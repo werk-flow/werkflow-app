@@ -10,25 +10,33 @@
 --
 -- All three now take one advisory lock per organization before they read the
 -- current configuration. The second of two concurrent changes waits for the
--- first to commit, and its read, a new statement under read committed, sees
--- the result: the second removal finds no other holder and refuses, and the
--- redemption finds the selected group and appends nothing.
+-- first to commit. Its read, a new statement under read committed, sees the
+-- result, and it compares effective_from with clock_timestamp(), not with
+-- now(), which is the start of its own transaction and would hide a
+-- configuration saved while it waited. So the second removal finds no other
+-- holder and refuses, and the redemption finds the selected group and
+-- appends nothing.
 --
--- Every path takes its row locks before the organization lock. The triggers
--- reach the lock after their statement and the function around it have
--- locked rows: a removal locks the person's personnel record FOR UPDATE, an
--- organization deletion the organization row. The save's inserts take a key
--- share lock on the organization and on each holder's personnel record
--- through their foreign keys, so the save takes those row locks first and
--- the organization lock after them. Taken after the organization lock, they
--- waited for a removal that itself waited for the organization lock. The
--- save then takes its per-responsibility lock, which delegations share;
--- nothing takes the two in the other order.
+-- Lock order: a member's row, then the organization lock, then personnel
+-- records. A role-default snapshot and the save take a key share lock on
+-- holders' personnel records through their foreign keys after the
+-- organization lock. So the member removal, which locks the removed
+-- person's record FOR UPDATE (also in close_time_session_for_member_removal),
+-- now takes the organization lock right after it locks the membership and
+-- before that record. Otherwise two Büro removals, or a removal and a save
+-- or delegation naming that person, waited for each other. A role change
+-- locks only its member row before the trigger takes the organization lock,
+-- the same order. The save takes the organization lock before its
+-- per-responsibility lock, which delegations share; nothing takes the two in
+-- the other order. An organization deletion locks the organization row
+-- first, so the last-holder trigger skips the lock for a member deleted with
+-- its organization, as the refresh already returns early there.
 --
 -- The signatures, the checks, the results and the grants stay as before
 -- (the last-holder trigger and the save from
 -- 20260805210307_add_scoped_responsibilities.sql, the refresh from
--- 20260805212958_guard_responsibility_snapshot_on_org_delete.sql).
+-- 20260805212958_guard_responsibility_snapshot_on_org_delete.sql, the removal
+-- from 20261004130000_remove_member_with_exit_atomically.sql).
 
 create or replace function app_private.protect_last_selected_responsibility_holder()
 returns trigger language plpgsql security definer set search_path = ''
@@ -51,14 +59,19 @@ begin
     if tg_op = 'DELETE' then return old; else return new; end if;
   end if;
 
-  perform pg_advisory_xact_lock(
-    hashtextextended(old.organization_id::text || ':responsibility-holders', 0)
-  );
+  if exists (
+    select 1 from public.organizations organization
+    where organization.id = old.organization_id
+  ) then
+    perform pg_advisory_xact_lock(
+      hashtextextended(old.organization_id::text || ':responsibility-holders', 0)
+    );
+  end if;
 
   with latest as (
     select distinct on (c.responsibility) c.id, c.responsibility, c.mode
     from public.organization_responsibility_configurations c
-    where c.organization_id = old.organization_id and c.effective_from <= now()
+    where c.organization_id = old.organization_id and c.effective_from <= clock_timestamp()
     order by c.responsibility, c.effective_from desc, c.created_at desc, c.id desc
   )
   select l.responsibility into stranded_responsibility
@@ -160,23 +173,6 @@ declare
   new_configuration_id uuid;
   holder_id uuid;
 begin
-  perform 1 from public.organizations organization
-  where organization.id = p_organization_id
-  for key share;
-  perform 1
-  from public.employee_records employee
-  where employee.organization_id = p_organization_id
-    and (
-      (p_mode = 'selected' and employee.id = any(p_employee_record_ids))
-      or (p_mode = 'role_default' and exists (
-        select 1 from public.organization_members member
-        where member.organization_id = employee.organization_id
-          and member.user_id = employee.user_id
-          and member.role in ('admin', 'buero')
-      ))
-    )
-  order by employee.id
-  for key share;
   perform pg_advisory_xact_lock(
     hashtextextended(p_organization_id::text || ':responsibility-holders', 0)
   );
@@ -194,7 +190,7 @@ begin
   from public.organization_responsibility_configurations c
   where c.organization_id = p_organization_id
     and c.responsibility = p_responsibility
-    and c.effective_from <= now()
+    and c.effective_from <= clock_timestamp()
   order by c.effective_from desc, c.created_at desc, c.id desc
   limit 1;
 
@@ -277,5 +273,83 @@ begin
     p_actor_id
   );
   return new_configuration_id;
+end;
+$$;
+
+create or replace function public.remove_member_with_time_capture(
+  p_organization_id uuid,
+  p_target_user_id uuid,
+  p_actor_id uuid,
+  p_operation_id uuid
+)
+returns boolean
+language plpgsql
+set search_path to ''
+as $$
+declare
+  -- The Europe/Berlin business date, as getBusinessTodayIso in TypeScript.
+  v_today date := (now() at time zone 'Europe/Berlin')::date;
+  v_canonical_closed boolean;
+  v_record_id uuid;
+  v_entry_date date;
+  v_exit_date date;
+begin
+  perform 1 from public.organization_members membership
+  where membership.organization_id = p_organization_id
+    and membership.user_id = p_target_user_id
+  for update;
+  if not found then raise exception 'time_member_removal_target_missing'; end if;
+  perform pg_advisory_xact_lock(
+    hashtextextended(p_organization_id::text || ':responsibility-holders', 0)
+  );
+
+  if exists (
+    select 1 from public.time_entries entry
+    where entry.organization_id = p_organization_id
+      and entry.user_id = p_target_user_id
+  ) or exists (
+    select 1 from public.time_sessions session
+    where session.organization_id = p_organization_id
+      and session.user_id = p_target_user_id
+  ) then raise exception 'time_member_removal_has_history'; end if;
+
+  select employee.id, employee.entry_date, employee.exit_date
+  into v_record_id, v_entry_date, v_exit_date
+  from public.employee_records employee
+  where employee.organization_id = p_organization_id
+    and employee.user_id = p_target_user_id
+  for update;
+  -- A person whose entry lies after today cannot exit today; refuse before
+  -- anything changes instead of dropping the exit date.
+  if v_record_id is not null
+    and (v_exit_date is null or v_exit_date >= v_today)
+    and v_entry_date > v_today
+  then raise exception 'member_removal_exit_before_entry'; end if;
+
+  v_canonical_closed := coalesce(public.close_time_session_for_member_removal(
+    p_organization_id, p_target_user_id, p_actor_id, p_operation_id
+  ), false);
+
+  delete from public.organization_members membership
+  where membership.organization_id = p_organization_id
+    and membership.user_id = p_target_user_id;
+  if not found then raise exception 'time_member_removal_target_missing'; end if;
+
+  -- The personnel record survives the removal and is marked as exited, so the
+  -- person stays distinguishable in history (P1-03, owner-approved).
+  if v_record_id is not null and (v_exit_date is null or v_exit_date >= v_today) then
+    update public.employee_records employee
+    set exit_date = v_today
+    where employee.id = v_record_id and employee.organization_id = p_organization_id;
+    insert into public.employee_record_events (
+      organization_id, employee_record_id, event_type, event_payload, created_by
+    ) values (
+      p_organization_id, v_record_id, 'membership_removed',
+      jsonb_build_object('exit_date', v_today, 'auto_clocked_out', v_canonical_closed),
+      p_actor_id
+    );
+  end if;
+
+  return v_canonical_closed;
 end;
 $$;

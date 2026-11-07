@@ -222,6 +222,7 @@ declare
   holder_one_record uuid;
   holder_two_record uuid;
   configuration_id uuid;
+  saved_configuration_id uuid;
   save_source text;
 begin
   select id into holder_one_record from public.employee_records
@@ -271,17 +272,42 @@ begin
     if sqlerrm <> 'responsibility_holder_probe' then raise; end if;
   end;
 
-  -- A removal reaches the organization lock holding the person's record FOR
-  -- UPDATE, so the save takes the key share row locks its inserts need before
-  -- the organization lock, never after it. It keeps its per-responsibility
-  -- lock, which delegations share, after the organization lock.
+  -- A change that waited for the lock reads what committed meanwhile. Its
+  -- transaction began before that save, so reading by now() would hide it;
+  -- inside this test transaction every save lies after now() as well.
+  begin
+    saved_configuration_id := public.apply_responsibility_configuration(
+      org, 'time_approval', 'selected', array[holder_one_record], owner_user, configuration_id);
+    perform public.apply_responsibility_configuration(
+      org, 'time_approval', 'selected', array[holder_one_record], owner_user, saved_configuration_id);
+    begin
+      delete from public.organization_members
+      where organization_id = org and user_id = '39000000-0000-0000-0000-000000000008';
+      raise exception 'a removal ignored the selection saved after its transaction began';
+    exception when others then
+      if sqlerrm <> 'last_responsibility_holder:time_approval' then raise; end if;
+    end;
+    raise exception 'responsibility_holder_probe';
+  exception when others then
+    if sqlerrm <> 'responsibility_holder_probe' then raise; end if;
+  end;
+
+  -- Lock order: a member's row, then the organization lock, then personnel
+  -- records, which a role-default snapshot or a save locks through its
+  -- foreign keys after the organization lock. A removal locks the removed
+  -- person's record FOR UPDATE, so it takes the organization lock first. The
+  -- save keeps its per-responsibility lock, which delegations share, after
+  -- the organization lock.
+  save_source := pg_get_functiondef(
+    'public.remove_member_with_time_capture(uuid,uuid,uuid,uuid)'::regprocedure);
+  if strpos(save_source, ':responsibility-holders') = 0
+    or strpos(save_source, ':responsibility-holders') < strpos(save_source, 'from public.organization_members')
+    or strpos(save_source, ':responsibility-holders') > strpos(save_source, 'from public.employee_records')
+  then raise exception 'a member removal locks the personnel record before the organization holder lock'; end if;
   save_source := pg_get_functiondef(
     'public.apply_responsibility_configuration(uuid,public.organization_responsibility,public.responsibility_configuration_mode,uuid[],uuid,uuid)'::regprocedure);
   if strpos(save_source, ':responsibility-holders') = 0
-    or strpos(save_source, 'for key share') = 0
-    or strpos(save_source, 'for key share') > strpos(save_source, ':responsibility-holders')
-  then raise exception 'the owner''s save locks its rows after the organization holder lock'; end if;
-  if strpos(save_source, ':responsibility-holders') > strpos(save_source, 'p_responsibility::text')
+    or strpos(save_source, ':responsibility-holders') > strpos(save_source, 'p_responsibility::text')
   then raise exception 'the owner''s save takes the responsibility lock before the organization holder lock'; end if;
 end;
 $$;
