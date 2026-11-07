@@ -1,4 +1,4 @@
-import { addLocalDays, getBusinessTodayIso } from '@/lib/date-time/berlin';
+import { addLocalDays, addLocalMonthsClamped, getBusinessTodayIso } from '@/lib/date-time/berlin';
 
 /**
  * Boundary parser for calendar date windows that reach server actions as
@@ -51,8 +51,7 @@ const BOOKMARK_REACH_YEARS = 10;
 /** Optional bookmark date; an invalid, repeated or out-of-reach query parameter uses today's date. */
 export function calendarDateFromQuery(value: string | string[] | undefined, today: string): string {
   if (typeof value !== 'string' || !isValidIsoDate(value)) return today;
-  const todayYear = Number(today.slice(0, 4));
-  const earliest = `${todayYear - BOOKMARK_REACH_YEARS}${today.slice(4)}`;
-  const latest = `${todayYear + BOOKMARK_REACH_YEARS}${today.slice(4)}`;
+  const earliest = addLocalMonthsClamped(today, -12 * BOOKMARK_REACH_YEARS);
+  const latest = addLocalMonthsClamped(today, 12 * BOOKMARK_REACH_YEARS);
   return value >= earliest && value <= latest ? value : today;
 }

@@ -46,3 +46,11 @@ test('calendar bookmarks accept only real single ISO dates within ten years of t
     expect(calendarDateFromQuery(input, today)).toBe(today);
   }
 });
+
+test('the bookmark reach on a leap day ends on a real calendar date', () => {
+  const leapDay = '2028-02-29';
+  expect(calendarDateFromQuery('2018-02-28', leapDay)).toBe('2018-02-28');
+  expect(calendarDateFromQuery('2038-02-28', leapDay)).toBe('2038-02-28');
+  expect(calendarDateFromQuery('2018-02-27', leapDay)).toBe(leapDay);
+  expect(calendarDateFromQuery('2038-03-01', leapDay)).toBe(leapDay);
+});
