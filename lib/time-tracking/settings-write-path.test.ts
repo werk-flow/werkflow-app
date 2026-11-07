@@ -17,7 +17,7 @@ type StoredSettings = {
 };
 type RpcCall = { name: string; args: Record<string, unknown> };
 // The history as written, every field kept, so an entry compares whole.
-const writtenHistorySchema = z.array(z.looseObject({ breakMode: z.string() }));
+const writtenHistorySchema = z.array(z.object({ breakMode: z.string() }).loose());
 
 const recordedEntry = {
   breakMode: 'manual',
