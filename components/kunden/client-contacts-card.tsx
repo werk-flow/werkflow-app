@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { InlinePending } from '@/components/ui/inline-pending';
+import { contactMailtoHref } from '@/lib/clients/contact-email';
 import type { ClientContact } from '@/lib/clients/types';
 import { SectionTitle } from '@/components/shared/section-title';
 
@@ -39,6 +40,7 @@ function ClientContactLinks({
   contact: ClientContact;
   onRequestContact: ContactRequestHandler | undefined;
 }) {
+  const mailtoHref = contact.email ? contactMailtoHref(contact.email) : null;
   return (
     <>
       {contact.phone && (
@@ -60,9 +62,9 @@ function ClientContactLinks({
           {contact.phone}
         </a>
       )}
-      {contact.email && (
+      {mailtoHref ? (
         <a
-          href={`mailto:${contact.email}`}
+          href={mailtoHref}
           className="hover:text-foreground"
           onClick={(event) => {
             if (!onRequestContact) return;
@@ -71,12 +73,14 @@ function ClientContactLinks({
               contactId: contact.id,
               contactName: contact.name,
               channel: 'email',
-              href: `mailto:${contact.email ?? ''}`,
+              href: mailtoHref,
             });
           }}
         >
           {contact.email}
         </a>
+      ) : (
+        contact.email && <span>{contact.email}</span>
       )}
     </>
   );

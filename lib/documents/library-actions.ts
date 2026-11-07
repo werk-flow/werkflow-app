@@ -103,7 +103,7 @@ export async function getDocumentLibrary(
     const [breadcrumbs, folders, documents] = await Promise.all([
       view === 'trash' ? [] : getFolderBreadcrumbs({ admin: context.admin, orgId: context.orgId, folderId }),
       hydrateFolders(context.admin, foldersResult.data),
-      hydrateDocuments(context.admin, documentRowsFromOrdinaryView(rows)),
+      hydrateDocuments(context, documentRowsFromOrdinaryView(rows)),
     ]);
     return {
       success: true,
@@ -146,7 +146,7 @@ export async function renameDocument(rawInput: RenameDocumentInput): Promise<Doc
   }
 
   revalidateDocuments();
-  return hydrateWrittenDocument(auth.context.admin, data);
+  return hydrateWrittenDocument(auth.context, data);
 }
 
 export async function updateDocumentCategory(rawInput: UpdateDocumentCategoryInput): Promise<DocumentResult> {
@@ -174,7 +174,7 @@ export async function updateDocumentCategory(rawInput: UpdateDocumentCategoryInp
   }
 
   revalidateDocuments();
-  return hydrateWrittenDocument(auth.context.admin, data);
+  return hydrateWrittenDocument(auth.context, data);
 }
 
 export async function moveDocument(rawInput: MoveDocumentInput): Promise<DocumentResult> {
@@ -214,7 +214,7 @@ export async function moveDocument(rawInput: MoveDocumentInput): Promise<Documen
   }
 
   revalidateDocuments();
-  return hydrateWrittenDocument(auth.context.admin, data);
+  return hydrateWrittenDocument(auth.context, data);
 }
 
 export async function copyDocument(rawInput: CopyDocumentInput): Promise<DocumentResult> {
@@ -292,7 +292,7 @@ export async function copyDocument(rawInput: CopyDocumentInput): Promise<Documen
   }
 
   revalidateDocuments();
-  return hydrateWrittenDocument(auth.context.admin, data);
+  return hydrateWrittenDocument(auth.context, data);
 }
 
 export async function deleteDocument(rawDocumentId: string): Promise<DocumentMutationResult> {

@@ -5,6 +5,7 @@ import { readCompleteRows, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { logReadFailure } from '@/lib/data/read-request-cache';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
+import { contactEmailSchema } from '@/lib/clients/contact-email';
 import { requireManagerAndClient } from '@/lib/clients/manager-access';
 import {
   type Client,
@@ -61,7 +62,7 @@ const updateClientArgumentsSchema = z.object({ clientId: uuidSchema, input: clie
 const contactFieldsSchema = z.object({
   name: z.string().max(300),
   role: nullableClientText(200),
-  email: nullableClientText(320),
+  email: contactEmailSchema,
   phone: nullableClientText(100),
   notes: nullableClientText(10000),
   isPrimary: z.boolean().optional(),
@@ -341,7 +342,7 @@ export async function createClientContact(
         client_id: clientId,
         name: input.name.trim(),
         role: input.role?.trim() || null,
-        email: input.email?.trim() || null,
+        email: input.email ?? null,
         phone: input.phone?.trim() || null,
         notes: input.notes?.trim() || null,
         is_primary: input.isPrimary ?? false,
@@ -398,7 +399,7 @@ export async function updateClientContact(
       updateData.name = input.name.trim();
     }
     if (input.role !== undefined) updateData.role = input.role?.trim() || null;
-    if (input.email !== undefined) updateData.email = input.email?.trim() || null;
+    if (input.email !== undefined) updateData.email = input.email;
     if (input.phone !== undefined) updateData.phone = input.phone?.trim() || null;
     if (input.notes !== undefined) updateData.notes = input.notes?.trim() || null;
     if (input.isPrimary !== undefined) updateData.is_primary = input.isPrimary;
