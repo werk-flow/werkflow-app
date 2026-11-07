@@ -1,7 +1,0 @@
-{
-  "reasons": {
-    "default": "Predates the 800-line module cap or the 80-line function cap; split it when it next changes."
-  },
-  "modules": {},
-  "functions": {}
-}
