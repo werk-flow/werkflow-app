@@ -1,6 +1,6 @@
 # Document storage and access
 
-Rules for document bytes, storage paths, signed URLs, access, links, trash and versions. [document-management.md](../features/document-management.md) owns what users can do.
+Rules for document bytes, storage paths, signed URLs, access, links, trash, versions, retention and filing. [document-management.md](../features/document-management.md) owns what users can do.
 
 ## Bytes and metadata
 
@@ -50,6 +50,7 @@ Server actions in `lib/documents/actions.ts` and RLS through `app_private` helpe
 | View or download the current version | Yes | Only when linked to an assigned job, or to a project with an assigned job |
 | Earlier versions and audit history | Yes | No |
 | Rename, move, copy, delete, link, unlink, reclassify, new version | Yes | No |
+| Document date, retention class, filing, and seeing them | Yes | No |
 
 - Field access follows assigned work: `lib/documents/access.ts` decides it, and `app_private.can_access_document` holds the same rule for Realtime. A customer or employee link alone grants nothing.
 - A field worker's document carries only the links `readableDocumentLinks` keeps: an assigned job, that job's project or customer, and the worker. `hydrateDocuments` takes the caller's context, so no reader resolves another link's names for them.
@@ -61,11 +62,22 @@ Server actions in `lib/documents/actions.ts` and RLS through `app_private` helpe
 
 - Move changes metadata only. A folder never moves or copies into itself or its descendants.
 - Copy creates new rows and copies each object server-side, without links, with the prefix `Kopie von ` and collision-safe naming.
-- Delete is soft; storage keeps the bytes. Restore keeps the folder if it still exists, otherwise uses the root. Permanent delete removes every object and the row.
+- Delete is soft; storage keeps the bytes. Restore keeps the folder if it still exists, otherwise uses the root. Permanent delete removes every object and the row, unless [retention](#retention-and-filing) refuses it.
 - Versioning applies to `contract`, `invoice`, `offer` and `report`. No rollback.
 - Every mutation writes rows and audit events in one database function call. Storage is not transactional: write an object before the call and discard it on refusal; delete an object only after its row is gone.
 - `/dokumente?document=<document-id>` opens that document. Other features link to the library record, never a copy.
 - Document readers carry no cache tag. A mutation revalidates its routes with `revalidatePath`.
+
+## Retention and filing
+
+The owner's schedule (werk-flow/werkflow-planning#24) has one class: ten years for financial papers. The retention end is 31 December of the document date's year plus ten years; permanent deletion is possible from the next day.
+
+- An ordinary upload of an invoice, offer or contract gets the class. A copy, a generated report and a protected personnel document do not. The document date (`Belegdatum`) defaults to the Berlin day of the upload.
+- Admin and Büro change the document date and the class, each change with its audit event, until they file the document. A protected personnel document keeps its own rules: no class, no filing.
+- Filing (`Festschreiben`) is final and audited. `lib/documents/filing.ts` is the server-only path: a server that generates an original, such as an invoice, files it right after its registration. A filed document refuses a new version, any byte replacement and the trash. Rename, move, category label and links stay possible and audited.
+- Permanent deletion refuses a filed document and any document whose retention end is today or later. Organization deletion refuses while such a document exists, the trash included.
+- `lib/documents/retention.ts` owns the deletion rule for the actions and the library. The trigger `documents_retention_guard` repeats every refusal under each database write, and lets organization teardown pass only once the organization row is gone.
+- Only Admin and Büro receive a document's archive data (`hydrateDocuments`).
 
 ## Storage cleanup
 

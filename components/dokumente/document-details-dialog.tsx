@@ -18,6 +18,7 @@ import {
   type OrganizationDocument,
 } from '@/lib/documents/types';
 import { formatGermanDate as formatDate } from '@/lib/utils';
+import { DocumentDetailsArchive, type DocumentDetailsArchiveProps } from './document-details-archive';
 import {
   getAuditEventLabel,
   getFileTypeLabel,
@@ -149,26 +150,28 @@ function DocumentDetailsVersionsHeader({
   return (
     <div className="flex items-center justify-between gap-2">
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Versionen</p>
-      {!isTrashView && ['contract', 'invoice', 'offer', 'report'].includes(document.category) && (
-        <>
-          <Button
-            pending={isBusy}
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => versionInputRef.current?.click()}
-            disabled={isBusy}
-          >
-            Neue Version
-          </Button>
-          <input
-            ref={versionInputRef}
-            type="file"
-            className="hidden"
-            onChange={(event) => onVersionUpload(event.target.files)}
-          />
-        </>
-      )}
+      {!isTrashView &&
+        !document.archive?.filedAt &&
+        ['contract', 'invoice', 'offer', 'report'].includes(document.category) && (
+          <>
+            <Button
+              pending={isBusy}
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => versionInputRef.current?.click()}
+              disabled={isBusy}
+            >
+              Neue Version
+            </Button>
+            <input
+              ref={versionInputRef}
+              type="file"
+              className="hidden"
+              onChange={(event) => onVersionUpload(event.target.files)}
+            />
+          </>
+        )}
     </div>
   );
 }
@@ -336,14 +339,18 @@ type DocumentDetailsDialogProps = Omit<DocumentDetailsVersionsProps, 'document'>
   error: string | null;
   onClose: () => void;
   onUpdateCategory: DocumentDetailsMetadataProps['onUpdateCategory'];
+  onUpdateRetention: DocumentDetailsArchiveProps['onUpdateRetention'];
+  onFile: DocumentDetailsArchiveProps['onFile'];
 };
 
-/** „Dateidetails": metadata, links, versions and audit history of one document. */
+/** „Dateidetails": metadata, retention, links, versions and audit history of one document. */
 export function DocumentDetailsDialog({
   document,
   error,
   onClose,
   onUpdateCategory,
+  onUpdateRetention,
+  onFile,
   ...versionProps
 }: DocumentDetailsDialogProps) {
   return (
@@ -371,6 +378,13 @@ export function DocumentDetailsDialog({
               document={document}
               categoryDisabled={versionProps.isBusy || versionProps.isTrashView}
               onUpdateCategory={onUpdateCategory}
+            />
+            <DocumentDetailsArchive
+              document={document}
+              disabled={versionProps.isBusy}
+              isTrashView={versionProps.isTrashView}
+              onUpdateRetention={onUpdateRetention}
+              onFile={onFile}
             />
             <DocumentDetailsLinks document={document} />
             <DocumentDetailsVersions document={document} {...versionProps} />

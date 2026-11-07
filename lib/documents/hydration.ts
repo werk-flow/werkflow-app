@@ -17,6 +17,7 @@ import {
   toDocumentLink,
   toDocumentAuditEvent,
   toDocumentVersion,
+  toDocumentArchive,
   toOrganizationDocument,
   type DocumentAuditEvent,
   type DocumentAuditEventRow,
@@ -314,6 +315,7 @@ export function documentRowsFromOrdinaryView(rows: readonly OrdinaryDocumentView
       created_at,
       current_version_number,
       display_name,
+      document_date,
       original_file_name,
       size_bytes,
       storage_bucket,
@@ -328,6 +330,7 @@ export function documentRowsFromOrdinaryView(rows: readonly OrdinaryDocumentView
       created_at === null ||
       current_version_number === null ||
       display_name === null ||
+      document_date === null ||
       original_file_name === null ||
       size_bytes === null ||
       storage_bucket === null ||
@@ -345,6 +348,7 @@ export function documentRowsFromOrdinaryView(rows: readonly OrdinaryDocumentView
         created_at,
         current_version_number,
         display_name,
+        document_date,
         original_file_name,
         size_bytes,
         storage_bucket,
@@ -358,6 +362,10 @@ export function documentRowsFromOrdinaryView(rows: readonly OrdinaryDocumentView
         folder_id: row.folder_id,
         metadata: row.metadata,
         mime_type: row.mime_type,
+        retention_class: row.retention_class,
+        retention_ends_on: row.retention_ends_on,
+        filed_at: row.filed_at,
+        filed_by: row.filed_by,
       },
     ];
   });
@@ -376,7 +384,14 @@ export async function hydrateDocuments(
   const { admin } = context;
 
   const documentIds = rows.map((row) => row.id);
-  const uploaderIds = Array.from(new Set(rows.map((row) => row.uploaded_by)));
+  // A manager also reads who filed each document.
+  const uploaderIds = Array.from(
+    new Set(
+      rows.flatMap((row) =>
+        context.isManagerOrAbove && row.filed_by ? [row.uploaded_by, row.filed_by] : [row.uploaded_by],
+      ),
+    ),
+  );
   // Every related read stays inside the documents' organizations; the admin client bypasses RLS.
   const organizationIds = [...new Set(rows.map((row) => row.organization_id))];
 
@@ -419,6 +434,9 @@ export async function hydrateDocuments(
       row,
       uploader: toProfileReference(profilesById.get(row.uploaded_by)),
       links: linksByDocumentId.get(row.id) ?? [],
+      archive: context.isManagerOrAbove
+        ? toDocumentArchive(row, row.filed_by ? toProfileReference(profilesById.get(row.filed_by)) : null)
+        : null,
     }),
   );
 }

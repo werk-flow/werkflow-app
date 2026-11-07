@@ -1,7 +1,8 @@
 -- Deleting an organization through delete_organization (migration
 -- 20261029205025_refuse_organization_delete_with_time_records.sql) refuses
 -- while the organization holds a time entry, a time session or a closed
--- period, refuses everyone but the owner and a wrong confirmation name, and
+-- period, or a document whose retention end is today or later
+-- (werk-flow/werkflow-planning#283), filed or not, also in the trash. It refuses everyone but the owner and a wrong confirmation name, and
 -- removes the organization with its rows otherwise. Only the service role
 -- executes the function and the scope read.
 begin;
@@ -17,12 +18,28 @@ insert into auth.users (
  'authenticated', 'authenticated', 'org-delete-employee@example.test', '', now(), '{}',
  '{"first_name":"Employee","last_name":"Delete"}', now(), now());
 
--- 10 has no time, 11 a time entry, 12 a time session, 13 only a closed period.
+-- 10 has no time, 11 a time entry, 12 a time session, 13 only a closed period,
+-- 14 an unfiled invoice in the trash inside its period, 15 a filed invoice
+-- whose period ended.
 insert into public.organizations (id, name, admin_id, unique_code) values
 ('27900000-0000-0000-0000-000000000010', 'Ohne Zeiten', '27900000-0000-0000-0000-000000000001', 'ODEL10'),
 ('27900000-0000-0000-0000-000000000011', 'Mit Zeiteintrag', '27900000-0000-0000-0000-000000000001', 'ODEL11'),
 ('27900000-0000-0000-0000-000000000012', 'Mit Sitzung', '27900000-0000-0000-0000-000000000001', 'ODEL12'),
-('27900000-0000-0000-0000-000000000013', 'Mit Periode', '27900000-0000-0000-0000-000000000001', 'ODEL13');
+('27900000-0000-0000-0000-000000000013', 'Mit Periode', '27900000-0000-0000-0000-000000000001', 'ODEL13'),
+('27900000-0000-0000-0000-000000000014', 'Mit Rechnung', '27900000-0000-0000-0000-000000000001', 'ODEL14'),
+('27900000-0000-0000-0000-000000000015', 'Mit alter Rechnung', '27900000-0000-0000-0000-000000000001', 'ODEL15');
+insert into public.documents (
+  id, organization_id, storage_path, original_file_name, display_name, category, size_bytes, uploaded_by,
+  document_date, retention_class, filed_at, filed_by, deleted_at, deleted_by
+) values
+('27900000-0000-0000-0000-000000000040', '27900000-0000-0000-0000-000000000014',
+ '27900000-0000-0000-0000-000000000014/d40/rechnung.pdf', 'rechnung.pdf', 'rechnung.pdf', 'invoice', 10,
+ '27900000-0000-0000-0000-000000000001', (now() at time zone 'Europe/Berlin')::date, 'ten_years', null, null,
+ now(), '27900000-0000-0000-0000-000000000001'),
+('27900000-0000-0000-0000-000000000041', '27900000-0000-0000-0000-000000000015',
+ '27900000-0000-0000-0000-000000000015/d41/rechnung.pdf', 'rechnung.pdf', 'rechnung.pdf', 'invoice', 10,
+ '27900000-0000-0000-0000-000000000001', '2010-03-01', 'ten_years', now(),
+ '27900000-0000-0000-0000-000000000001', null, null);
 insert into public.organization_members (organization_id, user_id, role) values
 ('27900000-0000-0000-0000-000000000010', '27900000-0000-0000-0000-000000000002', 'employee'),
 ('27900000-0000-0000-0000-000000000012', '27900000-0000-0000-0000-000000000002', 'employee');
@@ -113,6 +130,14 @@ begin
   if v_scope->>'closed_periods' <> '1' then
     raise exception 'deletion scope misses a reopened closed period: %', v_scope;
   end if;
+  v_scope := public.get_organization_deletion_scope('27900000-0000-0000-0000-000000000014');
+  if v_scope->>'retained_documents' <> '1' then
+    raise exception 'deletion scope misses a trashed document inside its period: %', v_scope;
+  end if;
+  v_scope := public.get_organization_deletion_scope('27900000-0000-0000-0000-000000000015');
+  if v_scope->>'retained_documents' <> '0' or v_scope->>'documents' <> '1' then
+    raise exception 'deletion scope retains a document whose period ended: %', v_scope;
+  end if;
 end;
 $$;
 
@@ -122,6 +147,8 @@ select pg_temp.expect_delete_refusal('a time session', '27900000-0000-0000-0000-
   '27900000-0000-0000-0000-000000000001', 'Mit Sitzung', 'has_time_records');
 select pg_temp.expect_delete_refusal('a closed period', '27900000-0000-0000-0000-000000000013',
   '27900000-0000-0000-0000-000000000001', 'Mit Periode', 'has_time_records');
+select pg_temp.expect_delete_refusal('a document inside its period', '27900000-0000-0000-0000-000000000014',
+  '27900000-0000-0000-0000-000000000001', 'Mit Rechnung', 'has_retained_documents');
 select pg_temp.expect_delete_refusal('a member who is not the owner', '27900000-0000-0000-0000-000000000010',
   '27900000-0000-0000-0000-000000000002', 'Ohne Zeiten', 'not_authorized');
 select pg_temp.expect_delete_refusal('a wrong confirmation name', '27900000-0000-0000-0000-000000000010',
@@ -136,7 +163,14 @@ begin
     or not exists (
       select 1 from public.time_period_close_versions where organization_id = '27900000-0000-0000-0000-000000000013'
     )
-  then raise exception 'a refused organization deletion removed time records'; end if;
+    or not exists (select 1 from public.documents where id = '27900000-0000-0000-0000-000000000040')
+  then raise exception 'a refused organization deletion removed time records or a retained document'; end if;
+
+  -- A filed document whose period ended goes with its organization.
+  perform public.delete_organization(
+    '27900000-0000-0000-0000-000000000015', '27900000-0000-0000-0000-000000000001', 'Mit alter Rechnung');
+  if exists (select 1 from public.documents where organization_id = '27900000-0000-0000-0000-000000000015')
+  then raise exception 'the deletion of an organization left its filed document whose period ended'; end if;
 
   perform public.delete_organization(
     '27900000-0000-0000-0000-000000000010', '27900000-0000-0000-0000-000000000001', '  Ohne Zeiten ');

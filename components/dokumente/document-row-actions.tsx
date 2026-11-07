@@ -22,6 +22,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { earlyDeletionRefusal } from '@/lib/documents/retention';
 import type { DocumentFolder, OrganizationDocument } from '@/lib/documents/types';
 
 export type DocumentActionHandlers = {
@@ -65,12 +66,17 @@ type MultiSelectionContextMenuProps = {
   onDelete: () => void;
 };
 
+// A filed document never reaches the trash, and a document whose retention
+// runs never leaves it permanently: the menu offers neither (the actions and
+// the database refuse both anyway). The details dialog names the reason.
 function DocumentActionItems({
+  document,
   isTrashView,
   handlers,
   item: Item,
   separator: Separator,
 }: {
+  document: OrganizationDocument;
   isTrashView: boolean;
   handlers: DocumentActionHandlers;
   item: typeof DropdownMenuItem | typeof ContextMenuItem;
@@ -78,6 +84,8 @@ function DocumentActionItems({
 }) {
   const MenuItem = Item;
   const MenuSeparator = Separator;
+  const retained = document.archive !== null && earlyDeletionRefusal(document.archive) !== null;
+  const filed = Boolean(document.archive?.filedAt);
 
   return (
     <>
@@ -95,11 +103,15 @@ function DocumentActionItems({
             <Undo2 className="size-4" />
             Wiederherstellen
           </MenuItem>
-          <MenuSeparator />
-          <MenuItem variant="destructive" onClick={handlers.onPermanentDelete}>
-            <Trash2 className="size-4" />
-            Endgültig löschen
-          </MenuItem>
+          {!retained && (
+            <>
+              <MenuSeparator />
+              <MenuItem variant="destructive" onClick={handlers.onPermanentDelete}>
+                <Trash2 className="size-4" />
+                Endgültig löschen
+              </MenuItem>
+            </>
+          )}
         </>
       ) : (
         <>
@@ -119,11 +131,15 @@ function DocumentActionItems({
             <Copy className="size-4" />
             Kopieren
           </MenuItem>
-          <MenuSeparator />
-          <MenuItem variant="destructive" onClick={handlers.onDelete}>
-            <Trash2 className="size-4" />
-            Löschen
-          </MenuItem>
+          {!filed && (
+            <>
+              <MenuSeparator />
+              <MenuItem variant="destructive" onClick={handlers.onDelete}>
+                <Trash2 className="size-4" />
+                Löschen
+              </MenuItem>
+            </>
+          )}
         </>
       )}
     </>
@@ -196,6 +212,7 @@ export function DocumentActionsMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DocumentActionItems
+          document={document}
           isTrashView={isTrashView}
           handlers={handlers}
           item={DropdownMenuItem}
@@ -206,10 +223,11 @@ export function DocumentActionsMenu({
   );
 }
 
-export function DocumentContextMenuContent({ isTrashView, handlers }: DocumentActionsProps) {
+export function DocumentContextMenuContent({ document, isTrashView, handlers }: DocumentActionsProps) {
   return (
     <ContextMenuContent>
       <DocumentActionItems
+        document={document}
         isTrashView={isTrashView}
         handlers={handlers}
         item={ContextMenuItem}
