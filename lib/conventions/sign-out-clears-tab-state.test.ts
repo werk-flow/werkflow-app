@@ -13,18 +13,6 @@ import { listProductSources, parseProductSource } from './product-sources';
 
 const CLEAR_CALL = 'clearManualEntryBridge';
 
-/**
- * Modules that sign out without the clear yet. Each one stays covered by the
- * reader, which refuses a queue another user left. Remove an entry when its
- * module gains the call; the last test fails until then.
- */
-const PENDING: ReadonlyMap<string, string> = new Map([
-  [
-    'components/settings/use-password-change-flow.ts',
-    'the password change joins once its owner releases the file (werk-flow/werkflow-planning#242)',
-  ],
-]);
-
 /** True when the call is `<client>.auth.signOut(...)` and ends this browser's session. */
 function endsOwnSession(node: ts.CallExpression): boolean {
   const callee = node.expression;
@@ -78,7 +66,7 @@ function signOutsWithoutClear(): string[] {
 
 describe('sign-out clears the tab state', () => {
   test('every browser sign-out of the own session clears the queued manual entries', () => {
-    expect(signOutsWithoutClear().filter((file) => !PENDING.has(file))).toEqual([]);
+    expect(signOutsWithoutClear()).toEqual([]);
   });
 
   test('probes: a sign-out without the clear is reported, one with it or of other sessions is not', () => {
@@ -103,10 +91,5 @@ describe('sign-out clears the tab state', () => {
       signsOut: false,
       clears: false,
     });
-  });
-
-  test('every pending module still signs out without the clear', () => {
-    const missing = signOutsWithoutClear();
-    expect([...PENDING.keys()].filter((file) => !missing.includes(file))).toEqual([]);
   });
 });
