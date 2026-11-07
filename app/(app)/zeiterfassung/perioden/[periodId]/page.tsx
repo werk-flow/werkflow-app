@@ -1,13 +1,11 @@
 import { notFound } from 'next/navigation';
-import { AlertTriangle, Info } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { EmptyState } from '@/components/ui/empty-state';
 import { LiveRouteRefresh } from '@/components/shared/live-route-refresh';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { SubpageHeader } from '@/components/shared/subpage-header';
-import { formatBerlin, formatGermanDate } from '@/lib/utils';
+import { formatGermanDate } from '@/lib/utils';
 import { TimePeriodCloseForm } from '@/components/zeiterfassung/time-period-close-form';
-import { TimePeriodFindingDecisionForm } from '@/components/zeiterfassung/time-period-finding-decision-form';
+import { TimePeriodFindings } from '@/components/zeiterfassung/time-period-findings';
 import {
   TimePeriodExportDownload,
   TimePeriodExportForm,
@@ -17,8 +15,6 @@ import { TimePeriodResults } from '@/components/zeiterfassung/time-period-result
 import { getTimeAccountAccess } from '@/lib/time-accounts/actions';
 import { TIME_PERIOD_DETAIL_LIVE_TABLES } from '@/lib/time-accounts/live-tables';
 import {
-  FINDING_DECISION_LABELS,
-  FINDING_LABELS,
   formatPeriod,
   PAYROLL_EXPORT_STATE_LABELS,
   PERIOD_STATE_LABELS,
@@ -28,71 +24,6 @@ import {
   type OpenPeriodSession,
   type TimePeriodDetail,
 } from '@/lib/time-accounts/queries';
-
-function FindingIcon({ severity }: { severity: string }) {
-  if (severity === 'close_blocked')
-    return <AlertTriangle aria-hidden="true" className="size-4 text-destructive" />;
-  if (severity === 'approval_required')
-    return <AlertTriangle aria-hidden="true" className="size-4 text-warning-text" />;
-  return <Info aria-hidden="true" className="size-4 text-muted-foreground" />;
-}
-
-// A running session blocks the close in the database. It shows as a blocking
-// finding from the live sessions, also when the calculation predates it.
-function OpenSessionFinding({ session }: { session: OpenPeriodSession }) {
-  return (
-    <div className="flex items-start gap-3 rounded-lg border bg-card p-4">
-      <FindingIcon severity="close_blocked" />
-      <div className="min-w-0 wrap-anywhere">
-        <p className="font-medium">
-          {session.status === 'recovery_required'
-            ? FINDING_LABELS.recovery_session
-            : FINDING_LABELS.open_session}
-        </p>
-        <p className="text-sm text-muted-foreground">
-          {session.employeeName} · seit {formatBerlin(session.startedAt, 'shortDateTime')} · muss vor dem
-          Abschluss beendet werden
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function PeriodFindingRow({
-  finding,
-  periodId,
-}: {
-  finding: TimePeriodDetail['findings'][number];
-  periodId: string;
-}) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
-      <div className="flex min-w-0 items-start gap-3">
-        <FindingIcon severity={finding.severity} />
-        <div className="min-w-0 wrap-anywhere">
-          <p className="font-medium">{FINDING_LABELS[finding.kind]}</p>
-          <p className="text-sm text-muted-foreground">
-            {finding.employeeName ?? 'Organisation'} ·{' '}
-            {finding.severity === 'close_blocked'
-              ? 'muss vor dem Abschluss behoben werden'
-              : finding.severity === 'approval_required'
-                ? 'Freigabe erforderlich'
-                : 'Information'}
-            {finding.decision ? ` · ${FINDING_DECISION_LABELS[finding.decision]}` : ''}
-          </p>
-        </div>
-      </div>
-      {finding.severity === 'approval_required' && finding.decision !== 'approved' ? (
-        <TimePeriodFindingDecisionForm
-          periodId={periodId}
-          findingId={finding.id}
-          findingLabel={FINDING_LABELS[finding.kind]}
-          canApprove={finding.canApprove}
-        />
-      ) : null}
-    </div>
-  );
-}
 
 /** The period's payroll export: Admin and Büro build it and download its versions. */
 function PayrollExportCard({
@@ -184,35 +115,23 @@ function PeriodSummaryCards({
   );
 }
 
-function PeriodFindingsSection({
-  periodId,
-  findings,
-  liveSessions,
-}: {
-  periodId: string;
-  findings: TimePeriodDetail['findings'];
-  liveSessions: OpenPeriodSession[];
-}) {
-  return (
-    <section className="space-y-3">
-      <h3 className="font-semibold">Prüfhinweise</h3>
-      <div className="space-y-2">
-        {liveSessions.map((session) => (
-          <OpenSessionFinding key={session.employeeRecordId} session={session} />
-        ))}
-        {findings.length === 0 && liveSessions.length === 0 ? (
-          <EmptyState size="compact" title="Keine Prüfhinweise." />
-        ) : (
-          findings.map((finding) => (
-            <PeriodFindingRow key={finding.id} finding={finding} periodId={periodId} />
-          ))
-        )}
-      </div>
-    </section>
-  );
+/** What still blocks the close, one sentence each, in the order the page shows them. */
+function closeBlockerSentences(input: {
+  hasCalculation: boolean;
+  blockedCount: number;
+  unresolvedApprovalCount: number;
+}): string[] {
+  const { hasCalculation, blockedCount, unresolvedApprovalCount } = input;
+  if (!hasCalculation) return ['Die Periode muss zuerst vorbereitet werden.'];
+  return [
+    ...(blockedCount === 1 ? ['Ein blockierender Hinweis muss zuerst behoben werden.'] : []),
+    ...(blockedCount > 1 ? [`${blockedCount} blockierende Hinweise müssen zuerst behoben werden.`] : []),
+    ...(unresolvedApprovalCount === 1 ? ['Eine Freigabe ist noch offen.'] : []),
+    ...(unresolvedApprovalCount > 1 ? [`${unresolvedApprovalCount} Freigaben sind noch offen.`] : []),
+  ];
 }
 
-/** Close or reopen the period, with what still blocks the close. */
+/** Close or reopen the period; a press while something blocks the close names it. */
 function PeriodCloseCard({
   periodId,
   detail,
@@ -235,27 +154,14 @@ function PeriodCloseCard({
         {detail.period.state !== 'closed' ? (
           <TimePeriodCloseForm
             periodId={periodId}
-            blocked={!detail.calculation || blockedCount > 0 || unresolvedApprovalCount > 0}
+            blockers={closeBlockerSentences({
+              hasCalculation: detail.calculation !== null,
+              blockedCount,
+              unresolvedApprovalCount,
+            })}
           />
         ) : null}
         {detail.period.state === 'closed' && isAdmin ? <TimePeriodReopenForm periodId={periodId} /> : null}
-        {!detail.calculation ? (
-          <p className="text-sm text-muted-foreground">Die Periode muss zuerst vorbereitet werden.</p>
-        ) : null}
-        {detail.calculation && blockedCount > 0 ? (
-          <p className="text-sm text-destructive" role="status">
-            {blockedCount === 1
-              ? 'Ein blockierender Hinweis muss zuerst behoben werden.'
-              : `${blockedCount} blockierende Hinweise müssen zuerst behoben werden.`}
-          </p>
-        ) : null}
-        {detail.calculation && unresolvedApprovalCount > 0 ? (
-          <p className="text-sm text-muted-foreground" role="status">
-            {unresolvedApprovalCount === 1
-              ? 'Eine Freigabe ist noch offen.'
-              : `${unresolvedApprovalCount} Freigaben sind noch offen.`}
-          </p>
-        ) : null}
       </CardContent>
     </Card>
   );
@@ -299,7 +205,12 @@ export default async function TimePeriodDetailPage({ params }: { params: Promise
         <TimePeriodResults results={detail.results} />
       </section>
 
-      <PeriodFindingsSection periodId={periodId} findings={detail.findings} liveSessions={liveSessions} />
+      <TimePeriodFindings
+        periodId={periodId}
+        findings={detail.findings}
+        liveSessions={liveSessions}
+        viewer={{ isAdmin: access.isAdmin, isOffice: access.isOffice }}
+      />
 
       <PeriodCloseCard
         periodId={periodId}

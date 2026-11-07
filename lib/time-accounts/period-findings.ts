@@ -6,6 +6,8 @@ import 'server-only';
 import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import { hasUnclosedLegacySequence } from '@/lib/time-accounts/legacy-projection';
 import { isTimeCorrectionSnapshot } from '@/lib/time-corrections/types';
+import { hasScheduleTargets, roundSecondsToMinutes } from './calculation';
+import type { UncomputedResultCause } from './period-results';
 import {
   hashPayload,
   type PeriodEmployee,
@@ -23,23 +25,32 @@ import type {
 // P1-23 intentionally fixes the break-warning threshold at six hours.
 const BREAK_REQUIRED_ABOVE_MINUTES = 360;
 
+/** The period facts the findings read: a narrow slice of the preparation's shared state. */
+type FindingShared = Pick<PeriodShared, 'startInstant' | 'endInstant'> & {
+  sources: Pick<PeriodSources, 'sessions' | 'correctionRequests' | 'correctionRevisions'>;
+  index: Pick<PeriodShared['index'], 'dates' | 'legacyByUser'>;
+  payloads: Pick<PeriodShared['payloads'], 'findingPayload'>;
+};
+
 type EmployeeFindingInput = {
-  employee: PeriodEmployee;
-  policy: TimeAccountPolicy | null;
-  account: PeriodSources['accounts'][number] | undefined;
-  hasCompletePolicyHistory: boolean;
+  employee: Pick<PeriodEmployee, 'id' | 'user_id'>;
+  /** The gaps that kept the month from being calculated (`employeeSetupGaps`). */
+  setupGaps: readonly UncomputedResultCause[];
   policiesByDate: PeriodPolicies;
   calculation: EmployeePeriodCalculation;
   intervals: TimeActivityInterval[];
   targetsByDate: Map<string, DailyTargetInput>;
-  shared: PeriodShared;
+  shared: FindingShared;
 };
 
+// One blocking finding per setup gap, and `missing_schedule` from the
+// schedule facts alone (werk-flow/werkflow-planning#47): a missing policy or
+// account never claims that the Wochenplan is missing.
 function pushEmployeeSetupFindings(input: EmployeeFindingInput): void {
-  const { employee, policy, account, hasCompletePolicyHistory, policiesByDate, calculation } = input;
+  const { employee, setupGaps, policiesByDate, targetsByDate } = input;
   const { findingPayload } = input.shared.payloads;
   const { dates } = input.shared.index;
-  if (!policy || !hasCompletePolicyHistory)
+  if (setupGaps.includes('missing_policy'))
     findingPayload.push({
       employee_record_id: employee.id,
       local_date: null,
@@ -54,7 +65,7 @@ function pushEmployeeSetupFindings(input: EmployeeFindingInput): void {
         dates: dates.filter((date) => !policiesByDate.get(date)),
       },
     });
-  if (!account)
+  if (setupGaps.includes('missing_opening_balance'))
     findingPayload.push({
       employee_record_id: employee.id,
       local_date: null,
@@ -66,7 +77,7 @@ function pushEmployeeSetupFindings(input: EmployeeFindingInput): void {
       }),
       explanation: {},
     });
-  if (!calculation.hasAuthoritativeTargets)
+  if (!hasScheduleTargets([...targetsByDate.values()]))
     findingPayload.push({
       employee_record_id: employee.id,
       local_date: null,
@@ -134,8 +145,8 @@ function pushEmployeeSourceIntegrityFindings(
 // into the period. The period close guard repeats this rule in SQL
 // (20261028130000_keep_period_close_consistent_with_concurrent_writes.sql).
 function findPendingCorrectionRequest(
-  employee: PeriodEmployee,
-  shared: PeriodShared,
+  employee: EmployeeFindingInput['employee'],
+  shared: FindingShared,
 ): PeriodSources['correctionRequests'][number] | undefined {
   const { startInstant, endInstant } = shared;
   const { correctionRequests, correctionRevisions } = shared.sources;
@@ -163,6 +174,31 @@ function findPendingCorrectionRequest(
   });
 }
 
+/**
+ * What „Zeit ohne Zuordnung“ asks to approve: each entry with its Berlin day,
+ * start, end, activity and minutes, so the decision is not blind
+ * (werk-flow/werkflow-planning#48). The page parses it with
+ * `unallocatedTimeExplanationSchema`.
+ */
+function describeUnallocatedTime(unallocated: readonly TimeActivityInterval[]): Record<string, unknown> {
+  const entries = [...unallocated]
+    .sort((left, right) => Date.parse(left.startedAt) - Date.parse(right.startedAt))
+    .map((interval) => ({
+      date: formatBerlinLocalDate(interval.startedAt),
+      startedAt: interval.startedAt,
+      endedAt: interval.endedAt,
+      activityKind: interval.activityKind,
+      minutes: roundSecondsToMinutes(
+        Math.max(0, Date.parse(interval.endedAt) - Date.parse(interval.startedAt)) / 1000,
+      ).minutes,
+    }));
+  return {
+    count: entries.length,
+    minutes: entries.reduce((sum, entry) => sum + entry.minutes, 0),
+    entries,
+  };
+}
+
 function pushEmployeeReviewFindings(input: EmployeeFindingInput): void {
   const { employee, calculation, intervals, targetsByDate } = input;
   const { findingPayload } = input.shared.payloads;
@@ -181,7 +217,7 @@ function pushEmployeeReviewFindings(input: EmployeeFindingInput): void {
         employee: employee.id,
         sources: unallocated.map((interval) => interval.sourceId).sort(),
       }),
-      explanation: { count: unallocated.length },
+      explanation: describeUnallocatedTime(unallocated),
     });
   const pendingRequest = findPendingCorrectionRequest(employee, input.shared);
   if (pendingRequest)
