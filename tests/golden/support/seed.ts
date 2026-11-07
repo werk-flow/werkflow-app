@@ -1,5 +1,8 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
+import type { Database } from '../../../lib/supabase/database.types';
+import { rpcArgs } from '../../../lib/supabase/rpc-args';
+
 import { requireEnv } from './env';
 import { testSupabaseClientOptions } from './client-options';
 import type { TestUser, TestWorld } from './world';
@@ -20,8 +23,8 @@ export function goldenTestOrganizationName(label: string, runId: string): string
   return worldName(`Golden Test SHK ${label}`, runId);
 }
 
-function createAdminClient(): SupabaseClient {
-  return createClient(
+function createAdminClient(): SupabaseClient<Database> {
+  return createClient<Database>(
     requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
     requireEnv('SUPABASE_SECRET_KEY'),
     testSupabaseClientOptions,
@@ -58,7 +61,7 @@ function randomOrgCode(): string {
   return code;
 }
 
-async function createTestUser(admin: SupabaseClient, user: TestUser): Promise<void> {
+async function createTestUser(admin: SupabaseClient<Database>, user: TestUser): Promise<void> {
   const { id, email, password, firstName, lastName } = user;
 
   const { data, error } = await admin.auth.admin.createUser({
@@ -86,7 +89,7 @@ async function createTestUser(admin: SupabaseClient, user: TestUser): Promise<vo
 }
 
 async function createOrganizationWithSettings(
-  admin: SupabaseClient,
+  admin: SupabaseClient<Database>,
   organizationId: string,
   name: string,
   adminUserId: string,
@@ -126,7 +129,7 @@ async function createOrganizationWithSettings(
 // same record_inventory_movement RPC the product uses, so the movement ledger
 // and inventory_stock_levels are consistent from the first row on.
 async function seedInventory(
-  admin: SupabaseClient,
+  admin: SupabaseClient<Database>,
   orgId: string,
   actorId: string,
   inventory: TestWorld['inventory'],
@@ -164,19 +167,22 @@ async function seedInventory(
     throw new Error(`Failed to seed inventory item: ${itemError?.message}`);
   }
 
-  const { error: movementError } = await admin.rpc('record_inventory_movement', {
-    p_organization_id: orgId,
-    p_actor_id: actorId,
-    p_item_id: item.id,
-    p_location_id: location.id,
-    p_movement_type: 'initial_count',
-    p_quantity_delta: initialQuantity,
-    p_job_id: null,
-    p_project_id: null,
-    p_job_material_line_id: null,
-    p_import_batch_id: null,
-    p_reason: 'Golden-Gate Startbestand',
-  });
+  const { error: movementError } = await admin.rpc(
+    'record_inventory_movement',
+    rpcArgs('record_inventory_movement', {
+      p_organization_id: orgId,
+      p_actor_id: actorId,
+      p_item_id: item.id,
+      p_location_id: location.id,
+      p_movement_type: 'initial_count',
+      p_quantity_delta: initialQuantity,
+      p_job_id: null,
+      p_project_id: null,
+      p_job_material_line_id: null,
+      p_import_batch_id: null,
+      p_reason: 'Golden-Gate Startbestand',
+    }),
+  );
   if (movementError) {
     throw new Error(`Failed to seed inventory stock: ${movementError.message}`);
   }

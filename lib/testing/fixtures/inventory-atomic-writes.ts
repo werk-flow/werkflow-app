@@ -273,6 +273,6 @@ expect(rpcCalls).toEqual([
   {
     name: 'record_inventory_movement',
     args: expect.objectContaining({ p_item_id: ITEM, p_job_material_line_id: LINE }),
-  },
+  } satisfies Record<string, unknown>,
 ]);
 expect(logged).toEqual([]);

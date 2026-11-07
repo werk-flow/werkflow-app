@@ -56,7 +56,7 @@ describe('workspace test operation ownership', () => {
         ).rejects.toMatchObject({
           message: expect.stringContaining('active workspace lock'),
           cause: expect.any(Error),
-        });
+        } satisfies Record<string, unknown>);
       }
       expect(executed).toBe(false);
     } finally {

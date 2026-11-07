@@ -65,13 +65,13 @@ Merge with `gh pr merge --squash`, after a fresh `git fetch` and a last look at 
 
 ### The CodeRabbit queue
 
-`ops/coderabbit-queue.py` in `werk-flow/werkflow-planning` runs every 10 minutes as a systemd user timer on the owner's machine, so no thread has to stay alive to hand out reviews. Each pass:
+`ops/coderabbit-queue.py` in `werk-flow/werkflow-planning` runs every 10 minutes on [the PC and the Mac](environments.md#background-jobs), so no thread has to stay alive to hand out reviews. Each pass on the machine that holds its lease:
 
 1. Lists the open PRs labelled `needs-coderabbit`, and skips any that already got a CodeRabbit review or a request after their latest push.
 2. In [trial mode](#trial-mode-until-2026-11-12), before `TRIAL_ENDS`, requests up to ten waiting PRs and skips the 65-minute wait. Afterward, does nothing while CodeRabbit posted a review, a "Review finished" note or a rate-limit notice, or received a request, on any PR in the last 65 minutes, or before a notice's "available in N minutes" ends.
-3. Selects PRs oldest label first, one per pass outside trial mode. Comments `@coderabbitai review` on each, relabels it `coderabbit-requested`, and sends one sentence to the PR's T3 thread: the one on its head branch, else the newest that links the PR, such as an epic's lead.
+3. Selects PRs oldest label first, one per pass outside trial mode. Comments `@coderabbitai review` on each, relabels it `coderabbit-requested`, and sends one sentence to the PR's T3 thread on that machine: the one on its head branch, else the newest that links the PR, such as an epic's lead. A thread on the other machine hears of the review through its own watch.
 
-The log is `~/.local/state/coderabbit-queue.log`, and `journalctl --user -u coderabbit-queue` shows each run. Automatic review is off, so a PR without the label gets no CodeRabbit review.
+Each machine logs its passes to `~/.local/state/coderabbit-queue.log`. Automatic review is off, so a PR without the label gets no CodeRabbit review.
 
 ### Give a review its context
 

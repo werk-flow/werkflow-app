@@ -147,7 +147,7 @@ test.skipIf(!ISOLATED)('the database selects each page and owns the totals', asy
         p_coverage_page: 1,
         p_page_size: 50,
       }),
-    },
+    } satisfies Record<string, unknown>,
   ]);
   expect(result.workspace.totals).toEqual({
     due: { total: 120, hasAny: true },
