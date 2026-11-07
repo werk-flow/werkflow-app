@@ -176,6 +176,14 @@ export const REQUIREMENT_STATE_LABELS: Record<PersonnelRequirementState, string>
   cancelled: 'Abgebrochen',
 };
 
+/**
+ * An employee confirms only an acknowledgement; Admin or Büro completes every
+ * other requirement type. `acknowledge_personnel_item` refuses the rest too.
+ */
+export function isSelfConfirmableRequirement(requirementType: PersonnelRequirementType): boolean {
+  return requirementType === 'acknowledgement';
+}
+
 export function getEffectiveAccessState(
   lifecycle: {
     state: PersonnelAccessState;
