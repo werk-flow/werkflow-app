@@ -244,6 +244,8 @@ export async function captureAcceptance(
       for (const scheme of capture.schemes) {
         await page.emulateMedia({ colorScheme: scheme });
         await expectReady(page, scope, capture.view.kind);
+        // A clocked-in capture shows the running clock, or it proves nothing about it.
+        if (clockedIn) await expect(runningClockLauncher(page)).toBeVisible();
         await writeCapture(page, testInfo, set, identity, destination.route, width, scheme);
       }
       if (capture.view.kind === 'dialog') await page.emulateMedia({ colorScheme: 'light' });
