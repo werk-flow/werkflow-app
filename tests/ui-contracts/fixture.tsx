@@ -12,6 +12,7 @@ import {
 } from './calendar-views-boundaries';
 import { OptionContractFixture } from './option-boundaries';
 import { DocumentSearchFixture, ListNavigationFixture } from './list-navigation-boundaries';
+import { DocumentUploadContractFixture } from './document-upload-boundaries';
 import { OrganizationContractFixture } from './organization-boundaries';
 import { CalendarContractFixture } from './calendar-boundaries';
 import { FeedbackContractFixture, isFeedbackFixture } from './feedback-boundaries';
@@ -564,6 +565,8 @@ createRoot(root).render(
     <ListNavigationFixture />
   ) : window.uiContractFixture === 'document-search' ? (
     <DocumentSearchFixture />
+  ) : window.uiContractFixture === 'document-upload' ? (
+    <DocumentUploadContractFixture />
   ) : window.uiContractFixture === 'options' ? (
     <OptionContractFixture />
   ) : window.uiContractFixture === 'calendar' ? (

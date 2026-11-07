@@ -11,6 +11,7 @@ import {
   validateTestGroupInventory,
   type TestGroup,
 } from './test-groups';
+import { z } from '@/lib/zod';
 import { expectDefined } from '../spec-support/expect-defined';
 import { labStepsForFiles } from '../lab-steps';
 import { groupSelections } from './group-selection';
@@ -228,9 +229,9 @@ describe('independent group registry', () => {
   test('every static gate runs a package script, and the formatter gate is in every change plan', () => {
     const root = resolve(import.meta.dir, '../../..');
     const groups = getTestGroups(root);
-    const packageScripts: Record<string, string> = JSON.parse(
-      readFileSync(resolve(root, 'package.json'), 'utf8'),
-    ).scripts;
+    const packageScripts = z
+      .object({ scripts: z.record(z.string(), z.string()) })
+      .parse(JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'))).scripts;
     const staticGroups = groups.filter((entry) => entry.kind === 'static');
     expect(
       staticGroups.filter((entry) => !entry.script || !packageScripts[entry.script]).map((entry) => entry.id),

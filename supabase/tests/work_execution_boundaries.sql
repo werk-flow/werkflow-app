@@ -112,6 +112,16 @@ insert into public.job_instruction_items (id, organization_id, job_id, content, 
 ('14170000-0000-0000-0000-000000000080', '14170000-0000-0000-0000-000000000010',
  '14170000-0000-0000-0000-000000000079', 'Altlast offen', 0, '14170000-0000-0000-0000-000000000001');
 
+-- A job both employees work on, for the internal-draft rule.
+insert into public.jobs (id, organization_id, title, job_number, created_by) values
+('14170000-0000-0000-0000-000000000090', '14170000-0000-0000-0000-000000000010',
+ 'Gemeinsamer Auftrag', 'WORK-SQL-8', '14170000-0000-0000-0000-000000000001');
+insert into public.job_assignments (organization_id, job_id, user_id, assigned_by) values
+('14170000-0000-0000-0000-000000000010', '14170000-0000-0000-0000-000000000090',
+ '14170000-0000-0000-0000-000000000003', '14170000-0000-0000-0000-000000000001'),
+('14170000-0000-0000-0000-000000000010', '14170000-0000-0000-0000-000000000090',
+ '14170000-0000-0000-0000-000000000005', '14170000-0000-0000-0000-000000000001');
+
 set local role service_role;
 
 -- The field work pack shows the checklist read-only once work is finished or
@@ -354,6 +364,156 @@ begin
   );
   if not exists (select 1 from public.work_handover_packages where job_id = v_job)
   then raise exception 'the handover draft was not recorded'; end if;
+end;
+$$;
+
+-- A field worker's internal draft stays private: an assigned coworker cannot
+-- send it to review, and the refusal changes nothing. Its author and a manager
+-- can, and another organization's id is refused.
+do $$
+declare
+  v_org constant uuid := '14170000-0000-0000-0000-000000000010';
+  v_foreign_org constant uuid := '14170000-0000-0000-0000-000000000011';
+  v_admin constant uuid := '14170000-0000-0000-0000-000000000001';
+  v_author constant uuid := '14170000-0000-0000-0000-000000000003';
+  v_coworker constant uuid := '14170000-0000-0000-0000-000000000005';
+  v_outsider constant uuid := '14170000-0000-0000-0000-000000000004';
+  v_job constant uuid := '14170000-0000-0000-0000-000000000090';
+  v_draft constant uuid := '14170000-0000-0000-0000-000000000091';
+  v_draft_revision constant uuid := '14170000-0000-0000-0000-000000000092';
+  v_second_draft constant uuid := '14170000-0000-0000-0000-000000000093';
+  v_second_revision constant uuid := '14170000-0000-0000-0000-000000000094';
+  v_buero constant uuid := '14170000-0000-0000-0000-000000000006';
+  v_third_draft constant uuid := '14170000-0000-0000-0000-0000000000a1';
+  v_third_revision constant uuid := '14170000-0000-0000-0000-0000000000a2';
+  v_fourth_draft constant uuid := '14170000-0000-0000-0000-0000000000a3';
+  v_fourth_revision constant uuid := '14170000-0000-0000-0000-0000000000a4';
+  v_result jsonb;
+begin
+  perform public.create_work_artifact_revision(
+    p_organization_id => v_org, p_artifact_id => v_draft, p_revision_id => v_draft_revision,
+    p_job_id => v_job, p_project_id => null, p_kind => 'work_report', p_visibility => 'internal_only',
+    p_title => 'Privater Entwurf',
+    p_content => '{"summary":"Anlage geprüft","performedWork":"Filter gereinigt","visitStartedAt":"2026-09-01T06:00:00Z","visitEndedAt":"2026-09-01T07:00:00Z"}'::jsonb,
+    p_captured_at => now(), p_correction_reason => null, p_corrects_revision_id => null,
+    p_expected_version => null, p_submit => false, p_submit_action_id => null, p_actor_id => v_author
+  );
+  perform public.create_work_artifact_revision(
+    p_organization_id => v_org, p_artifact_id => v_second_draft, p_revision_id => v_second_revision,
+    p_job_id => v_job, p_project_id => null, p_kind => 'work_report', p_visibility => 'internal_only',
+    p_title => 'Zweiter privater Entwurf',
+    p_content => '{"summary":"Anlage geprüft","performedWork":"Filter gereinigt","visitStartedAt":"2026-09-01T06:00:00Z","visitEndedAt":"2026-09-01T07:00:00Z"}'::jsonb,
+    p_captured_at => now(), p_correction_reason => null, p_corrects_revision_id => null,
+    p_expected_version => null, p_submit => false, p_submit_action_id => null, p_actor_id => v_author
+  );
+  perform public.create_work_artifact_revision(
+    p_organization_id => v_org, p_artifact_id => v_third_draft, p_revision_id => v_third_revision,
+    p_job_id => v_job, p_project_id => null, p_kind => 'work_report', p_visibility => 'internal_only',
+    p_title => 'Dritter privater Entwurf',
+    p_content => '{"summary":"Anlage geprüft","performedWork":"Filter gereinigt","visitStartedAt":"2026-09-01T06:00:00Z","visitEndedAt":"2026-09-01T07:00:00Z"}'::jsonb,
+    p_captured_at => now(), p_correction_reason => null, p_corrects_revision_id => null,
+    p_expected_version => null, p_submit => false, p_submit_action_id => null, p_actor_id => v_author
+  );
+  perform public.create_work_artifact_revision(
+    p_organization_id => v_org, p_artifact_id => v_fourth_draft, p_revision_id => v_fourth_revision,
+    p_job_id => v_job, p_project_id => null, p_kind => 'work_report', p_visibility => 'internal_only',
+    p_title => 'Vierter privater Entwurf',
+    p_content => '{"summary":"Anlage geprüft","performedWork":"Filter gereinigt","visitStartedAt":"2026-09-01T06:00:00Z","visitEndedAt":"2026-09-01T07:00:00Z"}'::jsonb,
+    p_captured_at => now(), p_correction_reason => null, p_corrects_revision_id => null,
+    p_expected_version => null, p_submit => false, p_submit_action_id => null, p_actor_id => v_author
+  );
+
+  -- Nor can the coworker write a revision over it and so take it over, even unsubmitted.
+  begin
+    perform public.create_work_artifact_revision(
+      p_organization_id => v_org, p_artifact_id => v_draft,
+      p_revision_id => '14170000-0000-0000-0000-0000000000a5',
+      p_job_id => v_job, p_project_id => null, p_kind => 'work_report', p_visibility => 'internal_only',
+      p_title => 'Übernommen',
+      p_content => '{"summary":"Anlage geprüft","performedWork":"Filter gereinigt","visitStartedAt":"2026-09-01T06:00:00Z","visitEndedAt":"2026-09-01T07:00:00Z"}'::jsonb,
+      p_captured_at => now(), p_correction_reason => null, p_corrects_revision_id => null,
+      p_expected_version => 1, p_submit => false, p_submit_action_id => null, p_actor_id => v_coworker
+    );
+    raise exception 'an assigned coworker wrote a revision over another person''s internal draft';
+  exception when others then
+    if sqlerrm <> 'work_artifact_not_authorized' then raise; end if;
+  end;
+  if not exists (select 1 from public.work_artifacts
+      where id = v_draft and version = 1 and current_revision_id = v_draft_revision)
+  then raise exception 'a refused revision changed the internal draft'; end if;
+
+  -- The assigned coworker reads the ids and version, but the review request is refused.
+  begin
+    perform public.record_work_artifact_action(
+      p_organization_id => v_org, p_actor_id => v_coworker, p_artifact_id => v_draft,
+      p_revision_id => v_draft_revision, p_action_id => '14170000-0000-0000-0000-000000000095',
+      p_expected_version => 1, p_action_type => 'review_requested', p_reason => null, p_comment => null,
+      p_responsibility_snapshot => null, p_customer_context => null, p_signature_document_id => null
+    );
+    raise exception 'an assigned coworker sent another person''s internal draft to review';
+  exception when others then
+    if sqlerrm <> 'work_artifact_not_authorized' then raise; end if;
+  end;
+  if not exists (select 1 from public.work_artifacts
+      where id = v_draft and status = 'draft' and version = 1)
+    or exists (select 1 from public.work_artifact_actions where artifact_id = v_draft)
+  then raise exception 'a refused review request changed the internal draft'; end if;
+
+  -- Another organization's admin names the draft inside the own organization and learns nothing.
+  begin
+    perform public.record_work_artifact_action(
+      p_organization_id => v_foreign_org, p_actor_id => v_outsider, p_artifact_id => v_draft,
+      p_revision_id => v_draft_revision, p_action_id => '14170000-0000-0000-0000-000000000096',
+      p_expected_version => 1, p_action_type => 'review_requested', p_reason => null, p_comment => null,
+      p_responsibility_snapshot => null, p_customer_context => null, p_signature_document_id => null
+    );
+    raise exception 'another organization sent the internal draft to review';
+  exception when others then
+    if sqlerrm <> 'work_artifact_not_found' then raise; end if;
+  end;
+
+  -- The author sends the own draft, and a manager sends the author's other draft.
+  v_result := public.record_work_artifact_action(
+    p_organization_id => v_org, p_actor_id => v_author, p_artifact_id => v_draft,
+    p_revision_id => v_draft_revision, p_action_id => '14170000-0000-0000-0000-000000000097',
+    p_expected_version => 1, p_action_type => 'review_requested', p_reason => null, p_comment => null,
+    p_responsibility_snapshot => null, p_customer_context => null, p_signature_document_id => null
+  );
+  if v_result ->> 'status' <> 'submitted' then
+    raise exception 'the author could not send the own internal draft to review';
+  end if;
+  v_result := public.record_work_artifact_action(
+    p_organization_id => v_org, p_actor_id => v_admin, p_artifact_id => v_second_draft,
+    p_revision_id => v_second_revision, p_action_id => '14170000-0000-0000-0000-000000000098',
+    p_expected_version => 1, p_action_type => 'review_requested', p_reason => null, p_comment => null,
+    p_responsibility_snapshot => null, p_customer_context => null, p_signature_document_id => null
+  );
+  if v_result ->> 'status' <> 'submitted' then
+    raise exception 'a manager could not send a field worker''s internal draft to review';
+  end if;
+  -- Büro is a manager too.
+  v_result := public.record_work_artifact_action(
+    p_organization_id => v_org, p_actor_id => v_buero, p_artifact_id => v_third_draft,
+    p_revision_id => v_third_revision, p_action_id => '14170000-0000-0000-0000-0000000000a6',
+    p_expected_version => 1, p_action_type => 'review_requested', p_reason => null, p_comment => null,
+    p_responsibility_snapshot => null, p_customer_context => null, p_signature_document_id => null
+  );
+  if v_result ->> 'status' <> 'submitted' then
+    raise exception 'Büro could not send a field worker''s internal draft to review';
+  end if;
+  -- A manager may write the next revision of a field worker's internal draft.
+  v_result := public.create_work_artifact_revision(
+    p_organization_id => v_org, p_artifact_id => v_fourth_draft,
+    p_revision_id => '14170000-0000-0000-0000-0000000000a7',
+    p_job_id => v_job, p_project_id => null, p_kind => 'work_report', p_visibility => 'internal_only',
+    p_title => 'Vom Büro ergänzt',
+    p_content => '{"summary":"Anlage geprüft","performedWork":"Filter gereinigt","visitStartedAt":"2026-09-01T06:00:00Z","visitEndedAt":"2026-09-01T07:00:00Z"}'::jsonb,
+    p_captured_at => now(), p_correction_reason => null, p_corrects_revision_id => null,
+    p_expected_version => 1, p_submit => false, p_submit_action_id => null, p_actor_id => v_admin
+  );
+  if (v_result ->> 'version')::bigint <> 2 then
+    raise exception 'a manager could not write a revision over a field worker''s internal draft';
+  end if;
 end;
 $$;
 

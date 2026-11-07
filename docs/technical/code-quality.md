@@ -10,7 +10,7 @@ This doc owns virtue 4 in `AGENTS.md`: how to reach good code, the deletion pass
 
 1. Search for the rule's owner with `git grep` under `lib/` before you write it. A domain rule lives in `lib/<domain>/` beside its `actions.ts`, `types.ts` and tests, as in `lib/requests/`.
 2. Put a component under `components/<area>/`, in the folder of its concern, such as `components/auftraege/lifecycle/`.
-3. Split by concern before a file nears its limit in `eslint-rules/size-caps.mjs`. When you touch an entry of `eslint-rules/size-cap-exceptions.json`, split it and lower or remove the entry. A shrink lowers the ceiling in the same change.
+3. Split by concern before a file or function nears its limit in `eslint-rules/size-caps.mjs`. No hand-written file or function is exempt.
 
 Wrong turn: a copy of a helper or a type in the file that needs it. The copies drift, and `lib/conventions/duplicate-helpers.test.ts` fails on a repeated name or a copied body.
 
@@ -71,7 +71,7 @@ Wrong turn: code kept for possible future scope. Every later agent reads, mainta
 
 ## Never
 
-- Use `any`, a non-null assertion `!`, or an `as` or `<T>` assertion (`as const` stays). A file on `eslint-rules/type-assertion-ratchet.json` keeps at most its recorded count; review judges an `as` added in a listed file. In product code, a typed variable that takes an `any` value asserts too: parse or narrow it (`no-unsafe-assignment`).
+- Use `any`, a non-null assertion `!`, or an `as` or `<T>` assertion (`as const` stays). Only casts the owner accepted as permanent stay, each with its reason beside it. `eslint-rules/type-assertion-ratchet.json` lists them by file and count, and `lib/conventions/type-assertions.test.ts` fails when a listed file holds another number. A typed variable that takes an `any` value asserts too, in tests and scripts as in product code: parse or narrow it (`no-unsafe-assignment`).
 - Pass `undefined` into an optional property, or silence a strict flag with a cast or `@ts-expect-error`.
 - Write a uuid regex outside `lib/validation/uuid.ts`.
 - Write to `console` in product code. Log through `logError`; a component shows the failure.

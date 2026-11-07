@@ -2,9 +2,9 @@
 
 import { Constants } from '@/lib/supabase/database.types';
 import { z } from '@/lib/zod';
+import { MANUAL_ENTRY_BRIDGE_STORAGE_KEY as STORAGE_KEY, tabStorage } from './manual-entry-bridge-storage';
 import { TIME_ENTRY_TYPES, type TimeEntry } from './types';
 
-const STORAGE_KEY = 'werkflow:manual-entry-created';
 export const MANUAL_ENTRY_CREATED_EVENT = 'werkflow:manual-entry-created';
 
 /** The queued entries as queueManualEntryBridge stored them: the fields toTimeEntry sets. */
@@ -27,9 +27,18 @@ const queuedEntriesSchema = z.array(
   }),
 );
 
+/**
+ * The queue a signed-in user left for the calendar of this tab. It names that
+ * user, not the person an entry is for: an admin queues entries they added
+ * for an employee.
+ */
+const queueSchema = z.object({ userId: z.string(), entries: queuedEntriesSchema });
+
+type Queue = { userId: string; entries: TimeEntry[] };
+
 /** The stored queue, or null when it is not one this module wrote. */
-function readQueuedEntries(raw: string): TimeEntry[] | null {
-  const parsed = queuedEntriesSchema.safeParse(JSON.parse(raw));
+function readQueue(raw: string): Queue | null {
+  const parsed = queueSchema.safeParse(JSON.parse(raw));
   return parsed.success ? parsed.data : null;
 }
 
@@ -39,20 +48,18 @@ export function readManualEntryEvent(detail: unknown): TimeEntry[] | null {
   return parsed.success ? parsed.data.entries : null;
 }
 
-function canUseBrowserStorage() {
-  return typeof window !== 'undefined' && typeof window.sessionStorage !== 'undefined';
-}
-
-export function queueManualEntryBridge(entries: TimeEntry[]): void {
-  if (!canUseBrowserStorage() || entries.length === 0) {
+/** Queues the signed-in user's new entries until the calendar of this tab reads them. */
+export function queueManualEntryBridge(userId: string, entries: TimeEntry[]): void {
+  const storage = tabStorage();
+  if (!storage || entries.length === 0) {
     return;
   }
 
   try {
-    const raw = window.sessionStorage.getItem(STORAGE_KEY);
-    // A stored queue this module cannot read is replaced, so it never blocks the bridge.
-    const existing = raw ? readQueuedEntries(raw) : [];
-    const merged = [...(existing ?? [])];
+    const raw = storage.getItem(STORAGE_KEY);
+    const existing = raw ? readQueue(raw) : null;
+    // A queue of another user, or one this module cannot read, is replaced, so it never blocks the bridge.
+    const merged = existing?.userId === userId ? [...existing.entries] : [];
 
     for (const entry of entries) {
       if (!merged.some((candidate) => candidate.id === entry.id)) {
@@ -60,35 +67,49 @@ export function queueManualEntryBridge(entries: TimeEntry[]): void {
       }
     }
 
-    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+    const queue: Queue = { userId, entries: merged };
+    storage.setItem(STORAGE_KEY, JSON.stringify(queue));
   } catch {
     // best-effort: the bridge only shows the new entry early; the saved entry arrives with the next read.
   }
 }
 
-export function consumeManualEntryBridge(organizationId: string): TimeEntry[] {
-  if (!canUseBrowserStorage()) {
+/**
+ * The queued entries of the signed-in user in the active organization,
+ * removed from the queue. A queue another user left in this tab is dropped
+ * unread.
+ */
+export function consumeManualEntryBridge({
+  userId,
+  organizationId,
+}: {
+  userId: string;
+  organizationId: string;
+}): TimeEntry[] {
+  const storage = tabStorage();
+  if (!storage) {
     return [];
   }
 
   try {
-    const raw = window.sessionStorage.getItem(STORAGE_KEY);
+    const raw = storage.getItem(STORAGE_KEY);
     if (!raw) {
       return [];
     }
 
-    const queued = readQueuedEntries(raw);
-    if (!queued) {
-      window.sessionStorage.removeItem(STORAGE_KEY);
+    const queue = readQueue(raw);
+    if (!queue || queue.userId !== userId) {
+      storage.removeItem(STORAGE_KEY);
       return [];
     }
-    const matching = queued.filter((entry) => entry.organizationId === organizationId);
-    const remaining = queued.filter((entry) => entry.organizationId !== organizationId);
+    const matching = queue.entries.filter((entry) => entry.organizationId === organizationId);
+    const remaining = queue.entries.filter((entry) => entry.organizationId !== organizationId);
 
     if (remaining.length > 0) {
-      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(remaining));
+      const rest: Queue = { userId, entries: remaining };
+      storage.setItem(STORAGE_KEY, JSON.stringify(rest));
     } else {
-      window.sessionStorage.removeItem(STORAGE_KEY);
+      storage.removeItem(STORAGE_KEY);
     }
 
     return matching;

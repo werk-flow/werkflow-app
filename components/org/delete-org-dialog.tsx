@@ -17,7 +17,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { useRouterRefresh } from '@/components/ui/refresh-button';
@@ -38,12 +37,8 @@ const ERROR_MESSAGES: Readonly<Record<string, string>> = {
   name_mismatch: NAME_MISMATCH,
   has_time_records:
     'Die Organisation enthält inzwischen erfasste Arbeitszeiten oder abgeschlossene Perioden und kann deshalb nicht gelöscht werden.',
-  files_delete_failed:
-    'Nicht alle gespeicherten Dateien konnten gelöscht werden. Die Organisation bleibt bestehen. Versuche es erneut, dann werden die übrigen Dateien gelöscht.',
-  time_recorded_during_deletion:
-    'Während des Löschens wurde Arbeitszeit erfasst. Die Organisation bleibt deshalb bestehen, ihre gespeicherten Dateien sind aber bereits gelöscht.',
   delete_org_failed:
-    'Die Organisation konnte nicht gelöscht werden, ihre gespeicherten Dateien sind aber bereits gelöscht. Versuche es erneut.',
+    'Die Organisation konnte nicht gelöscht werden. Es wurde nichts gelöscht. Versuche es erneut.',
 };
 
 interface DeleteOrgDialogProps {
@@ -65,21 +60,11 @@ function ScopeList({ rows }: { rows: readonly (readonly [string, number])[] }) {
   );
 }
 
-/**
- * Why the organization stays and what it holds; after a refusal that came
- * once the files were gone, it says so first.
- */
-function RetainedDescription({
-  scope,
-  filesDeleted,
-}: {
-  scope: OrganizationDeletionScope;
-  filesDeleted: boolean;
-}) {
+/** Why the organization stays and what it holds. */
+function RetainedDescription({ scope }: { scope: OrganizationDeletionScope }) {
   return (
     <AlertDialogDescription asChild>
       <div className="space-y-3 text-left text-muted-foreground text-sm">
-        {filesDeleted ? <ErrorText>{ERROR_MESSAGES.time_recorded_during_deletion}</ErrorText> : null}
         <p>
           <span className="font-semibold text-foreground">
             Diese Organisation kann nicht gelöscht werden,
@@ -143,15 +128,12 @@ function DeletionConfirmation({
   orgName,
   onDelete,
   onDeleted,
-  onFilesDeleted,
   isLoading,
   children,
 }: {
   orgName: string;
   onDelete: (confirmationName: string) => Promise<DeleteOrgResult>;
   onDeleted: () => void;
-  /** The files are gone although the organization stays; the refusal view must say so. */
-  onFilesDeleted: () => void;
   isLoading: boolean;
   children: ReactNode;
 }) {
@@ -181,8 +163,7 @@ function DeletionConfirmation({
       setError(describeFailure(result.error, ERROR_MESSAGES, SHARED_FAILURE_MESSAGES.unexpected_error));
       // Time recorded since the page loaded: the re-read scope turns the
       // dialog into the refusal with its retention reason and the export.
-      if (result.error === 'time_recorded_during_deletion') onFilesDeleted();
-      if (result.error === 'has_time_records' || result.error === 'time_recorded_during_deletion') refresh();
+      if (result.error === 'has_time_records') refresh();
     } catch {
       setError(SHARED_FAILURE_MESSAGES.unexpected_error);
     }
@@ -252,17 +233,11 @@ function DeletionActions({
  */
 export function DeleteOrgDialog({ orgName, scope }: DeleteOrgDialogProps) {
   const [open, setOpen] = useState(false);
-  // Lives here, not in the confirmation: the refusal view replaces it.
-  const [filesDeleted, setFilesDeleted] = useState(false);
   const { run: runDelete, isPending: isLoading } = useServerAction(deleteOrganization);
   const retained = scope?.retainsTimeRecords ?? false;
-  const handleOpenChange = (nextOpen: boolean) => {
-    setOpen(nextOpen);
-    if (!nextOpen) setFilesDeleted(false);
-  };
 
   return (
-    <AlertDialog open={open} onOpenChange={handleOpenChange} pending={isLoading}>
+    <AlertDialog open={open} onOpenChange={setOpen} pending={isLoading}>
       <AlertDialogTrigger asChild>
         <Button variant="destructive" size="sm" className="w-full" disabled={!scope}>
           <Trash2 className="size-4" />
@@ -278,9 +253,7 @@ export function DeleteOrgDialog({ orgName, scope }: DeleteOrgDialogProps) {
         </AlertDialogHeader>
         {retained ? (
           <>
-            <AlertDialogBody>
-              {scope ? <RetainedDescription scope={scope} filesDeleted={filesDeleted} /> : null}
-            </AlertDialogBody>
+            <AlertDialogBody>{scope ? <RetainedDescription scope={scope} /> : null}</AlertDialogBody>
             <AlertDialogFooter>
               <AlertDialogCancel>Abbrechen</AlertDialogCancel>
               <AlertDialogAction asChild>
@@ -293,7 +266,6 @@ export function DeleteOrgDialog({ orgName, scope }: DeleteOrgDialogProps) {
             orgName={orgName}
             onDelete={runDelete}
             onDeleted={() => setOpen(false)}
-            onFilesDeleted={() => setFilesDeleted(true)}
             isLoading={isLoading}
           >
             {scope ? <DeletionScopeDescription scope={scope} /> : null}
