@@ -5,7 +5,8 @@
 // project reads the project's artifacts, but an export of a project artifact
 // is a project-level document write and needs a manager. The same field worker
 // still exports an artifact of the assigned job. An artifact of another
-// organization is not found and nothing is stored.
+// organization is not found and nothing is stored. An internal revision is
+// never exported, not even by a manager.
 import { mock } from 'bun:test';
 import assert from 'node:assert/strict';
 import {
@@ -21,6 +22,7 @@ const jobId = '91000000-0000-4000-8000-000000000001';
 const projectArtifactId = '94000000-0000-4000-8000-000000000001';
 const jobArtifactId = '94000000-0000-4000-8000-000000000002';
 const foreignArtifactId = '94000000-0000-4000-8000-000000000003';
+const internalArtifactId = '94000000-0000-4000-8000-000000000004';
 const now = '2026-10-01T08:00:00.000Z';
 
 const artifactRow = (id: string, target: { job_id: string } | { project_id: string }) => ({
@@ -73,8 +75,13 @@ const world = installActionWorld({
     artifactRow(projectArtifactId, { project_id: projectId }),
     artifactRow(jobArtifactId, { job_id: jobId }),
     { ...artifactRow(foreignArtifactId, { job_id: jobId }), organization_id: ORGANIZATION_B },
+    artifactRow(internalArtifactId, { job_id: jobId }),
   ],
-  work_artifact_revisions: [revisionRow(projectArtifactId), revisionRow(jobArtifactId)],
+  work_artifact_revisions: [
+    revisionRow(projectArtifactId),
+    revisionRow(jobArtifactId),
+    { ...revisionRow(internalArtifactId), visibility: 'internal_only' },
+  ],
   work_artifact_actions: [],
   work_artifact_measurement_lines: [],
   work_artifact_defect_details: [],
@@ -133,6 +140,18 @@ for (const role of ['employee', 'buero'] as const) {
   signInAs(world, role);
   const foreignExport = await exportOf(foreignArtifactId, crypto.randomUUID());
   assert.equal(foreignExport.success, false, role);
+  assert.deepEqual(storedPaths, []);
+  assert.deepEqual(world.rpcCalls, []);
+}
+
+// An internal revision is refused before anything is stored, for its author and for a manager.
+for (const role of ['employee', 'buero'] as const) {
+  signInAs(world, role);
+  assert.deepEqual(
+    await exportOf(internalArtifactId, crypto.randomUUID()),
+    { success: false, error: 'work_artifact_export_requires_customer_visibility' },
+    role,
+  );
   assert.deepEqual(storedPaths, []);
   assert.deepEqual(world.rpcCalls, []);
 }
