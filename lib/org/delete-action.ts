@@ -50,7 +50,6 @@ async function discardOrganizationFiles(organizationId: string, listed: readonly
  */
 async function organizationIsGone(admin: AdminClient, organizationId: string): Promise<boolean> {
   const { data, error } = await admin
-    // tenant-scope: by-id-then-verified — the caller's own organization, whose ownership the action verified
     .from('organizations')
     .select('id')
     .eq('id', organizationId)
