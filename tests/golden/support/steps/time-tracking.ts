@@ -963,6 +963,14 @@ export function closeMonthButton(page: Page): Locator {
   return page.getByRole('button', { name: TIME_ACCOUNT_COPY.closeMonth });
 }
 
+/** The answer of a close pressed while blocking findings remain: it names them instead of closing. */
+export function closeBlockedAlert(page: Page): Locator {
+  return page
+    .getByRole('main')
+    .getByRole('alert')
+    .filter({ hasText: /blockierende[r]? Hinweis/ });
+}
+
 /** The payroll export action of a closed period. */
 export function createPayrollExportButton(page: Page): Locator {
   return page.getByRole('button', { name: TIME_ACCOUNT_COPY.createExport });
