@@ -7,6 +7,7 @@ import { useBanner } from '@/components/ui/banner';
 import { useOptimisticList } from '@/hooks/use-optimistic-list';
 import { useSettleOnChange } from '@/hooks/use-settle-on-change';
 import { createClientContact, updateClientContact } from '@/lib/clients/actions';
+import { contactEmailError } from '@/lib/clients/contact-email';
 import { buildContactEcho, withPendingPrimary } from '@/lib/clients/relation-echo';
 import type { ClientContact } from '@/lib/clients/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
@@ -94,8 +95,9 @@ export function useClientContacts({
   function saveContact(): void {
     if (!contactDialog) return;
     const nameError = contactDialog.draft.name.trim() ? undefined : 'Bitte gib einen Namen ein.';
-    if (focusFirstInvalidField({ 'contact-name': nameError })) {
-      setContactDialog({ ...contactDialog, nameError: nameError ?? null });
+    const emailError = contactEmailError(contactDialog.draft.email);
+    if (focusFirstInvalidField({ 'contact-name': nameError, 'contact-email': emailError })) {
+      setContactDialog({ ...contactDialog, nameError: nameError ?? null, emailError: emailError ?? null });
       return;
     }
     const { contactId, draft } = contactDialog;
