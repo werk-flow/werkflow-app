@@ -41,10 +41,21 @@ function storedSessionCookie(): string {
   return `base64-${Buffer.from(JSON.stringify(session)).toString('base64url')}`;
 }
 
+/** The account a bearer token names, as Auth would answer `/user` for it. */
+function bearerAccount(authorization: string | undefined): string | null {
+  const payload = authorization?.replace(/^Bearer /, '').split('.')[1];
+  if (!payload) return null;
+  const claims: unknown = JSON.parse(Buffer.from(payload, 'base64url').toString());
+  return typeof claims === 'object' && claims !== null && 'sub' in claims && typeof claims.sub === 'string'
+    ? claims.sub
+    : null;
+}
+
 /**
  * Opens the fixture on a URL whose fragment carries tokens and returns every
- * Auth request the page makes. Auth answers the linked tokens as valid, so a
- * client that redeems them signs in as the linked account.
+ * Auth request that used the link's credentials. Auth answers each token for
+ * its own account, so a client that redeems the link signs in as the linked
+ * account, while a check of the stored session stays allowed.
  */
 async function openWithTokenLink(
   page: Page,
@@ -54,17 +65,20 @@ async function openWithTokenLink(
   assertWorkspaceTestLock();
   const bundle = process.env.WERKFLOW_UI_CONTRACT_BUNDLE;
   if (!bundle) throw new Error('Run through bun tests/ui-contracts/run.ts.');
-  const authRequests: string[] = [];
+  const linkedCredentialUses: string[] = [];
   await page.route(`${CONTRACT_SUPABASE_URL}/**`, (route) => {
-    const path = new URL(route.request().url()).pathname;
-    authRequests.push(path);
-    if (path === '/auth/v1/user') {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const account = bearerAccount(request.headers()['authorization']);
+    if (account === LINKED_ACCOUNT || (request.postData() ?? '').includes('linked-refresh')) {
+      linkedCredentialUses.push(path);
+    }
+    if (path === '/auth/v1/user' && account) {
       return route.fulfill({
         json: {
-          id: LINKED_ACCOUNT,
+          id: account,
           aud: 'authenticated',
           role: 'authenticated',
-          email: 'verlinkt@example.test',
           app_metadata: {},
           user_metadata: {},
           created_at: '2026-01-01T00:00:00.000Z',
@@ -90,7 +104,7 @@ async function openWithTokenLink(
   }, fixture);
   await page.addScriptTag({ path: bundle });
   await expect(page.getByRole('heading', { name: 'Komponentenverträge' })).toBeVisible();
-  return authRequests;
+  return linkedCredentialUses;
 }
 
 async function sessionCookieNames(page: Page): Promise<string[]> {
@@ -101,17 +115,17 @@ async function sessionCookieNames(page: Page): Promise<string[]> {
 test('tokens in a link to an ordinary page neither sign in nor sign out the stored account', async ({
   page,
 }) => {
-  const authRequests = await openWithTokenLink(page, 'auth-url-session', { storedSession: true });
+  const linkedCredentialUses = await openWithTokenLink(page, 'auth-url-session', { storedSession: true });
   await expect(page.getByLabel('Angemeldetes Konto')).toHaveText(STORED_ACCOUNT);
   expect(await sessionCookieNames(page)).toEqual([CONTRACT_SESSION_COOKIE]);
-  expect(authRequests).toEqual([]);
+  expect(linkedCredentialUses).toEqual([]);
 });
 
 test('the reset page signs nobody in from tokens in its link', async ({ page }) => {
-  const authRequests = await openWithTokenLink(page, 'auth-url-reset-form', { storedSession: false });
+  const linkedCredentialUses = await openWithTokenLink(page, 'auth-url-reset-form', { storedSession: false });
   await expect(page.getByRole('main').getByText(/ungültig oder abgelaufen/)).toBeVisible();
   await expect(page.getByRole('link', { name: 'Neuen Link anfordern' })).toBeVisible();
   await expect(page.getByLabel('Neues Passwort')).toHaveCount(0);
   expect(await sessionCookieNames(page)).toEqual([]);
-  expect(authRequests).toEqual([]);
+  expect(linkedCredentialUses).toEqual([]);
 });
