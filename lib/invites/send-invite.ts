@@ -188,7 +188,7 @@ async function mailOrDiscardInvite(
 ): Promise<OrganizationInviteSendResult> {
   const { admin, organizationId, email } = send;
   const supabaseSecretKey = getSupabaseSecretKey();
-  const { error: emailError } = await admin.functions.invoke('send-invite-email', {
+  const mailed = await admin.functions.invoke('send-invite-email', {
     headers: {
       apikey: supabaseSecretKey,
       Authorization: `Bearer ${supabaseSecretKey}`,
@@ -201,6 +201,8 @@ async function mailOrDiscardInvite(
       isExistingUser: mail.isExistingUser,
     },
   });
+  // functions-js types a failure's error as any.
+  const emailError: unknown = mailed.error;
 
   if (emailError) {
     logError('createAndMailOrganizationInvite: send-invite-email failed', emailError);

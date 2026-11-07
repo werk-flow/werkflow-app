@@ -3,6 +3,7 @@ import type { User } from '@supabase/supabase-js';
 import { logError } from '@/lib/logging';
 import { loadDocument } from '@/lib/navigation/document-load';
 import type { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { jsonRecordOrEmpty } from '@/lib/supabase/json';
 
 type SupabaseBrowserClient = ReturnType<typeof createSupabaseBrowserClient>;
 
@@ -46,7 +47,8 @@ export async function redeemOtpInvite(
       body: JSON.stringify({ inviteCode: effectiveInviteCode }),
     });
 
-    const result = await response.json();
+    // The route answers a JSON object; each key stays unknown, as the redirects only test and print it.
+    const result = jsonRecordOrEmpty(await response.json());
 
     if (!response.ok) {
       logError('redeemOtpInvite: redemption refused', { code: result.error, status: response.status });
