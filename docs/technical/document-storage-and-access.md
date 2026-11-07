@@ -44,7 +44,7 @@ Server actions in `lib/documents/actions.ts` and RLS through `app_private` helpe
 
 | Action | `admin` and `buero` | `employee` |
 | --- | --- | --- |
-| `/dokumente` library, folders, trash, audit, versions | Yes | No; the route redirects |
+| `/dokumente` library, folders, trash | Yes | No; the route redirects |
 | Upload on a job page | Yes | Only on an assigned job |
 | Upload on a project, customer or employee page | Yes | No |
 | View or download the current version | Yes | Only when linked to an assigned job, or to a project with an assigned job |
