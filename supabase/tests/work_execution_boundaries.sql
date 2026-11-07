@@ -25,7 +25,10 @@ insert into auth.users (
  '{"first_name":"Outsider","last_name":"Work"}', now(), now()),
 ('14170000-0000-0000-0000-000000000005', '00000000-0000-0000-0000-000000000000',
  'authenticated', 'authenticated', 'work-boundary-colleague@example.test', '', now(), '{}',
- '{"first_name":"Colleague","last_name":"Work"}', now(), now());
+ '{"first_name":"Colleague","last_name":"Work"}', now(), now()),
+('14170000-0000-0000-0000-000000000006', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'work-boundary-buero@example.test', '', now(), '{}',
+ '{"first_name":"Buero","last_name":"Work"}', now(), now());
 
 insert into public.organizations (id, name, admin_id, unique_code) values
 ('14170000-0000-0000-0000-000000000010', 'Work boundaries SQL',
@@ -34,7 +37,8 @@ insert into public.organizations (id, name, admin_id, unique_code) values
  '14170000-0000-0000-0000-000000000004', 'WORKOUT');
 insert into public.organization_members (organization_id, user_id, role) values
 ('14170000-0000-0000-0000-000000000010', '14170000-0000-0000-0000-000000000003', 'employee'),
-('14170000-0000-0000-0000-000000000010', '14170000-0000-0000-0000-000000000005', 'employee');
+('14170000-0000-0000-0000-000000000010', '14170000-0000-0000-0000-000000000005', 'employee'),
+('14170000-0000-0000-0000-000000000010', '14170000-0000-0000-0000-000000000006', 'buero');
 
 insert into public.jobs (id, organization_id, title, job_number, created_by) values
 ('14170000-0000-0000-0000-000000000020', '14170000-0000-0000-0000-000000000010',
@@ -85,6 +89,29 @@ insert into public.job_instruction_items (id, organization_id, job_id, content, 
 ('14170000-0000-0000-0000-000000000074', '14170000-0000-0000-0000-000000000010',
  '14170000-0000-0000-0000-000000000071', 'Material abholen', 0, '14170000-0000-0000-0000-000000000001');
 
+-- A handed-over job, and an older job that carries only its legacy status.
+insert into public.jobs (id, organization_id, title, job_number, created_by) values
+('14170000-0000-0000-0000-000000000075', '14170000-0000-0000-0000-000000000010',
+ 'Checkliste übergeben', 'WORK-SQL-5', '14170000-0000-0000-0000-000000000001'),
+('14170000-0000-0000-0000-000000000077', '14170000-0000-0000-0000-000000000010',
+ 'Checkliste Altauftrag', 'WORK-SQL-6', '14170000-0000-0000-0000-000000000001'),
+('14170000-0000-0000-0000-000000000079', '14170000-0000-0000-0000-000000000010',
+ 'Checkliste Altauftrag offen', 'WORK-SQL-7', '14170000-0000-0000-0000-000000000001');
+insert into public.job_assignments (organization_id, job_id, user_id, assigned_by) values
+('14170000-0000-0000-0000-000000000010', '14170000-0000-0000-0000-000000000075',
+ '14170000-0000-0000-0000-000000000003', '14170000-0000-0000-0000-000000000001'),
+('14170000-0000-0000-0000-000000000010', '14170000-0000-0000-0000-000000000077',
+ '14170000-0000-0000-0000-000000000003', '14170000-0000-0000-0000-000000000001'),
+('14170000-0000-0000-0000-000000000010', '14170000-0000-0000-0000-000000000079',
+ '14170000-0000-0000-0000-000000000003', '14170000-0000-0000-0000-000000000001');
+insert into public.job_instruction_items (id, organization_id, job_id, content, sort_order, created_by) values
+('14170000-0000-0000-0000-000000000076', '14170000-0000-0000-0000-000000000010',
+ '14170000-0000-0000-0000-000000000075', 'Abnahme vorbereiten', 0, '14170000-0000-0000-0000-000000000001'),
+('14170000-0000-0000-0000-000000000078', '14170000-0000-0000-0000-000000000010',
+ '14170000-0000-0000-0000-000000000077', 'Altlast prüfen', 0, '14170000-0000-0000-0000-000000000001'),
+('14170000-0000-0000-0000-000000000080', '14170000-0000-0000-0000-000000000010',
+ '14170000-0000-0000-0000-000000000079', 'Altlast offen', 0, '14170000-0000-0000-0000-000000000001');
+
 set local role service_role;
 
 -- The field work pack shows the checklist read-only once work is finished or
@@ -122,6 +149,23 @@ begin
     p_to_state => 'cancelled', p_expected_version => 0, p_actor_id => v_admin,
     p_reason => 'Kunde hat abgesagt.'
   );
+  -- Fixture states: the lifecycle to handover needs a full Übergabe, and an
+  -- older job predates execution_state. Both are written directly here.
+  perform set_config('app.work_execution_write', 'true', true);
+  update public.jobs set execution_state = 'handed_over'
+  where id = '14170000-0000-0000-0000-000000000075';
+  perform set_config('app.work_execution_write', 'true', true);
+  update public.jobs set execution_state = null, status = 'fertig'
+  where id = '14170000-0000-0000-0000-000000000077';
+  perform set_config('app.work_execution_write', 'true', true);
+  update public.jobs set execution_state = null, status = 'in_bearbeitung'
+  where id = '14170000-0000-0000-0000-000000000079';
+  -- An older job still in progress keeps its checklist open to the employee.
+  if public.set_instruction_item_completion(
+    v_org, v_employee, '14170000-0000-0000-0000-000000000080', 0, true
+  ) <> 1 then
+    raise exception 'the assigned employee could not tick an item of an open legacy job';
+  end if;
 
   select count(*) into v_events from public.job_instruction_item_events
   where organization_id = v_org;
@@ -129,7 +173,9 @@ begin
     select * from (values
       (v_ticked, 1::bigint, false, 'unticked an item of finished work'),
       (v_open, 0::bigint, true, 'ticked an item of finished work'),
-      (v_cancelled_item, 0::bigint, true, 'ticked an item of cancelled work')
+      (v_cancelled_item, 0::bigint, true, 'ticked an item of cancelled work'),
+      ('14170000-0000-0000-0000-000000000076'::uuid, 0::bigint, true, 'ticked an item of handed-over work'),
+      ('14170000-0000-0000-0000-000000000078'::uuid, 0::bigint, true, 'ticked an item of a finished legacy job')
     ) attempt(item_id, expected_version, is_completed, label)
   loop
     begin
@@ -149,6 +195,11 @@ begin
   -- Admin and Büro keep correcting the checklist of finished work.
   if public.set_instruction_item_completion(v_org, v_admin, v_open, 0, true) <> 1 then
     raise exception 'the admin could not tick an item of finished work';
+  end if;
+  if public.set_instruction_item_completion(
+    v_org, '14170000-0000-0000-0000-000000000006', v_open, 1, false
+  ) <> 2 then
+    raise exception 'Büro could not untick an item of finished work';
   end if;
 end;
 $$;
