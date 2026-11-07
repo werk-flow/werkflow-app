@@ -108,6 +108,7 @@ const correctionRequest: TimeCorrectionRequest = {
   subjectName: 'Karla Kaiser',
   canReview: true,
   canWithdraw: false,
+  canResubmit: false,
 };
 
 declare global {

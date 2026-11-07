@@ -3,9 +3,19 @@
 // and a folder, document, customer, request, equipment, service case,
 // maintenance coverage or employee of another organization is not found
 // before any write; storage is never reached on a refusal. A trashed personnel
-// document of an Admin-only access class comes back only through an Admin.
+// document of an Admin-only access class comes back only through an Admin. A
+// release lets Büro read an Admin-only personnel document about themselves,
+// never change it: every document write refuses it, and an Admin's write and
+// Büro's write of a standard personnel document still reach their function.
+import { mock } from 'bun:test';
 import assert from 'node:assert/strict';
-import { ORGANIZATION_A, ORGANIZATION_B, installActionWorld, signInAs } from './action-boundary-world';
+import {
+  CALLER_ID,
+  ORGANIZATION_A,
+  ORGANIZATION_B,
+  installActionWorld,
+  signInAs,
+} from './action-boundary-world';
 import { assertRefused } from './operations-boundary-refusals';
 
 const ownFolderId = '8f000000-0000-4000-8000-000000000001';
@@ -20,6 +30,12 @@ const foreignCoverageId = '8f000000-0000-4000-8000-000000000009';
 const foreignMemberId = '8f000000-0000-4000-8000-00000000000a';
 const restrictedDeletedDocumentId = '8f000000-0000-4000-8000-00000000000b';
 const standardDeletedDocumentId = '8f000000-0000-4000-8000-00000000000c';
+const ownEmployeeRecordId = '8f000000-0000-4000-8000-00000000000d';
+const releasedRestrictedDocumentId = '8f000000-0000-4000-8000-00000000000e';
+const releasedHealthDocumentId = '8f000000-0000-4000-8000-00000000000f';
+const ownStandardDocumentId = '8f000000-0000-4000-8000-000000000010';
+const ownClientId = '8f000000-0000-4000-8000-000000000011';
+const releasedRestrictedLinkId = '8f000000-0000-4000-8000-000000000012';
 
 const folder = (id: string, organizationId: string) => ({
   id,
@@ -46,7 +62,11 @@ const world = installActionWorld({
     document(foreignDeletedDocumentId, '2026-10-01T08:00:00Z'),
     document(restrictedDeletedDocumentId, '2026-10-01T08:00:00Z', ORGANIZATION_A),
     document(standardDeletedDocumentId, '2026-10-01T08:00:00Z', ORGANIZATION_A),
+    document(releasedRestrictedDocumentId, null, ORGANIZATION_A),
+    document(releasedHealthDocumentId, null, ORGANIZATION_A),
+    document(ownStandardDocumentId, null, ORGANIZATION_A),
   ],
+  employee_records: [{ id: ownEmployeeRecordId, organization_id: ORGANIZATION_A, user_id: CALLER_ID }],
   personnel_documents: [
     {
       organization_id: ORGANIZATION_A,
@@ -58,14 +78,54 @@ const world = installActionWorld({
       document_id: standardDeletedDocumentId,
       access_class: 'personnel_standard',
     },
+    ...(
+      [
+        [releasedRestrictedDocumentId, 'admin_restricted'],
+        [releasedHealthDocumentId, 'health_evidence'],
+        [ownStandardDocumentId, 'personnel_standard'],
+      ] as const
+    ).map(([documentId, accessClass]) => ({
+      organization_id: ORGANIZATION_A,
+      document_id: documentId,
+      employee_record_id: ownEmployeeRecordId,
+      access_class: accessClass,
+      personnel_document_releases: [{ document_version_number: 1, revoked_at: null }],
+    })),
   ],
-  clients: [{ id: foreignClientId, organization_id: ORGANIZATION_B }],
+  document_links: [
+    {
+      id: releasedRestrictedLinkId,
+      organization_id: ORGANIZATION_A,
+      document_id: releasedRestrictedDocumentId,
+      client_id: ownClientId,
+    },
+  ],
+  clients: [
+    { id: foreignClientId, organization_id: ORGANIZATION_B },
+    { id: ownClientId, organization_id: ORGANIZATION_A },
+  ],
   client_requests: [{ id: foreignRequestId, organization_id: ORGANIZATION_B }],
   installed_equipment: [{ id: foreignEquipmentId, organization_id: ORGANIZATION_B }],
   service_cases: [{ id: foreignServiceCaseId, organization_id: ORGANIZATION_B }],
   maintenance_coverages: [{ id: foreignCoverageId, organization_id: ORGANIZATION_B }],
   organization_members: [{ user_id: foreignMemberId, organization_id: ORGANIZATION_B, role: 'employee' }],
 });
+// Storage stands in so a write that passes authorization signs no real URL; a refusal never reaches it.
+const storageCalls: string[] = [];
+const recordStorage =
+  (name: string) =>
+  async (...args: unknown[]) => {
+    storageCalls.push(name);
+    return name === 'createSignedUploadUrl' ? 'https://storage.example.test/upload' : args;
+  };
+mock.module('@/lib/storage/r2', () => ({
+  copyStorageObject: recordStorage('copyStorageObject'),
+  createSignedDownloadUrl: recordStorage('createSignedDownloadUrl'),
+  createSignedUploadUrl: recordStorage('createSignedUploadUrl'),
+  discardStorageObjects: recordStorage('discardStorageObjects'),
+  promoteUploadedObject: recordStorage('promoteUploadedObject'),
+  uploadStagingPath: (path: string) => `staging/${path}`,
+}));
 const {
   getAttachableDocuments,
   getRequestDocuments,
@@ -75,11 +135,21 @@ const {
   getServiceCaseDocuments,
   getMaintenanceCoverageDocuments,
   getEmployeeDocuments,
+  linkDocumentsToTarget,
   permanentlyDeleteDocument,
+  unlinkDocument,
+  updateDocumentLinks,
 } = await import('@/lib/documents/actions');
 const { getDocumentFolderOptions, createDocumentFolder, moveDocumentFolder, copyDocumentFolder } =
   await import('@/lib/documents/folder-actions');
-const { copyDocument, restoreDocument } = await import('@/lib/documents/library-actions');
+const {
+  copyDocument,
+  deleteDocument,
+  moveDocument,
+  renameDocument,
+  restoreDocument,
+  updateDocumentCategory,
+} = await import('@/lib/documents/library-actions');
 const { createDocumentVersionUploadTicket, finalizeDocumentVersionUpload } = await import(
   '@/lib/documents/upload-actions'
 );
@@ -102,6 +172,23 @@ const recordReads = [
   ['getEmployeeDocuments', () => getEmployeeDocuments(foreignMemberId), 'employee_not_found'],
 ] as const;
 const libraryWrites = [
+  [
+    'renameDocument',
+    () => renameDocument({ documentId: foreignDocumentId, displayName: 'neu.pdf' }),
+    'document_not_found',
+  ],
+  [
+    'updateDocumentCategory',
+    () => updateDocumentCategory({ documentId: foreignDocumentId, category: 'invoice' }),
+    'document_not_found',
+  ],
+  [
+    'moveDocument',
+    () => moveDocument({ documentId: foreignDocumentId, folderId: ownFolderId }),
+    'document_not_found',
+  ],
+  ['deleteDocument', () => deleteDocument(foreignDocumentId), 'document_not_found'],
+  ['updateDocumentLinks', () => updateDocumentLinks({ documentId: foreignDocumentId }), 'document_not_found'],
   [
     'createDocumentFolder',
     () => createDocumentFolder({ name: 'Angebote', parentFolderId: foreignFolderId }),
@@ -204,4 +291,82 @@ for (const [role, documentId] of [
     world.rpcCalls.map((call) => call.name),
     ['restore_document'],
   );
+}
+
+// Every document write of one document, by name.
+const documentWrites = (documentId: string) =>
+  [
+    ['renameDocument', () => renameDocument({ documentId, displayName: 'neu.pdf' })],
+    ['updateDocumentCategory', () => updateDocumentCategory({ documentId, category: 'invoice' })],
+    [
+      'createDocumentVersionUploadTicket',
+      () =>
+        createDocumentVersionUploadTicket({
+          documentId,
+          fileName: 'vertrag.pdf',
+          fileSizeBytes: 2048,
+          mimeType: 'application/pdf',
+        }),
+    ],
+    [
+      'finalizeDocumentVersionUpload',
+      () => finalizeDocumentVersionUpload({ documentId, versionNumber: 2, fileName: 'vertrag.pdf' }),
+    ],
+    ['deleteDocument', () => deleteDocument(documentId)],
+    ['moveDocument', () => moveDocument({ documentId, folderId: ownFolderId })],
+    ['copyDocument', () => copyDocument({ documentId })],
+    ['updateDocumentLinks', () => updateDocumentLinks({ documentId, addClientIds: [ownClientId] })],
+  ] as const;
+
+// Büro reads a released Admin-only personnel document about themselves, but no
+// write changes it, its links or its versions: each is refused before any
+// database function or storage call.
+signInAs(world, 'buero');
+storageCalls.length = 0;
+for (const documentId of [releasedRestrictedDocumentId, releasedHealthDocumentId]) {
+  await assertRefused(
+    world,
+    documentWrites(documentId),
+    { success: false, error: 'not_authorized' },
+    'reads',
+  );
+}
+await assertRefused(
+  world,
+  [['unlinkDocument', () => unlinkDocument({ linkId: releasedRestrictedLinkId })]],
+  { success: false, error: 'not_authorized' },
+  'reads',
+);
+assert.deepEqual(
+  await linkDocumentsToTarget({ documentIds: [releasedRestrictedDocumentId], clientId: ownClientId }),
+  { success: false, error: 'link_failed', linkedCount: 0, failedCount: 1 },
+);
+assert.equal(world.rpcCalls.length, 0, 'linkDocumentsToTarget reached a database function');
+assert.deepEqual(storageCalls, [], 'a refused write reached storage');
+
+// An Admin still renames, reclassifies, versions and trashes an Admin-only
+// personnel document, and Büro a standard one: each write reaches its function.
+for (const [role, documentId] of [
+  ['admin', releasedRestrictedDocumentId],
+  ['buero', ownStandardDocumentId],
+] as const) {
+  signInAs(world, role);
+  world.rpcCalls.length = 0;
+  storageCalls.length = 0;
+  await renameDocument({ documentId, displayName: 'neu.pdf' });
+  await updateDocumentCategory({ documentId, category: 'invoice' });
+  await deleteDocument(documentId);
+  const ticket = await createDocumentVersionUploadTicket({
+    documentId,
+    fileName: 'vertrag.pdf',
+    fileSizeBytes: 2048,
+    mimeType: 'application/pdf',
+  });
+  assert.ok(ticket.success, `${role}: the version ticket was refused`);
+  assert.deepEqual(
+    world.rpcCalls.map((call) => call.name),
+    ['rename_document', 'update_document_category', 'trash_document'],
+    `${role}: a write did not reach its function`,
+  );
+  assert.deepEqual(storageCalls, ['createSignedUploadUrl'], `${role}: the version ticket was not signed`);
 }

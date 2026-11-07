@@ -40,3 +40,28 @@ test('an accepted site archive stays archived after the route refresh', async ({
   await expect(main.getByRole('alert')).toHaveCount(0);
   expect(await page.evaluate(() => window.uiContractServices.navigation)).toContain('refresh');
 });
+
+test('a contact email that is not one address marks the field, focuses it and sends nothing', async ({
+  page,
+}) => {
+  const main = page.getByRole('main');
+  await main.getByRole('button', { name: 'Ansprechpartner bearbeiten', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  const email = dialog.getByLabel('E-Mail', { exact: true });
+  const fieldError = dialog.getByText('Bitte gib eine gültige E-Mail-Adresse ein oder lass das Feld leer.');
+  const save = dialog.getByRole('button', { name: 'Speichern', exact: true });
+  await expect(email).toHaveValue('petra.pohl(at)example.de');
+
+  await save.click();
+  await expect(email).toBeFocused();
+  await expect(email).toHaveAttribute('aria-invalid', 'true');
+  await expect(fieldError).toBeVisible();
+  await expect(save).toBeEnabled();
+  expect(await page.evaluate(() => window.uiContractWrites.calls)).toEqual([]);
+
+  // A blank email is allowed: clearing the field clears the error and saves.
+  await email.fill('');
+  await expect(fieldError).toHaveCount(0);
+  await save.click();
+  await expectHeldWrite(page, 'update-client-contact');
+});

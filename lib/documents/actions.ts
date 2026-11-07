@@ -19,6 +19,8 @@ import {
   getAuthorizedDocument,
   getAuthorizedDocumentContext,
   getDeletedDocumentForManager,
+  getDocumentWithHistory,
+  getManageableDocument,
   requireManager,
 } from './access';
 import {
@@ -148,7 +150,7 @@ export async function getAttachableDocuments(
   // One row beyond the page tells the dialog that a search can find more.
   const rows = documentRowsFromOrdinaryView(data ?? []);
   const documents = await hydrateDocumentsOrNull(
-    auth.context.admin,
+    auth.context,
     rows.slice(0, ATTACHABLE_DOCUMENT_PAGE_SIZE),
     'Failed to hydrate attachable documents',
   );
@@ -332,6 +334,9 @@ export async function unlinkDocument(rawInput: UnlinkDocumentInput): Promise<Doc
     return { success: false, error: 'link_not_found' };
   }
 
+  const document = await getManageableDocument(auth.context, link.document_id);
+  if (!document.success) return document;
+
   const result = await writeDocumentLinks(auth.context, link.document_id, {
     removeLinkIds: [input.linkId],
     additions: [],
@@ -348,10 +353,7 @@ export async function updateDocumentLinks(
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
-  const manager = requireManager(auth.context);
-  if (!manager.success) return manager;
-
-  const document = await getAuthorizedDocument(auth.context, input.documentId);
+  const document = await getManageableDocument(auth.context, input.documentId);
   if (!document.success) return document;
 
   const additions: DocumentLinkTarget[] = [
@@ -496,7 +498,7 @@ export async function getDocumentVersionSignedUrl(
   }
 
   const versionRow = version;
-  const existing = await getAuthorizedDocument(auth.context, versionRow.document_id, {
+  const existing = await getDocumentWithHistory(auth.context, versionRow.document_id, {
     protectedVersionNumber: versionRow.version_number,
   });
   if (!existing.success) return existing;
@@ -528,7 +530,7 @@ export async function getDocumentDetails(rawDocumentId: string): Promise<Documen
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
-  const existing = await getAuthorizedDocument(auth.context, documentId);
+  const existing = await getDocumentWithHistory(auth.context, documentId);
   if (!existing.success) return existing;
 
   const releasedVersionNumbers = existing.protectedAccess?.releasedVersionNumbers ?? null;
@@ -547,7 +549,7 @@ export async function getDocumentDetails(rawDocumentId: string): Promise<Documen
       : scopedVersionsQuery.order('version_number', { ascending: false });
   const [versionsResult, auditResult] = await Promise.all([
     versionsPromise,
-    existing.protectedAccess && !existing.protectedAccess.canInspectHistory
+    existing.protectedAccess && !existing.protectedAccess.managedByCaller
       ? Promise.resolve({ data: [], error: null })
       : auth.context.admin
           .from('document_audit_events')
@@ -558,7 +560,7 @@ export async function getDocumentDetails(rawDocumentId: string): Promise<Documen
           .limit(50),
   ]);
 
-  const [document] = await hydrateDocuments(auth.context.admin, [existing.document]);
+  const [document] = await hydrateDocuments(auth.context, [existing.document]);
   if (!document) {
     return { success: false, error: 'document_not_found' };
   }

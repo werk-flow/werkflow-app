@@ -40,6 +40,7 @@ import {
 
 import {
   correctionSourceId,
+  namesAnotherPerson,
   type TimeCorrectionRequest,
   type TimeCorrectionResult,
   type TimeCorrectionSource,
@@ -137,6 +138,11 @@ export async function submitTimeCorrection(
   if (!user) return { success: false, error: 'not_authenticated' };
   const caller = await resolveActionContextFor(input.organizationId);
   if (!caller.success) return caller;
+  // Moving time to another person is an office decision (owner decision): an
+  // employee never proposes it, so no answer reveals another person's time.
+  if (input.kind === 'reassign' && !caller.context.isManagerOrAbove) {
+    return { success: false, error: 'not_authorized' };
+  }
   const identities = await loadEmployeeIdentities(input.organizationId, [input.subjectEmployeeRecordId]);
   const subject = identities?.get(input.subjectEmployeeRecordId);
   if (!subject) return { success: false, error: 'subject_not_found' };
@@ -321,7 +327,7 @@ export async function resubmitTimeCorrection(rawInput: {
     admin
       // tenant-scope: by-id-then-verified — revise_time_correction_request refuses an actor who is not the request's author, and the rows read here only feed that call
       .from('time_correction_requests')
-      .select('organization_id, source_scope_key, current_revision')
+      .select('organization_id, source_scope_key, current_revision, kind, subject_user_id')
       .eq('id', input.requestId)
       .maybeSingle(),
   );
@@ -331,6 +337,10 @@ export async function resubmitTimeCorrection(rawInput: {
   }
   const caller = await resolveActionContextFor(request.organization_id);
   if (!caller.success) return caller;
+  // Only Admin and Büro move time to another person, on resubmission too.
+  if (request.kind === 'reassign' && !caller.context.isManagerOrAbove) {
+    return { success: false, error: 'not_authorized' };
+  }
   const [{ data: revision, error: revisionError }, { data: sources, error: sourcesError }] =
     await Promise.all([
       loggedRead(
@@ -357,6 +367,8 @@ export async function resubmitTimeCorrection(rawInput: {
   // A failed source read must never submit a revision without its source links.
   if (revisionError || sourcesError || !sources) return { success: false, error: 'load_failed' };
   if (!revision) return { success: false, error: 'request_not_found' };
+  if (namesAnotherPerson(request, revision.proposed_snapshot))
+    return { success: false, error: 'invalid_shape' };
   const sourcePayload = sources.flatMap((source) => {
     const sourceId = correctionSourceId(source);
     return sourceId ? [{ kind: source.source_kind, id: sourceId, version: source.source_version }] : [];
