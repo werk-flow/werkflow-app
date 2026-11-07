@@ -21,7 +21,8 @@ window.uiContractClientRelations = {
       clientId,
       name: 'Petra Pohl',
       role: 'Hausverwaltung',
-      email: null,
+      // Stored before the save checked the format: text, not one address.
+      email: 'petra.pohl(at)example.de',
       phone: null,
       notes: null,
       isPrimary: true,
