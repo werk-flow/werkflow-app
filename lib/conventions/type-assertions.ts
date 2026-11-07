@@ -5,15 +5,15 @@ import ts from 'typescript';
 import { z } from '@/lib/zod';
 import { parseProductSource, repositoryRoot } from './product-sources';
 
-// The ratchet of `@typescript-eslint/consistent-type-assertions` (eslint.config.mjs):
+// The exceptions to `@typescript-eslint/consistent-type-assertions` (eslint.config.mjs):
 // the rule bans every type assertion except `as const`; the files listed in
-// eslint-rules/type-assertion-ratchet.json keep their recorded count until
-// they are brought in line. lib/conventions/type-assertions.test.ts holds the
-// list to the code.
+// eslint-rules/type-assertion-ratchet.json hold the casts the owner accepted as
+// permanent, each with its reason beside the cast, and keep exactly their
+// recorded count. lib/conventions/type-assertions.test.ts holds the list to the code.
 
 export const TYPE_ASSERTION_RATCHET_FILE = 'eslint-rules/type-assertion-ratchet.json';
 
-/** Repository-relative path to the number of type assertions the file may still carry. */
+/** Repository-relative path to the number of permanent type assertions the file carries. */
 export type TypeAssertionRatchet = Readonly<Record<string, number>>;
 
 function isConstAssertion(type: ts.TypeNode): boolean {

@@ -2,9 +2,9 @@
 
 import { Constants } from '@/lib/supabase/database.types';
 import { z } from '@/lib/zod';
+import { MANUAL_ENTRY_BRIDGE_STORAGE_KEY as STORAGE_KEY, tabStorage } from './manual-entry-bridge-storage';
 import { TIME_ENTRY_TYPES, type TimeEntry } from './types';
 
-const STORAGE_KEY = 'werkflow:manual-entry-created';
 export const MANUAL_ENTRY_CREATED_EVENT = 'werkflow:manual-entry-created';
 
 /** The queued entries as queueManualEntryBridge stored them: the fields toTimeEntry sets. */
@@ -46,20 +46,6 @@ function readQueue(raw: string): Queue | null {
 export function readManualEntryEvent(detail: unknown): TimeEntry[] | null {
   const parsed = z.object({ entries: queuedEntriesSchema }).safeParse(detail);
   return parsed.success ? parsed.data.entries : null;
-}
-
-/**
- * The tab's session storage, or null outside the browser and where the
- * browser refuses storage: reading `window.sessionStorage` then throws.
- */
-function tabStorage(): Storage | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    return window.sessionStorage ?? null;
-  } catch {
-    // best-effort: without storage the bridge holds nothing, and a sign-out must go on.
-    return null;
-  }
 }
 
 /** Queues the signed-in user's new entries until the calendar of this tab reads them. */
@@ -130,14 +116,5 @@ export function consumeManualEntryBridge({
   } catch {
     // best-effort: the bridge only shows a new entry early; the saved entry arrives with the next read.
     return [];
-  }
-}
-
-/** Empties the queue. Every sign-out of this browser calls it before the session ends. */
-export function clearManualEntryBridge(): void {
-  try {
-    tabStorage()?.removeItem(STORAGE_KEY);
-  } catch {
-    // best-effort: a storage that refuses the write holds no queue this module could read either, and the sign-out goes on.
   }
 }

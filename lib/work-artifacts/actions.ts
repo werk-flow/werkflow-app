@@ -30,6 +30,7 @@ import { buildWorkArtifactExport } from './export';
 import { mapArtifactError } from './errors';
 import { readRenderedExport, refuseWorkArtifactExport, registerWorkArtifactExport } from './export-storage';
 import { readArtifactForDetail, refuseHiddenCoworkerDraft, toVisibleArtifactDetail } from './detail';
+import { isHiddenCoworkerDraft } from './field-visibility';
 import {
   WORK_ARTIFACT_STATUSES,
   type SaveWorkArtifactInput,
@@ -145,12 +146,9 @@ export async function getWorkArtifacts(
     artifacts: artifacts.flatMap((artifact) => {
       const revision = artifact.current_revision_id ? revisionById.get(artifact.current_revision_id) : null;
       if (!revision) return [];
-      const isHiddenCoworkerDraft =
-        !auth.context.isManagerOrAbove &&
-        artifact.status === 'draft' &&
-        revision.visibility === 'internal_only' &&
-        revision.created_by !== auth.context.userId;
-      return isHiddenCoworkerDraft ? [] : [{ ...artifact, currentRevision: revision }];
+      return isHiddenCoworkerDraft(auth.context, artifact, revision)
+        ? []
+        : [{ ...artifact, currentRevision: revision }];
     }),
   };
 }
