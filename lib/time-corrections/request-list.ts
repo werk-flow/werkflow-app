@@ -9,12 +9,17 @@ import {
   getEffectiveResponsibilityHolderForActor,
   loadResponsibilityRuntimeState,
 } from '@/lib/responsibilities/server';
-import type { OrgRole } from '@/lib/roles';
+import { isManagerRole, type OrgRole } from '@/lib/roles';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { Tables } from '@/lib/supabase/database.types';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { PENDING_CORRECTION_STATUSES } from './pending-projection';
-import { isTimeCorrectionSnapshot, type TimeCorrectionListResult, type TimeCorrectionRequest } from './types';
+import {
+  isTimeCorrectionSnapshot,
+  namesAnotherPerson,
+  type TimeCorrectionListResult,
+  type TimeCorrectionRequest,
+} from './types';
 
 // The correction request list behind the approval queue, the history page
 // and the provisional summary: one read, hydrated with names, the current
@@ -183,6 +188,12 @@ function toCorrectionRequest(
     canWithdraw:
       request.requested_by === caller.callerUserId &&
       (request.status === 'submitted' || request.status === 'clarification_required'),
+    // Only Admin and Büro move time to another person, on resubmission too.
+    canResubmit:
+      request.requested_by === caller.callerUserId &&
+      request.status === 'clarification_required' &&
+      (request.kind !== 'reassign' || isManagerRole(caller.callerRole)) &&
+      !namesAnotherPerson(request, revision.proposed_snapshot),
     revision: {
       revision: revision.revision,
       reason: revision.reason,
