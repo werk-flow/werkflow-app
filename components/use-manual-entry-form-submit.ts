@@ -72,24 +72,28 @@ function buildManualEntries(
   return entries;
 }
 
-/** The sentence for a refused save; a session open in another organization names that organization. */
+/**
+ * The sentence for a refused save. A session open in another organization
+ * names that organization when the server sent its name, which it does only
+ * for a member of it.
+ */
 function describeManualEntryFailure(
   result: Exclude<AddManualEntryResult, { success: true }>,
   targetUserId: string,
   currentUserId: string | null,
 ): string {
-  if (
-    result.error === 'working_in_other_org' &&
-    'otherOrgName' in result &&
-    typeof result.otherOrgName === 'string'
-  ) {
+  if (result.error === 'working_in_other_org') {
     const isSelf = targetUserId === currentUserId;
+    const place =
+      'otherOrgName' in result && typeof result.otherOrgName === 'string'
+        ? `in „${result.otherOrgName}“`
+        : 'in einer anderen Organisation';
     const title = isSelf
       ? 'Bereits in anderer Organisation eingestempelt'
       : 'Mitarbeiter ist bereits in anderer Organisation eingestempelt';
     const message = isSelf
-      ? `Du bist aktuell in „${result.otherOrgName}“ eingestempelt. Bitte stemple dort zuerst aus, bevor du hier startest.`
-      : `Der ausgewählte Mitarbeiter ist aktuell in „${result.otherOrgName}“ eingestempelt. Bitte zuerst dort ausstempeln, bevor hier eine offene Arbeitszeit gestartet wird.`;
+      ? `Du bist aktuell ${place} eingestempelt. Bitte stemple dort zuerst aus, bevor du hier startest.`
+      : `Der ausgewählte Mitarbeiter ist aktuell ${place} eingestempelt. Bitte zuerst dort ausstempeln, bevor hier eine offene Arbeitszeit gestartet wird.`;
 
     // One failure, one surface: the inline error carries the full
     // explanation (the earlier extra top banner double-reported it).

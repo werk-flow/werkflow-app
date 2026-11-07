@@ -4,7 +4,7 @@ import type { OrgRole } from '@/lib/roles';
 import type { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { getLocalDayEnd } from '@/lib/date-time/berlin';
 import type { z } from '@/lib/zod';
-import { getUserEntriesForDay } from './action-access';
+import { getUserEntriesForDay, verifyCurrentMembership } from './action-access';
 import type { addManualEntryInputSchema } from './action-schemas';
 import { determineApprovalStatus, hasOpenSession } from './helpers';
 import { getOpenSessionOrgsForUserOnDay } from './open-session-orgs';
@@ -29,7 +29,8 @@ type ManualEntryDraft = { entryType: TimeEntryType; timestamp: string; jobId: st
 /**
  * Cross-org guard: when the new entries would leave the target clocked in on
  * that day, a session open in another organization refuses them; null when
- * nothing refuses them.
+ * nothing refuses them. The refusal names that organization only to a caller
+ * who is a current member of it.
  */
 async function refuseOpenSessionElsewhere(
   admin: ReturnType<typeof createSupabaseAdminClient>,
@@ -58,12 +59,9 @@ async function refuseOpenSessionElsewhere(
   if (!openOrgs) return { success: false, error: 'fetch_failed' };
   const openOther = openOrgs.find((o) => o.organizationId !== target.organizationId);
   if (!openOther) return null;
-  return {
-    success: false,
-    error: 'working_in_other_org',
-    otherOrgId: openOther.organizationId,
-    otherOrgName: openOther.organizationName,
-  };
+  const callerRoleThere = await verifyCurrentMembership(openOther.organizationId);
+  if (!callerRoleThere) return { success: false, error: 'working_in_other_org' };
+  return { success: false, error: 'working_in_other_org', otherOrgName: openOther.organizationName };
 }
 
 /**
