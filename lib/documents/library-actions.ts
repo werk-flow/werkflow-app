@@ -10,10 +10,10 @@ import { LIST_PAGE_SIZE, parseListPage } from '@/lib/ui/list-pagination';
 import { uuidSchema } from '@/lib/validation/uuid';
 import {
   ensureFolder,
-  getAuthorizedDocument,
   getAuthorizedDocumentContext,
   getDeletedDocumentForManager,
   getFolderById,
+  getManageableDocument,
   requireManager,
 } from './access';
 import {
@@ -127,10 +127,7 @@ export async function renameDocument(rawInput: RenameDocumentInput): Promise<Doc
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
-  const manager = requireManager(auth.context);
-  if (!manager.success) return manager;
-
-  const existing = await getAuthorizedDocument(auth.context, input.documentId);
+  const existing = await getManageableDocument(auth.context, input.documentId);
   if (!existing.success) return existing;
 
   const displayName = input.displayName.trim();
@@ -158,10 +155,7 @@ export async function updateDocumentCategory(rawInput: UpdateDocumentCategoryInp
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
-  const manager = requireManager(auth.context);
-  if (!manager.success) return manager;
-
-  const existing = await getAuthorizedDocument(auth.context, input.documentId);
+  const existing = await getManageableDocument(auth.context, input.documentId);
   if (!existing.success) return existing;
 
   const { data, error } = await auth.context.admin.rpc('update_document_category', {
@@ -189,10 +183,7 @@ export async function moveDocument(rawInput: MoveDocumentInput): Promise<Documen
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
-  const manager = requireManager(auth.context);
-  if (!manager.success) return manager;
-
-  const existing = await getAuthorizedDocument(auth.context, input.documentId);
+  const existing = await getManageableDocument(auth.context, input.documentId);
   if (!existing.success) return existing;
 
   const displayName = await getAvailableDisplayName({
@@ -232,10 +223,7 @@ export async function copyDocument(rawInput: CopyDocumentInput): Promise<Documen
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
-  const manager = requireManager(auth.context);
-  if (!manager.success) return manager;
-
-  const existing = await getAuthorizedDocument(auth.context, input.documentId);
+  const existing = await getManageableDocument(auth.context, input.documentId);
   if (!existing.success) return existing;
 
   const { data: protectedDocument, error: protectedDocumentError } = await loggedRead(
@@ -313,10 +301,7 @@ export async function deleteDocument(rawDocumentId: string): Promise<DocumentMut
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
-  const manager = requireManager(auth.context);
-  if (!manager.success) return manager;
-
-  const existing = await getAuthorizedDocument(auth.context, documentId);
+  const existing = await getManageableDocument(auth.context, documentId);
   if (!existing.success) return existing;
 
   const { error } = await auth.context.admin.rpc('trash_document', {
