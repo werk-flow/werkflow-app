@@ -235,7 +235,9 @@ function FindingGroupCard({
           aria-label={`Betroffen: ${label}`}
         >
           {group.findings.map((finding) => (
-            <li key={finding.id}>{finding.employeeName ?? 'Organisation'}</li>
+            <li key={finding.id} className="min-w-0 max-w-full wrap-anywhere">
+              {finding.employeeName ?? 'Organisation'}
+            </li>
           ))}
         </ul>
       )}
