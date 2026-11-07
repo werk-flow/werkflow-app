@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "dependencyDigest": "37934306bde1fe9569ab18316da609d679a3e4ed137131aa488cebde1d39e110",
+  "dependencyDigest": "d1b7ad38624af7da7392c5c235d33a918714320630121c69f42d4a4ff3b77de8",
   "exceptions": [
     {
       "package": "minimatch",
@@ -15,7 +15,8 @@
         "https://github.com/advisories/GHSA-g3hv-75wg-m249",
         "bun audit on 2026-11-05: the advisory now covers >=7.0.0 <11.0.1, so minimatch 3.1.5 is no longer affected and its exception was removed.",
         "npm registry on 2026-10-31: minimatch 11.0.3 is the latest; @typescript-eslint/typescript-estree 8.47.0 requires ^9.0.4.",
-        "bun pm why minimatch@9.0.9 on 2026-11-05: it comes through @typescript-eslint/typescript-estree 8.47.0 (typescript-eslint, @typescript-eslint/parser, eslint-config-next 16.3.6), and every path ends in a dev dependency."
+        "bun pm why minimatch@9.0.9 on 2026-11-05: it comes through @typescript-eslint/typescript-estree 8.47.0 (typescript-eslint, @typescript-eslint/parser, eslint-config-next 16.3.6), and every path ends in a dev dependency.",
+        "Re-reviewed on 2026-11-07 for a patched @supabase/ssr 0.7.0 (werk-flow/werkflow-planning#232): bun pm why minimatch@9.0.9 still shows only @typescript-eslint/typescript-estree 8.47.0, every path ending in a dev dependency."
       ]
     }
   ]
