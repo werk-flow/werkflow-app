@@ -9,7 +9,7 @@ import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { clearEmailChangeChallengeQuietly } from '@/hooks/use-sign-out';
 import { loadDocument } from '@/lib/navigation/document-load';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
-import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge';
+import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
 
 interface SignOutAndRedirectButtonProps {
   /** The validated invite code, or null when it is no longer known. */

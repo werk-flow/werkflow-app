@@ -10,8 +10,13 @@ import { listProductSources, parseProductSource } from './product-sources';
 // `auth.signOut` therefore also calls `clearManualEntryBridge`. A sign-out of
 // the other sessions (`scope: 'others'`) keeps this tab signed in and needs no
 // clear. A route handler runs on the server and cannot reach the tab's storage.
+//
+// The menu sign-out sits in a chunk every page loads at startup, so the clear
+// lives in a module that imports nothing. Importing the bridge's schemas there
+// added a startup script to every page (werk-flow/werkflow-app#232).
 
 const CLEAR_CALL = 'clearManualEntryBridge';
+const CLEAR_MODULE = 'lib/time-tracking/manual-entry-bridge-storage.ts';
 
 /** True when the call is `<client>.auth.signOut(...)` and ends this browser's session. */
 function endsOwnSession(node: ts.CallExpression): boolean {
@@ -67,6 +72,10 @@ function signOutsWithoutClear(): string[] {
 describe('sign-out clears the tab state', () => {
   test('every browser sign-out of the own session clears the queued manual entries', () => {
     expect(signOutsWithoutClear()).toEqual([]);
+  });
+
+  test('the clear imports nothing, so a sign-out adds no startup script to a page', () => {
+    expect(parseProductSource(CLEAR_MODULE).statements.filter(ts.isImportDeclaration)).toEqual([]);
   });
 
   test('probes: a sign-out without the clear is reported, one with it or of other sessions is not', () => {

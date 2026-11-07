@@ -31,8 +31,7 @@ Open candidates for moving a rule up the ladder of [decision 0005](../decisions/
 
 | Candidate | Gap | Target |
 | --- | --- | --- |
-| Calendar functions over the size limit | Their split changes recorded render behavior. | Tier 2: split them in the run that recalibrates the calendar references, and delete their entries. |
-| Type-assertion ratchet | `eslint-rules/type-assertion-ratchet.json` only stops growth. | Tier 2: shrink it file by file with typed selects, parsers and guards, until the off-block goes. |
+| Reasoned disables of the type bans | A reasoned `eslint-disable-next-line` of `@typescript-eslint/consistent-type-assertions`, `no-explicit-any` or `no-non-null-assertion` passes lint in any file. Only review stops it. | Tier 2: `@eslint-community/eslint-comments/no-restricted-disable` for the three rules in every TypeScript file, composed with the `realtime/no-interval` entry of product files. |
 | Bare `toLocaleString` on a date | `timeOfDaySelectors` sees only calls with date options. | Tier 2: a typed lint rule that refuses `toLocaleString` on a `Date` outside `lib/utils.ts`. |
 | Schema value lists | `lib/customer-relationships/schemas.ts` repeats the values `types.ts` derives its unions from. | Tier 1: build the zod enums from the value lists. |
 | Date-time shims | `lib/planning/date-time.ts` and `shiftIsoDateByDays` in `lib/personnel/types.ts` stay because digest inputs import them. | Tier 2: import `lib/date-time/berlin.ts` in the next performance recalibration and delete both. |

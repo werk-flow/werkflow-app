@@ -74,8 +74,9 @@ const config: KnipConfig = {
   // tailwindcss is imported by app/globals.css, which knip does not compile.
   ignoreDependencies: ['supabase', 'tailwindcss'],
   // util-linux's flock holds the machine-wide heavy slots (lib/testing/runner/heavy-slot.ts);
-  // T3 Code's CLI wakes the thread of a notified run (lib/testing/notified-run.ts).
-  ignoreBinaries: ['flock', 't3'],
+  // T3 Code's CLI wakes the thread of a notified run (lib/testing/notified-run.ts);
+  // POSIX mkfifo lets its test wait on the wake itself (lib/testing/notified-run.test.ts).
+  ignoreBinaries: ['flock', 'mkfifo', 't3'],
 };
 
 export default config;
