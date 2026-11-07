@@ -6,9 +6,8 @@
 // whose period runs, or a filed one, refuses permanent deletion. Each refusal
 // comes before the database function and before storage. An employee reads a
 // document without its archive data; Admin and Büro read it with.
-import { mock } from 'bun:test';
+import { mock, setSystemTime } from 'bun:test';
 import assert from 'node:assert/strict';
-import { addLocalDays, addLocalMonthsClamped, getBusinessTodayIso } from '@/lib/date-time/berlin';
 import {
   CALLER_ID,
   ORGANIZATION_A,
@@ -17,6 +16,9 @@ import {
   signInAs,
 } from './action-boundary-world';
 import { assertRefused } from './operations-boundary-refusals';
+
+// The Berlin day 2026-11-07: the document date range ends on 2027-11-07.
+setSystemTime(new Date('2026-11-07T10:00:00.000Z'));
 
 const ownJobId = '8f000000-0000-4000-8000-000000000001';
 const openInvoiceId = '8f000000-0000-4000-8000-000000000002';
@@ -190,7 +192,7 @@ for (const role of ['buero', 'admin'] as const) {
         () =>
           updateDocumentRetention({
             documentId: openInvoiceId,
-            documentDate: addLocalDays(addLocalMonthsClamped(getBusinessTodayIso(), 12), 1),
+            documentDate: '2027-11-08',
             retentionClass: 'ten_years',
           }),
       ],
