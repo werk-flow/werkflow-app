@@ -218,6 +218,12 @@ export function TimeCorrectionRequestCard({
         {request.canReview || request.canResubmit ? (
           <TimeCorrectionRequestComment request={request} comments={comments} setComments={setComments} />
         ) : null}
+        {request.status === 'clarification_required' && request.canWithdraw && !request.canResubmit ? (
+          <p className="text-sm text-muted-foreground">
+            Diese Korrektur kannst du nicht erneut einreichen. Zieh sie zurück. Zeit für eine andere Person
+            trägt das Büro ein.
+          </p>
+        ) : null}
 
         <TimeCorrectionRequestActions
           request={request}
