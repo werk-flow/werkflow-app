@@ -9,7 +9,8 @@
 -- refused, filed or not. An employee, another organization and a protected
 -- personnel document cannot be filed or reclassified. Only the service role
 -- executes the functions. A former filer's account deletion is refused while
--- the filed document exists.
+-- the filed document exists. The migration's backfill gives an existing copy
+-- no class, even after its source is deleted.
 begin;
 
 insert into auth.users (
@@ -120,6 +121,48 @@ begin
   if (select trigger.tgenabled from pg_trigger trigger
     where trigger.tgrelid = 'public.documents'::regclass and trigger.tgname = 'documents_set_updated_at') <> 'O'
   then raise exception 'the backfill left documents_set_updated_at off'; end if;
+end;
+$$;
+
+-- The backfill gives an existing original invoice, offer or contract the
+-- class, and a copy none, as a copy made today gets none. A copy stays a copy
+-- after its source is deleted: copy_document writes the `copied` event on the
+-- copy's own id. 53 and 54 are invoices from before the class existed; 55
+-- copies 53, 56 copies 54, and 54 is then deleted.
+insert into public.documents (
+  id, organization_id, storage_path, original_file_name, display_name, category, size_bytes, uploaded_by
+) values
+('28300000-0000-0000-0000-000000000053', '28300000-0000-0000-0000-000000000010',
+ '28300000-0000-0000-0000-000000000010/d53/rechnung-alt.pdf', 'rechnung-alt.pdf', 'rechnung-alt.pdf',
+ 'invoice', 10, '28300000-0000-0000-0000-000000000001'),
+('28300000-0000-0000-0000-000000000054', '28300000-0000-0000-0000-000000000010',
+ '28300000-0000-0000-0000-000000000010/d54/rechnung-weg.pdf', 'rechnung-weg.pdf', 'rechnung-weg.pdf',
+ 'invoice', 10, '28300000-0000-0000-0000-000000000001');
+select public.copy_document(
+  '28300000-0000-0000-0000-000000000001', '28300000-0000-0000-0000-000000000010',
+  '28300000-0000-0000-0000-000000000053', '28300000-0000-0000-0000-000000000055', null,
+  '28300000-0000-0000-0000-000000000010/d55/rechnung-alt.pdf', 'rechnung-alt (Kopie).pdf'
+);
+select public.copy_document(
+  '28300000-0000-0000-0000-000000000001', '28300000-0000-0000-0000-000000000010',
+  '28300000-0000-0000-0000-000000000054', '28300000-0000-0000-0000-000000000056', null,
+  '28300000-0000-0000-0000-000000000010/d56/rechnung-weg.pdf', 'rechnung-weg (Kopie).pdf'
+);
+delete from public.documents where id = '28300000-0000-0000-0000-000000000054';
+
+do $$
+begin
+  if (select copied_from_document_id from public.documents where id = '28300000-0000-0000-0000-000000000056') is not null
+  then raise exception 'the copy of a deleted source still names its source'; end if;
+  if app_private.existing_document_retention_class('28300000-0000-0000-0000-000000000053') is distinct from 'ten_years'
+  then raise exception 'the backfill gives an existing original invoice no class'; end if;
+  if app_private.existing_document_retention_class('28300000-0000-0000-0000-000000000055') is not null
+  then raise exception 'the backfill gives an existing copy the class'; end if;
+  if app_private.existing_document_retention_class('28300000-0000-0000-0000-000000000056') is not null
+  then raise exception 'the backfill gives the copy of a deleted source the class'; end if;
+  if has_function_privilege('service_role', 'app_private.existing_document_retention_class(uuid)', 'execute')
+    or has_function_privilege('authenticated', 'app_private.existing_document_retention_class(uuid)', 'execute')
+  then raise exception 'a client or the service role may run the backfill rule'; end if;
 end;
 $$;
 

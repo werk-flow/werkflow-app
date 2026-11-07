@@ -95,3 +95,28 @@ test('a paused partial year is refused at „Speichern“, marked and focused, a
   await page.getByRole('button', { name: 'Belegdatum speichern' }).click();
   expect(await retentionWrites(page)).toEqual([{ documentDate: '2025-03-14', retentionClass: 'ten_years' }]);
 });
+
+test('„Festschreiben“ with an unsaved document date files nothing and marks and focuses the date', async ({
+  page,
+}) => {
+  const picker = documentDate(page);
+  await picker.locator('[data-segment="year"]').click();
+  await page.keyboard.type('2025');
+  const file = page.getByRole('button', { name: 'Festschreiben' });
+  await expect(file).toBeEnabled();
+  await file.click();
+  expect(await page.evaluate(() => window.documentArchiveContract.filings)).toEqual([]);
+  expect(await retentionWrites(page)).toEqual([]);
+  await expect(picker).toHaveAttribute('data-invalid', 'true');
+  await expect(picker).toBeFocused();
+  await expect(picker).toHaveAccessibleDescription(
+    'Speichere das Belegdatum oder setz es zurück, bevor du die Datei festschreibst.',
+  );
+
+  // Resetting puts the stored date back, and filing then files the date shown.
+  await page.getByRole('button', { name: 'Belegdatum zurücksetzen' }).click();
+  await expect(picker).toHaveText(/14\.03\.2026/);
+  await expect(picker).not.toHaveAttribute('data-invalid');
+  await file.click();
+  expect(await page.evaluate(() => window.documentArchiveContract.filings)).toEqual(['contract-document']);
+});

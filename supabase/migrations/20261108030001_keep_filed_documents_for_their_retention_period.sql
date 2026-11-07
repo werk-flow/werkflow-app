@@ -45,22 +45,48 @@ alter table public.documents
   add column filed_by uuid references public.profiles(id) on delete restrict,
   add constraint documents_filed_by_with_filed_at check ((filed_at is null) = (filed_by is null));
 
--- Existing documents date from their upload day. Existing ordinary invoices,
--- offers and contracts get the class an upload gives them today. The backfill
--- is no change to a document: the library shows and sorts by updated_at, so
--- documents_set_updated_at stays off for it, and the migration fails if any
--- updated_at moved anyway.
+-- The class the backfill gives an existing document: the one an upload of its
+-- category gets today. A copy gets none, as a copy made today gets none, and a
+-- protected personnel document gets none. Every copy path writes the `copied`
+-- audit event on the copy's own id (copy_document, copy_document_folder and
+-- the earlier server actions they replaced), so the event still names a copy
+-- after its source is deleted and copied_from_document_id is cleared.
+-- supabase/tests/document_retention.sql pins the rule; only the migration
+-- owner executes it.
+create function app_private.existing_document_retention_class(p_document_id uuid)
+returns public.document_retention_class
+language sql
+stable
+security invoker
+set search_path to ''
+as $$
+  select 'ten_years'::public.document_retention_class
+  from public.documents document
+  where document.id = p_document_id
+    and document.category in ('invoice', 'offer', 'contract')
+    and document.copied_from_document_id is null
+    and not exists (
+      select 1 from public.document_audit_events event
+      where event.document_id = document.id and event.event_type = 'copied'
+    )
+    and not exists (
+      select 1 from public.personnel_documents protected where protected.document_id = document.id
+    );
+$$;
+revoke all on function app_private.existing_document_retention_class(uuid)
+  from public, anon, authenticated, service_role;
+
+-- Existing documents date from their upload day and get the class above. The
+-- backfill is no change to a document: the library shows and sorts by
+-- updated_at, so documents_set_updated_at stays off for it, and the migration
+-- fails if any updated_at moved anyway.
 create temporary table documents_updated_at_before_backfill on commit drop as
 select document.id, document.updated_at from public.documents document;
 
 alter table public.documents disable trigger documents_set_updated_at;
 update public.documents document
 set document_date = (document.created_at at time zone 'Europe/Berlin')::date,
-  retention_class = case
-    when document.category in ('invoice', 'offer', 'contract') and not exists (
-      select 1 from public.personnel_documents protected where protected.document_id = document.id
-    ) then 'ten_years'::public.document_retention_class
-  end;
+  retention_class = app_private.existing_document_retention_class(document.id);
 alter table public.documents enable trigger documents_set_updated_at;
 
 do $$

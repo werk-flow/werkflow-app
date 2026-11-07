@@ -43,57 +43,99 @@ type RetentionFieldProps = {
   onChange: (terms: DocumentRetentionTerms) => Promise<boolean>;
 };
 
+const UNSAVED_DATE_MESSAGE =
+  'Speichere das Belegdatum oder setz es zurück, bevor du die Datei festschreibst.';
+
 /**
- * The picker reports every typed segment, a lone day digit or a paused year
- * included, so the date stays a draft until „Speichern“: only a date the user
- * confirms reaches the audited write, and only inside the document date range
- * (a paused „20“ is the year 20). The draft outlives a refused save, so the
- * user can retry it, and gives way to the stored date once saved.
+ * The typed document date. The picker reports every typed segment, a lone day
+ * digit or a paused year included, so the date stays a draft until
+ * „Speichern“: only a date the user confirms reaches the audited write, and
+ * only inside the document date range (a paused „20“ is the year 20). The
+ * draft outlives a refused save, so the user can retry it, and gives way to
+ * the stored date once saved. Filing refuses while a draft differs, since it
+ * would file the stored date, not the shown one.
  */
-function DocumentDateField({ archive, editable, disabled, onChange }: RetentionFieldProps) {
+function useDocumentDateDraft(archive: DocumentArchive, onChange: RetentionFieldProps['onChange']) {
   const controlId = useId();
   const [draft, setDraft] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const draftDate = draft ? toLocalDateString(draft) : archive.documentDate;
-  const save = () => {
-    const range = documentDateRange();
-    const nextError = isDocumentDateInRange(draftDate, range)
-      ? undefined
-      : `Gib ein Belegdatum zwischen dem ${formatDate(range.earliest)} und dem ${formatDate(range.latest)} ein.`;
-    setError(nextError ?? null);
-    if (focusFirstInvalidField({ [controlId]: nextError })) return;
-    void onChange({ documentDate: draftDate, retentionClass: archive.retentionClass }).then((saved) => {
-      if (saved) setDraft(null);
-    });
+  const unsaved = draftDate !== archive.documentDate;
+  const markInvalid = (message: string | undefined) => {
+    setError(message ?? null);
+    return focusFirstInvalidField({ [controlId]: message });
   };
+  return {
+    controlId,
+    draft,
+    error,
+    unsaved,
+    type: (date: Date) => {
+      setDraft(date);
+      setError(null);
+    },
+    reset: () => {
+      setDraft(null);
+      setError(null);
+    },
+    save: () => {
+      const range = documentDateRange();
+      const outOfRange = isDocumentDateInRange(draftDate, range)
+        ? undefined
+        : `Gib ein Belegdatum zwischen dem ${formatDate(range.earliest)} und dem ${formatDate(range.latest)} ein.`;
+      if (markInvalid(outOfRange)) return;
+      void onChange({ documentDate: draftDate, retentionClass: archive.retentionClass }).then((saved) => {
+        if (saved) setDraft(null);
+      });
+    },
+    /** Marks and focuses the date while it differs from the stored one; true refuses filing. */
+    refuseFiling: () => markInvalid(unsaved ? UNSAVED_DATE_MESSAGE : undefined),
+  };
+}
+
+type DocumentDateFieldProps = Omit<RetentionFieldProps, 'onChange'> & {
+  date: ReturnType<typeof useDocumentDateDraft>;
+};
+
+function DocumentDateField({ archive, editable, disabled, date }: DocumentDateFieldProps) {
   return (
     <div>
       <p className="text-xs text-muted-foreground">Belegdatum</p>
       <div className="mt-1">
         {editable ? (
-          <Field label="Belegdatum" hideLabel htmlFor={controlId} error={error}>
-            <div className="flex items-center gap-2">
+          <Field label="Belegdatum" hideLabel htmlFor={date.controlId} error={date.error}>
+            <div className="flex flex-wrap items-center gap-2">
               <DatePicker
-                value={draft ?? parseIsoLocalDate(archive.documentDate)}
-                onChange={(date) => {
-                  if (!date) return;
-                  setDraft(date);
-                  setError(null);
+                value={date.draft ?? parseIsoLocalDate(archive.documentDate)}
+                onChange={(next) => {
+                  if (next) date.type(next);
                 }}
                 disabled={disabled}
                 ariaLabel="Belegdatum der Datei"
               />
-              {draftDate !== archive.documentDate && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  aria-label="Belegdatum speichern"
-                  onClick={save}
-                  disabled={disabled}
-                >
-                  Speichern
-                </Button>
+              {date.unsaved && (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-label="Belegdatum speichern"
+                    onClick={date.save}
+                    disabled={disabled}
+                  >
+                    Speichern
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label="Belegdatum zurücksetzen"
+                    onClick={date.reset}
+                    disabled={disabled}
+                  >
+                    Zurücksetzen
+                  </Button>
+                </>
               )}
             </div>
           </Field>
@@ -154,22 +196,24 @@ export type DocumentDetailsArchiveProps = {
  * the filed state. Admin and Büro change date and class until they file the
  * document; an employee receives no archive data, so nothing renders.
  */
-export function DocumentDetailsArchive({
+export function DocumentDetailsArchive(props: DocumentDetailsArchiveProps) {
+  const { archive } = props.document;
+  if (!archive) return null;
+  return <DocumentArchiveSection key={props.document.id} archive={archive} {...props} />;
+}
+
+function DocumentArchiveSection({
+  archive,
   document,
   disabled,
   isTrashView,
   onUpdateRetention,
   onFile,
-}: DocumentDetailsArchiveProps) {
-  const { archive } = document;
-  if (!archive) return null;
+}: DocumentDetailsArchiveProps & { archive: DocumentArchive }) {
   const editable = !archive.filedAt && !isTrashView;
-  const fieldProps: RetentionFieldProps = {
-    archive,
-    editable,
-    disabled,
-    onChange: (terms) => onUpdateRetention(document, terms),
-  };
+  const onChange = (terms: DocumentRetentionTerms) => onUpdateRetention(document, terms);
+  const date = useDocumentDateDraft(archive, onChange);
+  const fieldProps: RetentionFieldProps = { archive, editable, disabled, onChange };
   return (
     <div>
       <div className="flex items-center justify-between gap-2">
@@ -185,7 +229,9 @@ export function DocumentDetailsArchive({
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => onFile(document)}
+              onClick={() => {
+                if (!date.refuseFiling()) onFile(document);
+              }}
               disabled={disabled}
             >
               <Lock className="size-4" />
@@ -195,7 +241,7 @@ export function DocumentDetailsArchive({
         )}
       </div>
       <div className="mt-2 grid gap-3 sm:grid-cols-2">
-        <DocumentDateField key={document.id} {...fieldProps} />
+        <DocumentDateField archive={archive} editable={editable} disabled={disabled} date={date} />
         <RetentionClassField {...fieldProps} />
       </div>
       <p className="mt-2 text-muted-foreground">{retentionSummary(archive)}</p>
