@@ -59,6 +59,7 @@ A PR is ready when all of these hold on its latest commit:
 - The level's reviews are done, and each finding is fixed or dismissed with a reason in its thread.
 - GitHub reports the PR mergeable and not `DIRTY` (`gh pr view <n> --json mergeable,mergeStateStatus`).
 - No commit that reached `main` after the last green run touches this PR's files. Otherwise merge `origin/main` into the branch, push, and wait for green again. The ruleset does not require an up-to-date branch, so this check is yours. One overlap needs no new run: the only shared file is `eslint-rules/size-cap-exceptions.json`, no entry is changed on both sides, neither side changes the base caps in `eslint-rules/size-caps.mjs`, the merge is clean, and on the merged result `bun run test:unit lib/conventions` passes and `bunx eslint` passes on every file either side changed since the PR's last green run and every file whose exception entry changed.
+- Each group this PR selects that an open `ci-alert` issue's run failed has passed on the branch. List the failed groups of each alert's run (`gh run view <run> --log-failed | grep -E '\[verify\] [^ ]+: failed'`), using the full run a release alert links, and compare them with `bun run test:plan`. Pass the overlap with `bun run test:verify --group <ids>`. A red run in other groups never blocks a merge.
 
 Merge with `gh pr merge --squash`, after a fresh `git fetch` and a last look at the PR. Never use `--admin` or another bypass.
 
