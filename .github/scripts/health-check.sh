@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # One read-only check of one credential for .github/workflows/health.yml.
-# Usage: health-check.sh <check-id> <kind> <secret variable> [argument]
+# Usage: health-check.sh <environment> <check-id> <kind> <secret variable> [argument]
+#
+# <environment> is prod for a credential production depends on, else dev. The step's
+# `environment` output carries it, so the report assigns the owner only when a prod
+# check failed (alert-issue.sh); the step itself is the one place that says so.
 #
 # The repository is public, so nothing here prints a value, a provider
 # answer or a URL that carries a credential: a failure names the check and,
@@ -9,16 +13,22 @@
 # one of the same kind first, to prove that a broken credential fails this step.
 set -euo pipefail
 
-check="$1"
-kind="$2"
-variable="$3"
-argument="${4:-}"
+environment="$1"
+check="$2"
+kind="$3"
+variable="$4"
+argument="${5:-}"
 value="${!variable:-}"
 
 fail() {
   echo "::error title=${check}::$1"
   exit 1
 }
+
+case "$environment" in
+  dev | prod) echo "environment=${environment}" >> "$GITHUB_OUTPUT" ;;
+  *) fail "Unknown environment ${environment}: dev or prod." ;;
+esac
 
 test -n "$value" || fail "${variable} is not configured."
 

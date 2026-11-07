@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -48,7 +48,7 @@ function writeJobs(jobs: unknown[]) {
   writeFileSync(join(stub, 'jobs.json'), JSON.stringify({ jobs }));
 }
 
-function bash(cwd: string, script: string, args: string[]) {
+function bash(cwd: string, script: string, args: string[], extraEnv: Record<string, string> = {}) {
   return spawnSync('bash', [script, ...args], {
     cwd,
     encoding: 'utf8',
@@ -62,13 +62,14 @@ function bash(cwd: string, script: string, args: string[]) {
       GITHUB_RUN_ID: '7',
       GITHUB_REF: 'refs/heads/main',
       GITHUB_OUTPUT: join(stub, 'output'),
+      ...extraEnv,
     },
   });
 }
 
 /** The gh calls that write to an issue. */
-function issueWrites(args: string[]) {
-  const result = bash(repositoryRoot, alertScript, args);
+function issueWrites(args: string[], extraEnv: Record<string, string> = {}) {
+  const result = bash(repositoryRoot, alertScript, args, extraEnv);
   expect(result.stderr).toBe('');
   expect(result.status).toBe(0);
   return readFileSync(join(stub, 'gh.log'), 'utf8')
@@ -178,6 +179,89 @@ test('a release with nothing to ship neither reports nor closes an open issue', 
   writeOpenIssues([{ number: 12, title: 'CI alert: release' }]);
   const skip = ['no-change', 'main equals production'];
   expect(issueWrites(['run', 'CI alert: release', 'success skipped skipped skipped', ...skip])).toEqual([]);
+});
+
+const PRODUCTION = { AFFECTS_PRODUCTION: 'true' };
+
+test('an alert that does not affect production opens without an assignee', () => {
+  for (const args of [
+    ['run', TITLE, 'failure'],
+    ['keep', TITLE, 'No date ran.'],
+  ]) {
+    writeFileSync(join(stub, 'gh.log'), '');
+    const [create, ...rest] = issueWrites(args);
+    expect(rest, args[0]).toEqual([]);
+    expect(create, args[0]).toStartWith('issue create');
+    expect(create, args[0]).not.toContain('assignee');
+  }
+});
+
+test('a production failure opens its alert with the owner assigned', () => {
+  const [create, ...rest] = issueWrites(['run', 'CI alert: release', 'failure'], PRODUCTION);
+  expect(rest).toEqual([]);
+  expect(create).toStartWith('issue create --title CI alert: release');
+  expect(create).toContain('--assignee tamaycbn');
+});
+
+test('an open alert that turns into a production failure gains the owner', () => {
+  writeOpenIssues([{ number: 12, title: TITLE }]);
+  const opened = issueWrites(['open', TITLE, 'A prod check failed.'], PRODUCTION);
+  expect(opened.at(-1)).toBe('issue edit 12 --add-assignee tamaycbn\n');
+  writeFileSync(join(stub, 'gh.log'), '');
+  const kept = issueWrites(['keep', TITLE, 'No date ran.'], PRODUCTION);
+  expect(kept.at(-1)).toBe('issue edit 12 --add-assignee tamaycbn\n');
+});
+
+test('an update that does not affect production changes no assignee', () => {
+  writeOpenIssues([{ number: 12, title: TITLE }]);
+  for (const args of [
+    ['open', TITLE, 'A dev check failed.'],
+    ['keep', TITLE, 'No date ran.'],
+  ])
+    for (const write of issueWrites(args)) expect(write, args[0]).not.toContain('assignee');
+});
+
+test('an unreadable production flag fails the job instead of guessing', () => {
+  const result = bash(repositoryRoot, alertScript, ['run', TITLE, 'failure'], { AFFECTS_PRODUCTION: 'yes' });
+  expect(result.status).not.toBe(0);
+  expect(readFileSync(join(stub, 'gh.log'), 'utf8')).toBe('');
+});
+
+test('only the release and the health check can assign the owner', () => {
+  const workflows = join(repositoryRoot, '.github/workflows');
+  const callers = readdirSync(workflows).filter((file) =>
+    readFileSync(join(workflows, file), 'utf8').includes('AFFECTS_PRODUCTION'),
+  );
+  expect(callers.sort()).toEqual(['health.yml', 'release.yml']);
+  expect(readFileSync(join(workflows, 'release.yml'), 'utf8')).toContain('AFFECTS_PRODUCTION: true\n');
+});
+
+test('every health check names its environment, and its step reports it even when it fails', () => {
+  const health = readFileSync(join(repositoryRoot, '.github/workflows/health.yml'), 'utf8');
+  const calls = health.match(/\$CHECK \S+/g) ?? [];
+  expect(calls.length).toBeGreaterThan(0);
+  for (const call of calls) expect(call).toMatch(/^\$CHECK (dev|prod)$/);
+
+  const healthScript = join(repositoryRoot, '.github/scripts/health-check.sh');
+  const missing = bash(repositoryRoot, healthScript, [
+    'prod',
+    'app-production',
+    'endpoint',
+    'UNSET_TOKEN',
+    'x',
+  ]);
+  expect(missing.status).not.toBe(0);
+  expect(readFileSync(join(stub, 'output'), 'utf8')).toBe('environment=prod\n');
+  writeFileSync(join(stub, 'output'), '');
+  const unknown = bash(repositoryRoot, healthScript, [
+    'staging',
+    'app-staging',
+    'endpoint',
+    'UNSET_TOKEN',
+    'x',
+  ]);
+  expect(unknown.status).not.toBe(0);
+  expect(readFileSync(join(stub, 'output'), 'utf8')).toBe('');
 });
 
 function commit(cwd: string, message: string) {

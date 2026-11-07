@@ -38,7 +38,7 @@ Auth settings, mail templates, SMTP and rate limits are no schema and no migrati
 
 This table is the one home of every credential the deployments and workflows use. No check copies a secret elsewhere to test it.
 
-- `.github/workflows/health.yml` checks every row each Monday with a read-only call where the value lives. A failed run fails the step named after the credential (a 404 from a health endpoint names a token mismatch, a 401 from staging the bypass secret) and opens or updates the issue "Weekly health check failed", assigned to `tamaycbn`. The next green run closes it. GitHub also mails that failure to `tamaycbn`, the account that last changed the cron line, if failed-workflow mail is on.
+- `.github/workflows/health.yml` checks every row each Monday with a read-only call where the value lives. A failed run fails the step named after the credential (a 404 from a health endpoint names a token mismatch, a 401 from staging the bypass secret) and opens or updates the issue "Weekly health check failed". The next green run closes it. Only a failed check marked `prod` assigns the owner ([monitoring](recovery-and-incidents.md#monitoring)); a run off `main` or with `break_check` reports on "… (proof)".
 - The app checks its runtime credentials at `GET /api/health`, each Supabase project at its `health` function. Both accept only a request with the header `x-health-check-token`; without it they answer like a missing route. The answer names each check `ok` or `failed`, never a value.
 
 | Credential | Lives in | Used by | Expires | Rotate |
