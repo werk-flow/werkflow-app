@@ -688,11 +688,13 @@ test('the real script keeps its supervisor out of the process tree and wakes an 
   const directory = temporaryDirectory();
   const { wakeFile, idleFile, env } = fakeT3(directory);
   writeFileSync(idleFile, '');
-  const wake = readPipe(namedPipe(wakeFile));
+  namedPipe(wakeFile);
   const release = namedPipe(join(directory, 'release'));
   const parentFile = join(directory, 'supervisor-parent.txt');
   const command = heldCommand(directory, release, 6, `ps -o ppid= -p "$PPID" > "${parentFile}"\n`);
   try {
+    // Reading starts inside the try, so its finally always closes the pipe.
+    const wake = readPipe(wakeFile);
     const foreground = spawn(process.execPath, [script, '--began', 'began', '--', command], {
       cwd: directory,
       env,
