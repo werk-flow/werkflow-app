@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict';
 import { expect, mock, setSystemTime, test } from 'bun:test';
 import { getLocalDayStart } from '@/lib/date-time/berlin';
+import { isJsonRecord } from '@/lib/supabase/json';
 import { createInMemoryAdmin, type InMemoryTables } from '@/lib/testing/fixtures/in-memory-admin';
 
 const FIXTURE_FLAG = 'CLOCK_DAY_FIXTURE';
@@ -95,7 +96,7 @@ async function runFixture(): Promise<void> {
   // The segments also stand as their own table, for the reads that name it.
   const readState = async () => {
     tables.time_segments = (tables.time_sessions ?? []).flatMap((session) =>
-      Array.isArray(session.time_segments) ? session.time_segments : [],
+      Array.isArray(session.time_segments) ? session.time_segments.filter(isJsonRecord) : [],
     );
     const result = await getCurrentClockState(organization);
     assert.ok(result.success, 'the clock state reads');

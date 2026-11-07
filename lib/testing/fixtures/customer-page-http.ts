@@ -129,7 +129,7 @@ async function check(input: Request, status: number): Promise<unknown> {
   const response = await GET(input);
   assert.equal(response.status, status);
   assert.equal(response.headers.get('cache-control'), 'private, no-store');
-  const body = await response.json();
+  const body: unknown = await response.json();
   assert.ok(!JSON.stringify(body).includes('private provider detail'));
   return body;
 }

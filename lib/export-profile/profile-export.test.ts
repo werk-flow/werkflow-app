@@ -167,7 +167,7 @@ describe('export profile: relations and other files', () => {
         bytes: 11,
         format: 'SQL Server backup (Microsoft Tape Format)',
         toRead: expect.stringContaining('SQL Server'),
-      },
+      } satisfies Record<string, unknown>,
     ]);
   });
 
@@ -195,7 +195,11 @@ describe('export profile: relations and other files', () => {
 
   test('an unreadable file names a fixed reason and what to do, and counts as no table', () => {
     expect(profile.unreadable).toEqual([
-      { file: 'Kaputt.xml', reason: 'xml_not_well_formed', advice: expect.stringContaining('fresh export') },
+      {
+        file: 'Kaputt.xml',
+        reason: 'xml_not_well_formed',
+        advice: expect.stringContaining('fresh export'),
+      } satisfies Record<string, unknown>,
     ]);
     expect(profile.tables.filter((table) => table.file === 'Kaputt.xml')).toEqual([]);
   });
@@ -203,7 +207,9 @@ describe('export profile: relations and other files', () => {
   test('the wrapper folder, system files and unknown files are accounted for', () => {
     expect(profile.wrapperFolders).toBe(1);
     expect(profile.skippedSystemFiles).toBe(1);
-    expect(profile.otherFiles).toEqual([{ extension: '.cfg', files: 1, bytes: expect.any(Number) }]);
+    expect(profile.otherFiles).toEqual([
+      { extension: '.cfg', files: 1, bytes: expect.any(Number) } satisfies Record<string, unknown>,
+    ]);
     expect(profile.files).toMatchObject({
       total: 17,
       tableFiles: 8,
