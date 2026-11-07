@@ -3,7 +3,14 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { HEAVY_SLOT_VARIABLE, hasFlock, heavySlotSkip, tryHeavySlot, type HeavySlot } from './heavy-slot';
+import {
+  HEAVY_SLOT_VARIABLE,
+  hasFlock,
+  heavySlotCount,
+  heavySlotSkip,
+  tryHeavySlot,
+  type HeavySlot,
+} from './heavy-slot';
 
 const directories: string[] = [];
 const processes: ChildProcess[] = [];
@@ -44,6 +51,16 @@ test('CI and a command already inside a slot take no slot; a machine without flo
   expect(heavySlotSkip({ [HEAVY_SLOT_VARIABLE]: '2' }, available)).toBe('nested');
   expect(heavySlotSkip({}, () => false)).toBe('no-flock');
   expect(heavySlotSkip({}, available)).toBeUndefined();
+});
+
+test('a machine holds as many heavy slots as its memory fits: two on the 16 GB PC, three on the 18 GB Mac, never none', () => {
+  const mebibytes = 1024 ** 2;
+  const gibibytes = 1024 ** 3;
+  // `free -m` total of the PC's WSL machine, where three slots of type-aware eslint stalled it.
+  expect(heavySlotCount(15_994 * mebibytes)).toBe(2);
+  expect(heavySlotCount(18 * gibibytes)).toBe(3);
+  expect(heavySlotCount(32 * gibibytes)).toBe(6);
+  expect(heavySlotCount(8 * gibibytes)).toBe(1);
 });
 
 // The slots are util-linux flock locks; without flock (macOS) the limit is off, as the test above proves.
