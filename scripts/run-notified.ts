@@ -3,14 +3,16 @@ import { appendFileSync, closeSync, mkdirSync, openSync, readFileSync } from 'no
 import { join, resolve } from 'node:path';
 import { z } from 'zod';
 import {
-  deliverWake,
   exitCodeOf,
   isAlive,
+  markHeard,
   parseRunArguments,
   readRecord,
   resendUnheardRuns,
   saveRecord,
   sendWake,
+  settleWake,
+  threadBusy,
   threadProblem,
   unheardDirectory,
   type RunOptions,
@@ -20,9 +22,10 @@ import {
 // Runs a long command detached and wakes the thread that started it when it
 // ends (lib/testing/notified-run.ts). The foreground part stays until the log
 // shows the command began work, or the command ended, so a refusal is reported
-// as a refusal. A harness stops a task by group and by walking its process tree,
-// so the supervisor runs in a session of its own, started by a launcher that exits
-// at once: it is nobody's child in that tree, also while this foreground waits.
+// as a refusal. An outcome the foreground reports counts as heard. A harness
+// stops a task by group and by walking its process tree, so the supervisor runs
+// in a session of its own, started by a launcher that exits at once: it is
+// nobody's child in that tree, also while this foreground waits.
 
 const LAUNCH_FLAG = '--launch';
 const WAIT_FLAG = '--wait';
@@ -59,13 +62,17 @@ async function supervise(recordPath: string): Promise<void> {
     });
     child.once('exit', (code, signal) => settle({ code: exitCodeOf(code, signal), signal }));
   });
-  const ended: RunRecord = {
+  saveRecord({
     ...readRecord(recordPath),
     outcome: { exitCode: exit.code, signal: exit.signal, endedAt: new Date().toISOString() },
-  };
-  saveRecord(ended);
-  const failure = await deliverWake(sendWake, ended, waitFor);
-  saveRecord({ ...ended, wake: failure === null ? 'sent' : 'failed', wakeError: failure });
+  });
+  await settleWake(recordPath, {
+    send: sendWake,
+    threadBusy,
+    supervisorAlive: isAlive,
+    wait: waitFor,
+    now: Date.now,
+  });
 }
 
 function refuse(reason: string): never {
@@ -91,9 +98,11 @@ function createRun(options: RunOptions): RunRecord {
   };
 }
 
+/** Reports the outcome to the caller. When the caller is the run's own thread, it heard the run, so no wake follows. */
 function reportEnded(record: RunRecord, exitCode: number): never {
   console.log(logTail(record.log));
   console.log(`[run-notified] ended with exit code ${exitCode}. Whole log: ${record.log}`);
+  markHeard(record, process.env.T3CODE_THREAD_ID);
   process.exit(exitCode);
 }
 
@@ -116,7 +125,9 @@ async function watchRun(recordPath: string, limit: number, began: string | null)
     }
     if (began !== null && readFileSync(current.log, 'utf8').includes(began)) {
       console.log(`[run-notified] began work: the log shows "${began}".`);
-      console.log(`[run-notified] When it ends, thread ${current.thread} gets the exit code.`);
+      console.log(
+        `[run-notified] When it ends, thread ${current.thread} gets the exit code once its turn ended, unless that thread heard it through --wait.`,
+      );
       console.log(`[run-notified] Log: ${current.log}\n[run-notified] To wait in this turn: ${waitCommand}`);
       process.exit(0);
     }
