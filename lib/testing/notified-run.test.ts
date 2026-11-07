@@ -598,14 +598,18 @@ function namedPipe(path: string): string {
   return path;
 }
 
-/** Everything written into `pipe` until its writer closes it. */
+/**
+ * Everything written into `pipe` until its writer closes it. A read error comes
+ * back as the text, so the assertion on it fails with the error, and a test that
+ * failed before it awaited the read leaves no unhandled rejection.
+ */
 function readPipe(pipe: string): Promise<string> {
-  return new Promise((settle, fail) => {
+  return new Promise((settle) => {
     let text = '';
     createReadStream(pipe, 'utf8')
       .on('data', (chunk) => (text += chunk))
       .on('end', () => settle(text))
-      .on('error', fail);
+      .on('error', (error) => settle(`the pipe could not be read: ${error.message}`));
   });
 }
 
@@ -698,8 +702,6 @@ test('the real script keeps its supervisor out of the process tree and wakes an 
   try {
     // Reading starts inside the try, so its finally always closes the pipe.
     const wake = readPipe(wakeFile);
-    // A read error stays visible at `await wake`, but never surfaces as unhandled when an earlier step failed.
-    wake.catch(() => undefined);
     const foreground = spawn(process.execPath, [script, '--began', 'began', '--', command], {
       cwd: directory,
       env,
