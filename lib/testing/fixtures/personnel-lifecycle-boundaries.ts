@@ -2,7 +2,8 @@
 // managers reach another person's lifecycle, the access transition and the
 // Admin-only documents stay with the Admin, an employee record or protected
 // document of another organization is unreachable, and a prestart employee
-// reads and acknowledges only their own items.
+// reads and acknowledges only their own items: an acknowledgement, never a
+// requirement Admin or Büro completes.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
 import {
@@ -13,6 +14,7 @@ import {
   signInAs,
   tableRows,
 } from './action-boundary-world';
+import { saveRequirementInputSchema, type PersonnelRequirementType } from '@/lib/personnel/lifecycle';
 
 const ownRecordId = '60000000-0000-4000-8000-000000000001';
 const colleagueRecordId = '60000000-0000-4000-8000-000000000002';
@@ -27,18 +29,26 @@ const colleagueId = '30000000-0000-4000-8000-000000000021';
 const foreignUserId = '30000000-0000-4000-8000-000000000029';
 const operationId = '63000000-0000-4000-8000-000000000001';
 const now = '2026-10-01T08:00:00.000Z';
+// Every requirement type but an acknowledgement is the office's to complete.
+const officeRequirements = saveRequirementInputSchema.shape.requirementType.options
+  .filter((type) => type !== 'acknowledgement')
+  .map((type, index) => ({ type, id: `66000000-0000-4000-8000-00000000000${index + 1}` }));
 
 const employeeRecord = (id: string, organizationId: string, userId: string) => ({
   id,
   organization_id: organizationId,
   user_id: userId,
 });
-const requirement = (id: string, employeeRecordId: string) => ({
+const requirement = (
+  id: string,
+  employeeRecordId: string,
+  requirementType: PersonnelRequirementType = 'acknowledgement',
+) => ({
   id,
   organization_id: ORGANIZATION_A,
   plan_id: '64000000-0000-4000-8000-000000000001',
   employee_record_id: employeeRecordId,
-  requirement_type: 'acknowledgement',
+  requirement_type: requirementType,
   title: 'Arbeitsschutz lesen',
   description: null,
   is_required: true,
@@ -88,6 +98,7 @@ const world = installActionWorld({
   personnel_onboarding_requirements: [
     requirement(ownRequirementId, ownRecordId),
     requirement(colleagueRequirementId, colleagueRecordId),
+    ...officeRequirements.map(({ id, type }) => requirement(id, ownRecordId, type)),
   ],
   personnel_documents: [
     personnelDocument(ownDocumentId, ORGANIZATION_A, ownRecordId, 'health_evidence'),
@@ -223,7 +234,7 @@ assert.equal(own.data.organizationId, ORGANIZATION_A);
 assert.equal(own.data.prestart, true);
 assert.deepEqual(
   own.data.requirements.map((item) => item.id),
-  [ownRequirementId],
+  [ownRequirementId, ...officeRequirements.map(({ id }) => id)],
 );
 assert.deepEqual(
   own.data.documents.map((document) => document.documentId),
@@ -233,8 +244,9 @@ assert.ok((await signedUrlOf(ownDocumentId)).success);
 assert.deepEqual(await signedUrlOf(colleagueDocumentId), notAuthorized);
 assert.deepEqual(await signedUrlOf(foreignDocumentId), notAuthorized);
 
-// An acknowledgement acts as the session employee in their own organization;
-// a colleague's requirement is refused by the function.
+// An acknowledgement acts as the session employee in their own organization.
+// A colleague's or an unknown requirement is not found, and a requirement the
+// office completes is refused, each before the function.
 const acknowledgement = (requirementId: string) =>
   actions.acknowledgePersonnelRequirement({
     requirementId,
@@ -242,19 +254,22 @@ const acknowledgement = (requirementId: string) =>
     statement: 'Gelesen und erledigt.',
     operationId,
   });
-assert.deepEqual(await acknowledgement(colleagueRequirementId), { success: false, error: 'forbidden' });
+const requirementNotFound = { success: false, error: 'requirement_not_found' };
+assert.deepEqual(await acknowledgement(colleagueRequirementId), requirementNotFound);
+assert.deepEqual(await acknowledgement('61000000-0000-4000-8000-0000000000ff'), requirementNotFound);
+for (const { id, type } of officeRequirements) {
+  assert.deepEqual(await acknowledgement(id), notAuthorized, `an employee confirmed a ${type} requirement`);
+}
+assert.equal(world.rpcCalls.length, 0, 'a refused confirmation reached the database function');
 assert.ok((await acknowledgement(ownRequirementId)).success);
 assert.deepEqual(
-  world.rpcCalls.map((call) => [call.args.p_organization_id, call.args.p_actor_id]),
-  [
-    [ORGANIZATION_A, CALLER_ID],
-    [ORGANIZATION_A, CALLER_ID],
-  ],
+  world.rpcCalls.map((call) => [call.name, call.args.p_organization_id, call.args.p_actor_id]),
+  [['acknowledge_personnel_item', ORGANIZATION_A, CALLER_ID]],
 );
 
 // A cookie for an organization the caller has no membership in resolves nothing.
 world.activeOrganizationCookie = ORGANIZATION_B;
 assert.deepEqual(await actions.getOwnPersonnelActions(), { success: false, error: 'not_a_member' });
 assert.deepEqual(await acknowledgement(ownRequirementId), { success: false, error: 'not_a_member' });
-assert.equal(world.rpcCalls.length, 2);
+assert.equal(world.rpcCalls.length, 1);
 assert.equal(databaseSnapshot(), initialDatabase, 'no self-service call may write rows outside the function');
