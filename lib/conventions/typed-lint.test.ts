@@ -6,8 +6,7 @@ import { readTypeAssertionRatchet } from './type-assertions';
 
 // Planted-violation probes for the type-aware rules of eslint.config.mjs and
 // the assertion ban. Each rule must fail its planted violation in product
-// code, tests and scripts, and pass the correct form; no-unsafe-assignment
-// covers product code only so far (werk-flow/werkflow-planning#221).
+// code, tests and scripts, and pass the correct form.
 
 const eslint = createProbeLinter({ typed: true });
 
@@ -115,16 +114,19 @@ describe('type-aware lint rules', () => {
     }
   });
 
-  test('an annotation on an any value fails in product code; a parsed or narrowed value passes', async () => {
+  test('an annotation on an any value fails in product code, tests and scripts; a parsed or narrowed value passes', async () => {
     const rule = '@typescript-eslint/no-unsafe-assignment';
     const entries = "import { z } from '@/lib/zod';\n\ntype Detail = { entries?: string[] } | null;\n";
     const detailSchema =
       'const detailSchema = z.object({ entries: z.array(z.string()).optional() }).nullable();\n';
     for (const filePath of [
-      'lib/typed-lint-probe.ts',
+      ...PROBE_PATHS,
       'components/typed-lint-probe.tsx',
       'hooks/typed-lint-probe.ts',
       'app/typed-lint-probe.tsx',
+      'lib/testing/typed-lint-probe.ts',
+      'tests/golden/support/typed-lint-probe.ts',
+      'tests/canary/typed-lint-probe.spec.ts',
     ]) {
       expect(
         await ruleMessages(

@@ -1065,6 +1065,10 @@ const eslintConfig = defineConfig([
   //   a `default` does not count, so a new member fails where it is not handled.
   // - no-floating-promises: an unawaited promise loses its rejection. Bun's
   //   `mock.module` returns a promise only for an async factory, which no test uses.
+  // - no-unsafe-assignment: an annotation on an `any` value asserts its type
+  //   with no `as` and no check: `const detail: { entries?: TimeEntry[] } | null
+  //   = event.detail` passed every check (werk-flow/werkflow-planning#221).
+  //   Parse or narrow the value instead.
   {
     files: ['**/*.{ts,tsx}'],
     ignores: ['supabase/functions/**'],
@@ -1084,17 +1088,6 @@ const eslintConfig = defineConfig([
         'error',
         { allowForKnownSafeCalls: [{ from: 'package', package: 'bun:test', name: 'module' }] },
       ],
-    },
-  },
-  // An annotation on an `any` value asserts its type with no `as` and no check:
-  // `const detail: { entries?: TimeEntry[] } | null = event.detail` passed every
-  // check (werk-flow/werkflow-planning#221). Parse or narrow the value instead.
-  // Product code only for now; tests, scripts and tests/** follow in the next
-  // debt child.
-  {
-    files: [...productFiles, 'proxy.ts'],
-    ignores: ['**/*.test.*', 'lib/testing/**'],
-    rules: {
       '@typescript-eslint/no-unsafe-assignment': 'error',
     },
   },
