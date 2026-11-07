@@ -26,7 +26,7 @@ import { endSessionBeforeSignOut } from './sign-out-session-end';
 import { createActivitySelection } from './segments';
 import { collectActiveJobIds } from './active-jobs';
 import { getOpenSessionOrgsForUserOnDay } from './open-session-orgs';
-import { getDayBounds, getUserEntriesForDay, verifyCurrentMembership } from './action-access';
+import { getDayBounds, getUserEntriesForDay } from './action-access';
 
 type OrganizationClockSettings = NonNullable<Awaited<ReturnType<typeof readOrganizationSettings>>>;
 
@@ -247,15 +247,8 @@ export async function getActiveJobIdsForOrg(
     const parsed = uuidSchema.safeParse(rawOrganizationId);
     if (!parsed.success) return { success: false, error: 'invalid_input' };
     const organizationId = parsed.data;
-    const user = await getAuthenticatedUser();
-    if (!user) {
-      return { success: false, error: 'not_authenticated' };
-    }
-
-    const callerRole = await verifyCurrentMembership(organizationId);
-    if (!callerRole) {
-      return { success: false, error: 'not_a_member' };
-    }
+    const caller = await resolveActionContextFor(organizationId);
+    if (!caller.success) return caller;
 
     const admin = createSupabaseAdminClient();
     const { start } = getDayBounds(new Date());
@@ -298,21 +291,39 @@ export async function getActiveJobIdsForOrg(
     }
 
     const activeJobIds = collectActiveJobIds(legacyResult.data, canonicalResult.data);
-    const jobs = await readInBatches(activeJobIds, (ids) =>
-      admin
-        .from('jobs')
-        .select('id,project_id')
-        .eq('organization_id', organizationId)
-        .in('id', [...ids]),
-    );
-    if (jobs.error) {
-      logReadErrors('getActiveJobIdsForOrg: read failed', jobs.error);
+    // An employee learns only which of their own assigned jobs, and the
+    // projects of those, someone works on; Admin and Büro see all of them.
+    const [jobs, ownAssignments] = await Promise.all([
+      readInBatches(activeJobIds, (ids) =>
+        admin
+          .from('jobs')
+          .select('id,project_id')
+          .eq('organization_id', organizationId)
+          .in('id', [...ids]),
+      ),
+      caller.context.isManagerOrAbove
+        ? null
+        : readInBatches(activeJobIds, (ids) =>
+            admin
+              .from('job_assignments')
+              .select('job_id')
+              .eq('organization_id', organizationId)
+              .eq('user_id', caller.context.userId)
+              .in('job_id', [...ids]),
+          ),
+    ]);
+    if (jobs.error || ownAssignments?.error) {
+      logReadErrors('getActiveJobIdsForOrg: read failed', jobs.error, ownAssignments?.error);
       return { success: false, error: 'fetch_failed' };
     }
+    const assignedJobIds = ownAssignments && new Set(ownAssignments.data.map((row) => row.job_id));
+    const visible = (jobId: string) => !assignedJobIds || assignedJobIds.has(jobId);
     return {
       success: true,
-      activeJobIds,
-      activeProjectIds: [...new Set(jobs.data.flatMap((job) => (job.project_id ? [job.project_id] : [])))],
+      activeJobIds: activeJobIds.filter(visible),
+      activeProjectIds: [
+        ...new Set(jobs.data.flatMap((job) => (job.project_id && visible(job.id) ? [job.project_id] : []))),
+      ],
     };
   } catch (error) {
     logError('Unexpected error in getActiveJobIdsForOrg:', error);
