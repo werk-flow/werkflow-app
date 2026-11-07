@@ -139,7 +139,7 @@ function TimeCorrectionRequestActions({
           Zurückziehen
         </Button>
       ) : null}
-      {request.status === 'clarification_required' && request.canWithdraw ? (
+      {request.canResubmit ? (
         <Button size="sm" onClick={() => void resubmit(request)} disabled={actionsDisabled}>
           <RotateCcw className="mr-1.5 size-4" /> Erneut einreichen
         </Button>

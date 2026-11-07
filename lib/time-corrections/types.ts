@@ -94,6 +94,7 @@ export type TimeCorrectionRequest = {
   subjectName: string;
   canReview: boolean;
   canWithdraw: boolean;
+  canResubmit: boolean;
 };
 
 export type TimeCorrectionResult =

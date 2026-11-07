@@ -28,6 +28,7 @@ const unknownRequestId = '85000000-0000-4000-8000-000000000006';
 const operationId = '85000000-0000-4000-8000-000000000007';
 const coworkerRecordId = '85000000-0000-4000-8000-000000000008';
 const ownEntryId = '85000000-0000-4000-8000-000000000009';
+const ownReassignRequestId = '85000000-0000-4000-8000-000000000010';
 
 const world = installActionWorld({
   employee_records: [
@@ -47,6 +48,17 @@ const world = installActionWorld({
       subject_user_id: foreignUserId,
       requested_by: foreignUserId,
       source_scope_key: 'scope',
+      current_revision: 1,
+    },
+    // The caller's own reassignment, returned with a question.
+    {
+      id: ownReassignRequestId,
+      organization_id: ORGANIZATION_A,
+      subject_user_id: CALLER_ID,
+      requested_by: CALLER_ID,
+      kind: 'reassign',
+      status: 'clarification_required',
+      source_scope_key: 'own-scope',
       current_revision: 1,
     },
   ],
@@ -273,6 +285,24 @@ assert.deepEqual(
   [...touchedTables].filter((table) => table.startsWith('time_')),
   [],
   'an employee reassignment reads no time before its refusal',
+);
+// Nor does an employee resubmit an earlier reassignment: the refusal comes
+// before any revision or source is read.
+touchedTables.clear();
+assert.deepEqual(
+  await resubmitTimeCorrection({
+    requestId: ownReassignRequestId,
+    expectedRevision: 1,
+    reason: 'Neu eingereicht',
+    operationId,
+  }),
+  { success: false, error: 'not_authorized' },
+  'an employee resubmits a reassignment',
+);
+assert.deepEqual(
+  [...touchedTables].filter((table) => table.startsWith('time_correction_request_')),
+  [],
+  'a refused resubmission reads no revision',
 );
 assert.deepEqual(
   world.rpcCalls.map((call) => call.name),

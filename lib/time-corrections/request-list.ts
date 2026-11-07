@@ -9,7 +9,7 @@ import {
   getEffectiveResponsibilityHolderForActor,
   loadResponsibilityRuntimeState,
 } from '@/lib/responsibilities/server';
-import type { OrgRole } from '@/lib/roles';
+import { isManagerRole, type OrgRole } from '@/lib/roles';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { Tables } from '@/lib/supabase/database.types';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
@@ -183,6 +183,11 @@ function toCorrectionRequest(
     canWithdraw:
       request.requested_by === caller.callerUserId &&
       (request.status === 'submitted' || request.status === 'clarification_required'),
+    // Only Admin and Büro move time to another person, on resubmission too.
+    canResubmit:
+      request.requested_by === caller.callerUserId &&
+      request.status === 'clarification_required' &&
+      (request.kind !== 'reassign' || isManagerRole(caller.callerRole)),
     revision: {
       revision: revision.revision,
       reason: revision.reason,

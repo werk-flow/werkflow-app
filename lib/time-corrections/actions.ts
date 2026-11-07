@@ -326,7 +326,7 @@ export async function resubmitTimeCorrection(rawInput: {
     admin
       // tenant-scope: by-id-then-verified — revise_time_correction_request refuses an actor who is not the request's author, and the rows read here only feed that call
       .from('time_correction_requests')
-      .select('organization_id, source_scope_key, current_revision')
+      .select('organization_id, source_scope_key, current_revision, kind')
       .eq('id', input.requestId)
       .maybeSingle(),
   );
@@ -336,6 +336,10 @@ export async function resubmitTimeCorrection(rawInput: {
   }
   const caller = await resolveActionContextFor(request.organization_id);
   if (!caller.success) return caller;
+  // Only Admin and Büro move time to another person, on resubmission too.
+  if (request.kind === 'reassign' && !caller.context.isManagerOrAbove) {
+    return { success: false, error: 'not_authorized' };
+  }
   const [{ data: revision, error: revisionError }, { data: sources, error: sourcesError }] =
     await Promise.all([
       loggedRead(
