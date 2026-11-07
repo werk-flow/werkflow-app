@@ -6,7 +6,7 @@
  * that shape and names the form the check can resolve.
  */
 
-import { type ShellWord, executedCommands, program } from './shell-words';
+import { type ShellWord, executedCommands, program } from '../../security/shell-words';
 
 /** Operands whose directory the shell decides: a variable anywhere, or a wildcard on a relative path. */
 function unresolvedOperands(args: readonly ShellWord[]): string[] {

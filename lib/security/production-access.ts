@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { executedCommands, program } from '../testing/runner/shell-words';
+import { executedCommands, program } from './shell-words';
 import { z } from '../zod';
 
 // Agents never read production data: every tool result goes to the model
