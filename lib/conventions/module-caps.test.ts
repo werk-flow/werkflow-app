@@ -10,6 +10,8 @@ import {
   MODULE_LINE_LIMIT,
   SIZE_CAP_EXCEPTIONS,
 } from '../../eslint-rules/size-caps.mjs';
+import { z } from '@/lib/zod';
+import { effectiveLintRules } from './effective-lint-rules';
 import { listProductSources, repositoryRoot } from './product-sources';
 
 // Tier 2 for the size caps (AGENTS.md "4. Code quality and maintainability").
@@ -21,15 +23,18 @@ import { listProductSources, repositoryRoot } from './product-sources';
 // fails until the entry is removed or lowered. A suppression with a reason
 // would pass the lint gate, so a directive that names a size rule fails too.
 
-type SizeCapExceptions = {
+const sizeCapExceptionsSchema = z.object({
   /** The reason of each entry: the longest matching path prefix, otherwise `default`. */
-  reasons: Record<string, string>;
-  modules: Record<string, number>;
-  functions: Record<string, Record<string, number>>;
-};
-type MeasuredFunction = { key: string; lines: number };
+  reasons: z.record(z.string(), z.string()),
+  modules: z.record(z.string(), z.number()),
+  functions: z.record(z.string(), z.record(z.string(), z.number())),
+});
+type SizeCapExceptions = z.infer<typeof sizeCapExceptionsSchema>;
+const measuredFunctionsSchema = z.array(z.object({ key: z.string(), lines: z.number() }));
+type MeasuredFunction = z.infer<typeof measuredFunctionsSchema>[number];
 
-const exceptions: SizeCapExceptions = SIZE_CAP_EXCEPTIONS;
+// eslint-rules/size-caps.mjs reads the list with JSON.parse, which is typed `any`.
+const exceptions = sizeCapExceptionsSchema.parse(SIZE_CAP_EXCEPTIONS);
 
 const SIZE_RULE_DIRECTIVE =
   /eslint-disable(?:-next-line|-line)?\b[^\n]*\b(?:max-lines(?:-per-function)?|quality\/function-size)\b/;
@@ -42,7 +47,8 @@ function measureSource(source: string, file: string): MeasuredFunction[] {
       measure: {
         create: (context: { sourceCode: unknown }) => ({
           'Program:exit': () => {
-            for (const { key, lines } of measureFunctions(context.sourceCode)) measured.push({ key, lines });
+            const functions = measuredFunctionsSchema.parse(measureFunctions(context.sourceCode));
+            for (const { key, lines } of functions) measured.push({ key, lines });
           },
         }),
       },
@@ -223,16 +229,16 @@ describe('size caps', () => {
 
   test('the effective configuration applies the caps and each listed module ceiling', async () => {
     const eslint = new ESLint();
-    const product = await eslint.calculateConfigForFile('lib/size-cap-probe.ts');
-    expect(product.rules['quality/function-size']).toEqual([
+    const product = effectiveLintRules(await eslint.calculateConfigForFile('lib/size-cap-probe.ts'));
+    expect(product['quality/function-size']).toEqual([
       2,
       { max: FUNCTION_LINE_LIMIT, exceptions: exceptions.functions },
     ]);
-    expect(product.rules['max-lines-per-function']).toBeUndefined();
-    expect(product.rules['max-lines']?.[1]?.max).toBe(MODULE_LINE_LIMIT);
+    expect(product['max-lines-per-function']).toBeUndefined();
+    expect(product['max-lines']?.[1]).toMatchObject({ max: MODULE_LINE_LIMIT });
     for (const [file, ceiling] of Object.entries(exceptions.modules)) {
-      const config = await eslint.calculateConfigForFile(file);
-      expect(config.rules['max-lines']?.[1]?.max, file).toBe(ceiling);
+      const rules = effectiveLintRules(await eslint.calculateConfigForFile(file));
+      expect(rules['max-lines']?.[1], file).toMatchObject({ max: ceiling });
     }
   });
 });

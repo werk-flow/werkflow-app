@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import { createProbeLinter } from '../../eslint-rules/probe-linter.mjs';
+import { effectiveLintRules } from './effective-lint-rules';
 import { readTypeAssertionRatchet } from './type-assertions';
 
 // Planted-violation probes for the type-aware rules of eslint.config.mjs and
@@ -62,8 +63,8 @@ describe('type-aware lint rules', () => {
     const floating =
       'async function load(): Promise<number> {\n  return 1;\n}\nexport function start(): void {\n  load();\n}\n';
     expect(await ruleMessages(rule, floating, 'lib/utils.ts')).toHaveLength(1);
-    const config = await eslint.calculateConfigForFile('lib/utils.ts');
-    expect(config.rules[rule]?.[0]).toBe(2);
+    const rules = effectiveLintRules(await eslint.calculateConfigForFile('lib/utils.ts'));
+    expect(rules[rule]?.[0]).toBe(2);
   });
 
   test('a promise is awaited, handled or voided; Bun mock.module is a known safe call', async () => {
