@@ -31,7 +31,7 @@ test('range and referenced-table or filters keep only the embedded items of the 
     .or(`ended_at.is.null,ended_at.gte.${DAY_START}`, { referencedTable: 'time_segments' });
 
   expect(Array.isArray(data) ? data.map((row) => row.id) : data).toEqual(['session']);
-  const segments = Array.isArray(data) ? data[0]?.time_segments : undefined;
+  const segments: unknown = Array.isArray(data) ? data[0]?.time_segments : undefined;
   expect(Array.isArray(segments) ? segments.map((segment: { id: string }) => segment.id) : segments).toEqual([
     'overnight',
     'today',
@@ -63,7 +63,7 @@ test('a !inner embed keeps its parent only while an embedded row passes every fi
     .from('time_sessions')
     .select('id, time_segments!inner(*)')
     .eq('time_segments.id', 'today');
-  const segments = Array.isArray(matching.data) ? matching.data[0]?.time_segments : undefined;
+  const segments: unknown = Array.isArray(matching.data) ? matching.data[0]?.time_segments : undefined;
   expect(Array.isArray(segments) ? segments.map((segment: { id: string }) => segment.id) : segments).toEqual([
     'today',
   ]);

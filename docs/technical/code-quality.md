@@ -71,7 +71,7 @@ Wrong turn: code kept for possible future scope. Every later agent reads, mainta
 
 ## Never
 
-- Use `any`, a non-null assertion `!`, or an `as` or `<T>` assertion (`as const` stays). A file on `eslint-rules/type-assertion-ratchet.json` keeps at most its recorded count; review judges an `as` added in a listed file. In product code, a typed variable that takes an `any` value asserts too: parse or narrow it (`no-unsafe-assignment`).
+- Use `any`, a non-null assertion `!`, or an `as` or `<T>` assertion (`as const` stays). A file on `eslint-rules/type-assertion-ratchet.json` keeps at most its recorded count; review judges an `as` added in a listed file. A typed variable that takes an `any` value asserts too, in tests and scripts as in product code: parse or narrow it (`no-unsafe-assignment`).
 - Pass `undefined` into an optional property, or silence a strict flag with a cast or `@ts-expect-error`.
 - Write a uuid regex outside `lib/validation/uuid.ts`.
 - Write to `console` in product code. Log through `logError`; a component shows the failure.

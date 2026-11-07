@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react';
 
 import type { OrganizationDocument } from '@/lib/documents/types';
-import type { DocumentUploadItem } from './document-upload-dialog';
+import type { DocumentUploadItem } from './document-upload-rows';
 
 type ContextualDocumentUploads = {
   fileInputRef: RefObject<HTMLInputElement | null>;

@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createInviteEmailHandler } from '../../supabase/functions/send-invite-email/handler';
+import { jsonRecordOrEmpty } from '../supabase/json';
 import { createEmailChangeOtpHandler } from '../../supabase/functions/send-email-change-current-otp/handler';
 
 const apiKey = 'sb_secret_synthetic-mail-test';
@@ -203,7 +204,7 @@ for (const example of cases) {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ success: true, id: messageId });
     expect(sent).toHaveLength(1);
-    const body = JSON.parse(String(sent[0]?.body));
+    const body = jsonRecordOrEmpty(JSON.parse(String(sent[0]?.body)));
     expect(body.to).toEqual(['private@example.test']);
     expect(body.html).toContain('&lt;script&gt;private&lt;/script&gt;');
     expect(body.html).not.toContain('<script>');

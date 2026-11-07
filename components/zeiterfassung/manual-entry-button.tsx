@@ -7,14 +7,14 @@ import { useClockState } from '@/components/clock-state-provider';
 import { MANUAL_ENTRY_CREATED_EVENT, queueManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge';
 
 /** The overview's toolbar action: opens the manual entry dialog and refreshes the live clock afterwards. */
-export function ManualEntryButton() {
+export function ManualEntryButton({ currentUserId }: { currentUserId: string }) {
   const { refresh } = useClockState();
 
   return (
     <ManualEntryDialog
       onSuccess={async (entries) => {
         if (typeof window !== 'undefined') {
-          queueManualEntryBridge(entries);
+          queueManualEntryBridge(currentUserId, entries);
           window.dispatchEvent(
             new CustomEvent(MANUAL_ENTRY_CREATED_EVENT, {
               detail: { entries },
