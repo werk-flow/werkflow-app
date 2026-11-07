@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -522,6 +523,25 @@ test('a send lock left empty by a crash holds no wake back', async () => {
   const { sent, dependencies } = wakeWorld(0);
   await settleWake(record.recordPath, dependencies);
   expect(sent).toHaveLength(1);
+});
+
+test('a send lock that cannot be read is not taken over, so a live holder keeps its single wake', async () => {
+  const unheard = temporaryDirectory();
+  await stuckHolder(endedRun(unheard, 'run-1', 4));
+  const [lock = ''] = readdirSync(unheard).filter((name) => name.endsWith('.send-lock'));
+  chmodSync(join(unheard, lock), 0o000);
+  const record = endedRun(unheard, 'run-2', 5);
+  let waits = 0;
+  const { sent, dependencies } = wakeWorld(0, {
+    supervisorAlive: () => false,
+    wait: () => {
+      waits += 1;
+      return waits > 3 ? Promise.reject(new Error('still waiting')) : Promise.resolve();
+    },
+  });
+  await expect(settleWake(record.recordPath, dependencies)).rejects.toThrow('still waiting');
+  chmodSync(join(unheard, lock), 0o600);
+  expect(sent, 'a second sender took the lock').toEqual([]);
 });
 
 test('a resend leaves a thread to the supervisor that holds its send lock, whose wake carries every orphaned run once', async () => {

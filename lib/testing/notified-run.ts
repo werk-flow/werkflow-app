@@ -339,6 +339,8 @@ function holdsSendLock(path: string, holder: string, supervisorAlive: (pid: numb
     }
     const current = readLock(path);
     if (current === 'gone') continue;
+    // A read that failed for another reason proves nothing about the holder, so the lock stays.
+    if (current === 'inconclusive') return false;
     if (current !== 'unreadable' && current.holder === holder) return true;
     if (current !== 'unreadable' && supervisorAlive(current.pid)) return false;
     rmSync(path, { force: true });
@@ -346,17 +348,24 @@ function holdsSendLock(path: string, holder: string, supervisorAlive: (pid: numb
   return false;
 }
 
-function readLock(path: string): z.infer<typeof sendLockSchema> | 'gone' | 'unreadable' {
+/** The lock's holder; `unreadable` when its text is no lock, `inconclusive` when reading it failed. */
+function readLock(path: string): z.infer<typeof sendLockSchema> | 'gone' | 'unreadable' | 'inconclusive' {
+  let text: string;
   try {
-    return sendLockSchema.parse(JSON.parse(readFileSync(path, 'utf8')));
+    text = readFileSync(path, 'utf8');
   } catch (error) {
-    return errorCode(error) === 'ENOENT' ? 'gone' : 'unreadable';
+    return errorCode(error) === 'ENOENT' ? 'gone' : 'inconclusive';
+  }
+  try {
+    return sendLockSchema.parse(JSON.parse(text));
+  } catch {
+    return 'unreadable';
   }
 }
 
 function releaseSendLock(path: string, holder: string): void {
   const current = readLock(path);
-  if (current !== 'gone' && current !== 'unreadable' && current.holder === holder) rmSync(path);
+  if (typeof current === 'object' && current.holder === holder) rmSync(path);
 }
 
 /**

@@ -54,7 +54,11 @@ async function supervise(recordPath: string): Promise<void> {
   const [program = '', ...programArguments] = started.command;
   const child = spawn(program, programArguments, { stdio: ['ignore', log, log] });
   closeSync(log);
-  for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) process.on(signal, () => child.kill(signal));
+  const forwards = (['SIGTERM', 'SIGINT', 'SIGHUP'] as const).map((signal) => {
+    const forward = () => child.kill(signal);
+    process.on(signal, forward);
+    return { signal, forward };
+  });
   const exit = await new Promise<{ code: number; signal: string | null }>((settle) => {
     child.once('error', (error) => {
       appendFileSync(started.log, `[run-notified] the command did not start: ${error.message}\n`);
@@ -62,6 +66,8 @@ async function supervise(recordPath: string): Promise<void> {
     });
     child.once('exit', (code, signal) => settle({ code: exitCodeOf(code, signal), signal }));
   });
+  // The command ended, so a signal ends the supervisor itself; a resend carries its wake.
+  for (const { signal, forward } of forwards) process.off(signal, forward);
   saveRecord({
     ...readRecord(recordPath),
     outcome: { exitCode: exit.code, signal: exit.signal, endedAt: new Date().toISOString() },
