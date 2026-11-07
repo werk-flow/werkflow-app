@@ -7,9 +7,27 @@ import { listProductSources, parseProductSource } from './product-sources';
 // URL" (werk-flow/werkflow-planning#233). Until hydration, a `<form>` submits
 // natively, and without `method="post"` the browser sends a GET: the email and
 // password land in the URL, browser history and request logs. Every `<form>`
-// element under app/(auth)/ therefore sets `method="post"` as a string literal.
+// element under app/(auth)/, and in each component a file there imports
+// directly (the new-password and code forms), therefore sets `method="post"`
+// as a string literal.
 
 const AUTH_ROUTES = 'app/(auth)/';
+
+/** The auth route files and the product components they import directly. */
+function authFormSources(): string[] {
+  const products = new Set(listProductSources());
+  const routes = [...products].filter((file) => file.startsWith(AUTH_ROUTES));
+  const imported = routes.flatMap((file) =>
+    parseProductSource(file).statements.flatMap((statement) => {
+      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) return [];
+      const specifier = statement.moduleSpecifier.text;
+      if (!specifier.startsWith('@/')) return [];
+      const base = specifier.slice(2);
+      return [`${base}.tsx`, `${base}/index.tsx`].filter((candidate) => products.has(candidate));
+    }),
+  );
+  return [...new Set([...routes, ...imported])];
+}
 
 /** Each `<form>` in the source without a literal `method="post"`, as `file:line`. */
 function formsWithoutPost(fileName: string, text?: string): string[] {
@@ -44,9 +62,11 @@ function postsNatively(attributes: ts.JsxAttributes): boolean {
 }
 
 describe('auth form method', () => {
-  test('every <form> under app/(auth)/ sets method="post"', () => {
-    const authSources = listProductSources(['app']).filter((file) => file.startsWith(AUTH_ROUTES));
-    expect(authSources.flatMap((file) => formsWithoutPost(file))).toEqual([]);
+  test('every <form> a sign-in route renders sets method="post"', () => {
+    const sources = authFormSources();
+    expect(sources).toContain('components/otp-form.tsx');
+    expect(sources).toContain('components/password/new-password-fields-form.tsx');
+    expect(sources.flatMap((file) => formsWithoutPost(file))).toEqual([]);
   });
 
   test('probes: a form without a literal post is reported, a posting form is not', () => {

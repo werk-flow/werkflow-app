@@ -171,7 +171,7 @@ export function OTPForm({ email, inviteCode, className, ...props }: OTPFormProps
         <CardDescription>Wir haben einen sechsstelligen Code an {maskedEmail} gesendet.</CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit}>
+        <form method="post" onSubmit={handleSubmit}>
           <div className="flex flex-col gap-6">
             <OtpCodeField code={code} setCode={setCode} />
 
