@@ -15,6 +15,7 @@ import {
 } from './decision-reads';
 import { canCorrectOpeningDate } from './opening-dates';
 import { type OpeningDateCorrection, type OpeningDateFacts, readOpeningDateFacts } from './opening-reads';
+import { type PeriodResultRow, toPeriodResultRows } from './period-results';
 import { getBerlinInstant, PERIOD_SOURCE_ROW_CAP, requirePeriodRows } from './period-sources';
 import type {
   PayrollExportState,
@@ -64,15 +65,8 @@ export type TimePeriodDetail = {
     version: number;
     sourceFingerprint: string;
   } | null;
-  results: Array<{
-    employeeRecordId: string;
-    employeeName: string;
-    targetMinutes: number;
-    creditedMinutes: number;
-    periodDeltaMinutes: number;
-    closingBalanceMinutes: number;
-    authoritativeTargets: boolean;
-  }>;
+  /** Sorted by name; a person the preparation could not calculate carries causes, no minutes. */
+  results: PeriodResultRow[];
   findings: Array<{
     id: string;
     employeeRecordId: string | null;
@@ -455,15 +449,7 @@ function toTimePeriodDetail(input: {
           sourceFingerprint: calculation.source_fingerprint,
         }
       : null,
-    results: rows.results.map((result) => ({
-      employeeRecordId: result.employee_record_id,
-      employeeName: nameByEmployee.get(result.employee_record_id) ?? 'Unbekannt',
-      targetMinutes: result.target_minutes,
-      creditedMinutes: result.credited_minutes,
-      periodDeltaMinutes: result.period_delta_minutes,
-      closingBalanceMinutes: result.closing_balance_minutes,
-      authoritativeTargets: result.authoritative_targets,
-    })),
+    results: toPeriodResultRows(rows.results, rows.findings, nameByEmployee),
     findings: rows.findings.map((finding) => ({
       id: finding.id,
       employeeRecordId: finding.employee_record_id,
