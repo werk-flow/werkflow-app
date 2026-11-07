@@ -12,10 +12,11 @@ import { buildLegacyIntervals } from './legacy-intervals';
 
 import type { DailyTarget } from '@/lib/personnel/targets';
 import type { AdminClient } from '@/lib/supabase/admin';
-import { calculateEmployeePeriod } from './calculation';
+import { calculateEmployeePeriod, hasScheduleTargets } from './calculation';
 import { resolveEmployeeDailyTargets } from './period-daily-targets';
 import { pushEmployeeFindings } from './period-findings';
 import { resolvePoliciesForPeriod } from './period-policies';
+import { employeeSetupGaps, type UncomputedResultCause } from './period-results';
 import {
   hashPayload,
   loadIndexedPeriodSources,
@@ -83,18 +84,21 @@ function buildEmployeeActivityIntervals(
   return intervals;
 }
 
+// A person with a setup gap gets placeholder values and the gap's blocking
+// finding; the period page reads such a row as not computed, never as zero.
+// Its schedule fact stays real: a missing policy says nothing about the Wochenplan.
 function calculateEmployeePeriodResult(input: {
   employee: PeriodEmployee;
   policy: TimeAccountPolicy | null;
   account: PeriodSources['accounts'][number] | undefined;
-  hasCompletePolicyHistory: boolean;
+  setupGaps: readonly UncomputedResultCause[];
   policiesByDate: PeriodPolicies;
   intervals: TimeActivityInterval[];
   resolvedTargets: DailyTarget[];
   dailyTargets: DailyTargetInput[];
   shared: PeriodShared;
 }): EmployeePeriodCalculation {
-  const { employee, policy, account, hasCompletePolicyHistory, policiesByDate, intervals } = input;
+  const { employee, policy, account, setupGaps, policiesByDate, intervals } = input;
   const { resolvedTargets, dailyTargets } = input;
   const { bounds } = input.shared;
   const { eventsByEmployee } = input.shared.index;
@@ -116,7 +120,7 @@ function calculateEmployeePeriodResult(input: {
       return [{ id: event.id, kind, effectiveDate: event.effective_date, minutes: event.minutes }];
     });
   let calculation: EmployeePeriodCalculation;
-  if (policy && account && hasCompletePolicyHistory) {
+  if (setupGaps.length === 0 && policy && account) {
     calculation = calculateEmployeePeriod({
       employeeRecordId: employee.id,
       periodStart: bounds.start,
@@ -154,7 +158,7 @@ function calculateEmployeePeriodResult(input: {
       overtimeCandidateMinutes: 0,
       previousBalanceMinutes,
       closingBalanceMinutes: previousBalanceMinutes,
-      hasAuthoritativeTargets: false,
+      hasAuthoritativeTargets: hasScheduleTargets(dailyTargets),
     };
   }
   return calculation;
@@ -320,13 +324,17 @@ function appendEmployeePeriodResults(
   const employeeResultId = randomUUID();
   const accountCandidate = accountByEmployee.get(employee.id);
   const account = accountCandidate && accountCandidate.opened_on <= bounds.end ? accountCandidate : undefined;
+  const setupGaps = employeeSetupGaps({
+    hasCompletePolicy: Boolean(policy) && hasCompletePolicyHistory,
+    hasAccount: Boolean(account),
+  });
   const intervals = buildEmployeeActivityIntervals(employee, shared);
   const { resolvedTargets, dailyTargets } = resolveEmployeeDailyTargets(employee, policiesByDate, shared);
   const calculation = calculateEmployeePeriodResult({
     employee,
     policy,
     account,
-    hasCompletePolicyHistory,
+    setupGaps,
     policiesByDate,
     intervals,
     resolvedTargets,
@@ -353,9 +361,7 @@ function appendEmployeePeriodResults(
   });
   pushEmployeeFindings({
     employee,
-    policy,
-    account,
-    hasCompletePolicyHistory,
+    setupGaps,
     policiesByDate,
     calculation,
     intervals,

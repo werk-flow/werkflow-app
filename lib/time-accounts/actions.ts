@@ -83,6 +83,8 @@ export async function getTimeAccountAccess(): Promise<
     canManage: boolean;
     managementReadFailed: boolean;
     isAdmin: boolean;
+    /** Admin or Büro: the roles that edit a person's Arbeitszeitmodell. */
+    isOffice: boolean;
     canProposeAdjustments: boolean;
     canExportPayroll: boolean;
   }
@@ -94,6 +96,7 @@ export async function getTimeAccountAccess(): Promise<
     canManage: management.success && management.canManage,
     managementReadFailed: !management.success,
     isAdmin: context.role === 'admin',
+    isOffice: context.isManagerOrAbove,
     canProposeAdjustments: context.role === 'admin' || context.role === 'buero',
     canExportPayroll: context.isManagerOrAbove,
   };

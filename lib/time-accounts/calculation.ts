@@ -1,5 +1,6 @@
 import { addLocalDays, formatBerlinLocalDate, resolveBerlinWallTime } from '@/lib/date-time/berlin';
 import type {
+  DailyTargetInput,
   EmployeePeriodCalculation,
   EmployeePeriodCalculationInput,
   RoundedTimeBucket,
@@ -30,6 +31,14 @@ export function roundSecondsToMinutes(seconds: number): {
   if (!Number.isFinite(seconds) || seconds < 0) throw new Error('invalid_seconds');
   const minutes = Math.floor(seconds / 60 + 0.5);
   return { minutes, roundingDeltaSeconds: minutes * 60 - seconds };
+}
+
+/**
+ * Every day's Soll comes from a Wochenplan: the schedule fact behind
+ * `missing_schedule`. A missing policy or account never changes it.
+ */
+export function hasScheduleTargets(targets: readonly Pick<DailyTargetInput, 'source'>[]): boolean {
+  return targets.length > 0 && targets.every((target) => target.source === 'schedule');
 }
 
 function contextKey(localDate: string, context: TimeActivityContext): string {
@@ -317,7 +326,6 @@ export function calculateEmployeePeriod(input: EmployeePeriodCalculationInput): 
     overtimeCandidateMinutes: Math.max(0, creditedMinutes - targetMinutes),
     previousBalanceMinutes: input.previousBalanceMinutes,
     closingBalanceMinutes: input.previousBalanceMinutes + periodDeltaMinutes,
-    hasAuthoritativeTargets:
-      relevantTargets.length > 0 && relevantTargets.every((target) => target.source === 'schedule'),
+    hasAuthoritativeTargets: hasScheduleTargets(relevantTargets),
   };
 }
