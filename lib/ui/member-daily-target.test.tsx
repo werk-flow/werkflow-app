@@ -21,7 +21,7 @@ const weekTargets = resolveDailyTargets(getBusinessWeekDates(), {
       organizationId: 'org-1',
       employeeRecordId: 'record-1',
       validFrom: '2020-01-01',
-      dayMinutes: Array(7).fill(HALF_PAST_EIGHT),
+      dayMinutes: Array<number>(7).fill(HALF_PAST_EIGHT),
       note: null,
       createdBy: null,
       createdAt: '2020-01-01T00:00:00Z',

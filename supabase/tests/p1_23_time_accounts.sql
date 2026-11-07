@@ -34,6 +34,21 @@ create trigger correction_period_probe_guard before insert on correction_period_
   for each row execute function app_private.guard_time_correction_closed_period();
 grant insert on correction_period_probe to service_role;
 
+-- Close and reopen check the order of an organization's periods, so both
+-- take one organization-level advisory lock; a transaction holds it until it
+-- ends. This reads whether the current transaction holds it.
+create function pg_temp.holds_period_order_lock(p_organization_id uuid)
+returns boolean language sql as $$
+  select exists (
+    select 1 from pg_locks held
+    where held.locktype = 'advisory' and held.pid = pg_backend_pid()
+      and held.granted and held.objsubid = 1
+      and ((held.classid::bigint << 32) | held.objid::bigint)
+        = hashtextextended(p_organization_id::text || ':p1-23-period-order', 0)
+  );
+$$;
+grant execute on function pg_temp.holds_period_order_lock(uuid) to service_role;
+
 set local role service_role;
 
 do $$
@@ -64,6 +79,8 @@ declare
   decide_source text;
   july_period_id uuid;
   later_decision_finding_id uuid;
+  order_probe_period_id uuid;
+  order_source text;
 begin
   select id into admin_employee_id from public.employee_records
     where organization_id = '23000000-0000-0000-0000-000000000010'
@@ -223,6 +240,60 @@ begin
   if not exists (select 1 from pg_publication_tables
       where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'time_periods')
   then raise exception 'the period root is not published'; end if;
+
+  -- A close of one month and a reopen of the month before check the period
+  -- order at the same moment. Both take the organization's period order lock,
+  -- so the second waits for the first to commit and then sees its result.
+  -- Each probe runs in a subtransaction that rolls back, which releases the
+  -- lock, so the reopen probe proves that the reopen itself takes it.
+  order_probe_period_id := (select period_id from public.time_period_calculations
+    where id = v_calculation_id);
+  if pg_temp.holds_period_order_lock('23000000-0000-0000-0000-000000000010')
+    then raise exception 'the period order lock was held before the close probe'; end if;
+  begin
+    perform public.close_time_period(
+      '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
+      order_probe_period_id, '23000000-0000-0000-0000-0000000000a1', repeat('a', 64));
+    if not pg_temp.holds_period_order_lock('23000000-0000-0000-0000-000000000010')
+      then raise exception 'a period close does not take the organization period order lock'; end if;
+    raise exception 'period_order_probe';
+  exception when others then
+    if sqlerrm <> 'period_order_probe' then raise; end if;
+  end;
+  if pg_temp.holds_period_order_lock('23000000-0000-0000-0000-000000000010')
+    then raise exception 'the period order lock outlived the close probe'; end if;
+  begin
+    -- The base close takes no order lock; only the base allows that, so the
+    -- probe runs it as the owner.
+    set local role postgres;
+    perform public.close_time_period_p1_23_base(
+      '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
+      order_probe_period_id, '23000000-0000-0000-0000-0000000000a2', repeat('a', 64));
+    set local role service_role;
+    if pg_temp.holds_period_order_lock('23000000-0000-0000-0000-000000000010')
+      then raise exception 'the base close took the period order lock'; end if;
+    perform public.reopen_time_period(
+      '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
+      order_probe_period_id, 'Probe', '23000000-0000-0000-0000-0000000000a3', repeat('a', 64));
+    if not pg_temp.holds_period_order_lock('23000000-0000-0000-0000-000000000010')
+      then raise exception 'a period reopen does not take the organization period order lock'; end if;
+    raise exception 'period_order_probe';
+  exception when others then
+    if sqlerrm <> 'period_order_probe' then raise; end if;
+  end;
+  if current_user <> 'service_role'
+    then raise exception 'the reopen probe left the owner role active'; end if;
+  -- The order lock comes before every period lock, so a close and a reopen
+  -- cannot wait for each other's period lock while each holds its own.
+  foreach order_source in array array[
+    pg_get_functiondef('public.close_time_period(uuid,uuid,uuid,uuid,text)'::regprocedure),
+    pg_get_functiondef('public.reopen_time_period(uuid,uuid,uuid,text,uuid,text)'::regprocedure)
+  ] loop
+    if strpos(order_source, ':p1-23-period-order') = 0
+      or strpos(order_source, ':p1-23-period-order') > strpos(order_source, ':p1-23-period:')
+    then raise exception 'a period close or reopen takes a period lock before the order lock'; end if;
+  end loop;
+
   close_id := public.close_time_period(
     '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
     (select period_id from public.time_period_calculations where id = v_calculation_id),

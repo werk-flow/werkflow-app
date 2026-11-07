@@ -6,6 +6,8 @@
 -- An employee assigned to a job of a project reads the project's work state
 -- and the project's own documents; an unassigned colleague and another
 -- organization read neither.
+-- The assigned employee ticks the checklist of open work only; finished or
+-- cancelled work keeps its checklist, which Admin and Büro still change.
 begin;
 
 insert into auth.users (
@@ -23,7 +25,10 @@ insert into auth.users (
  '{"first_name":"Outsider","last_name":"Work"}', now(), now()),
 ('14170000-0000-0000-0000-000000000005', '00000000-0000-0000-0000-000000000000',
  'authenticated', 'authenticated', 'work-boundary-colleague@example.test', '', now(), '{}',
- '{"first_name":"Colleague","last_name":"Work"}', now(), now());
+ '{"first_name":"Colleague","last_name":"Work"}', now(), now()),
+('14170000-0000-0000-0000-000000000006', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'work-boundary-buero@example.test', '', now(), '{}',
+ '{"first_name":"Buero","last_name":"Work"}', now(), now());
 
 insert into public.organizations (id, name, admin_id, unique_code) values
 ('14170000-0000-0000-0000-000000000010', 'Work boundaries SQL',
@@ -32,7 +37,8 @@ insert into public.organizations (id, name, admin_id, unique_code) values
  '14170000-0000-0000-0000-000000000004', 'WORKOUT');
 insert into public.organization_members (organization_id, user_id, role) values
 ('14170000-0000-0000-0000-000000000010', '14170000-0000-0000-0000-000000000003', 'employee'),
-('14170000-0000-0000-0000-000000000010', '14170000-0000-0000-0000-000000000005', 'employee');
+('14170000-0000-0000-0000-000000000010', '14170000-0000-0000-0000-000000000005', 'employee'),
+('14170000-0000-0000-0000-000000000010', '14170000-0000-0000-0000-000000000006', 'buero');
 
 insert into public.jobs (id, organization_id, title, job_number, created_by) values
 ('14170000-0000-0000-0000-000000000020', '14170000-0000-0000-0000-000000000010',
@@ -64,7 +70,149 @@ insert into public.document_links (organization_id, document_id, project_id, cre
 ('14170000-0000-0000-0000-000000000010', '14170000-0000-0000-0000-000000000060',
  '14170000-0000-0000-0000-000000000050', '14170000-0000-0000-0000-000000000001');
 
+-- Two jobs of the employee, each with a checklist, for the read-only checklist of finished work.
+insert into public.jobs (id, organization_id, title, job_number, created_by) values
+('14170000-0000-0000-0000-000000000070', '14170000-0000-0000-0000-000000000010',
+ 'Checkliste fertig', 'WORK-SQL-3', '14170000-0000-0000-0000-000000000001'),
+('14170000-0000-0000-0000-000000000071', '14170000-0000-0000-0000-000000000010',
+ 'Checkliste storniert', 'WORK-SQL-4', '14170000-0000-0000-0000-000000000001');
+insert into public.job_assignments (organization_id, job_id, user_id, assigned_by) values
+('14170000-0000-0000-0000-000000000010', '14170000-0000-0000-0000-000000000070',
+ '14170000-0000-0000-0000-000000000003', '14170000-0000-0000-0000-000000000001'),
+('14170000-0000-0000-0000-000000000010', '14170000-0000-0000-0000-000000000071',
+ '14170000-0000-0000-0000-000000000003', '14170000-0000-0000-0000-000000000001');
+insert into public.job_instruction_items (id, organization_id, job_id, content, sort_order, created_by) values
+('14170000-0000-0000-0000-000000000072', '14170000-0000-0000-0000-000000000010',
+ '14170000-0000-0000-0000-000000000070', 'Ventil prüfen', 0, '14170000-0000-0000-0000-000000000001'),
+('14170000-0000-0000-0000-000000000073', '14170000-0000-0000-0000-000000000010',
+ '14170000-0000-0000-0000-000000000070', 'Druck dokumentieren', 1, '14170000-0000-0000-0000-000000000001'),
+('14170000-0000-0000-0000-000000000074', '14170000-0000-0000-0000-000000000010',
+ '14170000-0000-0000-0000-000000000071', 'Material abholen', 0, '14170000-0000-0000-0000-000000000001');
+
+-- A handed-over job, and an older job that carries only its legacy status.
+insert into public.jobs (id, organization_id, title, job_number, created_by) values
+('14170000-0000-0000-0000-000000000075', '14170000-0000-0000-0000-000000000010',
+ 'Checkliste übergeben', 'WORK-SQL-5', '14170000-0000-0000-0000-000000000001'),
+('14170000-0000-0000-0000-000000000077', '14170000-0000-0000-0000-000000000010',
+ 'Checkliste Altauftrag', 'WORK-SQL-6', '14170000-0000-0000-0000-000000000001'),
+('14170000-0000-0000-0000-000000000079', '14170000-0000-0000-0000-000000000010',
+ 'Checkliste Altauftrag offen', 'WORK-SQL-7', '14170000-0000-0000-0000-000000000001');
+insert into public.job_assignments (organization_id, job_id, user_id, assigned_by) values
+('14170000-0000-0000-0000-000000000010', '14170000-0000-0000-0000-000000000075',
+ '14170000-0000-0000-0000-000000000003', '14170000-0000-0000-0000-000000000001'),
+('14170000-0000-0000-0000-000000000010', '14170000-0000-0000-0000-000000000077',
+ '14170000-0000-0000-0000-000000000003', '14170000-0000-0000-0000-000000000001'),
+('14170000-0000-0000-0000-000000000010', '14170000-0000-0000-0000-000000000079',
+ '14170000-0000-0000-0000-000000000003', '14170000-0000-0000-0000-000000000001');
+insert into public.job_instruction_items (id, organization_id, job_id, content, sort_order, created_by) values
+('14170000-0000-0000-0000-000000000076', '14170000-0000-0000-0000-000000000010',
+ '14170000-0000-0000-0000-000000000075', 'Abnahme vorbereiten', 0, '14170000-0000-0000-0000-000000000001'),
+('14170000-0000-0000-0000-000000000078', '14170000-0000-0000-0000-000000000010',
+ '14170000-0000-0000-0000-000000000077', 'Altlast prüfen', 0, '14170000-0000-0000-0000-000000000001'),
+('14170000-0000-0000-0000-000000000080', '14170000-0000-0000-0000-000000000010',
+ '14170000-0000-0000-0000-000000000079', 'Altlast offen', 0, '14170000-0000-0000-0000-000000000001');
+
+-- A job both employees work on, for the internal-draft rule.
+insert into public.jobs (id, organization_id, title, job_number, created_by) values
+('14170000-0000-0000-0000-000000000090', '14170000-0000-0000-0000-000000000010',
+ 'Gemeinsamer Auftrag', 'WORK-SQL-8', '14170000-0000-0000-0000-000000000001');
+insert into public.job_assignments (organization_id, job_id, user_id, assigned_by) values
+('14170000-0000-0000-0000-000000000010', '14170000-0000-0000-0000-000000000090',
+ '14170000-0000-0000-0000-000000000003', '14170000-0000-0000-0000-000000000001'),
+('14170000-0000-0000-0000-000000000010', '14170000-0000-0000-0000-000000000090',
+ '14170000-0000-0000-0000-000000000005', '14170000-0000-0000-0000-000000000001');
+
 set local role service_role;
+
+-- The field work pack shows the checklist read-only once work is finished or
+-- cancelled (isFieldWorkPackReadOnly); the function refuses the assigned
+-- employee there, and Admin and Büro still correct the list.
+do $$
+declare
+  v_org constant uuid := '14170000-0000-0000-0000-000000000010';
+  v_admin constant uuid := '14170000-0000-0000-0000-000000000001';
+  v_employee constant uuid := '14170000-0000-0000-0000-000000000003';
+  v_finished_job constant uuid := '14170000-0000-0000-0000-000000000070';
+  v_cancelled_job constant uuid := '14170000-0000-0000-0000-000000000071';
+  v_ticked constant uuid := '14170000-0000-0000-0000-000000000072';
+  v_open constant uuid := '14170000-0000-0000-0000-000000000073';
+  v_cancelled_item constant uuid := '14170000-0000-0000-0000-000000000074';
+  v_events integer;
+  v_attempt record;
+begin
+  -- Open work: the assigned employee ticks an item.
+  if public.set_instruction_item_completion(v_org, v_employee, v_ticked, 0, true) <> 1 then
+    raise exception 'the assigned employee could not tick an item of open work';
+  end if;
+
+  perform public.transition_work_execution(
+    p_organization_id => v_org, p_target_type => 'job', p_target_id => v_finished_job,
+    p_to_state => 'in_progress', p_expected_version => 0, p_actor_id => v_admin
+  );
+  perform public.transition_work_execution(
+    p_organization_id => v_org, p_target_type => 'job', p_target_id => v_finished_job,
+    p_to_state => 'execution_complete', p_expected_version => 1, p_actor_id => v_admin,
+    p_override_gates => true, p_reason => 'Restpunkt wird in der Übergabe ausgewiesen.'
+  );
+  perform public.transition_work_execution(
+    p_organization_id => v_org, p_target_type => 'job', p_target_id => v_cancelled_job,
+    p_to_state => 'cancelled', p_expected_version => 0, p_actor_id => v_admin,
+    p_reason => 'Kunde hat abgesagt.'
+  );
+  -- Fixture states: the lifecycle to handover needs a full Übergabe, and an
+  -- older job predates execution_state. Both are written directly here.
+  perform set_config('app.work_execution_write', 'true', true);
+  update public.jobs set execution_state = 'handed_over'
+  where id = '14170000-0000-0000-0000-000000000075';
+  perform set_config('app.work_execution_write', 'true', true);
+  update public.jobs set execution_state = null, status = 'fertig'
+  where id = '14170000-0000-0000-0000-000000000077';
+  perform set_config('app.work_execution_write', 'true', true);
+  update public.jobs set execution_state = null, status = 'in_bearbeitung'
+  where id = '14170000-0000-0000-0000-000000000079';
+  -- An older job still in progress keeps its checklist open to the employee.
+  if public.set_instruction_item_completion(
+    v_org, v_employee, '14170000-0000-0000-0000-000000000080', 0, true
+  ) <> 1 then
+    raise exception 'the assigned employee could not tick an item of an open legacy job';
+  end if;
+
+  select count(*) into v_events from public.job_instruction_item_events
+  where organization_id = v_org;
+  for v_attempt in
+    select * from (values
+      (v_ticked, 1::bigint, false, 'unticked an item of finished work'),
+      (v_open, 0::bigint, true, 'ticked an item of finished work'),
+      (v_cancelled_item, 0::bigint, true, 'ticked an item of cancelled work'),
+      ('14170000-0000-0000-0000-000000000076'::uuid, 0::bigint, true, 'ticked an item of handed-over work'),
+      ('14170000-0000-0000-0000-000000000078'::uuid, 0::bigint, true, 'ticked an item of a finished legacy job')
+    ) attempt(item_id, expected_version, is_completed, label)
+  loop
+    begin
+      perform public.set_instruction_item_completion(
+        v_org, v_employee, v_attempt.item_id, v_attempt.expected_version, v_attempt.is_completed
+      );
+      raise exception 'the assigned employee %', v_attempt.label;
+    exception when others then
+      if sqlerrm <> 'instruction_item_not_authorized' then raise; end if;
+    end;
+  end loop;
+  if (select count(*) from public.job_instruction_item_events where organization_id = v_org) <> v_events
+    or (select is_completed from public.job_instruction_items where id = v_ticked) is not true
+    or (select is_completed from public.job_instruction_items where id = v_open) is not false
+  then raise exception 'a refused checklist change on finished work left a trace'; end if;
+
+  -- Admin and Büro keep correcting the checklist of finished work.
+  if public.set_instruction_item_completion(v_org, v_admin, v_open, 0, true) <> 1 then
+    raise exception 'the admin could not tick an item of finished work';
+  end if;
+  if public.set_instruction_item_completion(
+    v_org, '14170000-0000-0000-0000-000000000006', v_open, 1, false
+  ) <> 2 then
+    raise exception 'Büro could not untick an item of finished work';
+  end if;
+end;
+$$;
 
 do $$
 declare
@@ -216,6 +364,156 @@ begin
   );
   if not exists (select 1 from public.work_handover_packages where job_id = v_job)
   then raise exception 'the handover draft was not recorded'; end if;
+end;
+$$;
+
+-- A field worker's internal draft stays private: an assigned coworker cannot
+-- send it to review, and the refusal changes nothing. Its author and a manager
+-- can, and another organization's id is refused.
+do $$
+declare
+  v_org constant uuid := '14170000-0000-0000-0000-000000000010';
+  v_foreign_org constant uuid := '14170000-0000-0000-0000-000000000011';
+  v_admin constant uuid := '14170000-0000-0000-0000-000000000001';
+  v_author constant uuid := '14170000-0000-0000-0000-000000000003';
+  v_coworker constant uuid := '14170000-0000-0000-0000-000000000005';
+  v_outsider constant uuid := '14170000-0000-0000-0000-000000000004';
+  v_job constant uuid := '14170000-0000-0000-0000-000000000090';
+  v_draft constant uuid := '14170000-0000-0000-0000-000000000091';
+  v_draft_revision constant uuid := '14170000-0000-0000-0000-000000000092';
+  v_second_draft constant uuid := '14170000-0000-0000-0000-000000000093';
+  v_second_revision constant uuid := '14170000-0000-0000-0000-000000000094';
+  v_buero constant uuid := '14170000-0000-0000-0000-000000000006';
+  v_third_draft constant uuid := '14170000-0000-0000-0000-0000000000a1';
+  v_third_revision constant uuid := '14170000-0000-0000-0000-0000000000a2';
+  v_fourth_draft constant uuid := '14170000-0000-0000-0000-0000000000a3';
+  v_fourth_revision constant uuid := '14170000-0000-0000-0000-0000000000a4';
+  v_result jsonb;
+begin
+  perform public.create_work_artifact_revision(
+    p_organization_id => v_org, p_artifact_id => v_draft, p_revision_id => v_draft_revision,
+    p_job_id => v_job, p_project_id => null, p_kind => 'work_report', p_visibility => 'internal_only',
+    p_title => 'Privater Entwurf',
+    p_content => '{"summary":"Anlage geprüft","performedWork":"Filter gereinigt","visitStartedAt":"2026-09-01T06:00:00Z","visitEndedAt":"2026-09-01T07:00:00Z"}'::jsonb,
+    p_captured_at => now(), p_correction_reason => null, p_corrects_revision_id => null,
+    p_expected_version => null, p_submit => false, p_submit_action_id => null, p_actor_id => v_author
+  );
+  perform public.create_work_artifact_revision(
+    p_organization_id => v_org, p_artifact_id => v_second_draft, p_revision_id => v_second_revision,
+    p_job_id => v_job, p_project_id => null, p_kind => 'work_report', p_visibility => 'internal_only',
+    p_title => 'Zweiter privater Entwurf',
+    p_content => '{"summary":"Anlage geprüft","performedWork":"Filter gereinigt","visitStartedAt":"2026-09-01T06:00:00Z","visitEndedAt":"2026-09-01T07:00:00Z"}'::jsonb,
+    p_captured_at => now(), p_correction_reason => null, p_corrects_revision_id => null,
+    p_expected_version => null, p_submit => false, p_submit_action_id => null, p_actor_id => v_author
+  );
+  perform public.create_work_artifact_revision(
+    p_organization_id => v_org, p_artifact_id => v_third_draft, p_revision_id => v_third_revision,
+    p_job_id => v_job, p_project_id => null, p_kind => 'work_report', p_visibility => 'internal_only',
+    p_title => 'Dritter privater Entwurf',
+    p_content => '{"summary":"Anlage geprüft","performedWork":"Filter gereinigt","visitStartedAt":"2026-09-01T06:00:00Z","visitEndedAt":"2026-09-01T07:00:00Z"}'::jsonb,
+    p_captured_at => now(), p_correction_reason => null, p_corrects_revision_id => null,
+    p_expected_version => null, p_submit => false, p_submit_action_id => null, p_actor_id => v_author
+  );
+  perform public.create_work_artifact_revision(
+    p_organization_id => v_org, p_artifact_id => v_fourth_draft, p_revision_id => v_fourth_revision,
+    p_job_id => v_job, p_project_id => null, p_kind => 'work_report', p_visibility => 'internal_only',
+    p_title => 'Vierter privater Entwurf',
+    p_content => '{"summary":"Anlage geprüft","performedWork":"Filter gereinigt","visitStartedAt":"2026-09-01T06:00:00Z","visitEndedAt":"2026-09-01T07:00:00Z"}'::jsonb,
+    p_captured_at => now(), p_correction_reason => null, p_corrects_revision_id => null,
+    p_expected_version => null, p_submit => false, p_submit_action_id => null, p_actor_id => v_author
+  );
+
+  -- Nor can the coworker write a revision over it and so take it over, even unsubmitted.
+  begin
+    perform public.create_work_artifact_revision(
+      p_organization_id => v_org, p_artifact_id => v_draft,
+      p_revision_id => '14170000-0000-0000-0000-0000000000a5',
+      p_job_id => v_job, p_project_id => null, p_kind => 'work_report', p_visibility => 'internal_only',
+      p_title => 'Übernommen',
+      p_content => '{"summary":"Anlage geprüft","performedWork":"Filter gereinigt","visitStartedAt":"2026-09-01T06:00:00Z","visitEndedAt":"2026-09-01T07:00:00Z"}'::jsonb,
+      p_captured_at => now(), p_correction_reason => null, p_corrects_revision_id => null,
+      p_expected_version => 1, p_submit => false, p_submit_action_id => null, p_actor_id => v_coworker
+    );
+    raise exception 'an assigned coworker wrote a revision over another person''s internal draft';
+  exception when others then
+    if sqlerrm <> 'work_artifact_not_authorized' then raise; end if;
+  end;
+  if not exists (select 1 from public.work_artifacts
+      where id = v_draft and version = 1 and current_revision_id = v_draft_revision)
+  then raise exception 'a refused revision changed the internal draft'; end if;
+
+  -- The assigned coworker reads the ids and version, but the review request is refused.
+  begin
+    perform public.record_work_artifact_action(
+      p_organization_id => v_org, p_actor_id => v_coworker, p_artifact_id => v_draft,
+      p_revision_id => v_draft_revision, p_action_id => '14170000-0000-0000-0000-000000000095',
+      p_expected_version => 1, p_action_type => 'review_requested', p_reason => null, p_comment => null,
+      p_responsibility_snapshot => null, p_customer_context => null, p_signature_document_id => null
+    );
+    raise exception 'an assigned coworker sent another person''s internal draft to review';
+  exception when others then
+    if sqlerrm <> 'work_artifact_not_authorized' then raise; end if;
+  end;
+  if not exists (select 1 from public.work_artifacts
+      where id = v_draft and status = 'draft' and version = 1)
+    or exists (select 1 from public.work_artifact_actions where artifact_id = v_draft)
+  then raise exception 'a refused review request changed the internal draft'; end if;
+
+  -- Another organization's admin names the draft inside the own organization and learns nothing.
+  begin
+    perform public.record_work_artifact_action(
+      p_organization_id => v_foreign_org, p_actor_id => v_outsider, p_artifact_id => v_draft,
+      p_revision_id => v_draft_revision, p_action_id => '14170000-0000-0000-0000-000000000096',
+      p_expected_version => 1, p_action_type => 'review_requested', p_reason => null, p_comment => null,
+      p_responsibility_snapshot => null, p_customer_context => null, p_signature_document_id => null
+    );
+    raise exception 'another organization sent the internal draft to review';
+  exception when others then
+    if sqlerrm <> 'work_artifact_not_found' then raise; end if;
+  end;
+
+  -- The author sends the own draft, and a manager sends the author's other draft.
+  v_result := public.record_work_artifact_action(
+    p_organization_id => v_org, p_actor_id => v_author, p_artifact_id => v_draft,
+    p_revision_id => v_draft_revision, p_action_id => '14170000-0000-0000-0000-000000000097',
+    p_expected_version => 1, p_action_type => 'review_requested', p_reason => null, p_comment => null,
+    p_responsibility_snapshot => null, p_customer_context => null, p_signature_document_id => null
+  );
+  if v_result ->> 'status' <> 'submitted' then
+    raise exception 'the author could not send the own internal draft to review';
+  end if;
+  v_result := public.record_work_artifact_action(
+    p_organization_id => v_org, p_actor_id => v_admin, p_artifact_id => v_second_draft,
+    p_revision_id => v_second_revision, p_action_id => '14170000-0000-0000-0000-000000000098',
+    p_expected_version => 1, p_action_type => 'review_requested', p_reason => null, p_comment => null,
+    p_responsibility_snapshot => null, p_customer_context => null, p_signature_document_id => null
+  );
+  if v_result ->> 'status' <> 'submitted' then
+    raise exception 'a manager could not send a field worker''s internal draft to review';
+  end if;
+  -- Büro is a manager too.
+  v_result := public.record_work_artifact_action(
+    p_organization_id => v_org, p_actor_id => v_buero, p_artifact_id => v_third_draft,
+    p_revision_id => v_third_revision, p_action_id => '14170000-0000-0000-0000-0000000000a6',
+    p_expected_version => 1, p_action_type => 'review_requested', p_reason => null, p_comment => null,
+    p_responsibility_snapshot => null, p_customer_context => null, p_signature_document_id => null
+  );
+  if v_result ->> 'status' <> 'submitted' then
+    raise exception 'Büro could not send a field worker''s internal draft to review';
+  end if;
+  -- A manager may write the next revision of a field worker's internal draft.
+  v_result := public.create_work_artifact_revision(
+    p_organization_id => v_org, p_artifact_id => v_fourth_draft,
+    p_revision_id => '14170000-0000-0000-0000-0000000000a7',
+    p_job_id => v_job, p_project_id => null, p_kind => 'work_report', p_visibility => 'internal_only',
+    p_title => 'Vom Büro ergänzt',
+    p_content => '{"summary":"Anlage geprüft","performedWork":"Filter gereinigt","visitStartedAt":"2026-09-01T06:00:00Z","visitEndedAt":"2026-09-01T07:00:00Z"}'::jsonb,
+    p_captured_at => now(), p_correction_reason => null, p_corrects_revision_id => null,
+    p_expected_version => 1, p_submit => false, p_submit_action_id => null, p_actor_id => v_admin
+  );
+  if (v_result ->> 'version')::bigint <> 2 then
+    raise exception 'a manager could not write a revision over a field worker''s internal draft';
+  end if;
 end;
 $$;
 

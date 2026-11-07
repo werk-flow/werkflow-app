@@ -879,7 +879,7 @@
       "profile": "golden-world",
       "backend": "local",
       "context": {
-        "workloadDigest": "938b8a0dda5681b9e31bf951e71aecfb1576b3c22bef272537a9ef38cf77ddd9",
+        "workloadDigest": "832b6760a6266c623589c893f4d1803fbe1c8b3f1605fcaa064d034ff4cea19d",
         "measurementDigest": "82dbfd5851ca84ec81d5b6a543e2e6c97744f2cce5be878ad16f08b5b4e0e246",
         "protocol": "independent-fixed-month-three-distinct-overlap-confirmations-browser-raf-v3",
         "role": "buero",
@@ -922,7 +922,14 @@
       "review": {
         "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
         "reviewedAt": "2026-11-06T06:50:50.193Z"
-      }
+      },
+      "workloadCarryOvers": [
+        {
+          "fromDigest": "938b8a0dda5681b9e31bf951e71aecfb1576b3c22bef272537a9ef38cf77ddd9",
+          "toDigest": "832b6760a6266c623589c893f4d1803fbe1c8b3f1605fcaa064d034ff4cea19d",
+          "reason": "tests/golden/support/seed.ts gained types only: the admin client is typed with Database and the record_inventory_movement arguments pass through rpcArgs, which returns them unchanged, so every seeded row and RPC payload stays the same (transpiled output differs only by that identity call)"
+        }
+      ]
     },
     {
       "scenarioId": "calendar.month.employee-open-to-event",
@@ -930,7 +937,7 @@
       "profile": "golden-world",
       "backend": "local",
       "context": {
-        "workloadDigest": "938b8a0dda5681b9e31bf951e71aecfb1576b3c22bef272537a9ef38cf77ddd9",
+        "workloadDigest": "832b6760a6266c623589c893f4d1803fbe1c8b3f1605fcaa064d034ff4cea19d",
         "measurementDigest": "857fa38b81667987b11411d866d4f20cfe4b71d6cd6e8cc86625d5dcd6a93db2",
         "protocol": "independent-fixed-month-jobs-warmed-settled-closed-server-fresh-employee-after-three-saves-browser-raf-v5",
         "role": "employee",
@@ -973,7 +980,14 @@
       "review": {
         "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
         "reviewedAt": "2026-11-06T06:50:50.193Z"
-      }
+      },
+      "workloadCarryOvers": [
+        {
+          "fromDigest": "938b8a0dda5681b9e31bf951e71aecfb1576b3c22bef272537a9ef38cf77ddd9",
+          "toDigest": "832b6760a6266c623589c893f4d1803fbe1c8b3f1605fcaa064d034ff4cea19d",
+          "reason": "tests/golden/support/seed.ts gained types only: the admin client is typed with Database and the record_inventory_movement arguments pass through rpcArgs, which returns them unchanged, so every seeded row and RPC payload stays the same (transpiled output differs only by that identity call)"
+        }
+      ]
     },
     {
       "scenarioId": "calendar.month.admin-open-to-legacy-event",
@@ -981,7 +995,7 @@
       "profile": "golden-world",
       "backend": "local",
       "context": {
-        "workloadDigest": "938b8a0dda5681b9e31bf951e71aecfb1576b3c22bef272537a9ef38cf77ddd9",
+        "workloadDigest": "832b6760a6266c623589c893f4d1803fbe1c8b3f1605fcaa064d034ff4cea19d",
         "measurementDigest": "f9ed0c9aef563a12d99d31649cbde02a479bbf277fd1872c7ecfd21a16495f4a",
         "protocol": "independent-fixed-month-fresh-admin-after-legacy-save-browser-raf-v3",
         "role": "admin",
@@ -1024,7 +1038,14 @@
       "review": {
         "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
         "reviewedAt": "2026-11-06T06:50:50.193Z"
-      }
+      },
+      "workloadCarryOvers": [
+        {
+          "fromDigest": "938b8a0dda5681b9e31bf951e71aecfb1576b3c22bef272537a9ef38cf77ddd9",
+          "toDigest": "832b6760a6266c623589c893f4d1803fbe1c8b3f1605fcaa064d034ff4cea19d",
+          "reason": "tests/golden/support/seed.ts gained types only: the admin client is typed with Database and the record_inventory_movement arguments pass through rpcArgs, which returns them unchanged, so every seeded row and RPC payload stays the same (transpiled output differs only by that identity call)"
+        }
+      ]
     },
     {
       "scenarioId": "time.clock-in.visible",

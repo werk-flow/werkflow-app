@@ -60,9 +60,9 @@ describe('output safety: where the profile may go', () => {
   test('defaults to a dated folder below the home folder and never reuses a filled one', () => {
     const first = decide(join(workspace, 'export'), null);
     expect(first).toEqual({
-      ok: true,
+      ok: true as const,
       folder: expect.stringMatching(/home\/werkflow-export-profiles\/2026-11-05$/),
-    });
+    } satisfies Record<string, unknown>);
     if (!first.ok) return;
     mkdirSync(first.folder, { recursive: true });
     writeFileSync(join(first.folder, 'profile.md'), '# Export profile');

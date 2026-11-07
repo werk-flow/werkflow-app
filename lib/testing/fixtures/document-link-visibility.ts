@@ -7,6 +7,7 @@
 // value or id of the second. Büro and Admin read every link as before. A
 // caller of another organization reaches neither the job nor the document.
 import assert from 'node:assert/strict';
+import { z } from '@/lib/zod';
 import {
   CALLER_ID,
   ORGANIZATION_A,
@@ -250,16 +251,21 @@ function valuesOf(value: unknown, values: string[] = []): string[] {
   return values;
 }
 
-type LinkView = { jobId: unknown; projectId: unknown; clientId: unknown; employeeId: unknown };
-/** The one document of a successful reader result, wherever the reader puts it. */
-function documentOf(result: unknown, label: string): { links: LinkView[] } {
+const documentLinksSchema = z.object({
+  links: z.array(
+    z.object({ jobId: z.unknown(), projectId: z.unknown(), clientId: z.unknown(), employeeId: z.unknown() }),
+  ),
+});
+/** The links of the one document of a successful reader result, wherever the reader puts it. */
+function documentOf(result: unknown, label: string): z.infer<typeof documentLinksSchema> {
   assert.ok(typeof result === 'object' && result !== null, `${label}: no result`);
   assert.equal(Reflect.get(result, 'success'), true, `${label}: ${JSON.stringify(result)}`);
-  const single = Reflect.get(result, 'document');
-  const listed = Reflect.get(result, 'documents') ?? Reflect.get(result, 'projectDocuments');
-  const document = single ?? (Array.isArray(listed) ? listed.find((item) => item.id === documentId) : null);
+  const single: unknown = Reflect.get(result, 'document');
+  const listed: unknown = Reflect.get(result, 'documents') ?? Reflect.get(result, 'projectDocuments');
+  const document: unknown =
+    single ?? (Array.isArray(listed) ? listed.find((item) => item.id === documentId) : null);
   assert.ok(document, `${label}: the document is missing`);
-  return document;
+  return documentLinksSchema.parse(document);
 }
 
 // The reads a field worker uses. The document details carry the version and
