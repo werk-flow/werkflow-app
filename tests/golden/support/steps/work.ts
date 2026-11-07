@@ -723,6 +723,16 @@ export function jobRelationDialog(page: Page, relation: JobRelation): Locator {
   return page.getByRole('dialog', { name: JOB_DIALOG_COPY.relationDialog[relation], exact: true });
 }
 
+/** The site picker's „Einsatzort anlegen“ for a customer without a work site, inside a work form. */
+export function createSiteButton(form: Locator): Locator {
+  return form.getByRole('button', { name: 'Einsatzort anlegen', exact: true });
+}
+
+/** The dialog that creates a customer's first work site from inside a work form. */
+export function createSiteDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: 'Einsatzort anlegen', exact: true });
+}
+
 /** One field row of the job's „Details“ card, named by its label. */
 export function jobDetailField(page: Page, field: keyof typeof JOB_DETAIL_COPY.field): Locator {
   return metadataField(detailsRegion(page.getByRole('main')), JOB_DETAIL_COPY.field[field]);

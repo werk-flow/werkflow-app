@@ -7,6 +7,7 @@ import {
 import { getEmployeeRecordStateByUser } from '../../../golden/support/db/personnel';
 import { hydratedAndSettled, settled } from '../../../golden/support/steps/interaction';
 import { seedOrganizationCertification } from '../../../golden/support/db/qualifications';
+import { seedCustomer } from '../../../golden/support/db/customers';
 import {
   seedDeclaredWorkDependency,
   seedJob,
@@ -32,6 +33,8 @@ import {
 } from '../../../golden/support/steps/shared';
 import {
   clearPlannedDateInJobEditDialog,
+  createSiteButton,
+  createSiteDialog,
   jobDeleteConfirmation,
   jobDetailMenuItem,
   jobEditDialog,
@@ -86,6 +89,7 @@ const AUDIT_JOB_TITLES = {
   prerequisites: 'Kesseltausch mit offenen Voraussetzungen',
   dispatched: 'Einsatz zur Rohrbruchreparatur',
   qualified: 'Gasleitungsprüfung mit Qualifikationsanforderung',
+  siteless: 'Heizungscheck bei einer Kundin ohne Einsatzort',
 } as const;
 
 type AuditJob = keyof typeof AUDIT_JOB_TITLES;
@@ -132,6 +136,28 @@ async function openAuditJob(
 }
 
 const noRows = async (): Promise<void> => {};
+
+/** Seeds once per world a job whose customer has no work site, and opens its detail page. */
+async function openSitelessCustomerJob({ page, world }: SurfaceContext): Promise<void> {
+  const { jobNumber, title } = auditJob(world, 'siteless');
+  await surfaceFixture(world, 'work.siteless', async () => {
+    const customer = await seedCustomer({
+      orgId: world.orgId,
+      actorId: world.users.admin.id,
+      name: worldName('Kundin ohne Einsatzort', world.runId),
+    });
+    await seedJob({
+      orgId: world.orgId,
+      actorId: world.users.admin.id,
+      jobNumber,
+      title,
+      clientId: customer.clientId,
+    });
+    return jobNumber;
+  });
+  await page.goto(`/auftraege/${encodeURIComponent(jobNumber)}`);
+  await expect(jobPageHeading(page, title)).toBeVisible();
+}
 
 type LayoutRecord = 'job' | 'project';
 
@@ -190,6 +216,16 @@ export const WORK_OPENERS = {
   'work.create-job-in-project': {
     trigger: async ({ page }) => projectAddJobButton(page),
     layer: projectCreateJobDialog,
+  },
+  'work.create-site': {
+    trigger: async (context) => {
+      await openSitelessCustomerJob(context);
+      await detailActionsButton(context.page).click();
+      await jobDetailMenuItem(context.page, 'edit').click();
+      return createSiteButton(jobEditDialog(context.page));
+    },
+    layer: createSiteDialog,
+    parents: (page) => [jobEditDialog(page)],
   },
   'work.delete-job': {
     trigger: async ({ page }) => {
