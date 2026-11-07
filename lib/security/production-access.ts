@@ -2,12 +2,15 @@ import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
+import { program, simpleCommands, withoutHeredocBodies } from '../testing/runner/shell-words';
 import { z } from '../zod';
 
 // Agents never read production data: every tool result goes to the model
 // provider (docs/technical/environments.md, "Work on production"). The PreToolUse
 // hook .claude/hooks/refuse-production-mcp.ts refuses an MCP tool that reaches
-// the production Supabase project, for Claude Code and Codex alike.
+// the production Supabase project or returns Vercel's runtime logs, and
+// .claude/hooks/refuse-production-logs.ts refuses the same logs through the
+// Vercel CLI, for Claude Code and Codex alike.
 
 const ENVIRONMENTS_DOC = 'docs/technical/environments.md';
 
@@ -154,6 +157,8 @@ export function productionMcpRefusal(
   const toolName = call.tool_name;
   const server = mcpServerOf(toolName);
   if (!server) return undefined;
+  const logs = vercelLogToolRefusal(toolName.slice(toolName.lastIndexOf('__') + 2), call.tool_input);
+  if (logs) return logs;
   const unknown = (what: string) =>
     refuse(`the hook could not read ${what}, so it cannot tell whether "${server}" reaches PROD.`);
   if (/prod/i.test(server)) return refuse(`MCP server "${server}" is a production server by its name.`);
@@ -185,4 +190,105 @@ function scopedOutsideProduction(text: string, productionRef: string): boolean {
   if (local && !/supabase\.(?:com|co)\b/.test(text)) return true;
   const refs = [...text.matchAll(/project[_-]?ref\W{1,3}([a-z]{20})\b/gi)].map((match) => match[1]);
   return refs.length > 0 && refs.every((ref) => ref !== productionRef);
+}
+
+const LOGS_INSTEAD = [
+  'Agents never read production data: every tool result goes to the model provider.',
+  'For a production failure read deployment metadata (state, SHA, errorCode, errorStep, alias) and the counts of',
+  'the metric vercel.request.count, grouped only by route, httpStatus, errorCode, deploymentId or serverActionName.',
+  'Reproduce a build failure on staging or with `bun run build`',
+  '(docs/technical/environments.md, "Which tool reaches what").',
+].join(' ');
+
+/**
+ * Vercel MCP tools whose result is text the app or its build wrote: runtime
+ * log lines, error clusters with sample messages, build events, request traces
+ * with exception messages. No input narrows them to metadata, except runtime
+ * logs filtered to preview deployments, which serve DEV data.
+ */
+const VERCEL_LOG_TOOLS = new Set([
+  'get_runtime_logs',
+  'get_runtime_errors',
+  'list_deployment_events',
+  'get_project_trace',
+]);
+
+/** Metric dimensions that hold a raw path, a request, a client or a referrer rather than a code. */
+const REQUEST_DIMENSIONS =
+  /\b(?:requestPath|requestId|clientIp|clientUserAgent|clientJa4Digest|referrerUrl|redirectLocation|cacheTags)\b/;
+
+/** An API path that returns log lines, build events or traces. */
+const LOG_ENDPOINT = /\/(?:logs|runtime-logs|events|traces?)(?:[/?]|$)/;
+
+/** Why a Vercel MCP tool call would return PROD log text or request data, or undefined. */
+function vercelLogToolRefusal(tool: string, input: unknown): string | undefined {
+  const refuse = (why: string) => `Refused: ${why} ${LOGS_INSTEAD}`;
+  const preview =
+    typeof input === 'object' && input !== null && Reflect.get(input, 'environment') === 'preview';
+  if (VERCEL_LOG_TOOLS.has(tool) && !(tool === 'get_runtime_logs' && preview))
+    return refuse(`"${tool}" returns log text from production, not metadata.`);
+  if (tool === 'create_observability_query' && REQUEST_DIMENSIONS.test(JSON.stringify(input ?? null)))
+    return refuse('the query names a metric dimension that holds request data.');
+  return undefined;
+}
+
+/** Whether every environment a `vercel logs` call names is preview, and it names one. */
+function previewOnly(args: readonly string[]): boolean {
+  const environments = args.flatMap((arg, index) => {
+    if (arg === '-e' || arg === '--environment') return [args[index + 1] ?? ''];
+    const inline = /^(?:-e|--environment)=(.*)$/.exec(arg);
+    return inline ? [inline[1] ?? ''] : [];
+  });
+  return environments.length > 0 && environments.every((environment) => environment === 'preview');
+}
+
+/** Why one Vercel CLI call, given its arguments, would return PROD log text or request data. */
+function vercelCliRefusal(args: readonly string[]): string | undefined {
+  if (args.includes('logs') && !previewOnly(args))
+    return '`vercel logs` returns runtime log lines or request records from production.';
+  if (args.includes('inspect') && args.some((arg) => arg === '-l' || /^--logs(?:=|$)/.test(arg)))
+    return "`vercel inspect --logs` returns a build's output.";
+  if (args.includes('api') && args.some((arg) => LOG_ENDPOINT.test(arg)))
+    return '`vercel api` on a log, event or trace endpoint returns log text.';
+  if (args.includes('metrics') && args.some((arg) => REQUEST_DIMENSIONS.test(arg)))
+    return 'the metrics query names a dimension that holds request data.';
+  return undefined;
+}
+
+const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash']);
+const VERCEL_CLI = /^(?:vercel|vc)(?:@\S*)?$/;
+
+/**
+ * The argument lists of every Vercel CLI call in a shell command: run
+ * directly, through a package runner or wrapper (`npx --yes vercel@65 logs`,
+ * `timeout 60 vercel logs`), or in a nested shell or `eval`.
+ */
+function vercelCliCalls(command: string, depth = 0): string[][] {
+  const calls: string[][] = [];
+  for (const words of simpleCommands(withoutHeredocBodies(command))) {
+    const texts = words.map((word) => word.text);
+    const at = texts.findIndex((text) => VERCEL_CLI.test(text.slice(text.lastIndexOf('/') + 1)));
+    if (at !== -1) calls.push(texts.slice(at + 1));
+    const call = program(words);
+    if (!call || depth > 2) continue;
+    const args = call.args.map((arg) => arg.text);
+    if (call.name === 'eval') calls.push(...vercelCliCalls(args.join(' '), depth + 1));
+    const script = args.findIndex((arg) => /^-[a-z]*c[a-z]*$/.test(arg));
+    if (SHELLS.has(call.name) && script !== -1)
+      calls.push(...vercelCliCalls(args[script + 1] ?? '', depth + 1));
+  }
+  return calls;
+}
+
+/**
+ * Why a shell command may not run because it reads Vercel's production logs,
+ * or undefined. Mentions inside a quoted message or a heredoc body do not
+ * count; a script or `curl` that calls the API itself is the backlog's.
+ */
+export function productionLogCommandRefusal(command: string): string | undefined {
+  for (const args of vercelCliCalls(command)) {
+    const why = vercelCliRefusal(args);
+    if (why) return `Refused: ${why} ${LOGS_INSTEAD}`;
+  }
+  return undefined;
 }
