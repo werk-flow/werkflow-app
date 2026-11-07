@@ -137,6 +137,11 @@ export async function submitTimeCorrection(
   if (!user) return { success: false, error: 'not_authenticated' };
   const caller = await resolveActionContextFor(input.organizationId);
   if (!caller.success) return caller;
+  // Moving time to another person is an office decision (owner decision): an
+  // employee never proposes it, so no answer reveals another person's time.
+  if (input.kind === 'reassign' && !caller.context.isManagerOrAbove) {
+    return { success: false, error: 'not_authorized' };
+  }
   const identities = await loadEmployeeIdentities(input.organizationId, [input.subjectEmployeeRecordId]);
   const subject = identities?.get(input.subjectEmployeeRecordId);
   if (!subject) return { success: false, error: 'subject_not_found' };

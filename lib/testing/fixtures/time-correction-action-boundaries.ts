@@ -4,9 +4,10 @@
 // refused before any revision or decision is written, an employee reads no
 // colleague's summary, and a withdrawal acts as the session user, so another
 // person's request is refused by its one call. A proposed fact names only the
-// request's subject, except in a reassignment: a fact for a coworker or for
-// another organization's record is refused before any time of that person is
-// read. A refused call writes nothing.
+// request's subject, except in a reassignment, which only Admin and Büro
+// submit: a fact for a coworker or for another organization's record, and an
+// employee's reassignment, are refused before any time of that person is read.
+// A refused call writes nothing.
 import assert from 'node:assert/strict';
 import {
   CALLER_ID,
@@ -250,6 +251,29 @@ for (const namedRecordId of [coworkerRecordId, foreignRecordId]) {
     );
   }
 }
+// Only Admin and Büro move time to another person. An employee's
+// reassignment is refused before any time is read.
+touchedTables.clear();
+assert.deepEqual(
+  await submitTimeCorrection({
+    organizationId: ORGANIZATION_A,
+    subjectEmployeeRecordId: ownRecordId,
+    reason: 'Falsch gestempelt',
+    operationId,
+    kind: 'reassign',
+    source: ownSource,
+    proposedFacts: [
+      { ...ownFact('moved', 'clock_in', '2026-10-20T07:00:00+02:00'), employeeRecordId: coworkerRecordId },
+    ],
+  }),
+  { success: false, error: 'not_authorized' },
+  'an employee reassignment',
+);
+assert.deepEqual(
+  [...touchedTables].filter((table) => table.startsWith('time_')),
+  [],
+  'an employee reassignment reads no time before its refusal',
+);
 assert.deepEqual(
   world.rpcCalls.map((call) => call.name),
   ['withdraw_time_correction'],
