@@ -1,3 +1,4 @@
+import type { Locator } from '@playwright/test';
 import { expect, test } from '../support/fixtures';
 import {
   DYNAMIC_PHONE_ROUTES,
@@ -5,9 +6,23 @@ import {
   PHONE_REDIRECTS,
 } from '../../../lib/testing/selection/mobile-route-inventory';
 import { layoutNames, prepareLayoutDetails } from '../support/layout-fixtures';
-import { detailDestination } from '../support/surface-routes';
-import { expectMainThreadSettles, expectPhoneLayout, expectWideLayout } from '../support/viewport-audit';
-import { monthlyResultListRow, monthlyResults } from '../../golden/support/steps/time-tracking';
+import { detailDestination, openSurface } from '../support/surface-routes';
+import {
+  expectMainThreadSettles,
+  expectNoControlUnderClock,
+  expectPhoneLayout,
+  expectWideLayout,
+} from '../support/viewport-audit';
+import {
+  clockInLauncher,
+  clockInOnJob,
+  clockOut,
+  monthlyResultListRow,
+  monthlyResults,
+  runningClockLauncher,
+  timeHistoryPanel,
+  timeHistoryTab,
+} from '../../golden/support/steps/time-tracking';
 
 // Design canon (werkflow-design, "Density and layout"): the detail pages, the
 // field worker's work packs and the route aliases fit a 375 px phone, and every
@@ -85,6 +100,63 @@ test.describe('@AUDIT-LAYOUT phone details and route aliases', () => {
       await adminPage.goto(alias.route);
       await expect(adminPage).toHaveURL((url) => url.pathname === alias.destination);
       await expectPhoneLayout(adminPage, alias.destination, testInfo);
+    });
+  }
+});
+
+// The clock dock never covers a page control, in either clock state, at any
+// scroll position: while clocked in, the activity and the two hot keys sit in
+// the dock; clocked out, the dock holds the start button. The pages are the
+// ones where the floating clock covered controls (werk-flow/werkflow-planning#59
+// and #89). The phone list and detail pages run the same check clocked out.
+test.describe('@AUDIT-LAYOUT the clock dock never covers a control', () => {
+  for (const viewport of [
+    { width: 375, height: 812 },
+    { width: 1280, height: 800 },
+  ]) {
+    test(`employee at ${viewport.width} px, clocked out and clocked in on a job: work pack, time pages and settings stay clear`, async ({
+      adminPage,
+      employeePage,
+      world,
+      businessDate,
+    }) => {
+      const pack = await detailDestination('/auftraege/[jobNumber]', adminPage, world, businessDate);
+      await employeePage.setViewportSize(viewport);
+      const expectFieldPagesClear = async (state: string, launcher: Locator): Promise<void> => {
+        for (const destination of [pack, { route: '/zeiterfassung' }, { route: '/einstellungen' }]) {
+          await openSurface(employeePage, destination);
+          await expect(launcher).toBeEnabled();
+          await expectNoControlUnderClock(employeePage, `${state}, ${destination.route}`);
+        }
+        await openSurface(employeePage, { route: '/zeiterfassung' });
+        await timeHistoryTab(employeePage).click();
+        await expect(timeHistoryPanel(employeePage)).toBeVisible();
+        await expectNoControlUnderClock(employeePage, `${state}, /zeiterfassung Verlauf`);
+      };
+      await expectFieldPagesClear('clocked out', clockInLauncher(employeePage));
+      await clockInOnJob(employeePage, pack.heading);
+      try {
+        await expectFieldPagesClear('clocked in', runningClockLauncher(employeePage));
+      } finally {
+        await clockOut(employeePage);
+      }
+    });
+
+    test(`admin clocked out at ${viewport.width} px: the period's findings stay clear`, async ({
+      adminPage,
+      world,
+      businessDate,
+    }) => {
+      const period = await detailDestination(
+        '/zeiterfassung/perioden/[periodId]',
+        adminPage,
+        world,
+        businessDate,
+      );
+      await adminPage.setViewportSize(viewport);
+      await openSurface(adminPage, period);
+      await expect(clockInLauncher(adminPage)).toBeEnabled();
+      await expectNoControlUnderClock(adminPage, period.route);
     });
   }
 });

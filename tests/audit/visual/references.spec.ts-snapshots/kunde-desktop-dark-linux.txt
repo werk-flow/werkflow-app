@@ -72,3 +72,4 @@ Finanzübersicht wird verfügbar, sobald Rechnungen und Verträge eingerichtet s
 Dokumente
 Verknüpfen
 Hochladen
+Nicht eingestempelt
