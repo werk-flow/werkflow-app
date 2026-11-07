@@ -5,7 +5,7 @@ import { loggedRead, logReadErrors } from '@/lib/data/read-request-cache';
 import type { AuthContext } from '@/lib/jobs/auth';
 import type { AdminClient } from '@/lib/supabase/admin';
 
-import { redactWorkArtifactActionForField } from './field-visibility';
+import { isHiddenCoworkerDraft, redactWorkArtifactActionForField } from './field-visibility';
 import type {
   WorkArtifactActionRow,
   WorkArtifactActionType,
@@ -75,7 +75,7 @@ export async function refuseHiddenCoworkerDraft(
     logReadErrors('getWorkArtifactDetail: read failed', currentRevisionError);
     return { success: false, error: 'work_artifact_load_failed' };
   }
-  if (currentRevision?.visibility === 'internal_only' && currentRevision.created_by !== context.userId) {
+  if (isHiddenCoworkerDraft(context, artifact, currentRevision)) {
     return { success: false, error: 'not_authorized' };
   }
   return null;

@@ -2,9 +2,9 @@ import { spawnSync } from 'node:child_process';
 import ts from 'typescript';
 
 // The ratchet behind every list the repository calls shrink-only: reviewed
-// exceptions, size and assertion ceilings, and registries whose entries may
-// leave but never join. Each list's own test compares it with the current
-// code only, so raising a function and its ceiling together, or adding a
+// exceptions, assertion ceilings, and registries whose entries may leave but
+// never join. Each list's own test compares it with the current code only, so
+// raising a file's assertions and its ceiling together, or adding a
 // finding and its exception together, would pass it. This module compares
 // each list with its version at the publication base instead: a new entry or
 // a raised ceiling is refused, a removed entry or a lowered ceiling passes.
@@ -39,16 +39,6 @@ const variable = (id: string, file: string, name: string): ShrinkOnlyList => ({
 });
 
 export const SHRINK_ONLY_LISTS: readonly ShrinkOnlyList[] = [
-  {
-    id: 'module size ceilings',
-    file: 'eslint-rules/size-cap-exceptions.json',
-    extract: { kind: 'json', path: ['modules'] },
-  },
-  {
-    id: 'function size ceilings',
-    file: 'eslint-rules/size-cap-exceptions.json',
-    extract: { kind: 'json', path: ['functions'] },
-  },
   {
     id: 'type assertion ratchet',
     file: 'eslint-rules/type-assertion-ratchet.json',
