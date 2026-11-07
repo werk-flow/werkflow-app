@@ -9,7 +9,7 @@ import { clearEmailChangeChallengeBeforeSignOut } from '@/lib/settings/email-cha
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { logError } from '@/lib/logging';
 import { clockOutBeforeSignOut } from '@/lib/time-tracking/clock-state-actions';
-import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge';
+import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
 
 /**
  * Best-effort step before every sign-out: a pending email-change challenge

@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 
 import {
-  clearManualEntryBridge,
   consumeManualEntryBridge,
   queueManualEntryBridge,
   readManualEntryEvent,
 } from './manual-entry-bridge';
+import { clearManualEntryBridge } from './manual-entry-bridge-storage';
 import { toTimeEntry, type TimeEntryRow } from './types';
 
 const row: TimeEntryRow = {

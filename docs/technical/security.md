@@ -8,7 +8,7 @@ Every rule here is hard, also where only review enforces it. Only the two Tier 3
 
 1. Copy `supabase/migrations/20261001104036_limit_organization_join_attempts.sql`: RLS enabled, a full revoke, then exactly the grants the code uses. Follow [the migration rule](environments.md#the-migration-rule).
 2. Give the table `organization_id`, or add it to the global-table list in `supabase/tests/security_boundaries.sql`.
-3. Start server-only: grant `service_role` only. A client read grant comes with the policy that limits it. A client write joins the reviewed inventory.
+3. Start server-only: grant `service_role` only. A client read grant comes with the policy that limits it and omits each column the server hides from that reader. A client write joins the reviewed inventory.
 4. A table that feeds the period calculation gets the closed-period trigger. A ledger refuses UPDATE and DELETE, and `security_boundaries.sql` asserts the denial.
 5. A table the UI shows live follows [add Realtime data](realtime-and-caching.md#add-realtime-data).
 6. Filter every service-role query on the table by `organization_id`, or add a reviewed `tenant-scope:` comment.
@@ -85,7 +85,7 @@ A customer's export stays on the owner's machine, outside every repository. The 
 
 ### Realtime
 
-RLS governs INSERT and UPDATE delivery, so a person waiting on a join request receives only their own request. Raw DELETE and TRUNCATE publication is off; deletion notices reach only current members. An event is a signal to read again through an authorized reader. [Realtime and caching](realtime-and-caching.md#realtime-model) owns the transport.
+RLS and column grants govern INSERT and UPDATE delivery. Raw DELETE and TRUNCATE publication is off; deletion notices reach only current members. An event is a signal to read again through an authorized reader. [Realtime and caching](realtime-and-caching.md#realtime-model) owns the transport.
 
 ### Files
 
