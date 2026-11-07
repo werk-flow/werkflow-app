@@ -4,8 +4,34 @@
  * expands nothing; a word only records whether the shell would glob or expand it.
  */
 
-/** A shell word: its text without quotes, and whether the shell would glob or expand it. */
-export type ShellWord = { text: string; globs: boolean; expands: boolean };
+/**
+ * A shell word: its text without quotes, whether the shell would glob or
+ * expand it, and its raw source, an exact slice of the text it was read from.
+ */
+export type ShellWord = { text: string; globs: boolean; expands: boolean; raw: string };
+
+/** Shells that run the script they read from their input when no `-c` script is given. */
+export const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash']);
+const READS_SCRIPT = new Set([...SHELLS, 'source', '.']);
+/** Programs that never run their arguments or their input as commands. */
+export const DATA_PROGRAMS = new Set([
+  'cat',
+  'tee',
+  'echo',
+  'printf',
+  'git',
+  'gh',
+  'grep',
+  'rg',
+  'jq',
+  'head',
+  'tail',
+  'wc',
+  'diff',
+  'ls',
+]);
+/** A shell flag that hands the shell a script as an argument: `-c`, `-lc`, `-ec`. */
+export const SCRIPT_FLAG = /^-[a-z]*c[a-z]*$/;
 
 const OPERATORS = new Set([';', '&', '|', '(', ')', '\n']);
 const GLOB_CHARACTERS = new Set(['*', '?', '[']);
@@ -89,10 +115,12 @@ function heredocAt(command: string, start: number): { heredoc: Heredoc; end: num
  * reaches its delimiter is read as commands too. A delimiter it cannot read
  * makes the whole command unreadable: undefined.
  */
-function splitHeredocs(command: string): { commands: string; expandingBodies: string[] } | undefined {
-  const expandingBodies: string[] = [];
+type HeredocBody = { text: string; expands: boolean; at: number };
+
+function splitHeredocs(command: string): { commands: string; bodies: HeredocBody[] } | undefined {
+  const bodies: HeredocBody[] = [];
   let commands = '';
-  let pending: Heredoc[] = [];
+  let pending: (Heredoc & { at: number })[] = [];
   let quote: '' | "'" | '"' = '';
   let comment = false;
   let index = 0;
@@ -112,8 +140,8 @@ function splitHeredocs(command: string): { commands: string; expandingBodies: st
           closed = (heredoc.stripsTabs ? line.replace(/^\t+/, '') : line) === heredoc.name;
           if (!closed) body.push(line);
         }
-        if (heredoc.expands || !closed) expandingBodies.push(body.join('\n'));
-        if (!closed) commands += body.join('\n');
+        if (closed) bodies.push({ text: body.join('\n'), expands: heredoc.expands, at: heredoc.at });
+        else commands += body.join('\n');
       }
       pending = [];
       continue;
@@ -147,30 +175,114 @@ function splitHeredocs(command: string): { commands: string; expandingBodies: st
       const opened = heredocAt(command, index - 1);
       if (opened === 'ambiguous') return undefined;
       if (opened !== 'none') {
-        pending.push(opened.heredoc);
+        pending.push({ ...opened.heredoc, at: commands.length - 2 });
         commands += command.slice(index, opened.end);
         index = opened.end;
       }
     }
   }
-  return { commands, expandingBodies };
+  return { commands, bodies };
+}
+
+/** The pipeline of a line around `offset`: its text between the separators `;`, `&&`, `||`, `&`, `(` and `)`. */
+function pipelineAround(line: string, offset: number): string {
+  let start = 0;
+  let quote: '' | "'" | '"' = '';
+  for (let index = 0; index < line.length; index++) {
+    const character = line.charAt(index);
+    if (quote === "'") {
+      if (character === "'") quote = '';
+      continue;
+    }
+    if (character === '\\') {
+      index++;
+      continue;
+    }
+    if (quote === '"') {
+      if (character === '"') quote = '';
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+      continue;
+    }
+    const pair = line.slice(index, index + 2);
+    const width =
+      pair === '&&' || pair === '||'
+        ? 2
+        : ';()'.includes(character) ||
+            (character === '&' && !'>|'.includes(line.charAt(index - 1)) && line.charAt(index + 1) !== '>')
+          ? 1
+          : 0;
+    if (width === 0) continue;
+    if (index >= offset) return line.slice(start, index);
+    start = index + width;
+    index += width - 1;
+  }
+  return line.slice(start);
 }
 
 /**
- * Every simple command a shell line runs: its own, the ones in its `$(...)`
- * and backtick substitutions, quoted or not, and the substitutions of heredoc
- * bodies under an unquoted delimiter. Other heredoc bodies are data.
- * Undefined when a heredoc delimiter is ambiguous: a guard then refuses
- * rather than guess which lines run.
+ * Who reads a heredoc body: a shell that runs it as a script (`bash <<EOF`,
+ * `bash -s <<EOF`, `cat <<EOF | sh`), only programs that treat it as data
+ * (`cat <<EOF > file`), or a program the reader cannot judge (`python3 - <<EOF`).
  */
-export function executedCommands(command: string): ShellWord[][] | undefined {
+function heredocReader(commands: string, at: number): 'shell' | 'data' | 'unknown' {
+  const lineStart = commands.lastIndexOf('\n', at - 1) + 1;
+  const lineEnd = commands.indexOf('\n', at);
+  const line = commands.slice(lineStart, lineEnd === -1 ? commands.length : lineEnd);
+  const readers = simpleCommands(pipelineAround(line, at - lineStart)).map(program);
+  if (
+    readers.some(
+      (reader) =>
+        reader && READS_SCRIPT.has(reader.name) && !reader.args.some((arg) => SCRIPT_FLAG.test(arg.text)),
+    )
+  )
+    return 'shell';
+  return readers.length > 0 && readers.every((reader) => reader && DATA_PROGRAMS.has(reader.name))
+    ? 'data'
+    : 'unknown';
+}
+
+/**
+ * What a shell line runs, as far as a guard needs: every simple command, its
+ * own and those of its `$(...)` and backtick substitutions, quoted or not, the
+ * substitutions of heredoc bodies under an unquoted delimiter, and the bodies a
+ * shell reads as its script. A body only data programs read is data; a body
+ * read by a program the reader cannot judge is unknown, and a guard decides.
+ */
+export type ShellReading = { commands: ShellWord[][]; dataBodies: string[]; unknownBodies: string[] };
+
+/**
+ * The reading of a shell line, or undefined when a heredoc delimiter is
+ * ambiguous: a guard then refuses rather than guess which lines run. A data
+ * body comes without its substitutions, which are among the commands.
+ */
+export function readShell(command: string, depth = 0): ShellReading | undefined {
   const split = splitHeredocs(command);
   if (!split) return undefined;
-  const { commands, expandingBodies } = split;
-  return [
-    ...simpleCommands(commands),
-    ...expandingBodies.flatMap((text) => bodySubstitutions(text).flatMap((inner) => simpleCommands(inner))),
-  ];
+  const reading: ShellReading = {
+    commands: simpleCommands(split.commands),
+    dataBodies: [],
+    unknownBodies: [],
+  };
+  for (const body of split.bodies) {
+    const reader = heredocReader(split.commands, body.at);
+    if (reader === 'shell') {
+      const script = depth < 4 ? readShell(body.text, depth + 1) : undefined;
+      if (!script) return undefined;
+      reading.commands.push(...script.commands);
+      reading.dataBodies.push(...script.dataBodies);
+      reading.unknownBodies.push(...script.unknownBodies);
+      continue;
+    }
+    if (body.expands)
+      reading.commands.push(...bodySubstitutions(body.text).flatMap((inner) => simpleCommands(inner)));
+    if (reader === 'data')
+      reading.dataBodies.push(body.expands ? bodyWithoutSubstitutions(body.text) : body.text);
+    else reading.unknownBodies.push(body.text);
+  }
+  return reading;
 }
 
 /** The index of the `)` that closes a `$(` whose body starts at `start`, or the text's end. */
@@ -197,23 +309,56 @@ function backtickEnd(text: string, start: number): number {
   return text.length;
 }
 
-/** The commands the `$(...)` and backtick substitutions in a heredoc body run; quotes there are literal. */
-function bodySubstitutions(body: string): string[] {
-  const found: string[] = [];
-  for (let index = 0; index < body.length; index++) {
-    const character = body.charAt(index);
-    if (character === '\\') index++;
-    else if (character === '$' && body.charAt(index + 1) === '(') {
-      const end = substitutionEnd(body, index + 2);
-      found.push(body.slice(index + 2, end));
+/**
+ * The `$(...)` and backtick substitutions in a text, as the commands they run
+ * and the text left without them. In a heredoc body quotes are literal; in a
+ * raw word single quotes keep their text literal, as `simpleCommands` reads it.
+ */
+function splitSubstitutions(
+  text: string,
+  quoting: 'body' | 'word',
+): { substitutions: string[]; rest: string } {
+  const substitutions: string[] = [];
+  let rest = '';
+  let doubleQuoted = false;
+  for (let index = 0; index < text.length; index++) {
+    const character = text.charAt(index);
+    if (quoting === 'word' && character === '"') doubleQuoted = !doubleQuoted;
+    if (quoting === 'word' && character === "'" && !doubleQuoted) {
+      // In a word, single quotes keep `$(` literal, as the reader does.
+      const close = text.indexOf("'", index + 1);
+      const end = close === -1 ? text.length : close + 1;
+      rest += text.slice(index, end);
+      index = end - 1;
+    } else if (character === '\\') {
+      rest += text.slice(index, index + 2);
+      index++;
+    } else if (character === '$' && text.charAt(index + 1) === '(') {
+      const end = substitutionEnd(text, index + 2);
+      substitutions.push(text.slice(index + 2, end));
       index = end;
     } else if (character === '`') {
-      const end = backtickEnd(body, index + 1);
-      found.push(body.slice(index + 1, end));
+      const end = backtickEnd(text, index + 1);
+      substitutions.push(text.slice(index + 1, end));
       index = end;
-    }
+    } else rest += character;
   }
-  return found;
+  return { substitutions, rest };
+}
+
+/** The commands the `$(...)` and backtick substitutions in a heredoc body run; quotes there are literal. */
+function bodySubstitutions(body: string): string[] {
+  return splitSubstitutions(body, 'body').substitutions;
+}
+
+/** A heredoc body without its substitutions, whose commands are read on their own. */
+function bodyWithoutSubstitutions(body: string): string {
+  return splitSubstitutions(body, 'body').rest;
+}
+
+/** A raw word without its `$(...)` and backtick substitutions, whose commands a guard reads on their own. */
+export function wordWithoutSubstitutions(raw: string): string {
+  return splitSubstitutions(raw, 'word').rest;
 }
 
 /**
@@ -227,13 +372,22 @@ function simpleCommands(command: string): ShellWord[][] {
   const substituted: ShellWord[][] = [];
   let words: ShellWord[] = [];
   let word: ShellWord | undefined;
+  let wordStart = 0;
+  let position = 0;
   let quote: '' | "'" | '"' = '';
-  const current = (): ShellWord => (word ??= { text: '', globs: false, expands: false });
+  const current = (): ShellWord => {
+    if (!word) {
+      word = { text: '', globs: false, expands: false, raw: '' };
+      wordStart = position;
+    }
+    return word;
+  };
   const endWord = () => {
-    if (word) words.push(word);
+    if (word) words.push({ ...word, raw: command.slice(wordStart, position) });
     word = undefined;
   };
   for (let index = 0; index < command.length; index++) {
+    position = index;
     const character = command.charAt(index);
     if (quote === "'") {
       if (character === "'") quote = '';
@@ -284,6 +438,7 @@ function simpleCommands(command: string): ShellWord[][] {
       current().text += character;
     }
   }
+  position = command.length;
   endWord();
   commands.push(words);
   return [...commands, ...substituted].filter((simple) => simple.length > 0);

@@ -6,7 +6,7 @@
  * that shape and names the form the check can resolve.
  */
 
-import { type ShellWord, executedCommands, program } from '../../security/shell-words';
+import { type ShellWord, program, readShell } from '../../security/shell-words';
 
 /** Operands whose directory the shell decides: a variable anywhere, or a wildcard on a relative path. */
 function unresolvedOperands(args: readonly ShellWord[]): string[] {
@@ -23,10 +23,13 @@ function unresolvedOperands(args: readonly ShellWord[]): string[] {
  * explicit absolute path (`rm -f /tmp/x/*`) passes.
  */
 export function unresolvableDeleteRefusal(command: string): string | undefined {
-  const commands = executedCommands(command);
-  if (!commands)
+  const reading = readShell(command);
+  if (!reading)
     return "Refused: the delete guard cannot tell where a heredoc delimiter in this command ends, so it cannot rule out an rm after it. Write the delimiter plainly: <<EOF or <<'EOF'.";
-  for (const words of commands) {
+  // A program the guard cannot judge (python3, node, timeout) may run its heredoc as commands.
+  if (reading.unknownBodies.some((body) => /(?:^|[\s;&|(])rm\s/.test(body)))
+    return 'Refused: rm in a heredoc that a program the delete guard cannot judge reads, so it may run. Feed the script to a shell (bash <<EOF) or write the rm out as a command.';
+  for (const words of reading.commands) {
     const call = program(words);
     if (call?.name !== 'rm') continue;
     const operands = unresolvedOperands(call.args);

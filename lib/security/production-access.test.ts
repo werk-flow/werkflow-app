@@ -326,6 +326,97 @@ test('other Vercel commands and mentions of the log command pass', () => {
     expect(productionLogCommandRefusal(command), command).toBeUndefined();
 });
 
+// `vercel metrics` options are an allowlist read from the CLI's own option list (vercel@65).
+test('a vercel metrics option the guard has not verified is refused', () => {
+  const metrics = (options: string) =>
+    productionLogCommandRefusal(`vercel metrics vercel.request.count ${options}`);
+  for (const options of [
+    // The deprecated shorthands of --filter, --aggregation, --limit and --granularity.
+    "-f 'requestPath:/kunden'",
+    '-a unique/clientIp',
+    '-l 5',
+    '-g 5m',
+    // Options vercel metrics does not have, and any the guard does not know.
+    '-q requestPath',
+    '--query requestPath',
+    '--unknown-flag',
+    '-A vercel-config.json',
+    // Verified options with values outside what they may take.
+    '--limit many',
+    '--order-by requestPath',
+    '--order sideways',
+    '--group-by',
+    'extra-argument',
+  ])
+    expect(metrics(options), options).toContain('Refused:');
+  for (const options of [
+    '-e production --since 24h --until now --granularity 5m --limit 50 --order-by count --order desc',
+    `--group-by route --group-by=httpStatus --filter='environment:production AND httpStatus >= 500' --aggregation count`,
+    '--prod --all --json --format json --project werkflow-app --scope werkflows-projects > out.json 2>&1',
+  ])
+    expect(metrics(options), options).toBeUndefined();
+  expect(productionLogCommandRefusal('vercel metrics query vercel.request.count --prod')).toBeUndefined();
+});
+
+// A heredoc a shell reads runs as a script, so its lines are commands for the guard.
+test('a heredoc a shell runs is read as commands', () => {
+  for (const command of [
+    "bash <<'EOF'\nvercel logs\nEOF",
+    'sh <<EOF\nvercel logs\nEOF',
+    'cat <<EOF | sh\nvercel logs\nEOF',
+    "cat <<'EOF' | bash -l\nvercel logs --json\nEOF",
+    'bash -s <<EOF\nvercel logs\nEOF',
+    "source /dev/stdin <<'EOF'\nvercel logs\nEOF",
+  ])
+    expect(productionLogCommandRefusal(command), command).toContain(
+      '`vercel logs` returns runtime log lines',
+    );
+  for (const command of [
+    "cat > note.md <<'EOF'\nvercel logs\nEOF",
+    "gh pr comment 206 --body-file - <<'EOF'\nThe hook refuses vercel logs.\nEOF",
+    "tee note.md <<'EOF' | wc -l\nvercel logs\nEOF",
+  ])
+    expect(productionLogCommandRefusal(command), command).toBeUndefined();
+});
+
+// The backstop: a mention of the CLI the guard cannot account for is refused, never allowed.
+test('a Vercel mention the guard cannot verify is refused', () => {
+  for (const command of [
+    `python3 -c "import os; os.system('vercel logs')"`,
+    `node -e "require('child_process').execSync('vercel logs')"`,
+    "python3 - <<'EOF'\nimport subprocess\nsubprocess.run(['vercel', 'logs'])\nEOF",
+    'timeout 60 bash <<EOF\nvercel logs\nEOF',
+    'X=vercel; $X logs',
+    'ls # vercel logs',
+    '/usr/bin/env -S "vercel logs"',
+  ]) {
+    const reason = productionLogCommandRefusal(command);
+    expect(reason, command).toContain('Refused:');
+    expect(reason, command).toContain('vercel');
+  }
+  const reason = productionLogCommandRefusal(`python3 -c "import os; os.system('vercel logs')"`);
+  expect(reason).toContain('could not verify the Vercel call in `python3 -c');
+  expect(reason).toContain('vercel metrics vercel.request.count');
+});
+
+test('commands that do not name the Vercel CLI, or name it only as data, never meet the backstop', () => {
+  for (const command of [
+    'git status',
+    'git log --oneline -5 && git diff --stat origin/main',
+    'bun run test:unit',
+    'bun test lib/security',
+    'gh pr view 206 --json state,headRefOid',
+    'gh api repos/werk-flow/werkflow-app/pulls/206/comments --jq ".[].id"',
+    'git commit -m "The hook refuses vercel logs"',
+    'gh pr comment 206 --body "Fixed: vercel logs is refused."',
+    'cat .vercel/project.json && jq . vercel.json',
+    'grep -rn "@vercel/functions" lib node_modules/vercel/package.json',
+    'echo Vercel',
+    'printf "%s\\n" "$(vercel list)"',
+  ])
+    expect(productionLogCommandRefusal(command), command).toBeUndefined();
+});
+
 test('servers come from every Claude Code and Codex scope, keyed as in tool names', () => {
   const dir = mkdtempSync(join(tmpdir(), 'mcp-config-'));
   writeFileSync(

@@ -36,6 +36,12 @@ test('rm on a variable or a relative wildcard is refused, with any flags and wit
     // A `<<` in a comment or in quotes opens no heredoc, so the next line still runs.
     '# <<EOF\nrm -rf logs/*',
     'echo "<<EOF"\nrm -rf logs/*',
+    // A heredoc a shell reads runs as a script.
+    "bash <<'EOF'\nrm -rf logs/*\nEOF",
+    'sh <<EOF\nrm -rf logs/*\nEOF',
+    'cat <<EOF | sh\nrm -rf logs/*\nEOF',
+    'bash -s <<EOF\nrm -rf logs/*\nEOF',
+    "source /dev/stdin <<'EOF'\nrm -rf logs/*\nEOF",
     // Each delimiter form ends its heredoc at the line \`EOF\`, so the next line runs.
     ...['\\EOF', "'EOF'", '"EOF"', 'E"OF"'].map(
       (delimiter) => `cat > note.md <<${delimiter}\nbody\nEOF\nrm -rf logs/*`,
@@ -83,7 +89,7 @@ test('explicit absolute deletes and literal relative deletes pass', () => {
     'git log --grep "cd x && rm -rf *"',
     // A heredoc body is data written to a file, not commands.
     "cd /tmp/ev35 && cat > a.test.ts <<'EOF'\ncd /tmp/x && rm -rf *\nEOF",
-    'cd /tmp/ev35 && python3 - <<EOF\nrm -rf $dir\nEOF\nls',
+    'cd /tmp/ev35 && cat > clean.sh <<EOF\nrm -rf $dir\nEOF\nls',
     // A quoted delimiter, in any form, keeps its body literal.
     ...['\\EOF', "'EOF'", '"EOF"', 'E"OF"'].map(
       (delimiter) => `cat > a.md <<${delimiter}\n$(rm -rf logs/*)\nEOF`,
@@ -100,6 +106,22 @@ test('a heredoc delimiter the reader cannot place is refused', () => {
     "cat > note.md <<$'EOF'\nbody\nEOF\nls",
   ])
     expect(unresolvableDeleteRefusal(command), command).toContain('cannot tell where a heredoc delimiter');
+});
+
+// A program the guard cannot judge may run its heredoc, so an rm there is refused.
+test('an rm in a heredoc an unknown program reads is refused, and data-only heredocs pass', () => {
+  for (const command of [
+    'cd /tmp/ev35 && python3 - <<EOF\nrm -rf $dir\nEOF\nls',
+    'timeout 60 bash <<EOF\nrm -rf /tmp/x\nEOF',
+    "node - <<'EOF'\nrm -rf build\nEOF",
+  ])
+    expect(unresolvableDeleteRefusal(command), command).toContain('a program the delete guard cannot judge');
+  for (const command of [
+    'cat <<EOF > clean.sh\nrm -rf logs/*\nEOF',
+    "tee clean.sh <<'EOF'\nrm -rf logs/*\nEOF",
+    "gh pr comment 1 --body-file - <<'EOF'\nrm -rf logs/* is refused.\nEOF",
+  ])
+    expect(unresolvableDeleteRefusal(command), command).toBeUndefined();
 });
 
 test('the Claude hook refuses the delete with the reason and lets other calls through', () => {

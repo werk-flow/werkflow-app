@@ -2,21 +2,26 @@
 // counts, and a response that holds no counts fails it instead of passing as zero errors.
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+
+import { z } from '../zod';
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
 const smokeScript = join(repositoryRoot, '.github/scripts/release-smoke.sh');
 const SERVED = 'dpl_served';
 
 // Answers like Vercel, the login page and the health function; the metrics answer comes from
-// $STUB/metrics.json, and its absence fails the request as `curl --fail` does.
+// $STUB/metrics.json, and its absence fails the request as `curl --fail` does. The metrics
+// query it received lands in $STUB/query.json.
 const CURL_STUB = `#!/usr/bin/env bash
 output=
+data=
 previous=
 for argument in "$@"; do
   if test "$previous" = --output; then output="$argument"; fi
+  if test "$previous" = --data; then data="$argument"; fi
   previous="$argument"
 done
 url="\${!#}"
@@ -24,7 +29,9 @@ case "$url" in
   *'/v4/aliases/'*) echo '{"deploymentId":"${SERVED}"}' ;;
   *'/login') printf '<title>Anmelden</title><input type="password">' > "$output"; printf 200 ;;
   *'/health') printf 200 ;;
-  *'/metrics/v1'*) test -f "$STUB/metrics.json" || exit 22; cat "$STUB/metrics.json" ;;
+  *'/metrics/v1'*)
+    printf '%s' "$data" > "$STUB/query.json"
+    test -f "$STUB/metrics.json" || exit 22; cat "$STUB/metrics.json" ;;
   *) exit 7 ;;
 esac
 `;
@@ -97,6 +104,22 @@ test('a response without counts fails the check, never as zero errors', () => {
     expect(result.output, JSON.stringify(metrics)).toContain(reason);
     expect(result.output).not.toContain('answered no request with a server error');
   }
+});
+
+// The count is this build's alone, per status: without the filter it counts other builds, and
+// without the grouping it cannot tell a server error from any other answer.
+test('the query counts the served build per status', () => {
+  expect(smoke({ summary: [row('200', 1)] }).status).toBe(0);
+  const query = z
+    .object({
+      filter: z.string(),
+      groupBy: z.array(z.string()),
+      metrics: z.object({ value: z.object({ metric: z.string(), aggregation: z.string() }) }),
+    })
+    .parse(JSON.parse(readFileSync(join(stub, 'query.json'), 'utf8')));
+  expect(query.filter).toBe(`deploymentId:${SERVED}`);
+  expect(query.groupBy).toEqual(['httpStatus']);
+  expect(query.metrics.value).toEqual({ metric: 'vercel.request.count', aggregation: 'count' });
 });
 
 test('the wait and the counted window are named as they run', () => {
