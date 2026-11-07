@@ -435,7 +435,10 @@ begin
   ) values (
     '23000000-0000-0000-0000-000000000010', later_decision_finding_id, 'rejected', 'Erst prüfen',
     '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000085',
-    '{"responsibility":"time_approval"}', now() - interval '1 minute'
+    -- A rejection whose transaction began after this one but committed first:
+    -- its time is later than this transaction's start. The approval that
+    -- follows must still sort after it.
+    '{"responsibility":"time_approval"}', clock_timestamp()
   );
   perform public.decide_time_period_finding(
     '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',

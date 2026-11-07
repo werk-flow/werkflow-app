@@ -178,11 +178,16 @@ begin
       and decision.decision in ('acknowledged', 'approved'))
     then raise exception 'finding_already_decided'; end if;
 
+  -- decided_at is the clock after the period lock, not the transaction start:
+  -- a decision whose transaction began first but locked second still sorts
+  -- after the decision it followed, so the latest decision is the last one.
   insert into public.time_period_finding_decisions (
-    organization_id, finding_id, decision, reason, decided_by, operation_id, responsibility_snapshot
+    organization_id, finding_id, decision, reason, decided_by, operation_id,
+    responsibility_snapshot, decided_at
   ) values (
     p_organization_id, p_finding_id, p_decision, p_reason, p_actor_id, p_operation_id,
-    jsonb_build_object('responsibility', 'time_approval', 'captured_at', now())
+    jsonb_build_object('responsibility', 'time_approval', 'captured_at', now()),
+    clock_timestamp()
   ) returning id into decision_id;
 
   update public.time_periods set version = version + 1, updated_at = now()
