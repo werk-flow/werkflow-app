@@ -4,11 +4,8 @@
  * expands nothing; a word only records whether the shell would glob or expand it.
  */
 
-/**
- * A shell word: its text without quotes, whether the shell would glob or expand
- * it, and the commands its `$(...)` or backtick substitutions run.
- */
-export type ShellWord = { text: string; globs: boolean; expands: boolean; substitutions: string[] };
+/** A shell word: its text without quotes, and whether the shell would glob or expand it. */
+export type ShellWord = { text: string; globs: boolean; expands: boolean };
 
 const OPERATORS = new Set([';', '&', '|', '(', ')', '\n']);
 const GLOB_CHARACTERS = new Set(['*', '?', '[']);
@@ -20,29 +17,42 @@ const BARE_REDIRECTION = /^\d*[<>]+&?$/;
 const HEREDOC = /(?<!<)<<-?\s*(["']?)([^\s"';&|<>()]+)\1/g;
 
 /**
- * The command without its heredoc bodies, and the bodies the shell expands: a
- * body is data, but under an unquoted delimiter its substitutions run.
+ * The command without its heredoc bodies, and the whole bodies the shell
+ * expands: a body is data, but under an unquoted delimiter its substitutions run.
  */
-export function splitHeredocs(command: string): { commands: string; expandingBodies: string[] } {
+function splitHeredocs(command: string): { commands: string; expandingBodies: string[] } {
   const kept: string[] = [];
   const expandingBodies: string[] = [];
   let delimiters: { name: string; expands: boolean }[] = [];
+  let body: string[] = [];
   for (const line of command.split('\n')) {
     const [open] = delimiters;
-    if (open) {
-      if (line.trim() === open.name) delimiters = delimiters.slice(1);
-      else if (open.expands) expandingBodies.push(line);
-      continue;
+    if (!open) {
+      kept.push(line);
+      delimiters = [...line.matchAll(HEREDOC)].map((match) => ({ name: match[2] ?? '', expands: !match[1] }));
+    } else if (line.trim() !== open.name) body.push(line);
+    else {
+      if (open.expands) expandingBodies.push(body.join('\n'));
+      body = [];
+      delimiters = delimiters.slice(1);
     }
-    kept.push(line);
-    delimiters = [...line.matchAll(HEREDOC)].map((match) => ({ name: match[2] ?? '', expands: !match[1] }));
   }
+  // A body the command never closes still runs its substitutions.
+  if (delimiters[0]?.expands) expandingBodies.push(body.join('\n'));
   return { commands: kept.join('\n'), expandingBodies };
 }
 
-/** The command without its heredoc bodies, which are data, not commands. */
-export function withoutHeredocBodies(command: string): string {
-  return splitHeredocs(command).commands;
+/**
+ * Every simple command a shell line runs: its own, the ones in its `$(...)`
+ * and backtick substitutions, quoted or not, and the substitutions of heredoc
+ * bodies under an unquoted delimiter. Other heredoc bodies are data.
+ */
+export function executedCommands(command: string): ShellWord[][] {
+  const { commands, expandingBodies } = splitHeredocs(command);
+  return [
+    ...simpleCommands(commands),
+    ...expandingBodies.flatMap((text) => bodySubstitutions(text).flatMap((inner) => simpleCommands(inner))),
+  ];
 }
 
 /** The index of the `)` that closes a `$(` whose body starts at `start`, or the text's end. */
@@ -70,7 +80,7 @@ function backtickEnd(text: string, start: number): number {
 }
 
 /** The commands the `$(...)` and backtick substitutions in a heredoc body run; quotes there are literal. */
-export function bodySubstitutions(body: string): string[] {
+function bodySubstitutions(body: string): string[] {
   const found: string[] = [];
   for (let index = 0; index < body.length; index++) {
     const character = body.charAt(index);
@@ -90,15 +100,17 @@ export function bodySubstitutions(body: string): string[] {
 
 /**
  * The simple commands of a shell line, split at operators, newlines and
- * parentheses. Quotes and backslashes are honored; a `#` that starts a word
- * comments out the rest of its line. Nested shells (`bash -c "..."`) stay one word.
+ * parentheses, followed by those its substitutions run. Quotes and backslashes
+ * are honored; a `#` that starts a word comments out the rest of its line.
+ * Nested shells (`bash -c "..."`) stay one word.
  */
-export function simpleCommands(command: string): ShellWord[][] {
+function simpleCommands(command: string): ShellWord[][] {
   const commands: ShellWord[][] = [];
+  const substituted: ShellWord[][] = [];
   let words: ShellWord[] = [];
   let word: ShellWord | undefined;
   let quote: '' | "'" | '"' = '';
-  const current = (): ShellWord => (word ??= { text: '', globs: false, expands: false, substitutions: [] });
+  const current = (): ShellWord => (word ??= { text: '', globs: false, expands: false });
   const endWord = () => {
     if (word) words.push(word);
     word = undefined;
@@ -125,7 +137,7 @@ export function simpleCommands(command: string): ShellWord[][] {
     if (substitution) {
       // Outside single quotes a substitution runs its command, inside double quotes too.
       current().expands = true;
-      current().substitutions.push(command.slice(substitution.start, substitution.end));
+      substituted.push(...simpleCommands(command.slice(substitution.start, substitution.end)));
       current().text += command.slice(index, substitution.end + 1);
       index = substitution.end;
       continue;
@@ -156,7 +168,7 @@ export function simpleCommands(command: string): ShellWord[][] {
   }
   endWord();
   commands.push(words);
-  return commands.filter((simple) => simple.length > 0);
+  return [...commands, ...substituted].filter((simple) => simple.length > 0);
 }
 
 /** The program and arguments of a simple command, past leading variable assignments, keywords and `sudo`. */

@@ -6,7 +6,7 @@
  * that shape and names the form the check can resolve.
  */
 
-import { type ShellWord, program, simpleCommands, withoutHeredocBodies } from './shell-words';
+import { type ShellWord, executedCommands, program } from './shell-words';
 
 /** Operands whose directory the shell decides: a variable anywhere, or a wildcard on a relative path. */
 function unresolvedOperands(args: readonly ShellWord[]): string[] {
@@ -23,7 +23,7 @@ function unresolvedOperands(args: readonly ShellWord[]): string[] {
  * explicit absolute path (`rm -f /tmp/x/*`) passes.
  */
 export function unresolvableDeleteRefusal(command: string): string | undefined {
-  for (const words of simpleCommands(withoutHeredocBodies(command))) {
+  for (const words of executedCommands(command)) {
     const call = program(words);
     if (call?.name !== 'rm') continue;
     const operands = unresolvedOperands(call.args);

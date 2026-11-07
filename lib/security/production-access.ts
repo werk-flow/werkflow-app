@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { bodySubstitutions, program, simpleCommands, splitHeredocs } from '../testing/runner/shell-words';
+import { executedCommands, program } from '../testing/runner/shell-words';
 import { z } from '../zod';
 
 // Agents never read production data: every tool result goes to the model
@@ -266,12 +266,8 @@ const VERCEL_CLI = /^(?:vercel|vc)(?:@\S*)?$/;
  */
 function vercelCliCalls(command: string, depth = 0): string[][] {
   const calls: string[][] = [];
-  const { commands, expandingBodies } = splitHeredocs(command);
   const nested = (inner: string) => (depth > 3 ? [] : vercelCliCalls(inner, depth + 1));
-  for (const body of expandingBodies)
-    for (const inner of bodySubstitutions(body)) calls.push(...nested(inner));
-  for (const words of simpleCommands(commands)) {
-    for (const word of words) for (const inner of word.substitutions) calls.push(...nested(inner));
+  for (const words of executedCommands(command)) {
     const texts = words.map((word) => word.text);
     const at = texts.findIndex((text) => VERCEL_CLI.test(text.slice(text.lastIndexOf('/') + 1)));
     if (at !== -1) calls.push(texts.slice(at + 1));

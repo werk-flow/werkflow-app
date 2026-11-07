@@ -28,6 +28,11 @@ test('rm on a variable or a relative wildcard is refused, with any flags and wit
     'pushd /tmp/ev35 && rm -fr [ab]*',
     'cd "$dir" && rm --recursive --force -- *',
     'cd /tmp/ev35 && rm -rf "$target"',
+    // A command substitution runs its rm, quoted or not, and so does one in an expanding heredoc.
+    'echo $(rm -rf logs/*)',
+    'value=$(rm "$target")',
+    'echo "$(cd /tmp/ev35 && rm -rf *)"',
+    'cat <<EOF\n$(\nrm -rf logs/*\n)\nEOF',
     'cd /tmp/ev35 && rm -Rf ${OUT}/*',
     'cd /tmp/ev35 && rm -rf $(ls)',
     'cd /tmp/ev35 && rm -rf /tmp/$name/*',

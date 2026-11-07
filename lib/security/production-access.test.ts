@@ -228,6 +228,8 @@ test('a shell command that reads Vercel logs from production is refused', () => 
     'echo "`vercel logs`"',
     'echo "$(printf x; echo "$(vercel logs)")"',
     'cat <<EOF\n$(vercel logs --json)\nEOF',
+    'cat <<EOF\n$(\nvercel logs\n)\nEOF',
+    'cat <<EOF\nfirst\n`vercel logs`\nEOF\necho done',
     'vercel inspect dpl_a --logs',
     'vercel inspect dpl_a -l',
     'vercel api /v3/deployments/dpl_a/events',
