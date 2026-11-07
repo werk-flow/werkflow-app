@@ -70,8 +70,14 @@ const VISUAL_GROUP = /^audit:visual(:|$)/;
 
 /** A browser shard holds about this many groups; a typical change then finishes in one shard round. */
 const GROUPS_PER_SHARD = 4;
-/** GitHub's free plan runs 20 jobs at once; the static, unit, SQL and component jobs keep the rest. */
-export const MAX_SHARDS = 14;
+/**
+ * GitHub's free plan runs 20 jobs at once across every run, and a shard's setup takes about as long
+ * as a typical shard's tests. A full selection fills this many shards, so it leaves the other pull
+ * requests' runs most of the runners, and its six general shards (about 14 min of tests each) still
+ * end before `audit:visual:acceptance` (about 19 min) alone in its own
+ * (werk-flow/werkflow-planning#291). A diff selection of up to 24 groups is not capped.
+ */
+export const MAX_SHARDS = 8;
 
 const isBrowser = (group: CiGroup): boolean => group.kind === 'golden' || group.kind === 'audit';
 

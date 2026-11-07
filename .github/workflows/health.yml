@@ -2,11 +2,13 @@ name: Health
 
 # Every credential, checked weekly where it lives, so an expired or rotated one
 # is noticed long before a release or a user meets it
-# (docs/technical/environments.md#credentials). Each check is its own step
-# named after its credential and runs even when an earlier one failed. A
-# failed run opens or updates one issue that lists the failed check ids; the
-# next green run closes it. Each check names its environment, dev or prod, and
-# only a failed prod check assigns the owner (.github/scripts/health-check.sh).
+# (docs/technical/environments.md#credentials). Each credential check is its own
+# step named after its credential and runs even when an earlier one failed. The
+# `CI queue` job reports how long CI jobs waited for a runner this week, so a rise
+# surfaces (docs/technical/testing.md#ci). A failed run opens or updates one issue
+# that lists the failed check ids; the next green run closes it. Each credential
+# check names its environment, dev or prod, and only a failed prod check assigns
+# the owner (.github/scripts/health-check.sh).
 on:
   schedule:
     # Monday 05:00 UTC: 06:00 in Berlin in winter, 07:00 in summer.
@@ -30,6 +32,7 @@ on:
           - supabase-function-prod
           - prod-database-url
           - production-deploy-key
+          - ci-queue
 
 permissions:
   contents: read
@@ -109,6 +112,26 @@ jobs:
           echo "failed=$(jq -r '[to_entries[] | select(.value.outcome == "failure") | .key] | join(" ")' <<< "$STEPS")" >> "$GITHUB_OUTPUT"
           echo "production=$(jq -r 'any(.[]; .outcome == "failure" and .outputs.environment == "prod")' <<< "$STEPS")" >> "$GITHUB_OUTPUT"
 
+  # The week's queue p50 and p90 land in the job summary. 10 min at p90 sits below the week
+  # before werk-flow/werkflow-planning#291 (pull requests 11.9 min, main 9.5 min).
+  ci-queue:
+    name: CI queue
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read # read ci.yml's runs and jobs
+    steps:
+      # Only the script is read; no step needs the job token in .git/config.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - name: CI jobs waited at most 10 min for a runner at p90 this week
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/ci-queue.sh 10
+
   production:
     name: Production credentials
     # The PROD secrets live in this environment only, and only main may use it, so a run
@@ -147,7 +170,7 @@ jobs:
 
   report:
     name: Report
-    needs: [repository, production]
+    needs: [repository, production, ci-queue]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -170,6 +193,7 @@ jobs:
           PRODUCTION: ${{ needs.production.result }}
           PRODUCTION_FAILED: ${{ needs.production.outputs.failed }}
           PRODUCTION_PROD_FAILED: ${{ needs.production.outputs.production }}
+          CI_QUEUE: ${{ needs.ci-queue.result }}
         run: |
           title='Weekly health check failed'
           # A run off main or with a broken check is a proof: it never touches the real issue.
@@ -183,6 +207,7 @@ jobs:
             success | skipped) ;;
             *) test -n "$PRODUCTION_FAILED" || failed="$(printf '%s\nproduction-credentials-job' "$failed")" ;;
           esac
+          test "$CI_QUEUE" = success || failed="$(printf '%s\nci-queue' "$failed")"
           failed="$(sed '/^$/d' <<< "$failed")"
           if test -z "$failed"; then
             bash .github/scripts/alert-issue.sh close "$title"
@@ -195,8 +220,8 @@ jobs:
           fi
           mapfile -t names <<< "$failed"
           list="$(printf -- '- %s\n' "${names[@]}")"
-          body="$(printf 'The weekly health check failed. Failed checks:\n\n%s\n\nThe step of each check in the run names its credential. [Credentials](https://github.com/%s/blob/main/docs/technical/environments.md#credentials) says how to rotate it.' \
-            "$list" "$GH_REPO")"
+          body="$(printf 'The weekly health check failed. Failed checks:\n\n%s\n\nThe step of each credential check in the run names its credential. [Credentials](https://github.com/%s/blob/main/docs/technical/environments.md#credentials) says how to rotate it. `ci-queue` means CI jobs waited longer for a runner this week; the summary of its job has the numbers, and [CI](https://github.com/%s/blob/main/docs/technical/testing.md#ci) says what to look at.' \
+            "$list" "$GH_REPO" "$GH_REPO")"
           bash .github/scripts/alert-issue.sh open "$title" "$body"
           echo "::error::Failed checks: $(paste -sd ' ' <<< "$failed")"
           exit 1
