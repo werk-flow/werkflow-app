@@ -2,10 +2,11 @@ import 'server-only';
 
 // Hydration of document, folder, version, and audit rows into their view
 // models. These are internal server helpers, not Server Actions: they take the
-// admin client from an authorized caller in the action modules and must never be
-// exported from a 'use server' module.
+// admin client, or for documents the whole context, from an authorized caller in
+// the action modules and must never be exported from a 'use server' module.
 
 import { toProfileReference } from '@/lib/profile-reference';
+import { readableDocumentLinks, type AuthorizedDocumentContext } from './access';
 import { logReadFailure } from '@/lib/data/read-request-cache';
 import { logError } from '@/lib/logging';
 import type { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -366,11 +367,13 @@ export function documentRowsFromOrdinaryView(rows: readonly OrdinaryDocumentView
   return documents;
 }
 
+/** The documents with the links the caller may see (`readableDocumentLinks`) resolved to their targets. */
 export async function hydrateDocuments(
-  admin: SupabaseAdmin,
+  context: AuthorizedDocumentContext,
   rows: DocumentRow[],
 ): Promise<OrganizationDocument[]> {
   if (rows.length === 0) return [];
+  const { admin } = context;
 
   const documentIds = rows.map((row) => row.id);
   const uploaderIds = Array.from(new Set(rows.map((row) => row.uploaded_by)));
@@ -401,7 +404,7 @@ export async function hydrateDocuments(
 
   if (linksResult.error || profilesResult.error)
     throw new Error('Dokumentverknüpfungen konnten nicht vollständig geladen werden.');
-  const linkRows = linksResult.data;
+  const linkRows = await readableDocumentLinks(context, linksResult.data);
   const targetResults = await readDocumentLinkTargets(
     admin,
     organizationIds,
@@ -425,12 +428,12 @@ export async function hydrateDocuments(
  * result, never as a throw: `null` when hydration failed (logged).
  */
 export async function hydrateDocumentsOrNull(
-  admin: SupabaseAdmin,
+  context: AuthorizedDocumentContext,
   rows: DocumentRow[],
   failureLabel: string,
 ): Promise<OrganizationDocument[] | null> {
   try {
-    return await hydrateDocuments(admin, rows);
+    return await hydrateDocuments(context, rows);
   } catch (error) {
     logError(failureLabel, error);
     return null;
@@ -442,11 +445,11 @@ export async function hydrateDocumentsOrNull(
  * `documents_failed`, so the caller never reports the write itself as failed.
  */
 export async function hydrateWrittenDocument(
-  admin: SupabaseAdmin,
+  context: AuthorizedDocumentContext,
   row: DocumentRow,
 ): Promise<DocumentResult> {
   const [document] =
-    (await hydrateDocumentsOrNull(admin, [row], 'Failed to hydrate a written document')) ?? [];
+    (await hydrateDocumentsOrNull(context, [row], 'Failed to hydrate a written document')) ?? [];
   if (!document) return { success: false, error: 'documents_failed' };
   return { success: true, document };
 }

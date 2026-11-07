@@ -149,7 +149,7 @@ export async function getAttachableDocuments(
   // One row beyond the page tells the dialog that a search can find more.
   const rows = documentRowsFromOrdinaryView(data ?? []);
   const documents = await hydrateDocumentsOrNull(
-    auth.context.admin,
+    auth.context,
     rows.slice(0, ATTACHABLE_DOCUMENT_PAGE_SIZE),
     'Failed to hydrate attachable documents',
   );
@@ -559,7 +559,7 @@ export async function getDocumentDetails(rawDocumentId: string): Promise<Documen
           .limit(50),
   ]);
 
-  const [document] = await hydrateDocuments(auth.context.admin, [existing.document]);
+  const [document] = await hydrateDocuments(auth.context, [existing.document]);
   if (!document) {
     return { success: false, error: 'document_not_found' };
   }

@@ -390,42 +390,66 @@ async function authorizeProtectedDocument(
   };
 }
 
-/** The caller's assignments to the linked jobs and projects, at most one per batch, with the first read error. */
-async function readLinkedAssignments(
-  context: AuthorizedDocumentContext,
-  linkedRows: Array<Pick<DocumentLinkRow, 'job_id' | 'project_id'>>,
-) {
-  const jobIds = linkedRows.map((link) => link.job_id).filter((jobId): jobId is string => Boolean(jobId));
-  const projectIds = linkedRows
-    .map((link) => link.project_id)
-    .filter((projectId): projectId is string => Boolean(projectId));
+type LinkedWork = Pick<DocumentLinkRow, 'job_id' | 'project_id'> & { client_id?: string | null };
 
-  // One matching assignment per batch proves access; a project's job list is never materialized.
-  const [jobAssignments, projectAssignments] = await Promise.all([
-    readInBatches(jobIds, (batch) =>
+/**
+ * The caller's assigned jobs that the links name: as the job itself, as its
+ * project or as its customer. A job counts only through the caller's own
+ * assignment, the rule of the job and project pages.
+ */
+async function readAssignedLinkedJobs(context: AuthorizedDocumentContext, links: LinkedWork[]) {
+  const linkedIds = (column: 'job_id' | 'project_id' | 'client_id') =>
+    links.flatMap((link) => {
+      const id = link[column];
+      return id ? [id] : [];
+    });
+  const assignedJobsWhere = (column: 'id' | 'project_id' | 'client_id', ids: string[]) =>
+    readInBatches(ids, (batch) =>
       context.admin
-        .from('job_assignments')
-        .select('id')
+        .from('jobs')
+        .select('id, project_id, client_id, job_assignments!inner(id)')
         .eq('organization_id', context.orgId)
-        .in('job_id', [...batch])
-        .eq('user_id', context.userId)
-        .limit(1),
-    ),
-    readInBatches(projectIds, (batch) =>
-      context.admin
-        .from('job_assignments')
-        .select('id, jobs!inner(project_id)')
-        .eq('organization_id', context.orgId)
-        .eq('jobs.organization_id', context.orgId)
-        .in('jobs.project_id', [...batch])
-        .eq('user_id', context.userId)
-        .limit(1),
-    ),
+        .in(column, [...batch])
+        .eq('job_assignments.user_id', context.userId),
+    );
+  const results = await Promise.all([
+    assignedJobsWhere('id', linkedIds('job_id')),
+    assignedJobsWhere('project_id', linkedIds('project_id')),
+    assignedJobsWhere('client_id', linkedIds('client_id')),
   ]);
   return {
-    count: jobAssignments.data.length + projectAssignments.data.length,
-    error: jobAssignments.error ?? projectAssignments.error,
+    jobs: results.flatMap((result) => result.data),
+    error: results.find((result) => result.error)?.error ?? null,
   };
+}
+
+/**
+ * The links a caller sees on a document they may read. Managers see every
+ * link. A field worker sees a link to an assigned job, to that job's project
+ * or customer, or to themselves, as their own job views show them; any other
+ * link is left out, so no title, name or summary of a record they cannot open
+ * reaches them. Throws when the assignments cannot be read.
+ */
+export async function readableDocumentLinks(
+  context: AuthorizedDocumentContext,
+  links: DocumentLinkRow[],
+): Promise<DocumentLinkRow[]> {
+  if (context.isManagerOrAbove) return links;
+  const assigned = await readAssignedLinkedJobs(context, links);
+  if (assigned.error) {
+    logReadFailure('readableDocumentLinks: assignment read failed', assigned.error);
+    throw new Error('Dokumentverknüpfungen konnten nicht geladen werden.');
+  }
+  const ids = (column: 'id' | 'project_id' | 'client_id') =>
+    new Set(assigned.jobs.flatMap((job) => (job[column] ? [job[column]] : [])));
+  const [jobIds, projectIds, clientIds] = [ids('id'), ids('project_id'), ids('client_id')];
+  return links.filter(
+    (link) =>
+      (link.job_id !== null && jobIds.has(link.job_id)) ||
+      (link.project_id !== null && projectIds.has(link.project_id)) ||
+      (link.client_id !== null && clientIds.has(link.client_id)) ||
+      link.employee_id === context.userId,
+  );
 }
 
 export async function getAuthorizedDocument(
@@ -476,14 +500,15 @@ export async function getAuthorizedDocument(
     .eq('document_id', row.id)
     .eq('organization_id', context.orgId);
 
-  const assignments = await readLinkedAssignments(context, links ?? []);
-  const accessError = linksError ?? assignments.error;
+  const assigned = await readAssignedLinkedJobs(context, links ?? []);
+  const accessError = linksError ?? assigned.error;
   if (accessError) {
     logReadFailure('getAuthorizedDocument: assignment access check failed', accessError);
     return { success: false, error: 'load_failed' };
   }
 
-  if (assignments.count === 0) {
+  // Only job and project links are read here: a customer link alone grants nothing.
+  if (assigned.jobs.length === 0) {
     return { success: false, error: 'not_authorized' };
   }
 
