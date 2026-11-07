@@ -7,7 +7,7 @@ import type { AcceptanceRecord } from './acceptance-sets';
 import { surfaceFixture } from './surface-fixtures';
 import type { SurfaceDestination } from './surface-routes';
 
-const CALLER = 'Anna Hartwig';
+const CALLER = 'Erika Sommer';
 
 /** An open request whose caller is already a customer: same name, the phone in another notation. */
 async function callerMatchRequest(world: TestWorld): Promise<SurfaceDestination> {
@@ -17,7 +17,7 @@ async function callerMatchRequest(world: TestWorld): Promise<SurfaceDestination>
       orgId: world.orgId,
       actorId: world.users.admin.id,
       name: CALLER,
-      contacts: [{ name: CALLER, phone: '+49 (0)30 5557150', isPrimary: true }],
+      contacts: [{ name: CALLER, phone: '+49 (0)30 4440123', isPrimary: true }],
     });
     return seedRequest({
       orgId: world.orgId,
@@ -25,8 +25,8 @@ async function callerMatchRequest(world: TestWorld): Promise<SurfaceDestination>
       summary,
       requestNumber: `ANF-${world.runId}-MATCH`,
       callerName: CALLER,
-      callerPhone: '030 55 57 150',
-      callerAddress: 'Musterweg 5, 10115 Berlin',
+      callerPhone: '030 44 40 123',
+      callerAddress: 'Lindenweg 7, 10115 Berlin',
     });
   });
   return { route: `/anfragen/${requestId}`, heading: summary };

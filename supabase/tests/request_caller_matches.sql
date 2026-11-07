@@ -24,45 +24,45 @@ insert into public.organizations (id, name, admin_id, unique_code) values
 
 insert into public.clients (id, organization_id, name, phone, email) values
 ('42000000-0000-0000-0000-000000000021', '42000000-0000-0000-0000-000000000010',
- 'Anna Hartwig', '+49 (0)30 5557150', null),
+ 'Erika Sommer', '+49 (0)30 4440123', null),
 ('42000000-0000-0000-0000-000000000022', '42000000-0000-0000-0000-000000000010',
- 'Hartwig GmbH', null, ' anna.hartwig@example.test '),
+ 'Sommer GmbH', null, ' erika.sommer@example.test '),
 ('42000000-0000-0000-0000-000000000023', '42000000-0000-0000-0000-000000000010',
  'Hausverwaltung Nord', '040 111111', null),
 ('42000000-0000-0000-0000-000000000024', '42000000-0000-0000-0000-000000000010',
- ' anna   HARTWIG ', null, null),
+ ' erika   SOMMER ', null, null),
 ('42000000-0000-0000-0000-000000000025', '42000000-0000-0000-0000-000000000010',
- 'Andere Person', '030 5557151', 'andere@example.test'),
+ 'Andere Person', '030 4440124', 'andere@example.test'),
 ('42000000-0000-0000-0000-000000000026', '42000000-0000-0000-0000-000000000010',
  'Kurze Nummer', '150', null),
 ('42000000-0000-0000-0000-000000000027', '42000000-0000-0000-0000-000000000010',
  'Wohnanlage Süd', null, null),
 ('42000000-0000-0000-0000-000000000029', '42000000-0000-0000-0000-000000000011',
- 'Anna Hartwig', '030 55 57 150', 'anna.hartwig@example.test');
+ 'Erika Sommer', '030 44 40 123', 'erika.sommer@example.test');
 insert into public.client_contacts (organization_id, client_id, name, phone, email) values
 ('42000000-0000-0000-0000-000000000010', '42000000-0000-0000-0000-000000000023',
- 'Frau Hartwig', '0049 30 555-7150', null),
+ 'Frau Sommer', '0049 30 444-0123', null),
 ('42000000-0000-0000-0000-000000000010', '42000000-0000-0000-0000-000000000027',
- 'Anna  Hartwig', null, null),
+ 'Erika  Sommer', null, null),
 ('42000000-0000-0000-0000-000000000011', '42000000-0000-0000-0000-000000000029',
- 'Fremder Kontakt', '+49 30 5557150', 'anna.hartwig@example.test');
+ 'Fremder Kontakt', '+49 30 4440123', 'erika.sommer@example.test');
 
 insert into public.client_requests (id, organization_id, summary, caller_name, caller_phone, caller_email)
 values
 ('42000000-0000-0000-0000-000000000040', '42000000-0000-0000-0000-000000000010', 'Heizung kalt',
- 'Anna Hartwig', '030 55 57 150', 'Anna.Hartwig@Example.test'),
+ 'Erika Sommer', '030 44 40 123', 'Erika.Sommer@Example.test'),
 ('42000000-0000-0000-0000-000000000041', '42000000-0000-0000-0000-000000000010', 'Kurze Nummer',
  null, '150', null),
 ('42000000-0000-0000-0000-000000000049', '42000000-0000-0000-0000-000000000011', 'Fremde Anfrage',
- 'Anna Hartwig', '030 55 57 150', 'anna.hartwig@example.test');
+ 'Erika Sommer', '030 44 40 123', 'erika.sommer@example.test');
 insert into public.client_requests (id, organization_id, client_id, summary, caller_name) values
 ('42000000-0000-0000-0000-000000000042', '42000000-0000-0000-0000-000000000010',
- '42000000-0000-0000-0000-000000000021', 'Schon zugeordnet', 'Anna Hartwig');
+ '42000000-0000-0000-0000-000000000021', 'Schon zugeordnet', 'Erika Sommer');
 insert into public.client_requests (
   id, organization_id, summary, caller_name, status, closed_reason, closed_by, closed_at
 ) values (
   '42000000-0000-0000-0000-000000000043', '42000000-0000-0000-0000-000000000010', 'Geschlossen',
-  'Anna Hartwig', 'geschlossen', 'duplikat', '42000000-0000-0000-0000-000000000001', now()
+  'Erika Sommer', 'geschlossen', 'duplikat', '42000000-0000-0000-0000-000000000001', now()
 );
 
 -- Every common notation of one number compares equal; a fragment is no number.
@@ -71,10 +71,10 @@ declare
   v_case text[];
 begin
   foreach v_case slice 1 in array array[
-    array['030 55 57 150', '0305557150'],
-    array['+49 (0)30 5557150', '0305557150'],
-    array['0049 30 555-7150', '0305557150'],
-    array['030/555 71 50', '0305557150'],
+    array['030 44 40 123', '0304440123'],
+    array['+49 (0)30 4440123', '0304440123'],
+    array['0049 30 444-0123', '0304440123'],
+    array['030/444 01 23', '0304440123'],
     array['+43 1 234567', '00431234567'],
     array['150', null],
     array['', null]

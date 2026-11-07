@@ -76,17 +76,17 @@ const world = installActionWorld(
         closed_at: now,
       }),
       requestRow(anonymousRequestId, ORGANIZATION_A, { caller_name: null }),
-      requestRow(matchingRequestId, ORGANIZATION_A, { caller_name: 'Anna Hartwig' }),
+      requestRow(matchingRequestId, ORGANIZATION_A, { caller_name: 'Erika Sommer' }),
     ],
     client_request_events: [],
     clients: [
       { id: clientId, organization_id: ORGANIZATION_A, name: 'Bestandskunde' },
       { id: secondClientId, organization_id: ORGANIZATION_A, name: 'Zweiter Kunde' },
       { id: foreignClientId, organization_id: ORGANIZATION_B, name: 'Fremder Kunde' },
-      { id: matchingClientId, organization_id: ORGANIZATION_A, name: 'Anna Hartwig' },
+      { id: matchingClientId, organization_id: ORGANIZATION_A, name: 'Erika Sommer' },
       // The other organization's customer is the caller of every request here.
       { id: foreignTwinClientId, organization_id: ORGANIZATION_B, name: 'Erika Muster' },
-      { id: '70000000-0000-4000-8000-000000000007', organization_id: ORGANIZATION_B, name: 'Anna Hartwig' },
+      { id: '70000000-0000-4000-8000-000000000007', organization_id: ORGANIZATION_B, name: 'Erika Sommer' },
     ],
     client_sites: [
       {
@@ -183,7 +183,7 @@ world.rpc = ({ name, args }) =>
 world.rpcCalls.length = 0;
 assert.deepEqual(await actions.getCallerMatches(matchingRequestId), {
   success: true,
-  matches: [{ clientId: matchingClientId, clientName: 'Anna Hartwig', matchedOn: ['name'] }],
+  matches: [{ clientId: matchingClientId, clientName: 'Erika Sommer', matchedOn: ['name'] }],
   moreMatches: false,
 });
 assert.deepEqual(await actions.getCallerMatches(openRequestId), {
@@ -486,7 +486,7 @@ assert.equal(tableRows(world, 'clients').length, 7);
 world.rpcCalls.length = 0;
 const confirmed = await actions.promoteCallerToClient(matchingRequestId, { createDespiteMatches: true });
 assert.ok(confirmed.success);
-assert.deepEqual(world.rpcCalls, [promoteArgs(matchingRequestId, 'Anna Hartwig')]);
+assert.deepEqual(world.rpcCalls, [promoteArgs(matchingRequestId, 'Erika Sommer')]);
 // A lookup that cannot complete refuses the unconfirmed promotion.
 const unreadRequestId = '60000000-0000-4000-8000-00000000000a';
 world.tables.client_requests?.push(requestRow(unreadRequestId, ORGANIZATION_A));
