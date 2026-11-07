@@ -108,7 +108,7 @@ begin
     if not found then
       raise exception 'planning_occurrence_not_found';
     end if;
-    if v_visit.version <> p_visit_version
+    if v_visit.version is distinct from p_visit_version
        or v_visit.status <> 'scheduled'
        or not coalesce(
          v_visit.start_at > now(),
