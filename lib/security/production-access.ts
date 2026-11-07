@@ -396,15 +396,22 @@ function metricsCliRefusal(args: readonly string[]): string | undefined {
     : `the metrics call has arguments the guard cannot place: ${positional.join(' ')}.`;
 }
 
-/** Flags whose value only picks the team, project or folder, so a variable there hides no command. */
+/**
+ * Flags whose value only picks the team, project or folder, so a variable there
+ * hides no command, as long as double quotes keep it one argument: unquoted,
+ * `--scope $ARGS` splits into further flags.
+ */
 const SCOPE_FLAG = /^(?:--scope|-S|--project|-p|--team|-T|--cwd)$/;
-const SCOPE_FLAG_VALUE = /^--(?:scope|project|team|cwd)=/;
+const QUOTED_SCOPE_VALUE = /^"[^"\\]*"$/;
+const QUOTED_SCOPE_FLAG_VALUE = /^--(?:scope|project|team|cwd)="[^"\\]*"$/;
 
 /** Why one Vercel CLI call, given its argument words, would return PROD log text or request data. */
 function vercelCliRefusal(words: readonly ShellWord[]): string | undefined {
   const expanding = withoutRedirections(words).filter(
     (word, index, kept) =>
-      word.expands && !SCOPE_FLAG_VALUE.test(word.text) && !SCOPE_FLAG.test(kept[index - 1]?.text ?? ''),
+      word.expands &&
+      !QUOTED_SCOPE_FLAG_VALUE.test(word.raw) &&
+      !(SCOPE_FLAG.test(kept[index - 1]?.text ?? '') && QUOTED_SCOPE_VALUE.test(word.raw)),
   );
   if (expanding.length > 0)
     return `the shell expands ${expanding.map((word) => word.text).join(' ')} in a Vercel call, so the guard cannot see which command, flag or dimension it runs. Write the arguments out.`;

@@ -267,6 +267,10 @@ test('a shell command that reads Vercel logs from production is refused', () => 
     "ARGS='--group-by requestPath'\nvercel metrics vercel.request.count $ARGS",
     'vercel $SUB --json',
     'vercel metrics vercel.request.count --filter "$FILTER"',
+    // Unquoted, a scope value splits into further flags.
+    "ARGS='team --group-by requestPath'\nvercel metrics vercel.request.count --scope $ARGS",
+    "ARGS='team --group-by requestPath'\nvercel metrics vercel.request.count --scope=$ARGS",
+    'vercel metrics vercel.request.count --scope "$TEAM"$ARGS',
     'vercel "$(echo logs)"',
     // An arithmetic shift opens no heredoc.
     'echo $((1<<2))\nvercel logs\n2',
