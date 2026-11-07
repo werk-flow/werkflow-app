@@ -21,13 +21,12 @@ Both run Micro compute, whose latency rises steeply with concurrency. The owner 
 
 - Every variable exists twice: one row for Production (PROD project, production bucket, production domain), one for all pre-production environments (DEV project, dev bucket, staging URL as `NEXT_PUBLIC_SITE_URL`).
 - The staging URL is the branch alias of `main`, `https://werkflow-app-git-main-werkflows-projects.vercel.app`, behind Vercel Authentication. DEV's auth redirect list must allow it, or invite and password links break on staging.
-- The app runtime and `next build` stay on Node; `vercel.json` installs from `bun.lock`.
 - `production` is the only branch Vercel deploys from Git (`vercel.json`): PR branches never deploy, and `.github/workflows/staging.yml` deploys staging after DEV's migrations.
 - `SUPABASE_ACCESS_TOKEN` is never on Vercel. Recheck the scopes when deployment configuration changes.
 
 ### Provider configuration
 
-Auth settings, mail templates, SMTP and rate limits are no schema and no migration carries them. Both projects carry the same posture.
+No migration carries auth settings, mail templates, SMTP or rate limits. Both projects carry the same posture.
 
 - After every auth change on the production dashboard, run `bun scripts/sync-dev-auth-from-prod.ts`. It prints the difference; `--apply` copies the mail fields from PROD to DEV.
 - `bun run auth:check` compares DEV's Auth configuration with the reviewed posture in `lib/security/supabase-project-checks.ts`. Change a setting and its posture entry together.
@@ -63,7 +62,7 @@ The platform injects `SUPABASE_SECRET_KEYS` into every function; `supabase_secre
 
 ## The local test stack
 
-The test groups run against the Supabase CLI's Docker composition: Docker Engine in WSL Ubuntu on Windows, Colima on macOS. Every repository command runs inside Linux or macOS. `supabase/config.toml` owns ports, auth posture, storage bucket and mail capture.
+The test groups run against the Supabase CLI's Docker composition: Docker Engine in WSL Ubuntu on Windows, Colima on macOS. `supabase/config.toml` owns ports, auth posture, storage bucket and mail capture.
 
 - `supabase db reset` replays the committed migration history. A failing reset is a finding about that history.
 - The keys are the CLI's shared local defaults, not secrets.
@@ -71,7 +70,6 @@ The test groups run against the Supabase CLI's Docker composition: Docker Engine
 - Analytics is off: Logflare filled the disk. The lab recorder reads Kong's access log through `docker logs`.
 - PostgREST truncates at its row limit without an error, locally and hosted. Read in pages ([add a list](realtime-and-caching.md#add-a-list)). Never raise the limit to hide the bound.
 - The stack answers on `http://127.0.0.1:54321`. `bun run env:local` writes that origin and this checkout's test-server origin into `.env.local`. Rebuild after a switch: `NEXT_PUBLIC_*` values are baked into the build.
-- Keep `bun run test:server local` running while you verify.
 - A reset or crash stops the edge runtime; the test server and CI wait start it.
 - An edge function imports only relative modules. The runtime fetches a remote one (`jsr:`, `npm:`, `https:`) on its first request, so a stalled registry hangs a fresh stack.
 - A restarted edge-runtime container keeps its old configuration. After you change `[edge_runtime.secrets]`, reload the runtime and verify the capture endpoint before an email browser group.
@@ -86,7 +84,7 @@ bun run env:dev    # .env.local -> the cloud dev backend (canary, live inspectio
 bun run env:prod   # .env.local -> PRODUCTION (loud warning; no tests)
 ```
 
-A local file never affects the deployed app. Never run the test harness or a destructive script while `.env.local` points at production; switch back as soon as the task is done. The preflight refuses a run whose `.env.local` does not match the requested target.
+Never run the test harness or a destructive script while `.env.local` points at production; switch back as soon as the task is done.
 
 ## Which tool reaches what
 
@@ -138,17 +136,30 @@ T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts`
 7. CodeRabbit: `curl -fsSL https://cli.coderabbit.ai/install.sh | sh` (into `~/.local/bin`). The owner signs in once with `coderabbit auth login`. `bun run review:doctor` confirms both. This is the only time an agent installs CodeRabbit.
 8. Verify: `bunx supabase projects list` shows both projects, `bun scripts/check-r2.ts` passes, and `bun run test:verify --group golden:gg-00` passes beside `bun run test:server local`.
 
+## Background jobs
+
+The `ops/` scripts of `werk-flow/werkflow-planning` run from `~/code/werkflow-planning`, as systemd user timers on the PC and launchd agents on the Mac (`ops/install-mac.py`).
+
+| Job | Runs on |
+| --- | --- |
+| `worktree-cleanup` | Each machine, its own worktrees |
+| [CodeRabbit queue](coderabbit.md#the-coderabbit-queue), `ci-alert` | Both; only the lease holder acts |
+| [Production watcher](recovery-and-incidents.md#monitoring) | Where its [token](#credentials) is |
+| [Recovery rehearsal](recovery-and-incidents.md#recovery-rehearsal) | The PC, beside the stack |
+
+A lease is the ref `refs/leases/<job>` (`ops/lease.py`): its holder renews it every pass, and the other machine takes over once it lapses.
+
 ## Work on production
 
 - Reads: metadata only, through `bun run prod:inspect`. [Which tool reaches what](#which-tool-reaches-what) owns the rule.
 - A production-local session is the owner's: `bun run env:prod`, do the task, `bun run env:dev`. No tests and no bulk scripts in between.
-- Owner demo data: `bun scripts/seed-demo-data.ts --target local|dev|prod` (PROD adds `--confirm-prod`) recreates the demo organizations, never the beta partner's; `local` also creates the owner. CI's SQL job seeds twice, so a migration that breaks the seeder fails `Check`. Each run generates the members' password. To sign in to `bun run dev` as one, seed DEV with your own `DEMO_MEMBER_PASSWORD` and run `bun run env:dev` first; PROD refuses one.
+- Owner demo data: `bun scripts/seed-demo-data.ts --target local|dev|prod` (PROD adds `--confirm-prod`) recreates the demo organizations, never the beta partner's; `local` also creates the owner. Each run generates the members' password. To sign in to `bun run dev` as one, seed DEV with your own `DEMO_MEMBER_PASSWORD` and run `bun run env:dev` first; PROD refuses one.
 
 ## Release and rollback
 
 [Decision 0009](../decisions/0009-pull-requests-and-ci.md) owns why. `main` is staging. The `production` branch is what Vercel serves on `app.werk-flow.app`.
 
 1. `.github/workflows/release.yml` ships a `main` commit to PROD only after a green full run ([release gate](testing.md#ci)). PROD is live weekdays by 05:00 Berlin: GitHub starts cron runs up to 10 hours late, so a run fires at 17:00 and holds until 03:30. A scheduled run ships its starting commit only when `main` moved since `production` and its newest full run, or its own, passed. A manual run queues behind a held one: `gh run cancel` it first. By hand, when a green `main` should not wait ("release main"): `gh workflow run release`, then `gh run watch`; `-f dry_run=true` prints a scheduled run's decision and, with a candidate, checks the serving build (step 3). `production` has no approval step (owner's decision). When it fails, repair `main` by PR and release again; a rerun is safe.
-2. Rollback: Vercel Instant Rollback switches the domain to the previous build within seconds. It changes code only; rule 6 of the migration rule names the limit for data. After a rollback Vercel stops assigning new production builds to the domain, so the next release must promote explicitly, which the workflow does.
+2. Rollback: Vercel Instant Rollback switches the domain to the previous build within seconds. It changes code only; rule 6 of the migration rule names the limit for data.
 3. The last job checks production without reading data: the build serves, the login page renders, `health` answers, and five minutes later Vercel counts no server error from the build. If it fails, the coordinator thread, else the owner, rolls back (step 2) and reports.
 4. Never roll back the database. Fix forward with a new migration. Point-in-time restore is a last resort that loses every write since the restore point ([recovery](recovery-and-incidents.md)).
