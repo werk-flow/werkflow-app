@@ -1249,7 +1249,7 @@
         "echoRenders": { "reference": 0, "tolerance": 0 },
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 3, "tolerance": 0 },
-        "backendRequests": { "reference": 72, "tolerance": 1 },
+        "backendRequests": { "reference": 87, "tolerance": 1 },
         "componentRenders": { "reference": 1634, "tolerance": 31 }
       },
       "payloads": {
@@ -1279,8 +1279,8 @@
         },
         "route:/auftraege/[jobNumber]": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 4956, "tolerance": { "relative": 1, "absolute": 512 } },
-          "decodedBytes": { "reference": 14099, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 6113, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 14625, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "script": {
@@ -1398,6 +1398,32 @@
           "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
           "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
           "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
+        },
+        {
+          "kind": "raise",
+          "target": "backendRequests",
+          "from": { "reference": 72, "tolerance": 1 },
+          "to": { "reference": 87, "tolerance": 1 },
+          "runKeys": ["2026-11-07T155436013Z-7a1b47"],
+          "reason": "Readiness on the job page now assesses capacity and qualifications of the job's next scheduled visit (werk-flow/werkflow-planning#50, #69): the next-visit read and the planning assessment's records, targets, absences, overlaps, qualification and name reads, server-side beside the existing lifecycle reads."
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "route:/auftraege/[jobNumber]",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 4956, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 14099, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 6113, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 14625, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-07T155436013Z-7a1b47"],
+          "reason": "The job page's lifecycle snapshot carries the readiness picture's new unplannedReason and the assessed visit's conflict details (werk-flow/werkflow-planning#50, #69)."
         }
       ]
     },

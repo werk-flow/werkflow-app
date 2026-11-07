@@ -175,6 +175,7 @@ describe('work lifecycle', () => {
         snapshot({
           blockers: [openBlocker('parking')],
         }),
+        true,
       ),
     ).toBe('Parkgrund prüfen und Arbeit wieder einplanen');
     expect(
@@ -182,6 +183,7 @@ describe('work lifecycle', () => {
         snapshot({
           blockers: [openBlocker('blocker')],
         }),
+        true,
       ),
     ).toBe('Offene Blocker klären');
     expect(
@@ -189,8 +191,36 @@ describe('work lifecycle', () => {
         snapshot({
           dependencies: [unsatisfiedDependency('blocks_start')],
         }),
+        true,
       ),
     ).toBe('Voraussetzungen klären');
+  });
+
+  test('unstarted work without people or a date asks to plan it, never to start it', () => {
+    const readiness = (unplannedReason: 'no_visit' | 'no_assignees' | null) => ({
+      dimensions: [],
+      unplannedReason,
+      snapshot: [],
+    });
+    expect(getWorkNextAction(snapshot({ readiness: readiness('no_visit') }), true)).toBe(
+      'Mitarbeiter zuweisen und einplanen',
+    );
+    expect(getWorkNextAction(snapshot({ readiness: readiness('no_assignees') }), true)).toBe(
+      'Mitarbeiter zuweisen',
+    );
+    expect(getWorkNextAction(snapshot({ readiness: readiness(null) }), true)).toBe('Arbeit starten');
+    // Planning is the manager's step; the field worker starts the work.
+    expect(getWorkNextAction(snapshot({ readiness: readiness('no_visit') }), false)).toBe('Arbeit starten');
+    // Started work keeps its execution guidance; parking still comes first.
+    expect(
+      getWorkNextAction(snapshot({ executionState: 'in_progress', readiness: readiness('no_visit') }), true),
+    ).toBe('Arbeit fortführen oder Ausführung abschließen');
+    expect(
+      getWorkNextAction(
+        snapshot({ blockers: [openBlocker('parking')], readiness: readiness('no_visit') }),
+        true,
+      ),
+    ).toBe('Parkgrund prüfen und Arbeit wieder einplanen');
   });
 
   test('warning-only prerequisites do not replace the execution guidance', () => {
@@ -200,6 +230,7 @@ describe('work lifecycle', () => {
           executionState: 'interrupted',
           dependencies: [unsatisfiedDependency('warning')],
         }),
+        true,
       ),
     ).toBe('Arbeit fortsetzen');
   });

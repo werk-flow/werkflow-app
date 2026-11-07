@@ -177,6 +177,14 @@ export const seriesHorizonApprovalSchema = z
 
 export const planningRescheduleScopeSchema = z.enum(['future', 'series']);
 
+/** The visit date the assignment picker marks people for; null means today. */
+export const assignmentAvailabilityInputSchema = z.object({
+  localDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable(),
+});
+
 /** A calendar date window as the client sends it; the span is checked by the reader. */
 export const planningDateWindowSchema = z.object({
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),

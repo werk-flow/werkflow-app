@@ -1,4 +1,5 @@
-import type { PlanningActionFailure, PlanningConflict } from './types';
+import type { ActionFailure } from '@/lib/action-result';
+import type { PlanningConflict } from './types';
 
 /** The part of a planning assessment the acknowledgement rule reads. */
 export type AssessedConflicts = {
@@ -12,6 +13,15 @@ export type ConflictAcknowledgement = {
   assessmentFingerprint: string | null;
 };
 
+/** A manager's confirmation of the planning conflicts they saw, as a job-page save sends it. */
+export type PlanningConflictApproval = { fingerprint: string; reason: string };
+
+/** The refusal of a conflicting write: the conflicts and the fingerprint the manager must confirm. */
+export type PlanningWarningFailure = ActionFailure<'planning_warning' | 'stale_assessment'> & {
+  conflicts: PlanningConflict[];
+  fingerprint: string;
+};
+
 /**
  * A conflicting planning write needs an override reason and the fingerprint
  * of the assessment the manager saw; otherwise the warning is returned again.
@@ -19,7 +29,7 @@ export type ConflictAcknowledgement = {
 export function rejectUnacknowledgedConflicts(
   assessment: AssessedConflicts,
   acknowledgement: ConflictAcknowledgement,
-): PlanningActionFailure | null {
+): PlanningWarningFailure | null {
   if (assessment.conflicts.length === 0) return null;
   if (!acknowledgement.overrideReason) {
     return {

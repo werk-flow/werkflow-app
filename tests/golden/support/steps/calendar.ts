@@ -285,6 +285,22 @@ export async function confirmPlanningWarning(page: Page, reason: string, require
   await expect(warning).toHaveCount(0);
 }
 
+/**
+ * For a save whose capacity check may or may not find a conflict: waits until
+ * the planning warning opens or the save finishes, which removes `dialog`, and
+ * confirms the warning with `reason` when it opened. `dialog` must stay open
+ * while the warning shows.
+ */
+export async function confirmPlanningWarningIfAsked(
+  page: Page,
+  reason: string,
+  dialog: Locator,
+): Promise<void> {
+  const warning = planningWarningDialog(page);
+  await expect.poll(async () => (await warning.isVisible()) || (await dialog.count()) === 0).toBe(true);
+  if (await warning.isVisible()) await confirmPlanningWarning(page, reason);
+}
+
 export function plannedEntriesConfirmation(page: Page, occurrenceCount: number): Locator {
   return visibleText(page, plannedEntriesMessage(occurrenceCount));
 }

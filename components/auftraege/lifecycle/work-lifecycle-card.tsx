@@ -74,6 +74,13 @@ function useWorkLifecycleLiveView({
       'organization_capabilities',
       'job_material_lines',
       'inventory_stock_levels',
+      // Readiness assesses the visit's people against these facts.
+      'employee_records',
+      'personnel_access_lifecycles',
+      'vacation_requests',
+      'sickness_reports',
+      'work_schedules',
+      'employment_conditions',
     ],
     read: async ({ signal }) => {
       const result = await readInBackground(
@@ -186,7 +193,7 @@ function useWorkLifecycleCardState({
 }
 
 /** The counts and readiness the card header and its actions read from one snapshot. */
-function workLifecycleCardSummary(snapshot: WorkLifecycleSnapshot) {
+function workLifecycleCardSummary(snapshot: WorkLifecycleSnapshot, isManager: boolean) {
   const parking = snapshot.blockers.find((blocker) => blocker.kind === 'parking');
   const blockingCount = snapshot.blockers.filter((blocker) => blocker.kind === 'blocker').length;
   const unmetDependencies = snapshot.dependencies.filter(
@@ -194,7 +201,7 @@ function workLifecycleCardSummary(snapshot: WorkLifecycleSnapshot) {
   ).length;
   const canStart = !parking && blockingCount === 0 && snapshot.gates.openStartDependencies === 0;
   const startReadinessKnown = canStart && !snapshot.readinessLoadFailed;
-  const nextAction = getWorkNextAction(snapshot);
+  const nextAction = getWorkNextAction(snapshot, isManager);
   return { parking, blockingCount, unmetDependencies, canStart, startReadinessKnown, nextAction };
 }
 
@@ -209,7 +216,7 @@ export function WorkLifecycleCard({
   const state = useWorkLifecycleCardState({ initialSnapshot, fieldMode });
   const { dialog, setDialog, setRemoteUpdateDialog, rowBusy, view, pendingState, snapshot, refresh } = state;
   const { parking, blockingCount, unmetDependencies, canStart, startReadinessKnown, nextAction } =
-    workLifecycleCardSummary(snapshot);
+    workLifecycleCardSummary(snapshot, isManager);
   const ownerNames = useMemo(
     () => new Map(snapshot.ownerOptions.map((owner) => [owner.value, owner.label])),
     [snapshot.ownerOptions],
