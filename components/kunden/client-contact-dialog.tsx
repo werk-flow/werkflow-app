@@ -35,7 +35,7 @@ function ClientContactDetailFields({
 }) {
   return (
     <>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid items-start gap-4 sm:grid-cols-2">
         <Field label="Telefon" htmlFor="contact-phone">
           <Input
             value={contactDialog.draft.phone ?? ''}
@@ -50,7 +50,7 @@ function ClientContactDetailFields({
             }
           />
         </Field>
-        <Field label="E-Mail" htmlFor="contact-email">
+        <Field label="E-Mail" htmlFor="contact-email" error={contactDialog.emailError}>
           <Input
             type="text"
             inputMode="email"
@@ -62,6 +62,7 @@ function ClientContactDetailFields({
                   ...contactDialog.draft,
                   email: e.target.value,
                 },
+                emailError: null,
               })
             }
           />
