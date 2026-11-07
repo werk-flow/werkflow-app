@@ -32,6 +32,8 @@ export type CaptureSpec = {
   state?: CaptureState;
   /** Visible text scrolled to the middle of its scroll area before the image, for a change below the fold. */
   reveal?: string;
+  /** Captured while the role works on the layout job; the capture clocks out afterwards. */
+  clockedIn?: true;
 };
 
 /** A screen outside the app shell, opened with the session its inventory entry names. */
@@ -253,6 +255,44 @@ function timeAccountOpeningCaptures(): AcceptanceSet {
   };
 }
 
+/**
+ * werk-flow/werkflow-planning#138 of 2026-11-07: the clock dock clocked in on
+ * the work pack and the time history, and clocked out on the period's findings.
+ */
+function clockDockCaptures(): AcceptanceSet {
+  const both = { widths: [1280, 375], schemes: ['light', 'dark'] } as const;
+  return {
+    id: 'clock-dock-2026-11-07',
+    captures: [
+      {
+        id: 'employee-auftraege-jobNumber-clocked-in',
+        role: 'employee',
+        route: '/auftraege/[jobNumber]',
+        view: { kind: 'page' },
+        clockedIn: true,
+        ...both,
+      },
+      {
+        id: 'employee-zeiterfassung-tab-history-clocked-in',
+        role: 'employee',
+        route: '/zeiterfassung',
+        view: { kind: 'tab', value: 'history' },
+        clockedIn: true,
+        ...both,
+      },
+      {
+        id: 'admin-zeiterfassung-perioden-periodId',
+        role: 'admin',
+        route: '/zeiterfassung/perioden/[periodId]',
+        view: { kind: 'page' },
+        reveal: 'Prüfhinweise',
+        ...both,
+      },
+    ],
+    standalone: [],
+  };
+}
+
 export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   uiRoundCaptures(),
   fieldTargetCaptures(),
@@ -262,4 +302,5 @@ export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   requestConversionCaptures(),
   settingsRoleCaptures(),
   timeAccountOpeningCaptures(),
+  clockDockCaptures(),
 ];

@@ -8,7 +8,12 @@ import { withFileLock, writeJsonAtomically } from '../../../lib/testing/runner/f
 import { browserRunPaths } from '../../../lib/testing/runs/run-paths';
 import { settled } from '../../golden/support/steps/interaction';
 import { inPageTab } from '../../golden/support/steps/shared';
-import { clockInLauncher } from '../../golden/support/steps/time-tracking';
+import {
+  clockInLauncher,
+  clockInOnJob,
+  clockOut,
+  runningClockLauncher,
+} from '../../golden/support/steps/time-tracking';
 import { currentRunKey } from '../../golden/support/run-state';
 import type { TestWorld } from '../../golden/support/world';
 import { standaloneScreen } from '../../../lib/testing/selection/standalone-route-inventory';
@@ -19,6 +24,7 @@ import { DIALOG_OPENERS } from './dialog-openers';
 import { openLayerAt } from './open-layer';
 import { DESKTOP, VIEWPORT_HEIGHT } from './open-layer-plan';
 import { openStandaloneScreen } from './standalone-sessions';
+import { layoutNames, prepareLayoutDetails } from './layout-fixtures';
 import { openSurface, surfaceDestination } from './surface-routes';
 
 // The capture fixture of rendered acceptance (docs/technical/standards-audit.md,
@@ -107,8 +113,8 @@ async function expectReady(page: Page, scope: Locator, view: CaptureSpec['view']
   // page behind it settled before its trigger was pressed.
   await settled(view === 'dialog' ? scope : page);
   await expect(page.locator('[data-slot="section-error"]:visible')).toHaveCount(0);
-  const launcher = clockInLauncher(page);
-  if (await launcher.count()) await expect(launcher).toBeEnabled();
+  for (const launcher of [clockInLauncher(page), runningClockLauncher(page)])
+    if (await launcher.count()) await expect(launcher).toBeEnabled();
   await page.evaluate(async () => {
     await document.fonts.ready;
   });
@@ -199,6 +205,10 @@ export async function captureAcceptance(
     await captureState(input, set, { ...capture, state: capture.state }, destination.route);
     return;
   }
+  if (capture.clockedIn) {
+    await prepareLayoutDetails(world);
+    await clockInOnJob(page, layoutNames(world).job);
+  }
   await openSurface(page, destination);
   const context = { page, role: capture.role, world, businessDate, route: destination.route };
   try {
@@ -233,6 +243,7 @@ export async function captureAcceptance(
     }
   } finally {
     await page.emulateMedia({ colorScheme: 'light' });
+    if (capture.clockedIn) await clockOut(page);
   }
 }
 

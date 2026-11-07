@@ -220,6 +220,16 @@ export function clockInLauncher(page: Page): Locator {
   return page.getByRole('button', { name: CLOCK_COPY.start, exact: true });
 }
 
+/** The clock dock, fixed at the bottom of every app page. */
+export function clockDock(page: Page): Locator {
+  return page.locator('[data-clock-fab]');
+}
+
+/** The clock dock's line that names the running activity, or that nobody is clocked in. */
+export function clockStatus(page: Page): Locator {
+  return clockDock(page).locator('[data-clock-status]');
+}
+
 /** The clock launcher while a clock runs. */
 export function runningClockLauncher(page: Page): Locator {
   return page.getByRole('button', { name: CLOCK_COPY.openRunning, exact: true });
@@ -364,10 +374,8 @@ export async function startClockBreak(page: Page): Promise<void> {
   const sheet = await openRunningClockSheet(page);
   await sheet.getByRole('button', { name: TIME_ACTIVITY_LABELS.break, exact: true }).click();
   await expect(sheet).toHaveCount(0);
-  // The pill above the button names the running break.
-  await expect(
-    page.getByRole('button', { name: new RegExp(`^${TIME_ACTIVITY_LABELS.break}`) }),
-  ).toBeVisible();
+  // The clock dock's status line names the running break.
+  await expect(clockStatus(page)).toHaveText(new RegExp(`^${TIME_ACTIVITY_LABELS.break}`));
 }
 
 export async function endClockBreak(page: Page, jobTitle?: string): Promise<void> {

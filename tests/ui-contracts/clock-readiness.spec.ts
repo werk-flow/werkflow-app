@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { assertWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-lock';
 import type { LiveClockState } from '@/lib/time-tracking/types';
+import { clockDock, clockStatus } from '../golden/support/steps/time-tracking';
 import { CLOCK_ORGANIZATION_ID, RUNNING_CLOCK_STATE } from './clock-state-fixture';
 
 declare global {
@@ -87,7 +88,7 @@ test('a break resumes its job from the hot key and the sheet, and hot keys wait 
   });
   await expect(resumeHotKey).toBeEnabled();
   await expect(page.getByRole('button', { name: 'Weiter ohne Auftrag', exact: true })).toBeEnabled();
-  await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
+  await expect(clockStatus(page)).toHaveText('Pause');
 
   await page.getByRole('button', { name: 'Laufende Zeiterfassung öffnen', exact: true }).click();
   const sheet = page
@@ -115,8 +116,40 @@ test('a break resumes its job from the hot key and the sheet, and hot keys wait 
   await page.evaluate(() => {
     window.clockContract.resolveTransition?.();
   });
-  await expect(page.getByRole('button', { name: /^Arbeit · Heizungswartung Müller/ })).toBeVisible();
+  await expect(clockStatus(page)).toHaveText('Arbeit · Heizungswartung Müller');
   await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeEnabled();
+});
+
+test('the clock dock publishes its height for the layout reserve, and its hot keys share one row on a phone', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.route('**/api/time-tracking-state?**', (route) =>
+    route.fulfill({ json: { success: true, state: BREAK_CLOCK_STATE } }),
+  );
+  await mountClock(page, { withStyles: true });
+  await expect(page.getByRole('button', { name: 'Weiter ohne Auftrag', exact: true })).toBeEnabled();
+  const dock = clockDock(page);
+  const published = (): Promise<string> =>
+    page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--clock-dock-height'));
+  await expect.poll(published).toMatch(/px$/);
+  const box = await dock.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return { height: rect.height, bottom: rect.bottom, width: rect.width };
+  });
+  // The layout pads the page column by the published height: it must be the dock's own.
+  expect(await published()).toBe(`${box.height}px`);
+  expect(box.bottom).toBe(812);
+  expect(box.width).toBe(375);
+  const keyTops = await Promise.all(
+    ['Weiter: Arbeit · Heizungswartung Müller', 'Weiter ohne Auftrag'].map(async (name) =>
+      dock
+        .getByRole('button', { name, exact: true })
+        .evaluate((element) => Math.round(element.getBoundingClientRect().top)),
+    ),
+  );
+  // Both hot keys sit in one row below the status line, never stacked over the page.
+  expect(new Set(keyTops).size).toBe(1);
 });
 
 test('with the app stylesheet at phone width every clock action is a 44 px target and the selected tile is not clipped', async ({

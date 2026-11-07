@@ -162,7 +162,9 @@ assert.ok(
   'the layout renders its providers inside Suspense',
 );
 const shell = await render(() => providers);
-assert.equal(propsOf(shell, 'AppShell')?.children, 'Authorized page content');
+const reserve = propsOf(shell, 'AppShell')?.children;
+assert.ok(isValidElement<{ children: ReactNode }>(reserve), 'the shell holds the clock dock reserve');
+assert.equal(reserve.props.children, 'Authorized page content');
 assert.equal(reads.get('subscriptions'), 1, 'only the upgrade page read the subscription');
 assert.deepEqual(redirects, []);
 

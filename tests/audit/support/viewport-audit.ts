@@ -98,7 +98,7 @@ export async function expectPhoneLayout(
   await expectMainThreadSettles(page, route);
   // Measured on the settled page only: on 2026-10-09 the check met two /kalender board cells of a
   // render still in flight, which the screenshot of the finished agenda no longer showed.
-  expect(await controlsUnderClockAtEnd(page), `${route}: a control stays under the clock button`).toEqual([]);
+  await expectNoControlUnderClock(page, route);
   await expectNothingMovesAfterUsable(page, route, testInfo);
 }
 
@@ -176,33 +176,82 @@ export async function expectMainThreadSettles(page: Page, route: string): Promis
   }
 }
 
-// The clock button floats over the bottom right of every page. Scrolled to its
-// end, the page body must leave every control clear of it: the service lists'
-// fixed create buttons sat underneath it on phones (rendered review of 2026-10-02).
-// The scroll can mount content (lazy rows), so the boxes are read two frames after it.
-async function controlsUnderClockAtEnd(page: Page): Promise<string[]> {
+// The clock dock is fixed at the bottom of every page. No control may sit
+// under it at any scroll position: a floating clock stack covered the work
+// pack's buttons and the period page's „Ablehnen“ while the page rested
+// (walkthrough of 2026-10-29), and the service lists' fixed create buttons sat
+// underneath it on phones (rendered review of 2026-10-02). The body is walked
+// from top to end in steps shorter than the dock; a scroll can mount content
+// (lazy rows), so the boxes are read two frames after each step. A control counts
+// only with the part its clipping ancestors and the viewport leave visible:
+// rows below the fold lie under the dock geometrically but are not shown.
+async function controlsUnderClock(page: Page): Promise<string[]> {
   return page.evaluate(async () => {
-    const body = document.querySelector<HTMLElement>('[data-page-body]');
     const clock = document.querySelector<HTMLElement>('[data-clock-fab]');
-    if (!body || !clock) return [];
-    body.scrollTop = body.scrollHeight;
-    for (let frame = 0; frame < 2; frame++)
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    const cover = clock.getBoundingClientRect();
-    return Array.from(
-      document.querySelectorAll<HTMLElement>('main a, main button, main input, main [role="combobox"]'),
-    )
-      .filter((control) => !clock.contains(control) && control.getClientRects().length > 0)
-      .filter((control) => {
-        const box = control.getBoundingClientRect();
+    if (!clock) return [];
+    const body = document.querySelector<HTMLElement>('[data-page-body]');
+    const visibleBox = (
+      element: HTMLElement,
+    ): { left: number; top: number; right: number; bottom: number } => {
+      const box = element.getBoundingClientRect();
+      let { left, top, right, bottom } = box;
+      for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+        const style = getComputedStyle(parent);
+        if (style.overflowX === 'visible' && style.overflowY === 'visible') continue;
+        const clip = parent.getBoundingClientRect();
+        left = Math.max(left, clip.left);
+        top = Math.max(top, clip.top);
+        right = Math.min(right, clip.right);
+        bottom = Math.min(bottom, clip.bottom);
+      }
+      return {
+        left: Math.max(left, 0),
+        top: Math.max(top, 0),
+        right: Math.min(right, window.innerWidth),
+        bottom: Math.min(bottom, window.innerHeight),
+      };
+    };
+    const covered = new Set<string>();
+    const measure = (): void => {
+      const cover = clock.getBoundingClientRect();
+      for (const control of document.querySelectorAll<HTMLElement>(
+        'main a, main button, main input, main textarea, main [role="combobox"]',
+      )) {
+        if (clock.contains(control) || control.getClientRects().length === 0) continue;
+        const box = visibleBox(control);
         const overlapX = Math.min(cover.right, box.right) - Math.max(cover.left, box.left);
         const overlapY = Math.min(cover.bottom, box.bottom) - Math.max(cover.top, box.top);
-        return overlapX > 2 && overlapY > 2;
-      })
-      .map((control) =>
-        (control.getAttribute('aria-label') ?? control.textContent ?? control.tagName).trim().slice(0, 60),
-      );
+        if (overlapX > 2 && overlapY > 2)
+          covered.add(
+            (control.getAttribute('aria-label') ?? control.textContent ?? control.tagName)
+              .trim()
+              .slice(0, 60),
+          );
+      }
+    };
+    const nextFrames = async (): Promise<void> => {
+      for (let frame = 0; frame < 2; frame++)
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    };
+    if (!body) {
+      measure();
+      return [...covered];
+    }
+    // A step a little shorter than the dock: every control that can pass under it overlaps it at some step.
+    const step = Math.max(8, Math.floor(clock.getBoundingClientRect().height) - 4);
+    for (let position = 0; ; position += step) {
+      body.scrollTop = position;
+      await nextFrames();
+      measure();
+      if (body.scrollTop + body.clientHeight >= body.scrollHeight - 1) break;
+    }
+    return [...covered];
   });
+}
+
+/** Fails with the names of the controls the clock dock covers at any scroll position of the page. */
+export async function expectNoControlUnderClock(page: Page, label: string): Promise<void> {
+  expect(await controlsUnderClock(page), `${label}: a control sits under the clock dock`).toEqual([]);
 }
 
 export async function expectAreaHeader(page: Page, route: string): Promise<void> {
