@@ -15,8 +15,12 @@ const LIVE_BY = '05:00';
 const RELEASE_DECIDES = '03:30';
 // GitHub starts this repository's scheduled runs up to 10 hours late (werk-flow/werkflow-app#184).
 const GITHUB_DELAY_MAX_MINUTES = 10 * 60;
-// A release that finds no green full run runs its own: 24 to 43 minutes so far, plus headroom.
-const OWN_FULL_RUN_MINUTES = 45;
+// The longest start delay measured on an evening line (#184): 440 minutes.
+const GITHUB_DELAY_MEASURED_MINUTES = 440;
+// A full run, nightly or the release's own: 23 to 29 minutes since 2026-10-31, plus headroom.
+const FULL_RUN_MINUTES = 45;
+// The slowest full run on record, before the CI overhaul (2026-10-30).
+const SLOWEST_FULL_RUN_MINUTES = 62;
 // From a green full run to a promoted build: under 7 minutes in the releases so far.
 const SHIP_MINUTES = 10;
 
@@ -57,12 +61,21 @@ test('PROD is live by 05:00 even when GitHub starts the release 10 hours late', 
   const cron = /- cron: '(\d+) (\d+) \* \* 0-4'\n {6}timezone: Europe\/Berlin/.exec(releaseWorkflow);
   expect(cron).not.toBeNull();
   const firesAt = Number(cron?.[2]) * 60 + Number(cron?.[1]);
-  const latestStart = firesAt + GITHUB_DELAY_MAX_MINUTES - 24 * 60;
-  const decides = Math.max(latestStart, minutesOf(RELEASE_DECIDES));
-  // The nightly shares the line, so it starts no later. ci.yml queues full runs on one commit, so the
-  // release's own run may wait for an unfinished nightly before it starts.
-  const ownRunStarts = Math.max(decides, latestStart + OWN_FULL_RUN_MINUTES);
-  expect(ownRunStarts + OWN_FULL_RUN_MINUTES + SHIP_MINUTES).toBeLessThanOrEqual(minutesOf(LIVE_BY));
+  /** When PROD is live: the release starts `delay` late, and the nightly shares its line, so it starts
+   * no later. ci.yml queues full runs on one commit, so the release's own run may wait for the nightly. */
+  const liveAt = (delay: number, nightly: number, ownRun: number) => {
+    const latestStart = firesAt + delay - 24 * 60;
+    const decides = Math.max(latestStart, minutesOf(RELEASE_DECIDES));
+    return Math.max(decides, latestStart + nightly) + ownRun + SHIP_MINUTES;
+  };
+  // GitHub's stated worst delay with today's full runs (23 to 29 minutes since 2026-10-31), with margin.
+  expect(liveAt(GITHUB_DELAY_MAX_MINUTES, FULL_RUN_MINUTES, FULL_RUN_MINUTES)).toBeLessThanOrEqual(
+    minutesOf(LIVE_BY),
+  );
+  // The worst delay measured on an evening line with the slowest full runs on record (62 minutes, 2026-10-30).
+  expect(
+    liveAt(GITHUB_DELAY_MEASURED_MINUTES, SLOWEST_FULL_RUN_MINUTES, SLOWEST_FULL_RUN_MINUTES),
+  ).toBeLessThanOrEqual(minutesOf(LIVE_BY));
   expect(releaseWorkflow).toContain(`run: bash .github/scripts/hold-until.sh ${RELEASE_DECIDES}`);
 });
 
@@ -162,16 +175,17 @@ test('a held run whose commit production already passed ends quietly with nothin
       `skip_reason=production already contains ${held}; a later release shipped it.`,
     ]);
   }
-  // A manual run still refuses to move production backwards.
-  expect(
-    spawnSync('bash', [candidateScript, 'manual'], {
-      cwd: repository,
-      env: {
-        NODE_ENV: 'test',
-        PATH: `${stub}:${process.env.PATH}`,
-        GITHUB_REF: 'refs/heads/main',
-        GITHUB_OUTPUT: output,
-      },
-    }).status,
-  ).not.toBe(0);
+  // A manual run still refuses to move production backwards, and says why.
+  const manual = spawnSync('bash', [candidateScript, 'manual'], {
+    cwd: repository,
+    encoding: 'utf8',
+    env: {
+      NODE_ENV: 'test',
+      PATH: `${stub}:${process.env.PATH}`,
+      GITHUB_REF: 'refs/heads/main',
+      GITHUB_OUTPUT: output,
+    },
+  });
+  expect(manual.status, manual.stdout + manual.stderr).not.toBe(0);
+  expect(manual.stdout + manual.stderr).toContain('production is not an ancestor of main');
 });
