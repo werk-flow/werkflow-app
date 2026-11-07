@@ -6,7 +6,7 @@ import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { readJobAssignmentOfUser, readOrganizationJob } from '@/lib/jobs/job-access-reads';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/supabase/database.types';
-import { readInBatches } from '@/lib/supabase/query-batches';
+import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import type { ParsedDocumentUploadTarget } from './action-schemas';
 import { toDocumentCategory, type DocumentFolderRow, type DocumentLinkRow, type DocumentRow } from './types';
 
@@ -403,14 +403,21 @@ async function readAssignedLinkedJobs(context: AuthorizedDocumentContext, links:
       const id = link[column];
       return id ? [id] : [];
     });
+  // A batch of linked projects or customers can hold more assigned jobs than one response returns.
   const assignedJobsWhere = (column: 'id' | 'project_id' | 'client_id', ids: string[]) =>
     readInBatches(ids, (batch) =>
-      context.admin
-        .from('jobs')
-        .select('id, project_id, client_id, job_assignments!inner(id)')
-        .eq('organization_id', context.orgId)
-        .in(column, [...batch])
-        .eq('job_assignments.user_id', context.userId),
+      readCompleteRows(
+        (from, to) =>
+          context.admin
+            .from('jobs')
+            .select('id, project_id, client_id, job_assignments!inner(id)')
+            .eq('organization_id', context.orgId)
+            .in(column, [...batch])
+            .eq('job_assignments.user_id', context.userId)
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
     );
   const results = await Promise.all([
     assignedJobsWhere('id', linkedIds('job_id')),

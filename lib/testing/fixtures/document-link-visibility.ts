@@ -310,6 +310,12 @@ assert.deepEqual(
   [assignedJobId],
 );
 
+// An assignment read that cannot complete refuses the field worker; it never shows every link.
+world.failingTables.add('jobs');
+for (const [label, read] of Object.entries(readers))
+  assert.equal((await read()).success, false, `${label}: a failed assignment read answers the field worker`);
+world.failingTables.delete('jobs');
+
 // A field worker without the assignment reads neither the job's documents nor the document.
 assignCallerTo([]);
 for (const [label, read] of Object.entries(readers))
