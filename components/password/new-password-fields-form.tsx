@@ -149,7 +149,7 @@ export function NewPasswordFieldsForm({
 
   return (
     <Form {...form}>
-      <form className={className} onSubmit={handleSubmit}>
+      <form className={className} method="post" onSubmit={handleSubmit}>
         <NewPasswordField
           form={form}
           strengthLevel={strengthLevel}
