@@ -945,10 +945,11 @@ function productRestrictions({ jsx = false, allow = [] } = {}) {
 }
 
 // Type assertions (`value as T`, `<T>value`) are banned; `as const` stays
-// allowed. The files that still carry assertions are listed with their count
-// in eslint-rules/type-assertion-ratchet.json: the rule is off for them, and
-// lib/conventions/type-assertions.test.ts fails when a listed count grows, when
-// it falls without the file being lowered, or when a listed file has none left.
+// allowed. eslint-rules/type-assertion-ratchet.json lists the casts the owner
+// accepted as permanent, by file and count, each with its reason beside the
+// cast: the rule is off for those files, and
+// lib/conventions/type-assertions.test.ts fails when a listed file holds any
+// other number of assertions or is gone.
 const typeAssertionRatchet = JSON.parse(
   readFileSync(new URL('./eslint-rules/type-assertion-ratchet.json', import.meta.url), 'utf8'),
 );
@@ -1096,14 +1097,10 @@ const eslintConfig = defineConfig([
       '@typescript-eslint/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
     },
   },
-  ...(ratchetedAssertionFiles.size
-    ? [
-        {
-          files: [isRatchetedAssertionFile],
-          rules: { '@typescript-eslint/consistent-type-assertions': 'off' },
-        },
-      ]
-    : []),
+  {
+    files: [isRatchetedAssertionFile],
+    rules: { '@typescript-eslint/consistent-type-assertions': 'off' },
+  },
   // Size limits (eslint-rules/size-caps.mjs): modules stay under 800 raw
   // lines, component and route files under 500, functions under 80 lines
   // without blanks and comments (quality/function-size). Only the generated
