@@ -170,7 +170,10 @@ mock.module('@/lib/parking/actions', () => ({
   getJobParkingContexts: seam('job-parking-contexts'),
   getParkingResponsibleOptions: seam('parking-responsible-options'),
 }));
-mock.module('@/lib/planning/actions', () => ({ getPlanningOptions: seam('planning-options') }));
+mock.module('@/lib/planning/actions', () => ({
+  getPlanningOptions: seam('planning-options'),
+  getAssignmentAvailability: seam('assignment-availability'),
+}));
 mock.module('@/lib/jobs/option-server', () => ({ readEntityOptions: seam('entity-options') }));
 mock.module('@/lib/dispatch/actions', () => ({
   getJobDispatchCards: seam('job-dispatch-cards'),
@@ -426,6 +429,7 @@ const inputs: Record<string, unknown> = {
   'inventory-picker-page': { search: '', exactItemId: jobId },
   'job-inventory-picker-options': { jobId, search: 'Rohr', exactItemId: jobId },
   'dispatch-readiness': { occurrenceId: jobId },
+  'assignment-availability': { localDate: '2026-11-04' },
   'maintenance-coverage-documents': { maintenanceCoverageId: jobId },
   'maintenance-evidence-options': { jobId },
   'next-job-number': { organizationId },

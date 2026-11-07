@@ -6,6 +6,7 @@ import { Ban, CheckCircle2, CirclePause, Play, RefreshCw } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { SectionError } from '@/components/ui/section-error';
 import { InlinePending } from '@/components/ui/inline-pending';
+import type { UnplannedReason } from '@/lib/dispatch/types';
 import {
   WORK_EXECUTION_LABELS,
   type WorkBlocker,
@@ -20,6 +21,19 @@ function StateIcon({ state }: { state: WorkExecutionState }) {
   if (state === 'cancelled') return <Ban className="size-4" />;
   if (state === 'execution_complete' || state === 'handed_over') return <CheckCircle2 className="size-4" />;
   return <RefreshCw className="size-4" />;
+}
+
+/** What unstarted work lacks before it can start: nothing blocks it, but nobody is planned on it. */
+const UNPLANNED_START_LABELS: Record<UnplannedReason, string> = {
+  no_visit: 'Kein Termin',
+  no_assignees: 'Niemand zugewiesen',
+};
+
+function startReadinessLabel(snapshot: WorkLifecycleSnapshot, canStart: boolean): string {
+  if (snapshot.readinessLoadFailed) return 'Startbereitschaft unbekannt';
+  if (!canStart) return 'Nicht startbereit';
+  const unplannedReason = snapshot.readiness?.unplannedReason;
+  return unplannedReason ? UNPLANNED_START_LABELS[unplannedReason] : 'Startbereit';
 }
 
 type WorkLifecycleStatusHeaderProps = {
@@ -57,12 +71,10 @@ export function WorkLifecycleStatusHeader({
           {WORK_EXECUTION_LABELS[snapshot.executionState]}
         </Badge>
         <Badge variant="outline">{snapshot.isPlanned ? 'Geplant' : 'Nicht geplant'}</Badge>
-        <Badge variant={startReadinessKnown ? 'secondary' : 'outline'}>
-          {snapshot.readinessLoadFailed
-            ? 'Startbereitschaft unbekannt'
-            : canStart
-              ? 'Startbereit'
-              : 'Nicht startbereit'}
+        <Badge
+          variant={startReadinessKnown && !snapshot.readiness?.unplannedReason ? 'secondary' : 'outline'}
+        >
+          {startReadinessLabel(snapshot, canStart)}
         </Badge>
         {parking && <Badge variant="secondary">Geparkt</Badge>}
         {blockingCount > 0 && <Badge variant="destructive">{blockingCount} Blocker</Badge>}
@@ -110,7 +122,14 @@ export function WorkLifecycleReadinessSection({
                       : 'Nicht bewertet'}
                 </Badge>
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">{dimension.details[0]}</p>
+              {/* A warning lists every affected person once; a met or unassessed dimension says it once. */}
+              {[
+                ...new Set(dimension.state === 'warning' ? dimension.details : dimension.details.slice(0, 1)),
+              ].map((detail) => (
+                <p key={detail} className="mt-1 text-xs wrap-anywhere text-muted-foreground">
+                  {detail}
+                </p>
+              ))}
             </div>
           ))}
         </div>

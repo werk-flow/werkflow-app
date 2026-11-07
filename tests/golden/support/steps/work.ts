@@ -57,6 +57,8 @@ const LIFECYCLE_COPY = {
   nextStepPrefix: 'Nächster Schritt: ',
   remoteUpdateHint: 'Während der Eingabe hat sich der Arbeitsstand geändert.',
   noMaterialDemand: 'Kein Materialbedarf geplant.',
+  noAssignees: 'Niemand zugewiesen.',
+  noVisit: 'Kein Termin geplant.',
   resolvedBlockers: 'Gelöste Blocker',
   linkedWork: 'Verknüpfte Arbeit',
   declaredDependency: 'Deklarierte Voraussetzung',
@@ -225,7 +227,11 @@ export function lifecycleNextStep(
   openBlocker?: WorkBlocker['kind'],
 ): Locator {
   const blockers = openBlocker ? [openBlockerRow(openBlocker)] : [];
-  const nextAction = getWorkNextAction({ executionState: state, blockers, dependencies: [] });
+  // A scheduled and staffed job, or a field worker's view: the step is the work itself.
+  const nextAction = getWorkNextAction(
+    { executionState: state, blockers, dependencies: [], readiness: null },
+    false,
+  );
   return lifecycleHeader(page).getByText(`${LIFECYCLE_COPY.nextStepPrefix}${nextAction}`, { exact: true });
 }
 
@@ -370,6 +376,33 @@ export function lifecycleReadiness(page: Page): Locator {
 /** Readiness state badges with this state inside the scope. */
 export function readinessStateBadges(scope: Locator, state: ReadinessState): Locator {
   return scope.getByText(READINESS_STATES[state], { exact: true });
+}
+
+/** What readiness misses before it can assess capacity and qualifications: people, or a date. */
+export function readinessMissingPlan(page: Page, reason: 'no_assignees' | 'no_visit'): Locator {
+  return lifecycleReadiness(page).getByText(
+    reason === 'no_assignees' ? LIFECYCLE_COPY.noAssignees : LIFECYCLE_COPY.noVisit,
+    { exact: true },
+  );
+}
+
+/** A readiness detail that names this person, as a capacity or qualification warning does. */
+export function readinessDetailFor(page: Page, personName: string): Locator {
+  return lifecycleReadiness(page).getByText(new RegExp(`^${escapeRegExp(personName)}: `));
+}
+
+/** The manager's next step while unstarted work has no visit or nobody on it. */
+export function lifecyclePlanningNextStep(page: Page, reason: 'no_assignees' | 'no_visit'): Locator {
+  const nextAction = getWorkNextAction(
+    {
+      executionState: 'not_started',
+      blockers: [],
+      dependencies: [],
+      readiness: { dimensions: [], unplannedReason: reason, snapshot: [] },
+    },
+    true,
+  );
+  return lifecycleHeader(page).getByText(`${LIFECYCLE_COPY.nextStepPrefix}${nextAction}`, { exact: true });
 }
 
 export function lifecycleNoMaterialDemand(page: Page): Locator {

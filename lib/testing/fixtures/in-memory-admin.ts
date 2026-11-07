@@ -38,6 +38,32 @@ function orTerm(term: string): (row: Row) => boolean {
   return (row) => compare(...comparable(row[column], value));
 }
 
+/** The comma-separated terms of a PostgREST filter list, keeping each `and(…)` group whole. */
+function topLevelTerms(filter: string): string[] {
+  const terms: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < filter.length; index++) {
+    const character = filter[index];
+    if (character === '(') depth += 1;
+    if (character === ')') depth -= 1;
+    if (character === ',' && depth === 0) {
+      terms.push(filter.slice(start, index));
+      start = index + 1;
+    }
+  }
+  terms.push(filter.slice(start));
+  return terms;
+}
+
+/** One term of an `or` filter: a comparison, or an `and(…)` group whose every comparison holds. */
+function orGroupTerm(term: string): (row: Row) => boolean {
+  const group = /^and\((.*)\)$/.exec(term);
+  if (!group) return orTerm(term);
+  const terms = topLevelTerms(group[1] ?? '').map(orTerm);
+  return (row) => terms.every((test) => test(row));
+}
+
 class InMemoryQuery implements PromiseLike<QueryResult> {
   private operation: 'select' | 'update' | 'delete' | 'insert' | 'upsert' | null = null;
   private payload: Row | Row[] = {};
@@ -157,11 +183,11 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
     return this;
   }
   /**
-   * Comparison terms and `is.null` only (`taken_quantity.gt.0,ended_at.is.null`); anything else
-   * throws. A filter on a referenced table filters that embed, never the parent row.
+   * Comparison terms, `is.null` and `and(…)` groups of them
+   * (`taken_quantity.gt.0,ended_at.is.null`); anything else throws. A filter on a referenced table filters that embed, never the parent row.
    */
   or(filter: string, options?: { referencedTable?: string }): this {
-    const terms = filter.split(',').map(orTerm);
+    const terms = topLevelTerms(filter).map(orGroupTerm);
     if (options?.referencedTable) {
       this.filterEmbed(options.referencedTable, (item) => terms.some((term) => term(item)));
       return this;

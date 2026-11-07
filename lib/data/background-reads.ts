@@ -29,8 +29,9 @@ import { getProjectJobPage } from '@/lib/jobs/list-actions';
 import { readEntityOptions } from '@/lib/jobs/option-server';
 import { jobOptionRequestSchema } from '@/lib/jobs/option-types';
 import { getJobParkingContexts, getParkingResponsibleOptions } from '@/lib/parking/actions';
-import { getPlanningOptions } from '@/lib/planning/actions';
+import { getAssignmentAvailability, getPlanningOptions } from '@/lib/planning/actions';
 import { planningOptionRequestSchema } from '@/lib/planning/option-types';
+import { assignmentAvailabilityInputSchema } from '@/lib/planning/schemas';
 import { suggestPersonnelNumber } from '@/lib/personnel/record-read-actions';
 import { getOwnPersonnelActions, getPersonnelLifecycle } from '@/lib/personnel/lifecycle-actions';
 import { getWeeklyTargets } from '@/lib/personnel/target-actions';
@@ -262,6 +263,9 @@ export const BACKGROUND_READS = {
   ),
   'approved-artifact-actions': defineRead(targetInput, (input) => getApprovedArtifactActionsForTarget(input)),
   'assignment-team-options': defineRead(noInput, () => getAssignmentTeamOptions()),
+  'assignment-availability': defineRead(assignmentAvailabilityInputSchema, (input) =>
+    getAssignmentAvailability(input),
+  ),
   'client-relations': defineRead(z.object({ clientId: uuidSchema }), (input) =>
     getClientRelations(input.clientId),
   ),

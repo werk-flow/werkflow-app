@@ -72,6 +72,10 @@ export const updateJobAssignmentsArgumentsSchema = z.object({
   selectedUserIds: z.array(uuidSchema).max(MAX_JOB_ASSIGNMENTS * 2),
   approval: assignmentApprovalSchema.nullish(),
   teamSourceId: uuidSchema.nullish(),
+  // The reason fits planning_occurrence_assessments.override_reason.
+  planningApproval: z
+    .object({ fingerprint: z.string().length(64), reason: z.string().trim().min(8).max(500) })
+    .nullish(),
 });
 
 /** A job number from the route segment, still URI-encoded. */

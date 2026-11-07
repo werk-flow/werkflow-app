@@ -28,6 +28,7 @@ import {
   unreadNotificationRows,
 } from '../../golden/support/steps/attention';
 import {
+  confirmPlanningWarning,
   createPlannedCalendarEntry,
   dragPlanningMonthEvent,
   openPlanningCreationDialog,
@@ -712,6 +713,9 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
         `A5 erfahrene Begleitung ist organisiert ${world.runId}`,
       );
       await assignDespiteWarningButton(warningDialog).click();
+      // The job's dated visit also runs the calendar's capacity check; the
+      // audit world has no work schedules, so it may ask for its own reason.
+      await confirmPlanningWarning(adminPage, `A5 Einsatz ist abgestimmt ${world.runId}`, false);
       await expect(warningDialog).toHaveCount(0);
 
       // The job detail distinguishes all five states and names the strongest
@@ -837,6 +841,8 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
       }
       await employeeAssignmentHeading(mixedDialog).click();
       await mixedDialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
+      // No qualification dialog; the dated visit's capacity check may still ask for a reason.
+      await confirmPlanningWarning(adminPage, `A5 Begleitung ist abgestimmt ${world.runId}`, false);
       await expect(mixedDialog).toHaveCount(0);
       await expect(qualificationWarningDialog(adminPage)).toHaveCount(0);
       expect((await getJobAssignmentUserIds(world.orgId, accompaniedJobNumber)).sort()).toEqual(
