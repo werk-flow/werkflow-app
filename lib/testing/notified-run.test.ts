@@ -462,17 +462,35 @@ test('a thread busy past the longest wait still gets its wake', async () => {
   expect(clock).toBeGreaterThan(MAX_DEFER_MILLISECONDS);
 });
 
-test('the send lock of a killed supervisor holds no wake back', async () => {
+test('a run the thread hears while a failed wake waits for its retry gets no wake', async () => {
   const unheard = temporaryDirectory();
-  const killed = endedRun(unheard, 'run-1', 4);
-  const record = endedRun(unheard, 'run-2', 5);
+  const record = endedRun(unheard, 'run-1');
+  const sent: string[] = [];
+  let attempts = 0;
+  const { dependencies } = wakeWorld(0, {
+    send: (_thread, message) => {
+      attempts += 1;
+      sent.push(message);
+      return 'server restarting';
+    },
+    wait: (milliseconds) => {
+      if (milliseconds > 0) markHeard(record, 'thread-1');
+      return Promise.resolve();
+    },
+  });
+  await settleWake(record.recordPath, dependencies);
+  expect(attempts, 'only the attempt before the thread heard it').toBe(1);
+  expect(readRecord(record.recordPath).wake).toBe('heard');
+});
+
+/** Starts a supervisor that takes its thread's send lock, finds the thread busy, and never acts again. */
+async function stuckHolder(record: RunRecord): Promise<void> {
   let lockTaken: () => void = () => undefined;
   const holding = new Promise<void>((resume) => {
     lockTaken = resume;
   });
-  // The first supervisor takes the lock, finds the thread busy, and never acts again.
   void settleWake(
-    killed.recordPath,
+    record.recordPath,
     wakeWorld(1, {
       wait: () => {
         lockTaken();
@@ -481,10 +499,60 @@ test('the send lock of a killed supervisor holds no wake back', async () => {
     }).dependencies,
   );
   await holding;
+}
+
+test('the send lock of a killed supervisor holds no wake back', async () => {
+  const unheard = temporaryDirectory();
+  const killed = endedRun(unheard, 'run-1', 4);
+  const record = endedRun(unheard, 'run-2', 5);
+  await stuckHolder(killed);
   const { sent, dependencies } = wakeWorld(0, { supervisorAlive: () => false });
   await settleWake(record.recordPath, dependencies);
   expect(sent).toHaveLength(1);
   expect(sent[0]).toContain('exit code 4');
+  expect(sent[0]).toContain('exit code 5');
+});
+
+test('a send lock left empty by a crash holds no wake back', async () => {
+  const unheard = temporaryDirectory();
+  await stuckHolder(endedRun(unheard, 'run-1', 4));
+  const [lock = ''] = readdirSync(unheard).filter((name) => name.endsWith('.send-lock'));
+  writeFileSync(join(unheard, lock), '');
+  const record = endedRun(unheard, 'run-2', 5);
+  const { sent, dependencies } = wakeWorld(0);
+  await settleWake(record.recordPath, dependencies);
+  expect(sent).toHaveLength(1);
+});
+
+test('a resend leaves a thread to the supervisor that holds its send lock, so no run is sent twice', async () => {
+  const unheard = temporaryDirectory();
+  const orphan = runRecord(
+    temporaryDirectory(),
+    unheard,
+    { supervisorPid: 999_999, outcome: { exitCode: 7, signal: null, endedAt: '2026-11-06T10:00:30.000Z' } },
+    'run-0',
+  );
+  saveRecord(orphan);
+  const record = endedRun(unheard, 'run-1', 5);
+  const sent: string[] = [];
+  const send = (_thread: string, message: string): string | null => {
+    sent.push(message);
+    return null;
+  };
+  let busy = true;
+  const supervisor = settleWake(record.recordPath, {
+    ...wakeWorld(0).dependencies,
+    send,
+    threadBusy: () => busy,
+    supervisorAlive: (pid) => pid !== 999_999,
+  });
+  await new Promise((resume) => setImmediate(resume));
+  expect(resendUnheardRuns(unheard, send, (pid) => pid !== 999_999)).toEqual([]);
+  expect(sent, 'the resend skipped the locked thread').toEqual([]);
+  busy = false;
+  await supervisor;
+  expect(sent).toHaveLength(1);
+  expect(sent[0]).toContain('exit code 7');
   expect(sent[0]).toContain('exit code 5');
 });
 

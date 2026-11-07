@@ -1,6 +1,14 @@
 import { spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { appendFileSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash, randomBytes } from 'node:crypto';
+import {
+  appendFileSync,
+  existsSync,
+  linkSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { constants, homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { z } from 'zod';
@@ -156,18 +164,25 @@ export function threadBusy(thread: string): boolean {
   }
 }
 
-/** Tries one wake for `records`, all of one thread, on the retry schedule. Resolves with the last failure, or null once it went through. */
+/**
+ * Tries one wake for `records`, all of one thread, on the retry schedule. Each
+ * attempt leaves out the runs the thread heard by then, and none is sent once it
+ * heard them all. Resolves with the last failure, or null.
+ */
 export async function deliverWake(
   send: WakeSender,
-  records: readonly [RunRecord, ...RunRecord[]],
+  records: readonly RunRecord[],
   wait: (milliseconds: number) => Promise<void>,
 ): Promise<string | null> {
   let failure: string | null = 'No wake attempt ran.';
   for (const milliseconds of WAKE_RETRY_WAITS_MILLISECONDS) {
     await wait(milliseconds);
-    failure = send(records[0].thread, wakeMessage(records));
+    const unheard = records.filter((record) => !wasHeard(record));
+    const [first] = unheard;
+    if (first === undefined) return null;
+    failure = send(first.thread, wakeMessage(unheard));
     if (failure === null) return null;
-    for (const record of records) appendFileSync(record.log, `[run-notified] wake failed: ${failure}\n`);
+    for (const record of unheard) appendFileSync(record.log, `[run-notified] wake failed: ${failure}\n`);
   }
   return failure;
 }
@@ -183,6 +198,13 @@ export function markHeard(record: RunRecord, hearingThread: string | undefined):
 }
 
 const wasHeard = (record: RunRecord): boolean => existsSync(heardPath(record));
+
+/** Saves how a wake attempt ended for `record`. A run its thread heard is settled whatever the send did. */
+function settle(record: RunRecord, failure: string | null): void {
+  if (wasHeard(record)) saveRecord({ ...record, wake: 'heard', wakeError: null });
+  else if (failure === null) saveRecord({ ...record, wake: 'sent', wakeError: null });
+  else saveRecord({ ...record, wake: 'failed', wakeError: failure });
+}
 
 /** The machine-wide directory of runs nobody has heard yet. */
 export function unheardDirectory(): string {
@@ -222,8 +244,10 @@ const SUPERVISOR_START_GRACE_MILLISECONDS = 60_000;
 
 /**
  * Resends each run whose supervisor is gone and whose wake never went through,
- * as one wake per thread. A run its thread heard leaves the list without a wake.
- * Returns one line per run that stays unheard, for the caller to print.
+ * as one wake per thread, under the thread's send lock. A thread whose lock a
+ * live supervisor holds is skipped: that supervisor's wake includes these runs.
+ * A run its thread heard leaves the list without a wake. Returns one line per
+ * run that stays unheard, for the caller to print.
  */
 export function resendUnheardRuns(
   directory: string,
@@ -233,7 +257,7 @@ export function resendUnheardRuns(
 ): string[] {
   if (!existsSync(directory)) return [];
   const unheard: string[] = [];
-  const due = new Map<string, RunRecord[]>();
+  const due = new Map<string, string[]>();
   for (const name of readdirSync(directory).filter((file) => file.endsWith('.json'))) {
     const path = join(directory, name);
     const record = readEntry(path);
@@ -249,18 +273,26 @@ export function resendUnheardRuns(
     // A failed wake is the supervisor's last write, so a live process on its pid is a reused pid.
     const supervised =
       record.wake !== 'failed' && record.supervisorPid !== null && supervisorAlive(record.supervisorPid);
-    if (supervised) continue;
-    if (wasHeard(record)) saveRecord({ ...record, wake: 'heard', wakeError: null });
-    else due.set(record.thread, [...(due.get(record.thread) ?? []), record]);
+    if (!supervised) due.set(record.thread, [...(due.get(record.thread) ?? []), path]);
   }
-  for (const [thread, records] of due) {
-    const failure = send(thread, wakeMessage(records));
-    for (const record of records)
-      if (failure === null) saveRecord({ ...record, wake: 'sent', wakeError: null });
-      else
-        unheard.push(
-          `UNHEARD RUN: thread ${record.thread}, exit code ${record.outcome?.exitCode ?? 'unknown'}, log ${record.log}. ${failure}. Delete ${record.unheardPath} once someone has read it.`,
-        );
+  const holder = `resend:${process.pid}`;
+  for (const [thread, paths] of due) {
+    const lock = sendLockPath(directory, thread);
+    if (!holdsSendLock(lock, holder, supervisorAlive)) continue;
+    try {
+      // Read again under the lock: a supervisor may have settled an entry meanwhile.
+      const records = paths.flatMap((path) => readEntry(path) ?? []);
+      const waiting = records.filter((record) => !wasHeard(record));
+      const failure = waiting.length === 0 ? null : send(thread, wakeMessage(waiting));
+      for (const record of records) settle(record, failure);
+      if (failure !== null)
+        for (const record of waiting)
+          unheard.push(
+            `UNHEARD RUN: thread ${record.thread}, exit code ${record.outcome?.exitCode ?? 'unknown'}, log ${record.log}. ${failure}. Delete ${record.unheardPath} once someone has read it.`,
+          );
+    } finally {
+      releaseSendLock(lock, holder);
+    }
   }
   return unheard;
 }
@@ -277,57 +309,65 @@ export type WakeDependencies = {
   readonly now: () => number;
 };
 
-const sendLockSchema = z.object({ pid: z.number().int(), recordPath: z.string() });
+const sendLockSchema = z.object({ pid: z.number().int(), holder: z.string() });
 
-function sendLockPath(record: RunRecord): string {
-  const thread = createHash('sha256').update(record.thread).digest('hex').slice(0, 16);
-  return join(dirname(record.unheardPath), `${thread}.send-lock`);
+function sendLockPath(directory: string, thread: string): string {
+  return join(directory, `${createHash('sha256').update(thread).digest('hex').slice(0, 16)}.send-lock`);
 }
 
-/** True once `record`'s supervisor holds its thread's send lock. A lock of a dead supervisor is removed. */
-function holdsSendLock(record: RunRecord, supervisorAlive: (pid: number) => boolean): boolean {
-  const path = sendLockPath(record);
-  try {
-    writeFileSync(path, JSON.stringify({ pid: process.pid, recordPath: record.recordPath }), { flag: 'wx' });
-    return true;
-  } catch (error) {
-    if (errorCode(error) !== 'EEXIST') throw error;
-  }
-  try {
-    const holder = sendLockSchema.parse(JSON.parse(readFileSync(path, 'utf8')));
-    if (holder.recordPath === record.recordPath) return true;
-    if (!supervisorAlive(holder.pid)) rmSync(path, { force: true });
-  } catch {
-    // Written but not yet filled, or removed meanwhile: the next look decides.
+/**
+ * True once `holder` holds the send lock at `path`. The lock is linked into place
+ * whole, so a crash never leaves a lock without its holder. The lock of a dead
+ * process, or one that cannot be read, is removed and taken again once.
+ */
+function holdsSendLock(path: string, holder: string, supervisorAlive: (pid: number) => boolean): boolean {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const draft = `${path}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
+    writeFileSync(draft, JSON.stringify({ pid: process.pid, holder }));
+    try {
+      linkSync(draft, path);
+      return true;
+    } catch (error) {
+      if (errorCode(error) !== 'EEXIST') throw error;
+    } finally {
+      rmSync(draft, { force: true });
+    }
+    const current = readLock(path);
+    if (current === 'gone') continue;
+    if (current !== 'unreadable' && current.holder === holder) return true;
+    if (current !== 'unreadable' && supervisorAlive(current.pid)) return false;
+    rmSync(path, { force: true });
   }
   return false;
 }
 
-function releaseSendLock(record: RunRecord): void {
-  const path = sendLockPath(record);
+function readLock(path: string): z.infer<typeof sendLockSchema> | 'gone' | 'unreadable' {
   try {
-    if (sendLockSchema.parse(JSON.parse(readFileSync(path, 'utf8'))).recordPath === record.recordPath)
-      rmSync(path);
+    return sendLockSchema.parse(JSON.parse(readFileSync(path, 'utf8')));
   } catch (error) {
-    if (errorCode(error) !== 'ENOENT') throw error;
+    return errorCode(error) === 'ENOENT' ? 'gone' : 'unreadable';
   }
 }
 
-/** The ended runs of `thread` that still wait for their wake, other than `own`. */
-function otherWaitingRuns(own: RunRecord): RunRecord[] {
-  const directory = dirname(own.unheardPath);
+function releaseSendLock(path: string, holder: string): void {
+  const current = readLock(path);
+  if (current !== 'gone' && current !== 'unreadable' && current.holder === holder) rmSync(path);
+}
+
+/** The ended runs of `thread` in `directory` that still wait for their wake, oldest first. */
+function waitingRuns(directory: string, thread: string): RunRecord[] {
   return readdirSync(directory)
     .filter((file) => file.endsWith('.json'))
     .flatMap((name) => {
       const record = readEntry(join(directory, name));
-      const waiting =
-        record !== null &&
-        record.recordPath !== own.recordPath &&
-        record.thread === own.thread &&
+      return record !== null &&
+        record.thread === thread &&
         record.outcome !== null &&
-        record.wake === 'pending';
-      return waiting ? [record] : [];
-    });
+        record.wake === 'pending'
+        ? [record]
+        : [];
+    })
+    .sort((first, second) => first.startedAt.localeCompare(second.startedAt));
 }
 
 /**
@@ -339,6 +379,9 @@ function otherWaitingRuns(own: RunRecord): RunRecord[] {
  */
 export async function settleWake(recordPath: string, dependencies: WakeDependencies): Promise<void> {
   const deadline = dependencies.now() + MAX_DEFER_MILLISECONDS;
+  const { thread, unheardPath } = readRecord(recordPath);
+  const directory = dirname(unheardPath);
+  const lock = sendLockPath(directory, thread);
   try {
     for (;;) {
       const own = readRecord(recordPath);
@@ -348,29 +391,18 @@ export async function settleWake(recordPath: string, dependencies: WakeDependenc
         return;
       }
       const sends =
-        holdsSendLock(own, dependencies.supervisorAlive) &&
-        (dependencies.now() > deadline || !dependencies.threadBusy(own.thread));
+        holdsSendLock(lock, recordPath, dependencies.supervisorAlive) &&
+        (dependencies.now() > deadline || !dependencies.threadBusy(thread));
       if (sends) {
-        await wakeThread(own, dependencies);
+        // Read under the lock, so a run another sender settled is not sent twice.
+        const runs = waitingRuns(directory, thread);
+        const failure = await deliverWake(dependencies.send, runs, dependencies.wait);
+        for (const record of runs) settle(record, failure);
         return;
       }
       await dependencies.wait(DEFER_POLL_MILLISECONDS);
     }
   } finally {
-    releaseSendLock(readRecord(recordPath));
+    releaseSendLock(lock, recordPath);
   }
-}
-
-async function wakeThread(own: RunRecord, dependencies: WakeDependencies): Promise<void> {
-  const others: RunRecord[] = [];
-  for (const record of otherWaitingRuns(own))
-    if (wasHeard(record)) saveRecord({ ...record, wake: 'heard' });
-    else others.push(record);
-  const runs = [own, ...others].sort((first, second) => first.startedAt.localeCompare(second.startedAt));
-  const [first = own, ...rest] = runs;
-  const failure = await deliverWake(dependencies.send, [first, ...rest], dependencies.wait);
-  const settled: Pick<RunRecord, 'wake' | 'wakeError'> =
-    failure === null ? { wake: 'sent', wakeError: null } : { wake: 'failed', wakeError: failure };
-  for (const record of others) saveRecord({ ...record, ...settled });
-  saveRecord({ ...own, ...settled });
 }
