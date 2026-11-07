@@ -31,7 +31,7 @@ One client factory per trust boundary under `lib/supabase/`:
 
 | File | Use |
 | --- | --- |
-| `client.ts` | Browser singleton under the user's JWT and RLS. Carries the Realtime connection. Reads no session from the page URL. |
+| `client.ts` | Browser singleton under the user's JWT and RLS. Carries the Realtime connection. Reads no session from the page URL; `patches/` makes `@supabase/ssr` 0.7.0 honor that until an upgrade to 0.10.3 or later. |
 | `server.ts` | Server rendering and Server Actions. Reads request cookies with the publishable key, so RLS applies. |
 | `admin.ts` | Service-role singleton that bypasses RLS. Imports `server-only`. |
 | `implicit-client.ts` | Browser client with the implicit flow, for the forgot-password form only: the client that sends the recovery email decides the link's flow. |
