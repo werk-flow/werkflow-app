@@ -4,8 +4,16 @@ import { logError } from '@/lib/logging';
 import { loadDocument } from '@/lib/navigation/document-load';
 import type { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { jsonRecordOrEmpty } from '@/lib/supabase/json';
+import { z } from '@/lib/zod';
 
 type SupabaseBrowserClient = ReturnType<typeof createSupabaseBrowserClient>;
+
+/** The route's answer to a redemption that succeeded; any other shape is a failed redemption. */
+const redeemedSchema = z.object({
+  success: z.literal(true),
+  organizationId: z.string().min(1),
+  alreadyMember: z.boolean().optional(),
+});
 
 /** Refusals the invite error page explains with their own sentence. */
 const EXPLAINED_REFUSALS = new Set([
@@ -47,7 +55,7 @@ export async function redeemOtpInvite(
       body: JSON.stringify({ inviteCode: effectiveInviteCode }),
     });
 
-    // The route answers a JSON object; each key stays unknown, as the redirects only test and print it.
+    // A refusal's keys stay unknown: the error page and the log only test and print them.
     const result = jsonRecordOrEmpty(await response.json());
 
     if (!response.ok) {
@@ -56,7 +64,8 @@ export async function redeemOtpInvite(
       loadDocument(inviteErrorPath(result.error));
       return true;
     }
-    if (result.success && result.organizationId) {
+    const redeemed = redeemedSchema.safeParse(result);
+    if (redeemed.success) {
       // The API already set the organization cookie; the pending code is used up.
       try {
         const { error: metadataError } = await supabase.auth.updateUser({
@@ -72,11 +81,10 @@ export async function redeemOtpInvite(
         // best-effort: the code is consumed on the server, and the stale hint in the user metadata is ignored on the next redemption.
         logError('redeemOtpInvite: clearing the pending invite code failed', error);
       }
-      if (result.alreadyMember) {
-        loadDocument(`/dashboard?already_member=${result.organizationId}`);
-      } else {
-        loadDocument(`/dashboard?joined=${result.organizationId}`);
-      }
+      const { alreadyMember, organizationId } = redeemed.data;
+      loadDocument(
+        alreadyMember ? `/dashboard?already_member=${organizationId}` : `/dashboard?joined=${organizationId}`,
+      );
       return true;
     }
     logError('redeemOtpInvite: redemption answered without an organization');
