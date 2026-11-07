@@ -118,3 +118,25 @@ describe('manual entry bridge queue', () => {
     expect(storage.length).toBe(0);
   });
 });
+
+describe('manual entry bridge without tab storage', () => {
+  beforeEach(() => {
+    const refusingWindow = {};
+    Object.defineProperty(refusingWindow, 'sessionStorage', {
+      get() {
+        throw new DOMException('The operation is insecure.', 'SecurityError');
+      },
+    });
+    Object.defineProperty(globalThis, 'window', { value: refusingWindow, configurable: true });
+  });
+
+  afterEach(() => {
+    Reflect.deleteProperty(globalThis, 'window');
+  });
+
+  test('a browser that refuses session storage never stops a sign-out, a queue or a read', () => {
+    expect(() => clearManualEntryBridge()).not.toThrow();
+    expect(() => queueManualEntryBridge('admin-1', [toTimeEntry(row)])).not.toThrow();
+    expect(consumeManualEntryBridge({ userId: 'admin-1', organizationId: 'org-1' })).toEqual([]);
+  });
+});

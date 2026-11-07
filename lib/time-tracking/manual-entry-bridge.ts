@@ -48,18 +48,29 @@ export function readManualEntryEvent(detail: unknown): TimeEntry[] | null {
   return parsed.success ? parsed.data.entries : null;
 }
 
-function canUseBrowserStorage() {
-  return typeof window !== 'undefined' && typeof window.sessionStorage !== 'undefined';
+/**
+ * The tab's session storage, or null outside the browser and where the
+ * browser refuses storage: reading `window.sessionStorage` then throws.
+ */
+function tabStorage(): Storage | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.sessionStorage ?? null;
+  } catch {
+    // best-effort: without storage the bridge holds nothing, and a sign-out must go on.
+    return null;
+  }
 }
 
 /** Queues the signed-in user's new entries until the calendar of this tab reads them. */
 export function queueManualEntryBridge(userId: string, entries: TimeEntry[]): void {
-  if (!canUseBrowserStorage() || entries.length === 0) {
+  const storage = tabStorage();
+  if (!storage || entries.length === 0) {
     return;
   }
 
   try {
-    const raw = window.sessionStorage.getItem(STORAGE_KEY);
+    const raw = storage.getItem(STORAGE_KEY);
     const existing = raw ? readQueue(raw) : null;
     // A queue of another user, or one this module cannot read, is replaced, so it never blocks the bridge.
     const merged = existing?.userId === userId ? [...existing.entries] : [];
@@ -71,7 +82,7 @@ export function queueManualEntryBridge(userId: string, entries: TimeEntry[]): vo
     }
 
     const queue: Queue = { userId, entries: merged };
-    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
+    storage.setItem(STORAGE_KEY, JSON.stringify(queue));
   } catch {
     // best-effort: the bridge only shows the new entry early; the saved entry arrives with the next read.
   }
@@ -89,19 +100,20 @@ export function consumeManualEntryBridge({
   userId: string;
   organizationId: string;
 }): TimeEntry[] {
-  if (!canUseBrowserStorage()) {
+  const storage = tabStorage();
+  if (!storage) {
     return [];
   }
 
   try {
-    const raw = window.sessionStorage.getItem(STORAGE_KEY);
+    const raw = storage.getItem(STORAGE_KEY);
     if (!raw) {
       return [];
     }
 
     const queue = readQueue(raw);
     if (!queue || queue.userId !== userId) {
-      window.sessionStorage.removeItem(STORAGE_KEY);
+      storage.removeItem(STORAGE_KEY);
       return [];
     }
     const matching = queue.entries.filter((entry) => entry.organizationId === organizationId);
@@ -109,9 +121,9 @@ export function consumeManualEntryBridge({
 
     if (remaining.length > 0) {
       const rest: Queue = { userId, entries: remaining };
-      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(rest));
+      storage.setItem(STORAGE_KEY, JSON.stringify(rest));
     } else {
-      window.sessionStorage.removeItem(STORAGE_KEY);
+      storage.removeItem(STORAGE_KEY);
     }
 
     return matching;
@@ -123,13 +135,9 @@ export function consumeManualEntryBridge({
 
 /** Empties the queue. Every sign-out of this browser calls it before the session ends. */
 export function clearManualEntryBridge(): void {
-  if (!canUseBrowserStorage()) {
-    return;
-  }
-
   try {
-    window.sessionStorage.removeItem(STORAGE_KEY);
+    tabStorage()?.removeItem(STORAGE_KEY);
   } catch {
-    // best-effort: a storage that refuses access holds no queue this module could read either, and the sign-out goes on.
+    // best-effort: a storage that refuses the write holds no queue this module could read either, and the sign-out goes on.
   }
 }
