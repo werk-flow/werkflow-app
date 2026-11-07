@@ -6,7 +6,7 @@
 -- refuse a foreign organization, a field worker outside the assigned job,
 -- by owner decision a field worker's export of a project artifact and every
 -- export of an internal revision
--- (20261108020000_export_only_customer_facing_work_artifacts.sql), and an
+-- (20261108030001_export_only_customer_facing_work_artifacts.sql), and an
 -- office member's change of an Admin-only personnel document
 -- (20261107160000_refuse_office_writes_to_admin_only_personnel_documents.sql).
 -- Only the service role executes them.
