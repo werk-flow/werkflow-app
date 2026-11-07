@@ -176,21 +176,42 @@ test('a Vercel tool that returns log text from production is refused', () => {
   expect(refusal('mcp__vercel__get_runtime_errors', scope)).toContain('returns log text');
 });
 
-test('a metrics query that names a request dimension is refused, a count by code passes', () => {
+// The allowed dimensions in both spellings Vercel accepts: camelCase (/metrics/v1, the CLI) and
+// snake_case (the /v2/observability API behind the MCP tool).
+const SAFE = ['route', 'httpStatus', 'errorCode', 'deploymentId', 'serverActionName'];
+const SAFE_SNAKE = ['route', 'http_status', 'error_code', 'deployment_id', 'server_action_name'];
+
+test('a metrics query may group and filter only by the allowed dimensions', () => {
   const query = (body: Record<string, unknown>) =>
     refusal(`${VERCEL}create_observability_query`, {
       requestBody: { metric: 'vercel.request.count', ...body },
     });
   for (const body of [
+    { groupBy: ['request_path'] },
     { groupBy: ['requestPath'] },
-    { groupBy: ['route', 'clientUserAgent'] },
-    { filter: "requestId eq 'x'" },
-    { aggregation: 'unique/clientIp' },
+    { groupBy: ['route', 'client_user_agent'] },
+    // A dimension the guard has never heard of is refused too.
+    { groupBy: ['someNewDimension'] },
+    { groupBy: ['route', 7] },
+    { filter: "request_path eq '/kunden'" },
+    { filter: "environment eq 'production' and request_id eq 'x'" },
+    { filter: 'environment:production AND requestPath:/kunden' },
+    { filter: "contains(request_path, 'x')" },
+    { aggregation: 'unique/client_ip' },
   ])
-    expect(query(body), JSON.stringify(body)).toContain('a metric dimension that holds request data');
-  expect(
-    query({ groupBy: ['route', 'httpStatus', 'errorCode', 'deploymentId', 'serverActionName'] }),
-  ).toBeUndefined();
+    expect(query(body), JSON.stringify(body)).toContain('Refused:');
+  expect(refusal(`${VERCEL}create_observability_query`, { teamId: 't' })).toContain(
+    'could not read the query',
+  );
+  for (const groupBy of [SAFE, SAFE_SNAKE]) expect(query({ groupBy }), groupBy.join()).toBeUndefined();
+  for (const filter of [
+    "environment eq 'production'",
+    "environment eq 'production' and http_status ge 500",
+    'environment:production AND httpStatus >= 500',
+    'deploymentId:dpl_a AND httpStatus >= 500',
+    '(route:"/anfragen/[requestId]" OR errorCode:FUNCTION_INVOCATION_TIMEOUT)',
+  ])
+    expect(query({ filter, groupBy: ['route'], aggregation: 'count' }), filter).toBeUndefined();
 });
 
 test('deployment metadata, aggregated counts and preview logs pass', () => {
@@ -232,6 +253,16 @@ test('a shell command that reads Vercel logs from production is refused', () => 
     // A `<<` in a comment or in quotes opens no heredoc, so the next line still runs.
     '# <<EOF\nvercel logs',
     'echo "<<EOF"\nvercel logs',
+    // Each delimiter form ends its heredoc at the line \`EOF\`, so the next line runs.
+    ...['\\EOF', "'EOF'", '"EOF"', 'E"OF"'].map(
+      (delimiter) => `cat > note.md <<${delimiter}\nbody\nEOF\nvercel logs`,
+    ),
+    'cat > note.md <<-EOF\n\tbody\n\tEOF\nvercel logs',
+    // An arithmetic shift opens no heredoc.
+    'echo $((1<<2))\nvercel logs\n2',
+    '(( x <<= 1 ))\nvercel logs\n1',
+    // A body that never reaches its delimiter is read as commands: the guard errs toward refusing.
+    'cat > note.md <<EOF\nvercel logs',
     "echo 'a\n<<EOF'\nvercel logs",
     'cat <<EOF\nfirst\n`vercel logs`\nEOF\necho done',
     'vercel inspect dpl_a --logs',
@@ -239,7 +270,14 @@ test('a shell command that reads Vercel logs from production is refused', () => 
     'vercel api /v3/deployments/dpl_a/events',
     'vercel api "/v1/projects/prj_a/deployments/dpl_a/runtime-logs?limit=5"',
     'vercel metrics vercel.request.count --group-by requestPath',
+    'vercel metrics vercel.request.count --group-by=request_path',
+    'vercel metrics vercel.request.count -e production --group-by route --group-by someNewDimension',
     "vercel metrics vercel.request.count --filter 'clientIp eq 1'",
+    "vercel metrics vercel.request.count --filter 'requestPath:/kunden'",
+    'vercel metrics vercel.request.count --aggregation unique/clientIp',
+    // A raw API query hides its body from the guard; `vercel metrics` is the checked path.
+    'vercel api /metrics/v1?teamId=t -X POST --input body.json',
+    'vercel api /v2/observability/query -F groupBy=request_path',
   ])
     expect(productionLogCommandRefusal(command), command).toContain('Agents never read production data');
 });
@@ -251,6 +289,10 @@ test('other Vercel commands and mentions of the log command pass', () => {
     'vercel inspect dpl_a',
     'vercel list --prod',
     'vercel metrics vercel.request.count -e production --group-by route --group-by httpStatus',
+    `vercel metrics vercel.request.count --prod ${SAFE.map((dimension) => `--group-by ${dimension}`).join(' ')}`,
+    "vercel metrics vercel.request.count --filter 'environment:production AND httpStatus >= 500' --group-by=errorCode",
+    'vercel metrics schema vercel.request.count',
+    'vercel api /v2/observability/schema/vercel.request.count',
     'vercel api /v4/aliases/app.werk-flow.app',
     'git commit -m "Refuse vercel logs"',
     'gh pr create --body "The hook refuses vercel logs."',
@@ -260,6 +302,10 @@ test('other Vercel commands and mentions of the log command pass', () => {
     "echo '$(vercel logs)'",
     "cat > note.md <<'EOF'\nThe hook refuses `vercel logs` and $(vercel logs).\nEOF",
     'cat <<<"vercel logs"',
+    // A quoted delimiter, in any form, keeps its body literal.
+    ...['\\EOF', "'EOF'", '"EOF"', 'E"OF"'].map(
+      (delimiter) => `cat > note.md <<${delimiter}\n$(vercel logs)\nEOF`,
+    ),
     "cat > a.md <<'A' && cat > b.md <<B\nvercel logs\nA\nplain\nB",
     'git commit -m "Refuse \\`vercel logs\\`"',
     'tail ~/.local/state/ci-alert.log',

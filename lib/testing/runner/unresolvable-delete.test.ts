@@ -36,6 +36,16 @@ test('rm on a variable or a relative wildcard is refused, with any flags and wit
     // A `<<` in a comment or in quotes opens no heredoc, so the next line still runs.
     '# <<EOF\nrm -rf logs/*',
     'echo "<<EOF"\nrm -rf logs/*',
+    // Each delimiter form ends its heredoc at the line \`EOF\`, so the next line runs.
+    ...['\\EOF', "'EOF'", '"EOF"', 'E"OF"'].map(
+      (delimiter) => `cat > note.md <<${delimiter}\nbody\nEOF\nrm -rf logs/*`,
+    ),
+    'cat > note.md <<-EOF\n\tbody\n\tEOF\nrm -rf logs/*',
+    // An arithmetic shift opens no heredoc.
+    'echo $((1<<2))\nrm -rf logs/*\n2',
+    '(( x <<= 1 ))\nrm -rf logs/*\n1',
+    // A body that never reaches its delimiter is read as commands: the guard errs toward refusing.
+    'cat > note.md <<EOF\nrm -rf logs/*',
     'cd /tmp/ev35 && rm -Rf ${OUT}/*',
     'cd /tmp/ev35 && rm -rf $(ls)',
     'cd /tmp/ev35 && rm -rf /tmp/$name/*',
@@ -72,6 +82,10 @@ test('explicit absolute deletes and literal relative deletes pass', () => {
     // A heredoc body is data written to a file, not commands.
     "cd /tmp/ev35 && cat > a.test.ts <<'EOF'\ncd /tmp/x && rm -rf *\nEOF",
     'cd /tmp/ev35 && python3 - <<EOF\nrm -rf $dir\nEOF\nls',
+    // A quoted delimiter, in any form, keeps its body literal.
+    ...['\\EOF', "'EOF'", '"EOF"', 'E"OF"'].map(
+      (delimiter) => `cat > a.md <<${delimiter}\n$(rm -rf logs/*)\nEOF`,
+    ),
   ])
     expect(unresolvableDeleteRefusal(command), command).toBeUndefined();
 });

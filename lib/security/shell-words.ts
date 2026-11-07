@@ -14,18 +14,55 @@ const ASSIGNMENT = /^[A-Za-z_]\w*=/;
 const PREFIXES = new Set(['if', 'then', 'else', 'elif', 'while', 'until', 'do', '!', '{', 'time', 'sudo']);
 const REDIRECTION = /^\d*[<>]/;
 const BARE_REDIRECTION = /^\d*[<>]+&?$/;
-const HEREDOC_AT = /<<-?[ \t]*(["']?)([^\s"';&|<>()]+)\1/y;
+const WORD_END = /[\s;&|<>()]/;
+
+type Heredoc = { name: string; expands: boolean; stripsTabs: boolean };
+
+/**
+ * The heredoc a `<<` at `start` opens, and the index after its delimiter word,
+ * or undefined when no delimiter follows. The delimiter is the word after
+ * quote removal (`<<\EOF`, `<<'EOF'`, `<<"EOF"` and `<<E"OF"` all end at a
+ * line `EOF`), and any quoting in it makes the body literal.
+ */
+function heredocAt(command: string, start: number): { heredoc: Heredoc; end: number } | undefined {
+  let index = start + 2;
+  const stripsTabs = command.charAt(index) === '-';
+  if (stripsTabs) index++;
+  while (command.charAt(index) === ' ' || command.charAt(index) === '\t') index++;
+  let name = '';
+  let quoted = false;
+  while (index < command.length && !WORD_END.test(command.charAt(index))) {
+    const character = command.charAt(index);
+    if (character === '\\') {
+      quoted = true;
+      name += command.charAt(index + 1);
+      index += 2;
+    } else if (character === "'" || character === '"') {
+      const close = command.indexOf(character, index + 1);
+      if (close === -1) return undefined;
+      quoted = true;
+      name += command.slice(index + 1, close);
+      index = close + 1;
+    } else {
+      name += character;
+      index++;
+    }
+  }
+  return name ? { heredoc: { name, expands: !quoted, stripsTabs }, end: index } : undefined;
+}
 
 /**
  * The command without its heredoc bodies, and the whole bodies the shell
  * expands: a body is data, but under an unquoted delimiter its substitutions
- * run. A `<<` counts only outside quotes and comments, and its body starts on
- * the line after it, so quoted text that spans lines hides nothing.
+ * run. A `<<` counts only outside quotes, comments and arithmetic, and its body
+ * starts on the line after it, so quoted text that spans lines hides nothing.
+ * Where the reading is unsure, it errs toward commands: a body that never
+ * reaches its delimiter is read as commands too.
  */
 function splitHeredocs(command: string): { commands: string; expandingBodies: string[] } {
   const expandingBodies: string[] = [];
   let commands = '';
-  let pending: { name: string; expands: boolean }[] = [];
+  let pending: Heredoc[] = [];
   let quote: '' | "'" | '"' = '';
   let comment = false;
   let index = 0;
@@ -37,20 +74,28 @@ function splitHeredocs(command: string): { commands: string; expandingBodies: st
       comment = false;
       for (const heredoc of pending) {
         const body: string[] = [];
-        while (index < command.length) {
+        let closed = false;
+        while (index < command.length && !closed) {
           const end = command.indexOf('\n', index);
           const line = command.slice(index, end === -1 ? command.length : end);
           index = end === -1 ? command.length : end + 1;
-          if (line.trim() === heredoc.name) break;
-          body.push(line);
+          closed = (heredoc.stripsTabs ? line.replace(/^\t+/, '') : line) === heredoc.name;
+          if (!closed) body.push(line);
         }
-        // A body the command never closes still runs its substitutions.
-        if (heredoc.expands) expandingBodies.push(body.join('\n'));
+        if (heredoc.expands || !closed) expandingBodies.push(body.join('\n'));
+        if (!closed) commands += body.join('\n');
       }
       pending = [];
       continue;
     }
     const before = commands.charAt(commands.length - 1);
+    if (!quote && !comment && character === '(' && command.charAt(index + 1) === '(') {
+      // Arithmetic, `((...))` or `$((...))`: its `<<` is a shift, not a heredoc.
+      const end = substitutionEnd(command, index + 1);
+      commands += command.slice(index, end + 1);
+      index = end + 1;
+      continue;
+    }
     commands += character;
     index++;
     if (comment) continue;
@@ -69,12 +114,11 @@ function splitHeredocs(command: string): { commands: string; expandingBodies: st
       command.charAt(index) === '<' &&
       command.charAt(index + 1) !== '<'
     ) {
-      HEREDOC_AT.lastIndex = index - 1;
-      const match = HEREDOC_AT.exec(command);
-      if (match) {
-        pending.push({ name: match[2] ?? '', expands: !match[1] });
-        commands += command.slice(index, HEREDOC_AT.lastIndex);
-        index = HEREDOC_AT.lastIndex;
+      const opened = heredocAt(command, index - 1);
+      if (opened) {
+        pending.push(opened.heredoc);
+        commands += command.slice(index, opened.end);
+        index = opened.end;
       }
     }
   }

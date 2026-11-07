@@ -213,12 +213,77 @@ const VERCEL_LOG_TOOLS = new Set([
   'get_project_trace',
 ]);
 
-/** Metric dimensions that hold a raw path, a request, a client or a referrer rather than a code. */
-const REQUEST_DIMENSIONS =
-  /\b(?:requestPath|requestId|clientIp|clientUserAgent|clientJa4Digest|referrerUrl|redirectLocation|cacheTags)\b/;
+/**
+ * The metric dimensions a query may group or filter by: codes and ids, never a
+ * path, a request, a client or a referrer. Vercel spells them two ways:
+ * camelCase in `/metrics/v1` and `vercel metrics`, snake_case in the
+ * `/v2/observability` API behind the MCP tool. Every other name is refused,
+ * including ones Vercel adds later.
+ */
+const SAFE_DIMENSIONS = new Set([
+  'route',
+  'httpStatus',
+  'http_status',
+  'errorCode',
+  'error_code',
+  'deploymentId',
+  'deployment_id',
+  'serverActionName',
+  'server_action_name',
+]);
+/** A filter may also narrow the query to one environment. */
+const FILTER_FIELDS = new Set([...SAFE_DIMENSIONS, 'environment']);
+
+/** One filter clause: KQL (`environment:production`, `httpStatus >= 500`) or OData (`http_status ge 500`). */
+const FILTER_CLAUSES = [
+  /^(\w+)\s*(?::|>=|<=|>|<)\s*(?:"[^"]*"|'[^']*'|[\w.*/[\]-]+)$/,
+  /^(\w+)\s+(?:eq|ne|gt|ge|lt|le)\s+(?:'(?:[^']|'')*'|"[^"]*"|[\w.-]+)$/i,
+];
+
+/** Whether a metrics filter names only FILTER_FIELDS. A clause it cannot read counts as unsafe. */
+function safeFilter(filter: string): boolean {
+  return filter.split(/\s+(?:and|or)\s+/i).every((part) => {
+    const clause = part
+      .trim()
+      .replace(/^(?:not\s+|\(\s*)+/i, '')
+      .replace(/(?:\s*\))+$/, '');
+    const field = FILTER_CLAUSES.map((pattern) => pattern.exec(clause)?.[1]).find(Boolean);
+    return field !== undefined && FILTER_FIELDS.has(field);
+  });
+}
+
+/** Whether an aggregation such as `count` or `unique/<dimension>` names only a safe dimension. */
+function safeAggregation(aggregation: string): boolean {
+  const slash = aggregation.indexOf('/');
+  return slash === -1 || SAFE_DIMENSIONS.has(aggregation.slice(slash + 1));
+}
+
+const observabilityQuerySchema = z.object({
+  requestBody: z.object({
+    groupBy: z.array(z.string()).optional(),
+    filter: z.string().optional(),
+    aggregation: z.string().optional(),
+  }),
+});
+
+/** Why an MCP observability query could return request data: a dimension, filter or aggregation outside the allowlist. */
+function observabilityQueryRefusal(input: unknown): string | undefined {
+  const query = observabilityQuerySchema.safeParse(input);
+  if (!query.success) return 'the guard could not read the query, so it cannot rule out request data.';
+  const { groupBy = [], filter, aggregation } = query.data.requestBody;
+  if (!groupBy.every((dimension) => SAFE_DIMENSIONS.has(dimension)))
+    return `the query groups by a dimension outside ${[...SAFE_DIMENSIONS].join(', ')}.`;
+  if (filter !== undefined && filter.trim() !== '' && !safeFilter(filter))
+    return 'the query filters on a dimension outside the allowed ones, or in a form the guard cannot read.';
+  if (aggregation !== undefined && !safeAggregation(aggregation))
+    return 'the query aggregates over a dimension outside the allowed ones.';
+  return undefined;
+}
 
 /** An API path that returns log lines, build events or traces. */
 const LOG_ENDPOINT = /\/(?:logs|runtime-logs|events|traces?)(?:[/?]|$)/;
+/** An API path that runs a metrics query, whose body the guard cannot see from the command line. */
+const QUERY_ENDPOINT = /\/(?:metrics\/v\d|v\d\/observability\/query)\b/;
 
 /** Why a Vercel MCP tool call would return PROD log text or request data, or undefined. */
 function vercelLogToolRefusal(tool: string, input: unknown): string | undefined {
@@ -227,19 +292,35 @@ function vercelLogToolRefusal(tool: string, input: unknown): string | undefined 
     typeof input === 'object' && input !== null && Reflect.get(input, 'environment') === 'preview';
   if (VERCEL_LOG_TOOLS.has(tool) && !(tool === 'get_runtime_logs' && preview))
     return refuse(`"${tool}" returns log text from production, not metadata.`);
-  if (tool === 'create_observability_query' && REQUEST_DIMENSIONS.test(JSON.stringify(input ?? null)))
-    return refuse('the query names a metric dimension that holds request data.');
-  return undefined;
+  const query = tool === 'create_observability_query' ? observabilityQueryRefusal(input) : undefined;
+  return query && refuse(query);
+}
+
+/** The values a CLI call gives a flag: `--flag value` and `--flag=value`, for each of its names. */
+function flagValues(args: readonly string[], names: readonly string[]): string[] {
+  return args.flatMap((arg, index) => {
+    if (names.includes(arg)) return [args[index + 1] ?? ''];
+    const name = names.find((candidate) => arg.startsWith(`${candidate}=`));
+    return name ? [arg.slice(name.length + 1)] : [];
+  });
 }
 
 /** Whether every environment a `vercel logs` call names is preview, and it names one. */
 function previewOnly(args: readonly string[]): boolean {
-  const environments = args.flatMap((arg, index) => {
-    if (arg === '-e' || arg === '--environment') return [args[index + 1] ?? ''];
-    const inline = /^(?:-e|--environment)=(.*)$/.exec(arg);
-    return inline ? [inline[1] ?? ''] : [];
-  });
+  const environments = flagValues(args, ['-e', '--environment']);
   return environments.length > 0 && environments.every((environment) => environment === 'preview');
+}
+
+/** Why a `vercel metrics` query could return request data; `vercel metrics schema` lists names only. */
+function metricsCliRefusal(args: readonly string[]): string | undefined {
+  if (args[args.indexOf('metrics') + 1] === 'schema') return undefined;
+  if (!flagValues(args, ['--group-by']).every((dimension) => SAFE_DIMENSIONS.has(dimension)))
+    return `the metrics query groups by a dimension outside ${[...SAFE_DIMENSIONS].join(', ')}.`;
+  if (!flagValues(args, ['--filter']).every(safeFilter))
+    return 'the metrics query filters on a dimension outside the allowed ones, or in a form the guard cannot read.';
+  if (!flagValues(args, ['--aggregation']).every(safeAggregation))
+    return 'the metrics query aggregates over a dimension outside the allowed ones.';
+  return undefined;
 }
 
 /** Why one Vercel CLI call, given its arguments, would return PROD log text or request data. */
@@ -250,9 +331,9 @@ function vercelCliRefusal(args: readonly string[]): string | undefined {
     return "`vercel inspect --logs` returns a build's output.";
   if (args.includes('api') && args.some((arg) => LOG_ENDPOINT.test(arg)))
     return '`vercel api` on a log, event or trace endpoint returns log text.';
-  if (args.includes('metrics') && args.some((arg) => REQUEST_DIMENSIONS.test(arg)))
-    return 'the metrics query names a dimension that holds request data.';
-  return undefined;
+  if (args.includes('api') && args.some((arg) => QUERY_ENDPOINT.test(arg)))
+    return '`vercel api` runs a metrics query the guard cannot read; use `vercel metrics`, which it checks.';
+  return args.includes('metrics') ? metricsCliRefusal(args) : undefined;
 }
 
 const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash']);
