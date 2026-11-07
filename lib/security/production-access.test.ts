@@ -258,6 +258,16 @@ test('a shell command that reads Vercel logs from production is refused', () => 
       (delimiter) => `cat > note.md <<${delimiter}\nbody\nEOF\nvercel logs`,
     ),
     'cat > note.md <<-EOF\n\tbody\n\tEOF\nvercel logs',
+    // Inside double quotes a backslash escapes the quote: this delimiter is E"OF.
+    'cat > note.md << "E\\"OF"\nbody\nE"OF\nvercel logs',
+    // A delimiter the reader cannot place is refused rather than guessed.
+    'cat > note.md <<"EOF\nvercel logs\nEOF"',
+    "cat > note.md <<$'EOF'\nbody\nEOF\nvercel logs",
+    // A variable can hide the subcommand, a flag or a dimension.
+    "ARGS='--group-by requestPath'\nvercel metrics vercel.request.count $ARGS",
+    'vercel $SUB --json',
+    'vercel metrics vercel.request.count --filter "$FILTER"',
+    'vercel "$(echo logs)"',
     // An arithmetic shift opens no heredoc.
     'echo $((1<<2))\nvercel logs\n2',
     '(( x <<= 1 ))\nvercel logs\n1',
@@ -307,6 +317,9 @@ test('other Vercel commands and mentions of the log command pass', () => {
       (delimiter) => `cat > note.md <<${delimiter}\n$(vercel logs)\nEOF`,
     ),
     "cat > a.md <<'A' && cat > b.md <<B\nvercel logs\nA\nplain\nB",
+    'cat > note.md << "E\\"OF"\n$(vercel logs)\nE"OF',
+    // A variable may pick the team or project, and a redirection target is no argument.
+    'vercel list --scope "$TEAM" --project="$PROJECT" > "$out" 2>&1',
     'git commit -m "Refuse \\`vercel logs\\`"',
     'tail ~/.local/state/ci-alert.log',
   ])

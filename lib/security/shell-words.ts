@@ -18,13 +18,19 @@ const WORD_END = /[\s;&|<>()]/;
 
 type Heredoc = { name: string; expands: boolean; stripsTabs: boolean };
 
+/** Characters a backslash escapes inside double quotes; before any other, the backslash stays. */
+const DOUBLE_QUOTE_ESCAPES = new Set(['"', '\\', '$', '`']);
+
 /**
- * The heredoc a `<<` at `start` opens, and the index after its delimiter word,
- * or undefined when no delimiter follows. The delimiter is the word after
- * quote removal (`<<\EOF`, `<<'EOF'`, `<<"EOF"` and `<<E"OF"` all end at a
- * line `EOF`), and any quoting in it makes the body literal.
+ * The heredoc a `<<` at `start` opens, and the index after its delimiter word;
+ * `none` when no delimiter follows; `ambiguous` when the reader cannot tell
+ * where the delimiter ends. The delimiter is the word after the shell's quote
+ * removal (`<<\EOF`, `<<'EOF'`, `<<"EOF"`, `<<E"OF"` and `<<"E\"OF"` end at the
+ * lines `EOF` and `E"OF`), and any quoting in it makes the body literal. An
+ * unclosed quote, a quote or backslash that runs into the next line, and
+ * `$'...'`, `$"..."`, `$(` or a backtick in the word are ambiguous.
  */
-function heredocAt(command: string, start: number): { heredoc: Heredoc; end: number } | undefined {
+function heredocAt(command: string, start: number): { heredoc: Heredoc; end: number } | 'none' | 'ambiguous' {
   let index = start + 2;
   const stripsTabs = command.charAt(index) === '-';
   if (stripsTabs) index++;
@@ -33,22 +39,45 @@ function heredocAt(command: string, start: number): { heredoc: Heredoc; end: num
   let quoted = false;
   while (index < command.length && !WORD_END.test(command.charAt(index))) {
     const character = command.charAt(index);
+    const next = command.charAt(index + 1);
     if (character === '\\') {
+      if (next === '' || next === '\n') return 'ambiguous';
       quoted = true;
-      name += command.charAt(index + 1);
+      name += next;
       index += 2;
-    } else if (character === "'" || character === '"') {
-      const close = command.indexOf(character, index + 1);
-      if (close === -1) return undefined;
+    } else if (character === "'") {
+      // Inside single quotes nothing is escaped.
+      const close = command.indexOf("'", index + 1);
+      const text = close === -1 ? '' : command.slice(index + 1, close);
+      if (close === -1 || text.includes('\n')) return 'ambiguous';
       quoted = true;
-      name += command.slice(index + 1, close);
+      name += text;
       index = close + 1;
-    } else {
+    } else if (character === '"') {
+      quoted = true;
+      index++;
+      for (;;) {
+        const inner = command.charAt(index);
+        const escaped = command.charAt(index + 1);
+        if (inner === '' || inner === '\n') return 'ambiguous';
+        if (inner === '"') break;
+        if (inner === '\\' && (escaped === '' || escaped === '\n')) return 'ambiguous';
+        if (inner === '\\' && DOUBLE_QUOTE_ESCAPES.has(escaped)) {
+          name += escaped;
+          index += 2;
+        } else {
+          name += inner;
+          index++;
+        }
+      }
+      index++;
+    } else if (character === '`' || (character === '$' && /['"(]/.test(next))) return 'ambiguous';
+    else {
       name += character;
       index++;
     }
   }
-  return name ? { heredoc: { name, expands: !quoted, stripsTabs }, end: index } : undefined;
+  return name ? { heredoc: { name, expands: !quoted, stripsTabs }, end: index } : 'none';
 }
 
 /**
@@ -57,9 +86,10 @@ function heredocAt(command: string, start: number): { heredoc: Heredoc; end: num
  * run. A `<<` counts only outside quotes, comments and arithmetic, and its body
  * starts on the line after it, so quoted text that spans lines hides nothing.
  * Where the reading is unsure, it errs toward commands: a body that never
- * reaches its delimiter is read as commands too.
+ * reaches its delimiter is read as commands too. A delimiter it cannot read
+ * makes the whole command unreadable: undefined.
  */
-function splitHeredocs(command: string): { commands: string; expandingBodies: string[] } {
+function splitHeredocs(command: string): { commands: string; expandingBodies: string[] } | undefined {
   const expandingBodies: string[] = [];
   let commands = '';
   let pending: Heredoc[] = [];
@@ -115,7 +145,8 @@ function splitHeredocs(command: string): { commands: string; expandingBodies: st
       command.charAt(index + 1) !== '<'
     ) {
       const opened = heredocAt(command, index - 1);
-      if (opened) {
+      if (opened === 'ambiguous') return undefined;
+      if (opened !== 'none') {
         pending.push(opened.heredoc);
         commands += command.slice(index, opened.end);
         index = opened.end;
@@ -129,9 +160,13 @@ function splitHeredocs(command: string): { commands: string; expandingBodies: st
  * Every simple command a shell line runs: its own, the ones in its `$(...)`
  * and backtick substitutions, quoted or not, and the substitutions of heredoc
  * bodies under an unquoted delimiter. Other heredoc bodies are data.
+ * Undefined when a heredoc delimiter is ambiguous: a guard then refuses
+ * rather than guess which lines run.
  */
-export function executedCommands(command: string): ShellWord[][] {
-  const { commands, expandingBodies } = splitHeredocs(command);
+export function executedCommands(command: string): ShellWord[][] | undefined {
+  const split = splitHeredocs(command);
+  if (!split) return undefined;
+  const { commands, expandingBodies } = split;
   return [
     ...simpleCommands(commands),
     ...expandingBodies.flatMap((text) => bodySubstitutions(text).flatMap((inner) => simpleCommands(inner))),
@@ -266,7 +301,7 @@ export function program(words: ShellWord[]): { name: string; args: ShellWord[] }
 }
 
 /** The arguments without redirections (`> "$log"`, `2>&1`) and their targets, which are no operands. */
-function withoutRedirections(args: readonly ShellWord[]): ShellWord[] {
+export function withoutRedirections(args: readonly ShellWord[]): ShellWord[] {
   return args.filter(
     (arg, index) => !REDIRECTION.test(arg.text) && !BARE_REDIRECTION.test(args[index - 1]?.text ?? ''),
   );

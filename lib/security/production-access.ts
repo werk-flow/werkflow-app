@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { executedCommands, program } from './shell-words';
+import { type ShellWord, executedCommands, program, withoutRedirections } from './shell-words';
 import { z } from '../zod';
 
 // Agents never read production data: every tool result goes to the model
@@ -323,8 +323,19 @@ function metricsCliRefusal(args: readonly string[]): string | undefined {
   return undefined;
 }
 
-/** Why one Vercel CLI call, given its arguments, would return PROD log text or request data. */
-function vercelCliRefusal(args: readonly string[]): string | undefined {
+/** Flags whose value only picks the team, project or folder, so a variable there hides no command. */
+const SCOPE_FLAG = /^(?:--scope|-S|--project|-p|--team|-T|--cwd)$/;
+const SCOPE_FLAG_VALUE = /^--(?:scope|project|team|cwd)=/;
+
+/** Why one Vercel CLI call, given its argument words, would return PROD log text or request data. */
+function vercelCliRefusal(words: readonly ShellWord[]): string | undefined {
+  const expanding = withoutRedirections(words).filter(
+    (word, index, kept) =>
+      word.expands && !SCOPE_FLAG_VALUE.test(word.text) && !SCOPE_FLAG.test(kept[index - 1]?.text ?? ''),
+  );
+  if (expanding.length > 0)
+    return `the shell expands ${expanding.map((word) => word.text).join(' ')} in a Vercel call, so the guard cannot see which command, flag or dimension it runs. Write the arguments out.`;
+  const args = words.map((word) => word.text);
   if (args.includes('logs') && !previewOnly(args))
     return '`vercel logs` returns runtime log lines or request records from production.';
   if (args.includes('inspect') && args.some((arg) => arg === '-l' || /^--logs(?:=|$)/.test(arg)))
@@ -340,24 +351,31 @@ const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash']);
 const VERCEL_CLI = /^(?:vercel|vc)(?:@\S*)?$/;
 
 /**
- * The argument lists of every Vercel CLI call in a shell command: run
+ * The argument words of every Vercel CLI call in a shell command: run
  * directly, through a package runner or wrapper (`npx --yes vercel@65 logs`,
  * `timeout 60 vercel logs`), in a command substitution, quoted or in an
- * expanding heredoc, or in a nested shell or `eval`.
+ * expanding heredoc, or in a nested shell or `eval`. Undefined when the shell
+ * reader cannot tell which lines run.
  */
-function vercelCliCalls(command: string, depth = 0): string[][] {
-  const calls: string[][] = [];
-  const nested = (inner: string) => (depth > 3 ? [] : vercelCliCalls(inner, depth + 1));
-  for (const words of executedCommands(command)) {
-    const texts = words.map((word) => word.text);
-    const at = texts.findIndex((text) => VERCEL_CLI.test(text.slice(text.lastIndexOf('/') + 1)));
-    if (at !== -1) calls.push(texts.slice(at + 1));
+function vercelCliCalls(command: string, depth = 0): ShellWord[][] | undefined {
+  const commands = executedCommands(command);
+  if (!commands) return undefined;
+  const calls: ShellWord[][] = [];
+  const nested = (inner: string): boolean => {
+    if (depth > 3) return true;
+    const found = vercelCliCalls(inner, depth + 1);
+    if (found) calls.push(...found);
+    return found !== undefined;
+  };
+  for (const words of commands) {
+    const at = words.findIndex((word) => VERCEL_CLI.test(word.text.slice(word.text.lastIndexOf('/') + 1)));
+    if (at !== -1) calls.push(words.slice(at + 1));
     const call = program(words);
     if (!call) continue;
     const args = call.args.map((arg) => arg.text);
-    if (call.name === 'eval') calls.push(...nested(args.join(' ')));
+    if (call.name === 'eval' && !nested(args.join(' '))) return undefined;
     const script = args.findIndex((arg) => /^-[a-z]*c[a-z]*$/.test(arg));
-    if (SHELLS.has(call.name) && script !== -1) calls.push(...nested(args[script + 1] ?? ''));
+    if (SHELLS.has(call.name) && script !== -1 && !nested(args[script + 1] ?? '')) return undefined;
   }
   return calls;
 }
@@ -368,8 +386,11 @@ function vercelCliCalls(command: string, depth = 0): string[][] {
  * count; a script or `curl` that calls the API itself is the backlog's.
  */
 export function productionLogCommandRefusal(command: string): string | undefined {
-  for (const args of vercelCliCalls(command)) {
-    const why = vercelCliRefusal(args);
+  const calls = vercelCliCalls(command);
+  if (!calls)
+    return `Refused: the log guard cannot tell where a heredoc delimiter in this command ends, so it cannot rule out a log read after it. Write the delimiter plainly: <<EOF or <<'EOF'. ${LOGS_INSTEAD}`;
+  for (const words of calls) {
+    const why = vercelCliRefusal(words);
     if (why) return `Refused: ${why} ${LOGS_INSTEAD}`;
   }
   return undefined;

@@ -41,6 +41,8 @@ test('rm on a variable or a relative wildcard is refused, with any flags and wit
       (delimiter) => `cat > note.md <<${delimiter}\nbody\nEOF\nrm -rf logs/*`,
     ),
     'cat > note.md <<-EOF\n\tbody\n\tEOF\nrm -rf logs/*',
+    // Inside double quotes a backslash escapes the quote: this delimiter is E"OF.
+    'cat > note.md << "E\\"OF"\nbody\nE"OF\nrm -rf logs/*',
     // An arithmetic shift opens no heredoc.
     'echo $((1<<2))\nrm -rf logs/*\n2',
     '(( x <<= 1 ))\nrm -rf logs/*\n1',
@@ -86,8 +88,18 @@ test('explicit absolute deletes and literal relative deletes pass', () => {
     ...['\\EOF', "'EOF'", '"EOF"', 'E"OF"'].map(
       (delimiter) => `cat > a.md <<${delimiter}\n$(rm -rf logs/*)\nEOF`,
     ),
+    'cat > a.md << "E\\"OF"\n$(rm -rf logs/*)\nE"OF',
   ])
     expect(unresolvableDeleteRefusal(command), command).toBeUndefined();
+});
+
+// A delimiter the reader cannot place is refused rather than guessed: an rm may follow it.
+test('a heredoc delimiter the reader cannot place is refused', () => {
+  for (const command of [
+    'cat > note.md <<"EOF\nrm -rf /tmp/x\nEOF"',
+    "cat > note.md <<$'EOF'\nbody\nEOF\nls",
+  ])
+    expect(unresolvableDeleteRefusal(command), command).toContain('cannot tell where a heredoc delimiter');
 });
 
 test('the Claude hook refuses the delete with the reason and lets other calls through', () => {

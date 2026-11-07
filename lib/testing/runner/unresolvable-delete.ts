@@ -23,7 +23,10 @@ function unresolvedOperands(args: readonly ShellWord[]): string[] {
  * explicit absolute path (`rm -f /tmp/x/*`) passes.
  */
 export function unresolvableDeleteRefusal(command: string): string | undefined {
-  for (const words of executedCommands(command)) {
+  const commands = executedCommands(command);
+  if (!commands)
+    return "Refused: the delete guard cannot tell where a heredoc delimiter in this command ends, so it cannot rule out an rm after it. Write the delimiter plainly: <<EOF or <<'EOF'.";
+  for (const words of commands) {
     const call = program(words);
     if (call?.name !== 'rm') continue;
     const operands = unresolvedOperands(call.args);
