@@ -388,6 +388,19 @@ test('a Vercel mention the guard cannot verify is refused', () => {
     'timeout 60 bash <<EOF\nvercel logs\nEOF',
     'X=vercel; $X logs',
     'ls # vercel logs',
+    // git, gh and rg can run their text: an alias, --exec, a pager, --pre, a shell alias.
+    "git -c alias.x='!vercel logs' x",
+    "git rebase --exec 'vercel logs' main",
+    "git -c core.pager='vercel logs' log",
+    "rg --pre 'vercel logs' pattern .",
+    "gh alias set --shell x 'vercel logs'",
+    // git reads a heredoc as a message only through -F -.
+    "git am <<'EOF'\nvercel logs\nEOF",
+    // ANSI-C or locale quoting anywhere, substitutions and heredoc bodies included.
+    "echo $'\\''; vercel logs",
+    'echo "$(echo $\'a\')"; vercel list',
+    "cat <<EOF\n$(echo $'x')\nEOF\nvercel list",
+    'echo $"x"; vercel list',
     '/usr/bin/env -S "vercel logs"',
   ]) {
     const reason = productionLogCommandRefusal(command);
@@ -408,6 +421,9 @@ test('commands that do not name the Vercel CLI, or name it only as data, never m
     'gh pr view 206 --json state,headRefOid',
     'gh api repos/werk-flow/werkflow-app/pulls/206/comments --jq ".[].id"',
     'git commit -m "The hook refuses vercel logs"',
+    'git commit --message="The hook refuses vercel logs"',
+    "git commit -F - <<'EOF'\nThe hook refuses vercel logs.\nEOF",
+    'gh pr create --title "Refuse vercel logs" --body "The hook refuses vercel logs."',
     'gh pr comment 206 --body "Fixed: vercel logs is refused."',
     'cat .vercel/project.json && jq . vercel.json',
     'grep -rn "@vercel/functions" lib node_modules/vercel/package.json',

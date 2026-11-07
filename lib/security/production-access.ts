@@ -3,7 +3,8 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import {
-  DATA_PROGRAMS,
+  ANSI_C_QUOTE,
+  INERT_PROGRAMS,
   SCRIPT_FLAG,
   SHELLS,
   type ShellWord,
@@ -468,9 +469,25 @@ function scanVercel(command: string, depth = 0): { calls: ShellWord[][]; account
     if (head) {
       calls.push(words.slice(at + 1));
       accounted += wordMentions([head]);
-    } else if (call && DATA_PROGRAMS.has(call.name)) accounted += wordMentions(words);
+    } else if (call && INERT_PROGRAMS.has(call.name)) accounted += wordMentions(words);
+    else if (call && (call.name === 'git' || call.name === 'gh'))
+      accounted += wordMentions(messageValues(call.args));
   }
   return { calls, accounted };
+}
+
+/** Flags of `git` and `gh` whose value is only a message: `git commit -m`, `gh pr create --body`. */
+const MESSAGE_FLAG = /^(?:-m|--message|--body|--title)$/;
+const MESSAGE_FLAG_VALUE = /^(?:--message|--body|--title)=/;
+
+/**
+ * The words of a `git` or `gh` call that are message values. Any other word
+ * may be run: a `!` alias, `--exec`, a pager or an extension.
+ */
+function messageValues(args: readonly ShellWord[]): ShellWord[] {
+  return args.filter(
+    (arg, index) => MESSAGE_FLAG_VALUE.test(arg.text) || MESSAGE_FLAG.test(args[index - 1]?.text ?? ''),
+  );
 }
 
 /**
@@ -482,6 +499,9 @@ function scanVercel(command: string, depth = 0): { calls: ShellWord[][]; account
  * itself without naming the CLI is the backlog's.
  */
 export function productionLogCommandRefusal(command: string): string | undefined {
+  // The reader does not parse ANSI-C or locale quoting; with one anywhere, a mention cannot be verified.
+  if (ANSI_C_QUOTE.test(command) && mentions(command) > 0)
+    return `Refused: the command uses $'...' or $"..." quoting, which the log guard does not read, and names the Vercel CLI. Write the quoting plainly. ${LOGS_INSTEAD}`;
   const scan = scanVercel(command);
   if (!scan)
     return `Refused: the log guard cannot tell where a heredoc delimiter in this command ends, so it cannot rule out a log read after it. Write the delimiter plainly: <<EOF or <<'EOF'. ${LOGS_INSTEAD}`;

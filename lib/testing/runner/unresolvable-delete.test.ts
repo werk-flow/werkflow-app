@@ -108,6 +108,20 @@ test('a heredoc delimiter the reader cannot place is refused', () => {
     expect(unresolvableDeleteRefusal(command), command).toContain('cannot tell where a heredoc delimiter');
 });
 
+// The reader does not parse ANSI-C or locale quoting, so with one anywhere an rm is refused.
+test('an rm next to ANSI-C or locale quoting is refused', () => {
+  for (const command of [
+    "echo $'\\''; rm -rf logs/*",
+    'echo "$(printf $\'x\')"; rm -f /tmp/x/a',
+    "cat <<EOF\n$(echo $'x')\nEOF\nrm -f /tmp/x/a",
+    'echo $"x"; rm -f /tmp/x/a',
+  ])
+    expect(unresolvableDeleteRefusal(command), command).toContain(
+      'quoting, which the delete guard does not read',
+    );
+  expect(unresolvableDeleteRefusal("printf $'a\\n'; ls")).toBeUndefined();
+});
+
 // A program the guard cannot judge may run its heredoc, so an rm there is refused.
 test('an rm in a heredoc an unknown program reads is refused, and data-only heredocs pass', () => {
   for (const command of [

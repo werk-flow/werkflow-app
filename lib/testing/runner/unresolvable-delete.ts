@@ -6,7 +6,7 @@
  * that shape and names the form the check can resolve.
  */
 
-import { type ShellWord, program, readShell } from '../../security/shell-words';
+import { ANSI_C_QUOTE, type ShellWord, program, readShell } from '../../security/shell-words';
 
 /** Operands whose directory the shell decides: a variable anywhere, or a wildcard on a relative path. */
 function unresolvedOperands(args: readonly ShellWord[]): string[] {
@@ -23,6 +23,9 @@ function unresolvedOperands(args: readonly ShellWord[]): string[] {
  * explicit absolute path (`rm -f /tmp/x/*`) passes.
  */
 export function unresolvableDeleteRefusal(command: string): string | undefined {
+  // The reader does not parse ANSI-C or locale quoting; with one anywhere, an rm cannot be placed.
+  if (ANSI_C_QUOTE.test(command) && /(?<![\w.-])rm(?![\w.-])/.test(command))
+    return `Refused: the command uses $'...' or $"..." quoting, which the delete guard does not read, and contains rm. Write the quoting plainly.`;
   const reading = readShell(command);
   if (!reading)
     return "Refused: the delete guard cannot tell where a heredoc delimiter in this command ends, so it cannot rule out an rm after it. Write the delimiter plainly: <<EOF or <<'EOF'.";

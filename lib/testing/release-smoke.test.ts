@@ -2,7 +2,7 @@
 // counts, and a response that holds no counts fails it instead of passing as zero errors.
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -31,7 +31,8 @@ case "$url" in
   *'/health') printf 200 ;;
   *'/metrics/v1'*)
     printf '%s' "$data" > "$STUB/query.json"
-    test -f "$STUB/metrics.json" || exit 22; cat "$STUB/metrics.json" ;;
+    test -f "$STUB/metrics.json" || { touch "$STUB/metrics-refused"; exit 22; }
+    cat "$STUB/metrics.json" ;;
   *) exit 7 ;;
 esac
 `;
@@ -51,9 +52,10 @@ beforeEach(() => {
 
 afterEach(() => rmSync(stub, { recursive: true, force: true }));
 
-/** Runs the smoke check of the served build against a metrics answer, or none. */
+/** Runs the smoke check of the served build against a metrics answer, or a failed request without one. */
 function smoke(metrics: unknown) {
-  if (metrics !== undefined) writeFileSync(join(stub, 'metrics.json'), JSON.stringify(metrics));
+  if (metrics === undefined) rmSync(join(stub, 'metrics.json'), { force: true });
+  else writeFileSync(join(stub, 'metrics.json'), JSON.stringify(metrics));
   const result = spawnSync('bash', [smokeScript, SERVED], {
     cwd: repositoryRoot,
     encoding: 'utf8',
@@ -97,13 +99,21 @@ test('a response without counts fails the check, never as zero errors', () => {
     [{ queryId: 'q' }, 'could not be read'],
     [{ summary: [row('200', null)] }, 'could not be read'],
     [{ summary: [{ dimensions: {}, values: { value: 1 } }] }, 'could not be read'],
-    [undefined, 'could not be read'],
   ] as const) {
     const result = smoke(metrics);
     expect(result.status, JSON.stringify(metrics)).toBe(1);
     expect(result.output, JSON.stringify(metrics)).toContain(reason);
     expect(result.output).not.toContain('answered no request with a server error');
   }
+});
+
+test('a failed metrics request fails the check', () => {
+  // A response an earlier call left behind must not stand in for the failed request.
+  writeFileSync(join(stub, 'metrics.json'), JSON.stringify({ queryId: 'left over' }));
+  const result = smoke(undefined);
+  expect(existsSync(join(stub, 'metrics-refused')), 'the stub refused the metrics request').toBe(true);
+  expect(result.status).toBe(1);
+  expect(result.output).toContain(`Vercel's request counts for ${SERVED} could not be read.`);
 });
 
 // The count is this build's alone, per status: without the filter it counts other builds, and

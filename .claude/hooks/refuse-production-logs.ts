@@ -6,6 +6,9 @@ import { shellCommand } from '../../lib/testing/runner/edit-guard';
  * .codex/hooks.json (pinned by lib/testing/runner/guard-wiring.test.ts): exits 2
  * with the reason when the command reads Vercel's production logs
  * (lib/security/production-access.ts). A call it cannot read is refused.
+ *
+ * Threat model: the hook stops accidental and habitual reads. Deliberate
+ * evasion is a rule violation it does not claim to catch.
  */
 let call: unknown;
 try {

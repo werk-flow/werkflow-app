@@ -13,16 +13,16 @@ export type ShellWord = { text: string; globs: boolean; expands: boolean; raw: s
 /** Shells that run the script they read from their input when no `-c` script is given. */
 export const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash']);
 const READS_SCRIPT = new Set([...SHELLS, 'source', '.']);
-/** Programs that never run their arguments or their input as commands. */
-export const DATA_PROGRAMS = new Set([
+/**
+ * Programs that never run their arguments or their input as commands. Not
+ * `git`, `gh` or `rg`: an alias, `--exec`, a pager or `--pre` runs their text.
+ */
+export const INERT_PROGRAMS = new Set([
   'cat',
   'tee',
   'echo',
   'printf',
-  'git',
-  'gh',
   'grep',
-  'rg',
   'jq',
   'head',
   'tail',
@@ -30,6 +30,23 @@ export const DATA_PROGRAMS = new Set([
   'diff',
   'ls',
 ]);
+/** `git` and `gh` read a heredoc as a message only through these flags. */
+const STDIN_MESSAGE = /^(?:-F|--file|--body-file)(?:=-)?$/;
+
+/** Whether a `git` or `gh` call reads its input as a message: `-F -`, `--file -`, `--body-file -`. */
+function readsMessageFromInput(reader: { name: string; args: ShellWord[] }): boolean {
+  if (reader.name !== 'git' && reader.name !== 'gh') return false;
+  return reader.args.some(
+    (arg, index) =>
+      STDIN_MESSAGE.test(arg.text) && (arg.text.endsWith('=-') || reader.args[index + 1]?.text === '-'),
+  );
+}
+/**
+ * ANSI-C (`$'...'`) or locale (`$"..."`) quoting, which this reader does not
+ * parse. A guard fails closed on it: anywhere in the raw text, so also inside
+ * substitutions and heredoc bodies.
+ */
+export const ANSI_C_QUOTE = /\$['"]/;
 /** A shell flag that hands the shell a script as an argument: `-c`, `-lc`, `-ec`. */
 export const SCRIPT_FLAG = /^-[a-z]*c[a-z]*$/;
 
@@ -225,7 +242,8 @@ function pipelineAround(line: string, offset: number): string {
 /**
  * Who reads a heredoc body: a shell that runs it as a script (`bash <<EOF`,
  * `bash -s <<EOF`, `cat <<EOF | sh`), only programs that treat it as data
- * (`cat <<EOF > file`), or a program the reader cannot judge (`python3 - <<EOF`).
+ * (`cat <<EOF > file`, `gh pr comment --body-file - <<EOF`), or a program the
+ * reader cannot judge (`python3 - <<EOF`).
  */
 function heredocReader(commands: string, at: number): 'shell' | 'data' | 'unknown' {
   const lineStart = commands.lastIndexOf('\n', at - 1) + 1;
@@ -239,7 +257,8 @@ function heredocReader(commands: string, at: number): 'shell' | 'data' | 'unknow
     )
   )
     return 'shell';
-  return readers.length > 0 && readers.every((reader) => reader && DATA_PROGRAMS.has(reader.name))
+  return readers.length > 0 &&
+    readers.every((reader) => reader && (INERT_PROGRAMS.has(reader.name) || readsMessageFromInput(reader)))
     ? 'data'
     : 'unknown';
 }

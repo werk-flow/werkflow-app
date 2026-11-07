@@ -93,7 +93,7 @@ Buckets are private. Server code authorizes the target and signs a short-lived U
 
 ### Mail and providers
 
-The edge functions accept only the project's secret keys and escape every interpolated value. The email-change code is stored as a keyed hash over user id and code. Missing configuration and provider failure return a stable error code. Logs hold fixed error codes and status numbers, never recipients, codes, invitation links or provider bodies.
+The edge functions accept only the project's secret keys and escape every interpolated value. The email-change code is stored as a keyed hash over user id and code. Missing configuration and provider failure return a stable error code.
 
 ### Browser
 
@@ -122,7 +122,7 @@ An exception that matches no finding on an unchanged tree means the registry nar
 - Cache a permission fact across requests, or an authenticated response at the CDN.
 - Add a retry or a cookie fallback that turns a failed identity check into access.
 - Write to PROD outside the `release` workflow.
-- Read PROD data in an agent session, through any tool: the result goes to the model provider. `bun run prod:inspect` returns metadata only. Hooks enforce it for MCP tools and `vercel logs`; other shell paths are a [backlog](enforcement-ladder-backlog.md) row.
+- Read PROD data in an agent session through any tool: results reach the model provider (`bun run prod:inspect` returns metadata only). Hooks enforce it for MCP tools and `vercel logs`; other shell paths are a [backlog](enforcement-ladder-backlog.md) row. The hooks stop accidental and habitual reads. Deliberate evasion is a rule violation they do not claim to catch.
 
 ## Verify your work
 
