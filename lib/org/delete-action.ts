@@ -22,6 +22,27 @@ const deleteRefusal = writeRefusalFor(
   new Set(['org_not_found', 'not_authorized', 'name_mismatch', 'has_time_records']),
 );
 
+/** Every stored file of the organization; null when the listing fails. */
+async function listOrganizationFiles(organizationId: string): Promise<string[] | null> {
+  try {
+    return await listStorageObjectPaths({ organizationId, prefix: `${organizationId}/` });
+  } catch (error) {
+    logError('deleteOrganization: stored file listing failed', error);
+    return null;
+  }
+}
+
+/**
+ * Removes the files of a deleted organization. No row references them any
+ * more, so the folder is listed again: an upload finalized after the first
+ * list goes too. A failed list or removal is logged and leaves orphaned
+ * objects, never a second error for a finished deletion.
+ */
+async function discardOrganizationFiles(organizationId: string, listed: readonly string[]): Promise<void> {
+  const late = (await listOrganizationFiles(organizationId)) ?? [];
+  await discardStorageObjects({ organizationId, paths: [...new Set([...listed, ...late])] });
+}
+
 /**
  * Delete an organization and all its associated data.
  *
@@ -78,13 +99,8 @@ export async function deleteOrganization(confirmationName: string): Promise<Dele
 
     // Listed while the rows still name the organization: without the list,
     // the deletion would knowingly leave every file behind.
-    let paths: string[];
-    try {
-      paths = await listStorageObjectPaths({ organizationId: activeOrgId, prefix: `${activeOrgId}/` });
-    } catch (error) {
-      logError('deleteOrganization: stored file listing failed', error);
-      return { success: false, error: 'delete_org_failed' };
-    }
+    const paths = await listOrganizationFiles(activeOrgId);
+    if (!paths) return { success: false, error: 'delete_org_failed' };
 
     // One statement: the cascade removes the memberships, invites and every
     // other organization row with it, or nothing. Deleting the memberships
@@ -102,9 +118,7 @@ export async function deleteOrganization(confirmationName: string): Promise<Dele
       );
     }
 
-    // No row references these files any more; a failed removal is logged and
-    // leaves orphaned objects, never a second error for a finished deletion.
-    await discardStorageObjects({ organizationId: activeOrgId, paths });
+    await discardOrganizationFiles(activeOrgId, paths);
 
     // Get the user's remaining organizations using admin client
     // (to bypass RLS - the org we just deleted might affect RLS queries)

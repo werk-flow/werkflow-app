@@ -33,6 +33,8 @@ const foreignObject = `${ORGANIZATION_B}/documents/fremd.pdf`;
 const bucket = new Set<string>();
 let failListing = false;
 let failFileRemoval = false;
+// An upload finalized while the deletion runs, after the first listing.
+let lateUpload: string | null = null;
 const steps: string[] = [];
 
 const organizationRemains = (organizationId: string = ORGANIZATION_A): boolean =>
@@ -96,6 +98,7 @@ world.rpc = ({ name, args }) => {
   }
   if (name === 'delete_organization') {
     steps.push('rows');
+    if (lateUpload) bucket.add(lateUpload);
     if (databaseRefusal) return { data: null, error: { code: 'P0001', message: databaseRefusal } };
     world.tables.organizations = (world.tables.organizations ?? []).filter(
       (row) => row.id !== args.p_organization_id,
@@ -193,7 +196,7 @@ databaseRefusal = null;
 reset();
 failFileRemoval = true;
 assert.deepEqual(await deleteOrganization('Musterbetrieb'), { success: true, nextOrgId: null });
-assert.deepEqual(steps, ['list', 'rows', 'files']);
+assert.deepEqual(steps, ['list', 'rows', 'list', 'files']);
 assert.ok(!organizationRemains(), 'the organization remains');
 assert.equal(bucket.size, ownObjects.length + 1, 'the failed removal still removed files');
 failFileRemoval = false;
@@ -202,10 +205,21 @@ world.tables.organizations = [
   ...(world.tables.organizations ?? []),
 ];
 
+// A file finalized after the first listing goes too: the folder is listed again once the rows are gone.
+reset();
+lateUpload = `${ORGANIZATION_A}/documents/spaet.pdf`;
+assert.deepEqual(await deleteOrganization('Musterbetrieb'), { success: true, nextOrgId: null });
+assert.deepEqual([...bucket], [foreignObject], 'a file uploaded during the deletion stayed behind');
+lateUpload = null;
+world.tables.organizations = [
+  { id: ORGANIZATION_A, name: 'Musterbetrieb', unique_code: 'ABCDEF', admin_id: CALLER_ID },
+  ...(world.tables.organizations ?? []),
+];
+
 // The deletion removes the rows first, then every file of the organization, and only those.
 reset();
 assert.deepEqual(await deleteOrganization(' Musterbetrieb '), { success: true, nextOrgId: null });
-assert.deepEqual(steps, ['list', 'rows', 'files']);
+assert.deepEqual(steps, ['list', 'rows', 'list', 'files']);
 assert.deepEqual([...bucket], [foreignObject], 'the deletion left own files or removed foreign ones');
 assert.ok(!organizationRemains(), 'the organization remains');
 assert.deepEqual(
