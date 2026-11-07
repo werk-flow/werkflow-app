@@ -134,17 +134,18 @@ An exception that matches no finding on an unchanged tree means the registry nar
 
 ## Known residual exposure
 
-List every residual exposure the owner accepted here until it closes.
+List each owner-accepted residual exposure here until it closes.
 
 - Injected inline scripts are not blocked. The script policy allows `'unsafe-inline'`, so it stops foreign scripts but not an injected inline one. A per-request nonce needs every page rendered per request, which `cacheComponents` rules out. The `htmlSinkSelectors` lint set keeps product code from creating an injection point.
 - No edge rate limit covers every request. The app limits operations that send mail, redeem a capability or activate billing; Supabase Auth limits its own endpoints. Edge limiting is the owner's Vercel plan decision.
 - The deletion transport lets current members receive the identity of a deleted row. It carries no record content.
-- `simulatePayment` in `lib/subscription/actions.ts` lets a signed-in user without an organization activate a subscription for their own account, once. It is the beta activation path and closes with werk-flow/werkflow-planning#248.
+- `simulatePayment` in `lib/subscription/actions.ts` lets a signed-in user without an organization activate their own subscription once: the beta activation path, closing with werk-flow/werkflow-planning#248.
 - The code step keeps the address for up to one hour in an httpOnly cookie scoped to `/verify`.
-- The `health` edge function has no rate limit. Its constant-time 64-hex token bounds it.
-- Member removal refuses a target with recorded time. `P1-33` owns complete offboarding and asset return.
+- The `health` edge function has no rate limit; a constant-time 64-hex token bounds it.
+- Member removal refuses a target with recorded time; `P1-33` owns offboarding and asset return.
+- Organization deletion removes stored files after the rows; a storage failure then leaves them, unreachable, under the organization's prefix, and is logged.
 - The lint toolchain's minimatch (GHSA-g3hv-75wg-m249) is a reviewed dependency exception; `lib/security/dependency-exceptions.json` holds its reason and expiry.
-- Two provider facts are unverified: the R2 buckets' CORS rules (runtime tokens get `AccessDenied` on `GetBucketCors`; a check needs an R2 token with Admin Read) and the Vercel environment scopes (a check needs a token that reads the project's environment).
+- Two provider facts are unverified, each needing a stronger read token: the R2 buckets' CORS rules (`GetBucketCors` refuses runtime tokens) and the Vercel environment scopes.
 
 ## Revocation boundaries
 
