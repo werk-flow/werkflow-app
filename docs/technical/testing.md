@@ -41,9 +41,9 @@ Only a child thread and a PR watch wake a thread when they end. A shell run neve
 bun scripts/run-notified.ts --began "[verify] starting " -- bun run test:verify --mode release
 ```
 
-It survives your turn and the harness, keeps the whole log, and sends your thread the command's own exit code. It refuses to start without a reachable thread.
+It survives your turn and the harness, keeps the whole log, and refuses to start without a reachable thread. After your turn, one wake gives every exit code not yet reported to you.
 
-- `--began` is log text only real work prints. The script returns on it, or with the exit code of an ended command. Exit 75: not proven running; never report it as running.
+- `--began` is log text only real work prints. The script returns on it, or with an ended command's exit code. Exit 75: not proven running; never report it as running.
 - A lead may end its turn after `began work`.
 - A delegated child stays in its turn and polls with the printed command: its turn end is its hand-back.
 - A failed wake leaves `UNHEARD RUN`, which the next notified run resends or prints.

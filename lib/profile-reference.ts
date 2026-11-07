@@ -18,8 +18,8 @@ export type ProfileReference = {
 /** The signed-in user's own profile, as the app shell reads it and the profile context holds it. */
 export type UserProfile = {
   id: string;
-  firstName: string;
-  lastName: string;
+  firstName: string | null;
+  lastName: string | null;
   email: string;
   avatarPath: string | null;
   avatarUrl: string | null;
