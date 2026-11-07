@@ -4,6 +4,7 @@ import { createServer, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { assertAppPortFree, workspaceAppOrigin, workspacePorts } from './app-port';
+import { errorCode } from './error-code';
 
 function listen(host: string, port = 0): Promise<Server> {
   return new Promise((resolveListen, reject) => {
@@ -24,28 +25,53 @@ function portOf(server: Server): number {
   return address.port;
 }
 
-/** A port nothing listens on, in either family. */
+const LISTEN_ADDRESSES = ['127.0.0.1', '::1', '0.0.0.0', '::'];
+
+/** The addresses this host can listen on: a host without IPv6 refuses `::1` and `::`. */
+async function listenableAddresses(): Promise<ReadonlySet<string>> {
+  const listenable = new Set<string>();
+  for (const host of LISTEN_ADDRESSES)
+    try {
+      await close(await listen(host));
+      listenable.add(host);
+    } catch (error) {
+      if (!['EAFNOSUPPORT', 'EADDRNOTAVAIL'].includes(String(errorCode(error)))) throw error;
+    }
+  return listenable;
+}
+const LISTENABLE = await listenableAddresses();
+const ABSENT = LISTEN_ADDRESSES.filter((host) => !LISTENABLE.has(host));
+// The check skips an address family the host lacks (app-port.ts), so its refusal case cannot run there.
+if (ABSENT.length > 0)
+  console.warn(
+    `[app-port.test] Skipped the refusal cases on ${ABSENT.join(' and ')}: this host cannot listen there.`,
+  );
+
+/** A port nothing listens on, in every family this host has. */
 async function closedPort(): Promise<number> {
-  const server = await listen('::');
+  const server = await listen(LISTENABLE.has('::') ? '::' : '0.0.0.0');
   const port = portOf(server);
   await close(server);
   return port;
 }
 
-for (const host of ['127.0.0.1', '::1', '0.0.0.0', '::'])
-  test(`a build is refused while an application serves the port on ${host}, naming the holders and the way out`, async () => {
-    const server = await listen(host, await closedPort());
-    const port = portOf(server);
-    try {
-      const refusal = assertAppPortFree(port);
-      await expect(refusal).rejects.toThrow(`Refused: port ${port} is serving an application`);
-      await expect(refusal).rejects.toThrow('bun run test:server');
-      await expect(refusal).rejects.toThrow('Stop it first with Ctrl+C');
-    } finally {
-      await close(server);
-    }
-    await expect(assertAppPortFree(port)).resolves.toBeUndefined();
-  });
+for (const host of LISTEN_ADDRESSES)
+  test.skipIf(ABSENT.includes(host))(
+    `a build is refused while an application serves the port on ${host}, naming the holders and the way out`,
+    async () => {
+      const server = await listen(host, await closedPort());
+      const port = portOf(server);
+      try {
+        const refusal = assertAppPortFree(port);
+        await expect(refusal).rejects.toThrow(`Refused: port ${port} is serving an application`);
+        await expect(refusal).rejects.toThrow('bun run test:server');
+        await expect(refusal).rejects.toThrow('Stop it first with Ctrl+C');
+      } finally {
+        await close(server);
+      }
+      await expect(assertAppPortFree(port)).resolves.toBeUndefined();
+    },
+  );
 
 test('a free port reads as free even when a stall lets every clock run out before the kernel answers', async () => {
   const port = await closedPort();
