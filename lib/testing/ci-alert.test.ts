@@ -167,6 +167,8 @@ test('the production alert workflow offers every title the production watcher ra
   ])
     expect(workflow).toContain(`- '${title}'\n`);
   expect(workflow).toContain('alert-issue.sh "$ACTION" "$TITLE" "$NOTE"');
+  // A pending run replaces the older pending run of its group, so one alert cannot drop another's.
+  expect(workflow).toContain('group: production-alert-${{ inputs.title }}\n');
 });
 
 test('a failed issue lookup fails the job instead of passing without a report', () => {

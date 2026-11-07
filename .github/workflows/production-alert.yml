@@ -31,8 +31,11 @@ on:
 
 permissions: {}
 
+# One group per alert, so two writes to one issue never race. GitHub keeps only the newest
+# pending run of a group and cancels the older one; ops/prod_watch.py dispatches again when
+# its run ends cancelled or failed.
 concurrency:
-  group: production-alert
+  group: production-alert-${{ inputs.title }}
   cancel-in-progress: false
 
 jobs:

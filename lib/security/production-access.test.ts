@@ -221,6 +221,13 @@ test('a shell command that reads Vercel logs from production is refused', () => 
     'bash -c "vercel logs"',
     "bash -lc 'npx vercel@65 logs --json'",
     'eval vercel logs',
+    // A command substitution runs, quoted or not, and so does one in an expanding heredoc.
+    'echo "$(vercel logs --json)"',
+    'report="$(npx --yes vercel@65 logs --json | jq -c .)"',
+    'echo $(vercel logs)',
+    'echo "`vercel logs`"',
+    'echo "$(printf x; echo "$(vercel logs)")"',
+    'cat <<EOF\n$(vercel logs --json)\nEOF',
     'vercel inspect dpl_a --logs',
     'vercel inspect dpl_a -l',
     'vercel api /v3/deployments/dpl_a/events',
@@ -243,6 +250,10 @@ test('other Vercel commands and mentions of the log command pass', () => {
     'gh pr create --body "The hook refuses vercel logs."',
     'grep -rn "vercel logs" docs',
     "cat > note.md <<'EOF'\nvercel logs\nEOF",
+    // Single quotes and a quoted heredoc keep a substitution literal.
+    "echo '$(vercel logs)'",
+    "cat > note.md <<'EOF'\nThe hook refuses `vercel logs` and $(vercel logs).\nEOF",
+    'git commit -m "Refuse \\`vercel logs\\`"',
     'tail ~/.local/state/ci-alert.log',
   ])
     expect(productionLogCommandRefusal(command), command).toBeUndefined();

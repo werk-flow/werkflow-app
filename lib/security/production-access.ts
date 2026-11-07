@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { program, simpleCommands, withoutHeredocBodies } from '../testing/runner/shell-words';
+import { bodySubstitutions, program, simpleCommands, splitHeredocs } from '../testing/runner/shell-words';
 import { z } from '../zod';
 
 // Agents never read production data: every tool result goes to the model
@@ -261,21 +261,26 @@ const VERCEL_CLI = /^(?:vercel|vc)(?:@\S*)?$/;
 /**
  * The argument lists of every Vercel CLI call in a shell command: run
  * directly, through a package runner or wrapper (`npx --yes vercel@65 logs`,
- * `timeout 60 vercel logs`), or in a nested shell or `eval`.
+ * `timeout 60 vercel logs`), in a command substitution, quoted or in an
+ * expanding heredoc, or in a nested shell or `eval`.
  */
 function vercelCliCalls(command: string, depth = 0): string[][] {
   const calls: string[][] = [];
-  for (const words of simpleCommands(withoutHeredocBodies(command))) {
+  const { commands, expandingBodies } = splitHeredocs(command);
+  const nested = (inner: string) => (depth > 3 ? [] : vercelCliCalls(inner, depth + 1));
+  for (const body of expandingBodies)
+    for (const inner of bodySubstitutions(body)) calls.push(...nested(inner));
+  for (const words of simpleCommands(commands)) {
+    for (const word of words) for (const inner of word.substitutions) calls.push(...nested(inner));
     const texts = words.map((word) => word.text);
     const at = texts.findIndex((text) => VERCEL_CLI.test(text.slice(text.lastIndexOf('/') + 1)));
     if (at !== -1) calls.push(texts.slice(at + 1));
     const call = program(words);
-    if (!call || depth > 2) continue;
+    if (!call) continue;
     const args = call.args.map((arg) => arg.text);
-    if (call.name === 'eval') calls.push(...vercelCliCalls(args.join(' '), depth + 1));
+    if (call.name === 'eval') calls.push(...nested(args.join(' ')));
     const script = args.findIndex((arg) => /^-[a-z]*c[a-z]*$/.test(arg));
-    if (SHELLS.has(call.name) && script !== -1)
-      calls.push(...vercelCliCalls(args[script + 1] ?? '', depth + 1));
+    if (SHELLS.has(call.name) && script !== -1) calls.push(...nested(args[script + 1] ?? ''));
   }
   return calls;
 }
