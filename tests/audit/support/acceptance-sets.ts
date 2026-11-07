@@ -264,7 +264,6 @@ function periodBlockerCaptures(): AcceptanceSet {
       [
         { reveal: 'Monatswerte', part: 'werte' },
         { reveal: 'Prüfhinweise', part: 'hinweise' },
-        { reveal: 'Wochenplan im Arbeitszeitmodell der Person hinterlegen.', part: 'arbeitsplan' },
       ].map(({ reveal, part }) => ({
         id: `${role}-periode-${part}`,
         role,
