@@ -12,6 +12,7 @@ import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { clearEmailChangeChallengeQuietly } from '@/hooks/use-sign-out';
 import { rememberPasswordResetAddress } from '@/lib/auth/actions';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge';
 import {
   type PasswordWithConfirmationValues,
   translateSupabasePasswordError,
@@ -224,6 +225,7 @@ async function redirectToPasswordReset(
   const knownAddress = await rememberResetAddress();
 
   // Global on purpose: a password change ends every existing session.
+  clearManualEntryBridge();
   const { error } = await supabase.auth.signOut({ scope: 'global' });
 
   if (error) {

@@ -10,6 +10,7 @@ import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { clearEmailChangeChallengeQuietly } from '@/hooks/use-sign-out';
 import { logError } from '@/lib/logging';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge';
 import {
   type PasswordWithConfirmationValues,
   translateSupabasePasswordError,
@@ -228,6 +229,7 @@ async function resetPasswordAndLeave({
     isRedirectingRef.current = true;
 
     await clearEmailChangeChallengeQuietly();
+    clearManualEntryBridge();
 
     // Immediately sign out the user for security — global on purpose: a
     // password reset must end every existing session.

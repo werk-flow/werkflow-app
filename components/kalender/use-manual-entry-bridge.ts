@@ -17,11 +17,13 @@ import type { TimeEntry } from '@/lib/time-tracking/types';
  * merge holds mutation ownership while it writes the range owner.
  */
 export function useManualEntryBridge({
+  userId,
   organizationId,
   needed,
   beginOperation,
   setEntries,
 }: {
+  userId: string;
   organizationId: string;
   needed: { start: Date; end: Date };
   beginOperation: () => () => void;
@@ -56,9 +58,9 @@ export function useManualEntryBridge({
 
   useEffect(() => {
     if (pathname !== '/kalender') return;
-    const queued = consumeManualEntryBridge(organizationId);
+    const queued = consumeManualEntryBridge({ userId, organizationId });
     if (queued.length > 0) handleManualEntrySuccess(queued);
-  }, [handleManualEntrySuccess, organizationId, pathname]);
+  }, [handleManualEntrySuccess, userId, organizationId, pathname]);
 
   return handleManualEntrySuccess;
 }
