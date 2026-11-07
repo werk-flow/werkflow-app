@@ -13,7 +13,7 @@
 -- fewer people than selected, and a projection muted a later job edit in the
 -- same transaction (migrations 20261005110000, 20261006100000 and
 -- 20261006100100). A job-page team change records the assessment of the
--- visit it reaches (20261107190002).
+-- visit it reaches (20261107200001).
 begin;
 
 insert into auth.users (
@@ -511,7 +511,7 @@ $$;
 
 -- 12. A job-page team change that adds a person records the capacity
 -- assessment of the legacy visit it reaches, with the manager's reason, in
--- the same call (20261107190002). A stale visit, a foreign organization and a
+-- the same call (20261107200001). A stale visit, a foreign organization and a
 -- team that changed since the server read it change nothing.
 do $$
 declare
