@@ -42,7 +42,17 @@ export function parseIsoDateRange(input: unknown): IsoDateRange | null {
   return { from, to };
 }
 
-/** Optional bookmark date; invalid or repeated query parameters use today's date. */
+/**
+ * How far a bookmark may sit from today. Ten years keeps every link to a
+ * job's planned date open, and bounds what one URL makes the views lay out.
+ */
+const BOOKMARK_REACH_YEARS = 10;
+
+/** Optional bookmark date; an invalid, repeated or out-of-reach query parameter uses today's date. */
 export function calendarDateFromQuery(value: string | string[] | undefined, today: string): string {
-  return typeof value === 'string' && isValidIsoDate(value) ? value : today;
+  if (typeof value !== 'string' || !isValidIsoDate(value)) return today;
+  const todayYear = Number(today.slice(0, 4));
+  const earliest = `${todayYear - BOOKMARK_REACH_YEARS}${today.slice(4)}`;
+  const latest = `${todayYear + BOOKMARK_REACH_YEARS}${today.slice(4)}`;
+  return value >= earliest && value <= latest ? value : today;
 }

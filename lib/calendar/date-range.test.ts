@@ -25,10 +25,12 @@ describe('calendar ISO date range boundary', () => {
   });
 });
 
-test('calendar bookmarks accept only real single ISO dates and otherwise preserve today', () => {
+test('calendar bookmarks accept only real single ISO dates within ten years of today and otherwise preserve today', () => {
   const today = '2026-09-08';
   expect(calendarDateFromQuery('2026-06-15', today)).toBe('2026-06-15');
   expect(calendarDateFromQuery('2028-02-29', today)).toBe('2028-02-29');
+  expect(calendarDateFromQuery('2036-09-08', today)).toBe('2036-09-08');
+  expect(calendarDateFromQuery('2016-09-08', today)).toBe('2016-09-08');
   for (const input of [
     undefined,
     ['2026-06-15'],
@@ -36,6 +38,10 @@ test('calendar bookmarks accept only real single ISO dates and otherwise preserv
     '2026-2-01',
     '2026-06-15T12:00:00Z',
     'invalid',
+    '2036-09-09',
+    '2016-09-07',
+    '9999-12-31',
+    '0001-01-01',
   ]) {
     expect(calendarDateFromQuery(input, today)).toBe(today);
   }
