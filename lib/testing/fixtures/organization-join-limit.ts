@@ -1,90 +1,102 @@
-// Actual requestOrganizationJoin and code generator with only identity,
-// cookies and the database replaced: wrong codes are counted per user and
-// refused after the limit, a right code creates one open join request and no
-// membership, another owner's code is refused, and codes come from the
-// cryptographic random source.
+// Actual requestOrganizationJoin, rate limiter and code generator over the
+// in-memory database: every join attempt is counted per user before the code
+// is looked up, so parallel guesses cannot pass the hourly limit; a right code
+// creates one open join request and no membership; another owner's code is
+// refused; and codes come from the cryptographic random source.
 import assert from 'node:assert/strict';
-import { mock } from 'bun:test';
-import { createInMemoryAdmin, type InMemoryTables } from './in-memory-admin';
+import { CALLER_ID, installActionWorld, tableRows } from './action-boundary-world';
+
+// Fixture-only value: the secret keys the limiter's subject hash.
+process.env.EMAIL_OTP_HASH_SECRET = 'fixture-only-join-limit-secret';
+console.error = () => {};
 
 const organizationId = '10000000-0000-4000-8000-000000000001';
+const otherUserId = '30000000-0000-4000-8000-000000000099';
 const validCode = 'ABCDEF';
-const tables: InMemoryTables = {
-  organizations: [{ id: organizationId, admin_id: 'owner', name: 'Fixture company', unique_code: validCode }],
-  organization_members: [],
-  organization_join_requests: [],
-  // Another user's failures never count against the caller.
-  organization_join_attempts: Array.from({ length: 10 }, (_, index) => ({
-    id: `other-${index}`,
-    user_id: 'other',
-    attempted_at: new Date().toISOString(),
-  })),
-};
-const callerAttempts = (): Array<Record<string, unknown>> =>
-  (tables.organization_join_attempts ?? []).filter((row) => row.user_id === 'caller');
-const members = (): Array<Record<string, unknown>> => tables.organization_members ?? [];
-const joinRequests = (): Array<Record<string, unknown>> => tables.organization_join_requests ?? [];
-const cookiesSet: string[] = [];
+const world = installActionWorld(
+  {
+    organizations: [
+      { id: organizationId, admin_id: 'owner', name: 'Fixture company', unique_code: validCode },
+    ],
+    organization_members: [],
+    organization_join_requests: [],
+  },
+  { organization_join_requests: () => ({ status: 'pending', requested_at: new Date().toISOString() }) },
+);
 
-mock.module('server-only', () => ({}));
-mock.module('next/headers', () => ({
-  cookies: async () => ({
-    get: () => undefined,
-    set: (name: string) => {
-      cookiesSet.push(name);
-    },
-  }),
-}));
-mock.module('next/cache', () => ({ updateTag: () => {} }));
-mock.module('@/lib/supabase/admin', () => ({
-  createSupabaseAdminClient: () =>
-    createInMemoryAdmin(tables, {
-      organization_join_attempts: () => ({ attempted_at: new Date().toISOString() }),
-      organization_join_requests: () => ({ status: 'pending', requested_at: new Date().toISOString() }),
-    }),
-}));
-mock.module('@/lib/data/cached', () => ({
-  CACHE_TAGS: { memberCount: () => 'member-count' },
-  getAuthenticatedUser: async () => ({ id: 'caller' }),
-  getCachedMemberships: async () => [],
-}));
+// Stands in for consume_rate_limit: the count and the record happen in one
+// synchronous step, as the database function does under its per-key advisory
+// lock (supabase/tests/rate_limits.sql proves the lock).
+const recordedAttempts = new Map<string, number[]>();
+let limiterFails = false;
+world.rpc = ({ name, args }) => {
+  assert.equal(name, 'consume_rate_limit');
+  if (limiterFails) return { data: null, error: { code: '08006', message: 'connection failure' } };
+  const key = `${String(args.p_action)}:${String(args.p_subject_hash)}`;
+  const now = Date.now();
+  const live = (recordedAttempts.get(key) ?? []).filter((expiresAt) => expiresAt > now);
+  if (live.length >= Number(args.p_max_attempts)) {
+    recordedAttempts.set(key, live);
+    return { data: false, error: null };
+  }
+  recordedAttempts.set(key, [...live, now + Number(args.p_window_seconds) * 1000]);
+  return { data: true, error: null };
+};
+const expireAllAttempts = (): void => {
+  for (const key of recordedAttempts.keys()) recordedAttempts.set(key, [Date.now() - 1]);
+};
+// Each limiter call takes one service-role client; every further one is the
+// action's own, which looks up the code first.
+const codeLookups = (): number => world.adminClientRequests - world.rpcCalls.length;
+const members = (): Array<Record<string, unknown>> => tableRows(world, 'organization_members');
+const joinRequests = (): Array<Record<string, unknown>> => tableRows(world, 'organization_join_requests');
+
 const { requestOrganizationJoin } = await import('@/lib/org/join-request-actions');
 const { generateUniqueOrgCode } = await import('@/lib/org/generate-code');
 const { getOrganizationCodeValidationError, normalizeOrganizationCode } = await import('@/lib/org/schemas');
 
 // An empty code is refused before anything is counted or looked up.
 assert.deepEqual(await requestOrganizationJoin('  '), { success: false, error: 'code_required' });
-assert.equal(callerAttempts().length, 0);
+assert.equal(world.rpcCalls.length, 0);
 
-// Ten wrong guesses are answered and recorded; the eleventh attempt is
-// refused before the code is looked up, even when it is the right code.
-for (let attempt = 0; attempt < 10; attempt += 1) {
-  assert.deepEqual(await requestOrganizationJoin('ZZZZZZ'), { success: false, error: 'invalid_code' });
-}
-assert.equal(callerAttempts().length, 10);
-assert.deepEqual(await requestOrganizationJoin('ZZZZZZ'), { success: false, error: 'too_many_attempts' });
+// Twenty guesses sent together: exactly ten are answered, the rest are refused
+// with the limit before their code is looked up, even the right code.
+const together = await Promise.all(Array.from({ length: 20 }, () => requestOrganizationJoin('ZZZZZZ')));
+const answers = together.map((result) => (result.success ? 'created' : result.error));
+assert.equal(answers.filter((answer) => answer === 'invalid_code').length, 10, answers.join());
+assert.equal(answers.filter((answer) => answer === 'too_many_attempts').length, 10, answers.join());
+assert.equal(codeLookups(), 10);
 assert.deepEqual(await requestOrganizationJoin(validCode), { success: false, error: 'too_many_attempts' });
-assert.equal(callerAttempts().length, 10);
+assert.equal(codeLookups(), 10);
 assert.deepEqual(joinRequests(), []);
 
-// After the window has passed the caller may ask to join; expired rows are
-// removed. The right code, in any case, creates an open request and no
-// membership, and no organization cookie is set.
-for (const row of callerAttempts()) row.attempted_at = new Date(Date.now() - 61 * 60 * 1000).toISOString();
+// Another person's attempts never count against the caller, and the reverse.
+world.callerId = otherUserId;
+assert.deepEqual(await requestOrganizationJoin('ZZZZZZ'), { success: false, error: 'invalid_code' });
+world.callerId = CALLER_ID;
+
+// A limit that cannot be decided refuses the attempt without a lookup.
+expireAllAttempts();
+limiterFails = true;
+const lookupsBeforeOutage = codeLookups();
+assert.deepEqual(await requestOrganizationJoin(validCode), { success: false, error: 'unexpected_error' });
+assert.equal(codeLookups(), lookupsBeforeOutage);
+limiterFails = false;
+
+// After the window has passed the caller may ask to join. The right code, in
+// any case, creates an open request and no membership. The world's cookie
+// store has no setter, so an organization cookie write would fail here.
 const requested = await requestOrganizationJoin(' abcdef ');
 assert.ok(requested.success);
 assert.deepEqual(
   { ...requested.request, id: 'generated' },
   { id: 'generated', organizationId, organizationName: 'Fixture company', status: 'pending' },
 );
-assert.equal(callerAttempts().length, 0);
-assert.equal((tables.organization_join_attempts ?? []).length, 10);
 assert.deepEqual(
   joinRequests().map((row) => [row.id, row.user_id, row.organization_id, row.status]),
-  [[requested.request.id, 'caller', organizationId, 'pending']],
+  [[requested.request.id, CALLER_ID, organizationId, 'pending']],
 );
 assert.deepEqual(members(), []);
-assert.deepEqual(cookiesSet, []);
 
 // A second submit returns the open request instead of creating another one.
 const repeated = await requestOrganizationJoin(validCode);
@@ -95,9 +107,10 @@ assert.equal(joinRequests().length, 1);
 
 // All organizations of one person belong to one owner: a member of the
 // owner's other organization still reaches the open request, but the code of
-// another owner's organization is refused before any request.
+// another owner's organization is refused before any request, and a wrong
+// code stays wrong.
 const foreignOwnerCode = 'XYZ234';
-tables.organizations?.push({
+tableRows(world, 'organizations').push({
   id: '10000000-0000-4000-8000-000000000002',
   admin_id: 'other-owner',
   name: 'Other company',
@@ -105,7 +118,7 @@ tables.organizations?.push({
 });
 members().push({
   organization_id: '10000000-0000-4000-8000-000000000003',
-  user_id: 'caller',
+  user_id: CALLER_ID,
   organizations: { admin_id: 'owner' },
 });
 const sameOwner = await requestOrganizationJoin(validCode);
@@ -114,6 +127,7 @@ assert.deepEqual(await requestOrganizationJoin(foreignOwnerCode), {
   success: false,
   error: 'admin_mismatch',
 });
+assert.deepEqual(await requestOrganizationJoin('ZZZZZZ'), { success: false, error: 'invalid_code' });
 assert.equal(joinRequests().length, 1);
 
 // Codes never come from Math.random, and a byte that would bias the charset is drawn again.
