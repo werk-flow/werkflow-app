@@ -109,6 +109,7 @@ async function recordMovement(
 
   if (error) {
     if (error.message === 'return_exceeds_taken') return { success: false, error: 'return_exceeds_taken' };
+    if (error.message === 'material_line_item_changed') return { success: false, error: 'line_changed' };
     logError('Error recording inventory movement.', { code: error.code ?? 'unknown' });
     if (error.message?.includes('inventory stock cannot go below zero')) {
       return { success: false, error: 'stock_would_go_negative' };
