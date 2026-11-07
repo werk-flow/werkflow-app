@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# One open issue per alert title, for health.yml, nightly.yml and release.yml: a failure opens
+# One open issue per alert title, for health.yml, nightly.yml, release.yml and the recovery rehearsal: a failure opens
 # it or updates it, and the next green run closes it. It only reports; no release decision
 # reads it. docs/technical/recovery-and-incidents.md#monitoring says who picks it up.
 #
 # Usage: alert-issue.sh open <title> <body>
 #        alert-issue.sh keep <title> <note>
-#        alert-issue.sh close <title>
+#        alert-issue.sh close <title> [<note>]
 #        alert-issue.sh run <title> <job results> [<skip> <skip reason>]
 #
 # `run` decides from this run's `needs.*.result` and the skip of release-candidate.sh. Needs
@@ -19,7 +19,8 @@ set -euo pipefail
 
 label=ci-alert
 owner=tamaycbn
-run_url="${GITHUB_SERVER_URL}/${GH_REPO}/actions/runs/${GITHUB_RUN_ID}"
+# A caller outside GitHub Actions names its run: ops/recovery-rehearsal.py in werkflow-planning.
+run_url="${ALERT_RUN:-${GITHUB_SERVER_URL}/${GH_REPO}/actions/runs/${GITHUB_RUN_ID}}"
 
 case "${AFFECTS_PRODUCTION:-false}" in
   true | false) ;;
@@ -70,11 +71,14 @@ keep_alert() {
 }
 
 # Every match: GitHub has no create-if-absent, so a race can leave a second issue of one title.
+# A note says why it closed; without one, the run is green again.
 close_alert() {
-  local issues issue
+  local issues issue comment
   issues="$(open_issues "$1")"
+  comment="Green again: ${run_url}"
+  test -z "${2:-}" || comment="$(printf '%s\n\nRun: %s' "$2" "$run_url")"
   for issue in $issues; do
-    gh issue close "$issue" --comment "Green again: ${run_url}"
+    gh issue close "$issue" --comment "$comment"
   done
 }
 

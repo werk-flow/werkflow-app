@@ -9,6 +9,7 @@ const repositoryRoot = resolve(import.meta.dir, '../../..');
 const GUARD = 'scripts/guard-edits-during-verification.ts';
 const DELETE_GUARD = '.claude/hooks/refuse-unresolvable-delete.ts';
 const PRODUCTION_MCP_GUARD = '.claude/hooks/refuse-production-mcp.ts';
+const PRODUCTION_LOG_GUARD = '.claude/hooks/refuse-production-logs.ts';
 
 const hookFileSchema = z.object({
   hooks: z.object({
@@ -66,4 +67,11 @@ test('both agent tools run the production MCP guard before every MCP tool', () =
   ];
   expect(guardedTools('.claude/settings.json', tools, PRODUCTION_MCP_GUARD)).toEqual(tools);
   expect(guardedTools('.codex/hooks.json', tools, PRODUCTION_MCP_GUARD)).toEqual(tools);
+});
+
+// No agent reads Vercel's production logs through the CLI (lib/security/production-access.ts);
+// both tools name every shell call `Bash`.
+test('both agent tools run the production log guard before every shell call', () => {
+  expect(guardedTools('.claude/settings.json', ['Bash'], PRODUCTION_LOG_GUARD)).toEqual(['Bash']);
+  expect(guardedTools('.codex/hooks.json', ['Bash'], PRODUCTION_LOG_GUARD)).toEqual(['Bash']);
 });

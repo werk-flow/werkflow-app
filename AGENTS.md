@@ -146,4 +146,4 @@ Domain terms, each defined by its feature spec: `Auftrag` (work order), `Projekt
 - Generated types (`lib/supabase/database.types.ts`) and live Supabase inspection outrank every schema description.
 - A schema change follows [the migration rule](docs/technical/environments.md#the-migration-rule): one migration per PR at most, with its regenerated types, expand-only.
 - The stack is settled ([decision 0001](docs/decisions/0001-infrastructure-stack.md)). Propose no provider migration without a superseding decision.
-- `main` is staging on DEV, `production` is PROD. `release` ships a moved, green `main` weekdays at 07:00 Berlin, or by hand when a green `main` should not wait ([release and rollback](docs/technical/environments.md#release-and-rollback)).
+- `main` is staging on DEV, `production` is PROD. `release` ships a moved, green `main` weekdays by 05:00 Berlin, or by hand when a green `main` should not wait ([release and rollback](docs/technical/environments.md#release-and-rollback)).

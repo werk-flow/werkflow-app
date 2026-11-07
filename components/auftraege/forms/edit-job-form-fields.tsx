@@ -194,6 +194,7 @@ function EditJobSiteFields({ form }: { form: EditJobForm }) {
         onContactChange={setContactId}
         disabled={formDisabled}
         idPrefix="edit-job"
+        offerSiteCreation
       />
 
       <Field label="Ort" htmlFor="edit-job-location">

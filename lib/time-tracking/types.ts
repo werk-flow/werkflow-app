@@ -370,7 +370,8 @@ export type ZeiterfassungOverview = {
 
 export type AddManualEntryResult =
   | { success: true; entries: TimeEntry[] }
-  | (ActionFailure<'working_in_other_org'> & { otherOrgId: string; otherOrgName: string })
+  /** `otherOrgName` only when the caller is a current member of that organization. */
+  | (ActionFailure<'working_in_other_org'> & { otherOrgName?: string })
   | TimeValidationActionFailure
   | ActionFailure;
 
