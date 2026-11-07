@@ -117,7 +117,8 @@ describe('type-aware lint rules', () => {
   test('an annotation on an any value fails in product code; a parsed or narrowed value passes', async () => {
     const rule = '@typescript-eslint/no-unsafe-assignment';
     const entries = "import { z } from '@/lib/zod';\n\ntype Detail = { entries?: string[] } | null;\n";
-    const detailSchema = 'const detailSchema = z.object({ entries: z.array(z.string()).optional() }).nullable();\n';
+    const detailSchema =
+      'const detailSchema = z.object({ entries: z.array(z.string()).optional() }).nullable();\n';
     for (const filePath of [
       'lib/typed-lint-probe.ts',
       'components/typed-lint-probe.tsx',
