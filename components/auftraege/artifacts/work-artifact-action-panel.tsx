@@ -11,6 +11,7 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import type { OrganizationDocument } from '@/lib/documents/types';
+import { isExportableRevision } from '@/lib/work-artifacts/field-visibility';
 import {
   WORK_ARTIFACT_LEGAL_NOTICE,
   type WorkArtifactDetail,
@@ -422,8 +423,8 @@ function WorkArtifactReviewButtons({
             Prüfung zurückziehen
           </Button>
         )}
-      {/* A project export is a project document write, which needs a manager. */}
-      {(isManager || !detail.project_id) && (
+      {/* A project export is a project document write, which needs a manager; an internal revision is never exported. */}
+      {(isManager || !detail.project_id) && isExportableRevision(currentRevision) && (
         <Button
           pending={isBusy('export')}
           type="button"
