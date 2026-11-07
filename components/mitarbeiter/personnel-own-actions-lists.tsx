@@ -5,7 +5,7 @@ import { Check, Download } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { OwnPersonnelActions } from '@/lib/personnel/lifecycle-actions';
-import { REQUIREMENT_STATE_LABELS } from '@/lib/personnel/lifecycle';
+import { isSelfConfirmableRequirement, REQUIREMENT_STATE_LABELS } from '@/lib/personnel/lifecycle';
 
 type PersonnelOwnRequirementListProps = {
   requirements: OwnPersonnelActions['requirements'];
@@ -34,7 +34,7 @@ export function PersonnelOwnRequirementList({
             <Badge variant={requirement.state === 'blocked' ? 'destructive' : 'secondary'}>
               {REQUIREMENT_STATE_LABELS[requirement.state]}
             </Badge>
-            {requirement.requirementType === 'acknowledgement' &&
+            {isSelfConfirmableRequirement(requirement.requirementType) &&
             (requirement.state === 'missing' || requirement.state === 'pending') ? (
               <Button
                 size="sm"

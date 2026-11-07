@@ -93,11 +93,6 @@ world.rpc = ({ name, args }) => {
       ? { data: operationId, error: null }
       : refusal('template_not_found');
   }
-  if (name === 'acknowledge_personnel_item' && args.p_requirement_id !== null) {
-    return inOrganization('personnel_onboarding_requirements', args.p_requirement_id, organizationId)
-      ? { data: operationId, error: null }
-      : refusal('requirement_not_found');
-  }
   if (name === 'acknowledge_personnel_item') {
     return inOrganization('personnel_documents', args.p_personnel_document_id, organizationId)
       ? { data: operationId, error: null }
@@ -304,7 +299,8 @@ assert.deepEqual(
 // Publishing over another organization's template is refused by its one call.
 assert.deepEqual(await publishTemplate(foreignTemplateId), { success: false, error: 'template_not_found' });
 
-// An employee acknowledges no requirement or document of another organization.
+// An employee acknowledges no requirement or document of another organization:
+// the requirement is not found before the function, the document by it.
 signInAs(world, 'employee');
 assert.deepEqual(
   await acknowledgePersonnelRequirement({
@@ -324,7 +320,7 @@ assert.deepEqual(
   }),
   { success: false, error: 'personnel_document_not_found' },
 );
-assert.equal(world.rpcCalls.length, 3);
+assert.equal(world.rpcCalls.length, 2);
 assertCallerScopedCalls(world);
 assert.deepEqual(storageCalls, []);
 assert.equal(databaseSnapshot(world), initialDatabase, 'no refused call may write');

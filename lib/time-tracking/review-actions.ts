@@ -30,13 +30,14 @@ import {
   touchesClosedTimePeriod,
 } from './closed-periods';
 import { isUuid } from '@/lib/validation/uuid';
+import { resolveActionContext } from '@/lib/org/action-context';
 import {
-  authorizeResponsibilityForTarget,
+  authorizeResponsibilityForTargets,
   getEffectiveResponsibilityHolderForActor,
   loadResponsibilityRuntimeState,
 } from '@/lib/responsibilities/server';
 import { getCurrentOrgId, verifyCurrentMembership } from './action-access';
-import { readPendingEntriesForReview } from './review-entry-reads';
+import { readEntriesForReview } from './review-entry-reads';
 
 // The approval Server Actions: the pending queues, the review of pending
 // entries and the decision on a change request.
@@ -49,10 +50,12 @@ const REVIEW_BATCH_LIMIT = 1000;
 
 /**
  * Approve or reject pending entries in one round trip: one session, one
- * calendar day or the whole approval backlog. Every entry must be pending and
- * belong to one organization the caller is a member of; the time_approval
- * responsibility is resolved once per target person at action time, so a
- * stale view never preserves authority. The database function applies the
+ * calendar day or the whole approval backlog. The caller's organization comes
+ * first, and only its entries are read: an entry of another organization is
+ * refused like an unknown id. The time_approval responsibility is resolved
+ * for every person of the selection from one load at action time, so a stale
+ * view never preserves authority, and only an approver of every person learns
+ * that an entry was already decided. The database function applies the
  * decision to every entry or to none. Rejected entries stay in history with
  * status 'rejected'.
  */
@@ -63,24 +66,18 @@ export async function reviewEntries(
   try {
     const parsed = reviewEntriesInputSchema.safeParse({ entryIds, decision });
     if (!parsed.success) return { success: false, error: 'invalid_input' };
-    const user = await getAuthenticatedUser();
-    if (!user) {
-      return { success: false, error: 'not_authenticated' };
-    }
     const ids = [...new Set(parsed.data.entryIds)];
     if (ids.length === 0 || ids.length > REVIEW_BATCH_LIMIT) {
       return { success: false, error: 'invalid_input' };
     }
+    const caller = await resolveActionContext();
+    if (!caller.success) return caller;
+    const { userId, orgId: organizationId } = caller.context;
 
     const admin = createSupabaseAdminClient();
-    const loaded = await readPendingEntriesForReview(admin, ids);
+    const loaded = await readEntriesForReview(admin, organizationId, ids);
     if (!loaded.success) return loaded;
-    const { entries, organizationId } = loaded;
-
-    const callerRole = await verifyCurrentMembership(organizationId);
-    if (!callerRole) {
-      return { success: false, error: 'not_a_member' };
-    }
+    const { entries } = loaded;
 
     const targetUserIds = [...new Set(entries.map((entry) => entry.user_id))];
     const { data: targetMembers, error: targetMembersError } = await readInBatches(targetUserIds, (batch) =>
@@ -95,24 +92,24 @@ export async function reviewEntries(
       return { success: false, error: 'fetch_failed' };
     }
     const roleByUser = new Map(targetMembers.map((member) => [member.user_id, member.role]));
+    const targets = targetUserIds.map((targetUserId) => ({
+      userId: targetUserId,
+      role: roleByUser.get(targetUserId) ?? null,
+    }));
+    if (targets.some((target) => target.role === null)) {
+      return { success: false, error: 'target_not_found' };
+    }
     // Resolve current stored responsibility at action time. A stale UI can
     // never preserve authority after a delegation expires.
-    const authorizations = await Promise.all(
-      targetUserIds.map(async (targetUserId) => {
-        const targetRole = roleByUser.get(targetUserId);
-        if (!targetRole) return { success: false as const, error: 'target_not_found' };
-        return authorizeResponsibilityForTarget({
-          organizationId,
-          responsibility: 'time_approval',
-          actorUserId: user.id,
-          targetUserId,
-          targetRole,
-        });
-      }),
-    );
-    const refusal = authorizations.find((authorization) => !authorization.success);
-    if (refusal && !refusal.success) {
-      return { success: false, error: refusal.error };
+    const authorization = await authorizeResponsibilityForTargets({
+      organizationId,
+      responsibility: 'time_approval',
+      actorUserId: userId,
+      targets,
+    });
+    if (!authorization.success) return authorization;
+    if (entries.some((entry) => entry.status !== 'pending')) {
+      return { success: false, error: 'entry_not_pending' };
     }
     // An entry of a closed month keeps its review state until a reopen.
     const entryTimestamps = entries.map((entry) => entry.timestamp);
@@ -124,7 +121,7 @@ export async function reviewEntries(
     const { data: reviewed, error: reviewError } = await admin.rpc(
       'review_time_entries',
       rpcArgs('review_time_entries', {
-        p_actor_id: user.id,
+        p_actor_id: userId,
         p_organization_id: organizationId,
         p_entry_ids: ids,
         p_decision: parsed.data.decision,
