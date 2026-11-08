@@ -350,6 +350,11 @@ export async function endResponsibilityDelegation(rawDelegationId: string): Prom
     p_revoked_from: revokedFrom,
     p_actor_id: owner.context.userId,
   });
+  // A concurrent request ended the window first: it is ended, as asked.
+  if (error?.message.includes('responsibility_delegation_already_ended')) {
+    refreshResponsibilitySurfaces();
+    return { success: true };
+  }
   if (error) {
     logError('Failed to end responsibility delegation:', error);
     return { success: false, error: responsibilityFailureCode(error.message) };

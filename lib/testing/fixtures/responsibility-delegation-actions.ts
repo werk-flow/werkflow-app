@@ -161,6 +161,20 @@ assert.deepEqual(
   'a running window ends today',
 );
 
+// A concurrent request ended the window first: the database refuses the second
+// end, and the action reports the window ended without a failure.
+const answerRpc = world.rpc;
+world.rpc = (call) =>
+  call.name === 'end_responsibility_delegation'
+    ? { data: null, error: { message: 'responsibility_delegation_already_ended' } }
+    : answerRpc(call);
+assert.deepEqual(
+  await endResponsibilityDelegation(activeId),
+  { success: true },
+  'a window another request ended first counts as ended',
+);
+world.rpc = answerRpc;
+
 // A window that is already over is not revoked again: its history keeps its end.
 world.rpcCalls.length = 0;
 assert.deepEqual(await endResponsibilityDelegation(endedId), { success: true });
