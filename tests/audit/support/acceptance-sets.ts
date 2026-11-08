@@ -355,6 +355,27 @@ function callerMatchCaptures(): AcceptanceSet {
   };
 }
 
+/**
+ * werk-flow/werkflow-planning#144 of 2026-11-08: Aufgaben for Büro, with the
+ * time-bound decisions first and the handover backlog counted at the end.
+ */
+function taskOrderCaptures(): AcceptanceSet {
+  return {
+    id: 'task-order-2026-11-08',
+    captures: [
+      {
+        id: 'buero-aufgaben',
+        role: 'buero',
+        route: '/aufgaben',
+        view: { kind: 'page' },
+        widths: [1280, 375],
+        schemes: ['light', 'dark'],
+      },
+    ],
+    standalone: [],
+  };
+}
+
 export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   uiRoundCaptures(),
   fieldTargetCaptures(),
@@ -367,4 +388,5 @@ export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   periodBlockerCaptures(),
   clockDockCaptures(),
   callerMatchCaptures(),
+  taskOrderCaptures(),
 ];

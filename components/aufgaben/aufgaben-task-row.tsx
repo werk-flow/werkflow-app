@@ -5,7 +5,7 @@ import type { AttentionTask } from '@/lib/attention/types';
 import { formatVacationDays } from '@/lib/vacation/balance';
 import { REQUEST_STATUS_LABELS, REQUEST_URGENCY_LABELS } from '@/lib/requests/types';
 import { WORK_ARTIFACT_KIND_LABELS } from '@/lib/work-artifacts/types';
-import { formatOpenSince } from './aufgaben-format';
+import { formatOpenSince } from '@/lib/attention/task-sections';
 import { formatGermanDate, formatGermanDateRange, formatBerlinDateTime } from '@/lib/utils';
 
 type AttentionApprovalTask = Extract<
@@ -81,6 +81,7 @@ function AttentionApprovalTaskRow({ task }: { task: AttentionApprovalTask }) {
         <p className="text-xs text-muted-foreground tabular-nums">
           {formatGermanDate(task.date)}
           {task.jobTitle ? ` · ${task.jobTitle}` : ''}
+          {` · ${formatOpenSince(task.openSinceDays)}`}
         </p>
       </TaskLink>
     );
@@ -96,6 +97,7 @@ function AttentionApprovalTaskRow({ task }: { task: AttentionApprovalTask }) {
         <p className="text-sm font-medium">{task.personName}</p>
         <p className="text-xs text-muted-foreground">
           {task.requestType === 'delete' ? 'Löschung eines Zeiteintrags' : 'Änderung eines Zeiteintrags'}
+          {` · ${formatOpenSince(task.openSinceDays)}`}
         </p>
       </TaskLink>
     );
@@ -109,7 +111,10 @@ function AttentionApprovalTaskRow({ task }: { task: AttentionApprovalTask }) {
         sourceId={task.sourceId}
       >
         <p className="text-sm font-medium">{task.personName}</p>
-        <p className="text-xs text-muted-foreground">{task.correctionLabel}</p>
+        <p className="text-xs text-muted-foreground">
+          {task.correctionLabel}
+          {` · ${formatOpenSince(task.openSinceDays)}`}
+        </p>
       </TaskLink>
     );
   }
@@ -125,6 +130,7 @@ function AttentionApprovalTaskRow({ task }: { task: AttentionApprovalTask }) {
         {formatGermanDateRange(task.startDate, task.endDate)}
         {task.dayPortion === 'half_day' ? ' (halbtags)' : ''}
         {` · ${formatVacationDays(task.totalDays)}`}
+        {` · ${formatOpenSince(task.openSinceDays)}`}
       </p>
     </TaskLink>
   );
