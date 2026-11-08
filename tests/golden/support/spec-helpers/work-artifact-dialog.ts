@@ -101,7 +101,7 @@ const ARTIFACT_COPY = {
 } as const;
 
 /** Fields whose label is unique only as an exact match. */
-const EXACT_FIELDS = new Set<WorkArtifactField>(['location', 'reason']);
+const EXACT_FIELDS = new Set<WorkArtifactField>(['location', 'reason', 'title']);
 const EXACT_ACTIONS = new Set<WorkArtifactAction>(['submitForReview', 'saveDraft', 'export', 'link']);
 
 type WorkArtifactPicker = keyof typeof ARTIFACT_COPY.picker;
@@ -385,7 +385,7 @@ export async function beginWorkArtifact(
 
 /** Submits for review with Enter in the exactly named title field, the form's keyboard path. */
 export async function submitWorkArtifactWithEnter(dialog: Locator): Promise<void> {
-  await pressKey(dialog, 'Enter', { into: dialog.getByLabel(ARTIFACT_COPY.field.title, { exact: true }) });
+  await pressKey(dialog, 'Enter', { into: workArtifactField(dialog, 'title') });
 }
 
 /** Submits a new Arbeitsnachweis for review, waits for its first version and closes the dialog. */

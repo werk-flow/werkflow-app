@@ -27,7 +27,18 @@ export function recordedVisitWindow(
   const ends = today.map((session) => session.clockOut?.timestamp ?? null);
   const open = ends.some((end) => end === null);
   if (open) return { startedAt: first.timestamp, endedAt: null };
-  return { startedAt: first.timestamp, endedAt: endAfterBreak(own, today.at(-1)) };
+  const endedAt = endAfterBreak(own, today.at(-1));
+  // The form shows minutes: an end in the start's minute would read as an end
+  // before or at the start, which the report refuses, so Ende stays empty.
+  return {
+    startedAt: first.timestamp,
+    endedAt: endedAt && inLaterMinute(endedAt, first.timestamp) ? endedAt : null,
+  };
+}
+
+function inLaterMinute(later: string, earlier: string): boolean {
+  const minute = (instant: string) => Math.floor(Date.parse(instant) / 60_000);
+  return minute(later) > minute(earlier);
 }
 
 /**

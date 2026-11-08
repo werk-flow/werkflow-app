@@ -93,4 +93,15 @@ describe('recordedVisitWindow', () => {
       endedAt: '2026-11-02T12:20:00+01:00',
     });
   });
+
+  test('an end in the start minute leaves Ende empty, so the prefill never reads as end before start', () => {
+    const quick = [
+      entry('in-1', 'clock_in', '2026-11-02T13:07:05+01:00'),
+      entry('out-1', 'clock_out', '2026-11-02T13:07:40+01:00'),
+    ];
+    expect(recordedVisitWindow(quick, { jobId, userId, now })).toEqual({
+      startedAt: '2026-11-02T13:07:05+01:00',
+      endedAt: null,
+    });
+  });
 });
