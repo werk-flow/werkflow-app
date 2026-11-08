@@ -295,9 +295,19 @@ export function takeFromStockButton(scope: Page | Locator): Locator {
   return scope.getByRole('button', { name: INVENTORY_LABELS.takeFromStock });
 }
 
-/** The still-out line of a job material row: „Noch draußen: 0 Stk.“. */
-export function materialStillOutText(quantity: number, unit = 'piece'): string {
-  return `Noch draußen: ${formatInventoryQuantity(quantity, unit)}`;
+/** What a job material row keeps at the job once something came back: „Beim Auftrag: 0 Stück“. */
+export function materialAtJobText(quantity: number, unit = 'piece'): string {
+  return `Beim Auftrag: ${formatInventoryQuantity(quantity, unit)}`;
+}
+
+/** A material row's taken quantity: „2 Stück entnommen“. */
+export function materialTakenText(quantity: number, unit = 'piece'): string {
+  return `${formatInventoryQuantity(quantity, unit)} entnommen`;
+}
+
+/** A material row's returned quantity: „1 Stück zurückgelegt“. */
+export function materialReturnedText(quantity: number, unit = 'piece'): string {
+  return `${formatInventoryQuantity(quantity, unit)} zurückgelegt`;
 }
 
 export function jobMaterialLine(page: Page, itemName: string): Locator {
