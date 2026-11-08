@@ -28,6 +28,8 @@ import {
   addMissedTimeButton,
   approveAllTimeEntriesButton,
   approveAllTimeEntriesConfirmation,
+  withdrawOwnSubmissionButtons,
+  withdrawSubmissionConfirmation,
   chooseActivityDialog,
   clockInJobPicker,
   clockInLauncher,
@@ -220,6 +222,18 @@ export const TIME_OPENERS = {
   'field.sickness-report': {
     trigger: async ({ page }) => enabled(reportSicknessButton(page)),
     layer: (page) => ownSicknessDialog(page, 'report'),
+  },
+  'field.withdraw-submission': {
+    trigger: async (context) => {
+      await seedEmployeeApprovals(context);
+      await context.page.reload();
+      await hydratedAndSettled(context.page);
+      await timeHistoryTab(context.page).click();
+      await expect(timeHistoryTab(context.page)).toHaveAttribute('aria-selected', 'true');
+      // The employee holds two seeded submissions; any row opens the same confirmation.
+      return enabled(withdrawOwnSubmissionButtons(context.page).first());
+    },
+    layer: withdrawSubmissionConfirmation,
   },
   'field.sickness-end': {
     trigger: async (context) => enabled(ownSicknessEndButton(context.page, await ownSicknessRange(context))),

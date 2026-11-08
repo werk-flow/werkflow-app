@@ -618,6 +618,16 @@ export function approveAllTimeEntriesConfirmation(page: Page): Locator {
   return page.getByRole('alertdialog', { name: TIME_ENTRY_COPY.approveAllConfirmation, exact: true });
 }
 
+/** „Zurückziehen“ on any of the viewer's own pending submissions in the Verlauf. */
+export function withdrawOwnSubmissionButtons(page: Page): Locator {
+  return timeHistoryPanel(page).getByRole('button', { name: /^Nachtrag vom .* zurückziehen \(/ });
+}
+
+/** The confirmation that „Zurückziehen“ on a pending submission opens. */
+export function withdrawSubmissionConfirmation(page: Page): Locator {
+  return page.getByRole('alertdialog', { name: 'Nachtrag zurückziehen?', exact: true });
+}
+
 function pendingTimeApprovalCard(page: Page, userId: string): Locator {
   return confirmed(page.locator(`[data-testid^="pending-session-"][data-user-id="${userId}"]`));
 }

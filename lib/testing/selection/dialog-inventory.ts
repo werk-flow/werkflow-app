@@ -422,6 +422,9 @@ export const DIALOG_INVENTORY = {
     {
       audits: [{ route: '/zeiterfassung', role: 'admin', opener: 'time.approve-all' }],
     },
+  'components/zeiterfassung/entry-history-row-action.tsx#WithdrawSubmissionButton|Nachtrag zurückziehen?': {
+    audits: [{ route: '/zeiterfassung', role: 'employee', opener: 'field.withdraw-submission' }],
+  },
   'components/zeiterfassung/sickness-section-end-dialog.tsx#OwnSicknessEndDialog|Enddatum setzen': {
     audits: [{ route: '/zeiterfassung', role: 'employee', opener: 'field.sickness-end' }],
   },
