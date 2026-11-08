@@ -3,6 +3,7 @@
 import { useId, useState } from 'react';
 import {
   CalendarClock,
+  CalendarX,
   ClipboardCheck,
   Clock,
   Inbox,
@@ -37,6 +38,11 @@ const SECTION_PRESENTATION: Record<
     icon: <Palmtree className="size-4" />,
     title: 'Urlaubsanträge',
     testId: 'attention-vacation-tasks',
+  },
+  visitReplan: {
+    icon: <CalendarX className="size-4" />,
+    title: 'Einsätze umplanen',
+    testId: 'attention-visit-replan-tasks',
   },
   request: {
     icon: <Inbox className="size-4" />,

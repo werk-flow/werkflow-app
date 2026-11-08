@@ -96,9 +96,16 @@ import {
   type BackendHealth,
 } from '../lib/testing/runner/backend-health';
 import { acquireHeavySlot } from '../lib/testing/runner/heavy-slot';
+import { verifyOnBoat } from '../lib/testing/boat/verify-on-boat';
 
-// A verification run holds one of the machine's heavy slots until it exits (lib/testing/runner/heavy-slot.ts); a plan takes none.
-if (process.argv[2] === 'run') await acquireHeavySlot('test:verify');
+// A run goes to a Boat machine when this workstation has a Boat key, and falls back here on any
+// Boat failure (lib/testing/boat/verify-on-boat.ts). A local run holds one of the machine's heavy
+// slots until it exits (lib/testing/runner/heavy-slot.ts); a plan takes neither.
+if (process.argv[2] === 'run') {
+  const boatExit = await verifyOnBoat(process.argv.slice(3), resolve(import.meta.dir, '..'));
+  if (boatExit !== undefined) process.exit(boatExit);
+  await acquireHeavySlot('test:verify');
+}
 
 const repository = resolve(import.meta.dir, '..');
 const archive = resolve(repository, '.agent-logs/verification');

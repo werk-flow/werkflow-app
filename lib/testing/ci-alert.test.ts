@@ -184,7 +184,7 @@ test('repeated handled failures keep one assigned issue open until the watcher c
   ]);
 });
 
-test('the production alert workflow offers every title the production watcher raises', () => {
+test('the production alert workflow offers every title the production watcher and the Boat key check raise', () => {
   const workflow = readFileSync(join(repositoryRoot, '.github/workflows/production-alert.yml'), 'utf8');
   for (const title of [
     'CI alert: release',
@@ -192,6 +192,7 @@ test('the production alert workflow offers every title the production watcher ra
     'Production alert: server errors',
     'Production alert: handled failures',
     'Production alert: watcher',
+    'Owner action: Boat key',
   ])
     expect(workflow).toContain(`- '${title}'\n`);
   expect(workflow).toContain('alert-issue.sh "$ACTION" "$TITLE" "$NOTE"');

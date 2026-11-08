@@ -33,6 +33,7 @@ import {
   createVacationCountingCache,
   loadVacationCountingContext,
   loadVacationRequestsForRecord,
+  readOpenVacationRequests,
   type RecordVacationCounting,
 } from './server';
 import {
@@ -617,22 +618,13 @@ export async function getPendingVacationRequestsForApprover(): Promise<ApproverV
     const { userId, orgId } = auth.context;
 
     const admin = createSupabaseAdminClient();
-    const { data: pendingRows, error: pendingError } = await readCompleteRows(
-      (from, to) =>
-        admin
-          .from('vacation_requests')
-          .select('*')
-          .eq('organization_id', orgId)
-          .eq('status', 'pending')
-          .order('start_date', { ascending: true })
-          .order('id')
-          .range(from, to),
-      LIST_ROW_CAP,
-    );
-    if (pendingError) {
-      logError('Failed to load pending vacation requests:', pendingError);
+    // The planner's replan tasks share this read within one request.
+    const openRequests = await readOpenVacationRequests(orgId, getBusinessTodayIso());
+    if (openRequests.error) {
+      logError('Failed to load pending vacation requests:', openRequests.error);
       return { success: false, error: 'fetch_failed' };
     }
+    const pendingRows = openRequests.data.filter((row) => row.status === 'pending');
     const span = spanOfRequests(pendingRows);
     if (!span) {
       return { success: true, requests: [] };

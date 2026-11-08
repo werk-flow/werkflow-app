@@ -140,7 +140,7 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
     return this.where((row) => (row[column] ?? null) === value);
   }
   in(column: string, values: readonly unknown[]): this {
-    return this.where((row) => values.includes(row[column]));
+    return this.compare(column, (field) => values.includes(field));
   }
   /** A null column fails the comparison, as in SQL; as text, `null` would sort after every date. */
   gte(column: string, value: string): this {

@@ -30,10 +30,11 @@ import {
 } from './office-tasks';
 import { deriveDispatchAcknowledgementTasks, deriveDispatchChallengeTasks } from './dispatch-tasks';
 import { deriveParkingReviewTasks } from './parking-tasks';
+import { deriveVisitReplanTasks } from './replan-tasks';
 import {
   deriveCertificationExpiryNotifications,
   readNotificationReadVersions,
-  readSicknessNoticeNames,
+  readPersonNames,
   refuseCertificationMarker,
   refuseSicknessReportMarker,
   refuseVacationDecisionMarker,
@@ -216,7 +217,7 @@ async function deriveSicknessNotifications(
     isManager,
     ownRecordId,
   );
-  const nameByRecordId = await readSicknessNoticeNames(admin, context.orgId, managerRows);
+  const nameByRecordId = await readPersonNames(admin, context.orgId, managerRows);
   if (!nameByRecordId) return { notifications: [], failed: true };
 
   const notifications: AttentionNotification[] = [];
@@ -303,6 +304,7 @@ async function deriveAttention(context: ActionContext): Promise<DerivedAttention
       deriveWorkArtifactTasks(context),
       deriveWorkHandoverTasks(context),
       deriveJoinRequestTasks(context),
+      deriveVisitReplanTasks(context),
     ]),
     Promise.all([
       deriveOwnNotifications(context, ownRecord),

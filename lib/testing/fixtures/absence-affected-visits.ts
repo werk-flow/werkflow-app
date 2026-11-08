@@ -46,7 +46,8 @@ const timedVisit = (input: {
   end_at: input.endAt,
   start_date: null,
   end_date_exclusive: null,
-  absent: [{ employee_record_id: input.recordId ?? absentRecordId }],
+  // The assignment shares the visit's id under another prefix.
+  absent: [{ id: input.id.replace(/^83/, '84'), employee_record_id: input.recordId ?? absentRecordId }],
   job: input.job,
 });
 
@@ -242,3 +243,46 @@ signInAs(world, 'employee');
 const requestsBefore = world.adminClientRequests;
 assert.deepEqual(await getAbsenceAffectedVisits(absence), { success: false, error: 'not_authorized' });
 assert.equal(world.adminClientRequests, requestsBefore, 'a refused caller reaches no service-role client');
+
+// More absences than one read carries: each still gets its own visits, in the order asked,
+// also when the two people of one visit land in different reads.
+const { loadAbsencesAffectedVisits } = await import('@/lib/calendar/absence-visits');
+const { createSupabaseAdminClient } = await import('@/lib/supabase/admin');
+const sharedVisitId = '83000000-0000-4000-8000-000000000017';
+world.tables.planning_occurrences?.push({
+  ...timedVisit({
+    id: sharedVisitId,
+    startAt: '2026-12-20T07:00:00.000Z',
+    endAt: '2026-12-20T09:00:00.000Z',
+    job: job('Gemeinsamer Termin', 'AUF-2026-160'),
+  }),
+  absent: [
+    { id: '85000000-0000-4000-8000-000000000001', employee_record_id: absentRecordId },
+    { id: '85000000-0000-4000-8000-000000000002', employee_record_id: coworkerRecordId },
+  ],
+});
+// The absent person sorts first, so the coworker's 20.12. lands in the second read of fifteen.
+const coworkerDays = [
+  ...Array.from({ length: 15 }, (_, index) => `2026-12-${String(index + 1).padStart(2, '0')}`),
+  '2026-12-20',
+].map((day) => ({
+  employeeRecordId: coworkerRecordId,
+  from: day,
+  to: day,
+}));
+const batched = await loadAbsencesAffectedVisits({
+  admin: createSupabaseAdminClient(),
+  orgId: ORGANIZATION_A,
+  absences: [
+    ...coworkerDays,
+    { employeeRecordId: absentRecordId, from: '2026-10-30', to: '2026-10-30' },
+    { employeeRecordId: absentRecordId, from: '2026-12-20', to: '2026-12-20' },
+  ],
+});
+assert.ok(batched);
+const assignmentsOf = (index: number) => batched[index]?.map((entry) => entry.assignmentId);
+assert.equal(batched.length, 18);
+assert.ok(batched.slice(0, 15).every((visits) => visits.length === 0));
+assert.deepEqual(assignmentsOf(15), ['85000000-0000-4000-8000-000000000002']);
+assert.deepEqual(assignmentsOf(16), [dispatchedVisitId.replace(/^83/, '84')]);
+assert.deepEqual(assignmentsOf(17), ['85000000-0000-4000-8000-000000000001']);

@@ -21,6 +21,10 @@ import { listProductSources, repositoryRoot } from './product-sources';
 
 /** file -> "method column <- filter expression" -> why the list is bounded. */
 const BOUNDED_STRING_FILTERS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  'lib/calendar/absence-visits.ts': {
+    'or * <- overlapFilter':
+      'two overlap terms per merged date window of one batch of at most ABSENCE_BATCH_SIZE (15) absences',
+  },
   'lib/time-corrections/pending-projection.ts': {
     "or * <- batch .map((id) => { const revision = revisionByRequest.get(id); if (revision === undefined) throw new Error('Pending correction revision is missing from its requested batch.'); return `and(request_id.eq.${id},revision.eq.${revision})`; }) .join(',')":
       'the batch parameter of readInBatches at REVISION_PAIR_BATCH_SIZE (40) request-revision pairs per request',
