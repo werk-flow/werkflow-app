@@ -21,6 +21,8 @@ type FolderActions = typeof import('@/lib/documents/folder-actions');
 type SignatureActions = typeof import('@/lib/work-artifacts/signature-upload-actions');
 type PersonnelActions = typeof import('@/lib/personnel/lifecycle-actions');
 
+type ContractVersion = { versionNumber: number; uploadId: string; storagePath: string };
+
 type DocumentUploadBoundaryState = {
   /** File names whose finalize registers the document, but whose answer never reaches the browser, once each. */
   loseFinalizeAnswer: string[];
@@ -32,8 +34,8 @@ type DocumentUploadBoundaryState = {
   completions: { failedCount: number; uploaded: string[] }[];
   /** File names whose next finalize fails before it registers anything, once each. */
   failFinalize: string[];
-  /** The versions saved on the versioned document, the first one included. */
-  versions: { versionNumber: number; storagePath: string }[];
+  /** The versions saved on the versioned document, the first one included, with the upload that saved each. */
+  versions: ContractVersion[];
   /** Whether a manager filed the versioned document, so it takes no new version. */
   filed: boolean;
 };
@@ -56,6 +58,7 @@ function takeOnce(list: string[], fileName: string): boolean {
 
 const registeredDocumentIds = new Set<string>();
 let ticketCount = 0;
+let versionTicketCount = 0;
 
 function unexpectedDocumentAction(): never {
   throw new Error('This document action is outside the upload dialog contract.');
@@ -119,7 +122,7 @@ function versionPath(documentId: string, versionNumber: number, fileName: string
   return `contract-organization/${documentId}/v${versionNumber}/${fileName}`;
 }
 
-function currentVersion(): { versionNumber: number; storagePath: string } {
+function currentVersion(): ContractVersion {
   const current = window.uiContractDocumentUpload.versions.at(-1);
   if (!current) throw new Error('The versioned contract document needs its first version.');
   return current;
@@ -129,19 +132,25 @@ export async function createDocumentVersionUploadTicket(
   input: Parameters<UploadActions['createDocumentVersionUploadTicket']>[0],
 ): ReturnType<UploadActions['createDocumentVersionUploadTicket']> {
   const versionNumber = currentVersion().versionNumber + 1;
+  versionTicketCount += 1;
   const storagePath = versionPath(input.documentId, versionNumber, input.fileName);
   return {
     success: true,
     ticket: {
       documentId: input.documentId,
       versionNumber,
+      uploadId: `contract-version-upload-${versionTicketCount}`,
       storagePath,
       uploadUrl: `http://localhost/storage/${input.documentId}/${encodeURIComponent(input.fileName)}`,
     },
   };
 }
 
-/** Saves a version when the document is not filed and its number is the next one, like `finalize_document_version_upload`. */
+/**
+ * Saves a version when the document is not filed and its number is the next
+ * one, like `finalize_document_version_upload`. A version of another number
+ * is `already_finalized` when this upload saved it, like the Server Action.
+ */
 export async function finalizeDocumentVersionUpload(
   input: Parameters<UploadActions['finalizeDocumentVersionUpload']>[0],
 ): ReturnType<UploadActions['finalizeDocumentVersionUpload']> {
@@ -149,10 +158,13 @@ export async function finalizeDocumentVersionUpload(
   if (takeOnce(state.failFinalize, input.fileName)) return { success: false, error: 'load_failed' };
   if (state.filed) return { success: false, error: 'document_filed' };
   if (input.versionNumber !== currentVersion().versionNumber + 1) {
-    return { success: false, error: 'version_conflict' };
+    const ownVersion = state.versions.some(
+      (version) => version.versionNumber === input.versionNumber && version.uploadId === input.uploadId,
+    );
+    return { success: false, error: ownVersion ? 'already_finalized' : 'version_conflict' };
   }
   const storagePath = versionPath(input.documentId, input.versionNumber, input.fileName);
-  state.versions.push({ versionNumber: input.versionNumber, storagePath });
+  state.versions.push({ versionNumber: input.versionNumber, uploadId: input.uploadId, storagePath });
   if (takeOnce(state.loseFinalizeAnswer, input.fileName)) throw new TypeError('Failed to fetch');
   const { originalFileName, ...document } = contractDocument(input.documentId, input.fileName);
   return {

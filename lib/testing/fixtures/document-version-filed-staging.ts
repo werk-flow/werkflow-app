@@ -74,6 +74,7 @@ assert.deepEqual(
   await finalizeDocumentVersionUpload({
     documentId: contractId,
     versionNumber: ticket.ticket.versionNumber,
+    uploadId: ticket.ticket.uploadId,
     fileName: 'vertrag-v2.pdf',
   }),
   { success: false, error: 'document_filed' },

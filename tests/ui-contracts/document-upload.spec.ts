@@ -47,7 +47,11 @@ async function openUploadDialog(
         registered: [],
         completions: [],
         versions: [
-          { versionNumber: 1, storagePath: 'contract-organization/contract-versioned/v1/angebot.pdf' },
+          {
+            versionNumber: 1,
+            uploadId: 'contract-first-upload',
+            storagePath: 'contract-organization/contract-versioned/v1/angebot.pdf',
+          },
         ],
       };
     },
@@ -180,6 +184,7 @@ test('a cancel request ends with its run, so a retry runs without the loss warni
 /** Another person's version 2 of the versioned document, under the same file name as ours. */
 const COLLEAGUE_VERSION = {
   versionNumber: 2,
+  uploadId: 'contract-colleague-upload',
   storagePath: 'contract-organization/contract-versioned/v2/angebot-v2.pdf',
 };
 
@@ -209,14 +214,12 @@ async function uploadVersionTwice(page: Page, beforeRetry: 'nothing' | 'another 
   );
 }
 
-test('a version retry after a lost save answer reports the save unconfirmed, never saved', async ({
-  page,
-}) => {
+test('a version retry after a lost save answer reports its own saved version as saved', async ({ page }) => {
   const puts = await openUploadDialog(page, { loseFinalizeAnswer: ['angebot-v2.pdf'] });
 
   expect(await uploadVersionTwice(page, 'nothing')).toEqual({
     first: 'interrupted',
-    retry: 'version_unconfirmed',
+    retry: 'saved',
     versions: [
       'contract-organization/contract-versioned/v1/angebot.pdf',
       'contract-organization/contract-versioned/v2/angebot-v2.pdf',
@@ -232,7 +235,7 @@ test('a version retry after another person saved the same file name never report
 
   expect(await uploadVersionTwice(page, 'another person saves a version')).toEqual({
     first: 'not_saved',
-    retry: 'version_unconfirmed',
+    retry: 'version_conflict',
     versions: [
       'contract-organization/contract-versioned/v1/angebot.pdf',
       'contract-organization/contract-versioned/v2/angebot-v2.pdf',

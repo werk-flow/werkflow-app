@@ -1,6 +1,7 @@
 'use server';
 
 import { randomUUID } from 'crypto';
+import { loggedRead } from '@/lib/data/read-request-cache';
 import { logError } from '@/lib/logging';
 import { createSignedUploadUrl, discardStorageObjects } from '@/lib/storage/r2';
 import { isConfirmedWriteRefusal } from '@/lib/supabase/write-refusal';
@@ -8,8 +9,11 @@ import { rpcArgs } from '@/lib/supabase/rpc-args';
 import {
   authorizeDocumentUploadTarget,
   getAuthorizedDocumentContext,
+  getManageableDocument,
   getVersionableDocument,
   normalizeUploadTarget,
+  refuseNewVersion,
+  type AuthorizedDocumentContext,
   type NormalizedUploadTarget,
 } from './access';
 import {
@@ -27,13 +31,18 @@ import {
 import { inferDocumentCategory } from './category-inference';
 import { hydrateWrittenDocument } from './hydration';
 import { readDocumentStoragePath } from './reads';
-import { buildDocumentStoragePath, buildDocumentVersionStoragePath } from './storage-path';
+import {
+  buildDocumentStoragePath,
+  buildDocumentVersionStoragePath,
+  buildDocumentVersionUploadFolder,
+} from './storage-path';
 import {
   DOCUMENT_MAX_FILE_SIZE_BYTES,
   DOCUMENT_STORAGE_BUCKET,
   toDocumentCategory,
   type DocumentCategory,
   type DocumentResult,
+  type DocumentRow,
   type DocumentUploadTicketResult,
   type DocumentVersion,
   type DocumentVersionUploadTicketResult,
@@ -236,9 +245,11 @@ export async function createDocumentVersionUploadTicket(
   }
 
   const nextVersionNumber = existing.document.current_version_number + 1;
+  const uploadId = randomUUID();
   const storagePath = buildDocumentVersionStoragePath({
     organizationId: auth.context.orgId,
     documentId: existing.document.id,
+    uploadId,
     versionNumber: nextVersionNumber,
     fileName: input.fileName.trim() || 'Dokument',
   });
@@ -255,6 +266,7 @@ export async function createDocumentVersionUploadTicket(
       ticket: {
         documentId: existing.document.id,
         versionNumber: nextVersionNumber,
+        uploadId,
         storagePath,
         uploadUrl,
       },
@@ -263,6 +275,42 @@ export async function createDocumentVersionUploadTicket(
     logError('Failed to create version upload ticket', error);
     return { success: false, error: 'ticket_failed' };
   }
+}
+
+/**
+ * Whether this upload saved version `versionNumber` of the document: the
+ * caller saved it from the upload's own folder, so another upload's version
+ * never counts, even under the same number and file name. `undefined` when
+ * the archived version could not be read (logged).
+ */
+async function isOwnSavedVersion(
+  context: AuthorizedDocumentContext,
+  document: DocumentRow,
+  upload: { versionNumber: number; uploadId: string },
+): Promise<boolean | undefined> {
+  let saved: { storage_path: string; uploaded_by: string } | null = null;
+  if (upload.versionNumber === document.current_version_number) {
+    saved = document;
+  } else if (upload.versionNumber < document.current_version_number) {
+    const { data, error } = await loggedRead(
+      'isOwnSavedVersion: document_versions read failed',
+      context.admin
+        .from('document_versions')
+        .select('storage_path, uploaded_by')
+        .eq('organization_id', context.orgId)
+        .eq('document_id', document.id)
+        .eq('version_number', upload.versionNumber)
+        .maybeSingle(),
+    );
+    if (error) return undefined;
+    saved = data;
+  }
+  const uploadFolder = buildDocumentVersionUploadFolder({
+    organizationId: context.orgId,
+    documentId: document.id,
+    uploadId: upload.uploadId,
+  });
+  return saved?.uploaded_by === context.userId && saved.storage_path.startsWith(`${uploadFolder}/`);
 }
 
 export async function finalizeDocumentVersionUpload(
@@ -279,26 +327,37 @@ export async function finalizeDocumentVersionUpload(
   const ticketPath = buildDocumentVersionStoragePath({
     organizationId: auth.context.orgId,
     documentId: input.documentId,
+    uploadId: input.uploadId,
     versionNumber: input.versionNumber,
     fileName: originalFileName,
   });
 
-  const existing = await getVersionableDocument(auth.context, input.documentId);
-  if (!existing.success) {
-    // A manager filed the document after this ticket, so no finalize of the
-    // upload can succeed. Only its staging object goes, never a registered key.
-    if (existing.error === 'document_filed') await discardStagedUpload(auth.context.orgId, ticketPath);
-    return existing;
-  }
+  const existing = await getManageableDocument(auth.context, input.documentId);
+  if (!existing.success) return existing;
 
   const nextVersionNumber = existing.document.current_version_number + 1;
-  if (input.versionNumber !== nextVersionNumber) {
-    // Another version landed between ticket and finalize; the upload must not
-    // become the current file. It still sits at its staging key, which no
-    // archived version shares.
+  const ticketIsStale = input.versionNumber !== nextVersionNumber;
+  if (ticketIsStale) {
+    // A version landed between ticket and finalize; the upload must not become
+    // the current file. Its staging object goes, which no saved version shares.
     await discardStagedUpload(auth.context.orgId, ticketPath);
-    return { success: false, error: 'version_conflict' };
+    // That version may be this upload's own, saved by a try whose answer got
+    // lost, also when the document was filed or recategorized since.
+    const ownVersion = await isOwnSavedVersion(auth.context, existing.document, input);
+    if (ownVersion === undefined) return { success: false, error: 'load_failed' };
+    if (ownVersion) return { success: false, error: 'already_finalized' };
   }
+
+  const versionable = refuseNewVersion(existing.document);
+  if (!versionable.success) {
+    // A manager filed the document after this ticket, so no finalize of the
+    // upload can succeed. Only its staging object goes, never a registered key.
+    if (versionable.error === 'document_filed' && !ticketIsStale) {
+      await discardStagedUpload(auth.context.orgId, ticketPath);
+    }
+    return versionable;
+  }
+  if (ticketIsStale) return { success: false, error: 'version_conflict' };
 
   const head = await acceptUploadedObject({
     organizationId: auth.context.orgId,
