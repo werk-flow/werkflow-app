@@ -8,6 +8,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -295,12 +296,6 @@ test('results are copied from outside the checkout and never through a symbolic 
   }
 });
 
-// GNU tar unquotes a backslash in a name given on its command line unless told not to; bsdtar
-// (macOS) keeps it and knows no such option.
-const NAMES_AS_WRITTEN = execFileSync('tar', ['--version'], { encoding: 'utf8' }).includes('GNU tar')
-  ? ['--no-unquote']
-  : [];
-
 // Crafted archives, built with tar itself, go through the same unpack and copy as a Boat run.
 test('a crafted results archive is refused whole and writes nothing into the checkout', () => {
   const crafted = (name: string, build: (work: string) => string[], extra: string[] = []) => {
@@ -308,7 +303,7 @@ test('a crafted results archive is refused whole and writes nothing into the che
     mkdirSync(join(work, '.agent-logs', 'verification'), { recursive: true });
     const members = build(work);
     const archive = join(work, `${name}.tgz`);
-    execFileSync('tar', ['-czf', archive, ...NAMES_AS_WRITTEN, ...extra, ...members], { cwd: work });
+    execFileSync('tar', ['-czf', archive, ...extra, ...members], { cwd: work });
     const checkout = mkdtempSync(join(tmpdir(), 'boat-checkout-'));
     const staging = mkdtempSync(join(tmpdir(), 'boat-staging-'));
     let refusal: string | undefined;
@@ -342,8 +337,9 @@ test('a crafted results archive is refused whole and writes nothing into the che
     crafted('outside', (work) => [file(work, 'package.json')]),
     // -P (GNU tar and bsdtar alike) keeps the `..` in the member name.
     crafted('escape', (work) => [file(work, '.agent-logs/../package.json')], ['-P']),
-    crafted('backslash', (work) => [file(work, '.agent-logs/a\\b/report.json')]),
-    crafted('newline', (work) => [file(work, '.agent-logs/a\nb/report.json')]),
+    // Archived as the folder, so tar reads these names from disk; no tar unquotes them.
+    crafted('backslash', (work) => (file(work, '.agent-logs/a\\b/report.json'), ['.agent-logs'])),
+    crafted('newline', (work) => (file(work, '.agent-logs/a\nb/report.json'), ['.agent-logs'])),
   ];
   for (const result of refused) {
     expect(result.refusal).toContain('The Boat results archive was refused');
@@ -392,4 +388,26 @@ test('a Ctrl-C while a machine starts deletes it and never falls back to a local
   expect(fallbackLine(new BoatError(503, 'no_ready_machine', ''), new AbortController().signal)).toBe(
     'Running locally: Boat answered 503 no_ready_machine.',
   );
+});
+
+test('a crafted archive imported over an existing link with a backslash or newline name writes nothing', () => {
+  for (const name of ['a\\b', 'a\nb']) {
+    // The archive targets the linked name. It is built from the folder, so tar reads the name from
+    // disk: no rename or unquote option, the same on GNU tar and bsdtar.
+    const work = mkdtempSync(join(tmpdir(), 'boat-crafted-link-'));
+    mkdirSync(join(work, '.agent-logs', name), { recursive: true });
+    writeFileSync(join(work, '.agent-logs', name, 'report.json'), '{}');
+    const archive = join(work, 'results.tgz');
+    execFileSync('tar', ['-czf', archive, '.agent-logs'], { cwd: work });
+    const checkout = mkdtempSync(join(tmpdir(), 'boat-checkout-'));
+    const outside = mkdtempSync(join(tmpdir(), 'boat-outside-'));
+    mkdirSync(join(checkout, '.agent-logs'));
+    symlinkSync(outside, join(checkout, '.agent-logs', name));
+    const staging = mkdtempSync(join(tmpdir(), 'boat-staging-'));
+    expect(() => unpackResults(archive, staging, checkout), JSON.stringify(name)).toThrow(
+      'The Boat results archive was refused',
+    );
+    expect(readdirSync(outside), JSON.stringify(name)).toEqual([]);
+    expect(readdirSync(join(checkout, '.agent-logs')), JSON.stringify(name)).toEqual([name]);
+  }
 });
