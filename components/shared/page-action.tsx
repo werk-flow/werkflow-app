@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 import { Button } from '@/components/ui/button';
@@ -11,17 +11,28 @@ import { useHydrated } from '@/hooks/use-hydrated';
 // data. This pair shares the open flag across that Suspense boundary so the
 // header paints before the data arrives (/auftraege, /arbeitsvorlagen).
 
+/** A dialog that loads on demand (`lazyDialog`): its download and whether an open waits for it. */
+type PageActionLoader = { preload: () => void; waiting: boolean };
+
 interface PageActionState {
   open: boolean;
   setOpen: (open: boolean) => void;
+  setLoader: (loader: PageActionLoader | null) => void;
 }
 
 const PageActionContext = createContext<PageActionState | null>(null);
+// Only the button reads the loader, so registering it never re-renders the page content.
+const PageActionLoaderContext = createContext<PageActionLoader | null>(null);
 
 export function PageActionProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
-  const value = useMemo<PageActionState>(() => ({ open, setOpen }), [open]);
-  return <PageActionContext.Provider value={value}>{children}</PageActionContext.Provider>;
+  const [loader, setLoader] = useState<PageActionLoader | null>(null);
+  const value = useMemo<PageActionState>(() => ({ open, setOpen, setLoader }), [open]);
+  return (
+    <PageActionContext.Provider value={value}>
+      <PageActionLoaderContext.Provider value={loader}>{children}</PageActionLoaderContext.Provider>
+    </PageActionContext.Provider>
+  );
 }
 
 export function usePageAction(): PageActionState {
@@ -32,12 +43,34 @@ export function usePageAction(): PageActionState {
   return state;
 }
 
+/**
+ * Hands the header button a dialog that loads on demand: the button starts the
+ * download on hover, focus or press, and shows pending while an open waits for it.
+ */
+export function usePageActionLoader(preload: (() => void) | null, waiting: boolean): void {
+  const { setLoader } = usePageAction();
+  useLayoutEffect(() => {
+    setLoader(preload ? { preload, waiting } : null);
+    return () => setLoader(null);
+  }, [setLoader, preload, waiting]);
+}
+
 /** The header button that opens the page's primary dialog. */
 export function PageActionButton({ className, children }: { className?: string; children: ReactNode }) {
   const { setOpen } = usePageAction();
+  const loader = useContext(PageActionLoaderContext);
   const hydrated = useHydrated();
+  const preload = loader?.preload;
   return (
-    <Button className={className} disabled={!hydrated} onClick={() => setOpen(true)}>
+    <Button
+      className={className}
+      disabled={!hydrated}
+      pending={loader?.waiting ?? false}
+      onPointerEnter={preload}
+      onFocus={preload}
+      onPointerDown={preload}
+      onClick={() => setOpen(true)}
+    >
       {children}
     </Button>
   );
