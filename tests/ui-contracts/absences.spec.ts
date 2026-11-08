@@ -16,15 +16,15 @@ test('the saved sickness lists the affected visits with their dispatch state and
   await dialog.getByRole('button', { name: 'Krankmeldung erfassen' }).click();
 
   const affected = dialog.getByRole('region', { name: 'Betroffene Termine' });
-  const rows = affected.getByRole('listitem');
-  await expect(rows).toHaveCount(2);
-  await expect(rows.nth(0)).toContainText('Heizungswartung Familie Berger');
-  await expect(rows.nth(0)).toContainText('Einsatz gesendet');
-  await expect(rows.nth(0).getByRole('link', { name: '30.10.2026, 08:00 Uhr' })).toHaveAttribute(
+  // In calendar order, each with the absent person's dispatch state.
+  await expect(affected.getByRole('listitem')).toHaveText([
+    /Heizungswartung Familie Berger.*Einsatz gesendet/,
+    /Badsanierung Projekt Lindenstraße.*Einsatz nicht gesendet/,
+  ]);
+  await expect(affected.getByRole('link', { name: '30.10.2026, 08:00 Uhr' })).toHaveAttribute(
     'href',
     '/kalender?date=2026-10-30',
   );
-  await expect(rows.nth(1)).toContainText('Einsatz nicht gesendet');
   // The open-ended report names how far the list looks ahead.
   await expect(affected).toContainText('Diese Termine sind geplant bis 12.11.2026.');
   expect(await page.evaluate(() => window.uiContractAbsence.reads[0]?.endDate)).toBeNull();
@@ -78,9 +78,10 @@ test('the person picker marks who is away on the day, and names a day outside th
   );
   await expect(page.getByRole('option', { name: /Daniel Krüger/ })).toContainText('Abwesend · P-7');
   await expect(page.getByRole('option', { name: /Lena Brandt/ })).not.toContainText('Abwesend');
-  await expect(page.getByText('Für diesen Tag sind keine Abwesenheiten geladen.')).toHaveCount(0);
+  const form = page.getByRole('main');
+  await expect(form.getByText('Für diesen Tag sind keine Abwesenheiten geladen.')).toHaveCount(0);
 
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Anderen Tag wählen' }).click();
-  await expect(page.getByText('Für diesen Tag sind keine Abwesenheiten geladen.')).toBeVisible();
+  await expect(form.getByText('Für diesen Tag sind keine Abwesenheiten geladen.')).toBeVisible();
 });

@@ -37,13 +37,12 @@ export type AbsenceAffectedVisits = {
 
 /** How far the list looks ahead for an open-ended absence: two working weeks. */
 export const OPEN_ABSENCE_LOOKAHEAD_DAYS = 14;
-/** The longest span one read covers, the calendar window's bound. */
-const MAX_SPAN_DAYS = 366;
 
 /**
  * The Berlin dates the list covers: the absence itself, or for an open-ended
- * one the lookahead from its start or from today, whichever is later. A span
- * beyond one year is cut there. Null for a date that does not exist or an end
+ * one the lookahead from its start or from today, whichever is later. The span
+ * has no cap: the read pages one person's visits and fails on an overflow
+ * instead of cutting the list. Null for a date that does not exist or an end
  * before the start.
  */
 export function absenceVisitWindow(
@@ -58,7 +57,5 @@ export function absenceVisitWindow(
     return null;
   }
   const lookaheadFrom = startDate > today ? startDate : today;
-  const to = endDate ?? addLocalDays(lookaheadFrom, OPEN_ABSENCE_LOOKAHEAD_DAYS - 1);
-  const latest = addLocalDays(startDate, MAX_SPAN_DAYS - 1);
-  return { from: startDate, to: to > latest ? latest : to };
+  return { from: startDate, to: endDate ?? addLocalDays(lookaheadFrom, OPEN_ABSENCE_LOOKAHEAD_DAYS - 1) };
 }

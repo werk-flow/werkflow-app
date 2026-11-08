@@ -57,11 +57,11 @@ type VacationApprovalDecisions = {
   handleApprove: (item: ApproverVacationRequest) => Promise<void>;
   handleReasonSubmit: (reason: string) => Promise<void>;
   /**
-   * The request approved last, until the approver closes the visits it
-   * affects. Planning is office work: only Admin and Büro get it.
+   * The requests approved here, each until the approver closes the visits it
+   * affects. Planning is office work: only Admin and Büro get them.
    */
-  approved: ApproverVacationRequest | null;
-  dismissApproved: () => void;
+  approvedHere: ApproverVacationRequest[];
+  dismissApproved: (requestId: string) => void;
 };
 
 function vacationDecisionFailure(error: string): string {
@@ -89,7 +89,7 @@ export function useVacationApprovalDecisions({
     mode: 'closed',
   });
   const [dialogError, setDialogError] = useState<string | null>(null);
-  const [approved, setApproved] = useState<ApproverVacationRequest | null>(null);
+  const [approvedHere, setApprovedHere] = useState<ApproverVacationRequest[]>([]);
   const refetch = view.refresh;
 
   // One failure, one surface: the section-level error survives the follow-up
@@ -118,7 +118,7 @@ export function useVacationApprovalDecisions({
           variant: 'success',
           message: `Der Urlaubsantrag von ${item.personName} wurde genehmigt.`,
         });
-        if (plansWork) setApproved(item);
+        if (plansWork) setApprovedHere((current) => [...current, item]);
       } else {
         pendingList.rollback(requestId);
         reportActionError(result.error, 'Die Freigabe konnte nicht gespeichert werden.');
@@ -160,7 +160,8 @@ export function useVacationApprovalDecisions({
     setDialogError,
     handleApprove,
     handleReasonSubmit,
-    approved,
-    dismissApproved: () => setApproved(null),
+    approvedHere,
+    dismissApproved: (requestId) =>
+      setApprovedHere((current) => current.filter((approved) => approved.request.id !== requestId)),
   };
 }

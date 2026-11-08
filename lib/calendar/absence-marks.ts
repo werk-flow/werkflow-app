@@ -1,4 +1,4 @@
-import { addLocalDays } from '@/lib/date-time/berlin';
+import { addLocalDays, splitTimedIntervalByBerlinDate } from '@/lib/date-time/berlin';
 import type { CalendarJob } from '@/lib/jobs/types';
 import {
   absenceMark,
@@ -18,12 +18,16 @@ export type BoardAbsences = {
   days: ReadonlyMap<string, CalendarBoardDay>;
   /** The Berlin dates the window holds capacity days for. */
   dates: ReadonlySet<string>;
+  /** Each board row's name, people without a login included. */
+  nameByRecordId: ReadonlyMap<string, string>;
+  /** For a legacy card that names its people by user id only. */
   recordIdByUserId: ReadonlyMap<string, string>;
 };
 
 export const NO_BOARD_ABSENCES: BoardAbsences = {
   days: new Map(),
   dates: new Set(),
+  nameByRecordId: new Map(),
   recordIdByUserId: new Map(),
 };
 
@@ -38,6 +42,7 @@ export function indexBoardAbsences(
   return {
     days: indexBoardDays(days),
     dates: new Set(days.map((day) => day.date)),
+    nameByRecordId: new Map(rows.map((row) => [row.employeeRecordId, row.displayName] as const)),
     recordIdByUserId: new Map(
       rows.flatMap((row) => (row.userId ? [[row.userId, row.employeeRecordId] as const] : [])),
     ),
@@ -65,8 +70,18 @@ export function withAbsenceMarks<Option extends { value: string; description?: s
   });
 }
 
-/** The Berlin dates a card covers: its day, or each day of a multi-day all-day entry. */
-function cardDates(job: Pick<CalendarJob, 'plannedDate' | 'endDateExclusive'>): string[] {
+type AbsenceCard = Pick<
+  CalendarJob,
+  'plannedDate' | 'endDateExclusive' | 'startAt' | 'endAt' | 'assignedUserIds' | 'assignedEmployeeRecordIds'
+>;
+
+/** The Berlin dates a card covers: each day of a timed interval, its day, or each day of an all-day entry. */
+function cardDates(job: AbsenceCard): string[] {
+  if (job.startAt && job.endAt) {
+    return splitTimedIntervalByBerlinDate(new Date(job.startAt), new Date(job.endAt)).map(
+      (allocation) => allocation.localDate,
+    );
+  }
   if (!job.plannedDate) return [];
   const end = job.endDateExclusive ?? addLocalDays(job.plannedDate, 1);
   const dates: string[] = [];
@@ -74,18 +89,26 @@ function cardDates(job: Pick<CalendarJob, 'plannedDate' | 'endDateExclusive'>): 
   return dates;
 }
 
-/** The card's assignees who are away on one of its days, each with the first mark found. */
+/**
+ * The card's assignees who are away on one of its days, each with the first
+ * mark found and the board row's name. A card names its people by record,
+ * people without a login included; a legacy card by user id.
+ */
 export function absentAssignees(
-  job: Pick<CalendarJob, 'plannedDate' | 'endDateExclusive' | 'assignedUserIds'>,
+  job: AbsenceCard,
   absences: BoardAbsences,
-): Array<{ userId: string; mark: string }> {
+): Array<{ employeeRecordId: string; name: string; mark: string }> {
   const dates = cardDates(job);
-  return job.assignedUserIds.flatMap((userId) => {
-    const recordId = absences.recordIdByUserId.get(userId);
-    if (!recordId) return [];
+  const recordIds =
+    job.assignedEmployeeRecordIds ??
+    job.assignedUserIds.flatMap((userId) => absences.recordIdByUserId.get(userId) ?? []);
+  return recordIds.flatMap((employeeRecordId) => {
     for (const date of dates) {
-      const mark = absenceMark(absences.days.get(boardDayKey(recordId, date)));
-      if (mark) return [{ userId, mark }];
+      const mark = absenceMark(absences.days.get(boardDayKey(employeeRecordId, date)));
+      if (mark) {
+        const name = absences.nameByRecordId.get(employeeRecordId) ?? 'Mitarbeiter';
+        return [{ employeeRecordId, name, mark }];
+      }
     }
     return [];
   });

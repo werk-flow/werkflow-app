@@ -71,12 +71,46 @@ test('a picker date outside the window says that its absences are not loaded', (
 });
 
 test('the card marks an assignee away on any day it covers, and only the assignees away', () => {
-  const card = { plannedDate: '2026-10-30', endDateExclusive: null, assignedUserIds: ['u-sick', 'u-here'] };
-  expect(absentAssignees(card, absences)).toEqual([{ userId: 'u-sick', mark: 'Abwesend' }]);
-  expect(absentAssignees({ ...card, endDateExclusive: '2026-11-01' }, absences)).toEqual([
-    { userId: 'u-sick', mark: 'Abwesend' },
-    { userId: 'u-here', mark: 'Urlaub' },
+  const card = {
+    plannedDate: '2026-10-30',
+    endDateExclusive: null,
+    assignedUserIds: ['u-sick', 'u-here'],
+    assignedEmployeeRecordIds: ['r-sick', 'r-here'],
+  };
+  expect(absentAssignees(card, absences)).toEqual([
+    { employeeRecordId: 'r-sick', name: 'r-sick', mark: 'Abwesend' },
   ]);
+  expect(
+    absentAssignees({ ...card, endDateExclusive: '2026-11-01' }, absences).map((entry) => entry.mark),
+  ).toEqual(['Abwesend', 'Urlaub']);
   // A card on a day the window does not hold marks nobody.
   expect(absentAssignees({ ...card, plannedDate: '2026-11-09' }, absences)).toEqual([]);
+});
+
+test('the card marks a person without a login by record, and a legacy card by user id', () => {
+  const noLogin = {
+    plannedDate: '2026-10-30',
+    assignedUserIds: [],
+    assignedEmployeeRecordIds: ['r-nologin'],
+  };
+  expect(absentAssignees(noLogin, absences)).toEqual([
+    { employeeRecordId: 'r-nologin', name: 'r-nologin', mark: 'Urlaub angefragt' },
+  ]);
+  expect(absentAssignees({ plannedDate: '2026-10-30', assignedUserIds: ['u-sick'] }, absences)).toHaveLength(
+    1,
+  );
+});
+
+test('a timed visit across midnight checks the day it ends on too', () => {
+  // Fri 30.10. 21:00 to Sat 31.10. 01:00 Berlin: Lena works Friday and is on vacation Saturday.
+  const overnight = {
+    plannedDate: '2026-10-30',
+    startAt: '2026-10-30T20:00:00.000Z',
+    endAt: '2026-10-31T00:00:00.000Z',
+    assignedUserIds: [],
+    assignedEmployeeRecordIds: ['r-here'],
+  };
+  expect(absentAssignees(overnight, absences)).toEqual([
+    { employeeRecordId: 'r-here', name: 'r-here', mark: 'Urlaub' },
+  ]);
 });

@@ -92,14 +92,14 @@ function sectionIsIdle(state: {
   approved: readonly ApproverVacationRequest[];
   actionError: string | null;
   reasonDialog: VacationReasonDialogState;
-  shownApproval: ApproverVacationRequest | null;
+  approvedHere: readonly ApproverVacationRequest[];
 }): boolean {
   return (
     state.pending.length === 0 &&
     state.approved.length === 0 &&
     !state.actionError &&
     state.reasonDialog.mode === 'closed' &&
-    !state.shownApproval
+    state.approvedHere.length === 0
   );
 }
 
@@ -138,15 +138,9 @@ export function VacationApprovals({ plansWork }: { plansWork: boolean }) {
     setDialogError,
     handleApprove,
     handleReasonSubmit,
-    approved: shownApproval,
+    approvedHere,
     dismissApproved,
-  } = useVacationApprovalDecisions({
-    view,
-    busy,
-    pendingList,
-    approvedList,
-    plansWork,
-  });
+  } = useVacationApprovalDecisions({ view, busy, pendingList, approvedList, plansWork });
 
   if (isLoading) {
     return <VacationApprovalsSkeleton />;
@@ -161,7 +155,7 @@ export function VacationApprovals({ plansWork }: { plansWork: boolean }) {
     );
   }
 
-  if (sectionIsIdle({ pending, approved, actionError, reasonDialog, shownApproval })) return null;
+  if (sectionIsIdle({ pending, approved, actionError, reasonDialog, approvedHere })) return null;
 
   return (
     <div className="space-y-3">
@@ -172,7 +166,7 @@ export function VacationApprovals({ plansWork }: { plansWork: boolean }) {
 
       <ErrorText className="px-1">{actionError}</ErrorText>
 
-      {shownApproval && <ApprovedVacationEffects item={shownApproval} onClose={dismissApproved} />}
+      <ApprovedVacationEffects approvedHere={approvedHere} onClose={dismissApproved} />
 
       <StaleRegion stale={view.isStale} onRetry={view.refresh} className="space-y-3">
         {pending.map((item) => (
@@ -206,22 +200,30 @@ export function VacationApprovals({ plansWork }: { plansWork: boolean }) {
   );
 }
 
-/** The visits the approved vacation affects, until the approver closes them. */
-function ApprovedVacationEffects({ item, onClose }: { item: ApproverVacationRequest; onClose: () => void }) {
-  const { employeeRecordId, startDate, endDate } = item.request;
-  return (
-    <Card className="py-0" data-approved-vacation-effects={item.request.id}>
-      <CardContent className="space-y-3 p-4">
-        <p className="font-medium">Urlaub von {item.personName} genehmigt</p>
-        <AbsenceAffectedVisits absence={{ employeeRecordId, startDate, endDate }} />
-        <div className="flex justify-end">
-          <Button variant="outline" size="sm" onClick={onClose}>
-            Schließen
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
+/** The visits each vacation approved here affects, until the approver closes them. */
+function ApprovedVacationEffects({
+  approvedHere,
+  onClose,
+}: {
+  approvedHere: readonly ApproverVacationRequest[];
+  onClose: (requestId: string) => void;
+}) {
+  return approvedHere.map((item) => {
+    const { id, employeeRecordId, startDate, endDate } = item.request;
+    return (
+      <Card key={id} className="py-0" data-approved-vacation-effects={id}>
+        <CardContent className="space-y-3 p-4">
+          <p className="font-medium">Urlaub von {item.personName} genehmigt</p>
+          <AbsenceAffectedVisits absence={{ employeeRecordId, startDate, endDate }} />
+          <div className="flex justify-end">
+            <Button variant="outline" size="sm" onClick={() => onClose(id)}>
+              Schließen
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  });
 }
 
 function VacationDecisionReasonDialog({

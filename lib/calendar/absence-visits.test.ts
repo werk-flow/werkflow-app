@@ -31,10 +31,11 @@ test('the affected list covers the absence, or two weeks from its start or today
     from: '2026-12-01',
     to: '2026-12-14',
   });
-  // More than a year is cut at one year.
-  expect(absenceVisitWindow({ startDate: '2026-01-01', endDate: '2027-06-30' }, '2026-11-08')?.to).toBe(
-    '2027-01-01',
-  );
+  // A sickness open since long ago still reaches the coming two weeks: nothing is cut.
+  expect(absenceVisitWindow({ startDate: '2025-01-01', endDate: null }, '2026-11-08')).toEqual({
+    from: '2025-01-01',
+    to: '2026-11-21',
+  });
 });
 
 test('a date that does not exist or an end before the start has no window', () => {

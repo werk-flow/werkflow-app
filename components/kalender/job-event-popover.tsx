@@ -380,9 +380,7 @@ function JobEventFacts({ job, memberNames }: { job: CalendarJob; memberNames: Re
       {absent.length > 0 && (
         <div className="flex items-start gap-2 font-medium text-warning-text" data-card-absence="">
           <UserX className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-          <span>
-            {absent.map(({ userId, mark }) => `${memberNames[userId] ?? 'Mitarbeiter'}: ${mark}`).join(', ')}
-          </span>
+          <span>{absent.map(({ name, mark }) => `${name}: ${mark}`).join(', ')}</span>
         </div>
       )}
     </div>
