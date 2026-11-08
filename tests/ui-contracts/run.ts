@@ -63,6 +63,10 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve({ filter: /^@\/lib\/vacation\/actions$/ }, () => ({
               path: join(import.meta.dir, 'approval-service-boundaries.ts'),
             }));
+            builder.onResolve({ filter: /^@\/lib\/sickness\/actions$/ }, (args) => {
+              if (args.importer.endsWith('use-sickness-report-record-form.ts'))
+                return { path: join(import.meta.dir, 'absence-service-boundaries.ts') };
+            });
             builder.onResolve({ filter: /^@\/lib\/org\/join-request-actions$/ }, () => ({
               path: join(import.meta.dir, 'join-request-service-boundaries.ts'),
             }));
@@ -98,7 +102,8 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
                 args.importer.endsWith('anfragen-content.tsx') ||
                 args.importer.endsWith('client-sites-card.tsx') ||
                 args.importer.endsWith('reset-password-form.tsx') ||
-                args.importer.endsWith('aufgaben-task-row.tsx')
+                args.importer.endsWith('aufgaben-task-row.tsx') ||
+                args.importer.endsWith('text-link.tsx')
               )
                 return { path: join(import.meta.dir, 'day-view-link-boundary.tsx') };
             });

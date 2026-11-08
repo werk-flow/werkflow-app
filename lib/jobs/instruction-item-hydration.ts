@@ -111,6 +111,12 @@ export async function hydrateInstructionItems(
   const details = await readInstructionItemFulfillments(admin, orgId, requirementIds, missingPredecessorIds);
   if (!details) return null;
   for (const predecessor of details.predecessors) contentById.set(predecessor.id, predecessor.content);
+  // Grouped once, in read order, so each item keeps its requirements in `sort_order`.
+  const evidenceByItemId = Map.groupBy(metadata.evidence, (requirement) => requirement.instruction_item_id);
+  const dependenciesByItemId = Map.groupBy(
+    metadata.dependencies,
+    (dependency) => dependency.dependent_item_id,
+  );
   const fulfillmentByRequirementId = new Map(
     details.fulfillments.map((fulfillment) => [
       fulfillment.evidence_requirement_id,
@@ -126,19 +132,15 @@ export async function hydrateInstructionItems(
     ...toJobInstructionItem(row),
     creator: actorReference(row.created_by),
     lastStatusChangedByProfile: actorReference(row.last_status_changed_by),
-    evidenceRequirements: metadata.evidence
-      .filter((item) => item.instruction_item_id === row.id)
-      .map((item) => ({
-        id: item.id,
-        description: item.description,
-        documentCategory: item.document_category,
-        fulfillment: fulfillmentByRequirementId.get(item.id) ?? null,
-      })),
-    predecessors: metadata.dependencies
-      .filter((item) => item.dependent_item_id === row.id)
-      .map((item) => ({
-        id: item.predecessor_item_id,
-        content: contentById.get(item.predecessor_item_id) ?? 'Früherer Eintrag',
-      })),
+    evidenceRequirements: (evidenceByItemId.get(row.id) ?? []).map((item) => ({
+      id: item.id,
+      description: item.description,
+      documentCategory: item.document_category,
+      fulfillment: fulfillmentByRequirementId.get(item.id) ?? null,
+    })),
+    predecessors: (dependenciesByItemId.get(row.id) ?? []).map((item) => ({
+      id: item.predecessor_item_id,
+      content: contentById.get(item.predecessor_item_id) ?? 'Früherer Eintrag',
+    })),
   }));
 }

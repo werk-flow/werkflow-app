@@ -9,9 +9,11 @@ import { SearchableMultiSelect, SearchableSelect } from '@/components/ui/searcha
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import type { usePlanningOptions } from '@/hooks/use-planning-options';
+import { absencesNotLoadedHint, withAbsenceMarks } from '@/lib/calendar/absence-marks';
 import type { PlanningEntryKind } from '@/lib/calendar/planning-entry-draft';
 import type { PlanningConflict } from '@/lib/planning/types';
 import { formatGermanDate } from '@/lib/utils';
+import { useBoardAbsences } from './board-absences-context';
 
 /** The searchable select props one `usePlanningOptions` picker provides. */
 type PlanningOptionsSelect = ReturnType<typeof usePlanningOptions>['select'];
@@ -111,6 +113,8 @@ export function PlanningEntryKindFields({
 }
 
 interface PlanningEntryAssignmentFieldsProps {
+  /** The entry's first day, for the people's absence marks. */
+  date: string;
   employeeSelect: PlanningOptionsSelect;
   employeeRecordIds: string[];
   onEmployeeRecordIdsChange: (employeeRecordIds: string[]) => void;
@@ -122,6 +126,7 @@ interface PlanningEntryAssignmentFieldsProps {
 
 /** The employee and team pickers; a changed assignment clears the shown planning warnings. */
 export function PlanningEntryAssignmentFields({
+  date,
   employeeSelect,
   employeeRecordIds,
   onEmployeeRecordIdsChange,
@@ -130,11 +135,18 @@ export function PlanningEntryAssignmentFields({
   onTeamIdsChange,
   onConflictsChange,
 }: PlanningEntryAssignmentFieldsProps) {
+  const absences = useBoardAbsences();
   return (
     <>
-      <Field label="Mitarbeiter" htmlFor="planning-employees" error={employeeSelect.loadFailure?.message}>
+      <Field
+        label="Mitarbeiter"
+        htmlFor="planning-employees"
+        error={employeeSelect.loadFailure?.message}
+        description={absencesNotLoadedHint(absences, date)}
+      >
         <SearchableMultiSelect
           {...employeeSelect}
+          options={withAbsenceMarks(employeeSelect.options, absences, date)}
           selectedIds={employeeRecordIds}
           onSelectionChange={(ids) => {
             onEmployeeRecordIdsChange(ids);

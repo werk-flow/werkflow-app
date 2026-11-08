@@ -6,36 +6,37 @@ import { useBanner } from '@/components/ui/banner';
 import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { recordSicknessForMember } from '@/lib/sickness/actions';
-import { SICKNESS_ERROR_MESSAGES, type SicknessAbsenceType } from '@/lib/sickness/types';
+import { SICKNESS_ERROR_MESSAGES, type SicknessAbsenceType, type SicknessReport } from '@/lib/sickness/types';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { logError } from '@/lib/logging';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 export type SicknessReportRecordForm = ReturnType<typeof useSicknessReportRecordForm>;
 
+/** The saved report and whether it overlaps approved vacation. */
+export type RecordedSickness = { report: SicknessReport; vacationOverlap: boolean };
+
 type SicknessRecordOutcome = {
   showBanner: ReturnType<typeof useBanner>['showBanner'];
-  setOverlapHint: (overlapHint: boolean) => void;
+  setRecorded: (recorded: RecordedSickness) => void;
   setError: (error: string | null) => void;
-  onClose: (saved: boolean) => void;
 };
 
-/** Confirms a recorded report, or shows why it was refused. */
+/**
+ * Confirms a recorded report and keeps the dialog open on what it affects
+ * (the visits to rearrange, an overlap with vacation) until the office closes
+ * it, never raced by a timer; or shows why it was refused.
+ */
 function showRecordOutcome(
   result: Awaited<ReturnType<typeof recordSicknessForMember>>,
-  { showBanner, setOverlapHint, setError, onClose }: SicknessRecordOutcome,
+  { showBanner, setRecorded, setError }: SicknessRecordOutcome,
 ) {
   if (result.success) {
     showBanner({
       variant: 'success',
       message: 'Die Krankmeldung wurde erfasst.',
     });
-    if (result.vacationOverlap) {
-      // Saved; the hint must be acknowledged, never raced by a timer.
-      setOverlapHint(true);
-    } else {
-      onClose(true);
-    }
+    setRecorded({ report: result.report, vacationOverlap: result.vacationOverlap });
   } else {
     setError(
       describeFailure(result.error, SICKNESS_ERROR_MESSAGES, 'Die Meldung konnte nicht gespeichert werden.'),
@@ -43,7 +44,7 @@ function showRecordOutcome(
   }
 }
 
-export function useSicknessReportRecordForm(recordId: string, onClose: (saved: boolean) => void) {
+export function useSicknessReportRecordForm(recordId: string) {
   const todayIso = getBusinessTodayIso();
   const { showBanner } = useBanner();
   const [absenceType, setAbsenceType] = useState<SicknessAbsenceType>('krankheit');
@@ -54,7 +55,7 @@ export function useSicknessReportRecordForm(recordId: string, onClose: (saved: b
   const [evidenceRequired, setEvidenceRequired] = useState(false);
   const { run: runSave, isPending: isSaving } = useServerAction(recordSicknessForMember);
   const [error, setError] = useState<string | null>(null);
-  const [overlapHint, setOverlapHint] = useState(false);
+  const [recorded, setRecorded] = useState<RecordedSickness | null>(null);
   const [dateErrors, setDateErrors] = useState<{ start?: string | undefined; end?: string | undefined }>({});
 
   const isSingleDay = endKnown && startDate === endDate;
@@ -89,7 +90,7 @@ export function useSicknessReportRecordForm(recordId: string, onClose: (saved: b
         dayPortion: halfDay && isSingleDay ? 'half_day' : 'full',
         evidenceRequired,
       });
-      showRecordOutcome(result, { showBanner, setOverlapHint, setError, onClose });
+      showRecordOutcome(result, { showBanner, setRecorded, setError });
     } catch (submitError) {
       logError('Error recording sickness:', submitError);
       setError('Die Meldung konnte nicht gespeichert werden.');
@@ -111,7 +112,7 @@ export function useSicknessReportRecordForm(recordId: string, onClose: (saved: b
     setEvidenceRequired,
     isSaving,
     error,
-    overlapHint,
+    recorded,
     dateErrors,
     isSingleDay,
     handleSubmit,
