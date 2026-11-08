@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
 import { usePendingTask } from '@/hooks/use-server-action';
@@ -47,6 +47,43 @@ function importValidationErrors(
 type CsvSource = { fileName: string; headers: string[]; rows: Record<string, string>[] };
 const NO_SOURCE: CsvSource = { fileName: '', headers: [], rows: [] };
 
+/** The chosen CSV file, parsed, with its guessed column mapping. A later selection or a clear outdates every earlier read. */
+function useCsvFile() {
+  const latestRead = useRef(0);
+  const [source, setSource] = useState(NO_SOURCE);
+  const [mapping, setMapping] = useState<ImportColumnMapping>({});
+  // Why the chosen file was refused; shown on the file field at once, not only after a submit.
+  const [fileRefusal, setFileRefusal] = useState<string | undefined>();
+
+  function clear() {
+    latestRead.current += 1;
+    setSource(NO_SOURCE);
+    setMapping({});
+    setFileRefusal(undefined);
+  }
+
+  function read(file: File, onReadFailure: () => void) {
+    clear();
+    const thisRead = latestRead.current;
+    file
+      .text()
+      .then((content) => {
+        if (thisRead !== latestRead.current) return;
+        const parsed = parseCsv(content);
+        setFileRefusal(parsed.ok ? undefined : parsed.message);
+        setSource(
+          parsed.ok ? { fileName: file.name, headers: parsed.headers, rows: parsed.rows } : NO_SOURCE,
+        );
+        setMapping(parsed.ok ? guessMapping(parsed.headers) : {});
+      })
+      .catch(() => {
+        if (thisRead === latestRead.current) onReadFailure();
+      });
+  }
+
+  return { source, mapping, setMapping, fileRefusal, clear, read };
+}
+
 /** The CSV import dialog's state: the parsed file, the column mapping, the import run. */
 export function useInventoryCsvImport({
   onOpenChange,
@@ -54,12 +91,10 @@ export function useInventoryCsvImport({
   onOpenChange: (open: boolean) => void;
 }): InventoryCsvImport {
   const { showBanner } = useBanner();
-  const [source, setSource] = useState(NO_SOURCE);
-  const { fileName, headers, rows } = source;
-  const [mapping, setMapping] = useState<ImportColumnMapping>({});
+  const csvFile = useCsvFile();
+  const { mapping, fileRefusal } = csvFile;
+  const { fileName, headers, rows } = csvFile.source;
   const [error, setError] = useState<string | null>(null);
-  // Why the chosen file was refused; shown on the file field at once, not only after a submit.
-  const [fileRefusal, setFileRefusal] = useState<string | undefined>();
   const { run: runImportTask, isPending } = usePendingTask();
   const [attempted, setAttempted] = useState(false);
   const validationErrors = importValidationErrors(rows.length, mapping, fileRefusal);
@@ -67,10 +102,8 @@ export function useInventoryCsvImport({
   const nameMappingError = attempted ? validationErrors['inventory-import-name'] : undefined;
 
   function resetImportState() {
-    setSource(NO_SOURCE);
-    setMapping({});
+    csvFile.clear();
     setError(null);
-    setFileRefusal(undefined);
     setAttempted(false);
   }
 
@@ -81,19 +114,8 @@ export function useInventoryCsvImport({
 
   function handleFile(file: File | null) {
     setError(null);
-    if (!file) return;
-
-    file
-      .text()
-      .then((content) => {
-        const parsed = parseCsv(content);
-        setFileRefusal(parsed.ok ? undefined : parsed.message);
-        setSource(
-          parsed.ok ? { fileName: file.name, headers: parsed.headers, rows: parsed.rows } : NO_SOURCE,
-        );
-        setMapping(parsed.ok ? guessMapping(parsed.headers) : {});
-      })
-      .catch(() => setError('Die Datei konnte nicht gelesen werden.'));
+    if (file) csvFile.read(file, () => setError('Die Datei konnte nicht gelesen werden.'));
+    else csvFile.clear();
   }
 
   function handleImport() {
@@ -126,7 +148,7 @@ export function useInventoryCsvImport({
     headers,
     rows,
     mapping,
-    setMapping,
+    setMapping: csvFile.setMapping,
     error,
     isPending,
     validationErrors,
