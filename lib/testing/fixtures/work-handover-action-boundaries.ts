@@ -57,6 +57,7 @@ world.rpc = ({ name, args }) =>
     : { data: null, error: { code: 'P0001', message: `unexpected_function_${name}` } };
 const storedPaths: string[] = [];
 mock.module('@/lib/storage/r2', () => ({
+  attemptStoragePath: (path: string) => path,
   putStorageObject: async ({ path }: { path: string }) => {
     storedPaths.push(path);
   },

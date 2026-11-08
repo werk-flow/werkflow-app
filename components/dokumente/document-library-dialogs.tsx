@@ -6,7 +6,7 @@ import { DocumentConfirmDialog } from './document-confirm-dialog';
 import { DocumentDetailsDialog } from './document-details-dialog';
 import { DocumentLinkDialog } from './document-link-dialog';
 import { DocumentCreateFolderDialog, DocumentRenameDialog } from './document-name-dialogs';
-import { DocumentUploadDialog } from './document-upload-dialog';
+import { DocumentBatchUploadDialog, DocumentUploadDialog } from './document-upload-dialog';
 import { DocumentViewerDialog } from './document-viewer-dialog';
 import type { DocumentLibrary } from './use-document-library';
 
@@ -23,11 +23,12 @@ export function DocumentLibraryDialogs({
   uploadTargetFolderId,
   moveCopyDialog,
 }: DocumentLibraryDialogsProps) {
-  const { mutations, upload, viewer, linkDialog, deleteActions, details, versionActions } = library;
+  const { mutations, upload, viewer, linkDialog, deleteActions, details, versionActions, archiveActions } =
+    library;
 
   return (
     <>
-      <DocumentUploadDialog
+      <DocumentBatchUploadDialog
         open={upload.uploadDialogOpen}
         onOpenChange={upload.setUploadDialogOpen}
         items={upload.uploadItems}
@@ -77,12 +78,25 @@ export function DocumentLibraryDialogs({
         versionInputRef={versionActions.versionInputRef}
         onClose={details.closeDetailsDialog}
         onUpdateCategory={details.handleUpdateCategory}
+        onUpdateRetention={archiveActions.handleUpdateRetention}
+        onFile={archiveActions.handleFileDocument}
         onDownload={versionActions.handleDownload}
         onVersionUpload={versionActions.handleVersionUpload}
         onDownloadVersion={versionActions.handleDownloadVersion}
         onRetryDetails={() => {
           if (details.detailsDialog) details.openDetailsDialog(details.detailsDialog);
         }}
+      />
+
+      <DocumentUploadDialog
+        open={!!versionActions.versionUpload}
+        title="Neue Version hochladen"
+        description={`Die Datei wird zur aktuellen Version von „${versionActions.versionUpload?.document.displayName ?? ''}“.`}
+        rows={versionActions.versionUpload ? [versionActions.versionUpload.row] : []}
+        isRunning={versionActions.versionUpload?.row.status === 'uploading'}
+        onRetry={versionActions.retryVersionUpload}
+        onCancel={versionActions.cancelVersionUpload}
+        onClose={versionActions.closeVersionUpload}
       />
     </>
   );

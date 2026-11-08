@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { expect, test } from '../golden/support/fixtures';
 import { requireEnv } from '../golden/support/env';
 import { testSupabaseClientOptions } from '../golden/support/client-options';
+import { isJsonRecord } from '../../lib/supabase/json';
 import { getDevSecurityProblems } from '../../lib/testing/spec-support/cloud-security';
 import { captureRealtimeBoundaries } from './support/realtime-boundaries';
 
@@ -44,7 +45,7 @@ test('C12: Cloud-Mail benötigt Serverberechtigung und einen bestätigten Versan
   const admin = createClient(url, key, testSupabaseClientOptions);
   // Resend's documented test mailbox is reserved by this run before sending.
   expect(world.invitee.email).toMatch(/^delivered\+gg-[a-f0-9]+@resend\.dev$/);
-  const { data, error } = await admin.functions.invoke('send-invite-email', {
+  const mailed = await admin.functions.invoke<unknown>('send-invite-email', {
     headers: { apikey: key, Authorization: `Bearer ${key}` },
     body: {
       to: world.invitee.email,
@@ -54,9 +55,12 @@ test('C12: Cloud-Mail benötigt Serverberechtigung und einen bestätigten Versan
       isExistingUser: true,
     },
   });
+  const { data } = mailed;
+  // functions-js types a failure's error as any.
+  const error: unknown = mailed.error;
   expect(error).toBeNull();
   expect(data).toMatchObject({ success: true });
-  expect(data.id).toMatch(/^[0-9a-f-]{36}$/i);
+  expect(isJsonRecord(data) ? data.id : undefined).toMatch(/^[0-9a-f-]{36}$/i);
   const denied = await fetch(`${url}/functions/v1/send-invite-email`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

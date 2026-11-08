@@ -65,3 +65,4 @@ Standard: Admin
 Verantwortlichkeiten und Freigaben
 Feste Rollen bleiben verständlich. Einzelne Freigaben können gezielt übertragen werden, ohne weitere Verwaltungsrechte zu vergeben.
 Änderungen gelten ab der Speicherung. Vergangene Zuständigkeiten und Vertretungszeiträume bleiben im Verlauf erhalten.
+Nicht eingestempelt

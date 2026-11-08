@@ -106,6 +106,7 @@ export async function previewDispatchReadiness(rawInput: {
     orgId: auth.context.orgId,
     occurrenceId,
     jobId,
+    assessPeople: true,
   });
   if (!result.success) return result;
   return {
@@ -153,6 +154,7 @@ export async function issueDispatch(rawInput: unknown): Promise<ActionResult<{ d
     orgId: auth.context.orgId,
     occurrenceId: parsed.data.occurrenceId,
     jobId: parsed.data.jobId,
+    assessPeople: true,
   });
   if (!readiness.success) return readiness;
 

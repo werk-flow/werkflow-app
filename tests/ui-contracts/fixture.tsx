@@ -12,10 +12,19 @@ import {
 } from './calendar-views-boundaries';
 import { OptionContractFixture } from './option-boundaries';
 import { DocumentSearchFixture, ListNavigationFixture } from './list-navigation-boundaries';
+import {
+  DocumentArchiveContractFixture,
+  initializeDocumentArchiveBoundary,
+} from './document-archive-boundaries';
+import {
+  DocumentUploadContractFixture,
+  DocumentVersionUploadContractFixture,
+} from './document-upload-boundaries';
 import { OrganizationContractFixture } from './organization-boundaries';
 import { CalendarContractFixture } from './calendar-boundaries';
 import { FeedbackContractFixture, isFeedbackFixture } from './feedback-boundaries';
 import { mountHydrationFixture } from './hydration-boundaries';
+import { AuthUrlContractFixture } from './auth-url-boundaries';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
@@ -60,9 +69,11 @@ import { PersonnelLifecycleSection } from '@/components/mitarbeiter/personnel-li
 import { PersonnelOwnActionsSection } from '@/components/mitarbeiter/personnel-own-actions-section';
 import { JoinRequestsSection } from '@/components/mitarbeiter/join-requests-section';
 import { initializePersonnelBoundary } from './personnel-boundaries';
+import { TaskSectionsContractFixture } from './task-section-boundaries';
 
 initializeServiceBoundaries();
 initializeLifecycleBoundary();
+initializeDocumentArchiveBoundary();
 const personnelInitialData = initializePersonnelBoundary();
 
 function LifecycleRouteFixture(): React.JSX.Element {
@@ -563,6 +574,12 @@ createRoot(root).render(
     <ListNavigationFixture />
   ) : window.uiContractFixture === 'document-search' ? (
     <DocumentSearchFixture />
+  ) : window.uiContractFixture === 'document-archive' ? (
+    <DocumentArchiveContractFixture />
+  ) : window.uiContractFixture === 'document-upload' ? (
+    <DocumentUploadContractFixture />
+  ) : window.uiContractFixture === 'document-version-upload' ? (
+    <DocumentVersionUploadContractFixture />
   ) : window.uiContractFixture === 'options' ? (
     <OptionContractFixture />
   ) : window.uiContractFixture === 'calendar' ? (
@@ -574,6 +591,11 @@ createRoot(root).render(
         <LifecycleRouteFixture />
       </main>
     </BannerProvider>
+  ) : window.uiContractFixture === 'task-sections' ? (
+    <main>
+      <h1>Komponentenverträge</h1>
+      <TaskSectionsContractFixture />
+    </main>
   ) : window.uiContractFixture === 'own-personnel' ? (
     <BannerProvider>
       <main>
@@ -610,6 +632,9 @@ createRoot(root).render(
         <PersonnelLifecycleSection data={personnelInitialData} canManage canAdministerAccess />
       </main>
     </BannerProvider>
+  ) : window.uiContractFixture === 'auth-url-session' ||
+    window.uiContractFixture === 'auth-url-reset-form' ? (
+    <AuthUrlContractFixture name={window.uiContractFixture} />
   ) : isFeedbackFixture(window.uiContractFixture) ? (
     <FeedbackContractFixture name={window.uiContractFixture} />
   ) : (

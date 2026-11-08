@@ -1,6 +1,6 @@
 import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import type { ProfileReference } from '@/lib/profile-reference';
-import type { Database, Json } from '@/lib/supabase/database.types';
+import { Constants, type Database, type Json } from '@/lib/supabase/database.types';
 
 export const DOCUMENT_STORAGE_BUCKET = 'organization-documents';
 export const DOCUMENT_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
@@ -17,6 +17,32 @@ export const DOCUMENT_CATEGORY_LABELS: Record<DocumentCategory, string> = {
   report: 'Berichte',
   other: 'Sonstige',
 };
+
+/** The owner's retention schedule: one class, ten years from the end of the document's year. */
+export type DocumentRetentionClass = Database['public']['Enums']['document_retention_class'];
+
+export const DOCUMENT_RETENTION_CLASSES = Constants.public.Enums.document_retention_class;
+
+export const DOCUMENT_RETENTION_CLASS_LABELS: Record<DocumentRetentionClass, string> = {
+  ten_years: '10 Jahre',
+};
+
+/**
+ * What the archive keeps of a document: its document date (`Belegdatum`), its
+ * retention class and end, and whether it is filed (`festgeschrieben`). Only
+ * Admin and Büro receive it.
+ */
+export type DocumentArchive = {
+  documentDate: string;
+  retentionClass: DocumentRetentionClass | null;
+  /** The last day of the period; permanent deletion is possible from the day after. */
+  retentionEndsOn: string | null;
+  filedAt: string | null;
+  filer: DocumentUploader | null;
+};
+
+/** The document date and retention class Admin and Büro set until the document is filed. */
+export type DocumentRetentionTerms = Pick<DocumentArchive, 'documentDate' | 'retentionClass'>;
 
 export type DocumentFolderRow = Database['public']['Tables']['document_folders']['Row'];
 export type DocumentRow = Database['public']['Tables']['documents']['Row'];
@@ -110,6 +136,8 @@ export type OrganizationDocument = {
   updatedAt: string;
   uploader: DocumentUploader | null;
   links: DocumentLink[];
+  /** Null for a caller who is not Admin or Büro. */
+  archive: DocumentArchive | null;
 };
 
 export const DOCUMENT_LIBRARY_VIEWS = [
@@ -229,6 +257,8 @@ export type DocumentUploadTicketResult = ActionResult<{ ticket: DocumentUploadTi
 type DocumentVersionUploadTicket = {
   documentId: string;
   versionNumber: number;
+  /** The upload's own identity: a retry finds the version this upload saved by it. */
+  uploadId: string;
   storagePath: string;
   uploadUrl: string;
 };
@@ -347,10 +377,12 @@ export function toOrganizationDocument({
   row,
   uploader,
   links,
+  archive,
 }: {
   row: DocumentRow;
   uploader: DocumentUploader | null;
   links: DocumentLink[];
+  archive: DocumentArchive | null;
 }): OrganizationDocument {
   return {
     id: row.id,
@@ -374,6 +406,17 @@ export function toOrganizationDocument({
     updatedAt: row.updated_at,
     uploader,
     links,
+    archive,
+  };
+}
+
+export function toDocumentArchive(row: DocumentRow, filer: DocumentUploader | null): DocumentArchive {
+  return {
+    documentDate: row.document_date,
+    retentionClass: row.retention_class,
+    retentionEndsOn: row.retention_ends_on,
+    filedAt: row.filed_at,
+    filer,
   };
 }
 

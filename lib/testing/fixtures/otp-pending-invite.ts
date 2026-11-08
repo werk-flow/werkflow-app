@@ -25,7 +25,7 @@ mock.module('@/lib/navigation/document-load', () => ({
 }));
 
 const { POST } = await import('@/app/api/redeem-invite/route');
-const { redeemSignInInvite } = await import('@/lib/invites/otp-redemption');
+const { redeemOtpInvite, redeemSignInInvite } = await import('@/lib/invites/otp-redemption');
 
 const sentBodies: string[] = [];
 
@@ -75,4 +75,37 @@ assert.equal(sentBodies.at(-1), JSON.stringify({ inviteCode: 'link-code' }));
 // Without a value there is nothing to refuse.
 for (const metadata of [{}, { pending_invite_code: null }, { pending_invite_code: '' }]) {
   assert.equal(await inviteLanding(metadata), null, `${JSON.stringify(metadata)} carries no invite`);
+}
+
+// A success answer reaches the app only in the route's own shape; any other shape opens the failure page.
+async function landingFor(answer: unknown): Promise<string | null> {
+  loaded.length = 0;
+  globalThis.fetch = Object.assign(async () => Response.json(answer), {
+    preconnect: globalThis.fetch.preconnect,
+  });
+  assert.equal(await redeemOtpInvite(supabase, 'link-code'), true, 'every answer ends in a document load');
+  return loaded[0] ?? null;
+}
+
+assert.equal(
+  await landingFor({ success: true, organizationId: 'org-1', alreadyMember: false }),
+  '/dashboard?joined=org-1',
+);
+assert.equal(
+  await landingFor({ success: true, organizationId: 'org-1', alreadyMember: true }),
+  '/dashboard?already_member=org-1',
+);
+assert.equal(await landingFor({ success: true, organizationId: 'org-1' }), '/dashboard?joined=org-1');
+for (const answer of [
+  { success: true, organizationId: { id: 'org-1' } },
+  { success: true, organizationId: '' },
+  { success: 'yes', organizationId: 'org-1' },
+  { success: true },
+  null,
+]) {
+  assert.equal(
+    await landingFor(answer),
+    '/invite-error?error=redeem_failed',
+    `${JSON.stringify(answer)} is no redemption`,
+  );
 }

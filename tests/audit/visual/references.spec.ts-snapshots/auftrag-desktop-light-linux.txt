@@ -25,18 +25,20 @@ Nicht begonnen
 Mittel
 Arbeitsstand
 Nächster Schritt:
-Arbeit starten
+Mitarbeiter zuweisen und einplanen
 Nicht begonnen
 Nicht geplant
-Startbereit
+Kein Termin
 Ausführung starten
 Stornieren
 Parken
 Einsatzbereitschaft
 Kapazität & Verfügbarkeit
-Erfüllt
+Nicht bewertet
+Kein Termin geplant.
 Qualifikationen
-Erfüllt
+Nicht bewertet
+Kein Termin geplant.
 Einsatzort
 Erfüllt
 Einfamilienhaus
@@ -74,3 +76,4 @@ Material planen
 Aus Lager entnehmen
 Noch kein Material erfasst.
 Planen speichert nur den Bedarf. Entnehmen bucht die tatsächliche Bewegung im Lager.
+Nicht eingestempelt

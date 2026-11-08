@@ -5,7 +5,11 @@
 // project reads the project's artifacts, but an export of a project artifact
 // is a project-level document write and needs a manager. The same field worker
 // still exports an artifact of the assigned job. An artifact of another
-// organization is not found and nothing is stored.
+// organization is not found and nothing is stored. An internal revision is
+// never exported, not even by a manager. Each export stores its object under a
+// key of its own: a refused or duplicate export of the same content removes
+// only its own object, never the one a committed export registered, and an
+// export with an unknown outcome keeps its object.
 import { mock } from 'bun:test';
 import assert from 'node:assert/strict';
 import {
@@ -21,6 +25,7 @@ const jobId = '91000000-0000-4000-8000-000000000001';
 const projectArtifactId = '94000000-0000-4000-8000-000000000001';
 const jobArtifactId = '94000000-0000-4000-8000-000000000002';
 const foreignArtifactId = '94000000-0000-4000-8000-000000000003';
+const internalArtifactId = '94000000-0000-4000-8000-000000000004';
 const now = '2026-10-01T08:00:00.000Z';
 
 const artifactRow = (id: string, target: { job_id: string } | { project_id: string }) => ({
@@ -73,8 +78,13 @@ const world = installActionWorld({
     artifactRow(projectArtifactId, { project_id: projectId }),
     artifactRow(jobArtifactId, { job_id: jobId }),
     { ...artifactRow(foreignArtifactId, { job_id: jobId }), organization_id: ORGANIZATION_B },
+    artifactRow(internalArtifactId, { job_id: jobId }),
   ],
-  work_artifact_revisions: [revisionRow(projectArtifactId), revisionRow(jobArtifactId)],
+  work_artifact_revisions: [
+    revisionRow(projectArtifactId),
+    revisionRow(jobArtifactId),
+    { ...revisionRow(internalArtifactId), visibility: 'internal_only' },
+  ],
   work_artifact_actions: [],
   work_artifact_measurement_lines: [],
   work_artifact_defect_details: [],
@@ -94,11 +104,14 @@ world.rpc = ({ name, args }) =>
     : { data: null, error: { message: `${name} is outside this fixture` } };
 
 const storedPaths: string[] = [];
+const discardedPaths: string[] = [];
 mock.module('@/lib/storage/r2', () => ({
   putStorageObject: async ({ path }: { path: string }) => {
     storedPaths.push(path);
   },
-  discardStorageObjects: async () => {},
+  discardStorageObjects: async ({ paths }: { paths: string[] }) => {
+    discardedPaths.push(...paths);
+  },
 }));
 const { exportWorkArtifact } = await import('@/lib/work-artifacts/actions');
 
@@ -137,6 +150,18 @@ for (const role of ['employee', 'buero'] as const) {
   assert.deepEqual(world.rpcCalls, []);
 }
 
+// An internal revision is refused before anything is stored, for its author and for a manager.
+for (const role of ['employee', 'buero'] as const) {
+  signInAs(world, role);
+  assert.deepEqual(
+    await exportOf(internalArtifactId, crypto.randomUUID()),
+    { success: false, error: 'work_artifact_export_requires_customer_visibility' },
+    role,
+  );
+  assert.deepEqual(storedPaths, []);
+  assert.deepEqual(world.rpcCalls, []);
+}
+
 // The same field worker exports the assigned job's artifact in one call.
 signInAs(world, 'employee');
 const jobDocumentId = crypto.randomUUID();
@@ -164,3 +189,36 @@ assert.deepEqual(exportCalls(), [
   },
 ]);
 assert.equal(storedPaths.length, 2);
+
+// Two more exports of the same content read the database before the first
+// export committed. The database refuses one and answers the other as a
+// duplicate of the committed export: each removes only the object it stored.
+const storedPathOfCall = (index: number) => world.rpcCalls[index]?.args.p_storage_path;
+const registeredPath = String(storedPathOfCall(0));
+world.rpc = () => ({ data: null, error: { code: 'P0001', message: 'work_artifact_stale_version' } });
+assert.deepEqual(await exportOf(jobArtifactId, crypto.randomUUID()), {
+  success: false,
+  error: 'work_artifact_stale_version',
+});
+world.rpc = () => ({
+  data: { version: 5, status: 'approved', documentId: jobDocumentId, duplicate: true },
+  error: null,
+});
+const duplicateExport = await exportOf(jobArtifactId, crypto.randomUUID());
+assert.ok(duplicateExport.success, JSON.stringify(duplicateExport));
+assert.equal(duplicateExport.documentId, jobDocumentId);
+assert.ok(
+  !discardedPaths.includes(registeredPath),
+  'a refused export removed the object a committed export registered',
+);
+assert.equal(new Set(storedPaths).size, storedPaths.length, 'two exports stored one key');
+assert.deepEqual(discardedPaths, storedPaths.slice(2));
+
+// An export whose registration has an unknown outcome keeps its object.
+world.rpc = () => ({ data: null, error: { code: '', message: 'TypeError: fetch failed' } });
+assert.deepEqual(await exportOf(jobArtifactId, crypto.randomUUID()), {
+  success: false,
+  error: 'work_artifact_export_failed',
+});
+assert.equal(storedPaths.length, 5);
+assert.deepEqual(discardedPaths, storedPaths.slice(2, 4), 'an unknown outcome removed the export object');

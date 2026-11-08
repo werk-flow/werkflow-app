@@ -23,11 +23,11 @@ export function PageShell({ className, children }: { className?: string; childre
  * The scroll region. Vertical only: page-level horizontal scroll is forbidden
  * on every viewport (design canon), so the region hides horizontal overflow
  * and the mobile viewport audit fails on any content that would need it.
- * The bottom padding keeps the last row clear of the clock button, which is
- * fixed at the bottom right on every authenticated page. A body that scrolls
- * without a focusable control becomes a focusable region for the keyboard
- * (`usePageBodyKeyboardScroll`, run once by the app shell: a client component
- * here would add its client reference to every route payload).
+ * The app layout ends the page column above the clock dock, so the body needs
+ * no clearance of its own. A body that scrolls without a focusable control
+ * becomes a focusable region for the keyboard (`usePageBodyKeyboardScroll`,
+ * run once by the app shell: a client component here would add its client
+ * reference to every route payload).
  */
 export function PageBody({
   className,
@@ -42,7 +42,7 @@ export function PageBody({
     <div
       data-page-body=""
       className={cn(
-        'min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-28',
+        'min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6',
         // Shown only while the body is its own focusable region (usePageBodyKeyboardScroll).
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50',
         className,

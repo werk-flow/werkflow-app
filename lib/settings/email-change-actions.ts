@@ -75,7 +75,7 @@ async function sendEmailChangeOtpEmail(params: {
     admin.from('profiles').select('first_name').eq('id', params.userId).maybeSingle(),
   );
   const secretKey = getSupabaseSecretKey();
-  const { error } = await admin.functions.invoke('send-email-change-current-otp', {
+  const mailed = await admin.functions.invoke('send-email-change-current-otp', {
     headers: { apikey: secretKey, Authorization: `Bearer ${secretKey}` },
     body: {
       to: params.email,
@@ -85,6 +85,8 @@ async function sendEmailChangeOtpEmail(params: {
       kind: params.kind,
     },
   });
+  // functions-js types a failure's error as any.
+  const error: unknown = mailed.error;
   return error ? emailChangeFailure('email_send_failed') : emailChangeSuccess();
 }
 

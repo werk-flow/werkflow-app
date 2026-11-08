@@ -2,6 +2,7 @@ import { afterEach, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { isJsonRecord } from '../../supabase/json';
 import { readReportHistory } from './report-history';
 
 const directories: string[] = [];
@@ -84,8 +85,11 @@ test('probe: a rewritten, removed or added report and a damaged cache never serv
   writeFileSync(cache, '{"version":1,"pairs":[],"snapshots":[{"environment":"x","pairs":"7"}]');
   expect(readReportHistory(archive, cache).map((entry) => entry.id)).toEqual(['r1']);
   // An index outside the pair table is a damaged cache, not an empty snapshot.
-  const damaged = JSON.parse(readFileSync(cache, 'utf8'));
-  damaged.snapshots[0].pairs = '999';
+  const damaged: unknown = JSON.parse(readFileSync(cache, 'utf8'));
+  const snapshots = isJsonRecord(damaged) ? damaged.snapshots : undefined;
+  const first: unknown = Array.isArray(snapshots) ? snapshots[0] : undefined;
+  if (!isJsonRecord(first)) throw new Error('The cache holds no snapshot to damage.');
+  first.pairs = '999';
   writeFileSync(cache, JSON.stringify(damaged));
   expect(readReportHistory(archive, cache)[0]?.snapshot.files).toEqual(snapshot.files);
 });

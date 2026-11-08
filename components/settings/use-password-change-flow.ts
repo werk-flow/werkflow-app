@@ -1,6 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import type { UserAttributes } from '@supabase/supabase-js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm, type UseFormReturn } from 'react-hook-form';
 import { z } from '@/lib/zod';
@@ -11,11 +12,17 @@ import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { clearEmailChangeChallengeQuietly } from '@/hooks/use-sign-out';
 import { rememberPasswordResetAddress } from '@/lib/auth/actions';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
 import {
   type PasswordWithConfirmationValues,
   translateSupabasePasswordError,
 } from '@/lib/validation/password';
 import { createSupabaseTransientBrowserClient } from '@/lib/supabase/transient-client';
+
+// GoTrue's PUT /user checks `current_password` before it changes a password.
+// auth-js's UserAttributes does not declare it; updateUser sends every
+// attribute as the request body, so the declared extra key reaches the server.
+type PasswordChangeAttributes = UserAttributes & { current_password: string };
 
 const currentPasswordSchema = z.object({
   currentPassword: z.string().min(1, 'Bitte gib dein aktuelles Passwort ein.'),
@@ -169,10 +176,11 @@ async function updatePassword(
       return;
     }
 
-    const { error } = await supabase.auth.updateUser({
+    const attributes: PasswordChangeAttributes = {
       current_password: currentPassword,
       password: values.password,
-    });
+    };
+    const { error } = await supabase.auth.updateUser(attributes);
 
     if (error) {
       if (isCurrentPasswordError(error)) {
@@ -217,6 +225,7 @@ async function redirectToPasswordReset(
   const knownAddress = await rememberResetAddress();
 
   // Global on purpose: a password change ends every existing session.
+  clearManualEntryBridge();
   const { error } = await supabase.auth.signOut({ scope: 'global' });
 
   if (error) {

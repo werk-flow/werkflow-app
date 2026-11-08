@@ -2,6 +2,7 @@ import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import type { ProfileReference } from '@/lib/profile-reference';
 import type { Database } from '@/lib/supabase/database.types';
 import type { AssignmentEvaluation } from '@/lib/qualifications/types';
+import type { PlanningWarningFailure } from '@/lib/planning/conflict-acknowledgement';
 import type { ClientContact, ClientSite } from '@/lib/clients/types';
 import { constrainedValue } from '@/lib/validation/constrained-value';
 
@@ -268,6 +269,7 @@ export type DeleteProjectResult = ActionResult;
 export type UpdateJobAssignmentsResult =
   | { success: true; assignments: JobAssignment[] }
   | QualificationWarningResult
+  | PlanningWarningFailure
   | ActionFailure;
 
 export type GetJobInstructionItemsResult = ActionResult<{ items: JobInstructionItemWithDetails[] }>;

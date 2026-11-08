@@ -56,6 +56,8 @@ type PlanningConflictKind =
   | 'pending_absence'
   | 'overlap'
   | 'over_capacity'
+  | 'outside_employment'
+  | 'access_ended'
   | 'qualification';
 
 export type PlanningConflict = {
@@ -86,6 +88,10 @@ export type CapacityDayContext = {
   pendingAbsenceMinutes: number;
   existingPlannedMinutes: number;
   overlapMinutes: number;
+  /** Set when the date lies before the person's entry or after their exit. */
+  outsideEmployment: 'before_entry' | 'after_exit' | null;
+  /** The person's app access has ended by this date. */
+  accessEnded: boolean;
 };
 
 export type CapacityEvaluation = {

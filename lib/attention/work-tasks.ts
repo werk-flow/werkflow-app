@@ -13,9 +13,11 @@ import { resolveProjectHandoverExecutionState } from '@/lib/work-handover/projec
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { readHandoverCandidateProjects } from '@/lib/attention/pending-sets';
 import type { Tables } from '@/lib/supabase/database.types';
+import { isHiddenCoworkerDraft } from '@/lib/work-artifacts/field-visibility';
 import { logError } from '@/lib/logging';
 import { workTargetHref, workTargetLabel } from './task-labels';
 import type { AttentionTask } from './types';
+import { toWorkHandoverTasks, type HandoverJobRow, type HandoverProjectRow } from './handover-tasks';
 
 type DerivedTasks = { tasks: AttentionTask[]; failed: boolean };
 
@@ -25,21 +27,12 @@ type WorkArtifactAttentionRow = Pick<
 >;
 type WorkArtifactRevisionAttentionRow = Pick<
   Tables<'work_artifact_revisions'>,
-  'id' | 'title' | 'kind' | 'revision_number' | 'created_by'
+  'id' | 'title' | 'kind' | 'revision_number' | 'created_by' | 'visibility'
 >;
 type WorkDefectAttentionRow = Pick<
   Tables<'work_artifact_defect_details'>,
   'revision_id' | 'due_date' | 'severity' | 'state' | 'responsible_employee_record_id'
 >;
-type HandoverJobRow = Pick<
-  Tables<'jobs'>,
-  'id' | 'job_number' | 'title' | 'execution_version' | 'project_id'
->;
-type HandoverProjectRow = Pick<
-  Tables<'projects'>,
-  'id' | 'project_number' | 'name' | 'execution_version' | 'execution_state_override' | 'status_override'
->;
-
 /** The jobs, projects, own employee record, and assignments that decide who may see an artifact task. */
 async function readWorkArtifactAttentionTargets(
   admin: AdminClient,
@@ -115,7 +108,8 @@ async function readWorkArtifactAttentionTargets(
     assignedJobIds: new Set((jobAssignmentsResult.data ?? []).map((assignment) => assignment.job_id)),
     assignedProjectIds: new Set(
       (projectAssignmentsResult.data ?? []).flatMap((assignment) => {
-        const joined = Array.isArray(assignment.jobs) ? assignment.jobs[0] : assignment.jobs;
+        // PostgREST embeds the job as an object; an embed seeded as an array reads its first job.
+        const [joined] = [assignment.jobs].flat();
         return joined?.project_id ? [joined.project_id] : [];
       }),
     ),
@@ -139,7 +133,8 @@ function toWorkArtifactTasks(
   for (const artifact of artifacts) {
     if (!artifact.current_revision_id) continue;
     const revision = revisions.get(artifact.current_revision_id);
-    if (!revision) continue;
+    // A coworker's internal draft yields no task, as its detail readers refuse it.
+    if (!revision || isHiddenCoworkerDraft(context, artifact, revision)) continue;
     const job = artifact.job_id ? jobs.get(artifact.job_id) : undefined;
     const project = artifact.project_id ? projects.get(artifact.project_id) : undefined;
     const targetHref = workTargetHref(job, project);
@@ -294,7 +289,7 @@ async function readWorkArtifactTaskFacts(
   const revisionsResult = await readInBatches(revisionIds, (batch) =>
     admin
       .from('work_artifact_revisions')
-      .select('id, title, kind, revision_number, created_by')
+      .select('id, title, kind, revision_number, created_by, visibility')
       .eq('organization_id', context.orgId)
       .in('id', [...batch]),
   );
@@ -384,53 +379,6 @@ async function resolveCompleteHandoverProjects(
       ) === 'execution_complete',
   );
 }
-function toWorkHandoverTasks(
-  jobs: HandoverJobRow[],
-  projects: HandoverProjectRow[],
-  jobPackageRows: Array<Pick<Tables<'work_handover_packages'>, 'job_id' | 'state' | 'version'>>,
-  projectPackageRows: Array<Pick<Tables<'work_handover_packages'>, 'project_id' | 'state' | 'version'>>,
-  parentProjectRows: Array<{ id: string; project_number: string | null }>,
-): AttentionTask[] {
-  const jobPackages = new Map(jobPackageRows.map((entry) => [entry.job_id, entry]));
-  const projectPackages = new Map(projectPackageRows.map((entry) => [entry.project_id, entry]));
-  const projectNumbers = new Map(parentProjectRows.map((project) => [project.id, project.project_number]));
-  const tasks: AttentionTask[] = [];
-  for (const job of jobs) {
-    const handoverPackage = jobPackages.get(job.id);
-    if (handoverPackage?.state === 'released') continue;
-    const projectNumber = job.project_id ? projectNumbers.get(job.project_id) : null;
-    tasks.push({
-      sourceType: 'work_handover_review',
-      sourceId: job.id,
-      targetType: 'job',
-      targetLabel: job.job_number ? `${job.job_number} · ${job.title}` : job.title,
-      targetHref:
-        job.job_number && projectNumber
-          ? `/auftraege/projekt/${encodeURIComponent(projectNumber)}/${encodeURIComponent(job.job_number)}/uebergabe`
-          : job.job_number && !job.project_id
-            ? `/auftraege/${encodeURIComponent(job.job_number)}/uebergabe`
-            : `/auftraege/uebergaben/auftrag/${job.id}`,
-      packageState: handoverPackage?.state ?? 'missing',
-      stateVersion: `job:${job.execution_version}:${handoverPackage?.version ?? 0}`,
-    });
-  }
-  for (const project of projects) {
-    const handoverPackage = projectPackages.get(project.id);
-    if (handoverPackage?.state === 'released') continue;
-    tasks.push({
-      sourceType: 'work_handover_review',
-      sourceId: project.id,
-      targetType: 'project',
-      targetLabel: project.project_number ? `${project.project_number} · ${project.name}` : project.name,
-      targetHref: project.project_number
-        ? `/auftraege/projekt/${encodeURIComponent(project.project_number)}/uebergabe`
-        : `/auftraege/uebergaben/projekt/${project.id}`,
-      packageState: handoverPackage?.state ?? 'missing',
-      stateVersion: `project:${project.execution_version}:${handoverPackage?.version ?? 0}`,
-    });
-  }
-  return tasks;
-}
 export async function deriveWorkHandoverTasks(context: ActionContext): Promise<DerivedTasks> {
   const holder = await getEffectiveResponsibilityHolderForActor({
     organizationId: context.orgId,
@@ -444,7 +392,7 @@ export async function deriveWorkHandoverTasks(context: ActionContext): Promise<D
       (from, to) =>
         admin
           .from('jobs')
-          .select('id, job_number, title, execution_version, project_id')
+          .select('id, job_number, title, execution_version, project_id, updated_at')
           .eq('organization_id', context.orgId)
           .or('execution_state.eq.execution_complete,and(execution_state.is.null,status.eq.fertig)')
           .order('updated_at', { ascending: true })
@@ -459,7 +407,9 @@ export async function deriveWorkHandoverTasks(context: ActionContext): Promise<D
       (from, to) =>
         admin
           .from('projects')
-          .select('id, project_number, name, execution_version, execution_state_override, status_override')
+          .select(
+            'id, project_number, name, execution_version, execution_state_override, status_override, updated_at',
+          )
           .eq('organization_id', context.orgId)
           .or(
             'execution_state_override.eq.execution_complete,and(execution_state_override.is.null,status_override.eq.abgeschlossen)',

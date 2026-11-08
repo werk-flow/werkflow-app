@@ -22,6 +22,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { randomUUID } from 'node:crypto';
 
 import { logError } from '../logging';
 import { isJsonRecord } from '../supabase/json';
@@ -56,7 +57,7 @@ type R2Config = {
   endpointOverride: string | null;
 };
 
-export type StorageObjectHead = {
+type StorageObjectHead = {
   exists: boolean;
   sizeBytes: number | null;
   contentType: string | null;
@@ -158,7 +159,7 @@ export function assertOrganizationStorageKey(organizationId: string, path: strin
 type OrganizationScope = { organizationId: string };
 
 /**
- * The key a browser upload writes before finalize promotes it to `path`. No
+ * The key a browser upload of `path` writes before finalize promotes it. No
  * row ever references a staging key, so a signed PUT that is still valid after
  * finalize can no longer change the bytes a row points at.
  */
@@ -169,7 +170,7 @@ export function uploadStagingPath(organizationId: string, path: string): string 
 
 /**
  * Signs a PUT for the staging key of `path`, never for `path` itself;
- * `promoteUploadedObject` moves the bytes to `path` at finalize.
+ * `promoteUploadedObject` copies the bytes to a key of its own at finalize.
  */
 export async function createSignedUploadUrl({
   organizationId,
@@ -218,7 +219,7 @@ export async function createSignedDownloadUrl({
   return getSignedUrl(getR2Client(), command, { expiresIn: clampExpiry(expiresInSeconds) });
 }
 
-export async function headStorageObject({
+async function headStorageObject({
   organizationId,
   path,
 }: OrganizationScope & { path: string }): Promise<StorageObjectHead> {
@@ -282,27 +283,49 @@ export async function copyStorageObject({
   );
 }
 
+/** The head of a promoted upload and the key its copy was written to. */
+export type PromotedUpload = StorageObjectHead & { path: string };
+
 /**
- * Copies a browser upload from its staging key to `path` on the server,
- * removes the staging object and returns the head of the copy. The copy is
- * what finalize verifies and registers: only the server writes `path`. A
- * missing staging object reads as a missing upload.
+ * The key one write attempt of `path` uses: the folder and file name of `path`
+ * with a fresh id before the name. No two attempts share a key, so an attempt
+ * never writes or removes a key another attempt already registered.
+ */
+export function attemptStoragePath(path: string): string {
+  const nameStart = path.lastIndexOf('/') + 1;
+  return `${path.slice(0, nameStart)}${randomUUID()}-${path.slice(nameStart)}`;
+}
+
+/**
+ * Copies a browser upload from the staging key of `path` to a key of its own
+ * on the server, removes the staging object and returns the head and key of
+ * the copy. The copy is what finalize verifies and registers: only the server
+ * writes it, and only this attempt. A missing staging object reads as a
+ * missing upload.
  */
 export async function promoteUploadedObject({
   organizationId,
   path,
-}: OrganizationScope & { path: string }): Promise<StorageObjectHead> {
+}: OrganizationScope & { path: string }): Promise<PromotedUpload> {
   const stagingPath = uploadStagingPath(organizationId, path);
+  const attemptPath = attemptStoragePath(path);
   try {
-    await copyStorageObject({ organizationId, sourcePath: stagingPath, targetPath: path });
+    await copyStorageObject({ organizationId, sourcePath: stagingPath, targetPath: attemptPath });
   } catch (error) {
-    if (isNotFoundError(error)) return { exists: false, sizeBytes: null, contentType: null };
+    if (isNotFoundError(error))
+      return { exists: false, sizeBytes: null, contentType: null, path: attemptPath };
     throw error;
   }
-  // The staging object stays until the copy is read, so a failed read can be retried.
-  const head = await headStorageObject({ organizationId, path });
+  let head: StorageObjectHead;
+  try {
+    head = await headStorageObject({ organizationId, path: attemptPath });
+  } catch (error) {
+    // The staging object stays, so a retry promotes it again into a key of its own.
+    await discardStorageObjects({ organizationId, paths: [attemptPath] });
+    throw error;
+  }
   await discardStorageObjects({ organizationId, paths: [stagingPath] });
-  return head;
+  return { ...head, path: attemptPath };
 }
 
 export async function putStorageObject({

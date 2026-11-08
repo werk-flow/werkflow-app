@@ -13,7 +13,28 @@ const CAPACITY_CONFLICT_MESSAGES = {
   pending_absence: 'Für diesen Tag liegt ein noch offener Abwesenheitsantrag vor.',
   overlap: 'Der Termin überschneidet sich mit bereits geplanter Arbeit.',
   over_capacity: 'Die geplante Zeit überschreitet die verfügbare Tageskapazität.',
+  before_entry: 'Der Termin liegt vor dem Eintritt dieser Person.',
+  after_exit: 'Der Termin liegt nach dem Austritt dieser Person.',
+  access_ended: 'Der App-Zugang dieser Person ist zu diesem Termin beendet.',
 } as const;
+
+type ConflictCommon = Pick<PlanningConflict, 'severity' | 'employeeRecordId' | 'localDate'>;
+
+/** Whether the person may be planned on the day at all: employed, and with app access. */
+function availabilityConflicts(common: ConflictCommon, context: CapacityDayContext): PlanningConflict[] {
+  if (context.outsideEmployment) {
+    return [
+      {
+        ...common,
+        kind: 'outside_employment',
+        message: CAPACITY_CONFLICT_MESSAGES[context.outsideEmployment],
+        details: { outsideEmployment: context.outsideEmployment },
+      },
+    ];
+  }
+  if (!context.accessEnded) return [];
+  return [{ ...common, kind: 'access_ended', message: CAPACITY_CONFLICT_MESSAGES.access_ended, details: {} }];
+}
 
 /** The warnings of one person's proposed day, in the order the assessment lists them. */
 function dayConflicts(
@@ -22,11 +43,16 @@ function dayConflicts(
   remainingMinutes: number | null,
 ): PlanningConflict[] {
   const conflicts: PlanningConflict[] = [];
-  const common = {
-    severity: 'warning' as const,
+  const common: ConflictCommon = {
+    severity: 'warning',
     employeeRecordId: allocation.employeeRecordId,
     localDate: allocation.localDate,
   };
+  const availability = availabilityConflicts(common, context);
+  // Outside employment the person owes no time at all, so the schedule,
+  // holiday and capacity warnings of that day would only repeat the one fact.
+  if (context.outsideEmployment) return availability;
+  conflicts.push(...availability);
   if (context.targetMinutes === null) {
     conflicts.push({
       ...common,
@@ -112,6 +138,8 @@ export function evaluateCapacity(
       pendingAbsenceMinutes: 0,
       existingPlannedMinutes: 0,
       overlapMinutes: 0,
+      outsideEmployment: null,
+      accessEnded: false,
     };
     const remainingMinutes =
       context.targetMinutes === null

@@ -297,6 +297,7 @@ export function CreateJobPlanningFields({ form, members }: CreateJobPlanningFiel
         onContactChange={setContactId}
         disabled={siteContactDisabled}
         idPrefix="job"
+        offerSiteCreation
       />
 
       <Field label="Ort" htmlFor="job-location">

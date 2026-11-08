@@ -9,7 +9,7 @@ Write each test at its boundary while you build the behavior. Run the narrowest 
 ### Choose the boundary for a rule
 
 1. A calculation or a pure rule: a unit test beside its module under `lib/`.
-2. A permission, a grant or a history rule: an SQL assertion in `supabase/tests/`, one rolled-back transaction with a failure message per invariant.
+2. A permission, grant or history rule: a rolled-back SQL transaction in `supabase/tests/`, a failure message per invariant, counting only its organizations' rows.
 3. A Server Action's authorization: a boundary fixture on `lib/testing/fixtures/action-boundary-world.ts`.
 4. A shared control, pending feedback or a held write: a contract in `tests/ui-contracts/`.
 5. A connected outcome across roles or sessions: a step in the slice's golden or audit spec.
@@ -41,9 +41,9 @@ Only a child thread and a PR watch wake a thread when they end. A shell run neve
 bun scripts/run-notified.ts --began "[verify] starting " -- bun run test:verify --mode release
 ```
 
-It survives your turn and the harness, keeps the whole log, and sends your thread the command's own exit code. It refuses to start without a reachable thread.
+It survives your turn and the harness, keeps the whole log, and refuses to start without a reachable thread. After your turn, one wake gives every exit code not yet reported to you.
 
-- `--began` is log text only real work prints. The script returns on it, or with the exit code of an ended command. Exit 75: not proven running; never report it as running.
+- `--began` is log text only real work prints. The script returns on it, or with an ended command's exit code. Exit 75: not proven running; never report it as running.
 - A lead may end its turn after `began work`.
 - A delegated child stays in its turn and polls with the printed command: its turn end is its hand-back.
 - A failed wake leaves `UNHEARD RUN`, which the next notified run resends or prints.

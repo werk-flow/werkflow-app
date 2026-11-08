@@ -5,6 +5,8 @@ import { uuidSchema } from '@/lib/validation/uuid';
 import { updateTag, revalidatePath } from 'next/cache';
 import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
+import { assessJobTeamChange, type JobVisitAssessment } from '@/lib/planning/job-team-assessment';
+import type { PlanningConflictApproval } from '@/lib/planning/conflict-acknowledgement';
 import { authenticateAndAuthorize } from './auth';
 import { readJobAssignmentOfUser } from './job-access-reads';
 import {
@@ -97,23 +99,48 @@ const JOB_UPDATE_REFUSALS = [
   ...CUSTOMER_REFERENCE_REFUSALS,
 ];
 
+/**
+ * Replaces the job team with its qualification assessment and, when the
+ * change adds people to the job's unstarted visit, records that visit's
+ * capacity assessment in the same call.
+ */
 async function replaceJobAssignmentsAfterAssessment(
-  input: AssignmentReplacement & { context: AssignmentContext; jobId: string },
+  input: AssignmentReplacement & {
+    context: AssignmentContext;
+    jobId: string;
+    expectedUserIds: string[];
+    visitAssessment: JobVisitAssessment | null;
+  },
 ): Promise<ActionResult<{ assignments: ReturnType<typeof toJobAssignment>[] }>> {
   const replacement = assignmentReplacementArguments(input);
   const selectedUserIds = replacement.p_selected_user_ids;
+  const visit = input.visitAssessment;
   const { error: replaceError } = await input.context.admin.rpc(
-    'replace_job_assignments_with_assessment',
-    rpcArgs('replace_job_assignments_with_assessment', {
+    'replace_job_assignments_with_visit_assessment',
+    rpcArgs('replace_job_assignments_with_visit_assessment', {
       ...replacement,
       p_organization_id: input.context.orgId,
       p_job_id: input.jobId,
       p_actor_id: input.context.actorId,
+      p_expected_user_ids: input.expectedUserIds,
+      p_visit_id: visit?.visitId ?? null,
+      p_visit_version: visit?.visitVersion ?? null,
+      p_capacity_snapshot: visit?.capacitySnapshot ?? null,
+      p_capacity_fingerprint: visit?.capacityFingerprint ?? null,
+      p_qualification_snapshot: visit?.qualificationSnapshot ?? null,
+      p_qualification_fingerprint: visit?.qualificationFingerprint ?? null,
+      p_planning_override_reason: visit?.overrideReason ?? null,
     }),
   );
   if (replaceError) {
     logError('Failed to replace job assignments:', replaceError);
-    return { success: false, error: 'assign_failed' };
+    // The team or the visit changed after the server assessed them: save again on the new state.
+    const stale = [
+      'stale_job_assignments',
+      'stale_planning_occurrence',
+      'planning_occurrence_not_found',
+    ].some((code) => replaceError.message.includes(code));
+    return { success: false, error: stale ? 'assignments_changed' : 'assign_failed' };
   }
   const { data: assignmentRows, error: loadError } = await input.context.admin
     .from('job_assignments')
@@ -275,15 +302,17 @@ export async function updateJobAssignments(
   rawSelectedUserIds: string[],
   rawApproval?: AssignmentApproval | null,
   rawTeamSourceId?: string | null,
+  rawPlanningApproval?: PlanningConflictApproval | null,
 ): Promise<UpdateJobAssignmentsResult> {
   const parsedArguments = updateJobAssignmentsArgumentsSchema.safeParse({
     jobId: rawJobId,
     selectedUserIds: rawSelectedUserIds,
     approval: rawApproval,
     teamSourceId: rawTeamSourceId,
+    planningApproval: rawPlanningApproval,
   });
   if (!parsedArguments.success) return { success: false, error: 'invalid_input' };
-  const { jobId, selectedUserIds, approval, teamSourceId } = parsedArguments.data;
+  const { jobId, selectedUserIds, approval, teamSourceId, planningApproval } = parsedArguments.data;
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -312,6 +341,19 @@ export async function updateJobAssignments(
       approval,
     });
     if (!assessment.success) return assessment;
+    // The capacity check of the calendar: a person added here reaches the
+    // job's unstarted visit, so a conflict there needs a confirmed reason.
+    const teamAssessment = await assessJobTeamChange({
+      admin,
+      orgId,
+      jobId,
+      nextUserIds: normalizedUserIds,
+      acknowledgement: {
+        overrideReason: planningApproval?.reason ?? null,
+        assessmentFingerprint: planningApproval?.fingerprint ?? null,
+      },
+    });
+    if (!teamAssessment.success) return teamAssessment;
     const result = await replaceJobAssignmentsAfterAssessment({
       context,
       jobId,
@@ -319,6 +361,8 @@ export async function updateJobAssignments(
       evaluation: assessment.evaluation,
       approval,
       teamSourceId,
+      expectedUserIds: teamAssessment.currentUserIds,
+      visitAssessment: teamAssessment.visitAssessment,
     });
     if (!result.success) return result;
     revalidatePath('/auftraege', 'layout');

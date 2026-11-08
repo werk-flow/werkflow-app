@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { logReadFailure } from '@/lib/data/read-request-cache';
-import { toProfileReference, type ProfileReferenceRow } from '@/lib/profile-reference';
+import { toProfileReference } from '@/lib/profile-reference';
 import type { AdminClient } from '@/lib/supabase/admin';
 import { readInBatches } from '@/lib/supabase/query-batches';
 import {
@@ -10,7 +10,10 @@ import {
   type JobInstructionItemWithDetails,
 } from './types';
 
-/** The people, evidence requirements and predecessors of the rows; null after a logged failed read. */
+/**
+ * The people, which of them are still members, the evidence requirements and
+ * the predecessors of the rows; null after a logged failed read.
+ */
 async function readInstructionItemMetadata(admin: AdminClient, orgId: string, rows: JobInstructionItemRow[]) {
   const profileIds = Array.from(
     new Set(
@@ -24,11 +27,9 @@ async function readInstructionItemMetadata(admin: AdminClient, orgId: string, ro
 
   // Each batch holds whole items, so the per-item `sort_order` survives batching.
   const [profilesResult, evidenceResult, dependencyResult] = await Promise.all([
+    // One read gives each person's profile and whether they are still a member here.
     readInBatches(profileIds, (batch) =>
-      admin
-        .from('profiles')
-        .select('id, first_name, last_name, email, avatar_path')
-        .in('id', [...batch]),
+      admin.rpc('list_profile_references', { p_organization_id: orgId, p_user_ids: [...batch] }),
     ),
     readInBatches(itemIds, (batch) =>
       admin
@@ -103,8 +104,11 @@ export async function hydrateInstructionItems(
 ): Promise<JobInstructionItemWithDetails[] | null> {
   const metadata = await readInstructionItemMetadata(admin, orgId, rows);
   if (!metadata) return null;
-  const profileMap = new Map<string, ProfileReferenceRow>();
-  for (const profile of metadata.profiles) profileMap.set(profile.id, profile);
+  const profileMap = new Map(metadata.profiles.map((profile) => [profile.id, profile]));
+  const actorReference = (userId: string | null) => {
+    const profile = userId ? profileMap.get(userId) : undefined;
+    return profile ? toProfileReference(profile, profile.is_member ? 'member' : 'former') : null;
+  };
   const requirementIds = metadata.evidence.map((requirement) => requirement.id);
   const contentById = new Map(rows.map((row) => [row.id, row.content]));
   // A single saved item is hydrated alone; its predecessors still need their labels.
@@ -127,10 +131,8 @@ export async function hydrateInstructionItems(
   );
   return rows.map((row) => ({
     ...toJobInstructionItem(row),
-    creator: toProfileReference(profileMap.get(row.created_by)),
-    lastStatusChangedByProfile: toProfileReference(
-      row.last_status_changed_by ? profileMap.get(row.last_status_changed_by) : null,
-    ),
+    creator: actorReference(row.created_by),
+    lastStatusChangedByProfile: actorReference(row.last_status_changed_by),
     evidenceRequirements: metadata.evidence
       .filter((item) => item.instruction_item_id === row.id)
       .map((item) => ({

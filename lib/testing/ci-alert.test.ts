@@ -149,6 +149,55 @@ test('a green run closes a duplicate a race left behind', () => {
   ]);
 });
 
+// The production watcher closes its own alert and says why (.github/workflows/production-alert.yml).
+test('a close with a note says why, with the run', () => {
+  writeOpenIssues([{ number: 14, title: 'Production alert: deploy' }]);
+  expect(issueWrites(['close', 'Production alert: deploy', 'Production serves its head again.'])).toEqual([
+    `issue close 14 --comment Production serves its head again.\n\nRun: ${RUN_URL}\n`,
+  ]);
+});
+
+test('the production alert workflow offers every title the production watcher raises', () => {
+  const workflow = readFileSync(join(repositoryRoot, '.github/workflows/production-alert.yml'), 'utf8');
+  for (const title of [
+    'CI alert: release',
+    'Production alert: deploy',
+    'Production alert: server errors',
+    'Production alert: watcher',
+  ])
+    expect(workflow).toContain(`- '${title}'\n`);
+  expect(workflow).toContain('alert-issue.sh "$ACTION" "$TITLE" "$NOTE"');
+  // A pending run replaces the older pending run of its group, so one alert cannot drop another's.
+  expect(workflow).toContain('group: production-alert-${{ inputs.title }}\n');
+});
+
+// The recovery rehearsal runs on the owner's PC, outside GitHub Actions (ops/recovery-rehearsal.py in werkflow-planning).
+test('a caller outside GitHub Actions names its own run in the issue', () => {
+  const run = 'recovery rehearsal of 2026-11-07 18:30 UTC at abc1234';
+  const title = 'CI alert: recovery rehearsal';
+  const local = (args: string[]) => {
+    writeFileSync(join(stub, 'gh.log'), '');
+    const result = spawnSync('bash', [alertScript, ...args], {
+      encoding: 'utf8',
+      env: {
+        NODE_ENV: 'test',
+        PATH: `${stub}:${process.env.PATH}`,
+        STUB: stub,
+        GH_REPO: 'owner/repo',
+        ALERT_RUN: run,
+      },
+    });
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
+    return readFileSync(join(stub, 'gh.log'), 'utf8');
+  };
+  expect(local(['open', title, 'The rehearsal failed.'])).toContain(
+    `issue create --title ${title} --body The rehearsal failed.\n\nRun: ${run} --label ci-alert\n`,
+  );
+  writeOpenIssues([{ number: 16, title }]);
+  expect(local(['close', title])).toContain(`issue close 16 --comment Green again: ${run}\n`);
+});
+
 test('a failed issue lookup fails the job instead of passing without a report', () => {
   rmSync(join(stub, 'issues.json'));
   for (const args of [

@@ -2,6 +2,9 @@
 // change a list, a list of another organization is unreachable, and every
 // change is one database function call for the caller's organization, which
 // applies completely or not at all (supabase/tests/work_atomic_writes.sql).
+// The function refuses the assigned employee a checklist change on finished
+// work (supabase/tests/work_execution_boundaries.sql); the action returns
+// that refusal as not_authorized.
 import assert from 'node:assert/strict';
 import {
   CALLER_ID,
@@ -31,6 +34,7 @@ const itemRow = (
   content: 'Schritt',
   sort_order: sortOrder,
   is_completed: false,
+  completion_version: 0,
   created_by: CALLER_ID,
   created_at: now,
   updated_at: now,
@@ -145,3 +149,30 @@ assert.deepEqual(await actions.deleteJobInstructionItem({ itemId: itemIds[1] ?? 
   success: false,
   error: 'delete_failed',
 });
+
+// An assigned employee ticking an item of finished work: the function refuses,
+// and the action answers with the shared refusal, not a generic failure.
+signInAs(world, 'employee');
+world.rpc = () => ({ data: null, error: { message: 'instruction_item_not_authorized' } });
+assert.deepEqual(
+  await actions.toggleJobInstructionItemCompletion({ itemId: itemIds[1] ?? '', isCompleted: true }),
+  { success: false, error: 'not_authorized' },
+);
+assert.deepEqual(world.rpcCalls.at(-1), {
+  name: 'set_instruction_item_completion',
+  args: {
+    p_organization_id: ORGANIZATION_A,
+    p_actor_id: CALLER_ID,
+    p_instruction_item_id: itemIds[1],
+    p_expected_version: 0,
+    p_is_completed: true,
+  },
+});
+
+// An item of another organization is unknown, and the function is never called.
+const callsBeforeForeignToggle = world.rpcCalls.length;
+assert.deepEqual(await actions.toggleJobInstructionItemCompletion({ itemId: foreignItemId }), {
+  success: false,
+  error: 'item_not_found',
+});
+assert.equal(world.rpcCalls.length, callsBeforeForeignToggle, 'a foreign item reaches no database function');

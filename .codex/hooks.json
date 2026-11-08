@@ -22,6 +22,28 @@
             "statusMessage": "Checking that the MCP tool does not reach production"
           }
         ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "root=\"$(git rev-parse --show-toplevel)\" || { echo \"Refused: the log guard could not find the repository root.\" >&2; exit 2; }; bun \"$root/.claude/hooks/refuse-production-logs.ts\"; code=$?; [ \"$code\" -eq 0 ] || [ \"$code\" -eq 2 ] || echo \"Refused: the log guard failed with exit $code, so it cannot rule out PROD logs.\" >&2; [ \"$code\" -eq 0 ] && exit 0; exit 2",
+            "timeout": 20,
+            "statusMessage": "Checking that the command reads no production logs"
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "root=\"$(git rev-parse --show-toplevel)\" || { echo \"Refused: the Boat key guard could not find the repository root.\" >&2; exit 2; }; bun \"$root/.claude/hooks/refuse-boat-key-reads.ts\"; code=$?; [ \"$code\" -eq 0 ] || [ \"$code\" -eq 2 ] || echo \"Refused: the Boat key guard failed with exit $code, so it cannot rule out a read of the key.\" >&2; [ \"$code\" -eq 0 ] && exit 0; exit 2",
+            "timeout": 20,
+            "statusMessage": "Checking that the command reads no Boat API key"
+          }
+        ]
       }
     ]
   }

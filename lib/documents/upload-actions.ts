@@ -1,14 +1,19 @@
 'use server';
 
 import { randomUUID } from 'crypto';
+import { loggedRead } from '@/lib/data/read-request-cache';
 import { logError } from '@/lib/logging';
 import { createSignedUploadUrl, discardStorageObjects } from '@/lib/storage/r2';
+import { isConfirmedWriteRefusal } from '@/lib/supabase/write-refusal';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import {
   authorizeDocumentUploadTarget,
   getAuthorizedDocumentContext,
+  getManageableDocument,
   getVersionableDocument,
   normalizeUploadTarget,
+  refuseNewVersion,
+  type AuthorizedDocumentContext,
   type NormalizedUploadTarget,
 } from './access';
 import {
@@ -26,13 +31,18 @@ import {
 import { inferDocumentCategory } from './category-inference';
 import { hydrateWrittenDocument } from './hydration';
 import { readDocumentStoragePath } from './reads';
-import { buildDocumentStoragePath, buildDocumentVersionStoragePath } from './storage-path';
+import {
+  buildDocumentStoragePath,
+  buildDocumentVersionStoragePath,
+  buildDocumentVersionUploadFolder,
+} from './storage-path';
 import {
   DOCUMENT_MAX_FILE_SIZE_BYTES,
   DOCUMENT_STORAGE_BUCKET,
   toDocumentCategory,
   type DocumentCategory,
   type DocumentResult,
+  type DocumentRow,
   type DocumentUploadTicketResult,
   type DocumentVersion,
   type DocumentVersionUploadTicketResult,
@@ -49,6 +59,18 @@ import {
 // A sent category maps to its known value or 'other'; only a missing one falls back to inference.
 function parseDocumentCategory(value: string | null): DocumentCategory | null {
   return value === null ? null : toDocumentCategory(value);
+}
+
+/**
+ * Removes a finalize's own copy after the database refused its registration.
+ * After an unknown outcome the copy stays: the registration may still commit.
+ */
+async function discardRefusedCopy(
+  organizationId: string,
+  storagePath: string,
+  error: { code?: string } | null,
+): Promise<void> {
+  if (isConfirmedWriteRefusal(error)) await discardStorageObjects({ organizationId, paths: [storagePath] });
 }
 
 const UPLOAD_LINK_KINDS = [
@@ -120,15 +142,16 @@ export async function finalizeDocumentUpload(rawInput: FinalizeDocumentUploadInp
   if (!auth.success) return auth;
 
   const originalFileName = input.fileName.trim() || 'Dokument';
-  // The storage path is recomputed server-side from the authenticated org and
+  // The upload's path is recomputed server-side from the authenticated org and
   // the document id, so a client can never register a foreign object key.
-  const storagePath = buildDocumentStoragePath({
+  const uploadPath = buildDocumentStoragePath({
     organizationId: auth.context.orgId,
     documentId: input.documentId,
     fileName: originalFileName,
   });
 
-  // Only a completed read proves the upload unregistered; the copy must never replace a registered file.
+  // Only a completed read proves the upload unregistered. A finalize that read
+  // before a concurrent one committed still copies only to a key of its own.
   const registeredPath = await readDocumentStoragePath(auth.context, input.documentId);
   if (registeredPath === undefined) return { success: false, error: 'load_failed' };
   if (registeredPath) return { success: false, error: 'already_finalized' };
@@ -136,17 +159,17 @@ export async function finalizeDocumentUpload(rawInput: FinalizeDocumentUploadInp
   const target = normalizeUploadTarget(input);
   const access = await authorizeDocumentUploadTarget(auth.context, target);
   if (!access.success) {
-    await discardStagedUpload(auth.context.orgId, storagePath);
+    await discardStagedUpload(auth.context.orgId, uploadPath);
     return access;
   }
 
   const head = await acceptUploadedObject({
     organizationId: auth.context.orgId,
-    storagePath,
+    storagePath: uploadPath,
     failureLabel: 'Failed to verify uploaded document object',
   });
   if (!head.success) return head;
-  const { contentType } = head;
+  const { contentType, storagePath } = head;
   const category =
     parseDocumentCategory(input.category ?? null) ??
     inferDocumentCategory({
@@ -193,10 +216,8 @@ export async function finalizeDocumentUpload(rawInput: FinalizeDocumentUploadInp
       ],
       'create_failed',
     );
-    // A concurrent finalize of the same upload committed first and owns the object.
-    if (failure.error !== 'already_finalized') {
-      await discardStorageObjects({ organizationId: auth.context.orgId, paths: [storagePath] });
-    }
+    // Only this finalize wrote its copy; a concurrent one that committed registered its own.
+    await discardRefusedCopy(auth.context.orgId, storagePath, error);
     return failure;
   }
 
@@ -224,9 +245,11 @@ export async function createDocumentVersionUploadTicket(
   }
 
   const nextVersionNumber = existing.document.current_version_number + 1;
+  const uploadId = randomUUID();
   const storagePath = buildDocumentVersionStoragePath({
     organizationId: auth.context.orgId,
     documentId: existing.document.id,
+    uploadId,
     versionNumber: nextVersionNumber,
     fileName: input.fileName.trim() || 'Dokument',
   });
@@ -243,6 +266,7 @@ export async function createDocumentVersionUploadTicket(
       ticket: {
         documentId: existing.document.id,
         versionNumber: nextVersionNumber,
+        uploadId,
         storagePath,
         uploadUrl,
       },
@@ -253,6 +277,42 @@ export async function createDocumentVersionUploadTicket(
   }
 }
 
+/**
+ * Whether this upload saved version `versionNumber` of the document: the
+ * caller saved it from the upload's own folder, so another upload's version
+ * never counts, even under the same number and file name. `undefined` when
+ * the archived version could not be read (logged).
+ */
+async function isOwnSavedVersion(
+  context: AuthorizedDocumentContext,
+  document: DocumentRow,
+  upload: { versionNumber: number; uploadId: string },
+): Promise<boolean | undefined> {
+  let saved: { storage_path: string; uploaded_by: string } | null = null;
+  if (upload.versionNumber === document.current_version_number) {
+    saved = document;
+  } else if (upload.versionNumber < document.current_version_number) {
+    const { data, error } = await loggedRead(
+      'isOwnSavedVersion: document_versions read failed',
+      context.admin
+        .from('document_versions')
+        .select('storage_path, uploaded_by')
+        .eq('organization_id', context.orgId)
+        .eq('document_id', document.id)
+        .eq('version_number', upload.versionNumber)
+        .maybeSingle(),
+    );
+    if (error) return undefined;
+    saved = data;
+  }
+  const uploadFolder = buildDocumentVersionUploadFolder({
+    organizationId: context.orgId,
+    documentId: document.id,
+    uploadId: upload.uploadId,
+  });
+  return saved?.uploaded_by === context.userId && saved.storage_path.startsWith(`${uploadFolder}/`);
+}
+
 export async function finalizeDocumentVersionUpload(
   rawInput: FinalizeDocumentVersionUploadInput,
 ): Promise<VersionResult> {
@@ -261,39 +321,51 @@ export async function finalizeDocumentVersionUpload(
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
-  const existing = await getVersionableDocument(auth.context, input.documentId);
-  if (!existing.success) return existing;
-
-  const nextVersionNumber = existing.document.current_version_number + 1;
-  if (input.versionNumber !== nextVersionNumber) {
-    // Another version landed between ticket and finalize; the upload must not
-    // become the current file. It still sits at its staging key, which no
-    // archived version shares.
-    const staleStoragePath = buildDocumentVersionStoragePath({
-      organizationId: auth.context.orgId,
-      documentId: existing.document.id,
-      versionNumber: input.versionNumber,
-      fileName: input.fileName.trim() || 'Dokument',
-    });
-    await discardStagedUpload(auth.context.orgId, staleStoragePath);
-    return { success: false, error: 'version_conflict' };
-  }
-
+  // The ticket's key, recomputed from the authenticated organization: a
+  // client never names a foreign key. Finalize promotes its staging object.
   const originalFileName = input.fileName.trim() || 'Dokument';
-  const storagePath = buildDocumentVersionStoragePath({
+  const ticketPath = buildDocumentVersionStoragePath({
     organizationId: auth.context.orgId,
-    documentId: existing.document.id,
-    versionNumber: nextVersionNumber,
+    documentId: input.documentId,
+    uploadId: input.uploadId,
+    versionNumber: input.versionNumber,
     fileName: originalFileName,
   });
 
+  const existing = await getManageableDocument(auth.context, input.documentId);
+  if (!existing.success) return existing;
+
+  const nextVersionNumber = existing.document.current_version_number + 1;
+  const ticketIsStale = input.versionNumber !== nextVersionNumber;
+  if (ticketIsStale) {
+    // A version landed between ticket and finalize; the upload must not become
+    // the current file. Its staging object goes, which no saved version shares.
+    await discardStagedUpload(auth.context.orgId, ticketPath);
+    // That version may be this upload's own, saved by a try whose answer got
+    // lost, also when the document was filed or recategorized since.
+    const ownVersion = await isOwnSavedVersion(auth.context, existing.document, input);
+    if (ownVersion === undefined) return { success: false, error: 'load_failed' };
+    if (ownVersion) return { success: false, error: 'already_finalized' };
+  }
+
+  const versionable = refuseNewVersion(existing.document);
+  if (!versionable.success) {
+    // A manager filed the document after this ticket, so no finalize of the
+    // upload can succeed. Only its staging object goes, never a registered key.
+    if (versionable.error === 'document_filed' && !ticketIsStale) {
+      await discardStagedUpload(auth.context.orgId, ticketPath);
+    }
+    return versionable;
+  }
+  if (ticketIsStale) return { success: false, error: 'version_conflict' };
+
   const head = await acceptUploadedObject({
     organizationId: auth.context.orgId,
-    storagePath,
+    storagePath: ticketPath,
     failureLabel: 'Failed to verify uploaded version object',
   });
   if (!head.success) return head;
-  const { contentType } = head;
+  const { contentType, storagePath } = head;
 
   // One transaction archives the current file, makes the upload current and records it.
   const { data: updatedDocument, error } = await auth.context.admin.rpc('finalize_document_version_upload', {
@@ -310,14 +382,11 @@ export async function finalizeDocumentVersionUpload(
     const failure = documentWriteFailure(
       'Failed to store the new document version',
       error,
-      ['version_conflict', 'document_not_found', 'versioning_not_supported'],
+      ['version_conflict', 'document_not_found', 'versioning_not_supported', 'document_filed'],
       'version_failed',
     );
-    // A concurrent finalize may have made an object of this same path current:
-    // on a conflict the object is kept, as an orphan is safer than a lost file.
-    if (failure.error !== 'version_conflict') {
-      await discardStorageObjects({ organizationId: auth.context.orgId, paths: [storagePath] });
-    }
+    // Only this finalize wrote its copy; a concurrent one that committed made its own current.
+    await discardRefusedCopy(auth.context.orgId, storagePath, error);
     return failure;
   }
 

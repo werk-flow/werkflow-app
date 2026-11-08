@@ -8,8 +8,6 @@ import 'server-only';
 import { getJobMaterialLines } from '@/lib/inventory/actions';
 import { fingerprintSnapshot } from '@/lib/planning/capacity';
 import { addLocalDays, formatBerlinLocalDateTime, resolveBerlinWallTime } from '@/lib/date-time/berlin';
-import { assessPlanningOccurrences } from '@/lib/planning/server';
-import type { MaterializedOccurrence, PlanningAssignmentDraft, PlanningConflict } from '@/lib/planning/types';
 import { logReadFailure } from '@/lib/data/read-request-cache';
 import type { AdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/supabase/database.types';
@@ -18,9 +16,16 @@ import { deriveTravelNotes, type TravelVisitFact } from './derivation';
 import {
   composeReadiness,
   type MaterialReadinessFacts,
-  type ReadinessFacts,
+  type PlanningReadinessFacts,
   type SiteReadinessFacts,
 } from './readiness';
+import {
+  assessVisitReadiness,
+  loadNextJobVisit,
+  loadReadinessVisit,
+  visitAssignments,
+  type ReadinessVisit,
+} from './readiness-visit';
 import { dispatchReadFailed, loadEmployeeNameFacts, type EmployeeNameFacts } from './server';
 import type { ReadinessResult, TravelNote } from './types';
 
@@ -206,25 +211,78 @@ async function loadTravelNotesForOccurrence(
   );
 }
 
-function toMaterializedOccurrence(occurrence: {
-  id: string;
-  time_kind: 'timed' | 'all_day';
-  start_at: string | null;
-  end_at: string | null;
-  start_date: string | null;
-  end_date_exclusive: string | null;
-  original_start_local: string | null;
-}): MaterializedOccurrence {
-  return {
-    // Used only as an in-memory assignment key during assessment.
-    originalStartLocal: occurrence.original_start_local ?? occurrence.id,
-    timeKind: occurrence.time_kind,
-    startAt: occurrence.start_at,
-    endAt: occurrence.end_at,
-    startDate: occurrence.start_date,
-    endDateExclusive: occurrence.end_date_exclusive,
-    dstResolution: 'exact',
-  };
+/**
+ * The visit readiness looks at: the dispatched visit, or for a job the next
+ * scheduled visit that has not ended. Undefined when the job has none.
+ */
+async function loadTargetVisit(input: {
+  admin: AdminClient;
+  orgId: string;
+  occurrenceId: string | null;
+  jobId: string | null;
+  assessPeople: boolean;
+}): Promise<ActionResult<{ visit: ReadinessVisit | undefined; jobId: string }>> {
+  if (input.occurrenceId) {
+    const visit = await loadReadinessVisit(input.admin, input.orgId, input.occurrenceId);
+    if (visit === null) return { success: false, error: 'load_failed' };
+    if (!visit?.job_id) return { success: false, error: 'dispatch_occurrence_not_found' };
+    return { success: true, visit, jobId: visit.job_id };
+  }
+  if (!input.jobId) return { success: false, error: 'invalid_input' };
+  // A field worker's readiness assesses no people, so it needs no visit.
+  if (!input.assessPeople) return { success: true, visit: undefined, jobId: input.jobId };
+  const visit = await loadNextJobVisit(input.admin, input.orgId, input.jobId);
+  if (visit === null) return { success: false, error: 'load_failed' };
+  return { success: true, visit, jobId: input.jobId };
+}
+
+/** The planning facts and travel gaps of the target's visit; null after a failed read. */
+async function loadVisitFacts(input: {
+  admin: AdminClient;
+  orgId: string;
+  jobId: string;
+  visit: ReadinessVisit | undefined;
+  withTravel: boolean;
+  assessPeople: boolean;
+}): Promise<{ planning: PlanningReadinessFacts; travelNotes: TravelNote[] } | null> {
+  const { visit } = input;
+  const [planning, travelNotes] = await Promise.all([
+    input.assessPeople
+      ? assessVisitReadiness(input.orgId, input.jobId, visit)
+      : Promise.resolve<PlanningReadinessFacts>({ state: 'office_only' }),
+    // Travel gaps are read for a dispatched visit only; a job's own readiness
+    // leaves them „nicht bewertet“.
+    input.withTravel && visit
+      ? loadTravelNotesForOccurrence(
+          input.admin,
+          input.orgId,
+          visit,
+          visitAssignments(visit).map((assignment) => assignment.employeeRecordId),
+        )
+      : Promise.resolve([]),
+  ]);
+  return planning && travelNotes ? { planning, travelNotes } : null;
+}
+
+/** The job's site and planned material; null when the job is not found. */
+async function loadJobFacts(
+  admin: AdminClient,
+  orgId: string,
+  jobId: string,
+): Promise<{ site: SiteReadinessFacts; material: MaterialReadinessFacts } | null> {
+  const { data: job, error: jobError } = await admin
+    .from('jobs')
+    .select('id, site_id')
+    .eq('organization_id', orgId)
+    .eq('id', jobId)
+    .maybeSingle();
+  if (jobError) logReadFailure('composeReadinessForTarget: job failed', { code: jobError.code });
+  if (jobError || !job) return null;
+  const [site, material] = await Promise.all([
+    loadSiteFacts(admin, orgId, job.site_id),
+    loadMaterialFacts(jobId),
+  ]);
+  return { site, material };
 }
 
 export async function composeReadinessForTarget(input: {
@@ -232,80 +290,28 @@ export async function composeReadinessForTarget(input: {
   orgId: string;
   occurrenceId: string | null;
   jobId: string | null;
+  /**
+   * False for a field worker: the visit's people, their absences and exits
+   * are office facts, so capacity and qualifications stay unassessed.
+   */
+  assessPeople: boolean;
 }): Promise<ActionResult<{ readiness: ReadinessResult; fingerprint: string }>> {
-  let planningConflicts: PlanningConflict[] = [];
-  let site: SiteReadinessFacts = { known: false, reason: 'missing' };
-  let travelNotes: TravelNote[] = [];
-  let jobId = input.jobId;
-
-  if (input.occurrenceId) {
-    const { data: occurrence, error } = await input.admin
-      .from('planning_occurrences')
-      .select(
-        'id, job_id, time_kind, status, start_at, end_at, start_date, end_date_exclusive, original_start_local',
-      )
-      .eq('organization_id', input.orgId)
-      .eq('id', input.occurrenceId)
-      .maybeSingle();
-    if (error) logReadFailure('composeReadinessForTarget: occurrence failed', { code: error.code });
-    if (error || !occurrence || !occurrence.job_id) {
-      return { success: false, error: 'dispatch_occurrence_not_found' };
-    }
-    jobId = occurrence.job_id;
-    const { data: assignments, error: assignmentError } = await input.admin
-      .from('planning_occurrence_assignments')
-      .select('employee_record_id, team_source_id')
-      .eq('organization_id', input.orgId)
-      .eq('occurrence_id', occurrence.id);
-    if (assignmentError) {
-      logReadFailure('composeReadinessForTarget: assignments failed', { code: assignmentError.code });
-      return { success: false, error: 'load_failed' };
-    }
-    const drafts: PlanningAssignmentDraft[] = (assignments ?? []).map((assignment) => ({
-      employeeRecordId: assignment.employee_record_id,
-      teamSourceId: assignment.team_source_id,
-    }));
-    const assessment = await assessPlanningOccurrences({
+  const target = await loadTargetVisit(input);
+  if (!target.success) return target;
+  const [visitFacts, jobFacts] = await Promise.all([
+    loadVisitFacts({
+      admin: input.admin,
       orgId: input.orgId,
-      jobId: occurrence.job_id,
-      occurrences: [toMaterializedOccurrence(occurrence)],
-      assignments: drafts,
-      excludeOccurrenceId: occurrence.id,
-    });
-    if (!assessment) return { success: false, error: 'load_failed' };
-    planningConflicts = assessment.conflicts;
-    const loadedTravelNotes = await loadTravelNotesForOccurrence(
-      input.admin,
-      input.orgId,
-      occurrence,
-      drafts.map((draft) => draft.employeeRecordId),
-    );
-    if (!loadedTravelNotes) return { success: false, error: 'load_failed' };
-    travelNotes = loadedTravelNotes;
-  }
-
-  if (!jobId) return { success: false, error: 'invalid_input' };
-  const { data: job, error: jobError } = await input.admin
-    .from('jobs')
-    .select('id, site_id')
-    .eq('organization_id', input.orgId)
-    .eq('id', jobId)
-    .maybeSingle();
-  if (jobError) logReadFailure('composeReadinessForTarget: job failed', { code: jobError.code });
-  if (jobError || !job) return { success: false, error: 'dispatch_job_not_found' };
-  const [siteFacts, material] = await Promise.all([
-    loadSiteFacts(input.admin, input.orgId, job.site_id),
-    loadMaterialFacts(jobId),
+      jobId: target.jobId,
+      visit: target.visit,
+      withTravel: input.occurrenceId !== null,
+      assessPeople: input.assessPeople,
+    }),
+    loadJobFacts(input.admin, input.orgId, target.jobId),
   ]);
-  site = siteFacts;
-
-  const facts: ReadinessFacts = {
-    planningConflicts,
-    site,
-    travelNotes,
-    material,
-  };
-  const readiness = composeReadiness(facts);
+  if (!jobFacts) return { success: false, error: 'dispatch_job_not_found' };
+  if (!visitFacts) return { success: false, error: 'load_failed' };
+  const readiness = composeReadiness({ ...visitFacts, ...jobFacts });
   const fingerprint = await fingerprintSnapshot(readiness.snapshot);
   return { success: true, readiness, fingerprint };
 }

@@ -7,6 +7,7 @@
 // value or id of the second. Büro and Admin read every link as before. A
 // caller of another organization reaches neither the job nor the document.
 import assert from 'node:assert/strict';
+import { z } from '@/lib/zod';
 import {
   CALLER_ID,
   ORGANIZATION_A,
@@ -250,31 +251,38 @@ function valuesOf(value: unknown, values: string[] = []): string[] {
   return values;
 }
 
-type LinkView = { jobId: unknown; projectId: unknown; clientId: unknown; employeeId: unknown };
-/** The one document of a successful reader result, wherever the reader puts it. */
-function documentOf(result: unknown, label: string): { links: LinkView[] } {
+const documentLinksSchema = z.object({
+  links: z.array(
+    z.object({ jobId: z.unknown(), projectId: z.unknown(), clientId: z.unknown(), employeeId: z.unknown() }),
+  ),
+});
+/** The links of the one document of a successful reader result, wherever the reader puts it. */
+function documentOf(result: unknown, label: string): z.infer<typeof documentLinksSchema> {
   assert.ok(typeof result === 'object' && result !== null, `${label}: no result`);
   assert.equal(Reflect.get(result, 'success'), true, `${label}: ${JSON.stringify(result)}`);
-  const single = Reflect.get(result, 'document');
-  const listed = Reflect.get(result, 'documents') ?? Reflect.get(result, 'projectDocuments');
-  const document = single ?? (Array.isArray(listed) ? listed.find((item) => item.id === documentId) : null);
+  const single: unknown = Reflect.get(result, 'document');
+  const listed: unknown = Reflect.get(result, 'documents') ?? Reflect.get(result, 'projectDocuments');
+  const document: unknown =
+    single ?? (Array.isArray(listed) ? listed.find((item) => item.id === documentId) : null);
   assert.ok(document, `${label}: the document is missing`);
-  return document;
+  return documentLinksSchema.parse(document);
 }
 
-const readers = {
+// The reads a field worker uses. The document details carry the version and
+// audit history, which stay with Admin and Büro, so only the office reads them.
+const fieldReaders = {
   jobDocuments: () => getJobDocuments(assignedJobId),
   projectOverview: () =>
     getProjectDocumentsOverview(projectId, [
       { id: assignedJobId, jobNumber: fieldFacts.jobNumber, title: fieldFacts.jobTitle },
     ]),
-  documentDetails: () => getDocumentDetails(documentId),
 };
+const readers = { ...fieldReaders, documentDetails: () => getDocumentDetails(documentId) };
 
 // The assigned field worker reads the document with its own links only, and no value of another record.
 signInAs(world, 'employee');
 assignCallerTo([assignedJobId]);
-for (const [label, read] of Object.entries(readers)) {
+for (const [label, read] of Object.entries(fieldReaders)) {
   const result = await read();
   const document = documentOf(result, label);
   assert.deepEqual(
@@ -302,8 +310,11 @@ for (const [label, read] of Object.entries(readers)) {
     assert.ok(!values.some((value) => value.includes(secret)), `${label}: the field worker receives ${name}`);
 }
 
+// The document details stay with the office: the field worker is refused.
+assert.deepEqual(await getDocumentDetails(documentId), { success: false, error: 'not_authorized' });
+
 // The project overview keeps only the assigned job's group.
-const projectOverview = await readers.projectOverview();
+const projectOverview = await fieldReaders.projectOverview();
 assert.ok(projectOverview.success, JSON.stringify(projectOverview));
 assert.deepEqual(
   projectOverview.jobDocumentGroups.map((group) => group.jobId),
@@ -312,13 +323,13 @@ assert.deepEqual(
 
 // An assignment read that cannot complete refuses the field worker; it never shows every link.
 world.failingTables.add('jobs');
-for (const [label, read] of Object.entries(readers))
+for (const [label, read] of Object.entries(fieldReaders))
   assert.equal((await read()).success, false, `${label}: a failed assignment read answers the field worker`);
 world.failingTables.delete('jobs');
 
 // A field worker without the assignment reads neither the job's documents nor the document.
 assignCallerTo([]);
-for (const [label, read] of Object.entries(readers))
+for (const [label, read] of Object.entries(fieldReaders))
   assert.deepEqual(
     await read(),
     { success: false, error: 'not_authorized' },

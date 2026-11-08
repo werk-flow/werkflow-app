@@ -25,6 +25,7 @@ import { loadApprovedVacationSpansByRecord } from '@/lib/vacation/server';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { fingerprintSnapshot } from './capacity';
 import { addLocalDays, resolveBerlinWallTime } from '@/lib/date-time/berlin';
+import { accessEndDatesByRecord } from './availability';
 import {
   assignedOccurrenceRowsSchema,
   buildQualificationAssessmentRequests,
@@ -353,7 +354,9 @@ async function loadAssessmentContext(input: {
   const recordsAndTargets = readInBatches(employeeRecordIds, (batch) =>
     admin
       .from('employee_records')
-      .select('id, user_id, first_name, last_name, entry_date, exit_date')
+      .select(
+        'id, user_id, first_name, last_name, entry_date, exit_date, personnel_access_lifecycles!personnel_access_lifecycles_employee_org_fkey(state, state_effective_at, scheduled_state, scheduled_for)',
+      )
       .eq('organization_id', input.orgId)
       .in('id', [...batch]),
   ).then(async (recordsResult) => ({
@@ -404,7 +407,12 @@ async function loadAssessmentContext(input: {
       message: 'Rows did not match the expected shape.',
     });
   }
-  return { records: recordsResult.data, targets, existingRows: parsedExisting.data };
+  return {
+    records: recordsResult.data,
+    targets,
+    accessEndDateByRecord: accessEndDatesByRecord(recordsResult.data),
+    existingRows: parsedExisting.data,
+  };
 }
 
 /** Fingerprints the capacity and qualification snapshots, then names the people the warnings concern. */
@@ -495,6 +503,7 @@ export async function assessPlanningOccurrences(input: {
     employeeRecordIds,
     uniqueDates,
     targets: context.targets,
+    accessEndDateByRecord: context.accessEndDateByRecord,
   });
 
   const evaluations = await loadPlanningQualificationEvaluations({

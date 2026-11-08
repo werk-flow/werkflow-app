@@ -194,6 +194,7 @@ export async function getWorkLifecycleSnapshot(input: {
           orgId: auth.context.orgId,
           occurrenceId: null,
           jobId: parsed.data.targetId,
+          assessPeople: auth.context.isManagerOrAbove,
         })
       : Promise.resolve(null),
     admin

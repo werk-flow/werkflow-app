@@ -10,7 +10,8 @@ import { z } from '@/lib/zod';
 export function parseFormData(formData: unknown, schema: z.ZodType): FormData | null {
   if (!(formData instanceof FormData)) return null;
   // No prototype: a field named `constructor` or `__proto__` is an ordinary field, not an inherited key.
-  const fields: Record<string, FormDataEntryValue> = Object.create(null);
+  // A `__proto__` key in a literal sets the prototype; the record is parse input, so its values stay unknown.
+  const fields: Record<string, unknown> = { __proto__: null };
   for (const [key, value] of formData.entries()) {
     if (Object.hasOwn(fields, key)) return null;
     fields[key] = value;

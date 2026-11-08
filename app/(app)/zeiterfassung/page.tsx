@@ -146,7 +146,7 @@ export default async function ZeiterfassungPage({ searchParams }: ZeiterfassungP
     <>
       {/* Outside the Suspense boundary: the action stays usable while the tabs load. */}
       <PageHeaderActions>
-        <ManualEntryButton />
+        <ManualEntryButton currentUserId={user.id} />
       </PageHeaderActions>
       <Suspense fallback={<ZeiterfassungContentSkeleton />}>
         <ZeiterfassungData

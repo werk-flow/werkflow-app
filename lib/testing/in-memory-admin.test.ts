@@ -31,7 +31,7 @@ test('range and referenced-table or filters keep only the embedded items of the 
     .or(`ended_at.is.null,ended_at.gte.${DAY_START}`, { referencedTable: 'time_segments' });
 
   expect(Array.isArray(data) ? data.map((row) => row.id) : data).toEqual(['session']);
-  const segments = Array.isArray(data) ? data[0]?.time_segments : undefined;
+  const segments: unknown = Array.isArray(data) ? data[0]?.time_segments : undefined;
   expect(Array.isArray(segments) ? segments.map((segment: { id: string }) => segment.id) : segments).toEqual([
     'overnight',
     'today',
@@ -63,8 +63,28 @@ test('a !inner embed keeps its parent only while an embedded row passes every fi
     .from('time_sessions')
     .select('id, time_segments!inner(*)')
     .eq('time_segments.id', 'today');
-  const segments = Array.isArray(matching.data) ? matching.data[0]?.time_segments : undefined;
+  const segments: unknown = Array.isArray(matching.data) ? matching.data[0]?.time_segments : undefined;
   expect(Array.isArray(segments) ? segments.map((segment: { id: string }) => segment.id) : segments).toEqual([
     'today',
+  ]);
+});
+
+test('an or filter of and-groups keeps a row when every comparison of one group holds', async () => {
+  const tables: InMemoryTables = {
+    planning_occurrences: [
+      { id: 'timed-inside', start_at: '2026-11-04T08:00:00.000Z', end_at: '2026-11-04T10:00:00.000Z' },
+      { id: 'timed-outside', start_at: '2026-11-06T08:00:00.000Z', end_at: '2026-11-06T10:00:00.000Z' },
+      { id: 'all-day-inside', start_date: '2026-11-04', end_date_exclusive: '2026-11-05' },
+    ],
+  };
+  const { data } = await createInMemoryAdmin(tables)
+    .from('planning_occurrences')
+    .select('id')
+    .or(
+      'and(start_at.lt.2026-11-05T00:00:00.000Z,end_at.gt.2026-11-04T00:00:00.000Z),and(start_date.lte.2026-11-04,end_date_exclusive.gt.2026-11-04)',
+    );
+  expect(data).toEqual([
+    expect.objectContaining({ id: 'timed-inside' }),
+    expect.objectContaining({ id: 'all-day-inside' }),
   ]);
 });
