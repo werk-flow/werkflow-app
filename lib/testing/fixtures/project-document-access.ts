@@ -12,6 +12,7 @@ import {
   ORGANIZATION_A,
   ORGANIZATION_B,
   installActionWorld,
+  listProfileReferencesInWorld,
   signInAs,
   tableRows,
 } from './action-boundary-world';
@@ -151,6 +152,7 @@ function assignCallerTo(jobIds: readonly string[]): void {
 // The document write functions run in SQL (supabase/tests/document_writes.sql);
 // here each one applies the row change it commits, so later reads see it.
 world.rpc = ({ name, args }) => {
+  if (name === 'list_profile_references') return listProfileReferencesInWorld(world, args);
   const organizationId = String(args.p_organization_id);
   const rows = world.tables.documents ?? [];
   if (name === 'finalize_document_upload') {
