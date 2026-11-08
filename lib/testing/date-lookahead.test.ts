@@ -182,6 +182,17 @@ test("a browser leg runs only on a date that ends a day before the runner agent'
   ]);
 });
 
+test('a browser leg keeps a whole day between its midday start and the expiry', () => {
+  const browserLegs = (certificateExpiry: string) =>
+    lookaheadLegs([askedDay('2026-12-21')], {
+      ...input,
+      certificateExpiry: new Date(certificateExpiry),
+    }).filter((leg) => leg.browser).length;
+
+  expect(browserLegs('2026-12-22T11:00:00.000Z')).toBe(2);
+  expect(browserLegs('2026-12-22T10:59:59.999Z')).toBe(0);
+});
+
 test("the runner agent's hosts are read from its journal, each once", () => {
   const journal = [
     '{"level":"INFO","msg":"hca platform and download urls","url":"https://github.com/actions/runner"}',
