@@ -94,9 +94,9 @@ export type PendingSubmissionFact = Pick<TimeCorrectionFact, 'entryType' | 'time
 function asTimeline(facts: readonly PendingSubmissionFact[]): TimeCorrectionFact[] {
   return [...facts]
     .sort((left, right) => left.timestamp.localeCompare(right.timestamp))
-    .map((fact) => ({
+    .map((fact, index) => ({
       ...fact,
-      factId: fact.timestamp,
+      factId: `${index}-${fact.timestamp}`,
       employeeRecordId: '',
       userId: '',
       jobId: null,
