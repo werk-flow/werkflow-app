@@ -22,3 +22,7 @@ test('the project time card reads the approved corrections once per request, not
 test("the project time card reads each person's days once per request, not once per job", async () => {
   await runFixture('project-job-day-reads');
 });
+
+test('a project read whose merged days exceed the row bound returns what each job read returns', async () => {
+  await runFixture('project-job-day-read-bound');
+});

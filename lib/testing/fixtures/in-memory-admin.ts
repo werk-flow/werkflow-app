@@ -59,6 +59,7 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
   private predicates: Array<(row: Row) => boolean> = [];
   private cardinality: 'many' | 'single' | 'maybeSingle' = 'many';
   private headOnly = false;
+  private page: { from: number; to: number } | null = null;
   /** Embeds the select joins with `!inner`, by alias or table name. */
   private readonly innerEmbeds = new Set<string>();
   /** Filters on a seeded embedded array: they drop its items, never its parent row (PostgREST). */
@@ -164,7 +165,9 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
   limit(): this {
     return this;
   }
-  range(): this {
+  /** One page of the selected rows in table order, as PostgREST pages an ordered read. */
+  range(from: number, to: number): this {
+    this.page = { from, to };
     return this;
   }
   not(): this {
@@ -224,7 +227,12 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
         .map((row) => this.withFilteredEmbeds(row))
         .filter((row) => this.keepsInnerEmbeds(row));
     if (this.headOnly) return { data: null, error: null, count: affected.length };
-    if (this.cardinality === 'many') return { data: affected, error: null, count: affected.length };
+    if (this.cardinality === 'many')
+      return {
+        data: this.page ? affected.slice(this.page.from, this.page.to + 1) : affected,
+        error: null,
+        count: affected.length,
+      };
     if (this.cardinality === 'single' && affected.length !== 1)
       // PostgREST's own answer to a `.single()` that matched no row or several.
       return {

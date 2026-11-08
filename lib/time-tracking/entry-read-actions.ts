@@ -4,7 +4,7 @@ import { logReadFailure, logReadErrors } from '@/lib/data/read-request-cache';
 import { readJobAssignmentOfUser } from '@/lib/jobs/job-access-reads';
 import { logError } from '@/lib/logging';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
+import { mapInWindows, readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
 import { getAuthenticatedUser } from '@/lib/data/cached';
 import {
   getTimeEntriesInputSchema,
@@ -261,19 +261,6 @@ type JobReadScope = {
 /** One job's canonical entries and the legacy clock-ins that open its sessions. */
 type JobSources = { jobId: string; canonicalEntries: TimeEntry[]; clockIns: TimeEntry[] };
 
-/** Runs `read` over the items, at most four at a time, in item order. */
-async function mapInWindows<Item, Result>(
-  items: readonly Item[],
-  read: (item: Item) => Promise<Result>,
-): Promise<Result[]> {
-  const windowSize = 4;
-  const results: Result[] = [];
-  for (let offset = 0; offset < items.length; offset += windowSize) {
-    results.push(...(await Promise.all(items.slice(offset, offset + windowSize).map(read))));
-  }
-  return results;
-}
-
 /** The canonical entries and legacy clock-ins of one job the caller may see; null when a read fails. */
 async function readJobSources(
   admin: ReturnType<typeof createSupabaseAdminClient>,
@@ -315,30 +302,33 @@ async function readJobSources(
   return { jobId, canonicalEntries: canonicalResult.entries, clockIns: toTimeEntries(jobClockIns || []) };
 }
 
-/**
- * The whole local days each job's clock-ins span, merged where they overlap,
- * each with the people whose days it reads.
- */
-function clockInDaySpans(
-  jobs: readonly JobSources[],
-): Array<{ start: number; end: number; userIds: Set<string> }> {
+/** The whole local days of one or more jobs' clock-ins, with the people whose days it reads. */
+type DaySpan = { start: number; end: number; userIds: Set<string>; jobs: JobSources[] };
+
+/** The whole local days one job's clock-ins span. */
+function jobDaySpan(job: JobSources): DaySpan {
+  const timestamps = job.clockIns.map((entry) => new Date(entry.timestamp).getTime());
+  return {
+    start: getLocalDayStart(new Date(Math.min(...timestamps))).getTime(),
+    end: getLocalDayEnd(new Date(Math.max(...timestamps))).getTime(),
+    userIds: new Set(job.clockIns.map((entry) => entry.userId)),
+    jobs: [job],
+  };
+}
+
+/** The day spans of the jobs with clock-ins, merged where they overlap. */
+function mergedDaySpans(jobs: readonly JobSources[]): DaySpan[] {
   const spans = jobs
     .filter((job) => job.clockIns.length > 0)
-    .map((job) => {
-      const timestamps = job.clockIns.map((entry) => new Date(entry.timestamp).getTime());
-      return {
-        start: getLocalDayStart(new Date(Math.min(...timestamps))).getTime(),
-        end: getLocalDayEnd(new Date(Math.max(...timestamps))).getTime(),
-        userIds: new Set(job.clockIns.map((entry) => entry.userId)),
-      };
-    })
+    .map(jobDaySpan)
     .sort((left, right) => left.start - right.start);
-  const merged: typeof spans = [];
+  const merged: DaySpan[] = [];
   for (const span of spans) {
     const last = merged.at(-1);
     if (last && span.start <= last.end) {
       last.end = Math.max(last.end, span.end);
       for (const userId of span.userIds) last.userIds.add(userId);
+      last.jobs.push(...span.jobs);
     } else {
       merged.push(span);
     }
@@ -347,47 +337,42 @@ function clockInDaySpans(
 }
 
 /**
- * The legacy entries of every local day a clock-in of the jobs sits in,
- * grouped by person and day. Each day is read once for all the jobs, not once
- * per job; null when a read fails.
+ * The work sessions of every person-day a clock-in of the span's jobs sits
+ * in, paired from the whole days of the span's people; the read's error
+ * otherwise.
  */
-async function readClockInDays(
+async function readSpanSessions(
   admin: ReturnType<typeof createSupabaseAdminClient>,
-  organizationId: string,
-  jobs: readonly JobSources[],
-): Promise<Map<string, TimeEntry[]> | null> {
-  const targetDayKeys = new Set(jobs.flatMap((job) => job.clockIns.map(userDayKey)));
+  scope: JobReadScope,
+  span: DaySpan,
+) {
+  const { organizationId } = scope;
+  const targetDayKeys = new Set(span.jobs.flatMap((job) => job.clockIns.map(userDayKey)));
   // Every clock-in above belongs to the organization. One user sits in one
-  // batch of a span, and spans hold whole days, so each user's day keeps its
+  // batch, and a span holds whole days, so each user's day keeps its
   // timestamp order.
-  const results = await mapInWindows(clockInDaySpans(jobs), (span) =>
-    readInBatches([...span.userIds], (batch) =>
-      readCompleteRows(
-        (from, to) =>
-          admin
-            .from('time_entries')
-            .select('*')
-            .in('user_id', [...batch])
-            .eq('organization_id', organizationId)
-            .gte('timestamp', new Date(span.start).toISOString())
-            .lte('timestamp', new Date(span.end).toISOString())
-            .neq('status', 'rejected')
-            .order('timestamp', { ascending: true })
-            .order('created_at', { ascending: true })
-            .order('id')
-            .range(from, to),
-        LIST_ROW_CAP,
-      ),
+  const { data, error } = await readInBatches([...span.userIds], (batch) =>
+    readCompleteRows(
+      (from, to) =>
+        admin
+          .from('time_entries')
+          .select('*')
+          .in('user_id', [...batch])
+          .eq('organization_id', organizationId)
+          .gte('timestamp', new Date(span.start).toISOString())
+          .lte('timestamp', new Date(span.end).toISOString())
+          .neq('status', 'rejected')
+          .order('timestamp', { ascending: true })
+          .order('created_at', { ascending: true })
+          .order('id')
+          .range(from, to),
+      LIST_ROW_CAP,
     ),
   );
-  const failed = results.find((result) => result.error);
-  if (failed?.error) {
-    logError('Error fetching session-aware time entries for job:', failed.error);
-    return null;
-  }
+  if (error) return { sessions: null, error };
 
   const entriesByUserDay = new Map<string, TimeEntry[]>();
-  for (const entry of toTimeEntries(results.flatMap((result) => result.data))) {
+  for (const entry of toTimeEntries(data)) {
     const key = userDayKey(entry);
     if (!targetDayKeys.has(key)) continue;
     const existing = entriesByUserDay.get(key);
@@ -397,7 +382,41 @@ async function readClockInDays(
       entriesByUserDay.set(key, [entry]);
     }
   }
-  return entriesByUserDay;
+  const sessions: ReadonlyMap<string, WorkSession[]> = new Map(
+    [...entriesByUserDay].map(([dayKey, entries]) => [dayKey, calculateWorkSessions(entries)]),
+  );
+  return { sessions, error: null };
+}
+
+/**
+ * The sessions each job of a span sees, by job id; null when a read fails.
+ * A merged span is read once for all its jobs. When that read exceeds the
+ * row bound, each job reads its own span instead, as a single-job read does,
+ * so merging never fails a read that per-job reads complete.
+ */
+async function readSpanJobSessions(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  scope: JobReadScope,
+  span: DaySpan,
+): Promise<Array<[string, ReadonlyMap<string, WorkSession[]>]> | null> {
+  const merged = await readSpanSessions(admin, scope, span);
+  const reads =
+    merged.error?.code === 'row_overflow' && span.jobs.length > 1
+      ? await mapInWindows(
+          span.jobs,
+          async (job) => ({ jobs: [job], read: await readSpanSessions(admin, scope, jobDaySpan(job)) }),
+          ({ read }) => read.error !== null,
+        )
+      : [{ jobs: span.jobs, read: merged }];
+  const sessionsByJob: Array<[string, ReadonlyMap<string, WorkSession[]>]> = [];
+  for (const { jobs, read } of reads) {
+    if (!read.sessions) {
+      logError('Error fetching session-aware time entries for job:', read.error);
+      return null;
+    }
+    for (const job of jobs) sessionsByJob.push([job.jobId, read.sessions]);
+  }
+  return sessionsByJob;
 }
 
 /**
@@ -444,15 +463,24 @@ async function readJobsTimeEntries(
   scope: JobReadScope,
   jobIds: readonly string[],
 ): Promise<Array<{ jobId: string; entries: TimeEntry[] }> | null> {
-  const sources = await mapInWindows(jobIds, (jobId) => readJobSources(admin, scope, jobId));
-  const jobs = sources.flatMap((source) => (source ? [source] : []));
-  if (jobs.length !== sources.length) return null;
-  const entriesByUserDay = await readClockInDays(admin, scope.organizationId, jobs);
-  if (!entriesByUserDay) return null;
-  const sessionsByUserDay = new Map(
-    [...entriesByUserDay].map(([dayKey, entries]) => [dayKey, calculateWorkSessions(entries)]),
+  const sources = await mapInWindows(
+    jobIds,
+    (jobId) => readJobSources(admin, scope, jobId),
+    (source) => source === null,
   );
-  return jobs.map((job) => ({ jobId: job.jobId, entries: jobTimeEntries(scope, job, sessionsByUserDay) }));
+  const jobs = sources.flatMap((source) => (source ? [source] : []));
+  if (jobs.length !== jobIds.length) return null;
+  const spanSessions = await mapInWindows(
+    mergedDaySpans(jobs),
+    (span) => readSpanJobSessions(admin, scope, span),
+    (result) => result === null,
+  );
+  if (spanSessions.some((result) => result === null)) return null;
+  const sessionsByJob = new Map(spanSessions.flatMap((result) => result ?? []));
+  return jobs.map((job) => ({
+    jobId: job.jobId,
+    entries: jobTimeEntries(scope, job, sessionsByJob.get(job.jobId) ?? new Map()),
+  }));
 }
 
 /**
