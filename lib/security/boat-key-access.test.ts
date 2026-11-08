@@ -87,6 +87,7 @@ test('a recursive read keeps the folder it runs in through launchers and nested 
     'cat $(find ~/.config -name config.json)',
     'head -n 20 `find ~/.config -type f`',
     'find ~/.config -type f | while read f; do head "$f"; done',
+    'while IFS= read -r f; do head -n 20 "$f"; done < <(find ~/.config -type f)',
     'grep --directories recurse token ~/.config',
     // A value flag the guard does not know cannot hide the folder it runs in.
     'cd ~ && rg --hidden --sort path token',

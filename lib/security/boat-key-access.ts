@@ -186,9 +186,10 @@ function lineRefusal(
       : undefined;
   const commands = reading.commands;
   const folders = lineFolders(commands, start, home);
-  // A `find` whose file list another command may consume: through xargs, a pipe, or a substitution.
+  // A `find` whose file list another command may consume: through xargs, a pipe, or a command
+  // or process substitution.
   const viaXargs =
-    /[|`]|\$\(/.test(command) ||
+    /[|`]|[$<>]\(/.test(command) ||
     commands.some((words) => innerCommand(words)?.viaXargs || program(words)?.name === 'xargs');
   for (const words of commands) {
     // Every word, redirection targets included: `cat < config.json` reads the file too.
