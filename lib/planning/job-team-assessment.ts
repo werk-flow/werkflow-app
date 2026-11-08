@@ -55,7 +55,7 @@ export type JobTeamAssessmentResult =
   | ActionFailure<'load_failed'>;
 
 /** The rule of app_private.sync_legacy_job_assignment: a visit that started is history. */
-function hasStarted(window: VisitWindow): boolean {
+function hasWindowStarted(window: VisitWindow): boolean {
   return window.startAt
     ? new Date(window.startAt).getTime() <= Date.now()
     : !window.startDate || window.startDate <= getBusinessTodayIso();
@@ -222,7 +222,7 @@ export async function assessJobTeamChange(input: {
   if (legacyVisit === null || change === null) return { success: false, error: 'load_failed' };
   const { currentUserIds } = change;
   const visit =
-    legacyVisit && legacyVisit.status === 'scheduled' && !hasStarted(windowOf(legacyVisit))
+    legacyVisit && legacyVisit.status === 'scheduled' && !hasWindowStarted(windowOf(legacyVisit))
       ? legacyVisit
       : undefined;
   if (!visit || change.addedRecordIds.length === 0) {
@@ -308,7 +308,7 @@ export async function assessJobPlan(input: {
   // An unchanged schedule leaves the visit where and as it is.
   if (!scheduleChanged && legacyVisit?.status !== 'scheduled') return nothing;
   const visitWindow = scheduleChanged || !legacyVisit ? window : windowOf(legacyVisit);
-  if (hasStarted(visitWindow)) return nothing;
+  if (hasWindowStarted(visitWindow)) return nothing;
   const crew = crewAfterChange(legacyVisit?.assignments ?? [], change);
   if (crew.length === 0 || (!scheduleChanged && change.addedRecordIds.length === 0)) return nothing;
 
