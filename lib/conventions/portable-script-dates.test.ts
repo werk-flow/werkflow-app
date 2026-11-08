@@ -21,11 +21,18 @@ const LINUX_RUNNER_ONLY: Readonly<Record<string, string>> = {
 // the options that follow it up to the first word that is no option.
 const DATE_CALL = /(?:^|[\s(;|&`])date((?:\s+-[^\s)"'`;|&]*)*)(?=[\s)"'`;|&]|$)/g;
 
-/** The script's commands with each `\\` line continuation joined, numbered by their first line. */
+/**
+ * The script's commands with each `\\` line continuation joined, numbered by their first line. A
+ * full-line comment never continues: Bash ignores its trailing `\\` and runs the next line alone.
+ */
 function logicalLines(script: string): { number: number; text: string }[] {
   const lines: { number: number; text: string }[] = [];
   let pending: { number: number; text: string } | undefined;
   for (const [index, line] of script.split('\n').entries()) {
+    if (!pending && line.trimStart().startsWith('#')) {
+      lines.push({ number: index + 1, text: line });
+      continue;
+    }
     const current = pending
       ? { number: pending.number, text: `${pending.text} ${line}` }
       : { number: index + 1, text: line };
@@ -73,6 +80,8 @@ test('the scan names GNU-only date options and passes portable calls', () => {
         'echo "update --all"',
         'start="$(date -u \\',
         "  -d '15 minutes ago' +%H)\"",
+        '# a comment ending in a backslash \\',
+        'date -d yesterday',
       ].join('\n'),
     ),
   ).toEqual([
@@ -82,6 +91,7 @@ test('the scan names GNU-only date options and passes portable calls', () => {
     '3: date --utc',
     '3: date --set',
     '7: date -d',
+    '10: date -d',
   ]);
 });
 
