@@ -76,7 +76,7 @@ The key lasts 90 days and cannot be extended. From 14 days before its expiry, ev
 
 ## Residual exposure
 
-The owner accepted these three on 2026-11-08.
+The owner accepts these residual exposures.
 
 - Agents run as the owner's OS user. The guard stops accidental and habitual reads, not a deliberate one.
 - The key reaches every machine of the organization, but deletes only its own.
