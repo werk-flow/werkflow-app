@@ -8,6 +8,7 @@ export function mapArtifactError(error: { message?: string } | null): string {
     'work_artifact_not_responsible',
     'work_artifact_review_not_pending',
     'work_artifact_customer_action_requires_customer_visibility',
+    'work_artifact_export_requires_customer_visibility',
     'work_artifact_defect_closure_proof_required',
     'work_artifact_is_voided',
     'instruction_evidence_already_fulfilled',

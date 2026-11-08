@@ -6,20 +6,18 @@ Nicht begonnen
 Mittel
 Arbeitsstand
 Nächster Schritt:
-Mitarbeiter zuweisen und einplanen
+Arbeit starten
 Nicht begonnen
 Nicht geplant
-Kein Termin
+Startbereit
 Ausführung starten
 Stornieren
 Parken
 Einsatzbereitschaft
 Kapazität & Verfügbarkeit
-Nicht bewertet
-Kein Termin geplant.
+Erfüllt
 Qualifikationen
-Nicht bewertet
-Kein Termin geplant.
+Erfüllt
 Einsatzort
 Erfüllt
 Einfamilienhaus
@@ -28,3 +26,7 @@ Nicht bewertet
 Fahrzeit nicht bewertet.
 Material
 Erfüllt
+Kein Materialbedarf geplant.
+Werkzeuge
+Nicht bewertet
+Nicht eingestempelt

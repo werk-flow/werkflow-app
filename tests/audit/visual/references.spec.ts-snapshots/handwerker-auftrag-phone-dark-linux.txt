@@ -27,3 +27,5 @@ Startbereit
 Ausführung starten
 Einsatzbereitschaft
 Kapazität & Verfügbarkeit
+Erfüllt
+Nicht eingestempelt

@@ -194,7 +194,7 @@ function workActions(state: LiveClockState): ClockAction[] {
   ];
 }
 
-/** The two most likely next transitions, shown as hot keys above the button while clocked in. */
+/** The two most likely next transitions, shown as hot keys in the clock dock while clocked in. */
 export function selectClockHotKeys(actions: readonly ClockAction[]): ClockAction[] {
   return actions.filter((action) => action.kind === 'transition' || action.kind === 'picker').slice(0, 2);
 }

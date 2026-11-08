@@ -76,3 +76,4 @@ Material planen
 Aus Lager entnehmen
 Noch kein Material erfasst.
 Planen speichert nur den Bedarf. Entnehmen bucht die tatsächliche Bewegung im Lager.
+Nicht eingestempelt

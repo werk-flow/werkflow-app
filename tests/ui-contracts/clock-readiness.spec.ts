@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { assertWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-lock';
 import type { LiveClockState } from '@/lib/time-tracking/types';
+import { clockDock, clockStatus } from '../golden/support/steps/time-tracking';
 import { CLOCK_ORGANIZATION_ID, RUNNING_CLOCK_STATE } from './clock-state-fixture';
 
 declare global {
@@ -87,7 +88,7 @@ test('a break resumes its job from the hot key and the sheet, and hot keys wait 
   });
   await expect(resumeHotKey).toBeEnabled();
   await expect(page.getByRole('button', { name: 'Weiter ohne Auftrag', exact: true })).toBeEnabled();
-  await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
+  await expect(clockStatus(page)).toHaveText('Pause');
 
   await page.getByRole('button', { name: 'Laufende Zeiterfassung öffnen', exact: true }).click();
   const sheet = page
@@ -115,8 +116,61 @@ test('a break resumes its job from the hot key and the sheet, and hot keys wait 
   await page.evaluate(() => {
     window.clockContract.resolveTransition?.();
   });
-  await expect(page.getByRole('button', { name: /^Arbeit · Heizungswartung Müller/ })).toBeVisible();
+  await expect(clockStatus(page)).toHaveText('Arbeit · Heizungswartung Müller');
   await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeEnabled();
+});
+
+test('the clock dock publishes its height for the layout reserve, keeps its button still on a late read, and its hot keys share one row on a phone', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  let releaseRead: () => void = () => {
+    throw new Error('Read barrier was not initialized.');
+  };
+  const heldRead = new Promise<void>((resolve) => {
+    releaseRead = resolve;
+  });
+  await page.route('**/api/time-tracking-state?**', async (route) => {
+    await heldRead;
+    await route.fulfill({ json: { success: true, state: BREAK_CLOCK_STATE } });
+  });
+  await mountClock(page, { withStyles: true });
+  const launcher = page.getByRole('button', { name: 'Zeiterfassung starten', exact: true });
+  await expect(launcher).toBeDisabled();
+  const buttonBox = (name: string): Promise<{ x: number; y: number }> =>
+    page.getByRole('button', { name, exact: true }).evaluate((element) => ({
+      x: element.getBoundingClientRect().x,
+      y: element.getBoundingClientRect().y,
+    }));
+  const loading = await buttonBox('Zeiterfassung starten');
+  releaseRead();
+  await expect(page.getByRole('button', { name: 'Weiter ohne Auftrag', exact: true })).toBeEnabled();
+  // The read adds the hot keys' row above; the round button stays where the finger expects it.
+  expect(await buttonBox('Laufende Zeiterfassung öffnen')).toEqual(loading);
+  const dock = clockDock(page);
+  const published = (): Promise<string> =>
+    page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--clock-dock-height'));
+  // The layout pads the page column by the published height: it must be the
+  // dock's own. The publisher writes the dock's whole-pixel height after the
+  // hot keys' row resizes it, so the poll waits for that write.
+  const ownHeight = (): Promise<string> =>
+    dock.evaluate((element) => (element instanceof HTMLElement ? `${element.offsetHeight}px` : 'no element'));
+  await expect.poll(async () => (await published()) === (await ownHeight())).toBe(true);
+  const box = await dock.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return { bottom: rect.bottom, width: rect.width };
+  });
+  expect(box.bottom).toBe(812);
+  expect(box.width).toBe(375);
+  const keyTops = await Promise.all(
+    ['Weiter: Arbeit · Heizungswartung Müller', 'Weiter ohne Auftrag'].map(async (name) =>
+      dock
+        .getByRole('button', { name, exact: true })
+        .evaluate((element) => Math.round(element.getBoundingClientRect().top)),
+    ),
+  );
+  // Both hot keys sit in one row below the status line, never stacked over the page.
+  expect(new Set(keyTops).size).toBe(1);
 });
 
 test('with the app stylesheet at phone width every clock action is a 44 px target and the selected tile is not clipped', async ({

@@ -20,3 +20,4 @@ Pause
 0 Min.
 Schnellzugriff
 Arbeit starten
+Nicht eingestempelt
