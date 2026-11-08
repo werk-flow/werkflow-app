@@ -29,6 +29,8 @@ export type RowActionMenuItem = {
 type RowActionsMenuProps = {
   actions: readonly RowActionMenuItem[];
   disabled?: boolean;
+  /** Runs when the menu opens, such as the download of a dialog an item opens (`lazyDialog`). */
+  onOpen?: () => void;
 };
 
 type MenuPosition = Pick<CSSProperties, 'top' | 'right' | 'bottom'>;
@@ -191,7 +193,7 @@ function RowActionsMenuList({
   );
 }
 
-export function RowActionsMenu({ actions, disabled = false }: RowActionsMenuProps) {
+export function RowActionsMenu({ actions, disabled = false, onOpen }: RowActionsMenuProps) {
   const menuId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -206,6 +208,7 @@ export function RowActionsMenu({ actions, disabled = false }: RowActionsMenuProp
     anchorRef.current = { top: bounds.top, left: bounds.left };
     setPosition(menuPosition(bounds, actions.length));
     setOpen(true);
+    onOpen?.();
   }
 
   function closeMenu({ restoreFocus = false } = {}): void {

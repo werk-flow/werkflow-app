@@ -3,16 +3,10 @@
 import { useCallback, useState, useMemo } from 'react';
 
 import { Table, TableBody, TableHeader } from '@/components/ui/table';
-import { Skeleton } from '@/components/ui/skeleton';
-import { SkeletonList, SkeletonRows } from '@/components/ui/skeleton-table';
 import { type Job, type Project } from '@/lib/jobs/types';
 import { type UnifiedListEntry, type SortColumn } from '@/lib/jobs/unified-list';
 import { sameRecords } from '@/lib/ui/memo-equality';
-import {
-  DEFAULT_VISIBLE_AUFTRAEGE_COLUMNS,
-  resolveVisibleAuftraegeColumns,
-  type AuftraegeColumnId,
-} from '@/lib/jobs/auftraege-table-columns';
+import { resolveVisibleAuftraegeColumns, type AuftraegeColumnId } from '@/lib/jobs/auftraege-table-columns';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
 import { useActiveJobs } from '@/hooks/use-active-jobs';
 import { auftraegeColumns, type AuftraegeTableColumn } from './unified-auftraege-columns';
@@ -27,53 +21,6 @@ const NO_ROW_FEEDBACK: AuftraegeRowFeedback = {
   pendingIds: new Set(),
   settlingIds: new Set(),
 };
-
-/** Loading placeholder with the exact frame of the loaded list; every row is a link, so rows hover. */
-export function AuftraegeTableSkeleton({
-  count,
-  showActions,
-  visibleColumns = DEFAULT_VISIBLE_AUFTRAEGE_COLUMNS,
-  sort,
-}: {
-  count: number;
-  showActions: boolean;
-  visibleColumns?: AuftraegeColumnId[] | undefined;
-  sort?: AuftraegeSortState | undefined;
-}) {
-  const columns = auftraegeColumns(visibleColumns, showActions);
-  return (
-    <>
-      <SkeletonList count={count} interactive className="md:hidden">
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <div className="flex items-center gap-2">
-            <Skeleton className="h-3 w-20" />
-            <Skeleton className="h-4 w-32" />
-          </div>
-          <div className="flex items-center gap-2">
-            <Skeleton className="h-3 w-24" />
-            <Skeleton className="h-3 w-3 rounded-full" />
-            <Skeleton className="h-3 w-20" />
-          </div>
-          <div className="flex items-center gap-2">
-            <Skeleton className="h-5 w-24 rounded-full" />
-            <Skeleton className="h-5 w-16 rounded-full" />
-          </div>
-        </div>
-        {showActions && <Skeleton className="h-8 w-8 shrink-0 rounded" />}
-      </SkeletonList>
-      <div className="hidden md:block">
-        <Table>
-          <TableHeader>
-            <AuftraegeTableHeaderRow columns={columns} sort={sort} />
-          </TableHeader>
-          <TableBody>
-            <SkeletonRows columns={columns} rows={count} interactive />
-          </TableBody>
-        </Table>
-      </div>
-    </>
-  );
-}
 
 interface UnifiedAuftraegeTableProps {
   /** A search or filter is active, so an empty list means "no match", not "nothing yet". */

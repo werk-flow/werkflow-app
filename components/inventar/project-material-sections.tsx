@@ -4,9 +4,8 @@ import { useId } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import type { InventoryLocation, ProjectMaterialSummary } from '@/lib/inventory/types';
-import { formatInventoryQuantity } from '@/lib/inventory/types';
 import { MaterialLineRow } from './job-material-line-row';
-import { MovementPill } from './material-movement-pill';
+import { MaterialQuantityPills } from './material-movement-pill';
 
 /** The read-only material lines a project inherits from its jobs. */
 export function InheritedJobMaterialGroups({
@@ -77,28 +76,13 @@ export function ProjectMaterialTotals({
             className="rounded-md border bg-background px-3 py-2"
           >
             <p className="truncate text-sm font-medium">{total.itemName}</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {total.plannedQuantity > 0 && (
-                <MovementPill tone="planned">
-                  Bedarf {formatInventoryQuantity(total.plannedQuantity, total.unit)}
-                </MovementPill>
-              )}
-              {total.takenQuantity > 0 && (
-                <MovementPill tone="take">
-                  -{formatInventoryQuantity(total.takenQuantity, total.unit)}
-                </MovementPill>
-              )}
-              {total.returnedQuantity > 0 && (
-                <MovementPill tone="return">
-                  +{formatInventoryQuantity(total.returnedQuantity, total.unit)}
-                </MovementPill>
-              )}
-              {isAdminOrManager && total.billableQuantity > 0 && (
-                <MovementPill tone="planned">
-                  Abrechenbar {formatInventoryQuantity(total.billableQuantity, total.unit)}
-                </MovementPill>
-              )}
-            </div>
+            <MaterialQuantityPills
+              unit={total.unit}
+              plannedQuantity={total.plannedQuantity}
+              takenQuantity={total.takenQuantity}
+              returnedQuantity={total.returnedQuantity}
+              billableQuantity={isAdminOrManager ? total.billableQuantity : null}
+            />
           </div>
         ))}
       </div>

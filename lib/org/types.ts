@@ -43,11 +43,13 @@ export type OrganizationDeletionScope = {
   closedPeriods: number;
   payrollExports: number;
   /**
-   * Recorded working time, a closed period (owner decision,
-   * werk-flow/werkflow-planning#85) or a document inside its retention period
-   * (werk-flow/werkflow-planning#283) falls under retention duties, so the
-   * organization is not deleted. The name predates the documents: renaming it
-   * waits for lib/org/delete-action.ts.
+   * Why the organization is not deleted, empty when nothing forbids it:
+   * recorded working time or a closed period (owner decision,
+   * werk-flow/werkflow-planning#85), and a document inside its retention
+   * period (werk-flow/werkflow-planning#283). Each falls under a retention duty.
    */
-  retainsTimeRecords: boolean;
+  retentionRefusals: readonly OrganizationRetentionRefusal[];
 };
+
+/** A reason under a retention duty that refuses an organization deletion; also the action's error code. */
+export type OrganizationRetentionRefusal = 'has_time_records' | 'has_retained_documents';

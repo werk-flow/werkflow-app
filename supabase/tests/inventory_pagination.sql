@@ -36,12 +36,18 @@ end $$;
 update public.inventory_items set item_type='tool',global_minimum_stock=3 where organization_id='97000000-0000-4000-8000-000000000002' and name='Item 1055';
 insert into public.jobs(id,organization_id,title,job_number,created_by) values('97000000-0000-4000-8000-000000000010','97000000-0000-4000-8000-000000000002','Pagination material','PAGE-MATERIAL','97000000-0000-4000-8000-000000000001');
 insert into public.job_material_lines(organization_id,job_id,item_id,planned_quantity,taken_quantity,created_by)
-select organization_id,'97000000-0000-4000-8000-000000000010',id,5,2,'97000000-0000-4000-8000-000000000001' from public.inventory_items where organization_id='97000000-0000-4000-8000-000000000002' and name='Item 1055';
+select organization_id,'97000000-0000-4000-8000-000000000010',id,5,4,'97000000-0000-4000-8000-000000000001' from public.inventory_items where organization_id='97000000-0000-4000-8000-000000000002' and name='Item 1055';
+-- Item 1056 holds 2 and 4 are planned: the demand exceeds the stock.
+insert into public.job_material_lines(organization_id,job_id,item_id,planned_quantity,taken_quantity,created_by)
+select organization_id,'97000000-0000-4000-8000-000000000010',id,4,0,'97000000-0000-4000-8000-000000000001' from public.inventory_items where organization_id='97000000-0000-4000-8000-000000000002' and name='Item 1056';
 do $$ declare result jsonb; target_location uuid; begin
  result:=public.list_inventory_page('97000000-0000-4000-8000-000000000002','{"type":"tool","stock":"low_stock"}');
  if (result->>'total')::int<>1 or (result#>>'{summary,lowStockItems}')::int<>1 then raise exception 'type/stock filters or global low-stock count failed'; end if;
+ result:=public.list_inventory_page('97000000-0000-4000-8000-000000000002','{"stock":"shortfall"}');
+ if (result->>'total')::int<>1 or (result#>>'{summary,shortfallItems}')::int<>1 then raise exception 'planned demand above stock lacks its own status or summary count'; end if;
+ if (result->'ids'->>0)::uuid<>(select id from public.inventory_items where organization_id='97000000-0000-4000-8000-000000000002' and name='Item 1056') then raise exception 'the shortfall filter listed the wrong item'; end if;
  result:=public.list_inventory_page('97000000-0000-4000-8000-000000000002','{"tab":"planned"}');
- if (result->>'total')::int<>1 or (result#>>'{summary,plannedQuantity}')::numeric<>3 then raise exception 'remaining planned material or planned filter failed'; end if;
+ if (result->>'total')::int<>2 or (result#>>'{summary,plannedQuantity}')::numeric<>5 then raise exception 'remaining planned material or planned filter failed'; end if;
  select id into target_location from public.inventory_locations where organization_id='97000000-0000-4000-8000-000000000002' and name='Location 02';
  result:=public.list_inventory_page('97000000-0000-4000-8000-000000000002',jsonb_build_object('location',target_location));
  if (result->>'total')::int<>0 or (result#>>'{summary,totalItems}')::int<>1105 then raise exception 'location filter lost global summary'; end if;
