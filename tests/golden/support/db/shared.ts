@@ -84,6 +84,19 @@ export async function getOrganizationByJoinCode(code: string): Promise<Persisted
   return persisted({ organizationId: data.id, name: data.name, code: data.unique_code });
 }
 
+export type PersistedOrganization = Persisted<{ organizationId: string; name: string }>;
+
+/** The organization a create dialog just saved, read back by its test-specific name. */
+export async function getOrganizationByName(name: string): Promise<PersistedOrganization> {
+  const { data, error } = await createAdminClient()
+    .from('organizations')
+    .select('id, name')
+    .eq('name', name)
+    .single();
+  if (error) throw new Error(`Organization ${name} lookup failed: ${error.message}`);
+  return persisted({ organizationId: data.id, name: data.name });
+}
+
 // The stored states of one person's join requests to one organization, oldest first.
 export async function getJoinRequestStatuses(orgId: string, email: string): Promise<string[]> {
   const admin = createAdminClient();

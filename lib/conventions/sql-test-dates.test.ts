@@ -36,6 +36,11 @@ const REVIEWED_NEAR_FUTURE_DATES: Readonly<Record<string, ReviewedDates>> = {
     reason:
       'Rows inserted with triggers off; the read policies under test compare none of them with the clock.',
   },
+  'document_retention.sql': {
+    dates: { '2035-12-31': 2, '2036-12-31': 2 },
+    reason:
+      'Expected retention ends computed from fixed past document dates; nothing compares them with the clock.',
+  },
   'employee_capability_history_writes.sql': {
     dates: { '2026-11-30': 1, '2026-12-31': 3, '2027-01-01': 8 },
     reason: 'Validity and renewal dates are compared only with each other.',

@@ -1,4 +1,5 @@
 import type { WorkLifecycleSnapshot } from '@/lib/work-lifecycle/types';
+import type { AuthUrlFixtureName } from './auth-url-boundaries';
 import type { FeedbackFixtureName } from './feedback-boundaries';
 
 type LifecycleActions = typeof import('@/lib/work-lifecycle/actions');
@@ -23,11 +24,14 @@ declare global {
       | 'personnel'
       | 'join-requests'
       | 'own-personnel'
+      | 'task-sections'
       | 'calendar'
       | 'options'
       | 'list-navigation'
       | 'document-search'
+      | 'document-archive'
       | 'document-upload'
+      | 'document-version-upload'
       | 'calendar-board'
       | 'calendar-day'
       | 'calendar-month'
@@ -37,6 +41,7 @@ declare global {
       | 'live-view'
       | 'route-refresh'
       | 'customer'
+      | AuthUrlFixtureName
       | FeedbackFixtureName;
     uiContractLifecycle: LifecycleBoundaryState;
   }

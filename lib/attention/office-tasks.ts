@@ -6,7 +6,7 @@ import 'server-only';
 
 import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import type { ActionContext } from '@/lib/org/action-context';
-import { formatBerlinLocalDate, getBusinessTodayIso } from '@/lib/date-time/berlin';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { formatProfileName } from '@/lib/members/profile-name';
 import { getPendingChangeRequests, getPendingSessions } from '@/lib/time-tracking/review-actions';
 import { getTimeCorrectionRequests } from '@/lib/time-corrections/read-actions';
@@ -17,8 +17,8 @@ import { logError } from '@/lib/logging';
 import { getPendingVacationRequestsForApprover } from '@/lib/vacation/actions';
 import { readPendingJoinRequests } from '@/lib/org/join-requests';
 import {
-  computeOpenSinceDays,
   FOLLOW_UP_ATTENTION_CAPACITY,
+  openSinceDaysAt,
   selectFollowUpAttentionRows,
   type FollowUpAttentionCandidate,
 } from './resolution';
@@ -39,6 +39,7 @@ export async function deriveApprovalTasks(
     getTimeCorrectionRequests(context.orgId, 'approvals'),
     getPendingVacationRequestsForApprover(),
   ]);
+  const businessToday = getBusinessTodayIso();
 
   // Pending time sessions: getPendingSessions resolves the caller's
   // time_approval responsibility itself and returns [] for non-holders.
@@ -50,6 +51,7 @@ export async function deriveApprovalTasks(
         personName: [session.firstName, session.lastName].filter(Boolean).join(' ') || 'Unbekannt',
         date: session.date,
         jobTitle: session.jobTitle,
+        openSinceDays: openSinceDaysAt(session.createdAt, businessToday),
       });
     }
   } else {
@@ -66,6 +68,7 @@ export async function deriveApprovalTasks(
           personName:
             [request.requesterFirstName, request.requesterLastName].filter(Boolean).join(' ') || 'Unbekannt',
           requestType: request.changeType === 'delete' ? 'delete' : 'edit',
+          openSinceDays: openSinceDaysAt(request.createdAt, businessToday),
         });
       }
     } else {
@@ -82,6 +85,7 @@ export async function deriveApprovalTasks(
         personName: request.subjectName,
         correctionLabel: TIME_CORRECTION_KIND_LABELS[request.kind],
         stateVersion: String(request.currentRevision),
+        openSinceDays: openSinceDaysAt(request.revision.createdAt, businessToday),
       });
     }
   } else {
@@ -100,6 +104,7 @@ export async function deriveApprovalTasks(
         endDate: item.request.endDate,
         dayPortion: item.request.dayPortion,
         totalDays: item.totalDays,
+        openSinceDays: openSinceDaysAt(item.request.createdAt, businessToday),
       });
     }
   } else {
@@ -161,7 +166,7 @@ export async function deriveOpenRequestTasks(
       status: row.status,
       urgency: row.urgency,
       receivedAt: row.received_at,
-      openSinceDays: computeOpenSinceDays(formatBerlinLocalDate(row.received_at), businessToday),
+      openSinceDays: openSinceDaysAt(row.received_at, businessToday),
       assigneeName: assignee ? formatProfileName(assignee) : null,
       assignedToMe: row.assigned_to === context.userId,
     };

@@ -94,7 +94,11 @@ async function loadMemberJobs(): Promise<(typeof import('./actions'))['getJobsFo
     revalidatePath: () => undefined,
     cacheTag: () => undefined,
   }));
-  mock.module('@/lib/data/cached', () => ({ CACHE_TAGS: {} }));
+  // The assignment action's planning check imports the calendar read; the member read never calls it.
+  mock.module('@/lib/data/cached', () => ({
+    CACHE_TAGS: {},
+    getCachedOrganizationCalendar: async () => null,
+  }));
   mock.module('@/lib/jobs/auth', () => ({
     authenticateAndAuthorize: async () => ({
       success: true,

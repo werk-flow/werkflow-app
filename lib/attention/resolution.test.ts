@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
-  computeOpenSinceDays,
   dedupeAttentionItems,
   isNotificationUnread,
   isWithinNotificationWindow,
   notificationWindowStartIso,
+  openSinceDaysAt,
   resolveSicknessReportFacts,
   resolveVacationDecisionFacts,
   selectFollowUpAttentionRows,
@@ -231,18 +231,29 @@ describe('isWithinNotificationWindow', () => {
   });
 });
 
-describe('computeOpenSinceDays', () => {
+describe('openSinceDaysAt', () => {
   test('same business day is 0, yesterday is 1', () => {
-    expect(computeOpenSinceDays('2026-08-07', '2026-08-07')).toBe(0);
-    expect(computeOpenSinceDays('2026-08-06', '2026-08-07')).toBe(1);
+    expect(openSinceDaysAt('2026-08-07T10:00:00.000Z', '2026-08-07')).toBe(0);
+    expect(openSinceDaysAt('2026-08-06T10:00:00.000Z', '2026-08-07')).toBe(1);
   });
 
   test('month boundaries count calendar days', () => {
-    expect(computeOpenSinceDays('2026-07-28', '2026-08-07')).toBe(10);
+    expect(openSinceDaysAt('2026-07-28T10:00:00.000Z', '2026-08-07')).toBe(10);
   });
 
-  test('a future received date clamps to 0 instead of going negative', () => {
-    expect(computeOpenSinceDays('2026-08-09', '2026-08-07')).toBe(0);
+  test('a future instant clamps to 0 instead of going negative', () => {
+    expect(openSinceDaysAt('2026-08-09T10:00:00.000Z', '2026-08-07')).toBe(0);
+  });
+
+  test('an approval submitted late in the Berlin evening counts that Berlin day, not the next UTC day', () => {
+    // 23:30 Berlin (CEST) on 6 August is 21:30 UTC on the same day.
+    expect(openSinceDaysAt('2026-08-06T21:30:00.000Z', '2026-08-07')).toBe(1);
+    // 00:30 Berlin on 7 August is still 6 August in UTC.
+    expect(openSinceDaysAt('2026-08-06T22:30:00.000Z', '2026-08-07')).toBe(0);
+  });
+
+  test('six weeks of waiting read as 42 days', () => {
+    expect(openSinceDaysAt('2026-09-26T08:00:00.000Z', '2026-11-07')).toBe(42);
   });
 });
 

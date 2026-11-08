@@ -268,7 +268,7 @@ export async function deleteDocumentFolder(rawFolderId: string): Promise<Documen
     return documentWriteFailure(
       'Failed to delete document folder',
       error,
-      ['folder_not_found'],
+      ['folder_not_found', 'document_filed'],
       'delete_failed',
     );
   }

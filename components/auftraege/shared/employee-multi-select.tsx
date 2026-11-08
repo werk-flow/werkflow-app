@@ -23,6 +23,8 @@ interface EmployeeMultiSelectProps {
   assessedForDate?: string | null;
   onTeamApplied?: (teamId: string | null) => void;
   onTeamExpansionPendingChange?: (pending: boolean) => void;
+  /** Why a member cannot be planned on the date, shown under their name. */
+  memberNotes?: ReadonlyMap<string, string> | undefined;
   disabled?: boolean;
 }
 
@@ -38,6 +40,7 @@ export function EmployeeMultiSelect({
   assessedForDate,
   onTeamApplied,
   onTeamExpansionPendingChange,
+  memberNotes,
   disabled = false,
 }: EmployeeMultiSelectProps) {
   const { showBanner } = useBanner();
@@ -56,8 +59,9 @@ export function EmployeeMultiSelect({
       members.map((m) => ({
         value: m.userId,
         label: getMemberName(m),
+        description: memberNotes?.get(m.userId),
       })),
-    [members],
+    [members, memberNotes],
   );
 
   return (

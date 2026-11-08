@@ -1,6 +1,6 @@
 import type { ActionResult } from '@/lib/action-result';
 import type { Database, Json } from '@/lib/supabase/database.types';
-import type { ReadinessResult } from '@/lib/dispatch/types';
+import type { ReadinessResult, UnplannedReason } from '@/lib/dispatch/types';
 import { WORK_ARTIFACT_KINDS, WORK_ARTIFACT_STATUSES } from '@/lib/work-artifacts/types';
 import { z } from '@/lib/zod';
 import { uuidSchema } from '@/lib/validation/uuid';
@@ -196,8 +196,19 @@ export function getAllowedWorkTransitions(
   return WORK_TRANSITIONS[state].filter((next) => next !== 'cancelled' && next !== 'handed_over');
 }
 
+/** The step that plans unstarted work its readiness could not assess: people, a date or both. */
+const UNPLANNED_NEXT_ACTIONS: Record<UnplannedReason, string> = {
+  no_visit: 'Mitarbeiter zuweisen und einplanen',
+  no_assignees: 'Mitarbeiter zuweisen',
+};
+
+/**
+ * The one next step the card names. Planning people and a date is a
+ * manager's step, so only a manager sees it in place of starting the work.
+ */
 export function getWorkNextAction(
-  snapshot: Pick<WorkLifecycleSnapshot, 'executionState' | 'blockers' | 'dependencies'>,
+  snapshot: Pick<WorkLifecycleSnapshot, 'executionState' | 'blockers' | 'dependencies' | 'readiness'>,
+  isManager: boolean,
 ): string {
   if (snapshot.blockers.some((blocker) => blocker.state === 'open' && blocker.kind === 'parking')) {
     return 'Parkgrund prüfen und Arbeit wieder einplanen';
@@ -209,6 +220,10 @@ export function getWorkNextAction(
     snapshot.dependencies.some((dependency) => !dependency.is_satisfied && dependency.effect !== 'warning')
   ) {
     return 'Voraussetzungen klären';
+  }
+  const unplannedReason = snapshot.readiness?.unplannedReason;
+  if (isManager && snapshot.executionState === 'not_started' && unplannedReason) {
+    return UNPLANNED_NEXT_ACTIONS[unplannedReason];
   }
   return {
     not_started: 'Arbeit starten',

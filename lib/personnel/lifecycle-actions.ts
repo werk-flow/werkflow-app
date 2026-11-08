@@ -12,8 +12,13 @@ import { getResponsibilitiesStrandedByMemberRemoval } from '@/lib/responsibiliti
 import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import type { Database, Json } from '@/lib/supabase/database.types';
-import { createSignedUploadUrl, discardStorageObjects } from '@/lib/storage/r2';
-import { acceptPersonnelUpload, discardPersonnelUpload, readPersonnelUploadOwner } from './upload-storage';
+import { createSignedUploadUrl } from '@/lib/storage/r2';
+import {
+  acceptPersonnelUpload,
+  discardPersonnelUpload,
+  discardRefusedPersonnelCopy,
+  readPersonnelUploadOwner,
+} from './upload-storage';
 import { DOCUMENT_MAX_FILE_SIZE_BYTES, DOCUMENT_STORAGE_BUCKET } from '@/lib/documents/types';
 import { buildDocumentStoragePath } from '@/lib/documents/storage-path';
 import {
@@ -700,7 +705,14 @@ export async function cleanupPersonnelDocumentUpload(input: unknown): Promise<Li
     })
   )
     return { success: false, error: 'not_authorized' };
-  const upload = { admin: context.admin, organizationId: context.organizationId, storagePath };
+  const upload = {
+    admin: context.admin,
+    organizationId: context.organizationId,
+    documentId: request.documentId,
+    storagePath,
+  };
+  // The cleanup removes only the staging object, so even a read taken before a
+  // concurrent finalize committed cannot remove the copy that finalize registers.
   const owner = await readPersonnelUploadOwner(
     upload,
     'cleanupPersonnelDocumentUpload: documents read failed',
@@ -748,13 +760,14 @@ export async function finalizePersonnelDocumentUpload(
     })
   )
     return { success: false, error: 'not_authorized' };
-  const upload = { admin: context.admin, organizationId: context.organizationId, storagePath };
+  const upload = {
+    admin: context.admin,
+    organizationId: context.organizationId,
+    documentId: request.documentId,
+    storagePath,
+  };
   const head = await acceptPersonnelUpload(upload);
   if (!head.success) return head;
-  if (head.sizeBytes > DOCUMENT_MAX_FILE_SIZE_BYTES) {
-    await discardStorageObjects({ organizationId: context.organizationId, paths: [storagePath] });
-    return { success: false, error: 'file_too_large' };
-  }
   const { data, error } = await context.admin.rpc(
     'finalize_personnel_document_metadata',
     rpcArgs('finalize_personnel_document_metadata', {
@@ -763,7 +776,7 @@ export async function finalizePersonnelDocumentUpload(
       p_employee_record_id: request.employeeRecordId,
       p_document_id: request.documentId,
       p_storage_bucket: DOCUMENT_STORAGE_BUCKET,
-      p_storage_path: storagePath,
+      p_storage_path: head.storagePath,
       p_original_file_name: request.fileName,
       p_display_name: request.fileName,
       p_category: 'other',
@@ -778,15 +791,8 @@ export async function finalizePersonnelDocumentUpload(
     }),
   );
   if (error || !data) {
-    const normalized = lifecycleFailureCode(error);
-    const owner = await readPersonnelUploadOwner(
-      upload,
-      'finalizePersonnelDocumentUpload: documents read failed',
-    );
-    // A failed read keeps the object.
-    if (owner === null)
-      await discardStorageObjects({ organizationId: context.organizationId, paths: [storagePath] });
-    return { success: false, error: normalized };
+    await discardRefusedPersonnelCopy(upload, head, error);
+    return { success: false, error: lifecycleFailureCode(error) };
   }
   revalidatePersonnel();
   return { success: true, data: { documentId: data } };

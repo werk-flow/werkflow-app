@@ -28,7 +28,7 @@ export type PendingJoinRequest = {
   requestedAt: string;
 };
 
-/** What deleting an organization removes, and whether its time records forbid the deletion. */
+/** What deleting an organization removes, and whether records under a retention duty forbid the deletion. */
 export type OrganizationDeletionScope = {
   members: number;
   openInvites: number;
@@ -37,12 +37,17 @@ export type OrganizationDeletionScope = {
   jobs: number;
   employeeRecords: number;
   documents: number;
+  /** Documents whose retention end is today or later, filed or not, the trash included. */
+  retainedDocuments: number;
   timeTrackedPeople: number;
   closedPeriods: number;
   payrollExports: number;
   /**
-   * Recorded working time or a closed period falls under retention duties, so
-   * the organization is not deleted (owner decision, werk-flow/werkflow-planning#85).
+   * Recorded working time, a closed period (owner decision,
+   * werk-flow/werkflow-planning#85) or a document inside its retention period
+   * (werk-flow/werkflow-planning#283) falls under retention duties, so the
+   * organization is not deleted. The name predates the documents: renaming it
+   * waits for lib/org/delete-action.ts.
    */
   retainsTimeRecords: boolean;
 };

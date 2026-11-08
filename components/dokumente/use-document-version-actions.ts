@@ -81,9 +81,9 @@ async function showUploadedVersion({
   }
 }
 
-/** The upload met a newer version, so the details reload to show which versions were saved. */
-function meetsNewerVersion(reason: UploadFailureReason): boolean {
-  return reason === 'version_conflict' || reason === 'version_unconfirmed';
+/** The document changed under the upload, so the details reload to show its versions or its filing. */
+function meetsChangedDocument(reason: UploadFailureReason): boolean {
+  return reason === 'version_conflict' || reason === 'document_filed';
 }
 
 type VersionUpload = { document: OrganizationDocument; row: DocumentUploadRow };
@@ -134,7 +134,7 @@ function useVersionUpload({
 
         if (outcome.status === 'failed') {
           updateVersionRow(row.id, failedUploadRow(outcome.reason, outcome.transferred));
-          if (meetsNewerVersion(outcome.reason)) reloadDetails(activeDocument);
+          if (meetsChangedDocument(outcome.reason)) reloadDetails(activeDocument);
           return;
         }
 
