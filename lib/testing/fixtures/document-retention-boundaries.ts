@@ -52,6 +52,8 @@ const invoice = (id: string, organizationId: string, state: { filed?: boolean; t
   retention_ends_on: '2036-12-31',
   filed_at: state.filed ? '2026-10-01T09:00:00Z' : null,
   filed_by: state.filed ? CALLER_ID : null,
+  source_system: null,
+  source_reference: null,
 });
 
 const world = installActionWorld({

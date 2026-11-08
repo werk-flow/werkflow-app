@@ -63,7 +63,7 @@ export function DocumentLibraryToolbar({
               // Clearing the field shows the whole library again without a second step.
               if (!value) onSubmitSearch('');
             }}
-            placeholder="Dokumente suchen…"
+            placeholder="Name oder alte Nummer suchen…"
             aria-label="Dokumente suchen"
           />
         </form>

@@ -366,6 +366,8 @@ export function documentRowsFromOrdinaryView(rows: readonly OrdinaryDocumentView
         retention_ends_on: row.retention_ends_on,
         filed_at: row.filed_at,
         filed_by: row.filed_by,
+        source_system: row.source_system,
+        source_reference: row.source_reference,
       },
     ];
   });

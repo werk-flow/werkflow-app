@@ -8,7 +8,12 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-import type { DocumentArchive, DocumentFolder, OrganizationDocument } from '@/lib/documents/types';
+import type {
+  DocumentArchive,
+  DocumentFolder,
+  DocumentOrigin,
+  OrganizationDocument,
+} from '@/lib/documents/types';
 import { formatGermanDate } from '@/lib/utils';
 
 /** How the document library names a file: icon, type, uploader, links and audit events. */
@@ -124,6 +129,7 @@ export function getAuditEventLabel(eventType: string): string {
     storage_cleanup: 'Speicher bereinigt',
     retention_changed: 'Aufbewahrung geändert',
     filed: 'Festgeschrieben',
+    origin_changed: 'Herkunft geändert',
   };
 
   return labels[eventType] ?? 'Dokumentaktion';
@@ -138,4 +144,15 @@ export function getArchiveLabel(archive: DocumentArchive | null): string | null 
   const endsOn = archive.retentionEndsOn ? formatGermanDate(archive.retentionEndsOn) : null;
   if (archive.filedAt) return endsOn ? `Festgeschrieben, aufbewahren bis ${endsOn}` : 'Festgeschrieben';
   return endsOn ? `Aufbewahren bis ${endsOn}` : null;
+}
+
+/**
+ * Where a legacy original came from, for a library row, such as „Aus Sykasoft:
+ * RE-2019-0042“; null for a document without an origin.
+ */
+export function getOriginLabel(origin: DocumentOrigin): string | null {
+  const { sourceSystem, sourceReference } = origin;
+  if (sourceSystem && sourceReference) return `Aus ${sourceSystem}: ${sourceReference}`;
+  if (sourceReference) return `Alte Nummer: ${sourceReference}`;
+  return sourceSystem ? `Aus ${sourceSystem}` : null;
 }

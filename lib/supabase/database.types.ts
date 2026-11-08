@@ -1235,6 +1235,8 @@ export type Database = {
             | null;
           retention_ends_on: string | null;
           size_bytes: number;
+          source_reference: string | null;
+          source_system: string | null;
           storage_bucket: string;
           storage_path: string;
           updated_at: string;
@@ -1263,6 +1265,8 @@ export type Database = {
             | null;
           retention_ends_on?: string | null;
           size_bytes: number;
+          source_reference?: string | null;
+          source_system?: string | null;
           storage_bucket?: string;
           storage_path: string;
           updated_at?: string;
@@ -1291,6 +1295,8 @@ export type Database = {
             | null;
           retention_ends_on?: string | null;
           size_bytes?: number;
+          source_reference?: string | null;
+          source_system?: string | null;
           storage_bucket?: string;
           storage_path?: string;
           updated_at?: string;
@@ -12840,6 +12846,8 @@ export type Database = {
             | null;
           retention_ends_on: string | null;
           size_bytes: number | null;
+          source_reference: string | null;
+          source_system: string | null;
           storage_bucket: string | null;
           storage_path: string | null;
           updated_at: string | null;
@@ -12868,6 +12876,8 @@ export type Database = {
             | null;
           retention_ends_on?: string | null;
           size_bytes?: number | null;
+          source_reference?: string | null;
+          source_system?: string | null;
           storage_bucket?: string | null;
           storage_path?: string | null;
           updated_at?: string | null;
@@ -12896,6 +12906,8 @@ export type Database = {
             | null;
           retention_ends_on?: string | null;
           size_bytes?: number | null;
+          source_reference?: string | null;
+          source_system?: string | null;
           storage_bucket?: string | null;
           storage_path?: string | null;
           updated_at?: string | null;
@@ -13485,6 +13497,8 @@ export type Database = {
             | null;
           retention_ends_on: string | null;
           size_bytes: number;
+          source_reference: string | null;
+          source_system: string | null;
           storage_bucket: string;
           storage_path: string;
           updated_at: string;
@@ -14652,6 +14666,8 @@ export type Database = {
             | null;
           retention_ends_on: string | null;
           size_bytes: number;
+          source_reference: string | null;
+          source_system: string | null;
           storage_bucket: string;
           storage_path: string;
           updated_at: string;
@@ -14702,6 +14718,8 @@ export type Database = {
             | null;
           retention_ends_on: string | null;
           size_bytes: number;
+          source_reference: string | null;
+          source_system: string | null;
           storage_bucket: string;
           storage_path: string;
           updated_at: string;
@@ -14748,6 +14766,8 @@ export type Database = {
             | null;
           retention_ends_on: string | null;
           size_bytes: number;
+          source_reference: string | null;
+          source_system: string | null;
           storage_bucket: string;
           storage_path: string;
           updated_at: string;
@@ -15423,6 +15443,8 @@ export type Database = {
             | null;
           retention_ends_on: string | null;
           size_bytes: number;
+          source_reference: string | null;
+          source_system: string | null;
           storage_bucket: string;
           storage_path: string;
           updated_at: string;
@@ -15838,6 +15860,8 @@ export type Database = {
             | null;
           retention_ends_on: string | null;
           size_bytes: number;
+          source_reference: string | null;
+          source_system: string | null;
           storage_bucket: string;
           storage_path: string;
           updated_at: string;
@@ -17437,6 +17461,8 @@ export type Database = {
             | null;
           retention_ends_on: string | null;
           size_bytes: number;
+          source_reference: string | null;
+          source_system: string | null;
           storage_bucket: string;
           storage_path: string;
           updated_at: string;
@@ -17467,6 +17493,51 @@ export type Database = {
           added_count: number;
           removed_count: number;
         }[];
+      };
+      update_document_origin: {
+        Args: {
+          p_actor_id: string;
+          p_document_id: string;
+          p_organization_id: string;
+          p_source_reference: string;
+          p_source_system: string;
+        };
+        Returns: {
+          category: string;
+          copied_from_document_id: string | null;
+          created_at: string;
+          current_version_number: number;
+          delete_reason: string | null;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          display_name: string;
+          document_date: string;
+          filed_at: string | null;
+          filed_by: string | null;
+          folder_id: string | null;
+          id: string;
+          metadata: Json;
+          mime_type: string | null;
+          organization_id: string;
+          original_file_name: string;
+          retention_class:
+            | Database["public"]["Enums"]["document_retention_class"]
+            | null;
+          retention_ends_on: string | null;
+          size_bytes: number;
+          source_reference: string | null;
+          source_system: string | null;
+          storage_bucket: string;
+          storage_path: string;
+          updated_at: string;
+          uploaded_by: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "documents";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       update_document_retention: {
         Args: {
@@ -17499,6 +17570,8 @@ export type Database = {
             | null;
           retention_ends_on: string | null;
           size_bytes: number;
+          source_reference: string | null;
+          source_system: string | null;
           storage_bucket: string;
           storage_path: string;
           updated_at: string;

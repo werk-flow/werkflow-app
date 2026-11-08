@@ -254,7 +254,7 @@ export function AttachDocumentDialog({
           <SearchInput
             value={dialog.searchQuery}
             onValueChange={dialog.setSearchQuery}
-            placeholder="Dokument suchen…"
+            placeholder="Name oder alte Nummer suchen…"
             aria-label="Dokument suchen"
           />
 

@@ -53,6 +53,7 @@ Server actions in `lib/documents/actions.ts` and RLS through `app_private` helpe
 | Earlier versions and audit history | Yes | No |
 | Rename, move, copy, delete, link, unlink, reclassify, new version | Yes | No |
 | Document date, retention class, filing, and seeing them | Yes | No |
+| Origin (source system and old number) | See and change until filed | See, on a document they may read |
 
 - Field access follows assigned work: `lib/documents/access.ts` decides it, and `app_private.can_access_document` holds the same rule for Realtime. A customer or employee link alone grants nothing.
 - A field worker's document carries only the links `readableDocumentLinks` keeps: an assigned job, that job's project or customer, and the worker. `hydrateDocuments` takes the caller's context, so no reader resolves another link's names for them.
@@ -80,6 +81,14 @@ The owner's schedule (werk-flow/werkflow-planning#24) has one class: ten years f
 - A filed document names its filer (`filed_by`) for as long as it exists. As with the uploader, that person cannot delete their account while the document remains.
 - `lib/documents/retention.ts` owns the deletion rule the feature spec states, for the actions and the library; `get_organization_deletion_scope` and `delete_organization` apply it to organization deletion. The trigger `documents_retention_guard` repeats every refusal under each database write, and lets organization teardown pass only once the organization row is gone.
 - Only Admin and Büro receive a document's archive data (`hydrateDocuments`).
+
+## Origin of legacy originals
+
+A legacy original keeps its source system (`source_system`) and the number that system gave it (`source_reference`).
+
+- `update_document_origin` is the one write, for the details and for a later archive import: trimmed, a blank value meaning none, with an `origin_changed` audit event. It shares the archive lock with `update_document_retention`, so it refuses a non-manager, a protected personnel document and a filed document. `documents_retention_guard` keeps a filed document's origin on every path.
+- The library search (`list_document_page`) and the link search (`applyDocumentSearch`) match `source_reference` exactly or by prefix, ignoring case, inside the query before the page boundary. A number that only contains the text is no match, so a short search does not flood the list.
+- The client column grant on `documents` leaves out both columns: the origin reaches a reader only through the server, with a document the server already lets them read.
 
 ## Storage cleanup
 
