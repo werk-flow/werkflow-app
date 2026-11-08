@@ -1,3 +1,5 @@
+import 'server-only';
+
 import type { AdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/supabase/database.types';
 import { readInBatches } from '@/lib/supabase/query-batches';
