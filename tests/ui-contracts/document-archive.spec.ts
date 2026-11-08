@@ -120,3 +120,63 @@ test('„Festschreiben“ with an unsaved document date files nothing and marks 
   await file.click();
   expect(await page.evaluate(() => window.documentArchiveContract.filings)).toEqual(['contract-document']);
 });
+
+function originWrites(page: Page) {
+  return page.evaluate(() => window.documentArchiveContract.originWrites);
+}
+
+test('a typed origin saves trimmed on Enter, and a cleared field saves as none', async ({ page }) => {
+  const system = page.getByRole('textbox', { name: 'Quellsystem' });
+  const reference = page.getByRole('textbox', { name: 'Alte Nummer' });
+  await system.fill(' Sykasoft ');
+  await reference.fill('RE-2019-0042  ');
+  expect(await originWrites(page)).toEqual([]);
+  await reference.press('Enter');
+  expect(await originWrites(page)).toEqual([{ sourceSystem: 'Sykasoft', sourceReference: 'RE-2019-0042' }]);
+  await expect(page.getByRole('button', { name: 'Herkunft speichern' })).toHaveCount(0);
+  await expect(reference).toHaveValue('RE-2019-0042');
+
+  await system.fill('');
+  await page.getByRole('button', { name: 'Herkunft speichern' }).click();
+  expect((await originWrites(page)).at(-1)).toEqual({ sourceSystem: null, sourceReference: 'RE-2019-0042' });
+  await expect(system).toHaveValue('');
+});
+
+test('a refused origin stays typed for a retry', async ({ page }) => {
+  const reference = page.getByRole('textbox', { name: 'Alte Nummer' });
+  await reference.fill('RE-2019-0042');
+  await page.evaluate(() => {
+    window.documentArchiveContract.refuseNext = true;
+  });
+  const save = page.getByRole('button', { name: 'Herkunft speichern' });
+  await save.click();
+  await expect(save).toBeVisible();
+  await expect(reference).toHaveValue('RE-2019-0042');
+
+  await save.click();
+  expect(await originWrites(page)).toEqual([
+    { sourceSystem: null, sourceReference: 'RE-2019-0042' },
+    { sourceSystem: null, sourceReference: 'RE-2019-0042' },
+  ]);
+  await expect(save).toHaveCount(0);
+});
+
+test('„Festschreiben“ with an unsaved origin files nothing and marks and focuses the old number', async ({
+  page,
+}) => {
+  const reference = page.getByRole('textbox', { name: 'Alte Nummer' });
+  await reference.fill('RE-2019-0042');
+  await page.getByRole('button', { name: 'Festschreiben' }).click();
+  expect(await page.evaluate(() => window.documentArchiveContract.filings)).toEqual([]);
+  expect(await originWrites(page)).toEqual([]);
+  await expect(reference).toBeFocused();
+  await expect(reference).toHaveAttribute('aria-invalid', 'true');
+  await expect(reference).toHaveAccessibleDescription(
+    'Speichere die Herkunft oder setz sie zurück, bevor du die Datei festschreibst.',
+  );
+
+  await page.getByRole('button', { name: 'Herkunft zurücksetzen' }).click();
+  await expect(reference).toHaveValue('');
+  await page.getByRole('button', { name: 'Festschreiben' }).click();
+  expect(await page.evaluate(() => window.documentArchiveContract.filings)).toEqual(['contract-document']);
+});

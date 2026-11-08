@@ -15,7 +15,7 @@ import {
   type OrganizationDocument,
 } from '@/lib/documents/types';
 import { formatGermanDate as formatDate } from '@/lib/utils';
-import { DocumentArchiveLabel } from './document-archive-label';
+import { DocumentArchiveLabel, DocumentOriginLabel } from './document-archive-label';
 import { getFileIcon, getLinkBadges } from './document-library-file-labels';
 import {
   DocumentActionsMenu,
@@ -156,6 +156,7 @@ function DocumentLibraryDocumentCard({
                   {linkBadges.length > 1 ? ` +${linkBadges.length - 1}` : ''}
                 </p>
               )}
+              <DocumentOriginLabel origin={document.origin} />
               <DocumentArchiveLabel archive={document.archive} />
             </div>
           </div>

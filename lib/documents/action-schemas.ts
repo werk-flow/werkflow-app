@@ -9,6 +9,8 @@ import { uuidSchema } from '@/lib/validation/uuid';
 import {
   DOCUMENT_CATEGORIES,
   DOCUMENT_RETENTION_CLASSES,
+  DOCUMENT_SOURCE_REFERENCE_MAX_LENGTH,
+  DOCUMENT_SOURCE_SYSTEM_MAX_LENGTH,
   DOCUMENT_LIBRARY_LINK_FILTERS,
   DOCUMENT_LIBRARY_SORTS,
   DOCUMENT_LIBRARY_VIEWS,
@@ -132,6 +134,14 @@ export const updateDocumentRetentionInputSchema = z.object({
   retentionClass: z.enum(DOCUMENT_RETENTION_CLASSES).nullable(),
 });
 export type UpdateDocumentRetentionInput = z.input<typeof updateDocumentRetentionInputSchema>;
+
+/** A blank value clears that part of the origin. */
+export const updateDocumentOriginInputSchema = z.object({
+  documentId: uuidSchema,
+  sourceSystem: z.string().trim().max(DOCUMENT_SOURCE_SYSTEM_MAX_LENGTH),
+  sourceReference: z.string().trim().max(DOCUMENT_SOURCE_REFERENCE_MAX_LENGTH),
+});
+export type UpdateDocumentOriginInput = z.input<typeof updateDocumentOriginInputSchema>;
 
 export const moveDocumentInputSchema = z.object({ documentId: uuidSchema, folderId: optionalIdSchema });
 export type MoveDocumentInput = z.input<typeof moveDocumentInputSchema>;

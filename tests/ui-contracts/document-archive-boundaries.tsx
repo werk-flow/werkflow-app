@@ -1,10 +1,15 @@
 import { useState } from 'react';
 import { DocumentDetailsArchive } from '@/components/dokumente/document-details-archive';
-import type { DocumentRetentionTerms, OrganizationDocument } from '@/lib/documents/types';
+import type { DocumentOrigin, DocumentRetentionTerms, OrganizationDocument } from '@/lib/documents/types';
 
 declare global {
   interface Window {
-    documentArchiveContract: { writes: DocumentRetentionTerms[]; filings: string[]; refuseNext: boolean };
+    documentArchiveContract: {
+      writes: DocumentRetentionTerms[];
+      originWrites: DocumentOrigin[];
+      filings: string[];
+      refuseNext: boolean;
+    };
   }
 }
 
@@ -30,6 +35,7 @@ const invoice: OrganizationDocument = {
   updatedAt: '2026-03-14T09:00:00.000Z',
   uploader: null,
   links: [],
+  origin: { sourceSystem: null, sourceReference: null },
   archive: {
     documentDate: '2026-03-14',
     retentionClass: 'ten_years',
@@ -40,9 +46,10 @@ const invoice: OrganizationDocument = {
 };
 
 /**
- * „Aufbewahrung“ of an unfiled invoice. Each retention write is recorded and
- * applied at once, as the details apply it; `refuseNext` makes the next write
- * fail and puts the stored terms back. Each filing request is recorded.
+ * „Herkunft“ and „Aufbewahrung“ of an unfiled invoice. Each origin and
+ * retention write is recorded and applied at once, as the details apply it;
+ * `refuseNext` makes the next write fail and puts the stored values back.
+ * Each filing request is recorded.
  */
 export function DocumentArchiveContractFixture(): React.JSX.Element {
   const [document, setDocument] = useState(invoice);
@@ -62,6 +69,16 @@ export function DocumentArchiveContractFixture(): React.JSX.Element {
           setDocument(current);
           return false;
         }}
+        onUpdateOrigin={async (current, origin) => {
+          const contract = window.documentArchiveContract;
+          contract.originWrites.push(origin);
+          setDocument({ ...current, origin });
+          await Promise.resolve();
+          if (!contract.refuseNext) return true;
+          contract.refuseNext = false;
+          setDocument(current);
+          return false;
+        }}
         onFile={(current) => window.documentArchiveContract.filings.push(current.id)}
       />
     </main>
@@ -69,5 +86,5 @@ export function DocumentArchiveContractFixture(): React.JSX.Element {
 }
 
 export function initializeDocumentArchiveBoundary(): void {
-  window.documentArchiveContract = { writes: [], filings: [], refuseNext: false };
+  window.documentArchiveContract = { writes: [], originWrites: [], filings: [], refuseNext: false };
 }

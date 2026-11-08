@@ -344,16 +344,18 @@ type DocumentDetailsDialogProps = Omit<DocumentDetailsVersionsProps, 'document'>
   onClose: () => void;
   onUpdateCategory: DocumentDetailsMetadataProps['onUpdateCategory'];
   onUpdateRetention: DocumentDetailsArchiveProps['onUpdateRetention'];
+  onUpdateOrigin: DocumentDetailsArchiveProps['onUpdateOrigin'];
   onFile: DocumentDetailsArchiveProps['onFile'];
 };
 
-/** „Dateidetails": metadata, retention, links, versions and audit history of one document. */
+/** „Dateidetails": metadata, origin, retention, links, versions and audit history of one document. */
 export function DocumentDetailsDialog({
   document,
   error,
   onClose,
   onUpdateCategory,
   onUpdateRetention,
+  onUpdateOrigin,
   onFile,
   ...versionProps
 }: DocumentDetailsDialogProps) {
@@ -388,6 +390,7 @@ export function DocumentDetailsDialog({
               disabled={versionProps.isBusy}
               isTrashView={versionProps.isTrashView}
               onUpdateRetention={onUpdateRetention}
+              onUpdateOrigin={onUpdateOrigin}
               onFile={onFile}
             />
             <DocumentDetailsLinks document={document} />
