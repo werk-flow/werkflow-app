@@ -16,10 +16,12 @@ import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Label } from '@/components/ui/label';
 import { cn, toLocalDateString } from '@/lib/utils';
+import { AbsenceAffectedVisits } from '@/components/kalender/absence-affected-visits';
 
 import { SicknessAbsenceTypeSelect } from './sickness-absence-type-select';
 import {
   useSicknessReportRecordForm,
+  type RecordedSickness,
   type SicknessReportRecordForm,
 } from './use-sickness-report-record-form';
 
@@ -30,75 +32,91 @@ export function RecordSicknessDialog({
   recordId: string;
   onClose: (saved: boolean) => void;
 }) {
-  const form = useSicknessReportRecordForm(recordId, onClose);
-  const {
-    absenceType,
-    setAbsenceType,
-    evidenceRequired,
-    setEvidenceRequired,
-    isSaving,
-    error,
-    overlapHint,
-    handleSubmit,
-  } = form;
+  const form = useSicknessReportRecordForm(recordId);
+  const { absenceType, setAbsenceType, evidenceRequired, setEvidenceRequired, isSaving, error, recorded } =
+    form;
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose(overlapHint)} pending={isSaving}>
+    <Dialog open onOpenChange={(open) => !open && onClose(recorded !== null)} pending={isSaving}>
       <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Krankmeldung erfassen</DialogTitle>
           <DialogDescription>
-            Für telefonische oder persönliche Meldungen. Es werden keine Krankheitsdetails erfasst.
+            {recorded
+              ? 'Die Krankmeldung ist gespeichert.'
+              : 'Für telefonische oder persönliche Meldungen. Es werden keine Krankheitsdetails erfasst.'}
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
-          <DialogBody className="grid gap-4 py-4">
-            <Field label="Art" htmlFor="record-sickness-type">
-              <SicknessAbsenceTypeSelect value={absenceType} onChange={setAbsenceType} disabled={isSaving} />
-            </Field>
+        {recorded ? (
+          <RecordedSicknessSummary recorded={recorded} onDone={() => onClose(true)} />
+        ) : (
+          <form onSubmit={form.handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
+            <DialogBody className="grid gap-4 py-4">
+              <Field label="Art" htmlFor="record-sickness-type">
+                <SicknessAbsenceTypeSelect
+                  value={absenceType}
+                  onChange={setAbsenceType}
+                  disabled={isSaving}
+                />
+              </Field>
 
-            <SicknessReportRecordPeriodFields form={form} />
+              <SicknessReportRecordPeriodFields form={form} />
 
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="record-sickness-evidence"
-                checked={evidenceRequired}
-                onCheckedChange={(checked) => setEvidenceRequired(checked === true)}
-                disabled={isSaving}
-              />
-              <Label htmlFor="record-sickness-evidence" className="text-sm font-normal">
-                Nachweis erforderlich (Entscheidung des Betriebs)
-              </Label>
-            </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="record-sickness-evidence"
+                  checked={evidenceRequired}
+                  onCheckedChange={(checked) => setEvidenceRequired(checked === true)}
+                  disabled={isSaving}
+                />
+                <Label htmlFor="record-sickness-evidence" className="text-sm font-normal">
+                  Nachweis erforderlich (Entscheidung des Betriebs)
+                </Label>
+              </div>
 
-            {overlapHint && (
-              <p role="status" className="text-xs text-muted-foreground">
-                Hinweis: Der Zeitraum überschneidet sich mit genehmigtem Urlaub. Eine Anpassung des Urlaubs
-                bleibt eine bewusste Entscheidung über die Urlaubsverwaltung.
-              </p>
-            )}
-
-            <ErrorText>{error}</ErrorText>
-          </DialogBody>
-          <DialogFooter>
-            {overlapHint ? (
-              <Button type="button" onClick={() => onClose(true)}>
-                Verstanden
+              <ErrorText>{error}</ErrorText>
+            </DialogBody>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => onClose(false)} disabled={isSaving}>
+                Abbrechen
               </Button>
-            ) : (
-              <>
-                <Button type="button" variant="outline" onClick={() => onClose(false)} disabled={isSaving}>
-                  Abbrechen
-                </Button>
-                <Button pending={isSaving} type="submit" disabled={isSaving}>
-                  {isSaving ? 'Wird gespeichert…' : 'Krankmeldung erfassen'}
-                </Button>
-              </>
-            )}
-          </DialogFooter>
-        </form>
+              <Button pending={isSaving} type="submit" disabled={isSaving}>
+                {isSaving ? 'Wird gespeichert…' : 'Krankmeldung erfassen'}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** What the saved report affects: the visits to rearrange and an overlap with approved vacation. */
+function RecordedSicknessSummary({ recorded, onDone }: { recorded: RecordedSickness; onDone: () => void }) {
+  const { report, vacationOverlap } = recorded;
+  return (
+    <>
+      <DialogBody className="grid gap-4 py-4">
+        {vacationOverlap && (
+          <p role="status" className="text-xs text-muted-foreground">
+            Hinweis: Der Zeitraum überschneidet sich mit genehmigtem Urlaub. Eine Anpassung des Urlaubs bleibt
+            eine bewusste Entscheidung über die Urlaubsverwaltung.
+          </p>
+        )}
+        <AbsenceAffectedVisits
+          absence={{
+            employeeRecordId: report.employeeRecordId,
+            startDate: report.startDate,
+            endDate: report.endDate,
+          }}
+        />
+      </DialogBody>
+      <DialogFooter>
+        <Button type="button" onClick={onDone}>
+          Fertig
+        </Button>
+      </DialogFooter>
+    </>
   );
 }
 

@@ -111,7 +111,7 @@ export function ZeiterfassungContent({
 
       {hasApprovalSurface ? (
         <TabsContent value="approvals" className="mt-4 space-y-6">
-          {canApproveLeave ? <VacationApprovals /> : null}
+          {canApproveLeave ? <VacationApprovals plansWork={isManagerRole(currentUserRole)} /> : null}
           {canApproveTime ? (
             <TimeCorrectionRequests organizationId={organizationId} mode="approvals" />
           ) : null}

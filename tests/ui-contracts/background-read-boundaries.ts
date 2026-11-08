@@ -8,6 +8,8 @@ import { readApprovalContract } from './approval-service-boundaries';
 import { readTimeApprovalContract } from './time-approval-boundaries';
 import { readMaterialLinesContract, readMaterialPickerContract } from './material-boundaries';
 import { getOwnPersonnelActions, getPersonnelLifecycle } from './personnel-boundaries';
+import { readAffectedVisitsContract } from './absence-service-boundaries';
+import { absenceAffectedVisitsInputSchema } from '@/lib/calendar/absence-visits-types';
 
 export async function readInBackground(kind: string, input: unknown, signal?: AbortSignal): Promise<unknown> {
   if (kind === 'planning-options') return readPlanningOptionContract(input, signal);
@@ -25,6 +27,8 @@ export async function readInBackground(kind: string, input: unknown, signal?: Ab
   if (kind === 'job-material-lines') return readMaterialLinesContract();
   if (kind === 'inventory-picker-page' || kind === 'job-inventory-picker-options')
     return readMaterialPickerContract();
+  if (kind === 'absence-affected-visits')
+    return readAffectedVisitsContract(absenceAffectedVisitsInputSchema.parse(input));
   if (kind === 'own-personnel-actions') return getOwnPersonnelActions();
   if (kind === 'personnel-lifecycle' && input && typeof input === 'object' && 'employeeRecordId' in input)
     return getPersonnelLifecycle(String(input.employeeRecordId));
