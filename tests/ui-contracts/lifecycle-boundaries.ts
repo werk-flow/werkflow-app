@@ -41,6 +41,8 @@ declare global {
       | 'live-view'
       | 'route-refresh'
       | 'customer'
+      | 'sickness-record'
+      | 'absence-picker'
       | AuthUrlFixtureName
       | FeedbackFixtureName;
     uiContractLifecycle: LifecycleBoundaryState;
