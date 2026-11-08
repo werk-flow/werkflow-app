@@ -11,6 +11,7 @@ import {
   ORGANIZATION_A,
   ORGANIZATION_B,
   installActionWorld,
+  listProfileReferencesInWorld,
   signInAs,
 } from './action-boundary-world';
 import { assertRefused } from './operations-boundary-refusals';
@@ -150,13 +151,16 @@ for (const role of ['buero', 'admin'] as const) {
 
   // Admin and Büro write the trimmed origin through the one function, in their organization.
   world.rpcCalls.length = 0;
-  world.rpc = ({ name }) =>
+  // The written document names its uploader through the profile reference read.
+  world.rpc = ({ name, args }) =>
     name === 'update_document_origin'
       ? {
           data: { ...invoice(legacyInvoiceId, ORGANIZATION_A), source_reference: 'RE-2019-0099' },
           error: null,
         }
-      : { data: null, error: { code: 'P0001', message: 'unexpected_call' } };
+      : name === 'list_profile_references'
+        ? listProfileReferencesInWorld(world, args)
+        : { data: null, error: { code: 'P0001', message: 'unexpected_call' } };
   const change = await updateDocumentOrigin({
     documentId: legacyInvoiceId,
     sourceSystem: ' Sykasoft ',
@@ -165,13 +169,15 @@ for (const role of ['buero', 'admin'] as const) {
   assert.ok(change.success, `${role}: the origin change was refused`);
   assert.deepEqual(change.document.origin, { sourceSystem: 'Sykasoft', sourceReference: 'RE-2019-0099' });
   assert.deepEqual(
-    world.rpcCalls.map((call) => [
-      call.name,
-      call.args.p_organization_id,
-      call.args.p_document_id,
-      call.args.p_source_system,
-      call.args.p_source_reference,
-    ]),
+    world.rpcCalls
+      .filter((call) => call.name !== 'list_profile_references')
+      .map((call) => [
+        call.name,
+        call.args.p_organization_id,
+        call.args.p_document_id,
+        call.args.p_source_system,
+        call.args.p_source_reference,
+      ]),
     [['update_document_origin', ORGANIZATION_A, legacyInvoiceId, 'Sykasoft', 'RE-2019-0099']],
   );
 }
