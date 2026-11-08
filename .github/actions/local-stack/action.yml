@@ -40,9 +40,7 @@ runs:
       run: sudo sysctl -w net.ipv4.ip_local_port_range="55000 65000"
 
     - if: steps.start.outputs.start == 'true'
-      uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb # v1.7.3
-      with:
-        version: 2.116.0
+      uses: ./.github/actions/supabase-cli
 
     # The stack's images, saved after the first start. A key change pulls them again.
     - name: Restore the stack images

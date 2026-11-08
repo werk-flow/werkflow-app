@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { CalendarJob } from '@/lib/jobs/types';
 import {
+  absenceMark,
   boardDayKey,
   deriveCapacityState,
   describeCapacity,
@@ -161,6 +162,19 @@ describe('capacity state', () => {
       'teilweise geplant: 2,5 h von 8 h geplant, Urlaub angefragt',
     );
   });
+});
+
+test('marks a person away on the day by absence kind and portion, a sickness without naming it', () => {
+  expect(absenceMark(day({ targetMinutes: 0, absence: { type: 'vacation', portion: 'full' } }))).toBe(
+    'Urlaub',
+  );
+  expect(absenceMark(day({ absence: { type: 'sickness', portion: 'half_day' } }))).toBe(
+    'Abwesend (halber Tag)',
+  );
+  expect(absenceMark(day({ pendingVacation: true }))).toBe('Urlaub angefragt');
+  expect(absenceMark(day({}))).toBeNull();
+  // A day the calendar does not hold says nothing about the person.
+  expect(absenceMark(undefined)).toBeNull();
 });
 
 test('dispatch state falls back to „nicht gesendet" for occurrences without a dispatch', () => {

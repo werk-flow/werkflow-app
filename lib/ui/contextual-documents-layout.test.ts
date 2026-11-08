@@ -94,7 +94,10 @@ test('loading preserves available toolbar slots and normal/upload emphasis heigh
       emphasizeUpload: false,
     }),
   );
-  expect(normal).toContain('h-8 w-31');
+  // The placeholders take their width from the toolbar's own labels, never a
+  // fixed width that fits one platform's text metrics.
+  expect(normal).toContain('<span>Verknüpfen</span>');
+  expect(normal).toContain('<span>Hochladen</span>');
   expect(normal.split(/[\s"]/)).toContain('h-11');
   const emphasized = renderToStaticMarkup(
     createElement(ContextualDocumentsSkeleton, {

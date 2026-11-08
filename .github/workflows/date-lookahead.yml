@@ -70,7 +70,7 @@ jobs:
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      # The nightly peaks at 20 runners. A third of that leaves pull requests theirs.
+      # Seven legs at once leave pull requests most of the account's runners.
       max-parallel: 7
       matrix:
         include: ${{ fromJSON(needs.plan.outputs.legs) }}

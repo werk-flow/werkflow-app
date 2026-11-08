@@ -4,6 +4,12 @@
 // row values, email addresses or the request. Only the classification leaves
 // this module: the error's name, its code and its HTTP status. ESLint rejects
 // `console.*` in lib/, app/api, app/auth and proxy.ts outside this file.
+//
+// On the server, each logged failure also counts once as the Vercel custom metric
+// `werkflow.failure` (lib/failure-metric/server.ts). A browser bundle resolves
+// `#failure-metric` to a no-op instead (package.json "imports").
+
+import { countFailure } from '#failure-metric';
 
 /** The reviewed fields of a logged failure. */
 type LoggedFailure = { name?: string; code?: string; status?: number };
@@ -37,6 +43,10 @@ function classifyFailure(error: unknown): LoggedFailure {
 
 /** Logs a failure under a fixed label with its classification only. */
 export function logError(label: string, error?: unknown): void {
+  const failure = classifyFailure(error);
   // eslint-disable-next-line no-restricted-properties -- the reviewed sink: only the classification is written
-  console.error(label, classifyFailure(error));
+  console.error(label, failure);
+  const lost = countFailure(label, failure.code);
+  // eslint-disable-next-line no-restricted-properties -- the reviewed sink: only the classification is written
+  if (lost) console.error('logError: failure metric not recorded', classifyFailure(lost.error));
 }

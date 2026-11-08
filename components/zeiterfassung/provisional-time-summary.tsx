@@ -12,11 +12,17 @@ import { formatBerlin } from '@/lib/utils';
 
 const dayList = new Intl.ListFormat('de', { type: 'conjunction' });
 
+/** „Mo., 26.10.“ for a day; „Mo., 02.01.2023 bis Di., 27.10.2026“ for a run of more than a week. */
+function dayLabel(day: ProvisionalTimeSummaryData['days'][number]): string {
+  return typeof day === 'string'
+    ? formatBerlin(day, 'weekdayDayMonth')
+    : `${formatBerlin(day.first, 'weekdayDate')} bis ${formatBerlin(day.last, 'weekdayDate')}`;
+}
+
 /** „Eine Korrektur für Mo., 26.10. wartet auf eine Entscheidung.“, naming every day it changes. */
 function pendingSentence({ count, days }: ProvisionalTimeSummaryData): string {
   const subject = count === 1 ? 'Eine Korrektur' : `${count} Korrekturen`;
-  const forDays =
-    days.length > 0 ? ` für ${dayList.format(days.map((day) => formatBerlin(day, 'weekdayDayMonth')))}` : '';
+  const forDays = days.length > 0 ? ` für ${dayList.format(days.map(dayLabel))}` : '';
   return `${subject}${forDays} ${count === 1 ? 'wartet' : 'warten'} auf eine Entscheidung.`;
 }
 

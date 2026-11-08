@@ -3,6 +3,7 @@ import { RouteRefreshFixture } from './route-refresh-boundaries';
 import { PresentationFixture } from './presentation-fixture';
 import { CustomerContractFixture } from './customer-boundaries';
 import { VacationApprovals } from '@/components/zeiterfassung/vacation-approvals';
+import { AbsencePickerContractFixture, SicknessRecordContractFixture } from './absence-boundaries';
 import { ClockContractFixture } from './clock-boundaries';
 import { SidebarContractFixture } from './sidebar-boundaries';
 import {
@@ -548,9 +549,13 @@ createRoot(root).render(
     <BannerProvider>
       <main>
         <h1>Komponentenverträge</h1>
-        <VacationApprovals />
+        <VacationApprovals plansWork />
       </main>
     </BannerProvider>
+  ) : window.uiContractFixture === 'sickness-record' ? (
+    <SicknessRecordContractFixture />
+  ) : window.uiContractFixture === 'absence-picker' ? (
+    <AbsencePickerContractFixture />
   ) : window.uiContractFixture === 'route-refresh' ? (
     <RouteRefreshFixture />
   ) : window.uiContractFixture === 'live-view' ? (
