@@ -1348,7 +1348,7 @@
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 3, "tolerance": 0 },
         "backendRequests": { "reference": 87, "tolerance": 1 },
-        "componentRenders": { "reference": 1634, "tolerance": 31 }
+        "componentRenders": { "reference": 1583, "tolerance": 31 }
       },
       "payloads": {
         "background:job-dispatch-cards": {
@@ -1522,6 +1522,14 @@
           },
           "runKeys": ["2026-11-07T155436013Z-7a1b47"],
           "reason": "The job page's lifecycle snapshot carries the readiness picture's new unplannedReason and the assessed visit's conflict details (werk-flow/werkflow-planning#50, #69)."
+        },
+        {
+          "kind": "ratchet",
+          "target": "componentRenders",
+          "from": { "reference": 1634, "tolerance": 31 },
+          "to": { "reference": 1583, "tolerance": 31 },
+          "runKeys": ["2026-11-08T162433969Z-6e6e07"],
+          "reason": null
         }
       ]
     },
