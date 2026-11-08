@@ -12,7 +12,7 @@ What a backup can restore, what loss the owner accepted, and who acts in an inci
 | Configuration and secrets | Manual: provider dashboards, the owner's password manager, the gitignored env backups | No automated export. Update the env backups after every provider change. |
 | Edge function source | `supabase/functions/` in git | Function secrets exist only in each project's secret store. |
 
-The owner accepted these limits until the point-in-time upgrade below. No restore time is agreed or demonstrated.
+The owner accepted these limits until the point-in-time upgrade below. The recovery objectives: at most one day of data lost and at most one working day down. While WerkFlow is down, staff work on paper and by phone. The [recovery rehearsal](#recovery-rehearsal) measures a local restore; no provider restore time is demonstrated.
 
 ## Planned provider upgrades
 
@@ -25,21 +25,29 @@ The team moved to Vercel Pro on 2026-11-05; its checklist is open in werk-flow/w
 
 ## Recovery rehearsal
 
-`bun scripts/rehearse-recovery.ts` backs up and restores a synthetic schema with file bytes in disposable local databases and buckets. It needs healthy local containers and `.env.local-stack-backup`, takes the workspace test lock, and journals each operation to `.agent-logs/recovery/<run-id>/journal.json`.
+`bun scripts/rehearse-recovery.ts` restores a representative organization with every file link in disposable local databases and buckets. It needs healthy local containers, Docker on the machine's own socket (Linux, or Colima's default profile on a Mac) and `.env.local-stack-backup`. It takes the workspace test lock and journals each operation and stage duration to `.agent-logs/recovery/<run-id>/journal.json`; the `restore` stage's duration is the measured restore time. Its stages:
+
+1. `seed` copies the stack's migrated schema, never a row, into a new database. It fails when the stack lacks a migration of the revision. It writes a made-up SHK company through the app's database functions: staff of every role, jobs with assignees, document versions, filed originals, a trashed document, protected personnel files and a second organization.
+2. `backup` takes a full `pg_dump` as the superuser, as the provider's daily backup does, and copies the bytes to a backup bucket, with one upload made after the dump.
+3. `remove-source` drops the source database and deletes its objects key by key.
+4. `restore` loads the dump in one transaction and copies the bytes to a new bucket.
+5. `verify` compares migration history, schema and row counts. Every current and historical document path must have its object, size and bytes, and the late upload must be the only orphan. A deliberately removed object must fail and name its document. A member of another organization and an employee without assignment must read exactly what they read before. Signed access must work, unsigned and tampered access fail.
+
+A missing object fails acceptance. The journal names missing documents and orphan objects by id, never a path, file name or content.
 
 `ops/recovery-rehearsal.py` in `werk-flow/werkflow-planning` runs it on [the PC](environments.md#background-jobs): at 04:00 Berlin on the first Monday of January, April, July and October, in a checkout of its own at `origin/main`. After a backup or storage change, run that script with `--revision <branch>`. It shares the stack with every worktree: it adds two databases and three buckets for seconds and restarts nothing, so it takes no heavy slot. A stopped or unhealthy stack fails it. A failure opens or updates `CI alert: recovery rehearsal`, the next pass closes it, and `ops/ci-alert.py` hands it to a thread and reports a quarter without a run. It assigns nobody: no production data is at stake.
 
 - A cleanup or journal failure prevents acceptance. After a killed run, reconcile the journal's exact resource names before you run again.
 - Never drop a resource by prefix search, remove a shared bucket or database, reset the shared stack, or load a production or DEV dump into it.
-- The rehearsal proves mechanics only, not a full-schema or provider restore, recovery time or R2 durability. A production restore needs separate owner authorization.
+- The rehearsal proves the full-schema restore on the local stack, not a provider restore, its recovery time or R2 durability. It leaves out pg_cron, which runs only in the cluster's `postgres` database. A production restore needs separate owner authorization.
 
 ## Restore procedure (database)
 
 1. Record source, target, backup timestamp, application revision, expected loss and rollback limits. Get the owner's authorization. Never load production material into DEV or the local stack.
-2. Stop writes through enforced maintenance or provider controls, and notify the customer. A notice alone stops no direct client, job or session. Pause the storage purge until step 5 is done: remove `CRON_SECRET` from Vercel Production, so `/api/storage-purge` answers 503, deletes nothing and raises the production-watcher alert; set a new value when the paths reconcile.
+2. Stop writes through enforced maintenance or provider controls, and notify the customer; staff work on paper and by phone until writes reopen. A notice alone stops no direct client, job or session. Pause the storage purge until step 5 is done: remove `CRON_SECRET` from Vercel Production, so `/api/storage-purge` answers 503, deletes nothing and raises the production-watcher alert; set a new value when the paths reconcile.
 3. Follow the provider's current restore procedure. Run only the authorized operation and keep its result. A partial load or a nonzero exit is a failed restore.
-4. Compare `supabase_migrations.schema_migrations` on the target with the intended revision. `bun run migrations:check` checks DEV only. For a missing migration, follow [the migration rule](environments.md#the-migration-rule) without relinking the CLI to production.
-5. Reconcile current and historical document and version paths against the correct bucket. Metadata without an object means missing bytes. An object uploaded after the backup can survive without metadata. Keep orphan objects for review; never purge them automatically.
+4. Compare `supabase_migrations.schema_migrations` on the target with the intended revision, and check that `cron.job` holds the scheduled jobs. `bun run migrations:check` checks DEV only. For a missing migration, follow [the migration rule](environments.md#the-migration-rule) without relinking the CLI to production.
+5. Reconcile current and historical document and version paths against the correct bucket, with the rehearsal's path query and comparison (`lib/testing/runs/recovery-rehearsal.ts`). Metadata without an object means missing bytes. An object uploaded after the backup can survive without metadata. Keep orphan objects for review; never purge them automatically.
 6. Check tenant and role access, protected documents and session revocation. A database restore revokes no token.
 7. Run the provider canary on cloud DEV; it does not prove production recovery. On production, use metadata and configuration checks and the customer verification the owner agreed before you resume writes. Record unresolved evidence and every loss.
 

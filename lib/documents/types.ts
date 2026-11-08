@@ -257,6 +257,8 @@ export type DocumentUploadTicketResult = ActionResult<{ ticket: DocumentUploadTi
 type DocumentVersionUploadTicket = {
   documentId: string;
   versionNumber: number;
+  /** The upload's own identity: a retry finds the version this upload saved by it. */
+  uploadId: string;
   storagePath: string;
   uploadUrl: string;
 };

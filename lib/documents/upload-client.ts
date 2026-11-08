@@ -83,15 +83,19 @@ export type UploadFailureReason =
   | 'refused'
   | 'not_saved'
   | 'version_conflict'
-  | 'version_unconfirmed'
   | 'document_filed';
 
 /**
  * The upload whose bytes reached storage. A retry first registers these
  * bytes instead of sending the file again, so a registration whose answer
- * got lost never registers the file twice.
+ * got lost never registers the file twice. A new version also keeps its
+ * number and the upload's own identity.
  */
-export type TransferredUpload = { documentId: string; versionNumber: number | null; storagePath: string };
+export type TransferredUpload = {
+  documentId: string;
+  version: { versionNumber: number; uploadId: string } | null;
+  storagePath: string;
+};
 
 /** A saved upload (`saved` is null when an earlier attempt registered it), or why it failed. */
 export type UploadOutcome<Saved> =
@@ -181,7 +185,7 @@ export async function uploadDocumentDirect({
     await putFileWithProgress(ticketResult.ticket.uploadUrl, file, onProgress, signal);
     stored = {
       documentId: ticketResult.ticket.documentId,
-      versionNumber: null,
+      version: null,
       storagePath: ticketResult.ticket.storagePath,
     };
     const result = await registerDocument(stored.documentId);
@@ -226,10 +230,9 @@ export async function uploadWorkArtifactSignatureDirect({
 
 /**
  * Uploads a new version of a document. A retry with the earlier try's
- * `transferred` registers the stored bytes first, like `uploadDocumentDirect`.
- * When another person saved a version meanwhile, a first try is a
- * `version_conflict`. A retry that meets a newer version is
- * `version_unconfirmed`: it cannot tell its own lost save from another one.
+ * `transferred` registers the stored bytes first, like `uploadDocumentDirect`:
+ * when the lost answer of the earlier try had saved them, the retry is saved.
+ * When another upload saved a version meanwhile, the try is a `version_conflict`.
  */
 export async function uploadDocumentVersionDirect({
   documentId,
@@ -241,16 +244,15 @@ export async function uploadDocumentVersionDirect({
   documentId: string;
   file: File;
 }): Promise<UploadOutcome<DocumentVersion>> {
-  const registerVersion = (versionNumber: number) =>
-    finalizeDocumentVersionUpload({ documentId, versionNumber, fileName: file.name });
+  const registerVersion = (version: { versionNumber: number; uploadId: string }) =>
+    finalizeDocumentVersionUpload({ documentId, ...version, fileName: file.name });
   let stored = transferred;
   try {
-    if (stored && stored.versionNumber !== null) {
-      const result = await registerVersion(stored.versionNumber);
+    if (stored?.version) {
+      const result = await registerVersion(stored.version);
       if (result.success) return { status: 'saved', saved: result.version };
-      // A lost answer of the earlier try and another person's version look
-      // the same here, so the outcome says the save is unconfirmed.
-      if (result.error === 'version_conflict') return failedUpload('version_unconfirmed', stored);
+      // The lost answer of the earlier try had saved this upload's version.
+      if (result.error === 'already_finalized') return { status: 'saved', saved: null };
       if (result.error !== 'file_missing') return failedUpload(refusalReason(result.error), stored);
       stored = null;
     }
@@ -262,9 +264,10 @@ export async function uploadDocumentVersionDirect({
     });
     if (!ticketResult.success) return failedUpload(refusalReason(ticketResult.error), null);
     await putFileWithProgress(ticketResult.ticket.uploadUrl, file, onProgress, signal);
-    const { versionNumber, storagePath } = ticketResult.ticket;
-    stored = { documentId, versionNumber, storagePath };
-    const result = await registerVersion(versionNumber);
+    const { versionNumber, uploadId, storagePath } = ticketResult.ticket;
+    const version = { versionNumber, uploadId };
+    stored = { documentId, version, storagePath };
+    const result = await registerVersion(version);
     if (result.success) return { status: 'saved', saved: result.version };
     return failedUpload(refusalReason(result.error), stored);
   } catch (error) {
