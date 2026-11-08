@@ -51,7 +51,7 @@ export const MEASURED_SCENARIOS: readonly MeasuredScenario[] = [
     profile: 'golden-world',
     file: 'tests/audit/performance/planning-benchmark.spec.ts',
     samples: 3,
-    comparison: 'calibrating',
+    comparison: 'required',
     description:
       'A manager saves a planned visit; a second Büro session shows the occurrence in the month grid.',
   },
@@ -63,7 +63,7 @@ export const MEASURED_SCENARIOS: readonly MeasuredScenario[] = [
     profile: 'golden-world',
     file: 'tests/audit/performance/planning-benchmark.spec.ts',
     samples: 3,
-    comparison: 'calibrating',
+    comparison: 'required',
     description:
       'An employee opens the fixed benchmark calendar date, switches to month, and sees an assigned event.',
   },
@@ -75,7 +75,7 @@ export const MEASURED_SCENARIOS: readonly MeasuredScenario[] = [
     profile: 'golden-world',
     file: 'tests/audit/performance/planning-benchmark.spec.ts',
     samples: 3,
-    comparison: 'calibrating',
+    comparison: 'required',
     description:
       'An administrator opens the fixed benchmark date after creating a legacy-date job and sees its month event.',
   },

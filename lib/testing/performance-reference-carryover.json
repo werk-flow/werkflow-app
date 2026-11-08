@@ -87,21 +87,6 @@
       "measuredTestDigest": "be12b3d8a1d0dcd30613ca13ef8885875512b9482a9a8d531de406fa1a7837ce"
     },
     {
-      "scenarioId": "planning.occurrence.cross-session",
-      "fileDigest": "82dbfd5851ca84ec81d5b6a543e2e6c97744f2cce5be878ad16f08b5b4e0e246",
-      "measuredTestDigest": "56107bc2c130db6b67943a30ac0681abae4ee59db9170d37a20adfc4639a947a"
-    },
-    {
-      "scenarioId": "calendar.month.employee-open-to-event",
-      "fileDigest": "857fa38b81667987b11411d866d4f20cfe4b71d6cd6e8cc86625d5dcd6a93db2",
-      "measuredTestDigest": "115d543f94fe816eb12d885c004d332f609ef2d4057154111b39c2ae2bc5ce66"
-    },
-    {
-      "scenarioId": "calendar.month.admin-open-to-legacy-event",
-      "fileDigest": "f9ed0c9aef563a12d99d31649cbde02a479bbf277fd1872c7ecfd21a16495f4a",
-      "measuredTestDigest": "5a14af24c2dbccffb2e8f25c6bb46b7d9c0b171228c6b171d67cd991af397a3c"
-    },
-    {
       "scenarioId": "time.clock-in.visible",
       "fileDigest": "f612d5a05290575deb006ebb70a4bf397436385a70fe8d4a8b2c89a40ccaf303",
       "measuredTestDigest": "f8bbd770a04f1b5ca9ef392b0ba11264c9ed3814188938e09cc9c481684461f7"

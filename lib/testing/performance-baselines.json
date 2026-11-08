@@ -879,8 +879,8 @@
       "profile": "golden-world",
       "backend": "local",
       "context": {
-        "workloadDigest": "832b6760a6266c623589c893f4d1803fbe1c8b3f1605fcaa064d034ff4cea19d",
-        "measurementDigest": "82dbfd5851ca84ec81d5b6a543e2e6c97744f2cce5be878ad16f08b5b4e0e246",
+        "workloadDigest": "be5c7af57f12159503e84f7449705b758fbde4c54f357b3228bf593470b7e722",
+        "measurementDigest": "f6f54d8502d30f30515d83e4c27e6901ed5f5b56e761e18616966d01d357b987",
         "protocol": "independent-fixed-month-three-distinct-overlap-confirmations-browser-raf-v3",
         "role": "buero",
         "browser": "chromium",
@@ -897,39 +897,32 @@
         "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 648.2001953125,
+      "referenceMs": 653.800048828125,
       "samples": [
-        577.39990234375,
-        601.89990234375,
-        618.39990234375,
-        643.2001953125,
-        648.2001953125,
-        680.2998046875,
-        699.599853515625,
-        743,
-        997.400146484375
+        600.300048828125,
+        605.199951171875,
+        635.2998046875,
+        653,
+        653.800048828125,
+        671,
+        681.2001953125,
+        708.800048828125,
+        802.89990234375
       ],
       "source": {
-        "runKey": "2026-11-06T063210577Z-ff7eda",
+        "runKey": "2026-11-08T182953762Z-6281fa",
         "runKeys": [
-          "2026-11-06T063210577Z-ff7eda",
-          "2026-11-06T063803492Z-a55d19",
-          "2026-11-06T064427695Z-b1f8e5"
+          "2026-11-08T182953762Z-6281fa",
+          "2026-11-08T183128426Z-5025e4",
+          "2026-11-08T183252480Z-ac83a4"
         ],
-        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
-        "recordedAt": "2026-11-06T06:48:39.928Z"
+        "buildId": "e58f9f41-36f6-4c9e-a14e-86b82016252c",
+        "recordedAt": "2026-11-08T18:33:39.304Z"
       },
       "review": {
-        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
-        "reviewedAt": "2026-11-06T06:50:50.193Z"
-      },
-      "workloadCarryOvers": [
-        {
-          "fromDigest": "938b8a0dda5681b9e31bf951e71aecfb1576b3c22bef272537a9ef38cf77ddd9",
-          "toDigest": "832b6760a6266c623589c893f4d1803fbe1c8b3f1605fcaa064d034ff4cea19d",
-          "reason": "tests/golden/support/seed.ts gained types only: the admin client is typed with Database and the record_inventory_movement arguments pass through rpcArgs, which returns them unchanged, so every seeded row and RPC payload stays the same (transpiled output differs only by that identity call)"
-        }
-      ]
+        "reason": "Recalibrated on the Linux PC on mains power: werk-flow/werkflow-app#285 backdated the benchmark people's entry date, which moved the seeded workload and the three planning digests. Three fresh rounds on one build at 30af13f2, each within budget, on a quiet machine (werk-flow/werkflow-planning#96).",
+        "reviewedAt": "2026-11-08T18:34:15.523Z"
+      }
     },
     {
       "scenarioId": "calendar.month.employee-open-to-event",
@@ -937,8 +930,8 @@
       "profile": "golden-world",
       "backend": "local",
       "context": {
-        "workloadDigest": "832b6760a6266c623589c893f4d1803fbe1c8b3f1605fcaa064d034ff4cea19d",
-        "measurementDigest": "857fa38b81667987b11411d866d4f20cfe4b71d6cd6e8cc86625d5dcd6a93db2",
+        "workloadDigest": "be5c7af57f12159503e84f7449705b758fbde4c54f357b3228bf593470b7e722",
+        "measurementDigest": "a3560b533ebac440e63ba505830dfa3cf8db99f004190b1611dff489d6166a8a",
         "protocol": "independent-fixed-month-jobs-warmed-settled-closed-server-fresh-employee-after-three-saves-browser-raf-v5",
         "role": "employee",
         "browser": "chromium",
@@ -955,39 +948,32 @@
         "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 431,
+      "referenceMs": 422.599853515625,
       "samples": [
-        396.699951171875,
-        409.099853515625,
-        417.5,
-        424.899658203125,
-        431,
-        431.800048828125,
-        440.800048828125,
-        449.300048828125,
-        471.000244140625
+        375.600341796875,
+        402.60009765625,
+        414.7001953125,
+        417.800048828125,
+        422.599853515625,
+        423.800048828125,
+        426.699951171875,
+        436.800048828125,
+        465.89990234375
       ],
       "source": {
-        "runKey": "2026-11-06T063210577Z-ff7eda",
+        "runKey": "2026-11-08T182953762Z-6281fa",
         "runKeys": [
-          "2026-11-06T063210577Z-ff7eda",
-          "2026-11-06T063803492Z-a55d19",
-          "2026-11-06T064427695Z-b1f8e5"
+          "2026-11-08T182953762Z-6281fa",
+          "2026-11-08T183128426Z-5025e4",
+          "2026-11-08T183252480Z-ac83a4"
         ],
-        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
-        "recordedAt": "2026-11-06T06:48:50.747Z"
+        "buildId": "e58f9f41-36f6-4c9e-a14e-86b82016252c",
+        "recordedAt": "2026-11-08T18:33:49.967Z"
       },
       "review": {
-        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
-        "reviewedAt": "2026-11-06T06:50:50.193Z"
-      },
-      "workloadCarryOvers": [
-        {
-          "fromDigest": "938b8a0dda5681b9e31bf951e71aecfb1576b3c22bef272537a9ef38cf77ddd9",
-          "toDigest": "832b6760a6266c623589c893f4d1803fbe1c8b3f1605fcaa064d034ff4cea19d",
-          "reason": "tests/golden/support/seed.ts gained types only: the admin client is typed with Database and the record_inventory_movement arguments pass through rpcArgs, which returns them unchanged, so every seeded row and RPC payload stays the same (transpiled output differs only by that identity call)"
-        }
-      ]
+        "reason": "Recalibrated on the Linux PC on mains power: werk-flow/werkflow-app#285 backdated the benchmark people's entry date, which moved the seeded workload and the three planning digests. Three fresh rounds on one build at 30af13f2, each within budget, on a quiet machine (werk-flow/werkflow-planning#96).",
+        "reviewedAt": "2026-11-08T18:34:15.523Z"
+      }
     },
     {
       "scenarioId": "calendar.month.admin-open-to-legacy-event",
@@ -995,8 +981,8 @@
       "profile": "golden-world",
       "backend": "local",
       "context": {
-        "workloadDigest": "832b6760a6266c623589c893f4d1803fbe1c8b3f1605fcaa064d034ff4cea19d",
-        "measurementDigest": "f9ed0c9aef563a12d99d31649cbde02a479bbf277fd1872c7ecfd21a16495f4a",
+        "workloadDigest": "be5c7af57f12159503e84f7449705b758fbde4c54f357b3228bf593470b7e722",
+        "measurementDigest": "2a9e334a010f41c94c953eabed3009c0ca41d03d8b29d11b71fd19c4c7e75c29",
         "protocol": "independent-fixed-month-fresh-admin-after-legacy-save-browser-raf-v3",
         "role": "admin",
         "browser": "chromium",
@@ -1013,39 +999,32 @@
         "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 452,
+      "referenceMs": 422.099853515625,
       "samples": [
-        419.39990234375,
-        422.699951171875,
-        436.2998046875,
-        437.800048828125,
-        452,
-        461.10009765625,
-        465.89990234375,
-        478.2001953125,
-        733.60009765625
+        395.800048828125,
+        411.199951171875,
+        418.5,
+        421.2998046875,
+        422.099853515625,
+        422.300048828125,
+        443.39990234375,
+        456.900146484375,
+        484
       ],
       "source": {
-        "runKey": "2026-11-06T063210577Z-ff7eda",
+        "runKey": "2026-11-08T182953762Z-6281fa",
         "runKeys": [
-          "2026-11-06T063210577Z-ff7eda",
-          "2026-11-06T063803492Z-a55d19",
-          "2026-11-06T064427695Z-b1f8e5"
+          "2026-11-08T182953762Z-6281fa",
+          "2026-11-08T183128426Z-5025e4",
+          "2026-11-08T183252480Z-ac83a4"
         ],
-        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
-        "recordedAt": "2026-11-06T06:48:57.645Z"
+        "buildId": "e58f9f41-36f6-4c9e-a14e-86b82016252c",
+        "recordedAt": "2026-11-08T18:33:57.331Z"
       },
       "review": {
-        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
-        "reviewedAt": "2026-11-06T06:50:50.193Z"
-      },
-      "workloadCarryOvers": [
-        {
-          "fromDigest": "938b8a0dda5681b9e31bf951e71aecfb1576b3c22bef272537a9ef38cf77ddd9",
-          "toDigest": "832b6760a6266c623589c893f4d1803fbe1c8b3f1605fcaa064d034ff4cea19d",
-          "reason": "tests/golden/support/seed.ts gained types only: the admin client is typed with Database and the record_inventory_movement arguments pass through rpcArgs, which returns them unchanged, so every seeded row and RPC payload stays the same (transpiled output differs only by that identity call)"
-        }
-      ]
+        "reason": "Recalibrated on the Linux PC on mains power: werk-flow/werkflow-app#285 backdated the benchmark people's entry date, which moved the seeded workload and the three planning digests. Three fresh rounds on one build at 30af13f2, each within budget, on a quiet machine (werk-flow/werkflow-planning#96).",
+        "reviewedAt": "2026-11-08T18:34:15.523Z"
+      }
     },
     {
       "scenarioId": "time.clock-in.visible",
