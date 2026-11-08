@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { RowActionsMenu } from '@/components/ui/row-actions-menu';
+import { lazyDialog } from '@/components/shared/lazy-dialog';
 import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import {
   AlertDialog,
@@ -15,10 +16,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { EditProjectDialog } from '../forms/edit-project-dialog';
 import { deleteProject } from '@/lib/projects/actions';
 import { type Job, type Project, type ProjectWithDetails } from '@/lib/jobs/types';
 import { rowMenuActions } from './job-actions-menu-items';
+
+// Only Admin and Büro see a row menu. The edit form downloads when one opens,
+// so the field worker's cold start never carries it (`lab.field.cold-start`).
+const lazyEditProjectDialog = lazyDialog(() =>
+  import('../forms/edit-project-dialog').then((mod) => mod.EditProjectDialog),
+);
 
 export const PROJECT_DELETE_FAILED_MESSAGE = 'Das Projekt konnte nicht gelöscht werden.';
 
@@ -131,6 +137,7 @@ export function ProjectActionsMenu({
   return (
     <>
       <RowActionsMenu
+        onOpen={lazyEditProjectDialog.preload}
         disabled={isDeleting}
         actions={rowMenuActions({
           openDetails: () => router.push(detailHref),
@@ -169,7 +176,7 @@ export function ProjectActionsMenu({
         </AlertDialogContent>
       </AlertDialog>
 
-      <EditProjectDialog
+      <lazyEditProjectDialog.Dialog
         project={project}
         open={showEditDialog}
         onOpenChange={setShowEditDialog}

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { RowActionsMenu } from '@/components/ui/row-actions-menu';
+import { lazyDialog } from '@/components/shared/lazy-dialog';
 import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import {
   AlertDialog,
@@ -15,7 +16,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { EditJobDialog } from '../forms/edit-job-dialog';
 import { describeFailure } from '@/lib/action-messages';
 import { deleteJob } from '@/lib/jobs/actions';
 import { JOB_DELETE_FAILED_MESSAGE, JOB_DELETE_HISTORY_MESSAGE } from '@/lib/jobs/messages';
@@ -23,6 +23,12 @@ import { getJobDisplayTitle, type Job, type ProjectWithDetails } from '@/lib/job
 import { knownProjectOption } from '../forms/job-form-options';
 import { rowMenuActions } from './job-actions-menu-items';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
+
+// Only Admin and Büro see a row menu. The edit form downloads when one opens,
+// so the field worker's cold start never carries it (`lab.field.cold-start`).
+const lazyEditJobDialog = lazyDialog(() =>
+  import('../forms/edit-job-dialog').then((mod) => mod.EditJobDialog),
+);
 
 const JOB_DELETE_ERROR_MESSAGES = {
   planning_history_exists: JOB_DELETE_HISTORY_MESSAGE,
@@ -140,6 +146,7 @@ export function JobActionsMenu({
   return (
     <>
       <RowActionsMenu
+        onOpen={lazyEditJobDialog.preload}
         disabled={isDeleting}
         actions={rowMenuActions({
           openDetails: () => router.push(detailHref),
@@ -177,7 +184,7 @@ export function JobActionsMenu({
         </AlertDialogContent>
       </AlertDialog>
 
-      <EditJobDialog
+      <lazyEditJobDialog.Dialog
         job={job}
         open={showEditDialog}
         onOpenChange={setShowEditDialog}

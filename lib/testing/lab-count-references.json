@@ -74,7 +74,7 @@
         },
         "script": {
           "requests": { "reference": 43, "tolerance": 1 },
-          "encodedBytes": { "reference": 697836, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 687657, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         },
@@ -262,6 +262,24 @@
           },
           "runKeys": ["2026-11-08T103722095Z-1c44e2"],
           "reason": "Owner decision of 2026-11-08 via the CI lead (werk-flow/werkflow-planning#222): accept now, then fix. The cold start crept across about 45 merges since werk-flow/werkflow-app#173, each inside the tolerance alone. CI read 696,885 at 7055dee1, 695,928 at 8862eaec (#238), 697,787 at fe09be21 (#210), 698,667 at ca8df013 (#230), 698,620 at 3f27a259, and 698,812 at 86b61f9b (#258) in PR #263's run 42467917583, above the ceiling 698,705. About 2 KB of the distance to 691,787 is the CI/Mac gap recorded with #173; the rest is first-load script of /auftraege (+3.5 KB gzip since #173) and the job-page chunks the list prefetches (+1.3 KB). Script requests are unchanged at 43. Cause: the manager-only create and edit forms ship to the field worker. This value is a passing run on the 16 GB PC on 86b61f9b; a CI run cannot be accepted here because its proof environment differs. A follow-up PR must bring the value back below 691,787 without raising any office count."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 43, "tolerance": 1 },
+            "encodedBytes": { "reference": 697836, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 43, "tolerance": 1 },
+            "encodedBytes": { "reference": 687657, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-08T112625699Z-6f644d"],
+          "reason": "Manager-only create and edit dialogs load on intent (lazyDialog), the create-project helpers left the form module, and the Auftraege table skeleton left the table module the app shell imported: the field worker no longer downloads the create and edit forms or the job table on every page. 697,836 on 86b61f9b to 687,657 on this PC, script requests unchanged at 43. Back below the 691,787 that werk-flow/werkflow-app#272 accepted as the follow-up's target (owner decision of 2026-11-08)."
         }
       ]
     },
@@ -665,8 +683,8 @@
       "payloads": {
         "action:/dashboard": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 9183, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 26210, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 9104, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 25593, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "api:/api/time-tracking-state": {
@@ -760,6 +778,24 @@
           "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
           "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
           "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "action:/dashboard",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 9183, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 26210, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 9104, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 25593, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-08T112625699Z-6f644d"],
+          "reason": "The dashboard's clock action response lists fewer client chunks now that the app shell no longer imports the Auftraege table, its row menus and their edit forms (AuftraegeTableSkeleton has its own module): 26,210 to 25,593 decoded bytes, rows unchanged."
         }
       ]
     },
@@ -879,8 +915,8 @@
       "payloads": {
         "action:/dashboard": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 9183, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 26209, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 9101, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 25592, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "api:/api/time-tracking-state": {
@@ -992,6 +1028,24 @@
           "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
           "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
           "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "action:/dashboard",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 9183, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 26209, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 9101, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 25592, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-08T112625699Z-6f644d"],
+          "reason": "The dashboard's clock action response lists fewer client chunks now that the app shell no longer imports the Auftraege table, its row menus and their edit forms (AuftraegeTableSkeleton has its own module): 26,210 to 25,593 decoded bytes, rows unchanged."
         }
       ]
     },
@@ -1016,7 +1070,7 @@
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 90, "tolerance": 1 },
-        "componentRenders": { "reference": 10433, "tolerance": 201 }
+        "componentRenders": { "reference": 7596, "tolerance": 201 }
       },
       "payloads": {
         "api:/api/attention-counts": {
@@ -1062,8 +1116,8 @@
           "rows": null
         },
         "script": {
-          "requests": { "reference": 38, "tolerance": 1 },
-          "encodedBytes": { "reference": 597427, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "requests": { "reference": 37, "tolerance": 1 },
+          "encodedBytes": { "reference": 575135, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         },
@@ -1244,6 +1298,32 @@
           },
           "runKeys": ["2026-11-06T163031434Z-c3366b"],
           "reason": "werk-flow/werkflow-app#173 cut the Zod namespace: lib/zod.ts re-exported all of z, and lib/zod-members.ts now names the members the product uses, so the 63 locales and the JSON Schema conversion leave the shell chunk. -56,174 bytes on this Mac, 653,601 on 23b0de15 to 597,427, with 38 script requests unchanged. The reference is a Mac value: CI's full run on main at d6d52102 (run 42237378515) read 655,478, about 0.3 % above this Mac, inside the 1 % tolerance. Lead's decision of 2026-11-06 (werk-flow/werkflow-planning#212)."
+        },
+        {
+          "kind": "ratchet",
+          "target": "componentRenders",
+          "from": { "reference": 10433, "tolerance": 201 },
+          "to": { "reference": 7596, "tolerance": 201 },
+          "runKeys": ["2026-11-08T112625699Z-098a70"],
+          "reason": null
+        },
+        {
+          "kind": "floor-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 38, "tolerance": 1 },
+            "encodedBytes": { "reference": 597427, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 37, "tolerance": 1 },
+            "encodedBytes": { "reference": 575135, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-08T112625699Z-098a70"],
+          "reason": "Manager-only create and edit dialogs load on intent (lazyDialog) instead of in the cold start, and the app shell no longer imports the Auftraege table through its skeleton: 600,972 on 86b61f9b to 575,135 on this PC, with requests 54 to 53. The create dialog downloads on the hover, focus or press of „Neu“, the edit dialogs when a row menu opens."
         }
       ]
     },
@@ -1466,7 +1546,7 @@
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 0, "tolerance": 0 },
-        "componentRenders": { "reference": 827, "tolerance": 15 }
+        "componentRenders": { "reference": 803, "tolerance": 15 }
       },
       "payloads": {},
       "source": {
@@ -1540,6 +1620,14 @@
           "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
           "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
           "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
+        },
+        {
+          "kind": "ratchet",
+          "target": "componentRenders",
+          "from": { "reference": 827, "tolerance": 15 },
+          "to": { "reference": 803, "tolerance": 15 },
+          "runKeys": ["2026-11-08T112625699Z-098a70"],
+          "reason": null
         }
       ]
     },
@@ -1668,7 +1756,7 @@
         "actionRoundTrips": { "reference": 1, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 44, "tolerance": 1 },
-        "componentRenders": { "reference": 5274, "tolerance": 101 }
+        "componentRenders": { "reference": 4360, "tolerance": 101 }
       },
       "payloads": {
         "action:/auftraege": {
@@ -1780,6 +1868,14 @@
           "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
           "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
           "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
+        },
+        {
+          "kind": "ratchet",
+          "target": "componentRenders",
+          "from": { "reference": 5274, "tolerance": 101 },
+          "to": { "reference": 4360, "tolerance": 101 },
+          "runKeys": ["2026-11-08T112625699Z-098a70"],
+          "reason": null
         }
       ]
     },
@@ -2241,7 +2337,7 @@
         },
         "script": {
           "requests": { "reference": 4, "tolerance": 0 },
-          "encodedBytes": { "reference": 33652, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 35153, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         }
@@ -2417,6 +2513,24 @@
           },
           "runKeys": ["2026-11-07T212454898Z-a83f9b"],
           "reason": "werk-flow/werkflow-app#232: #225 put the manual entry bridge and its Zod schemas into the startup chunk of every page through the menu sign-out (cold start 54 to 55 requests). Its fix keeps only an import-free clear in the sign-out, so the bridge returns to the /zeiterfassung chunks the task list prefetches (32720 to 33652 bytes) while every cold start loads 602426 to 599628 script bytes and 39 to 38 scripts."
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 4, "tolerance": 0 },
+            "encodedBytes": { "reference": 33652, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 4, "tolerance": 0 },
+            "encodedBytes": { "reference": 35153, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-08T112625699Z-098a70"],
+          "reason": "Owner decision of 2026-11-08 via the CI lead (werk-flow/werkflow-planning#222): accept. TimeInput (components/ui/time-input) left every page's shared chunk, where the Auftraege edit form held it through the app shell's table skeleton, and now arrives with the /zeiterfassung chunks that Aufgaben prefetches: 33,645 to 35,153, script requests unchanged at 4. No new code; every cold start drops the module instead."
         }
       ]
     },
