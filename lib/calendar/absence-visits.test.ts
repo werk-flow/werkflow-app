@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { resolve } from 'node:path';
-import { absenceVisitWindow, OPEN_ABSENCE_LOOKAHEAD_DAYS } from './absence-visits-types';
+import { absenceVisitWindow } from './absence-visits-types';
 
 test('a sickness recorded over a dispatched visit lists that visit with its dispatch state, for the office only', async () => {
   const child = Bun.spawn(
@@ -20,7 +20,6 @@ test('the affected list covers the absence, or two weeks from its start or today
     from: '2026-10-30',
     to: '2026-11-03',
   });
-  expect(OPEN_ABSENCE_LOOKAHEAD_DAYS).toBe(14);
   // Recorded afterwards: the open end still looks two weeks past today.
   expect(absenceVisitWindow({ startDate: '2026-10-30', endDate: null }, '2026-11-08')).toEqual({
     from: '2026-10-30',

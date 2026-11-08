@@ -36,7 +36,7 @@ export type AbsenceAffectedVisits = {
 };
 
 /** How far the list looks ahead for an open-ended absence: two working weeks. */
-export const OPEN_ABSENCE_LOOKAHEAD_DAYS = 14;
+const OPEN_ABSENCE_LOOKAHEAD_DAYS = 14;
 
 /**
  * The Berlin dates the list covers: the absence itself, or for an open-ended

@@ -1,6 +1,5 @@
 import { expect, test } from 'bun:test';
 import {
-  ABSENCES_NOT_LOADED_HINT,
   absencesNotLoadedHint,
   absentAssignees,
   indexBoardAbsences,
@@ -64,7 +63,9 @@ test('a picker marks each person away on the chosen date and keeps the option’
 
 test('a picker date outside the window says that its absences are not loaded', () => {
   expect(absencesNotLoadedHint(absences, '2026-10-30')).toBeUndefined();
-  expect(absencesNotLoadedHint(absences, '2026-11-09')).toBe(ABSENCES_NOT_LOADED_HINT);
+  expect(absencesNotLoadedHint(absences, '2026-11-09')).toBe(
+    'Für diesen Tag sind keine Abwesenheiten geladen. Beim Speichern prüft WerkFlow sie trotzdem.',
+  );
   // No date chosen yet, or no window at all: nothing to say.
   expect(absencesNotLoadedHint(absences, '')).toBeUndefined();
   expect(absencesNotLoadedHint(indexBoardAbsences([], []), '2026-11-09')).toBeUndefined();

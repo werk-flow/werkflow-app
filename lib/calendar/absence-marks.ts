@@ -32,7 +32,7 @@ export const NO_BOARD_ABSENCES: BoardAbsences = {
 };
 
 /** The hint under a picker whose date lies outside the window. */
-export const ABSENCES_NOT_LOADED_HINT =
+const ABSENCES_NOT_LOADED_HINT =
   'Für diesen Tag sind keine Abwesenheiten geladen. Beim Speichern prüft WerkFlow sie trotzdem.';
 
 export function indexBoardAbsences(
