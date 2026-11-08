@@ -38,9 +38,11 @@ Startbereit
 Ausführung starten
 Einsatzbereitschaft
 Kapazität & Verfügbarkeit
-Erfüllt
+Nicht bewertet
+Prüft das Büro bei der Einplanung.
 Qualifikationen
-Erfüllt
+Nicht bewertet
+Prüft das Büro bei der Einplanung.
 Einsatzort
 Erfüllt
 Einfamilienhaus

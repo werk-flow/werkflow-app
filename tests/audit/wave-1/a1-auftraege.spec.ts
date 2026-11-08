@@ -4,9 +4,16 @@ import { expect, test } from '../support/fixtures';
 import { UNIFIED_STATUS_LABELS } from '../../../lib/jobs/unified-list';
 import { WORK_EXECUTION_LABELS } from '../../../lib/work-lifecycle/types';
 import { createCustomer } from '../../golden/support/steps/customers';
+import { getPlanningState } from '../../golden/support/db/calendar';
+import { getJobAssignmentUserIds, seedJob, seedJobAssignment } from '../../golden/support/db/work';
+import { confirmPlanningWarning, planningWarningRevert } from '../../golden/support/steps/calendar';
 import {
   detailActionsButton,
+  employeeAssignmentHeading,
   employeeAssignmentPicker,
+  employeeAssignmentSearch,
+  openEmployeeAssignmentDialog,
+  planningWarningDialog,
   SHARED_COPY,
   testData,
   textInDom,
@@ -32,7 +39,12 @@ import {
   jobInstructionToggle,
   jobTypeFilter,
   lifecycleBadge,
+  lifecyclePlanningNextStep,
+  lifecycleReadiness,
   parkWork,
+  readinessDetailFor,
+  readinessMissingPlan,
+  readinessStateBadges,
   saveWorkColumnSettings,
   setInstructionCompletionOnJobPage,
   setPlannedDateOnJobPage,
@@ -53,6 +65,7 @@ import {
 import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
 import { setJobStatus } from '../support/a1-steps';
 import { observeRouteRenders } from '../../golden/support/route-renders';
+import { captureResponsiveSection } from '../support/visual-evidence';
 
 function dateDigits(date: string): string {
   return date.split('-').reverse().join('');
@@ -367,5 +380,88 @@ test.describe('A1 Aufträge, Lebenszyklus und Auftragsliste @AUDIT-W1-A1', () =>
     await adminPage.goto('/einstellungen/auftraege-projekte');
     await workColumnSetting(adminPage, 'customer').click();
     await saveWorkColumnSettings(adminPage);
+  });
+  test('A1-21: Einsatzbereitschaft nennt, was fehlt, und Zuweisen prüft die Planung wie der Kalender [werk-flow/werkflow-planning#50/#69]', async ({
+    adminPage,
+    world,
+  }, testInfo) => {
+    const employee = world.users.employee;
+    const employeeName = `${employee.firstName} ${employee.lastName}`;
+    const actorId = world.users.admin.id;
+    const visitDate = ownedBerlinDateAtOffset('a1-auftraege', 150);
+    const reason = `A1 Doppeleinsatz abgestimmt ${world.runId}`;
+    // The employee already works this day on another job, so a second visit conflicts.
+    const busyJobId = await seedJob({
+      orgId: world.orgId,
+      actorId,
+      jobNumber: `A1-BUSY-${world.runId}`,
+      title: testData`A1 Belegter Tag ${world.runId}`,
+      plannedDate: visitDate,
+    });
+    await seedJobAssignment({ orgId: world.orgId, actorId, jobId: busyJobId, userId: employee.id });
+    const jobNumber = `A1-KAPA-${world.runId}`;
+    await seedJob({
+      orgId: world.orgId,
+      actorId,
+      jobNumber,
+      title: testData`A1 Zweiter Einsatz ${world.runId}`,
+      plannedDate: visitDate,
+    });
+    const undatedJobNumber = `A1-OHNE-${world.runId}`;
+    await seedJob({
+      orgId: world.orgId,
+      actorId,
+      jobNumber: undatedJobNumber,
+      title: testData`A1 Ohne Termin ${world.runId}`,
+    });
+
+    await test.step('Ohne Termin oder ohne Personen ist Kapazität nicht bewertet und der nächste Schritt plant', async () => {
+      await adminPage.goto(`/auftraege/${undatedJobNumber}`);
+      await expect(readinessMissingPlan(adminPage, 'no_visit')).toHaveCount(2);
+      await expect(lifecyclePlanningNextStep(adminPage, 'no_visit')).toBeVisible();
+      await adminPage.goto(`/auftraege/${jobNumber}`);
+      await expect(readinessMissingPlan(adminPage, 'no_assignees')).toHaveCount(2);
+      await expect(lifecyclePlanningNextStep(adminPage, 'no_assignees')).toBeVisible();
+      await captureResponsiveSection(
+        adminPage,
+        testInfo,
+        lifecycleReadiness(adminPage),
+        'a1-21-readiness-before',
+      );
+    });
+
+    await test.step('Zuweisen fragt beim Planungskonflikt nach einer Begründung und speichert ohne sie nichts', async () => {
+      const dialog = await openEmployeeAssignmentDialog(adminPage);
+      await employeeAssignmentPicker(dialog).click();
+      await employeeAssignmentSearch(adminPage).fill(employee.firstName);
+      await adminPage.getByRole('listbox').getByRole('option').filter({ hasText: employeeName }).click();
+      await employeeAssignmentHeading(dialog).click();
+      await dialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
+      const warning = planningWarningDialog(adminPage);
+      await expect(warning).toBeVisible();
+      // The conflicts depend on the run's weekday; each one names the person.
+      await expect(warning.getByText(new RegExp(`^${employeeName}: `))).not.toHaveCount(0);
+      await captureResponsiveSection(adminPage, testInfo, warning, 'a1-21-conflict-dialog');
+      await planningWarningRevert(warning).click();
+      await expect(warning).toHaveCount(0);
+      expect(await getJobAssignmentUserIds(world.orgId, jobNumber)).toEqual([]);
+
+      await dialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
+      await confirmPlanningWarning(adminPage, reason);
+      await expect(dialog).toHaveCount(0);
+      expect(await getJobAssignmentUserIds(world.orgId, jobNumber)).toEqual([employee.id]);
+      expect((await getPlanningState(world.orgId, { jobNumber })).overrideReasons).toContain(reason);
+    });
+
+    await test.step('Die Einsatzbereitschaft meldet den Konflikt mit dem Namen der Person', async () => {
+      await expect(readinessDetailFor(adminPage, employeeName)).not.toHaveCount(0);
+      await expect(readinessStateBadges(lifecycleReadiness(adminPage), 'warning')).not.toHaveCount(0);
+      await captureResponsiveSection(
+        adminPage,
+        testInfo,
+        lifecycleReadiness(adminPage),
+        'a1-21-readiness-after',
+      );
+    });
   });
 });

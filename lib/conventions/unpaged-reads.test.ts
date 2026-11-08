@@ -96,8 +96,6 @@ const REVIEWED_UNPAGED_READS: Readonly<Record<string, string>> = {
   'app/(app)/anfragen/[requestId]/page.tsx::AnfrageDetailPage::client_request_events':
     'the history of one customer request',
   'lib/attention/actions.ts::deriveOwnNotifications::vacation_requests': `${ONE_EMPLOYEE}, inside the 60-day notification window`,
-  'lib/dispatch/readiness-target.ts::composeReadinessForTarget::planning_occurrence_assignments':
-    ONE_OCCURRENCE,
   'lib/dispatch/server.ts::loadEmployeeDispatchCards::planning_dispatches':
     'the active dispatches of one job',
   'lib/documents/access.ts::getAuthorizedDocument::document_links': 'the links of one document',

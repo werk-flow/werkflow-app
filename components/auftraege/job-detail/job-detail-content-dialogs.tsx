@@ -118,6 +118,7 @@ export function JobDetailContentDialogs({
         onCancel={assignment.cancelQualificationWarning}
         onConfirm={assignment.handleQualificationOverride}
       />
+      {assignment.planningWarningDialog}
       {inlineEditWarningDialog}
     </>
   );

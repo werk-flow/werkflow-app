@@ -16016,6 +16016,31 @@ export type Database = {
         };
         Returns: undefined;
       };
+      replace_job_assignments_with_visit_assessment: {
+        Args: {
+          p_actor_id: string;
+          p_assessed_for_date: string;
+          p_capacity_fingerprint: string;
+          p_capacity_snapshot: Json;
+          p_coverage_fingerprint: string;
+          p_coverage_snapshot: Json;
+          p_expected_user_ids: string[];
+          p_job_id: string;
+          p_organization_id: string;
+          p_override_reason: string;
+          p_planning_override_reason: string;
+          p_qualification_fingerprint: string;
+          p_qualification_snapshot: Json;
+          p_record_assessment: boolean;
+          p_requirements_snapshot: Json;
+          p_selected_employee_record_ids: string[];
+          p_selected_user_ids: string[];
+          p_team_source_id: string;
+          p_visit_id: string;
+          p_visit_version: number;
+        };
+        Returns: undefined;
+      };
       replace_job_capability_requirements: {
         Args: {
           p_actor_id: string;
