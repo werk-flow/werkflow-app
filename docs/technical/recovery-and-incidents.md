@@ -83,7 +83,7 @@ A label or code that holds an email address, a link, six digits in a row, or twe
 Check the path without an outage:
 
 1. `bun test lib/logging.test.ts lib/testing/ci-alert.test.ts` proves the tags, the withheld values, the silent fallback, and that one issue opens, updates and closes.
-2. Open `https://werkflow-app-git-main-werkflows-projects.vercel.app/auth/callback?code=check` once. The made-up code fails its exchange, and `logError` handles the failure. Under Observability, Custom Metrics, the staging deployment then shows `werkflow.failure` with a label that starts with `auth.callback_code_exchange`.
+2. Open `/auth/callback?code=check` once on [the staging URL](environments.md#vercel). The made-up code fails its exchange, and `logError` handles the failure. Under Observability, Custom Metrics, the staging deployment then shows `werkflow.failure` with a label that starts with `auth.callback_code_exchange`.
 3. In werkflow-planning, the watcher's own tests prove the rule's thresholds.
 
 `.github/workflows/date-lookahead.yml` runs the suite nightly on dates still to come, so a test that fails on a date alone surfaces weeks before that date. It reports the same way, on `CI alert: date look-ahead`, and a failed job's name is its date. Each job steps its runner's kernel clock (`.github/scripts/shift-clock.sh`). Containers share that clock, so Bun, Chromium, the app, Postgres and the Supabase services all show the date, and SQL tests read it too. A job fails if the shell, Bun or Postgres shows another date, or if the clock leaves the shift.
