@@ -1,4 +1,4 @@
-import { AuftraegeTableSkeleton } from '@/components/auftraege/list/unified-auftraege-table';
+import { AuftraegeTableSkeleton } from '@/components/auftraege/list/unified-auftraege-table-skeleton';
 import { DetailColumns } from '@/components/shared/detail-columns';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';

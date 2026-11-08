@@ -77,6 +77,9 @@ const UNSCOPED_FUNCTIONS: Readonly<Record<string, string>> = {
     "The action resolves the caller in the request's organization first; the function accepts only the request author as p_actor_id.",
   end_responsibility_delegation:
     "The action reads the delegation inside the caller's organization first; the function checks the actor in the delegation's organization.",
+  claim_storage_purge:
+    'The scheduled purge has no caller and spans every organization; each claimed entry names its organization, whose prefix alone its object is deleted in.',
+  complete_storage_purge: 'Removes, by id, only the entries the scheduled purge just claimed and deleted.',
 };
 
 const ORGANIZATION_ARGUMENT_NAMES = ['p_organization_id', 'p_org_id', 'organization_id', 'org_id'];

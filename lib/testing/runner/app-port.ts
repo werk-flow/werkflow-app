@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { lstatSync, realpathSync } from 'node:fs';
-import { createConnection } from 'node:net';
+import { createServer } from 'node:net';
+import { networkInterfaces } from 'node:os';
 import { join } from 'node:path';
 
 /** The main checkout serves the recorded build and `next dev` on Next's default port. */
@@ -37,26 +38,36 @@ function refusal(port: number): string {
   ].join(' ');
 }
 
-const NOTHING_LISTENS = new Set(['ECONNREFUSED', 'EAFNOSUPPORT', 'EADDRNOTAVAIL', 'ENETUNREACH']);
+/**
+ * Every address a server on the port can listen on: each loopback, which
+ * `localhost` resolves to, and each wildcard, which `next start` binds. Linux
+ * refuses any overlapping bind; macOS refuses only the same address, so the
+ * host's own addresses are probed one by one as well.
+ */
+const LISTEN_ADDRESSES = ['127.0.0.1', '::1', '0.0.0.0', '::'];
 
+/** The host's own addresses besides loopback, where a server can also listen alone. */
+function hostAddresses(): string[] {
+  return Object.values(networkInterfaces())
+    .flat()
+    .flatMap((entry) =>
+      entry && !entry.internal && !entry.address.startsWith('fe80:') ? [entry.address] : [],
+    );
+}
+/** This host lacks the address family, so nothing can listen there. */
+const ABSENT_FAMILY = new Set(['EAFNOSUPPORT', 'EADDRNOTAVAIL']);
+
+// The kernel answers a bind at once, so the answer needs no clock. A timed
+// connect read a closed port as busy when a memory stall outlasted its timeout.
 function probe(host: string, port: number): Promise<void> {
   return new Promise<void>((resolveProbe, reject) => {
-    const socket = createConnection({ host, port });
-    socket.setTimeout(2_000);
-    socket.once('connect', () => {
-      socket.destroy();
-      reject(new Error(refusal(port)));
-    });
-    socket.once('error', (error: NodeJS.ErrnoException) => {
-      socket.destroy();
-      // Refused, or a loopback family this host does not provide: nothing listens there.
-      if (NOTHING_LISTENS.has(error.code ?? '')) resolveProbe();
+    const server = createServer();
+    server.once('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EADDRINUSE') reject(new Error(refusal(port)));
+      else if (ABSENT_FAMILY.has(error.code ?? '')) resolveProbe();
       else reject(new Error(`Cannot verify that port ${port} is free: ${error.code}`));
     });
-    socket.once('timeout', () => {
-      socket.destroy();
-      reject(new Error(`Port ${port} ownership check timed out. Inspect the server before building.`));
-    });
+    server.listen({ host, port }, () => server.close(() => resolveProbe()));
   });
 }
 
@@ -66,5 +77,5 @@ function probe(host: string, port: number): Promise<void> {
  * production build therefore refuses while anything listens on the app port.
  */
 export async function assertAppPortFree(port: number): Promise<void> {
-  for (const host of ['127.0.0.1', '::1']) await probe(host, port);
+  for (const host of [...LISTEN_ADDRESSES, ...hostAddresses()]) await probe(host, port);
 }

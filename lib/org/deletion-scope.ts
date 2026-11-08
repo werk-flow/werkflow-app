@@ -9,7 +9,7 @@ import type { ActionFailure } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { z } from '@/lib/zod';
-import type { OrganizationDeletionScope } from './types';
+import type { OrganizationDeletionScope, OrganizationRetentionRefusal } from './types';
 
 const count = z.number().int().nonnegative();
 const scopeSchema = z.object({
@@ -38,6 +38,10 @@ export async function readOrganizationDeletionScope(
     return { success: false, error: 'load_failed' };
   }
   const scope = parsed.data;
+  // The deletion action refuses on these before any stored file is queued.
+  const retentionRefusals: OrganizationRetentionRefusal[] = [];
+  if (scope.time_tracked_people > 0 || scope.closed_periods > 0) retentionRefusals.push('has_time_records');
+  if (scope.retained_documents > 0) retentionRefusals.push('has_retained_documents');
   return {
     success: true,
     scope: {
@@ -52,10 +56,7 @@ export async function readOrganizationDeletionScope(
       timeTrackedPeople: scope.time_tracked_people,
       closedPeriods: scope.closed_periods,
       payrollExports: scope.payroll_exports,
-      // The deletion action refuses on this flag before any stored file goes,
-      // so a document inside its retention period holds the organization too.
-      retainsTimeRecords:
-        scope.time_tracked_people > 0 || scope.closed_periods > 0 || scope.retained_documents > 0,
+      retentionRefusals,
     },
   };
 }

@@ -12,7 +12,7 @@ import {
   JOB_MATERIAL_STATUS_LABELS,
 } from '@/lib/inventory/types';
 import { cn } from '@/lib/utils';
-import { MovementPill } from './material-movement-pill';
+import { MaterialQuantityPills } from './material-movement-pill';
 
 function statusClasses(status: JobMaterialLine['status']): string {
   switch (status) {
@@ -113,29 +113,19 @@ function MaterialLineSummary({
           </Badge>
         )}
       </div>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {line.plannedQuantity > 0 && (
-          <MovementPill tone="planned">
-            Bedarf {formatInventoryQuantity(line.plannedQuantity, line.unit)}
-          </MovementPill>
-        )}
-        {line.takenQuantity > 0 && (
-          <MovementPill tone="take">-{formatInventoryQuantity(line.takenQuantity, line.unit)}</MovementPill>
-        )}
-        {line.returnedQuantity > 0 && (
-          <MovementPill tone="return">
-            +{formatInventoryQuantity(line.returnedQuantity, line.unit)}
-          </MovementPill>
-        )}
-        {showBillableData && line.billableQuantity > 0 && (
-          <MovementPill tone="planned">
-            Abrechenbar {formatInventoryQuantity(line.billableQuantity, line.unit)}
-          </MovementPill>
-        )}
-      </div>
+      <MaterialQuantityPills
+        unit={line.unit}
+        plannedQuantity={line.plannedQuantity}
+        takenQuantity={line.takenQuantity}
+        returnedQuantity={line.returnedQuantity}
+        billableQuantity={showBillableData ? line.billableQuantity : null}
+      />
       <div className="mt-2 grid gap-1 text-xs text-muted-foreground @md:grid-cols-2">
         <span>Lager: {line.preferredLocationName ?? 'Nicht festgelegt'}</span>
-        <span>Noch draußen: {formatInventoryQuantity(stillOut, line.unit)}</span>
+        {/* Without a return, everything taken is still at the job; the taken pill says so. */}
+        {line.returnedQuantity > 0 && (
+          <span>Beim Auftrag: {formatInventoryQuantity(stillOut, line.unit)}</span>
+        )}
       </div>
       {line.notes && <p className="mt-2 text-xs text-muted-foreground">{line.notes}</p>}
     </div>

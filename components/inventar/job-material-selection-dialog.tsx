@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { Plus } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -17,9 +18,11 @@ import { ErrorText } from '@/components/ui/error-text';
 import { Label } from '@/components/ui/label';
 import type { InventoryLocation, InventoryPickerOption } from '@/lib/inventory/types';
 import { INVENTORY_PICKER_PAGE_SIZE } from '@/lib/inventory/types';
+import { cn } from '@/lib/utils';
 import {
   addItemToDialogRows,
   getMaterialDialogCopy,
+  materialDialogCatalog,
   matchesItemSearch,
   type MaterialDialogMode,
   type MaterialDialogRow,
@@ -34,6 +37,8 @@ type MaterialSelectionDialogProps = {
   items: InventoryPickerOption[];
   locations: InventoryLocation[];
   isSaving: boolean;
+  /** The office sees supplier details; a field worker never does. */
+  isAdminOrManager: boolean;
   isSearching: boolean;
   searchFailed: boolean;
   onRetrySearch: () => void;
@@ -78,14 +83,6 @@ function materialDialogEditor(
   return { patchDialog, addItem, updateRow, removeRow };
 }
 
-/** A return keeps its item, and so does an edit once the position has bookings. */
-function canChangeDialogItem({ mode, rows }: MaterialDialogState): boolean {
-  return (
-    mode !== 'return' &&
-    (mode !== 'edit' || rows.every((row) => row.takenQuantity === 0 && row.returnedQuantity === 0))
-  );
-}
-
 function LockedItemNotice() {
   return (
     <div className="rounded-md border border-dashed bg-muted/20 px-4 py-6 text-sm text-muted-foreground">
@@ -95,38 +92,100 @@ function LockedItemNotice() {
   );
 }
 
+type MaterialDialogEditor = ReturnType<typeof materialDialogEditor>;
+
+/** The catalog column: the search over the loaded page and the items it matches. */
+function MaterialCatalogColumn({
+  dialog,
+  items,
+  showSupplier,
+  isSearching,
+  searchFailed,
+  onRetrySearch,
+  editor,
+}: Pick<MaterialSelectionDialogProps, 'items' | 'isSearching' | 'searchFailed' | 'onRetrySearch'> & {
+  dialog: MaterialDialogState;
+  showSupplier: boolean;
+  editor: MaterialDialogEditor;
+}) {
+  const matchingItems = useMemo(
+    () => items.filter((item) => matchesItemSearch(item, dialog.search)),
+    [dialog.search, items],
+  );
+  return (
+    <MaterialItemPicker
+      mode={dialog.mode}
+      showSupplier={showSupplier}
+      search={dialog.search}
+      onSearchChange={(search) => editor.patchDialog({ search })}
+      filteredItems={matchingItems.slice(0, INVENTORY_PICKER_PAGE_SIZE)}
+      // A full page means the catalog may hold more than the list shows.
+      hasMoreItems={matchingItems.length >= INVENTORY_PICKER_PAGE_SIZE}
+      isSearching={isSearching}
+      searchFailed={searchFailed}
+      onRetrySearch={onRetrySearch}
+      onAdd={editor.addItem}
+    />
+  );
+}
+
+/** Cancel, and the submit named by what it books. */
+function MaterialDialogFooter({
+  mode,
+  isSaving,
+  onCancel,
+}: {
+  mode: MaterialDialogMode;
+  isSaving: boolean;
+  onCancel: () => void;
+}) {
+  return (
+    <DialogFooter>
+      <Button type="button" variant="outline" onClick={onCancel} disabled={isSaving}>
+        Abbrechen
+      </Button>
+      <Button pending={isSaving} type="submit" disabled={isSaving}>
+        {mode === 'take' ? 'Entnahme buchen' : mode === 'return' ? 'Zurücklegen' : 'Speichern'}
+      </Button>
+    </DialogFooter>
+  );
+}
+
+/** Opens the catalog in a take that started on one line. */
+function FurtherMaterialButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button type="button" variant="outline" className="justify-self-start" onClick={onClick}>
+      <Plus className="size-4" />
+      Weiteres Material
+    </Button>
+  );
+}
+
 export function MaterialSelectionDialog({
   dialog,
   setDialog,
   items,
   locations,
   isSaving,
+  isAdminOrManager,
   isSearching,
   searchFailed,
   onRetrySearch,
   onSave,
 }: MaterialSelectionDialogProps) {
-  const mode = dialog?.mode ?? 'plan';
-  const matchingItems = useMemo(
-    () => items.filter((item) => matchesItemSearch(item, dialog?.search ?? '')),
-    [dialog?.search, items],
-  );
-  const filteredItems = matchingItems.slice(0, INVENTORY_PICKER_PAGE_SIZE);
-  // A full page means the catalog may hold more than the list shows.
-  const hasMoreItems = matchingItems.length >= INVENTORY_PICKER_PAGE_SIZE;
-
   if (!dialog) return null;
 
   const currentDialog = dialog;
+  const mode = currentDialog.mode;
   const canAddMultiple = mode === 'plan' || mode === 'take';
-  const canChangeItem = canChangeDialogItem(currentDialog);
+  const catalog = materialDialogCatalog(currentDialog);
   const editor = materialDialogEditor(currentDialog, setDialog, { locations, mode, canAddMultiple });
 
   const { title, description } = getMaterialDialogCopy(mode);
 
   return (
     <Dialog open onOpenChange={(open) => !open && setDialog(null)} pending={isSaving}>
-      <DialogContent size="4xl">
+      <DialogContent size={catalog === 'collapsed' ? 'lg' : '4xl'}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
@@ -140,22 +199,24 @@ export function MaterialSelectionDialog({
           noValidate
           className="flex min-h-0 flex-1 flex-col"
         >
-          <DialogBody className="grid grid-cols-1 gap-5 py-1 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]">
-            {canChangeItem ? (
-              <MaterialItemPicker
-                mode={mode}
-                search={currentDialog.search}
-                onSearchChange={(search) => editor.patchDialog({ search })}
-                filteredItems={filteredItems}
-                hasMoreItems={hasMoreItems}
+          <DialogBody
+            className={cn(
+              'grid grid-cols-1 gap-5 py-1',
+              catalog !== 'collapsed' && 'lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]',
+            )}
+          >
+            {catalog === 'catalog' && (
+              <MaterialCatalogColumn
+                dialog={currentDialog}
+                items={items}
+                showSupplier={isAdminOrManager}
                 isSearching={isSearching}
                 searchFailed={searchFailed}
                 onRetrySearch={onRetrySearch}
-                onAdd={editor.addItem}
+                editor={editor}
               />
-            ) : (
-              <LockedItemNotice />
             )}
+            {catalog === 'locked' && <LockedItemNotice />}
 
             <SelectedMaterialPositions
               rows={currentDialog.rows}
@@ -167,17 +228,16 @@ export function MaterialSelectionDialog({
               onRemoveRow={editor.removeRow}
             />
 
-            <ErrorText className="lg:col-span-2">{currentDialog.error}</ErrorText>
+            {catalog === 'collapsed' && (
+              <FurtherMaterialButton onClick={() => editor.patchDialog({ catalogOpen: true })} />
+            )}
+
+            <ErrorText className={cn(catalog !== 'collapsed' && 'lg:col-span-2')}>
+              {currentDialog.error}
+            </ErrorText>
           </DialogBody>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setDialog(null)} disabled={isSaving}>
-              Abbrechen
-            </Button>
-            <Button pending={isSaving} type="submit" disabled={isSaving}>
-              {mode === 'take' ? 'Entnahme buchen' : mode === 'return' ? 'Zurücklegen' : 'Speichern'}
-            </Button>
-          </DialogFooter>
+          <MaterialDialogFooter mode={mode} isSaving={isSaving} onCancel={() => setDialog(null)} />
         </form>
       </DialogContent>
     </Dialog>
