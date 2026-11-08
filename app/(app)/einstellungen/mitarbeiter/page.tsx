@@ -15,7 +15,7 @@ export default async function EmployeesSettingsPage(): Promise<ReactElement> {
   // own responsibilities, so their page never asks for a read it is refused.
   const managesPeople = isManagerRole(membership.role);
   const [result, templatesResult] = await Promise.all([
-    getResponsibilitySettingsData({ withSubstituteAbsences: true }),
+    getResponsibilitySettingsData(),
     managesPeople ? getPersonnelOnboardingTemplates() : null,
   ]);
   if (!result.success) {

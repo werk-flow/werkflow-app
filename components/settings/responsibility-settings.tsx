@@ -47,8 +47,6 @@ export function ResponsibilitySettings({ data }: { data: ResponsibilitySettingsD
       'organization_responsibility_delegations',
       'organization_members',
       'employee_records',
-      // The owner's substitute picker shows absences.
-      ...(data.substituteAbsences ? (['vacation_requests', 'sickness_reports'] as const) : []),
     ],
   });
 

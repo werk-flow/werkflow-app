@@ -199,6 +199,9 @@ mock.module('@/lib/documents/actions', () => ({
   getDocumentViewSignedUrl: seam('document-view-url'),
   getDocumentLinkEmployees: seam('document-link-employees'),
 }));
+mock.module('@/lib/responsibilities/substitute-absence-read', () => ({
+  getSubstituteAbsences: seam('responsibility-substitute-absences'),
+}));
 mock.module('@/lib/work-artifacts/actions', () => ({
   getWorkArtifacts: seam('work-artifacts'),
   getWorkArtifactDetail: seam('work-artifact-detail'),
@@ -438,6 +441,7 @@ const inputs: Record<string, unknown> = {
   'next-personnel-number': { organizationId },
   'document-view-url': { organizationId, documentId: jobId },
   'document-link-employees': { organizationId },
+  'responsibility-substitute-absences': { organizationId },
   'vacation-days-preview': {
     organizationId,
     startDate: '2026-10-19',
@@ -496,6 +500,7 @@ const readerArguments: Record<string, unknown> = {
   'next-personnel-number': undefined,
   'document-view-url': jobId,
   'document-link-employees': undefined,
+  'responsibility-substitute-absences': undefined,
   'assignment-availability': { localDate: '2026-11-04' },
   // The readers never receive the organization: they take it from the session.
   'vacation-days-preview': { startDate: '2026-10-19', endDate: '2026-10-23', dayPortion: 'full' },
@@ -544,6 +549,7 @@ for (const kind of [
   'next-personnel-number',
   'document-view-url',
   'document-link-employees',
+  'responsibility-substitute-absences',
   'vacation-days-preview',
   'work-predecessor-search',
 ]) {

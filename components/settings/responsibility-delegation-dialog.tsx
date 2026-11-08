@@ -1,11 +1,13 @@
 'use client';
 
+import { useMemo } from 'react';
 import { CalendarClock, TriangleAlert } from 'lucide-react';
 
 import { personName } from '@/components/settings/responsibility-display';
 import { delegationPeriodText } from '@/lib/responsibilities/delegation-window';
 import { substituteOptionDescription } from '@/lib/responsibilities/substitute-absence';
 import { useResponsibilityDelegationForm } from '@/components/settings/use-responsibility-delegation-form';
+import { useSubstituteAbsences } from '@/components/settings/use-substitute-absences';
 import { Button } from '@/components/ui/button';
 import { DatePicker } from '@/components/ui/date-picker';
 import {
@@ -44,7 +46,9 @@ export function DelegationDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const form = useResponsibilityDelegationForm({ data, responsibility, onOpenChange });
+  const substituteAbsences = useSubstituteAbsences(open);
+  const withAbsences = useMemo(() => ({ ...data, substituteAbsences }), [data, substituteAbsences]);
+  const form = useResponsibilityDelegationForm({ data: withAbsences, responsibility, onOpenChange });
   const {
     validFrom,
     validUntil,
@@ -70,7 +74,7 @@ export function DelegationDialog({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSave} noValidate className="grid gap-4 sm:grid-cols-2">
-          <DelegationPeopleFields data={data} responsibility={responsibility} form={form} />
+          <DelegationPeopleFields data={withAbsences} responsibility={responsibility} form={form} />
           <DelegationPeriodFields responsibility={responsibility} form={form} />
           <Field
             label="Hinweis (optional)"

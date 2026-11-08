@@ -173,3 +173,25 @@ await assertRefused(
   { success: false, error: 'responsibility_delegation_not_found' },
   'reads',
 );
+
+// The substitute picker's absences load when the dialog opens: the owner reads
+// the active organization's full-day absences only; anyone else is refused.
+const { getSubstituteAbsences } = await import('@/lib/responsibilities/substitute-absence-read');
+setAbsences('vacation_requests', [
+  { ...absence(ORGANIZATION_A, day(2), day(4)), status: 'approved' },
+  { ...absence(ORGANIZATION_B, day(2), day(4)), status: 'approved' },
+]);
+assert.deepEqual(
+  await getSubstituteAbsences(),
+  { success: true, absences: [{ employeeRecordId: substituteId, startDate: day(2), endDate: day(4) }] },
+  "the owner reads only the active organization's absences",
+);
+const owner = world.tables.organizations?.find((organization) => organization.id === ORGANIZATION_A);
+assert.ok(owner, 'the fixture holds organization A');
+owner.admin_id = delegatorId;
+assert.deepEqual(
+  await getSubstituteAbsences(),
+  { success: false, error: 'not_authorized' },
+  'a member who is not the owner reads no absences',
+);
+owner.admin_id = CALLER_ID;
