@@ -12,7 +12,8 @@
 -- visit, a calendar move followed by park and unpark planned the visit for
 -- fewer people than selected, and a projection muted a later job edit in the
 -- same transaction (migrations 20261005110000, 20261006100000 and
--- 20261006100100).
+-- 20261006100100). A job-page team change records the assessment of the
+-- visit it reaches (20261108120000).
 begin;
 
 insert into auth.users (
@@ -114,6 +115,19 @@ create function pg_temp.version_of(p_occurrence_id uuid) returns integer languag
 $$;
 create function pg_temp.users(variadic p_ids text[]) returns uuid[] language sql as $$
   select coalesce(array_agg(value::uuid order by value::uuid), '{}') from unnest(p_ids) value;
+$$;
+
+-- The rows a team change with a visit assessment can write: the operation
+-- and occurrence assessments of the plan and the job's qualification
+-- assessments. A refused change writes none of them.
+create function pg_temp.assessment_counts() returns bigint[]
+language sql
+as $$
+  select array[
+    (select count(*) from public.planning_operation_assessments),
+    (select count(*) from public.planning_occurrence_assessments),
+    (select count(*) from public.job_qualification_assessments)
+  ];
 $$;
 
 -- The rules that hold after every committed call.
@@ -508,6 +522,172 @@ begin
 end;
 $$;
 
+-- 12. A job-page team change that adds a person records the capacity
+-- assessment of the legacy visit it reaches, with the manager's reason, in
+-- the same call (20261108120000). A stale visit, a foreign organization and a
+-- team that changed since the server read it change nothing.
+do $$
+declare
+  v_job public.jobs;
+  v_visit uuid;
+  v_version integer;
+  v_assessments integer;
+  v_written bigint[];
+begin
+  v_job := public.create_job_with_assignments(
+    'b1d9e000-0000-4000-8000-000000000010', 'b1d9e000-0000-4000-8000-000000000001',
+    jsonb_build_object('title', 'Gastherme', 'job_number', 'BRIDGE-12',
+      'planned_date', pg_temp.day(12), 'planned_time', '08:00', 'estimated_duration_minutes', 60),
+    pg_temp.users('b1d9e000-0000-4000-8000-000000000001'),
+    pg_temp.day(12), '{}', '[]', '{}', 'fingerprint', null, null, false, null, false);
+  v_visit := pg_temp.legacy_visit(v_job.id);
+  v_version := pg_temp.version_of(v_visit);
+  v_written := pg_temp.assessment_counts();
+
+  begin
+    perform public.replace_job_assignments_with_visit_assessment(
+      'b1d9e000-0000-4000-8000-000000000010', v_job.id,
+      pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002'),
+      'b1d9e000-0000-4000-8000-000000000001', pg_temp.day(12), '{}', '[]', '{}', 'fingerprint',
+      null, null, false, pg_temp.users('b1d9e000-0000-4000-8000-000000000001'),
+      v_visit, v_version + 1, '{"conflicts":[]}', 'capacity', '{"evaluations":[]}', 'qualification',
+      'Mit dem Kunden abgestimmt');
+    raise exception 'a stale visit version was accepted';
+  exception when others then
+    if sqlerrm <> 'stale_planning_occurrence' then raise; end if;
+  end;
+  begin
+    perform public.replace_job_assignments_with_visit_assessment(
+      'b1d9e000-0000-4000-8000-000000000011', v_job.id,
+      pg_temp.users('b1d9e000-0000-4000-8000-000000000004'),
+      'b1d9e000-0000-4000-8000-000000000004', pg_temp.day(12), '{}', '[]', '{}', 'fingerprint',
+      null, null, false, pg_temp.users('b1d9e000-0000-4000-8000-000000000001'),
+      v_visit, v_version, '{"conflicts":[]}', 'capacity', '{"evaluations":[]}', 'qualification',
+      'Fremde Organisation');
+    raise exception 'a job of another organization was accepted';
+  exception when others then
+    if sqlerrm <> 'job organization mismatch' then raise; end if;
+  end;
+  -- The visit of another job of the same organization is not this job's visit.
+  if not exists (
+    select 1 from public.planning_occurrences
+    where id = pg_temp.bridge_id('job 2 legacy visit')
+      and organization_id = 'b1d9e000-0000-4000-8000-000000000010'
+  ) then raise exception 'the fixture lost the other job''s visit'; end if;
+  begin
+    perform public.replace_job_assignments_with_visit_assessment(
+      'b1d9e000-0000-4000-8000-000000000010', v_job.id,
+      pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002'),
+      'b1d9e000-0000-4000-8000-000000000001', pg_temp.day(12), '{}', '[]', '{}', 'fingerprint',
+      null, null, false, pg_temp.users('b1d9e000-0000-4000-8000-000000000001'),
+      pg_temp.bridge_id('job 2 legacy visit'), pg_temp.version_of(pg_temp.bridge_id('job 2 legacy visit')),
+      '{"conflicts":[]}', 'capacity', '{"evaluations":[]}', 'qualification', 'Anderer Auftrag');
+    raise exception 'the visit of another job was accepted';
+  exception when others then
+    if sqlerrm <> 'planning_occurrence_not_found' then raise; end if;
+  end;
+  -- A visit assessment without a version never passes the stale check.
+  begin
+    perform public.replace_job_assignments_with_visit_assessment(
+      'b1d9e000-0000-4000-8000-000000000010', v_job.id,
+      pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002'),
+      'b1d9e000-0000-4000-8000-000000000001', pg_temp.day(12), '{}', '[]', '{}', 'fingerprint',
+      null, null, false, pg_temp.users('b1d9e000-0000-4000-8000-000000000001'),
+      v_visit, null, '{"conflicts":[]}', 'capacity', '{"evaluations":[]}', 'qualification',
+      'Ohne Version');
+    raise exception 'a visit assessment without a version was accepted';
+  exception when others then
+    if sqlerrm <> 'stale_planning_occurrence' then raise; end if;
+  end;
+  -- The team changed after the server read it (here: the server read Anna and
+  -- Cem): even a change that the server found to add nobody is refused, so no
+  -- person reaches the visit unassessed.
+  begin
+    perform public.replace_job_assignments_with_visit_assessment(
+      'b1d9e000-0000-4000-8000-000000000010', v_job.id,
+      pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002'),
+      'b1d9e000-0000-4000-8000-000000000001', pg_temp.day(12), '{}', '[]', '{}', 'fingerprint',
+      null, null, false,
+      pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002'),
+      null, null, null, null, null, null, null);
+    raise exception 'a team change assessed against a stale team was accepted';
+  exception when others then
+    if sqlerrm <> 'stale_job_assignments' then raise; end if;
+  end;
+  if pg_temp.team(v_job.id) <> pg_temp.users('b1d9e000-0000-4000-8000-000000000001')
+     or pg_temp.crew(v_visit) <> pg_temp.users('b1d9e000-0000-4000-8000-000000000001')
+     or exists (select 1 from public.planning_occurrence_assessments where occurrence_id = v_visit)
+     or pg_temp.assessment_counts() <> v_written
+  then raise exception 'a refused team change changed the team, the visit or its history'; end if;
+
+  perform public.replace_job_assignments_with_visit_assessment(
+    'b1d9e000-0000-4000-8000-000000000010', v_job.id,
+    pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002'),
+    'b1d9e000-0000-4000-8000-000000000001', pg_temp.day(12), '{}', '[]', '{}', 'fingerprint',
+    null, null, false, pg_temp.users('b1d9e000-0000-4000-8000-000000000001'),
+    v_visit, v_version, '{"conflicts":[]}', 'capacity', '{"evaluations":[]}', 'qualification',
+    '  Mit dem Kunden abgestimmt  ');
+  if pg_temp.team(v_job.id)
+       <> pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002')
+     or pg_temp.crew(v_visit)
+       <> pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002')
+  then raise exception 'a confirmed team change did not reach the team and its legacy visit'; end if;
+  if not exists (
+    select 1
+    from public.planning_occurrence_assessments assessment
+    join public.planning_operation_assessments operation on operation.id = assessment.operation_assessment_id
+    where assessment.occurrence_id = v_visit
+      and assessment.override_reason = 'Mit dem Kunden abgestimmt'
+      and assessment.capacity_fingerprint = 'capacity'
+      and assessment.created_by = 'b1d9e000-0000-4000-8000-000000000001'
+      and assessment.selected_employee_record_ids = array(
+        select unnest(array[
+          pg_temp.record_of('b1d9e000-0000-4000-8000-000000000001'),
+          pg_temp.record_of('b1d9e000-0000-4000-8000-000000000002')
+        ]) order by 1
+      )
+      and operation.capacity_snapshot = '{"conflicts":[]}'
+  ) then raise exception 'a confirmed team change did not record the visit''s assessment with its reason'; end if;
+  perform pg_temp.assert_bridge('a team change with a visit assessment');
+
+  -- A change without a visit assessment is the plain team replacement.
+  select count(*) into v_assessments from public.planning_occurrence_assessments where occurrence_id = v_visit;
+  perform public.replace_job_assignments_with_visit_assessment(
+    'b1d9e000-0000-4000-8000-000000000010', v_job.id,
+    pg_temp.users('b1d9e000-0000-4000-8000-000000000001'),
+    'b1d9e000-0000-4000-8000-000000000001', pg_temp.day(12), '{}', '[]', '{}', 'fingerprint',
+    null, null, false,
+    pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000002'),
+    null, null, null, null, null, null, null);
+  if pg_temp.team(v_job.id) <> pg_temp.users('b1d9e000-0000-4000-8000-000000000001')
+     or (select count(*) from public.planning_occurrence_assessments where occurrence_id = v_visit) <> v_assessments
+  then raise exception 'a team change without a visit assessment recorded one or missed the team'; end if;
+  perform pg_temp.assert_bridge('a team change without a visit assessment');
+
+  -- The server read the job without a visit; the visit was scheduled before
+  -- the write. Adding a person without an assessment is refused.
+  update public.jobs set planned_date = null, planned_time = null where id = v_job.id;
+  update public.jobs set planned_date = pg_temp.day(13), planned_time = '09:00' where id = v_job.id;
+  v_written := pg_temp.assessment_counts();
+  begin
+    perform public.replace_job_assignments_with_visit_assessment(
+      'b1d9e000-0000-4000-8000-000000000010', v_job.id,
+      pg_temp.users('b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000003'),
+      'b1d9e000-0000-4000-8000-000000000001', pg_temp.day(13), '{}', '[]', '{}', 'fingerprint',
+      null, null, false, pg_temp.users('b1d9e000-0000-4000-8000-000000000001'),
+      null, null, null, null, null, null, null);
+    raise exception 'an unassessed addition reached a visit scheduled meanwhile';
+  exception when others then
+    if sqlerrm <> 'stale_planning_occurrence' then raise; end if;
+  end;
+  if pg_temp.team(v_job.id) <> pg_temp.users('b1d9e000-0000-4000-8000-000000000001')
+     or pg_temp.crew(pg_temp.legacy_visit(v_job.id)) <> pg_temp.users('b1d9e000-0000-4000-8000-000000000001')
+     or pg_temp.assessment_counts() <> v_written
+  then raise exception 'a refused unassessed addition changed the team, the visit or its history'; end if;
+  perform pg_temp.assert_bridge('an unassessed addition to a visit scheduled meanwhile');
+end;
+$$;
+
 reset role;
 
 -- One owner sets the marker and every job-to-plan trigger reads it. A second
@@ -549,6 +729,7 @@ begin
     'public.batch_reschedule_planning_occurrences(uuid, uuid, uuid, text, jsonb, jsonb, text, jsonb, text, text)',
     'public.set_planning_occurrence_status(uuid, uuid, uuid, integer, planning_occurrence_status, text)',
     'public.replace_job_assignments_with_assessment(uuid, uuid, uuid[], uuid, date, uuid[], jsonb, jsonb, text, text, uuid, boolean)',
+    'public.replace_job_assignments_with_visit_assessment(uuid, uuid, uuid[], uuid, date, uuid[], jsonb, jsonb, text, text, uuid, boolean, uuid[], uuid, integer, jsonb, text, jsonb, text, text)',
     'public.update_job_with_assignments(uuid, uuid, uuid, jsonb, boolean, uuid[], date, uuid[], jsonb, jsonb, text, text, uuid, boolean)'
   ] loop
     if not has_function_privilege('service_role', v_function, 'execute') then
