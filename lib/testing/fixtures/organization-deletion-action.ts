@@ -110,7 +110,10 @@ world.rpc = ({ name, args }) => {
   }
   if (name === 'queue_storage_purge') {
     steps.push('queue');
-    assert.ok(!organizationRemains(ORGANIZATION_A), 'files were queued apart from the deletion before it ran');
+    assert.ok(
+      !organizationRemains(ORGANIZATION_A),
+      'files were queued apart from the deletion before it ran',
+    );
     assert.equal(args.p_organization_id, ORGANIZATION_A);
     const paths = args.p_paths;
     assert.ok(Array.isArray(paths), 'the late queueing got no path list');
