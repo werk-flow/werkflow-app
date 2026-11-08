@@ -3,6 +3,7 @@
 // route refresh re-reads that state as new props, as a server render would.
 import { useEffect, useState } from 'react';
 import { AnfragenContent } from '@/components/anfragen/anfragen-content';
+import { WorkArtifactsSection } from '@/components/auftraege/artifacts/work-artifacts-section';
 import { JobMaterialsSection } from '@/components/inventar/job-materials-section';
 import { EntryDetailsDialog } from '@/components/kalender/entry-details-dialog';
 import { ClientRelationsSection } from '@/components/kunden/client-relations-section';
@@ -21,6 +22,7 @@ import {
 } from '@/lib/requests/list-page';
 import type { ClientRequest } from '@/lib/requests/types';
 import type { ServiceCaseDetail } from '@/lib/service-cases/types';
+import { NO_RECORDED_VISIT } from '@/lib/work-artifacts/types';
 import type { WorkSession } from '@/lib/time-tracking/types';
 import { clientRelationContractId } from './client-relation-boundaries';
 import { ROUTE_REFRESH_EVENT } from './lifecycle-boundaries';
@@ -37,6 +39,7 @@ const FEEDBACK_FIXTURES = [
   'team-qualifications',
   'service-evidence-link',
   'time-account-opening',
+  'work-artifact-report',
 ] as const;
 export type FeedbackFixtureName = (typeof FEEDBACK_FIXTURES)[number];
 
@@ -270,6 +273,20 @@ function FeedbackSurface({ name }: { name: FeedbackFixtureName }): React.JSX.Ele
       return <ServiceEvidenceHost />;
     case 'time-account-opening':
       return <TimeAccountOpeningHost />;
+    case 'work-artifact-report':
+      // A worker's job work pack with the visit window the page read from today's time records.
+      return (
+        <WorkArtifactsSection
+          targetType="job"
+          targetId="00000000-0000-4000-8000-000000000151"
+          initialArtifacts={[]}
+          isManager={false}
+          canApprove={false}
+          currentUserId="contract-worker"
+          documents={[]}
+          recordedVisit={window.uiContractRecordedVisit ?? NO_RECORDED_VISIT}
+        />
+      );
   }
 }
 

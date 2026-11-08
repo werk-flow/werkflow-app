@@ -1,98 +1,78 @@
 import { z } from '@/lib/zod';
 import { Constants } from '@/lib/supabase/database.types';
 import { uuidSchema } from '@/lib/validation/uuid';
+import { workArtifactFieldIssues } from './field-rules';
 import { WORK_ARTIFACT_KINDS, type WorkArtifactActionType } from './types';
 
 const artifactText = z.string().trim().max(5000).optional();
 const optionalUuid = uuidSchema.optional();
 
-const workArtifactContentSchema = z
-  .object({
-    siteId: optionalUuid,
-    instructionItemId: optionalUuid,
-    summary: artifactText,
-    customerStatement: artifactText,
-    requiresCustomerResponse: z.boolean().optional(),
-    requiresSignature: z.boolean().optional(),
-    workDate: z.string().date().optional(),
-    progress: artifactText,
-    peoplePresent: artifactText,
-    weatherConditions: artifactText,
-    siteConditions: artifactText,
-    deliveries: artifactText,
-    impediments: artifactText,
-    decisions: artifactText,
-    notableEvents: artifactText,
-    visitStartedAt: z.string().datetime({ offset: true }).optional(),
-    visitEndedAt: z.string().datetime({ offset: true }).optional(),
-    performedWork: artifactText,
-    outstandingWork: artifactText,
-    materialsSummary: artifactText,
-    nextVisitAt: z.string().datetime({ offset: true }).optional(),
-    measurementDate: z.string().date().optional(),
-    measurementLocation: z.string().trim().max(500).optional(),
-    measurementNotes: artifactText,
-    measurementLines: z
-      .array(
-        z.object({
-          id: optionalUuid,
-          description: z.string().trim().min(1).max(500),
-          location: z.string().trim().max(500).optional(),
-          quantity: z
-            .string()
-            .regex(/^\d{1,11}(?:[.,]\d{1,3})?$/)
-            .refine((value) => Number(value.replace(',', '.')) > 0, 'quantity_must_be_positive'),
-          unit: z.enum([
-            'piece',
-            'meter',
-            'square_meter',
-            'cubic_meter',
-            'liter',
-            'kilogram',
-            'hour',
-            'flat_rate',
-          ]),
-          note: z.string().trim().max(1000).optional(),
-        }),
-      )
-      .max(200)
-      .optional(),
-    defectDescription: artifactText,
-    defectSeverity: z.enum(['low', 'medium', 'high', 'critical']).optional(),
-    defectLocation: z.string().trim().max(500).optional(),
-    responsibleEmployeeRecordId: optionalUuid,
-    responsibilityContext: z.string().trim().max(1000).optional(),
-    dueDate: z.string().date().optional(),
-    defectState: z.enum(['open', 'in_progress', 'resolved']).optional(),
-    proposedResolution: artifactText,
-    resolutionSummary: artifactText,
-    changeDescription: artifactText,
-    changeReason: z.string().trim().max(2000).optional(),
-    requestedByContext: z.string().trim().max(500).optional(),
-    expectedLaborMinutes: z
-      .string()
-      .regex(/^\d{1,10}$/)
-      .refine((value) => Number(value) <= 2_147_483_647, 'labor_minutes_out_of_range')
-      .optional(),
-    actualLaborMinutes: z
-      .string()
-      .regex(/^\d{1,10}$/)
-      .refine((value) => Number(value) <= 2_147_483_647, 'labor_minutes_out_of_range')
-      .optional(),
-    expectedMaterialSummary: artifactText,
-    actualMaterialSummary: artifactText,
-    authorizationState: z.enum(['not_requested', 'requested', 'authorized', 'rejected']).optional(),
-    scheduleImpact: artifactText,
-  })
-  .superRefine((content, context) => {
-    if (
-      content.visitStartedAt &&
-      content.visitEndedAt &&
-      new Date(content.visitEndedAt) <= new Date(content.visitStartedAt)
-    ) {
-      context.addIssue({ code: 'custom', path: ['visitEndedAt'], message: 'visit_end_must_be_after_start' });
-    }
-  });
+const workArtifactContentSchema = z.object({
+  siteId: optionalUuid,
+  instructionItemId: optionalUuid,
+  summary: artifactText,
+  customerStatement: artifactText,
+  requiresCustomerResponse: z.boolean().optional(),
+  requiresSignature: z.boolean().optional(),
+  workDate: z.string().date().optional(),
+  progress: artifactText,
+  peoplePresent: artifactText,
+  weatherConditions: artifactText,
+  siteConditions: artifactText,
+  deliveries: artifactText,
+  impediments: artifactText,
+  decisions: artifactText,
+  notableEvents: artifactText,
+  visitStartedAt: z.string().datetime({ offset: true }).optional(),
+  visitEndedAt: z.string().datetime({ offset: true }).optional(),
+  performedWork: artifactText,
+  outstandingWork: artifactText,
+  materialsSummary: artifactText,
+  nextVisitAt: z.string().datetime({ offset: true }).optional(),
+  measurementDate: z.string().date().optional(),
+  measurementLocation: z.string().trim().max(500).optional(),
+  measurementNotes: artifactText,
+  measurementLines: z
+    .array(
+      z.object({
+        id: optionalUuid,
+        description: z.string().trim().max(500),
+        location: z.string().trim().max(500).optional(),
+        // Format and „above zero“ are a field rule (field-rules.ts), so the form marks the field too.
+        quantity: z.string().max(20),
+        unit: z.enum(Constants.public.Enums.work_artifact_measurement_unit),
+        note: z.string().trim().max(1000).optional(),
+      }),
+    )
+    .max(200)
+    .optional(),
+  defectDescription: artifactText,
+  defectSeverity: z.enum(['low', 'medium', 'high', 'critical']).optional(),
+  defectLocation: z.string().trim().max(500).optional(),
+  responsibleEmployeeRecordId: optionalUuid,
+  responsibilityContext: z.string().trim().max(1000).optional(),
+  dueDate: z.string().date().optional(),
+  defectState: z.enum(['open', 'in_progress', 'resolved']).optional(),
+  proposedResolution: artifactText,
+  resolutionSummary: artifactText,
+  changeDescription: artifactText,
+  changeReason: z.string().trim().max(2000).optional(),
+  requestedByContext: z.string().trim().max(500).optional(),
+  expectedLaborMinutes: z
+    .string()
+    .regex(/^\d{1,10}$/)
+    .refine((value) => Number(value) <= 2_147_483_647, 'labor_minutes_out_of_range')
+    .optional(),
+  actualLaborMinutes: z
+    .string()
+    .regex(/^\d{1,10}$/)
+    .refine((value) => Number(value) <= 2_147_483_647, 'labor_minutes_out_of_range')
+    .optional(),
+  expectedMaterialSummary: artifactText,
+  actualMaterialSummary: artifactText,
+  authorizationState: z.enum(['not_requested', 'requested', 'authorized', 'rejected']).optional(),
+  scheduleImpact: artifactText,
+});
 
 const saveWorkArtifactFields = z.object({
   artifactId: uuidSchema,
@@ -103,7 +83,7 @@ const saveWorkArtifactFields = z.object({
   kind: z.enum(WORK_ARTIFACT_KINDS),
   visibility: z.enum(['internal_only', 'customer_facing']),
   capturedAt: z.string().datetime({ offset: true }),
-  title: z.string().trim().min(3).max(160),
+  title: z.string().trim().max(160),
   content: workArtifactContentSchema,
   correctsRevisionId: optionalUuid,
   correctionReason: z.string().trim().min(3).max(1000).optional(),
@@ -111,83 +91,20 @@ const saveWorkArtifactFields = z.object({
   submitActionId: optionalUuid,
 });
 
-type SaveWorkArtifactFields = z.output<typeof saveWorkArtifactFields>;
-type ArtifactContent = SaveWorkArtifactFields['content'];
-
-function requireContentField(
-  context: z.RefinementCtx,
-  present: unknown,
-  field: keyof ArtifactContent,
-  message: string,
-): void {
-  if (!present) context.addIssue({ code: 'custom', path: ['content', field], message });
-}
-
-function requireMeaningfulContent(value: SaveWorkArtifactFields, context: z.RefinementCtx): void {
-  const content = value.content;
-  const meaningful =
-    value.kind === 'site_diary'
-      ? content.progress
-      : value.kind === 'work_report'
-        ? content.performedWork
-        : value.kind === 'measurement'
-          ? content.measurementLocation || content.measurementLines?.length
-          : value.kind === 'defect'
-            ? content.defectDescription
-            : content.changeDescription;
-  if (!meaningful)
-    context.addIssue({ code: 'custom', path: ['content'], message: 'meaningful_content_required' });
-}
-
-function requireKindFields(value: SaveWorkArtifactFields, context: z.RefinementCtx): void {
-  const content = value.content;
-  if (value.kind === 'defect') {
-    requireContentField(context, content.defectSeverity, 'defectSeverity', 'defect_severity_required');
-    requireContentField(context, content.defectLocation, 'defectLocation', 'defect_location_required');
-  }
-  if (value.kind === 'change_work') {
-    requireContentField(context, content.changeReason, 'changeReason', 'change_reason_required');
-    requireContentField(
-      context,
-      content.requestedByContext,
-      'requestedByContext',
-      'requested_by_context_required',
-    );
-  }
-}
-
-function requireSubmittedFields(value: SaveWorkArtifactFields, context: z.RefinementCtx): void {
-  const content = value.content;
-  if (value.submit && value.kind === 'site_diary') {
-    requireContentField(context, content.workDate, 'workDate', 'work_date_required');
-    requireContentField(context, content.progress, 'progress', 'progress_required');
-  }
-  if (value.submit && value.kind === 'work_report') {
-    requireContentField(context, content.visitStartedAt, 'visitStartedAt', 'visit_start_required');
-    requireContentField(context, content.visitEndedAt, 'visitEndedAt', 'visit_end_required');
-    requireContentField(context, content.performedWork, 'performedWork', 'performed_work_required');
-  }
-  if (value.submit && value.kind === 'measurement') {
-    requireContentField(context, content.measurementDate, 'measurementDate', 'measurement_date_required');
-    requireContentField(
-      context,
-      content.measurementLocation,
-      'measurementLocation',
-      'measurement_location_required',
-    );
-    requireContentField(
-      context,
-      content.measurementLines?.length,
-      'measurementLines',
-      'measurement_lines_required',
-    );
-  }
-}
-
 export const saveWorkArtifactSchema = saveWorkArtifactFields.superRefine((value, context) => {
   const content = value.content;
-  requireMeaningfulContent(value, context);
-  requireKindFields(value, context);
+  // The title, the kind's required fields and the visit window: the rules the editor marks before a save.
+  for (const issue of workArtifactFieldIssues(value)) {
+    const path =
+      issue.field === 'title'
+        ? ['title']
+        : issue.field === 'measurementLineDescription'
+          ? ['content', 'measurementLines', issue.line, 'description']
+          : issue.field === 'measurementLineQuantity'
+            ? ['content', 'measurementLines', issue.line, 'quantity']
+            : ['content', issue.field];
+    context.addIssue({ code: 'custom', path, message: issue.code });
+  }
   if (
     value.visibility === 'internal_only' &&
     (content.requiresCustomerResponse || content.requiresSignature)
@@ -197,7 +114,6 @@ export const saveWorkArtifactSchema = saveWorkArtifactFields.superRefine((value,
   if (value.submit && !value.submitActionId) {
     context.addIssue({ code: 'custom', path: ['submitActionId'], message: 'submit_action_required' });
   }
-  requireSubmittedFields(value, context);
   if (Boolean(value.correctsRevisionId) !== Boolean(value.correctionReason)) {
     context.addIssue({ code: 'custom', path: ['correctsRevisionId'], message: 'correction_pair_required' });
     context.addIssue({ code: 'custom', path: ['correctionReason'], message: 'correction_pair_required' });

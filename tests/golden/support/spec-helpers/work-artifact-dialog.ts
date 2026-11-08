@@ -94,14 +94,14 @@ const ARTIFACT_COPY = {
   fulfilEvidence: 'Nachweiserwartung erfüllen',
   message: {
     empty: 'Noch keine Arbeitsnachweise erfasst.',
-    requiredFields: 'Bitte fülle die Pflichtangaben',
+    missingMeasurementDate: 'Bitte wähle das Aufmaßdatum.',
     changedMeanwhile: 'Der Arbeitsnachweis wurde zwischenzeitlich geändert. Deine Eingaben bleiben erhalten.',
     legalNotice: 'keine besondere Rechtswirksamkeit',
   },
 } as const;
 
 /** Fields whose label is unique only as an exact match. */
-const EXACT_FIELDS = new Set<WorkArtifactField>(['location', 'reason']);
+const EXACT_FIELDS = new Set<WorkArtifactField>(['location', 'reason', 'title']);
 const EXACT_ACTIONS = new Set<WorkArtifactAction>(['submitForReview', 'saveDraft', 'export', 'link']);
 
 type WorkArtifactPicker = keyof typeof ARTIFACT_COPY.picker;
@@ -196,7 +196,10 @@ export function workArtifactFulfilWithVersion(dialog: Locator, version: number):
 }
 
 export function workArtifactField(dialog: Locator, field: WorkArtifactField): Locator {
-  return dialog.getByLabel(ARTIFACT_COPY.field[field], EXACT_FIELDS.has(field) ? { exact: true } : {});
+  const label = ARTIFACT_COPY.field[field];
+  if (!EXACT_FIELDS.has(field)) return dialog.getByLabel(label);
+  // The label alone, or with the required mark „ *“ that a required field shows after it.
+  return dialog.getByLabel(new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}( \\*)?$`));
 }
 
 /** Inputs of the work report dialog, by their DOM id. */
@@ -206,6 +209,7 @@ const ARTIFACT_INPUT_IDS = {
   customerRole: 'artifact-customer-role',
   customerRelationship: 'artifact-customer-relationship',
   firstMeasurementQuantity: 'artifact-measurement-quantity-0',
+  measurementDate: 'artifact-measurement-date',
 } as const;
 
 /** An input of the open work report dialog. */
@@ -381,7 +385,7 @@ export async function beginWorkArtifact(
 
 /** Submits for review with Enter in the exactly named title field, the form's keyboard path. */
 export async function submitWorkArtifactWithEnter(dialog: Locator): Promise<void> {
-  await pressKey(dialog, 'Enter', { into: dialog.getByLabel(ARTIFACT_COPY.field.title, { exact: true }) });
+  await pressKey(dialog, 'Enter', { into: workArtifactField(dialog, 'title') });
 }
 
 /** Submits a new Arbeitsnachweis for review, waits for its first version and closes the dialog. */

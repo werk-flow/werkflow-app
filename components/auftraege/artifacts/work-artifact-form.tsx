@@ -12,10 +12,11 @@ import {
   type WorkArtifactKind,
   type WorkArtifactVisibility,
 } from '@/lib/work-artifacts/types';
+import type { WorkArtifactFieldState } from './use-work-artifact-editor';
 import type { WorkArtifactContentDraft } from './work-artifact-content';
 import { TextField } from './work-artifact-form-fields';
+import { WorkArtifactChangeWorkFields } from './work-artifact-change-work-fields';
 import {
-  WorkArtifactChangeWorkFields,
   WorkArtifactCustomerFacingFields,
   WorkArtifactDefectFields,
   WorkArtifactMeasurementFields,
@@ -42,6 +43,8 @@ type ArtifactFormProps = {
   correctionReasonError: string | null;
   setCorrectionReason: (value: string) => void;
   instructionOptions: Array<{ id: string; label: string }>;
+  fieldState: WorkArtifactFieldState;
+  fieldErrors: Readonly<Record<string, string>>;
 };
 
 export function ArtifactForm({
@@ -63,6 +66,8 @@ export function ArtifactForm({
   correctionReasonError,
   setCorrectionReason,
   instructionOptions,
+  fieldState,
+  fieldErrors,
 }: ArtifactFormProps) {
   return (
     <div className="space-y-5">
@@ -73,7 +78,7 @@ export function ArtifactForm({
         visibility={visibility}
         setVisibility={setVisibility}
       />
-      <TextField label="Titel" value={title} onChange={setTitle} />
+      <TextField {...fieldState('title')} label="Titel" value={title} onChange={setTitle} />
       <Field label="Erfasst am" htmlFor="artifact-captured-date">
         <DateTimeField
           value={capturedAt}
@@ -102,6 +107,8 @@ export function ArtifactForm({
         patchContent={patchContent}
         measurementLines={measurementLines}
         setMeasurementLines={setMeasurementLines}
+        fieldState={fieldState}
+        fieldErrors={fieldErrors}
       />
       {requiresCorrectionReason && (
         <TextField
@@ -110,6 +117,7 @@ export function ArtifactForm({
           value={correctionReason}
           onChange={setCorrectionReason}
           error={correctionReasonError}
+          required
           textarea
         />
       )}
@@ -199,28 +207,34 @@ function ArtifactKindSpecificFields({
   patchContent,
   measurementLines,
   setMeasurementLines,
+  fieldState,
+  fieldErrors,
 }: Pick<
   ArtifactFormProps,
-  'kind' | 'visibility' | 'content' | 'patchContent' | 'measurementLines' | 'setMeasurementLines'
+  | 'kind'
+  | 'visibility'
+  | 'content'
+  | 'patchContent'
+  | 'measurementLines'
+  | 'setMeasurementLines'
+  | 'fieldState'
+  | 'fieldErrors'
 >) {
+  const fields = { content, patchContent, fieldState };
   return (
     <>
-      {kind === 'site_diary' && <WorkArtifactSiteDiaryFields content={content} patchContent={patchContent} />}
-      {kind === 'work_report' && (
-        <WorkArtifactWorkReportFields content={content} patchContent={patchContent} />
-      )}
+      {kind === 'site_diary' && <WorkArtifactSiteDiaryFields {...fields} />}
+      {kind === 'work_report' && <WorkArtifactWorkReportFields {...fields} />}
       {kind === 'measurement' && (
         <WorkArtifactMeasurementFields
-          content={content}
-          patchContent={patchContent}
+          {...fields}
+          fieldErrors={fieldErrors}
           measurementLines={measurementLines}
           setMeasurementLines={setMeasurementLines}
         />
       )}
-      {kind === 'defect' && <WorkArtifactDefectFields content={content} patchContent={patchContent} />}
-      {kind === 'change_work' && (
-        <WorkArtifactChangeWorkFields content={content} patchContent={patchContent} />
-      )}
+      {kind === 'defect' && <WorkArtifactDefectFields {...fields} />}
+      {kind === 'change_work' && <WorkArtifactChangeWorkFields {...fields} />}
       {visibility === 'customer_facing' && (
         <WorkArtifactCustomerFacingFields content={content} patchContent={patchContent} />
       )}
