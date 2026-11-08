@@ -25,6 +25,8 @@ import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { useVacationApprovalDecisions, type VacationReasonDialogState } from './use-vacation-approvals';
 import { VacationApprovalApprovedList, VacationApprovalPendingCard } from './vacation-approvals-cards';
+import { AbsenceAffectedVisits } from '@/components/kalender/absence-affected-visits';
+import { Card, CardContent } from '@/components/ui/card';
 
 const EMPTY_REQUESTS: ApproverVacationRequest[] = [];
 const getVacationRequestId = (item: ApproverVacationRequest) => item.request.id;
@@ -77,7 +79,32 @@ function reasonDialogCopy(reasonDialog: Exclude<VacationReasonDialogState, { mod
   };
 }
 
-export function VacationApprovals() {
+/**
+ * The section may only disappear when nothing is in progress: an open
+ * decision dialog must never be unmounted by a background refresh that
+ * empties the lists (the user would lose their in-progress reason mid-typing
+ * and the pending server action), an action error must stay readable so the
+ * user understands why a card vanished, and an approval's affected visits stay
+ * until the approver closes them.
+ */
+function sectionIsIdle(state: {
+  pending: readonly ApproverVacationRequest[];
+  approved: readonly ApproverVacationRequest[];
+  actionError: string | null;
+  reasonDialog: VacationReasonDialogState;
+  approvedHere: readonly ApproverVacationRequest[];
+}): boolean {
+  return (
+    state.pending.length === 0 &&
+    state.approved.length === 0 &&
+    !state.actionError &&
+    state.reasonDialog.mode === 'closed' &&
+    state.approvedHere.length === 0
+  );
+}
+
+/** The approver's vacation queue; `plansWork` (Admin, Büro) also shows the visits an approval affects. */
+export function VacationApprovals({ plansWork }: { plansWork: boolean }) {
   // Guards a second decision on the same request while its write runs.
   const busy = useBusyIds();
 
@@ -111,7 +138,9 @@ export function VacationApprovals() {
     setDialogError,
     handleApprove,
     handleReasonSubmit,
-  } = useVacationApprovalDecisions({ view, busy, pendingList, approvedList });
+    approvedHere,
+    dismissApproved,
+  } = useVacationApprovalDecisions({ view, busy, pendingList, approvedList, plansWork });
 
   if (isLoading) {
     return <VacationApprovalsSkeleton />;
@@ -126,14 +155,7 @@ export function VacationApprovals() {
     );
   }
 
-  // The section may only disappear when nothing is in progress: an open
-  // decision dialog must never be unmounted by a background refresh that
-  // empties the lists (the user would lose their in-progress reason mid-typing
-  // and the pending server action), and an action error must stay readable so
-  // the user understands why a card vanished.
-  if (pending.length === 0 && approved.length === 0 && !actionError && reasonDialog.mode === 'closed') {
-    return null;
-  }
+  if (sectionIsIdle({ pending, approved, actionError, reasonDialog, approvedHere })) return null;
 
   return (
     <div className="space-y-3">
@@ -143,6 +165,8 @@ export function VacationApprovals() {
       </h2>
 
       <ErrorText className="px-1">{actionError}</ErrorText>
+
+      <ApprovedVacationEffects approvedHere={approvedHere} onClose={dismissApproved} />
 
       <StaleRegion stale={view.isStale} onRetry={view.refresh} className="space-y-3">
         {pending.map((item) => (
@@ -174,6 +198,32 @@ export function VacationApprovals() {
       )}
     </div>
   );
+}
+
+/** The visits each vacation approved here affects, until the approver closes them. */
+function ApprovedVacationEffects({
+  approvedHere,
+  onClose,
+}: {
+  approvedHere: readonly ApproverVacationRequest[];
+  onClose: (requestId: string) => void;
+}) {
+  return approvedHere.map((item) => {
+    const { id, employeeRecordId, startDate, endDate } = item.request;
+    return (
+      <Card key={id} className="py-0" data-approved-vacation-effects={id}>
+        <CardContent className="space-y-3 p-4">
+          <p className="font-medium">Urlaub von {item.personName} genehmigt</p>
+          <AbsenceAffectedVisits absence={{ employeeRecordId, startDate, endDate }} />
+          <div className="flex justify-end">
+            <Button variant="outline" size="sm" onClick={() => onClose(id)}>
+              Schließen
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  });
 }
 
 function VacationDecisionReasonDialog({
