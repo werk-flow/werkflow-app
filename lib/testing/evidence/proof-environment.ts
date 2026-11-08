@@ -132,12 +132,22 @@ export function backendValueDigests(
   const fromProcess = Object.keys(environment)
     .filter((key) => APPLICATION_ENVIRONMENT_PATTERN.test(key))
     .map((key): [string, string] => [`process:${key}`, environment[key] ?? '']);
-  return Object.fromEntries(
-    [...fromFiles, ...fromProcess]
+  // The code-hash secret's value stays out, but not whether the app can use it: a Boat run draws a
+  // usable one, so its proof stands for a workstation only where the workstation's is usable too.
+  const localSecret = environment.EMAIL_OTP_HASH_SECRET ?? fileValue(repositoryRoot, 'EMAIL_OTP_HASH_SECRET');
+  return Object.fromEntries([
+    ...[...fromFiles, ...fromProcess]
       .filter(([name]) => !WORKSTATION_ONLY.has(name.slice(name.indexOf(':') + 1)))
       .map(([name, value]) => [
         name,
         createHash('sha256').update(normalizeEnvironmentValue(value)).digest('hex'),
       ]),
-  );
+    ['usable:EMAIL_OTP_HASH_SECRET', localSecret?.trim() ? 'usable' : 'missing'],
+  ]);
+}
+
+/** A key's value in `.env.local`, which the app loads after the process environment. */
+function fileValue(repositoryRoot: string, key: string): string | undefined {
+  const path = join(repositoryRoot, '.env.local');
+  return existsSync(path) ? parseEnvironmentFile(readFileSync(path, 'utf8'))[key] : undefined;
 }

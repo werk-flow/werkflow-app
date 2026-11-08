@@ -189,7 +189,9 @@ test('the backend comparison covers every source the proof digest reads, but no 
     '.env.local:NEXT_PUBLIC_SUPABASE_URL',
     '.env:R2_BUCKET_NAME',
     'process:NEXT_PUBLIC_EXTRA',
+    'usable:EMAIL_OTP_HASH_SECRET',
   ]);
+  expect(digests['usable:EMAIL_OTP_HASH_SECRET']).toBe('usable');
   // The WSL address is transport: any private stack origin compares equal.
   writeFileSync(join(folder, '.env.local'), 'NEXT_PUBLIC_SUPABASE_URL=http://172.20.0.5:54321\n');
   expect(backendValueDigests(folder, {})['.env.local:NEXT_PUBLIC_SUPABASE_URL']).toBe(
@@ -225,4 +227,21 @@ test('only planning metadata of local runs goes to Boat, never a world and never
     '.agent-logs/verification/r1/diagnoses.json',
     '.agent-logs/verification/r1/report.json',
   ]);
+});
+
+test('a Boat proof stands for a workstation only where its code-hash secret is usable', () => {
+  const folder = mkdtempSync(join(tmpdir(), 'proof-otp-'));
+  const secret = (fileLine: string, environment: Record<string, string>) => {
+    writeFileSync(join(folder, '.env.local'), fileLine);
+    return backendValueDigests(folder, environment)['usable:EMAIL_OTP_HASH_SECRET'];
+  };
+  // A Boat machine exports a drawn secret; its .env.local holds none.
+  const boat = secret('', { EMAIL_OTP_HASH_SECRET: 'drawn-per-run' });
+  expect(secret('EMAIL_OTP_HASH_SECRET=local-secret\n', {})).toBe(boat);
+  for (const missing of [
+    secret('EMAIL_OTP_HASH_SECRET=\n', {}),
+    secret('', {}),
+    secret('EMAIL_OTP_HASH_SECRET=x\n', { EMAIL_OTP_HASH_SECRET: ' ' }),
+  ])
+    expect(missing).not.toBe(boat);
 });
