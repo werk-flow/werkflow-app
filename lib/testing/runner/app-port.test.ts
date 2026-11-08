@@ -1,7 +1,7 @@
 import { expect, jest, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:net';
-import { tmpdir } from 'node:os';
+import { networkInterfaces, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { assertAppPortFree, workspaceAppOrigin, workspacePorts } from './app-port';
 import { errorCode } from './error-code';
@@ -72,6 +72,33 @@ for (const host of LISTEN_ADDRESSES)
       await expect(assertAppPortFree(port)).resolves.toBeUndefined();
     },
   );
+
+/** An IPv4 address of this host that is not loopback: a server bound only there leaves loopback free. */
+const OUTER_IPV4 = Object.values(networkInterfaces())
+  .flat()
+  .find((entry) => entry?.family === 'IPv4' && !entry.internal)?.address;
+if (OUTER_IPV4 === undefined)
+  console.warn(
+    '[app-port.test] Skipped the outer-address refusal case: this host has no non-loopback IPv4 address.',
+  );
+
+// On Linux the loopback probes also catch a wildcard listener, so only a server bound to one outer
+// address proves that the check probes the wildcard addresses at all.
+test.skipIf(OUTER_IPV4 === undefined)(
+  'a build is refused while an application serves the port on one outer address only',
+  async () => {
+    const server = await listen(OUTER_IPV4 ?? '', await closedPort());
+    const port = portOf(server);
+    try {
+      await expect(assertAppPortFree(port)).rejects.toThrow(
+        `Refused: port ${port} is serving an application`,
+      );
+    } finally {
+      await close(server);
+    }
+    await expect(assertAppPortFree(port)).resolves.toBeUndefined();
+  },
+);
 
 test('a free port reads as free even when a stall lets every clock run out before the kernel answers', async () => {
   const port = await closedPort();
