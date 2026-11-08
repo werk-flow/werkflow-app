@@ -6,7 +6,9 @@
 // is a project-level document write and needs a manager. The same field worker
 // still exports an artifact of the assigned job. An artifact of another
 // organization is not found and nothing is stored. An internal revision is
-// never exported, not even by a manager.
+// never exported, not even by a manager. Each export stores its object under a
+// key of its own: a refused or duplicate export of the same content removes
+// only its own object, never the one a committed export registered.
 import { mock } from 'bun:test';
 import assert from 'node:assert/strict';
 import {
@@ -101,11 +103,14 @@ world.rpc = ({ name, args }) =>
     : { data: null, error: { message: `${name} is outside this fixture` } };
 
 const storedPaths: string[] = [];
+const discardedPaths: string[] = [];
 mock.module('@/lib/storage/r2', () => ({
   putStorageObject: async ({ path }: { path: string }) => {
     storedPaths.push(path);
   },
-  discardStorageObjects: async () => {},
+  discardStorageObjects: async ({ paths }: { paths: string[] }) => {
+    discardedPaths.push(...paths);
+  },
 }));
 const { exportWorkArtifact } = await import('@/lib/work-artifacts/actions');
 
@@ -183,3 +188,27 @@ assert.deepEqual(exportCalls(), [
   },
 ]);
 assert.equal(storedPaths.length, 2);
+
+// Two more exports of the same content read the database before the first
+// export committed. The database refuses one and answers the other as a
+// duplicate of the committed export: each removes only the object it stored.
+const storedPathOfCall = (index: number) => world.rpcCalls[index]?.args.p_storage_path;
+const registeredPath = String(storedPathOfCall(0));
+world.rpc = () => ({ data: null, error: { code: 'P0001', message: 'work_artifact_stale_version' } });
+assert.deepEqual(await exportOf(jobArtifactId, crypto.randomUUID()), {
+  success: false,
+  error: 'work_artifact_stale_version',
+});
+world.rpc = () => ({
+  data: { version: 5, status: 'approved', documentId: jobDocumentId, duplicate: true },
+  error: null,
+});
+const duplicateExport = await exportOf(jobArtifactId, crypto.randomUUID());
+assert.ok(duplicateExport.success, JSON.stringify(duplicateExport));
+assert.equal(duplicateExport.documentId, jobDocumentId);
+assert.ok(
+  !discardedPaths.includes(registeredPath),
+  'a refused export removed the object a committed export registered',
+);
+assert.equal(new Set(storedPaths).size, storedPaths.length, 'two exports stored one key');
+assert.deepEqual(discardedPaths, storedPaths.slice(2));

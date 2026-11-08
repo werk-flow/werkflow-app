@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { randomUUID } from 'node:crypto';
+
 import type { PostgrestError, PostgrestSingleResponse } from '@supabase/supabase-js';
 
 import type { ActionFailure } from '@/lib/action-result';
@@ -12,10 +14,24 @@ import type { Json } from '@/lib/supabase/database.types';
 import { mapArtifactError } from './errors';
 
 /**
+ * The key one export attempt stores its object under. A fresh id per attempt
+ * keeps two exports of the same content apart, so an attempt that fails or
+ * turns out a duplicate removes only its own object.
+ */
+export function workArtifactExportStoragePath(
+  organizationId: string,
+  revisionId: string,
+  exportFile: { rendererVersion: string; contentHash: string },
+): string {
+  return `${organizationId}/work-artifact-exports/${revisionId}/${randomUUID()}/${exportFile.rendererVersion}-${exportFile.contentHash}.html`;
+}
+
+/**
  * Removes a generated export object after its registration failed, unless a
- * document owns its path: a committed export of the same content writes the
- * same key. A failed read keeps the object, since only a completed read
- * proves that no document owns it.
+ * document owns its path. A failed read keeps the object, since only a
+ * completed read proves that no document owns it. The read is current only
+ * when no other attempt writes the key: an artifact export's key is its own
+ * (`workArtifactExportStoragePath`).
  */
 export async function discardUnreferencedExportObject(
   admin: AdminClient,
@@ -98,7 +114,7 @@ export async function refuseWorkArtifactExport(
   storagePath: string,
   error: { message?: string } | null,
 ): Promise<ActionFailure> {
-  // A committed export of the same content owns an object of this same path.
+  // The registration may have committed before its answer was lost.
   await discardUnreferencedExportObject(
     admin,
     organizationId,

@@ -120,15 +120,16 @@ export async function finalizeDocumentUpload(rawInput: FinalizeDocumentUploadInp
   if (!auth.success) return auth;
 
   const originalFileName = input.fileName.trim() || 'Dokument';
-  // The storage path is recomputed server-side from the authenticated org and
+  // The upload's path is recomputed server-side from the authenticated org and
   // the document id, so a client can never register a foreign object key.
-  const storagePath = buildDocumentStoragePath({
+  const uploadPath = buildDocumentStoragePath({
     organizationId: auth.context.orgId,
     documentId: input.documentId,
     fileName: originalFileName,
   });
 
-  // Only a completed read proves the upload unregistered; the copy must never replace a registered file.
+  // Only a completed read proves the upload unregistered. A finalize that read
+  // before a concurrent one committed still copies only to a key of its own.
   const registeredPath = await readDocumentStoragePath(auth.context, input.documentId);
   if (registeredPath === undefined) return { success: false, error: 'load_failed' };
   if (registeredPath) return { success: false, error: 'already_finalized' };
@@ -136,17 +137,17 @@ export async function finalizeDocumentUpload(rawInput: FinalizeDocumentUploadInp
   const target = normalizeUploadTarget(input);
   const access = await authorizeDocumentUploadTarget(auth.context, target);
   if (!access.success) {
-    await discardStagedUpload(auth.context.orgId, storagePath);
+    await discardStagedUpload(auth.context.orgId, uploadPath);
     return access;
   }
 
   const head = await acceptUploadedObject({
     organizationId: auth.context.orgId,
-    storagePath,
+    storagePath: uploadPath,
     failureLabel: 'Failed to verify uploaded document object',
   });
   if (!head.success) return head;
-  const { contentType } = head;
+  const { contentType, storagePath } = head;
   const category =
     parseDocumentCategory(input.category ?? null) ??
     inferDocumentCategory({
@@ -193,10 +194,8 @@ export async function finalizeDocumentUpload(rawInput: FinalizeDocumentUploadInp
       ],
       'create_failed',
     );
-    // A concurrent finalize of the same upload committed first and owns the object.
-    if (failure.error !== 'already_finalized') {
-      await discardStorageObjects({ organizationId: auth.context.orgId, paths: [storagePath] });
-    }
+    // Only this finalize wrote its copy; a concurrent one that committed registered its own.
+    await discardStorageObjects({ organizationId: auth.context.orgId, paths: [storagePath] });
     return failure;
   }
 
@@ -280,20 +279,18 @@ export async function finalizeDocumentVersionUpload(
   }
 
   const originalFileName = input.fileName.trim() || 'Dokument';
-  const storagePath = buildDocumentVersionStoragePath({
-    organizationId: auth.context.orgId,
-    documentId: existing.document.id,
-    versionNumber: nextVersionNumber,
-    fileName: originalFileName,
-  });
-
   const head = await acceptUploadedObject({
     organizationId: auth.context.orgId,
-    storagePath,
+    storagePath: buildDocumentVersionStoragePath({
+      organizationId: auth.context.orgId,
+      documentId: existing.document.id,
+      versionNumber: nextVersionNumber,
+      fileName: originalFileName,
+    }),
     failureLabel: 'Failed to verify uploaded version object',
   });
   if (!head.success) return head;
-  const { contentType } = head;
+  const { contentType, storagePath } = head;
 
   // One transaction archives the current file, makes the upload current and records it.
   const { data: updatedDocument, error } = await auth.context.admin.rpc('finalize_document_version_upload', {
@@ -313,11 +310,8 @@ export async function finalizeDocumentVersionUpload(
       ['version_conflict', 'document_not_found', 'versioning_not_supported'],
       'version_failed',
     );
-    // A concurrent finalize may have made an object of this same path current:
-    // on a conflict the object is kept, as an orphan is safer than a lost file.
-    if (failure.error !== 'version_conflict') {
-      await discardStorageObjects({ organizationId: auth.context.orgId, paths: [storagePath] });
-    }
+    // Only this finalize wrote its copy; a concurrent one that committed made its own current.
+    await discardStorageObjects({ organizationId: auth.context.orgId, paths: [storagePath] });
     return failure;
   }
 
