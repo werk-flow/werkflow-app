@@ -86,7 +86,13 @@ const world = installActionWorld({
   ],
   personnel_documents: [],
   profiles: [
-    { id: CALLER_ID, first_name: 'Kim', last_name: 'Berger', email: 'caller@example.test', avatar_path: null },
+    {
+      id: CALLER_ID,
+      first_name: 'Kim',
+      last_name: 'Berger',
+      email: 'caller@example.test',
+      avatar_path: null,
+    },
   ],
 });
 const { getJobDocuments, updateDocumentOrigin } = await import('@/lib/documents/actions');

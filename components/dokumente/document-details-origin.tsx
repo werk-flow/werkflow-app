@@ -88,14 +88,18 @@ function DocumentOriginValues({ origin }: { origin: DocumentOrigin }) {
     <div>
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Herkunft</p>
       <div className="mt-2 grid gap-3 sm:grid-cols-2">
-        <div>
-          <p className="text-xs text-muted-foreground">Quellsystem</p>
-          <p className="mt-1 wrap-anywhere">{origin.sourceSystem ?? 'Keine Angabe'}</p>
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground">Alte Nummer</p>
-          <p className="mt-1 wrap-anywhere">{origin.sourceReference ?? 'Keine Angabe'}</p>
-        </div>
+        {origin.sourceSystem && (
+          <div>
+            <p className="text-xs text-muted-foreground">Quellsystem</p>
+            <p className="mt-1 wrap-anywhere">{origin.sourceSystem}</p>
+          </div>
+        )}
+        {origin.sourceReference && (
+          <div>
+            <p className="text-xs text-muted-foreground">Alte Nummer</p>
+            <p className="mt-1 wrap-anywhere">{origin.sourceReference}</p>
+          </div>
+        )}
       </div>
     </div>
   );
