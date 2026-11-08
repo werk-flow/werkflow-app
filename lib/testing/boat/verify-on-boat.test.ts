@@ -542,3 +542,48 @@ test('a link member followed by a file through it writes nothing outside staging
     expect(existsSync(join(checkout, '.agent-logs')), target).toBe(false);
   }
 });
+
+// A real SIGINT, delivered while a synchronous step runs; no timing involved. The handler stands in
+// for the one verifyOnBoat installs.
+async function withSigint<T>(work: (signal: AbortSignal) => Promise<T>): Promise<T | unknown> {
+  const controller = new AbortController();
+  const stop = () => controller.abort();
+  process.on('SIGINT', stop);
+  try {
+    return await work(controller.signal).catch((error: unknown) => error);
+  } finally {
+    process.off('SIGINT', stop);
+  }
+}
+
+test('a real SIGINT during planning stops the run instead of falling back', async () => {
+  const repository = mkdtempSync(join(tmpdir(), 'boat-plan-sigint-'));
+  mkdirSync(join(repository, 'scripts'));
+  // The plan child signals this process while the synchronous planning step waits for it.
+  writeFileSync(join(repository, 'scripts', 'verify.ts'), "process.kill(process.ppid, 'SIGINT');\n");
+  const outcome = await withSigint((signal) => prepareAndRun([], repository, 'boat_secret', signal));
+  expect(outcome instanceof Error && outcome.name).toBe('AbortError');
+});
+
+test('a real SIGINT during packing stops the run instead of falling back', async () => {
+  const repository = mkdtempSync(join(tmpdir(), 'boat-pack-sigint-'));
+  execFileSync('git', ['init', '-q'], { cwd: repository });
+  writeFileSync(join(repository, 'README.md'), 'x');
+  execFileSync('git', ['add', '.'], { cwd: repository });
+  execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'x'], {
+    cwd: repository,
+  });
+  const outcome = await withSigint((signal) => {
+    // Delivered now, handled only when the event loop turns: as for a SIGINT during the synchronous
+    // snapshot and pack that runOnBoat starts with. The refused pack alone would fall back.
+    process.kill(process.pid, 'SIGINT');
+    return runOnBoat({
+      args: [],
+      repository,
+      folder: mkdtempSync(join(tmpdir(), 'boat-pack-sigint-folder-')),
+      key: 'boat_secret',
+      signal,
+    });
+  });
+  expect(outcome instanceof Error && outcome.name).toBe('AbortError');
+});

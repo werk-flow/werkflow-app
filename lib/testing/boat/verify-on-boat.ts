@@ -251,6 +251,16 @@ export function linkedDestination(repository: string, paths: readonly string[]):
   return undefined;
 }
 
+/**
+ * Honors a Ctrl-C that arrived during synchronous work. Bun runs a signal handler only once the
+ * event loop turns; measured, not after a microtask but after setImmediate. So a check right after
+ * a synchronous step would miss it and fall back to a local run.
+ */
+async function honorInterrupt(signal: AbortSignal): Promise<void> {
+  await new Promise((done) => setImmediate(done));
+  signal.throwIfAborted();
+}
+
 /** The fallback line for a Boat failure; an interruption by the user is rethrown, never a fallback. */
 export function fallbackLine(error: unknown, signal: AbortSignal): string {
   if (signal.aborted) throw error;
@@ -306,7 +316,7 @@ export async function prepareAndRun(
   signal: AbortSignal,
 ): Promise<number | undefined> {
   const planned = planReason(repository, args);
-  signal.throwIfAborted();
+  await honorInterrupt(signal);
   if (planned) {
     say(`Running locally: ${planned}`);
     return undefined;
@@ -497,7 +507,7 @@ export async function runOnBoat(input: {
   } catch (error) {
     packed = { refused: `packing the run failed: ${boatFailure(error)}` };
   }
-  signal.throwIfAborted();
+  await honorInterrupt(signal);
   if ('refused' in packed) {
     say(`Running locally: ${packed.refused}`);
     return undefined;
