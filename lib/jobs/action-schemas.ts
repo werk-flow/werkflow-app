@@ -32,6 +32,12 @@ export const assignmentApprovalSchema = z
       teamSourceId === undefined ? approval : { ...approval, teamSourceId },
   );
 
+/** A manager's reason for the planning conflicts they saw, for the fingerprint of that assessment. */
+const planningApprovalSchema = z
+  // The reason fits planning_occurrence_assessments.override_reason.
+  .object({ fingerprint: z.string().length(64), reason: z.string().trim().min(8).max(500) })
+  .nullish();
+
 const jobFieldsShape = {
   title: z.string().max(500),
   description: z.string().max(20_000).nullish(),
@@ -47,6 +53,7 @@ const jobFieldsShape = {
   assignmentApproval: assignmentApprovalSchema.nullish(),
   assignmentTeamSourceId: uuidSchema.nullish(),
   templateVersionId: blankableUuidSchema.optional(),
+  planningApproval: planningApprovalSchema,
 };
 
 export const createJobInputSchema = z.object({
@@ -72,10 +79,7 @@ export const updateJobAssignmentsArgumentsSchema = z.object({
   selectedUserIds: z.array(uuidSchema).max(MAX_JOB_ASSIGNMENTS * 2),
   approval: assignmentApprovalSchema.nullish(),
   teamSourceId: uuidSchema.nullish(),
-  // The reason fits planning_occurrence_assessments.override_reason.
-  planningApproval: z
-    .object({ fingerprint: z.string().length(64), reason: z.string().trim().min(8).max(500) })
-    .nullish(),
+  planningApproval: planningApprovalSchema,
 });
 
 /** A job number from the route segment, still URI-encoded. */

@@ -48,7 +48,7 @@ export function EditJobDialog({
   onSuccess,
 }: EditJobDialogProps) {
   const form = useEditJobForm({ job, open, knownProject });
-  const { submitChanges, handleSubmit } = useEditJobSubmit({
+  const { submitChanges, handleSubmit, planningWarningDialog } = useEditJobSubmit({
     job,
     form,
     onOpenChange,
@@ -118,6 +118,7 @@ export function EditJobDialog({
         }}
         onConfirm={(approval) => submitChanges(confirmedDateRemovalForWarning, approval)}
       />
+      {planningWarningDialog}
     </>
   );
 }

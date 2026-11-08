@@ -8,6 +8,11 @@ import type { Job } from '@/lib/jobs/types';
 import { buildEditJobInput } from './edit-job-input';
 import type { EditJobForm } from './use-edit-job-form';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
+import {
+  PLANNING_CHANGED_MESSAGE,
+  isPlanningWarning,
+  usePlanningApprovalRetry,
+} from './use-planning-approval-retry';
 
 const CONTENT_REQUIRED_MESSAGE = 'Bitte gib mindestens einen Titel oder eine Beschreibung ein.';
 
@@ -20,6 +25,7 @@ const ERROR_MESSAGES = {
   job_has_several_visits:
     'Dieser Auftrag hat inzwischen mehrere Termine. Datum, Uhrzeit und Dauer änderst du in der Plantafel.',
   update_failed: 'Fehler beim Aktualisieren des Auftrags.',
+  planning_changed: PLANNING_CHANGED_MESSAGE,
 } satisfies Record<string, string>;
 
 type EditJobSubmitInput = {
@@ -29,9 +35,13 @@ type EditJobSubmitInput = {
   onSuccess: ((payload: { job: Job; selectedEmployeeIds?: string[] }) => void | Promise<void>) | undefined;
 };
 
-/** Validates and saves the edit-job draft, including the date-removal and qualification confirmations. */
+/**
+ * Validates and saves the edit-job draft, including the date-removal,
+ * qualification and planning confirmations.
+ */
 export function useEditJobSubmit({ job, form, onOpenChange, onSuccess }: EditJobSubmitInput) {
   const { showBanner } = useBanner();
+  const { retryWithPlanningApproval, planningWarningDialog } = usePlanningApprovalRetry();
   const {
     title,
     description,
@@ -67,7 +77,11 @@ export function useEditJobSubmit({ job, form, onOpenChange, onSuccess }: EditJob
       try {
         const input = buildEditJobInput(job, form, approval);
 
-        const result = await updateJob(job.id, input);
+        const result = await retryWithPlanningApproval((planningApproval) =>
+          updateJob(job.id, { ...input, planningApproval }),
+        );
+        // Taken back in the planning dialog: the form stays open for a change.
+        if (isPlanningWarning(result)) return;
 
         if (!result.success && result.error !== 'no_changes') {
           if (
@@ -113,5 +127,5 @@ export function useEditJobSubmit({ job, form, onOpenChange, onSuccess }: EditJob
     await submitChanges();
   };
 
-  return { submitChanges, handleSubmit };
+  return { submitChanges, handleSubmit, planningWarningDialog };
 }
