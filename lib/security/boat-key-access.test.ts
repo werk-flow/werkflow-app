@@ -4,7 +4,7 @@ import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
-import { boatKeyCommandRefusal, boatKeyToolRefusal, shellFolder } from './boat-key-access';
+import { boatKeyCommandRefusal, boatKeyToolRefusal } from './boat-key-access';
 
 const home = '/home/agent';
 const context = { cwd: '/home/agent/code/werkflow-app', home };
@@ -115,12 +115,26 @@ test('ordinary work, the expiry file and the runner pass', () => {
     expect(refused(command), command).toBeUndefined();
 });
 
-test("a Codex call's workdir is the folder its relative paths and globs resolve from", () => {
-  const folder = shellFolder({ cmd: 'cat b*', workdir: '~/.config/werkflow' }, context);
-  expect(folder).toBe('/home/agent/.config/werkflow');
-  expect(boatKeyCommandRefusal('cat b*', { cwd: folder, home })).toContain('matches a file');
-  expect(shellFolder({ cmd: 'ls', workdir: '../other' }, context)).toBe('/home/agent/code/other');
-  expect(shellFolder({ command: 'ls' }, context)).toBe(context.cwd);
+// Codex sends the hook the session's folder, not the folder its call runs in (codex-rs
+// exec_command.rs, pre_tool_use_payload), so a relative name of the CLI config refuses anywhere.
+test('a relative path or glob that may name the Boat CLI config is refused wherever it runs', () => {
+  for (const command of [
+    'cat config.json',
+    'jq . ./config.json',
+    'head conf*',
+    'cat < config.json',
+    'cat */config.json',
+  ])
+    expect(refused(command), command).toContain("may be the Boat CLI's config");
+  for (const command of [
+    'cat tsconfig.json',
+    'cat ~/scratch/config.json',
+    'cat lib/config.ts',
+    'ls *',
+    'cat *.json',
+    'cat package.json',
+  ])
+    expect(refused(command), command).toBeUndefined();
 });
 
 test('a long chain of folder changes stays bounded and refuses past the bound', () => {
@@ -158,9 +172,6 @@ test('the hook refuses a read of the key and passes ordinary work', () => {
   expect(refusedRun.status).toBe(2);
   expect(refusedRun.stderr).toContain('Refused');
   expect(run(bash('git status')).status).toBe(0);
-  // Codex names the shell's folder in `workdir`; a glob there resolves from it.
-  const codex = { tool_name: 'Bash', tool_input: { cmd: 'cat b*', workdir: '~/.config/werkflow' }, cwd: '/' };
-  expect(run(JSON.stringify(codex)).status).toBe(2);
   expect(
     run(JSON.stringify({ tool_name: 'Read', tool_input: { file_path: '~/.config/ascii/boat/config.json' } }))
       .status,

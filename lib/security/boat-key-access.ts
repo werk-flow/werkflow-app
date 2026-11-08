@@ -66,14 +66,23 @@ const ASSIGNMENT = /^[A-Za-z_]\w*=/;
 const MAX_FOLDERS = 256;
 
 /**
- * The folder a shell call runs in: Codex's `workdir` when the call names one, resolved from the
- * session's folder, else the session's folder. Relative paths and globs resolve from there.
+ * Codex runs a shell call in its `workdir` but sends the hook only the session's folder
+ * (codex-rs exec_command.rs, `pre_tool_use_payload`), so a relative path cannot be resolved
+ * where it runs. A relative word named like the Boat CLI's config, or a glob that may match that
+ * name, is therefore refused wherever it runs. No file of this name is in the repository.
  */
-export function shellFolder(input: unknown, context: Context): string {
-  const workdir: unknown =
-    typeof input === 'object' && input !== null ? Reflect.get(input, 'workdir') : undefined;
-  if (typeof workdir !== 'string' || !workdir) return context.cwd;
-  return resolve(context.cwd, expandedPath(workdir, context.home) ?? workdir);
+const CONFIG_NAME = 'config.json';
+
+/** Whether a word names a file called like the Boat CLI's config by a relative path or glob. */
+function namesConfigRelatively(text: string, globs: boolean): boolean {
+  const word = text.replace(/^\d*[<>]+&?/, '');
+  if (word === '' || isAbsolute(word) || /^(?:~|\$HOME\b|\$\{HOME\})/.test(word)) return false;
+  const name = word.slice(word.lastIndexOf('/') + 1);
+  // A glob counts only with a literal part of the name, so `*` and `*.json` stay ordinary.
+  return (
+    name === CONFIG_NAME ||
+    (globs && /conf/i.test(name.replace(/[*?]|\[[^\]]*\]/g, '')) && new Bun.Glob(name).match(CONFIG_NAME))
+  );
 }
 
 type Context = { cwd: string; home: string };
@@ -214,12 +223,13 @@ function lineRefusal(
     commands.some((words) => innerCommand(words)?.viaXargs || program(words)?.name === 'xargs');
   for (const words of commands) {
     // Every word, redirection targets included: `cat < config.json` reads the file too.
-    for (const word of words)
+    for (const word of words) {
       for (const path of pathsOf(word.text, folders, home)) {
         if (secrets.includes(path)) return 'the command names a file that holds a Boat API key.';
         if (word.globs && secrets.some((secret) => new Bun.Glob(path).match(secret)))
           return `the pattern ${word.raw} matches a file that holds a Boat API key.`;
       }
+    }
     const run = innerCommand(words);
     if (!run) continue;
     if (SHELLS.has(run.name)) {
@@ -241,7 +251,11 @@ function lineRefusal(
     if (ancestor)
       return `${run.name} would read every file under ${ancestor === home ? '~' : ancestor.replace(home + sep, '~/')}, a Boat API key included.`;
   }
-  return undefined;
+  // Last, so a more specific reason above names the call first.
+  const config = commands.flat().find((word) => namesConfigRelatively(word.text, word.globs));
+  return config
+    ? `${config.raw} may be the Boat CLI's config in the folder the shell runs in; name a config file by its full path.`
+    : undefined;
 }
 
 /**

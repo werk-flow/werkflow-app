@@ -1,6 +1,6 @@
 import { homedir } from 'node:os';
 
-import { boatKeyCommandRefusal, boatKeyToolRefusal, shellFolder } from '../../lib/security/boat-key-access';
+import { boatKeyCommandRefusal, boatKeyToolRefusal } from '../../lib/security/boat-key-access';
 import { shellCommand } from '../../lib/testing/runner/edit-guard';
 
 /**
@@ -26,9 +26,7 @@ const toolCall = { tool_name: toolName, tool_input: toolInput };
 const cwd: unknown = Reflect.get(call, 'cwd');
 const context = { cwd: typeof cwd === 'string' && cwd ? cwd : process.cwd(), home: homedir() };
 const command = shellCommand(toolCall);
-const reason = command
-  ? boatKeyCommandRefusal(command, { ...context, cwd: shellFolder(toolInput, context) })
-  : boatKeyToolRefusal(toolCall, context);
+const reason = command ? boatKeyCommandRefusal(command, context) : boatKeyToolRefusal(toolCall, context);
 if (reason) {
   console.error(reason);
   process.exit(2);
