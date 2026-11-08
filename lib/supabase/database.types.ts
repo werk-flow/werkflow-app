@@ -15330,6 +15330,17 @@ export type Database = {
           revision_id: string;
         }[];
       };
+      list_profile_references: {
+        Args: { p_organization_id: string; p_user_ids: string[] };
+        Returns: {
+          avatar_path: string;
+          email: string;
+          first_name: string;
+          id: string;
+          is_member: boolean;
+          last_name: string;
+        }[];
+      };
       list_project_job_page: {
         Args: {
           p_is_manager: boolean;
