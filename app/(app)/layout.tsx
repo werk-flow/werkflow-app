@@ -63,7 +63,12 @@ async function AppProviders({ children }: { children: React.ReactNode }) {
               {/* Optional runtime reads must not hold every route refresh. */}
               <ActiveJobsProvider>
                 <ClockStateProvider>
-                  <AppShell initialOrganizationId={activeOrgId}>{children}</AppShell>
+                  <AppShell initialOrganizationId={activeOrgId}>
+                    {/* The bottom reserve: the clock dock publishes its height, and the page column ends above it.
+                        The fallback is the dock's one-row height (button, padding, border), so the first paint
+                        already leaves it free and hydration moves nothing. */}
+                    <div className="h-full pb-[var(--clock-dock-height,calc(4.5rem_+_1px))]">{children}</div>
+                  </AppShell>
                   <ClockFAB />
                 </ClockStateProvider>
               </ActiveJobsProvider>
