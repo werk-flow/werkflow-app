@@ -52,8 +52,23 @@ test('a recursive read of a folder that holds a secret file is refused', () => {
     'rsync -a ~/ backup:/home',
     'find ~/.config -type f -exec cat {} +',
     'find ~/.config -type f | xargs cat',
+    // A glob's literal folder is what a recursive reader reads.
+    'grep -R token ~/.config/*',
+    'rg --hidden token ~/.config/*',
+    // Launchers and shell scripts run the reader all the same.
+    'env rg --hidden token ~/.config',
+    'timeout 30 nice -n 5 grep -r token ~/.config',
+    'bash -lc "rg --hidden token ~/.config"',
+    // An existing file named as the pattern leaves the working folder as the searched path.
+    'cd ~ && rg -uu .bashrc',
   ])
     expect(refused(command), command).toMatch(/would read every file under/);
+});
+
+test('a relative path from the folder of a secret file is refused', () => {
+  expect(refused('cat config.json', '/home/agent/.config/ascii/boat')).toContain('names a file');
+  expect(refused('head -c 9 ./config.json', '/home/agent/.config/ascii/boat')).toContain('names a file');
+  expect(refused('cat ../ascii/boat/config.json', '/home/agent/.config/werkflow')).toContain('names a file');
 });
 
 test('ordinary work, the expiry file and the runner pass', () => {
@@ -62,12 +77,16 @@ test('ordinary work, the expiry file and the runner pass', () => {
     'ls -la ~/.config/werkflow',
     'mkdir -p ~/.config/werkflow',
     'bun run test:verify',
+    'env WERKFLOW_VERIFY_LOCAL=1 bun run test:verify --group sql:security',
+    'timeout 600 bun test lib/security',
     'grep -rn boatKeyCommandRefusal lib/',
+    "rg -g '*.ts' --hidden token lib",
     'rg --hidden token .',
     'find ~/.config -name "*.toml"',
     'cp -r .agent-logs ~/scratch/evidence',
     'tar czf out.tgz -C repo .agent-logs',
     'git commit -F ~/scratch/message.txt',
+    'bash -lc "rg token lib"',
   ])
     expect(refused(command), command).toBeUndefined();
 });

@@ -1,7 +1,6 @@
-import { existsSync } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 
-import { type ShellWord, program, readShell } from './shell-words';
+import { type ShellWord, SCRIPT_FLAG, SHELLS, program, readShell } from './shell-words';
 
 // Only the process that calls Boat reads the workstation's Boat API key
 // (docs/technical/environments.md, "Credentials"). The PreToolUse hook
@@ -19,6 +18,8 @@ const SECRET_FILES = ['.config/werkflow/boat-api-key', '.config/ascii/boat/confi
 /**
  * Text that names a secret file however a command spells its folder: the key
  * file under any name but its expiry file, and the Boat CLI's config folder.
+ * It is matched on the raw text, so a variable, a nested quote or a heredoc
+ * the reader cannot follow still refuses.
  */
 const SECRET_MENTION = /boat-api-key(?!\.expires(?![\w.*?[-]))|ascii\/boat\b|\bboat\/config\.json/;
 
@@ -27,31 +28,70 @@ const INSTEAD =
   'The expiry date is in ~/.config/werkflow/boat-api-key.expires ' +
   '(docs/technical/environments.md, "Credentials").';
 
-/** Programs that read every file under a folder they are given, with the flags that make them recurse. */
-const RECURSIVE_READERS: ReadonlyMap<string, RegExp | undefined> = new Map([
-  ['grep', /^(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive|--dereference-recursive|--directories=recurse|-d)$/],
-  ['egrep', /^(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive|--dereference-recursive|--directories=recurse|-d)$/],
-  ['fgrep', /^(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive|--dereference-recursive|--directories=recurse|-d)$/],
-  ['ugrep', /^(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive|--dereference-recursive)$/],
+/** Search tools: the first operand is the pattern unless a flag gives it, the rest are paths, none means the working folder. */
+const SEARCHERS = new Set(['grep', 'egrep', 'fgrep', 'zgrep', 'ugrep', 'rg', 'ag', 'ack']);
+/** Search tools that recurse without a flag. */
+const ALWAYS_RECURSIVE = new Set(['rg', 'ag', 'ack']);
+const RECURSE_FLAG =
+  /^(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive|--dereference-recursive|--directories=recurse)$/;
+/** Flags that give the pattern, so every operand is a path. */
+const PATTERN_FLAGS = new Set(['-e', '-f', '--regexp', '--file']);
+/** Search flags whose value is the next word, not an operand. */
+const SEARCH_VALUE_FLAGS = new Set([
+  ...PATTERN_FLAGS,
+  ...[
+    '-g',
+    '--glob',
+    '--iglob',
+    '-t',
+    '--type',
+    '-T',
+    '--type-not',
+    '-A',
+    '-B',
+    '-C',
+    '-m',
+    '-j',
+    '-d',
+    '-D',
+  ],
+  ...['--max-count', '--max-depth', '--context', '--include', '--exclude', '--exclude-dir', '--threads'],
+]);
+/** Copy and archive tools that read every file under a folder operand. */
+const COPIERS: ReadonlyMap<string, RegExp | undefined> = new Map([
   ['cp', /^(?:-[a-zA-Z]*[rRa][a-zA-Z]*|--recursive|--archive)$/],
   ['scp', /^-[a-zA-Z]*r[a-zA-Z]*$/],
-  ['rg', undefined],
-  ['ag', undefined],
-  ['ack', undefined],
   ['tar', undefined],
   ['zip', undefined],
   ['7z', undefined],
   ['rsync', undefined],
   ['cpio', undefined],
 ]);
-
 /** `find` reads file contents only through a command it runs. */
 const FIND_RUNS = new Set(['-exec', '-execdir', '-ok', '-okdir']);
+/** Programs that run the command in their arguments, with the options to skip before it. */
+const LAUNCHERS: ReadonlyMap<string, { valueFlags: ReadonlySet<string>; positionals: number }> = new Map([
+  [
+    'env',
+    { valueFlags: new Set(['-u', '--unset', '-C', '--chdir', '-S', '--split-string']), positionals: 0 },
+  ],
+  ['nice', { valueFlags: new Set(['-n', '--adjustment']), positionals: 0 }],
+  ['nohup', { valueFlags: new Set(), positionals: 0 }],
+  ['timeout', { valueFlags: new Set(['-s', '--signal', '-k', '--kill-after']), positionals: 1 }],
+  ['command', { valueFlags: new Set(), positionals: 0 }],
+  ['exec', { valueFlags: new Set(['-a']), positionals: 0 }],
+  ['stdbuf', { valueFlags: new Set(['-i', '-o', '-e']), positionals: 0 }],
+  ['ionice', { valueFlags: new Set(['-c', '-n', '-t']), positionals: 0 }],
+  ['xargs', { valueFlags: new Set(['-n', '-I', '-P', '-d', '-L', '-s', '-E', '-a']), positionals: 0 }],
+]);
+const ASSIGNMENT = /^[A-Za-z_]\w*=/;
+
+type Context = { cwd: string; home: string };
 
 /** A word's path with a leading `~`, `$HOME` or `${HOME}` expanded, or undefined when another expansion remains. */
-function expandedPath(word: ShellWord, home: string): string | undefined {
-  const text = word.text.replace(/^(?:~|\$HOME\b|\$\{HOME\})(?=\/|$)/, home);
-  return /[$`]/.test(text) ? undefined : text;
+function expandedPath(text: string, home: string): string | undefined {
+  const path = text.replace(/^(?:~|\$HOME\b|\$\{HOME\})(?=\/|$)/, home);
+  return /[$`]/.test(path) ? undefined : path;
 }
 
 /** Whether `path` is `folder` or lies inside it. */
@@ -60,70 +100,147 @@ function within(path: string, folder: string): boolean {
   return rest === '' || (!rest.startsWith('..') && !isAbsolute(rest));
 }
 
-/** The folders a command line `cd`s or `pushd`s into, so relative words resolve against them too. */
-function changedFolders(commands: readonly ShellWord[][], cwd: string, home: string): string[] {
-  return commands.flatMap((words) => {
-    const run = program(words);
-    if (!run || (run.name !== 'cd' && run.name !== 'pushd')) return [];
-    const target = run.args.find((arg) => !arg.text.startsWith('-'));
-    if (!target) return [home];
-    const path = expandedPath(target, home);
-    return path === undefined ? [] : [resolve(cwd, path)];
+/** The folder a glob's literal prefix names: `~/.config/*` reads under `~/.config`. */
+function globRoot(path: string): string {
+  const literal = path.slice(0, path.search(/[*?[]/));
+  return literal.endsWith(sep) ? literal.slice(0, -1) || sep : resolve(literal, '..');
+}
+
+/** The program a simple command runs and its arguments, through launchers such as `env` and `timeout`. */
+function innerCommand(
+  words: ShellWord[],
+): { name: string; args: ShellWord[]; viaXargs: boolean } | undefined {
+  let run = program(words);
+  let viaXargs = false;
+  for (let depth = 0; run && depth < 4; depth++) {
+    const launcher = LAUNCHERS.get(run.name);
+    if (!launcher) return { ...run, viaXargs };
+    viaXargs ||= run.name === 'xargs';
+    let index = 0;
+    let positionals = launcher.positionals;
+    while (index < run.args.length) {
+      const text = run.args[index]?.text ?? '';
+      if (launcher.valueFlags.has(text)) index += 2;
+      else if (text.startsWith('-') || (run.name === 'env' && ASSIGNMENT.test(text))) index++;
+      else if (positionals > 0) {
+        positionals--;
+        index++;
+      } else break;
+    }
+    run = program(run.args.slice(index));
+  }
+  return run && { ...run, viaXargs };
+}
+
+/** The paths a word may name: itself and the value of `--flag=value`, against each folder it may be relative to. */
+function pathsOf(word: ShellWord, folders: readonly string[], home: string): string[] {
+  const texts = [
+    word.text,
+    ...(/^--?[\w-]+=/.test(word.text) ? [word.text.slice(word.text.indexOf('=') + 1)] : []),
+  ];
+  return texts.flatMap((text) => {
+    const path = expandedPath(text, home);
+    if (path === undefined || path === '') return [];
+    return isAbsolute(path) ? [resolve(path)] : folders.map((folder) => resolve(folder, path));
   });
+}
+
+/** The folders a recursive reader reads, as its operands name them; undefined when it reads none recursively. */
+function recursiveOperands(
+  name: string,
+  args: readonly ShellWord[],
+  viaXargs: boolean,
+): ShellWord[] | 'cwd' | undefined {
+  const texts = args.map((arg) => arg.text);
+  if (SEARCHERS.has(name)) {
+    if (!ALWAYS_RECURSIVE.has(name) && !texts.some((text) => RECURSE_FLAG.test(text))) return undefined;
+    const operands: ShellWord[] = [];
+    for (let index = 0; index < args.length; index++) {
+      const arg = args[index];
+      if (!arg) continue;
+      if (SEARCH_VALUE_FLAGS.has(arg.text)) index++;
+      else if (!arg.text.startsWith('-')) operands.push(arg);
+    }
+    const paths = texts.some((text) => PATTERN_FLAGS.has(text) || /^--(?:regexp|file)=/.test(text))
+      ? operands
+      : operands.slice(1);
+    return paths.length ? paths : 'cwd';
+  }
+  if (COPIERS.has(name)) {
+    const flag = COPIERS.get(name);
+    return flag === undefined || texts.some((text) => flag.test(text)) ? [...args] : undefined;
+  }
+  if (name === 'find' && (viaXargs || texts.some((text) => FIND_RUNS.has(text)))) {
+    const end = args.findIndex((arg) => /^[-(!]/.test(arg.text));
+    const paths = args.slice(0, end === -1 ? args.length : end);
+    return paths.length ? paths : 'cwd';
+  }
+  return undefined;
+}
+
+/** The refusal for one shell line, read with the folders it may run in; shells it starts are read too. */
+function lineRefusal(command: string, context: Context, depth: number): string | undefined {
+  const { cwd, home } = context;
+  const secrets = SECRET_FILES.map((file) => resolve(home, file));
+  const reading = readShell(command);
+  if (!reading)
+    return /\.config\b/.test(command)
+      ? 'the guard cannot read this command, and it names a config folder.'
+      : undefined;
+  const commands = reading.commands;
+  const folders = [cwd];
+  for (const words of commands) {
+    const run = program(words);
+    if (run?.name !== 'cd' && run?.name !== 'pushd') continue;
+    const target = run.args.find((arg) => !arg.text.startsWith('-'));
+    const path = target ? expandedPath(target.text, home) : home;
+    if (path !== undefined) folders.push(resolve(cwd, path));
+  }
+  const viaXargs = commands.some(
+    (words) => innerCommand(words)?.viaXargs || program(words)?.name === 'xargs',
+  );
+  for (const words of commands) {
+    const run = innerCommand(words);
+    if (!run) continue;
+    if (SHELLS.has(run.name)) {
+      const flag = run.args.findIndex((arg) => SCRIPT_FLAG.test(arg.text));
+      const script = flag === -1 ? undefined : run.args[flag + 1]?.text;
+      const inner = script !== undefined && depth < 4 ? lineRefusal(script, context, depth + 1) : undefined;
+      if (inner) return inner;
+    }
+    for (const arg of run.args)
+      for (const path of pathsOf(arg, folders, home)) {
+        if (secrets.includes(path)) return 'the command names a file that holds a Boat API key.';
+        if (arg.globs && secrets.some((secret) => new Bun.Glob(path).match(secret)))
+          return `the pattern ${arg.raw} matches a file that holds a Boat API key.`;
+      }
+    const operands = recursiveOperands(run.name, run.args, run.viaXargs || viaXargs);
+    if (!operands) continue;
+    const roots =
+      operands === 'cwd'
+        ? folders
+        : operands.flatMap((arg) =>
+            pathsOf(arg, folders, home).map((path) => (arg.globs ? globRoot(path) : path)),
+          );
+    const ancestor = roots.find((root) => secrets.some((secret) => within(secret, root)));
+    if (ancestor)
+      return `${run.name} would read every file under ${ancestor === home ? '~' : ancestor.replace(home + sep, '~/')}, a Boat API key included.`;
+  }
+  return undefined;
 }
 
 /**
  * Why a shell command may not run because it would read a Boat key, or
- * undefined when it may. It refuses a command that names a secret file in any
- * spelling, a glob that matches one, and a recursive read of a folder that
- * holds one. A command it cannot read refuses when it names a config folder.
+ * undefined when it may. It refuses a command whose text names a secret file in
+ * any spelling, an operand or glob that resolves to one, and a recursive read
+ * of a folder that holds one, through launchers and `bash -c` scripts. A
+ * command it cannot read refuses when it names a config folder.
  */
-export function boatKeyCommandRefusal(
-  command: string,
-  context: { cwd: string; home: string },
-): string | undefined {
-  const { cwd, home } = context;
-  const secrets = SECRET_FILES.map((file) => resolve(home, file));
-  const refuse = (why: string) => `Refused: ${why} ${INSTEAD}`;
-  if (SECRET_MENTION.test(command)) return refuse('the command names a file that holds a Boat API key.');
-  const reading = readShell(command);
-  if (!reading)
-    return /\.config\b/.test(command)
-      ? refuse('the guard cannot read this command, and it names a config folder.')
-      : undefined;
-  const commands = [...reading.commands];
-  const folders = [cwd, ...changedFolders(commands, cwd, home)];
-  const pipesToRunner = commands.some((words) => program(words)?.name === 'xargs');
-  for (const words of commands) {
-    const run = program(words);
-    if (!run) continue;
-    const paths = run.args.flatMap((arg) => {
-      const path = expandedPath(arg, home);
-      if (path === undefined) return [];
-      return isAbsolute(path)
-        ? [{ arg, path }]
-        : folders.map((folder) => ({ arg, path: resolve(folder, path) }));
-    });
-    for (const { arg, path } of paths)
-      if (arg.globs && secrets.some((secret) => new Bun.Glob(path).match(secret)))
-        return refuse(`the pattern ${arg.raw} matches a file that holds a Boat API key.`);
-    const flag = RECURSIVE_READERS.get(run.name);
-    const recursive =
-      RECURSIVE_READERS.has(run.name) && (flag === undefined || run.args.some((arg) => flag.test(arg.text)));
-    const findRuns =
-      run.name === 'find' && (pipesToRunner || run.args.some((arg) => FIND_RUNS.has(arg.text)));
-    if (!recursive && !findRuns) continue;
-    // A reader given no existing path reads its working folder.
-    const operands = paths.some(({ path }) => existsSync(path))
-      ? paths.map(({ path }) => path)
-      : [...paths.map(({ path }) => path), ...folders];
-    const ancestor = operands.find((path) => secrets.some((secret) => within(secret, path)));
-    if (ancestor)
-      return refuse(
-        `${run.name} would read every file under ${ancestor === home ? '~' : ancestor.replace(home + sep, '~/')}, a Boat API key included.`,
-      );
-  }
-  return undefined;
+export function boatKeyCommandRefusal(command: string, context: Context): string | undefined {
+  const why = SECRET_MENTION.test(command)
+    ? 'the command names a file that holds a Boat API key.'
+    : lineRefusal(command, context, 0);
+  return why && `Refused: ${why} ${INSTEAD}`;
 }
 
 /**
@@ -132,7 +249,7 @@ export function boatKeyCommandRefusal(
  */
 export function boatKeyToolRefusal(
   call: { tool_name: unknown; tool_input: unknown },
-  context: { cwd: string; home: string },
+  context: Context,
 ): string | undefined {
   const { cwd, home } = context;
   const input = typeof call.tool_input === 'object' && call.tool_input !== null ? call.tool_input : {};
@@ -141,8 +258,8 @@ export function boatKeyToolRefusal(
     return typeof value === 'string' ? resolve(cwd, value.replace(/^~(?=\/|$)/, home)) : undefined;
   };
   const secrets = SECRET_FILES.map((file) => resolve(home, file));
-  if (call.tool_name === 'Read' || call.tool_name === 'NotebookRead') {
-    const path = field('file_path') ?? field('notebook_path');
+  if (call.tool_name === 'Read') {
+    const path = field('file_path');
     if (path && secrets.includes(path)) return `Refused: the file holds a Boat API key. ${INSTEAD}`;
   }
   if (call.tool_name === 'Grep') {
