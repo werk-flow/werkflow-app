@@ -5,12 +5,14 @@ import type { AttentionTask } from './types';
 
 /**
  * The Aufgaben sections, most urgent first. Time-bound decisions lead: time
- * approvals (MiLoG timeliness), vacation requests and open Anfragen. The
+ * approvals (MiLoG timeliness), vacation requests, the visits an approved
+ * vacation takes a planned person away from, and open Anfragen. The
  * handover backlog comes last, because it waits without a deadline.
  */
 const ATTENTION_TASK_SECTION_ORDER = [
   'time',
   'vacation',
+  'visitReplan',
   'request',
   'joinRequest',
   'dispatchAcknowledgement',
@@ -31,6 +33,7 @@ const SECTION_OF_TASK_KIND = {
   time_change_request_approval: 'time',
   time_correction_approval: 'time',
   vacation_request_approval: 'vacation',
+  planning_visit_replan: 'visitReplan',
   client_request_open: 'request',
   organization_join_request: 'joinRequest',
   dispatch_acknowledgement: 'dispatchAcknowledgement',

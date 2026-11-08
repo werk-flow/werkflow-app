@@ -1,5 +1,5 @@
 import 'server-only';
-import { logReadFailure } from '@/lib/data/read-request-cache';
+import { logReadFailure, memoizeRequestRead } from '@/lib/data/read-request-cache';
 import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { getCachedOrganizationCalendar } from '@/lib/data/cached';
@@ -18,6 +18,26 @@ import { logError } from '@/lib/logging';
 // Server-only shared loaders for the vacation domain. Server actions and the
 // target loaders consume these; nothing here performs authorization — callers
 // resolve their own authority first.
+
+/**
+ * The organization's open vacation requests, read once per request: the
+ * pending ones the approvers decide, and the approved ones ending on `today`
+ * or later, whose planned visits the planners replan. By start date.
+ */
+export const readOpenVacationRequests = memoizeRequestRead(async (organizationId: string, today: string) =>
+  readCompleteRows(
+    (from, to) =>
+      createSupabaseAdminClient()
+        .from('vacation_requests')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .or(`status.eq.pending,and(status.eq.approved,end_date.gte.${today})`)
+        .order('start_date', { ascending: true })
+        .order('id')
+        .range(from, to),
+    LIST_ROW_CAP,
+  ),
+);
 
 /**
  * The counting context (schedules, conditions, holiday calendar) for one

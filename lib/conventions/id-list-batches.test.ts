@@ -17,6 +17,10 @@ import { listProductSources, repositoryRoot } from './product-sources';
 
 /** file -> "column <- list expression" -> why the list is bounded. */
 const BOUNDED_LISTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  'lib/calendar/absence-visits.ts': {
+    'absent.employee_record_id <- employeeRecordIds':
+      'the people of one batch of at most ABSENCE_BATCH_SIZE (15) absences',
+  },
   'lib/documents/actions.ts': {
     'version_number <- releasedVersionNumbers': 'the released version numbers of one personnel document',
   },

@@ -41,6 +41,10 @@ const OLD_DATE = OLD.slice(0, 10);
 const pendingDay = (index: number): string => addLocalDays(DUE, index);
 /** One past day per closed report: a report stays `reported` after it ends. */
 const closedDay = (index: number): string => addLocalDays(OLD_DATE, 10_000 - index);
+/** One future day per approved vacation, clear of the pending requests' days. */
+const upcomingDay = (index: number): string => addLocalDays(DUE, 100 + index);
+/** The person of a request, a vacation and its visit: the viewer and the colleague alternate. */
+const personOf = (index: number): string => (index % 2 ? OWN_RECORD : COLLEAGUE_RECORD);
 
 /** A deterministic UUID per kind of record and index. */
 function uuid(kind: number, index: number): string {
@@ -224,6 +228,21 @@ function dispatchRows(pending: number, history: number): Record<string, Row[]> {
   };
 }
 
+const vacationRequest = (index: number, isOpen: boolean): Row =>
+  scoped({
+    id: uuid(15, index),
+    employee_record_id: personOf(index),
+    status: isOpen ? 'pending' : 'approved',
+    start_date: isOpen ? pendingDay(index) : OLD_DATE,
+    end_date: isOpen ? pendingDay(index) : OLD_DATE,
+    day_portion: 'full',
+    decided_at: isOpen ? null : OLD,
+    cancelled_at: null,
+    decision_comment: null,
+    cancellation_reason: null,
+    created_at: isOpen ? RECENT : OLD,
+  });
+
 /** Requests, follow-ups, absences, time and join requests: pending ones, then decided ones. */
 function requestRows(pending: number, history: number): Record<string, Row[]> {
   const open = indexes(0, pending);
@@ -263,21 +282,18 @@ function requestRows(pending: number, history: number): Record<string, Row[]> {
         status: isOpen ? 'pending' : 'approved',
       }),
     ),
-    vacation_requests: both((index, isOpen) =>
-      scoped({
-        id: uuid(15, index),
-        employee_record_id: index % 2 ? OWN_RECORD : COLLEAGUE_RECORD,
-        status: isOpen ? 'pending' : 'approved',
-        start_date: isOpen ? pendingDay(index) : OLD_DATE,
-        end_date: isOpen ? pendingDay(index) : OLD_DATE,
-        day_portion: 'full',
-        decided_at: isOpen ? null : OLD,
-        cancelled_at: null,
-        decision_comment: null,
-        cancellation_reason: null,
-        created_at: isOpen ? RECENT : OLD,
-      }),
-    ),
+    vacation_requests: [
+      ...both(vacationRequest),
+      // Approved and still ahead: each takes its person away from one planned visit.
+      ...open.map((index) => ({
+        ...vacationRequest(index, true),
+        id: uuid(21, index),
+        status: 'approved',
+        start_date: upcomingDay(index),
+        end_date: upcomingDay(index),
+        decided_at: RECENT,
+      })),
+    ],
     sickness_reports: both((index, isOpen) =>
       scoped({
         id: uuid(16, index),
@@ -351,6 +367,31 @@ function requestRows(pending: number, history: number): Record<string, Row[]> {
   };
 }
 
+/** One visit on each approved vacation ahead; the closed history lies on past days no window reaches. */
+function planningRows(pending: number, history: number): Record<string, Row[]> {
+  const visit = (index: number, day: string): Row =>
+    scoped({
+      id: uuid(22, index),
+      status: 'scheduled',
+      entry_kind: 'job_visit',
+      internal_type: null,
+      time_kind: 'timed',
+      title: null,
+      start_at: `${day}T07:00:00.000Z`,
+      end_at: `${day}T09:00:00.000Z`,
+      start_date: null,
+      end_date_exclusive: null,
+      absent: [{ id: uuid(23, index), employee_record_id: personOf(index) }],
+      job: { title: 'Einsatz', description: null, job_number: `A-${index}`, status: 'nicht_bearbeitet' },
+    });
+  return {
+    planning_occurrences: [
+      ...indexes(0, pending).map((index) => visit(index, upcomingDay(index))),
+      ...indexes(10_000, history).map((index) => visit(index, closedDay(index))),
+    ],
+  };
+}
+
 function buildWorld(size: { pending: number; history: number }): World {
   return new Map(
     Object.entries({
@@ -358,6 +399,7 @@ function buildWorld(size: { pending: number; history: number }): World {
       ...workRows(size.pending, size.history),
       ...dispatchRows(size.pending, size.history),
       ...requestRows(size.pending, size.history),
+      ...planningRows(size.pending, size.history),
     }),
   );
 }
@@ -450,7 +492,9 @@ function query(table: string) {
   const on = (name: string, test: (value: unknown) => boolean): void => {
     const [embed = '', nested = ''] = name.split('.');
     if (!name.includes('.')) filters.push((row) => test(row[name]));
-    else if (innerEmbeds.has(embed)) filters.push((row) => test(field(row[embed], nested)));
+    // A to-many embed keeps its parent while one embedded row matches.
+    else if (innerEmbeds.has(embed))
+      filters.push((row) => [row[embed]].flat().some((item) => test(field(item, nested))));
   };
   const builder: Record<string, unknown> = {};
   const chain =
@@ -632,10 +676,12 @@ function historyProblems(nextRole: Role, growth: Record<string, number>): string
  * at most `fixed + perPendingItem * pending`, in at most `requests` requests.
  * Measured at 3 and 6 pending items; a new read raises the count and fails.
  */
+// werk-flow/werkflow-planning#267 added the approved vacations ahead with their visits: the office reads
+// their visits once per 15 vacations plus dispatches and names, and own approvals add a marker read.
 const ROW_BUDGET: Readonly<Record<Role, { fixed: number; perPendingItem: number; requests: number }>> = {
-  admin: { fixed: 29, perPendingItem: 31, requests: 70 },
-  buero: { fixed: 28, perPendingItem: 30, requests: 67 },
-  employee: { fixed: 15, perPendingItem: 15, requests: 30 },
+  admin: { fixed: 34, perPendingItem: 33, requests: 75 },
+  buero: { fixed: 33, perPendingItem: 32, requests: 72 },
+  employee: { fixed: 13, perPendingItem: 17, requests: 31 },
 };
 
 // Module mocks are process-wide, so the mocked scenario runs in its own process.

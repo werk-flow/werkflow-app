@@ -46,7 +46,8 @@ const timedVisit = (input: {
   end_at: input.endAt,
   start_date: null,
   end_date_exclusive: null,
-  absent: [{ employee_record_id: input.recordId ?? absentRecordId }],
+  // The assignment shares the visit's id under another prefix.
+  absent: [{ id: input.id.replace(/^83/, '84'), employee_record_id: input.recordId ?? absentRecordId }],
   job: input.job,
 });
 
@@ -242,3 +243,24 @@ signInAs(world, 'employee');
 const requestsBefore = world.adminClientRequests;
 assert.deepEqual(await getAbsenceAffectedVisits(absence), { success: false, error: 'not_authorized' });
 assert.equal(world.adminClientRequests, requestsBefore, 'a refused caller reaches no service-role client');
+
+// More absences than one read carries: each still gets its own visits, in the order asked.
+const { loadAbsencesAffectedVisits } = await import('@/lib/calendar/absence-visits');
+const { createSupabaseAdminClient } = await import('@/lib/supabase/admin');
+const coworkerDays = Array.from({ length: 16 }, (_, index) => ({
+  employeeRecordId: coworkerRecordId,
+  from: `2026-12-${String(index + 1).padStart(2, '0')}`,
+  to: `2026-12-${String(index + 1).padStart(2, '0')}`,
+}));
+const batched = await loadAbsencesAffectedVisits({
+  admin: createSupabaseAdminClient(),
+  orgId: ORGANIZATION_A,
+  absences: [...coworkerDays, { employeeRecordId: absentRecordId, from: '2026-10-30', to: '2026-10-30' }],
+});
+assert.ok(batched);
+assert.equal(batched.length, 17);
+assert.ok(batched.slice(0, 16).every((visits) => visits.length === 0));
+assert.deepEqual(
+  batched[16]?.map((entry) => [entry.assignmentId, entry.visit.occurrenceId]),
+  [[dispatchedVisitId.replace(/^83/, '84'), dispatchedVisitId]],
+);
