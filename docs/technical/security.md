@@ -88,7 +88,7 @@ RLS and column grants govern INSERT and UPDATE delivery. Raw DELETE and TRUNCATE
 
 ### Files
 
-Buckets are private. Server code authorizes the target and signs a short-lived URL for a staging key; finalization copies it to the final key and checks it. Every storage key starts with the owning organization id and goes through the storage adapter. The storage adapter and the admin client never reach a browser bundle. A Server Action never takes file bytes, and only the reviewed writers store a server-generated file.
+Buckets are private. Server code authorizes the target and signs a short-lived URL for a staging key; each finalization copies it to its own key and checks it. Every storage key starts with the owning organization id and goes through the storage adapter. The storage adapter and the admin client never reach a browser bundle. A Server Action never takes file bytes, and only the reviewed writers store a server-generated file.
 
 ### Mail and providers
 
