@@ -15,6 +15,9 @@ import {
   type ResponsibilityMember,
 } from './resolution';
 import { loadResponsibilityRuntimeState } from './server';
+import { delegationRevocationDate, revokedOnOf } from './delegation-window';
+import { isAbsentForWholeWindow } from './substitute-absence';
+import { loadSubstituteAbsenceSpans } from './substitute-absence-server';
 import type { OrganizationResponsibility, ResponsibilityConfigurationMode } from './types';
 import { logError } from '@/lib/logging';
 import { Constants } from '@/lib/supabase/database.types';
@@ -38,6 +41,8 @@ const delegationSchema = z.object({
   validFrom: z.string().max(10),
   validUntil: z.string().max(10),
   note: z.string().max(2000),
+  /** The owner saw the warning that the substitute is away on every day of the window. */
+  acceptAbsentSubstitute: z.boolean(),
 });
 
 export type ResponsibilityPreview = {
@@ -235,6 +240,28 @@ export async function applyResponsibilityConfiguration(rawInput: {
   return { success: true };
 }
 
+/**
+ * The warning a save without the owner's acknowledgement answers when the
+ * substitute is away on every day of the window; null when they are not.
+ * The read runs at save time, so an absence approved after the dialog opened
+ * still warns. A failed read refuses: it must not pass as "not away".
+ */
+async function substituteAbsenceRefusal(
+  context: { orgId: string; admin: AdminClient },
+  input: { substituteEmployeeRecordId: string; validFrom: string; validUntil: string },
+): Promise<ActionResult | null> {
+  const spans = await loadSubstituteAbsenceSpans(context.admin, {
+    organizationId: context.orgId,
+    from: input.validFrom,
+    until: input.validUntil,
+    employeeRecordId: input.substituteEmployeeRecordId,
+  });
+  if (!spans) return { success: false, error: 'responsibility_absence_check_failed' };
+  return isAbsentForWholeWindow(spans, input.substituteEmployeeRecordId, input.validFrom, input.validUntil)
+    ? { success: false, error: 'responsibility_substitute_absent' }
+    : null;
+}
+
 export async function createResponsibilityDelegation(rawInput: {
   responsibility: OrganizationResponsibility;
   delegatorEmployeeRecordId: string;
@@ -242,6 +269,7 @@ export async function createResponsibilityDelegation(rawInput: {
   validFrom: string;
   validUntil: string;
   note: string;
+  acceptAbsentSubstitute: boolean;
 }): Promise<ActionResult> {
   const parsedInput = delegationSchema.safeParse(rawInput);
   if (!parsedInput.success) return { success: false, error: 'invalid_input' };
@@ -254,6 +282,10 @@ export async function createResponsibilityDelegation(rawInput: {
     input.validUntil < input.validFrom
   ) {
     return { success: false, error: 'responsibility_delegation_invalid_dates' };
+  }
+  if (!input.acceptAbsentSubstitute) {
+    const absence = await substituteAbsenceRefusal(owner.context, input);
+    if (absence) return absence;
   }
 
   const { error } = await owner.context.admin.rpc('create_responsibility_delegation', {
@@ -275,6 +307,12 @@ export async function createResponsibilityDelegation(rawInput: {
   return { success: true };
 }
 
+/**
+ * „Heute beenden“ for a running window, „Entfernen“ for one that has not
+ * started: the window is revoked from today, or from its first day so it never
+ * takes effect. The row and its event stay as history. A window that is
+ * already over or removed answers success without a write.
+ */
 export async function endResponsibilityDelegation(rawDelegationId: string): Promise<ActionResult> {
   const parsedDelegationId = uuidSchema.safeParse(rawDelegationId);
   if (!parsedDelegationId.success) return { success: false, error: 'invalid_input' };
@@ -286,7 +324,7 @@ export async function endResponsibilityDelegation(rawDelegationId: string): Prom
   // read binds the delegation to the active organization first.
   const { data: delegation, error: delegationError } = await owner.context.admin
     .from('organization_responsibility_delegations')
-    .select('id')
+    .select('id, valid_from, valid_until, revoked_from, updated_at')
     .eq('organization_id', owner.context.orgId)
     .eq('id', delegationId)
     .maybeSingle();
@@ -296,9 +334,20 @@ export async function endResponsibilityDelegation(rawDelegationId: string): Prom
   }
   if (!delegation) return { success: false, error: 'responsibility_delegation_not_found' };
 
+  const revokedFrom = delegationRevocationDate(
+    {
+      validFrom: delegation.valid_from,
+      validUntil: delegation.valid_until,
+      revokedFrom: delegation.revoked_from,
+      revokedOn: revokedOnOf(delegation),
+    },
+    getBusinessTodayIso(),
+  );
+  if (revokedFrom === null) return { success: true };
+
   const { error } = await owner.context.admin.rpc('end_responsibility_delegation', {
     p_delegation_id: delegationId,
-    p_revoked_from: getBusinessTodayIso(),
+    p_revoked_from: revokedFrom,
     p_actor_id: owner.context.userId,
   });
   if (error) {

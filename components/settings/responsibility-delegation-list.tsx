@@ -11,8 +11,20 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { endResponsibilityDelegation } from '@/lib/responsibilities/actions';
+import { delegationWindowState, type DelegationWindowState } from '@/lib/responsibilities/delegation-window';
 import type { ResponsibilityDelegation } from '@/lib/responsibilities/resolution';
 import type { ResponsibilitySettingsData } from '@/lib/responsibilities/server';
+
+const DELEGATION_BADGES = {
+  planned: { label: 'Geplant', variant: 'outline' },
+  active: { label: 'Zeitlich begrenzt', variant: 'outline' },
+  ended: { label: 'Beendet', variant: 'secondary' },
+  removed: { label: 'Entfernt', variant: 'secondary' },
+} as const satisfies Record<DelegationWindowState, { label: string; variant: 'outline' | 'secondary' }>;
+
+/** A window that has not started is removed, so it never takes effect; a running one ends today. */
+const PLANNED_ACTION = { label: 'Entfernen', pending: 'Wird entfernt…' };
+const ACTIVE_ACTION = { label: 'Heute beenden', pending: 'Wird beendet…' };
 
 export function DelegationList({
   data,
@@ -26,7 +38,7 @@ export function DelegationList({
   const { showBanner } = useBanner();
   const ending = useBusyIds();
 
-  const handleEnd = async (delegationId: string) => {
+  const handleEnd = async (delegationId: string, state: DelegationWindowState) => {
     await ending.run(delegationId, async () => {
       try {
         const result = await endResponsibilityDelegation(delegationId);
@@ -38,7 +50,10 @@ export function DelegationList({
           return;
         }
         // The action's response renders the route with the ended delegation.
-        showBanner({ message: 'Die Vertretung wurde beendet.', variant: 'success' });
+        showBanner({
+          message: state === 'planned' ? 'Die Vertretung wurde entfernt.' : 'Die Vertretung wurde beendet.',
+          variant: 'success',
+        });
       } catch {
         showBanner({ message: ERROR_MESSAGES.save_failed, variant: 'error' });
       }
@@ -48,8 +63,9 @@ export function DelegationList({
   return (
     <ul className="grid gap-2">
       {delegations.map((delegation) => {
-        const effectiveUntil = delegation.revokedFrom ? delegation.revokedFrom : delegation.validUntil;
-        const isEnded = effectiveUntil < data.businessDate || delegation.revokedFrom === data.businessDate;
+        const state = delegationWindowState(delegation, data.businessDate);
+        const badge = DELEGATION_BADGES[state];
+        const action = state === 'planned' ? PLANNED_ACTION : state === 'active' ? ACTIVE_ACTION : null;
         return (
           <li
             key={delegation.id}
@@ -63,18 +79,16 @@ export function DelegationList({
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant={isEnded ? 'secondary' : 'outline'}>
-                {isEnded ? 'Beendet' : 'Zeitlich begrenzt'}
-              </Badge>
-              {canEdit && !isEnded ? (
+              <Badge variant={badge.variant}>{badge.label}</Badge>
+              {canEdit && action ? (
                 <Button
                   type="button"
                   size="sm"
                   variant="ghost"
                   disabled={ending.anyBusy}
-                  onClick={() => void handleEnd(delegation.id)}
+                  onClick={() => void handleEnd(delegation.id, state)}
                 >
-                  {ending.isBusy(delegation.id) ? 'Wird beendet…' : 'Heute beenden'}
+                  {ending.isBusy(delegation.id) ? action.pending : action.label}
                 </Button>
               ) : null}
             </div>

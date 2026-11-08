@@ -264,6 +264,8 @@ const delegation = {
   valid_from: today,
   valid_until: '2026-10-15',
   revoked_from: null,
+  // Every row has one; the revocation day is read from it.
+  updated_at: `${today}T08:00:00.000Z`,
 };
 world.tables.organization_responsibility_delegations = [delegation];
 actAs(employeeId, 'employee');

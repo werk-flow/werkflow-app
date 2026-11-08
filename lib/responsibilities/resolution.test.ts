@@ -123,6 +123,7 @@ describe('resolveEffectiveResponsibility', () => {
       validFrom: '2026-08-10',
       validUntil: '2026-08-12',
       revokedFrom: null,
+      revokedOn: null,
     });
 
     expect(result.holders.some((holder) => holder.employeeRecordId === 'employee-record')).toBe(expected);
@@ -137,6 +138,7 @@ describe('resolveEffectiveResponsibility', () => {
       validFrom: '2026-08-10',
       validUntil: '2026-08-15',
       revokedFrom: '2026-08-13',
+      revokedOn: '2026-08-13',
     };
 
     expect(resolveWithDelegation('2026-08-12', delegation).holders).toHaveLength(2);
@@ -172,6 +174,7 @@ describe('resolveEffectiveResponsibility', () => {
           validFrom: '2026-08-10',
           validUntil: '2026-08-12',
           revokedFrom: null,
+          revokedOn: null,
         },
       ],
     });
@@ -191,6 +194,7 @@ describe('resolveEffectiveResponsibility', () => {
       validFrom: '2026-08-10',
       validUntil: '2026-08-12',
       revokedFrom: null,
+      revokedOn: null,
     };
     const result = resolveEffectiveResponsibility({
       responsibility: 'time_approval',
@@ -219,6 +223,7 @@ describe('resolveEffectiveResponsibility', () => {
         validFrom: '2026-08-09',
         validUntil: '2026-08-15',
         revokedFrom: null,
+        revokedOn: null,
       },
       {
         id: 'newer-delegation',
@@ -228,6 +233,7 @@ describe('resolveEffectiveResponsibility', () => {
         validFrom: '2026-08-10',
         validUntil: '2026-08-12',
         revokedFrom: null,
+        revokedOn: null,
       },
     ];
     const resolve = (inputDelegations: ResponsibilityDelegation[]) =>
@@ -278,6 +284,7 @@ describe('resolveEffectiveResponsibility', () => {
       validFrom: '2026-08-10',
       validUntil: '2026-08-12',
       revokedFrom: null,
+      revokedOn: null,
     });
     const leaveApproval = resolveEffectiveResponsibility({
       responsibility: 'leave_approval',
