@@ -273,33 +273,36 @@ export async function finalizeDocumentVersionUpload(
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
+  // The ticket's key, recomputed from the authenticated organization: a
+  // client never names a foreign key. Finalize promotes its staging object.
+  const originalFileName = input.fileName.trim() || 'Dokument';
+  const ticketPath = buildDocumentVersionStoragePath({
+    organizationId: auth.context.orgId,
+    documentId: input.documentId,
+    versionNumber: input.versionNumber,
+    fileName: originalFileName,
+  });
+
   const existing = await getVersionableDocument(auth.context, input.documentId);
-  if (!existing.success) return existing;
+  if (!existing.success) {
+    // A manager filed the document after this ticket, so no finalize of the
+    // upload can succeed. Only its staging object goes, never a registered key.
+    if (existing.error === 'document_filed') await discardStagedUpload(auth.context.orgId, ticketPath);
+    return existing;
+  }
 
   const nextVersionNumber = existing.document.current_version_number + 1;
   if (input.versionNumber !== nextVersionNumber) {
     // Another version landed between ticket and finalize; the upload must not
     // become the current file. It still sits at its staging key, which no
     // archived version shares.
-    const staleStoragePath = buildDocumentVersionStoragePath({
-      organizationId: auth.context.orgId,
-      documentId: existing.document.id,
-      versionNumber: input.versionNumber,
-      fileName: input.fileName.trim() || 'Dokument',
-    });
-    await discardStagedUpload(auth.context.orgId, staleStoragePath);
+    await discardStagedUpload(auth.context.orgId, ticketPath);
     return { success: false, error: 'version_conflict' };
   }
 
-  const originalFileName = input.fileName.trim() || 'Dokument';
   const head = await acceptUploadedObject({
     organizationId: auth.context.orgId,
-    storagePath: buildDocumentVersionStoragePath({
-      organizationId: auth.context.orgId,
-      documentId: existing.document.id,
-      versionNumber: nextVersionNumber,
-      fileName: originalFileName,
-    }),
+    storagePath: ticketPath,
     failureLabel: 'Failed to verify uploaded version object',
   });
   if (!head.success) return head;

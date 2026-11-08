@@ -30,6 +30,7 @@ declare global {
       | 'document-search'
       | 'document-archive'
       | 'document-upload'
+      | 'document-version-upload'
       | 'calendar-board'
       | 'calendar-day'
       | 'calendar-month'

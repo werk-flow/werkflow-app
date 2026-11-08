@@ -16,7 +16,10 @@ import {
   DocumentArchiveContractFixture,
   initializeDocumentArchiveBoundary,
 } from './document-archive-boundaries';
-import { DocumentUploadContractFixture } from './document-upload-boundaries';
+import {
+  DocumentUploadContractFixture,
+  DocumentVersionUploadContractFixture,
+} from './document-upload-boundaries';
 import { OrganizationContractFixture } from './organization-boundaries';
 import { CalendarContractFixture } from './calendar-boundaries';
 import { FeedbackContractFixture, isFeedbackFixture } from './feedback-boundaries';
@@ -574,6 +577,8 @@ createRoot(root).render(
     <DocumentArchiveContractFixture />
   ) : window.uiContractFixture === 'document-upload' ? (
     <DocumentUploadContractFixture />
+  ) : window.uiContractFixture === 'document-version-upload' ? (
+    <DocumentVersionUploadContractFixture />
   ) : window.uiContractFixture === 'options' ? (
     <OptionContractFixture />
   ) : window.uiContractFixture === 'calendar' ? (

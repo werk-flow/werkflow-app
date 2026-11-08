@@ -16,18 +16,19 @@ const ARCHIVE_FAILURE_MESSAGES = {
 /**
  * Runs a retention or filing write under the document's busy id. The result
  * shows in the details dialog while it still shows that document; a refusal
- * puts the document back and names the reason there. Resolves whether the
- * write was saved.
+ * puts the document back and names the reason there. A saved write stays busy
+ * until the revalidated library lands, or reports the unconfirmed refresh.
+ * Resolves whether the write was saved.
  */
 function runArchiveWrite({
   details,
-  busy,
+  mutations: { busy, waitForDocuments },
   document,
   write,
   fallback,
 }: {
   details: DocumentDetailsDialogState;
-  busy: DocumentLibraryMutations['busy'];
+  mutations: DocumentLibraryMutations;
   document: OrganizationDocument;
   write: () => Promise<DocumentResult>;
   fallback: string;
@@ -39,6 +40,8 @@ function runArchiveWrite({
     setDetailsError(describeFailure(error, ARCHIVE_FAILURE_MESSAGES, fallback));
   };
   setDetailsError(null);
+  // The action's response carries the revalidated library and can land before the write resolves.
+  const since = waitForDocuments.markChange();
   return busy
     .run(document.id, async () => {
       const result = await write();
@@ -47,6 +50,7 @@ function runArchiveWrite({
         return false;
       }
       if (detailsDialogIdRef.current === document.id) setDetailsDialog(result.document);
+      await waitForDocuments(since);
       return true;
     })
     .catch(() => {
@@ -71,8 +75,6 @@ export function useDocumentArchiveActions({
   isTrashView: boolean;
   confirm: (dialog: DocumentConfirmDialogState) => void;
 }) {
-  const { busy } = mutations;
-
   function handleUpdateRetention(
     document: OrganizationDocument,
     terms: DocumentRetentionTerms,
@@ -81,7 +83,7 @@ export function useDocumentArchiveActions({
     details.setDetailsDialog({ ...document, archive: { ...document.archive, ...terms } });
     return runArchiveWrite({
       details,
-      busy,
+      mutations,
       document,
       write: () => updateDocumentRetention({ documentId: document.id, ...terms }),
       fallback: 'Die Aufbewahrung konnte nicht geändert werden.',
@@ -97,7 +99,7 @@ export function useDocumentArchiveActions({
       onConfirm: () =>
         void runArchiveWrite({
           details,
-          busy,
+          mutations,
           document,
           write: () => fileDocument(document.id),
           fallback: 'Die Datei konnte nicht festgeschrieben werden.',

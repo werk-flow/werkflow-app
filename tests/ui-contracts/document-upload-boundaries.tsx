@@ -1,8 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
-import { DocumentBatchUploadDialog } from '@/components/dokumente/document-upload-dialog';
+import {
+  DocumentBatchUploadDialog,
+  DocumentUploadDialog,
+} from '@/components/dokumente/document-upload-dialog';
 import { uploadDocumentVersionDirect } from '@/lib/documents/upload-client';
-import type { DocumentUploadItem } from '@/components/dokumente/document-upload-rows';
+import {
+  failedUploadRow,
+  type DocumentUploadItem,
+  type DocumentUploadRow,
+} from '@/components/dokumente/document-upload-rows';
 import type { OrganizationDocument } from '@/lib/documents/types';
 
 // The document upload's Server Actions for the upload dialog contract. The
@@ -27,6 +34,8 @@ type DocumentUploadBoundaryState = {
   failFinalize: string[];
   /** The versions saved on the versioned document, the first one included. */
   versions: { versionNumber: number; storagePath: string }[];
+  /** Whether a manager filed the versioned document, so it takes no new version. */
+  filed: boolean;
 };
 
 declare global {
@@ -132,12 +141,13 @@ export async function createDocumentVersionUploadTicket(
   };
 }
 
-/** Saves a version when its number is the next one, like `finalize_document_version_upload`. */
+/** Saves a version when the document is not filed and its number is the next one, like `finalize_document_version_upload`. */
 export async function finalizeDocumentVersionUpload(
   input: Parameters<UploadActions['finalizeDocumentVersionUpload']>[0],
 ): ReturnType<UploadActions['finalizeDocumentVersionUpload']> {
   const state = window.uiContractDocumentUpload;
   if (takeOnce(state.failFinalize, input.fileName)) return { success: false, error: 'load_failed' };
+  if (state.filed) return { success: false, error: 'document_filed' };
   if (input.versionNumber !== currentVersion().versionNumber + 1) {
     return { success: false, error: 'version_conflict' };
   }
@@ -196,5 +206,48 @@ export function DocumentUploadContractFixture(): React.JSX.Element {
         }}
       />
     </main>
+  );
+}
+
+const VERSION_FILE = new File(['Version 2'], 'angebot-v2.pdf', { type: 'application/pdf' });
+
+/**
+ * The „Neue Version hochladen“ dialog of the library after one try of one
+ * file on the versioned document: the real upload client, the failed row with
+ * its reason, and the retry the dialog offers only for a reason another try
+ * can fix.
+ */
+export function DocumentVersionUploadContractFixture(): React.JSX.Element {
+  const [row, setRow] = useState<DocumentUploadRow>({
+    id: 'contract-version-upload',
+    file: VERSION_FILE,
+    status: 'uploading',
+    progress: 0,
+    transferred: null,
+  });
+  useEffect(() => {
+    void uploadDocumentVersionDirect({
+      documentId: 'contract-versioned',
+      file: VERSION_FILE,
+      transferred: null,
+    }).then((outcome) =>
+      setRow((running) =>
+        outcome.status === 'failed'
+          ? { ...running, ...failedUploadRow(outcome.reason, outcome.transferred) }
+          : { ...running, status: 'done' },
+      ),
+    );
+  }, []);
+  return (
+    <DocumentUploadDialog
+      open
+      title="Neue Version hochladen"
+      description="Die Datei wird zur aktuellen Version von „Vertrag.pdf“."
+      rows={[row]}
+      isRunning={row.status === 'uploading'}
+      onRetry={() => undefined}
+      onCancel={() => undefined}
+      onClose={() => undefined}
+    />
   );
 }

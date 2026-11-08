@@ -71,7 +71,7 @@ Server actions in `lib/documents/actions.ts` and RLS through `app_private` helpe
 
 ## Retention and filing
 
-The owner's schedule (werk-flow/werkflow-planning#24) has one class: ten years for financial papers. The retention end is 31 December of the document date's year plus ten years; permanent deletion is possible from the next day.
+The owner's schedule (werk-flow/werkflow-planning#24) has one class: ten years for financial papers. The retention end is 31 December of the document date's year plus ten years; from the next day the period no longer blocks permanent deletion.
 
 - An ordinary upload of an invoice, offer or contract gets the class. A copy, a generated report and a protected personnel document do not. The document date (`Belegdatum`) defaults to the Berlin day of the upload.
 - Admin and Büro change the document date and the class, each change with its audit event, until they file the document. The details form, the action and `update_document_retention` each refuse a date outside `documentDateRange` (`lib/documents/retention.ts`) with `document_date_out_of_range`. A protected personnel document keeps its own rules: no class, no filing.

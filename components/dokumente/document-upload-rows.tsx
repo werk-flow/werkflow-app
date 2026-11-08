@@ -42,6 +42,7 @@ const FAILURE_TEXT: Record<DocumentUploadFailure, string> = {
   not_saved: 'Die Datei konnte nicht gespeichert werden.',
   version_conflict: 'Inzwischen wurde eine neuere Version gespeichert. Prüfe die Versionen.',
   version_unconfirmed: 'Ob deine Version gespeichert wurde, ist nicht sicher. Prüfe die Versionen.',
+  document_filed: 'Die Datei wurde inzwischen festgeschrieben und nimmt keine neue Version mehr an.',
   folder_failed: 'Der Zielordner konnte nicht angelegt werden.',
 };
 
@@ -51,6 +52,7 @@ const FINAL_FAILURES: ReadonlySet<DocumentUploadFailure> = new Set([
   'empty',
   'version_conflict',
   'version_unconfirmed',
+  'document_filed',
 ]);
 
 /** A failed row the retry sends again. */
