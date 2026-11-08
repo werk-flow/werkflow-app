@@ -271,6 +271,7 @@ function addUpload(
     const versionPath = buildDocumentVersionStoragePath({
       organizationId: input.organizationId,
       documentId,
+      uploadId: log.newId(),
       versionNumber: version,
       fileName: input.fileName,
     });
