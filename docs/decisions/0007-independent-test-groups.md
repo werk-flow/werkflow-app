@@ -182,3 +182,13 @@ The owner decided this on 2026-10-29 for the CI overhaul (werk-flow/werkflow-pla
 3. Repair mode, release mode and full CI runs are unchanged. Every other browser group runs nightly and in the release gate.
 
 Known limit, accepted by the owner: a regression that only a non-critical journey without a permission test exposes surfaces in the nightly run or the release gate, not on its PR. Rules and commands: [testing.md](../technical/testing.md#how-selection-works).
+
+## Amendment 2026-11-08: the lab groups run on every product change
+
+The owner decided this on 2026-11-08 (werk-flow/werkflow-planning#222). On 2026-11-07 two lab-count regressions reached `main` unseen, because a change plan selected the lab groups only for their own test code: werk-flow/werkflow-app#225 added two requests to the office's first load, and werk-flow/werkflow-app#241 two backend requests to a field checklist tick. Each turned every later full-run PR red until its fix landed. A lab group takes about a minute in CI.
+
+1. A change plan, in CI and locally, selects `audit:lab:office` and `audit:lab:field` when a product file, a migration or a dependency changed, as it selects the critical journeys, and when their own spec or test support changed. Shared test support that a lab group does not import selects neither. This supersedes, in the first 2026-10-29 amendment, `audit:lab:*` among the groups that run only in release mode, CI's full runs and with `--group`, and the known limit for lab-count regressions.
+2. A failed lab group starts repair mode like any group a change plan runs.
+3. The wall-clock `audit:performance:*` groups stay out of every change plan. The lab gate itself, its references, ceilings and digests, is unchanged.
+
+Rules and commands: [testing.md](../technical/testing.md#how-selection-works).

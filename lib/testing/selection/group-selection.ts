@@ -92,13 +92,18 @@ function browserSelection(
   const trigger = group.trigger ?? 'scope';
   const criticalSupport =
     trigger === 'critical' && sharedSupport.has(file) ? 'Critical journey: test support changed' : undefined;
-  // A shared fixture also runs the integration pilots; only the critical journeys run besides them.
-  if (isRunnerInput(file)) return criticalSupport;
-  if (isTestInput(file))
-    return group.executionInputs?.includes(file) ? 'Test execution dependency changed' : criticalSupport;
+  const ownSupport =
+    isTestInput(file) && group.executionInputs?.includes(file)
+      ? 'Test execution dependency changed'
+      : undefined;
+  // A shared fixture also runs the integration pilots; besides them only the critical journeys run,
+  // and a lab group that imports it, because its counts are measured through the fixture.
+  if (isRunnerInput(file)) return trigger === 'product' ? ownSupport : criticalSupport;
+  if (isTestInput(file)) return ownSupport ?? criticalSupport;
   const rows = CORE_SELECTION.filter((entry) => entry.pattern.test(file));
-  if (trigger === 'critical' && (rows.length || isProductFile(file)))
-    return `Critical journey: ${rows[0]?.name ?? 'product code'} changed`;
+  const product = rows[0]?.name ?? (isProductFile(file) ? 'product code' : undefined);
+  if (product && trigger === 'critical') return `Critical journey: ${product} changed`;
+  if (product && trigger === 'product') return `Lab counts: ${product} changed`;
   const row = rows.find((entry) => entry.groups.includes(group.id));
   if (row) return `Core set: ${row.name}`;
   if (trigger !== 'scope' || !isProductFile(file)) return undefined;
@@ -111,9 +116,10 @@ function browserSelection(
 /**
  * Chooses what a change must check. Release mode selects every group. Change
  * mode selects the cheap gates and the browser groups each `changeTrigger`
- * names: the critical journeys for any product, migration or shared test
- * support change, permission groups by declared scope, the core table, and
- * any group whose own test code changed. When a browser group's latest result
+ * names: the critical journeys for any product, migration, dependency or
+ * shared test support change, the lab groups for the same except shared test
+ * support, permission groups by declared scope, the core table, and any group
+ * whose own test code changed. When a browser group's latest result
  * failed or was blocked, it selects those browser groups and the groups whose
  * own test code changed instead (repair mode).
  */
