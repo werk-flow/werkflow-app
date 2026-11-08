@@ -164,9 +164,12 @@ begin
     '28600000-0000-0000-0000-000000000001'
   );
   insert into public.purge_test_references values (v_org, v_org || '/due/anderswo.pdf');
+  -- The claim is global: another organization's due entries would change its
+  -- result or crowd out this test's. The rollback restores them.
+  delete from public.storage_purge_queue where organization_id <> v_org and purge_after <= now();
 
   select array_agg(claimed.storage_path order by claimed.storage_path) into v_claimed
-  from public.claim_storage_purge(100) claimed;
+  from public.claim_storage_purge(100) claimed where claimed.organization_id = v_org;
   if v_claimed is distinct from array[
     v_org || '/d20/versions/1-foto.jpg', v_org || '/due/frei.pdf'
   ] then raise exception 'the purge claimed other paths than the due unreferenced ones: %', v_claimed; end if;
@@ -179,7 +182,7 @@ begin
 
   -- A claimed entry waits an hour; one the purge did not complete stays queued
   -- and comes back with its attempts once the hour is over.
-  if exists (select 1 from public.claim_storage_purge(100)) then
+  if exists (select 1 from public.claim_storage_purge(100) claimed where claimed.organization_id = v_org) then
     raise exception 'a claimed entry was claimed again within the hour';
   end if;
   perform public.complete_storage_purge(array(
@@ -190,7 +193,8 @@ begin
   end if;
   update public.storage_purge_queue set last_attempt_at = now() - interval '1 hour'
   where storage_path = v_org || '/d20/versions/1-foto.jpg';
-  select array_agg(claimed.storage_path) into v_claimed from public.claim_storage_purge(100) claimed;
+  select array_agg(claimed.storage_path) into v_claimed
+  from public.claim_storage_purge(100) claimed where claimed.organization_id = v_org;
   if v_claimed is distinct from array[v_org || '/d20/versions/1-foto.jpg']
     or (select attempts from public.storage_purge_queue
       where storage_path = v_org || '/d20/versions/1-foto.jpg') <> 2
