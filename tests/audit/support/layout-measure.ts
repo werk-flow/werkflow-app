@@ -49,13 +49,13 @@ type PageReport = {
  * and its replacement still runs.
  */
 export async function nextFrames(page: Page): Promise<void> {
-  await page.evaluate(async () => {
+  const unsettled = await page.evaluate(async () => {
     await new Promise<void>((resolve) => {
       requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
     });
     let capped = false;
     const cap = new Promise<void>((resolve) =>
-      // eslint-disable-next-line test-hygiene/no-wall-clock-wait -- caps a stuck animation; the wait ends as soon as no finite animation runs
+      // eslint-disable-next-line test-hygiene/no-wall-clock-wait -- caps a stuck animation; the wait ends as soon as no finite animation runs, and a cap that fires fails below
       setTimeout(() => {
         capped = true;
         resolve();
@@ -69,9 +69,26 @@ export async function nextFrames(page: Page): Promise<void> {
             (animation.playState === 'running' || animation.pending) &&
             Number.isFinite(Number(animation.effect?.getComputedTiming().endTime)),
         );
-    for (let current = running(); current.length > 0 && !capped; current = running())
+    let current = running();
+    while (current.length > 0 && !capped) {
       await Promise.race([Promise.allSettled(current.map((animation) => animation.finished)), cap]);
+      current = running();
+    }
+    return current.map((animation) => {
+      const name =
+        animation instanceof CSSTransition
+          ? animation.transitionProperty
+          : animation instanceof CSSAnimation
+            ? animation.animationName
+            : animation.id || 'animation';
+      const target = animation.effect instanceof KeyframeEffect ? animation.effect.target : null;
+      return `${name} on ${target ? target.tagName.toLowerCase() : '?'}`;
+    });
   });
+  // A finite animation still running at the cap would let the next read see a
+  // halfway layout or color: fail, never measure it as settled.
+  if (unsettled.length > 0)
+    throw new Error(`Animations still ran after 2 s, so nothing settled to measure: ${unsettled.join(', ')}`);
 }
 
 async function measurePage(page: Page): Promise<PageReport> {
