@@ -27,30 +27,6 @@ export function workArtifactExportStoragePath(
   return `${organizationId}/work-artifact-exports/${revisionId}/${randomUUID()}/${exportFile.rendererVersion}-${exportFile.contentHash}.html`;
 }
 
-/**
- * Removes a generated export object after its registration failed, unless a
- * document owns its path: a committed export of the same content writes the
- * same key. A failed read keeps the object, since only a completed read
- * proves that no document owns it.
- */
-export async function discardUnreferencedExportObject(
-  admin: AdminClient,
-  organizationId: string,
-  storagePath: string,
-  failureLabel: string,
-): Promise<void> {
-  const reference = await admin
-    .from('documents')
-    .select('id')
-    .eq('organization_id', organizationId)
-    .eq('storage_path', storagePath)
-    .limit(1);
-  if (reference.error) logError(failureLabel, reference.error);
-  if (!reference.error && (reference.data?.length ?? 0) === 0) {
-    await discardStorageObjects({ organizationId, paths: [storagePath] });
-  }
-}
-
 /** The document a committed export of this revision, renderer and content already registered. */
 export async function readRenderedExport(
   admin: AdminClient,
