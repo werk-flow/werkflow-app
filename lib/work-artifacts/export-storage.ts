@@ -6,8 +6,8 @@ import type { PostgrestError, PostgrestSingleResponse } from '@supabase/supabase
 
 import type { ActionFailure } from '@/lib/action-result';
 import { loggedRead } from '@/lib/data/read-request-cache';
+import { discardUnreferencedObject } from '@/lib/documents/storage-references';
 import { logError } from '@/lib/logging';
-import { discardStorageObjects } from '@/lib/storage/r2';
 import type { AdminClient } from '@/lib/supabase/admin';
 import type { Json } from '@/lib/supabase/database.types';
 
@@ -24,31 +24,6 @@ export function workArtifactExportStoragePath(
   exportFile: { rendererVersion: string; contentHash: string },
 ): string {
   return `${organizationId}/work-artifact-exports/${revisionId}/${randomUUID()}/${exportFile.rendererVersion}-${exportFile.contentHash}.html`;
-}
-
-/**
- * Removes a generated export object after its registration failed, unless a
- * document owns its path. A failed read keeps the object, since only a
- * completed read proves that no document owns it. The read is current only
- * when no other attempt writes the key: an artifact export's key is its own
- * (`workArtifactExportStoragePath`).
- */
-export async function discardUnreferencedExportObject(
-  admin: AdminClient,
-  organizationId: string,
-  storagePath: string,
-  failureLabel: string,
-): Promise<void> {
-  const reference = await admin
-    .from('documents')
-    .select('id')
-    .eq('organization_id', organizationId)
-    .eq('storage_path', storagePath)
-    .limit(1);
-  if (reference.error) logError(failureLabel, reference.error);
-  if (!reference.error && (reference.data?.length ?? 0) === 0) {
-    await discardStorageObjects({ organizationId, paths: [storagePath] });
-  }
 }
 
 /** The document a committed export of this revision, renderer and content already registered. */
@@ -114,8 +89,7 @@ export async function refuseWorkArtifactExport(
   storagePath: string,
   error: { message?: string } | null,
 ): Promise<ActionFailure> {
-  // The registration may have committed before its answer was lost.
-  await discardUnreferencedExportObject(
+  await discardUnreferencedObject(
     admin,
     organizationId,
     storagePath,

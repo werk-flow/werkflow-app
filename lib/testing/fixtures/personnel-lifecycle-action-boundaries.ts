@@ -329,8 +329,8 @@ assert.deepEqual(storageCalls, []);
 assert.equal(databaseSnapshot(world), initialDatabase, 'no refused call may write');
 
 // An Admin's upload: the first finalize copies the staged upload to a key of
-// its own and registers that key, and a replay of the finalized upload reads
-// the registered object without copying over it. A cleanup whose read was
+// its own and registers that key, and a replay of the finalized upload touches
+// no storage. A cleanup whose read was
 // taken before the finalize committed removes only the staging key, never the
 // registered copy. A cleanup of an unregistered upload removes its staging key.
 signInAs(world, 'admin');
@@ -374,12 +374,21 @@ const registeredPath = String(
 );
 // The documents table does not show the commit yet: the cleanup read it before the finalize committed.
 assert.deepEqual(await cleanupPersonnelDocumentUpload(registered.request), { success: true });
+// A replay after a later version of the document made another key current
+// copies nothing and names the ticket's path, which the function's path check accepts.
 world.tables.documents.push({
   id: registered.request.documentId,
   organization_id: ORGANIZATION_A,
-  storage_path: registeredPath,
+  storage_path: `${ORGANIZATION_A}/${registered.request.documentId}/versions/2-nachweis.pdf`,
+  size_bytes: 100,
+  mime_type: 'application/pdf',
 });
+world.rpcCalls.length = 0;
 assert.deepEqual(await finalizeRegistered(), finalized);
+assert.equal(
+  world.rpcCalls.find((call) => call.name === 'finalize_personnel_document_metadata')?.args.p_storage_path,
+  registered.path,
+);
 const abandoned = await issueTicket();
 assert.deepEqual(await cleanupPersonnelDocumentUpload(abandoned.request), { success: true });
 assert.ok(
@@ -392,7 +401,6 @@ assert.deepEqual(storageCalls, [
   `upload:${registered.path}`,
   `promote:${registered.path}`,
   `discard:${stagingOf(registered.path)}`,
-  `head:${registeredPath}`,
   `upload:${abandoned.path}`,
   `discard:${stagingOf(abandoned.path)}`,
 ]);

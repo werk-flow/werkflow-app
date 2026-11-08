@@ -20,11 +20,11 @@ Postgres holds metadata: folders, documents, links, categories, trash state, ver
 3. `finalizeDocumentUpload` authorizes again, recomputes the path on the server, and copies the staging object to a key of its own beside it (`promoteUploadedObject`). A HEAD request checks the copy's size and content type. One database function inserts metadata, link and audit events with that key.
 
 - Only the server writes a key a row references, and only the finalize attempt that registers it. A still-valid signed URL reaches only the staging key after finalize, and a second finalize of the same upload copies to another key, so the bytes of a registered file never change.
-- A finalize that fails after the copy deletes its own copy. A finalize refused before the copy deletes the staging object.
+- A finalize that fails after the copy deletes its own copy once a completed read shows that no document or archived version references it, since a lost answer can hide a committed registration. A finalize refused before the copy deletes the staging object.
 - `DOCUMENT_MAX_FILE_SIZE_BYTES` applies at the ticket and again to the copy.
-- Protected personnel uploads (`createPersonnelDocumentUploadTicket`, `finalizePersonnelDocumentUpload`) follow the same steps. A signed cleanup capability binds actor, organization, owner, document, file name, class and operation. The cleanup removes only the staging object, so it never removes a registered copy; a finalize removes its own copy unless its document registered it.
-- An `Arbeitsnachweis` export stores each attempt's HTML under a key of its own. A refused export, or one the database answers as a duplicate of a committed export, deletes only its own object.
-- A handover release renders deterministic customer-safe HTML on the server; a guarded RPC registers it. A failed registration deletes the object only after it proves no committed row references it.
+- Protected personnel uploads (`createPersonnelDocumentUploadTicket`, `finalizePersonnelDocumentUpload`) follow the same steps. A signed cleanup capability binds actor, organization, owner, document, file name, class and operation. The cleanup removes only the staging object, so it never removes a registered copy. A replay of a registered upload touches no storage.
+- An `Arbeitsnachweis` export stores each attempt's HTML under a key of its own. A refused export deletes only its own unreferenced object, and one the database answers as a duplicate of a committed export deletes its own object.
+- A handover release renders deterministic customer-safe HTML on the server; a guarded RPC registers it. A failed registration deletes the object only after it proves no document or version row references it.
 
 ## Links and ownership
 

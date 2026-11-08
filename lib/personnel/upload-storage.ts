@@ -2,11 +2,11 @@ import 'server-only';
 
 import type { ActionResult } from '@/lib/action-result';
 import { loggedRead } from '@/lib/data/read-request-cache';
+import { discardUnreferencedObject } from '@/lib/documents/storage-references';
 import { DOCUMENT_MAX_FILE_SIZE_BYTES } from '@/lib/documents/types';
 import { logError } from '@/lib/logging';
 import {
   discardStorageObjects,
-  headStorageObject,
   promoteUploadedObject,
   uploadStagingPath,
   type PromotedUpload,
@@ -27,18 +27,18 @@ type PersonnelUpload = {
 };
 
 /**
- * The registered document of the upload with its key, or `undefined` when the
- * read failed: only a completed read proves that no document registered it.
+ * The registered document of the upload, or `undefined` when the read failed:
+ * only a completed read proves that no document registered it.
  */
 export async function readPersonnelUploadOwner(
   { admin, organizationId, documentId }: PersonnelUpload,
   label: string,
-): Promise<{ id: string; storage_path: string } | null | undefined> {
+): Promise<{ size_bytes: number; mime_type: string | null } | null | undefined> {
   const { data, error } = await loggedRead(
     label,
     admin
       .from('documents')
-      .select('id, storage_path')
+      .select('size_bytes, mime_type')
       .eq('organization_id', organizationId)
       .eq('id', documentId)
       .maybeSingle(),
@@ -48,55 +48,65 @@ export async function readPersonnelUploadOwner(
 
 /**
  * The object a finalize registers. A first finalize copies the staging key to
- * a key of its own; a replay of a registered upload reads the registered
- * object and copies nothing. A rejected copy is discarded.
+ * a key of its own and checks it; a rejected copy is discarded. A replay of a
+ * registered upload copies nothing: the database function answers it from its
+ * operation record, so the ticket's path stands in for the key (`copied` is false).
  */
 export async function acceptPersonnelUpload(
   upload: PersonnelUpload,
-): Promise<ActionResult<{ storagePath: string; sizeBytes: number; contentType: string | null }>> {
+): Promise<
+  ActionResult<{ storagePath: string; copied: boolean; sizeBytes: number; contentType: string | null }>
+> {
   const owner = await readPersonnelUploadOwner(upload, 'acceptPersonnelUpload: documents read failed');
   if (owner === undefined) return { success: false, error: 'load_failed' };
   const { organizationId } = upload;
+  if (owner) {
+    return {
+      success: true,
+      storagePath: upload.storagePath,
+      copied: false,
+      sizeBytes: owner.size_bytes,
+      contentType: owner.mime_type,
+    };
+  }
   let head: PromotedUpload;
   try {
-    head = owner
-      ? {
-          ...(await headStorageObject({ organizationId, path: owner.storage_path })),
-          path: owner.storage_path,
-        }
-      : await promoteUploadedObject({ organizationId, path: upload.storagePath });
+    head = await promoteUploadedObject({ organizationId, path: upload.storagePath });
   } catch (error) {
     logError('acceptPersonnelUpload: storage failed', error);
     return { success: false, error: 'upload_failed' };
   }
   const reject = async (error: 'file_missing' | 'file_too_large') => {
-    if (!owner) await discardStorageObjects({ organizationId, paths: [head.path] });
+    await discardStorageObjects({ organizationId, paths: [head.path] });
     return { success: false, error } as const;
   };
   if (!head.exists || !head.sizeBytes || head.sizeBytes <= 0) return reject('file_missing');
   if (head.sizeBytes > DOCUMENT_MAX_FILE_SIZE_BYTES) return reject('file_too_large');
-  return { success: true, storagePath: head.path, sizeBytes: head.sizeBytes, contentType: head.contentType };
+  return {
+    success: true,
+    storagePath: head.path,
+    copied: true,
+    sizeBytes: head.sizeBytes,
+    contentType: head.contentType,
+  };
 }
 
 /**
- * Removes a finalize's copy that its document did not register. After a
- * refused registration, a document that is missing or holds another key
- * proves it. After an accepted one only another key does: the function
- * replays a concurrent finalize that committed first and returns its
- * document. A failed read keeps the copy.
+ * Removes a finalize's copy after a refused registration, unless a document or
+ * version references it: a lost answer can hide a committed registration. A
+ * replay copied nothing.
  */
-export async function discardUnregisteredPersonnelCopy(
-  upload: PersonnelUpload,
-  copyPath: string,
-  registration: 'accepted' | 'refused',
+export async function discardRefusedPersonnelCopy(
+  { admin, organizationId }: PersonnelUpload,
+  accepted: { storagePath: string; copied: boolean },
 ): Promise<void> {
-  const owner = await readPersonnelUploadOwner(
-    upload,
-    'discardUnregisteredPersonnelCopy: documents read failed',
+  if (!accepted.copied) return;
+  await discardUnreferencedObject(
+    admin,
+    organizationId,
+    accepted.storagePath,
+    'discardRefusedPersonnelCopy: reference read failed',
   );
-  if (owner === undefined || owner?.storage_path === copyPath) return;
-  if (owner === null && registration === 'accepted') return;
-  await discardStorageObjects({ organizationId: upload.organizationId, paths: [copyPath] });
 }
 
 /** Removes an unregistered upload's staging object; a finalize removes its own copy. */

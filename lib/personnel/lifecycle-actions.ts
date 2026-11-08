@@ -16,7 +16,7 @@ import { createSignedUploadUrl } from '@/lib/storage/r2';
 import {
   acceptPersonnelUpload,
   discardPersonnelUpload,
-  discardUnregisteredPersonnelCopy,
+  discardRefusedPersonnelCopy,
   readPersonnelUploadOwner,
 } from './upload-storage';
 import { DOCUMENT_MAX_FILE_SIZE_BYTES, DOCUMENT_STORAGE_BUCKET } from '@/lib/documents/types';
@@ -791,10 +791,9 @@ export async function finalizePersonnelDocumentUpload(
     }),
   );
   if (error || !data) {
-    await discardUnregisteredPersonnelCopy(upload, head.storagePath, 'refused');
+    await discardRefusedPersonnelCopy(upload, head);
     return { success: false, error: lifecycleFailureCode(error) };
   }
-  await discardUnregisteredPersonnelCopy(upload, head.storagePath, 'accepted');
   revalidatePersonnel();
   return { success: true, data: { documentId: data } };
 }

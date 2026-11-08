@@ -2,13 +2,14 @@
 
 import { randomUUID } from 'crypto';
 import { logError } from '@/lib/logging';
-import { createSignedUploadUrl, discardStorageObjects } from '@/lib/storage/r2';
+import { createSignedUploadUrl } from '@/lib/storage/r2';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import {
   authorizeDocumentUploadTarget,
   getAuthorizedDocumentContext,
   getVersionableDocument,
   normalizeUploadTarget,
+  type AuthorizedDocumentContext,
   type NormalizedUploadTarget,
 } from './access';
 import {
@@ -45,10 +46,21 @@ import {
   acceptUploadedObject,
   discardStagedUpload,
 } from './write-support';
+import { discardUnreferencedObject } from './storage-references';
 
 // A sent category maps to its known value or 'other'; only a missing one falls back to inference.
 function parseDocumentCategory(value: string | null): DocumentCategory | null {
   return value === null ? null : toDocumentCategory(value);
+}
+
+/** Removes a finalize's copy after a refused registration, unless the registration committed before its answer was lost. */
+async function discardRefusedCopy(context: AuthorizedDocumentContext, storagePath: string): Promise<void> {
+  await discardUnreferencedObject(
+    context.admin,
+    context.orgId,
+    storagePath,
+    'Failed to verify a refused upload reference',
+  );
 }
 
 const UPLOAD_LINK_KINDS = [
@@ -195,7 +207,7 @@ export async function finalizeDocumentUpload(rawInput: FinalizeDocumentUploadInp
       'create_failed',
     );
     // Only this finalize wrote its copy; a concurrent one that committed registered its own.
-    await discardStorageObjects({ organizationId: auth.context.orgId, paths: [storagePath] });
+    await discardRefusedCopy(auth.context, storagePath);
     return failure;
   }
 
@@ -311,7 +323,7 @@ export async function finalizeDocumentVersionUpload(
       'version_failed',
     );
     // Only this finalize wrote its copy; a concurrent one that committed made its own current.
-    await discardStorageObjects({ organizationId: auth.context.orgId, paths: [storagePath] });
+    await discardRefusedCopy(auth.context, storagePath);
     return failure;
   }
 
