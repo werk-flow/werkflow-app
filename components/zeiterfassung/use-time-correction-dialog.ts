@@ -4,12 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
 import { useServerAction } from '@/hooks/use-server-action';
-import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
+import { SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { submitTimeCorrection } from '@/lib/time-corrections/actions';
 import type { TimeCorrectionFormOptions } from '@/lib/time-corrections/read-actions';
-import { TIME_CORRECTION_FAILURE_MESSAGES } from '@/lib/time-corrections/messages';
 import type { TimeCorrectionKind } from '@/lib/time-corrections/types';
 import {
   isDateInClosedPeriod,
@@ -17,7 +16,9 @@ import {
   type ClosedTimePeriod,
 } from '@/lib/time-tracking/closed-period-dates';
 import type { TimeEntry, TimeSegmentKind } from '@/lib/time-tracking/types';
+import type { CorrectionOperation } from '@/components/correction-operation';
 import { buildTimeCorrectionProposedFacts } from './time-correction-dialog-facts';
+import { sendTimeCorrection, TIME_CORRECTION_SAVE_FAILURE } from './time-correction-dialog-send';
 
 function toLocalDateTime(iso: string): string {
   const date = new Date(iso);
@@ -152,9 +153,10 @@ function useTimeCorrectionDialogSession({
     setInternalOpen(nextOpen);
     onOpenChangeRef.current?.(nextOpen);
   }, []);
-  // One operation id per opening: a retry after a lost response replays the
-  // saved request instead of reporting a conflict.
-  const operationIdRef = useRef<string | null>(null);
+  // One operation per opening, with the content that may have been saved
+  // under it: a retry after a lost response replays the saved request instead
+  // of reporting a conflict, and an edit since then must not pass as saved.
+  const operationRef = useRef<CorrectionOperation | null>(null);
   const [loadedOptions, setLoadedOptions] = useState<{
     organizationId: string;
     value: TimeCorrectionFormOptions;
@@ -174,7 +176,7 @@ function useTimeCorrectionDialogSession({
     const controller = new AbortController();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- every opening starts from a clean selection while the form options load
     setLoadingOptions(true);
-    operationIdRef.current = crypto.randomUUID();
+    operationRef.current = null;
     setLoadedOptions(null);
     setSubmitError(null);
     setSubjectEmployeeRecordId('');
@@ -217,7 +219,7 @@ function useTimeCorrectionDialogSession({
     setJobId,
     submitError,
     setSubmitError,
-    operationIdRef,
+    operationRef,
   };
 }
 
@@ -304,14 +306,6 @@ function timeCorrectionFieldIds(errors: TimeCorrectionFieldErrors): Record<strin
   };
 }
 
-function timeCorrectionFailure(error: string): string {
-  return describeFailure(
-    error,
-    TIME_CORRECTION_FAILURE_MESSAGES,
-    'Die Korrektur konnte nicht gespeichert werden.',
-  );
-}
-
 // The fields of one correction, from the entry it starts with.
 function useTimeCorrectionFieldState(entry: TimeEntry | undefined) {
   // Added time is one kind: 'add' and the older 'missed_clock' apply alike.
@@ -357,7 +351,7 @@ export function useTimeCorrectionDialogForm({
     onOpenChange,
     showBanner,
   });
-  const { operationIdRef, ...sessionState } = session;
+  const { operationRef, ...sessionState } = session;
   const { setOpen, subjectEmployeeRecordId, targetEmployeeRecordId, jobId, setSubmitError } = sessionState;
   const { run: runSubmit, isPending: submitting } = useServerAction(submitTimeCorrection);
   const { setFieldErrors, ...fields } = useTimeCorrectionFieldState(entry);
@@ -394,31 +388,28 @@ export function useTimeCorrectionDialogForm({
 
     setSubmitError(null);
     try {
-      const result = await runSubmit({
-        organizationId,
-        subjectEmployeeRecordId,
-        kind,
-        reason,
-        source: kind === 'add' || kind === 'missed_clock' ? null : source,
-        proposedFacts,
-        operationId: (operationIdRef.current ??= crypto.randomUUID()),
-      });
-      if (!result.success) {
-        setSubmitError(timeCorrectionFailure(result.error));
+      const answer = await sendTimeCorrection(
+        operationRef,
+        {
+          organizationId,
+          subjectEmployeeRecordId,
+          kind,
+          reason,
+          source: kind === 'add' || kind === 'missed_clock' ? null : source,
+          proposedFacts,
+        },
+        runSubmit,
+      );
+      if (!answer.saved) {
+        setSubmitError(answer.message);
         return;
       }
-      showBanner({
-        variant: 'success',
-        message:
-          result.status === 'approved'
-            ? 'Die Zeit wurde korrigiert.'
-            : 'Die Korrektur wurde zur Prüfung eingereicht.',
-      });
+      showBanner({ variant: 'success', message: answer.message });
       setOpen(false);
       setReason('');
       onSubmitted?.();
     } catch {
-      setSubmitError('Die Korrektur konnte nicht gespeichert werden.');
+      setSubmitError(TIME_CORRECTION_SAVE_FAILURE);
     }
   };
 
