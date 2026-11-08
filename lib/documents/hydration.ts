@@ -385,7 +385,7 @@ export async function hydrateDocuments(
 
   const documentIds = rows.map((row) => row.id);
   // A manager also reads who filed each document.
-  const uploaderIds = Array.from(
+  const personIds = Array.from(
     new Set(
       rows.flatMap((row) =>
         context.isManagerOrAbove && row.filed_by ? [row.uploaded_by, row.filed_by] : [row.uploaded_by],
@@ -395,7 +395,7 @@ export async function hydrateDocuments(
   // Every related read stays inside the documents' organizations; the admin client bypasses RLS.
   const organizationIds = [...new Set(rows.map((row) => row.organization_id))];
 
-  const [linksResult, uploadersResult] = await Promise.all([
+  const [linksResult, peopleResult] = await Promise.all([
     readInBatches(documentIds, (ids) =>
       readCompleteRows(
         (from, to) =>
@@ -409,10 +409,10 @@ export async function hydrateDocuments(
         LIST_ROW_CAP,
       ),
     ),
-    readProfileReferences(admin, context.orgId, uploaderIds),
+    readProfileReferences(admin, context.orgId, personIds),
   ]);
 
-  if (linksResult.error || uploadersResult.error)
+  if (linksResult.error || peopleResult.error)
     throw new Error('Dokumentverknüpfungen konnten nicht vollständig geladen werden.');
   const linkRows = await readableDocumentLinks(context, linksResult.data);
   const targetResults = await readDocumentLinkTargets(
@@ -425,10 +425,10 @@ export async function hydrateDocuments(
   return rows.map((row) =>
     toOrganizationDocument({
       row,
-      uploader: uploadersResult.data.get(row.uploaded_by) ?? null,
+      uploader: peopleResult.data.get(row.uploaded_by) ?? null,
       links: linksByDocumentId.get(row.id) ?? [],
       archive: context.isManagerOrAbove
-        ? toDocumentArchive(row, row.filed_by ? toProfileReference(profilesById.get(row.filed_by)) : null)
+        ? toDocumentArchive(row, row.filed_by ? (peopleResult.data.get(row.filed_by) ?? null) : null)
         : null,
     }),
   );

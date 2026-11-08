@@ -1,7 +1,8 @@
 // The real document and folder readers over the in-memory database: a person
 // who has left the organization stays named as uploader, folder creator and
 // audit actor, but the reader gets neither their current email nor their
-// avatar path. A current member keeps the full reference. The office reads the
+// avatar path, and the same holds for whoever filed a document. A current
+// member keeps the full reference. The office reads the
 // library, the folder options and the document details; an assigned field
 // worker reads the job's documents. Another organization's document and job
 // stay unreachable, and a failed membership read fails the reader instead of
@@ -46,6 +47,12 @@ const documentRow = (id: string, organizationId: string, uploadedBy: string): Re
   folder_id: null,
   metadata: {},
   mime_type: 'application/pdf',
+  document_date: '2026-10-01',
+  retention_class: 'ten_years',
+  retention_ends_on: '2036-12-31',
+  // Whoever uploaded a document also filed it.
+  filed_at: now,
+  filed_by: uploadedBy,
 });
 const folderRow = (id: string, createdBy: string) => ({
   id,
@@ -194,10 +201,17 @@ function uploaders(result: unknown, label: string): unknown[] {
 
 signInAs(world, 'buero');
 
-// The library names the former uploader and folder creator by name only.
+// The library names the former uploader, filer and folder creator by name only.
 const library = await getDocumentLibrary({ view: 'folders' });
 assert.deepEqual(uploaders(library, 'library'), [formerMember, currentMember], `library: ${rule}`);
 assert.ok(library.success);
+assert.deepEqual(
+  [formerDocumentId, currentDocumentId].map(
+    (id) => library.documents.find((document) => document.id === id)?.archive?.filer,
+  ),
+  [formerMember, currentMember],
+  `library filers: ${rule}`,
+);
 assert.deepEqual(
   [formerFolderId, currentFolderId].map((id) => library.folders.find((folder) => folder.id === id)?.creator),
   [formerMember, currentMember],
@@ -218,7 +232,11 @@ assert.deepEqual(
 // The details name the uploader, each version's uploader and each audit actor the same way.
 const details = await getDocumentDetails(formerDocumentId);
 assert.ok(details.success, JSON.stringify(details));
-assert.deepEqual(details.document.uploader, formerMember, `details: ${rule}`);
+assert.deepEqual(
+  [details.document.uploader, details.document.archive?.filer],
+  [formerMember, formerMember],
+  `details: ${rule}`,
+);
 assert.deepEqual(
   // The in-memory database ignores `order`; the version number orders the comparison.
   details.versions
