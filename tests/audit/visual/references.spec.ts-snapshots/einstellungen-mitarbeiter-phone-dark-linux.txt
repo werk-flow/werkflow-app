@@ -20,3 +20,4 @@ Urlaubsfreigaben
 Aktuell verantwortlich
 Standard: Admin
 Arbeitsnachweise freigeben
+Nicht eingestempelt

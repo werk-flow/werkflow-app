@@ -1,6 +1,5 @@
 'use client';
 
-import { PlainButton } from '@/components/ui/plain-button';
 import { Clock3, Coffee, Play } from 'lucide-react';
 import { useState } from 'react';
 
@@ -21,6 +20,26 @@ import {
 } from '@/lib/time-tracking/clock-actions';
 import { useBanner } from '@/components/ui/banner';
 import { cn, formatBerlinTime } from '@/lib/utils';
+
+/** The CSS variable that carries the dock's height to the app layout's bottom reserve. */
+const DOCK_HEIGHT_VARIABLE = '--clock-dock-height';
+
+/**
+ * Publishes the dock's rendered height while it is mounted (a callback ref with
+ * cleanup). The layout pads the page column by it, so a status error or the
+ * hot keys' second row on a phone never cover the page's last control.
+ */
+function publishDockHeight(dock: HTMLDivElement): () => void {
+  const root = document.documentElement;
+  const observer = new ResizeObserver(() => {
+    root.style.setProperty(DOCK_HEIGHT_VARIABLE, `${dock.offsetHeight}px`);
+  });
+  observer.observe(dock, { box: 'border-box' });
+  return () => {
+    observer.disconnect();
+    root.style.removeProperty(DOCK_HEIGHT_VARIABLE);
+  };
+}
 
 /** The sheet's open state and the hot keys, which act directly or open the sheet at their picker. */
 function useClockFabControls(transitionActivity: ReturnType<typeof useClockState>['transitionActivity']) {
@@ -76,6 +95,19 @@ function useClockFabControls(transitionActivity: ReturnType<typeof useClockState
   };
 }
 
+/** The confirmed state for measurements and tests; a pending transition is never "in" or "out". */
+function confirmedClockState(clock: {
+  isReady: boolean;
+  isPending: boolean;
+  isOnBreak: boolean;
+  isClockedIn: boolean;
+}): 'loading' | 'pending' | 'break' | 'in' | 'out' {
+  if (!clock.isReady) return 'loading';
+  if (clock.isPending) return 'pending';
+  if (clock.isOnBreak) return 'break';
+  return clock.isClockedIn ? 'in' : 'out';
+}
+
 export function ClockFAB() {
   const { activeOrgId, activeOrg } = useOrganization();
   const { state, isLoading, isReady, isPending, statusError, refresh, transitionActivity } = useClockState();
@@ -121,30 +153,39 @@ export function ClockFAB() {
       </Dialog>
 
       <div
+        ref={publishDockHeight}
         data-clock-fab=""
-        // The confirmed state for measurements and tests; a pending transition is never "in" or "out".
-        data-clock-state={
-          !isReady ? 'loading' : isPending ? 'pending' : isOnBreak ? 'break' : isClockedIn ? 'in' : 'out'
-        }
-        className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-2 will-change-transform"
+        data-clock-state={confirmedClockState({ isReady, isPending, isOnBreak, isClockedIn })}
+        // The dock spans the content column; the app layout reserves its height, so no page control sits under it.
+        // On a phone the button keeps the bottom: a late clock read adds the hot keys' row above, not under it.
+        className="fixed inset-x-0 bottom-0 z-30 flex items-end gap-3 border-t bg-card px-4 py-2 will-change-transform sm:items-center sm:px-6 md:left-64"
         style={{ contain: 'layout style' }}
       >
-        {isClockedIn && currentLabel && (
-          <PlainButton
-            type="button"
-            onClick={() => controls.openSheet()}
-            title="Laufende Zeiterfassung öffnen"
-            className="flex min-h-11 max-w-64 items-center rounded-md border bg-background/95 px-3 py-2 text-sm font-medium shadow-xs transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-          >
-            <span className="min-w-0 truncate">{currentLabel}</span>
-          </PlainButton>
-        )}
-        <ClockHotKeys
-          hotKeys={hotKeys}
-          pendingHotKey={controls.pendingHotKey}
-          busy={busy}
-          onActivate={controls.activateHotKey}
-        />
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5 self-center sm:flex-row sm:items-center sm:gap-3">
+          {statusError ? (
+            <SectionError className="min-w-0 flex-1" onRetry={() => void refresh()}>
+              Der Zeitstatus konnte nicht sicher geladen werden.
+            </SectionError>
+          ) : (
+            // What runs now, or that nobody is clocked in; empty while the state loads. Inline, not a
+            // component: the dock renders with every clock change, and lab counts count components.
+            <p
+              data-clock-status=""
+              className={cn(
+                'min-h-5 min-w-0 truncate text-sm sm:max-w-80',
+                isClockedIn ? 'font-medium text-foreground' : 'text-muted-foreground',
+              )}
+            >
+              {!isReady ? null : isClockedIn ? currentLabel : 'Nicht eingestempelt'}
+            </p>
+          )}
+          <ClockHotKeys
+            hotKeys={hotKeys}
+            pendingHotKey={controls.pendingHotKey}
+            busy={busy}
+            onActivate={controls.activateHotKey}
+          />
+        </div>
         <ClockFabButton
           isClockedIn={isClockedIn}
           isOnBreak={isOnBreak}
@@ -152,11 +193,6 @@ export function ClockFAB() {
           isReady={isReady}
           onOpen={() => controls.openSheet()}
         />
-        {statusError && (
-          <SectionError className="max-w-64 shadow-lg" onRetry={() => void refresh()}>
-            Der Zeitstatus konnte nicht sicher geladen werden.
-          </SectionError>
-        )}
       </div>
     </>
   );
@@ -174,19 +210,25 @@ function ClockHotKeys({
   busy: boolean;
   onActivate: (action: ClockAction) => void;
 }) {
-  return hotKeys.map((action) => (
-    <Button
-      pending={pendingHotKey === action.id}
-      key={action.id}
-      type="button"
-      variant="outline"
-      className="min-h-11 max-w-64 rounded-full bg-background/95 px-4 shadow-md"
-      disabled={busy}
-      onClick={() => onActivate(action)}
-    >
-      <span className="min-w-0 truncate">{action.label}</span>
-    </Button>
-  ));
+  if (hotKeys.length === 0) return null;
+  return (
+    <div className="flex min-w-0 gap-2">
+      {hotKeys.map((action) => (
+        <Button
+          pending={pendingHotKey === action.id}
+          key={action.id}
+          type="button"
+          variant="outline"
+          className="min-h-11 min-w-0 flex-1 px-4 sm:max-w-64 sm:flex-initial"
+          title={action.label}
+          disabled={busy}
+          onClick={() => onActivate(action)}
+        >
+          <span className="min-w-0 truncate">{action.label}</span>
+        </Button>
+      ))}
+    </div>
+  );
 }
 
 /** The round clock button: green while working, yellow on a break, a play icon while clocked out. */

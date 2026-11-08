@@ -18,6 +18,8 @@ type RateLimit = { maxAttempts: number; windowSeconds: number };
  *   address is invited again a few times at most;
  * - invite redemption: a person opens one link a few times; one office network
  *   carries a whole team joining at once;
+ * - joining by code: a person enters one organization code, a few times at
+ *   most after typos; every attempt counts, so guessing codes stays slow;
  * - email change: one change sends two codes plus a few resends (the 60-second
  *   send window per account stays in force beside this budget);
  * - the simulated payment runs once per account;
@@ -29,6 +31,7 @@ const RATE_LIMITS = {
   invite_send_per_recipient: { maxAttempts: 10, windowSeconds: DAY_SECONDS },
   invite_redeem_per_user: { maxAttempts: 30, windowSeconds: HOUR_SECONDS },
   invite_redeem_per_ip: { maxAttempts: 300, windowSeconds: HOUR_SECONDS },
+  organization_join_per_user: { maxAttempts: 10, windowSeconds: HOUR_SECONDS },
   email_change_code_per_user: { maxAttempts: 10, windowSeconds: HOUR_SECONDS },
   email_change_code_per_recipient: { maxAttempts: 10, windowSeconds: HOUR_SECONDS },
   subscription_activation_per_user: { maxAttempts: 10, windowSeconds: HOUR_SECONDS },
