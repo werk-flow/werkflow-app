@@ -92,6 +92,46 @@ function useAuftraegeProjectCreate({
   );
 }
 
+type JobCreateOutcome = Awaited<ReturnType<typeof createJob>>;
+
+/** The pending row's end after the server answered: created, waiting for a confirm, taken back or refused. */
+function settleJobCreate(
+  outcome: JobCreateOutcome,
+  pending: CreateJobSubmission & { tempId: string },
+  {
+    setJobCreateAwaitingApproval,
+    rollbackJob,
+    showBanner,
+    handleJobCreated,
+  }: Pick<AuftraegeCreateActionsOptions, 'rollbackJob' | 'showBanner' | 'handleJobCreated'> & {
+    setJobCreateAwaitingApproval: (awaiting: JobCreateAwaitingApproval | null) => void;
+  },
+): void {
+  if (
+    !outcome.success &&
+    (outcome.error === 'qualification_warning' || outcome.error === 'stale_evaluation') &&
+    'evaluation' in outcome
+  ) {
+    // The confirm step runs at list level; the pending row stays until the user decides.
+    setJobCreateAwaitingApproval({ ...pending, evaluation: outcome.evaluation });
+    return;
+  }
+  setJobCreateAwaitingApproval(null);
+  rollbackJob(pending.tempId);
+  if (outcome.success) {
+    handleJobCreated({ job: outcome.job, assignedUserIds: pending.assignedUserIds });
+    showBanner({ variant: 'success', message: 'Auftrag erfolgreich erstellt!' });
+  } else if (isPlanningWarning(outcome)) {
+    // Taken back in the planning dialog: nothing was created.
+    showBanner({ variant: 'info', message: JOB_NOT_CREATED });
+  } else {
+    showBanner({
+      variant: 'error',
+      message: createFailureMessage(CREATE_JOB_ERROR_MESSAGES, outcome.error, JOB_NOT_CREATED),
+    });
+  }
+}
+
 /** Deferred creates from the dialog: pending row, server call, qualification and planning confirms, rollback. */
 export function useAuftraegeCreateActions({
   showBanner,
@@ -113,47 +153,21 @@ export function useAuftraegeCreateActions({
       // The planning confirm step, from the lazily loaded create dialogs.
       retryWithPlanningApproval: RetryWithPlanningApproval,
     ) => {
-      const rejectJobCreate = (error: string) => {
-        setJobCreateAwaitingApproval(null);
-        rollbackJob(pending.tempId);
-        showBanner({
-          variant: 'error',
-          message: createFailureMessage(CREATE_JOB_ERROR_MESSAGES, error, JOB_NOT_CREATED),
+      const settle = (outcome: JobCreateOutcome) =>
+        settleJobCreate(outcome, pending, {
+          setJobCreateAwaitingApproval,
+          rollbackJob,
+          showBanner,
+          handleJobCreated,
         });
-      };
       try {
-        const result = await retryWithPlanningApproval((planningApproval) =>
-          runCreateJob({ ...pending.input, assignmentApproval: approval, planningApproval }),
+        settle(
+          await retryWithPlanningApproval((planningApproval) =>
+            runCreateJob({ ...pending.input, assignmentApproval: approval, planningApproval }),
+          ),
         );
-        if (isPlanningWarning(result)) {
-          // Taken back in the planning dialog: the pending row goes, nothing was created.
-          setJobCreateAwaitingApproval(null);
-          rollbackJob(pending.tempId);
-          showBanner({ variant: 'info', message: JOB_NOT_CREATED });
-          return;
-        }
-        if (result.success) {
-          setJobCreateAwaitingApproval(null);
-          rollbackJob(pending.tempId);
-          handleJobCreated({
-            job: result.job,
-            assignedUserIds: pending.assignedUserIds,
-          });
-          showBanner({ variant: 'success', message: 'Auftrag erfolgreich erstellt!' });
-          return;
-        }
-        if (
-          (result.error === 'qualification_warning' || result.error === 'stale_evaluation') &&
-          'evaluation' in result
-        ) {
-          // The confirm step runs at list level; the pending row stays until
-          // the user decides.
-          setJobCreateAwaitingApproval({ ...pending, evaluation: result.evaluation });
-          return;
-        }
-        rejectJobCreate(result.error);
       } catch {
-        rejectJobCreate('unexpected_error');
+        settle({ success: false, error: 'unexpected_error' });
       }
     },
     [handleJobCreated, rollbackJob, runCreateJob, showBanner],
