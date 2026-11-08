@@ -644,14 +644,6 @@ export async function expectMemberRemovalBlockedByResponsibility(
   await expect(dialog.getByRole('button', { name: TIME_ENTRY_COPY.reassignFirst })).toBeDisabled();
 }
 
-/** A pending submission of the approvals panel that shows this text (a job title). */
-export function pendingSubmission(page: Page, text: string): Locator {
-  return page
-    .getByRole('main')
-    .getByTestId(/pending-session-/)
-    .filter({ hasText: text });
-}
-
 // ---------------------------------------------------------------------------
 // Rules of the organization (/einstellungen/zeiterfassung)
 
@@ -697,20 +689,6 @@ export function timeCorrectionReasonField(dialog: Locator): Locator {
 /** The office's „Zeit nachtragen“ on the history, which opens an empty correction. */
 export function addMissedTimeButton(page: Page): Locator {
   return timeHistoryPanel(page).getByRole('button', { name: TIME_CORRECTION_COPY.addTime });
-}
-
-/**
- * Opens the office's „Zeit nachtragen“ on the history and measures until the
- * correction form is usable; `observation` names the recorded readiness observation.
- */
-export async function openMissedTimeDialog(page: Page, observation: string): Promise<Locator> {
-  const dialog = timeCorrectionDialog(page);
-  await expectReadyWithin(timeCorrectionReasonField(dialog), {
-    label: observation,
-    targetMs: TIME_CORRECTION_READY_MS,
-    trigger: () => addMissedTimeButton(page).click({ timeout: 10_000 }),
-  });
-  return dialog;
 }
 
 /**

@@ -54,5 +54,7 @@ export async function submitPastDayTime(input: {
     }),
     operationId: input.operationId,
   });
-  return result.success ? null : describeFailure(result.error, TIME_CORRECTION_FAILURE_MESSAGES, PAST_DAY_FAILURE);
+  return result.success
+    ? null
+    : describeFailure(result.error, TIME_CORRECTION_FAILURE_MESSAGES, PAST_DAY_FAILURE);
 }

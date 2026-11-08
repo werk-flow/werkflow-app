@@ -24,7 +24,6 @@ const SOURCE_KINDS: TimeCorrectionKind[] = [
   'reassign',
 ];
 
-
 const ACTIVITY_OPTIONS: Array<{ value: TimeSegmentKind; label: string }> = [
   { value: 'work', label: 'Arbeit' },
   { value: 'travel', label: 'Fahrt' },

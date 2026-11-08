@@ -68,7 +68,15 @@ export type PendingSubmissionFact = Pick<TimeCorrectionFact, 'entryType' | 'time
 function submissionAsAddition(facts: readonly PendingSubmissionFact[]): TimeCorrectionFact[] {
   return [...facts]
     .sort((left, right) => left.timestamp.localeCompare(right.timestamp))
-    .map((fact) => ({ ...fact, factId: fact.timestamp, employeeRecordId: '', userId: '', jobId: null, activityKind: null, isManual: true }));
+    .map((fact) => ({
+      ...fact,
+      factId: fact.timestamp,
+      employeeRecordId: '',
+      userId: '',
+      jobId: null,
+      activityKind: null,
+      isManual: true,
+    }));
 }
 
 /**

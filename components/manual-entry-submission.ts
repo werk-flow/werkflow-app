@@ -67,19 +67,29 @@ function buildManualEntries(
 ): ManualEntryInput[] {
   const entries: ManualEntryInput[] = [];
   if (needsClockIn(entryMode)) {
-    entries.push({ entryType: 'clock_in', timestamp: new Date(`${dateIso}T${clockInTime}:00`).toISOString() });
+    entries.push({
+      entryType: 'clock_in',
+      timestamp: new Date(`${dateIso}T${clockInTime}:00`).toISOString(),
+    });
   }
   if (needsClockOut(entryMode)) {
-    entries.push({ entryType: 'clock_out', timestamp: new Date(`${dateIso}T${clockOutTime}:00`).toISOString() });
+    entries.push({
+      entryType: 'clock_out',
+      timestamp: new Date(`${dateIso}T${clockOutTime}:00`).toISOString(),
+    });
   }
   return entries;
 }
 
 /** Every field error of the form, in form order. */
-function manualEntryFieldErrors(values: ManualEntryFormValues, dateIso: string | null): ManualEntryFieldErrors {
+function manualEntryFieldErrors(
+  values: ManualEntryFormValues,
+  dateIso: string | null,
+): ManualEntryFieldErrors {
   const { entryMode, clockInTime, clockOutTime } = values;
   return {
-    member: values.isAdminOrManager && !values.selectedUserId ? 'Bitte wähle einen Mitarbeiter aus.' : undefined,
+    member:
+      values.isAdminOrManager && !values.selectedUserId ? 'Bitte wähle einen Mitarbeiter aus.' : undefined,
     date: !dateIso
       ? 'Bitte wähle ein gültiges Datum.'
       : isDateInClosedPeriod(dateIso, values.closedPeriods)

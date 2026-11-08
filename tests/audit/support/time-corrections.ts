@@ -70,7 +70,8 @@ export async function submitOwnPastTime(
     open: async () => {
       await openOwnTimeDialog(page, 'P1-22 audit own time form');
     },
-    prepare: () => fillOwnPastTime(dialog, { date: input.date, from: '07:00', to: '09:30', reason: input.reason }),
+    prepare: () =>
+      fillOwnPastTime(dialog, { date: input.date, from: '07:00', to: '09:30', reason: input.reason }),
     submit: async () => {
       await input.beforeSubmit?.();
       await pressKey(dialog, 'Enter', { into: timeCorrectionSaveButton(dialog) });

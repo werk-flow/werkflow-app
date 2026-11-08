@@ -32,7 +32,8 @@ const MANUAL_ENTRY_ERROR_MESSAGES: Readonly<Partial<Record<string, string | Fail
     'Der Auftrag wurde in dieser Organisation nicht gefunden. Wähle einen anderen Auftrag oder trage die Zeit ohne Auftrag ein.',
   job_not_assigned:
     'Die ausgewählte Person ist diesem Auftrag nicht zugewiesen. Wähle einen ihrer Aufträge oder trage die Zeit ohne Auftrag ein.',
-  past_day_needs_reason: 'Für einen vergangenen Tag braucht die Freigabe einen Grund. Gib ihn an und speichere erneut.',
+  past_day_needs_reason:
+    'Für einen vergangenen Tag braucht die Freigabe einen Grund. Gib ihn an und speichere erneut.',
 };
 
 type ManualEntrySubmitInput = ManualEntryFormValues & {

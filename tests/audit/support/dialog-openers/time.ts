@@ -7,7 +7,10 @@ import {
   seedOpenOnboardingRequirement,
 } from '../../../golden/support/db/personnel';
 import { seedSicknessReport } from '../../../golden/support/db/sickness';
-import { seedApprovedManualInterval, seedPendingManualInterval } from '../../../golden/support/db/time-tracking';
+import {
+  seedApprovedManualInterval,
+  seedPendingManualInterval,
+} from '../../../golden/support/db/time-tracking';
 import { seedPendingVacationRequest } from '../../../golden/support/db/vacation';
 import {
   newWorkArtifactButton,

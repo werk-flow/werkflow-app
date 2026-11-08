@@ -1,8 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  planManualEntrySubmission,
-  type ManualEntryFormValues,
-} from '@/components/manual-entry-submission';
+import { planManualEntrySubmission, type ManualEntryFormValues } from '@/components/manual-entry-submission';
 
 // What „Speichern“ in „Zeit nachtragen“ (the manual entry form) sends. The
 // form starts with empty times, so an untouched form marks its fields and
@@ -90,7 +87,12 @@ describe('the manual entry form sends', () => {
   test('own time of an earlier day with its reason as a correction, never as manual entries', () => {
     expect(
       planManualEntrySubmission(
-        values({ needsReason: true, reason: ' Baustelle ohne Netz ', clockInTime: '07:30', clockOutTime: '16:00' }),
+        values({
+          needsReason: true,
+          reason: ' Baustelle ohne Netz ',
+          clockInTime: '07:30',
+          clockOutTime: '16:00',
+        }),
       ),
     ).toEqual({ kind: 'past-day', dateIso: '2026-10-29', reason: 'Baustelle ohne Netz' });
   });

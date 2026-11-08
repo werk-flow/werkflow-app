@@ -238,7 +238,11 @@ export function ManualEntryFormContent({
         />
 
         {form.needsReason ? (
-          <ManualEntryReasonField reason={form.reason} setReason={form.setReason} error={form.fieldErrors.reason} />
+          <ManualEntryReasonField
+            reason={form.reason}
+            setReason={form.setReason}
+            error={form.fieldErrors.reason}
+          />
         ) : null}
 
         <ErrorText>{form.error}</ErrorText>

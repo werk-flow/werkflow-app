@@ -226,9 +226,8 @@ mock.module('@/lib/responsibilities/server', () => ({
   ...responsibilities,
   authorizeResponsibilityForTargets: async () => ({ success: true }),
 }));
-const { addManualEntry, deleteEntry, deleteEntriesBatch, updateEntry, withdrawPendingSubmission } = await import(
-  '@/lib/time-tracking/entry-write-actions'
-);
+const { addManualEntry, deleteEntry, deleteEntriesBatch, updateEntry, withdrawPendingSubmission } =
+  await import('@/lib/time-tracking/entry-write-actions');
 const { reviewEntries, reviewChangeRequest } = await import('@/lib/time-tracking/review-actions');
 const { getCurrentClockState } = await import('@/lib/time-tracking/clock-state-actions');
 const { getTimeEntries, getTimeEntriesForJob, getTimeEntryAuditEvents } = await import(

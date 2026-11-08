@@ -11,7 +11,8 @@ import type { TimeEntry } from '@/lib/time-tracking/types';
 // withdraws it before an approver decides.
 
 const WITHDRAW_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
-  entry_not_pending: 'Über diesen Nachtrag wurde schon entschieden. Die Liste zeigt jetzt den aktuellen Stand.',
+  entry_not_pending:
+    'Über diesen Nachtrag wurde schon entschieden. Die Liste zeigt jetzt den aktuellen Stand.',
   entry_not_found: 'Diesen Nachtrag gibt es nicht mehr. Die Liste zeigt jetzt den aktuellen Stand.',
   not_authorized: 'Nur wer einen Nachtrag eingereicht hat, kann ihn zurückziehen.',
 };
@@ -30,7 +31,11 @@ export function useWithdrawSubmission(
       const result = await withdrawPendingSubmission(entry.id);
       if (!result.success) {
         setWithdrawError(
-          describeFailure(result, WITHDRAW_FAILURE_MESSAGES, 'Der Nachtrag konnte nicht zurückgezogen werden.'),
+          describeFailure(
+            result,
+            WITHDRAW_FAILURE_MESSAGES,
+            'Der Nachtrag konnte nicht zurückgezogen werden.',
+          ),
         );
         await refresh();
         return;
