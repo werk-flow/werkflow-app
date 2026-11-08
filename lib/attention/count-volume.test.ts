@@ -369,7 +369,7 @@ function requestRows(pending: number, history: number): Record<string, Row[]> {
 
 /** One visit on each approved vacation ahead; the closed history lies on past days no window reaches. */
 function planningRows(pending: number, history: number): Record<string, Row[]> {
-  const visit = (index: number, day: string): Row =>
+  const visit = (index: number, day: string, person = personOf(index)): Row =>
     scoped({
       id: uuid(22, index),
       status: 'scheduled',
@@ -381,12 +381,14 @@ function planningRows(pending: number, history: number): Record<string, Row[]> {
       end_at: `${day}T09:00:00.000Z`,
       start_date: null,
       end_date_exclusive: null,
-      absent: [{ id: uuid(23, index), employee_record_id: personOf(index) }],
+      absent: [{ id: uuid(23, index), employee_record_id: person }],
       job: { title: 'Einsatz', description: null, job_number: `A-${index}`, status: 'nicht_bearbeitet' },
     });
   return {
     planning_occurrences: [
       ...indexes(0, pending).map((index) => visit(index, upcomingDay(index))),
+      // Someone with no vacation that day: the absence read's `!inner` team filter drops it.
+      ...indexes(0, pending).map((index) => visit(20_000 + index, upcomingDay(index), uuid(26, index))),
       ...indexes(10_000, history).map((index) => visit(index, closedDay(index))),
     ],
   };
@@ -517,7 +519,9 @@ function query(table: string) {
   });
   builder.or = chain((text) => filters.push(termFilter(`or(${column(text)})`)));
   builder.select = chain((columns, options) => {
-    for (const match of column(columns).matchAll(/(\w+)!inner\(/g)) innerEmbeds.add(match[1] ?? '');
+    // An aliased embed (`absent:planning_occurrence_assignments!inner(`) is filtered under its alias.
+    for (const match of column(columns).matchAll(/(?:(\w+):)?(\w+)(?:!\w+)*?!inner\(/g))
+      innerEmbeds.add(match[1] ?? match[2] ?? '');
     head = typeof options === 'object' && options !== null && 'head' in options && options.head === true;
   });
   builder.order = chain(() => undefined);
