@@ -163,8 +163,11 @@ const refusedPath = storagePathOfCall(1);
 assert.notEqual(refusedPath, registeredPath, 'two release attempts stored one key');
 assert.deepEqual(packageKeys(), [registeredPath]);
 
-// A replay of the committed release answers with the registered package and
-// removes the object it stored.
+// A replay of the committed request whose reads, like the refused attempt's,
+// were taken before the commit: the database answers it as a duplicate, and it
+// answers with the registered package and removes the object it stored. A
+// retry that reads after the commit is refused as stale before it stores
+// anything.
 world.rpc = () => ({ data: { releaseId, documentId: committedDocumentId, duplicate: true }, error: null });
 assert.deepEqual(await release(committedRequestId, crypto.randomUUID()), {
   success: true,
