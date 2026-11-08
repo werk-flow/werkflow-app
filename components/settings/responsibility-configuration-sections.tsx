@@ -2,6 +2,7 @@ import { formatDelegationDate, personName } from '@/components/settings/responsi
 import { Checkbox } from '@/components/ui/checkbox';
 import type { ResponsibilityPreview } from '@/lib/responsibilities/actions';
 import {
+  orderByPersonName,
   formatResponsibilityPersonName,
   type OrganizationResponsibility,
   type ResponsibilityPerson,
@@ -105,7 +106,14 @@ function PreviewNames({
     <div className="text-sm" data-testid={testId}>
       <p className="font-medium">{label}</p>
       <p className="text-muted-foreground">
-        {ids.length > 0 ? ids.map((id) => personName(people, id)).join(', ') : emptyLabel}
+        {ids.length > 0
+          ? orderByPersonName(
+              ids.map((employeeRecordId) => ({ employeeRecordId })),
+              people,
+            )
+              .map(({ employeeRecordId }) => personName(people, employeeRecordId))
+              .join(', ')
+          : emptyLabel}
       </p>
     </div>
   );

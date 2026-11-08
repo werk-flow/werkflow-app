@@ -20,6 +20,9 @@ import {
 } from './resolution';
 import type { OrgRole } from '@/lib/roles';
 import type { OrganizationResponsibility, ResponsibilityPerson } from './types';
+import { delegationWindowState } from './delegation-window';
+import type { SubstituteAbsenceSpan } from './substitute-absence';
+import { loadSubstituteAbsenceSpans } from './substitute-absence-server';
 
 export type ResponsibilityRuntimeState = {
   members: ResponsibilityMember[];
@@ -63,6 +66,11 @@ export type ResponsibilitySettingsData = {
   configurations: ResponsibilityConfiguration[];
   delegations: ResponsibilityDelegation[];
   effective: Record<OrganizationResponsibility, EffectiveResponsibility>;
+  /**
+   * The full-day absences from today on, for the owner's substitute picker;
+   * null for everyone else and on pages that offer no picker.
+   */
+  substituteAbsences: SubstituteAbsenceSpan[] | null;
 };
 
 export const loadResponsibilityRuntimeState = memoizeRequestRead(
@@ -350,9 +358,9 @@ async function readDelegationHistory(organizationId: string): Promise<Responsibi
   return result.data.map(toResponsibilityDelegation);
 }
 
-export async function getResponsibilitySettingsData(): Promise<
-  ActionResult<{ data: ResponsibilitySettingsData }>
-> {
+export async function getResponsibilitySettingsData(
+  options: { withSubstituteAbsences?: boolean } = {},
+): Promise<ActionResult<{ data: ResponsibilitySettingsData }>> {
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
 
@@ -369,13 +377,26 @@ export async function getResponsibilitySettingsData(): Promise<
   }
 
   const businessDate = getBusinessTodayIso();
+  const isOwner = organizationResult.data.admin_id === userId;
+  // Only the owner names substitutes, so only the owner's picker reads absences.
+  const readsAbsences = isOwner && options.withSubstituteAbsences === true;
+  const substituteAbsences = readsAbsences
+    ? await loadSubstituteAbsenceSpans(admin, { organizationId: orgId, from: businessDate, until: null })
+    : null;
+  if (readsAbsences && !substituteAbsences) {
+    return { success: false, error: 'load_failed' };
+  }
   const actionTime = getSkewGuardedActionTime(state.configurations);
   const currentEmployeeRecordId =
     state.members.find((member) => member.userId === userId)?.employeeRecordId ?? null;
   const isManager = role === 'admin' || role === 'buero';
+  // A window removed before its first day never took effect; its row and event stay as history.
+  const listedDelegations = delegations.filter(
+    (delegation) => delegationWindowState(delegation, businessDate) !== 'removed',
+  );
   const visibleDelegations = isManager
-    ? delegations
-    : delegations.filter(
+    ? listedDelegations
+    : listedDelegations.filter(
         (delegation) =>
           delegation.delegatorEmployeeRecordId === currentEmployeeRecordId ||
           delegation.substituteEmployeeRecordId === currentEmployeeRecordId,
@@ -408,7 +429,7 @@ export async function getResponsibilitySettingsData(): Promise<
       currentUserId: userId,
       currentUserRole: role,
       currentEmployeeRecordId,
-      isOwner: organizationResult.data.admin_id === userId,
+      isOwner,
       businessDate,
       people: isManager
         ? state.people
@@ -418,6 +439,7 @@ export async function getResponsibilitySettingsData(): Promise<
       effective: mapResponsibilities((responsibility) =>
         scopeEffective(effectiveResponsibilities[responsibility]),
       ),
+      substituteAbsences,
     },
   };
 }

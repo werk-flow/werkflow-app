@@ -53,6 +53,7 @@ const calls = [
         validFrom: '2026-11-02',
         validUntil: '2026-11-13',
         note: 'Urlaubsvertretung',
+        acceptAbsentSubstitute: true,
       }),
   ],
   ['endResponsibilityDelegation', () => endResponsibilityDelegation(foreignDelegationId)],

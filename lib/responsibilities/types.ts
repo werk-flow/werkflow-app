@@ -55,3 +55,16 @@ export function formatResponsibilityPersonName(
   const name = [person.firstName, person.lastName].filter(Boolean).join(' ');
   return name || person.email || 'Unbekannte Person';
 }
+
+/**
+ * The items in the order of the people list, which is sorted by name, so every
+ * section lists holders alike; a person outside the list goes last.
+ */
+export function orderByPersonName<Item extends { employeeRecordId: string }>(
+  items: readonly Item[],
+  people: readonly ResponsibilityPerson[],
+): Item[] {
+  const position = new Map(people.map((person, index) => [person.employeeRecordId, index]));
+  const rank = (item: Item) => position.get(item.employeeRecordId) ?? people.length;
+  return items.toSorted((left, right) => rank(left) - rank(right));
+}

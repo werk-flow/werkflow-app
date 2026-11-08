@@ -30,6 +30,7 @@ import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resolution';
 import type { ResponsibilitySettingsData } from '@/lib/responsibilities/server';
 import {
+  orderByPersonName,
   ORGANIZATION_RESPONSIBILITIES,
   RESPONSIBILITY_DESCRIPTIONS,
   RESPONSIBILITY_LABELS,
@@ -46,6 +47,8 @@ export function ResponsibilitySettings({ data }: { data: ResponsibilitySettingsD
       'organization_responsibility_delegations',
       'organization_members',
       'employee_records',
+      // The owner's substitute picker shows absences.
+      ...(data.substituteAbsences ? (['vacation_requests', 'sickness_reports'] as const) : []),
     ],
   });
 
@@ -120,7 +123,7 @@ function CurrentHolderSection({
       <h3 className="text-sm font-medium">Aktuell verantwortlich</h3>
       <ul className="grid gap-2">
         {holders.length > 0 ? (
-          holders.map((holder) => (
+          orderByPersonName(holders, people).map((holder) => (
             <li
               key={holder.employeeRecordId}
               className="flex flex-col gap-1 rounded-md border px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
