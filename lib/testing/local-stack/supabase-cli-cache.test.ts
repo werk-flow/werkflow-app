@@ -17,6 +17,7 @@ test('CI and staging install the Supabase CLI through the cached action', () => 
     expect(read(path), path).not.toContain(SETUP_CLI);
   }
   expect(read('.github/workflows/release.yml')).toContain(SETUP_CLI);
+  expect(read('.github/workflows/release.yml')).not.toContain(CACHED_CLI);
 });
 
 test('the cached action restores first and downloads only on a miss', () => {
