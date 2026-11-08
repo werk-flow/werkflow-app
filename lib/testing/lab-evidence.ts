@@ -70,18 +70,18 @@ export type LabEvidenceCheck = z.infer<typeof labEvidenceSchema>;
  * required step without a reference fail when `enforceCeilings` (the runner
  * sets it in every plan: release, explicit `--group` and a change plan that
  * selected the group by scope); otherwise they are notes. A step without a
- * reference compares nothing, so it must never pass as a note. An improvement that was not ratcheted fails in release mode.
+ * reference compares nothing, so it must never pass as a note. A count
+ * below its floor fails too, so the change that lowered it ratchets it.
  */
 export function checkLabEvidence(input: {
   directory: string;
   runKey: string;
   requiredSteps: readonly string[];
   enforceCeilings: boolean;
-  release: boolean;
   references?: LabReferences;
   steps?: readonly LabStep[];
 }): LabEvidenceCheck {
-  const { directory, runKey, requiredSteps, enforceCeilings, release } = input;
+  const { directory, runKey, requiredSteps, enforceCeilings } = input;
   const references = input.references ?? readLabReferences();
   const { observations, problems } = readLabObservations(directory);
   const overTarget: string[] = [];
@@ -115,15 +115,14 @@ export function checkLabEvidence(input: {
     }
     const rows = compareLabStep({ step, observation, reference });
     table.push(...formatLabTable(stepId, rows, observation.wallClockMs));
-    for (const row of rows.filter((candidate) => isFailingRow(candidate, true))) {
+    for (const row of rows.filter(isFailingRow)) {
       const message =
         row.status === 'ratchet-pending'
-          ? `${stepId} ${row.target} fell to ${row.now} below its reference ${row.reference}: lower the reference with bun scripts/lab-counts.ts ratchet --run ${runKey}`
+          ? `${stepId} ${row.target} fell to ${row.now}, below its floor ${row.floor} (reference ${row.reference}): lower the reference in this change with bun scripts/lab-counts.ts ratchet --run ${runKey}. A CI run key is not on your machine: run the group locally and ratchet that run; if it measures ${row.target} inside its tolerance, bun scripts/lab-counts.ts accept --run <that run> --step ${stepId} --target ${row.target} --reason "CI measured ${row.now}"`
           : row.status === 'shrank'
             ? `${stepId} ${row.target} shrank to ${row.now} below its floor ${row.floor}: confirm nothing is missing, then bun scripts/lab-counts.ts accept --run ${runKey} --step ${stepId} --target ${row.target.split('#')[0]} --reason "<what changed>"`
             : `${stepId} ${row.target} is ${row.status}: ${row.now ?? 'absent'} against reference ${row.reference ?? 'none'} (ceiling ${row.ceiling ?? '—'})`;
-      if (row.status === 'ratchet-pending') (release ? problems : overTarget).push(message);
-      else (enforceCeilings ? problems : overTarget).push(message);
+      (enforceCeilings ? problems : overTarget).push(message);
     }
   }
   const extra = observations.filter((observation) => !requiredSteps.includes(observation.stepId));

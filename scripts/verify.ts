@@ -231,13 +231,12 @@ function commandForGroup(group: TestGroup, target: 'local' | 'cloud'): string[] 
 /**
  * The lab evidence of a lab group's run; undefined for any other group. Its
  * ceilings, budgets and floors apply in every plan, so a change plan that
- * selects the group by scope blocks a count or payload regression; an
- * unratcheted improvement fails in release mode only.
+ * selects the group by scope blocks a count or payload regression and an
+ * unratcheted fall alike.
  */
 function labEvidenceOf(
   timing: { requiredLabSteps?: readonly string[] | undefined },
   runKey: string,
-  release: boolean,
 ): LabEvidenceCheck | undefined {
   const requiredSteps = timing.requiredLabSteps ?? [];
   if (!requiredSteps.length) return undefined;
@@ -246,7 +245,6 @@ function labEvidenceOf(
     runKey,
     requiredSteps,
     enforceCeilings: true,
-    release,
   });
 }
 
@@ -379,7 +377,7 @@ async function main(): Promise<void> {
             ...entry.timing,
             enforceDeadlines: entry.enforceDeadlines,
           }).problems.length ||
-          labEvidenceOf(entry.timing, reusable.runKey, options.mode === 'release')?.problems.length)
+          labEvidenceOf(entry.timing, reusable.runKey)?.problems.length)
       )
         reusable = undefined;
       return { ...entry, reusable };
@@ -494,8 +492,7 @@ async function main(): Promise<void> {
               ...entry.timing,
               enforceDeadlines: entry.enforceDeadlines,
             }).problems,
-            ...(labEvidenceOf(entry.timing, entry.reusable.runKey, options.mode === 'release')?.problems ??
-              []),
+            ...(labEvidenceOf(entry.timing, entry.reusable.runKey)?.problems ?? []),
           ]
         : ['Missing browser run identity'];
       if (invalid || latencyProblems.length)
@@ -611,11 +608,7 @@ async function main(): Promise<void> {
                   ...entry.timing,
                   enforceDeadlines: entry.enforceDeadlines,
                 });
-                const reusedLab = labEvidenceOf(
-                  entry.timing,
-                  entry.reusable.runKey,
-                  options.mode === 'release',
-                );
+                const reusedLab = labEvidenceOf(entry.timing, entry.reusable.runKey);
                 if (reusedLab) report.labCounts[entry.group.id] = reusedLab;
               }
               report.results.push(entry.reusable);
@@ -776,9 +769,7 @@ async function main(): Promise<void> {
               for (const note of latencyEvidence.overTarget)
                 console.log(`[verify] ${entry.group.id}: ${note}`);
             }
-            const labEvidence = run
-              ? labEvidenceOf(entry.timing, run.runKey, options.mode === 'release')
-              : undefined;
+            const labEvidence = run ? labEvidenceOf(entry.timing, run.runKey) : undefined;
             if (labEvidence) {
               report.labCounts[entry.group.id] = labEvidence;
               for (const line of labEvidence.table) console.log(`[verify] ${entry.group.id} ${line}`);
