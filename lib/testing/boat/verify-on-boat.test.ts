@@ -10,6 +10,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -22,6 +23,7 @@ import { createMachine, runScript } from './boat-machine';
 import { backendValueDigests } from '../evidence/proof-environment';
 import {
   boatFailure,
+  changedSinceHead,
   fallbackLine,
   gitEnvironment,
   copyResults,
@@ -30,7 +32,9 @@ import {
   machineBoundGroup,
   placeFiles,
   prepareAndRun,
+  rebuiltTreeProblem,
   runOnBoat,
+  tarPackArguments,
   unpackResults,
   withMachine,
   linkedDestination,
@@ -625,3 +629,91 @@ test('a destination longer than the system allows is refused before any write', 
   expect(() => copyResults(staging, checkout)).toThrow('too long');
   expect(existsSync(join(checkout, '.agent-logs'))).toBe(false);
 });
+
+test('macOS bsdtar packs without extended attributes or AppleDouble members, GNU tar as before', () => {
+  const mac = 'bsdtar 3.5.3 - libarchive 3.7.4 zlib/1.2.12 liblzma/5.4.3 bz2lib/1.0.8\n';
+  expect(tarPackArguments(mac, 'tree.tgz', 'tree.list')).toEqual([
+    '-czf',
+    'tree.tgz',
+    '--no-xattrs',
+    '--no-mac-metadata',
+    '--null',
+    '-T',
+    'tree.list',
+  ]);
+  const gnu = 'tar (GNU tar) 1.35\nCopyright (C) 2023 Free Software Foundation, Inc.\n';
+  expect(tarPackArguments(gnu, 'tree.tgz', 'tree.list')).toEqual([
+    '-czf',
+    'tree.tgz',
+    '--null',
+    '-T',
+    'tree.list',
+  ]);
+});
+
+/** A committed repository whose working tree has a change, a deletion and an untracked file. */
+function workstationCheckout(): string {
+  const repository = mkdtempSync(join(tmpdir(), 'boat-tree-'));
+  const run = (...args: string[]) => execFileSync('git', args, { cwd: repository, env: gitEnvironment() });
+  run('init', '-q');
+  mkdirSync(join(repository, 'lib'));
+  for (const name of ['lib/kept.ts', 'lib/changed.ts', 'lib/deleted.ts'])
+    writeFileSync(join(repository, name), `export const name = '${name}';\n`);
+  run('add', '.');
+  run('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'x');
+  writeFileSync(join(repository, 'lib/changed.ts'), 'export const name = 1;\n');
+  rmSync(join(repository, 'lib/deleted.ts'));
+  writeFileSync(join(repository, 'lib/new.ts'), 'export const name = 2;\n');
+  return repository;
+}
+
+/** The workstation's tree packed with this host's tar, unpacked into a fresh clone as remote-verify.sh does. */
+function rebuild(workstation: string): string {
+  const folder = mkdtempSync(join(tmpdir(), 'boat-pack-'));
+  const machine = join(folder, 'machine');
+  execFileSync('git', ['clone', '-q', workstation, machine], { env: gitEnvironment() });
+  const list = join(folder, 'tree.list');
+  writeFileSync(list, ['lib/kept.ts', 'lib/changed.ts', 'lib/new.ts'].join('\0'));
+  const version = execFileSync('tar', ['--version'], { encoding: 'utf8' });
+  execFileSync('tar', tarPackArguments(version, join(folder, 'tree.tgz'), list), { cwd: workstation });
+  execFileSync('tar', ['--extract', '--gzip', '--file', join(folder, 'tree.tgz')], { cwd: machine });
+  rmSync(join(machine, 'lib/deleted.ts'));
+  return machine;
+}
+
+test("git reads a checkout rebuilt with this host's tar as changed exactly where the workstation is", () => {
+  const workstation = workstationCheckout();
+  const changed = changedSinceHead(workstation);
+  expect(changed).toEqual(['lib/changed.ts', 'lib/deleted.ts', 'lib/new.ts']);
+  const machine = rebuild(workstation);
+  expect(rebuiltTreeProblem(changed, changedSinceHead(machine))).toBeUndefined();
+  // An AppleDouble member unpacked by GNU tar is such an extra file.
+  writeFileSync(join(machine, 'lib/._kept.ts'), '\0\u0005\u0016\u0007');
+  expect(rebuiltTreeProblem(changed, changedSinceHead(machine))).toBe(
+    "git reads the rebuilt checkout as changed elsewhere than the workstation's: 1 (lib/._kept.ts) paths only on the machine, 0 only on the workstation.",
+  );
+});
+
+test('a mismatch names its first five paths on each side and the count', () => {
+  const machine = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((name) => `lib/${name}.ts`);
+  expect(rebuiltTreeProblem(['lib/a.ts', 'lib/z.ts'], machine)).toBe(
+    "git reads the rebuilt checkout as changed elsewhere than the workstation's: 6 (lib/b.ts, lib/c.ts, lib/d.ts, lib/e.ts, lib/f.ts, …) paths only on the machine, 1 (lib/z.ts) only on the workstation.",
+  );
+});
+
+// macOS only: elsewhere no tar packs a file's extended attributes as an AppleDouble member.
+test.skipIf(process.platform !== 'darwin')(
+  'a file with an extended attribute packs on macOS without an AppleDouble member or the attribute',
+  () => {
+    const workstation = workstationCheckout();
+    execFileSync('xattr', ['-w', 'com.werkflow.test', 'provenance', join(workstation, 'lib/kept.ts')]);
+    const folder = mkdtempSync(join(tmpdir(), 'boat-pack-'));
+    const list = join(folder, 'tree.list');
+    writeFileSync(list, 'lib/kept.ts');
+    const version = execFileSync('tar', ['--version'], { encoding: 'utf8' });
+    execFileSync('tar', tarPackArguments(version, join(folder, 'tree.tgz'), list), { cwd: workstation });
+    const members = execFileSync('tar', ['-tzf', join(folder, 'tree.tgz')], { encoding: 'utf8' });
+    expect(members.trim().split('\n')).toEqual(['lib/kept.ts']);
+    expect(execFileSync('gzip', ['-dc', join(folder, 'tree.tgz')]).includes('com.werkflow.test')).toBe(false);
+  },
+);

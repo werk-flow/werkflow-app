@@ -4604,6 +4604,219 @@ export type Database = {
           },
         ];
       };
+      organization_export_events: {
+        Row: {
+          actor_id: string;
+          event_payload: Json;
+          event_type: string;
+          export_id: string;
+          id: string;
+          occurred_at: string;
+          organization_id: string;
+          part_id: string | null;
+        };
+        Insert: {
+          actor_id: string;
+          event_payload?: Json;
+          event_type: string;
+          export_id: string;
+          id?: string;
+          occurred_at?: string;
+          organization_id: string;
+          part_id?: string | null;
+        };
+        Update: {
+          actor_id?: string;
+          event_payload?: Json;
+          event_type?: string;
+          export_id?: string;
+          id?: string;
+          occurred_at?: string;
+          organization_id?: string;
+          part_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "organization_export_events_export_fkey";
+            columns: ["export_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organization_exports";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "organization_export_events_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      organization_export_files: {
+        Row: {
+          archive_name: string;
+          document_id: string;
+          export_id: string;
+          file_bytes: number;
+          id: string;
+          organization_id: string;
+          part_id: string;
+          source_path: string;
+          version_number: number | null;
+        };
+        Insert: {
+          archive_name: string;
+          document_id: string;
+          export_id: string;
+          file_bytes: number;
+          id?: string;
+          organization_id: string;
+          part_id: string;
+          source_path: string;
+          version_number?: number | null;
+        };
+        Update: {
+          archive_name?: string;
+          document_id?: string;
+          export_id?: string;
+          file_bytes?: number;
+          id?: string;
+          organization_id?: string;
+          part_id?: string;
+          source_path?: string;
+          version_number?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "organization_export_files_export_fkey";
+            columns: ["export_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organization_exports";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "organization_export_files_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "organization_export_files_part_fkey";
+            columns: ["part_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organization_export_parts";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      organization_export_parts: {
+        Row: {
+          archive_bytes: number | null;
+          archive_path: string;
+          build_started_at: string | null;
+          built_at: string | null;
+          expires_at: string | null;
+          export_id: string;
+          failure_reason: string | null;
+          file_bytes: number;
+          file_count: number;
+          id: string;
+          kind: string;
+          organization_id: string;
+          part_number: number;
+          state: string;
+        };
+        Insert: {
+          archive_bytes?: number | null;
+          archive_path: string;
+          build_started_at?: string | null;
+          built_at?: string | null;
+          expires_at?: string | null;
+          export_id: string;
+          failure_reason?: string | null;
+          file_bytes?: number;
+          file_count?: number;
+          id?: string;
+          kind: string;
+          organization_id: string;
+          part_number: number;
+          state?: string;
+        };
+        Update: {
+          archive_bytes?: number | null;
+          archive_path?: string;
+          build_started_at?: string | null;
+          built_at?: string | null;
+          expires_at?: string | null;
+          export_id?: string;
+          failure_reason?: string | null;
+          file_bytes?: number;
+          file_count?: number;
+          id?: string;
+          kind?: string;
+          organization_id?: string;
+          part_number?: number;
+          state?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "organization_export_parts_export_fkey";
+            columns: ["export_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organization_exports";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "organization_export_parts_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      organization_exports: {
+        Row: {
+          file_bytes: number;
+          file_count: number;
+          id: string;
+          organization_id: string;
+          part_count: number;
+          requested_at: string;
+          requested_by: string;
+          updated_at: string;
+        };
+        Insert: {
+          file_bytes: number;
+          file_count: number;
+          id?: string;
+          organization_id: string;
+          part_count: number;
+          requested_at?: string;
+          requested_by: string;
+          updated_at?: string;
+        };
+        Update: {
+          file_bytes?: number;
+          file_count?: number;
+          id?: string;
+          organization_id?: string;
+          part_count?: number;
+          requested_at?: string;
+          requested_by?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "organization_exports_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       organization_invites: {
         Row: {
           accepted_at: string | null;
@@ -8165,6 +8378,7 @@ export type Database = {
           purge_after: string;
           queued_at: string;
           storage_path: string;
+          writes_end_at: string | null;
         };
         Insert: {
           attempts?: number;
@@ -8174,6 +8388,7 @@ export type Database = {
           purge_after: string;
           queued_at?: string;
           storage_path: string;
+          writes_end_at?: string | null;
         };
         Update: {
           attempts?: number;
@@ -8183,6 +8398,7 @@ export type Database = {
           purge_after?: string;
           queued_at?: string;
           storage_path?: string;
+          writes_end_at?: string | null;
         };
         Relationships: [];
       };
@@ -9490,6 +9706,44 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "time_entry_audit_events_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      time_entry_withdrawals: {
+        Row: {
+          actor_id: string;
+          created_at: string;
+          entry_id: string;
+          entry_timestamp: string;
+          id: string;
+          organization_id: string;
+          withdrawn_entry: Json;
+        };
+        Insert: {
+          actor_id: string;
+          created_at?: string;
+          entry_id: string;
+          entry_timestamp: string;
+          id?: string;
+          organization_id: string;
+          withdrawn_entry: Json;
+        };
+        Update: {
+          actor_id?: string;
+          created_at?: string;
+          entry_id?: string;
+          entry_timestamp?: string;
+          id?: string;
+          organization_id?: string;
+          withdrawn_entry?: Json;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_entry_withdrawals_organization_id_fkey";
             columns: ["organization_id"];
             isOneToOne: false;
             referencedRelation: "organizations";
@@ -13268,6 +13522,14 @@ export type Database = {
           user_id: string;
         }[];
       };
+      claim_organization_export_part_build: {
+        Args: {
+          p_actor_id: string;
+          p_organization_id: string;
+          p_part_id: string;
+        };
+        Returns: Json;
+      };
       claim_storage_purge: {
         Args: { p_limit: number };
         Returns: {
@@ -13405,6 +13667,15 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      complete_organization_export_part: {
+        Args: {
+          p_actor_id: string;
+          p_archive_bytes: number;
+          p_organization_id: string;
+          p_part_id: string;
+        };
+        Returns: undefined;
       };
       complete_storage_purge: { Args: { p_ids: string[] }; Returns: undefined };
       consume_rate_limit: {
@@ -14716,6 +14987,15 @@ export type Database = {
         };
         Returns: string[];
       };
+      fail_organization_export_part: {
+        Args: {
+          p_actor_id: string;
+          p_failure_reason: string;
+          p_organization_id: string;
+          p_part_id: string;
+        };
+        Returns: undefined;
+      };
       fail_payroll_export: {
         Args: {
           p_actor_id: string;
@@ -15711,6 +15991,15 @@ export type Database = {
         Args: { p_organization_id: string; p_paths: string[] };
         Returns: undefined;
       };
+      read_organization_export_page: {
+        Args: {
+          p_after: Json;
+          p_limit: number;
+          p_organization_id: string;
+          p_table: string;
+        };
+        Returns: Json;
+      };
       read_time_correction_applications: {
         Args: {
           p_from?: string;
@@ -15784,6 +16073,14 @@ export type Database = {
           quantity_after: number;
           quantity_before: number;
         }[];
+      };
+      record_organization_export_download: {
+        Args: {
+          p_actor_id: string;
+          p_organization_id: string;
+          p_part_id: string;
+        };
+        Returns: Json;
       };
       record_work_artifact_action: {
         Args: {
@@ -17083,6 +17380,14 @@ export type Database = {
         };
         Returns: undefined;
       };
+      start_organization_export: {
+        Args: {
+          p_actor_id: string;
+          p_file_parts: Json;
+          p_organization_id: string;
+        };
+        Returns: string;
+      };
       submit_time_account_adjustment: {
         Args: {
           p_account_id: string;
@@ -18136,6 +18441,14 @@ export type Database = {
           p_reason: string;
         };
         Returns: undefined;
+      };
+      withdraw_pending_time_entries: {
+        Args: {
+          p_actor_id: string;
+          p_entry_ids: string[];
+          p_organization_id: string;
+        };
+        Returns: number;
       };
       withdraw_time_account_adjustment: {
         Args: {

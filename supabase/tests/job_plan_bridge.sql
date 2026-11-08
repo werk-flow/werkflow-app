@@ -14,7 +14,7 @@
 -- same transaction (migrations 20261005110000, 20261006100000 and
 -- 20261006100100). A job-page team change records the assessment of the
 -- visit it reaches (20261108120000), and so does a job created or edited
--- with a date and people (20261120100000).
+-- with a date and people (20261124100000).
 begin;
 
 insert into auth.users (
@@ -690,7 +690,7 @@ end;
 $$;
 
 -- 13. The job create and edit dialogs plan the legacy visit with its people
--- (20261120100000). A save that leaves a scheduled, unstarted visit with
+-- (20261124100000). A save that leaves a scheduled, unstarted visit with
 -- people, after moving it or adding someone, records the assessment of
 -- exactly that visit, with the reason; without one, or for another visit
 -- than the one it leaves, it changes nothing.

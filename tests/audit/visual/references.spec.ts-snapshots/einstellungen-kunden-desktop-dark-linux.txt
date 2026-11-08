@@ -41,6 +41,8 @@ Mitarbeiter
 Freigaben und Vertretungen
 Kunden
 Kundenverwaltung und Defaults
+Datenexport
+Alle Daten herunterladen
 Kunden
 Umschließt Einstellungen für Kundenstammdaten und Kundenprozesse.
 Gilt für Haustechnik Krämer GmbH

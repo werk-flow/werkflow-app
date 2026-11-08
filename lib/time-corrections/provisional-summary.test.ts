@@ -74,6 +74,7 @@ describe('the pending corrections in sum', () => {
     );
     expect(summary).toEqual({
       count: 2,
+      submissionCount: 0,
       beforeMinutes: 450,
       proposedMinutes: 510 + 510,
       days: ['2026-10-26', '2026-10-27'],
@@ -188,5 +189,79 @@ describe('the pending corrections in sum', () => {
     // At most one week's listing per stored fact.
     expect(dayStepCount).toBeLessThanOrEqual(legacy.facts.length * 8);
     expect(summary.days).toEqual([{ first: '2023-01-02', last: '2026-10-27' }]);
+  });
+});
+
+describe('pending manual submissions in the sum', () => {
+  test('count as time they would add, beside the corrections, on their own days', () => {
+    // 27.10. in Berlin: a correction adds 06:00 to 08:00 local; a submission
+    // of the 28th adds 09:00 to 17:00 local, an open clock-in of the 29th none.
+    const summary = summarizePendingCorrections(
+      [
+        request(
+          snapshot(),
+          snapshot(
+            fact('clock_in', '2026-10-27T05:00:00.000Z'),
+            fact('clock_out', '2026-10-27T07:00:00.000Z'),
+          ),
+        ),
+      ],
+      'user',
+      {
+        pending: [
+          [
+            { entryType: 'clock_out', timestamp: '2026-10-28T16:00:00.000Z' },
+            { entryType: 'clock_in', timestamp: '2026-10-28T08:00:00.000Z' },
+          ],
+          [{ entryType: 'clock_in', timestamp: '2026-10-29T06:00:00.000Z' }],
+        ],
+        acceptedOnTheirDays: [],
+      },
+    );
+    expect(summary).toEqual({
+      count: 1,
+      submissionCount: 2,
+      beforeMinutes: 0,
+      proposedMinutes: 120 + 480,
+      days: ['2026-10-27', '2026-10-28', '2026-10-29'],
+    });
+  });
+
+  test('count a clock-in and the clock-out that closes it from separate submissions', () => {
+    // 28.10. in Berlin: a forgotten start at 07:00 and a forgotten end at 15:00 local, submitted apart.
+    const summary = summarizePendingCorrections([], 'user', {
+      pending: [
+        [{ entryType: 'clock_in', timestamp: '2026-10-28T06:00:00.000Z' }],
+        [{ entryType: 'clock_out', timestamp: '2026-10-28T14:00:00.000Z' }],
+      ],
+      acceptedOnTheirDays: [],
+    });
+    expect(summary).toEqual({
+      count: 0,
+      submissionCount: 2,
+      beforeMinutes: 0,
+      proposedMinutes: 480,
+      days: ['2026-10-28'],
+    });
+  });
+
+  test('count the time a submission closes or adds beside accepted time of its day', () => {
+    // 28.10. in Berlin: an accepted clock-in at 09:00 and a forgotten clock-out at
+    // 17:00 local; an accepted 06:00 to 07:00 stays as it was.
+    const summary = summarizePendingCorrections([], 'user', {
+      pending: [[{ entryType: 'clock_out', timestamp: '2026-10-28T16:00:00.000Z' }]],
+      acceptedOnTheirDays: [
+        { entryType: 'clock_in', timestamp: '2026-10-28T05:00:00.000Z' },
+        { entryType: 'clock_out', timestamp: '2026-10-28T06:00:00.000Z' },
+        { entryType: 'clock_in', timestamp: '2026-10-28T08:00:00.000Z' },
+      ],
+    });
+    expect(summary).toEqual({
+      count: 0,
+      submissionCount: 1,
+      beforeMinutes: 60,
+      proposedMinutes: 60 + 480,
+      days: ['2026-10-28'],
+    });
   });
 });

@@ -158,7 +158,8 @@ function CalendarHeaderActions({
         onClick={() => onEntryDialogOpenChange(true)}
       >
         <CalendarPlus className="size-4" />
-        <span>Kalendereintrag</span>
+        {/* An employee adds only own time here: the action says so (the office's dialog also plans and creates jobs). */}
+        <span>{isAdminOrManager ? 'Kalendereintrag' : 'Zeit nachtragen'}</span>
       </Button>
 
       {isAdminOrManager ? (

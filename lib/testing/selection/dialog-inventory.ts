@@ -43,7 +43,7 @@ export const DIALOG_INVENTORY = {
   'components/job-picker-modal.tsx#JobPickerModal|{title}': {
     audits: [{ route: '/dashboard', role: 'employee', opener: 'field.job-picker' }],
   },
-  'components/manual-entry-dialog.tsx#ManualEntryDialog|Manuelle Eintragung': {
+  'components/manual-entry-dialog.tsx#ManualEntryDialog|{title}': {
     audits: [
       { route: '/zeiterfassung', role: 'admin', opener: 'time.manual-entry' },
       { route: '/zeiterfassung', role: 'employee', opener: 'field.manual-entry' },
@@ -422,6 +422,9 @@ export const DIALOG_INVENTORY = {
     {
       audits: [{ route: '/zeiterfassung', role: 'admin', opener: 'time.approve-all' }],
     },
+  'components/zeiterfassung/entry-history-row-action.tsx#WithdrawSubmissionButton|Nachtrag zurückziehen?': {
+    audits: [{ route: '/zeiterfassung', role: 'employee', opener: 'field.withdraw-submission' }],
+  },
   'components/zeiterfassung/sickness-section-end-dialog.tsx#OwnSicknessEndDialog|Enddatum setzen': {
     audits: [{ route: '/zeiterfassung', role: 'employee', opener: 'field.sickness-end' }],
   },

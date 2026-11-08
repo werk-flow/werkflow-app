@@ -16,7 +16,15 @@ import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 import { correctionHistoryVisibility } from './history-visibility';
 import { hydrateCorrectionRequests, readCorrectionRequestList } from './request-list';
-import { summarizePendingCorrections, type ProvisionalTimeSummary } from './provisional-summary';
+import {
+  summarizePendingCorrections,
+  type PendingSubmissionFact,
+  type ProvisionalTimeSummary,
+} from './provisional-summary';
+import { groupPendingEntries } from '@/lib/time-tracking/pending-sessions';
+import { toTimeEntry } from '@/lib/time-tracking/types';
+import { getTimeEntries } from '@/lib/time-tracking/entry-read-actions';
+import { formatBerlinLocalDate, getLocalDayEnd, getLocalDayStart } from '@/lib/date-time/berlin';
 import type { TimeCorrectionHistoryResult, TimeCorrectionListResult } from './types';
 
 // The Server Actions that read time corrections: the approval queue, the
@@ -249,12 +257,68 @@ export async function getProvisionalTimeSummary(rawInput: {
   if (role === 'employee' && input.userId !== user.id) {
     return { success: false, error: 'not_authorized' };
   }
-  const result = await readCorrectionRequestList({
-    organizationId: input.organizationId,
-    callerUserId: user.id,
-    callerRole: role,
-    filter: { status: 'open', subjectUserId: input.userId },
-  });
+  const [result, submissions] = await Promise.all([
+    readCorrectionRequestList({
+      organizationId: input.organizationId,
+      callerUserId: user.id,
+      callerRole: role,
+      filter: { status: 'open', subjectUserId: input.userId },
+    }),
+    readPendingSubmissions(input.organizationId, input.userId),
+  ]);
   if (!result.success) return result;
-  return { success: true, ...summarizePendingCorrections(result.requests, input.userId) };
+  if (!submissions) return { success: false, error: 'fetch_failed' };
+  return { success: true, ...summarizePendingCorrections(result.requests, input.userId, submissions) };
+}
+
+/**
+ * The person's pending manual submissions, each as its clock facts in the
+ * groups an approver decides (pending-sessions.ts), and the person's accepted
+ * facts on their days, which a submission may close or extend; null when a
+ * read fails.
+ */
+async function readPendingSubmissions(
+  organizationId: string,
+  userId: string,
+): Promise<{ pending: PendingSubmissionFact[][]; acceptedOnTheirDays: PendingSubmissionFact[] } | null> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await readCompleteRows(
+    (from, to) =>
+      admin
+        .from('time_entries')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .eq('user_id', userId)
+        .eq('status', 'pending')
+        .eq('is_manual', true)
+        .order('timestamp')
+        .order('id')
+        .range(from, to),
+    LIST_ROW_CAP,
+  );
+  if (error) {
+    logReadFailure('getProvisionalTimeSummary: pending entries read failed', error);
+    return null;
+  }
+  const pending = groupPendingEntries(data).map((group) =>
+    group.entries.map(toTimeEntry).map(({ entryType, timestamp }) => ({ entryType, timestamp })),
+  );
+  const first = data[0];
+  const last = data.at(-1);
+  if (!first || !last) return { pending, acceptedOnTheirDays: [] };
+  // The accepted day as every view shows it: recorded entries, live capture and approved corrections.
+  const accepted = await getTimeEntries({
+    organizationId,
+    userId,
+    from: getLocalDayStart(new Date(first.timestamp)).toISOString(),
+    to: getLocalDayEnd(new Date(last.timestamp)).toISOString(),
+  });
+  if (!accepted.success) return null;
+  const days = new Set(data.map((row) => formatBerlinLocalDate(row.timestamp)));
+  return {
+    pending,
+    acceptedOnTheirDays: accepted.entries
+      .filter((entry) => entry.status === 'approved' && days.has(formatBerlinLocalDate(entry.timestamp)))
+      .map(({ entryType, timestamp }) => ({ entryType, timestamp })),
+  };
 }

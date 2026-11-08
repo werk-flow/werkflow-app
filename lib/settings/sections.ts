@@ -2,6 +2,7 @@ import type { LucideIcon } from 'lucide-react';
 
 import { isManagerRole, type OrgRole } from '@/lib/roles';
 import {
+  Archive,
   Briefcase,
   Building2,
   Calendar,
@@ -26,7 +27,8 @@ export type SettingsSectionSlug =
   | 'kalender'
   | 'zeiterfassung'
   | 'mitarbeiter'
-  | 'kunden';
+  | 'kunden'
+  | 'datenexport';
 
 export type SettingsSection = {
   slug: SettingsSectionSlug;
@@ -43,6 +45,8 @@ export type SettingsSection = {
    * nav hides the rest and its pages send an employee to the default section.
    */
   managersOnly?: boolean;
+  /** Sections only Admin sees: Büro and employees neither see them nor open their pages. */
+  adminOnly?: boolean;
   implemented: boolean;
 };
 
@@ -161,6 +165,18 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     managersOnly: true,
     implemented: false,
   },
+  {
+    slug: 'datenexport',
+    label: 'Datenexport',
+    shortDescription: 'Alle Daten herunterladen',
+    description:
+      'Lädt jeden Datensatz und jede Originaldatei der Organisation herunter, für einen Wechsel, eine Prüfung oder dein eigenes Archiv.',
+    icon: Archive,
+    group: 'organization',
+    scope: 'organization',
+    adminOnly: true,
+    implemented: true,
+  },
 ];
 
 export const DEFAULT_SETTINGS_SECTION_SLUG: SettingsSectionSlug = 'profil';
@@ -175,6 +191,7 @@ export function getSettingsSectionBySlug(slug: string): SettingsSection | null {
 
 /** Whether a member with this role sees the section in the nav and may open its page. */
 export function isSettingsSectionOpenTo(section: SettingsSection, role: OrgRole): boolean {
+  if (section.adminOnly) return role === 'admin';
   return !section.managersOnly || isManagerRole(role);
 }
 

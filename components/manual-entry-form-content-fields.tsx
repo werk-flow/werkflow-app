@@ -8,7 +8,9 @@ import { Field } from '@/components/ui/field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { DatePicker } from '@/components/ui/date-picker';
+import { Textarea } from '@/components/ui/textarea';
 import type { ManualEntryMode } from '@/components/use-manual-entry-form-draft';
+import type { ManualEntryFieldErrors } from '@/components/manual-entry-submission';
 
 const ENTRY_MODES: readonly ManualEntryMode[] = ['both', 'clock_in', 'clock_out'];
 
@@ -106,7 +108,7 @@ export function ManualEntryAssignmentFields({
 
 type ManualEntryTimeFieldsProps = {
   entryMode: ManualEntryMode;
-  dateError: string | undefined;
+  fieldErrors: Pick<ManualEntryFieldErrors, 'date' | 'clockIn' | 'clockOut'>;
   selectedDate: Date | undefined;
   setSelectedDate: (date: Date | undefined) => void;
   clockInTime: string;
@@ -117,7 +119,7 @@ type ManualEntryTimeFieldsProps = {
 
 export function ManualEntryTimeFields({
   entryMode,
-  dateError,
+  fieldErrors,
   selectedDate,
   setSelectedDate,
   clockInTime,
@@ -127,7 +129,7 @@ export function ManualEntryTimeFields({
 }: ManualEntryTimeFieldsProps) {
   return (
     <>
-      <Field label="Datum" htmlFor="manual-entry-date" required error={dateError}>
+      <Field label="Datum" htmlFor="manual-entry-date" required error={fieldErrors.date}>
         <DatePicker
           ariaLabel="Datum"
           value={selectedDate}
@@ -138,7 +140,7 @@ export function ManualEntryTimeFields({
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {(entryMode === 'clock_in' || entryMode === 'both') && (
-          <Field label="Einstempeln" htmlFor="clockInTime" required>
+          <Field label="Einstempeln" htmlFor="clockInTime" required error={fieldErrors.clockIn}>
             <div className="relative">
               <Clock className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <TimeInput value={clockInTime} onChange={setClockInTime} className="pl-10 pr-3" />
@@ -146,7 +148,7 @@ export function ManualEntryTimeFields({
           </Field>
         )}
         {(entryMode === 'clock_out' || entryMode === 'both') && (
-          <Field label="Ausstempeln" htmlFor="clockOutTime" required>
+          <Field label="Ausstempeln" htmlFor="clockOutTime" required error={fieldErrors.clockOut}>
             <div className="relative">
               <Clock className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <TimeInput value={clockOutTime} onChange={setClockOutTime} className="pl-10 pr-3" />
@@ -155,5 +157,33 @@ export function ManualEntryTimeFields({
         )}
       </div>
     </>
+  );
+}
+
+/** The reason an approver reads for own time of an earlier day. */
+export function ManualEntryReasonField({
+  reason,
+  setReason,
+  error,
+}: {
+  reason: string;
+  setReason: (reason: string) => void;
+  error: string | undefined;
+}) {
+  return (
+    <Field
+      label="Grund"
+      htmlFor="manual-entry-reason"
+      required
+      error={error}
+      description="Für einen vergangenen Tag braucht die Freigabe einen Grund."
+    >
+      <Textarea
+        value={reason}
+        onChange={(event) => setReason(event.target.value)}
+        placeholder="Warum fehlt die Zeit?"
+        maxLength={2000}
+      />
+    </Field>
   );
 }

@@ -348,7 +348,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['inventory-ledger', ['inventory_ledger.sql', 'inventory_atomic_writes.sql'], ['inventory']],
   ['closed-period-writes', ['closed_period_writes.sql'], ['time']],
   ['entry-change-request-decisions', ['entry_change_request_decisions.sql'], ['time']],
-  ['own-time-entry-changes', ['own_time_entry_changes.sql'], ['time']],
+  ['own-time-entry-changes', ['own_time_entry_changes.sql', 'pending_entry_withdrawals.sql'], ['time']],
   ['manual-entry-job-assignment', ['manual_entry_job_assignment.sql'], ['time', 'work']],
   [
     'document-writes',
@@ -366,6 +366,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['rate-limits', ['rate_limits.sql'], ['*']],
   ['organization-deletion', ['organization_deletion.sql'], ['*']],
   ['storage-purge', ['storage_purge.sql'], ['documents']],
+  ['organization-export', ['organization_export.sql'], ['*']],
   ['record-numbers', ['record_numbers.sql'], ['work', 'customers', 'personnel', 'service']],
   [
     'list-pagination',

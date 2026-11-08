@@ -68,6 +68,11 @@ const CLOSED_ENTRY_WRAPPER: ExportReference = {
   module: CLOSED_PERIOD_DATES,
   exportName: 'isEntryInClosedPeriod',
 };
+/** The time entry form's plan: its date field error is the closed-period check. */
+const MANUAL_ENTRY_PLAN_WRAPPER: ExportReference = {
+  module: 'components/manual-entry-submission.ts',
+  exportName: 'planManualEntrySubmission',
+};
 
 export const ACTION_PRECHECKS: readonly ActionPrecheck[] = [
   {
@@ -122,6 +127,7 @@ export const ACTION_PRECHECKS: readonly ActionPrecheck[] = [
     predicate: CLOSED_PERIOD_PREDICATE,
     wrappers: [
       CLOSED_ENTRY_WRAPPER,
+      MANUAL_ENTRY_PLAN_WRAPPER,
       {
         module: 'components/kalender/entry-details-permissions.ts',
         exportName: 'getEntryDetailsPermissions',
@@ -148,12 +154,15 @@ export const ACTION_PRECHECKS: readonly ActionPrecheck[] = [
     kind: 'time-correction-submit',
     serverCodes: ['period_closed'],
     predicate: CLOSED_PERIOD_PREDICATE,
-    wrappers: [CLOSED_ENTRY_WRAPPER],
+    wrappers: [CLOSED_ENTRY_WRAPPER, MANUAL_ENTRY_PLAN_WRAPPER],
     actions: [{ module: CORRECTION_ACTIONS, exportName: 'submitTimeCorrection' }],
     screenedReads: [],
     props: [],
     server: { kind: 'sql', test: 'supabase/tests/p1_23_time_accounts.sql' },
-    exempt: {},
+    exempt: {
+      'components/manual-entry-past-day.ts':
+        "Sends an employee's earlier-day time as a Zeitkorrektur only after use-manual-entry-form-submit.ts planned it with planManualEntrySubmission, whose date error is the closed-period check.",
+    },
   },
   {
     kind: 'time-entry-approval',

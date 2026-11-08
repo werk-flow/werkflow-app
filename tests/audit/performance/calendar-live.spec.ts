@@ -1,5 +1,5 @@
 import { expect, test } from '../support/fixtures';
-import { submitMissedTime } from '../support/time-corrections';
+import { submitOwnPastTime } from '../support/time-corrections';
 import {
   calendarClosure,
   calendarCorrectionBlock,
@@ -68,7 +68,7 @@ test.describe('Already-open calendar updates @AUDIT-PERFORMANCE-LIVE', () => {
       receiverReady: calendarReady(adminPage, 'month'),
       label: 'provisional correction appears in the already-open manager month',
       mutation: (beforeSubmit) =>
-        submitMissedTime(employeePage, { date: correctionDate, reason, beforeSubmit }),
+        submitOwnPastTime(employeePage, { date: correctionDate, reason, beforeSubmit }),
     });
     const submitted = await getTimeCorrectionState(world.orgId);
     const revision = submitted.revisions.find((entry) => entry.reason === reason);

@@ -433,6 +433,71 @@ function taskOrderCaptures(): AcceptanceSet {
   };
 }
 
+/**
+ * werk-flow/werkflow-planning#146 of 2026-11-08: the employee's one „Zeit
+ * nachtragen“ in the Zeiterfassung header and the calendar, its form with
+ * empty times, and the Verlauf without a second add action.
+ */
+function addTimeCaptures(): AcceptanceSet {
+  const phone = { role: 'employee', widths: [375], schemes: ['light', 'dark'] } as const;
+  return {
+    id: 'zeit-nachtragen-2026-11-08',
+    captures: [
+      { id: 'employee-zeiterfassung', route: '/zeiterfassung', view: { kind: 'page' }, ...phone },
+      {
+        id: 'employee-zeiterfassung-dialog-field-manual-entry',
+        route: '/zeiterfassung',
+        view: { kind: 'dialog', opener: 'field.manual-entry' },
+        ...phone,
+      },
+      {
+        id: 'employee-zeiterfassung-tab-history',
+        route: '/zeiterfassung',
+        view: { kind: 'tab', value: 'history' },
+        ...phone,
+      },
+      { id: 'employee-kalender', route: '/kalender', view: { kind: 'page' }, ...phone },
+    ],
+    standalone: [],
+  };
+}
+
+/**
+ * werk-flow/werkflow-planning#287 of 2026-11-08: the Admin's „Datenexport“
+ * section, settled and loading, and the settings nav that leads there.
+ */
+function organizationExportCaptures(): AcceptanceSet {
+  const both = { widths: [1280, 375], schemes: ['light', 'dark'] } as const;
+  return {
+    id: 'organization-export-2026-11-08',
+    captures: [
+      {
+        id: 'admin-einstellungen-datenexport',
+        role: 'admin',
+        route: '/einstellungen/datenexport',
+        view: { kind: 'page' },
+        ...both,
+      },
+      {
+        id: stateCaptureId('admin-einstellungen-datenexport', 'loading'),
+        role: 'admin',
+        route: '/einstellungen/datenexport',
+        view: { kind: 'page' },
+        state: 'loading',
+        ...both,
+      },
+      {
+        id: 'admin-einstellungen-organisation',
+        role: 'admin',
+        route: '/einstellungen/organisation',
+        view: { kind: 'page' },
+        ...both,
+      },
+    ],
+    standalone: [],
+  };
+}
+
 export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   uiRoundCaptures(),
   fieldTargetCaptures(),
@@ -448,4 +513,6 @@ export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   documentRetentionCaptures(),
   documentOriginCaptures(),
   taskOrderCaptures(),
+  addTimeCaptures(),
+  organizationExportCaptures(),
 ];

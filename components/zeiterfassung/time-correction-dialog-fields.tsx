@@ -24,9 +24,6 @@ const SOURCE_KINDS: TimeCorrectionKind[] = [
   'reassign',
 ];
 
-// A correction without a source entry adds time.
-const ADD_KINDS: TimeCorrectionKind[] = ['add', 'missed_clock'];
-
 const ACTIVITY_OPTIONS: Array<{ value: TimeSegmentKind; label: string }> = [
   { value: 'work', label: 'Arbeit' },
   { value: 'travel', label: 'Fahrt' },
@@ -41,7 +38,15 @@ type TimeCorrectionDialogFieldsProps = {
   form: TimeCorrectionDialogForm;
 };
 
-function TimeCorrectionPersonFields({ entry, form }: TimeCorrectionDialogFieldsProps) {
+/**
+ * Whose time the correction changes. Only Admin and Büro correct other
+ * people's time; everyone else corrects their own and sees no person field.
+ */
+function TimeCorrectionPersonFields({
+  entry,
+  form,
+  canChoosePerson,
+}: TimeCorrectionDialogFieldsProps & { canChoosePerson: boolean }) {
   const {
     options,
     kind,
@@ -59,7 +64,7 @@ function TimeCorrectionPersonFields({ entry, form }: TimeCorrectionDialogFieldsP
 
   return (
     <>
-      {!entry ? (
+      {!entry && canChoosePerson ? (
         <Field
           label="Person"
           htmlFor="time-correction-person"
@@ -202,6 +207,36 @@ function TimeCorrectionJobField({
   );
 }
 
+/** What a correction of an entry changes. */
+function TimeCorrectionKindField({
+  kind,
+  setKind,
+  isOffice,
+}: Pick<TimeCorrectionDialogForm, 'kind' | 'setKind'> & { isOffice: boolean }) {
+  return (
+    <Field label="Korrektur" className="gap-1.5">
+      <Select
+        value={kind}
+        onValueChange={(value) =>
+          setKind(constrainedValue(Constants.public.Enums.time_correction_kind, value, 'correction kind'))
+        }
+      >
+        <SelectTrigger aria-label="Art der Zeitkorrektur">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {/* Only Admin and Büro move an entry to another person. */}
+          {SOURCE_KINDS.filter((value) => value !== 'reassign' || isOffice).map((value) => (
+            <SelectItem key={value} value={value}>
+              {TIME_CORRECTION_KIND_LABELS[value]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
+  );
+}
+
 export function TimeCorrectionDialogFields({ entry, form }: TimeCorrectionDialogFieldsProps) {
   const {
     loadingOptions,
@@ -222,13 +257,12 @@ export function TimeCorrectionDialogFields({ entry, form }: TimeCorrectionDialog
     { kind: 'jobs', purpose: 'time-correction' },
     jobId && jobId !== 'none' ? [jobId] : [],
   );
-  // Moving time to another person is an office decision: only Admin and Büro see it.
+  // Moving time to another person, or choosing whose time is added, is an
+  // office decision: only Admin and Büro see it.
   const callerRole = options?.people.find(
     (person) => person.employeeRecordId === options.currentEmployeeRecordId,
   )?.role;
-  const sourceKinds = entry
-    ? SOURCE_KINDS.filter((value) => value !== 'reassign' || (callerRole && isManagerRole(callerRole)))
-    : ADD_KINDS;
+  const isOffice = callerRole !== undefined && isManagerRole(callerRole);
 
   return (
     <>
@@ -236,29 +270,10 @@ export function TimeCorrectionDialogFields({ entry, form }: TimeCorrectionDialog
         <TimeCorrectionFieldsSkeleton />
       ) : (
         <>
-          <Field label="Korrektur" className="gap-1.5">
-            <Select
-              value={kind}
-              onValueChange={(value) =>
-                setKind(
-                  constrainedValue(Constants.public.Enums.time_correction_kind, value, 'correction kind'),
-                )
-              }
-            >
-              <SelectTrigger aria-label="Art der Zeitkorrektur">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {sourceKinds.map((value) => (
-                  <SelectItem key={value} value={value}>
-                    {TIME_CORRECTION_KIND_LABELS[value]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
+          {/* Added time has one kind („Zeit nachtragen“); only a correction of an entry chooses what changes. */}
+          {entry ? <TimeCorrectionKindField kind={kind} setKind={setKind} isOffice={isOffice} /> : null}
 
-          <TimeCorrectionPersonFields entry={entry} form={form} />
+          <TimeCorrectionPersonFields entry={entry} form={form} canChoosePerson={isOffice} />
 
           <TimeCorrectionTimeFields form={form} />
 

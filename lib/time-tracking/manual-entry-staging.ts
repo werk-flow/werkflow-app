@@ -2,7 +2,7 @@ import 'server-only';
 import { readJobAssignmentOfUser, readOrganizationJob } from '@/lib/jobs/job-access-reads';
 import type { OrgRole } from '@/lib/roles';
 import type { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { getLocalDayEnd } from '@/lib/date-time/berlin';
+import { formatBerlinLocalDate, getBusinessTodayIso, getLocalDayEnd } from '@/lib/date-time/berlin';
 import type { z } from '@/lib/zod';
 import { getUserEntriesForDay, verifyCurrentMembership } from './action-access';
 import type { addManualEntryInputSchema } from './action-schemas';
@@ -25,6 +25,10 @@ function getManualEntryJobId(entryType: TimeEntry['entryType'], jobId?: string |
 }
 
 type ManualEntryDraft = { entryType: TimeEntryType; timestamp: string; jobId: string | null };
+
+function isBeforeBerlinToday(timestamp: string): boolean {
+  return formatBerlinLocalDate(timestamp) < getBusinessTodayIso();
+}
 
 /**
  * Cross-org guard: when the new entries would leave the target clocked in on
@@ -130,6 +134,12 @@ export async function stageManualEntries(
 
   // Determine approval status
   const status = determineApprovalStatus(callerRole, targetUserId, input.callerId);
+  // An employee's manual entry covers today only: own time of an earlier day
+  // goes in as a Zeitkorrektur, whose reason the approver reads. The office
+  // keeps entering earlier days for the people it manages.
+  if (callerRole === 'employee' && entries.some((entry) => isBeforeBerlinToday(entry.timestamp))) {
+    return { refusal: { success: false, error: 'past_day_needs_reason' } };
+  }
 
   const otherOrgRefusal = await refuseOpenSessionElsewhere(
     admin,

@@ -188,7 +188,9 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
   order(): this {
     return this;
   }
-  limit(): this {
+  /** The first selected rows in table order, as `range` pages them; a limit on an embed is not modeled. */
+  limit(count: number, options?: { referencedTable?: string }): this {
+    if (!options?.referencedTable) this.page = { from: 0, to: count - 1 };
     return this;
   }
   /** One page of the selected rows in table order, as PostgREST pages an ordered read. */
@@ -299,7 +301,8 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
 }
 
 // The batched time-entry functions write every named entry of the
-// organization. Their refusals run in SQL: supabase/tests/closed_period_writes.sql.
+// organization. Their refusals run in SQL: supabase/tests/closed_period_writes.sql
+// and, for a withdrawal, supabase/tests/pending_entry_withdrawals.sql.
 async function runTimeEntryBatch(tables: InMemoryTables, name: string, args: Row): Promise<QueryResult> {
   const query = new InMemoryQuery(tables, 'time_entries', () => ({}));
   const write =
@@ -375,7 +378,11 @@ export function createInMemoryAdmin(
   return {
     from: (table) => new InMemoryQuery(tables, table, columnDefaults[table] ?? (() => ({})), beforeWrite),
     rpc: async (name, args = {}) => {
-      if (name === 'review_time_entries' || name === 'delete_time_entries')
+      if (
+        name === 'review_time_entries' ||
+        name === 'delete_time_entries' ||
+        name === 'withdraw_pending_time_entries'
+      )
         return runTimeEntryBatch(tables, name, args);
       if (name === 'decide_entry_change_request') return decideEntryChangeRequest(tables, args);
       if (name === 'update_time_entry') return updateTimeEntry(tables, args);

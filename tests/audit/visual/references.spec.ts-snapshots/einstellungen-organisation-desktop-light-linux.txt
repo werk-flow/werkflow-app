@@ -41,6 +41,8 @@ Mitarbeiter
 Freigaben und Vertretungen
 Kunden
 Kundenverwaltung und Defaults
+Datenexport
+Alle Daten herunterladen
 Organisation
 Organisationweite Grundeinstellungen und Standardwerte.
 Gilt für Haustechnik Krämer GmbH

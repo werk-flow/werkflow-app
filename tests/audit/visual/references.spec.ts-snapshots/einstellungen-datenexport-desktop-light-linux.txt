@@ -1,0 +1,57 @@
+Haustechnik Krämer GmbH
+Organisation erstellen
+Dashboard
+Aufgaben
+3
+3 offene Aufgaben und Benachrichtigungen
+Kalender
+Zeiterfassung
+Qualifikationen
+Anfragen
+Aufträge
+Dokumente
+Inventar
+Service
+Arbeitsvorlagen
+Mitarbeiter
+Kunden
+MK
+Martin Krämer
+martin.kraemer@haustechnik-kraemer.de
+Einstellungen
+Persönlich
+Profil
+Name und Profilbild
+Konto & Sicherheit
+E-Mail und Passwort
+Aufträge & Projekte
+Persönliche Tabellenansicht
+Abonnement & Abrechnung
+Plan und Abrechnung
+Organisation
+Dashboard
+Startansicht und Widgets
+Organisation
+Allgemeine Organisationsdaten
+Kalender
+Kalenderansichten und Regeln
+Zeiterfassung
+Arbeitszeiten und Freigaben
+Mitarbeiter
+Freigaben und Vertretungen
+Kunden
+Kundenverwaltung und Defaults
+Datenexport
+Alle Daten herunterladen
+Datenexport
+Lädt jeden Datensatz und jede Originaldatei der Organisation herunter, für einen Wechsel, eine Prüfung oder dein eigenes Archiv.
+Gilt für Haustechnik Krämer GmbH
+Organisation exportieren
+Lade alle Daten deiner Organisation herunter: jeden Datensatz als Tabelle für Excel, ein Verzeichnis aller Dokumente und jede Originaldatei mit allen Versionen, auch die Personalakten.
+Große Organisationen erhalten den Export in mehreren Teilen. Lade jeden Teil herunter.
+Bleib auf dieser Seite, bis alle Teile fertig sind. Ein fehlender Teil lässt sich hier nachholen.
+Jeder Teil lässt sich 7 Tage lang herunterladen. Danach löscht WerkFlow ihn.
+Export starten
+Noch keine Exporte
+Starte einen Export, um alle Daten deiner Organisation herunterzuladen.
+Nicht eingestempelt

@@ -41,6 +41,8 @@ Mitarbeiter
 Freigaben und Vertretungen
 Kunden
 Kundenverwaltung und Defaults
+Datenexport
+Alle Daten herunterladen
 Dashboard
 Steuert, welche Informationen auf der Startseite priorisiert angezeigt werden.
 Gilt für Haustechnik Krämer GmbH
