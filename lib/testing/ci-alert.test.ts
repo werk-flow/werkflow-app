@@ -157,13 +157,14 @@ test('a close with a note says why, with the run', () => {
   ]);
 });
 
-test('the production alert workflow offers every title the production watcher raises', () => {
+test('the production alert workflow offers every title the production watcher and the Boat key check raise', () => {
   const workflow = readFileSync(join(repositoryRoot, '.github/workflows/production-alert.yml'), 'utf8');
   for (const title of [
     'CI alert: release',
     'Production alert: deploy',
     'Production alert: server errors',
     'Production alert: watcher',
+    'Owner action: Boat key',
   ])
     expect(workflow).toContain(`- '${title}'\n`);
   expect(workflow).toContain('alert-issue.sh "$ACTION" "$TITLE" "$NOTE"');

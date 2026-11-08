@@ -16,6 +16,8 @@ import { join } from 'node:path';
 const ENVIRONMENT_FILES = ['.env', '.env.local', '.env.production', '.env.production.local'] as const;
 const APPLICATION_ENVIRONMENT_PATTERN = /^(NEXT_PUBLIC_|SUPABASE_|R2_)/;
 
+/** Set on a Boat machine to the workstation's digest (lib/testing/boat/verify-on-boat.ts). */
+const BOAT_PROOF_ENVIRONMENT = 'WERKFLOW_BOAT_PROOF_ENVIRONMENT';
 const LOCAL_API_PORT = '54321';
 const PRIVATE_HOST_PATTERN =
   /^(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})$/;
@@ -51,6 +53,10 @@ export function proofEnvironmentDigest(
   repositoryRoot: string,
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): string {
+  // A Boat machine proves the workstation's backend once remote-verify.sh found its stack values
+  // equal to the workstation's (backendValueDigests), so its proofs count on the workstation.
+  const workstation = environment[BOAT_PROOF_ENVIRONMENT];
+  if (environment.WERKFLOW_BOAT_MACHINE === '1' && workstation) return workstation;
   const digest = createHash('sha256');
   for (const filename of ENVIRONMENT_FILES) {
     const path = join(repositoryRoot, filename);
@@ -99,4 +105,24 @@ export function backendIdentity(supabaseUrl: string | undefined, repositoryRoot:
     : undefined;
   if (!projectId) throw new Error('The local stack identity needs project_id in supabase/config.toml.');
   return `local:${projectId}`;
+}
+
+/** A workstation credential that names no backend and never leaves the workstation. */
+const WORKSTATION_ONLY = new Set(['SUPABASE_ACCESS_TOKEN']);
+
+/**
+ * A digest of each backend value in `.env.local`, origins normalized, so a Boat machine can prove
+ * its stack equals the workstation's without either side sending a value.
+ */
+export function backendValueDigests(repositoryRoot: string): Record<string, string> {
+  const path = join(repositoryRoot, '.env.local');
+  if (!existsSync(path)) return {};
+  return Object.fromEntries(
+    Object.entries(parseEnvironmentFile(readFileSync(path, 'utf8')))
+      .filter(([key]) => APPLICATION_ENVIRONMENT_PATTERN.test(key) && !WORKSTATION_ONLY.has(key))
+      .map(([key, value]) => [
+        key,
+        createHash('sha256').update(normalizeEnvironmentValue(value)).digest('hex'),
+      ]),
+  );
 }

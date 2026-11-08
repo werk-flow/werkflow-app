@@ -41,6 +41,8 @@ const config: KnipConfig = {
     'lib/testing/fixtures/*.{ts,tsx}',
     'scripts/*.ts!',
     'scripts/migration/*.ts!',
+    // Run on a Boat machine by scripts/boat/remote-verify.sh, or by package scripts.
+    'scripts/boat/*.ts!',
     // Agent hooks run by path from the agent settings.
     '.claude/hooks/*.ts!',
     'playwright.audit.config.ts!',

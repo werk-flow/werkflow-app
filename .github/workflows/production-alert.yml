@@ -17,6 +17,7 @@ on:
           - 'Production alert: deploy'
           - 'Production alert: server errors'
           - 'Production alert: watcher'
+          - 'Owner action: Boat key'
       action:
         description: keep opens the alert or comments on the open one; close closes it
         type: choice
