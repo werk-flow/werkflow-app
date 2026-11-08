@@ -157,12 +157,40 @@ test('a close with a note says why, with the run', () => {
   ]);
 });
 
+// The workflow's step for the watcher's handled-failure count (lib/logging.ts, `werkflow.failure`).
+test('repeated handled failures keep one assigned issue open until the watcher closes it', () => {
+  const title = 'Production alert: handled failures';
+  const production = { AFFECTS_PRODUCTION: 'true' };
+  const [create, ...rest] = issueWrites(
+    ['keep', title, 'label createClient_insert_failed, code 23505: 12'],
+    production,
+  );
+  expect(rest).toEqual([]);
+  expect(create).toContain(`issue create --title ${title}`);
+  expect(create).toContain('--label ci-alert --assignee tamaycbn');
+
+  writeFileSync(join(stub, 'gh.log'), '');
+  writeOpenIssues([{ number: 21, title }]);
+  expect(
+    issueWrites(['keep', title, 'label createClient_insert_failed, code 23505: 30'], production),
+  ).toEqual([
+    `issue comment 21 --body label createClient_insert_failed, code 23505: 30\n\nRun: ${RUN_URL}`,
+    'issue edit 21 --add-assignee tamaycbn\n',
+  ]);
+
+  writeFileSync(join(stub, 'gh.log'), '');
+  expect(issueWrites(['close', title, 'No handled failure for a day.'], production)).toEqual([
+    `issue close 21 --comment No handled failure for a day.\n\nRun: ${RUN_URL}\n`,
+  ]);
+});
+
 test('the production alert workflow offers every title the production watcher raises', () => {
   const workflow = readFileSync(join(repositoryRoot, '.github/workflows/production-alert.yml'), 'utf8');
   for (const title of [
     'CI alert: release',
     'Production alert: deploy',
     'Production alert: server errors',
+    'Production alert: handled failures',
     'Production alert: watcher',
   ])
     expect(workflow).toContain(`- '${title}'\n`);

@@ -191,3 +191,22 @@ export function installActionWorld(
   mockCachedReads(world);
   return world;
 }
+
+/**
+ * The database function `list_profile_references`, answered from the world's tables:
+ * each named profile and whether that person is a member of the organization asked
+ * about. `supabase/tests/organization_member_reads.sql` proves the function itself.
+ */
+export function listProfileReferencesInWorld(world: ActionWorld, args: FixtureRow): RpcOutcome {
+  const userIds = args.p_user_ids;
+  if (!Array.isArray(userIds)) throw new Error('list_profile_references needs p_user_ids');
+  const members = tableRows(world, 'organization_members').filter(
+    (member) => member.organization_id === args.p_organization_id,
+  );
+  return {
+    data: tableRows(world, 'profiles')
+      .filter((profile) => userIds.includes(profile.id))
+      .map((profile) => ({ ...profile, is_member: members.some((member) => member.user_id === profile.id) })),
+    error: null,
+  };
+}

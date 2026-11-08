@@ -58,26 +58,27 @@ A proof is a passing result whose fingerprint matches the current inputs; a late
 
 ## How selection works
 
-`bun run test:plan` prints each group with its reason and the first file that caused it. Change mode compares the tree with the baseline: the latest passing automatic plan, or `HEAD` without one.
+`bun run test:plan` prints each group with its reason and the first file behind it. Change mode compares the tree with the baseline: the latest passing automatic plan, or `HEAD` without one.
 
 Each browser group has a `changeTrigger` (`lib/testing/selection/change-triggers.ts`):
 
 - **Critical journeys** (`CRITICAL_JOURNEYS`, one or more per role) run when a product file, migration, dependency or shared test support changed.
+- **Lab groups** (`audit:lab:*`) run on the same changes, except shared test support.
 - **Permission groups** keep selection by declared scope: every group that drives an `outsiderPage` session or has a `ROLE_DENIAL_GROUPS` row. The auth path and dependency files add `audit:security:account`.
 - **Other groups** run nightly and in release mode.
 - A spec or support file selects the groups that import it.
-- The speed measurements, captures and sweeps (`audit:lab:*`, `audit:performance:*`, `audit:visual*`, `audit:layout*`) run only in release mode, with `--group`, or, except wall-clock groups, in CI's full runs or when their test code changed.
+- Wall-clock groups, captures and sweeps (`audit:performance:*`, `audit:visual*`, `audit:layout*`) run in release mode, with `--group`, or, except wall-clock groups, in CI's full runs or when their test code changed.
 - Static gates run in every plan. Unit, SQL and component groups run when their inputs changed.
-- Browser groups whose own spec or support changed run first.
-- `test:verify` refuses to start while the latest failed attempt of a group it would run is unclassified.
+- Groups whose own spec or support changed run first.
+- `test:verify` refuses to start while a group it would run has an unclassified latest failure.
 
 ### Repair mode
 
-When a browser group's latest result is failed or blocked, a change plan selects those groups, the groups whose test code changed, and the cheap gates. Their passing report becomes the baseline. A failed browser group may run again as soon as any source file changed. Clean its retained world first. [Failures](#failures) owns a repeat on the identical tree.
+When a browser group last failed or was blocked, a change plan selects those groups, the groups whose test code changed, and the cheap gates. Their passing report becomes the baseline. A failed group may run again after any source change. Clean its retained world first. [Failures](#failures) owns a repeat on the identical tree.
 
 ### Release mode
 
-`bun run test:verify --mode release` selects every group and rejects `--group`. A browser pass is reused only when every product file is unchanged since it ran.
+`bun run test:verify --mode release` selects every group and rejects `--group`. A browser pass is reused only if no product file changed since it ran.
 
 - `audit:lab:*` groups fail on budgets, ceilings and floors in every run, because counts repeat on a loaded machine.
 - Other latency deadlines fail in release mode only. Missing or malformed evidence fails in every mode.
