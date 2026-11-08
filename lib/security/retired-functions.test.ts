@@ -39,7 +39,6 @@ const SQL_CALLERS: Readonly<Record<string, string>> = {
   link_maintenance_due_visit: 'create_maintenance_visit_job',
   prepare_time_period_p1_23_base: 'prepare_time_period',
   publish_personnel_onboarding_template_base: 'publish_personnel_onboarding_template',
-  queue_storage_purge: 'delete_organization_with_files',
   record_work_artifact_action_p1_17_inner: 'record_work_artifact_action',
   release_work_handover_p1_17_inner: 'release_work_handover',
   reopen_time_period_p1_23_base: 'reopen_time_period',

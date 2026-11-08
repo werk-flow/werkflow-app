@@ -33,6 +33,28 @@ async function listOrganizationFiles(organizationId: string): Promise<string[] |
 }
 
 /**
+ * Queues each object that reached the prefix after the first listing, such as
+ * a signed upload that landed during the deletion; no row names it. The
+ * organization is already gone, so a failure is logged and the deletion stands.
+ */
+async function queueLateFiles(
+  admin: AdminClient,
+  organizationId: string,
+  listed: readonly string[],
+): Promise<void> {
+  const paths = await listOrganizationFiles(organizationId);
+  if (!paths) return;
+  const known = new Set(listed);
+  const late = paths.filter((path) => !known.has(path));
+  if (late.length === 0) return;
+  const { error } = await admin.rpc('queue_storage_purge', {
+    p_organization_id: organizationId,
+    p_paths: late,
+  });
+  if (error) logError('deleteOrganization: late file queueing failed', error);
+}
+
+/**
  * True only when a read confirms the organization row is gone. A failed call
  * can still have committed, when only its response was lost: then the
  * deletion finished and its files are queued.
@@ -60,6 +82,8 @@ async function organizationIsGone(admin: AdminClient, organizationId: string): P
  *   deletes the organization row and queues the listed files and every file a
  *   row names, in one transaction. The scheduled purge deletes them after
  *   the backup window. A refusal queues no file
+ * - After the deletion the action lists the prefix again and queues each
+ *   object that landed after the first listing
  * - The foreign key cascade removes the memberships, invites and all other
  *   organization data in the same statement as the organization row
  * - Users who lose their only org will be redirected to onboarding on next login
@@ -123,6 +147,7 @@ export async function deleteOrganization(confirmationName: string): Promise<Dele
         'deleteOrganization: organization delete failed',
       );
     }
+    await queueLateFiles(admin, activeOrgId, paths);
 
     // Get the user's remaining organizations using admin client
     // (to bypass RLS - the org we just deleted might affect RLS queries)

@@ -67,7 +67,7 @@ $$;
 
 -- Organization deletion queues the listed objects and every document and
 -- version path with the rows; a refusal queues nothing, and the entries
--- outlive the organization.
+-- outlive the organization. A late upload's key is still queued afterwards.
 do $$
 declare
   v_org constant uuid := '28600000-0000-0000-0000-000000000011';
@@ -97,6 +97,13 @@ begin
       v_org || '/d21/bericht.pdf', v_org || '/d21/versions/1-bericht.pdf', v_org || '/staging/upload.pdf'
     ]
   then raise exception 'the organization deletion did not queue every listed and registered path'; end if;
+
+  -- An upload that landed after the listing is queued once the organization is gone.
+  perform public.queue_storage_purge(v_org, array[v_org || '/staging/spaet.jpg']);
+  if not exists (
+    select 1 from public.storage_purge_queue
+    where storage_path = v_org || '/staging/spaet.jpg' and purge_after = now() + interval '8 days'
+  ) then raise exception 'a late upload of a deleted organization could not be queued'; end if;
 end;
 $$;
 
