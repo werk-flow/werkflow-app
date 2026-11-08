@@ -27,6 +27,6 @@ test('a project read whose merged days exceed the row bound returns what each jo
   await runFixture('project-job-day-read-bound');
 });
 
-test("a job read keeps its session's clock-out that names no job", async () => {
+test('a job read keeps the jobless break and clock-out after its clock-in, as corrected', async () => {
   await runFixture('job-read-paired-clock-out');
 });
