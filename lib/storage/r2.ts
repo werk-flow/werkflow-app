@@ -57,7 +57,7 @@ type R2Config = {
   endpointOverride: string | null;
 };
 
-export type StorageObjectHead = {
+type StorageObjectHead = {
   exists: boolean;
   sizeBytes: number | null;
   contentType: string | null;
@@ -219,7 +219,7 @@ export async function createSignedDownloadUrl({
   return getSignedUrl(getR2Client(), command, { expiresIn: clampExpiry(expiresInSeconds) });
 }
 
-export async function headStorageObject({
+async function headStorageObject({
   organizationId,
   path,
 }: OrganizationScope & { path: string }): Promise<StorageObjectHead> {

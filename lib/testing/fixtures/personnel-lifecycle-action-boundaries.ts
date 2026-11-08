@@ -113,10 +113,6 @@ mock.module('@/lib/storage/r2', () => ({
   discardStorageObjects: async ({ paths }: { paths: string[] }) => {
     storageCalls.push(`discard:${paths.join(',')}`);
   },
-  headStorageObject: async ({ path }: { path: string }) => {
-    storageCalls.push(`head:${path}`);
-    return { exists: true, sizeBytes: 100, contentType: 'application/pdf' };
-  },
   // Like the adapter, each promotion copies to a key of its own beside the ticket's path.
   promoteUploadedObject: async ({ path }: { path: string }) => {
     storageCalls.push(`promote:${path}`);
