@@ -115,6 +115,14 @@ test('ordinary work, the expiry file and the runner pass', () => {
     expect(refused(command), command).toBeUndefined();
 });
 
+test('a long chain of folder changes stays bounded and refuses past the bound', () => {
+  // Repeated changes between two folders keep the set small; distinct ones grow it, so the guard stops.
+  expect(refused(Array.from({ length: 40 }, () => 'cd a; cd ..').join('; ') + '; ls')).toBeUndefined();
+  expect(refused(Array.from({ length: 12 }, (_, index) => `cd d${index}`).join('; ') + '; ls')).toContain(
+    'cannot follow',
+  );
+});
+
 test('a command the guard cannot read is refused only when it names a config folder', () => {
   // A heredoc delimiter whose quote runs into the next line makes the shell reader give up.
   expect(refused("cat <<'E\n~/.config/werkflow'")).toContain('cannot read');

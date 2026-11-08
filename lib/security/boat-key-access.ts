@@ -62,6 +62,8 @@ const LAUNCHERS: ReadonlyMap<string, { valueFlags: ReadonlySet<string>; position
   ['xargs', { valueFlags: new Set(['-n', '-I', '-P', '-d', '-L', '-s', '-E', '-a']), positionals: 0 }],
 ]);
 const ASSIGNMENT = /^[A-Za-z_]\w*=/;
+/** The most folders one line may run in that the guard follows. */
+const MAX_FOLDERS = 256;
 
 type Context = { cwd: string; home: string };
 
@@ -155,8 +157,12 @@ function readsRecursively(name: string, args: readonly ShellWord[], viaXargs: bo
  * The folders a line may run in: the working folder, and every target of `cd`, `pushd` and
  * `env -C`, each resolved against every folder before it, so chained changes are followed.
  */
-function lineFolders(commands: readonly ShellWord[][], folders: readonly string[], home: string): string[] {
-  const reached = [...folders];
+function lineFolders(
+  commands: readonly ShellWord[][],
+  folders: readonly string[],
+  home: string,
+): string[] | undefined {
+  const reached = new Set(folders);
   for (const words of commands) {
     const run = program(words);
     const targets =
@@ -165,10 +171,13 @@ function lineFolders(commands: readonly ShellWord[][], folders: readonly string[
         : (innerCommand(words)?.chdir ?? []);
     for (const target of targets) {
       const path = expandedPath(target, home);
-      if (path !== undefined) reached.push(...reached.map((folder) => resolve(folder, path)));
+      if (path === undefined) continue;
+      for (const folder of [...reached]) reached.add(resolve(folder, path));
+      // A line with more folders than the guard follows is one it cannot read.
+      if (reached.size > MAX_FOLDERS) return undefined;
     }
   }
-  return [...new Set(reached)];
+  return [...reached];
 }
 
 /** The refusal for one shell line, read with the folders it may run in; shells it starts are read too. */
@@ -186,6 +195,7 @@ function lineRefusal(
       : undefined;
   const commands = reading.commands;
   const folders = lineFolders(commands, start, home);
+  if (!folders) return 'the guard cannot follow this many folder changes in one command.';
   // A `find` whose file list another command may consume: through xargs, a pipe, or a command
   // or process substitution.
   const viaXargs =
