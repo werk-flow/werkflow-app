@@ -40,14 +40,15 @@ create trigger guard_event_ledger_history before update or delete on public.time
   for each row execute function app_private.guard_event_ledger_history();
 
 -- Withdraws the actor's own pending manual entries: all of them or none.
--- Security definer like delete_time_entries and review_time_entries: the batch
--- lock it shares with them is closed to every client role, service_role
--- included (supabase/tests/closed_period_writes.sql), and only service_role
--- may execute this function.
--- Refusals: invalid_input, entry_not_found, not_a_member, target_not_found
--- (from the batch lock), not_authorized for an entry of another person,
--- entry_not_pending for a decided or a clocked entry; a closed period raises
--- WFP01 'period_closed'. Returns the number of withdrawn entries.
+-- It runs as its caller, the service role (docs/technical/security.md). It
+-- needs a narrower lock than app_private.lock_time_entry_batch, which stays
+-- closed to every client role: every entry belongs to the actor, so the
+-- actor's membership is the only one to hold.
+-- Refusals: invalid_input for an empty or repeated id, not_a_member,
+-- entry_not_found for an id outside the organization, not_authorized for an
+-- entry of another person, entry_not_pending for a decided or a clocked
+-- entry; a closed period raises WFP01 'period_closed'. Returns the number of
+-- withdrawn entries.
 create function public.withdraw_pending_time_entries(
   p_actor_id uuid,
   p_organization_id uuid,
@@ -55,13 +56,36 @@ create function public.withdraw_pending_time_entries(
 )
 returns integer
 language plpgsql
-security definer
+security invoker
 set search_path to ''
 as $$
 declare
+  v_entry_count integer := coalesce(cardinality(p_entry_ids), 0);
+  v_locked_count integer;
   v_withdrawn integer;
 begin
-  perform app_private.lock_time_entry_batch(p_actor_id, p_organization_id, p_entry_ids);
+  if v_entry_count = 0
+    or v_entry_count <> (select count(distinct entry_id) from unnest(p_entry_ids) entry_id)
+  then
+    raise exception 'invalid_input';
+  end if;
+  -- The membership holds until commit: a removal waits for this call or makes it refuse.
+  perform 1 from public.organization_members member
+  where member.organization_id = p_organization_id and member.user_id = p_actor_id
+  for share;
+  if not found then
+    raise exception 'not_a_member';
+  end if;
+  select count(*) into v_locked_count
+  from (
+    select entry.id from public.time_entries entry
+    where entry.organization_id = p_organization_id and entry.id = any(p_entry_ids)
+    order by entry.id
+    for update
+  ) locked;
+  if v_locked_count <> v_entry_count then
+    raise exception 'entry_not_found';
+  end if;
   if exists (
     select 1 from public.time_entries entry
     where entry.organization_id = p_organization_id and entry.id = any(p_entry_ids)

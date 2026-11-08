@@ -64,16 +64,9 @@ function ownerDays(facts: readonly TimeCorrectionFact[]): string[] {
 /** One clock fact of a pending manual submission. */
 export type PendingSubmissionFact = Pick<TimeCorrectionFact, 'entryType' | 'timestamp'>;
 
-/**
- * The pending manual submissions as one timeline that adds their facts to
- * nothing: a clock-in and the clock-out that closes it may come in separate
- * submissions.
- */
-function submissionsAsAddition(
-  submissions: readonly (readonly PendingSubmissionFact[])[],
-): TimeCorrectionFact[] {
-  return submissions
-    .flat()
+/** Clock facts as one timeline in time order, without a person: the caller reads one person's facts only. */
+function asTimeline(facts: readonly PendingSubmissionFact[]): TimeCorrectionFact[] {
+  return [...facts]
     .sort((left, right) => left.timestamp.localeCompare(right.timestamp))
     .map((fact) => ({
       ...fact,
@@ -89,34 +82,47 @@ function submissionsAsAddition(
 /**
  * The sum of one person's pending time: each correction counted by its
  * current revision and only by that person's facts, and the pending manual
- * submissions as the time they would add together.
+ * submissions as the change they make to the accepted time of their days. A
+ * submission may close or open time that accepted facts or another
+ * submission hold, so the days are counted before and after as a whole.
  */
 export function summarizePendingCorrections(
   pending: readonly Pick<TimeCorrectionRequest, 'revision'>[],
   subjectUserId: string,
-  pendingSubmissions: readonly (readonly PendingSubmissionFact[])[] = [],
+  submissions: {
+    pending: readonly (readonly PendingSubmissionFact[])[];
+    /** The person's accepted facts on the days of the pending submissions. */
+    acceptedOnTheirDays: readonly PendingSubmissionFact[];
+  } = { pending: [], acceptedOnTheirDays: [] },
 ): ProvisionalTimeSummary {
-  const submissionFacts = submissionsAsAddition(pendingSubmissions);
+  const submittedFacts = submissions.pending.flat();
+  const acceptedBefore = ownerMinutes(asTimeline(submissions.acceptedOnTheirDays));
+  const acceptedAfter =
+    submittedFacts.length === 0
+      ? acceptedBefore
+      : ownerMinutes(asTimeline([...submissions.acceptedOnTheirDays, ...submittedFacts]));
   const days = new Set([
     ...pending.flatMap(({ revision }) => [
       ...ownerDays(subjectFacts(revision.beforeSnapshot, subjectUserId)),
       ...ownerDays(subjectFacts(revision.proposedSnapshot, subjectUserId)),
     ]),
-    ...ownerDays(submissionFacts),
+    ...ownerDays(asTimeline(submittedFacts)),
   ]);
   return {
     count: pending.length,
-    submissionCount: pendingSubmissions.length,
-    beforeMinutes: pending.reduce(
-      (total, request) => total + ownerMinutes(subjectFacts(request.revision.beforeSnapshot, subjectUserId)),
-      0,
-    ),
+    submissionCount: submissions.pending.length,
+    beforeMinutes:
+      pending.reduce(
+        (total, request) =>
+          total + ownerMinutes(subjectFacts(request.revision.beforeSnapshot, subjectUserId)),
+        0,
+      ) + acceptedBefore,
     proposedMinutes:
       pending.reduce(
         (total, request) =>
           total + ownerMinutes(subjectFacts(request.revision.proposedSnapshot, subjectUserId)),
         0,
-      ) + ownerMinutes(submissionFacts),
+      ) + acceptedAfter,
     days: [...days].sort(),
   };
 }

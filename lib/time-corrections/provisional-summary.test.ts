@@ -150,13 +150,16 @@ describe('pending manual submissions in the sum', () => {
         ),
       ],
       'user',
-      [
-        [
-          { entryType: 'clock_out', timestamp: '2026-10-28T16:00:00.000Z' },
-          { entryType: 'clock_in', timestamp: '2026-10-28T08:00:00.000Z' },
+      {
+        pending: [
+          [
+            { entryType: 'clock_out', timestamp: '2026-10-28T16:00:00.000Z' },
+            { entryType: 'clock_in', timestamp: '2026-10-28T08:00:00.000Z' },
+          ],
+          [{ entryType: 'clock_in', timestamp: '2026-10-29T06:00:00.000Z' }],
         ],
-        [{ entryType: 'clock_in', timestamp: '2026-10-29T06:00:00.000Z' }],
-      ],
+        acceptedOnTheirDays: [],
+      },
     );
     expect(summary).toEqual({
       count: 1,
@@ -169,15 +172,38 @@ describe('pending manual submissions in the sum', () => {
 
   test('count a clock-in and the clock-out that closes it from separate submissions', () => {
     // 28.10. in Berlin: a forgotten start at 07:00 and a forgotten end at 15:00 local, submitted apart.
-    const summary = summarizePendingCorrections([], 'user', [
-      [{ entryType: 'clock_in', timestamp: '2026-10-28T06:00:00.000Z' }],
-      [{ entryType: 'clock_out', timestamp: '2026-10-28T14:00:00.000Z' }],
-    ]);
+    const summary = summarizePendingCorrections([], 'user', {
+      pending: [
+        [{ entryType: 'clock_in', timestamp: '2026-10-28T06:00:00.000Z' }],
+        [{ entryType: 'clock_out', timestamp: '2026-10-28T14:00:00.000Z' }],
+      ],
+      acceptedOnTheirDays: [],
+    });
     expect(summary).toEqual({
       count: 0,
       submissionCount: 2,
       beforeMinutes: 0,
       proposedMinutes: 480,
+      days: ['2026-10-28'],
+    });
+  });
+
+  test('count the time a submission closes or adds beside accepted time of its day', () => {
+    // 28.10. in Berlin: an accepted clock-in at 09:00 and a forgotten clock-out at
+    // 17:00 local; an accepted 06:00 to 07:00 stays as it was.
+    const summary = summarizePendingCorrections([], 'user', {
+      pending: [[{ entryType: 'clock_out', timestamp: '2026-10-28T16:00:00.000Z' }]],
+      acceptedOnTheirDays: [
+        { entryType: 'clock_in', timestamp: '2026-10-28T05:00:00.000Z' },
+        { entryType: 'clock_out', timestamp: '2026-10-28T06:00:00.000Z' },
+        { entryType: 'clock_in', timestamp: '2026-10-28T08:00:00.000Z' },
+      ],
+    });
+    expect(summary).toEqual({
+      count: 0,
+      submissionCount: 1,
+      beforeMinutes: 60,
+      proposedMinutes: 60 + 480,
       days: ['2026-10-28'],
     });
   });

@@ -23,6 +23,8 @@ import {
 } from './provisional-summary';
 import { groupPendingEntries } from '@/lib/time-tracking/pending-sessions';
 import { toTimeEntry } from '@/lib/time-tracking/types';
+import { getTimeEntries } from '@/lib/time-tracking/entry-read-actions';
+import { formatBerlinLocalDate, getLocalDayEnd, getLocalDayStart } from '@/lib/date-time/berlin';
 import type { TimeCorrectionHistoryResult, TimeCorrectionListResult } from './types';
 
 // The Server Actions that read time corrections: the approval queue, the
@@ -271,12 +273,14 @@ export async function getProvisionalTimeSummary(rawInput: {
 
 /**
  * The person's pending manual submissions, each as its clock facts in the
- * groups an approver decides (pending-sessions.ts); null when the read fails.
+ * groups an approver decides (pending-sessions.ts), and the person's accepted
+ * facts on their days, which a submission may close or extend; null when a
+ * read fails.
  */
 async function readPendingSubmissions(
   organizationId: string,
   userId: string,
-): Promise<PendingSubmissionFact[][] | null> {
+): Promise<{ pending: PendingSubmissionFact[][]; acceptedOnTheirDays: PendingSubmissionFact[] } | null> {
   const admin = createSupabaseAdminClient();
   const { data, error } = await readCompleteRows(
     (from, to) =>
@@ -296,7 +300,25 @@ async function readPendingSubmissions(
     logReadFailure('getProvisionalTimeSummary: pending entries read failed', error);
     return null;
   }
-  return groupPendingEntries(data).map((group) =>
+  const pending = groupPendingEntries(data).map((group) =>
     group.entries.map(toTimeEntry).map(({ entryType, timestamp }) => ({ entryType, timestamp })),
   );
+  const first = data[0];
+  const last = data.at(-1);
+  if (!first || !last) return { pending, acceptedOnTheirDays: [] };
+  // The accepted day as every view shows it: recorded entries, live capture and approved corrections.
+  const accepted = await getTimeEntries({
+    organizationId,
+    userId,
+    from: getLocalDayStart(new Date(first.timestamp)).toISOString(),
+    to: getLocalDayEnd(new Date(last.timestamp)).toISOString(),
+  });
+  if (!accepted.success) return null;
+  const days = new Set(data.map((row) => formatBerlinLocalDate(row.timestamp)));
+  return {
+    pending,
+    acceptedOnTheirDays: accepted.entries
+      .filter((entry) => entry.status === 'approved' && days.has(formatBerlinLocalDate(entry.timestamp)))
+      .map(({ entryType, timestamp }) => ({ entryType, timestamp })),
+  };
 }

@@ -78,6 +78,10 @@ $sql$, 'entry_not_pending'),
   select public.withdraw_pending_time_entries('28200000-0000-0000-0000-000000000002',
     '28200000-0000-0000-0000-000000000010', array['28200000-0000-0000-0000-000000000026'::uuid])
 $sql$, 'entry_not_found'),
+('withdrawal by someone outside the organization', $sql$
+  select public.withdraw_pending_time_entries('28200000-0000-0000-0000-000000000003',
+    '28200000-0000-0000-0000-000000000011', array['28200000-0000-0000-0000-000000000026'::uuid])
+$sql$, 'not_a_member'),
 ('withdrawal that names an entry twice', $sql$
   select public.withdraw_pending_time_entries('28200000-0000-0000-0000-000000000002',
     '28200000-0000-0000-0000-000000000010',
@@ -185,6 +189,9 @@ begin
   end loop;
   if not has_function_privilege('service_role', 'public.withdraw_pending_time_entries(uuid, uuid, uuid[])', 'execute')
   then raise exception 'withdraw_pending_time_entries lost its service_role grant'; end if;
+  -- It writes related rows for a server action, so it runs as its caller (docs/technical/security.md).
+  if (select prosecdef from pg_proc where oid = 'public.withdraw_pending_time_entries(uuid, uuid, uuid[])'::regprocedure)
+  then raise exception 'withdraw_pending_time_entries runs as security definer'; end if;
 end;
 $$;
 
