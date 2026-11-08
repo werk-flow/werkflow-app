@@ -22,7 +22,9 @@
 --
 -- Only an Admin of the organization starts, builds or downloads an export;
 -- each function checks it again. Every start, part result and download writes
--- an event to an append-only ledger.
+-- an event to an append-only ledger. A start removes the file plans of the
+-- organization's exports whose archives are all past their seven days; the
+-- exports, their parts and the ledger stay.
 --
 -- Prevention: Tier 1 (the plan check, the unique file and name per export,
 -- the ledger guard), Tier 2 supabase/tests/organization_export.sql.
@@ -143,6 +145,8 @@ revoke all on table public.organization_exports, public.organization_export_part
 grant select on table public.organization_exports to authenticated;
 grant select, insert, update on table public.organization_exports, public.organization_export_parts to service_role;
 grant select, insert on table public.organization_export_files, public.organization_export_events to service_role;
+-- The start removes the file plans of exports whose archives are past their seven days.
+grant delete on table public.organization_export_files to service_role;
 
 alter table public.organization_exports replica identity using index organization_exports_replident_idx;
 alter publication supabase_realtime add table public.organization_exports;
@@ -227,8 +231,6 @@ as $$
 declare
   v_export_id uuid := gen_random_uuid();
   v_part_count integer;
-  v_part_index integer;
-  v_part_id uuid;
   v_file_count integer;
   v_file_bytes bigint;
 begin
@@ -281,31 +283,39 @@ begin
   insert into public.organization_exports (id, organization_id, requested_by, part_count, file_count, file_bytes)
   values (v_export_id, p_organization_id, p_actor_id, v_part_count, v_file_count, v_file_bytes);
   insert into public.organization_export_parts (organization_id, export_id, part_number, kind, archive_path)
-  values (p_organization_id, v_export_id, 1, 'data',
-    format('%s/datenexporte/%s/teil-1.zip', p_organization_id, v_export_id));
-
-  for v_part_index in 1 .. v_part_count - 1 loop
-    insert into public.organization_export_parts (organization_id, export_id, part_number, kind, archive_path)
-    values (p_organization_id, v_export_id, v_part_index + 1, 'files',
-      format('%s/datenexporte/%s/teil-%s.zip', p_organization_id, v_export_id, v_part_index + 1))
-    returning id into v_part_id;
-    insert into public.organization_export_files (
-      organization_id, export_id, part_id, document_id, version_number, source_path, archive_name, file_bytes
-    )
-    select p_organization_id, v_export_id, v_part_id, source.document_id, source.version_number,
-      source.source_path, plan.archive_name, source.file_bytes
-    from app_private.organization_export_plan(p_file_parts) plan
-    join app_private.organization_export_sources(p_organization_id) source
-      on source.source_path = plan.source_path
-    where plan.part_index = v_part_index;
-    update public.organization_export_parts part
-    set file_count = totals.file_count, file_bytes = totals.file_bytes
-    from (
-      select count(*)::integer as file_count, coalesce(sum(file.file_bytes), 0)::bigint as file_bytes
-      from public.organization_export_files file where file.part_id = v_part_id
-    ) totals
-    where part.id = v_part_id;
-  end loop;
+  select p_organization_id, v_export_id, part_number,
+    case when part_number = 1 then 'data' else 'files' end,
+    format('%s/datenexporte/%s/teil-%s.zip', p_organization_id, v_export_id, part_number)
+  from generate_series(1, v_part_count) as part_number;
+  -- One join of the plan with the files, not one per part: neither function
+  -- inlines, so a join per part would read every file once per part.
+  insert into public.organization_export_files (
+    organization_id, export_id, part_id, document_id, version_number, source_path, archive_name, file_bytes
+  )
+  select p_organization_id, v_export_id, part.id, source.document_id, source.version_number,
+    source.source_path, plan.archive_name, source.file_bytes
+  from app_private.organization_export_plan(p_file_parts) plan
+  join app_private.organization_export_sources(p_organization_id) source
+    on source.source_path = plan.source_path
+  join public.organization_export_parts part
+    on part.export_id = v_export_id and part.part_number = plan.part_index + 1;
+  update public.organization_export_parts part
+  set file_count = totals.file_count, file_bytes = totals.file_bytes
+  from (
+    select file.part_id, count(*)::integer as file_count, sum(file.file_bytes)::bigint as file_bytes
+    from public.organization_export_files file
+    where file.export_id = v_export_id
+    group by file.part_id
+  ) totals
+  where part.id = totals.part_id;
+  -- The plans of exports whose archives are all past their seven days: a
+  -- part builds within seven days of the start and its archive is due seven
+  -- days after its build began, so no build reads these rows any more.
+  delete from public.organization_export_files file
+  using public.organization_exports export_row
+  where file.export_id = export_row.id
+    and export_row.organization_id = p_organization_id
+    and export_row.requested_at <= now() - interval '14 days';
 
   insert into public.organization_export_events (organization_id, export_id, event_type, actor_id, event_payload)
   values (p_organization_id, v_export_id, 'started', p_actor_id, jsonb_build_object(

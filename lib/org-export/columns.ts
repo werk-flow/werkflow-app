@@ -24,7 +24,12 @@ type ExcludedTable =
   // Storage keys of files already deleted from WerkFlow.
   | 'storage_purge_queue'
   // The paying account's billing state, not the organization's records.
-  | 'subscriptions';
+  | 'subscriptions'
+  // The file plan and part state of earlier exports, whose archives are gone
+  // after seven days; one row per file would grow every export by the last.
+  // Their history stays in `organization_exports` and `organization_export_events`.
+  | 'organization_export_files'
+  | 'organization_export_parts';
 
 export type ExportTable = Exclude<TableName, ExcludedTable>;
 type ColumnOf<Table extends ExportTable> = keyof PublicTables[Table]['Row'] & string;
@@ -102,8 +107,6 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   organization_capabilities: 'Organisation_Qualifikationen',
   organization_closure_days: 'Organisation_Schließtage',
   organization_export_events: 'Datenexporte_Protokoll',
-  organization_export_files: 'Datenexporte_Dateien',
-  organization_export_parts: 'Datenexporte_Teile',
   organization_exports: 'Datenexporte',
   organization_invites: 'Organisation_Einladungen',
   organization_join_requests: 'Organisation_Beitrittsanfragen',

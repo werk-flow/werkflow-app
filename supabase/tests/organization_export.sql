@@ -13,7 +13,9 @@
 -- start, part result and download writes an event the ledger guard keeps.
 -- Queued again by the organization's deletion, an archive falls due at once. An Admin's session reads the export row; Büro, an
 -- employee and another organization read nothing, and no client reads parts,
--- files or events. The page reader returns only the organization's rows.
+-- files or events. The page reader returns only the organization's rows. A
+-- start removes the file plans of exports whose archives are all past their
+-- seven days, and nothing else.
 begin;
 
 insert into auth.users (
@@ -480,6 +482,60 @@ begin
     or has_table_privilege('authenticated', 'public.organization_exports', 'INSERT,UPDATE,DELETE')
     or has_table_privilege('anon', 'public.organization_exports', 'SELECT') then
     raise exception 'a client role reaches export data beyond the export row';
+  end if;
+end;
+$$;
+
+-- A start removes the file plan of an export whose archives are all past
+-- their seven days, fourteen days after its start, and keeps a younger plan,
+-- every export's parts and the ledger; another organization's plan stays.
+insert into public.organization_exports (id, organization_id, requested_by, requested_at, part_count, file_count, file_bytes)
+values ('28700000-0000-0000-0000-000000000090', '28700000-0000-0000-0000-000000000011',
+  '28700000-0000-0000-0000-000000000004', now() - interval '30 days', 2, 1, 40);
+insert into public.organization_export_parts (id, organization_id, export_id, part_number, kind, archive_path)
+values ('28700000-0000-0000-0000-000000000091', '28700000-0000-0000-0000-000000000011',
+  '28700000-0000-0000-0000-000000000090', 2, 'files',
+  '28700000-0000-0000-0000-000000000011/datenexporte/28700000-0000-0000-0000-000000000090/teil-2.zip');
+insert into public.organization_export_files (
+  organization_id, export_id, part_id, document_id, source_path, archive_name, file_bytes
+) values ('28700000-0000-0000-0000-000000000011', '28700000-0000-0000-0000-000000000090',
+  '28700000-0000-0000-0000-000000000091', '28700000-0000-0000-0000-000000000043',
+  '28700000-0000-0000-0000-000000000011/d43/fremd.pdf', 'Dateien/fremd.pdf', 40);
+update public.organization_exports set requested_at = now() - interval '13 days 23 hours'
+where id = (select export_id from started);
+create temporary table ledger_before on commit drop as
+select count(*) as events from public.organization_export_events;
+set local role service_role;
+create temporary table later_starts on commit drop as
+select public.start_organization_export('28700000-0000-0000-0000-000000000001',
+  '28700000-0000-0000-0000-000000000010', (select plan from full_plan)) as export_id;
+reset role;
+do $$
+begin
+  if (select count(*) from public.organization_export_files where export_id = (select export_id from started)) <> 4 then
+    raise exception 'a start removed the plan of an export whose archives may still be built';
+  end if;
+end;
+$$;
+update public.organization_exports set requested_at = now() - interval '14 days'
+where id = (select export_id from started);
+set local role service_role;
+insert into later_starts
+select public.start_organization_export('28700000-0000-0000-0000-000000000001',
+  '28700000-0000-0000-0000-000000000010', (select plan from full_plan));
+reset role;
+do $$
+begin
+  if exists (select 1 from public.organization_export_files where export_id = (select export_id from started)) then
+    raise exception 'a start kept the plan of an export whose archives are past their seven days';
+  end if;
+  if (select count(*) from public.organization_export_files
+      where export_id in (select export_id from later_starts)) <> 8
+    or (select count(*) from public.organization_export_files
+      where export_id = '28700000-0000-0000-0000-000000000090') <> 1
+    or (select count(*) from public.organization_export_parts where export_id = (select export_id from started)) <> 3
+    or (select count(*) from public.organization_export_events) <> (select events from ledger_before) + 2 then
+    raise exception 'a start removed more than the expired plan';
   end if;
 end;
 $$;

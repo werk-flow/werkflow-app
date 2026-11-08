@@ -8,37 +8,42 @@ import { useBusyIds } from '@/hooks/use-busy-id';
 import { usePendingTask } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { buildOrganizationExportPart, startOrganizationExport } from '@/lib/org-export/actions';
-import { ORGANIZATION_EXPORT_MESSAGES } from '@/lib/org-export/messages';
+import { isRetryablePartFailure, ORGANIZATION_EXPORT_MESSAGES } from '@/lib/org-export/messages';
 
 const START_FAILED = 'Der Export konnte nicht gestartet werden. Versuche es in einem Moment erneut.';
-const PART_FAILED = 'Der Teil konnte nicht erstellt werden. Versuche es erneut.';
 
-function withMessage(
+function withRefusal(
   current: ReadonlyMap<string, string>,
   partId: string,
-  message: string | null,
+  code: string | null,
 ): ReadonlyMap<string, string> {
   const next = new Map(current);
-  if (message === null) next.delete(partId);
-  else next.set(partId, message);
+  if (code === null) next.delete(partId);
+  else next.set(partId, code);
   return next;
 }
 
-function completionBanner(failures: number) {
-  if (failures === 0)
+/** The banner after a run: a retry is advised only when every failure can be retried. */
+function completionBanner(failures: readonly string[]) {
+  if (failures.length === 0)
     return { variant: 'success', message: 'Der Export ist fertig. Lade jetzt jeden Teil herunter.' } as const;
-  return {
-    variant: 'error',
-    message:
-      failures === 1
-        ? 'Ein Teil konnte nicht erstellt werden. Versuche ihn erneut.'
-        : `${failures} Teile konnten nicht erstellt werden. Versuche sie erneut.`,
-  } as const;
+  const advice = failures.every(isRetryablePartFailure)
+    ? failures.length === 1
+      ? 'Versuche ihn erneut.'
+      : 'Versuche sie erneut.'
+    : failures.length === 1
+      ? 'Der Grund steht am Teil.'
+      : 'Die Gründe stehen an den Teilen.';
+  const failed =
+    failures.length === 1
+      ? 'Ein Teil konnte nicht erstellt werden.'
+      : `${failures.length} Teile konnten nicht erstellt werden.`;
+  return { variant: 'error', message: `${failed} ${advice}` } as const;
 }
 
 /**
  * Starts an export and builds its parts one request each, in order. A part
- * that fails keeps its message and builds again alone; the others go on.
+ * that fails keeps its refusal code and builds again alone; the others go on.
  * The route reads again after each part, so the page shows its state.
  */
 export function useExportBuilder() {
@@ -50,16 +55,15 @@ export function useExportBuilder() {
   const [partRefusals, setPartRefusals] = useState<ReadonlyMap<string, string>>(new Map());
 
   const buildParts = async (partIds: readonly string[]): Promise<void> => {
-    let failures = 0;
+    const failures: string[] = [];
     for (const partId of partIds) {
-      setPartRefusals((current) => withMessage(current, partId, null));
+      setPartRefusals((current) => withRefusal(current, partId, null));
       const result = await building
         .run(partId, () => buildOrganizationExportPart(partId))
         .catch(() => ({ success: false, error: 'export_part_failed' }) as const);
       if (!result.success) {
-        failures += 1;
-        const message = describeFailure(result.error, ORGANIZATION_EXPORT_MESSAGES, PART_FAILED);
-        setPartRefusals((current) => withMessage(current, partId, message));
+        failures.push(result.error);
+        setPartRefusals((current) => withRefusal(current, partId, result.error));
       }
       router.refresh();
     }

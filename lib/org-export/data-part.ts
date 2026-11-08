@@ -154,16 +154,27 @@ async function readManifestFiles(
   return files.data.map((file) => ({ ...file, partNumber: partNumbers.get(file.part_id) ?? 0 }));
 }
 
+/** How the export splits into parts: one part holds only data, more parts hold the originals too. */
+function partLines(partCount: number): string[] {
+  if (partCount === 1)
+    return [
+      'Der Export besteht aus diesem einen Archiv mit allen Daten; beim Start gab es keine Originaldateien.',
+    ];
+  return [
+    `Der Export besteht aus ${partCount} Teilen. Teil 1 (dieses Archiv) enthält alle Daten,`,
+    'die weiteren Teile enthalten die Originaldateien im Ordner „Dateien“, nach Ordnern sortiert,',
+    `höchstens ${PART_FILE_LIMIT.toLocaleString('de-DE')} Dateien oder ${formatFileSize(PART_BYTE_LIMIT)} je Teil.`,
+    'Personalakten liegen unter „Dateien/Personalakten“, Dateien aus dem Papierkorb unter',
+    '„Dateien/Papierkorb“. Frühere Versionen tragen „(Version n)“ im Namen.',
+  ];
+}
+
 function readme(input: { organizationName: string; generatedAt: string; partCount: number }): string {
   return [
     `WerkFlow-Datenexport: ${input.organizationName}`,
     `Erstellt: ${input.generatedAt}`,
     '',
-    `Der Export besteht aus ${input.partCount} Teilen. Teil 1 (dieses Archiv) enthält alle Daten,`,
-    'die weiteren Teile enthalten die Originaldateien im Ordner „Dateien“, nach Ordnern sortiert,',
-    `höchstens ${PART_FILE_LIMIT.toLocaleString('de-DE')} Dateien oder ${formatFileSize(PART_BYTE_LIMIT)} je Teil.`,
-    'Personalakten liegen unter „Dateien/Personalakten“, Dateien aus dem Papierkorb unter',
-    '„Dateien/Papierkorb“. Frühere Versionen tragen „(Version n)“ im Namen.',
+    ...partLines(input.partCount),
     '',
     '„Dokumentenverzeichnis.csv“ nennt jedes Dokument einmal: Ordnerpfad, Kategorie, Belegdatum,',
     'Aufbewahrung, Festschreibung, Herkunft, Verknüpfungen und für jede Version die Datei im',
@@ -177,9 +188,15 @@ function readme(input: { organizationName: string; generatedAt: string; partCoun
     'direkt. Zeitpunkte stehen in UTC (ISO 8601), Datumsangaben als JJJJ-MM-TT. Ein Wert, der',
     'mit =, +, -, @ beginnt, steht mit einem vorangestellten Apostroph in der Datei.',
     '',
-    'Nicht enthalten: Beitritts- und Einladungscodes, Anmeldecodes und technische Zwischenstände.',
-    'Dokumente und Versionen, die nach dem Start dieses Exports hochgeladen wurden, enthält erst ein',
-    'neuer Export; die Spalte „Hinweis“ im Dokumentenverzeichnis nennt sie.',
+    'Nicht enthalten: Beitritts- und Einladungscodes, Anmeldecodes, technische Zwischenstände und',
+    'die Datei- und Teillisten früherer Exporte. Wer wann exportiert und heruntergeladen hat, steht',
+    'in „Daten/Datenexporte.csv“ und „Daten/Datenexporte_Protokoll.csv“.',
+    '',
+    'Die Originaldateien sind die vom Start dieses Exports. Wurde ein Dokument danach endgültig',
+    'gelöscht oder bekam es eine neue Version, nennt das die Spalte „Hinweis“ im',
+    'Dokumentenverzeichnis, sofern es vor der Erstellung dieses Archivs geschah. Ein Dokument, das',
+    'nach dem Start hochgeladen wurde, steht nur in „Daten/Dokumente.csv“. Den Stand nach späteren',
+    'Änderungen enthält ein neuer Export.',
     '',
   ].join('\r\n');
 }

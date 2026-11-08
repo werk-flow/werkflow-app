@@ -6,7 +6,7 @@ import { resolveActionContext, type ActionContext } from '@/lib/org/action-conte
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { buildExportPart, signExportDownload, startExport } from './build';
-import type { OrganizationExportFailureCode } from './messages';
+import { PART_FAILURE_REASONS, type OrganizationExportFailureCode } from './messages';
 
 // The organization export's actions (werk-flow/werkflow-planning#287). Only an
 // Admin of the active organization starts an export, builds its parts and
@@ -25,6 +25,8 @@ const KNOWN_REFUSALS = new Set<string>([
   'export_part_ready',
   'export_part_not_ready',
   'export_part_expired',
+  // A failed part's stored reason, so the screen says why the part failed.
+  ...PART_FAILURE_REASONS,
 ]);
 
 function isKnownRefusal(code: string): code is OrganizationExportFailureCode {

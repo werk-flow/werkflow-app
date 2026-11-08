@@ -8,6 +8,7 @@ import { mapInWindows, readCompleteRows } from '@/lib/supabase/query-batches';
 import { isJsonRecord, toJson } from '@/lib/supabase/json';
 import { buildDataPartFiles } from './data-part';
 import { exportSourceFiles, readDocumentArchive } from './documents';
+import { PART_FAILURE_REASONS } from './messages';
 import { PART_FILE_LIMIT, planFileParts } from './plan';
 import { readExportParts } from './reads';
 
@@ -18,14 +19,7 @@ import { readExportParts } from './reads';
 
 type ExportContext = { organizationId: string; userId: string };
 
-/** Codes a failed part keeps as its reason; any other failure reads as `build_failed`. */
-const PART_FAILURE_CODES = new Set([
-  'load_failed',
-  'export_too_large',
-  'export_dictionary_incomplete',
-  'storage_object_missing',
-  'zip64_required',
-]);
+const PART_FAILURE_CODES = new Set<string>(PART_FAILURE_REASONS);
 
 function partFailureReason(error: unknown): string {
   return error instanceof Error && PART_FAILURE_CODES.has(error.message) ? error.message : 'build_failed';

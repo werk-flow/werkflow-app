@@ -22,6 +22,7 @@ import {
 import { formatBerlinDateTime, formatGermanDate } from '@/lib/utils';
 
 const DOWNLOAD_FAILED = 'Der Download konnte nicht vorbereitet werden. Versuche es erneut.';
+const PART_FAILED = 'Der Teil konnte nicht erstellt werden. Versuche es erneut.';
 const count = new Intl.NumberFormat('de-DE');
 
 function stateBadge(part: OrganizationExportPartView, building: boolean) {
@@ -60,6 +61,7 @@ function failureText(part: OrganizationExportPartView): string | null {
 function PartAction({
   part,
   building,
+  buildable,
   downloading,
   buildDisabled,
   onDownload,
@@ -67,6 +69,7 @@ function PartAction({
 }: {
   part: OrganizationExportPartView;
   building: boolean;
+  buildable: boolean;
   downloading: boolean;
   buildDisabled: boolean;
   onDownload: () => void;
@@ -79,7 +82,7 @@ function PartAction({
         Herunterladen
       </Button>
     );
-  if (part.state === 'failed')
+  if (part.state === 'failed' && buildable)
     return (
       <Button type="button" variant="outline" size="sm" disabled={buildDisabled} onClick={onBuild}>
         Erneut versuchen
@@ -144,13 +147,21 @@ export function OrganizationExportCard({
   organizationExport: OrganizationExportView;
   isBuilding: (partId: string) => boolean;
   buildDisabled: boolean;
+  /** This page's latest refusal code of each part's build. */
   partRefusals: ReadonlyMap<string, string>;
   onBuild: (partIds: readonly string[]) => void;
 }) {
   const { download, isDownloading, refusals } = usePartDownload();
   const { parts } = organizationExport;
   const readyCount = parts.filter((part) => part.state === 'ready').length;
-  const missing = parts.filter((part) => isBuildable(part) && !isBuilding(part.id));
+  const buildable = (part: OrganizationExportPartView) => isBuildable(part, partRefusals.get(part.id));
+  const missing = parts.filter((part) => buildable(part) && !isBuilding(part.id));
+  const refusalText = (partId: string) => {
+    const refusal = partRefusals.get(partId);
+    return refusal === undefined
+      ? undefined
+      : describeFailure(refusal, ORGANIZATION_EXPORT_MESSAGES, PART_FAILED);
+  };
   const files =
     organizationExport.fileCount === 1 ? '1 Datei' : `${count.format(organizationExport.fileCount)} Dateien`;
 
@@ -170,11 +181,12 @@ export function OrganizationExportCard({
               key={part.id}
               part={part}
               building={isBuilding(part.id)}
-              error={partRefusals.get(part.id) ?? refusals.get(part.id) ?? failureText(part)}
+              error={refusalText(part.id) ?? refusals.get(part.id) ?? failureText(part)}
               action={
                 <PartAction
                   part={part}
                   building={isBuilding(part.id)}
+                  buildable={buildable(part)}
                   downloading={isDownloading(part.id)}
                   buildDisabled={buildDisabled}
                   onDownload={() => void download(part.id)}

@@ -339,12 +339,13 @@ assert.deepEqual(
 );
 assert.ok(!JSON.stringify(plan).includes(ORGANIZATION_B), 'the plan names a foreign file');
 
-// A missing original fails its part alone; the next part builds. Each build
-// claims its part, which queues the archive for the purge, before it stores.
+// A missing original fails its part alone, and the action answers the stored
+// reason; the next part builds. Each build claims its part, which queues the
+// archive for the purge, before it stores.
 steps.length = 0;
 assert.deepEqual(await buildOrganizationExportPart(firstFilePart), {
   success: false,
-  error: 'export_part_failed',
+  error: 'storage_object_missing',
 });
 assert.equal(
   world.rpcCalls.find((call) => call.name === 'fail_organization_export_part')?.args.p_failure_reason,
@@ -413,6 +414,16 @@ for (const name of [
 ])
   assert.ok(entries.has(name), `the data part lacks ${name}`);
 assert.ok(![...entries.keys()].some((name) => name.includes('Anmelde') || name.includes('rate_limit')));
+// The file plans and part states of exports stay out: every export would carry all earlier ones.
+for (const name of ['Daten/Datenexporte_Dateien.csv', 'Daten/Datenexporte_Teile.csv'])
+  assert.ok(!entries.has(name), `the data part holds ${name}`);
+const readmeOf = (archive: Map<string, string>) =>
+  (archive.get('LIESMICH.txt') ?? '').replaceAll('\r\n', ' ');
+assert.ok(readmeOf(entries).includes('Der Export besteht aus 3 Teilen.'), 'the README miscounts the parts');
+assert.ok(
+  readmeOf(entries).includes('nach dem Start hochgeladen wurde, steht nur in „Daten/Dokumente.csv“'),
+  'the README claims the manifest notes a document uploaded after the start',
+);
 const manifest = entries.get('Dokumentenverzeichnis.csv') ?? '';
 for (const documentId of [currentDoc, trashedDoc, personnelDoc])
   assert.equal(manifest.split(documentId).length - 1, 1, `the manifest lists ${documentId} other than once`);
@@ -450,12 +461,24 @@ columns.documents = [...(columns.documents ?? []), 'brand_new_column'];
 world.rpcCalls.length = 0;
 assert.deepEqual(await buildOrganizationExportPart(dataPart), {
   success: false,
-  error: 'export_part_failed',
+  error: 'export_dictionary_incomplete',
 });
 assert.equal(
   world.rpcCalls.find((call) => call.name === 'fail_organization_export_part')?.args.p_failure_reason,
   'export_dictionary_incomplete',
 );
+
+// An export of one part has no further parts, and its README names none.
+columns.documents = columns.documents.filter((column) => column !== 'brand_new_column');
+const [onePartExport] = tableRows(world, 'organization_exports');
+assert.ok(onePartExport);
+onePartExport.part_count = 1;
+storedArchives.splice(storedArchives.indexOf(dataArchive), 1);
+assert.deepEqual(await buildOrganizationExportPart(dataPart), { success: true });
+const onePartReadme = readmeOf(zipEntries(storedArchives.at(-1)?.body ?? new Uint8Array()));
+assert.ok(onePartReadme.includes('diesem einen Archiv mit allen Daten'), 'the README of one part miscounts');
+assert.ok(!onePartReadme.includes('weiteren Teile'), 'the README of one part names further parts');
+onePartExport.part_count = 3;
 
 // A ready part refuses another build, and an export past its seven days builds no part.
 const parts = tableRows(world, 'organization_export_parts');
