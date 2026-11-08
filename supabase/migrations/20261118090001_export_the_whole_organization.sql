@@ -276,12 +276,13 @@ begin
     raise exception 'export_plan_stale';
   end if;
 
-  select count(*), coalesce(sum(source.file_bytes), 0) into v_file_count, v_file_bytes
-  from app_private.organization_export_sources(p_organization_id) source;
   v_part_count := jsonb_array_length(p_file_parts) + 1;
 
+  -- The totals follow the file rows below: each statement reads the files
+  -- anew, so totals read from the files here could differ from the rows
+  -- when an upload or deletion commits in between.
   insert into public.organization_exports (id, organization_id, requested_by, part_count, file_count, file_bytes)
-  values (v_export_id, p_organization_id, p_actor_id, v_part_count, v_file_count, v_file_bytes);
+  values (v_export_id, p_organization_id, p_actor_id, v_part_count, 0, 0);
   insert into public.organization_export_parts (organization_id, export_id, part_number, kind, archive_path)
   select p_organization_id, v_export_id, part_number,
     case when part_number = 1 then 'data' else 'files' end,
@@ -308,6 +309,15 @@ begin
     group by file.part_id
   ) totals
   where part.id = totals.part_id;
+  update public.organization_exports export_row
+  set file_count = totals.file_count, file_bytes = totals.file_bytes
+  from (
+    select count(*)::integer as file_count, coalesce(sum(file.file_bytes), 0)::bigint as file_bytes
+    from public.organization_export_files file
+    where file.export_id = v_export_id
+  ) totals
+  where export_row.id = v_export_id
+  returning export_row.file_count, export_row.file_bytes into v_file_count, v_file_bytes;
   -- The plans of exports whose archives are all past their seven days: a
   -- part builds within seven days of the start and its archive is due seven
   -- days after its build began, so no build reads these rows any more.

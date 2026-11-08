@@ -1,21 +1,23 @@
 -- Admin exports the whole organization (werk-flow/werkflow-planning#287).
 -- Only an Admin of the organization starts an export, completes or fails a
--- part and downloads it; Büro, an employee and another organization's Admin
--- are refused, and a foreign part answers like an unknown one. The start
--- refuses a plan that misses, repeats or adds a file, or repeats a name in
--- any letter case, so every original lands in exactly one part. A failed part
--- leaves the others as they are and completes alone later; a ready part
--- refuses a second result. A build's claim queues the part's archive for the
--- purge seven days after the build started, not eight, before anything is
--- stored: an archive whose completion is never recorded keeps that entry,
--- and completion keeps it too. The purge takes a due archive although the
--- part names its path, and an export older than seven days builds no part. Every
--- start, part result and download writes an event the ledger guard keeps.
--- Queued again by the organization's deletion, an archive falls due at once. An Admin's session reads the export row; Büro, an
--- employee and another organization read nothing, and no client reads parts,
--- files or events. The page reader returns only the organization's rows. A
--- start removes the file plans of exports whose archives are all past their
--- seven days, and nothing else.
+-- part and downloads it; Büro, an employee, a suspended Admin and another
+-- organization's Admin are refused, and a foreign part answers like an
+-- unknown one. The start refuses a plan that misses, repeats or adds a file,
+-- or repeats a name in any letter case, so every original lands in exactly
+-- one part. The export totals are the sums of its file rows, also when a
+-- file changes during the start. A failed part leaves the others as they are
+-- and completes alone later; a ready part refuses a second result. A build's
+-- claim queues the part's archive for the purge seven days after the build
+-- started, not eight, before anything is stored: an archive whose completion
+-- is never recorded keeps that entry, and completion keeps it too. The purge
+-- takes a due archive although the part names its path, and an export older
+-- than seven days builds no part. Every start, part result and download
+-- writes an event the ledger guard keeps. Queued again by the organization's
+-- deletion, an archive falls due at once. An Admin's session reads the export
+-- row; Büro, an employee and another organization read nothing, and no client
+-- reads parts, files or events. The page reader returns only the
+-- organization's rows. A start removes the file plans of exports whose
+-- archives are all past their seven days, and nothing else.
 begin;
 
 insert into auth.users (
@@ -200,6 +202,14 @@ begin
   then
     raise exception 'the export totals or its start event are wrong';
   end if;
+  if (select file_count || ':' || file_bytes from public.organization_exports where id = v_export)
+      <> (select count(*) || ':' || coalesce(sum(file_bytes), 0) from public.organization_export_files
+        where export_id = v_export)
+    or (select file_count || ':' || file_bytes from public.organization_exports where id = v_export)
+      <> (select sum(file_count) || ':' || sum(file_bytes) from public.organization_export_parts
+        where export_id = v_export) then
+    raise exception 'the export totals differ from its file rows or its part totals';
+  end if;
 end;
 $$;
 
@@ -307,7 +317,8 @@ begin
     raise exception 'a failed part changed another part';
   end if;
   -- The failed build's archive, had it stored one, is still queued; the retry claims the part again.
-  if not exists (select 1 from public.storage_purge_queue where storage_path like '%/teil-2.zip') then
+  if not exists (select 1 from public.storage_purge_queue where storage_path =
+      (select archive_path from public.organization_export_parts where id = v_part)) then
     raise exception 'a failed build left its archive unqueued';
   end if;
   perform public.claim_organization_export_part_build('28700000-0000-0000-0000-000000000001',
@@ -320,7 +331,8 @@ reset role;
 update public.organization_export_parts set build_started_at = now() - interval '1 hour'
 where id = (select id from export_parts where part_number = 2);
 update public.storage_purge_queue set purge_after = now() - interval '1 hour' + interval '7 days'
-where storage_path like '%/teil-2.zip';
+where storage_path = (select archive_path from public.organization_export_parts
+  where id = (select id from export_parts where part_number = 2));
 set local role service_role;
 do $$
 declare
@@ -370,6 +382,40 @@ begin
   end if;
 end;
 $$;
+
+-- A suspended Admin starts, claims, records and downloads nothing: each
+-- function checks effective access, not the Admin role alone. The product
+-- refuses to suspend the organization's owner, so the fixture writes the
+-- entry directly; the Admin is active again afterwards.
+reset role;
+insert into public.personnel_access_lifecycles (organization_id, employee_record_id, state, state_effective_at)
+select record.organization_id, record.id, 'suspended', now() from public.employee_records record
+where record.organization_id = '28700000-0000-0000-0000-000000000010'
+  and record.user_id = '28700000-0000-0000-0000-000000000001';
+set local role service_role;
+select pg_temp.expect_refusal('suspended admin start', format(
+  'select public.start_organization_export(%L, %L, %L)', '28700000-0000-0000-0000-000000000001',
+  '28700000-0000-0000-0000-000000000010', (select plan from full_plan)), 'not_authorized');
+select pg_temp.expect_refusal('suspended admin claim', format(
+  'select public.claim_organization_export_part_build(%L, %L, %L)', '28700000-0000-0000-0000-000000000001',
+  '28700000-0000-0000-0000-000000000010', (select id from export_parts where part_number = 3)), 'not_authorized');
+select pg_temp.expect_refusal('suspended admin complete', format(
+  'select public.complete_organization_export_part(%L, %L, %L, 100)', '28700000-0000-0000-0000-000000000001',
+  '28700000-0000-0000-0000-000000000010', (select id from export_parts where part_number = 3)), 'not_authorized');
+select pg_temp.expect_refusal('suspended admin fail', format(
+  'select public.fail_organization_export_part(%L, %L, %L, %L)', '28700000-0000-0000-0000-000000000001',
+  '28700000-0000-0000-0000-000000000010', (select id from export_parts where part_number = 3), 'build_failed'),
+  'not_authorized');
+select pg_temp.expect_refusal('suspended admin download', format(
+  'select public.record_organization_export_download(%L, %L, %L)', '28700000-0000-0000-0000-000000000001',
+  '28700000-0000-0000-0000-000000000010', (select id from export_parts where part_number = 2)), 'not_authorized');
+reset role;
+delete from public.personnel_access_lifecycles lifecycle
+using public.employee_records record
+where lifecycle.employee_record_id = record.id
+  and record.organization_id = '28700000-0000-0000-0000-000000000010'
+  and record.user_id = '28700000-0000-0000-0000-000000000001';
+set local role service_role;
 
 -- Only the Admin downloads; a download is recorded; an expired part is refused.
 select pg_temp.expect_refusal('office download', format(
@@ -538,6 +584,39 @@ begin
     or (select count(*) from public.organization_export_events
       where organization_id = '28700000-0000-0000-0000-000000000010') <> (select events from ledger_before) + 2 then
     raise exception 'a start removed more than the expired plan';
+  end if;
+end;
+$$;
+
+-- A file that changes while the export starts, as an upload committed
+-- between two of its statements can, moves the export totals with the file
+-- rows: the test trigger resizes a file right after the export row exists.
+create function pg_temp.resize_file_during_start() returns trigger language plpgsql as $$
+begin
+  update public.documents set size_bytes = size_bytes + 1000
+  where id = '28700000-0000-0000-0000-000000000040';
+  return null;
+end;
+$$;
+grant execute on function pg_temp.resize_file_during_start() to service_role;
+create trigger resize_file_during_start after insert on public.organization_exports
+  for each row execute function pg_temp.resize_file_during_start();
+set local role service_role;
+create temporary table resized_start on commit drop as
+select public.start_organization_export('28700000-0000-0000-0000-000000000001',
+  '28700000-0000-0000-0000-000000000010', (select plan from full_plan)) as export_id;
+reset role;
+drop trigger resize_file_during_start on public.organization_exports;
+do $$
+declare
+  v_export uuid := (select export_id from resized_start);
+begin
+  if (select file_count || ':' || file_bytes from public.organization_exports where id = v_export) <> '4:1085'
+    or (select sum(file_bytes) from public.organization_export_files where export_id = v_export) <> 1085
+    or (select sum(file_bytes) from public.organization_export_parts where export_id = v_export) <> 1085
+    or (select event_payload ->> 'fileBytes' from public.organization_export_events
+      where export_id = v_export and event_type = 'started') <> '1085' then
+    raise exception 'the export totals differ from the file rows of a file that changed during the start';
   end if;
 end;
 $$;
