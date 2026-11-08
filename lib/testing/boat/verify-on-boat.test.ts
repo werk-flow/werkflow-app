@@ -1,6 +1,7 @@
 // Rule test: test:verify picks Boat only where a Boat run proves the same thing as a local one,
 // falls back to the local run on any Boat failure, and an unusable key says so in one line.
 import { expect, test } from 'bun:test';
+import { execFileSync } from 'node:child_process';
 import { chmodSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -281,4 +282,29 @@ test('results never unpack through a symbolic link that already exists in the ch
   expect(linkedDestination(repository, report)).toBeUndefined();
   symlinkSync(outside, join(repository, '.agent-logs', 'verification', 'r1'));
   expect(linkedDestination(repository, report)).toContain('.agent-logs/verification/r1 is a symbolic link');
+});
+
+// Crafted archives, built with tar itself and checked the way importResults lists them.
+test('a crafted results archive is refused whole: a link, a hard link, an escape or an outside path', () => {
+  const work = mkdtempSync(join(tmpdir(), 'boat-crafted-'));
+  mkdirSync(join(work, '.agent-logs', 'verification'), { recursive: true });
+  writeFileSync(join(work, '.agent-logs', 'verification', 'report.json'), '{}');
+  writeFileSync(join(work, 'package.json'), '{}');
+  symlinkSync('/etc/passwd', join(work, '.agent-logs', 'link'));
+  writeFileSync(join(work, '.agent-logs', 'first'), 'x');
+  execFileSync('ln', [join(work, '.agent-logs', 'first'), join(work, '.agent-logs', 'hard')]);
+  const check = (name: string, members: string[], extra: string[] = []) => {
+    const archive = join(work, `${name}.tgz`);
+    execFileSync('tar', ['-czf', archive, ...extra, ...members], { cwd: work });
+    const list = (flags: string) => execFileSync('tar', [flags, archive], { encoding: 'utf8' });
+    return resultsArchiveProblem(list('-tvzf'), list('-tzf'));
+  };
+  expect(check('good', ['.agent-logs/verification'])).toBeUndefined();
+  expect(check('symlink', ['.agent-logs/link'])).toContain('not a regular file');
+  // tar stores the second name of a hard-linked pair as a link member.
+  expect(check('hardlink', ['.agent-logs/first', '.agent-logs/hard'])).toContain('not a regular file');
+  expect(check('outside', ['package.json'])).toContain('outside .agent-logs/');
+  expect(
+    check('escape', ['.agent-logs/verification/report.json'], ['--transform', 's,^,.agent-logs/../,']),
+  ).toContain('outside');
 });
