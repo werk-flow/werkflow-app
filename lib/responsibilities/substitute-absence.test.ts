@@ -2,10 +2,8 @@ import { describe, expect, test } from 'bun:test';
 
 import { delegationPeriodText } from './delegation-window';
 import {
-  absentDaysInWindow,
   isAbsentForWholeWindow,
   substituteOptionDescription,
-  windowDayCount,
   type SubstituteAbsenceSpan,
 } from './substitute-absence';
 import { orderByPersonName, type ResponsibilityPerson } from './types';
@@ -33,21 +31,24 @@ const person = (employeeRecordId: string, firstName: string, role: Responsibilit
 });
 
 describe('substitute absence in a delegation window', () => {
+  const buero = person(nadine, 'Nadine', 'buero');
+  const describeWindow = (spans: SubstituteAbsenceSpan[], from: string, until: string) =>
+    substituteOptionDescription(buero, spans, from, until);
+
   test('a window counts its days inclusively, across a month end', () => {
-    expect(windowDayCount('2026-11-02', '2026-11-06')).toBe(5);
-    expect(windowDayCount('2026-10-30', '2026-11-02')).toBe(4);
-    expect(windowDayCount('2026-11-06', '2026-11-02')).toBe(0);
+    const spans = [span('2026-10-31', '2026-11-01')];
+    expect(describeWindow(spans, '2026-10-30', '2026-11-02')).toBe('Büro · an 2 von 4 Tagen abwesend');
   });
 
   test('vacation over exactly the window is absence on every day', () => {
     const spans = [span('2026-11-02', '2026-11-06')];
-    expect(absentDaysInWindow(spans, nadine, '2026-11-02', '2026-11-06')).toBe(5);
+    expect(describeWindow(spans, '2026-11-02', '2026-11-06')).toBe('Büro · im ganzen Zeitraum abwesend');
     expect(isAbsentForWholeWindow(spans, nadine, '2026-11-02', '2026-11-06')).toBe(true);
   });
 
   test('overlapping spans count a day once, and one free day is no whole-window absence', () => {
     const spans = [span('2026-11-02', '2026-11-04'), span('2026-11-04', '2026-11-05')];
-    expect(absentDaysInWindow(spans, nadine, '2026-11-02', '2026-11-06')).toBe(4);
+    expect(describeWindow(spans, '2026-11-02', '2026-11-06')).toBe('Büro · an 4 von 5 Tagen abwesend');
     expect(isAbsentForWholeWindow(spans, nadine, '2026-11-02', '2026-11-06')).toBe(false);
   });
 

@@ -24,12 +24,12 @@ function dayNumber(isoDate: string): number {
 }
 
 /** The days of the inclusive window; 0 for a window that ends before it starts. */
-export function windowDayCount(validFrom: string, validUntil: string): number {
+function windowDayCount(validFrom: string, validUntil: string): number {
   return Math.max(0, dayNumber(validUntil) - dayNumber(validFrom) + 1);
 }
 
 /** How many days of the inclusive window the person is absent; overlapping spans count a day once. */
-export function absentDaysInWindow(
+function absentDaysInWindow(
   spans: readonly SubstituteAbsenceSpan[],
   employeeRecordId: string,
   validFrom: string,
