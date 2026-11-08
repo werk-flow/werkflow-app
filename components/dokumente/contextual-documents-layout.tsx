@@ -1,5 +1,5 @@
 import { useId, type HTMLAttributes, type ReactElement, type ReactNode } from 'react';
-import { FileText } from 'lucide-react';
+import { FileText, LinkIcon, Upload } from 'lucide-react';
 
 import { ListRow } from '@/components/ui/list-row';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -82,6 +82,38 @@ export function ContextualDocumentRowFrame({
   );
 }
 
+/**
+ * The placeholder of a small toolbar button in `ContextualDocumentsToolbar`.
+ * Its hidden icon and label give it the button's width in the reader's own
+ * font metrics, so the toolbar keeps its place when the buttons arrive. A
+ * fixed width matched only one platform's text rendering.
+ */
+function ToolbarButtonPlaceholder({
+  icon,
+  label,
+  outlined,
+  className,
+}: {
+  icon: ReactElement;
+  label: string;
+  /** The outline button's 1 px border. */
+  outlined: boolean;
+  className?: string | undefined;
+}): ReactElement {
+  return (
+    <Skeleton
+      className={cn(
+        'inline-flex h-8 items-center gap-1.5 whitespace-nowrap px-2.5 text-sm font-medium [&>*]:invisible [&_svg]:size-4',
+        outlined && 'border border-transparent',
+        className,
+      )}
+    >
+      {icon}
+      <span>{label}</span>
+    </Skeleton>
+  );
+}
+
 export function ContextualDocumentsSkeleton({
   title = 'Dokumente & Bilder',
   description,
@@ -102,12 +134,16 @@ export function ContextualDocumentsSkeleton({
       role="status"
       aria-label="Dokumente werden geladen"
       aria-busy="true"
-      // The placeholders take the widths of the Geist buttons „Verknüpfen“ and „Hochladen“ with their icons.
       actions={
         canUpload ? (
           <>
-            {canAttach && <Skeleton className="h-8 w-31" />}
-            <Skeleton className={cn('w-30', emphasizeUpload ? 'h-8' : 'h-11')} />
+            {canAttach && <ToolbarButtonPlaceholder icon={<LinkIcon />} label="Verknüpfen" outlined />}
+            <ToolbarButtonPlaceholder
+              icon={<Upload />}
+              label="Hochladen"
+              outlined={!emphasizeUpload}
+              className={emphasizeUpload ? undefined : 'h-11'}
+            />
           </>
         ) : undefined
       }
