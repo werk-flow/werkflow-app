@@ -62,14 +62,14 @@ A customer's export stays on the owner's machine, outside every repository. The 
 - **Page routing.** `proxy.ts` sends a visitor without a session away from every authenticated area; a new authenticated area is routed there. `app/(app)/layout.tsx` checks the session again and is the authority.
 - **Identity failure.** An identity check that cannot complete is a failure, never a signed-out caller and never access: a page shows the error page, a route handler a private 500 or 503, the auth callback `/auth/unavailable`. The proxy lets the request through to the layout. `lib/auth/identity-errors.ts` classifies Auth failures for both.
 - **Redirects.** A return destination from a query string goes through `resolveSafeReturnPath` and is a same-origin path. An invite code is a UUID before the app echoes it.
-- **Organization cookie.** The active-organization cookie is a hint. The server accepts it only for a current member and refuses to set it for a non-member.
-- **Joining.** Join codes come from the cryptographic random source. A code creates a join request, never a membership. Only an Admin or Büro approval in that organization creates the membership, in one database function. A signed-in user gets a limited number of failed join attempts per hour.
+- **Organization cookie.** The cookie is a hint. The server accepts it only for a current member and refuses to set it for a non-member.
+- **Joining.** Join codes come from the cryptographic random source. A code creates a join request, never a membership. Only an Admin or Büro approval in that organization creates the membership, in one database function. A signed-in user gets limited join attempts per hour.
 - **Cross-organization writes.** A write that names another record checks that it belongs to the caller's organization and, where it applies, to the same person.
-- **Abuse limits.** Invite mail, invite redemption, email-change codes, the simulated payment and health checks pass a limit per subject. A limiter that cannot decide refuses the operation; the health check proceeds. A subject reaches the database only as a keyed hash.
+- **Abuse limits.** Invite mail, invite redemption, join codes, email-change codes, the simulated payment and health checks pass a limit per subject. A limiter that cannot decide refuses the operation; the health check proceeds. A subject reaches the database only as a keyed hash.
 
 ### Database
 
-- RLS restricts every client read, by role and assignment where the server readers restrict them. `supabase/tests/client_read_boundaries.sql` proves that an employee reads only their own jobs, assignments and projects, and a suspended member nothing. Extend it for a new role-limited table.
+- RLS restricts every client read, by role and assignment where the server readers restrict them. `supabase/tests/client_read_boundaries.sql` proves an employee reads only their own jobs, assignments and projects, and a suspended member nothing. Extend it for a new role-limited table.
 - RLS checks effective personnel access wherever a policy or its helper reads `organization_members`, `job_assignments` or `employee_records`.
 - Client roles write no table directly, except a user's own name and avatar.
 - Nothing is granted to `anon` without the owner's approval.
@@ -78,7 +78,7 @@ A customer's export stays on the owner's machine, outside every repository. The 
 - A ledger table refuses direct UPDATE and DELETE, also for privileged roles, with a real denial and a permitted-cleanup assertion. Cascade or reference-nulling follows the domain's retention rule.
 - **Service-role queries.** A query on organization data passes an organization from the resolved context, or carries a reviewed `tenant-scope` reason.
 - **Closed periods.** A closed period freezes the recorded time of its month for every writer, service-role code included. Triggers raise SQLSTATE `WFP01`; `isPeriodClosedError` maps it to `period_closed`. Close refuses with `period_open_sessions` while a session that began before the period end is open.
-- **Account and email change.** Account and email-change transitions stay atomic and server-only. One service-only RPC serializes every challenge transition per account. Send windows per mailbox survive a reset of the wizard. A completion claim permits one Auth update. Client roles read neither state table.
+- **Account and email change.** Transitions stay atomic and server-only. One service-only RPC serializes every challenge transition per account. Send windows per mailbox survive a reset of the wizard. A completion claim permits one Auth update. Client roles read neither state table.
 - DEV's Auth configuration matches the reviewed posture (`auth:check`), and its advisors report nothing outside the reviewed exceptions (`advisors:check`).
 - A seeded demo account gets a password generated per run, never one from the repository, and PROD refuses a chosen one (`lib/security/demo-member-password.test.ts`).
 
@@ -92,7 +92,7 @@ Buckets are private. Server code authorizes the target and signs a short-lived U
 
 ### Mail and providers
 
-The edge functions accept only the project's secret keys and escape every interpolated value. The email-change code is stored as a keyed hash over user id and code. Missing configuration and provider failure return a stable error code. Logs hold fixed error codes and status numbers, never recipients, codes, invitation links or provider bodies.
+The edge functions accept only the project's secret keys and escape every interpolated value. The email-change code is stored as a keyed hash over user id and code. Missing configuration and provider failure return a stable error code. Logs hold only fixed error codes and status numbers.
 
 ### Browser
 
@@ -106,7 +106,7 @@ A reader cached across requests throws `CachedReadError` on a failed read, so th
 
 Every plan carries an advisory check under 24 hours old. An unknown finding fails. So does an exception on a changed dependency tree, or one that is expired or outgrown, even when it matches nothing. An exception in `lib/security/dependency-exceptions.json` names its path, reason, digest and expiry. A workflow pins each outside action to a commit SHA and its release.
 
-An exception that matches no finding on an unchanged tree means the registry narrowed the advisory: the check passes with a note in its output, report and CI job summary. Remove the exception.
+An exception that matches no finding on an unchanged tree means the registry narrowed the advisory: the check passes with a note. Remove the exception.
 
 ## Never
 
@@ -137,13 +137,14 @@ List each owner-accepted residual exposure here until it closes.
 
 - Injected inline scripts are not blocked. The script policy allows `'unsafe-inline'`, so it stops foreign scripts but not an injected inline one. A per-request nonce needs every page rendered per request, which `cacheComponents` rules out. The `htmlSinkSelectors` lint set keeps product code from creating an injection point.
 - No edge rate limit covers every request. The app limits operations that send mail, redeem a capability or activate billing; Supabase Auth limits its own endpoints. Edge limiting is the owner's Vercel plan decision.
-- The deletion transport lets current members receive the identity of a deleted row. It carries no record content.
+- The deletion transport lets current members receive a deleted row's identity, never its content.
 - `simulatePayment` in `lib/subscription/actions.ts` lets a signed-in user without an organization activate their own subscription once: the beta activation path, closing with werk-flow/werkflow-planning#248.
 - The code step keeps the address for up to one hour in an httpOnly cookie scoped to `/verify`.
 - The `health` edge function has no rate limit; a constant-time 64-hex token bounds it.
 - Member removal refuses a target with recorded time; `P1-33` owns offboarding and asset return.
 - Organization deletion removes stored files after the rows. If storage fails, or a lost delete response cannot be rechecked, they stay under its prefix, logged, unreachable through the app.
-- The lint toolchain's minimatch (GHSA-g3hv-75wg-m249) is a reviewed dependency exception; `lib/security/dependency-exceptions.json` holds its reason and expiry.
+- The lint toolchain's minimatch (GHSA-g3hv-75wg-m249) is a reviewed dependency exception in `lib/security/dependency-exceptions.json`.
+- A coworker's Arbeitsnachweis detail hides the customer signer's name; an exported report, a job or project document, shows it to all its readers (owner decision, werk-flow/werkflow-planning#241).
 - Two provider facts are unverified, each needing a stronger read token: the R2 buckets' CORS rules (`GetBucketCors` refuses runtime tokens) and the Vercel environment scopes.
 
 ## Revocation boundaries

@@ -17,6 +17,15 @@ export function isHiddenCoworkerDraft(
   );
 }
 
+/**
+ * An export becomes a report document that every reader of the job or project
+ * opens, so only a customer-facing revision is exported. The database refuses
+ * an internal one too.
+ */
+export function isExportableRevision(revision: Pick<WorkArtifactRevisionRow, 'visibility'>): boolean {
+  return revision.visibility === 'customer_facing';
+}
+
 export function redactWorkArtifactActionForField(
   action: WorkArtifactActionRow,
   viewerId: string,

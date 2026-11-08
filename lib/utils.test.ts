@@ -180,23 +180,45 @@ describe('formatBerlin', () => {
         ...replacedOptions[style],
         timeZone: 'Europe/Berlin',
       });
+      // formatBerlin sets the comma after a weekday itself, so it renders the
+      // same text where the platform's ICU drops it.
+      const expected = (instant: string): string => {
+        const text = reference.format(new Date(instant));
+        return 'weekday' in replacedOptions[style] ? text.replace(/^(\S+?),? /, '$1, ') : text;
+      };
       for (const instant of instants) {
-        expect(formatBerlin(instant, style), `${style} ${instant}`).toBe(reference.format(new Date(instant)));
-        expect(formatBerlin(new Date(instant), style)).toBe(reference.format(new Date(instant)));
+        expect(formatBerlin(instant, style), `${style} ${instant}`).toBe(expected(instant));
+        expect(formatBerlin(new Date(instant), style)).toBe(expected(instant));
       }
     }
   });
 
-  test('renders the sample text of each style', () => {
-    const instant = '2026-09-03T08:15:00.000Z';
-    expect(formatBerlin(instant, 'numericDate')).toBe('3.9.2026');
-    expect(formatBerlin(instant, 'date')).toBe('03.09.2026');
-    expect(formatBerlin(instant, 'shortYearDate')).toBe('03.09.26');
-    expect(formatBerlin(instant, 'longDate')).toBe('3. September 2026');
-    // ICU versions differ on the comma after an abbreviated German weekday.
-    expect(formatBerlin(instant, 'weekdayDate')).toMatch(/^Do\.,? 03\.09\.2026$/);
-    expect(formatBerlin(instant, 'longWeekdayDateTime')).toBe('Donnerstag, 03.09.2026, 10:15');
-    expect(formatBerlin(instant, 'dayMonthTime')).toBe('03.09., 10:15');
+  test('renders the sample text of each style on every platform', () => {
+    // Exact text, so a platform's ICU that renders a style differently fails
+    // here: some builds drop the comma after an abbreviated weekday.
+    const samples: Record<BerlinLabelStyle, string> = {
+      numericDate: '3.9.2026',
+      date: '03.09.2026',
+      shortYearDate: '03.09.26',
+      compactDate: '3.9.26',
+      longDate: '3. September 2026',
+      weekdayDayMonth: 'Do., 03.09.',
+      weekdayDate: 'Do., 03.09.2026',
+      longWeekdayDate: 'Donnerstag, 03.09.2026',
+      monthYear: 'September 2026',
+      shortMonthYear: 'Sept. 2026',
+      shortMonth: 'Sep',
+      time: '10:15',
+      dayMonthTime: '03.09., 10:15',
+      shortDateTime: '03.09.26, 10:15',
+      dateTime: '03.09.2026, 10:15',
+      weekdayDateTime: 'Do., 03.09.2026, 10:15',
+      longWeekdayDateTime: 'Donnerstag, 03.09.2026, 10:15',
+    };
+    const isStyle = (key: string): key is BerlinLabelStyle => key in samples;
+    for (const style of Object.keys(samples).filter(isStyle)) {
+      expect(formatBerlin('2026-09-03T08:15:00.000Z', style), style).toBe(samples[style]);
+    }
   });
 
   test('a calendar date renders as that date, like the noon and local-midnight copies', () => {

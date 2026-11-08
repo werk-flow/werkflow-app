@@ -1,4 +1,4 @@
-import { addLocalDays, getBusinessTodayIso } from '@/lib/date-time/berlin';
+import { addLocalDays, addLocalMonthsClamped, getBusinessTodayIso } from '@/lib/date-time/berlin';
 
 /**
  * Boundary parser for calendar date windows that reach server actions as
@@ -42,7 +42,16 @@ export function parseIsoDateRange(input: unknown): IsoDateRange | null {
   return { from, to };
 }
 
-/** Optional bookmark date; invalid or repeated query parameters use today's date. */
+/**
+ * How far a bookmark may sit from today. Ten years keeps every link to a
+ * job's planned date open, and bounds what one URL makes the views lay out.
+ */
+const BOOKMARK_REACH_YEARS = 10;
+
+/** Optional bookmark date; an invalid, repeated or out-of-reach query parameter uses today's date. */
 export function calendarDateFromQuery(value: string | string[] | undefined, today: string): string {
-  return typeof value === 'string' && isValidIsoDate(value) ? value : today;
+  if (typeof value !== 'string' || !isValidIsoDate(value)) return today;
+  const earliest = addLocalMonthsClamped(today, -12 * BOOKMARK_REACH_YEARS);
+  const latest = addLocalMonthsClamped(today, 12 * BOOKMARK_REACH_YEARS);
+  return value >= earliest && value <= latest ? value : today;
 }
