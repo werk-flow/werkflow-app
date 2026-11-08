@@ -65,6 +65,17 @@ const ASSIGNMENT = /^[A-Za-z_]\w*=/;
 /** The most folders one line may run in that the guard follows. */
 const MAX_FOLDERS = 256;
 
+/**
+ * The folder a shell call runs in: Codex's `workdir` when the call names one, resolved from the
+ * session's folder, else the session's folder. Relative paths and globs resolve from there.
+ */
+export function shellFolder(input: unknown, context: Context): string {
+  const workdir: unknown =
+    typeof input === 'object' && input !== null ? Reflect.get(input, 'workdir') : undefined;
+  if (typeof workdir !== 'string' || !workdir) return context.cwd;
+  return resolve(context.cwd, expandedPath(workdir, context.home) ?? workdir);
+}
+
 type Context = { cwd: string; home: string };
 
 /** A word's path with a leading `~`, `$HOME` or `${HOME}` expanded, or undefined when another expansion remains. */
