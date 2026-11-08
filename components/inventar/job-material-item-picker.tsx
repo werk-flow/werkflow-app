@@ -61,6 +61,7 @@ function PickableItem({
 /** The left column of the material dialog: catalog search and the pickable items. */
 export function MaterialItemPicker({
   mode,
+  showSupplier,
   search,
   onSearchChange,
   filteredItems,
@@ -71,6 +72,8 @@ export function MaterialItemPicker({
   onAdd,
 }: {
   mode: MaterialDialogMode;
+  /** The office searches by supplier too; a field worker never sees one. */
+  showSupplier: boolean;
   search: string;
   onSearchChange: (search: string) => void;
   /** The matching items of the loaded catalog page. */
@@ -92,7 +95,11 @@ export function MaterialItemPicker({
           if (event.key === 'Enter') event.preventDefault();
         }}
         aria-label="Artikel suchen"
-        placeholder="Artikel, SKU, Barcode, Lager, Lieferant suchen…"
+        placeholder={
+          showSupplier
+            ? 'Artikel, SKU, Barcode, Lager, Lieferant suchen…'
+            : 'Artikel, SKU, Barcode, Lager suchen…'
+        }
       />
       {searchFailed && (
         <SectionError onRetry={onRetrySearch} retryPending={isSearching}>

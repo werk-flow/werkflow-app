@@ -54,6 +54,7 @@ Server actions in `lib/documents/actions.ts` and RLS through `app_private` helpe
 | Earlier versions and audit history | Yes | No |
 | Rename, move, copy, delete, link, unlink, reclassify, new version | Yes | No |
 | Document date, retention class, filing, and seeing them | Yes | No |
+| Origin (source system and old number) | See and change until filed | See, on a document they may read |
 
 - Field access follows assigned work: `lib/documents/access.ts` decides it, and `app_private.can_access_document` holds the same rule for Realtime. A customer or employee link alone grants nothing.
 - A field worker's document carries only the links `readableDocumentLinks` keeps: an assigned job, that job's project or customer, and the worker. `hydrateDocuments` takes the caller's context, so no reader resolves another link's names for them.
@@ -65,7 +66,7 @@ Server actions in `lib/documents/actions.ts` and RLS through `app_private` helpe
 
 - Move changes metadata only. A folder never moves or copies into itself or its descendants.
 - Copy creates new rows and copies each object server-side, without links, with the prefix `Kopie von ` and collision-safe naming.
-- Delete is soft; storage keeps the bytes. Restore keeps the folder if it still exists, otherwise uses the root. Permanent delete removes every object and the row, unless [retention](#retention-and-filing) refuses it.
+- Delete is soft; storage keeps the bytes. Restore keeps the folder if it still exists, otherwise uses the root. Permanent delete removes the row and queues every object for the [purge](#storage-cleanup), unless [retention](#retention-and-filing) refuses it.
 - Versioning applies to `contract`, `invoice`, `offer` and `report`. No rollback.
 - Every mutation writes rows and audit events in one database function call. Storage is not transactional: write an object before the call and discard it on refusal; delete an object only after its row is gone.
 - `/dokumente?document=<document-id>` opens that document. Other features link to the library record, never a copy.
@@ -80,8 +81,23 @@ The owner's schedule (werk-flow/werkflow-planning#24) has one class: ten years f
 - Filing (`Festschreiben`) is final and audited. `lib/documents/filing.ts` is the server-only path: a server that generates an original, such as an invoice, files it right after its registration. A filed document refuses a new version, any byte replacement and the trash. Rename, move, category label and links stay possible and audited.
 - A filed document names its filer (`filed_by`) for as long as it exists. As with the uploader, that person cannot delete their account while the document remains.
 - `lib/documents/retention.ts` owns the deletion rule the feature spec states, for the actions and the library; `get_organization_deletion_scope` and `delete_organization` apply it to organization deletion. The trigger `documents_retention_guard` repeats every refusal under each database write, and lets organization teardown pass only once the organization row is gone.
-- Only Admin and Büro receive a document's archive data (`hydrateDocuments`).
+- Only Admin and Büro receive a document's retention and filing data (`hydrateDocuments`); its origin follows the access table.
+
+## Origin of legacy originals
+
+A legacy original keeps its source system (`source_system`) and the number that system gave it (`source_reference`).
+
+- `update_document_origin` is the one write, for the details and for a later archive import: trimmed, a blank value meaning none, with an `origin_changed` audit event. It shares the archive lock with `update_document_retention`, so it refuses a non-manager, a protected personnel document and a filed document. `documents_retention_guard` keeps a filed document's origin on every path.
+- The library search (`list_document_page`) and the link search (`applyDocumentSearch`) match `source_reference` exactly or by prefix, ignoring case, inside the query before the page boundary. A number that only contains the text is no match, so a short search does not flood the list.
+- The client column grant on `documents` leaves out both columns: the origin reaches a reader only through the server, with a document the server already lets them read.
 
 ## Storage cleanup
 
-Deleting an organization lists every object under its prefix, deletes its rows, and only then deletes the listed objects, so a refusal in the database keeps every file. A failed object deletion after the rows went is logged and leaves orphaned objects. Apart from that, no feature reports or deletes orphaned objects (a staging object whose finalize never ran). When reconciliation becomes a need, build an admin maintenance page with a reviewed authorization boundary and follow the [recovery runbook](recovery-and-incidents.md#restore-procedure-database): list candidates, never purge by prefix, keep objects for review.
+A database restore brings back rows as old as its backup, so their objects must still exist. Permanent deletion and organization deletion never delete an object at once: the database function that removes the rows queues their paths in `storage_purge_queue`, in the same transaction, eight days ahead, one day past the [backup retention](recovery-and-incidents.md#what-is-backed-up). Deleting an organization lists its prefix first, and `delete_organization_with_files` queues the listed objects, rows or not, in the same transaction; a refusal queues nothing. After the deletion, the action lists the prefix again and queues, through `queue_storage_purge`, each object the first listing missed, such as a signed upload that landed meanwhile.
+
+- Vercel Cron calls `GET /api/storage-purge` daily on production with `CRON_SECRET` (`vercel.json`). `claim_storage_purge` first releases each due entry whose path a row references again, such as a restored document: it reads every public column whose name ends in `storage_path`, so a new path column needs that suffix. It then claims due entries for an hour. The purge deletes each organization's claimed keys inside its prefix and completes them; it never searches by prefix.
+- A failed deletion keeps its entry and attempt count, and the next run retries it. The route answers 500, which the [production watcher](recovery-and-incidents.md#monitoring) reports, and 503 without `CRON_SECRET`. Its body and logs carry counts and error codes, never a path.
+- DEV and the local stack queue but never purge. Seeder and test resets delete their objects at once. An object no row ever referenced, such as a refused upload's copy, is still discarded at once.
+- Residual: a signed upload URL stays valid for 30 minutes (`SIGNED_UPLOAD_URL_EXPIRES_SECONDS` in `lib/storage/r2.ts`). An upload that lands after the second listing, or a second listing or queueing that failed (logged as `deleteOrganization: stored file listing failed` or `late file queueing failed`), leaves an object in neither a row nor the queue. To find one, list the bucket's top-level prefixes and keep each whose organization id has no `organizations` row. Each object in such a prefix without a `storage_purge_queue` entry is such an object. Keep it for review like any other orphan (below).
+
+Apart from that, no feature reports or deletes orphaned objects (a staging object whose finalize never ran). When reconciliation becomes a need, build an admin maintenance page with a reviewed authorization boundary and follow the [recovery runbook](recovery-and-incidents.md#restore-procedure-database): list candidates, never purge by prefix, keep objects for review.

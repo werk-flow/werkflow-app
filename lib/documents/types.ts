@@ -41,6 +41,19 @@ export type DocumentArchive = {
   filer: DocumentUploader | null;
 };
 
+/**
+ * Where a legacy original came from: the source system, such as Sykasoft, and
+ * the number that system gave it. Every reader of the document receives it.
+ */
+export type DocumentOrigin = {
+  sourceSystem: string | null;
+  sourceReference: string | null;
+};
+
+/** The longest source system and old number `update_document_origin` accepts, after trimming. */
+export const DOCUMENT_SOURCE_SYSTEM_MAX_LENGTH = 80;
+export const DOCUMENT_SOURCE_REFERENCE_MAX_LENGTH = 120;
+
 /** The document date and retention class Admin and Büro set until the document is filed. */
 export type DocumentRetentionTerms = Pick<DocumentArchive, 'documentDate' | 'retentionClass'>;
 
@@ -136,6 +149,7 @@ export type OrganizationDocument = {
   updatedAt: string;
   uploader: DocumentUploader | null;
   links: DocumentLink[];
+  origin: DocumentOrigin;
   /** Null for a caller who is not Admin or Büro. */
   archive: DocumentArchive | null;
 };
@@ -406,6 +420,7 @@ export function toOrganizationDocument({
     updatedAt: row.updated_at,
     uploader,
     links,
+    origin: { sourceSystem: row.source_system, sourceReference: row.source_reference },
     archive,
   };
 }

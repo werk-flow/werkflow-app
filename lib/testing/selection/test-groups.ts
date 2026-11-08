@@ -350,7 +350,11 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['entry-change-request-decisions', ['entry_change_request_decisions.sql'], ['time']],
   ['own-time-entry-changes', ['own_time_entry_changes.sql'], ['time']],
   ['manual-entry-job-assignment', ['manual_entry_job_assignment.sql'], ['time', 'work']],
-  ['document-writes', ['document_writes.sql', 'document_retention.sql'], ['documents', 'work']],
+  [
+    'document-writes',
+    ['document_writes.sql', 'document_retention.sql', 'document_origin.sql'],
+    ['documents', 'work'],
+  ],
   ['payroll-export-recovery', ['payroll_export_recovery.sql'], ['time']],
   ['time-settings-atomic-writes', ['time_settings_atomic_writes.sql'], ['time']],
   ['work-atomic-writes', ['work_atomic_writes.sql'], ['work']],
@@ -361,6 +365,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['user-preference-writes', ['user_preference_writes.sql'], ['work', 'planning']],
   ['rate-limits', ['rate_limits.sql'], ['*']],
   ['organization-deletion', ['organization_deletion.sql'], ['*']],
+  ['storage-purge', ['storage_purge.sql'], ['documents']],
   ['record-numbers', ['record_numbers.sql'], ['work', 'customers', 'personnel', 'service']],
   [
     'list-pagination',

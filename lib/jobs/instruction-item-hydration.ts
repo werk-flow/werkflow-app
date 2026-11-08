@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { logReadFailure } from '@/lib/data/read-request-cache';
-import { toProfileReference } from '@/lib/profile-reference';
+import { readProfileReferences } from '@/lib/profile-reference';
 import type { AdminClient } from '@/lib/supabase/admin';
 import { readInBatches } from '@/lib/supabase/query-batches';
 import {
@@ -26,11 +26,8 @@ async function readInstructionItemMetadata(admin: AdminClient, orgId: string, ro
   const itemIds = rows.map((row) => row.id);
 
   // Each batch holds whole items, so the per-item `sort_order` survives batching.
-  const [profilesResult, evidenceResult, dependencyResult] = await Promise.all([
-    // One read gives each person's profile and whether they are still a member here.
-    readInBatches(profileIds, (batch) =>
-      admin.rpc('list_profile_references', { p_organization_id: orgId, p_user_ids: [...batch] }),
-    ),
+  const [referencesResult, evidenceResult, dependencyResult] = await Promise.all([
+    readProfileReferences(admin, orgId, profileIds),
     readInBatches(itemIds, (batch) =>
       admin
         .from('job_instruction_item_evidence_requirements')
@@ -47,13 +44,13 @@ async function readInstructionItemMetadata(admin: AdminClient, orgId: string, ro
         .in('dependent_item_id', [...batch]),
     ),
   ]);
-  const metadataError = profilesResult.error ?? evidenceResult.error ?? dependencyResult.error;
+  const metadataError = referencesResult.error ?? evidenceResult.error ?? dependencyResult.error;
   if (metadataError) {
     logReadFailure('hydrateInstructionItems: metadata read failed', { code: metadataError.code });
     return null;
   }
   return {
-    profiles: profilesResult.data,
+    references: referencesResult.data,
     evidence: evidenceResult.data,
     dependencies: dependencyResult.data,
   };
@@ -104,11 +101,7 @@ export async function hydrateInstructionItems(
 ): Promise<JobInstructionItemWithDetails[] | null> {
   const metadata = await readInstructionItemMetadata(admin, orgId, rows);
   if (!metadata) return null;
-  const profileMap = new Map(metadata.profiles.map((profile) => [profile.id, profile]));
-  const actorReference = (userId: string | null) => {
-    const profile = userId ? profileMap.get(userId) : undefined;
-    return profile ? toProfileReference(profile, profile.is_member ? 'member' : 'former') : null;
-  };
+  const actorReference = (userId: string | null) => (userId ? metadata.references.get(userId) : null) ?? null;
   const requirementIds = metadata.evidence.map((requirement) => requirement.id);
   const contentById = new Map(rows.map((row) => [row.id, row.content]));
   // A single saved item is hydrated alone; its predecessors still need their labels.
@@ -118,6 +111,12 @@ export async function hydrateInstructionItems(
   const details = await readInstructionItemFulfillments(admin, orgId, requirementIds, missingPredecessorIds);
   if (!details) return null;
   for (const predecessor of details.predecessors) contentById.set(predecessor.id, predecessor.content);
+  // Grouped once, in read order, so each item keeps its requirements in `sort_order`.
+  const evidenceByItemId = Map.groupBy(metadata.evidence, (requirement) => requirement.instruction_item_id);
+  const dependenciesByItemId = Map.groupBy(
+    metadata.dependencies,
+    (dependency) => dependency.dependent_item_id,
+  );
   const fulfillmentByRequirementId = new Map(
     details.fulfillments.map((fulfillment) => [
       fulfillment.evidence_requirement_id,
@@ -133,19 +132,15 @@ export async function hydrateInstructionItems(
     ...toJobInstructionItem(row),
     creator: actorReference(row.created_by),
     lastStatusChangedByProfile: actorReference(row.last_status_changed_by),
-    evidenceRequirements: metadata.evidence
-      .filter((item) => item.instruction_item_id === row.id)
-      .map((item) => ({
-        id: item.id,
-        description: item.description,
-        documentCategory: item.document_category,
-        fulfillment: fulfillmentByRequirementId.get(item.id) ?? null,
-      })),
-    predecessors: metadata.dependencies
-      .filter((item) => item.dependent_item_id === row.id)
-      .map((item) => ({
-        id: item.predecessor_item_id,
-        content: contentById.get(item.predecessor_item_id) ?? 'Früherer Eintrag',
-      })),
+    evidenceRequirements: (evidenceByItemId.get(row.id) ?? []).map((item) => ({
+      id: item.id,
+      description: item.description,
+      documentCategory: item.document_category,
+      fulfillment: fulfillmentByRequirementId.get(item.id) ?? null,
+    })),
+    predecessors: (dependenciesByItemId.get(row.id) ?? []).map((item) => ({
+      id: item.predecessor_item_id,
+      content: contentById.get(item.predecessor_item_id) ?? 'Früherer Eintrag',
+    })),
   }));
 }

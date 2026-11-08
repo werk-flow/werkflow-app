@@ -10,8 +10,8 @@ import {
   ORGANIZATION_A,
   ORGANIZATION_B,
   installActionWorld,
+  listProfileReferencesInWorld,
   signInAs,
-  tableRows,
 } from './action-boundary-world';
 
 const formerMemberId = '30000000-0000-4000-8000-000000000002';
@@ -97,22 +97,9 @@ const world = installActionWorld({
     ),
   ],
 });
-// The database function `list_profile_references`, answered from the world's tables:
-// each named profile and whether that person is a member of the organization asked
-// about. `supabase/tests/organization_member_reads.sql` proves the function itself.
 world.rpc = ({ name, args }) => {
   assert.equal(name, 'list_profile_references');
-  const userIds = args.p_user_ids;
-  assert.ok(Array.isArray(userIds));
-  const members = tableRows(world, 'organization_members').filter(
-    (member) => member.organization_id === args.p_organization_id,
-  );
-  return {
-    data: tableRows(world, 'profiles')
-      .filter((profile) => userIds.includes(profile.id))
-      .map((profile) => ({ ...profile, is_member: members.some((member) => member.user_id === profile.id) })),
-    error: null,
-  };
+  return listProfileReferencesInWorld(world, args);
 };
 const actions = await import('@/lib/jobs/instruction-items-actions');
 

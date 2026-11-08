@@ -1235,6 +1235,8 @@ export type Database = {
             | null;
           retention_ends_on: string | null;
           size_bytes: number;
+          source_reference: string | null;
+          source_system: string | null;
           storage_bucket: string;
           storage_path: string;
           updated_at: string;
@@ -1263,6 +1265,8 @@ export type Database = {
             | null;
           retention_ends_on?: string | null;
           size_bytes: number;
+          source_reference?: string | null;
+          source_system?: string | null;
           storage_bucket?: string;
           storage_path: string;
           updated_at?: string;
@@ -1291,6 +1295,8 @@ export type Database = {
             | null;
           retention_ends_on?: string | null;
           size_bytes?: number;
+          source_reference?: string | null;
+          source_system?: string | null;
           storage_bucket?: string;
           storage_path?: string;
           updated_at?: string;
@@ -8150,6 +8156,36 @@ export type Database = {
           },
         ];
       };
+      storage_purge_queue: {
+        Row: {
+          attempts: number;
+          id: string;
+          last_attempt_at: string | null;
+          organization_id: string;
+          purge_after: string;
+          queued_at: string;
+          storage_path: string;
+        };
+        Insert: {
+          attempts?: number;
+          id?: string;
+          last_attempt_at?: string | null;
+          organization_id: string;
+          purge_after: string;
+          queued_at?: string;
+          storage_path: string;
+        };
+        Update: {
+          attempts?: number;
+          id?: string;
+          last_attempt_at?: string | null;
+          organization_id?: string;
+          purge_after?: string;
+          queued_at?: string;
+          storage_path?: string;
+        };
+        Relationships: [];
+      };
       subscriptions: {
         Row: {
           created_at: string;
@@ -12840,6 +12876,8 @@ export type Database = {
             | null;
           retention_ends_on: string | null;
           size_bytes: number | null;
+          source_reference: string | null;
+          source_system: string | null;
           storage_bucket: string | null;
           storage_path: string | null;
           updated_at: string | null;
@@ -12868,6 +12906,8 @@ export type Database = {
             | null;
           retention_ends_on?: string | null;
           size_bytes?: number | null;
+          source_reference?: string | null;
+          source_system?: string | null;
           storage_bucket?: string | null;
           storage_path?: string | null;
           updated_at?: string | null;
@@ -12896,6 +12936,8 @@ export type Database = {
             | null;
           retention_ends_on?: string | null;
           size_bytes?: number | null;
+          source_reference?: string | null;
+          source_system?: string | null;
           storage_bucket?: string | null;
           storage_path?: string | null;
           updated_at?: string | null;
@@ -13226,6 +13268,14 @@ export type Database = {
           user_id: string;
         }[];
       };
+      claim_storage_purge: {
+        Args: { p_limit: number };
+        Returns: {
+          id: string;
+          organization_id: string;
+          storage_path: string;
+        }[];
+      };
       clear_project_execution_override: {
         Args: {
           p_actor_id: string;
@@ -13356,6 +13406,7 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      complete_storage_purge: { Args: { p_ids: string[] }; Returns: undefined };
       consume_rate_limit: {
         Args: {
           p_action: string;
@@ -13485,6 +13536,8 @@ export type Database = {
             | null;
           retention_ends_on: string | null;
           size_bytes: number;
+          source_reference: string | null;
+          source_system: string | null;
           storage_bucket: string;
           storage_path: string;
           updated_at: string;
@@ -14474,6 +14527,15 @@ export type Database = {
         };
         Returns: undefined;
       };
+      delete_organization_with_files: {
+        Args: {
+          p_actor_id: string;
+          p_confirmation_name: string;
+          p_organization_id: string;
+          p_storage_paths: string[];
+        };
+        Returns: undefined;
+      };
       delete_time_entries: {
         Args: {
           p_actor_id: string;
@@ -14652,6 +14714,8 @@ export type Database = {
             | null;
           retention_ends_on: string | null;
           size_bytes: number;
+          source_reference: string | null;
+          source_system: string | null;
           storage_bucket: string;
           storage_path: string;
           updated_at: string;
@@ -14702,6 +14766,8 @@ export type Database = {
             | null;
           retention_ends_on: string | null;
           size_bytes: number;
+          source_reference: string | null;
+          source_system: string | null;
           storage_bucket: string;
           storage_path: string;
           updated_at: string;
@@ -14748,6 +14814,8 @@ export type Database = {
             | null;
           retention_ends_on: string | null;
           size_bytes: number;
+          source_reference: string | null;
+          source_system: string | null;
           storage_bucket: string;
           storage_path: string;
           updated_at: string;
@@ -15423,6 +15491,8 @@ export type Database = {
             | null;
           retention_ends_on: string | null;
           size_bytes: number;
+          source_reference: string | null;
+          source_system: string | null;
           storage_bucket: string;
           storage_path: string;
           updated_at: string;
@@ -15585,6 +15655,10 @@ export type Database = {
           p_template_id: string;
         };
         Returns: string;
+      };
+      queue_storage_purge: {
+        Args: { p_organization_id: string; p_paths: string[] };
+        Returns: undefined;
       };
       read_time_correction_applications: {
         Args: {
@@ -15838,6 +15912,8 @@ export type Database = {
             | null;
           retention_ends_on: string | null;
           size_bytes: number;
+          source_reference: string | null;
+          source_system: string | null;
           storage_bucket: string;
           storage_path: string;
           updated_at: string;
@@ -17437,6 +17513,8 @@ export type Database = {
             | null;
           retention_ends_on: string | null;
           size_bytes: number;
+          source_reference: string | null;
+          source_system: string | null;
           storage_bucket: string;
           storage_path: string;
           updated_at: string;
@@ -17467,6 +17545,51 @@ export type Database = {
           added_count: number;
           removed_count: number;
         }[];
+      };
+      update_document_origin: {
+        Args: {
+          p_actor_id: string;
+          p_document_id: string;
+          p_organization_id: string;
+          p_source_reference: string;
+          p_source_system: string;
+        };
+        Returns: {
+          category: string;
+          copied_from_document_id: string | null;
+          created_at: string;
+          current_version_number: number;
+          delete_reason: string | null;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          display_name: string;
+          document_date: string;
+          filed_at: string | null;
+          filed_by: string | null;
+          folder_id: string | null;
+          id: string;
+          metadata: Json;
+          mime_type: string | null;
+          organization_id: string;
+          original_file_name: string;
+          retention_class:
+            | Database["public"]["Enums"]["document_retention_class"]
+            | null;
+          retention_ends_on: string | null;
+          size_bytes: number;
+          source_reference: string | null;
+          source_system: string | null;
+          storage_bucket: string;
+          storage_path: string;
+          updated_at: string;
+          uploaded_by: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "documents";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       update_document_retention: {
         Args: {
@@ -17499,6 +17622,8 @@ export type Database = {
             | null;
           retention_ends_on: string | null;
           size_bytes: number;
+          source_reference: string | null;
+          source_system: string | null;
           storage_bucket: string;
           storage_path: string;
           updated_at: string;

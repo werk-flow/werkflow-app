@@ -4,7 +4,7 @@ import type { ActionResult } from '@/lib/action-result';
 import type { Job } from '@/lib/jobs/types';
 import { logError } from '@/lib/logging';
 import { getOrgMembersForUser } from '@/lib/members/queries';
-import { createSignedDownloadUrl, discardStorageObjects } from '@/lib/storage/r2';
+import { createSignedDownloadUrl } from '@/lib/storage/r2';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { uuidSchema } from '@/lib/validation/uuid';
 import {
@@ -35,9 +35,11 @@ import {
   signedUrlOptionsSchema,
   unlinkDocumentInputSchema,
   updateDocumentLinksInputSchema,
+  updateDocumentOriginInputSchema,
   updateDocumentRetentionInputSchema,
   type AttachableDocumentsInput,
   type UnlinkDocumentInput,
+  type UpdateDocumentOriginInput,
   type UpdateDocumentRetentionInput,
 } from './action-schemas';
 import { fileDocumentOriginal } from './filing';
@@ -585,8 +587,8 @@ export async function getDocumentDetails(rawDocumentId: string): Promise<Documen
   }
 
   const [versions, auditEvents] = await Promise.all([
-    hydrateDocumentVersions(auth.context.admin, versionsResult.data),
-    hydrateDocumentAuditEvents(auth.context.admin, auditResult.data),
+    hydrateDocumentVersions(auth.context, versionsResult.data),
+    hydrateDocumentAuditEvents(auth.context, auditResult.data),
   ]);
   if (!versions) return { success: false, error: 'versions_failed', document };
   if (!auditEvents) return { success: false, error: 'audit_failed', document };
@@ -604,17 +606,17 @@ export async function permanentlyDeleteDocument(rawDocumentId: string): Promise<
   const early = refuseEarlyDeletion(existing.document);
   if (!early.success) return early;
 
-  // The row goes first, in one transaction with its version rows, links and
-  // audit event: a refused delete (a protected personnel document, a released
-  // handover or another `on delete restrict` reference) leaves the files in
-  // place, while storage that fails after the row is gone only leaves an
-  // orphaned object.
-  const { data: storagePaths, error } = await auth.context.admin.rpc('permanently_delete_document', {
+  // One transaction removes the row with its version rows, links and audit
+  // event, and queues every object for the scheduled purge: the bytes outlive
+  // the backup window, so a restored row still finds its file. A refusal (a
+  // protected personnel document, a released handover or another `on delete
+  // restrict` reference) queues nothing.
+  const { error } = await auth.context.admin.rpc('permanently_delete_document', {
     p_actor_id: auth.context.userId,
     p_organization_id: auth.context.orgId,
     p_document_id: existing.document.id,
   });
-  if (error || !storagePaths) {
+  if (error) {
     return documentWriteFailure(
       'Failed to permanently delete document metadata',
       error,
@@ -622,9 +624,6 @@ export async function permanentlyDeleteDocument(rawDocumentId: string): Promise<
       'delete_failed',
     );
   }
-
-  // The row is gone, so a storage failure leaves only an orphaned object, which discardStorageObjects logs.
-  await discardStorageObjects({ organizationId: auth.context.orgId, paths: storagePaths });
 
   revalidateDocuments();
   return { success: true };
@@ -665,6 +664,44 @@ export async function updateDocumentRetention(
       'Failed to update document retention',
       error,
       ['document_not_found', 'protected_document_boundary', 'document_filed', 'document_date_out_of_range'],
+      'update_failed',
+    );
+  }
+
+  revalidateDocuments();
+  return hydrateWrittenDocument(auth.context, data);
+}
+
+/**
+ * Sets where a legacy original came from: its source system and old number,
+ * until the document is filed; the function records the change.
+ */
+export async function updateDocumentOrigin(rawInput: UpdateDocumentOriginInput): Promise<DocumentResult> {
+  const input = parseActionInput(updateDocumentOriginInputSchema, rawInput);
+  if (!input) return INVALID_INPUT;
+  const auth = await getAuthorizedDocumentContext();
+  if (!auth.success) return auth;
+
+  const existing = await getManageableDocument(auth.context, input.documentId);
+  if (!existing.success) return existing;
+  const filed = refuseFiledDocument(existing.document);
+  if (!filed.success) return filed;
+
+  const { data, error } = await auth.context.admin.rpc(
+    'update_document_origin',
+    rpcArgs('update_document_origin', {
+      p_actor_id: auth.context.userId,
+      p_organization_id: auth.context.orgId,
+      p_document_id: existing.document.id,
+      p_source_system: input.sourceSystem,
+      p_source_reference: input.sourceReference,
+    }),
+  );
+  if (error || !data) {
+    return documentWriteFailure(
+      'Failed to update document origin',
+      error,
+      ['document_not_found', 'protected_document_boundary', 'document_filed'],
       'update_failed',
     );
   }

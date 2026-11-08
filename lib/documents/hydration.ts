@@ -5,7 +5,7 @@ import 'server-only';
 // admin client, or for documents the whole context, from an authorized caller in
 // the action modules and must never be exported from a 'use server' module.
 
-import { toProfileReference } from '@/lib/profile-reference';
+import { readProfileReferences } from '@/lib/profile-reference';
 import { readableDocumentLinks, type AuthorizedDocumentContext } from './access';
 import { logReadFailure } from '@/lib/data/read-request-cache';
 import { logError } from '@/lib/logging';
@@ -366,6 +366,8 @@ export function documentRowsFromOrdinaryView(rows: readonly OrdinaryDocumentView
         retention_ends_on: row.retention_ends_on,
         filed_at: row.filed_at,
         filed_by: row.filed_by,
+        source_system: row.source_system,
+        source_reference: row.source_reference,
       },
     ];
   });
@@ -385,7 +387,7 @@ export async function hydrateDocuments(
 
   const documentIds = rows.map((row) => row.id);
   // A manager also reads who filed each document.
-  const uploaderIds = Array.from(
+  const personIds = Array.from(
     new Set(
       rows.flatMap((row) =>
         context.isManagerOrAbove && row.filed_by ? [row.uploaded_by, row.filed_by] : [row.uploaded_by],
@@ -395,7 +397,7 @@ export async function hydrateDocuments(
   // Every related read stays inside the documents' organizations; the admin client bypasses RLS.
   const organizationIds = [...new Set(rows.map((row) => row.organization_id))];
 
-  const [linksResult, profilesResult] = await Promise.all([
+  const [linksResult, peopleResult] = await Promise.all([
     readInBatches(documentIds, (ids) =>
       readCompleteRows(
         (from, to) =>
@@ -409,15 +411,10 @@ export async function hydrateDocuments(
         LIST_ROW_CAP,
       ),
     ),
-    readInBatches(uploaderIds, (ids) =>
-      admin
-        .from('profiles')
-        .select('id, first_name, last_name, email, avatar_path')
-        .in('id', [...ids]),
-    ),
+    readProfileReferences(admin, context.orgId, personIds),
   ]);
 
-  if (linksResult.error || profilesResult.error)
+  if (linksResult.error || peopleResult.error)
     throw new Error('Dokumentverknüpfungen konnten nicht vollständig geladen werden.');
   const linkRows = await readableDocumentLinks(context, linksResult.data);
   const targetResults = await readDocumentLinkTargets(
@@ -427,15 +424,13 @@ export async function hydrateDocuments(
   );
   const linksByDocumentId = buildDocumentLinksByDocumentId(linkRows, indexDocumentLinkTargets(targetResults));
 
-  const profilesById = rowsById(profilesResult.data);
-
   return rows.map((row) =>
     toOrganizationDocument({
       row,
-      uploader: toProfileReference(profilesById.get(row.uploaded_by)),
+      uploader: peopleResult.data.get(row.uploaded_by) ?? null,
       links: linksByDocumentId.get(row.id) ?? [],
       archive: context.isManagerOrAbove
-        ? toDocumentArchive(row, row.filed_by ? toProfileReference(profilesById.get(row.filed_by)) : null)
+        ? toDocumentArchive(row, row.filed_by ? (peopleResult.data.get(row.filed_by) ?? null) : null)
         : null,
     }),
   );
@@ -473,57 +468,43 @@ export async function hydrateWrittenDocument(
 }
 
 export async function hydrateFolders(
-  admin: SupabaseAdmin,
+  { admin, orgId }: AuthorizedDocumentContext,
   rows: DocumentFolderRow[],
 ): Promise<DocumentFolder[]> {
   if (rows.length === 0) return [];
 
   const creatorIds = Array.from(new Set(rows.map((row) => row.created_by)));
-  const { data: profiles, error } = await readInBatches(creatorIds, (ids) =>
-    admin
-      .from('profiles')
-      .select('id, first_name, last_name, email, avatar_path')
-      .in('id', [...ids]),
-  );
+  const { data: creators, error } = await readProfileReferences(admin, orgId, creatorIds);
   if (error) throw new Error('Ordnerinformationen konnten nicht vollständig geladen werden.');
 
-  const profilesById = rowsById(profiles);
-
-  return rows.map((row) => toDocumentFolder(row, toProfileReference(profilesById.get(row.created_by))));
+  return rows.map((row) => toDocumentFolder(row, creators.get(row.created_by) ?? null));
 }
 
 /** Null when the uploader names could not be read (logged). */
 export async function hydrateDocumentVersions(
-  admin: SupabaseAdmin,
+  { admin, orgId }: AuthorizedDocumentContext,
   rows: DocumentVersionRow[],
 ): Promise<DocumentVersion[] | null> {
   if (rows.length === 0) return [];
 
   const uploaderIds = Array.from(new Set(rows.map((row) => row.uploaded_by)));
-  const { data: profiles, error } = await readInBatches(uploaderIds, (ids) =>
-    admin
-      .from('profiles')
-      .select('id, first_name, last_name, email, avatar_path')
-      .in('id', [...ids]),
-  );
+  const { data: uploaders, error } = await readProfileReferences(admin, orgId, uploaderIds);
   if (error) {
     logReadFailure('hydrateDocumentVersions: uploader profiles failed', error);
     return null;
   }
 
-  const profilesById = rowsById(profiles);
-
   return rows.map((row) =>
     toDocumentVersion({
       row,
-      uploader: toProfileReference(profilesById.get(row.uploaded_by)),
+      uploader: uploaders.get(row.uploaded_by) ?? null,
     }),
   );
 }
 
 /** Null when the actor names could not be read (logged). */
 export async function hydrateDocumentAuditEvents(
-  admin: SupabaseAdmin,
+  { admin, orgId }: AuthorizedDocumentContext,
   rows: DocumentAuditEventRow[],
 ): Promise<DocumentAuditEvent[] | null> {
   if (rows.length === 0) return [];
@@ -531,23 +512,16 @@ export async function hydrateDocumentAuditEvents(
   const actorIds = Array.from(
     new Set(rows.map((row) => row.actor_id).filter((actorId): actorId is string => Boolean(actorId))),
   );
-  const { data: profiles, error } = await readInBatches(actorIds, (ids) =>
-    admin
-      .from('profiles')
-      .select('id, first_name, last_name, email, avatar_path')
-      .in('id', [...ids]),
-  );
+  const { data: actors, error } = await readProfileReferences(admin, orgId, actorIds);
   if (error) {
     logReadFailure('hydrateDocumentAuditEvents: actor profiles failed', error);
     return null;
   }
 
-  const profilesById = rowsById(profiles);
-
   return rows.map((row) =>
     toDocumentAuditEvent({
       row,
-      actor: row.actor_id ? toProfileReference(profilesById.get(row.actor_id)) : null,
+      actor: row.actor_id ? (actors.get(row.actor_id) ?? null) : null,
     }),
   );
 }

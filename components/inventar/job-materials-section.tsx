@@ -167,6 +167,7 @@ export function JobMaterialsSection({
         items={materialDialog.pickerItems}
         locations={materialDialog.pickerLocations}
         isSaving={isSaving}
+        isAdminOrManager={isAdminOrManager}
         isSearching={materialDialog.isPickerLoading}
         searchFailed={materialDialog.searchFailed}
         onRetrySearch={materialDialog.retrySearch}

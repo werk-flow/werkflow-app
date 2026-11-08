@@ -25,11 +25,13 @@ Lager anlegen
 Artikel anlegen
 Artikel mit Bestand
 1
+Geplante Artikel
+0
+Unterdeckt
+0
 Knapp
 0
 Leer
-0
-Geplante Artikel
 0
 Alle Artikel
 Lager

@@ -41,7 +41,7 @@ Only a child thread and a PR watch wake a thread when they end. A shell run neve
 bun scripts/run-notified.ts --began "[verify] starting " -- bun run test:verify --mode release
 ```
 
-It survives your turn and the harness, keeps the whole log, and refuses to start without a reachable thread. After your turn, one wake gives every exit code not yet reported to you.
+It survives your turn and the harness, keeps the whole log, and needs a reachable thread. After your turn, one wake reports every unreported exit code.
 
 - `--began` is log text only real work prints. The script returns on it, or with an ended command's exit code. Exit 75: not proven running; never report it as running.
 - A lead may end its turn after `began work`.
@@ -58,26 +58,27 @@ A proof is a passing result whose fingerprint matches the current inputs; a late
 
 ## How selection works
 
-`bun run test:plan` prints each group with its reason and the first file that caused it. Change mode compares the tree with the baseline: the latest passing automatic plan, or `HEAD` without one.
+`bun run test:plan` prints each group with its reason and the first file behind it. Change mode compares the tree with the baseline: the latest passing automatic plan, or `HEAD` without one.
 
 Each browser group has a `changeTrigger` (`lib/testing/selection/change-triggers.ts`):
 
 - **Critical journeys** (`CRITICAL_JOURNEYS`, one or more per role) run when a product file, migration, dependency or shared test support changed.
+- **Lab groups** (`audit:lab:*`) run on the same changes, except shared test support.
 - **Permission groups** keep selection by declared scope: every group that drives an `outsiderPage` session or has a `ROLE_DENIAL_GROUPS` row. The auth path and dependency files add `audit:security:account`.
 - **Other groups** run nightly and in release mode.
 - A spec or support file selects the groups that import it.
-- The speed measurements, captures and sweeps (`audit:lab:*`, `audit:performance:*`, `audit:visual*`, `audit:layout*`) run only in release mode, with `--group`, or, except wall-clock groups, in CI's full runs or when their test code changed.
+- Wall-clock groups, captures and sweeps (`audit:performance:*`, `audit:visual*`, `audit:layout*`) run in release mode, with `--group`, or, except wall-clock groups, in CI's full runs or when their test code changed.
 - Static gates run in every plan. Unit, SQL and component groups run when their inputs changed.
-- Browser groups whose own spec or support changed run first.
-- `test:verify` refuses to start while the latest failed attempt of a group it would run is unclassified.
+- Groups whose own spec or support changed run first.
+- `test:verify` refuses to start while a group it would run has an unclassified latest failure.
 
 ### Repair mode
 
-When a browser group's latest result is failed or blocked, a change plan selects those groups, the groups whose test code changed, and the cheap gates. Their passing report becomes the baseline. A failed browser group may run again as soon as any source file changed. Clean its retained world first. [Failures](#failures) owns a repeat on the identical tree.
+When a browser group last failed or was blocked, a change plan selects those groups, the groups whose test code changed, and the cheap gates. Their passing report becomes the baseline. A failed group may run again after any source change. Clean its retained world first. [Failures](#failures) owns a repeat on the identical tree.
 
 ### Release mode
 
-`bun run test:verify --mode release` selects every group and rejects `--group`. A browser pass is reused only when every product file is unchanged since it ran.
+`bun run test:verify --mode release` selects every group and rejects `--group`. A browser pass is reused only if no product file changed since it ran.
 
 - `audit:lab:*` groups fail on budgets, ceilings and floors in every run, because counts repeat on a loaded machine.
 - Other latency deadlines fail in release mode only. Missing or malformed evidence fails in every mode.
@@ -88,11 +89,10 @@ After a failed release run, pass every failed group with `--group` before the ne
 
 `.github/workflows/ci.yml` runs on every PR to `main`, except a label change, and every push to `main`. Its job `Check` is the one required check ([decision 0009](../decisions/0009-pull-requests-and-ci.md)).
 
-- **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups with the change-mode rules: a PR's diff against its merge base, a push's diff against the previous `main` commit. Every browser group runs on an unreadable diff, a changed tooling input, and in a full run.
-- **Tooling input.** A file that changes how every group installs, builds or runs makes a full run: `TOOLING_INPUTS` and `runnerModules` in `ci-plan.ts`.
-- **Full run.** `ci.yml` called with `full` from a job named `Full run` (check `Full run / Check`): nightly on `main` (`nightly.yml`), and the release gate.
-- **Release gate.** `release.yml` ships a commit only when the newest `Full run / Check` of a nightly or release run on `main` at that commit is green. Without one it runs the full suite first.
-- **One build.** `Build` builds the app once per run without a stack. Each browser shard serves it with `bun run test:server local --prebuilt`, which fails when the shard's source or `.env.local` differs from the build.
+- **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups with the change-mode rules: a PR's diff against its merge base, a push's against the previous `main` commit. Every browser group runs on an unreadable diff, in a full run, and on a change to how every group installs, builds or runs (`TOOLING_INPUTS`, `runnerModules`).
+- **Full run and release gate.** A full run is `ci.yml` called with `full` from a job named `Full run`, nightly and in the release. `release.yml` ships a commit only after the newest `Full run / Check` of a nightly or release run on `main` at that commit passed, or runs one first.
+- **Shards.** A visual group runs alone. A full selection fills at most `MAX_SHARDS` shards, so other pull requests keep most runners, and still ends with `audit:visual:acceptance`.
+- **Queue.** The weekly `CI queue` job of `health.yml` reports the runner wait of pull request and `main` jobs at p50 and p90, and fails above its ceiling (`.github/scripts/ci-queue.sh`).
 - **Date look-ahead.** `date-lookahead.yml` runs the suite nightly on a shifted clock and gates nothing ([Monitoring](recovery-and-incidents.md#monitoring)).
 - **Not in CI.** The wall-clock `audit:performance:*` groups and the cloud canary stay local release checks.
 - **Branch freshness.** A branch need not be up to date with `main`: the push to `main` and the full runs cover it.
@@ -144,7 +144,7 @@ Lint (`eslint-rules/test-hygiene-rules.mjs`, unit tests too) and `spec-conventio
 - **Confirmed records.** An outcome assertion reads through `confirmed`, which skips `data-unconfirmed` content. An absence after a change goes through `expectGone`.
 - **Stale premise.** A session whose premise is outdated state calls `freezeLiveUpdates` before it opens the page, or holds that state in an open dialog.
 - **No swallowed failure.** A wait that may time out branches through `settledBeforeTimeout`. A real best effort says why in a `// best-effort: <reason>` comment.
-- **Quarantine last.** Skip only a diagnosed defect whose fix is an open planning issue.
+- **Quarantine last.** Skip only a diagnosed defect whose fix is an open planning issue. A test needing a host capability (`flock`, an address family) registers only where it exists and names what it left out: no quarantine.
 
 ## Deadlines and measured scenarios
 
@@ -174,18 +174,18 @@ Classes:
 - **authoring**: test code that never passed on its current content fails. Refused for test inputs that passed.
 - **accepted-change**: an accepted design made an `audit:visual` reference stale.
 
-Only `environment` allows one retry on unchanged inputs: a browser group's after a passing diagnostic and the cleanup, any other group's at once. The diagnostic replays the failed test on the retained world (`--reuse-run`). When that test wrote to its world before it failed, run the whole group on a fresh world on the same build instead (`--fresh-for`). A second failure on those inputs needs a change. Product and harness repairs change the inputs anyway.
+Only `environment` allows one retry on unchanged inputs: a browser group's after a passing diagnostic and the cleanup, any other group's at once. The diagnostic replays the failed test on the retained world (`--reuse-run`). When that test wrote to its world before it failed, run the whole group on a fresh world on the same build instead (`--fresh-for`). A second failure on those inputs needs a change.
 
 A preflight failure that creates no run is blocked verification, not a product failure. If the host kills a run, confirm the lock owner is gone, then run `bun run test:runs recover-interrupted <run-key> "<observed interruption>"`.
 
 ## Recurring traps
 
-Check these before you classify.
+Check these before classifying.
 
 - **Another worktree's migration.** The shared stack can hold a migration this branch lacks. An SQL failure on an object the branch does not define is `environment`; compare `supabase migration list --local` with `supabase/migrations/`.
 - **Stale fakes.** When a read changes its `select` shape, update every unit-test fake of that table. Embedded relations come back as arrays.
 - **The agent's tool killed the run.** A background limit or session end (SIGTERM, exit 137) is `environment`; [start it notified](#wait-for-a-long-run) next time.
-- **Host network.** `net::ERR_NETWORK_CHANGED`, or a Realtime socket that reconnects every few seconds, is a host network problem: `environment`. Run no heavy load beside a browser or measured group.
+- **Host network.** `net::ERR_NETWORK_CHANGED`, or a Realtime socket that reconnects every few seconds, is `environment`. Run no heavy load beside a browser or measured group.
 - **Time zone and run day.** CI runs in UTC; a window computed in process time misses the Berlin window. A fixture on a DST switch or a run-day-dependent week fails on some days only. Check the run's business date and reproduce in UTC.
 - **Press before hydration.** A server-rendered button ignores it. Wait for the hydrated control.
 - **Menus.** A Radix menu opened by mouse can select the item under the pointer on release; open menus through the area module. The row actions menu closes on scroll, and a sideways-overflowing table scrolls on click.
@@ -194,7 +194,7 @@ Check these before you classify.
 - **Unstable order.** A list ordered by a random UUID reorders between runs.
 - **Long tokens at 375 px.** An email address or a generated token is one unbreakable word.
 - **Fixture race.** Read-then-insert fixtures race under two workers.
-- **Slow machine.** When every measured scenario slows at once, untouched pages included, replay `HEAD` on the same machine before you blame the change.
+- **Slow machine.** When every measured scenario slows at once, replay `HEAD` on the same machine before you blame the change.
 
 ## Never
 

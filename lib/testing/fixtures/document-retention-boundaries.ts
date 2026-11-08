@@ -13,6 +13,7 @@ import {
   ORGANIZATION_A,
   ORGANIZATION_B,
   installActionWorld,
+  listProfileReferencesInWorld,
   signInAs,
 } from './action-boundary-world';
 import { assertRefused } from './operations-boundary-refusals';
@@ -52,6 +53,8 @@ const invoice = (id: string, organizationId: string, state: { filed?: boolean; t
   retention_ends_on: '2036-12-31',
   filed_at: state.filed ? '2026-10-01T09:00:00Z' : null,
   filed_by: state.filed ? CALLER_ID : null,
+  source_system: null,
+  source_reference: null,
 });
 
 const world = installActionWorld({
@@ -101,6 +104,9 @@ const world = installActionWorld({
     },
   ],
   personnel_documents: [],
+  organization_members: [
+    { id: 'member-caller', organization_id: ORGANIZATION_A, user_id: CALLER_ID, role: 'buero' },
+  ],
   profiles: [
     {
       id: CALLER_ID,
@@ -111,6 +117,11 @@ const world = installActionWorld({
     },
   ],
 });
+const answerProfileReferences: typeof world.rpc = ({ name, args }) =>
+  name === 'list_profile_references'
+    ? listProfileReferencesInWorld(world, args)
+    : { data: null, error: { code: 'P0001', message: 'unexpected_call' } };
+world.rpc = answerProfileReferences;
 const unusedStorage = async (): Promise<never> => {
   throw new Error('a refused retention action reached storage');
 };
@@ -252,15 +263,17 @@ for (const role of ['buero', 'admin'] as const) {
     `${role}: the archive data changed`,
   );
   world.rpcCalls.length = 0;
-  world.rpc = ({ name }) =>
-    name === 'file_document'
+  world.rpc = (call) =>
+    call.name === 'file_document'
       ? { data: invoice(openInvoiceId, ORGANIZATION_A, { filed: true }), error: null }
-      : { data: null, error: { code: 'P0001', message: 'unexpected_call' } };
+      : answerProfileReferences(call);
   const filing = await fileDocument(openInvoiceId);
   assert.ok(filing.success, `${role}: filing was refused`);
   assert.equal(filing.document.archive?.filedAt, '2026-10-01T09:00:00Z');
   assert.deepEqual(
-    world.rpcCalls.map((call) => [call.name, call.args.p_document_id, call.args.p_organization_id]),
+    world.rpcCalls
+      .filter((call) => call.name !== 'list_profile_references')
+      .map((call) => [call.name, call.args.p_document_id, call.args.p_organization_id]),
     [['file_document', openInvoiceId, ORGANIZATION_A]],
   );
 }
