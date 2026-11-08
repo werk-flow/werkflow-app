@@ -25,7 +25,7 @@ const ERROR_MESSAGES = {
   job_has_several_visits:
     'Dieser Auftrag hat inzwischen mehrere Termine. Datum, Uhrzeit und Dauer änderst du in der Plantafel.',
   update_failed: 'Fehler beim Aktualisieren des Auftrags.',
-  planning_changed: PLANNING_CHANGED_MESSAGE,
+  stale_occurrence: PLANNING_CHANGED_MESSAGE,
 } satisfies Record<string, string>;
 
 type EditJobSubmitInput = {

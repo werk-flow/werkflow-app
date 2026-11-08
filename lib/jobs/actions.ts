@@ -126,7 +126,7 @@ function jobSaveFailure(
   refusals: readonly string[],
   fallback: string,
 ): ActionFailure {
-  if (error.message === 'stale_planning_occurrence') return { success: false, error: 'planning_changed' };
+  if (error.message === 'stale_planning_occurrence') return { success: false, error: 'stale_occurrence' };
   return workWriteFailure(label, error, refusals, fallback);
 }
 

@@ -300,7 +300,7 @@ world.rpcCalls = [];
 world.rpc = () => ({ data: null, error: { code: 'P0001', message: 'stale_planning_occurrence' } });
 assert.deepEqual(await updateJob(jobId, { title: 'Heizungstausch' }), {
   success: false,
-  error: 'planning_changed',
+  error: 'stale_occurrence',
 });
 world.rpc = () => ({ data: storedJob, error: null });
 

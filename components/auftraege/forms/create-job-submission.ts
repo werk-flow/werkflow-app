@@ -17,7 +17,7 @@ export const CREATE_JOB_ERROR_MESSAGES = {
   work_template_version_unavailable: 'Die gewählte Arbeitsvorlage ist nicht mehr verfügbar.',
   work_template_reference_unavailable: 'Die Arbeitsvorlage verweist auf nicht mehr aktive Stammdaten.',
   template_apply_failed: 'Die Arbeitsvorlage konnte nicht übernommen werden.',
-  planning_changed: PLANNING_CHANGED_MESSAGE,
+  stale_occurrence: PLANNING_CHANGED_MESSAGE,
 } satisfies Record<string, string>;
 
 /** A validated create request the landing list runs itself (deferred submit). */
