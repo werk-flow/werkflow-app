@@ -12,7 +12,7 @@ On a workstation with a Boat key, `bun run test:verify` runs on a short-lived Bo
 - `--target cloud`: the canary needs DEV's secrets.
 - `.env.local` points elsewhere than the local stack.
 
-The whole plan runs there, static gates included: type-aware lint is the largest local load.
+The whole plan runs there, static gates included: type-aware lint is the largest local load. A Boat run takes no heavy slot, and holds the workspace lock while the machine runs, so the edit guard works as during a local run.
 
 The machine starts from the saved snapshot `werkflow-verify` and runs `scripts/boat/remote-verify.sh`. It rebuilds the checkout at the same absolute path and in the same form (main checkout or linked worktree) from `HEAD`, the local commits and the working tree, untracked files included, with the evidence history of `.agent-logs/`. It starts a fresh stack at this tree's migrations, serves the build when the plan runs a browser group, runs `bun run test:verify` with the same arguments, and returns every report and run folder the run wrote. So selection, proofs, reports and [failure classification](testing.md#failures) work as for a local run.
 
@@ -43,7 +43,7 @@ A failed browser group's retained world is deleted with its machine. Diagnose it
 | File | `~/.config/werkflow/boat-api-key`, mode 600, folder mode 700, one line holding the key |
 | Expiry file | `~/.config/werkflow/boat-api-key.expires`, one ISO date |
 
-The runner reads the key in its own process and calls Boat's REST API with it. It never writes the key elsewhere and needs no Boat CLI and no SSH. A run refuses a key file or folder others can read, and an untracked file that looks like a credential.
+The runner reads the key in its own process and calls Boat's REST API with it. It never writes the key elsewhere and needs no Boat CLI and no SSH. A run refuses a key file or folder others can read, and falls back to local when an untracked file is a dotfile or looks like a credential.
 
 Agents never read the key or the Boat CLI's config, which holds a key in plain text after `boat login`. `.claude/hooks/refuse-boat-key-reads.ts` refuses such a call in Claude Code and Codex, and `permissions.deny` in `.claude/settings.json` covers Claude's file tools. The expiry file stays readable.
 
@@ -60,7 +60,7 @@ On the PC inside WSL Ubuntu, on the Mac in Terminal:
    sh -c 'umask 077; mkdir -p ~/.config/werkflow; chmod 700 ~/.config/werkflow; stty -echo; IFS= read -r k; stty echo; printf "%s\n" "$k" > ~/.config/werkflow/boat-api-key'
    ```
 
-3. Record the expiry date the dashboard shows: `echo 2027-02-06 > ~/.config/werkflow/boat-api-key.expires`.
+3. Record the expiry date the dashboard shows: `echo <YYYY-MM-DD> > ~/.config/werkflow/boat-api-key.expires`.
 4. Codex: trust the project hooks once with `/hooks`. Claude Code reads its rules from the repository.
 5. Check: `bun run test:verify --group sql:security` prints `Running on Boat machine`.
 
@@ -72,9 +72,9 @@ Run `bun run boat:snapshot` after a change to the Bun version, the Playwright ve
 
 ## Renew the key
 
-The key lasts 90 days and cannot be extended. From 14 days before its expiry, every run prints a reminder, and the weekly local check in werkflow-planning `ops/` assigns the owner an issue. Create the new key, install it with step 2, write its expiry date, then revoke the old key in the dashboard.
+The key lasts 90 days and cannot be extended. From 14 days before its expiry, every run prints a reminder, and the ci-alert pass in werkflow-planning `ops/` opens `Owner action: Boat key` for the owner, weekly until the new date is written. Create the new key, install it with step 2, write its expiry date, then revoke the old key in the dashboard.
 
-## Accepted exposure
+## Residual exposure
 
 - Agents run as the owner's OS user. The guard stops accidental and habitual reads, not a deliberate one.
 - The key reaches every machine of the organization, but deletes only its own.

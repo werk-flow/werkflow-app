@@ -10,7 +10,9 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, relative, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
+
+import { z } from '../../zod';
 
 import { captureInputSnapshot, changedInputs } from '../evidence/group-evidence';
 import {
@@ -53,9 +55,15 @@ const MACHINE_BOUND_GROUP = /^audit:(?:lab|performance|visual|layout)/;
  */
 const SECRET_NAME =
   /(?:^|\/)(?:\.[^/]*|[^/]*\.(?:pem|key|p12|pfx|jks|keystore)|id_[a-z0-9]+|[^/]*(?:secret|credential|token|passw)[^/]*)$/i;
-/** Evidence planning reads; traces, screenshots and logs stay home. */
-const EVIDENCE_FILE = /\.(?:json|jsonl|md)$/;
-const EVIDENCE_ROOTS = ['.agent-logs/verification', '.agent-logs/playwright-runs'];
+/** The files of a report that planning reads. */
+const REPORT_FILES = ['report.json', 'diagnoses.json'];
+/**
+ * The top-level files of a browser run that planning reads: its manifest and its latency and lab
+ * archives. A run's world state, traces and screenshots stay home; a cloud run's world holds DEV
+ * passwords.
+ */
+const RUN_FILE = /^(?:manifest\.json|latency-summary\.json|[\w.-]+\.ndjson)$/;
+const runTargetSchema = z.object({ target: z.string().optional() });
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -111,14 +119,36 @@ function git(repository: string, args: readonly string[]): string {
   return execFileSync('git', args, { cwd: repository, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 }
 
-/** Files under `root` (relative to `repository`) that planning reads, outside run artifacts. */
-function evidenceFiles(repository: string, root: string): string[] {
-  const folder = resolve(repository, root);
-  if (!existsSync(folder)) return [];
-  return readdirSync(folder, { recursive: true, withFileTypes: true })
-    .filter((entry) => entry.isFile() && EVIDENCE_FILE.test(entry.name))
-    .map((entry) => relative(repository, join(entry.parentPath, entry.name)))
-    .filter((file) => !/\/(?:playwright|active)\//.test(file));
+/** Subfolder names of an evidence folder, or none when it does not exist. */
+function folders(path: string): string[] {
+  return existsSync(path)
+    ? readdirSync(path, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+    : [];
+}
+
+/** The evidence a plan reads, relative to `repository`: reports and diagnoses, and local runs' metadata. */
+export function evidenceFiles(repository: string): string[] {
+  const reports = folders(resolve(repository, '.agent-logs/verification')).flatMap((id) =>
+    REPORT_FILES.map((name) => `.agent-logs/verification/${id}/${name}`),
+  );
+  const runs = folders(resolve(repository, '.agent-logs/playwright-runs')).flatMap((key) => {
+    const run = `.agent-logs/playwright-runs/${key}`;
+    const manifest = resolve(repository, run, 'manifest.json');
+    if (!existsSync(manifest)) return [];
+    let target: string | undefined;
+    try {
+      target = runTargetSchema.parse(JSON.parse(readFileSync(manifest, 'utf8'))).target;
+    } catch {
+      return [];
+    }
+    if (target !== 'local') return [];
+    return readdirSync(resolve(repository, run), { withFileTypes: true })
+      .filter((entry) => entry.isFile() && RUN_FILE.test(entry.name))
+      .map((entry) => `${run}/${entry.name}`);
+  });
+  return [...reports, ...runs].filter((file) => existsSync(resolve(repository, file)));
 }
 
 /** Packs the local commits, the working tree and the evidence history into `folder`. */
@@ -162,10 +192,7 @@ function packRun(
   // Against HEAD's tree, so a staged deletion or rename removes the old path on the machine too.
   const committed = list(['ls-tree', '-r', '-z', '--name-only', 'HEAD']);
   writeFileSync(join(folder, 'deleted.txt'), committed.filter((file) => !exists(file)).join('\n'));
-  tar(
-    'evidence',
-    EVIDENCE_ROOTS.flatMap((root) => evidenceFiles(repository, root)),
-  );
+  tar('evidence', evidenceFiles(repository));
   return { head, bundle: !pushed };
 }
 

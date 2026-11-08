@@ -29,18 +29,20 @@ function daysBetween(from: string, to: string): number {
 /** Reads the key, or says why a run cannot use it. `folder` and `now` are a test's stand-ins. */
 export function readBoatKey(folder = BOAT_KEY_FOLDER, now = new Date()): BoatKeyReading {
   const keyPath = join(folder, KEY_FILE);
-  let mode: number;
+  let key: string;
   try {
-    mode = statSync(keyPath).mode;
-  } catch {
-    return { kind: 'absent' };
+    const mode = statSync(keyPath).mode;
+    if ((mode & 0o077) !== 0 || (statSync(folder).mode & 0o077) !== 0)
+      return {
+        kind: 'unusable',
+        reason: `the key file or its folder is readable by others; run chmod 700 ${folder} and chmod 600 on the key file.`,
+      };
+    key = readFileSync(keyPath, 'utf8').trim();
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return { kind: 'absent' };
+    // A key being replaced, or a file this process may not read.
+    return { kind: 'unusable', reason: 'the key file could not be read.' };
   }
-  if ((mode & 0o077) !== 0 || (statSync(folder).mode & 0o077) !== 0)
-    return {
-      kind: 'unusable',
-      reason: `the key file or its folder is readable by others; run chmod 700 ${folder} and chmod 600 on the key file.`,
-    };
-  const key = readFileSync(keyPath, 'utf8').trim();
   if (!/^boat_\S+$/.test(key))
     return { kind: 'unusable', reason: `the key file does not hold one Boat key on one line. ${RENEW}` };
   let expiresOn: string | undefined;

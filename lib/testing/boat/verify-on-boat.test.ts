@@ -9,7 +9,7 @@ import { BoatError, boatClient } from './boat-api';
 import { readBoatKey } from './boat-key';
 import { runScript } from './boat-machine';
 import { backendValueDigests } from '../evidence/proof-environment';
-import { boatFailure, localReason, machineBoundGroup, withheldFile } from './verify-on-boat';
+import { boatFailure, evidenceFiles, localReason, machineBoundGroup, withheldFile } from './verify-on-boat';
 
 test('change plans and ordinary groups may run on Boat', () => {
   expect(localReason([], {})).toBeUndefined();
@@ -71,6 +71,9 @@ test('an expired, malformed or exposed key falls back to local with the reason',
   expect(malformed.kind).toBe('unusable');
   const exposed = readBoatKey(keyFolder({ 'boat-api-key': 'boat_abc' }, 0o700, 0o644), now);
   expect(exposed.kind === 'unusable' && exposed.reason).toContain('chmod');
+  // A key file this process cannot read, such as one being replaced.
+  const unreadable = readBoatKey(keyFolder({ 'boat-api-key': 'boat_abc' }, 0o700, 0o200), now);
+  expect(unreadable).toEqual({ kind: 'unusable', reason: 'the key file could not be read.' });
 });
 
 test('a Boat refusal keeps its status and code, and the key never appears in a message', async () => {
@@ -192,4 +195,34 @@ test('the backend comparison covers every source the proof digest reads, but no 
   expect(backendValueDigests(folder, {})['.env.local:NEXT_PUBLIC_SUPABASE_URL']).toBe(
     digests['.env.local:NEXT_PUBLIC_SUPABASE_URL'],
   );
+});
+
+test('only planning metadata of local runs goes to Boat, never a world and never a cloud run', () => {
+  const repository = mkdtempSync(join(tmpdir(), 'boat-evidence-'));
+  const write = (path: string, text = '{}') => {
+    mkdirSync(join(repository, path, '..'), { recursive: true });
+    writeFileSync(join(repository, path), text);
+  };
+  write('.agent-logs/verification/r1/report.json');
+  write('.agent-logs/verification/r1/diagnoses.json');
+  write('.agent-logs/verification/r1/static-lint.log', 'log');
+  for (const [key, target] of [
+    ['local-run', 'local'],
+    ['cloud-run', 'cloud'],
+  ]) {
+    const run = `.agent-logs/playwright-runs/${key}`;
+    write(`${run}/manifest.json`, JSON.stringify({ target }));
+    write(`${run}/latency-summary.json`);
+    write(`${run}/live-latencies.ndjson`, '');
+    write(`${run}/state/world.json`, JSON.stringify({ password: 'dev-password' }));
+    write(`${run}/active/world.json`);
+    write(`${run}/runner.log`, 'log');
+  }
+  expect(evidenceFiles(repository).sort()).toEqual([
+    '.agent-logs/playwright-runs/local-run/latency-summary.json',
+    '.agent-logs/playwright-runs/local-run/live-latencies.ndjson',
+    '.agent-logs/playwright-runs/local-run/manifest.json',
+    '.agent-logs/verification/r1/diagnoses.json',
+    '.agent-logs/verification/r1/report.json',
+  ]);
 });
