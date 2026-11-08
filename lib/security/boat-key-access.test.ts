@@ -4,7 +4,7 @@ import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
-import { boatKeyCommandRefusal, boatKeyToolRefusal } from './boat-key-access';
+import { boatKeyCommandRefusal, boatKeyToolRefusal, shellFolder } from './boat-key-access';
 
 const home = '/home/agent';
 const context = { cwd: '/home/agent/code/werkflow-app', home };
@@ -115,26 +115,15 @@ test('ordinary work, the expiry file and the runner pass', () => {
     expect(refused(command), command).toBeUndefined();
 });
 
-// Codex sends the hook the session's folder, not the folder its call runs in (codex-rs
-// exec_command.rs, pre_tool_use_payload), so a relative name of the CLI config refuses anywhere.
-test('a relative path or glob that may name the Boat CLI config is refused wherever it runs', () => {
-  for (const command of [
-    'cat config.json',
-    'jq . ./config.json',
-    'head conf*',
-    'cat < config.json',
-    'cat */config.json',
-  ])
-    expect(refused(command), command).toContain("may be the Boat CLI's config");
-  for (const command of [
-    'cat tsconfig.json',
-    'cat ~/scratch/config.json',
-    'cat lib/config.ts',
-    'ls *',
-    'cat *.json',
-    'cat package.json',
-  ])
-    expect(refused(command), command).toBeUndefined();
+// Covers a payload that names `workdir`. Codex 0.164 to 0.167 send none (codex-rs exec_command.rs,
+// pre_tool_use_payload): their calls resolve from the session's folder, and a call run in a key
+// folder is deliberate evasion, outside the threat model (docs/technical/security.md).
+test('a payload that names its workdir resolves relative paths and globs from it', () => {
+  const folder = shellFolder({ command: 'cat b*', workdir: '~/.config/werkflow' }, context);
+  expect(folder).toBe('/home/agent/.config/werkflow');
+  expect(boatKeyCommandRefusal('cat b*', { cwd: folder, home })).toContain('matches a file');
+  expect(shellFolder({ command: 'ls', workdir: '../other' }, context)).toBe('/home/agent/code/other');
+  expect(shellFolder({ command: 'ls' }, context)).toBe(context.cwd);
 });
 
 test('a long chain of folder changes stays bounded and refuses past the bound', () => {

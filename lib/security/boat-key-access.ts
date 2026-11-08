@@ -66,23 +66,17 @@ const ASSIGNMENT = /^[A-Za-z_]\w*=/;
 const MAX_FOLDERS = 256;
 
 /**
- * Codex runs a shell call in its `workdir` but sends the hook only the session's folder
- * (codex-rs exec_command.rs, `pre_tool_use_payload`), so a relative path cannot be resolved
- * where it runs. A relative word named like the Boat CLI's config, or a glob that may match that
- * name, is therefore refused wherever it runs. No file of this name is in the repository.
+ * The folder a shell call runs in, when its payload names one in `workdir`, resolved from the
+ * session's folder; else the session's folder. Codex 0.164 to 0.167 run a call in its `workdir`
+ * but send the hook only `{ command }` (codex-rs exec_command.rs, `pre_tool_use_payload`), so
+ * there the guard sees the session's folder. Choosing a key folder as a call's working folder
+ * names the target: deliberate evasion, which the threat model leaves out (docs/technical/security.md).
  */
-const CONFIG_NAME = 'config.json';
-
-/** Whether a word names a file called like the Boat CLI's config by a relative path or glob. */
-function namesConfigRelatively(text: string, globs: boolean): boolean {
-  const word = text.replace(/^\d*[<>]+&?/, '');
-  if (word === '' || isAbsolute(word) || /^(?:~|\$HOME\b|\$\{HOME\})/.test(word)) return false;
-  const name = word.slice(word.lastIndexOf('/') + 1);
-  // A glob counts only with a literal part of the name, so `*` and `*.json` stay ordinary.
-  return (
-    name === CONFIG_NAME ||
-    (globs && /conf/i.test(name.replace(/[*?]|\[[^\]]*\]/g, '')) && new Bun.Glob(name).match(CONFIG_NAME))
-  );
+export function shellFolder(input: unknown, context: Context): string {
+  const workdir: unknown =
+    typeof input === 'object' && input !== null ? Reflect.get(input, 'workdir') : undefined;
+  if (typeof workdir !== 'string' || !workdir) return context.cwd;
+  return resolve(context.cwd, expandedPath(workdir, context.home) ?? workdir);
 }
 
 type Context = { cwd: string; home: string };
@@ -251,11 +245,7 @@ function lineRefusal(
     if (ancestor)
       return `${run.name} would read every file under ${ancestor === home ? '~' : ancestor.replace(home + sep, '~/')}, a Boat API key included.`;
   }
-  // Last, so a more specific reason above names the call first.
-  const config = commands.flat().find((word) => namesConfigRelatively(word.text, word.globs));
-  return config
-    ? `${config.raw} may be the Boat CLI's config in the folder the shell runs in; name a config file by its full path.`
-    : undefined;
+  return undefined;
 }
 
 /**
