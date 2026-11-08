@@ -287,11 +287,11 @@ export async function copyStorageObject({
 export type PromotedUpload = StorageObjectHead & { path: string };
 
 /**
- * The key one promotion of `path` writes: the folder and file name of `path`
- * with a fresh id before the name. No two promotions share a key, so a
- * promotion never writes a key another attempt already registered.
+ * The key one write attempt of `path` uses: the folder and file name of `path`
+ * with a fresh id before the name. No two attempts share a key, so an attempt
+ * never writes or removes a key another attempt already registered.
  */
-function uploadAttemptPath(path: string): string {
+export function attemptStoragePath(path: string): string {
   const nameStart = path.lastIndexOf('/') + 1;
   return `${path.slice(0, nameStart)}${randomUUID()}-${path.slice(nameStart)}`;
 }
@@ -308,7 +308,7 @@ export async function promoteUploadedObject({
   path,
 }: OrganizationScope & { path: string }): Promise<PromotedUpload> {
   const stagingPath = uploadStagingPath(organizationId, path);
-  const attemptPath = uploadAttemptPath(path);
+  const attemptPath = attemptStoragePath(path);
   try {
     await copyStorageObject({ organizationId, sourcePath: stagingPath, targetPath: attemptPath });
   } catch (error) {

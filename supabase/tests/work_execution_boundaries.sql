@@ -70,6 +70,19 @@ insert into public.document_links (organization_id, document_id, project_id, cre
 ('14170000-0000-0000-0000-000000000010', '14170000-0000-0000-0000-000000000060',
  '14170000-0000-0000-0000-000000000050', '14170000-0000-0000-0000-000000000001');
 
+-- A document of the lifecycle job, the source of its handover release.
+insert into public.documents (
+  id, organization_id, display_name, original_file_name, size_bytes, storage_path, uploaded_by
+) values (
+  '14170000-0000-0000-0000-0000000000b1', '14170000-0000-0000-0000-000000000010',
+  'Prüfprotokoll', 'pruefprotokoll.pdf', 1,
+  '14170000-0000-0000-0000-000000000010/14170000-0000-0000-0000-0000000000b1/pruefprotokoll.pdf',
+  '14170000-0000-0000-0000-000000000001'
+);
+insert into public.document_links (organization_id, document_id, job_id, created_by) values
+('14170000-0000-0000-0000-000000000010', '14170000-0000-0000-0000-0000000000b1',
+ '14170000-0000-0000-0000-000000000020', '14170000-0000-0000-0000-000000000001');
+
 -- Two jobs of the employee, each with a checklist, for the read-only checklist of finished work.
 insert into public.jobs (id, organization_id, title, job_number, created_by) values
 ('14170000-0000-0000-0000-000000000070', '14170000-0000-0000-0000-000000000010',
@@ -364,6 +377,122 @@ begin
   );
   if not exists (select 1 from public.work_handover_packages where job_id = v_job)
   then raise exception 'the handover draft was not recorded'; end if;
+end;
+$$;
+
+-- P1-17: a release registers its package under the storage key of its own
+-- attempt, `<release folder>/<attempt id>-<renderer>-<content hash>.html`, so
+-- two attempts never share a key. A key outside that form is refused before
+-- anything is written. The previous release's shared key still passes the
+-- check. A replay with another attempt's key answers with the registered
+-- package and registers nothing.
+do $$
+declare
+  v_org constant uuid := '14170000-0000-0000-0000-000000000010';
+  v_admin constant uuid := '14170000-0000-0000-0000-000000000001';
+  v_job constant uuid := '14170000-0000-0000-0000-000000000020';
+  v_package constant uuid := '14170000-0000-0000-0000-000000000041';
+  v_release constant uuid := '14170000-0000-0000-0000-0000000000b3';
+  v_request constant uuid := '14170000-0000-0000-0000-0000000000b4';
+  v_document constant uuid := '14170000-0000-0000-0000-0000000000b5';
+  v_name constant text := 'sql-test-v1-' || repeat('b', 64) || '.html';
+  v_folder constant text := v_org::text || '/work-handover-packages/' || v_release::text || '/';
+  v_attempt_path constant text := v_folder || '0f8fad5b-d9cb-469f-a165-70867728950e-' || v_name;
+  v_replay_path constant text := v_folder || '7c9e6679-7425-40de-944b-e07fc1f90ae7-' || v_name;
+  v_gate jsonb;
+  v_package_version bigint;
+  v_execution_version bigint;
+  v_case text[];
+  v_path text;
+  v_result jsonb;
+begin
+  select version into v_package_version from public.work_handover_packages where id = v_package;
+  v_result := public.save_work_handover_draft(
+    p_organization_id => v_org, p_target_type => 'job', p_target_id => v_job,
+    p_package_id => v_package, p_expected_version => v_package_version,
+    p_request_id => '14170000-0000-0000-0000-0000000000b6',
+    p_items => jsonb_build_array(jsonb_build_object(
+      'id', 'a3bb189e-8bf9-4888-9912-ace4e6543002', 'source_kind', 'document_version',
+      'document_id', '14170000-0000-0000-0000-0000000000b1', 'document_version_number', 1,
+      'document_storage_path',
+      '14170000-0000-0000-0000-000000000010/14170000-0000-0000-0000-0000000000b1/pruefprotokoll.pdf',
+      'customer_label', 'Prüfprotokoll', 'sort_order', 0
+    )),
+    p_actor_id => v_admin
+  );
+  select version into v_package_version from public.work_handover_packages where id = v_package;
+  select execution_version into v_execution_version from public.jobs where id = v_job;
+  v_gate := public.get_work_handover_gate_snapshot(v_org, v_admin, 'job', v_job);
+
+  -- The path check comes before the package version check: a refused key
+  -- reads as invalid input, an accepted key on a stale version as stale.
+  foreach v_case slice 1 in array array[
+    [v_folder || v_name, 'work_handover_stale_version'],
+    [v_attempt_path, 'work_handover_stale_version'],
+    [v_org::text || '/work-handover-packages/14170000-0000-0000-0000-0000000000b7/'
+      || '0f8fad5b-d9cb-469f-a165-70867728950e-' || v_name, 'work_handover_invalid_input'],
+    ['14170000-0000-0000-0000-000000000011/work-handover-packages/' || v_release::text
+      || '/0f8fad5b-d9cb-469f-a165-70867728950e-' || v_name, 'work_handover_invalid_input'],
+    [v_folder || 'anlage/0f8fad5b-d9cb-469f-a165-70867728950e-' || v_name, 'work_handover_invalid_input'],
+    [v_folder || '0f8fad5b-d9cb-469f-a165-70867728950e/' || v_name, 'work_handover_invalid_input'],
+    [v_folder || '0f8fad5b-d9cb-469f-a165-70867728950e-sql-test-v1-' || repeat('c', 64) || '.html',
+      'work_handover_invalid_input']
+  ] loop
+    v_path := v_case[1];
+    begin
+      perform public.release_work_handover(
+        p_organization_id => v_org, p_actor_id => v_admin, p_package_id => v_package,
+        p_release_id => v_release, p_request_id => gen_random_uuid(),
+        p_expected_package_version => v_package_version + 1,
+        p_expected_execution_version => v_execution_version,
+        p_expected_gate_fingerprint => v_gate ->> 'fingerprint',
+        p_handover_reason => 'Übergabe an Kunden', p_override_gates => true,
+        p_override_reason => 'Offener Blocker ist ausgewiesen.',
+        p_target_snapshot => '{}'::jsonb, p_time_summary => '{}'::jsonb,
+        p_material_summary => '{}'::jsonb, p_responsibility_snapshot => '{}'::jsonb,
+        p_unassessed_facts => '[]'::jsonb,
+        p_item_payloads => jsonb_build_array(jsonb_build_object(
+          'draft_item_id', 'a3bb189e-8bf9-4888-9912-ace4e6543002', 'customer_payload', '{}'::jsonb)),
+        p_document_id => gen_random_uuid(), p_document_link_id => gen_random_uuid(),
+        p_storage_path => v_path, p_file_name => 'uebergabe.html', p_size_bytes => 1,
+        p_renderer_version => 'sql-test-v1', p_content_hash => repeat('b', 64)
+      );
+      raise exception 'a release on a stale version was recorded';
+    exception when others then
+      if sqlerrm <> v_case[2] then
+        raise exception 'release key %: expected %, got %', v_path, v_case[2], sqlerrm;
+      end if;
+    end;
+  end loop;
+
+  -- The attempt's own key is registered; a replay with another attempt's key
+  -- answers with that package.
+  foreach v_path in array array[v_attempt_path, v_replay_path] loop
+    v_result := public.release_work_handover(
+      p_organization_id => v_org, p_actor_id => v_admin, p_package_id => v_package,
+      p_release_id => v_release, p_request_id => v_request,
+      p_expected_package_version => v_package_version,
+      p_expected_execution_version => v_execution_version,
+      p_expected_gate_fingerprint => v_gate ->> 'fingerprint',
+      p_handover_reason => 'Übergabe an Kunden', p_override_gates => true,
+      p_override_reason => 'Offener Blocker ist ausgewiesen.',
+      p_target_snapshot => '{}'::jsonb, p_time_summary => '{}'::jsonb,
+      p_material_summary => '{}'::jsonb, p_responsibility_snapshot => '{}'::jsonb,
+      p_unassessed_facts => '[]'::jsonb,
+      p_item_payloads => jsonb_build_array(jsonb_build_object(
+        'draft_item_id', 'a3bb189e-8bf9-4888-9912-ace4e6543002', 'customer_payload', '{}'::jsonb)),
+      p_document_id => case when v_path = v_attempt_path then v_document else gen_random_uuid() end,
+      p_document_link_id => gen_random_uuid(),
+      p_storage_path => v_path, p_file_name => 'uebergabe.html', p_size_bytes => 1,
+      p_renderer_version => 'sql-test-v1', p_content_hash => repeat('b', 64)
+    );
+    if (v_result ->> 'documentId')::uuid <> v_document
+      or (v_result ->> 'duplicate')::boolean <> (v_path = v_replay_path)
+    then raise exception 'release with key % answered %', v_path, v_result; end if;
+  end loop;
+  if (select array_agg(storage_path) from public.documents
+      where organization_id = v_org and storage_path like v_folder || '%') <> array[v_attempt_path]
+  then raise exception 'the release did not register exactly its own attempt''s key'; end if;
 end;
 $$;
 

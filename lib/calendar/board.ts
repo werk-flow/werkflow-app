@@ -35,6 +35,12 @@ type CalendarBoardAbsence = {
   portion: 'full' | 'half_day';
 };
 
+/** An absence by its kind; a sickness reads „Abwesend“, so the board never names it. */
+const ABSENCE_LABELS: Record<CalendarBoardAbsence['type'], string> = {
+  vacation: 'Urlaub',
+  sickness: 'Abwesend',
+};
+
 /** One person-day from the planning owner's target resolution. */
 export type CalendarBoardDay = {
   employeeRecordId: string;
@@ -207,11 +213,24 @@ export function describeCapacity(day: CalendarBoardDay, plannedMinutes: number):
   if (state === 'off') {
     if (day.reason === 'holiday') return `Feiertag${day.label ? `: ${day.label}` : ''}`;
     if (day.reason === 'closure') return `Betriebsruhe${day.label ? `: ${day.label}` : ''}`;
-    if (day.absence) return day.absence.type === 'vacation' ? 'Urlaub' : 'Abwesend';
+    if (day.absence) return ABSENCE_LABELS[day.absence.type];
     return 'Kein Arbeitstag';
   }
   const planned = formatShortHours(plannedMinutes);
   const target = formatShortHours(day.targetMinutes);
   const suffix = day.pendingVacation ? ', Urlaub angefragt' : '';
   return `${CAPACITY_STATE_LABELS[state]}: ${planned} von ${target} geplant${suffix}`;
+}
+
+/**
+ * Why a person is away on a capacity day, as the card and the pickers mark
+ * them: an approved absence, half or whole, or a vacation request still open;
+ * null when nothing of the kind is recorded.
+ */
+export function absenceMark(day: CalendarBoardDay | undefined): string | null {
+  if (day?.absence) {
+    const label = ABSENCE_LABELS[day.absence.type];
+    return day.absence.portion === 'half_day' ? `${label} (halber Tag)` : label;
+  }
+  return day?.pendingVacation ? 'Urlaub angefragt' : null;
 }
