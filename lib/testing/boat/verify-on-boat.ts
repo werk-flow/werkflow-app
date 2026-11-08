@@ -222,6 +222,30 @@ export function resultsArchiveProblem(verbose: string, names: string): string | 
   return undefined;
 }
 
+/**
+ * An existing symbolic link in the checkout that unpacking the archive would write through, or
+ * undefined. tar follows a link that already exists at a folder it writes into, so a member that
+ * passed resultsArchiveProblem could still land outside `.agent-logs/`.
+ */
+export function linkedDestination(repository: string, paths: readonly string[]): string | undefined {
+  const prefixes = new Set(
+    paths.flatMap((path) => {
+      const parts = path.split('/').filter(Boolean);
+      return parts.map((_, index) => parts.slice(0, index + 1).join('/'));
+    }),
+  );
+  for (const prefix of [...prefixes].sort()) {
+    let link = false;
+    try {
+      link = lstatSync(join(repository, prefix)).isSymbolicLink();
+    } catch {
+      continue;
+    }
+    if (link) return `${prefix} is a symbolic link in the checkout.`;
+  }
+  return undefined;
+}
+
 /** A Boat refusal in one line, with the renewal advice when Boat rejected the key itself. */
 export function boatFailure(error: unknown): string {
   if (error instanceof BoatError && (error.status === 401 || error.code.startsWith('api_key_')))
@@ -304,7 +328,8 @@ async function importResults(machine: Machine, folder: string, repository: strin
   const list = (flags: string) =>
     execFileSync('tar', [flags, archive], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   const refused = resultsArchiveProblem(list('-tvzf'), list('-tzf'));
-  if (refused) throw new Error(`The Boat results archive was refused: ${refused}`);
+  const linked = linkedDestination(repository, list('-tzf').split('\n').filter(Boolean));
+  if (refused ?? linked) throw new Error(`The Boat results archive was refused: ${refused ?? linked}`);
   execFileSync('tar', ['-xzf', archive, '--no-same-owner', '--no-same-permissions'], { cwd: repository });
 }
 

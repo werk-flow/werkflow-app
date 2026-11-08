@@ -1,7 +1,7 @@
 // Rule test: test:verify picks Boat only where a Boat run proves the same thing as a local one,
 // falls back to the local run on any Boat failure, and an unusable key says so in one line.
 import { expect, test } from 'bun:test';
-import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -14,6 +14,7 @@ import {
   evidenceFiles,
   localReason,
   machineBoundGroup,
+  linkedDestination,
   resultsArchiveProblem,
   withheldFile,
 } from './verify-on-boat';
@@ -270,4 +271,14 @@ test('only regular files and folders under .agent-logs come back from a Boat mac
   expect(resultsArchiveProblem(...listing([['-', '/home/user/.bashrc']]))).toContain('outside');
   expect(resultsArchiveProblem(...listing([['l', '.agent-logs/link']]))).toContain('not a regular file');
   expect(resultsArchiveProblem(...listing([['h', '.agent-logs/hard']]))).toContain('not a regular file');
+});
+
+test('results never unpack through a symbolic link that already exists in the checkout', () => {
+  const repository = mkdtempSync(join(tmpdir(), 'boat-links-'));
+  const outside = mkdtempSync(join(tmpdir(), 'boat-outside-'));
+  mkdirSync(join(repository, '.agent-logs', 'verification'), { recursive: true });
+  const report = ['.agent-logs/verification/r1/report.json'];
+  expect(linkedDestination(repository, report)).toBeUndefined();
+  symlinkSync(outside, join(repository, '.agent-logs', 'verification', 'r1'));
+  expect(linkedDestination(repository, report)).toContain('.agent-logs/verification/r1 is a symbolic link');
 });
