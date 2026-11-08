@@ -99,7 +99,9 @@ WERKFLOW_BOAT_PROOF_ENVIRONMENT="$(cat "$HOME/proof-environment")"
 export WERKFLOW_BOAT_PROOF_ENVIRONMENT
 bash .github/actions/local-stack/wait-for-edge-runtime.sh > "$HOME/edge.log" 2>&1 || { cat "$HOME/edge.log"; setup_failed "edge runtime"; }
 
-if bun run test:plan "$@" 2> /dev/null | grep -qE '^RUN +(golden|audit|canary):'; then
+# The whole plan first: grep -q on a pipe would stop the writer, and pipefail would hide the match.
+bun run test:plan "$@" > "$HOME/plan.txt" 2> /dev/null || setup_failed "test:plan"
+if grep -qE '^RUN +(golden|audit|canary):' "$HOME/plan.txt"; then
   phase "building and serving the app"
   origin="$(sed -n 's/^NEXT_PUBLIC_SITE_URL=//p' .env.local)"
   nohup bun run test:server local > "$HOME/test-server.log" 2>&1 &

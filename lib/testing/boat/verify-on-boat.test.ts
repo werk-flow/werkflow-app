@@ -9,7 +9,14 @@ import { BoatError, boatClient } from './boat-api';
 import { readBoatKey } from './boat-key';
 import { runScript } from './boat-machine';
 import { backendValueDigests } from '../evidence/proof-environment';
-import { boatFailure, evidenceFiles, localReason, machineBoundGroup, withheldFile } from './verify-on-boat';
+import {
+  boatFailure,
+  evidenceFiles,
+  localReason,
+  machineBoundGroup,
+  resultsArchiveProblem,
+  withheldFile,
+} from './verify-on-boat';
 
 test('change plans and ordinary groups may run on Boat', () => {
   expect(localReason([], {})).toBeUndefined();
@@ -244,4 +251,26 @@ test('a Boat proof stands for a workstation only where its code-hash secret is u
     secret('EMAIL_OTP_HASH_SECRET=x\n', { EMAIL_OTP_HASH_SECRET: ' ' }),
   ])
     expect(missing).not.toBe(boat);
+});
+
+test('only regular files and folders under .agent-logs come back from a Boat machine', () => {
+  const listing = (members: [string, string][]) =>
+    [
+      members.map(([type, path]) => `${type}rw-r--r-- user/user 2 2026-11-08 12:00 ${path}`).join('\n'),
+      members.map(([, path]) => path).join('\n'),
+    ] as const;
+  expect(resultsArchiveProblem(...listing([]))).toBeUndefined();
+  expect(
+    resultsArchiveProblem(
+      ...listing([
+        ['d', '.agent-logs/verification/r1/'],
+        ['-', '.agent-logs/verification/r1/report.json'],
+      ]),
+    ),
+  ).toBeUndefined();
+  expect(resultsArchiveProblem(...listing([['-', 'package.json']]))).toContain('outside .agent-logs/');
+  expect(resultsArchiveProblem(...listing([['-', '.agent-logs/../scripts/verify.ts']]))).toContain('outside');
+  expect(resultsArchiveProblem(...listing([['-', '/home/user/.bashrc']]))).toContain('outside');
+  expect(resultsArchiveProblem(...listing([['l', '.agent-logs/link']]))).toContain('not a regular file');
+  expect(resultsArchiveProblem(...listing([['h', '.agent-logs/hard']]))).toContain('not a regular file');
 });

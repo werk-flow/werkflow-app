@@ -69,7 +69,7 @@ On the machine with the watcher's token, `ops/ci-alert.py` also runs the product
 - `Production alert: server errors`: a burst of server errors against the week before, or a route that starts to fail. It adds a comment at most every few hours and closes a day after the newest error.
 - `Production alert: watcher`: several failed passes in a row, such as an expired token. `python3 -I ops/prod_watch.py --health` in werkflow-planning checks the token.
 
-On every machine with a Boat key, the pass opens `Owner action: Boat key` 14 days before the key expires and repeats it weekly until the [renewal](boat-verification.md#renew-the-key) (`ops/boat_key.py`).
+On every machine with a Boat key, the pass opens `Owner action: Boat key` before the key expires (`ops/boat_key.py`; [renew the key](boat-verification.md#renew-the-key) owns the schedule).
 
 Its thread reads no PROD data: no runtime log, build log, request record or row, and of a failed `Apply pending migrations to PROD` step only the result, since its log may quote a row. It works from the route, status, error code and commit range, and reproduces the failure on staging or the local stack. The watcher closes the deploy alert once production serves its head and no build is failed or stuck. It misses a handled failure answered below 500: no metric counts log levels.
 

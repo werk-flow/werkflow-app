@@ -197,6 +197,27 @@ function packRun(
   return { head, bundle: !pushed };
 }
 
+/**
+ * Why a results archive from the machine may not be unpacked into the checkout, or undefined. A
+ * party with access to the machine could replace it, so only regular files and folders under
+ * `.agent-logs/` come back: no link, device or other type, no absolute path and no `..`. `verbose`
+ * and `names` are `tar -tvzf` and `tar -tzf` of the same archive, one member per line.
+ */
+export function resultsArchiveProblem(verbose: string, names: string): string | undefined {
+  const types = verbose
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => line.charAt(0));
+  const paths = names.split('\n').filter(Boolean);
+  if (types.length !== paths.length) return 'its listing could not be read.';
+  for (const [index, path] of paths.entries()) {
+    if (types[index] !== '-' && types[index] !== 'd') return `${path} is not a regular file or folder.`;
+    if (!path.startsWith('.agent-logs/') || path.split('/').includes('..'))
+      return `${path} lies outside .agent-logs/.`;
+  }
+  return undefined;
+}
+
 /** A Boat refusal in one line, with the renewal advice when Boat rejected the key itself. */
 export function boatFailure(error: unknown): string {
   if (error instanceof BoatError && (error.status === 401 || error.code.startsWith('api_key_')))
@@ -272,6 +293,17 @@ async function uploadRun(
     await machine.client.upload(machine.id, `${HOME}/${name}`, readFileSync(source));
 }
 
+/** Downloads the run's results, checks the archive and unpacks it into the checkout. */
+async function importResults(machine: Machine, folder: string, repository: string): Promise<void> {
+  const archive = join(folder, 'results.tgz');
+  writeFileSync(archive, await machine.client.download(machine.id, `${HOME}/results.tgz`));
+  const list = (flags: string) =>
+    execFileSync('tar', [flags, archive], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  const refused = resultsArchiveProblem(list('-tvzf'), list('-tzf'));
+  if (refused) throw new Error(`The Boat results archive was refused: ${refused}`);
+  execFileSync('tar', ['-xzf', archive, '--no-same-owner', '--no-same-permissions'], { cwd: repository });
+}
+
 async function runOnBoat(input: {
   args: readonly string[];
   repository: string;
@@ -328,9 +360,7 @@ async function runOnBoat(input: {
       );
       return undefined;
     }
-    const results = await client.download(machine.id, `${HOME}/results.tgz`);
-    writeFileSync(join(folder, 'results.tgz'), results);
-    execFileSync('tar', ['-xzf', join(folder, 'results.tgz')], { cwd: repository });
+    await importResults(machine, folder, repository);
     // The machine pruned only its copy of the archive; the workstation's shrinks as after a local run.
     console.info(pruneRunArchive('prune'));
     code = result.exitCode;
