@@ -162,7 +162,8 @@ export async function addManualEntry(rawParams: AddManualEntryParams): Promise<A
  */
 async function pendingSubmissionEntryIds(
   admin: ReturnType<typeof createSupabaseAdminClient>,
-  entry: { id: string; organization_id: string; user_id: string; timestamp: string },
+  organizationId: string,
+  entry: { id: string; user_id: string; timestamp: string },
 ): Promise<string[] | null> {
   const { start, end } = getDayBounds(new Date(entry.timestamp));
   const { data, error } = await readCompleteRows(
@@ -170,7 +171,7 @@ async function pendingSubmissionEntryIds(
       admin
         .from('time_entries')
         .select('*')
-        .eq('organization_id', entry.organization_id)
+        .eq('organization_id', organizationId)
         .eq('user_id', entry.user_id)
         .eq('status', 'pending')
         .eq('is_manual', true)
@@ -214,13 +215,14 @@ export async function withdrawPendingSubmission(rawEntryId: string): Promise<Wit
     if (entryError) return { success: false, error: 'load_failed' };
     if (!entry) return { success: false, error: 'entry_not_found' };
 
-    if (!(await verifyCurrentMembership(entry.organization_id))) {
+    const callerRole = await verifyCurrentMembership(entry.organization_id);
+    if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
     if (entry.user_id !== user.id) return { success: false, error: 'not_authorized' };
     if (entry.status !== 'pending' || !entry.is_manual) return { success: false, error: 'entry_not_pending' };
 
-    const entryIds = await pendingSubmissionEntryIds(admin, entry);
+    const entryIds = await pendingSubmissionEntryIds(admin, entry.organization_id, entry);
     if (!entryIds) return { success: false, error: 'load_failed' };
 
     const { data: withdrawn, error: withdrawError } = await admin.rpc('withdraw_pending_time_entries', {

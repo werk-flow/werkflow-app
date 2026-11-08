@@ -211,8 +211,8 @@ function TimeCorrectionJobField({
 function TimeCorrectionKindField({
   kind,
   setKind,
-  kinds,
-}: Pick<TimeCorrectionDialogForm, 'kind' | 'setKind'> & { kinds: readonly TimeCorrectionKind[] }) {
+  isOffice,
+}: Pick<TimeCorrectionDialogForm, 'kind' | 'setKind'> & { isOffice: boolean }) {
   return (
     <Field label="Korrektur" className="gap-1.5">
       <Select
@@ -225,7 +225,8 @@ function TimeCorrectionKindField({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {kinds.map((value) => (
+          {/* Only Admin and Büro move an entry to another person. */}
+          {SOURCE_KINDS.filter((value) => value !== 'reassign' || isOffice).map((value) => (
             <SelectItem key={value} value={value}>
               {TIME_CORRECTION_KIND_LABELS[value]}
             </SelectItem>
@@ -262,7 +263,6 @@ export function TimeCorrectionDialogFields({ entry, form }: TimeCorrectionDialog
     (person) => person.employeeRecordId === options.currentEmployeeRecordId,
   )?.role;
   const isOffice = callerRole !== undefined && isManagerRole(callerRole);
-  const sourceKinds = SOURCE_KINDS.filter((value) => value !== 'reassign' || isOffice);
 
   return (
     <>
@@ -271,7 +271,7 @@ export function TimeCorrectionDialogFields({ entry, form }: TimeCorrectionDialog
       ) : (
         <>
           {/* Added time has one kind („Zeit nachtragen“); only a correction of an entry chooses what changes. */}
-          {entry ? <TimeCorrectionKindField kind={kind} setKind={setKind} kinds={sourceKinds} /> : null}
+          {entry ? <TimeCorrectionKindField kind={kind} setKind={setKind} isOffice={isOffice} /> : null}
 
           <TimeCorrectionPersonFields entry={entry} form={form} canChoosePerson={isOffice} />
 
