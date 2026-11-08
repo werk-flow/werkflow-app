@@ -4,7 +4,7 @@
 
 ## How to work
 
-Write each test at its boundary while you build the behavior. Run the narrowest check after each edit.
+Write each test at its boundary while you build the behavior.
 
 ### Choose the boundary for a rule
 
@@ -31,7 +31,7 @@ A useful test survives an equivalent implementation. Check a regression test aga
 1. After each edit: `bun run test:unit <path>`, `bun run test:ui <spec>`, or `bun run test:verify --group <id>` for one SQL or browser group.
 2. Before you push: `bun run check:changed`. It checks every file changed since the merge base, committed or not.
 3. Before you finish: `bun run test:plan`, and read why each group is selected.
-4. At the end: `bun run test:verify` for the whole plan.
+4. At the end: `bun run test:verify` for the whole plan ([on Boat](boat-verification.md) with a key).
 
 ### Wait for a long run
 
