@@ -22,21 +22,24 @@ import { logError } from '@/lib/logging';
 /**
  * The organization's open vacation requests, read once per request: the
  * pending ones the approvers decide, and the approved ones ending on `today`
- * or later, whose planned visits the planners replan. By start date.
+ * or later, whose planned visits the planners replan. By start date. Outside
+ * a GET read scope every call reads fresh, so an action sees its own writes.
  */
-export const readOpenVacationRequests = memoizeRequestRead(async (organizationId: string, today: string) =>
-  readCompleteRows(
-    (from, to) =>
-      createSupabaseAdminClient()
-        .from('vacation_requests')
-        .select('*')
-        .eq('organization_id', organizationId)
-        .or(`status.eq.pending,and(status.eq.approved,end_date.gte.${today})`)
-        .order('start_date', { ascending: true })
-        .order('id')
-        .range(from, to),
-    LIST_ROW_CAP,
-  ),
+export const readOpenVacationRequests = memoizeRequestRead(
+  async (organizationId: string, today: string) =>
+    readCompleteRows(
+      (from, to) =>
+        createSupabaseAdminClient()
+          .from('vacation_requests')
+          .select('*')
+          .eq('organization_id', organizationId)
+          .or(`status.eq.pending,and(status.eq.approved,end_date.gte.${today})`)
+          .order('start_date', { ascending: true })
+          .order('id')
+          .range(from, to),
+      LIST_ROW_CAP,
+    ),
+  { outsideRequest: 'fresh' },
 );
 
 /**
