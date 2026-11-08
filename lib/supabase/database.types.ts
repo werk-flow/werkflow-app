@@ -8156,6 +8156,36 @@ export type Database = {
           },
         ];
       };
+      storage_purge_queue: {
+        Row: {
+          attempts: number;
+          id: string;
+          last_attempt_at: string | null;
+          organization_id: string;
+          purge_after: string;
+          queued_at: string;
+          storage_path: string;
+        };
+        Insert: {
+          attempts?: number;
+          id?: string;
+          last_attempt_at?: string | null;
+          organization_id: string;
+          purge_after: string;
+          queued_at?: string;
+          storage_path: string;
+        };
+        Update: {
+          attempts?: number;
+          id?: string;
+          last_attempt_at?: string | null;
+          organization_id?: string;
+          purge_after?: string;
+          queued_at?: string;
+          storage_path?: string;
+        };
+        Relationships: [];
+      };
       subscriptions: {
         Row: {
           created_at: string;
@@ -13238,6 +13268,14 @@ export type Database = {
           user_id: string;
         }[];
       };
+      claim_storage_purge: {
+        Args: { p_limit: number };
+        Returns: {
+          id: string;
+          organization_id: string;
+          storage_path: string;
+        }[];
+      };
       clear_project_execution_override: {
         Args: {
           p_actor_id: string;
@@ -13368,6 +13406,7 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      complete_storage_purge: { Args: { p_ids: string[] }; Returns: undefined };
       consume_rate_limit: {
         Args: {
           p_action: string;
@@ -14485,6 +14524,15 @@ export type Database = {
           p_actor_id: string;
           p_confirmation_name: string;
           p_organization_id: string;
+        };
+        Returns: undefined;
+      };
+      delete_organization_with_files: {
+        Args: {
+          p_actor_id: string;
+          p_confirmation_name: string;
+          p_organization_id: string;
+          p_storage_paths: string[];
         };
         Returns: undefined;
       };
@@ -15607,6 +15655,10 @@ export type Database = {
           p_template_id: string;
         };
         Returns: string;
+      };
+      queue_storage_purge: {
+        Args: { p_organization_id: string; p_paths: string[] };
+        Returns: undefined;
       };
       read_time_correction_applications: {
         Args: {

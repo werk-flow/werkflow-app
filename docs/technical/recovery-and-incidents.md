@@ -7,7 +7,7 @@ What a backup can restore, what loss the owner accepted, and who acts in an inci
 | Data | Protection | Limit |
 | --- | --- | --- |
 | Postgres on Supabase PROD | Daily provider backups, seven-day retention | Up to 24 hours of writes can be lost. No point-in-time recovery. |
-| File bytes in the production R2 bucket | Durable object storage; the app's trash keeps a deleted document until permanent deletion | No object versioning. A permanently deleted or overwritten object is gone. The database backup holds no bytes. |
+| File bytes in the production R2 bucket | Durable object storage; the app's trash keeps a deleted document until permanent deletion. A permanent deletion or an organization deletion takes effect in the app at once and in storage eight days later, one day past the backups, so a restored row finds its file ([storage cleanup](document-storage-and-access.md#storage-cleanup)). | No object versioning. An object is gone once the purge deleted it. The database backup holds no bytes. |
 | Auth users and sessions | In the database backup | Treat a dump as a credential. A restored session row revokes no issued token. |
 | Configuration and secrets | Manual: provider dashboards, the owner's password manager, the gitignored env backups | No automated export. Update the env backups after every provider change. |
 | Edge function source | `supabase/functions/` in git | Function secrets exist only in each project's secret store. |
@@ -44,16 +44,16 @@ A missing object fails acceptance. The journal names missing documents and orpha
 ## Restore procedure (database)
 
 1. Record source, target, backup timestamp, application revision, expected loss and rollback limits. Get the owner's authorization. Never load production material into DEV or the local stack.
-2. Stop writes through enforced maintenance or provider controls, and notify the customer; staff work on paper and by phone until writes reopen. A notice alone stops no direct client, job or session.
+2. Stop writes through enforced maintenance or provider controls, and notify the customer; staff work on paper and by phone until writes reopen. A notice alone stops no direct client, job or session. Pause the storage purge until step 5 is done: remove `CRON_SECRET` from Vercel Production and redeploy production, since a variable change reaches only a new deployment. Before the restore, confirm that `/api/storage-purge` answers 503 and that no purge request is still running; a run that has not started yet never will. The paused route deletes nothing and raises the production-watcher alert. After step 5, set a new value and redeploy again.
 3. Follow the provider's current restore procedure. Run only the authorized operation and keep its result. A partial load or a nonzero exit is a failed restore.
 4. Compare `supabase_migrations.schema_migrations` on the target with the intended revision, and check that `cron.job` holds the scheduled jobs. `bun run migrations:check` checks DEV only. For a missing migration, follow [the migration rule](environments.md#the-migration-rule) without relinking the CLI to production.
-5. Reconcile current and historical document and version paths against the correct bucket, with the rehearsal's path query and comparison (`lib/testing/runs/recovery-rehearsal.ts`). Metadata without an object means missing bytes. An object uploaded after the backup can survive without metadata. Keep orphan objects for review; never purge them automatically.
+5. Reconcile current and historical document and version paths against the correct bucket, with the rehearsal's path query and comparison (`lib/testing/runs/recovery-rehearsal.ts`). Metadata without an object means missing bytes. An object uploaded after the backup, or one whose deletion was queued after it, can survive without metadata or queue entry. Keep orphan objects for review; never purge them automatically.
 6. Check tenant and role access, protected documents and session revocation. A database restore revokes no token.
 7. Run the provider canary on cloud DEV; it does not prove production recovery. On production, use metadata and configuration checks and the customer verification the owner agreed before you resume writes. Record unresolved evidence and every loss.
 
 ## Restore procedure (files)
 
-Restore a trashed document in the app (`/dokumente`, Papierkorb). A permanently deleted object is gone. If a whole bucket is lost, the database still holds every path and size, so the owner can ask customers to upload again.
+Restore a trashed document in the app (`/dokumente`, Papierkorb). A permanently deleted document's bytes stay in storage for eight days, so a database restore within that window finds them; after the purge they are gone. If a whole bucket is lost, the database still holds every path and size, so the owner can ask customers to upload again.
 
 ## Monitoring
 

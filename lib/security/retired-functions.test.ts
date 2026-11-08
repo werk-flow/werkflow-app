@@ -26,6 +26,7 @@ const SQL_CALLERS: Readonly<Record<string, string>> = {
   close_time_period_p1_23_base: 'close_time_period',
   close_time_session_for_member_removal: 'remove_member_with_time_capture',
   create_maintenance_plan: 'create_maintenance_plan_with_due_work',
+  delete_organization: 'delete_organization_with_files',
   create_payroll_mapping_version_p1_23_base: 'create_payroll_mapping_version',
   fail_payroll_export_p1_23_base: 'fail_payroll_export',
   finalize_personnel_document_metadata_base: 'finalize_personnel_document_metadata',
