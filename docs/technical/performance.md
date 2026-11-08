@@ -74,7 +74,6 @@ A metric earns its gate by two jobs: it repeats across five runs within toleranc
 - A count reference moves down without review. Only `ratchet` and `calibrate` write it. Never edit `lib/testing/lab-count-references.json` by hand: every reference replays from its history, and a hand edit fails.
 - A count of ten or more keeps a tolerance of one or 2 %, whichever is larger.
 - A payload is judged by decoded bytes and rows. Per-shape request counts, the encoded size of a streamed text response and prefetch shapes print only, because they follow timing.
-- An improvement not lowered fails in release mode.
 - A lab step fails when it released a live read that a dialog held since before the step (`<html data-live-read-held>`). Settle the page before you open the dialog: `settleLiveShell` waits until no live read is queued or running.
 - A request shape is named by its route pattern or background-read kind, never by ids or query values.
 
