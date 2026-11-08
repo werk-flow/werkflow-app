@@ -1,11 +1,12 @@
 'use server';
-import { loggedRead } from '@/lib/data/read-request-cache';
+import { loggedRead, logReadFailure } from '@/lib/data/read-request-cache';
 import { revalidatePath } from 'next/cache';
 import { logError } from '@/lib/logging';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
-import { readInBatches } from '@/lib/supabase/query-batches';
+import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { getAuthenticatedUser } from '@/lib/data/cached';
+import { uuidSchema } from '@/lib/validation/uuid';
 import { readOrganizationSettings } from './organization-settings-read';
 import {
   addManualEntryInputSchema,
@@ -20,6 +21,7 @@ import {
   type UpdateEntryResult,
   type DeleteEntryResult,
   type RequestChangeResult,
+  type WithdrawSubmissionResult,
   toTimeEntry,
   toTimeEntries,
 } from './types';
@@ -31,7 +33,8 @@ import {
   touchesClosedTimePeriod,
 } from './closed-periods';
 import { refuseEntryEdit } from './entry-edit-checks';
-import { verifyCurrentMembership } from './action-access';
+import { getDayBounds, verifyCurrentMembership } from './action-access';
+import { groupPendingEntries } from './pending-sessions';
 import { stageManualEntries } from './manual-entry-staging';
 
 // The Server Actions that write time entries: manual entries, edits and deletes.
@@ -147,6 +150,94 @@ export async function addManualEntry(rawParams: AddManualEntryParams): Promise<A
     return { success: true, entries: toTimeEntries(newEntries) };
   } catch (error) {
     logError('Unexpected error in addManualEntry:', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
+/**
+ * The ids of the pending manual submission that holds the entry: the
+ * author's own pending manual entries of its Berlin day, grouped as the
+ * approvers see them (pending-sessions.ts). Null when the read fails, is
+ * cut off, or no longer holds the entry.
+ */
+async function pendingSubmissionEntryIds(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  organizationId: string,
+  entry: { id: string; user_id: string; timestamp: string },
+): Promise<string[] | null> {
+  const { start, end } = getDayBounds(new Date(entry.timestamp));
+  const { data, error } = await readCompleteRows(
+    (from, to) =>
+      admin
+        .from('time_entries')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .eq('user_id', entry.user_id)
+        .eq('status', 'pending')
+        .eq('is_manual', true)
+        .gte('timestamp', start.toISOString())
+        .lte('timestamp', end.toISOString())
+        .order('timestamp')
+        .order('id')
+        .range(from, to),
+    LIST_ROW_CAP,
+  );
+  if (error) {
+    logReadFailure('withdrawPendingSubmission: time_entries read failed', error);
+    return null;
+  }
+  // The entry was read as pending a moment ago: a day read without it is incomplete.
+  const group = groupPendingEntries(data).find((candidate) =>
+    candidate.entries.some((row) => row.id === entry.id),
+  );
+  return group ? group.entries.map((row) => row.id) : null;
+}
+
+/**
+ * Withdraws the caller's own pending manual submission that holds the entry,
+ * before an approver decides it. Only its author withdraws it; the database
+ * removes the entries and records the withdrawal in one transaction.
+ */
+export async function withdrawPendingSubmission(rawEntryId: string): Promise<WithdrawSubmissionResult> {
+  try {
+    const parsed = uuidSchema.safeParse(rawEntryId);
+    if (!parsed.success) return { success: false, error: 'invalid_input' };
+    const user = await getAuthenticatedUser();
+    if (!user) return { success: false, error: 'not_authenticated' };
+
+    const admin = createSupabaseAdminClient();
+    // tenant-scope: by-id-then-verified — the caller's membership in the entry's organization is verified next, and the withdrawal filters by that organization.
+    const { data: entry, error: entryError } = await admin
+      .from('time_entries')
+      .select('id, organization_id, user_id, timestamp, status, is_manual')
+      .eq('id', parsed.data)
+      .maybeSingle();
+    if (entryError) return { success: false, error: 'load_failed' };
+    if (!entry) return { success: false, error: 'entry_not_found' };
+
+    const callerRole = await verifyCurrentMembership(entry.organization_id);
+    if (!callerRole) {
+      return { success: false, error: 'not_a_member' };
+    }
+    if (entry.user_id !== user.id) return { success: false, error: 'not_authorized' };
+    if (entry.status !== 'pending' || !entry.is_manual) return { success: false, error: 'entry_not_pending' };
+
+    const entryIds = await pendingSubmissionEntryIds(admin, entry.organization_id, entry);
+    if (!entryIds) return { success: false, error: 'load_failed' };
+
+    const { data: withdrawn, error: withdrawError } = await admin.rpc('withdraw_pending_time_entries', {
+      p_actor_id: user.id,
+      p_organization_id: entry.organization_id,
+      p_entry_ids: entryIds,
+    });
+    if (withdrawError) {
+      return timeEntryBatchFailure('Error withdrawing entries:', withdrawError, 'withdraw_failed');
+    }
+
+    revalidatePath('/zeiterfassung');
+    return { success: true, withdrawn: withdrawn ?? entryIds.length };
+  } catch (error) {
+    logError('Unexpected error in withdrawPendingSubmission:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }

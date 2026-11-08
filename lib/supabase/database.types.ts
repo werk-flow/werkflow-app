@@ -9713,6 +9713,44 @@ export type Database = {
           },
         ];
       };
+      time_entry_withdrawals: {
+        Row: {
+          actor_id: string;
+          created_at: string;
+          entry_id: string;
+          entry_timestamp: string;
+          id: string;
+          organization_id: string;
+          withdrawn_entry: Json;
+        };
+        Insert: {
+          actor_id: string;
+          created_at?: string;
+          entry_id: string;
+          entry_timestamp: string;
+          id?: string;
+          organization_id: string;
+          withdrawn_entry: Json;
+        };
+        Update: {
+          actor_id?: string;
+          created_at?: string;
+          entry_id?: string;
+          entry_timestamp?: string;
+          id?: string;
+          organization_id?: string;
+          withdrawn_entry?: Json;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_entry_withdrawals_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       time_operations: {
         Row: {
           actor_id: string | null;
@@ -18301,6 +18339,14 @@ export type Database = {
           p_reason: string;
         };
         Returns: undefined;
+      };
+      withdraw_pending_time_entries: {
+        Args: {
+          p_actor_id: string;
+          p_entry_ids: string[];
+          p_organization_id: string;
+        };
+        Returns: number;
       };
       withdraw_time_account_adjustment: {
         Args: {

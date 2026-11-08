@@ -19,11 +19,16 @@ function dayLabel(day: ProvisionalTimeSummaryData['days'][number]): string {
     : `${formatBerlin(day.first, 'weekdayDate')} bis ${formatBerlin(day.last, 'weekdayDate')}`;
 }
 
-/** „Eine Korrektur für Mo., 26.10. wartet auf eine Entscheidung.“, naming every day it changes. */
-function pendingSentence({ count, days }: ProvisionalTimeSummaryData): string {
-  const subject = count === 1 ? 'Eine Korrektur' : `${count} Korrekturen`;
+/** „Eine Korrektur und ein Nachtrag für Mo., 26.10. warten auf eine Entscheidung.“, naming every day they change. */
+function pendingSentence({ count, submissionCount, days }: ProvisionalTimeSummaryData): string {
+  const parts = [
+    count === 0 ? null : count === 1 ? 'eine Korrektur' : `${count} Korrekturen`,
+    submissionCount === 0 ? null : submissionCount === 1 ? 'ein Nachtrag' : `${submissionCount} Nachträge`,
+  ].filter((part) => part !== null);
+  const subject = parts.join(' und ');
   const forDays = days.length > 0 ? ` für ${dayList.format(days.map(dayLabel))}` : '';
-  return `${subject}${forDays} ${count === 1 ? 'wartet' : 'warten'} auf eine Entscheidung.`;
+  const verb = count + submissionCount === 1 ? 'wartet' : 'warten';
+  return `${subject.charAt(0).toUpperCase()}${subject.slice(1)}${forDays} ${verb} auf eine Entscheidung.`;
 }
 
 export function ProvisionalTimeSummary({
@@ -34,12 +39,22 @@ export function ProvisionalTimeSummary({
   userId: string;
 }) {
   const view = useLiveView<ProvisionalTimeSummaryData>({
-    tables: ['time_correction_requests'],
+    // The accepted day comes from recorded entries and live capture too.
+    tables: ['time_correction_requests', 'time_entries', 'time_sessions', 'time_segments'],
     read: async ({ signal }): Promise<LiveViewResult<ProvisionalTimeSummaryData>> => {
       const result = await readInBackground('provisional-time-summary', { organizationId, userId }, signal);
       return result.success ? { ok: true, data: result } : { ok: false };
     },
     resetKey: `${organizationId}:${userId}`,
+    // Admin and Büro receive every member's clock rows; only this person's
+    // entries and sessions change the summary. Correction and segment events
+    // stay relevant (a reassignment names a second person; a segment names
+    // none), and so does any row whose person the event does not carry.
+    eventFilter: (event) => {
+      if (event.table !== 'time_entries' && event.table !== 'time_sessions') return true;
+      const person = (event.new ?? event.old)?.user_id;
+      return typeof person !== 'string' || person === userId;
+    },
   });
   const summary = view.data;
   if (view.isLoading) return null;
@@ -47,11 +62,11 @@ export function ProvisionalTimeSummary({
   if (!summary) {
     return (
       <SectionError className="mb-4" onRetry={() => void view.refresh()} retryPending={view.isRefreshing}>
-        Offene Zeitkorrekturen konnten nicht geladen werden.
+        Offene Korrekturen und Nachträge konnten nicht geladen werden.
       </SectionError>
     );
   }
-  if (summary.count === 0) return null;
+  if (summary.count + summary.submissionCount === 0) return null;
   const delta = summary.proposedMinutes - summary.beforeMinutes;
   return (
     <StaleRegion stale={view.isStale} onRetry={view.refresh}>

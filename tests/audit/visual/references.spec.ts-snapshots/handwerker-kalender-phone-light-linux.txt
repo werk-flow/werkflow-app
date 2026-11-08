@@ -2,7 +2,7 @@ Menü öffnen
 Kalender
 01.01.26
 Heute
-Kalendereintrag
+Zeit nachtragen
 Tag
 Woche
 Monat

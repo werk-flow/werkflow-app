@@ -58,6 +58,7 @@ type CalendarActionErrorCode =
   | 'not_authorized'
   | 'not_found'
   | 'organization_changed'
+  | 'past_day_needs_reason'
   | 'period_closed'
   | 'planning_history_exists'
   | 'planning_warning'
@@ -211,6 +212,8 @@ const CALENDAR_MESSAGES = {
   break_mode_automatic:
     'Pausen werden in dieser Organisation automatisch berechnet und lassen sich nicht einzeln ändern.',
   clock_out_incomplete: 'Die Person ist noch eingestempelt. Beende zuerst die laufende Arbeitszeit.',
+  past_day_needs_reason:
+    'Für einen vergangenen Tag braucht die Freigabe einen Grund. Gib ihn an und speichere erneut.',
   entry_not_pending: REQUEST_STATE,
   request_not_pending: REQUEST_STATE,
   request_already_reviewed: REQUEST_STATE,

@@ -314,7 +314,8 @@ function timeCorrectionFailure(error: string): string {
 
 // The fields of one correction, from the entry it starts with.
 function useTimeCorrectionFieldState(entry: TimeEntry | undefined) {
-  const [kind, setKind] = useState<TimeCorrectionKind>(entry ? 'edit' : 'missed_clock');
+  // Added time is one kind: 'add' and the older 'missed_clock' apply alike.
+  const [kind, setKind] = useState<TimeCorrectionKind>(entry ? 'edit' : 'add');
   const initialStart = toLocalDateTime(entry?.timestamp ?? new Date().toISOString());
   const [startAt, setStartAt] = useState(initialStart);
   const [splitAt, setSplitAt] = useState(oneHourAfter(initialStart));

@@ -883,6 +883,18 @@ export async function seedJobAssignment(input: {
     .throwOnError();
 }
 
+/** The id of the job with this number. */
+export async function getJobIdByNumber(orgId: string, jobNumber: string): Promise<string> {
+  const { data, error } = await createAdminClient()
+    .from('jobs')
+    .select('id')
+    .eq('organization_id', orgId)
+    .eq('job_number', jobNumber)
+    .single();
+  if (error || !data) throw new Error(`Job lookup failed for ${jobNumber}: ${error?.message}`);
+  return data.id;
+}
+
 /** The sorted user ids assigned to the job with this number. */
 export async function getJobAssignmentUserIds(orgId: string, jobNumber: string): Promise<string[]> {
   const admin = createAdminClient();

@@ -14,6 +14,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { useOrganization } from '@/components/organization/organization-context';
+import { isManagerRole } from '@/lib/roles';
 import type { ClosedTimePeriod } from '@/lib/time-tracking/closed-period-dates';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { TimeCorrectionDialogFields } from './time-correction-dialog-fields';
@@ -39,6 +41,18 @@ function TimeCorrectionTrigger({ entry }: { entry: TimeEntry | undefined }) {
         {entry ? 'Korrigieren' : 'Zeit nachtragen'}
       </Button>
     </DialogTrigger>
+  );
+}
+
+/** The sentence about other people's time applies to Admin and Büro only. */
+function TimeCorrectionDescription() {
+  const { activeOrg } = useOrganization();
+  return (
+    <DialogDescription>
+      {activeOrg !== null && isManagerRole(activeOrg.role)
+        ? 'Eigene Änderungen gehen zur Prüfung. Freigabeberechtigte können Zeiten anderer Personen direkt korrigieren.'
+        : 'Deine Änderung geht zur Prüfung.'}
+    </DialogDescription>
   );
 }
 
@@ -70,10 +84,7 @@ export function TimeCorrectionDialog({
       <DialogContent size="xl">
         <DialogHeader>
           <DialogTitle>Zeitkorrektur</DialogTitle>
-          <DialogDescription>
-            Eigene Änderungen gehen zur Prüfung. Freigabeberechtigte können Zeiten anderer Personen direkt
-            korrigieren.
-          </DialogDescription>
+          <TimeCorrectionDescription />
         </DialogHeader>
         <DialogBody className="space-y-4">
           {kind !== 'delete' ? (

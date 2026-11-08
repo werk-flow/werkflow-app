@@ -384,6 +384,9 @@ export type UpdateEntryResult =
 
 export type DeleteEntryResult = { success: true } | ActionFailure;
 
+/** A withdrawn pending submission: how many of its entries left the time record. */
+export type WithdrawSubmissionResult = { success: true; withdrawn: number } | ActionFailure;
+
 export type GetTimeEntriesResult =
   | {
       success: true;

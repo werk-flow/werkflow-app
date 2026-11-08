@@ -183,6 +183,7 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   time_correction_requests: 'Zeitkorrekturen',
   time_entries: 'Zeiterfassung_Buchungen',
   time_entry_audit_events: 'Zeiterfassung_Protokoll',
+  time_entry_withdrawals: 'Zeiterfassung_Rücknahmen',
   time_operations: 'Zeiterfassung_Vorgänge',
   time_period_calculations: 'Perioden_Berechnungen',
   time_period_close_versions: 'Perioden_Abschlüsse',

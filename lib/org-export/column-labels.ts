@@ -723,6 +723,7 @@ export const COLUMN_LABELS: Record<LabeledColumn, string> = {
   window_start_date: 'Zeitfenster ab (Datum)',
   window_start_time: 'Zeitfenster ab (Uhrzeit)',
   withdrawal_reason: 'Grund der Rücknahme',
+  withdrawn_entry: 'Zurückgenommene Buchung',
   witness_context: 'Zeugen',
   wording_snapshot: 'Wortlaut',
   work_artifact_revision_id: 'Arbeitsnachweis-Fassung (ID)',

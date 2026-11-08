@@ -25,9 +25,18 @@ const strangerUser = '40000000-0000-4000-8000-000000000004';
 // Recorded entries of a person who has left the organization: no membership row.
 const formerUser = '40000000-0000-4000-8000-000000000005';
 const formerIn = '20000000-0000-4000-8000-000000000008';
+// The caller's own pending manual submission, and a colleague's.
+const callerPendingIn = '20000000-0000-4000-8000-000000000009';
+const callerPendingOut = '20000000-0000-4000-8000-000000000010';
+const colleaguePending = '20000000-0000-4000-8000-000000000011';
 const today = new Date(Date.now() - 1000).toISOString();
 const yesterday = (hour: number): string => {
   const date = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  date.setHours(hour, 0, 0, 0);
+  return date.toISOString();
+};
+const twoDaysAgo = (hour: number): string => {
+  const date = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
   date.setHours(hour, 0, 0, 0);
   return date.toISOString();
 };
@@ -69,6 +78,16 @@ const tables: InMemoryTables = {
     { ...entry(ownPending, ownOrganization, employeeUser, 'clock_in', yesterday(6)), status: 'pending' },
     {
       ...entry(foreignPending, foreignOrganization, strangerUser, 'clock_in', yesterday(6)),
+      status: 'pending',
+    },
+    { ...entry(callerPendingIn, ownOrganization, callerUser, 'clock_in', yesterday(10)), status: 'pending' },
+    {
+      ...entry(callerPendingOut, ownOrganization, callerUser, 'clock_out', yesterday(11)),
+      status: 'pending',
+      created_at: yesterday(10),
+    },
+    {
+      ...entry(colleaguePending, ownOrganization, colleagueUser, 'clock_in', twoDaysAgo(10)),
       status: 'pending',
     },
   ],
@@ -207,9 +226,8 @@ mock.module('@/lib/responsibilities/server', () => ({
   ...responsibilities,
   authorizeResponsibilityForTargets: async () => ({ success: true }),
 }));
-const { addManualEntry, deleteEntry, deleteEntriesBatch, updateEntry } = await import(
-  '@/lib/time-tracking/entry-write-actions'
-);
+const { addManualEntry, deleteEntry, deleteEntriesBatch, updateEntry, withdrawPendingSubmission } =
+  await import('@/lib/time-tracking/entry-write-actions');
 const { reviewEntries, reviewChangeRequest } = await import('@/lib/time-tracking/review-actions');
 const { getCurrentClockState } = await import('@/lib/time-tracking/clock-state-actions');
 const { getTimeEntries, getTimeEntriesForJob, getTimeEntryAuditEvents } = await import(
@@ -503,3 +521,51 @@ assert.equal(jobOf(colleagueIn), null);
 // An employee reads no audit of Admins' own changes.
 callerRole = 'employee';
 assert.deepEqual(await getTimeEntryAuditEvents({ organizationId: ownOrganization, ...range }), notAuthorized);
+
+// „Zurückziehen“: only the author of a pending manual submission withdraws it.
+// Another person's entry, another organization's entry and a decided entry
+// are refused before the database function runs, and nothing changes.
+rpcCalls.length = 0;
+const beforeWithdrawals = entryIds();
+assert.deepEqual(await withdrawPendingSubmission(colleaguePending), notAuthorized);
+assert.deepEqual(await withdrawPendingSubmission(foreignPending), { success: false, error: 'not_a_member' });
+assert.deepEqual(await withdrawPendingSubmission(callerIn), { success: false, error: 'entry_not_pending' });
+assert.deepEqual(await withdrawPendingSubmission('caller-pending-in'), invalid);
+failingReadTable = 'time_entries';
+assert.deepEqual(await withdrawPendingSubmission(callerPendingIn), { success: false, error: 'load_failed' });
+failingReadTable = null;
+assert.deepEqual(rpcCalls, []);
+assert.deepEqual(entryIds(), beforeWithdrawals);
+// The author withdraws the whole submission in one call with server-resolved values.
+assert.deepEqual(await withdrawPendingSubmission(callerPendingOut), { success: true, withdrawn: 2 });
+assert.deepEqual(rpcCalls, [
+  {
+    name: 'withdraw_pending_time_entries',
+    args: {
+      p_actor_id: callerUser,
+      p_organization_id: ownOrganization,
+      p_entry_ids: [callerPendingIn, callerPendingOut],
+    },
+  },
+]);
+assert.deepEqual(
+  entryIds(),
+  beforeWithdrawals.filter((id) => id !== callerPendingIn && id !== callerPendingOut),
+);
+assert.equal(statusOf(colleaguePending), 'pending');
+
+// Own time of an earlier day that waits for an approver needs a reason: a
+// manual entry for it is refused, so it goes in as a Zeitkorrektur.
+const beforePastDay = entryIds();
+assert.deepEqual(
+  await addManualEntry({
+    organizationId: ownOrganization,
+    targetUserId: callerUser,
+    entries: [
+      { entryType: 'clock_in', timestamp: yesterday(13) },
+      { entryType: 'clock_out', timestamp: yesterday(14) },
+    ],
+  }),
+  { success: false, error: 'past_day_needs_reason' },
+);
+assert.deepEqual(entryIds(), beforePastDay);
