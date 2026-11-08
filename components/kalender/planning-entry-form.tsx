@@ -249,6 +249,7 @@ function PlanningEntryCoreFields({
       />
 
       <PlanningEntryAssignmentFields
+        date={values.date}
         employeeSelect={employeeSearch.select}
         employeeRecordIds={employeeSearch.selectedIds}
         onEmployeeRecordIdsChange={set.setEmployeeRecordIds}

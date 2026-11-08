@@ -1,6 +1,18 @@
-import { describe, expect, test } from 'bun:test';
-import { summarizePendingCorrections } from './provisional-summary';
+import { describe, expect, mock, test } from 'bun:test';
+import * as berlin from '@/lib/date-time/berlin';
 import type { TimeCorrectionFact, TimeCorrectionSnapshot } from './types';
+
+// Counts every step from one Berlin day to the next, so a test can bound the summary's work.
+const realAddLocalDays = berlin.addLocalDays;
+let dayStepCount = 0;
+mock.module('@/lib/date-time/berlin', () => ({
+  ...berlin,
+  addLocalDays: (localDate: string, days: number) => {
+    dayStepCount += 1;
+    return realAddLocalDays(localDate, days);
+  },
+}));
+const { summarizePendingCorrections } = await import('./provisional-summary');
 
 function fact(
   entryType: TimeCorrectionFact['entryType'],
@@ -132,6 +144,51 @@ describe('the pending corrections in sum', () => {
       '2026-10-30',
     ]);
     expect(summarizePendingCorrections([request(spanning, snapshot())], 'b').days).toEqual(['2026-10-28']);
+  });
+
+  test('name an interval of up to a week day by day, and a longer one by its first and last day', () => {
+    // 01.10. 08:00 to 07.10. 16:00 local: seven days.
+    const week = snapshot(
+      fact('clock_in', '2026-10-01T06:00:00.000Z'),
+      fact('clock_out', '2026-10-07T14:00:00.000Z'),
+    );
+    expect(summarizePendingCorrections([request(week, snapshot())], 'user').days).toEqual([
+      '2026-10-01',
+      '2026-10-02',
+      '2026-10-03',
+      '2026-10-04',
+      '2026-10-05',
+      '2026-10-06',
+      '2026-10-07',
+    ]);
+    // 01.10. 08:00 to 08.10. 16:00 local: eight days; a proposal on the 5th lies inside them, the 9th after them.
+    const longer = snapshot(
+      fact('clock_in', '2026-10-01T06:00:00.000Z'),
+      fact('clock_out', '2026-10-08T14:00:00.000Z'),
+    );
+    const proposed = snapshot(
+      fact('clock_in', '2026-10-05T06:00:00.000Z'),
+      fact('clock_out', '2026-10-05T14:00:00.000Z'),
+      fact('clock_in', '2026-10-09T06:00:00.000Z'),
+      fact('clock_out', '2026-10-09T14:00:00.000Z'),
+    );
+    expect(summarizePendingCorrections([request(longer, proposed)], 'user').days).toEqual([
+      { first: '2026-10-01', last: '2026-10-08' },
+      '2026-10-09',
+    ]);
+  });
+
+  test('take steps bounded by the stored facts, not by the days between them', () => {
+    // A legacy interval from 02.01.2023 to 27.10.2026, removed by the correction.
+    const legacy = snapshot(
+      fact('clock_in', '2023-01-02T07:00:00.000Z'),
+      fact('clock_out', '2026-10-27T15:00:00.000Z'),
+    );
+    dayStepCount = 0;
+    const summary = summarizePendingCorrections([request(legacy, snapshot())], 'user');
+    // At most one week's listing per stored fact.
+    expect(dayStepCount).toBeLessThanOrEqual(legacy.facts.length * 8);
+    expect(summary.days).toEqual([{ first: '2023-01-02', last: '2026-10-27' }]);
   });
 });
 
