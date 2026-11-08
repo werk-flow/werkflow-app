@@ -82,9 +82,9 @@ const isBrowser = (group: CiGroup): boolean => group.kind === 'golden' || group.
  * groups, whose medians follow a shared runner's load
  * (docs/technical/performance.md). A pull request and a push to `main` take
  * the change-mode selection of `groupSelections` for their diff against the
- * base (a push's previous `main` commit): the critical journeys, the
- * permission groups by scope, and the other groups only when their own test
- * code changed.
+ * base (a push's previous `main` commit): the critical journeys, the lab
+ * groups, the permission groups by scope, and the other groups only when their
+ * own test code changed.
  */
 export function ciPlan(input: {
   groups: readonly CiGroup[];

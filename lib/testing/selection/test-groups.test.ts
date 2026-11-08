@@ -51,10 +51,10 @@ describe('independent group registry', () => {
       expect([performance.id, performance.changeTrigger]).toEqual([performance.id, 'release-only']);
     const releaseOnly = groups.filter((candidate) => candidate.changeTrigger === 'release-only');
     expect(releaseOnly.every((candidate) => candidate.kind === 'audit')).toBe(true);
-    // Every speed measurement, capture and sweep, and no other group (decision 0007, amendment 2026-10-29).
+    // Every wall-clock measurement, capture and sweep, and no other group (decision 0007, amendments 2026-10-29 and 2026-11-08).
     expect(
       groups
-        .filter((candidate) => /^audit:(performance|lab|visual|layout)(:|$)/.test(candidate.id))
+        .filter((candidate) => /^audit:(performance|visual|layout)(:|$)/.test(candidate.id))
         .map((candidate) => candidate.id),
     ).toEqual(releaseOnly.map((candidate) => candidate.id));
     // The runner passes the same flag; a change plan with every file changed still leaves them out.
@@ -123,25 +123,37 @@ describe('independent group registry', () => {
     expect(groups.some((entry) => entry.id === 'golden:integrated')).toBe(false);
   });
 
-  test('a lab group runs alone, a change plan selects it only for its own spec, and it must record each of its steps', () => {
+  test('a lab group runs alone, a change plan selects it for any product change or its own spec, and it must record each of its steps', () => {
     const root = resolve(import.meta.dir, '../../..');
     const groups = getTestGroups(root);
-    const plan = groupSelections({
-      mode: 'change',
-      // The runner passes each group's spec files among its execution inputs.
-      groups: groups.map((candidate) => ({
-        ...candidate,
-        executionInputs: candidate.files,
-        trigger: candidate.changeTrigger,
-      })),
-      changedFiles: ['lib/attention/actions.ts', 'tests/audit/lab/office.spec.ts'],
-      unresolvedGroupIds: [],
-    });
-    expect(plan.has('audit:lab:field')).toBe(false);
-    expect(plan.get('audit:lab:office')?.reason).toBe('Test execution dependency changed');
+    const plan = (changedFiles: string[]): string[] =>
+      [
+        ...groupSelections({
+          mode: 'change',
+          // The runner passes each group's spec files among its execution inputs.
+          groups: groups.map((candidate) => ({
+            ...candidate,
+            executionInputs: candidate.files,
+            trigger: candidate.changeTrigger,
+          })),
+          changedFiles,
+          unresolvedGroupIds: [],
+        }).keys(),
+      ].filter((id) => id.startsWith('audit:lab:'));
+    expect(plan(['lib/attention/actions.ts'])).toEqual(['audit:lab:field', 'audit:lab:office']);
+    expect(plan(['supabase/migrations/20261108090000_attention.sql'])).toEqual([
+      'audit:lab:field',
+      'audit:lab:office',
+    ]);
+    expect(plan(['docs/technical/performance.md', 'tests/audit/lab/office.spec.ts'])).toEqual([
+      'audit:lab:office',
+    ]);
+    expect(groups.filter((entry) => entry.changeTrigger === 'product').map((entry) => entry.id)).toEqual([
+      'audit:lab:field',
+      'audit:lab:office',
+    ]);
     for (const id of ['audit:lab:field', 'audit:lab:office']) {
       const group = expectDefined(groups.find((entry) => entry.id === id));
-      expect(group.changeTrigger).toBe('release-only');
       const timing = getGroupTimingRequirements(group, root);
       expect(timing.exclusive).toBe(true);
       expect(timing.requiredLabSteps).toEqual(labStepsForFiles(group.files).map((step) => step.id));
