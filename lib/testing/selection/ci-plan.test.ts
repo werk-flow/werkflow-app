@@ -124,7 +124,7 @@ test('files that cannot change how every group installs, builds or runs plan by 
   }
 });
 
-test('lab, visual and layout groups run in a pull request only when their own test code changed', () => {
+test('visual and layout groups run in a pull request only when their own test code changed, lab groups also on product code', () => {
   const sweeps = [
     ...groups,
     group(
@@ -133,15 +133,17 @@ test('lab, visual and layout groups run in a pull request only when their own te
       ['work', 'customers'],
       'release-only',
     ),
-    group('audit:lab:office', 'tests/audit/lab/office.spec.ts', ['work', 'planning'], 'release-only'),
+    group('audit:lab:office', 'tests/audit/lab/office.spec.ts', ['work', 'planning'], 'product'),
   ];
   const plan = (changedFiles: string[]): string[] =>
     ids(ciPlan({ groups: sweeps, changedFiles, fullRun: undefined, runnerModules }));
-  // A work page selects the work journey, never the work sweep or lab group that share its scope.
+  // A work page selects the work journey and the lab group, never the work sweep that shares its scope.
   expect(plan(['app/(app)/auftraege/page.tsx', 'components/ui/button.tsx', 'app/globals.css'])).toEqual([
     'golden:gg-00',
     'audit:wave-2:p1-13',
+    'audit:lab:office',
   ]);
+  expect(plan(['docs/technical/performance.md'])).toEqual([]);
   for (const spec of [
     'tests/audit/visual/references.spec.ts',
     'tests/audit/visual/acceptance.spec.ts',
@@ -209,16 +211,23 @@ test('support only a wall-clock group imports still runs the critical journeys, 
   expect(ids(plan)).toEqual(['golden:gg-00']);
 });
 
-test('the critical journeys of a product change split into three shards', () => {
+test('the critical journeys and both lab groups of a product change split into three shards', () => {
   const critical = Object.keys(CRITICAL_JOURNEYS).map((id) =>
     group(id, `tests/golden/${id.replace('golden:', '')}.spec.ts`, ['*'], 'critical'),
   );
+  const labs = ['field', 'office'].map((name) =>
+    group(`audit:lab:${name}`, `tests/audit/lab/${name}.spec.ts`, ['*'], 'product'),
+  );
   const plan = ciPlan({
-    groups: critical,
+    groups: [...critical, ...labs],
     changedFiles: ['lib/jobs/actions.ts'],
     fullRun: undefined,
     runnerModules,
   });
-  expect(plan.browser.map((entry) => entry.id)).toEqual(Object.keys(CRITICAL_JOURNEYS));
-  expect(plan.shards.map((shard) => shard.groups.split(',').length)).toEqual([3, 3, 3]);
+  expect(plan.browser.map((entry) => entry.id)).toEqual([
+    ...Object.keys(CRITICAL_JOURNEYS),
+    'audit:lab:field',
+    'audit:lab:office',
+  ]);
+  expect(plan.shards.map((shard) => shard.groups.split(',').length)).toEqual([4, 4, 3]);
 });

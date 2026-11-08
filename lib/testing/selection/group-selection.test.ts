@@ -350,27 +350,16 @@ test('the plan names a wall-clock group whose scope owns a changed product file,
 });
 
 test('a release-only group runs in a change plan only when its own spec or test support changed', () => {
-  const lab = browser(
-    'audit:lab:office',
-    'release-only',
-    ['planning'],
-    ['tests/audit/lab/office.spec.ts', 'lib/testing/lab-steps.ts'],
-  );
-  const withLab = [...groups, lab];
   const plan = (changedFiles: string[], unresolvedGroupIds: string[] = []): Map<string, unknown> =>
-    groupSelections({ mode: 'change', groups: withLab, changedFiles, unresolvedGroupIds });
-  // Its scope owns the file, yet the lab, layout and visual groups wait for a full run.
+    groupSelections({ mode: 'change', groups, changedFiles, unresolvedGroupIds });
+  // Its scope owns the file, yet the layout and visual groups wait for a full run.
   const owned = plan([
     'components/kalender/board/board-row.tsx',
     'lib/work/actions.ts',
     'components/ui/button.tsx',
   ]);
-  for (const id of ['audit:lab:office', 'audit:layout', 'audit:layout:work', 'audit:visual'])
+  for (const id of ['audit:layout', 'audit:layout:work', 'audit:visual'])
     expect([id, owned.has(id)]).toEqual([id, false]);
-  expect(plan(['lib/testing/lab-steps.ts']).get('audit:lab:office')).toEqual({
-    reason: 'Test execution dependency changed',
-    changedFiles: ['lib/testing/lab-steps.ts'],
-  });
   expect(browserOnly([...plan(['tests/audit/layout/surfaces-work.spec.ts']).keys()])).toEqual([
     'audit:layout:work',
   ]);
@@ -378,10 +367,78 @@ test('a release-only group runs in a change plan only when its own spec or test 
   // A wall-clock group runs on a quiet machine with --group only, even when its own spec changed.
   expect(plan(['tests/audit/performance/calendar.spec.ts']).has('audit:performance:calendar')).toBe(false);
   // A failed release-only group is passed again with --group; it starts no repair mode.
-  expect(browserOnly([...plan(['lib/inventory/b.ts'], ['audit:lab:office']).keys()])).toEqual([
+  expect(browserOnly([...plan(['lib/inventory/b.ts'], ['audit:layout:work']).keys()])).toEqual([
     ...CRITICAL,
     'audit:wave-2:p1-13',
   ]);
+});
+
+test('every product, migration or dependency change runs both lab groups; a docs or test change runs them only for their own test code', () => {
+  const labs = [
+    browser('audit:lab:office', 'product', ['work', 'planning'], ['tests/audit/lab/office.spec.ts']),
+    browser(
+      'audit:lab:field',
+      'product',
+      ['time'],
+      [
+        'tests/audit/lab/field.spec.ts',
+        'tests/audit/support/lab-journeys.ts',
+        'tests/audit/support/fixtures.ts',
+        'tests/golden/support/fixtures.ts',
+        'lib/testing/lab-steps.ts',
+      ],
+    ),
+  ];
+  const plan = (changedFiles: string[]): [string, unknown][] =>
+    [
+      ...groupSelections({
+        mode: 'change',
+        groups: [...groups, ...labs],
+        changedFiles,
+        unresolvedGroupIds: [],
+      }).entries(),
+    ].filter(([id]) => id.startsWith('audit:lab:'));
+  const both = (reason: string, file: string): [string, unknown][] =>
+    labs.map((lab) => [lab.id, { reason, changedFiles: [file] }]);
+  // No scope of either lab group owns these files.
+  for (const file of ['lib/inventory/stock.ts', 'components/ui/button.tsx', 'app/globals.css'])
+    expect([file, plan([file])]).toEqual([file, both('Lab counts: product code changed', file)]);
+  const migration = 'supabase/migrations/20261108090000_stock_reservations.sql';
+  expect(plan([migration])).toEqual(both('Lab counts: product code changed', migration));
+  expect(plan(['bun.lock'])).toEqual(
+    both('Lab counts: Dependencies or backend environment changed', 'bun.lock'),
+  );
+  // Docs, other groups' tests, shared test support and the runner select no lab group.
+  for (const file of [
+    'docs/technical/performance.md',
+    'AGENTS.md',
+    'tests/golden/gg-00.spec.ts',
+    'tests/golden/support/steps/shared.ts',
+    'supabase/tests/p1_21_time.sql',
+    'lib/inventory/stock.test.ts',
+    'lib/testing/runner/run-policy.ts',
+  ])
+    expect([file, plan([file])]).toEqual([file, []]);
+  // A shared fixture the runner owns still selects the lab group that imports it.
+  for (const fixture of ['tests/audit/support/fixtures.ts', 'tests/golden/support/fixtures.ts'])
+    expect([fixture, plan([fixture])]).toEqual([
+      fixture,
+      [['audit:lab:field', { reason: 'Test execution dependency changed', changedFiles: [fixture] }]],
+    ]);
+  expect(plan(['tests/audit/support/lab-journeys.ts'])).toEqual([
+    [
+      'audit:lab:field',
+      { reason: 'Test execution dependency changed', changedFiles: ['tests/audit/support/lab-journeys.ts'] },
+    ],
+  ]);
+  // A failed lab group is repaired like any group a change plan runs.
+  const repair = groupSelections({
+    mode: 'change',
+    groups: [...groups, ...labs],
+    changedFiles: ['lib/inventory/stock.ts'],
+    unresolvedGroupIds: ['audit:lab:office'],
+  });
+  expect(browserOnly([...repair.keys()])).toEqual(['audit:lab:office']);
 });
 
 test('changed-spec-first: a group whose own spec or test support changed is tier 0; harness and product changes decide no order', () => {

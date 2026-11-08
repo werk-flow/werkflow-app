@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { resolve } from 'node:path';
 
-test('deleting an organization lets the database decide before any stored file goes', async () => {
+test('deleting an organization lets the database decide before it queues any stored file, and deletes none at once', async () => {
   const child = Bun.spawn(
     [process.execPath, resolve(import.meta.dir, '../testing/fixtures/organization-deletion-action.ts')],
     { cwd: resolve(import.meta.dir, '../..'), stdout: 'pipe', stderr: 'pipe' },

@@ -109,7 +109,7 @@ function MaterialRowEffect({ mode, effectQuantity }: { mode: MaterialDialogMode;
     <p
       className={cn(
         'rounded-md px-3 py-2 text-xs',
-        mode === 'take' && 'bg-destructive-soft text-destructive-soft-foreground',
+        mode === 'take' && 'bg-muted text-muted-foreground',
         mode === 'return' && 'bg-success-soft text-success-soft-foreground',
         (mode === 'plan' || mode === 'edit') && 'bg-info-soft text-info-soft-foreground',
       )}

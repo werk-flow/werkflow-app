@@ -31,6 +31,8 @@ import {
   JOB_MATERIAL_ACTIONS,
   jobMaterialLine,
   jobMaterialLineAction,
+  materialReturnedText,
+  materialTakenText,
   openItemRowAction,
   pendingLocationStatus,
   planMaterialOnDetailPage,
@@ -96,7 +98,8 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
       '1',
       JOB_MATERIAL_ACTIONS.return.submit,
     );
-    await expect(materialLine).toContainText(/\+1/);
+    await expect(materialLine).toContainText(materialTakenText(2));
+    await expect(materialLine).toContainText(materialReturnedText(1));
     await expect(materialLine).toContainText(world.inventory.itemName);
     await expect(materialLine).not.toContainText(INVENTORY_COPY.billable);
     await takeMaterialOnJobPage(employeePage, jobNumber, world.inventory.itemName, 1);
@@ -125,8 +128,8 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     await expect(visibleText(adminPage, world.inventory.itemName)).toBeVisible();
     const projectTotal = projectMaterialTotal(adminPage, world.inventory.itemId);
     await expect(projectTotal).toContainText(INVENTORY_COPY.materialDemand);
-    await expect(projectTotal).toContainText(/-3/);
-    await expect(projectTotal).toContainText(/\+1/);
+    await expect(projectTotal).toContainText(materialTakenText(3));
+    await expect(projectTotal).toContainText(materialReturnedText(1));
     await expect(projectTotal).toContainText(billableQuantityPattern(2));
   });
 

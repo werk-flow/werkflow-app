@@ -37,6 +37,7 @@ declare global {
       | 'calendar-month'
       | 'organization'
       | 'sidebar'
+      | 'lazy-dialog'
       | 'clock'
       | 'live-view'
       | 'route-refresh'

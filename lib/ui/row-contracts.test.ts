@@ -17,6 +17,7 @@ const PAIRS = [
   ['components/anfragen/anfragen-content.tsx'],
   [
     'components/auftraege/list/unified-auftraege-table.tsx',
+    'components/auftraege/list/unified-auftraege-table-skeleton.tsx',
     'components/auftraege/list/unified-auftraege-desktop-rows.tsx',
     'components/auftraege/list/unified-auftraege-mobile-cards.tsx',
   ],

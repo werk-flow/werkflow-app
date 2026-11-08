@@ -15,7 +15,6 @@ import type {
   InventoryOverviewItem,
   InventoryPickerOption,
   InventoryStockLevelRow,
-  InventoryStockStatus,
   InventorySupplier,
   JobMaterialLineRow,
   InventoryAssetInstanceRow,
@@ -28,19 +27,11 @@ import {
   toInventorySupplier,
   toNumber,
 } from './types';
+import { inventoryStockFacts } from './stock-facts';
 
 // The catalog reads behind the inventory Server Actions in `./actions` and
 // `./catalog-actions`. The callers authorize the organization first; every
 // read here keeps the organization filter as the tenant boundary.
-
-function getStockStatus(item: InventoryItem, totalOnHand: number): InventoryStockStatus {
-  if (!item.trackQuantity) return 'in_stock';
-  if (totalOnHand <= 0) return 'out_of_stock';
-  if (item.globalMinimumStock > 0 && totalOnHand <= item.globalMinimumStock) {
-    return 'low_stock';
-  }
-  return 'in_stock';
-}
 
 /** The organization's categories, locations and suppliers in their display order. */
 function readInventoryCatalogLookups(admin: AdminClient, orgId: string) {
@@ -253,8 +244,7 @@ function toInventoryOverviewItems(
         barcodes: itemBarcodes.map((barcode) => barcode.barcode_value),
         totalOnHand,
         plannedQuantity,
-        availableQuantity: Math.max(0, totalOnHand - plannedQuantity),
-        stockStatus: getStockStatus(item, totalOnHand),
+        ...inventoryStockFacts(item, totalOnHand, plannedQuantity),
         stockByLocation,
         assetInstanceCount: assetCountByItem.get(item.id) ?? 0,
       },
