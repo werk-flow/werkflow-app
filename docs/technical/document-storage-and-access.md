@@ -10,6 +10,7 @@ Postgres holds metadata: folders, documents, links, categories, trash state, ver
 - `documents.storage_bucket` keeps the logical label `organization-documents`, not the bucket name.
 - The server authorizes a transfer and signs a short-lived URL; the browser moves the bytes. Server-generated files (artifact exports, handover packages, payroll exports) are the one exception: the server writes them with `putStorageObject`.
 - `lib/documents/storage-path.ts` builds an upload's path, `{organizationId}/{documentId}/{sanitizedFileName}`, or for a new version `{organizationId}/{documentId}/versions/{uploadId}/{versionNumber}-…` with a fresh id per version ticket. Finalize registers a copy beside it whose file name starts with a fresh id per attempt. A registered path never changes; rename and move update metadata only.
+- Each attempt that writes a key a row will reference writes a key of its own with a fresh id (as `attemptStoragePath` builds), and deletes it only when it fails before calling the registration, when the database refused its registration (`isConfirmedWriteRefusal`), or when it answered it as a replay. A key two attempts share lets one attempt's cleanup remove the file the other registered.
 - `lib/storage/r2.ts` refuses a key outside the given organization, and a copy, put, delete or list whose keys do not share one organization prefix.
 - A view URL renders inline only for MIME types safe to render; every other type downloads. The viewer fetches a new URL each time it opens.
 
@@ -25,7 +26,7 @@ Postgres holds metadata: folders, documents, links, categories, trash state, ver
 - `DOCUMENT_MAX_FILE_SIZE_BYTES` applies at the ticket and again to the copy.
 - Protected personnel uploads (`createPersonnelDocumentUploadTicket`, `finalizePersonnelDocumentUpload`) follow the same steps. A signed cleanup capability binds actor, organization, owner, document, file name, class and operation. The cleanup removes only the staging object, so it never removes a registered copy. A replay of a registered upload touches no storage.
 - An `Arbeitsnachweis` export stores each attempt's HTML under a key of its own. An export the database refused, or answered as a duplicate of a committed export, deletes only its own object; after an unknown outcome the object stays.
-- A handover release renders deterministic customer-safe HTML on the server; a guarded RPC registers it. A failed registration deletes the object only after it proves no committed row references it.
+- A handover release renders deterministic customer-safe HTML on the server and stores each attempt under a key of its own; a guarded RPC registers it. A release the database refused, or answered as a replay of a committed release, deletes only its own object; after an unknown outcome the object stays. A replay answers with the registered package.
 
 ## Links and ownership
 

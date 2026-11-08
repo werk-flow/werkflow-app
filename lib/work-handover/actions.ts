@@ -14,9 +14,9 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { isJsonRecord, toJson } from '@/lib/supabase/json';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import type { Json } from '@/lib/supabase/database.types';
-import { putStorageObject } from '@/lib/storage/r2';
+import { attemptStoragePath, discardStorageObjects, putStorageObject } from '@/lib/storage/r2';
 import { logError } from '@/lib/logging';
-import { discardUnreferencedExportObject } from '@/lib/work-artifacts/export-storage';
+import { isConfirmedWriteRefusal } from '@/lib/supabase/write-refusal';
 import type { WorkTargetType } from '@/lib/work-lifecycle/types';
 import { mapHandoverError } from './errors';
 import { buildWorkHandoverExport } from './export';
@@ -369,6 +369,33 @@ export async function previewWorkHandover(
   }
 }
 
+/**
+ * The key one release attempt stores its package under. A fresh id per
+ * attempt keeps a parallel attempt and a replay of the same release apart, so
+ * no attempt writes or removes the package another attempt registered.
+ */
+function releaseAttemptPath(
+  organizationId: string,
+  releaseId: string,
+  exportFile: { rendererVersion: string; contentHash: string },
+): string {
+  return attemptStoragePath(
+    `${organizationId}/work-handover-packages/${releaseId}/${exportFile.rendererVersion}-${exportFile.contentHash}.html`,
+  );
+}
+
+/** The failure of a refused release registration, after its own unreferenced object is removed. */
+async function refuseRelease(
+  organizationId: string,
+  storagePath: string,
+  error: { message: string; code?: string },
+): Promise<ActionFailure> {
+  // A refused registration wrote nothing, so this attempt's object is
+  // unreferenced; after an unknown outcome it stays.
+  if (isConfirmedWriteRefusal(error)) await discardStorageObjects({ organizationId, paths: [storagePath] });
+  return { success: false, error: mapHandoverError(error) };
+}
+
 export async function releaseWorkHandover(
   input: z.input<typeof releaseSchema>,
 ): Promise<{ success: true; releaseId: string; documentId: string } | ActionFailure> {
@@ -389,7 +416,7 @@ export async function releaseWorkHandover(
     if (exportResult.contentHash !== parsed.data.expectedContentHash) {
       return { success: false, error: 'work_handover_preview_stale' };
     }
-    const storagePath = `${auth.context.orgId}/work-handover-packages/${parsed.data.releaseId}/${exportResult.rendererVersion}-${exportResult.contentHash}.html`;
+    const storagePath = releaseAttemptPath(auth.context.orgId, parsed.data.releaseId, exportResult);
     await putStorageObject({
       organizationId: auth.context.orgId,
       path: storagePath,
@@ -398,7 +425,7 @@ export async function releaseWorkHandover(
     });
     const gateRecord = isJsonRecord(loaded.workspace.gateSnapshot) ? loaded.workspace.gateSnapshot : {};
     const admin = createSupabaseAdminClient();
-    const { error } = await admin.rpc(
+    const { data, error } = await admin.rpc(
       'release_work_handover',
       rpcArgs('release_work_handover', {
         p_organization_id: auth.context.orgId,
@@ -432,17 +459,17 @@ export async function releaseWorkHandover(
         p_content_hash: exportResult.contentHash,
       }),
     );
-    if (error) {
-      await discardUnreferencedExportObject(
-        admin,
-        auth.context.orgId,
-        storagePath,
-        'Failed to verify a work handover object reference',
-      );
-      return { success: false, error: mapHandoverError(error) };
-    }
+    if (error) return refuseRelease(auth.context.orgId, storagePath, error);
+    // A replay of a committed release answers with its package, whose
+    // document owns another object.
+    const replay = isJsonRecord(data) && data.duplicate === true ? data : null;
+    if (replay) await discardStorageObjects({ organizationId: auth.context.orgId, paths: [storagePath] });
     revalidateWorkEvidenceViews();
-    return { success: true, releaseId: parsed.data.releaseId, documentId: parsed.data.documentId };
+    return {
+      success: true,
+      releaseId: parsed.data.releaseId,
+      documentId: typeof replay?.documentId === 'string' ? replay.documentId : parsed.data.documentId,
+    };
   } catch (error) {
     return handoverFailureFromException(error, 'work_handover_action_failed', 'release');
   }
