@@ -92,6 +92,7 @@ const SETTINGS_SECTIONS = [
   'abonnement-abrechnung',
   'mitarbeiter',
   'auftraege-projekte',
+  'datenexport',
 ] as const;
 
 export const APP_FAMILIES: readonly AppFamily[] = [

@@ -366,6 +366,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['rate-limits', ['rate_limits.sql'], ['*']],
   ['organization-deletion', ['organization_deletion.sql'], ['*']],
   ['storage-purge', ['storage_purge.sql'], ['documents']],
+  ['organization-export', ['organization_export.sql'], ['*']],
   ['record-numbers', ['record_numbers.sql'], ['work', 'customers', 'personnel', 'service']],
   [
     'list-pagination',

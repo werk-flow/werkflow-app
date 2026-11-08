@@ -188,7 +188,9 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
   order(): this {
     return this;
   }
-  limit(): this {
+  /** The first selected rows in table order, as `range` pages them; a limit on an embed is not modeled. */
+  limit(count: number, options?: { referencedTable?: string }): this {
+    if (!options?.referencedTable) this.page = { from: 0, to: count - 1 };
     return this;
   }
   /** One page of the selected rows in table order, as PostgREST pages an ordered read. */
