@@ -1,0 +1,16 @@
+Menü öffnen
+Einstellungen
+Zeiterfassung
+Mitarbeiter
+Kunden
+Datenexport
+Datenexport
+Lädt jeden Datensatz und jede Originaldatei der Organisation herunter, für einen Wechsel, eine Prüfung oder dein eigenes Archiv.
+Gilt für Haustechnik Krämer GmbH
+Organisation exportieren
+Lade alle Daten deiner Organisation herunter: jeden Datensatz als Tabelle für Excel, ein Verzeichnis aller Dokumente und jede Originaldatei mit allen Versionen, auch die Personalakten.
+Große Organisationen erhalten den Export in mehreren Teilen. Lade jeden Teil herunter.
+Bleib auf dieser Seite, bis alle Teile fertig sind. Ein fehlender Teil lässt sich hier nachholen.
+Jeder Teil lässt sich 7 Tage lang herunterladen. Danach löscht WerkFlow ihn.
+Export starten
+Nicht eingestempelt

@@ -23,6 +23,7 @@ import {
   DocumentVersionUploadContractFixture,
 } from './document-upload-boundaries';
 import { OrganizationContractFixture } from './organization-boundaries';
+import { OrganizationExportContractFixture } from './organization-export-boundaries';
 import { CalendarContractFixture } from './calendar-boundaries';
 import { FeedbackContractFixture, isFeedbackFixture } from './feedback-boundaries';
 import { mountHydrationFixture } from './hydration-boundaries';
@@ -573,6 +574,8 @@ createRoot(root).render(
     <LazyDialogContractFixture />
   ) : window.uiContractFixture === 'organization' ? (
     <OrganizationContractFixture />
+  ) : window.uiContractFixture === 'organization-export' ? (
+    <OrganizationExportContractFixture />
   ) : window.uiContractFixture === 'calendar-board' ? (
     <CalendarBoardContractFixture />
   ) : window.uiContractFixture === 'calendar-day' ? (

@@ -72,7 +72,6 @@ A customer's export stays on the owner's machine, outside every repository. The 
 - RLS restricts every client read, by role and assignment where the server readers restrict them. `supabase/tests/client_read_boundaries.sql` proves an employee reads only their own jobs, assignments and projects, and a suspended member nothing. Extend it for a new role-limited table.
 - RLS checks effective personnel access wherever a policy or its helper reads `organization_members`, `job_assignments` or `employee_records`.
 - Client roles write no table directly, except a user's own name and avatar.
-- Nothing is granted to `anon` without the owner's approval.
 - A table's migration revokes everything from `public`, `anon`, `authenticated` and `service_role`, then grants exactly the needed operations to the needed roles. Default grants are revoked, so a new object has no Data API access until its migration grants it.
 - Grant sequence privileges when an intended insert needs them. The service role bypasses RLS, not SQL privileges.
 - A ledger table refuses direct UPDATE and DELETE, also for privileged roles, with a real denial and a permitted-cleanup assertion. Cascade or reference-nulling follows the domain's retention rule.
@@ -88,11 +87,11 @@ RLS and column grants govern INSERT and UPDATE delivery. Raw DELETE and TRUNCATE
 
 ### Files
 
-Buckets are private. Server code authorizes the target and signs a short-lived URL for a staging key; each finalization copies it to its own key and checks it. Every storage key starts with the owning organization id and goes through the storage adapter. The storage adapter and the admin client never reach a browser bundle. A Server Action never takes file bytes, and only the reviewed writers store a server-generated file.
+Buckets are private. Server code authorizes the target and signs a short-lived URL for a staging key; each finalization copies it to its own key and checks it. Every storage key starts with the owning organization id and goes through the storage adapter. The storage adapter and the admin client never reach a browser bundle. A Server Action never takes file bytes, and only the reviewed writers store a server-generated file. The organization export is one: it reads originals on the server, and only an Admin of the organization builds or downloads it.
 
 ### Mail and providers
 
-The edge functions accept only the project's secret keys and escape every interpolated value. The email-change code is stored as a keyed hash over user id and code. Missing configuration and provider failure return a stable error code. Logs hold only fixed error codes and status numbers.
+The edge functions accept only the project's secret keys and escape every interpolated value. The email-change code is stored as a keyed hash over user id and code. Missing configuration and provider failure return a stable error code.
 
 ### Browser
 
@@ -100,7 +99,7 @@ Responses carry the hardening headers and the enforced Content-Security-Policy f
 
 ### Server caches
 
-A reader cached across requests throws `CachedReadError` on a failed read, so the cache never keeps a failure. No permission fact is cached across requests, and no authenticated response is cached at the CDN.
+A reader cached across requests throws `CachedReadError` on a failed read, so the cache never keeps a failure.
 
 ### Supply chain
 
@@ -162,7 +161,7 @@ List each owner-accepted residual exposure here until it closes.
 | Data | Purpose and access | Retention |
 | --- | --- | --- |
 | Customer contacts, sites, work records, signatures | Organization operations, restricted by role and assignment. | Keep business history and the explicit trash and version behavior. The owner sets contractual retention and deletion rules before client data is imported. Add no guessed automatic deletion period. |
-| Personnel, sickness, time, payroll exports | Employment operations, through personnel access classes and releases. An export is a copy outside the app's access control. | The owner decides lawful purpose, recipients and retention. Ending access does not authorize deleting employment or time history. |
+| Personnel, sickness, time, payroll and organization exports | Employment operations, through personnel access classes and releases. An export is a copy outside the app's access control. | The owner decides lawful purpose, recipients and retention. Ending access does not authorize deleting employment or time history. An organization export's archive is deleted seven days after its build. |
 | Mail | Invitations and code delivery. No business documents. | The provider's mail metadata has its own lifecycle. |
 | Logs, traces, test artifacts | Diagnosis and test evidence. Fixtures are synthetic. | Limit access and remove secrets from exported evidence. Ignored files are neither encrypted nor purged automatically. |
 | Backups and retained file versions | Recovery. Database backups hold no file bytes. | [The runbook](recovery-and-incidents.md) records coverage and accepted loss. Deleting a live record does not erase a backup. |

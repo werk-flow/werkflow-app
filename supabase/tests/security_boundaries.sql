@@ -488,6 +488,8 @@ declare
     'app_private.current_user_can_access_personnel_document_history(uuid)',
     -- document_versions (personnel documents)
     'app_private.current_user_can_access_personnel_document_version(uuid, integer)',
+    -- organization_exports: only an Admin hears of an export
+    'app_private.get_user_admin_org_ids(uuid)',
     -- manager visibility across clients, planning, time, teams, templates, jobs, projects and job_assignments
     'app_private.get_user_admin_or_manager_org_ids(uuid)',
     -- an employee's own work in jobs and job_assignments

@@ -1,0 +1,514 @@
+-- Admin exports the whole organization (werk-flow/werkflow-planning#287).
+-- An export is one data part (every record as CSV, the document manifest)
+-- and file parts that hold every original file: each document's current
+-- file and each earlier version. The server plans the file parts once; the
+-- start refuses a plan that misses, repeats or adds a file, so every file
+-- lands in exactly one part. Each part builds in its own request and ends
+-- in one call, complete or fail; a failed part builds again alone.
+--
+-- A built archive stays downloadable for seven days (owner's answer on
+-- werk-flow/werkflow-planning#287). Each part's archive path is fixed at the
+-- start and queued in storage_purge_queue at once, due seven days later, so
+-- an archive whose completion got lost is deleted too; completion moves the
+-- due date to seven days after the build. An archive needs no backup
+-- protection, so it gets no extra day, and the organization's deletion makes
+-- it due at once instead of eight days later. No column here ends in
+-- `storage_path`, because claim_storage_purge keeps any queued object such a
+-- column references: a planned file must not keep a deleted document's
+-- bytes, and an archive must not keep itself.
+--
+-- Only an Admin of the organization starts, builds or downloads an export;
+-- each function checks it again. Every start, part result and download writes
+-- an event to an append-only ledger.
+--
+-- Prevention: Tier 1 (the plan check, the unique file and name per export,
+-- the ledger guard), Tier 2 supabase/tests/organization_export.sql.
+
+create table public.organization_exports (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  -- No foreign key: the export's history outlives the account that started it.
+  requested_by uuid not null,
+  requested_at timestamptz not null default now(),
+  part_count integer not null check (part_count >= 1),
+  file_count integer not null check (file_count >= 0),
+  file_bytes bigint not null check (file_bytes >= 0),
+  updated_at timestamptz not null default now()
+);
+create unique index organization_exports_replident_idx on public.organization_exports (id, organization_id);
+create index organization_exports_organization_idx on public.organization_exports (organization_id, requested_at desc);
+-- Every row version carries its transaction's time (lib/realtime/tables.ts, TRANSACTION_STAMPED_TABLES).
+create trigger organization_exports_updated_at before update on public.organization_exports
+  for each row execute function public.update_updated_at_column();
+
+create table public.organization_export_parts (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  export_id uuid not null,
+  part_number integer not null check (part_number >= 1),
+  kind text not null check (kind in ('data', 'files')),
+  state text not null default 'pending' check (state in ('pending', 'ready', 'failed')),
+  file_count integer not null default 0 check (file_count >= 0),
+  file_bytes bigint not null default 0 check (file_bytes >= 0),
+  archive_path text not null,
+  archive_bytes bigint check (archive_bytes >= 0),
+  built_at timestamptz,
+  expires_at timestamptz,
+  failure_reason text check (failure_reason ~ '^[a-z][a-z0-9_:]*$'),
+  constraint organization_export_parts_export_fkey foreign key (export_id, organization_id)
+    references public.organization_exports (id, organization_id) on delete cascade,
+  constraint organization_export_parts_number_unique unique (export_id, part_number),
+  constraint organization_export_parts_id_org_unique unique (id, organization_id),
+  constraint organization_export_parts_data_first check ((kind = 'data') = (part_number = 1)),
+  constraint organization_export_parts_archive_in_organization
+    check (starts_with(archive_path, organization_id::text || '/')),
+  constraint organization_export_parts_state_shape check (
+    (state = 'ready') = (archive_bytes is not null and built_at is not null and expires_at is not null)
+    and (state = 'failed') = (failure_reason is not null)
+  )
+);
+
+create table public.organization_export_files (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  export_id uuid not null,
+  part_id uuid not null,
+  -- No foreign key: the plan keeps naming a document deleted after the start.
+  document_id uuid not null,
+  -- Null for the document's current file, else the earlier version's number.
+  version_number integer check (version_number >= 1),
+  source_path text not null check (starts_with(source_path, organization_id::text || '/')),
+  archive_name text not null check (archive_name ~ '^Dateien/' and archive_name !~ '(^|/)\.{0,2}(/|$)'),
+  file_bytes bigint not null check (file_bytes >= 0),
+  constraint organization_export_files_export_fkey foreign key (export_id, organization_id)
+    references public.organization_exports (id, organization_id) on delete cascade,
+  constraint organization_export_files_part_fkey foreign key (part_id, organization_id)
+    references public.organization_export_parts (id, organization_id) on delete cascade,
+  constraint organization_export_files_once unique (export_id, source_path)
+);
+-- Archive programs on Windows and macOS treat names that differ only in case as one file.
+create unique index organization_export_files_name_once
+  on public.organization_export_files (export_id, lower(archive_name));
+create index organization_export_files_part_idx on public.organization_export_files (part_id);
+
+create table public.organization_export_events (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  export_id uuid not null,
+  part_id uuid,
+  event_type text not null check (event_type in ('started', 'part_ready', 'part_failed', 'downloaded')),
+  -- No foreign key: the ledger outlives the account that acted.
+  actor_id uuid not null,
+  event_payload jsonb not null default '{}'::jsonb,
+  occurred_at timestamptz not null default now(),
+  constraint organization_export_events_export_fkey foreign key (export_id, organization_id)
+    references public.organization_exports (id, organization_id) on delete cascade
+);
+create index organization_export_events_export_idx on public.organization_export_events (export_id, occurred_at);
+create trigger guard_event_ledger_history before update or delete on public.organization_export_events
+  for each row execute function app_private.guard_event_ledger_history();
+
+-- The organizations a user is an Admin of, with effective access: the
+-- Realtime and Data API read of organization_exports.
+create function app_private.get_user_admin_org_ids(p_user_id uuid)
+returns setof uuid language sql stable security definer set search_path = '' as $$
+  select member.organization_id
+  from public.organization_members member
+  where member.user_id = p_user_id
+    and member.role = 'admin'
+    and app_private.p1_24_has_effective_access(member.organization_id, p_user_id);
+$$;
+revoke all on function app_private.get_user_admin_org_ids(uuid) from public, anon, authenticated;
+grant execute on function app_private.get_user_admin_org_ids(uuid) to authenticated, service_role;
+
+alter table public.organization_exports enable row level security;
+alter table public.organization_export_parts enable row level security;
+alter table public.organization_export_files enable row level security;
+alter table public.organization_export_events enable row level security;
+
+-- An Admin's session reads the export row only to hear of a change; the
+-- server reads parts, files and events.
+create policy organization_exports_admin_select on public.organization_exports for select to authenticated
+  using (organization_id in (select app_private.get_user_admin_org_ids((select auth.uid()))));
+
+revoke all on table public.organization_exports, public.organization_export_parts,
+  public.organization_export_files, public.organization_export_events
+  from public, anon, authenticated, service_role;
+grant select on table public.organization_exports to authenticated;
+grant select, insert, update on table public.organization_exports, public.organization_export_parts to service_role;
+grant select, insert on table public.organization_export_files, public.organization_export_events to service_role;
+
+alter table public.organization_exports replica identity using index organization_exports_replident_idx;
+alter publication supabase_realtime add table public.organization_exports;
+create trigger emit_realtime_deletion after delete on public.organization_exports
+  for each row execute function app_private.emit_realtime_deletion();
+
+-- The plan as rows: one per named file, with the index of its file part.
+create function app_private.organization_export_plan(p_file_parts jsonb)
+returns table (part_index integer, source_path text, archive_name text)
+language sql
+immutable
+set search_path to ''
+as $$
+  select part.ordinality::integer, file.value ->> 'sourcePath', file.value ->> 'archiveName'
+  from jsonb_array_elements(p_file_parts) with ordinality as part(value, ordinality)
+  cross join lateral jsonb_array_elements(part.value) as file(value);
+$$;
+
+-- Every original file of the organization: each document's current file and
+-- each earlier version, once per storage key.
+create function app_private.organization_export_sources(p_organization_id uuid)
+returns table (source_path text, document_id uuid, version_number integer, file_bytes bigint)
+language sql
+stable
+set search_path to ''
+as $$
+  select distinct on (source.source_path) source.source_path, source.document_id,
+    source.version_number, source.file_bytes
+  from (
+    select document.storage_path as source_path, document.id as document_id,
+      null::integer as version_number, document.size_bytes::bigint as file_bytes
+    from public.documents document
+    where document.organization_id = p_organization_id
+    union all
+    select version.storage_path, version.document_id, version.version_number, version.size_bytes::bigint
+    from public.document_versions version
+    where version.organization_id = p_organization_id
+  ) source
+  order by source.source_path, source.version_number nulls first;
+$$;
+
+-- Queues objects of one organization for deletion. A document file waits
+-- eight days, and queued again keeps the later date, as in
+-- 20261108210001_keep_deleted_file_bytes_past_the_backup_window.sql. An
+-- export archive needs no backup protection: queued again, such as by the
+-- organization's deletion, it is due at once and never later than before.
+create or replace function public.queue_storage_purge(p_organization_id uuid, p_paths text[])
+returns void
+language sql
+security invoker
+set search_path to ''
+as $$
+  insert into public.storage_purge_queue as queued (organization_id, storage_path, purge_after)
+  select distinct p_organization_id, path,
+    case when starts_with(path, p_organization_id::text || '/datenexporte/') then now()
+      else now() + interval '8 days' end
+  from unnest(p_paths) as path
+  where path is not null
+  on conflict (storage_path) do update
+    set purge_after = case
+      when starts_with(excluded.storage_path, excluded.organization_id::text || '/datenexporte/')
+        then least(queued.purge_after, excluded.purge_after)
+      else greatest(queued.purge_after, excluded.purge_after)
+    end;
+$$;
+
+-- Starts an export with the server's plan: one array of file parts, each a
+-- non-empty array of { "sourcePath", "archiveName" }. The plan names each
+-- original file of the organization exactly once and nothing else, and no
+-- two files share a name, also not in another letter case; sizes and
+-- document ids come from the rows. Returns the export id.
+create function public.start_organization_export(
+  p_actor_id uuid,
+  p_organization_id uuid,
+  p_file_parts jsonb
+)
+returns uuid
+language plpgsql
+security invoker
+set search_path to ''
+as $$
+declare
+  v_export_id uuid := gen_random_uuid();
+  v_part_count integer;
+  v_part_index integer;
+  v_part_id uuid;
+  v_file_count integer;
+  v_file_bytes bigint;
+begin
+  if not app_private.p1_24_is_admin(p_organization_id, p_actor_id) then
+    raise exception 'not_authorized';
+  end if;
+  if jsonb_typeof(p_file_parts) is distinct from 'array' or exists (
+    select 1 from jsonb_array_elements(p_file_parts) part
+    where jsonb_typeof(part) <> 'array' or jsonb_array_length(part) = 0
+  ) or exists (
+    select 1 from app_private.organization_export_plan(p_file_parts) plan
+    where plan.source_path is null or plan.archive_name is null
+  ) then
+    raise exception 'export_plan_invalid';
+  end if;
+  if exists (
+    select 1 from app_private.organization_export_plan(p_file_parts) plan
+    group by plan.source_path having count(*) > 1
+  ) then
+    raise exception 'export_plan_repeats_file';
+  end if;
+  if exists (
+    select 1 from app_private.organization_export_plan(p_file_parts) plan
+    group by lower(plan.archive_name) having count(*) > 1
+  ) then
+    raise exception 'export_plan_repeats_name';
+  end if;
+  -- A file the plan misses, or a path that is no file of this organization:
+  -- the documents changed since the server listed them, or the plan is wrong.
+  if exists (
+    select 1 from app_private.organization_export_sources(p_organization_id) source
+    where not exists (
+      select 1 from app_private.organization_export_plan(p_file_parts) plan
+      where plan.source_path = source.source_path
+    )
+  ) or exists (
+    select 1 from app_private.organization_export_plan(p_file_parts) plan
+    where not exists (
+      select 1 from app_private.organization_export_sources(p_organization_id) source
+      where source.source_path = plan.source_path
+    )
+  ) then
+    raise exception 'export_plan_stale';
+  end if;
+
+  select count(*), coalesce(sum(source.file_bytes), 0) into v_file_count, v_file_bytes
+  from app_private.organization_export_sources(p_organization_id) source;
+  v_part_count := jsonb_array_length(p_file_parts) + 1;
+
+  insert into public.organization_exports (id, organization_id, requested_by, part_count, file_count, file_bytes)
+  values (v_export_id, p_organization_id, p_actor_id, v_part_count, v_file_count, v_file_bytes);
+  insert into public.organization_export_parts (organization_id, export_id, part_number, kind, archive_path)
+  values (p_organization_id, v_export_id, 1, 'data',
+    format('%s/datenexporte/%s/teil-1.zip', p_organization_id, v_export_id));
+
+  for v_part_index in 1 .. v_part_count - 1 loop
+    insert into public.organization_export_parts (organization_id, export_id, part_number, kind, archive_path)
+    values (p_organization_id, v_export_id, v_part_index + 1, 'files',
+      format('%s/datenexporte/%s/teil-%s.zip', p_organization_id, v_export_id, v_part_index + 1))
+    returning id into v_part_id;
+    insert into public.organization_export_files (
+      organization_id, export_id, part_id, document_id, version_number, source_path, archive_name, file_bytes
+    )
+    select p_organization_id, v_export_id, v_part_id, source.document_id, source.version_number,
+      source.source_path, plan.archive_name, source.file_bytes
+    from app_private.organization_export_plan(p_file_parts) plan
+    join app_private.organization_export_sources(p_organization_id) source
+      on source.source_path = plan.source_path
+    where plan.part_index = v_part_index;
+    update public.organization_export_parts part
+    set file_count = totals.file_count, file_bytes = totals.file_bytes
+    from (
+      select count(*)::integer as file_count, coalesce(sum(file.file_bytes), 0)::bigint as file_bytes
+      from public.organization_export_files file where file.part_id = v_part_id
+    ) totals
+    where part.id = v_part_id;
+  end loop;
+
+  insert into public.storage_purge_queue (organization_id, storage_path, purge_after)
+  select p_organization_id, part.archive_path, now() + interval '7 days'
+  from public.organization_export_parts part where part.export_id = v_export_id;
+
+  insert into public.organization_export_events (organization_id, export_id, event_type, actor_id, event_payload)
+  values (p_organization_id, v_export_id, 'started', p_actor_id, jsonb_build_object(
+    'partCount', v_part_count, 'fileCount', v_file_count, 'fileBytes', v_file_bytes
+  ));
+  return v_export_id;
+end;
+$$;
+
+-- Records a built archive at the part's fixed path: the part is ready for
+-- seven days from now, and the archive's purge falls due when that ends. A
+-- ready part is refused, so a second build of it changes nothing.
+create function public.complete_organization_export_part(
+  p_actor_id uuid,
+  p_organization_id uuid,
+  p_part_id uuid,
+  p_archive_bytes bigint
+)
+returns void
+language plpgsql
+security invoker
+set search_path to ''
+as $$
+declare
+  v_part public.organization_export_parts;
+  v_expires_at timestamptz := now() + interval '7 days';
+begin
+  if not app_private.p1_24_is_admin(p_organization_id, p_actor_id) then
+    raise exception 'not_authorized';
+  end if;
+  select * into v_part from public.organization_export_parts part
+  where part.id = p_part_id and part.organization_id = p_organization_id
+  for update;
+  if not found then raise exception 'export_part_not_found'; end if;
+  if v_part.state = 'ready' then raise exception 'export_part_ready'; end if;
+
+  update public.organization_export_parts part
+  set state = 'ready', failure_reason = null, archive_bytes = p_archive_bytes, built_at = now(),
+    expires_at = v_expires_at
+  where part.id = p_part_id;
+  update public.organization_exports export_row set updated_at = now() where export_row.id = v_part.export_id;
+  -- The start queued the path; a purge that already ran for it took the entry.
+  insert into public.storage_purge_queue as queued (organization_id, storage_path, purge_after)
+  values (p_organization_id, v_part.archive_path, v_expires_at)
+  on conflict (storage_path) do update set purge_after = excluded.purge_after;
+  insert into public.organization_export_events (
+    organization_id, export_id, part_id, event_type, actor_id, event_payload
+  ) values (
+    p_organization_id, v_part.export_id, p_part_id, 'part_ready', p_actor_id,
+    jsonb_build_object('partNumber', v_part.part_number, 'archiveBytes', p_archive_bytes,
+      'fileCount', v_part.file_count)
+  );
+end;
+$$;
+
+-- Records a failed build with a stable reason code; the part builds again alone.
+create function public.fail_organization_export_part(
+  p_actor_id uuid,
+  p_organization_id uuid,
+  p_part_id uuid,
+  p_failure_reason text
+)
+returns void
+language plpgsql
+security invoker
+set search_path to ''
+as $$
+declare
+  v_part public.organization_export_parts;
+begin
+  if not app_private.p1_24_is_admin(p_organization_id, p_actor_id) then
+    raise exception 'not_authorized';
+  end if;
+  select * into v_part from public.organization_export_parts part
+  where part.id = p_part_id and part.organization_id = p_organization_id
+  for update;
+  if not found then raise exception 'export_part_not_found'; end if;
+  if v_part.state = 'ready' then raise exception 'export_part_ready'; end if;
+
+  update public.organization_export_parts part
+  set state = 'failed', failure_reason = p_failure_reason
+  where part.id = p_part_id;
+  update public.organization_exports export_row set updated_at = now() where export_row.id = v_part.export_id;
+  insert into public.organization_export_events (
+    organization_id, export_id, part_id, event_type, actor_id, event_payload
+  ) values (
+    p_organization_id, v_part.export_id, p_part_id, 'part_failed', p_actor_id,
+    jsonb_build_object('partNumber', v_part.part_number, 'reason', p_failure_reason)
+  );
+end;
+$$;
+
+-- Records a download of a ready, unexpired part and returns what the server
+-- signs: { archivePath, partNumber, partCount, requestedAt }.
+create function public.record_organization_export_download(
+  p_actor_id uuid,
+  p_organization_id uuid,
+  p_part_id uuid
+)
+returns jsonb
+language plpgsql
+security invoker
+set search_path to ''
+as $$
+declare
+  v_part public.organization_export_parts;
+begin
+  if not app_private.p1_24_is_admin(p_organization_id, p_actor_id) then
+    raise exception 'not_authorized';
+  end if;
+  select * into v_part from public.organization_export_parts part
+  where part.id = p_part_id and part.organization_id = p_organization_id;
+  if not found then raise exception 'export_part_not_found'; end if;
+  if v_part.state <> 'ready' then raise exception 'export_part_not_ready'; end if;
+  if v_part.expires_at <= now() then raise exception 'export_part_expired'; end if;
+
+  insert into public.organization_export_events (
+    organization_id, export_id, part_id, event_type, actor_id, event_payload
+  ) values (
+    p_organization_id, v_part.export_id, p_part_id, 'downloaded', p_actor_id,
+    jsonb_build_object('partNumber', v_part.part_number)
+  );
+  return jsonb_build_object(
+    'archivePath', v_part.archive_path,
+    'partNumber', v_part.part_number,
+    'partCount', (select export_row.part_count from public.organization_exports export_row
+      where export_row.id = v_part.export_id),
+    'requestedAt', (select export_row.requested_at from public.organization_exports export_row
+      where export_row.id = v_part.export_id)
+  );
+end;
+$$;
+
+-- One page of an organization's rows of one table, in primary-key order,
+-- after the row whose key p_after carries (null for the first page), with
+-- the table's columns in table order: { "columns": [...], "rows": [...] }.
+-- A table without organization_id or without a primary key is refused.
+create function public.read_organization_export_page(
+  p_organization_id uuid,
+  p_table text,
+  p_after jsonb,
+  p_limit integer
+)
+returns jsonb
+language plpgsql
+stable
+security invoker
+set search_path to ''
+as $$
+declare
+  v_relation regclass := to_regclass(format('public.%I', p_table));
+  v_keys text[];
+  v_order text;
+  v_page_order text;
+  v_after text := '';
+  v_rows jsonb;
+begin
+  if v_relation is null or not exists (
+    select 1 from pg_catalog.pg_attribute attribute
+    where attribute.attrelid = v_relation and attribute.attname = 'organization_id' and not attribute.attisdropped
+  ) then
+    raise exception 'export_table_unknown';
+  end if;
+  select array_agg(attribute.attname::text order by key.ordinality) into v_keys
+  from pg_catalog.pg_index index_row
+  cross join lateral unnest(index_row.indkey) with ordinality as key(attnum, ordinality)
+  join pg_catalog.pg_attribute attribute
+    on attribute.attrelid = index_row.indrelid and attribute.attnum = key.attnum
+  where index_row.indrelid = v_relation and index_row.indisprimary;
+  if v_keys is null then raise exception 'export_table_without_key'; end if;
+
+  select string_agg(format('source.%I', key_name), ', '), string_agg(format('page.%I', key_name), ', ')
+  into v_order, v_page_order from unnest(v_keys) key_name;
+  if p_after is not null then
+    select format('and (%s) > (select %s from jsonb_populate_record(null::%s, $2) after_row)',
+      v_order, string_agg(format('after_row.%I', key_name), ', '), v_relation)
+    into v_after from unnest(v_keys) key_name;
+  end if;
+  execute format(
+    'select coalesce(jsonb_agg(to_jsonb(page) order by %s), ''[]''::jsonb)
+     from (select source.* from %s source where source.organization_id = $1 %s order by %s limit $3) page',
+    v_page_order, v_relation, v_after, v_order
+  ) into v_rows using p_organization_id, p_after, greatest(least(p_limit, 5000), 1);
+  return jsonb_build_object(
+    'columns', (
+      select jsonb_agg(attribute.attname order by attribute.attnum)
+      from pg_catalog.pg_attribute attribute
+      where attribute.attrelid = v_relation and attribute.attnum > 0 and not attribute.attisdropped
+    ),
+    'rows', v_rows
+  );
+end;
+$$;
+
+revoke all on function app_private.organization_export_plan(jsonb) from public, anon, authenticated;
+revoke all on function app_private.organization_export_sources(uuid) from public, anon, authenticated;
+revoke all on function public.start_organization_export(uuid, uuid, jsonb) from public, anon, authenticated;
+revoke all on function public.complete_organization_export_part(uuid, uuid, uuid, bigint) from public, anon, authenticated;
+revoke all on function public.fail_organization_export_part(uuid, uuid, uuid, text) from public, anon, authenticated;
+revoke all on function public.record_organization_export_download(uuid, uuid, uuid) from public, anon, authenticated;
+revoke all on function public.read_organization_export_page(uuid, text, jsonb, integer) from public, anon, authenticated;
+grant execute on function app_private.organization_export_plan(jsonb) to service_role;
+grant execute on function app_private.organization_export_sources(uuid) to service_role;
+grant execute on function public.start_organization_export(uuid, uuid, jsonb) to service_role;
+grant execute on function public.complete_organization_export_part(uuid, uuid, uuid, bigint) to service_role;
+grant execute on function public.fail_organization_export_part(uuid, uuid, uuid, text) to service_role;
+grant execute on function public.record_organization_export_download(uuid, uuid, uuid) to service_role;
+grant execute on function public.read_organization_export_page(uuid, text, jsonb, integer) to service_role;
