@@ -127,7 +127,7 @@ T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts`
 ## Set up a new machine
 
 1. Install Bun, Node 22 or later, git, the GitHub CLI, Docker and the Supabase CLI. On Windows, clone and work inside WSL Ubuntu.
-   On an Apple Silicon Mac, use `brew install colima docker`, then `colima start --cpu 4 --memory 6 --disk 40 --vm-type vz --mount-type virtiofs`. This starts Docker without Docker Desktop; run the repository's pinned CLI with `bunx supabase`. Increase the VM allocation only if measured stack use requires it. Keep the Mac awake on power with `caffeinate -s` while agents run.
+   On an Apple Silicon Mac, use `brew install colima docker`, then `colima start --cpu 4 --memory 6 --disk 40 --vm-type vz --vz-rosetta --mount-type virtiofs`. Rosetta: the visual groups' amd64 Chromium crashes under QEMU. Run the repository's pinned CLI with `bunx supabase`. Grow the VM only for a measured need. Keep the Mac awake on power with `caffeinate -s` while agents run.
 2. Export the owner's Supabase personal access token as `SUPABASE_ACCESS_TOKEN`, with a copy in every env backup (a switch overwrites `.env.local`). Never commit or print it.
 3. Get the DEV `.env.local` from the owner's password manager and copy it to `.env.dev-backup`. Add `.env.live-backup` only for production sessions.
 4. Add the DEV MCP server `supabase` above to Claude Code (`claude mcp add --scope user --transport http supabase "<url>"`) and Codex (`[mcp_servers.supabase]` in `~/.codex/config.toml`). The owner signs in once per tool. Never add a server for PROD. The Vercel CLI, signed in as the owner, serves both.
