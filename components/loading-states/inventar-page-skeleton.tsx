@@ -5,7 +5,8 @@ import { SkeletonList, SkeletonTable } from '@/components/ui/skeleton-table';
 import { cn } from '@/lib/utils';
 
 // Mirrors `InventoryContent`: page header with three actions, five summary
-// tiles, the tab strip with filters, then the item list. Item rows do nothing
+// tiles, the tab strip with filters, then the item list. The tiles
+// follow their compact one-line form below `sm`. Item rows do nothing
 // on click, so neither the table nor the card skeletons are interactive.
 export function InventarPageSkeleton(): React.JSX.Element {
   return (
@@ -25,14 +26,17 @@ export function InventarPageSkeleton(): React.JSX.Element {
       </header>
 
       <PageBody>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
           {Array.from({ length: 5 }).map((_, index) => (
             <div
               key={index}
-              className={cn('rounded-lg border bg-card px-3 py-3', index === 0 && 'col-span-2 lg:col-span-1')}
+              className={cn(
+                'flex items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2 sm:block sm:py-3',
+                index === 0 && 'col-span-2 lg:col-span-1',
+              )}
             >
-              <Skeleton className="h-4 w-28 max-w-full" />
-              <Skeleton className="mt-2 h-6 w-20" />
+              <Skeleton className="h-4 w-20 max-w-full sm:w-28" />
+              <Skeleton className="h-5 w-6 sm:mt-2 sm:h-6 sm:w-20" />
             </div>
           ))}
         </div>
