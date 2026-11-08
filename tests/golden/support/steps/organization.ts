@@ -153,6 +153,7 @@ async function expectOrganizationCreated(
     page.getByRole('alert').filter({ hasText: ORGANIZATION_COPY.organizationCreated }),
   ).toBeVisible();
   await expect(organizationSwitcher(page, organizationName)).toBeVisible();
+  await hydratedAndSettled(page);
   return getOrganizationByName(organizationName);
 }
 
