@@ -1,8 +1,9 @@
 import 'server-only';
 
 // The callers establish identity, the active organization and the owner or
-// Admin role before they read; delete_organization repeats the retention check
-// under its lock (supabase/migrations/20261029205025_refuse_organization_delete_with_time_records.sql).
+// Admin role before they read; delete_organization repeats the retention checks
+// under its lock (supabase/migrations/20261029205025_refuse_organization_delete_with_time_records.sql,
+// 20261108120001_keep_filed_documents_for_their_retention_period.sql).
 
 import type { ActionFailure } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
@@ -19,6 +20,7 @@ const scopeSchema = z.object({
   jobs: count,
   employee_records: count,
   documents: count,
+  retained_documents: count,
   time_tracked_people: count,
   closed_periods: count,
   payroll_exports: count,
@@ -46,10 +48,14 @@ export async function readOrganizationDeletionScope(
       jobs: scope.jobs,
       employeeRecords: scope.employee_records,
       documents: scope.documents,
+      retainedDocuments: scope.retained_documents,
       timeTrackedPeople: scope.time_tracked_people,
       closedPeriods: scope.closed_periods,
       payrollExports: scope.payroll_exports,
-      retainsTimeRecords: scope.time_tracked_people > 0 || scope.closed_periods > 0,
+      // The deletion action refuses on this flag before any stored file goes,
+      // so a document inside its retention period holds the organization too.
+      retainsTimeRecords:
+        scope.time_tracked_people > 0 || scope.closed_periods > 0 || scope.retained_documents > 0,
     },
   };
 }

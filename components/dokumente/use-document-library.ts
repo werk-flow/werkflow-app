@@ -11,6 +11,7 @@ import type {
   OrganizationDocument,
 } from '@/lib/documents/types';
 import type { DocumentLibraryRowActions } from './document-library-mobile-list';
+import { useDocumentArchiveActions } from './use-document-archive-actions';
 import { useDocumentDeleteActions } from './use-document-delete-actions';
 import { useDocumentDetailsDialog } from './use-document-details-dialog';
 import { useDocumentFolderCreation } from './use-document-folder-creation';
@@ -166,6 +167,12 @@ export function useDocumentLibrary(options: DocumentLibraryOptions) {
   });
   const details = useDocumentDetailsDialog(libraryScope);
   const versionActions = useDocumentVersionActions({ details, mutations });
+  const archiveActions = useDocumentArchiveActions({
+    details,
+    mutations,
+    isTrashView,
+    confirm: deleteActions.setConfirmDialog,
+  });
   const { dropTargets, upload } = useDocumentLibraryIntake({
     dropTargetOptions: {
       ...libraryScope,
@@ -209,6 +216,7 @@ export function useDocumentLibrary(options: DocumentLibraryOptions) {
     moveCopy,
     details,
     versionActions,
+    archiveActions,
     dropTargets,
     upload,
     rowActions,

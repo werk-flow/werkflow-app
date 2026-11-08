@@ -12,7 +12,13 @@ async function openUploadDialog(
     answer = saved,
     loseFinalizeAnswer = [],
     failFinalize = [],
-  }: { answer?: StorageAnswer; loseFinalizeAnswer?: string[]; failFinalize?: string[] },
+    fixture = 'document-upload',
+  }: {
+    answer?: StorageAnswer;
+    loseFinalizeAnswer?: string[];
+    failFinalize?: string[];
+    fixture?: 'document-upload' | 'document-version-upload';
+  },
 ): Promise<Map<string, number>> {
   assertWorkspaceTestLock();
   const bundle = process.env.WERKFLOW_UI_CONTRACT_BUNDLE;
@@ -32,10 +38,11 @@ async function openUploadDialog(
   });
   await page.goto('http://localhost/ui-contracts');
   await page.evaluate(
-    (failures) => {
-      window.uiContractFixture = 'document-upload';
+    ({ fixtureName, ...failures }) => {
+      window.uiContractFixture = fixtureName;
       window.uiContractDocumentUpload = {
         ...failures,
+        filed: false,
         tickets: [],
         registered: [],
         completions: [],
@@ -44,7 +51,7 @@ async function openUploadDialog(
         ],
       };
     },
-    { loseFinalizeAnswer, failFinalize },
+    { loseFinalizeAnswer, failFinalize, fixtureName: fixture },
   );
   await page.addScriptTag({ path: bundle });
   return puts;
@@ -258,4 +265,29 @@ test('a first version upload after another person saved a version is a conflict'
 
   expect(outcome).toBe('version_conflict');
   expect(puts.get('angebot-v2.pdf')).toBe(1);
+});
+
+test('a version upload whose document was filed meanwhile names the filing and offers no retry', async ({
+  page,
+}) => {
+  const puts = await openUploadDialog(page, {
+    fixture: 'document-version-upload',
+    // Another manager files the document while our version's bytes are on their way.
+    answer: async (_fileName, _attempt, route) => {
+      await page.evaluate(() => {
+        window.uiContractDocumentUpload.filed = true;
+      });
+      await route.fulfill({ status: 200, body: '' });
+    },
+  });
+  const dialog = page.getByRole('dialog', { name: 'Neue Version hochladen' });
+
+  await expect(fileRow(page, 'angebot-v2.pdf')).toContainText(
+    'Die Datei wurde inzwischen festgeschrieben und nimmt keine neue Version mehr an.',
+  );
+  // The finished run offers only its two close buttons: the footer's and the dialog's own.
+  await expect(dialog.getByRole('button')).toHaveText(['Schließen', 'Schließen']);
+  await expect(dialog.getByRole('button', { name: 'Erneut versuchen' })).toHaveCount(0);
+  expect(puts.get('angebot-v2.pdf')).toBe(1);
+  expect(await page.evaluate(() => window.uiContractDocumentUpload.versions.length)).toBe(1);
 });
