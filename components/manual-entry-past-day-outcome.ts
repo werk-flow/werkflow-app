@@ -23,33 +23,41 @@ export function pastDayOutcome(
  */
 export type PastDayOperation = { id: string; savedContent: string | null };
 
+/** One send under an operation, with the operation as it was before the send. */
+export type PastDaySend = {
+  operation: PastDayOperation;
+  before: PastDayOperation;
+  editedSinceFirstSend: boolean;
+};
+
 /**
  * The operation the next send runs under, and whether the form changed since
- * a send that may have been saved: a lost response leaves that content, a
- * refusal leaves none.
+ * a send that may have been saved: a lost response leaves that content.
  */
 export function startPastDaySend(
   operation: PastDayOperation | null,
   content: string,
   newId: () => string,
-): { operation: PastDayOperation; editedSinceFirstSend: boolean } {
-  const current = operation ?? { id: newId(), savedContent: null };
+): PastDaySend {
+  const before = operation ?? { id: newId(), savedContent: null };
   return {
-    operation: { id: current.id, savedContent: current.savedContent ?? content },
-    editedSinceFirstSend: current.savedContent !== null && current.savedContent !== content,
+    operation: { id: before.id, savedContent: before.savedContent ?? content },
+    before,
+    editedSinceFirstSend: before.savedContent !== null && before.savedContent !== content,
   };
 }
 
 /**
  * The operation after a send's answer. Saved, or an earlier version stands:
- * the next send is a new correction. A refusal saved nothing under the id, so
- * the next send's content becomes the one to compare with.
+ * the next send is a new correction. A refusal saved nothing in this send, so
+ * the operation is as before it; an earlier send whose answer was lost may
+ * still have saved its content.
  */
 export function finishPastDaySend(
-  operation: PastDayOperation,
+  send: PastDaySend,
   outcome: 'saved' | 'earlier-version-saved' | 'failed',
 ): PastDayOperation | null {
-  return outcome === 'failed' ? { id: operation.id, savedContent: null } : null;
+  return outcome === 'failed' ? send.before : null;
 }
 
 export const EARLIER_VERSION_SAVED =

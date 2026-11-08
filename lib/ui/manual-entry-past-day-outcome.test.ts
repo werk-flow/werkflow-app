@@ -24,23 +24,40 @@ test('a retry after a refusal and a lost response counts the content the server 
   // Content A is refused: nothing was saved under the id.
   const refused = startPastDaySend(null, 'A', newId);
   expect(refused.editedSinceFirstSend).toBe(false);
-  const afterRefusal = finishPastDaySend(refused.operation, 'failed');
+  const afterRefusal = finishPastDaySend(refused, 'failed');
   expect(afterRefusal).toEqual({ id: 'operation-1', savedContent: null });
 
   // The edit B goes in under the same id; the server saves it, the response is lost.
   const lost = startPastDaySend(afterRefusal, 'B', newId);
-  expect(lost).toEqual({ operation: { id: 'operation-1', savedContent: 'B' }, editedSinceFirstSend: false });
+  expect(lost.operation).toEqual({ id: 'operation-1', savedContent: 'B' });
+  expect(lost.editedSinceFirstSend).toBe(false);
 
   // Retrying B replays the saved B: saved, not „earlier version“.
   const retry = startPastDaySend(lost.operation, 'B', newId);
   expect(pastDayOutcome({ saved: true, replayed: true }, retry.editedSinceFirstSend)).toEqual({
     kind: 'saved',
   });
-  expect(finishPastDaySend(retry.operation, 'saved')).toBeNull();
+  expect(finishPastDaySend(retry, 'saved')).toBeNull();
 
   // Editing to C after the lost B: B stands and the form says so.
   const edited = startPastDaySend(lost.operation, 'C', newId);
   expect(pastDayOutcome({ saved: true, replayed: true }, edited.editedSinceFirstSend)).toEqual({
+    kind: 'earlier-version-saved',
+  });
+});
+
+test('a refusal after a lost response keeps the content that may have been saved', () => {
+  const newId = () => 'operation-1';
+  // A is saved, but its response is lost: the send throws and the operation stays.
+  const lostA = startPastDaySend(null, 'A', newId);
+  // Edited to B, the retry is refused before it reaches the server.
+  const refusedB = startPastDaySend(lostA.operation, 'B', newId);
+  expect(refusedB.editedSinceFirstSend).toBe(true);
+  const afterRefusal = finishPastDaySend(refusedB, 'failed');
+  expect(afterRefusal).toEqual({ id: 'operation-1', savedContent: 'A' });
+  // The next send of B replays A: the form says the earlier version stands.
+  const retryB = startPastDaySend(afterRefusal, 'B', newId);
+  expect(pastDayOutcome({ saved: true, replayed: true }, retryB.editedSinceFirstSend)).toEqual({
     kind: 'earlier-version-saved',
   });
 });

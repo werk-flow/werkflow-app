@@ -267,7 +267,7 @@ export function useManualEntrySubmit(input: ManualEntrySubmitInput): {
             showBanner,
             onSuccess,
           });
-          operationRef.current = finishPastDaySend(send.operation, outcome);
+          operationRef.current = finishPastDaySend(send, outcome);
           return;
         }
         await saveManualEntries({
