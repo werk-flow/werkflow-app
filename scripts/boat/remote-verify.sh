@@ -130,7 +130,12 @@ comm -13 "$HOME/evidence-before.txt" "$HOME/evidence-after.txt" > "$HOME/evidenc
 # A failed browser group's retained world dies with this machine: clean it here, so its manifest
 # says so. A run without a retained world refuses the cleanup, which changes nothing.
 grep '^\.agent-logs/playwright-runs/' "$HOME/evidence-new.txt" | while read -r run; do
-  bun run test:runs cleanup "$(basename "$run")" > /dev/null 2>&1 || true
+  [ -f "$run/state/world.json" ] || continue
+  if ! bun run test:runs cleanup "$(basename "$run")" > "$HOME/cleanup.log" 2>&1; then
+    tail -n 3 "$HOME/cleanup.log"
+    printf '[boat] the world of run %s could not be cleaned on the machine, which is now deleted. Run bun run test:runs cleanup %s on the workstation.\n' \
+      "$(basename "$run")" "$(basename "$run")"
+  fi
 done
 [ -d .agent-logs/test-server ] && echo .agent-logs/test-server >> "$HOME/evidence-new.txt"
 tar --create --gzip --file "$HOME/results.tgz" --files-from "$HOME/evidence-new.txt"
