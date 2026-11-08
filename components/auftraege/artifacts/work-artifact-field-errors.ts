@@ -22,6 +22,8 @@ export const WORK_ARTIFACT_CONTROL_IDS = {
 export const measurementLineDescriptionId = (line: number): string =>
   `artifact-measurement-description-${line}`;
 
+export const measurementLineQuantityId = (line: number): string => `artifact-measurement-quantity-${line}`;
+
 const REQUIRED_MESSAGES: Readonly<Record<WorkArtifactRuleField, string>> = {
   title: 'Bitte gib einen Titel mit mindestens 3 Zeichen an.',
   workDate: 'Bitte wähle den Arbeitstag.',
@@ -44,7 +46,7 @@ const REQUIRED_MESSAGES: Readonly<Record<WorkArtifactRuleField, string>> = {
 export function workArtifactFieldErrors(issues: readonly WorkArtifactFieldIssue[]): Record<string, string> {
   const errors: Record<string, string> = {};
   for (const issue of issues) {
-    if (issue.field === 'measurementLineDescription') continue;
+    if (issue.field === 'measurementLineDescription' || issue.field === 'measurementLineQuantity') continue;
     errors[WORK_ARTIFACT_CONTROL_IDS[issue.field]] =
       issue.code === 'visit_end_must_be_after_start'
         ? 'Das Ende muss nach dem Beginn liegen.'
@@ -55,8 +57,11 @@ export function workArtifactFieldErrors(issues: readonly WorkArtifactFieldIssue[
     const message = errors[id];
     if (message) ordered[id] = message;
   }
-  for (const issue of issues)
+  for (const issue of issues) {
     if (issue.field === 'measurementLineDescription')
       ordered[measurementLineDescriptionId(issue.line)] = 'Bitte gib eine Bezeichnung an.';
+    if (issue.field === 'measurementLineQuantity')
+      ordered[measurementLineQuantityId(issue.line)] = 'Bitte gib eine Menge über 0 an.';
+  }
   return ordered;
 }

@@ -58,11 +58,34 @@ describe('workArtifactFieldIssues', () => {
         kind: 'measurement',
         title: 'Aufmaß',
         submit: false,
-        content: { measurementLines: [{ description: 'Rohr' }, { description: ' ' }] },
+        content: {
+          measurementLines: [
+            { description: 'Rohr', quantity: '2,5' },
+            { description: ' ', quantity: '1' },
+          ],
+        },
       }),
     ).toEqual([
       { field: 'measurementLineDescription', line: 1, code: 'measurement_line_description_required' },
     ]);
+  });
+
+  test('a measurement line needs a quantity above zero in a number format the save accepts', () => {
+    const quantityLines = (quantities: string[]) =>
+      workArtifactFieldIssues({
+        kind: 'measurement',
+        title: 'Aufmaß',
+        submit: false,
+        content: { measurementLines: quantities.map((quantity) => ({ description: 'Rohr', quantity })) },
+      });
+    expect(quantityLines(['1', '2,5', '0.125', '12345678901'])).toEqual([]);
+    expect(quantityLines(['', '0', '0,000', '-1', '1,2345', 'abc'])).toEqual(
+      [0, 1, 2, 3, 4, 5].map((line) => ({
+        field: 'measurementLineQuantity',
+        line,
+        code: 'measurement_line_quantity_invalid',
+      })),
+    );
   });
 
   test('a defect and a change work need their fields even as a draft', () => {
@@ -83,7 +106,11 @@ describe('workArtifactFieldIssues', () => {
       const marked = requiredWorkArtifactFields(kind);
       for (const field of fields({ kind, title: '', submit: true, content: {} }))
         expect(
-          marked.has(field === 'measurementLineDescription' ? 'measurementLines' : field),
+          marked.has(
+            field === 'measurementLineDescription' || field === 'measurementLineQuantity'
+              ? 'measurementLines'
+              : field,
+          ),
           `${kind}: ${field}`,
         ).toBe(true);
     }

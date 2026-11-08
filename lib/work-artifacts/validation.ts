@@ -38,10 +38,8 @@ const workArtifactContentSchema = z.object({
         id: optionalUuid,
         description: z.string().trim().max(500),
         location: z.string().trim().max(500).optional(),
-        quantity: z
-          .string()
-          .regex(/^\d{1,11}(?:[.,]\d{1,3})?$/)
-          .refine((value) => Number(value.replace(',', '.')) > 0, 'quantity_must_be_positive'),
+        // Format and „above zero“ are a field rule (field-rules.ts), so the form marks the field too.
+        quantity: z.string().max(20),
         unit: z.enum(Constants.public.Enums.work_artifact_measurement_unit),
         note: z.string().trim().max(1000).optional(),
       }),
@@ -102,7 +100,9 @@ export const saveWorkArtifactSchema = saveWorkArtifactFields.superRefine((value,
         ? ['title']
         : issue.field === 'measurementLineDescription'
           ? ['content', 'measurementLines', issue.line, 'description']
-          : ['content', issue.field];
+          : issue.field === 'measurementLineQuantity'
+            ? ['content', 'measurementLines', issue.line, 'quantity']
+            : ['content', issue.field];
     context.addIssue({ code: 'custom', path, message: issue.code });
   }
   if (

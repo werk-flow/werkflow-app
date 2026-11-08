@@ -26,7 +26,8 @@ export type WorkArtifactRuleField = 'title' | RequiredContentField;
 
 export type WorkArtifactFieldIssue =
   | { field: WorkArtifactRuleField; code: string }
-  | { field: 'measurementLineDescription'; line: number; code: 'measurement_line_description_required' };
+  | { field: 'measurementLineDescription'; line: number; code: 'measurement_line_description_required' }
+  | { field: 'measurementLineQuantity'; line: number; code: 'measurement_line_quantity_invalid' };
 
 /** The draft the rules read: the client's editor state or the parsed save input. */
 export type WorkArtifactRuleDraft = {
@@ -35,10 +36,15 @@ export type WorkArtifactRuleDraft = {
   submit: boolean;
   content: {
     [Key in Exclude<RequiredContentField, 'measurementLines'>]?: WorkArtifactContentInput[Key] | undefined;
-  } & { measurementLines?: ReadonlyArray<{ description: string }> | undefined };
+  } & { measurementLines?: ReadonlyArray<{ description: string; quantity: string }> | undefined };
 };
 
 const WORK_ARTIFACT_TITLE_MIN_LENGTH = 3;
+
+/** A measurement position's quantity: up to eleven digits and three decimals, comma or point, above zero. */
+function isMeasurementQuantity(value: string): boolean {
+  return /^\d{1,11}(?:[.,]\d{1,3})?$/.test(value) && Number(value.replace(',', '.')) > 0;
+}
 
 /** The fields each kind needs for a submit, in the form's order; a draft needs the ones in `DRAFT_REQUIRED`. */
 const SUBMIT_REQUIRED: Readonly<Record<WorkArtifactKind, readonly RequiredContentField[]>> = {
@@ -112,6 +118,12 @@ export function workArtifactFieldIssues(draft: WorkArtifactRuleDraft): WorkArtif
         field: 'measurementLineDescription',
         line: index,
         code: 'measurement_line_description_required',
+      });
+    if (!isMeasurementQuantity(line.quantity))
+      issues.push({
+        field: 'measurementLineQuantity',
+        line: index,
+        code: 'measurement_line_quantity_invalid',
       });
   });
   return issues;

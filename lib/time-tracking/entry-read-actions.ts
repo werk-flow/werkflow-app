@@ -428,9 +428,14 @@ function jobTimeEntries(
   job: JobSources,
   sessionsByUserDay: ReadonlyMap<string, WorkSession[]>,
 ): TimeEntry[] {
+  // A session's clock-out can carry no job (a same-day manual pair); it still
+  // ends this job's session, so it stays with the clock-in that opened it.
+  const pairedClockOutIds = new Set<string>();
   const projectJobEntries = (entries: readonly TimeEntry[]): TimeEntry[] =>
     applyApprovedTimeCorrections(entries, scope.correctionApplications, scope.organizationId).filter(
-      (entry) => entry.jobId === job.jobId && (scope.isManager || entry.userId === scope.userId),
+      (entry) =>
+        (entry.jobId === job.jobId || pairedClockOutIds.has(entry.id)) &&
+        (scope.isManager || entry.userId === scope.userId),
     );
   if (job.clockIns.length === 0) return projectJobEntries(job.canonicalEntries);
 
@@ -441,7 +446,10 @@ function jobTimeEntries(
     for (const { clockIn, clockOut } of sessions) {
       if (clockIn?.jobId !== job.jobId) continue;
       dedupedEntries.set(clockIn.id, clockIn);
-      if (clockOut) dedupedEntries.set(clockOut.id, clockOut);
+      if (clockOut) {
+        dedupedEntries.set(clockOut.id, clockOut);
+        pairedClockOutIds.add(clockOut.id);
+      }
     }
   }
 

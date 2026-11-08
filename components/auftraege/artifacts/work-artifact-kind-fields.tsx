@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Constants } from '@/lib/supabase/database.types';
 import { WORK_ARTIFACT_UNIT_LABELS, type MeasurementLineInput } from '@/lib/work-artifacts/types';
 import { DEFECT_SEVERITY_LABELS, DEFECT_STATE_LABELS } from './work-artifact-content';
-import { measurementLineDescriptionId } from './work-artifact-field-errors';
+import { measurementLineDescriptionId, measurementLineQuantityId } from './work-artifact-field-errors';
 import { DateField, TextField, type WorkArtifactContentFieldsProps } from './work-artifact-form-fields';
 
 export function WorkArtifactSiteDiaryFields({
@@ -189,6 +189,7 @@ export function WorkArtifactMeasurementFields({
             line={line}
             index={index}
             descriptionError={fieldErrors[measurementLineDescriptionId(index)]}
+            quantityError={fieldErrors[measurementLineQuantityId(index)]}
             measurementLines={measurementLines}
             setMeasurementLines={setMeasurementLines}
           />
@@ -225,10 +226,12 @@ function MeasurementLineFields({
   measurementLines,
   setMeasurementLines,
   descriptionError,
+  quantityError,
 }: Pick<WorkArtifactMeasurementFieldsProps, 'measurementLines' | 'setMeasurementLines'> & {
   line: MeasurementLineInput;
   index: number;
   descriptionError: string | undefined;
+  quantityError: string | undefined;
 }) {
   const patchLine = (patch: Partial<MeasurementLineInput>) =>
     setMeasurementLines(
@@ -244,9 +247,9 @@ function MeasurementLineFields({
         value={line.description}
         onChange={(value) => patchLine({ description: value })}
       />
-      <Field label="Menge" htmlFor={`artifact-measurement-quantity-${index}`}>
+      <Field label="Menge" htmlFor={measurementLineQuantityId(index)} required error={quantityError}>
         <QuantityStepper
-          id={`artifact-measurement-quantity-${index}`}
+          id={measurementLineQuantityId(index)}
           value={line.quantity}
           onChange={(value) => patchLine({ quantity: value })}
           min={0.001}

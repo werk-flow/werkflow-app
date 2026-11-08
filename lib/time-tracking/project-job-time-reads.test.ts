@@ -26,3 +26,7 @@ test("the project time card reads each person's days once per request, not once 
 test('a project read whose merged days exceed the row bound returns what each job read returns', async () => {
   await runFixture('project-job-day-read-bound');
 });
+
+test("a job read keeps its session's clock-out that names no job", async () => {
+  await runFixture('job-read-paired-clock-out');
+});
