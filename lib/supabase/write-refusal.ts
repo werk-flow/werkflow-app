@@ -4,6 +4,17 @@ import { logError } from '@/lib/logging';
 type WriteError = { message: string } | null;
 
 /**
+ * Whether the database refused a write function call, so its transaction
+ * rolled back and wrote nothing: the function raised (`P0001`) or a
+ * constraint refused a row (class `23`). A transport failure, a gateway error
+ * or a timeout carries no such code and leaves the outcome unknown.
+ */
+export function isConfirmedWriteRefusal(error: { code?: string } | null): boolean {
+  const code = error?.code ?? '';
+  return code === 'P0001' || code.startsWith('23');
+}
+
+/**
  * The failure of one call of a database write function for a module whose
  * function raises the codes in `refusals` under its lock: a listed refusal
  * reaches the caller as its code; anything else is logged and becomes the

@@ -8,6 +8,7 @@ import { z } from '@/lib/zod';
 import { uuidSchema } from '@/lib/validation/uuid';
 import {
   DOCUMENT_CATEGORIES,
+  DOCUMENT_RETENTION_CLASSES,
   DOCUMENT_LIBRARY_LINK_FILTERS,
   DOCUMENT_LIBRARY_SORTS,
   DOCUMENT_LIBRARY_VIEWS,
@@ -125,6 +126,13 @@ export const updateDocumentCategoryInputSchema = z.object({
 });
 export type UpdateDocumentCategoryInput = z.input<typeof updateDocumentCategoryInputSchema>;
 
+export const updateDocumentRetentionInputSchema = z.object({
+  documentId: uuidSchema,
+  documentDate: z.iso.date(),
+  retentionClass: z.enum(DOCUMENT_RETENTION_CLASSES).nullable(),
+});
+export type UpdateDocumentRetentionInput = z.input<typeof updateDocumentRetentionInputSchema>;
+
 export const moveDocumentInputSchema = z.object({ documentId: uuidSchema, folderId: optionalIdSchema });
 export type MoveDocumentInput = z.input<typeof moveDocumentInputSchema>;
 
@@ -170,6 +178,7 @@ export type CreateDocumentVersionUploadTicketInput = z.input<
 export const finalizeDocumentVersionUploadInputSchema = z.object({
   documentId: uuidSchema,
   versionNumber: z.number().int(),
+  uploadId: uuidSchema,
   fileName: fileNameSchema,
 });
 export type FinalizeDocumentVersionUploadInput = z.input<typeof finalizeDocumentVersionUploadInputSchema>;

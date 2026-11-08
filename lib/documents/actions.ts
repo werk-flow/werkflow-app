@@ -5,6 +5,7 @@ import type { Job } from '@/lib/jobs/types';
 import { logError } from '@/lib/logging';
 import { getOrgMembersForUser } from '@/lib/members/queries';
 import { createSignedDownloadUrl, discardStorageObjects } from '@/lib/storage/r2';
+import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { uuidSchema } from '@/lib/validation/uuid';
 import {
   ensureClientManagerAccess,
@@ -21,6 +22,8 @@ import {
   getDeletedDocumentForManager,
   getDocumentWithHistory,
   getManageableDocument,
+  refuseEarlyDeletion,
+  refuseFiledDocument,
   requireManager,
 } from './access';
 import {
@@ -32,15 +35,19 @@ import {
   signedUrlOptionsSchema,
   unlinkDocumentInputSchema,
   updateDocumentLinksInputSchema,
+  updateDocumentRetentionInputSchema,
   type AttachableDocumentsInput,
   type UnlinkDocumentInput,
+  type UpdateDocumentRetentionInput,
 } from './action-schemas';
+import { fileDocumentOriginal } from './filing';
 import {
   documentRowsFromOrdinaryView,
   hydrateDocumentAuditEvents,
   hydrateDocuments,
   hydrateDocumentsOrNull,
   hydrateDocumentVersions,
+  hydrateWrittenDocument,
 } from './hydration';
 import { linkDocumentToTarget, singleLinkTarget, writeDocumentLinks, type DocumentLinkTarget } from './links';
 import { applyDocumentSearch, readLinkedDocuments, type DocumentLinkColumn } from './reads';
@@ -49,6 +56,7 @@ import type {
   DocumentEmployee,
   DocumentListResult,
   DocumentMutationResult,
+  DocumentResult,
   LinkDocumentsToTargetInput,
   LinkDocumentsToTargetResult,
   ProjectDocumentsOverviewResult,
@@ -56,6 +64,7 @@ import type {
   UpdateDocumentLinksInput,
   UpdateDocumentLinksResult,
 } from './types';
+import { documentDateRange, isDocumentDateInRange } from './retention';
 import { documentWriteFailure, revalidateDocuments } from './write-support';
 
 // Types the in-app viewer actually previews. Everything else is delivered as a
@@ -592,6 +601,8 @@ export async function permanentlyDeleteDocument(rawDocumentId: string): Promise<
 
   const existing = await getDeletedDocumentForManager(auth.context, documentId);
   if (!existing.success) return existing;
+  const early = refuseEarlyDeletion(existing.document);
+  if (!early.success) return early;
 
   // The row goes first, in one transaction with its version rows, links and
   // audit event: a refused delete (a protected personnel document, a released
@@ -607,7 +618,7 @@ export async function permanentlyDeleteDocument(rawDocumentId: string): Promise<
     return documentWriteFailure(
       'Failed to permanently delete document metadata',
       error,
-      ['document_not_found', 'document_has_equipment_history'],
+      ['document_not_found', 'document_has_equipment_history', 'document_filed', 'retention_period_running'],
       'delete_failed',
     );
   }
@@ -617,4 +628,70 @@ export async function permanentlyDeleteDocument(rawDocumentId: string): Promise<
 
   revalidateDocuments();
   return { success: true };
+}
+
+/**
+ * Sets the document date and the retention class of an ordinary document
+ * until it is filed; the function records the change.
+ */
+export async function updateDocumentRetention(
+  rawInput: UpdateDocumentRetentionInput,
+): Promise<DocumentResult> {
+  const input = parseActionInput(updateDocumentRetentionInputSchema, rawInput);
+  if (!input) return INVALID_INPUT;
+  if (!isDocumentDateInRange(input.documentDate, documentDateRange())) {
+    return { success: false, error: 'document_date_out_of_range' };
+  }
+  const auth = await getAuthorizedDocumentContext();
+  if (!auth.success) return auth;
+
+  const existing = await getManageableDocument(auth.context, input.documentId);
+  if (!existing.success) return existing;
+  const filed = refuseFiledDocument(existing.document);
+  if (!filed.success) return filed;
+
+  const { data, error } = await auth.context.admin.rpc(
+    'update_document_retention',
+    rpcArgs('update_document_retention', {
+      p_actor_id: auth.context.userId,
+      p_organization_id: auth.context.orgId,
+      p_document_id: existing.document.id,
+      p_document_date: input.documentDate,
+      p_retention_class: input.retentionClass,
+    }),
+  );
+  if (error || !data) {
+    return documentWriteFailure(
+      'Failed to update document retention',
+      error,
+      ['document_not_found', 'protected_document_boundary', 'document_filed', 'document_date_out_of_range'],
+      'update_failed',
+    );
+  }
+
+  revalidateDocuments();
+  return hydrateWrittenDocument(auth.context, data);
+}
+
+/** Files (`Festschreiben`) an ordinary document: final, audited. */
+export async function fileDocument(rawDocumentId: string): Promise<DocumentResult> {
+  const documentId = parseActionInput(uuidSchema, rawDocumentId);
+  if (!documentId) return INVALID_INPUT;
+  const auth = await getAuthorizedDocumentContext();
+  if (!auth.success) return auth;
+
+  const existing = await getManageableDocument(auth.context, documentId);
+  if (!existing.success) return existing;
+  const filed = refuseFiledDocument(existing.document);
+  if (!filed.success) return filed;
+
+  const result = await fileDocumentOriginal(auth.context.admin, {
+    actorId: auth.context.userId,
+    organizationId: auth.context.orgId,
+    documentId: existing.document.id,
+  });
+  if (!result.success) return result;
+
+  revalidateDocuments();
+  return hydrateWrittenDocument(auth.context, result.document);
 }

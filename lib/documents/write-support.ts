@@ -105,9 +105,11 @@ export async function discardStagedUpload(organizationId: string, storagePath: s
 }
 
 /**
- * Promotes the object the browser uploaded to a signed URL to its permanent
- * key and checks the copy: it exists, is not empty and stays within the size
- * limit. A rejected copy is discarded.
+ * Promotes the object the browser uploaded to a signed URL to a key of its
+ * own and checks the copy: it exists, is not empty and stays within the size
+ * limit. A rejected copy is discarded. The returned key is the one the caller
+ * registers, and discards when the registration fails: no other attempt
+ * writes it.
  */
 export async function acceptUploadedObject({
   organizationId,
@@ -117,7 +119,7 @@ export async function acceptUploadedObject({
   organizationId: string;
   storagePath: string;
   failureLabel: string;
-}): Promise<ActionResult<{ sizeBytes: number; contentType: string }>> {
+}): Promise<ActionResult<{ storagePath: string; sizeBytes: number; contentType: string }>> {
   let head;
   try {
     head = await promoteUploadedObject({ organizationId, path: storagePath });
@@ -131,17 +133,18 @@ export async function acceptUploadedObject({
   }
 
   if (!head.sizeBytes || head.sizeBytes <= 0) {
-    await discardStorageObjects({ organizationId, paths: [storagePath] });
+    await discardStorageObjects({ organizationId, paths: [head.path] });
     return { success: false, error: 'file_empty' };
   }
 
   if (head.sizeBytes > DOCUMENT_MAX_FILE_SIZE_BYTES) {
-    await discardStorageObjects({ organizationId, paths: [storagePath] });
+    await discardStorageObjects({ organizationId, paths: [head.path] });
     return { success: false, error: 'file_too_large' };
   }
 
   return {
     success: true,
+    storagePath: head.path,
     sizeBytes: head.sizeBytes,
     contentType: head.contentType || 'application/octet-stream',
   };
