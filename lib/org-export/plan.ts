@@ -21,7 +21,7 @@ export type ExportSourceFile = {
   fileBytes: number;
   /** The document's name in WerkFlow. */
   displayName: string;
-  /** The name the file had when it was uploaded; its extension wins when the display name has none. */
+  /** The name the file had when it was uploaded; its extension is the exported file's. */
   originalFileName: string;
   /** The folders below `Dateien/`, outermost first. */
   location: readonly string[];
@@ -49,19 +49,20 @@ function extensionOf(name: string): string {
   return dot > 0 && dot >= name.length - 11 ? name.slice(dot) : '';
 }
 
-function splitName(name: string): { stem: string; extension: string } {
-  const extension = extensionOf(name);
-  return { stem: extension ? name.slice(0, -extension.length) : name, extension };
-}
-
-/** The file name of one source before collisions: `Angebot.pdf`, `Angebot (Version 2).pdf`. */
+/**
+ * The file name of one source before collisions: `Angebot.pdf`,
+ * `Angebot (Version 2).pdf`. The extension is the uploaded file's, so the
+ * file opens with the right program. A display name ending in it drops it;
+ * any other suffix stays part of the name: `Rechnung 2026.01.pdf`.
+ */
 function baseName(file: ExportSourceFile): { stem: string; extension: string } {
-  const display = splitName(safeSegment(file.displayName));
-  const extension =
-    file.versionNumber === null && display.extension
-      ? display.extension
-      : extensionOf(safeSegment(file.originalFileName));
-  const stem = file.versionNumber === null ? display.stem : `${display.stem} (Version ${file.versionNumber})`;
+  const display = safeSegment(file.displayName);
+  const extension = extensionOf(safeSegment(file.originalFileName));
+  const displayStem =
+    extension !== '' && extensionOf(display).toLowerCase() === extension.toLowerCase()
+      ? display.slice(0, -extension.length)
+      : display;
+  const stem = file.versionNumber === null ? displayStem : `${displayStem} (Version ${file.versionNumber})`;
   // Room for a ` (99)` suffix; a cut never leaves a trailing dot or space.
   const cut = stem.slice(0, MAX_SEGMENT_LENGTH - extension.length - 6).replace(/[. ]+$/, '');
   return { stem: cut === '' ? '_' : cut, extension };

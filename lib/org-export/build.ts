@@ -2,7 +2,12 @@ import 'server-only';
 
 import { buildStoredZip } from '@/lib/format/csv-zip';
 import { logError } from '@/lib/logging';
-import { createSignedDownloadUrl, putStorageObject, readStorageObject } from '@/lib/storage/r2';
+import {
+  createSignedDownloadUrl,
+  headStorageObject,
+  putStorageObject,
+  readStorageObject,
+} from '@/lib/storage/r2';
 import type { AdminClient } from '@/lib/supabase/admin';
 import { mapInWindows, readCompleteRows } from '@/lib/supabase/query-batches';
 import { isJsonRecord, toJson } from '@/lib/supabase/json';
@@ -123,8 +128,10 @@ async function claimPartBuild(
 /**
  * Packs the part's archive and stores it at the part's path, unless an
  * archive is there already: the first archive stored for a part never
- * changes, so a second build, concurrent or after a lost completion, records
- * the stored archive's size instead of its own bytes.
+ * changes. A build after a lost completion finds it before reading any
+ * source, so a source gone since then cannot fail the part; a concurrent
+ * build that stores first wins the conditional write. Either way the build
+ * records the stored archive's size instead of its own bytes.
  */
 async function packAndStore(
   admin: AdminClient,
@@ -132,6 +139,11 @@ async function packAndStore(
   partId: string,
   part: BuildablePart,
 ): Promise<number> {
+  const existing = await headStorageObject({ organizationId, path: part.archivePath });
+  if (existing.exists) {
+    if (existing.sizeBytes === null) throw new Error('load_failed');
+    return existing.sizeBytes;
+  }
   const files =
     part.kind === 'data'
       ? await buildDataPartFiles(admin, {

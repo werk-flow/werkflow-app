@@ -73,6 +73,23 @@ describe('organization export file plan', () => {
     expect(names.get(file(4).sourcePath)).toBe('Dateien/Kunden/Rechnung (Version 2).PDF');
   });
 
+  test("ends every name in the uploaded file's extension, keeping another display suffix in the name", () => {
+    const names = nameExportFiles([
+      file(1, { displayName: 'Rechnung 2026.01', originalFileName: 'rechnung.pdf' }),
+      file(2, { displayName: 'Lieferschein', originalFileName: 'scan.PDF' }),
+      file(3, { displayName: 'Angebot.PDF', originalFileName: 'angebot.pdf' }),
+      file(4, { displayName: 'Rechnung 2026.01', originalFileName: 'rechnung-alt.pdf', versionNumber: 1 }),
+      file(5, { displayName: 'Rechnung 2026.01.pdf', originalFileName: 'kopie.pdf' }),
+      file(6, { displayName: 'Notiz.txt', originalFileName: 'notiz' }),
+    ]);
+    expect(names.get(file(1).sourcePath)).toBe('Dateien/Kunden/Rechnung 2026.01.pdf');
+    expect(names.get(file(2).sourcePath)).toBe('Dateien/Kunden/Lieferschein.PDF');
+    expect(names.get(file(3).sourcePath)).toBe('Dateien/Kunden/Angebot.pdf');
+    expect(names.get(file(4).sourcePath)).toBe('Dateien/Kunden/Rechnung 2026.01 (Version 1).pdf');
+    expect(names.get(file(5).sourcePath)).toBe('Dateien/Kunden/Rechnung 2026.01 (2).pdf');
+    expect(names.get(file(6).sourcePath)).toBe('Dateien/Kunden/Notiz.txt');
+  });
+
   test('names stay inside the archive folder, whatever the folder or file is called', () => {
     const names = nameExportFiles([
       file(1, { location: ['..', 'a/b', ' . '], displayName: '../../etc/passwd' }),

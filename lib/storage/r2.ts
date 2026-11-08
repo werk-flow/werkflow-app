@@ -219,7 +219,8 @@ export async function createSignedDownloadUrl({
   return getSignedUrl(getR2Client(), command, { expiresIn: clampExpiry(expiresInSeconds) });
 }
 
-async function headStorageObject({
+/** Whether an object of the organization is stored at the key, and its size. */
+export async function headStorageObject({
   organizationId,
   path,
 }: OrganizationScope & { path: string }): Promise<StorageObjectHead> {

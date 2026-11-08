@@ -176,6 +176,8 @@ let missingFileArrived = false;
 // The part whose completion answer the next build loses.
 let losesCompletion: string | null = null;
 const storedArchives: { path: string; body: Uint8Array }[] = [];
+// The archive a concurrent build stores at its key just before the next write there.
+let concurrentStore: { path: string; body: Uint8Array } | null = null;
 // Claims, results and stores in the order a build made them, by part file name.
 const steps: string[] = [];
 const partFile = (partId: string) =>
@@ -189,6 +191,12 @@ mock.module('@/lib/storage/r2', () => ({
     if (key === missingPath && !missingFileArrived) throw new Error('storage_object_missing');
     return new TextEncoder().encode(`bytes of ${key}`);
   },
+  headStorageObject: async ({ path: key }: { organizationId: string; path: string }) => {
+    const stored = storedArchives.find((archive) => archive.path === key);
+    return stored
+      ? { exists: true, sizeBytes: stored.body.length, contentType: 'application/zip' }
+      : { exists: false, sizeBytes: null, contentType: null };
+  },
   // A key once written keeps its object, as the conditional write in R2 does.
   putStorageObject: async ({
     path: key,
@@ -200,6 +208,10 @@ mock.module('@/lib/storage/r2', () => ({
     ifAbsent?: boolean;
   }) => {
     steps.push(`store ${key.split('/').at(-1) ?? ''}`);
+    if (concurrentStore?.path === key) {
+      storedArchives.push(concurrentStore);
+      concurrentStore = null;
+    }
     const stored = storedArchives.find((archive) => archive.path === key);
     if (ifAbsent && stored) return { created: false, sizeBytes: stored.body.length };
     storedArchives.push({ path: key, body });
@@ -443,14 +455,21 @@ assert.ok(
   'the manifest hides a version uploaded after the start',
 );
 
-// A second build of a part whose archive is stored, concurrent or after a lost
-// completion, keeps the stored archive and records its size.
+// A build after a lost completion records the stored archive's size before it
+// reads any source: an original gone since then cannot fail the part.
 const storedFirstPart = storedArchives.find((archive) => archive.path.endsWith('/teil-2.zip'));
 assert.ok(storedFirstPart, 'the first file part stored no archive');
+missingFileArrived = false;
 world.rpcCalls.length = 0;
+steps.length = 0;
 const archiveCount = storedArchives.length;
-assert.deepEqual(await buildOrganizationExportPart(firstFilePart), { success: true });
+assert.deepEqual(
+  await buildOrganizationExportPart(firstFilePart),
+  { success: true },
+  'a build after a lost completion read the sources again instead of recording the stored archive',
+);
 assert.equal(storedArchives.length, archiveCount, 'a second build overwrote a stored archive');
+assert.deepEqual(steps, ['claim teil-2.zip', 'complete teil-2.zip'], 'a second build stored again');
 assert.deepEqual(
   world.rpcCalls.map((call) => [call.name, call.args.p_archive_bytes]),
   [
@@ -458,6 +477,28 @@ assert.deepEqual(
     ['complete_organization_export_part', storedFirstPart.body.length],
   ],
 );
+missingFileArrived = true;
+
+// A concurrent build that stores first wins the conditional write: this build
+// keeps that archive and records its size.
+storedArchives.splice(storedArchives.indexOf(storedFirstPart), 1);
+const concurrentArchive = new TextEncoder().encode('the archive a concurrent build stored');
+concurrentStore = { path: storedFirstPart.path, body: concurrentArchive };
+world.rpcCalls.length = 0;
+assert.deepEqual(await buildOrganizationExportPart(firstFilePart), { success: true });
+assert.deepEqual(
+  storedArchives.filter((archive) => archive.path === storedFirstPart.path).map((archive) => archive.body),
+  [concurrentArchive],
+  'a concurrent build overwrote the archive stored first',
+);
+assert.equal(
+  world.rpcCalls.find((call) => call.name === 'complete_organization_export_part')?.args.p_archive_bytes,
+  concurrentArchive.length,
+  'a concurrent build recorded its own size instead of the stored archive',
+);
+
+// The data part builds again below, as a part whose archive was never stored.
+storedArchives.splice(storedArchives.indexOf(dataArchive), 1);
 
 // A column the dictionary does not know fails the data part instead of leaving it out.
 columns.documents = [...(columns.documents ?? []), 'brand_new_column'];
@@ -476,7 +517,6 @@ columns.documents = columns.documents.filter((column) => column !== 'brand_new_c
 const [onePartExport] = tableRows(world, 'organization_exports');
 assert.ok(onePartExport);
 onePartExport.part_count = 1;
-storedArchives.splice(storedArchives.indexOf(dataArchive), 1);
 assert.deepEqual(await buildOrganizationExportPart(dataPart), { success: true });
 const onePartReadme = readmeOf(zipEntries(storedArchives.at(-1)?.body ?? new Uint8Array()));
 assert.ok(onePartReadme.includes('diesem einen Archiv mit allen Daten'), 'the README of one part miscounts');
