@@ -17,6 +17,7 @@ import { OrganizationContractFixture } from './organization-boundaries';
 import { CalendarContractFixture } from './calendar-boundaries';
 import { FeedbackContractFixture, isFeedbackFixture } from './feedback-boundaries';
 import { mountHydrationFixture } from './hydration-boundaries';
+import { AuthUrlContractFixture } from './auth-url-boundaries';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
@@ -613,6 +614,9 @@ createRoot(root).render(
         <PersonnelLifecycleSection data={personnelInitialData} canManage canAdministerAccess />
       </main>
     </BannerProvider>
+  ) : window.uiContractFixture === 'auth-url-session' ||
+    window.uiContractFixture === 'auth-url-reset-form' ? (
+    <AuthUrlContractFixture name={window.uiContractFixture} />
   ) : isFeedbackFixture(window.uiContractFixture) ? (
     <FeedbackContractFixture name={window.uiContractFixture} />
   ) : (
