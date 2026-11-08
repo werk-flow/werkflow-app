@@ -124,7 +124,11 @@ function startWorkArtifactExport(editor: WorkArtifactEditor, showBanner: ShowBan
       actionId: crypto.randomUUID(),
       documentId: crypto.randomUUID(),
     });
-    if (await handleMutationFailure(result, 'Der Export konnte nicht erstellt werden.')) return;
+    const failureMessage =
+      !result.success && result.error === 'work_artifact_export_requires_customer_visibility'
+        ? 'Ein interner Arbeitsnachweis wird nicht exportiert. Speichere eine neue Version „Für Kundendokumentation“, um ihn zu exportieren.'
+        : 'Der Export konnte nicht erstellt werden.';
+    if (await handleMutationFailure(result, failureMessage)) return;
     await load(detail.id);
     showBanner({ variant: 'success', message: 'HTML-Export wurde unter Dokumente abgelegt.' });
   });

@@ -20,6 +20,7 @@ import {
   seriesReschedulePayload,
 } from './edit-drafts';
 import {
+  assignmentAvailabilityInputSchema,
   createPlanningEntrySchema,
   planningDateWindowSchema,
   planningIdSchema,
@@ -45,6 +46,8 @@ import type {
   PlanningCalendarEntry,
 } from './types';
 import { logError } from '@/lib/logging';
+import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
+import { availabilityNote } from './availability';
 
 export async function getPlanningOptions(input: PlanningOptionRequest): Promise<PlanningOptionResult> {
   const auth = await authenticateAndAuthorize();
@@ -55,6 +58,46 @@ export async function getPlanningOptions(input: PlanningOptionRequest): Promise<
   if (parsed.data.organizationId !== auth.context.orgId)
     return { success: false, error: 'organization_changed' };
   return loadPlanningOptions(auth.context.orgId, parsed.data);
+}
+
+/**
+ * The members the assignment picker marks on a date: left, not yet started,
+ * or without app access. Only these facts leave the server, keyed by the
+ * member's user id.
+ */
+export async function getAssignmentAvailability(
+  rawInput: unknown,
+): Promise<ActionResult<{ notes: Array<{ userId: string; note: string }> }>> {
+  const parsed = assignmentAvailabilityInputSchema.safeParse(rawInput);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const auth = await authenticateAndAuthorize();
+  if (!auth.success) return auth;
+  if (!auth.context.isManagerOrAbove) return { success: false, error: 'not_authorized' };
+  const localDate = parsed.data.localDate ?? getBusinessTodayIso();
+  const { data, error } = await readCompleteRows(
+    (from, to) =>
+      createSupabaseAdminClient()
+        .from('employee_records')
+        .select(
+          'id, user_id, entry_date, exit_date, personnel_access_lifecycles!personnel_access_lifecycles_employee_org_fkey(state, state_effective_at, scheduled_state, scheduled_for)',
+        )
+        .eq('organization_id', auth.context.orgId)
+        .not('user_id', 'is', null)
+        .order('id')
+        .range(from, to),
+    LIST_ROW_CAP,
+  );
+  if (error) {
+    logError('Failed to load assignment availability', error);
+    return { success: false, error: 'load_failed' };
+  }
+  return {
+    success: true,
+    notes: data.flatMap((record) => {
+      const note = availabilityNote(record, localDate);
+      return note && record.user_id ? [{ userId: record.user_id, note }] : [];
+    }),
+  };
 }
 
 export async function getPlanningEntries(

@@ -113,13 +113,12 @@ mock.module('@/lib/storage/r2', () => ({
   discardStorageObjects: async ({ paths }: { paths: string[] }) => {
     storageCalls.push(`discard:${paths.join(',')}`);
   },
-  headStorageObject: async ({ path }: { path: string }) => {
-    storageCalls.push(`head:${path}`);
-    return { exists: true, sizeBytes: 100, contentType: 'application/pdf' };
-  },
+  // Like the adapter, each promotion copies to a key of its own beside the ticket's path.
   promoteUploadedObject: async ({ path }: { path: string }) => {
     storageCalls.push(`promote:${path}`);
-    return { exists: true, sizeBytes: 100, contentType: 'application/pdf' };
+    const nameStart = path.lastIndexOf('/') + 1;
+    const copyPath = `${path.slice(0, nameStart)}copy-${storageCalls.length}-${path.slice(nameStart)}`;
+    return { exists: true, sizeBytes: 100, contentType: 'application/pdf', path: copyPath };
   },
   uploadStagingPath: (organizationId: string, path: string) =>
     `${organizationId}/staging/${path.slice(organizationId.length + 1)}`,
@@ -325,12 +324,16 @@ assertCallerScopedCalls(world);
 assert.deepEqual(storageCalls, []);
 assert.equal(databaseSnapshot(world), initialDatabase, 'no refused call may write');
 
-// An Admin's upload: the first finalize copies the staged upload to the document key,
-// and a replay of the finalized upload reads the registered object without copying
-// over it. A cleanup of an unregistered upload removes its staging key too.
+// An Admin's upload: the first finalize copies the staged upload to a key of
+// its own and registers that key, and a replay of the finalized upload touches
+// no storage. A cleanup whose read was
+// taken before the finalize committed removes only the staging key, never the
+// registered copy. A cleanup of an unregistered upload removes its staging key.
 signInAs(world, 'admin');
 storageCalls.length = 0;
+world.rpcCalls.length = 0;
 world.tables.documents = [];
+const stagingOf = (path: string) => `${ORGANIZATION_A}/staging/${path.slice(ORGANIZATION_A.length + 1)}`;
 const issueTicket = async () => {
   const issued = await ticket(colleagueRecordId, 'admin_restricted');
   assert.ok(issued.success, JSON.stringify(issued));
@@ -362,18 +365,63 @@ world.failingTables.add('documents');
 assert.deepEqual(await finalizeRegistered(), { success: false, error: 'load_failed' });
 world.failingTables.delete('documents');
 assert.deepEqual(await finalizeRegistered(), finalized);
+const registeredPath = String(
+  world.rpcCalls.find((call) => call.name === 'finalize_personnel_document_metadata')?.args.p_storage_path,
+);
+// The documents table does not show the commit yet: the cleanup read it before the finalize committed.
+assert.deepEqual(await cleanupPersonnelDocumentUpload(registered.request), { success: true });
+// A replay after a later version of the document made another key current
+// copies nothing and names the ticket's path, which the function's path check accepts.
 world.tables.documents.push({
   id: registered.request.documentId,
   organization_id: ORGANIZATION_A,
-  storage_path: registered.path,
+  storage_path: `${ORGANIZATION_A}/${registered.request.documentId}/versions/2-nachweis.pdf`,
+  size_bytes: 100,
+  mime_type: 'application/pdf',
 });
+world.rpcCalls.length = 0;
 assert.deepEqual(await finalizeRegistered(), finalized);
+assert.equal(
+  world.rpcCalls.find((call) => call.name === 'finalize_personnel_document_metadata')?.args.p_storage_path,
+  registered.path,
+);
 const abandoned = await issueTicket();
 assert.deepEqual(await cleanupPersonnelDocumentUpload(abandoned.request), { success: true });
+assert.ok(
+  !storageCalls.some(
+    (call: string) => call.startsWith('discard:') && call.slice(8).split(',').includes(registeredPath),
+  ),
+  'a cleanup removed the copy a finalize registered',
+);
 assert.deepEqual(storageCalls, [
   `upload:${registered.path}`,
   `promote:${registered.path}`,
-  `head:${registered.path}`,
+  `discard:${stagingOf(registered.path)}`,
   `upload:${abandoned.path}`,
-  `discard:${ORGANIZATION_A}/staging/${abandoned.path.slice(ORGANIZATION_A.length + 1)},${abandoned.path}`,
+  `discard:${stagingOf(abandoned.path)}`,
 ]);
+
+// A refused registration removes the finalize's own copy; an unknown outcome keeps it.
+for (const [error, kept] of [
+  [{ code: 'P0001', message: 'operation_id_conflict' }, false],
+  [{ code: '', message: 'TypeError: fetch failed' }, true],
+] as const) {
+  const refused = await issueTicket();
+  world.rpc = (call) =>
+    call.name === 'finalize_personnel_document_metadata' ? { data: null, error } : rpcBeforeUploads(call);
+  storageCalls.length = 0;
+  world.rpcCalls.length = 0;
+  const result = await finalizePersonnelDocumentUpload({
+    ...refused.request,
+    documentType: 'Vertrag',
+    evidenceState: 'valid',
+    validUntil: null,
+  });
+  assert.equal(result.success, false);
+  const copyPath = String(world.rpcCalls.at(-1)?.args.p_storage_path);
+  assert.deepEqual(
+    storageCalls,
+    [`promote:${refused.path}`, ...(kept ? [] : [`discard:${copyPath}`])],
+    error.message,
+  );
+}

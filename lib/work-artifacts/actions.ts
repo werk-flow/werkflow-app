@@ -28,9 +28,14 @@ import {
 } from './validation';
 import { buildWorkArtifactExport } from './export';
 import { mapArtifactError } from './errors';
-import { readRenderedExport, refuseWorkArtifactExport, registerWorkArtifactExport } from './export-storage';
+import {
+  readRenderedExport,
+  refuseWorkArtifactExport,
+  registerWorkArtifactExport,
+  workArtifactExportStoragePath,
+} from './export-storage';
 import { readArtifactForDetail, refuseHiddenCoworkerDraft, toVisibleArtifactDetail } from './detail';
-import { isHiddenCoworkerDraft } from './field-visibility';
+import { isExportableRevision, isHiddenCoworkerDraft } from './field-visibility';
 import {
   WORK_ARTIFACT_STATUSES,
   type SaveWorkArtifactInput,
@@ -585,11 +590,15 @@ export async function exportWorkArtifact(
   if (artifact.project_id && !auth.context.isManagerOrAbove)
     return { success: false, error: 'not_authorized' };
   const revisionId = artifact.current_revision_id;
-  if (!revisionId || artifact.version !== input.expectedVersion) {
+  const currentRevision = artifact.revisions.find((revision) => revision.id === revisionId);
+  if (!revisionId || !currentRevision || artifact.version !== input.expectedVersion) {
     return { success: false, error: 'work_artifact_stale_version' };
   }
+  // Refused before the object is stored; export_work_artifact refuses it as well.
+  if (!isExportableRevision(currentRevision))
+    return { success: false, error: 'work_artifact_export_requires_customer_visibility' };
   const exportFile = buildWorkArtifactExport(artifact);
-  const { bytes, contentHash, rendererVersion } = exportFile;
+  const { bytes } = exportFile;
   const admin = createSupabaseAdminClient();
   const { data: existing, error: existingError } = await readRenderedExport(
     admin,
@@ -607,7 +616,7 @@ export async function exportWorkArtifact(
       documentId: existing.document_id,
     };
   }
-  const storagePath = `${auth.context.orgId}/work-artifact-exports/${revisionId}/${rendererVersion}-${contentHash}.html`;
+  const storagePath = workArtifactExportStoragePath(auth.context.orgId, revisionId, exportFile);
   try {
     await putStorageObject({
       organizationId: auth.context.orgId,
@@ -630,7 +639,11 @@ export async function exportWorkArtifact(
   });
   const status = mutationStatus(data);
   if (error || !isJsonRecord(data) || !status) {
-    return refuseWorkArtifactExport(admin, auth.context.orgId, storagePath, error);
+    return refuseWorkArtifactExport(auth.context.orgId, storagePath, error);
+  }
+  // A concurrent export of the same content committed first; its document owns another object.
+  if (data.duplicate === true) {
+    await discardStorageObjects({ organizationId: auth.context.orgId, paths: [storagePath] });
   }
   revalidateWorkEvidenceViews();
   return {

@@ -63,7 +63,8 @@ function PlanningWarningReasonField({
         value={reason}
         onChange={(event) => onReasonChange(event.target.value)}
         placeholder="z. B. abgestimmter Notdiensteinsatz"
-        maxLength={1000}
+        // planning_occurrence_assessments.override_reason holds at most 500 characters.
+        maxLength={500}
       />
     </Field>
   );

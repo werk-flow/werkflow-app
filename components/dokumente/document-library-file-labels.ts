@@ -8,7 +8,8 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-import type { DocumentFolder, OrganizationDocument } from '@/lib/documents/types';
+import type { DocumentArchive, DocumentFolder, OrganizationDocument } from '@/lib/documents/types';
+import { formatGermanDate } from '@/lib/utils';
 
 /** How the document library names a file: icon, type, uploader, links and audit events. */
 
@@ -121,7 +122,20 @@ export function getAuditEventLabel(eventType: string): string {
     version_uploaded: 'Neue Version hochgeladen',
     permanently_deleted: 'Endgültig gelöscht',
     storage_cleanup: 'Speicher bereinigt',
+    retention_changed: 'Aufbewahrung geändert',
+    filed: 'Festgeschrieben',
   };
 
   return labels[eventType] ?? 'Dokumentaktion';
+}
+
+/**
+ * The archive state in a few words for a library row, such as „Festgeschrieben,
+ * aufbewahren bis 31.12.2036"; null for an unfiled document without a period.
+ */
+export function getArchiveLabel(archive: DocumentArchive | null): string | null {
+  if (!archive) return null;
+  const endsOn = archive.retentionEndsOn ? formatGermanDate(archive.retentionEndsOn) : null;
+  if (archive.filedAt) return endsOn ? `Festgeschrieben, aufbewahren bis ${endsOn}` : 'Festgeschrieben';
+  return endsOn ? `Aufbewahren bis ${endsOn}` : null;
 }

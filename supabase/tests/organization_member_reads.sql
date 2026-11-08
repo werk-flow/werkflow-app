@@ -2,7 +2,11 @@
 -- 20260502180735_add_security_invoker_rpc_compatibility_wrappers.sql) answers
 -- a member of the organization with that organization's members only, and
 -- refuses a caller who is not a member of the organization it names, so one
--- organization never lists another's people. Only the service role executes it.
+-- organization never lists another's people. list_profile_references (migration
+-- 20261108050000_list_profile_references_with_membership.sql) returns the named
+-- people's profiles and says for each whether they are a member of the
+-- organization it names, so a reader can tell a person who left. Only the
+-- service role executes either.
 -- Runs inside one transaction against the local stack and rolls back.
 begin;
 
@@ -57,6 +61,11 @@ begin
   then
     raise exception 'a client role executes get_org_members_for_user';
   end if;
+  if has_function_privilege('anon', 'public.list_profile_references(uuid, uuid[])', 'execute')
+    or has_function_privilege('authenticated', 'public.list_profile_references(uuid, uuid[])', 'execute')
+  then
+    raise exception 'a client role executes list_profile_references';
+  end if;
 end;
 $$;
 
@@ -81,6 +90,46 @@ begin
   from public.get_org_members_for_user('3b000000-0000-0000-0000-000000000011', '3b000000-0000-0000-0000-000000000003');
   if v_listed is distinct from array['3b000000-0000-0000-0000-000000000003', '3b000000-0000-0000-0000-000000000004']::uuid[] then
     raise exception 'the owner of B lists %, not the members of B', v_listed;
+  end if;
+end;
+$$;
+
+do $$
+declare
+  v_references text[];
+begin
+  -- Each named person comes back once with their profile; only the members of the
+  -- named organization count as members, and an unknown id returns nothing.
+  select array_agg(format('%s:%s', reference.first_name, reference.is_member) order by reference.id)
+  into v_references
+  from public.list_profile_references(
+    '3b000000-0000-0000-0000-000000000010',
+    array[
+      '3b000000-0000-0000-0000-000000000001', '3b000000-0000-0000-0000-000000000003',
+      '3b000000-0000-0000-0000-000000000004', '3b000000-0000-0000-0000-0000000000ff'
+    ]::uuid[]
+  ) reference;
+  if v_references is distinct from array['Anna:t', 'Berta:f', 'Fritz:f'] then
+    raise exception 'the references for A are %, not Anna as member and Berta and Fritz as non-members', v_references;
+  end if;
+  select array_agg(format('%s:%s', reference.first_name, reference.is_member) order by reference.id)
+  into v_references
+  from public.list_profile_references(
+    '3b000000-0000-0000-0000-000000000011',
+    array['3b000000-0000-0000-0000-000000000002', '3b000000-0000-0000-0000-000000000004']::uuid[]
+  ) reference;
+  if v_references is distinct from array['Emil:f', 'Fritz:t'] then
+    raise exception 'the references for B are %, not Emil as non-member and Fritz as member', v_references;
+  end if;
+  -- A person who has left keeps the profile row, and the reader decides what to show of it.
+  if not exists (
+    select 1
+    from public.list_profile_references(
+      '3b000000-0000-0000-0000-000000000010', array['3b000000-0000-0000-0000-000000000004']::uuid[]
+    ) reference
+    where reference.email = 'members-employee-b@example.test'
+  ) then
+    raise exception 'list_profile_references dropped the profile columns of a non-member';
   end if;
 end;
 $$;
