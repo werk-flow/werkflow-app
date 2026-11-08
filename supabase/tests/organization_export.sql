@@ -12,8 +12,12 @@
 -- is never recorded keeps that entry, and completion keeps it too. The purge
 -- takes a due archive although the part names its path, and an export older
 -- than seven days builds no part. Every start, part result and download
--- writes an event the ledger guard keeps. Queued again by the organization's
--- deletion, an archive falls due at once. An Admin's session reads the export
+-- writes an event the ledger guard keeps. Queued again, as by the
+-- organization's deletion, an archive falls due when every build that may
+-- still store it has ended, fifteen minutes after the latest claim. The
+-- deletion makes an archive stored after its listing due then too, and until
+-- then the purge neither claims nor completes such an entry, also one it
+-- claimed before a build claimed the part. An Admin's session reads the export
 -- row; Büro, an employee and another organization read nothing, and no client
 -- reads parts, files or events. The page reader returns only the
 -- organization's rows. A start removes the file plans of exports whose
@@ -282,8 +286,9 @@ end;
 $$;
 
 -- Queued again, as the organization's deletion queues every listed object,
--- an archive falls due at once instead of eight days later; a document file
--- still waits eight days.
+-- an archive falls due as soon as every build that may still store it has
+-- ended, fifteen minutes after the latest claim, instead of eight days later;
+-- a document file still waits eight days.
 do $$
 declare
   v_archive text := (select archive_path from public.organization_export_parts
@@ -291,10 +296,11 @@ declare
 begin
   perform public.queue_storage_purge('28700000-0000-0000-0000-000000000010',
     array[v_archive, '28700000-0000-0000-0000-000000000010/d40/rechnung.pdf']);
-  if (select purge_after from public.storage_purge_queue where storage_path = v_archive) <> now()
+  if (select purge_after from public.storage_purge_queue where storage_path = v_archive)
+      is distinct from now() + interval '15 minutes'
     or (select purge_after from public.storage_purge_queue
       where storage_path = '28700000-0000-0000-0000-000000000010/d40/rechnung.pdf') <> now() + interval '8 days' then
-    raise exception 'queueing again extended an archive or shortened a document file';
+    raise exception 'queueing again did not make an archive due at the end of its build window, or shortened a document file';
   end if;
 end;
 $$;
@@ -330,7 +336,9 @@ $$;
 reset role;
 update public.organization_export_parts set build_started_at = now() - interval '1 hour'
 where id = (select id from export_parts where part_number = 2);
-update public.storage_purge_queue set purge_after = now() - interval '1 hour' + interval '7 days'
+update public.storage_purge_queue
+set purge_after = now() - interval '1 hour' + interval '7 days',
+  writes_end_at = now() - interval '1 hour' + interval '15 minutes'
 where storage_path = (select archive_path from public.organization_export_parts
   where id = (select id from export_parts where part_number = 2));
 set local role service_role;
@@ -374,7 +382,9 @@ begin
     is distinct from v_part.build_started_at + interval '7 days' then
     raise exception 'completion moved the archive''s purge away from seven days after its build started';
   end if;
-  update public.storage_purge_queue set purge_after = now() - interval '1 second'
+  -- Both archives fall due, and part 3's build has ended too.
+  update public.storage_purge_queue set purge_after = now() - interval '1 second',
+    writes_end_at = least(writes_end_at, now() - interval '1 second')
   where storage_path like '28700000-0000-0000-0000-000000000010/datenexporte/%';
   if (select count(*) from public.claim_storage_purge(500) claimed
       where claimed.storage_path like '28700000-0000-0000-0000-000000000010/datenexporte/%') <> 2 then
@@ -621,8 +631,99 @@ begin
 end;
 $$;
 
+-- A purge that claimed an archive's due entry before a build claimed its
+-- part completes nothing while that build may still store the archive: the
+-- entry stays, due seven days after the build started.
+create temporary table resized_parts on commit drop as
+select part.part_number, part.id, part.archive_path from public.organization_export_parts part
+where part.export_id = (select export_id from resized_start);
+grant select on resized_parts to service_role;
+insert into public.storage_purge_queue (organization_id, storage_path, purge_after)
+select '28700000-0000-0000-0000-000000000010', archive_path, now() - interval '1 second'
+from resized_parts where part_number = 3;
+set local role service_role;
+do $$
+declare
+  v_archive text := (select archive_path from resized_parts where part_number = 3);
+  v_claimed uuid[];
+begin
+  select array_agg(claimed.id) into v_claimed from public.claim_storage_purge(500) claimed
+  where claimed.storage_path = v_archive;
+  if cardinality(v_claimed) is distinct from 1 then
+    raise exception 'the purge did not claim the due archive entry';
+  end if;
+  perform public.claim_organization_export_part_build('28700000-0000-0000-0000-000000000001',
+    '28700000-0000-0000-0000-000000000010', (select id from resized_parts where part_number = 3));
+  perform public.complete_storage_purge(v_claimed);
+  if (select purge_after from public.storage_purge_queue where storage_path = v_archive)
+    is distinct from now() + interval '7 days' then
+    raise exception 'a purge claimed before a build completed the archive''s entry while the build may still store it';
+  end if;
+end;
+$$;
+
+-- The organization's deletion during two builds: part 2's archive is stored
+-- and listed, part 3's lands after the listing. Each falls due when the
+-- builds that may store it have ended, fifteen minutes after their claims,
+-- not at once and not seven days later. Until then the purge claims and
+-- completes neither. An hour later both are due, also when the action's
+-- second listing finds the late archive and queues it again, and the purge
+-- takes them.
+do $$
+begin
+  perform public.claim_organization_export_part_build('28700000-0000-0000-0000-000000000001',
+    '28700000-0000-0000-0000-000000000010', (select id from resized_parts where part_number = 2));
+  perform public.delete_organization_with_files('28700000-0000-0000-0000-000000000010',
+    '28700000-0000-0000-0000-000000000001', 'Export SQL',
+    array[(select archive_path from resized_parts where part_number = 2)]);
+  if (select count(*) from public.storage_purge_queue queued
+      join resized_parts part on part.archive_path = queued.storage_path
+      where part.part_number in (2, 3) and queued.purge_after = now() + interval '15 minutes') <> 2 then
+    raise exception 'the deletion left an archive due before its builds ended or later than that: %', (
+      select string_agg(part.part_number || ':' || queued.purge_after, ', ')
+      from public.storage_purge_queue queued join resized_parts part on part.archive_path = queued.storage_path);
+  end if;
+  if exists (select 1 from public.claim_storage_purge(500) claimed
+      join resized_parts part on part.archive_path = claimed.storage_path) then
+    raise exception 'the purge claimed an archive while a build may still store it';
+  end if;
+  perform public.complete_storage_purge(array(select queued.id from public.storage_purge_queue queued
+    join resized_parts part on part.archive_path = queued.storage_path));
+  if (select count(*) from public.storage_purge_queue queued
+      join resized_parts part on part.archive_path = queued.storage_path) <> 2 then
+    raise exception 'the purge completed an archive''s entry while a build may still store it';
+  end if;
+end;
+$$;
+-- An hour later, past the builds and the earlier purge run's claim.
+reset role;
+update public.storage_purge_queue queued
+set purge_after = queued.purge_after - interval '1 hour',
+  writes_end_at = queued.writes_end_at - interval '1 hour',
+  last_attempt_at = queued.last_attempt_at - interval '1 hour'
+from resized_parts part where part.archive_path = queued.storage_path;
+set local role service_role;
+do $$
+declare
+  v_claimed uuid[];
+begin
+  perform public.queue_storage_purge('28700000-0000-0000-0000-000000000010',
+    array[(select archive_path from resized_parts where part_number = 3)]);
+  select array_agg(claimed.id) into v_claimed from public.claim_storage_purge(500) claimed
+  join resized_parts part on part.archive_path = claimed.storage_path;
+  if cardinality(v_claimed) is distinct from 2 then
+    raise exception 'an archive stored late is not due once its builds ended';
+  end if;
+  perform public.complete_storage_purge(v_claimed);
+  if exists (select 1 from public.storage_purge_queue queued
+      join resized_parts part on part.archive_path = queued.storage_path) then
+    raise exception 'the purge kept an archive entry after its builds ended';
+  end if;
+end;
+$$;
+reset role;
+
 -- Organization deletion takes the export and its ledger along.
-delete from public.organizations where id = '28700000-0000-0000-0000-000000000010';
 do $$
 begin
   if exists (select 1 from public.organization_export_events where organization_id = '28700000-0000-0000-0000-000000000010')

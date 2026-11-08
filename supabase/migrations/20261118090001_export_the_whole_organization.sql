@@ -14,8 +14,18 @@
 -- has its deletion date, also one whose completion got lost or whose build
 -- failed. Completion keeps that entry and makes the part downloadable until
 -- it falls due. An archive needs no backup protection, so it gets no extra
--- day, and the organization's deletion makes it due at once instead of eight
--- days later. No column here ends in
+-- day, and the organization's deletion makes it due instead of eight days
+-- later: at once, or when the builds that may still store it have ended.
+--
+-- A build stores its archive after its claim commits, so the claim also
+-- records in the entry when every build of that path has certainly ended:
+-- fifteen minutes after the latest claim, three times the page's
+-- maxDuration of 300 seconds (app/(app)/einstellungen/datenexport/page.tsx).
+-- Until then the entry never falls due through the organization's deletion,
+-- and the purge neither claims, releases nor completes it, so an archive
+-- stored late is still queued and due. All builds of a part share its path
+-- and its one entry; the conditional write keeps the archive stored first.
+-- No column here ends in
 -- `storage_path`, because claim_storage_purge keeps any queued object such a
 -- column references: a planned file must not keep a deleted document's
 -- bytes, and an archive must not keep itself.
@@ -27,7 +37,13 @@
 -- exports, their parts and the ledger stay.
 --
 -- Prevention: Tier 1 (the plan check, the unique file and name per export,
--- the ledger guard), Tier 2 supabase/tests/organization_export.sql.
+-- the ledger guard, the write window in the queue), Tier 2
+-- supabase/tests/organization_export.sql.
+
+-- When the last writer that may store the entry's object has certainly
+-- ended; null when nothing writes it any more. Until then the purge leaves
+-- the entry alone.
+alter table public.storage_purge_queue add column writes_end_at timestamptz;
 
 create table public.organization_exports (
   id uuid primary key default gen_random_uuid(),
@@ -192,7 +208,8 @@ $$;
 -- eight days, and queued again keeps the later date, as in
 -- 20261108210001_keep_deleted_file_bytes_past_the_backup_window.sql. An
 -- export archive needs no backup protection: queued again, such as by the
--- organization's deletion, it is due at once and never later than before.
+-- organization's deletion, it is due once the builds that may still store it
+-- have ended, at once if none may, and never later than before.
 create or replace function public.queue_storage_purge(p_organization_id uuid, p_paths text[])
 returns void
 language sql
@@ -208,9 +225,70 @@ as $$
   on conflict (storage_path) do update
     set purge_after = case
       when starts_with(excluded.storage_path, excluded.organization_id::text || '/datenexporte/')
-        then least(queued.purge_after, excluded.purge_after)
+        then least(queued.purge_after, greatest(excluded.purge_after, queued.writes_end_at))
       else greatest(queued.purge_after, excluded.purge_after)
     end;
+$$;
+
+-- As in 20261108210001_keep_deleted_file_bytes_past_the_backup_window.sql,
+-- except that an entry whose writes have not ended is neither released nor
+-- claimed: a build may still store its object.
+create or replace function public.claim_storage_purge(p_limit integer)
+returns table (id uuid, organization_id uuid, storage_path text)
+language plpgsql
+security invoker
+set search_path to ''
+as $$
+declare
+  v_column record;
+begin
+  for v_column in
+    select relation.relname as table_name, attribute.attname as column_name
+    from pg_catalog.pg_attribute attribute
+    join pg_catalog.pg_class relation on relation.oid = attribute.attrelid
+    join pg_catalog.pg_namespace namespace on namespace.oid = relation.relnamespace
+    where namespace.nspname = 'public' and relation.relkind in ('r', 'p')
+      and relation.relname <> 'storage_purge_queue'
+      and attribute.attname like '%storage\_path'
+      and attribute.attnum > 0 and not attribute.attisdropped
+  loop
+    execute format(
+      'delete from public.storage_purge_queue queued where queued.purge_after <= now()
+         and (queued.writes_end_at is null or queued.writes_end_at <= now())
+         and exists (select 1 from public.%I referencing where referencing.%I = queued.storage_path)',
+      v_column.table_name, v_column.column_name
+    );
+  end loop;
+
+  return query
+  with due as (
+    select queued.id from public.storage_purge_queue queued
+    where queued.purge_after <= now()
+      and (queued.writes_end_at is null or queued.writes_end_at <= now())
+      and (queued.last_attempt_at is null or queued.last_attempt_at <= now() - interval '1 hour')
+    order by queued.purge_after, queued.id
+    limit greatest(p_limit, 0)
+    for update skip locked
+  )
+  update public.storage_purge_queue queued
+  set attempts = queued.attempts + 1, last_attempt_at = now()
+  from due
+  where queued.id = due.id
+  returning queued.id, queued.organization_id, queued.storage_path;
+end;
+$$;
+
+-- Removes the entries whose objects the purge deleted, except one a build
+-- claimed after the purge did: that build may store its object again, so
+-- the entry stays for a later run.
+create or replace function public.complete_storage_purge(p_ids uuid[])
+returns void
+language sql
+security invoker
+set search_path to ''
+as $$
+  delete from public.storage_purge_queue queued
+  where queued.id = any(p_ids) and (queued.writes_end_at is null or queued.writes_end_at <= now());
 $$;
 
 -- Starts an export with the server's plan: one array of file parts, each a
@@ -338,9 +416,10 @@ $$;
 -- Claims a part for a build before the build stores anything: queues the
 -- part's archive path for the purge seven days from now, the build's start,
 -- in the same call, so an archive whose completion is never recorded is
--- deleted too. A later build of a part not yet ready moves the date to seven
--- days after its own start: the archive it records is the one stored first
--- (the build's conditional write), downloadable until the entry falls due.
+-- deleted too. The entry also holds the end of the build's write window,
+-- fifteen minutes from now. A later build of a part not yet ready moves both
+-- to its own start: the archive it records is the one stored first (the
+-- build's conditional write), downloadable until the entry falls due.
 -- Refuses a ready part, and an export older than seven days. Returns what
 -- the build needs: { exportId, kind, archivePath, partCount }.
 create function public.claim_organization_export_part_build(
@@ -370,9 +449,11 @@ begin
   if v_export.requested_at <= now() - interval '7 days' then raise exception 'export_part_expired'; end if;
 
   update public.organization_export_parts part set build_started_at = now() where part.id = p_part_id;
-  insert into public.storage_purge_queue as queued (organization_id, storage_path, purge_after)
-  values (p_organization_id, v_part.archive_path, now() + interval '7 days')
-  on conflict (storage_path) do update set purge_after = excluded.purge_after;
+  insert into public.storage_purge_queue as queued (organization_id, storage_path, purge_after, writes_end_at)
+  values (p_organization_id, v_part.archive_path, now() + interval '7 days', now() + interval '15 minutes')
+  on conflict (storage_path) do update
+    set purge_after = greatest(queued.purge_after, excluded.purge_after),
+      writes_end_at = greatest(queued.writes_end_at, excluded.writes_end_at);
   return jsonb_build_object(
     'exportId', v_part.export_id,
     'kind', v_part.kind,
@@ -461,6 +542,27 @@ begin
   );
 end;
 $$;
+
+-- A part leaves only with its organization. Its archive, if a build claimed
+-- it, is queued again like a listed object, so an archive stored after the
+-- deletion's listing is due when its builds have ended, not seven days after
+-- its claim. The part row's lock orders this after a claim in flight.
+create function app_private.queue_deleted_export_part_archive()
+returns trigger
+language plpgsql
+security invoker
+set search_path to ''
+as $$
+begin
+  if old.build_started_at is not null then
+    perform public.queue_storage_purge(old.organization_id, array[old.archive_path]);
+  end if;
+  return null;
+end;
+$$;
+revoke all on function app_private.queue_deleted_export_part_archive() from public, anon, authenticated;
+create trigger queue_deleted_export_part_archive after delete on public.organization_export_parts
+  for each row execute function app_private.queue_deleted_export_part_archive();
 
 -- Records a download of a ready, unexpired part and returns what the server
 -- signs: { archivePath, partNumber, partCount, requestedAt }.

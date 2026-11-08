@@ -15,6 +15,11 @@ const OrganizationExportSection = dynamic(() =>
   ),
 );
 
+// The export's builds run as this page's Server Actions. A build's claim
+// keeps the purge off its archive for fifteen minutes
+// (claim_organization_export_part_build), so a build must end well before.
+export const maxDuration = 300;
+
 // Only Admin opens this section; Büro and employees go to their profile
 // (lib/settings/sections.ts). Each action checks the Admin again.
 export default async function DatenexportSettingsPage() {

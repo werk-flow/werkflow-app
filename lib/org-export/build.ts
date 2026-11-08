@@ -94,7 +94,8 @@ type BuildablePart = {
 /**
  * Claims the part for this build: of the caller's organization, not ready, of
  * an export inside its seven days. The same call queues the part's archive
- * for the purge seven days from now, before this build stores anything.
+ * for the purge seven days from now, before this build stores anything, and
+ * keeps the purge off it for fifteen minutes, past the page's maxDuration.
  */
 async function claimPartBuild(
   admin: AdminClient,

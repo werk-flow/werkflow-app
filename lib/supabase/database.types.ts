@@ -8378,6 +8378,7 @@ export type Database = {
           purge_after: string;
           queued_at: string;
           storage_path: string;
+          writes_end_at: string | null;
         };
         Insert: {
           attempts?: number;
@@ -8387,6 +8388,7 @@ export type Database = {
           purge_after: string;
           queued_at?: string;
           storage_path: string;
+          writes_end_at?: string | null;
         };
         Update: {
           attempts?: number;
@@ -8396,6 +8398,7 @@ export type Database = {
           purge_after?: string;
           queued_at?: string;
           storage_path?: string;
+          writes_end_at?: string | null;
         };
         Relationships: [];
       };
