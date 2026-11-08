@@ -90,9 +90,6 @@ async function readFilePartFiles(
   return Object.fromEntries(files);
 }
 
-/** An export's parts can be built for as long as a built part stays downloadable. */
-const BUILD_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
-
 type BuildablePart = {
   exportId: string;
   kind: string;
@@ -100,36 +97,32 @@ type BuildablePart = {
   partCount: number;
 };
 
-/** The part to build: of the caller's organization, not ready, of an export inside its window. */
-async function readBuildablePart(
+/**
+ * Claims the part for this build: of the caller's organization, not ready, of
+ * an export inside its seven days. The same call queues the part's archive
+ * for the purge seven days from now, before this build stores anything.
+ */
+async function claimPartBuild(
   admin: AdminClient,
-  organizationId: string,
+  context: ExportContext,
   partId: string,
 ): Promise<BuildablePart> {
-  const { data: part, error } = await admin
-    .from('organization_export_parts')
-    .select('export_id, kind, state, archive_path')
-    .eq('organization_id', organizationId)
-    .eq('id', partId)
-    .maybeSingle();
-  if (error) throw new Error('load_failed');
-  if (!part) throw new Error('export_part_not_found');
-  if (part.state === 'ready') throw new Error('export_part_ready');
-  const { data: started, error: exportError } = await admin
-    .from('organization_exports')
-    .select('requested_at, part_count')
-    .eq('organization_id', organizationId)
-    .eq('id', part.export_id)
-    .single();
-  if (exportError) throw new Error('load_failed');
-  if (Date.parse(started.requested_at) <= Date.now() - BUILD_WINDOW_MS)
-    throw new Error('export_part_expired');
-  return {
-    exportId: part.export_id,
-    kind: part.kind,
-    archivePath: part.archive_path,
-    partCount: started.part_count,
-  };
+  const { data, error } = await admin.rpc('claim_organization_export_part_build', {
+    p_actor_id: context.userId,
+    p_organization_id: context.organizationId,
+    p_part_id: partId,
+  });
+  if (error) throw refusal(error, 'export_part_claim_failed');
+  const claimed = isJsonRecord(data) ? data : {};
+  const { exportId, kind, archivePath, partCount } = claimed;
+  if (
+    typeof exportId !== 'string' ||
+    typeof kind !== 'string' ||
+    typeof archivePath !== 'string' ||
+    typeof partCount !== 'number'
+  )
+    throw new Error('load_failed');
+  return { exportId, kind, archivePath, partCount };
 }
 
 /**
@@ -166,8 +159,8 @@ async function packAndStore(
 }
 
 /**
- * Builds one part in this request: packs its archive, stores it at the
- * part's fixed path and records it ready for seven days. A failure records
+ * Builds one part in this request: claims it, packs its archive, stores it
+ * at the part's fixed path and records it ready until its purge falls due. A failure records
  * the part failed with a stable reason and rethrows; only this part builds
  * again. Either way the build ends in one database call.
  */
@@ -176,7 +169,7 @@ export async function buildExportPart(
   context: ExportContext,
   partId: string,
 ): Promise<void> {
-  const part = await readBuildablePart(admin, context.organizationId, partId);
+  const part = await claimPartBuild(admin, context, partId);
   const outcome = await packAndStore(admin, context.organizationId, partId, part).then(
     (archiveBytes) => ({ archiveBytes, error: null }),
     (error: unknown) => ({ archiveBytes: null, error }),
@@ -188,7 +181,7 @@ export async function buildExportPart(
       p_part_id: partId,
       p_archive_bytes: outcome.archiveBytes,
     });
-    // A stored archive whose completion failed is deleted with the start's purge entry.
+    // A stored archive whose completion failed is deleted with its claim's purge entry.
     if (error) throw refusal(error, 'export_part_complete_failed');
     return;
   }

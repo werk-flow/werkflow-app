@@ -3,16 +3,19 @@
 -- and file parts that hold every original file: each document's current
 -- file and each earlier version. The server plans the file parts once; the
 -- start refuses a plan that misses, repeats or adds a file, so every file
--- lands in exactly one part. Each part builds in its own request and ends
--- in one call, complete or fail; a failed part builds again alone.
+-- lands in exactly one part. Each part's build starts with one call that
+-- claims it and ends in one call, complete or fail; a failed part builds
+-- again alone.
 --
 -- A built archive stays downloadable for seven days (owner's answer on
 -- werk-flow/werkflow-planning#287). Each part's archive path is fixed at the
--- start and queued in storage_purge_queue at once, due seven days later, so
--- an archive whose completion got lost is deleted too; completion moves the
--- due date to seven days after the build. An archive needs no backup
--- protection, so it gets no extra day, and the organization's deletion makes
--- it due at once instead of eight days later. No column here ends in
+-- start. The claim queues it in storage_purge_queue, due seven days after the
+-- build started, before the build stores anything, so every stored archive
+-- has its deletion date, also one whose completion got lost or whose build
+-- failed. Completion keeps that entry and makes the part downloadable until
+-- it falls due. An archive needs no backup protection, so it gets no extra
+-- day, and the organization's deletion makes it due at once instead of eight
+-- days later. No column here ends in
 -- `storage_path`, because claim_storage_purge keeps any queued object such a
 -- column references: a planned file must not keep a deleted document's
 -- bytes, and an archive must not keep itself.
@@ -52,6 +55,8 @@ create table public.organization_export_parts (
   file_bytes bigint not null default 0 check (file_bytes >= 0),
   archive_path text not null,
   archive_bytes bigint check (archive_bytes >= 0),
+  -- When the latest build claimed the part; its archive is due for the purge seven days later.
+  build_started_at timestamptz,
   built_at timestamptz,
   expires_at timestamptz,
   failure_reason text check (failure_reason ~ '^[a-z][a-z0-9_:]*$'),
@@ -64,6 +69,7 @@ create table public.organization_export_parts (
     check (starts_with(archive_path, organization_id::text || '/')),
   constraint organization_export_parts_state_shape check (
     (state = 'ready') = (archive_bytes is not null and built_at is not null and expires_at is not null)
+    and (state <> 'ready' or build_started_at is not null)
     and (state = 'failed') = (failure_reason is not null)
   )
 );
@@ -301,10 +307,6 @@ begin
     where part.id = v_part_id;
   end loop;
 
-  insert into public.storage_purge_queue (organization_id, storage_path, purge_after)
-  select p_organization_id, part.archive_path, now() + interval '7 days'
-  from public.organization_export_parts part where part.export_id = v_export_id;
-
   insert into public.organization_export_events (organization_id, export_id, event_type, actor_id, event_payload)
   values (p_organization_id, v_export_id, 'started', p_actor_id, jsonb_build_object(
     'partCount', v_part_count, 'fileCount', v_file_count, 'fileBytes', v_file_bytes
@@ -313,9 +315,57 @@ begin
 end;
 $$;
 
--- Records a built archive at the part's fixed path: the part is ready for
--- seven days from now, and the archive's purge falls due when that ends. A
--- ready part is refused, so a second build of it changes nothing.
+-- Claims a part for a build before the build stores anything: queues the
+-- part's archive path for the purge seven days from now, the build's start,
+-- in the same call, so an archive whose completion is never recorded is
+-- deleted too. A later build of a part not yet ready moves the date to seven
+-- days after its own start: the archive it records is the one stored first
+-- (the build's conditional write), downloadable until the entry falls due.
+-- Refuses a ready part, and an export older than seven days. Returns what
+-- the build needs: { exportId, kind, archivePath, partCount }.
+create function public.claim_organization_export_part_build(
+  p_actor_id uuid,
+  p_organization_id uuid,
+  p_part_id uuid
+)
+returns jsonb
+language plpgsql
+security invoker
+set search_path to ''
+as $$
+declare
+  v_part public.organization_export_parts;
+  v_export public.organization_exports;
+begin
+  if not app_private.p1_24_is_admin(p_organization_id, p_actor_id) then
+    raise exception 'not_authorized';
+  end if;
+  select * into v_part from public.organization_export_parts part
+  where part.id = p_part_id and part.organization_id = p_organization_id
+  for update;
+  if not found then raise exception 'export_part_not_found'; end if;
+  if v_part.state = 'ready' then raise exception 'export_part_ready'; end if;
+  select * into v_export from public.organization_exports export_row
+  where export_row.id = v_part.export_id and export_row.organization_id = p_organization_id;
+  if v_export.requested_at <= now() - interval '7 days' then raise exception 'export_part_expired'; end if;
+
+  update public.organization_export_parts part set build_started_at = now() where part.id = p_part_id;
+  insert into public.storage_purge_queue as queued (organization_id, storage_path, purge_after)
+  values (p_organization_id, v_part.archive_path, now() + interval '7 days')
+  on conflict (storage_path) do update set purge_after = excluded.purge_after;
+  return jsonb_build_object(
+    'exportId', v_part.export_id,
+    'kind', v_part.kind,
+    'archivePath', v_part.archive_path,
+    'partCount', v_export.part_count
+  );
+end;
+$$;
+
+-- Records a built archive at the part's fixed path: the part is ready until
+-- the archive's purge entry, written by its build's claim, falls due seven
+-- days after the build started. A ready part is refused, so a second build
+-- of it changes nothing.
 create function public.complete_organization_export_part(
   p_actor_id uuid,
   p_organization_id uuid,
@@ -329,7 +379,6 @@ set search_path to ''
 as $$
 declare
   v_part public.organization_export_parts;
-  v_expires_at timestamptz := now() + interval '7 days';
 begin
   if not app_private.p1_24_is_admin(p_organization_id, p_actor_id) then
     raise exception 'not_authorized';
@@ -339,16 +388,13 @@ begin
   for update;
   if not found then raise exception 'export_part_not_found'; end if;
   if v_part.state = 'ready' then raise exception 'export_part_ready'; end if;
+  if v_part.build_started_at is null then raise exception 'export_part_not_claimed'; end if;
 
   update public.organization_export_parts part
   set state = 'ready', failure_reason = null, archive_bytes = p_archive_bytes, built_at = now(),
-    expires_at = v_expires_at
+    expires_at = v_part.build_started_at + interval '7 days'
   where part.id = p_part_id;
   update public.organization_exports export_row set updated_at = now() where export_row.id = v_part.export_id;
-  -- The start queued the path; a purge that already ran for it took the entry.
-  insert into public.storage_purge_queue as queued (organization_id, storage_path, purge_after)
-  values (p_organization_id, v_part.archive_path, v_expires_at)
-  on conflict (storage_path) do update set purge_after = excluded.purge_after;
   insert into public.organization_export_events (
     organization_id, export_id, part_id, event_type, actor_id, event_payload
   ) values (
@@ -501,6 +547,7 @@ $$;
 revoke all on function app_private.organization_export_plan(jsonb) from public, anon, authenticated;
 revoke all on function app_private.organization_export_sources(uuid) from public, anon, authenticated;
 revoke all on function public.start_organization_export(uuid, uuid, jsonb) from public, anon, authenticated;
+revoke all on function public.claim_organization_export_part_build(uuid, uuid, uuid) from public, anon, authenticated;
 revoke all on function public.complete_organization_export_part(uuid, uuid, uuid, bigint) from public, anon, authenticated;
 revoke all on function public.fail_organization_export_part(uuid, uuid, uuid, text) from public, anon, authenticated;
 revoke all on function public.record_organization_export_download(uuid, uuid, uuid) from public, anon, authenticated;
@@ -508,6 +555,7 @@ revoke all on function public.read_organization_export_page(uuid, text, jsonb, i
 grant execute on function app_private.organization_export_plan(jsonb) to service_role;
 grant execute on function app_private.organization_export_sources(uuid) to service_role;
 grant execute on function public.start_organization_export(uuid, uuid, jsonb) to service_role;
+grant execute on function public.claim_organization_export_part_build(uuid, uuid, uuid) to service_role;
 grant execute on function public.complete_organization_export_part(uuid, uuid, uuid, bigint) to service_role;
 grant execute on function public.fail_organization_export_part(uuid, uuid, uuid, text) to service_role;
 grant execute on function public.record_organization_export_download(uuid, uuid, uuid) to service_role;

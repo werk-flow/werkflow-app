@@ -74,6 +74,7 @@ export const COLUMN_LABELS: Record<LabeledColumn, string> = {
   blocks_access: 'Sperrt den Zugang',
   break_mode: 'Pausenregel',
   break_policy_history: 'Verlauf der Pausenregel',
+  build_started_at: 'Archiv-Erstellung begonnen am',
   built_at: 'Archiv erstellt am',
   calculation_id: 'Berechnung-ID',
   calculation_schema_version: 'Berechnungsschema-Version',

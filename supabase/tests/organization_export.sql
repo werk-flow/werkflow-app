@@ -5,9 +5,11 @@
 -- refuses a plan that misses, repeats or adds a file, or repeats a name in
 -- any letter case, so every original lands in exactly one part. A failed part
 -- leaves the others as they are and completes alone later; a ready part
--- refuses a second result. Every part's archive is queued for the purge at
--- the start, seven days ahead, and again seven days after its build, not
--- eight, and the purge takes it although the part names its path. Every
+-- refuses a second result. A build's claim queues the part's archive for the
+-- purge seven days after the build started, not eight, before anything is
+-- stored: an archive whose completion is never recorded keeps that entry,
+-- and completion keeps it too. The purge takes a due archive although the
+-- part names its path, and an export older than seven days builds no part. Every
 -- start, part result and download writes an event the ledger guard keeps.
 -- Queued again by the organization's deletion, an archive falls due at once. An Admin's session reads the export row; Büro, an
 -- employee and another organization read nothing, and no client reads parts,
@@ -99,6 +101,7 @@ declare
 begin
   foreach v_function in array array[
     'public.start_organization_export(uuid, uuid, jsonb)',
+    'public.claim_organization_export_part_build(uuid, uuid, uuid)',
     'public.complete_organization_export_part(uuid, uuid, uuid, bigint)',
     'public.fail_organization_export_part(uuid, uuid, uuid, text)',
     'public.record_organization_export_download(uuid, uuid, uuid)',
@@ -214,19 +217,54 @@ select pg_temp.expect_refusal('employee fail', format(
 select pg_temp.expect_refusal('foreign admin complete in own organization', format(
   'select public.complete_organization_export_part(%L, %L, %L, 100)', '28700000-0000-0000-0000-000000000004',
   '28700000-0000-0000-0000-000000000011', (select id from export_parts where part_number = 2)), 'export_part_not_found');
+select pg_temp.expect_refusal('office claim', format(
+  'select public.claim_organization_export_part_build(%L, %L, %L)', '28700000-0000-0000-0000-000000000002',
+  '28700000-0000-0000-0000-000000000010', (select id from export_parts where part_number = 2)), 'not_authorized');
+select pg_temp.expect_refusal('foreign admin claim in own organization', format(
+  'select public.claim_organization_export_part_build(%L, %L, %L)', '28700000-0000-0000-0000-000000000004',
+  '28700000-0000-0000-0000-000000000011', (select id from export_parts where part_number = 2)), 'export_part_not_found');
 select pg_temp.expect_refusal('unknown part', format(
   'select public.fail_organization_export_part(%L, %L, %L, %L)', '28700000-0000-0000-0000-000000000001',
   '28700000-0000-0000-0000-000000000010', gen_random_uuid(), 'build_failed'), 'export_part_not_found');
 
--- Every part's archive path is fixed and queued for the purge seven days ahead at the start.
+-- Every part's archive path is fixed at the start; nothing is stored or queued before a build claims it.
 do $$
 begin
-  if (select count(*) from public.storage_purge_queue queued
-      join public.organization_export_parts part on part.archive_path = queued.storage_path
+  if (select count(*) from public.organization_export_parts part
       where part.export_id = (select export_id from started)
         and part.archive_path = format('%s/datenexporte/%s/teil-%s.zip', part.organization_id, part.export_id, part.part_number)
-        and queued.purge_after = now() + interval '7 days') <> 3 then
-    raise exception 'the start did not queue every archive path seven days ahead';
+        and part.build_started_at is null) <> 3
+    or exists (select 1 from public.storage_purge_queue
+      where storage_path like '28700000-0000-0000-0000-000000000010/datenexporte/%') then
+    raise exception 'the start did not fix every archive path, or queued one before a build';
+  end if;
+end;
+$$;
+
+-- At the end of the export's seven days a build claims part 3. The claim
+-- queues its archive for the purge seven days after the build started,
+-- before the build stores it, so the archive is deleted although its
+-- completion is never recorded.
+reset role;
+update public.organization_exports set requested_at = now() - interval '6 days 23 hours'
+where id = (select export_id from started);
+set local role service_role;
+do $$
+declare
+  v_claimed jsonb;
+  v_part public.organization_export_parts;
+begin
+  v_claimed := public.claim_organization_export_part_build('28700000-0000-0000-0000-000000000001',
+    '28700000-0000-0000-0000-000000000010', (select id from export_parts where part_number = 3));
+  select * into v_part from public.organization_export_parts where id = (select id from export_parts where part_number = 3);
+  if v_claimed <> jsonb_build_object('exportId', v_part.export_id, 'kind', 'files',
+      'archivePath', v_part.archive_path, 'partCount', 3) then
+    raise exception 'the claim answered %', v_claimed;
+  end if;
+  if v_part.state <> 'pending' or v_part.build_started_at <> now() or v_part.expires_at is not null
+    or (select purge_after from public.storage_purge_queue where storage_path = v_part.archive_path)
+      is distinct from now() + interval '7 days' then
+    raise exception 'an archive whose completion is never recorded has no purge entry seven days after its build started';
   end if;
 end;
 $$;
@@ -254,6 +292,11 @@ do $$
 declare
   v_part uuid := (select id from export_parts where part_number = 2);
 begin
+  perform pg_temp.expect_refusal('completion without a claim', format(
+    'select public.complete_organization_export_part(%L, %L, %L, 100)', '28700000-0000-0000-0000-000000000001',
+    '28700000-0000-0000-0000-000000000010', v_part), 'export_part_not_claimed');
+  perform public.claim_organization_export_part_build('28700000-0000-0000-0000-000000000001',
+    '28700000-0000-0000-0000-000000000010', v_part);
   perform public.fail_organization_export_part('28700000-0000-0000-0000-000000000001',
     '28700000-0000-0000-0000-000000000010', v_part, 'storage_object_missing');
   if (select string_agg(part.part_number || ':' || part.state, ',' order by part.part_number)
@@ -261,8 +304,26 @@ begin
     <> '1:pending,2:failed,3:pending' then
     raise exception 'a failed part changed another part';
   end if;
-  -- As if the purge had already taken the start's entry: completion queues the archive again.
-  delete from public.storage_purge_queue where storage_path like '%/teil-2.zip';
+  -- The failed build's archive, had it stored one, is still queued; the retry claims the part again.
+  if not exists (select 1 from public.storage_purge_queue where storage_path like '%/teil-2.zip') then
+    raise exception 'a failed build left its archive unqueued';
+  end if;
+  perform public.claim_organization_export_part_build('28700000-0000-0000-0000-000000000001',
+    '28700000-0000-0000-0000-000000000010', v_part);
+end;
+$$;
+
+-- The retry's build took an hour before its completion.
+reset role;
+update public.organization_export_parts set build_started_at = now() - interval '1 hour'
+where id = (select id from export_parts where part_number = 2);
+update public.storage_purge_queue set purge_after = now() - interval '1 hour' + interval '7 days'
+where storage_path like '%/teil-2.zip';
+set local role service_role;
+do $$
+declare
+  v_part uuid := (select id from export_parts where part_number = 2);
+begin
   perform public.complete_organization_export_part('28700000-0000-0000-0000-000000000001',
     '28700000-0000-0000-0000-000000000010', v_part, 100);
   if (select string_agg(part.part_number || ':' || part.state, ',' order by part.part_number)
@@ -270,6 +331,9 @@ begin
     <> '1:pending,2:ready,3:pending' then
     raise exception 'the retried part did not complete alone';
   end if;
+  perform pg_temp.expect_refusal('claim of a ready part', format(
+    'select public.claim_organization_export_part_build(%L, %L, %L)', '28700000-0000-0000-0000-000000000001',
+    '28700000-0000-0000-0000-000000000010', v_part), 'export_part_ready');
   perform pg_temp.expect_refusal('second result of a ready part', format(
     'select public.fail_organization_export_part(%L, %L, %L, %L)', '28700000-0000-0000-0000-000000000001',
     '28700000-0000-0000-0000-000000000010', v_part, 'build_failed'), 'export_part_ready');
@@ -279,7 +343,8 @@ begin
 end;
 $$;
 
--- The ready archive is due for the purge seven days after its build, and the
+-- The ready archive stays downloadable until its claim's purge entry falls
+-- due, seven days after its build started: completion keeps the entry. The
 -- purge takes every due archive although its part names the path.
 do $$
 declare
@@ -287,17 +352,18 @@ declare
 begin
   select * into v_part from public.organization_export_parts where id = (select id from export_parts where part_number = 2);
   if v_part.state <> 'ready' or v_part.failure_reason is not null or v_part.archive_bytes <> 100
-    or v_part.built_at <> now() or v_part.expires_at <> now() + interval '7 days' then
+    or v_part.built_at <> now() or v_part.build_started_at <> now() - interval '1 hour'
+    or v_part.expires_at <> v_part.build_started_at + interval '7 days' then
     raise exception 'the ready part is wrong';
   end if;
   if (select purge_after from public.storage_purge_queue where storage_path = v_part.archive_path)
-    <> v_part.built_at + interval '7 days' then
-    raise exception 'the archive is not due for the purge seven days after its build';
+    is distinct from v_part.build_started_at + interval '7 days' then
+    raise exception 'completion moved the archive''s purge away from seven days after its build started';
   end if;
   update public.storage_purge_queue set purge_after = now() - interval '1 second'
   where storage_path like '28700000-0000-0000-0000-000000000010/datenexporte/%';
   if (select count(*) from public.claim_storage_purge(500) claimed
-      where claimed.storage_path like '28700000-0000-0000-0000-000000000010/datenexporte/%') <> 3 then
+      where claimed.storage_path like '28700000-0000-0000-0000-000000000010/datenexporte/%') <> 2 then
     raise exception 'the purge kept a due archive';
   end if;
 end;
@@ -335,6 +401,15 @@ set local role service_role;
 select pg_temp.expect_refusal('download of an expired part', format(
   'select public.record_organization_export_download(%L, %L, %L)', '28700000-0000-0000-0000-000000000001',
   '28700000-0000-0000-0000-000000000010', (select id from export_parts where part_number = 2)), 'export_part_expired');
+
+-- An export older than seven days builds no part, so nothing is stored after its window.
+reset role;
+update public.organization_exports set requested_at = now() - interval '7 days'
+where id = (select export_id from started);
+set local role service_role;
+select pg_temp.expect_refusal('claim in an expired export', format(
+  'select public.claim_organization_export_part_build(%L, %L, %L)', '28700000-0000-0000-0000-000000000001',
+  '28700000-0000-0000-0000-000000000010', (select id from export_parts where part_number = 1)), 'export_part_expired');
 
 -- The service role holds no change privilege on the ledger, and the guard
 -- refuses a change by the owner too.

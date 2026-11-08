@@ -4714,6 +4714,7 @@ export type Database = {
         Row: {
           archive_bytes: number | null;
           archive_path: string;
+          build_started_at: string | null;
           built_at: string | null;
           expires_at: string | null;
           export_id: string;
@@ -4729,6 +4730,7 @@ export type Database = {
         Insert: {
           archive_bytes?: number | null;
           archive_path: string;
+          build_started_at?: string | null;
           built_at?: string | null;
           expires_at?: string | null;
           export_id: string;
@@ -4744,6 +4746,7 @@ export type Database = {
         Update: {
           archive_bytes?: number | null;
           archive_path?: string;
+          build_started_at?: string | null;
           built_at?: string | null;
           expires_at?: string | null;
           export_id?: string;
@@ -13477,6 +13480,14 @@ export type Database = {
           user_exists: boolean;
           user_id: string;
         }[];
+      };
+      claim_organization_export_part_build: {
+        Args: {
+          p_actor_id: string;
+          p_organization_id: string;
+          p_part_id: string;
+        };
+        Returns: Json;
       };
       claim_storage_purge: {
         Args: { p_limit: number };

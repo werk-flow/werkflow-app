@@ -6,7 +6,9 @@
 // earlier versions, and never a foreign one. The data part lists each
 // document once in its manifest, never a foreign one, and writes no join or
 // invite code. A part whose file is missing fails alone: the other parts
-// build, and the failed one builds again by itself.
+// build, and the failed one builds again by itself. Every build claims its
+// part before it stores anything; the claim queues the archive for the purge,
+// so an archive whose completion answer is lost is deleted too.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
 import {
@@ -171,7 +173,17 @@ const world = installActionWorld({
 
 // The stored files: one original is missing until the retry.
 let missingFileArrived = false;
+// The part whose completion answer the next build loses.
+let losesCompletion: string | null = null;
 const storedArchives: { path: string; body: Uint8Array }[] = [];
+// Claims, results and stores in the order a build made them, by part file name.
+const steps: string[] = [];
+const partFile = (partId: string) =>
+  tableRows(world, 'organization_export_parts')
+    .find((part) => part.id === partId)
+    ?.archive_path?.toString()
+    .split('/')
+    .at(-1);
 mock.module('@/lib/storage/r2', () => ({
   readStorageObject: async ({ path: key }: { organizationId: string; path: string }) => {
     if (key === missingPath && !missingFileArrived) throw new Error('storage_object_missing');
@@ -187,6 +199,7 @@ mock.module('@/lib/storage/r2', () => ({
     body: Uint8Array;
     ifAbsent?: boolean;
   }) => {
+    steps.push(`store ${key.split('/').at(-1) ?? ''}`);
     const stored = storedArchives.find((archive) => archive.path === key);
     if (ifAbsent && stored) return { created: false, sizeBytes: stored.body.length };
     storedArchives.push({ path: key, body });
@@ -196,7 +209,8 @@ mock.module('@/lib/storage/r2', () => ({
 }));
 
 // The database functions as the SQL proves them (supabase/tests/organization_export.sql):
-// a part outside the caller's organization is unknown; every call names the caller.
+// a part outside the caller's organization is unknown; every call names the caller;
+// the claim refuses a ready part and an export past its seven days.
 const ownParts = new Set([dataPart, firstFilePart, secondFilePart]);
 const columns: Record<string, string[]> = {
   organizations: ['id', 'name', 'admin_id', 'unique_code'],
@@ -222,7 +236,26 @@ world.rpc = ({ name, args }) => {
     !ownParts.has(args.p_part_id)
   )
     return { data: null, error: { code: 'P0001', message: 'export_part_not_found' } };
-  return { data: null, error: null };
+  const part = tableRows(world, 'organization_export_parts').find((row) => row.id === args.p_part_id);
+  steps.push(`${name.split('_')[0] ?? name} ${partFile(args.p_part_id) ?? ''}`);
+  if (name === 'complete_organization_export_part' && losesCompletion === args.p_part_id) {
+    losesCompletion = null;
+    return { data: null, error: { code: '08006', message: 'connection lost' } };
+  }
+  if (name !== 'claim_organization_export_part_build') return { data: null, error: null };
+  const startedExport = tableRows(world, 'organization_exports').find((row) => row.id === part?.export_id);
+  if (part?.state === 'ready') return { data: null, error: { code: 'P0001', message: 'export_part_ready' } };
+  if (Date.parse(String(startedExport?.requested_at)) <= Date.now() - 7 * 24 * 60 * 60 * 1000)
+    return { data: null, error: { code: 'P0001', message: 'export_part_expired' } };
+  return {
+    data: {
+      exportId: part?.export_id,
+      kind: part?.kind,
+      archivePath: part?.archive_path,
+      partCount: startedExport?.part_count,
+    },
+    error: null,
+  };
 };
 
 const { buildOrganizationExportPart, downloadOrganizationExportPart, startOrganizationExport } = await import(
@@ -257,7 +290,7 @@ await assertRefused(
   world,
   [['foreign admin build', () => buildOrganizationExportPart(firstFilePart)]],
   { success: false, error: 'export_part_not_found' },
-  'reads',
+  'one-call',
 );
 await assertRefused(
   world,
@@ -270,7 +303,7 @@ await assertRefused(
   world,
   [['foreign part build', () => buildOrganizationExportPart(foreignPart)]],
   { success: false, error: 'export_part_not_found' },
-  'reads',
+  'one-call',
 );
 await assertRefused(
   world,
@@ -306,31 +339,39 @@ assert.deepEqual(
 );
 assert.ok(!JSON.stringify(plan).includes(ORGANIZATION_B), 'the plan names a foreign file');
 
-// A missing original fails its part alone; the next part builds.
-world.rpcCalls.length = 0;
+// A missing original fails its part alone; the next part builds. Each build
+// claims its part, which queues the archive for the purge, before it stores.
+steps.length = 0;
+assert.deepEqual(await buildOrganizationExportPart(firstFilePart), {
+  success: false,
+  error: 'export_part_failed',
+});
+assert.equal(
+  world.rpcCalls.find((call) => call.name === 'fail_organization_export_part')?.args.p_failure_reason,
+  'storage_object_missing',
+);
+assert.equal(storedArchives.length, 0, 'a failed part stored an archive');
+assert.deepEqual(await buildOrganizationExportPart(secondFilePart), { success: true });
+assert.deepEqual(
+  steps,
+  ['claim teil-2.zip', 'fail teil-2.zip', 'claim teil-3.zip', 'store teil-3.zip', 'complete teil-3.zip'],
+  'a build stored its archive before its claim queued the archive for the purge',
+);
+
+// The failed part builds again by itself, at its own path. Its completion
+// answer is lost: the archive is stored after the claim queued it, so the
+// purge deletes it although no completion is recorded.
+missingFileArrived = true;
+losesCompletion = firstFilePart;
+steps.length = 0;
 assert.deepEqual(await buildOrganizationExportPart(firstFilePart), {
   success: false,
   error: 'export_part_failed',
 });
 assert.deepEqual(
-  world.rpcCalls.map((call) => [call.name, call.args.p_part_id, call.args.p_failure_reason]),
-  [['fail_organization_export_part', firstFilePart, 'storage_object_missing']],
-);
-assert.equal(storedArchives.length, 0, 'a failed part stored an archive');
-world.rpcCalls.length = 0;
-assert.deepEqual(await buildOrganizationExportPart(secondFilePart), { success: true });
-assert.deepEqual(
-  world.rpcCalls.map((call) => [call.name, call.args.p_part_id]),
-  [['complete_organization_export_part', secondFilePart]],
-);
-
-// The failed part builds again by itself, at its own path.
-missingFileArrived = true;
-world.rpcCalls.length = 0;
-assert.deepEqual(await buildOrganizationExportPart(firstFilePart), { success: true });
-assert.deepEqual(
-  world.rpcCalls.map((call) => [call.name, call.args.p_part_id]),
-  [['complete_organization_export_part', firstFilePart]],
+  steps,
+  ['claim teil-2.zip', 'store teil-2.zip', 'complete teil-2.zip'],
+  'an archive whose completion is lost was stored before its claim queued it for the purge',
 );
 assert.deepEqual(
   storedArchives.map((archive) => archive.path.split('/').at(-1)),
@@ -398,7 +439,10 @@ assert.deepEqual(await buildOrganizationExportPart(firstFilePart), { success: tr
 assert.equal(storedArchives.length, archiveCount, 'a second build overwrote a stored archive');
 assert.deepEqual(
   world.rpcCalls.map((call) => [call.name, call.args.p_archive_bytes]),
-  [['complete_organization_export_part', storedFirstPart.body.length]],
+  [
+    ['claim_organization_export_part_build', undefined],
+    ['complete_organization_export_part', storedFirstPart.body.length],
+  ],
 );
 
 // A column the dictionary does not know fails the data part instead of leaving it out.
@@ -422,7 +466,7 @@ await assertRefused(
   world,
   [['ready part build', () => buildOrganizationExportPart(secondFilePart)]],
   { success: false, error: 'export_part_ready' },
-  'reads',
+  'one-call',
 );
 const [startedExport] = tableRows(world, 'organization_exports');
 assert.ok(startedExport);
@@ -431,7 +475,7 @@ await assertRefused(
   world,
   [['expired export build', () => buildOrganizationExportPart(firstFilePart)]],
   { success: false, error: 'export_part_expired' },
-  'reads',
+  'one-call',
 );
 
 // A download names the part and goes through the recorded download.

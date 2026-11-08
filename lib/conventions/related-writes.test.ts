@@ -65,6 +65,8 @@ const ALLOWED_SEPARATE_WRITES: Readonly<Record<string, string>> = {
     'Documented recovery around the Auth API: the claim is locked before the Auth update, which cannot join a transaction; a definite rejection abandons the claim, and an unknown outcome stays completion_pending until complete reconciles it.',
   'lib/subscription/actions.ts::simulatePayment':
     'Independent housekeeping: the rate-limit attempt must persist when the subscription activation fails.',
+  'lib/org-export/actions.ts::buildOrganizationExportPart':
+    'Ordered around storage: claim_organization_export_part_build queues the part’s archive for the purge before the archive is stored, and one call records the result after, because a storage write cannot join a transaction; an archive whose result is lost is deleted with the claim’s entry.',
   'lib/documents/actions.ts::linkDocumentsToTarget':
     'Independent by design: each document is authorized and linked by its own update_document_links call, and the result reports linked and failed counts as partial_update; a refused document keeps the links of the others.',
 };
