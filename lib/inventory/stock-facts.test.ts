@@ -58,3 +58,12 @@ describe('formatAvailableQuantity', () => {
     expect(formatAvailableQuantity(0, 'piece')).toBe('0 Stück');
   });
 });
+
+test('an item without tracked stock never shows a shortfall', () => {
+  const untracked = { trackQuantity: false, globalMinimumStock: 0 };
+  // No stock rows and 4 planned: neither „Fehlmenge“ nor „Unterdeckt“.
+  expect(inventoryStockFacts(untracked, 0, 4)).toEqual({ availableQuantity: 0, stockStatus: 'in_stock' });
+  expect(
+    formatAvailableQuantity(inventoryStockFacts(untracked, 0, 4).availableQuantity, 'piece'),
+  ).not.toContain('Fehlmenge');
+});

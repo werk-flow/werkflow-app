@@ -7,7 +7,8 @@ import { formatInventoryQuantity, type InventoryStockStatus } from './types';
  * An item's `Verfügbar` and status. `Verfügbar` is total stock minus open
  * planned demand and turns negative when the demand exceeds the stock; that
  * shortfall outranks every other status, because a planned job cannot get
- * its material.
+ * its material. An item without tracked stock has no shortfall: its
+ * `Verfügbar` stops at 0, as its status and the „Unterdeckt“ filter do.
  */
 export function inventoryStockFacts(
   item: { trackQuantity: boolean; globalMinimumStock: number },
@@ -15,7 +16,8 @@ export function inventoryStockFacts(
   plannedQuantity: number,
 ): { availableQuantity: number; stockStatus: InventoryStockStatus } {
   const onHand = toStoredQuantity(totalOnHand);
-  const availableQuantity = toStoredQuantity(onHand - toStoredQuantity(plannedQuantity));
+  const signed = toStoredQuantity(onHand - toStoredQuantity(plannedQuantity));
+  const availableQuantity = item.trackQuantity ? signed : Math.max(signed, 0);
   return { availableQuantity, stockStatus: stockStatus(item, onHand, availableQuantity) };
 }
 
