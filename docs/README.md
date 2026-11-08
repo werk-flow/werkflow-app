@@ -15,6 +15,7 @@ Start with `AGENTS.md`, then read only the entries whose condition applies. A ta
 - [document-storage-and-access.md](technical/document-storage-and-access.md): document bytes, signed URLs, storage paths, access classes, trash, versions.
 - [code-quality.md](technical/code-quality.md): writing or reviewing code.
 - [testing.md](technical/testing.md): verifying a change, a failed test, a release.
+- [boat-verification.md](technical/boat-verification.md): `test:verify` on Boat machines, the Boat key, the verification snapshot.
 - [integrated-test-state.md](technical/integrated-test-state.md): seeding test state, fixture dates, stable browser steps.
 - [coderabbit.md](technical/coderabbit.md): review levels, babysitting and merging a PR, review findings.
 - [recovery-and-incidents.md](technical/recovery-and-incidents.md): something lost, leaked or down.

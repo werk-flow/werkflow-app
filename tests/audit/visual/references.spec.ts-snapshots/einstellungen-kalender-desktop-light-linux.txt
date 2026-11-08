@@ -41,6 +41,8 @@ Mitarbeiter
 Freigaben und Vertretungen
 Kunden
 Kundenverwaltung und Defaults
+Datenexport
+Alle Daten herunterladen
 Kalender
 Legt fest, wie Termine, Einsätze und Planungsansichten funktionieren.
 Gilt für Haustechnik Krämer GmbH

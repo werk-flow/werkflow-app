@@ -24,6 +24,8 @@ import { readInBackground } from '@/lib/data/background-read-client';
 import {
   WORK_ARTIFACT_KIND_LABELS,
   WORK_ARTIFACT_STATUS_LABELS,
+  NO_RECORDED_VISIT,
+  type RecordedVisitWindow,
   type WorkArtifactSummary,
   type WorkArtifactTimeSourceOption,
 } from '@/lib/work-artifacts/types';
@@ -51,6 +53,8 @@ type WorkArtifactsSectionProps = WorkArtifactTarget & {
   documents: OrganizationDocument[];
   evidenceRequirements?: WorkArtifactEvidenceRequirement[];
   timeEntryOptions?: WorkArtifactTimeSourceOption[];
+  /** The viewer's recorded time of today on the job: a new work report's Beginn and Ende. */
+  recordedVisit?: RecordedVisitWindow;
   instructionOptions?: Array<{ id: string; label: string }>;
   defaultSiteId?: string | undefined;
   readOnly?: boolean;
@@ -66,6 +70,7 @@ export function WorkArtifactsSection({
   documents,
   evidenceRequirements = [],
   timeEntryOptions = [],
+  recordedVisit = NO_RECORDED_VISIT,
   instructionOptions = [],
   defaultSiteId,
   readOnly = false,
@@ -121,6 +126,7 @@ export function WorkArtifactsSection({
           documents={documents}
           evidenceRequirements={evidenceRequirements}
           timeEntryOptions={timeEntryOptions}
+          recordedVisit={recordedVisit}
           instructionOptions={instructionOptions}
           defaultSiteId={defaultSiteId}
           readOnly={readOnly}
@@ -248,6 +254,7 @@ type WorkArtifactDialogProps = WorkArtifactTarget & {
   documents: OrganizationDocument[];
   evidenceRequirements: WorkArtifactEvidenceRequirement[];
   timeEntryOptions: WorkArtifactTimeSourceOption[];
+  recordedVisit: RecordedVisitWindow;
   instructionOptions: Array<{ id: string; label: string }>;
   defaultSiteId?: string | undefined;
   remoteVersions: Record<string, number>;
@@ -345,9 +352,16 @@ function useWorkArtifactDialogActions({
   defaultSiteId,
   readOnly,
   timeEntryOptions,
+  recordedVisit,
   onClose,
 }: WorkArtifactDialogProps) {
-  const editor = useWorkArtifactEditor({ artifactId, initialSummary, defaultSiteId, readOnly });
+  const editor = useWorkArtifactEditor({
+    artifactId,
+    initialSummary,
+    defaultSiteId,
+    recordedVisit,
+    readOnly,
+  });
   const save = useWorkArtifactSave({ targetType, targetId, editor });
   const review = useWorkArtifactReviewActions(editor);
   const customer = useWorkArtifactCustomerActions({ targetType, targetId, editor, review, onClose });

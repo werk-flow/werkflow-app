@@ -1,8 +1,13 @@
 'use client';
 
 import { describeFailure } from '@/lib/action-messages';
-import { fileDocument, updateDocumentRetention } from '@/lib/documents/actions';
-import type { DocumentResult, DocumentRetentionTerms, OrganizationDocument } from '@/lib/documents/types';
+import { fileDocument, updateDocumentOrigin, updateDocumentRetention } from '@/lib/documents/actions';
+import type {
+  DocumentOrigin,
+  DocumentResult,
+  DocumentRetentionTerms,
+  OrganizationDocument,
+} from '@/lib/documents/types';
 import type { DocumentConfirmDialogState } from './use-document-delete-actions';
 import type { DocumentDetailsDialogState } from './use-document-details-dialog';
 import type { DocumentLibraryMutations } from './use-document-library-mutations';
@@ -14,7 +19,7 @@ const ARCHIVE_FAILURE_MESSAGES = {
 } satisfies Record<string, string>;
 
 /**
- * Runs a retention or filing write under the document's busy id. The result
+ * Runs an origin, retention or filing write under the document's busy id. The result
  * shows in the details dialog while it still shows that document; a refusal
  * puts the document back and names the reason there. A saved write stays busy
  * until the revalidated library lands, or reports the unconfirmed refresh.
@@ -60,9 +65,10 @@ function runArchiveWrite({
 }
 
 /**
- * The document date, the retention class and filing (`Festschreiben`) in the
- * „Dateidetails" dialog. Date and class change at once and roll back on a
- * refusal; filing passes the library's confirmation first.
+ * The origin, the document date, the retention class and filing
+ * (`Festschreiben`) in the „Dateidetails" dialog. Origin, date and class change
+ * at once and roll back on a refusal; filing passes the library's confirmation
+ * first.
  */
 export function useDocumentArchiveActions({
   details,
@@ -90,11 +96,28 @@ export function useDocumentArchiveActions({
     });
   }
 
+  function handleUpdateOrigin(document: OrganizationDocument, origin: DocumentOrigin): Promise<boolean> {
+    if (isTrashView || !document.archive) return Promise.resolve(false);
+    details.setDetailsDialog({ ...document, origin });
+    return runArchiveWrite({
+      details,
+      mutations,
+      document,
+      write: () =>
+        updateDocumentOrigin({
+          documentId: document.id,
+          sourceSystem: origin.sourceSystem ?? '',
+          sourceReference: origin.sourceReference ?? '',
+        }),
+      fallback: 'Die Herkunft konnte nicht gespeichert werden.',
+    });
+  }
+
   function handleFileDocument(document: OrganizationDocument) {
     if (isTrashView) return;
     confirm({
       title: 'Datei festschreiben?',
-      description: `„${document.displayName}“ wird endgültig festgeschrieben. Danach lassen sich Inhalt, Belegdatum und Aufbewahrungsfrist nicht mehr ändern, und die Datei lässt sich nicht mehr löschen. Name, Ordner, Kategorie und Verknüpfungen bleiben änderbar.`,
+      description: `„${document.displayName}“ wird endgültig festgeschrieben. Danach lassen sich Inhalt, Herkunft, Belegdatum und Aufbewahrungsfrist nicht mehr ändern, und die Datei lässt sich nicht mehr löschen. Name, Ordner, Kategorie und Verknüpfungen bleiben änderbar.`,
       confirmLabel: 'Festschreiben',
       onConfirm: () =>
         void runArchiveWrite({
@@ -107,5 +130,5 @@ export function useDocumentArchiveActions({
     });
   }
 
-  return { handleUpdateRetention, handleFileDocument };
+  return { handleUpdateRetention, handleUpdateOrigin, handleFileDocument };
 }

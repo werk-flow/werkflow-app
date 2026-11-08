@@ -87,6 +87,8 @@ export function WorkArtifactDraftForm({
     requiresCorrectionReason,
     measurementLines,
     patchContent,
+    fieldState,
+    fieldErrors,
   } = editor;
   return (
     <ArtifactForm
@@ -108,6 +110,8 @@ export function WorkArtifactDraftForm({
       correctionReason={correctionReason}
       correctionReasonError={correctionReasonError}
       setCorrectionReason={setCorrectionReason}
+      fieldState={fieldState}
+      fieldErrors={fieldErrors}
     />
   );
 }

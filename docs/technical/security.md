@@ -88,7 +88,7 @@ RLS and column grants govern INSERT and UPDATE delivery. Raw DELETE and TRUNCATE
 
 ### Files
 
-Buckets are private. Server code authorizes the target and signs a short-lived URL for a staging key; each finalization copies it to its own key and checks it. Every storage key starts with the owning organization id and goes through the storage adapter. The storage adapter and the admin client never reach a browser bundle. A Server Action never takes file bytes, and only the reviewed writers store a server-generated file.
+Buckets are private. Server code authorizes the target and signs a short-lived URL for a staging key; each finalization copies it to its own key and checks it. The storage adapter and the admin client never reach a browser bundle. A Server Action never takes file bytes; only reviewed writers, such as the organization export, store a server-generated file.
 
 ### Mail and providers
 
@@ -162,7 +162,7 @@ List each owner-accepted residual exposure here until it closes.
 | Data | Purpose and access | Retention |
 | --- | --- | --- |
 | Customer contacts, sites, work records, signatures | Organization operations, restricted by role and assignment. | Keep business history and the explicit trash and version behavior. The owner sets contractual retention and deletion rules before client data is imported. Add no guessed automatic deletion period. |
-| Personnel, sickness, time, payroll exports | Employment operations, through personnel access classes and releases. An export is a copy outside the app's access control. | The owner decides lawful purpose, recipients and retention. Ending access does not authorize deleting employment or time history. |
+| Personnel, sickness, time, payroll and organization exports | Employment operations, through personnel access classes and releases. An export is a copy outside the app's access control. | The owner decides lawful purpose, recipients and retention. Ending access does not authorize deleting employment or time history. Export archives: [due for deletion](document-storage-and-access.md#storage-cleanup) 7 days after their build began. |
 | Mail | Invitations and code delivery. No business documents. | The provider's mail metadata has its own lifecycle. |
 | Logs, traces, test artifacts | Diagnosis and test evidence. Fixtures are synthetic. | Limit access and remove secrets from exported evidence. Ignored files are neither encrypted nor purged automatically. |
 | Backups and retained file versions | Recovery. Database backups hold no file bytes. | [The runbook](recovery-and-incidents.md) records coverage and accepted loss. Deleting a live record does not erase a backup. |

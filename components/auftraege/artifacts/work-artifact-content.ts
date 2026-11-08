@@ -1,4 +1,8 @@
-import type { WorkArtifactContentInput, WorkArtifactDetail } from '@/lib/work-artifacts/types';
+import type {
+  WorkArtifactContentInput,
+  WorkArtifactDetail,
+  WorkArtifactKind,
+} from '@/lib/work-artifacts/types';
 
 export type WorkArtifactEvidenceRequirement = {
   id: string;
@@ -54,6 +58,21 @@ export const EMPTY_CONTENT: WorkArtifactContentInput = {
   authorizationState: 'not_requested',
   scheduleImpact: '',
 };
+
+/**
+ * The draft a kind saves and validates. Only a work report records a visit
+ * window and only a measurement its lines, so after a kind switch another
+ * kind drops them: neither a prefilled window nor an empty line rides along
+ * hidden, and no rule names a field the form no longer shows.
+ */
+export function contentForKind(
+  kind: WorkArtifactKind,
+  content: WorkArtifactContentDraft,
+): WorkArtifactContentDraft {
+  const visit = kind === 'work_report' ? {} : { visitStartedAt: undefined, visitEndedAt: undefined };
+  const lines = kind === 'measurement' ? {} : { measurementLines: undefined };
+  return { ...content, ...visit, ...lines };
+}
 
 export function localDateTime(value?: string | null): string {
   if (!value) return '';

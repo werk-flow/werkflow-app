@@ -19,10 +19,9 @@ test('an employee sees only their own settings sections', () => {
 });
 
 test('Admin and Büro see every settings section, with the personal table view under „Persönlich“', () => {
-  for (const role of ['admin', 'buero'] as const) {
-    expect(tabs(role), role).toEqual({
-      account: ['Profil', 'Konto & Sicherheit', 'Aufträge & Projekte', 'Abonnement & Abrechnung'],
-      organization: ['Dashboard', 'Organisation', 'Kalender', 'Zeiterfassung', 'Mitarbeiter', 'Kunden'],
-    });
-  }
+  const organization = ['Dashboard', 'Organisation', 'Kalender', 'Zeiterfassung', 'Mitarbeiter', 'Kunden'];
+  const account = ['Profil', 'Konto & Sicherheit', 'Aufträge & Projekte', 'Abonnement & Abrechnung'];
+  expect(tabs('buero')).toEqual({ account, organization });
+  // Only Admin exports the whole organization (werk-flow/werkflow-planning#287).
+  expect(tabs('admin')).toEqual({ account, organization: [...organization, 'Datenexport'] });
 });

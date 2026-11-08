@@ -1,9 +1,13 @@
 'use client';
 
-import { CalendarClock } from 'lucide-react';
+import { useMemo } from 'react';
+import { CalendarClock, TriangleAlert } from 'lucide-react';
 
-import { formatDelegationDate, personName } from '@/components/settings/responsibility-display';
+import { personName } from '@/components/settings/responsibility-display';
+import { delegationPeriodText } from '@/lib/responsibilities/delegation-window';
+import { substituteOptionDescription } from '@/lib/responsibilities/substitute-absence';
 import { useResponsibilityDelegationForm } from '@/components/settings/use-responsibility-delegation-form';
+import { useSubstituteAbsences } from '@/components/settings/use-substitute-absences';
 import { Button } from '@/components/ui/button';
 import { DatePicker } from '@/components/ui/date-picker';
 import {
@@ -42,9 +46,22 @@ export function DelegationDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const form = useResponsibilityDelegationForm({ data, responsibility, onOpenChange });
-  const { validFrom, validUntil, note, isSaving, saveError, canSave, setNote, handleOpenChange, handleSave } =
-    form;
+  const substituteAbsences = useSubstituteAbsences(open);
+  const withAbsences = useMemo(() => ({ ...data, substituteAbsences }), [data, substituteAbsences]);
+  const form = useResponsibilityDelegationForm({ data: withAbsences, responsibility, onOpenChange });
+  const {
+    validFrom,
+    validUntil,
+    note,
+    isSaving,
+    saveError,
+    canSave,
+    substituteAbsent,
+    substituteId,
+    setNote,
+    handleOpenChange,
+    handleSave,
+  } = form;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange} pending={isSaving}>
@@ -57,7 +74,7 @@ export function DelegationDialog({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSave} noValidate className="grid gap-4 sm:grid-cols-2">
-          <DelegationPeopleFields data={data} responsibility={responsibility} form={form} />
+          <DelegationPeopleFields data={withAbsences} responsibility={responsibility} form={form} />
           <DelegationPeriodFields responsibility={responsibility} form={form} />
           <Field
             label="Hinweis (optional)"
@@ -71,6 +88,7 @@ export function DelegationDialog({
               maxLength={500}
             />
           </Field>
+          {substituteAbsent ? <AbsentSubstituteWarning name={personName(data.people, substituteId)} /> : null}
           {canSave ? <DelegationEffect validFrom={validFrom} validUntil={validUntil} /> : null}
           <ErrorText className="sm:col-span-2">{saveError}</ErrorText>
           <DialogFooter className="sm:col-span-2">
@@ -83,7 +101,7 @@ export function DelegationDialog({
               Abbrechen
             </Button>
             <Button pending={isSaving} type="submit" disabled={isSaving}>
-              Vertretung speichern
+              {substituteAbsent ? 'Trotzdem speichern' : 'Vertretung speichern'}
             </Button>
           </DialogFooter>
         </form>
@@ -103,7 +121,16 @@ function DelegationPeopleFields({
   responsibility: OrganizationResponsibility;
   form: DelegationForm;
 }) {
-  const { baseHolders, delegatorId, substituteId, personErrors, selectDelegator, selectSubstitute } = form;
+  const {
+    baseHolders,
+    delegatorId,
+    substituteId,
+    validFrom,
+    validUntil,
+    personErrors,
+    selectDelegator,
+    selectSubstitute,
+  } = form;
   return (
     <>
       <Field
@@ -138,6 +165,12 @@ function DelegationPeopleFields({
             .map((person) => ({
               value: person.employeeRecordId,
               label: formatResponsibilityPersonName(person),
+              description: substituteOptionDescription(
+                person,
+                data.substituteAbsences,
+                validFrom,
+                validUntil,
+              ),
             }))}
           value={substituteId}
           onChange={selectSubstitute}
@@ -185,8 +218,27 @@ function DelegationEffect({ validFrom, validUntil }: { validFrom: string; validU
         <CalendarClock className="size-4" /> Wirkung
       </p>
       <p className="mt-1 text-muted-foreground">
-        Die Vertretung gilt einschließlich {formatDelegationDate(validFrom)} und{' '}
-        {formatDelegationDate(validUntil)}. Ab dem Folgetag endet der Zugriff automatisch.
+        Die Vertretung gilt {delegationPeriodText(validFrom, validUntil)}. Ab dem Folgetag endet der Zugriff
+        automatisch.
+      </p>
+    </div>
+  );
+}
+
+function AbsentSubstituteWarning({ name }: { name: string }) {
+  return (
+    <div
+      role="status"
+      data-testid="absent-substitute-warning"
+      className="rounded-md border border-warning/40 bg-warning-soft p-3 text-sm text-warning-soft-foreground sm:col-span-2"
+    >
+      <p className="flex items-start gap-2 font-medium">
+        <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+        <span>{name} ist im ganzen Zeitraum abwesend</span>
+      </p>
+      <p className="mt-1">
+        Freigaben bleiben dann liegen, bis die verantwortliche Person zurück ist. Wähle eine andere Vertretung
+        oder speichere trotzdem.
       </p>
     </div>
   );

@@ -87,6 +87,7 @@ function contractDocument(documentId: string, fileName: string): OrganizationDoc
     updatedAt: '2026-11-02T08:00:00.000Z',
     uploader: null,
     links: [],
+    origin: { sourceSystem: null, sourceReference: null },
     archive: null,
   };
 }

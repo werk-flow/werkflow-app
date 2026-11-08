@@ -7,24 +7,37 @@ import { useClientRead } from '@/hooks/use-client-read';
 import { describeFailure } from '@/lib/action-messages';
 import type { ActionResult } from '@/lib/action-result';
 import { readInBackground } from '@/lib/data/background-read-client';
+import { requiredWorkArtifactFields, workArtifactFieldIssues } from '@/lib/work-artifacts/field-rules';
 import type {
+  RecordedVisitWindow,
   WorkArtifactDetail,
   WorkArtifactKind,
   WorkArtifactSummary,
   WorkArtifactVisibility,
 } from '@/lib/work-artifacts/types';
 import {
+  contentForKind,
   contentFromDetail,
   EMPTY_CONTENT,
   localDateTime,
   type WorkArtifactContentDraft,
 } from './work-artifact-content';
+import { WORK_ARTIFACT_CONTROL_IDS, workArtifactFieldErrors } from './work-artifact-field-errors';
 
 type WorkArtifactEditorOptions = {
   artifactId: string | null;
   initialSummary: WorkArtifactSummary | null;
   defaultSiteId: string | undefined;
+  /** A new work report's Beginn and Ende from today's recorded time on the job. */
+  recordedVisit: RecordedVisitWindow;
   readOnly: boolean;
+};
+
+/** One rule field's control id, required mark and current error. */
+export type WorkArtifactFieldState = (field: keyof typeof WORK_ARTIFACT_CONTROL_IDS) => {
+  id: string;
+  required: boolean;
+  error: string | undefined;
 };
 
 /** The loaded artifact, its editable draft and the reload every dialog action builds on. */
@@ -32,6 +45,7 @@ export function useWorkArtifactEditor({
   artifactId,
   initialSummary,
   defaultSiteId,
+  recordedVisit,
   readOnly,
 }: WorkArtifactEditorOptions) {
   const [detail, setDetail] = useState<WorkArtifactDetail | null>(null);
@@ -44,10 +58,7 @@ export function useWorkArtifactEditor({
   const [capturedAt, setCapturedAt] = useState(
     localDateTime(initialSummary?.currentRevision.captured_at) || localDateTime(new Date().toISOString()),
   );
-  const [content, setContent] = useState<WorkArtifactContentDraft>({
-    ...EMPTY_CONTENT,
-    siteId: defaultSiteId,
-  });
+  const [content, setContent] = useState(() => initialContent(artifactId, defaultSiteId, recordedVisit));
   const [correctionReason, setCorrectionReason] = useState('');
   const [correctionReasonError, setCorrectionReasonError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +93,7 @@ export function useWorkArtifactEditor({
   }
 
   const handleMutationFailure = mutationFailureHandler({ detail, load, setError });
+  const fieldMarks = useWorkArtifactFieldMarks(kind, title, content);
 
   return {
     detail,
@@ -102,6 +114,7 @@ export function useWorkArtifactEditor({
     setCorrectionReason,
     correctionReasonError,
     setCorrectionReasonError,
+    ...fieldMarks,
     error,
     setError,
     runArtifactTask,
@@ -115,6 +128,41 @@ export function useWorkArtifactEditor({
     patchContent,
     handleMutationFailure,
   };
+}
+
+/** A new draft's content: the job's site and, for a new report, today's recorded visit window. */
+function initialContent(
+  artifactId: string | null,
+  defaultSiteId: string | undefined,
+  recordedVisit: RecordedVisitWindow,
+): WorkArtifactContentDraft {
+  return {
+    ...EMPTY_CONTENT,
+    siteId: defaultSiteId,
+    visitStartedAt: artifactId ? undefined : localDateTime(recordedVisit.startedAt),
+    visitEndedAt: artifactId ? undefined : localDateTime(recordedVisit.endedAt),
+  };
+}
+
+/** The last save attempt and, from then on, the draft's broken rules at their fields as the user edits. */
+function useWorkArtifactFieldMarks(kind: WorkArtifactKind, title: string, content: WorkArtifactContentDraft) {
+  const [attemptedSave, setAttemptedSave] = useState<{ submit: boolean } | null>(null);
+  const fieldErrors = attemptedSave
+    ? workArtifactFieldErrors(
+        workArtifactFieldIssues({
+          kind,
+          title,
+          submit: attemptedSave.submit,
+          content: contentForKind(kind, content),
+        }),
+      )
+    : {};
+  const requiredFields = requiredWorkArtifactFields(kind);
+  const fieldState: WorkArtifactFieldState = (field) => {
+    const id = WORK_ARTIFACT_CONTROL_IDS[field];
+    return { id, required: requiredFields.has(field), error: fieldErrors[id] };
+  };
+  return { setAttemptedSave, fieldErrors, fieldState };
 }
 
 type WorkArtifactReadTarget = { id: string | null; revision: number };

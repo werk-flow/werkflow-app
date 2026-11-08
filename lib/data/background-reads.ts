@@ -87,6 +87,7 @@ import {
   getWorkTemplates,
 } from '@/lib/work-templates/actions';
 import { workTemplatePreviewInputSchema, workTemplateTargetTypeSchema } from '@/lib/work-templates/schemas';
+import { getSubstituteAbsences } from '@/lib/responsibilities/substitute-absence-read';
 
 /**
  * The closed set of read-only readers a page may run in the background over
@@ -317,6 +318,8 @@ export const BACKGROUND_READS = {
     getDocumentViewSignedUrl(input.documentId),
   ),
   'document-link-employees': defineRead(organizationInput, () => getDocumentLinkEmployees()),
+  // The owner's substitute picker reads absences when the delegation dialog opens.
+  'responsibility-substitute-absences': defineRead(organizationInput, () => getSubstituteAbsences()),
   'vacation-days-preview': defineRead(
     z.object({
       organizationId: uuidSchema,

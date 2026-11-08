@@ -5,29 +5,30 @@ import { Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DateTimeField } from '@/components/ui/date-time-field';
-import { Field } from '@/components/ui/field';
-import { Label } from '@/components/ui/label';
+import { Field, useFieldContext } from '@/components/ui/field';
 import { QuantityStepper } from '@/components/ui/quantity-stepper';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Constants } from '@/lib/supabase/database.types';
 import { WORK_ARTIFACT_UNIT_LABELS, type MeasurementLineInput } from '@/lib/work-artifacts/types';
-import {
-  AUTHORIZATION_STATE_LABELS,
-  DEFECT_SEVERITY_LABELS,
-  DEFECT_STATE_LABELS,
-} from './work-artifact-content';
+import { DEFECT_SEVERITY_LABELS, DEFECT_STATE_LABELS } from './work-artifact-content';
+import { measurementLineDescriptionId, measurementLineQuantityId } from './work-artifact-field-errors';
 import { DateField, TextField, type WorkArtifactContentFieldsProps } from './work-artifact-form-fields';
 
-export function WorkArtifactSiteDiaryFields({ content, patchContent }: WorkArtifactContentFieldsProps) {
+export function WorkArtifactSiteDiaryFields({
+  content,
+  patchContent,
+  fieldState,
+}: WorkArtifactContentFieldsProps) {
   return (
     <div className="grid gap-4">
       <DateField
-        id="artifact-work-date"
+        {...fieldState('workDate')}
         label="Arbeitstag"
         value={content.workDate}
         onChange={(value) => patchContent({ workDate: value })}
       />
       <TextField
+        {...fieldState('progress')}
         label="Fortschritt"
         value={content.progress}
         onChange={(value) => patchContent({ progress: value })}
@@ -77,26 +78,37 @@ export function WorkArtifactSiteDiaryFields({ content, patchContent }: WorkArtif
   );
 }
 
-export function WorkArtifactWorkReportFields({ content, patchContent }: WorkArtifactContentFieldsProps) {
+export function WorkArtifactWorkReportFields({
+  content,
+  patchContent,
+  fieldState,
+}: WorkArtifactContentFieldsProps) {
+  const start = fieldState('visitStartedAt');
+  const end = fieldState('visitEndedAt');
   return (
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Beginn" htmlFor="artifact-visit-start-date">
+        <Field label="Beginn" htmlFor={start.id} required={start.required} error={start.error}>
           <DateTimeField
             value={content.visitStartedAt ?? ''}
             onChange={(value) => patchContent({ visitStartedAt: value })}
             idPrefix="artifact-visit-start"
+            dateAriaLabel="Datum des Beginns"
+            invalid={Boolean(start.error)}
           />
         </Field>
-        <Field label="Ende" htmlFor="artifact-visit-end-date">
+        <Field label="Ende" htmlFor={end.id} required={end.required} error={end.error}>
           <DateTimeField
             value={content.visitEndedAt ?? ''}
             onChange={(value) => patchContent({ visitEndedAt: value })}
             idPrefix="artifact-visit-end"
+            dateAriaLabel="Datum des Endes"
+            invalid={Boolean(end.error)}
           />
         </Field>
       </div>
       <TextField
+        {...fieldState('performedWork')}
         label="Ausgeführte Arbeiten"
         value={content.performedWork}
         onChange={(value) => patchContent({ performedWork: value })}
@@ -128,24 +140,30 @@ export function WorkArtifactWorkReportFields({ content, patchContent }: WorkArti
 type WorkArtifactMeasurementFieldsProps = WorkArtifactContentFieldsProps & {
   measurementLines: MeasurementLineInput[];
   setMeasurementLines: (lines: MeasurementLineInput[]) => void;
+  /** The form's errors by control id; a line's description error sits under its id. */
+  fieldErrors: Readonly<Record<string, string>>;
 };
 
 export function WorkArtifactMeasurementFields({
   content,
   patchContent,
+  fieldState,
+  fieldErrors,
   measurementLines,
   setMeasurementLines,
 }: WorkArtifactMeasurementFieldsProps) {
+  const lines = fieldState('measurementLines');
   return (
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <DateField
-          id="artifact-measurement-date"
+          {...fieldState('measurementDate')}
           label="Aufmaßdatum"
           value={content.measurementDate}
           onChange={(value) => patchContent({ measurementDate: value })}
         />
         <TextField
+          {...fieldState('measurementLocation')}
           label="Aufmaßort"
           value={content.measurementLocation}
           onChange={(value) => patchContent({ measurementLocation: value })}
@@ -158,24 +176,20 @@ export function WorkArtifactMeasurementFields({
         textarea
       />
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <Label>Positionen</Label>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={() =>
+        <Field label="Positionen" htmlFor={lines.id} required={lines.required} error={lines.error}>
+          <AddMeasurementLineButton
+            onAdd={() =>
               setMeasurementLines([...measurementLines, { description: '', quantity: '1', unit: 'piece' }])
             }
-          >
-            Position ergänzen
-          </Button>
-        </div>
+          />
+        </Field>
         {measurementLines.map((line, index) => (
           <MeasurementLineFields
             key={line.id ?? index}
             line={line}
             index={index}
+            descriptionError={fieldErrors[measurementLineDescriptionId(index)]}
+            quantityError={fieldErrors[measurementLineQuantityId(index)]}
             measurementLines={measurementLines}
             setMeasurementLines={setMeasurementLines}
           />
@@ -185,14 +199,39 @@ export function WorkArtifactMeasurementFields({
   );
 }
 
+/** The control of „Positionen“: it keeps its own name and carries the field's required mark and error. */
+function AddMeasurementLineButton({ onAdd }: { onAdd: () => void }) {
+  const field = useFieldContext();
+  return (
+    <Button
+      id={field?.controlId}
+      type="button"
+      size="sm"
+      variant="ghost"
+      className="justify-self-start"
+      aria-label="Position ergänzen"
+      aria-describedby={
+        [field?.describedBy, field?.requiredDescriptionId].filter(Boolean).join(' ') || undefined
+      }
+      onClick={onAdd}
+    >
+      Position ergänzen
+    </Button>
+  );
+}
+
 function MeasurementLineFields({
   line,
   index,
   measurementLines,
   setMeasurementLines,
+  descriptionError,
+  quantityError,
 }: Pick<WorkArtifactMeasurementFieldsProps, 'measurementLines' | 'setMeasurementLines'> & {
   line: MeasurementLineInput;
   index: number;
+  descriptionError: string | undefined;
+  quantityError: string | undefined;
 }) {
   const patchLine = (patch: Partial<MeasurementLineInput>) =>
     setMeasurementLines(
@@ -201,14 +240,16 @@ function MeasurementLineFields({
   return (
     <div className="grid gap-3 rounded-md border p-3 sm:grid-cols-[1fr_180px_auto]">
       <TextField
-        id={`artifact-measurement-description-${index}`}
+        id={measurementLineDescriptionId(index)}
+        required
+        error={descriptionError}
         label="Bezeichnung"
         value={line.description}
         onChange={(value) => patchLine({ description: value })}
       />
-      <Field label="Menge" htmlFor={`artifact-measurement-quantity-${index}`}>
+      <Field label="Menge" htmlFor={measurementLineQuantityId(index)} required error={quantityError}>
         <QuantityStepper
-          id={`artifact-measurement-quantity-${index}`}
+          id={measurementLineQuantityId(index)}
           value={line.quantity}
           onChange={(value) => patchLine({ quantity: value })}
           min={0.001}
@@ -256,10 +297,15 @@ function MeasurementLineFields({
   );
 }
 
-export function WorkArtifactDefectFields({ content, patchContent }: WorkArtifactContentFieldsProps) {
+export function WorkArtifactDefectFields({
+  content,
+  patchContent,
+  fieldState,
+}: WorkArtifactContentFieldsProps) {
   return (
     <div className="space-y-4">
       <TextField
+        {...fieldState('defectDescription')}
         label="Mangelbeschreibung"
         value={content.defectDescription}
         onChange={(value) => patchContent({ defectDescription: value })}
@@ -267,12 +313,12 @@ export function WorkArtifactDefectFields({ content, patchContent }: WorkArtifact
       />
       <div className="grid gap-4 sm:grid-cols-2">
         <TextField
-          id="artifact-defect-location"
+          {...fieldState('defectLocation')}
           label="Ort"
           value={content.defectLocation}
           onChange={(value) => patchContent({ defectLocation: value })}
         />
-        <DefectSeverityField content={content} patchContent={patchContent} />
+        <DefectSeverityField content={content} patchContent={patchContent} fieldState={fieldState} />
         <DateField
           id="artifact-due-date"
           label="Fällig am"
@@ -304,9 +350,10 @@ export function WorkArtifactDefectFields({ content, patchContent }: WorkArtifact
   );
 }
 
-function DefectSeverityField({ content, patchContent }: WorkArtifactContentFieldsProps) {
+function DefectSeverityField({ content, patchContent, fieldState }: WorkArtifactContentFieldsProps) {
+  const severity = fieldState('defectSeverity');
   return (
-    <Field label="Schweregrad" htmlFor="artifact-defect-severity">
+    <Field label="Schweregrad" htmlFor={severity.id} required={severity.required} error={severity.error}>
       <Select
         value={content.defectSeverity ?? 'medium'}
         onValueChange={(value) => {
@@ -331,7 +378,10 @@ function DefectSeverityField({ content, patchContent }: WorkArtifactContentField
   );
 }
 
-function DefectStateField({ content, patchContent }: WorkArtifactContentFieldsProps) {
+function DefectStateField({
+  content,
+  patchContent,
+}: Pick<WorkArtifactContentFieldsProps, 'content' | 'patchContent'>) {
   return (
     <Field label="Status" htmlFor="artifact-defect-state">
       <Select
@@ -358,83 +408,10 @@ function DefectStateField({ content, patchContent }: WorkArtifactContentFieldsPr
   );
 }
 
-export function WorkArtifactChangeWorkFields({ content, patchContent }: WorkArtifactContentFieldsProps) {
-  return (
-    <div className="space-y-4">
-      <TextField
-        label="Änderungs-/Regiearbeit"
-        value={content.changeDescription}
-        onChange={(value) => patchContent({ changeDescription: value })}
-        textarea
-      />
-      <TextField
-        label="Grund"
-        value={content.changeReason}
-        onChange={(value) => patchContent({ changeReason: value })}
-        textarea
-      />
-      <TextField
-        label="Angefordert durch"
-        value={content.requestedByContext}
-        onChange={(value) => patchContent({ requestedByContext: value })}
-      />
-      <div className="grid gap-4 sm:grid-cols-2">
-        <TextField
-          label="Erwartete Arbeitsminuten"
-          value={content.expectedLaborMinutes}
-          onChange={(value) => patchContent({ expectedLaborMinutes: value })}
-        />
-        <TextField
-          label="Tatsächliche Arbeitsminuten"
-          value={content.actualLaborMinutes}
-          onChange={(value) => patchContent({ actualLaborMinutes: value })}
-        />
-      </div>
-      <TextField
-        label="Erwartetes Material"
-        value={content.expectedMaterialSummary}
-        onChange={(value) => patchContent({ expectedMaterialSummary: value })}
-        textarea
-      />
-      <TextField
-        label="Tatsächliches Material"
-        value={content.actualMaterialSummary}
-        onChange={(value) => patchContent({ actualMaterialSummary: value })}
-        textarea
-      />
-      <Field label="Autorisierungsstand" htmlFor="artifact-authorization-state">
-        <Select
-          value={content.authorizationState ?? 'not_requested'}
-          onValueChange={(value) => {
-            const authorizationState = Constants.public.Enums.work_artifact_change_authorization_state.find(
-              (candidate) => candidate === value,
-            );
-            if (authorizationState) patchContent({ authorizationState });
-          }}
-        >
-          <SelectTrigger aria-label="Autorisierungsstand">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(AUTHORIZATION_STATE_LABELS).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
-      <TextField
-        label="Terminauswirkung"
-        value={content.scheduleImpact}
-        onChange={(value) => patchContent({ scheduleImpact: value })}
-        textarea
-      />
-    </div>
-  );
-}
-
-export function WorkArtifactCustomerFacingFields({ content, patchContent }: WorkArtifactContentFieldsProps) {
+export function WorkArtifactCustomerFacingFields({
+  content,
+  patchContent,
+}: Pick<WorkArtifactContentFieldsProps, 'content' | 'patchContent'>) {
   return (
     <div className="space-y-3 rounded-md border p-4">
       <TextField

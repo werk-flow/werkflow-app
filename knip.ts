@@ -41,6 +41,8 @@ const config: KnipConfig = {
     'lib/testing/fixtures/*.{ts,tsx}',
     'scripts/*.ts!',
     'scripts/migration/*.ts!',
+    // Run on a Boat machine by scripts/boat/remote-verify.sh, or by package scripts.
+    'scripts/boat/*.ts!',
     // Agent hooks run by path from the agent settings.
     '.claude/hooks/*.ts!',
     'playwright.audit.config.ts!',
@@ -75,8 +77,10 @@ const config: KnipConfig = {
   ignoreDependencies: ['supabase', 'tailwindcss'],
   // util-linux's flock holds the machine-wide heavy slots (lib/testing/runner/heavy-slot.ts);
   // T3 Code's CLI wakes the thread of a notified run (lib/testing/notified-run.ts);
-  // POSIX mkfifo lets its test wait on the wake itself (lib/testing/notified-run.test.ts).
-  ignoreBinaries: ['flock', 'mkfifo', 't3'],
+  // POSIX mkfifo lets its test wait on the wake itself (lib/testing/notified-run.test.ts);
+  // the runner's openssl reads its agent's certificate expiry (scripts/date-lookahead-plan.ts);
+  // macOS xattr marks a file the Boat pack must strip (lib/testing/boat/verify-on-boat.test.ts).
+  ignoreBinaries: ['flock', 'mkfifo', 'openssl', 't3', 'xattr'],
 };
 
 export default config;

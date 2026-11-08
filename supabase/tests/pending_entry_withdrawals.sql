@@ -1,4 +1,4 @@
--- Withdrawn manual submissions (migration 20261114120000_withdraw_pending_manual_entries.sql):
+-- Withdrawn manual submissions (migration 20261122120000_withdraw_pending_manual_entries.sql):
 -- the author of a pending manual entry withdraws it before the decision. The
 -- entries leave the time record and one withdrawal event per entry keeps the
 -- author, the time and the entry as submitted. Another person's entry, a

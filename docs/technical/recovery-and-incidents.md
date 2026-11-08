@@ -61,13 +61,15 @@ Signals: the production watcher below, the failure count `werkflow.failure`, Ver
 
 A red nightly or release, a scheduled release that stopped at a red full run, and a scheduled run that never started each open or update one issue with the label `ci-alert`: `CI alert: nightly` or `CI alert: release` (`.github/scripts/alert-issue.sh`). The next green run closes it. A release that stops because `main` equals `production` leaves the issue as it is, because it proves nothing. `ops/ci-alert.py` in `werk-flow/werkflow-planning` runs every 10 minutes on [the PC and the Mac](environments.md#background-jobs): it finds a run that never started and hands each open issue, and the weekly health issue, to one T3 thread. These issues only report; no release decision reads them.
 
-Assignment is the owner's one notification, so only a failure that affects production assigns `tamaycbn`: a failed or held release, a release that never started, a production watcher alert, and a failed health check of a credential production depends on. A caller of `alert-issue.sh` says so with `AFFECTS_PRODUCTION=true`. Every other alert reaches its thread only. An open issue that turns into a production failure gains the owner; no update removes an assignee. No issue text or comment mentions the owner. GitHub never notifies a user of their own actions, and `ops/ci-alert.py` runs `gh` as the owner, so it reports a release that never started, and every production watcher alert, by dispatching `.github/workflows/production-alert.yml`, which writes as `github-actions`.
+Assignment is the owner's one notification, so only a failure that affects production assigns `tamaycbn`: a failed or held release, a release that never started, a production watcher alert, a failed health check of a credential production depends on, and a Boat key about to expire. A caller of `alert-issue.sh` says so with `AFFECTS_PRODUCTION=true`. Every other alert reaches its thread only. An open issue that turns into a production failure gains the owner; no update removes an assignee. No issue text or comment mentions the owner. GitHub never notifies a user of their own actions, and `ops/ci-alert.py` runs `gh` as the owner, so it reports a release that never started, every production watcher alert and `Owner action: Boat key`, by dispatching `.github/workflows/production-alert.yml`, which writes as `github-actions`.
 
 On the machine with the watcher's token, `ops/ci-alert.py` also runs the production watcher, `ops/prod_watch.py`, which owns the rules and thresholds. It reads metadata only, with the token `werkflow app prod-watch` ([credentials](environments.md#credentials)): Vercel's production deployments, the deployment `app.werk-flow.app` serves, the head of `production`, and counts of `vercel.request.count` with a 5xx status per route pattern, status, error code and deployment. It opens one issue per incident:
 
 - `Production alert: deploy`: a production build failed or stuck past its deadline, or production not serving the `production` head for an hour, which is a rollback or a failed promotion.
 - `Production alert: server errors`: a burst of server errors against the week before, or a route that starts to fail. It adds a comment at most every few hours and closes a day after the newest error.
 - `Production alert: watcher`: several failed passes in a row, such as an expired token. `python3 -I ops/prod_watch.py --health` in werkflow-planning checks the token.
+
+On every machine with a Boat key, the pass opens `Owner action: Boat key` before the key expires (`ops/boat_key.py`; [renew the key](boat-verification.md#renew-the-key) owns the schedule).
 
 Its thread reads no PROD data: no runtime log, build log, request record or row, and of a failed `Apply pending migrations to PROD` step only the result, since its log may quote a row. It works from the route, status, error code and commit range, and reproduces the failure on staging or the local stack. The watcher closes the deploy alert once production serves its head and no build is failed or stuck.
 
@@ -91,14 +93,17 @@ Check the path without an outage:
 | Dates | Groups |
 | --- | --- |
 | The next 14 days, the first month end and year end past them, and the year turn (00:30 in Berlin, still December 31 in UTC) | Unit, SQL and component |
-| Day 14, on Sundays also that month end and year end, and every date the open issue names for a browser job | Every browser group |
+| Day 14, on Sundays also that month end and year end, and every date the open issue names for a browser job, each only if it is at least a day before the runner's certificate expires | Every browser group |
 
-A date keeps its browser jobs while the issue names it, so a green run cannot close the issue on a date it skipped. Started by hand, `gh workflow run date-lookahead.yml -f date=<YYYY-MM-DD>` reruns one date and reports nothing.
+The runner's agent reaches GitHub over TLS. On a clock past the expiry of that certificate the agent loses GitHub, and GitHub shuts the runner down 13 to 20 minutes later. A suite job ends before that, but a browser job does not. So the plan reads the agent's hosts from the runner's journal and gives browser jobs only to dates whose midday is at least a day before the earliest of their certificates' expiries. Its log names each held date. GitHub renews the certificate, so a held date gets its browser jobs again later. A runner shut down mid-job with "The runner has received a shutdown signal" means a leg went past that horizon.
+
+A date keeps its browser jobs while the issue names it, so a green run cannot close the issue on a date it skipped. The exception is a date past the horizon, whose browser jobs could not have run. Started by hand, `gh workflow run date-lookahead.yml -f date=<YYYY-MM-DD>` reruns one date and reports nothing.
 
 The look-ahead does not cover:
 
 - A spec merged after its date was day 14: only the suite groups and the real nightly reach that date.
 - Any hour but midday, apart from the year turn.
+- Browser groups on a date past the runner's certificate horizon, until GitHub renews the certificate.
 - Data that aged into the date: the stack migrates on the real clock, and each browser group seeds a fresh world on the shifted one.
 - The cloud providers: every job uses the local stack.
 

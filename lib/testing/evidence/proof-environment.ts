@@ -16,6 +16,8 @@ import { join } from 'node:path';
 const ENVIRONMENT_FILES = ['.env', '.env.local', '.env.production', '.env.production.local'] as const;
 const APPLICATION_ENVIRONMENT_PATTERN = /^(NEXT_PUBLIC_|SUPABASE_|R2_)/;
 
+/** Set on a Boat machine to the workstation's digest (lib/testing/boat/verify-on-boat.ts). */
+const BOAT_PROOF_ENVIRONMENT = 'WERKFLOW_BOAT_PROOF_ENVIRONMENT';
 const LOCAL_API_PORT = '54321';
 const PRIVATE_HOST_PATTERN =
   /^(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})$/;
@@ -51,6 +53,10 @@ export function proofEnvironmentDigest(
   repositoryRoot: string,
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): string {
+  // A Boat machine proves the workstation's backend once remote-verify.sh found its stack values
+  // equal to the workstation's (backendValueDigests), so its proofs count on the workstation.
+  const workstation = environment[BOAT_PROOF_ENVIRONMENT];
+  if (environment.WERKFLOW_BOAT_MACHINE === '1' && workstation) return workstation;
   const digest = createHash('sha256');
   for (const filename of ENVIRONMENT_FILES) {
     const path = join(repositoryRoot, filename);
@@ -99,4 +105,49 @@ export function backendIdentity(supabaseUrl: string | undefined, repositoryRoot:
     : undefined;
   if (!projectId) throw new Error('The local stack identity needs project_id in supabase/config.toml.');
   return `local:${projectId}`;
+}
+
+/**
+ * Values a workstation holds that name no backend and never leave it: the owner's Supabase token,
+ * and the code-hash secret a Boat run draws at random, as CI does.
+ */
+const WORKSTATION_ONLY = new Set(['SUPABASE_ACCESS_TOKEN', 'EMAIL_OTP_HASH_SECRET']);
+
+/**
+ * A digest of every value proofEnvironmentDigest reads, from each environment file and from the
+ * process, origins normalized, except WORKSTATION_ONLY. A Boat machine compares its own with the
+ * workstation's, so it proves the same backend without either side sending a value.
+ */
+export function backendValueDigests(
+  repositoryRoot: string,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): Record<string, string> {
+  const fromFiles = ENVIRONMENT_FILES.flatMap((filename) => {
+    const path = join(repositoryRoot, filename);
+    if (!existsSync(path)) return [];
+    return Object.entries(parseEnvironmentFile(readFileSync(path, 'utf8'))).map(
+      ([key, value]): [string, string] => [`${filename}:${key}`, value],
+    );
+  });
+  const fromProcess = Object.keys(environment)
+    .filter((key) => APPLICATION_ENVIRONMENT_PATTERN.test(key))
+    .map((key): [string, string] => [`process:${key}`, environment[key] ?? '']);
+  // The code-hash secret's value stays out, but not whether the app can use it: a Boat run draws a
+  // usable one, so its proof stands for a workstation only where the workstation's is usable too.
+  const localSecret = environment.EMAIL_OTP_HASH_SECRET ?? fileValue(repositoryRoot, 'EMAIL_OTP_HASH_SECRET');
+  return Object.fromEntries([
+    ...[...fromFiles, ...fromProcess]
+      .filter(([name]) => !WORKSTATION_ONLY.has(name.slice(name.indexOf(':') + 1)))
+      .map(([name, value]) => [
+        name,
+        createHash('sha256').update(normalizeEnvironmentValue(value)).digest('hex'),
+      ]),
+    ['usable:EMAIL_OTP_HASH_SECRET', localSecret?.trim() ? 'usable' : 'missing'],
+  ]);
+}
+
+/** A key's value in `.env.local`, which the app loads after the process environment. */
+function fileValue(repositoryRoot: string, key: string): string | undefined {
+  const path = join(repositoryRoot, '.env.local');
+  return existsSync(path) ? parseEnvironmentFile(readFileSync(path, 'utf8'))[key] : undefined;
 }

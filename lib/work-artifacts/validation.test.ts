@@ -126,6 +126,37 @@ describe('saveWorkArtifactSchema', () => {
       );
   });
 
+  test('names the missing Beginn and Ende of a submitted work report at their content paths', () => {
+    const result = saveWorkArtifactSchema.safeParse({
+      ...base,
+      kind: 'work_report',
+      content: { performedWork: 'Anlage geprüft' },
+      submit: true,
+      submitActionId: '00000000-0000-4000-8000-000000000010',
+    });
+    expect(result.success).toBe(false);
+    if (!result.success)
+      expect(result.error.issues.map((issue) => issue.path.join('.'))).toEqual([
+        'content.visitStartedAt',
+        'content.visitEndedAt',
+      ]);
+  });
+
+  test('requires a title of three characters and a description on every measurement line', () => {
+    const result = saveWorkArtifactSchema.safeParse({
+      ...base,
+      title: ' ab ',
+      kind: 'measurement',
+      content: { measurementLines: [{ description: ' ', quantity: '1', unit: 'piece' }] },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success)
+      expect(result.error.issues.map((issue) => issue.path.join('.'))).toEqual([
+        'title',
+        'content.measurementLines.0.description',
+      ]);
+  });
+
   test('requires correction revision and reason together', () => {
     const result = saveWorkArtifactSchema.safeParse({
       ...base,

@@ -136,9 +136,19 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve({ filter: /^@\/lib\/jobs\/instruction-items-actions$/ }, () => ({
               path: join(import.meta.dir, 'instruction-service-boundaries.ts'),
             }));
+            builder.onResolve({ filter: /^@\/lib\/work-artifacts\/actions$/ }, () => ({
+              path: join(import.meta.dir, 'work-artifact-boundaries.ts'),
+            }));
             builder.onResolve({ filter: /^@\/lib\/qualifications\/actions$/ }, () => ({
               path: join(import.meta.dir, 'qualification-service-boundaries.ts'),
             }));
+            builder.onResolve({ filter: /^@\/lib\/org-export\/actions$/ }, () => ({
+              path: join(import.meta.dir, 'organization-export-service-boundaries.ts'),
+            }));
+            builder.onResolve({ filter: /^next\/navigation$/ }, (args) => {
+              if (args.importer.endsWith('use-export-builder.ts'))
+                return { path: join(import.meta.dir, 'organization-export-service-boundaries.ts') };
+            });
             builder.onResolve({ filter: /^@\/lib\/time-accounts\/actions$/ }, () => ({
               path: join(import.meta.dir, 'time-account-boundaries.ts'),
             }));

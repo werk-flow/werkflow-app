@@ -7,11 +7,14 @@ import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toLocalDateString } from '@/lib/utils';
+import type { WorkArtifactFieldState } from './use-work-artifact-editor';
 import type { WorkArtifactContentDraft } from './work-artifact-content';
 
 export type WorkArtifactContentFieldsProps = {
   content: WorkArtifactContentDraft;
   patchContent: (patch: Partial<WorkArtifactContentDraft>) => void;
+  /** A rule field's control id, required mark and error. */
+  fieldState: WorkArtifactFieldState;
 };
 
 // Thin composites over the registry `Field`: the artifact form has ~40 free-text
@@ -22,6 +25,7 @@ export function TextField({
   value,
   onChange,
   textarea = false,
+  required = false,
   error,
 }: {
   id?: string;
@@ -29,12 +33,13 @@ export function TextField({
   value?: string | undefined;
   onChange: (value: string) => void;
   textarea?: boolean;
-  error?: string | null;
+  required?: boolean;
+  error?: string | null | undefined;
 }) {
   const generatedId = useId();
   const id = providedId ?? generatedId;
   return (
-    <Field label={label} htmlFor={id} error={error}>
+    <Field label={label} htmlFor={id} required={required} error={error}>
       {textarea ? (
         <Textarea value={value ?? ''} onChange={(event) => onChange(event.target.value)} />
       ) : (
@@ -49,17 +54,21 @@ export function DateField({
   label,
   value,
   onChange,
+  required = false,
+  error,
 }: {
   id: string;
   label: string;
   value?: string | undefined;
   onChange: (value: string) => void;
+  required?: boolean;
+  error?: string | undefined;
 }) {
   const date = value
     ? new Date(Number(value.slice(0, 4)), Number(value.slice(5, 7)) - 1, Number(value.slice(8, 10)))
     : undefined;
   return (
-    <Field label={label} htmlFor={id}>
+    <Field label={label} htmlFor={id} required={required} error={error}>
       <DatePicker
         value={date}
         onChange={(next) => onChange(next ? toLocalDateString(next) : '')}

@@ -285,7 +285,7 @@ select pg_temp.expect_period_closed('service midnight clock_out', $sql$
     'clock_out', '2026-07-01 00:00+02', true, 'pending')
 $sql$);
 -- A withdrawal of an own pending submission that names an entry of the
--- closed June refuses as a whole (20261114120000): the open July entry stays
+-- closed June refuses as a whole (20261122120000): the open July entry stays
 -- pending too, and the withdrawal ledger keeps no event.
 select pg_temp.expect_period_closed('service withdrawal of a pending entry in June', $sql$
   select public.withdraw_pending_time_entries('26100000-0000-0000-0000-000000000002',

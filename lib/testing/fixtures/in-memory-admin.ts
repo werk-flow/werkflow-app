@@ -140,7 +140,7 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
     return this.where((row) => (row[column] ?? null) === value);
   }
   in(column: string, values: readonly unknown[]): this {
-    return this.where((row) => values.includes(row[column]));
+    return this.compare(column, (field) => values.includes(field));
   }
   /** A null column fails the comparison, as in SQL; as text, `null` would sort after every date. */
   gte(column: string, value: string): this {
@@ -188,7 +188,9 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
   order(): this {
     return this;
   }
-  limit(): this {
+  /** The first selected rows in table order, as `range` pages them; a limit on an embed is not modeled. */
+  limit(count: number, options?: { referencedTable?: string }): this {
+    if (!options?.referencedTable) this.page = { from: 0, to: count - 1 };
     return this;
   }
   /** One page of the selected rows in table order, as PostgREST pages an ordered read. */

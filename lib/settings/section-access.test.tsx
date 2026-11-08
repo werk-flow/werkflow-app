@@ -77,7 +77,13 @@ async function runFixture(): Promise<void> {
   assert.equal(templateReads, 0);
 
   // A manager-only section sends the employee to the default section.
-  for (const slug of ['organisation', 'zeiterfassung', 'abonnement-abrechnung', 'kunden'] as const) {
+  for (const slug of [
+    'organisation',
+    'zeiterfassung',
+    'abonnement-abrechnung',
+    'kunden',
+    'datenexport',
+  ] as const) {
     assert.equal(await redirectOf(() => readSettingsSectionMembership(slug)), '/einstellungen/profil', slug);
   }
   assert.equal(await redirectOf(() => readSettingsSectionMembership('auftraege-projekte')), null);
@@ -87,6 +93,10 @@ async function runFixture(): Promise<void> {
   assert.deepEqual(await renderedBlocks(), ['OnboardingTemplates', 'Responsibilities']);
   assert.equal(templateReads, 1);
   assert.equal(await redirectOf(() => readSettingsSectionMembership('organisation')), null);
+  // Only Admin opens the organization export (werk-flow/werkflow-planning#287).
+  assert.equal(await redirectOf(() => readSettingsSectionMembership('datenexport')), '/einstellungen/profil');
+  role = 'admin';
+  assert.equal(await redirectOf(() => readSettingsSectionMembership('datenexport')), null);
 }
 
 if (process.env[FIXTURE_FLAG] === '1') {

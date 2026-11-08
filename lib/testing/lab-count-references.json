@@ -1348,7 +1348,7 @@
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 3, "tolerance": 0 },
         "backendRequests": { "reference": 87, "tolerance": 1 },
-        "componentRenders": { "reference": 1634, "tolerance": 31 }
+        "componentRenders": { "reference": 1583, "tolerance": 31 }
       },
       "payloads": {
         "background:job-dispatch-cards": {
@@ -1522,6 +1522,14 @@
           },
           "runKeys": ["2026-11-07T155436013Z-7a1b47"],
           "reason": "The job page's lifecycle snapshot carries the readiness picture's new unplannedReason and the assessed visit's conflict details (werk-flow/werkflow-planning#50, #69)."
+        },
+        {
+          "kind": "ratchet",
+          "target": "componentRenders",
+          "from": { "reference": 1634, "tolerance": 31 },
+          "to": { "reference": 1583, "tolerance": 31 },
+          "runKeys": ["2026-11-08T162433969Z-6e6e07"],
+          "reason": null
         }
       ]
     },
@@ -2573,7 +2581,7 @@
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 11, "tolerance": 1 },
-        "componentRenders": { "reference": 494, "tolerance": 9 }
+        "componentRenders": { "reference": 471, "tolerance": 9 }
       },
       "payloads": {
         "route:/einstellungen/mitarbeiter": {
@@ -2683,6 +2691,14 @@
           },
           "runKeys": ["2026-11-06T035544252Z-8c2fb1"],
           "reason": "werk-flow/werkflow-app#147 split the Einstellungen components below the size caps with behavior unchanged. CI held about 8370 bytes through 2026-11-01 13:02 UTC and about 8960 from 13:36, with #147 the only merge between. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212)."
+        },
+        {
+          "kind": "ratchet",
+          "target": "componentRenders",
+          "from": { "reference": 494, "tolerance": 9 },
+          "to": { "reference": 471, "tolerance": 9 },
+          "runKeys": ["2026-11-08T150801926Z-0e181a"],
+          "reason": null
         }
       ]
     }

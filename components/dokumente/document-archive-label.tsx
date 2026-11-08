@@ -2,9 +2,9 @@
 
 import { Lock } from 'lucide-react';
 
-import type { DocumentArchive } from '@/lib/documents/types';
+import type { DocumentArchive, DocumentOrigin } from '@/lib/documents/types';
 import { cn } from '@/lib/utils';
-import { getArchiveLabel } from './document-library-file-labels';
+import { getArchiveLabel, getOriginLabel } from './document-library-file-labels';
 
 /** A library row's archive line: the filed state and the retention end, when there is one. */
 export function DocumentArchiveLabel({
@@ -22,4 +22,11 @@ export function DocumentArchiveLabel({
       <span className="truncate">{label}</span>
     </p>
   );
+}
+
+/** A library row's origin line: the old system and number a search also matches. */
+export function DocumentOriginLabel({ origin, className }: { origin: DocumentOrigin; className?: string }) {
+  const label = getOriginLabel(origin);
+  if (!label) return null;
+  return <p className={cn('truncate text-xs text-muted-foreground', className)}>{label}</p>;
 }

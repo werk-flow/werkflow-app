@@ -36,6 +36,7 @@ declare global {
       | 'calendar-day'
       | 'calendar-month'
       | 'organization'
+      | 'organization-export'
       | 'sidebar'
       | 'lazy-dialog'
       | 'clock'

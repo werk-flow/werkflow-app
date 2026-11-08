@@ -59,6 +59,19 @@ const input: PayrollExportInput = {
   ],
 };
 
+// A fixed input that reaches every encoder branch: a separator and quotes, a
+// formula prefix, a line break, a negative number and non-ASCII text.
+const guardInput: PayrollExportInput = {
+  ...input,
+  valueRows: [
+    valueRow,
+    { ...valueRow, rowId: 'value-2', outputCode: 'Code;"Sonder"', roundingDeltaSeconds: -30 },
+    { ...valueRow, rowId: 'value-3', outputCode: '=1+1', externalEmployeeReference: 'Müller\r\nGrüße' },
+  ],
+};
+const PACKAGE_LENGTH = 1938;
+const PACKAGE_SHA256 = 'b3f7fa322031e95bad47bcd037e24494b17feee6403fe0855886c7a25018c4fa';
+
 describe('P1-23 payroll export package', () => {
   test('is byte-stable and self-identifying', () => {
     const secondValueRow = {
@@ -86,6 +99,15 @@ describe('P1-23 payroll export package', () => {
       'zuordnungen.csv',
     ]);
     expect(first.files['lohnwerte.csv']?.slice(0, 3)).toEqual(new Uint8Array([0xef, 0xbb, 0xbf]));
+  });
+
+  test('keeps the package bytes of a fixed input', () => {
+    // The stored-ZIP writer and the CSV encoder are shared with the
+    // organization export (lib/format/csv-zip.ts). Payroll output is money: a
+    // change of either must not change one byte of this package.
+    const result = buildPayrollExportPackage(guardInput);
+    expect(result.bytes.length).toBe(PACKAGE_LENGTH);
+    expect(result.sha256).toBe(PACKAGE_SHA256);
   });
 
   test('escapes semicolons and quotes without changing control totals', () => {

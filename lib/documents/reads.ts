@@ -152,6 +152,13 @@ export async function getFolderBreadcrumbs({
   return breadcrumbs;
 }
 
+/**
+ * Matches the name anywhere and the old number of a legacy original
+ * (`source_reference`) exactly or by prefix, ignoring case, as
+ * `list_document_page` does for the library. The prefix is an anchored
+ * regular expression with every other character escaped: PostgREST reads `*`
+ * in an `ilike` pattern as a wildcard.
+ */
 export function applyDocumentSearch<
   T extends {
     ilike: (column: string, pattern: string) => T;
@@ -163,6 +170,14 @@ export function applyDocumentSearch<
 
   const escapedSearch = search.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[%_]/g, '\\$&');
   const pattern = `"%${escapedSearch}%"`;
+  const prefix = quoteFilterValue(`^${search.replace(/[^\p{L}\p{N}]/gu, '\\$&')}`);
 
-  return query.or(`display_name.ilike.${pattern},original_file_name.ilike.${pattern}`);
+  return query.or(
+    `display_name.ilike.${pattern},original_file_name.ilike.${pattern},source_reference.imatch.${prefix}`,
+  );
+}
+
+/** A PostgREST filter value in double quotes, its backslashes and quotes escaped. */
+function quoteFilterValue(value: string): string {
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
