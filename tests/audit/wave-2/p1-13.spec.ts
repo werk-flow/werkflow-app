@@ -307,6 +307,7 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
       plannedDateDigits: digits(ownedBerlinDateAtOffset('p1-13', 70)),
       workTemplateName: templateName,
       qualificationOverrideReason: 'Abweichung für den vollständigen Auditfluss.',
+      planningOverride: { orgId: world.orgId, reason: 'Einsatz ist mit dem Team abgestimmt.' },
     });
     const created = await getAppliedWorkTemplateState(world.orgId, { jobNumber });
     expect(created.applications).toHaveLength(1);

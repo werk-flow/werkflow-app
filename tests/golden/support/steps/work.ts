@@ -19,6 +19,7 @@ import {
 } from '../../../../lib/work-lifecycle/types';
 import { expectDefined } from '../../../../lib/testing/spec-support/expect-defined';
 import { usableContentTarget } from '../browser-observation';
+import { getJobCountByNumber } from '../db/work';
 import { pressKey } from './interaction';
 import {
   assignDespiteQualificationWarning,
@@ -34,6 +35,8 @@ import {
   listPager,
   metadataField,
   pendingRow,
+  confirmPlanningWarning,
+  planningWarningDialog,
   selectFromSearchable,
   SHARED_COPY,
   toggleInSearchableMulti,
@@ -1287,6 +1290,29 @@ export async function selectAllHandoverSources(section: Locator): Promise<void> 
   }
 }
 
+/**
+ * Answers the planning warning of a job create from the Aufträge list when
+ * the server asks for a reason. The list closes its dialog before the server
+ * answers, and a project child's pending row is not mounted while its project
+ * is collapsed, so the create has ended when the warning shows or the job
+ * exists. The audit world has no work schedules, so whether a dated job with
+ * a person asks depends on the date's weekday.
+ */
+export async function confirmJobCreatePlanningIfAsked(
+  page: Page,
+  options: { orgId: string; jobNumber: string; reason: string },
+): Promise<void> {
+  const warning = planningWarningDialog(page);
+  await expect
+    .poll(
+      async () =>
+        (await warning.isVisible()) || (await getJobCountByNumber(options.orgId, options.jobNumber)) > 0,
+      { message: 'the job create asks for a planning reason or saves the job' },
+    )
+    .toBe(true);
+  if (await warning.isVisible()) await confirmPlanningWarning(page, options.reason);
+}
+
 export async function createJob(
   page: Page,
   options: {
@@ -1302,10 +1328,16 @@ export async function createJob(
     expectedInheritedSiteName?: string;
     expectedInheritedContactName?: string;
     qualificationOverrideReason?: string;
+    /** The reason for the planning warning of a dated job with a person, when its weekday asks for one. */
+    planningOverride?: { orgId: string; reason: string };
     plannedDateDigits?: string;
     workTemplateName?: string;
   },
 ): Promise<void> {
+  if (options.plannedDateDigits && options.assignEmployeeName && !options.planningOverride) {
+    // The save runs the calendar's capacity check on the job's visit; a pending row would hang on its warning.
+    throw new Error('createJob: a dated job with a person may ask for a planning reason; pass planningOverride');
+  }
   await page.goto('/auftraege');
   await workCreateButton(page).click();
   await expect(workCreateHeading(page)).toBeVisible();
@@ -1386,10 +1418,16 @@ export async function createJob(
   }
 
   await workCreateSubmit(page, 'job').click();
-  if (options.qualificationOverrideReason) {
-    const warningDialog = await assignDespiteQualificationWarning(page, options.qualificationOverrideReason);
-    await expect(warningDialog).toHaveCount(0);
+  const warningDialog = options.qualificationOverrideReason
+    ? await assignDespiteQualificationWarning(page, options.qualificationOverrideReason)
+    : null;
+  if (options.planningOverride) {
+    await confirmJobCreatePlanningIfAsked(page, {
+      ...options.planningOverride,
+      jobNumber: options.jobNumber,
+    });
   }
+  if (warningDialog) await expect(warningDialog).toHaveCount(0);
   // The dialog closes on success; the caller asserts the job row afterwards.
   await expect(workCreateHeading(page)).toBeHidden();
 

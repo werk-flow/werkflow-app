@@ -93,7 +93,7 @@ A job's team and the people on its visits are two records of one plan. A job sch
 - A team edit that adds a person reaches the legacy visit only. A planning write for one visit never changes another visit's people.
 - A started visit is history; a team edit leaves its people.
 - The schedule columns project the first scheduled visit. A schedule edit in the job form moves the legacy visit.
-- A job create or edit that leaves the legacy visit scheduled, unstarted and with people, after moving it or adding someone, records that visit's assessment in the same call. The call refuses the write when the visit it leaves is not the one the server assessed.
+- The job create and edit saves and the job-page team change record the capacity assessment of the legacy visit they move or add people to, in the same call, and refuse the write when that visit is not the one the server assessed. The calendar's unpark into the schedule and the request conversion still schedule without it (werk-flow/werkflow-planning#304).
 - Parking cancels scheduled visits and empties the schedule; visits keep their people, the job its team. Unparking revives the legacy visit.
 - A series change sets the people of every occurrence it rewrites; the replaced people stay on the team.
 
