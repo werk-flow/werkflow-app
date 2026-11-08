@@ -16,6 +16,8 @@ describe('planning capacity resolution', () => {
           pendingAbsenceMinutes: 60,
           existingPlannedMinutes: 180,
           overlapMinutes: 30,
+          outsideEmployment: null,
+          accessEnded: false,
         },
       ],
     );
@@ -45,6 +47,8 @@ describe('planning capacity resolution', () => {
           pendingAbsenceMinutes: 0,
           existingPlannedMinutes: 0,
           overlapMinutes: 0,
+          outsideEmployment: null,
+          accessEnded: false,
         },
       ],
     );
@@ -71,6 +75,8 @@ describe('planning capacity resolution', () => {
           pendingAbsenceMinutes: 0,
           existingPlannedMinutes: 0,
           overlapMinutes: 0,
+          outsideEmployment: null,
+          accessEnded: false,
         },
       ],
     );
@@ -78,6 +84,50 @@ describe('planning capacity resolution', () => {
     expect(result.employeeDays).toHaveLength(1);
     expect(result.employeeDays[0]?.proposedMinutes).toBe(540);
     expect(result.conflicts.map((conflict) => conflict.kind)).toEqual(['over_capacity']);
+  });
+
+  test('a day after the exit is one outside-employment conflict, never a free day or over capacity', () => {
+    const result = evaluateCapacity(
+      [{ employeeRecordId: 'employee', localDate: '2026-11-04', minutes: 240 }],
+      [
+        {
+          employeeRecordId: 'employee',
+          localDate: '2026-11-04',
+          targetMinutes: 0,
+          targetSource: 'schedule',
+          approvedAbsenceMinutes: 0,
+          pendingAbsenceMinutes: 0,
+          existingPlannedMinutes: 0,
+          overlapMinutes: 0,
+          outsideEmployment: 'after_exit',
+          accessEnded: true,
+        },
+      ],
+    );
+    expect(result.conflicts.map((conflict) => [conflict.kind, conflict.message])).toEqual([
+      ['outside_employment', 'Der Termin liegt nach dem Austritt dieser Person.'],
+    ]);
+  });
+
+  test('ended app access warns beside the day the person still works', () => {
+    const result = evaluateCapacity(
+      [{ employeeRecordId: 'employee', localDate: '2026-11-04', minutes: 240 }],
+      [
+        {
+          employeeRecordId: 'employee',
+          localDate: '2026-11-04',
+          targetMinutes: 480,
+          targetSource: 'schedule',
+          approvedAbsenceMinutes: 0,
+          pendingAbsenceMinutes: 0,
+          existingPlannedMinutes: 0,
+          overlapMinutes: 0,
+          outsideEmployment: null,
+          accessEnded: true,
+        },
+      ],
+    );
+    expect(result.conflicts.map((conflict) => conflict.kind)).toEqual(['access_ended']);
   });
 
   test('fingerprints snapshots independently of object key order', async () => {

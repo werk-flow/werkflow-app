@@ -21,3 +21,4 @@ Ab dieser gesamten Anwesenheitszeit wird die automatische Pause berücksichtigt.
 Automatische Pausendauer (Minuten)
 Diese Minuten werden automatisch abgezogen, sobald die Schwelle erreicht ist.
 Neue Regeln gelten sofort für offene und kommende Zeiterfassungen. Bereits abgeschlossene Historie wird nicht rückwirkend umgeschrieben.
+Nicht eingestempelt

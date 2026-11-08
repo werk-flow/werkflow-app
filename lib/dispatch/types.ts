@@ -117,8 +117,13 @@ export type ReadinessDimension = {
   details: string[];
 };
 
+/** Why readiness could not assess capacity and qualifications: no visit, or nobody on it. */
+export type UnplannedReason = 'no_visit' | 'no_assignees';
+
 export type ReadinessResult = {
   dimensions: ReadinessDimension[];
+  /** Set while the target has no visit or nobody on it. */
+  unplannedReason: UnplannedReason | null;
   snapshot: Json;
 };
 

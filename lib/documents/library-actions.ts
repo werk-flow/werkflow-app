@@ -14,6 +14,7 @@ import {
   getDeletedDocumentForManager,
   getFolderById,
   getManageableDocument,
+  refuseFiledDocument,
   requireManager,
 } from './access';
 import {
@@ -303,6 +304,8 @@ export async function deleteDocument(rawDocumentId: string): Promise<DocumentMut
 
   const existing = await getManageableDocument(auth.context, documentId);
   if (!existing.success) return existing;
+  const filed = refuseFiledDocument(existing.document);
+  if (!filed.success) return filed;
 
   const { error } = await auth.context.admin.rpc('trash_document', {
     p_actor_id: auth.context.userId,
@@ -313,7 +316,7 @@ export async function deleteDocument(rawDocumentId: string): Promise<DocumentMut
     return documentWriteFailure(
       'Failed to delete document metadata',
       error,
-      ['document_not_found'],
+      ['document_not_found', 'document_filed'],
       'delete_failed',
     );
   }

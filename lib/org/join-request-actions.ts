@@ -15,13 +15,11 @@ import { isJsonRecord } from '@/lib/supabase/json';
 import { logError } from '@/lib/logging';
 import { resolveActionContext } from '@/lib/org/action-context';
 import { normalizeOrganizationCode } from '@/lib/org/schemas';
+import { consumeRateLimit } from '@/lib/security/rate-limit';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { uuidSchema } from '@/lib/validation/uuid';
 import type { OwnJoinRequest } from './types';
 
-// A signed-in user may guess this many wrong organization codes per hour.
-const JOIN_FAILURE_LIMIT = 10;
-const JOIN_FAILURE_WINDOW_MS = 60 * 60 * 1000;
 // Generated codes have six characters; older hand-made codes are longer. A
 // longer input cannot be a code and is refused without a lookup.
 const MAX_CODE_LENGTH = 32;
@@ -70,30 +68,11 @@ async function readOpenRequest(
   };
 }
 
-/** Counts this hour's failed code guesses; null when the limit cannot be read. */
-async function countRecentFailures(admin: AdminClient, userId: string): Promise<number | null> {
-  const windowStart = new Date(Date.now() - JOIN_FAILURE_WINDOW_MS).toISOString();
-  const { error: pruneError } = await admin
-    .from('organization_join_attempts')
-    .delete()
-    .eq('user_id', userId)
-    .lt('attempted_at', windowStart);
-  const { count, error: countError } = await admin
-    .from('organization_join_attempts')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .gte('attempted_at', windowStart);
-  if (pruneError || countError || count === null) {
-    logError('countRecentFailures: join attempt read failed', pruneError ?? countError);
-    return null;
-  }
-  return count;
-}
-
 /**
- * Asks to join the organization that owns `code`. Wrong codes count against
- * the caller's hourly limit; a limit that cannot be read refuses the attempt.
- * A caller with an open request gets that request back instead of a second one.
+ * Asks to join the organization that owns `code`. Every attempt counts against
+ * the caller's hourly limit before the code is looked up, so parallel guesses
+ * cannot pass it; a limit that cannot be decided refuses the attempt. A caller
+ * with an open request gets that request back instead of a second one.
  */
 export async function requestOrganizationJoin(code: string): Promise<RequestOrganizationJoinResult> {
   const parsedCode = joinCodeSchema.safeParse(code);
@@ -103,11 +82,11 @@ export async function requestOrganizationJoin(code: string): Promise<RequestOrga
   if (!user) return { success: false, error: 'not_authenticated' };
 
   try {
-    const admin = createSupabaseAdminClient();
-    const recentFailures = await countRecentFailures(admin, user.id);
-    if (recentFailures === null) return { success: false, error: 'unexpected_error' };
-    if (recentFailures >= JOIN_FAILURE_LIMIT) return { success: false, error: 'too_many_attempts' };
+    const verdict = await consumeRateLimit({ action: 'organization_join_per_user', subject: user.id });
+    if (verdict === 'unavailable') return { success: false, error: 'unexpected_error' };
+    if (verdict === 'limited') return { success: false, error: 'too_many_attempts' };
 
+    const admin = createSupabaseAdminClient();
     const { data: organization, error: organizationError } =
       parsedCode.data.length > MAX_CODE_LENGTH
         ? { data: null, error: null }
@@ -120,16 +99,7 @@ export async function requestOrganizationJoin(code: string): Promise<RequestOrga
       logError('requestOrganizationJoin: code lookup failed', organizationError);
       return { success: false, error: 'unexpected_error' };
     }
-    if (!organization) {
-      const { error: attemptError } = await admin
-        .from('organization_join_attempts')
-        .insert({ user_id: user.id });
-      if (attemptError) {
-        logError('requestOrganizationJoin: join attempt write failed', attemptError);
-        return { success: false, error: 'unexpected_error' };
-      }
-      return { success: false, error: 'invalid_code' };
-    }
+    if (!organization) return { success: false, error: 'invalid_code' };
 
     const { data: memberships, error: membershipError } = await admin
       // tenant-scope: cross-organization-by-design — the caller's own memberships decide whether this organization fits

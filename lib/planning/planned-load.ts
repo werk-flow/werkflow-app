@@ -216,10 +216,11 @@ function buildCapacityDayContexts(input: {
   proposedKeys: Set<string>;
   targetByEmployeeDate: Map<string, DailyTarget>;
   pendingVacation: DailyTargetsByRecord['pendingVacation'];
+  accessEndDateByRecord: ReadonlyMap<string, string>;
   existingMinutes: Map<string, number>;
   overlaps: Map<string, number>;
 }): { contexts: CapacityDayContext[]; missingConfigurationConflicts: PlanningConflict[] } {
-  const { targetByEmployeeDate, pendingVacation, existingMinutes, overlaps } = input;
+  const { targetByEmployeeDate, pendingVacation, accessEndDateByRecord, existingMinutes, overlaps } = input;
   const contexts: CapacityDayContext[] = [];
   const missingConfigurationConflicts: PlanningConflict[] = [];
   for (const employeeRecordId of input.employeeRecordIds) {
@@ -234,7 +235,8 @@ function buildCapacityDayContexts(input: {
           request.start_date <= date &&
           date <= request.end_date,
       );
-      if (target.source === 'default') {
+      const accessEndDate = accessEndDateByRecord.get(employeeRecordId);
+      if (target.source === 'default' && !target.outsideEmployment) {
         missingConfigurationConflicts.push({
           kind: 'no_schedule',
           severity: 'warning',
@@ -263,6 +265,8 @@ function buildCapacityDayContexts(input: {
         ),
         existingPlannedMinutes: existingMinutes.get(key) ?? 0,
         overlapMinutes: overlaps.get(key) ?? 0,
+        outsideEmployment: target.outsideEmployment,
+        accessEnded: accessEndDate !== undefined && accessEndDate <= date,
       });
     }
   }
@@ -313,6 +317,8 @@ export function evaluateProposedCapacity(input: {
   employeeRecordIds: string[];
   uniqueDates: string[];
   targets: DailyTargetsByRecord;
+  /** The Berlin date from which each person's app access has ended. */
+  accessEndDateByRecord: ReadonlyMap<string, string>;
 }): CapacityEvaluation {
   const { occurrences, assignmentsFor, employeeRecordIds } = input;
   const { targetByEmployeeDate, pendingVacation } = input.targets;
@@ -349,6 +355,7 @@ export function evaluateProposedCapacity(input: {
     proposedKeys,
     targetByEmployeeDate,
     pendingVacation,
+    accessEndDateByRecord: input.accessEndDateByRecord,
     existingMinutes,
     overlaps,
   });

@@ -23,7 +23,8 @@ export function DocumentLibraryDialogs({
   uploadTargetFolderId,
   moveCopyDialog,
 }: DocumentLibraryDialogsProps) {
-  const { mutations, upload, viewer, linkDialog, deleteActions, details, versionActions } = library;
+  const { mutations, upload, viewer, linkDialog, deleteActions, details, versionActions, archiveActions } =
+    library;
 
   return (
     <>
@@ -77,6 +78,8 @@ export function DocumentLibraryDialogs({
         versionInputRef={versionActions.versionInputRef}
         onClose={details.closeDetailsDialog}
         onUpdateCategory={details.handleUpdateCategory}
+        onUpdateRetention={archiveActions.handleUpdateRetention}
+        onFile={archiveActions.handleFileDocument}
         onDownload={versionActions.handleDownload}
         onVersionUpload={versionActions.handleVersionUpload}
         onDownloadVersion={versionActions.handleDownloadVersion}
