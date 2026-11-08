@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
+import { EmptyState } from '@/components/ui/empty-state';
 import { SectionError } from '@/components/ui/section-error';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TextLink } from '@/components/ui/text-link';
@@ -85,9 +86,10 @@ export function AbsenceAffectedVisits({
         </SectionError>
       )}
       {read.state === 'loaded' && read.result.visits.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          Keine geplanten Termine betroffen{openEndSuffix(absence, read.result.through)}.
-        </p>
+        <EmptyState
+          size="compact"
+          title={`Keine geplanten Termine betroffen${openEndSuffix(absence, read.result.through)}.`}
+        />
       )}
       {read.state === 'loaded' && read.result.visits.length > 0 && (
         <>
