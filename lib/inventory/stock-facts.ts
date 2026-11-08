@@ -38,9 +38,13 @@ function stockStatus(
   return 'in_stock';
 }
 
-/** `Verfügbar` in words: the quantity, or „Fehlmenge n“ when planned demand exceeds the stock. */
+/**
+ * `Verfügbar` in words: the quantity, or „Fehlmenge n“ when planned demand
+ * exceeds the stock. It keeps all three stored decimals, so a shortfall of
+ * 0,001 never reads „Fehlmenge 0“.
+ */
 export function formatAvailableQuantity(availableQuantity: number, unit: string): string {
   return availableQuantity < 0
-    ? `Fehlmenge ${formatInventoryQuantity(-availableQuantity, unit)}`
-    : formatInventoryQuantity(availableQuantity, unit);
+    ? `Fehlmenge ${formatInventoryQuantity(-availableQuantity, unit, 3)}`
+    : formatInventoryQuantity(availableQuantity, unit, 3);
 }

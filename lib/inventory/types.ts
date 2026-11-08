@@ -281,9 +281,9 @@ export const INVENTORY_UNIT_OPTIONS: InventoryUnitOption[] = [
   { value: 'pallet', label: 'Palette' },
 ];
 
-export function formatInventoryQuantity(quantity: number, unit: string): string {
+export function formatInventoryQuantity(quantity: number, unit: string, maximumFractionDigits = 2): string {
   const formatter = new Intl.NumberFormat('de-DE', {
-    maximumFractionDigits: 2,
+    maximumFractionDigits,
   });
   return `${formatter.format(quantity)} ${getInventoryUnitLabel(unit)}`;
 }

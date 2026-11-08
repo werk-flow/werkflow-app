@@ -47,6 +47,12 @@ describe('formatAvailableQuantity', () => {
     expect(formatAvailableQuantity(-2, 'piece')).toBe('Fehlmenge 2 Stück');
   });
 
+  test('the smallest stored shortfall still reads as a shortfall', () => {
+    const { availableQuantity, stockStatus } = inventoryStockFacts(tracked, 0.3, 0.301);
+    expect(stockStatus).toBe('shortfall');
+    expect(formatAvailableQuantity(availableQuantity, 'meter')).toBe('Fehlmenge 0,001 Meter');
+  });
+
   test('a covered Verfügbar reads as the quantity', () => {
     expect(formatAvailableQuantity(1.5, 'piece')).toBe('1,5 Stück');
     expect(formatAvailableQuantity(0, 'piece')).toBe('0 Stück');
