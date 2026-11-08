@@ -79,6 +79,7 @@ export function DocumentLibraryDialogs({
         onClose={details.closeDetailsDialog}
         onUpdateCategory={details.handleUpdateCategory}
         onUpdateRetention={archiveActions.handleUpdateRetention}
+        onUpdateOrigin={archiveActions.handleUpdateOrigin}
         onFile={archiveActions.handleFileDocument}
         onDownload={versionActions.handleDownload}
         onVersionUpload={versionActions.handleVersionUpload}

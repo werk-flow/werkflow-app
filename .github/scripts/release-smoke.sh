@@ -57,9 +57,14 @@ fi
 # zero errors.
 echo "Waiting 5 minutes, then counting the server errors of ${served} in the last 15 minutes."
 sleep 300
-query="$(jq -cn --arg team "$VERCEL_TEAM_ID" --arg project "$VERCEL_PROJECT_ID" --arg id "$served" \
-  --arg start "$(date -u -d '15 minutes ago' +%Y-%m-%dT%H:%M:00Z)" --arg end "$(date -u +%Y-%m-%dT%H:%M:00Z)" '{
-    scope: {ownerId: $team, projectIds: [$project]}, timeRange: {start: $start, end: $end}, bucketSeconds: 300,
+# The clock is read once with portable `date +%s` (the unit test stubs it), and jq, not GNU
+# date -d, takes the window's minutes, so the unit test runs it on macOS too.
+now="$(date +%s)"
+query="$(jq -cn --arg team "$VERCEL_TEAM_ID" --arg project "$VERCEL_PROJECT_ID" --arg id "$served" --argjson now "$now" '
+  def minute: strftime("%Y-%m-%dT%H:%M:00Z");
+  {
+    scope: {ownerId: $team, projectIds: [$project]},
+    timeRange: {start: ($now - 15 * 60 | minute), end: ($now | minute)}, bucketSeconds: 300,
     filter: "deploymentId:\($id)", groupBy: ["httpStatus"],
     metrics: {value: {metric: "vercel.request.count", aggregation: "count"}}, outputs: ["value"],
     seriesSelection: {limit: 100, mode: "exact", rankBy: [{metric: "value", direction: "desc"}]}}')"

@@ -35,9 +35,11 @@ import {
   signedUrlOptionsSchema,
   unlinkDocumentInputSchema,
   updateDocumentLinksInputSchema,
+  updateDocumentOriginInputSchema,
   updateDocumentRetentionInputSchema,
   type AttachableDocumentsInput,
   type UnlinkDocumentInput,
+  type UpdateDocumentOriginInput,
   type UpdateDocumentRetentionInput,
 } from './action-schemas';
 import { fileDocumentOriginal } from './filing';
@@ -662,6 +664,44 @@ export async function updateDocumentRetention(
       'Failed to update document retention',
       error,
       ['document_not_found', 'protected_document_boundary', 'document_filed', 'document_date_out_of_range'],
+      'update_failed',
+    );
+  }
+
+  revalidateDocuments();
+  return hydrateWrittenDocument(auth.context, data);
+}
+
+/**
+ * Sets where a legacy original came from: its source system and old number,
+ * until the document is filed; the function records the change.
+ */
+export async function updateDocumentOrigin(rawInput: UpdateDocumentOriginInput): Promise<DocumentResult> {
+  const input = parseActionInput(updateDocumentOriginInputSchema, rawInput);
+  if (!input) return INVALID_INPUT;
+  const auth = await getAuthorizedDocumentContext();
+  if (!auth.success) return auth;
+
+  const existing = await getManageableDocument(auth.context, input.documentId);
+  if (!existing.success) return existing;
+  const filed = refuseFiledDocument(existing.document);
+  if (!filed.success) return filed;
+
+  const { data, error } = await auth.context.admin.rpc(
+    'update_document_origin',
+    rpcArgs('update_document_origin', {
+      p_actor_id: auth.context.userId,
+      p_organization_id: auth.context.orgId,
+      p_document_id: existing.document.id,
+      p_source_system: input.sourceSystem,
+      p_source_reference: input.sourceReference,
+    }),
+  );
+  if (error || !data) {
+    return documentWriteFailure(
+      'Failed to update document origin',
+      error,
+      ['document_not_found', 'protected_document_boundary', 'document_filed'],
       'update_failed',
     );
   }

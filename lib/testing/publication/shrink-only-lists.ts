@@ -80,6 +80,11 @@ export const SHRINK_ONLY_LISTS: readonly ShrinkOnlyList[] = [
   variable('form focus exceptions', 'lib/conventions/form-validation-focus.test.ts', 'REVIEWED_EXCEPTIONS'),
   variable('double renders', 'lib/conventions/route-render-owner.test.ts', 'REVIEWED_DOUBLE_RENDERS'),
   variable(
+    'Linux-runner-only script dates',
+    'lib/conventions/portable-script-dates.test.ts',
+    'LINUX_RUNNER_ONLY',
+  ),
+  variable(
     'hand-built pending state',
     'lib/conventions/server-action-feedback.test.ts',
     'HAND_PENDING_STATE',
