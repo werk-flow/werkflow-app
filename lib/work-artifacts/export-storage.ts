@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { randomUUID } from 'node:crypto';
+
 import type { PostgrestError, PostgrestSingleResponse } from '@supabase/supabase-js';
 
 import type { ActionFailure } from '@/lib/action-result';
@@ -8,8 +10,22 @@ import { logError } from '@/lib/logging';
 import { discardStorageObjects } from '@/lib/storage/r2';
 import type { AdminClient } from '@/lib/supabase/admin';
 import type { Json } from '@/lib/supabase/database.types';
+import { isConfirmedWriteRefusal } from '@/lib/supabase/write-refusal';
 
 import { mapArtifactError } from './errors';
+
+/**
+ * The key one export attempt stores its object under. A fresh id per attempt
+ * keeps two exports of the same content apart, so an attempt that fails or
+ * turns out a duplicate removes only its own object.
+ */
+export function workArtifactExportStoragePath(
+  organizationId: string,
+  revisionId: string,
+  exportFile: { rendererVersion: string; contentHash: string },
+): string {
+  return `${organizationId}/work-artifact-exports/${revisionId}/${randomUUID()}/${exportFile.rendererVersion}-${exportFile.contentHash}.html`;
+}
 
 /**
  * Removes a generated export object after its registration failed, unless a
@@ -93,18 +109,13 @@ export async function registerWorkArtifactExport(
 
 /** The failure of a refused export registration, after its unreferenced object is removed. */
 export async function refuseWorkArtifactExport(
-  admin: AdminClient,
   organizationId: string,
   storagePath: string,
-  error: { message?: string } | null,
+  error: { message?: string; code?: string } | null,
 ): Promise<ActionFailure> {
-  // A committed export of the same content owns an object of this same path.
-  await discardUnreferencedExportObject(
-    admin,
-    organizationId,
-    storagePath,
-    'Failed to verify a work artifact export reference',
-  );
+  // A refused registration wrote nothing, so the attempt's own object is
+  // unreferenced; after an unknown outcome it stays.
+  if (isConfirmedWriteRefusal(error)) await discardStorageObjects({ organizationId, paths: [storagePath] });
   logError('Failed to export work artifact', error);
   const code = mapArtifactError(error);
   return {
