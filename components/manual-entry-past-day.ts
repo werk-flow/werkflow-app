@@ -3,6 +3,7 @@ import { readInBackground } from '@/lib/data/background-read-client';
 import { submitTimeCorrection } from '@/lib/time-corrections/actions';
 import { TIME_CORRECTION_FAILURE_MESSAGES } from '@/lib/time-corrections/messages';
 import { buildTimeCorrectionProposedFacts } from '@/components/zeiterfassung/time-correction-dialog-facts';
+import type { PastDaySendResult } from '@/components/manual-entry-past-day-outcome';
 
 // The other half of „Zeit nachtragen“: own time of an earlier day waits for an
 // approver, who needs the reason, so it goes in as a Zeitkorrektur that adds
@@ -12,7 +13,7 @@ const PAST_DAY_FAILURE = 'Die Zeit konnte nicht nachgetragen werden.';
 
 /**
  * Proposes the caller's own work from the clock-in to the clock-out of an
- * earlier day, with the reason. Returns the sentence of a refusal, or null.
+ * earlier day, with the reason.
  */
 export async function submitPastDayTime(input: {
   organizationId: string;
@@ -23,12 +24,12 @@ export async function submitPastDayTime(input: {
   jobId: string;
   reason: string;
   operationId: string;
-}): Promise<string | null> {
+}): Promise<PastDaySendResult> {
   // The caller's own employee record is the subject; the server checks it again.
   const options = await readInBackground('time-correction-form-options', {
     organizationId: input.organizationId,
   });
-  if (!options.success) return PAST_DAY_FAILURE;
+  if (!options.success) return { saved: false, message: PAST_DAY_FAILURE };
   const baseEmployeeRecordId = options.options.currentEmployeeRecordId;
   const result = await submitTimeCorrection({
     organizationId: input.organizationId,
@@ -49,6 +50,9 @@ export async function submitPastDayTime(input: {
     operationId: input.operationId,
   });
   return result.success
-    ? null
-    : describeFailure(result.error, TIME_CORRECTION_FAILURE_MESSAGES, PAST_DAY_FAILURE);
+    ? { saved: true, replayed: result.replayed }
+    : {
+        saved: false,
+        message: describeFailure(result.error, TIME_CORRECTION_FAILURE_MESSAGES, PAST_DAY_FAILURE),
+      };
 }
