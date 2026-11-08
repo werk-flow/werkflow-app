@@ -203,30 +203,8 @@ function packRun(
 }
 
 /**
- * Why a results archive from the machine may not be unpacked into the checkout, or undefined. A
- * party with access to the machine could replace it, so only regular files and folders under
- * `.agent-logs/` come back: no link, device or other type, no absolute path and no `..`. `verbose`
- * and `names` are `tar -tvzf` and `tar -tzf` of the same archive, one member per line.
- */
-export function resultsArchiveProblem(verbose: string, names: string): string | undefined {
-  const types = verbose
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => line.charAt(0));
-  const paths = names.split('\n').filter(Boolean);
-  if (types.length !== paths.length) return 'its listing could not be read.';
-  for (const [index, path] of paths.entries()) {
-    if (types[index] !== '-' && types[index] !== 'd') return `${path} is not a regular file or folder.`;
-    if (!path.startsWith('.agent-logs/') || path.split('/').includes('..'))
-      return `${path} lies outside .agent-logs/.`;
-  }
-  return undefined;
-}
-
-/**
- * An existing symbolic link in the checkout that unpacking the archive would write through, or
- * undefined. tar follows a link that already exists at a folder it writes into, so a member that
- * passed resultsArchiveProblem could still land outside `.agent-logs/`.
+ * An existing symbolic link in the checkout that a copy to one of `paths` would write through, or
+ * undefined. Each path is checked component by component, from `.agent-logs` down to the file.
  */
 export function linkedDestination(repository: string, paths: readonly string[]): string | undefined {
   const prefixes = new Set(
@@ -322,20 +300,31 @@ async function uploadRun(
     await machine.client.upload(machine.id, `${HOME}/${name}`, readFileSync(source));
 }
 
+/** A name the guard does not copy: a control character, a backslash or a newline. */
+const UNSAFE_NAME = /[\u0000-\u001f\u007f\\]/;
+
 /**
- * Copies the regular files of an unpacked results folder into the checkout's `.agent-logs/`.
- * Every destination is checked before the first copy: no existing component of its path,
- * `.agent-logs` itself included, may be a symbolic link, so nothing is written through one and a
- * refusal writes nothing. Anything but a regular file or a folder refuses the whole import.
+ * Copies the regular files of an unpacked results folder into the checkout's `.agent-logs/`. The
+ * unpacked tree is walked with lstat semantics, never read from a tar listing: anything at its top
+ * but `.agent-logs`, a symbolic link, a hard link, a device or other special file, or a name with a
+ * control character, backslash or newline refuses the whole import. Every destination is then
+ * checked before the first copy, so no existing symbolic link is written through and a refusal
+ * writes nothing.
  */
 export function copyResults(staging: string, repository: string): void {
+  const outside = readdirSync(staging).find((name) => name !== '.agent-logs');
+  if (outside !== undefined) throw new Error(`${JSON.stringify(outside)} lies outside .agent-logs/.`);
   const source = join(staging, '.agent-logs');
   if (!existsSync(source)) return;
+  if (!lstatSync(source).isDirectory()) throw new Error('.agent-logs is not a folder.');
   const files: string[] = [];
   for (const entry of readdirSync(source, { recursive: true, withFileTypes: true })) {
-    const path = relative(staging, join(entry.parentPath, entry.name));
+    const full = join(entry.parentPath, entry.name);
+    const path = relative(staging, full);
+    if (UNSAFE_NAME.test(entry.name)) throw new Error(`${JSON.stringify(path)} has an unsafe name.`);
     if (entry.isDirectory()) continue;
-    if (!entry.isFile()) throw new Error(`${path} is not a regular file.`);
+    if (!entry.isFile()) throw new Error(`${JSON.stringify(path)} is not a regular file.`);
+    if (lstatSync(full).nlink > 1) throw new Error(`${JSON.stringify(path)} is a hard link.`);
     files.push(path);
   }
   const linked = linkedDestination(repository, files);
@@ -347,24 +336,29 @@ export function copyResults(staging: string, repository: string): void {
 }
 
 /**
- * Downloads the run's results and checks the archive, unpacks it into a fresh folder outside the
- * checkout, and copies its regular files into `.agent-logs/`.
+ * Unpacks a results archive into `staging`, a fresh folder outside the checkout, and copies its
+ * regular files into the checkout. Any refusal writes nothing into the checkout.
  */
-async function importResults(machine: Machine, folder: string, repository: string): Promise<void> {
-  const archive = join(folder, 'results.tgz');
-  writeFileSync(archive, await machine.client.download(machine.id, `${HOME}/results.tgz`));
-  const list = (flags: string) =>
-    execFileSync('tar', [flags, archive], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-  const refused = resultsArchiveProblem(list('-tvzf'), list('-tzf'));
-  if (refused) throw new Error(`The Boat results archive was refused: ${refused}`);
-  const staging = mkdtempSync(join(folder, 'results-'));
+export function unpackResults(archive: string, staging: string, repository: string): void {
   try {
-    execFileSync('tar', ['-xzf', archive, '--no-same-owner', '--no-same-permissions'], { cwd: staging });
+    execFileSync('tar', ['-xzf', archive, '-C', staging, '--no-same-owner', '--no-same-permissions'], {
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
     copyResults(staging, repository);
   } catch (error) {
     throw new Error(
-      `The Boat results archive was refused: ${error instanceof Error ? error.message : String(error)}`,
+      `The Boat results archive was refused: ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`,
     );
+  }
+}
+
+/** Downloads the run's results and unpacks them through a fresh folder outside the checkout. */
+async function importResults(machine: Machine, folder: string, repository: string): Promise<void> {
+  const archive = join(folder, 'results.tgz');
+  writeFileSync(archive, await machine.client.download(machine.id, `${HOME}/results.tgz`));
+  const staging = mkdtempSync(join(folder, 'results-'));
+  try {
+    unpackResults(archive, staging, repository);
   } finally {
     rmSync(staging, { recursive: true, force: true });
   }

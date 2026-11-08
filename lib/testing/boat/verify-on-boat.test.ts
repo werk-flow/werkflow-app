@@ -24,8 +24,8 @@ import {
   evidenceFiles,
   localReason,
   machineBoundGroup,
+  unpackResults,
   linkedDestination,
-  resultsArchiveProblem,
   withheldFile,
 } from './verify-on-boat';
 
@@ -261,28 +261,6 @@ test('a Boat proof stands for a workstation only where its code-hash secret is u
     expect(missing).not.toBe(boat);
 });
 
-test('only regular files and folders under .agent-logs come back from a Boat machine', () => {
-  const listing = (members: [string, string][]) =>
-    [
-      members.map(([type, path]) => `${type}rw-r--r-- user/user 2 2026-11-08 12:00 ${path}`).join('\n'),
-      members.map(([, path]) => path).join('\n'),
-    ] as const;
-  expect(resultsArchiveProblem(...listing([]))).toBeUndefined();
-  expect(
-    resultsArchiveProblem(
-      ...listing([
-        ['d', '.agent-logs/verification/r1/'],
-        ['-', '.agent-logs/verification/r1/report.json'],
-      ]),
-    ),
-  ).toBeUndefined();
-  expect(resultsArchiveProblem(...listing([['-', 'package.json']]))).toContain('outside .agent-logs/');
-  expect(resultsArchiveProblem(...listing([['-', '.agent-logs/../scripts/verify.ts']]))).toContain('outside');
-  expect(resultsArchiveProblem(...listing([['-', '/home/user/.bashrc']]))).toContain('outside');
-  expect(resultsArchiveProblem(...listing([['l', '.agent-logs/link']]))).toContain('not a regular file');
-  expect(resultsArchiveProblem(...listing([['h', '.agent-logs/hard']]))).toContain('not a regular file');
-});
-
 test('results never unpack through a symbolic link that already exists in the checkout', () => {
   const repository = mkdtempSync(join(tmpdir(), 'boat-links-'));
   const outside = mkdtempSync(join(tmpdir(), 'boat-outside-'));
@@ -291,31 +269,6 @@ test('results never unpack through a symbolic link that already exists in the ch
   expect(linkedDestination(repository, report)).toBeUndefined();
   symlinkSync(outside, join(repository, '.agent-logs', 'verification', 'r1'));
   expect(linkedDestination(repository, report)).toContain('.agent-logs/verification/r1 is a symbolic link');
-});
-
-// Crafted archives, built with tar itself and checked the way importResults lists them.
-test('a crafted results archive is refused whole: a link, a hard link, an escape or an outside path', () => {
-  const work = mkdtempSync(join(tmpdir(), 'boat-crafted-'));
-  mkdirSync(join(work, '.agent-logs', 'verification'), { recursive: true });
-  writeFileSync(join(work, '.agent-logs', 'verification', 'report.json'), '{}');
-  writeFileSync(join(work, 'package.json'), '{}');
-  symlinkSync('/etc/passwd', join(work, '.agent-logs', 'link'));
-  writeFileSync(join(work, '.agent-logs', 'first'), 'x');
-  execFileSync('ln', [join(work, '.agent-logs', 'first'), join(work, '.agent-logs', 'hard')]);
-  const check = (name: string, members: string[], extra: string[] = []) => {
-    const archive = join(work, `${name}.tgz`);
-    execFileSync('tar', ['-czf', archive, ...extra, ...members], { cwd: work });
-    const list = (flags: string) => execFileSync('tar', [flags, archive], { encoding: 'utf8' });
-    return resultsArchiveProblem(list('-tvzf'), list('-tzf'));
-  };
-  expect(check('good', ['.agent-logs/verification'])).toBeUndefined();
-  expect(check('symlink', ['.agent-logs/link'])).toContain('not a regular file');
-  // tar stores the second name of a hard-linked pair as a link member.
-  expect(check('hardlink', ['.agent-logs/first', '.agent-logs/hard'])).toContain('not a regular file');
-  expect(check('outside', ['package.json'])).toContain('outside .agent-logs/');
-  expect(
-    check('escape', ['.agent-logs/verification/report.json'], ['--transform', 's,^,.agent-logs/../,']),
-  ).toContain('outside');
 });
 
 test('results are copied from outside the checkout and never through a symbolic link', () => {
@@ -338,5 +291,72 @@ test('results are copied from outside the checkout and never through a symbolic 
     symlinkSync(outside, join(checkout, link));
     expect(() => copyResults(unpacked(), checkout), link).toThrow('is a symbolic link in the checkout');
     expect(existsSync(join(outside, 'verification')) || existsSync(join(outside, 'r1')), link).toBe(false);
+  }
+});
+
+// Crafted archives, built with tar itself, go through the same unpack and copy as a Boat run.
+test('a crafted results archive is refused whole and writes nothing into the checkout', () => {
+  const crafted = (name: string, build: (work: string) => string[], extra: string[] = []) => {
+    const work = mkdtempSync(join(tmpdir(), `boat-crafted-${name}-`));
+    mkdirSync(join(work, '.agent-logs', 'verification'), { recursive: true });
+    const members = build(work);
+    const archive = join(work, `${name}.tgz`);
+    // --no-unquote keeps a backslash in a name as written.
+    execFileSync('tar', ['-czf', archive, '--no-unquote', ...extra, ...members], { cwd: work });
+    const checkout = mkdtempSync(join(tmpdir(), 'boat-checkout-'));
+    const staging = mkdtempSync(join(tmpdir(), 'boat-staging-'));
+    let refusal: string | undefined;
+    try {
+      unpackResults(archive, staging, checkout);
+    } catch (error) {
+      refusal = error instanceof Error ? error.message : String(error);
+    }
+    return {
+      refusal,
+      wrote: existsSync(join(checkout, '.agent-logs')) || existsSync(join(checkout, 'package.json')),
+    };
+  };
+  const file = (work: string, path: string) => {
+    mkdirSync(join(work, path, '..'), { recursive: true });
+    writeFileSync(join(work, path), '{}');
+    return path;
+  };
+  const good = crafted('good', (work) => [file(work, '.agent-logs/verification/report.json')]);
+  expect(good).toEqual({ refusal: undefined, wrote: true });
+  const refused = [
+    crafted('symlink', (work) => {
+      symlinkSync('/etc/passwd', join(work, '.agent-logs', 'link'));
+      return ['.agent-logs/link'];
+    }),
+    crafted('hardlink', (work) => {
+      file(work, '.agent-logs/first');
+      execFileSync('ln', [join(work, '.agent-logs', 'first'), join(work, '.agent-logs', 'hard')]);
+      return ['.agent-logs/first', '.agent-logs/hard'];
+    }),
+    crafted('outside', (work) => [file(work, 'package.json')]),
+    crafted('escape', (work) => [file(work, '.agent-logs/verification/report.json')], [
+      '--transform',
+      's,^,.agent-logs/../,',
+    ]),
+    crafted('backslash', (work) => [file(work, '.agent-logs/a\\b/report.json')]),
+    crafted('newline', (work) => [file(work, '.agent-logs/a\nb/report.json')]),
+  ];
+  for (const result of refused) {
+    expect(result.refusal).toContain('The Boat results archive was refused');
+    expect(result.wrote).toBe(false);
+  }
+});
+
+test('an existing destination link whose name holds a backslash or a newline is never written through', () => {
+  for (const name of ['a\\b', 'a\nb']) {
+    const staging = mkdtempSync(join(tmpdir(), 'boat-staging-'));
+    mkdirSync(join(staging, '.agent-logs', name), { recursive: true });
+    writeFileSync(join(staging, '.agent-logs', name, 'report.json'), '{}');
+    const checkout = mkdtempSync(join(tmpdir(), 'boat-checkout-'));
+    const outside = mkdtempSync(join(tmpdir(), 'boat-outside-'));
+    mkdirSync(join(checkout, '.agent-logs'));
+    symlinkSync(outside, join(checkout, '.agent-logs', name));
+    expect(() => copyResults(staging, checkout), JSON.stringify(name)).toThrow();
+    expect(existsSync(join(outside, 'report.json')), JSON.stringify(name)).toBe(false);
   }
 });
