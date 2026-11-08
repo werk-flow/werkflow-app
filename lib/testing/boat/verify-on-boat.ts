@@ -47,8 +47,12 @@ const HOME = '/home/user';
 const SETUP_FAILED = 90;
 /** A hard stop for a machine whose run or deletion went wrong; without snapshots it is then erased. */
 const MACHINE_TTL_SECONDS = 3 * 3_600;
-/** Groups that measure the machine or compare screenshots, against references taken on the workstation. */
-const MACHINE_BOUND_GROUP = /^audit:(?:lab|performance|visual|layout)/;
+/**
+ * Groups that measure wall-clock time or compare screenshots against references taken on the
+ * workstation. Lab groups count requests, payloads and renders, which repeat on any machine (CI gates
+ * on them), so they may run on Boat.
+ */
+const MACHINE_BOUND_GROUP = /^audit:(?:performance|visual|layout)/;
 /**
  * Untracked files that may hold a credential or a local setting never leave the workstation: every
  * dotfile (`.env.*`, `.npmrc`, `.netrc`, `.git-credentials`, `.pgpass`), keys and certificates, and

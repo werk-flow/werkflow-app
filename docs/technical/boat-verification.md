@@ -8,7 +8,7 @@ On a workstation with a Boat key, `bun run test:verify` runs on a short-lived Bo
 
 - CI, or the Boat machine itself.
 - `WERKFLOW_VERIFY_LOCAL=1`.
-- `--mode release`, or a group under `audit:lab`, `audit:performance`, `audit:visual` or `audit:layout`: they compare against references taken on the workstation.
+- `--mode release`, or a group under `audit:performance`, `audit:visual` or `audit:layout`: they compare against references taken on the workstation. Lab counts repeat on any machine, so `audit:lab` groups run on Boat.
 - `--target cloud`: the canary needs DEV's secrets.
 - `.env.local` points elsewhere than the local stack.
 

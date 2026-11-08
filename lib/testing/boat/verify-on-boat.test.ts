@@ -22,17 +22,14 @@ test('change plans and ordinary groups may run on Boat', () => {
   expect(localReason([], {})).toBeUndefined();
   expect(localReason(['--group', 'sql:security,golden:gg-00'], {})).toBeUndefined();
   expect(localReason(['--mode', 'change'], {})).toBeUndefined();
+  // Lab counts repeat on any machine; every product change selects both lab groups.
+  expect(localReason(['--group', 'audit:lab:office,audit:lab:field'], {})).toBeUndefined();
 });
 
 test('runs that measure this machine, reach DEV or are asked local stay local', () => {
   expect(localReason(['--mode', 'release'], {})).toContain('release mode');
   expect(localReason(['--target', 'cloud'], {})).toContain('DEV');
-  for (const group of [
-    'audit:lab:office',
-    'audit:performance:calendar',
-    'audit:visual',
-    'audit:layout-field',
-  ])
+  for (const group of ['audit:performance:calendar', 'audit:visual', 'audit:layout-field'])
     expect(localReason(['--group', `sql:security,${group}`], {}), group).toContain('references');
   expect(localReason([], { WERKFLOW_VERIFY_LOCAL: '1' })).toContain('WERKFLOW_VERIFY_LOCAL');
   // CI and the Boat machine itself run locally without a line.
