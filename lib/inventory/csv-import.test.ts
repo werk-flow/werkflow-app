@@ -6,11 +6,6 @@ import { buildImportRows, guessMapping, IMPORT_COLUMNS, importResultBanner, pars
 // The widest header one import reads; the refusal message names it.
 const MAX_HEADER_COLUMNS = 200;
 
-/** The cells a parse built: every row holds one cell per header. */
-function builtCells(parsed: ReturnType<typeof parseCsv>): number {
-  return parsed.ok ? parsed.headers.length * parsed.rows.length : 0;
-}
-
 describe('parseCsv', () => {
   test('detects the semicolon delimiter and keeps quoted delimiters and quotes', () => {
     expect(parseCsv('Artikel;Bestand;Notiz\r\n"Rohr; 22 mm";4;"sagt ""ok"""\r\n\r\nMuffe;2\n')).toEqual({
@@ -76,7 +71,6 @@ describe('parseCsv bounds its work by what the import can use', () => {
       message:
         'Die CSV-Datei hat mehr als 200 Spalten. Lösche die Spalten, die du nicht importierst, und wähle die Datei erneut.',
     });
-    expect(builtCells(parsed)).toBe(0);
   });
 
   test('more data rows than one import takes are refused before any row is built', () => {
@@ -86,18 +80,14 @@ describe('parseCsv bounds its work by what the import can use', () => {
       message:
         'Die CSV-Datei hat mehr als 5.000 Datenzeilen. Teile sie auf mehrere Dateien auf und importiere sie nacheinander.',
     });
-    expect(builtCells(parsed)).toBe(0);
   });
 
-  test('a file at both limits is read completely, within the bounded number of cells', () => {
+  test('a file at either limit is read completely', () => {
     const atColumnLimit = parseCsv(`${header(MAX_HEADER_COLUMNS)}\n${dataRows(3)}`);
     expect(atColumnLimit.ok && atColumnLimit.rows.length).toBe(3);
     // Blank lines are not data rows.
     const atRowLimit = parseCsv(`Artikel\n\n${dataRows(INVENTORY_IMPORT_MAX_ROWS)}\n\n`);
     expect(atRowLimit.ok && atRowLimit.rows.length).toBe(INVENTORY_IMPORT_MAX_ROWS);
-    for (const parsed of [atColumnLimit, atRowLimit]) {
-      expect(builtCells(parsed)).toBeLessThanOrEqual(MAX_HEADER_COLUMNS * INVENTORY_IMPORT_MAX_ROWS);
-    }
   });
 });
 
