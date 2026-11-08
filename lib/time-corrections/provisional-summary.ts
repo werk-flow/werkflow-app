@@ -64,9 +64,16 @@ function ownerDays(facts: readonly TimeCorrectionFact[]): string[] {
 /** One clock fact of a pending manual submission. */
 export type PendingSubmissionFact = Pick<TimeCorrectionFact, 'entryType' | 'timestamp'>;
 
-/** A pending manual submission as a correction that adds its facts to nothing. */
-function submissionAsAddition(facts: readonly PendingSubmissionFact[]): TimeCorrectionFact[] {
-  return [...facts]
+/**
+ * The pending manual submissions as one timeline that adds their facts to
+ * nothing: a clock-in and the clock-out that closes it may come in separate
+ * submissions.
+ */
+function submissionsAsAddition(
+  submissions: readonly (readonly PendingSubmissionFact[])[],
+): TimeCorrectionFact[] {
+  return submissions
+    .flat()
     .sort((left, right) => left.timestamp.localeCompare(right.timestamp))
     .map((fact) => ({
       ...fact,
@@ -81,25 +88,25 @@ function submissionAsAddition(facts: readonly PendingSubmissionFact[]): TimeCorr
 
 /**
  * The sum of one person's pending time: each correction counted by its
- * current revision and only by that person's facts, and each pending manual
- * submission as time it would add.
+ * current revision and only by that person's facts, and the pending manual
+ * submissions as the time they would add together.
  */
 export function summarizePendingCorrections(
   pending: readonly Pick<TimeCorrectionRequest, 'revision'>[],
   subjectUserId: string,
   pendingSubmissions: readonly (readonly PendingSubmissionFact[])[] = [],
 ): ProvisionalTimeSummary {
-  const submissions = pendingSubmissions.map(submissionAsAddition);
+  const submissionFacts = submissionsAsAddition(pendingSubmissions);
   const days = new Set([
     ...pending.flatMap(({ revision }) => [
       ...ownerDays(subjectFacts(revision.beforeSnapshot, subjectUserId)),
       ...ownerDays(subjectFacts(revision.proposedSnapshot, subjectUserId)),
     ]),
-    ...submissions.flatMap(ownerDays),
+    ...ownerDays(submissionFacts),
   ]);
   return {
     count: pending.length,
-    submissionCount: submissions.length,
+    submissionCount: pendingSubmissions.length,
     beforeMinutes: pending.reduce(
       (total, request) => total + ownerMinutes(subjectFacts(request.revision.beforeSnapshot, subjectUserId)),
       0,
@@ -109,7 +116,7 @@ export function summarizePendingCorrections(
         (total, request) =>
           total + ownerMinutes(subjectFacts(request.revision.proposedSnapshot, subjectUserId)),
         0,
-      ) + submissions.reduce((total, facts) => total + ownerMinutes(facts), 0),
+      ) + ownerMinutes(submissionFacts),
     days: [...days].sort(),
   };
 }

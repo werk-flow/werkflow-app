@@ -18,7 +18,7 @@ import {
   ManualEntryReasonField,
   ManualEntryTimeFields,
 } from '@/components/manual-entry-form-content-fields';
-import { isBeforeToday } from '@/components/manual-entry-past-day';
+import { isBeforeToday } from '@/components/manual-entry-submission';
 import { useManualEntryMembers } from '@/components/use-manual-entry-form-members';
 import { useManualEntrySubmit } from '@/components/use-manual-entry-form-submit';
 import { useClosedTimePeriods } from '@/components/zeiterfassung/use-closed-time-periods';

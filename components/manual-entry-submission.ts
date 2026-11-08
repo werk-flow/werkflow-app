@@ -2,12 +2,21 @@ import { SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import { isDateInClosedPeriod, type ClosedTimePeriod } from '@/lib/time-tracking/closed-period-dates';
 import type { ManualEntryInput } from '@/lib/time-tracking/types';
 import { describeTimeValidationFailure } from '@/lib/time-tracking/validation-messages';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { toLocalDateString } from '@/lib/utils';
 import type { ManualEntryMode } from '@/components/use-manual-entry-form-draft';
 
 // What a press of „Speichern“ in the manual entry form sends: nothing while a
 // field is missing or wrong, the manual entries of the day, or own time of an
 // earlier day with its reason (manual-entry-past-day.ts).
+
+/**
+ * True when the picked calendar date lies before today in Berlin, the day the
+ * server refuses an employee's manual entry before.
+ */
+export function isBeforeToday(date: Date | undefined, todayIso: string = getBusinessTodayIso()): boolean {
+  return date !== undefined && toLocalDateString(date) < todayIso;
+}
 
 export type ManualEntryFieldErrors = {
   member: string | undefined;

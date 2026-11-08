@@ -1,10 +1,10 @@
 'use server';
-import { loggedRead } from '@/lib/data/read-request-cache';
+import { loggedRead, logReadFailure } from '@/lib/data/read-request-cache';
 import { revalidatePath } from 'next/cache';
 import { logError } from '@/lib/logging';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
-import { readInBatches } from '@/lib/supabase/query-batches';
+import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { getAuthenticatedUser } from '@/lib/data/cached';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { readOrganizationSettings } from './organization-settings-read';
@@ -157,30 +157,39 @@ export async function addManualEntry(rawParams: AddManualEntryParams): Promise<A
 /**
  * The ids of the pending manual submission that holds the entry: the
  * author's own pending manual entries of its Berlin day, grouped as the
- * approvers see them (pending-sessions.ts). Null when the read fails.
+ * approvers see them (pending-sessions.ts). Null when the read fails, is
+ * cut off, or no longer holds the entry.
  */
 async function pendingSubmissionEntryIds(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   entry: { id: string; organization_id: string; user_id: string; timestamp: string },
 ): Promise<string[] | null> {
   const { start, end } = getDayBounds(new Date(entry.timestamp));
-  const { data, error } = await loggedRead(
-    'withdrawPendingSubmission: time_entries read failed',
-    admin
-      .from('time_entries')
-      .select('*')
-      .eq('organization_id', entry.organization_id)
-      .eq('user_id', entry.user_id)
-      .eq('status', 'pending')
-      .eq('is_manual', true)
-      .gte('timestamp', start.toISOString())
-      .lte('timestamp', end.toISOString()),
+  const { data, error } = await readCompleteRows(
+    (from, to) =>
+      admin
+        .from('time_entries')
+        .select('*')
+        .eq('organization_id', entry.organization_id)
+        .eq('user_id', entry.user_id)
+        .eq('status', 'pending')
+        .eq('is_manual', true)
+        .gte('timestamp', start.toISOString())
+        .lte('timestamp', end.toISOString())
+        .order('timestamp')
+        .order('id')
+        .range(from, to),
+    LIST_ROW_CAP,
   );
-  if (error || !data) return null;
+  if (error) {
+    logReadFailure('withdrawPendingSubmission: time_entries read failed', error);
+    return null;
+  }
+  // The entry was read as pending a moment ago: a day read without it is incomplete.
   const group = groupPendingEntries(data).find((candidate) =>
     candidate.entries.some((row) => row.id === entry.id),
   );
-  return group ? group.entries.map((row) => row.id) : [entry.id];
+  return group ? group.entries.map((row) => row.id) : null;
 }
 
 /**

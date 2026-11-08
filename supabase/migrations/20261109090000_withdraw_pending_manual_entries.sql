@@ -40,6 +40,10 @@ create trigger guard_event_ledger_history before update or delete on public.time
   for each row execute function app_private.guard_event_ledger_history();
 
 -- Withdraws the actor's own pending manual entries: all of them or none.
+-- Security definer like delete_time_entries and review_time_entries: the batch
+-- lock it shares with them is closed to every client role, service_role
+-- included (supabase/tests/closed_period_writes.sql), and only service_role
+-- may execute this function.
 -- Refusals: invalid_input, entry_not_found, not_a_member, target_not_found
 -- (from the batch lock), not_authorized for an entry of another person,
 -- entry_not_pending for a decided or a clocked entry; a closed period raises

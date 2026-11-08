@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { planManualEntrySubmission, type ManualEntryFormValues } from '@/components/manual-entry-submission';
+import {
+  isBeforeToday,
+  planManualEntrySubmission,
+  type ManualEntryFormValues,
+} from '@/components/manual-entry-submission';
 
 // What „Speichern“ in „Zeit nachtragen“ (the manual entry form) sends. The
 // form starts with empty times, so an untouched form marks its fields and
@@ -106,5 +110,13 @@ describe('the manual entry form sends', () => {
       }),
     );
     expect(plan.kind === 'invalid' && plan.fieldErrors.date).toBeString();
+  });
+});
+
+describe('an earlier day', () => {
+  test('is a calendar date before Berlin today, whatever the browser clock says', () => {
+    expect(isBeforeToday(new Date(2026, 9, 28), '2026-10-29')).toBe(true);
+    expect(isBeforeToday(new Date(2026, 9, 29), '2026-10-29')).toBe(false);
+    expect(isBeforeToday(undefined, '2026-10-29')).toBe(false);
   });
 });

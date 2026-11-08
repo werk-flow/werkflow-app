@@ -166,4 +166,19 @@ describe('pending manual submissions in the sum', () => {
       days: ['2026-10-27', '2026-10-28', '2026-10-29'],
     });
   });
+
+  test('count a clock-in and the clock-out that closes it from separate submissions', () => {
+    // 28.10. in Berlin: a forgotten start at 07:00 and a forgotten end at 15:00 local, submitted apart.
+    const summary = summarizePendingCorrections([], 'user', [
+      [{ entryType: 'clock_in', timestamp: '2026-10-28T06:00:00.000Z' }],
+      [{ entryType: 'clock_out', timestamp: '2026-10-28T14:00:00.000Z' }],
+    ]);
+    expect(summary).toEqual({
+      count: 0,
+      submissionCount: 2,
+      beforeMinutes: 0,
+      proposedMinutes: 480,
+      days: ['2026-10-28'],
+    });
+  });
 });

@@ -2,17 +2,11 @@ import { describeFailure } from '@/lib/action-messages';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { submitTimeCorrection } from '@/lib/time-corrections/actions';
 import { TIME_CORRECTION_FAILURE_MESSAGES } from '@/lib/time-corrections/messages';
-import { toLocalDateString } from '@/lib/utils';
 import { buildTimeCorrectionProposedFacts } from '@/components/zeiterfassung/time-correction-dialog-facts';
 
 // The other half of „Zeit nachtragen“: own time of an earlier day waits for an
 // approver, who needs the reason, so it goes in as a Zeitkorrektur that adds
 // time. Same-day time stays a manual entry (use-manual-entry-form-submit.ts).
-
-/** True when the date lies before today. */
-export function isBeforeToday(date: Date | undefined): boolean {
-  return date !== undefined && toLocalDateString(date) < toLocalDateString(new Date());
-}
 
 const PAST_DAY_FAILURE = 'Die Zeit konnte nicht nachgetragen werden.';
 
