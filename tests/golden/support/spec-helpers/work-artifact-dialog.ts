@@ -196,7 +196,10 @@ export function workArtifactFulfilWithVersion(dialog: Locator, version: number):
 }
 
 export function workArtifactField(dialog: Locator, field: WorkArtifactField): Locator {
-  return dialog.getByLabel(ARTIFACT_COPY.field[field], EXACT_FIELDS.has(field) ? { exact: true } : {});
+  const label = ARTIFACT_COPY.field[field];
+  if (!EXACT_FIELDS.has(field)) return dialog.getByLabel(label);
+  // The label alone, or with the required mark „ *“ that a required field shows after it.
+  return dialog.getByLabel(new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}( \\*)?$`));
 }
 
 /** Inputs of the work report dialog, by their DOM id. */
