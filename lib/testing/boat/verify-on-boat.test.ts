@@ -487,3 +487,30 @@ test('a Ctrl-C during the cleanup after a failed setup never falls back', async 
     ),
   ).toBeUndefined();
 });
+
+test('an import never writes through a destination hard link and writes nothing when one file conflicts', () => {
+  const staging = mkdtempSync(join(tmpdir(), 'boat-staging-'));
+  mkdirSync(join(staging, '.agent-logs', 'runs'), { recursive: true });
+  writeFileSync(join(staging, '.agent-logs', 'runs', 'a-first'), 'new');
+  writeFileSync(join(staging, '.agent-logs', 'runs', 'z-last'), 'new');
+  // z-last is a hard link to a file outside .agent-logs: the import refuses and the file keeps its bytes.
+  const linkedCheckout = mkdtempSync(join(tmpdir(), 'boat-checkout-'));
+  mkdirSync(join(linkedCheckout, '.agent-logs', 'runs'), { recursive: true });
+  writeFileSync(join(linkedCheckout, 'owner-file'), 'owner');
+  execFileSync('ln', [
+    join(linkedCheckout, 'owner-file'),
+    join(linkedCheckout, '.agent-logs', 'runs', 'z-last'),
+  ]);
+  expect(() => copyResults(staging, linkedCheckout)).toThrow('is a hard link in the checkout');
+  expect(readFileSync(join(linkedCheckout, 'owner-file'), 'utf8')).toBe('owner');
+  expect(existsSync(join(linkedCheckout, '.agent-logs', 'runs', 'a-first'))).toBe(false);
+  // z-last is a folder in the checkout: refused before a-first is written.
+  const folderCheckout = mkdtempSync(join(tmpdir(), 'boat-checkout-'));
+  mkdirSync(join(folderCheckout, '.agent-logs', 'runs', 'z-last'), { recursive: true });
+  expect(() => copyResults(staging, folderCheckout)).toThrow('is not a regular file');
+  expect(readdirSync(join(folderCheckout, '.agent-logs', 'runs'))).toEqual(['z-last']);
+  // A clean checkout gets both files and no temporary file is left.
+  const clean = mkdtempSync(join(tmpdir(), 'boat-checkout-'));
+  copyResults(staging, clean);
+  expect(readdirSync(join(clean, '.agent-logs', 'runs')).sort()).toEqual(['a-first', 'z-last']);
+});

@@ -1,6 +1,8 @@
 import { execFileSync, spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import {
   copyFileSync,
+  renameSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -371,12 +373,61 @@ export function copyResults(staging: string, repository: string): void {
     if (lstatSync(full).nlink > 1) throw new Error(`${JSON.stringify(path)} is a hard link.`);
     files.push(path);
   }
-  const linked = linkedDestination(repository, files);
+  const linked = linkedDestination(repository, files) ?? destinationConflict(repository, files);
   if (linked) throw new Error(linked);
+  placeFiles(staging, repository, files);
+}
+
+/**
+ * Why a destination cannot take a copy, or undefined: a folder on its way that exists but is not a
+ * folder, or an existing destination that is not a regular file or is a hard link, whose other names
+ * a copy would change too. Checked for every file before the first write.
+ */
+function destinationConflict(repository: string, files: readonly string[]): string | undefined {
   for (const path of files) {
-    mkdirSync(dirname(join(repository, path)), { recursive: true });
-    copyFileSync(join(staging, path), join(repository, path));
+    const parts = path.split('/');
+    for (let index = 1; index < parts.length; index++) {
+      const folder = join(repository, ...parts.slice(0, index));
+      if (existsSync(folder) && !lstatSync(folder).isDirectory())
+        return `${JSON.stringify(parts.slice(0, index).join('/'))} is not a folder in the checkout.`;
+    }
+    const target = join(repository, path);
+    if (!existsSync(target)) continue;
+    const stat = lstatSync(target);
+    if (!stat.isFile()) return `${JSON.stringify(path)} exists in the checkout and is not a regular file.`;
+    if (stat.nlink > 1) return `${JSON.stringify(path)} is a hard link in the checkout.`;
   }
+  return undefined;
+}
+
+/**
+ * Writes every file to a temporary name beside its destination, then renames each into place, so
+ * no existing file is written through. A failure while writing removes every temporary file and
+ * every folder it created, so the checkout is as before.
+ */
+function placeFiles(staging: string, repository: string, files: readonly string[]): void {
+  const created: string[] = [];
+  const temporary: [string, string][] = [];
+  try {
+    for (const path of files) {
+      const target = join(repository, path);
+      const parts = path.split('/');
+      for (let index = 1; index < parts.length; index++) {
+        const folder = join(repository, ...parts.slice(0, index));
+        if (existsSync(folder)) continue;
+        mkdirSync(folder);
+        created.push(folder);
+      }
+      const temp = join(dirname(target), `.boat-import-${randomUUID()}`);
+      copyFileSync(join(staging, path), temp);
+      temporary.push([temp, target]);
+    }
+  } catch (error) {
+    for (const [temp] of temporary) rmSync(temp, { force: true });
+    for (const folder of created.reverse()) rmSync(folder, { recursive: true, force: true });
+    throw error;
+  }
+  for (const [temp, target] of temporary) renameSync(temp, target);
 }
 
 /**
