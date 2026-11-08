@@ -116,6 +116,7 @@ test.describe('P1-16 focused field work pack @P1-16', () => {
         contactName,
         plannedDateDigits: dateDigits(berlinDateAtOffset(85)),
         assignEmployeeName: employeeName,
+        planningOverride: { orgId: world.orgId, reason: 'P116 Einsatz ist abgestimmt.' },
         workTemplateName: templateName,
       });
 
