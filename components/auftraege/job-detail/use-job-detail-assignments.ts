@@ -4,8 +4,10 @@ import { useState, type Dispatch, type SetStateAction } from 'react';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { usePendingTask, useServerAction } from '@/hooks/use-server-action';
 import { useBanner } from '@/components/ui/banner';
+import { usePlanningWarningConfirmation } from '@/components/kalender/planning-warning-dialog';
 import { updateJobAssignments } from '@/lib/jobs/actions';
-import type { Job, JobWithDetails } from '@/lib/jobs/types';
+import type { Job, JobWithDetails, UpdateJobAssignmentsResult } from '@/lib/jobs/types';
+import type { PlanningConflictApproval } from '@/lib/planning/conflict-acknowledgement';
 import type { AssignmentApproval, AssignmentEvaluation } from '@/lib/qualifications/types';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
 import {
@@ -14,18 +16,50 @@ import {
   replaceJobAssignmentsAfterEdit,
 } from './job-detail-assignment-updates';
 
+/** The save's refusal in German: a team changed by someone else, or any other failure. */
+function assignmentFailureMessage(error: string, fallback: string): string {
+  return error === 'assignments_changed'
+    ? 'Die Zuweisung wurde inzwischen geändert. Prüfe die Auswahl und speichere erneut.'
+    : fallback;
+}
+
+type RequestPlanningApproval = ReturnType<typeof usePlanningWarningConfirmation>['requestApproval'];
+
+/**
+ * Saves the selection; while the server reports planning conflicts on the
+ * job's visit, asks for the reason of that exact assessment and saves again.
+ * Null when the manager takes the change back.
+ */
+async function saveWithPlanningApproval(
+  save: (planningApproval: PlanningConflictApproval | null) => Promise<UpdateJobAssignmentsResult>,
+  requestPlanningApproval: RequestPlanningApproval,
+): Promise<UpdateJobAssignmentsResult | null> {
+  let result = await save(null);
+  while (!result.success && 'conflicts' in result) {
+    const approval = await requestPlanningApproval(result.conflicts, result.fingerprint);
+    if (!approval) return null;
+    result = await save(approval);
+  }
+  return result;
+}
+
 type JobDetailQualificationOverrideInput = {
   jobId: string;
   assignmentTeamSourceId: string | null;
   onSaved: () => void;
 };
 
-/** The reasoned override of a qualification warning raised by an assignment change. */
-function useJobDetailQualificationOverride({
+/**
+ * The reasoned overrides of an assignment change: a qualification gap on the
+ * job, and planning conflicts on the visit it reaches.
+ */
+function useJobDetailAssignmentOverrides({
   jobId,
   assignmentTeamSourceId,
   onSaved,
 }: JobDetailQualificationOverrideInput) {
+  const { requestApproval: requestPlanningApproval, warningDialog: planningWarningDialog } =
+    usePlanningWarningConfirmation();
   const [qualificationOverrideError, setQualificationOverrideError] = useState<string | null>(null);
   const [qualificationWarning, setQualificationWarning] = useState<AssignmentEvaluation | null>(null);
   const [pendingAssignmentIds, setPendingAssignmentIds] = useState<string[]>([]);
@@ -40,7 +74,13 @@ function useJobDetailQualificationOverride({
   const handleQualificationOverride = async (approval: AssignmentApproval) => {
     setQualificationOverrideError(null);
     try {
-      const result = await runOverride(jobId, pendingAssignmentIds, approval, assignmentTeamSourceId);
+      const result = await saveWithPlanningApproval(
+        (planningApproval) =>
+          runOverride(jobId, pendingAssignmentIds, approval, assignmentTeamSourceId, planningApproval),
+        requestPlanningApproval,
+      );
+      // Taken back in the planning dialog: the qualification dialog stays open.
+      if (!result) return;
       if (!result.success) {
         if (
           (result.error === 'qualification_warning' || result.error === 'stale_evaluation') &&
@@ -48,7 +88,12 @@ function useJobDetailQualificationOverride({
         ) {
           setQualificationWarning(result.evaluation);
         } else {
-          setQualificationOverrideError('Die begründete Zuweisung konnte nicht gespeichert werden.');
+          setQualificationOverrideError(
+            assignmentFailureMessage(
+              result.error,
+              'Die begründete Zuweisung konnte nicht gespeichert werden.',
+            ),
+          );
         }
         return;
       }
@@ -68,6 +113,8 @@ function useJobDetailQualificationOverride({
   };
 
   return {
+    requestPlanningApproval,
+    planningWarningDialog,
     qualificationWarning,
     qualificationOverrideError,
     isQualificationOverrideSaving,
@@ -94,6 +141,7 @@ type SaveJobDetailAssignmentsInput = Pick<
   assignmentTeamSourceId: string | null;
   setAssignError: (error: string | null) => void;
   requestQualificationOverride: RequestQualificationOverride;
+  requestPlanningApproval: RequestPlanningApproval;
   onSaved: () => void;
 };
 
@@ -106,19 +154,26 @@ async function saveJobDetailAssignments({
   assignmentTeamSourceId,
   setAssignError,
   requestQualificationOverride,
+  requestPlanningApproval,
   onSaved,
 }: SaveJobDetailAssignmentsInput) {
   // The dialog opens with the current crew selected, so its selection is
   // the complete set: an unchecked assignee is removed.
   const nextIds = [...new Set(assignSelectedIds)];
   const newIds = nextIds.filter((id) => !liveJob.assignments.some((a) => a.userId === id));
-  let result: Awaited<ReturnType<typeof updateJobAssignments>>;
+  let result: UpdateJobAssignmentsResult | null;
   try {
-    result = await updateJobAssignments(liveJob.id, nextIds, null, assignmentTeamSourceId);
+    result = await saveWithPlanningApproval(
+      (planningApproval) =>
+        updateJobAssignments(liveJob.id, nextIds, null, assignmentTeamSourceId, planningApproval),
+      requestPlanningApproval,
+    );
   } catch {
     setAssignError('Die Zuweisung konnte nicht gespeichert werden.');
     return;
   }
+  // Taken back in the planning dialog: the selection stays open for a change.
+  if (!result) return;
   if (!result.success) {
     if (
       (result.error === 'qualification_warning' || result.error === 'stale_evaluation') &&
@@ -126,7 +181,9 @@ async function saveJobDetailAssignments({
     ) {
       requestQualificationOverride(nextIds, result.evaluation);
     } else {
-      setAssignError('Die Zuweisung konnte nicht gespeichert werden.');
+      setAssignError(
+        assignmentFailureMessage(result.error, 'Die Zuweisung konnte nicht gespeichert werden.'),
+      );
     }
     return;
   }
@@ -213,11 +270,12 @@ export function useJobDetailAssignments({
     setAssignSelectedIds([]);
     setAssignmentTeamSourceId(null);
   };
-  const { requestQualificationOverride, ...qualificationOverride } = useJobDetailQualificationOverride({
-    jobId: liveJob.id,
-    assignmentTeamSourceId,
-    onSaved: closeSavedAssignDialog,
-  });
+  const { requestQualificationOverride, requestPlanningApproval, ...overrides } =
+    useJobDetailAssignmentOverrides({
+      jobId: liveJob.id,
+      assignmentTeamSourceId,
+      onSaved: closeSavedAssignDialog,
+    });
 
   const handleAssignEmployees = () => {
     setAssignError(null);
@@ -230,6 +288,7 @@ export function useJobDetailAssignments({
         assignmentTeamSourceId,
         setAssignError,
         requestQualificationOverride,
+        requestPlanningApproval,
         onSaved: closeSavedAssignDialog,
       }),
     );
@@ -263,7 +322,7 @@ export function useJobDetailAssignments({
   };
 
   return {
-    ...qualificationOverride,
+    ...overrides,
     assignError,
     assignSelectedIds,
     setAssignSelectedIds,

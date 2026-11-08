@@ -6,8 +6,8 @@ import {
   createSignedUploadUrl,
   deleteStorageObjects,
   discardStorageObjects,
-  headStorageObject,
   listStorageObjectPaths,
+  promoteUploadedObject,
   putStorageObject,
 } from './r2';
 
@@ -65,7 +65,7 @@ const operations: ReadonlyArray<{
     call: (scope) => createSignedUploadUrl({ ...scope, contentType: 'application/pdf' }),
   },
   { name: 'signed download', call: (scope) => createSignedDownloadUrl(scope) },
-  { name: 'head', call: (scope) => headStorageObject(scope) },
+  { name: 'promote', call: (scope) => promoteUploadedObject(scope) },
   {
     name: 'copy source',
     call: ({ organizationId: scopeId, path }) =>

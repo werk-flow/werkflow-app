@@ -4,6 +4,7 @@ import {
   INVENTORY_ITEM_TYPE_LABELS,
   type InventoryItemType,
 } from '../../../../lib/inventory/types';
+import { getInventoryLocationByName, type PersistedInventoryLocation } from '../db/inventory';
 import {
   confirmed,
   expectBannerAfter,
@@ -349,13 +350,28 @@ export async function planMaterialOnDetailPage(
   await expect(dialog).toHaveCount(0);
 }
 
-export async function createInventoryLocation(page: Page, name: string): Promise<void> {
+/**
+ * Creates a Lager on /inventar and returns its saved row once the server
+ * confirmed it. The dialog closes with the click while the save is still in
+ * flight, so a caller that navigates next would abort the save without this wait.
+ */
+export async function createInventoryLocation(
+  page: Page,
+  options: { orgId: string; name: string },
+): Promise<PersistedInventoryLocation> {
+  const { orgId, name } = options;
   await page.goto('/inventar');
   await createLocationButton(page).click();
   const dialog = inventoryDialog(page, 'createLocation');
   await dialog.locator('#inventory-location-name').fill(name);
   await dialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
   await expect(dialog).toHaveCount(0);
+  await inventoryTab(page, 'locations').click();
+  await expect(inventoryLocationCard(page, name)).toBeVisible();
+  await expect(pendingLocationStatus(page)).toHaveCount(0);
+  const location = await getInventoryLocationByName(orgId, name);
+  expect(location.isActive).toBe(true);
+  return location;
 }
 
 export async function createInventoryItem(

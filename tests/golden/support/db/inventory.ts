@@ -1,4 +1,4 @@
-import { createAdminClient } from './shared';
+import { createAdminClient, persisted, type Persisted } from './shared';
 
 export type InventoryLedgerState = {
   quantityOnHand: number;
@@ -50,4 +50,21 @@ export async function getInventoryLedgerState(
     lastQuantityAfter,
     movementCount: rows.length,
   };
+}
+
+export type PersistedInventoryLocation = Persisted<{ id: string; name: string; isActive: boolean }>;
+
+/** The Lager a dialog just saved, read back by its test-specific name. */
+export async function getInventoryLocationByName(
+  orgId: string,
+  name: string,
+): Promise<PersistedInventoryLocation> {
+  const { data, error } = await createAdminClient()
+    .from('inventory_locations')
+    .select('id, name, is_active')
+    .eq('organization_id', orgId)
+    .eq('name', name)
+    .single();
+  if (error) throw new Error(`Inventory location ${name} lookup failed: ${error.message}`);
+  return persisted({ id: data.id, name: data.name, isActive: data.is_active });
 }

@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { randomUUID } from 'node:crypto';
+
 import type { PostgrestError, PostgrestSingleResponse } from '@supabase/supabase-js';
 
 import type { ActionFailure } from '@/lib/action-result';
@@ -8,31 +10,21 @@ import { logError } from '@/lib/logging';
 import { discardStorageObjects } from '@/lib/storage/r2';
 import type { AdminClient } from '@/lib/supabase/admin';
 import type { Json } from '@/lib/supabase/database.types';
+import { isConfirmedWriteRefusal } from '@/lib/supabase/write-refusal';
 
 import { mapArtifactError } from './errors';
 
 /**
- * Removes a generated export object after its registration failed, unless a
- * document owns its path: a committed export of the same content writes the
- * same key. A failed read keeps the object, since only a completed read
- * proves that no document owns it.
+ * The key one export attempt stores its object under. A fresh id per attempt
+ * keeps two exports of the same content apart, so an attempt that fails or
+ * turns out a duplicate removes only its own object.
  */
-export async function discardUnreferencedExportObject(
-  admin: AdminClient,
+export function workArtifactExportStoragePath(
   organizationId: string,
-  storagePath: string,
-  failureLabel: string,
-): Promise<void> {
-  const reference = await admin
-    .from('documents')
-    .select('id')
-    .eq('organization_id', organizationId)
-    .eq('storage_path', storagePath)
-    .limit(1);
-  if (reference.error) logError(failureLabel, reference.error);
-  if (!reference.error && (reference.data?.length ?? 0) === 0) {
-    await discardStorageObjects({ organizationId, paths: [storagePath] });
-  }
+  revisionId: string,
+  exportFile: { rendererVersion: string; contentHash: string },
+): string {
+  return `${organizationId}/work-artifact-exports/${revisionId}/${randomUUID()}/${exportFile.rendererVersion}-${exportFile.contentHash}.html`;
 }
 
 /** The document a committed export of this revision, renderer and content already registered. */
@@ -93,18 +85,13 @@ export async function registerWorkArtifactExport(
 
 /** The failure of a refused export registration, after its unreferenced object is removed. */
 export async function refuseWorkArtifactExport(
-  admin: AdminClient,
   organizationId: string,
   storagePath: string,
-  error: { message?: string } | null,
+  error: { message?: string; code?: string } | null,
 ): Promise<ActionFailure> {
-  // A committed export of the same content owns an object of this same path.
-  await discardUnreferencedExportObject(
-    admin,
-    organizationId,
-    storagePath,
-    'Failed to verify a work artifact export reference',
-  );
+  // A refused registration wrote nothing, so the attempt's own object is
+  // unreferenced; after an unknown outcome it stays.
+  if (isConfirmedWriteRefusal(error)) await discardStorageObjects({ organizationId, paths: [storagePath] });
   logError('Failed to export work artifact', error);
   const code = mapArtifactError(error);
   return {

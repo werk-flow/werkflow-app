@@ -205,9 +205,15 @@ mock.module('@/lib/storage/r2', () => ({
   discardStorageObjects: async ({ paths }: { paths: string[] }) => {
     discardedPaths.push(...paths);
   },
+  // Like the adapter, the promotion copies to a key of its own beside the ticket's path.
   promoteUploadedObject: async ({ path }: { path: string }) => {
     promotedPaths.push(path);
-    return { exists: true, sizeBytes: 1024, contentType: 'application/pdf' };
+    return {
+      exists: true,
+      sizeBytes: 1024,
+      contentType: 'application/pdf',
+      path: path.replace(/[^/]+$/, (name) => `copy-${name}`),
+    };
   },
   uploadStagingPath: stagingPathOf,
 }));
@@ -358,7 +364,7 @@ assert.deepEqual(linksTo(jobUploadId), [{ job_id: assignedJobId, project_id: nul
 const jobUploadPath = `${ORGANIZATION_A}/${jobUploadId}/aufmass.pdf`;
 assert.equal(
   tableRows(world, 'documents').find((document) => document.id === jobUploadId)?.storage_path,
-  jobUploadPath,
+  `${ORGANIZATION_A}/${jobUploadId}/copy-aufmass.pdf`,
 );
 assert.deepEqual(promotedPaths, [jobUploadPath]);
 assert.deepEqual(

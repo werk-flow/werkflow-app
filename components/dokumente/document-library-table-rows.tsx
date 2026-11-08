@@ -26,6 +26,7 @@ import {
   type DocumentActionHandlers,
   type FolderActionHandlers,
 } from './document-row-actions';
+import { DocumentArchiveLabel } from './document-archive-label';
 import {
   getFileIcon,
   getFileTypeLabel,
@@ -71,6 +72,8 @@ type DocumentLibraryTableRowShellProps = DocumentLibraryTableRowProps & {
   selectionLabel: string;
   icon: ReactNode;
   name: string;
+  /** A second line under the name, such as the document's archive state. */
+  detail?: ReactNode;
   onOpen: () => void;
   /** The row's actions menu in the last cell. */
   actionsMenu: ReactNode;
@@ -87,6 +90,7 @@ function DocumentLibraryTableRowShell({
   selectionLabel,
   icon,
   name,
+  detail,
   onOpen,
   actionsMenu,
   singleItemMenu,
@@ -136,6 +140,7 @@ function DocumentLibraryTableRowShell({
               <span className="truncate">{name}</span>
               <InlinePending active={isItemPending} />
             </PlainButton>
+            {detail}
           </TableCell>
           {children}
           <TableCell data-table-interactive="true">{actionsMenu}</TableCell>
@@ -254,6 +259,7 @@ export function DocumentLibraryTableDocumentRow({
         className: 'size-4 shrink-0 text-muted-foreground',
       })}
       name={document.displayName}
+      detail={<DocumentArchiveLabel archive={document.archive} className="mt-0.5 pl-6" />}
       onOpen={handlers.onOpen}
       actionsMenu={
         <DocumentActionsMenu

@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { ROLE_LABELS } from '../../../../lib/roles';
+import { getOrganizationByName, type PersistedOrganization } from '../db/shared';
 import { confirmTestUserEmail } from '../seed';
 import { hydratedAndSettled, pressKey, settledBeforeTimeout } from './interaction';
 import { openMemberDetailFromList } from './personnel';
@@ -26,6 +27,8 @@ const ORGANIZATION_COPY = {
   simulatePayment: 'Zahlung simulieren / Fortfahren',
   organizationName: 'Name der Organisation',
   createOrganization: 'Organisation erstellen',
+  /** The dashboard's banner after a created organization's first load (app/(app)/dashboard/page.tsx). */
+  organizationCreated: 'Organisation erstellt — Du bist jetzt Admin.',
   joinOrganization: 'Organisation beitreten',
   joinCode: 'Organisationscode',
   requestJoin: 'Beitritt anfragen',
@@ -136,19 +139,43 @@ export function simulatedPaymentButton(page: Page): Locator {
   return page.getByRole('button', { name: ORGANIZATION_COPY.simulatePayment });
 }
 
-/** Creates the account's first organization on the onboarding form and lands on the dashboard. */
-export async function createOrganizationInOnboarding(page: Page, organizationName: string): Promise<void> {
+/**
+ * The landing after either create form: a full load of `/dashboard?created=<id>`.
+ * The dashboard shows the confirmation and strips the parameter at once
+ * (`UrlFlashBanner`), so the URL is no fact to wait on. The banner, the
+ * switcher on the new active organization and the stored row are.
+ */
+async function expectOrganizationCreated(
+  page: Page,
+  organizationName: string,
+): Promise<PersistedOrganization> {
+  await expect(
+    page.getByRole('alert').filter({ hasText: ORGANIZATION_COPY.organizationCreated }),
+  ).toBeVisible();
+  await expect(organizationSwitcher(page, organizationName)).toBeVisible();
+  await hydratedAndSettled(page);
+  return getOrganizationByName(organizationName);
+}
+
+/** Creates the account's first organization on the onboarding form and lands on its dashboard. */
+export async function createOrganizationInOnboarding(
+  page: Page,
+  organizationName: string,
+): Promise<PersistedOrganization> {
   await page.getByLabel(ORGANIZATION_COPY.organizationName).fill(organizationName);
   await page.getByRole('button', { name: ORGANIZATION_COPY.createOrganization }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  return expectOrganizationCreated(page, organizationName);
 }
 
 /** Creates a further organization through the switcher's dialog and lands on its dashboard. */
-export async function createAdditionalOrganization(page: Page, organizationName: string): Promise<void> {
+export async function createAdditionalOrganization(
+  page: Page,
+  organizationName: string,
+): Promise<PersistedOrganization> {
   await page.getByRole('button', { name: ORGANIZATION_COPY.createOrganization }).click();
   await page.getByLabel(ORGANIZATION_COPY.organizationName).fill(organizationName);
   await page.getByRole('button', { name: SHARED_COPY.action.create, exact: true }).click();
-  await expect(page).toHaveURL(/\/dashboard\?created=/);
+  return expectOrganizationCreated(page, organizationName);
 }
 
 /** The organization switcher while it shows this organization. */

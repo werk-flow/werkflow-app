@@ -21,7 +21,7 @@ type CaptureView =
   | { kind: 'dialog'; opener: DialogOpenerId };
 
 /** A seeded record a capture opens instead of its route's layout record (acceptance-records.ts). */
-export type AcceptanceRecord = 'caller-match-request' | 'promoted-caller-request';
+export type AcceptanceRecord = 'caller-match-request' | 'promoted-caller-request' | 'office-task-backlog';
 
 export type CaptureSpec = {
   /** Unique within its set; part of the image name and the citation token. */
@@ -355,6 +355,61 @@ function callerMatchCaptures(): AcceptanceSet {
   };
 }
 
+/**
+ * werk-flow/werkflow-planning#283 of 2026-11-07: the library rows with their
+ * archive line and the „Aufbewahrung“ section of the file details.
+ */
+function documentRetentionCaptures(): AcceptanceSet {
+  const both = { widths: [1280, 375], schemes: ['light', 'dark'] } as const;
+  return {
+    id: 'document-retention-2026-11-07',
+    captures: [
+      { id: 'admin-dokumente', role: 'admin', route: '/dokumente', view: { kind: 'page' }, ...both },
+      {
+        id: 'admin-dokumente-details',
+        role: 'admin',
+        route: '/dokumente',
+        view: { kind: 'dialog', opener: 'documents.details' },
+        reveal: 'Aufbewahrung',
+        ...both,
+      },
+    ],
+    standalone: [],
+  };
+}
+
+/**
+ * werk-flow/werkflow-planning#144 of 2026-11-08: Aufgaben for Büro, with the
+ * time-bound decisions first and the handover backlog counted at the end.
+ */
+function taskOrderCaptures(): AcceptanceSet {
+  return {
+    id: 'task-order-2026-11-08',
+    captures: [
+      {
+        id: 'buero-aufgaben',
+        role: 'buero',
+        route: '/aufgaben',
+        view: { kind: 'page' },
+        record: 'office-task-backlog',
+        widths: [1280, 375],
+        schemes: ['light', 'dark'],
+      },
+      {
+        id: 'buero-aufgaben-uebergaben',
+        role: 'buero',
+        route: '/aufgaben',
+        view: { kind: 'page' },
+        record: 'office-task-backlog',
+        reveal: 'Alle anzeigen',
+        widths: [1280, 375],
+        schemes: ['light', 'dark'],
+      },
+    ],
+    standalone: [],
+  };
+}
+
 export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   uiRoundCaptures(),
   fieldTargetCaptures(),
@@ -367,4 +422,6 @@ export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   periodBlockerCaptures(),
   clockDockCaptures(),
   callerMatchCaptures(),
+  documentRetentionCaptures(),
+  taskOrderCaptures(),
 ];
