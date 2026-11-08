@@ -6,11 +6,7 @@ import { getPendingInviteCode } from './support/db/shared';
 import { seedJob, seedJobAssignment } from './support/db/work';
 import { createCustomer } from './support/steps/customers';
 import { documentLibraryHeading, uploadDocumentOnJobPage } from './support/steps/documents';
-import {
-  materialAtJobText,
-  returnMaterialOnJobPage,
-  takeMaterialOnJobPage,
-} from './support/steps/inventory';
+import { materialAtJobText, returnMaterialOnJobPage, takeMaterialOnJobPage } from './support/steps/inventory';
 import {
   expectRedirectedAway,
   inviteMember,
