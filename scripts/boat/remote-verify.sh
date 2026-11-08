@@ -62,6 +62,7 @@ find .agent-logs -mindepth 2 -maxdepth 2 -type d | sort > "$HOME/evidence-before
 
 phase "installing dependencies"
 bun install --frozen-lockfile > "$HOME/install.log" 2>&1 || { cat "$HOME/install.log"; setup_failed "bun install"; }
+bun scripts/boat/check-tree.ts "$HOME/changed.json" || setup_failed "the rebuilt checkout differs from the workstation's"
 
 phase "loading the stack images"
 until docker info > /dev/null 2>&1; do sleep 1; done
