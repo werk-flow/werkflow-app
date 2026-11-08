@@ -42,20 +42,35 @@ type PageReport = {
  * layout and colors are the settled ones: a theme switch fades colors for
  * 150 ms and a dialog slides in, and axe once read the colors halfway through
  * the fade. A spinner or a skeleton pulse runs forever and is not waited for.
+ *
+ * The animations are read again after each wait. A color inherited through
+ * an ancestor's own color transition (the /dokumente view links inside the
+ * drop zone) restarts its transition every frame: the cancelled one settles,
+ * and its replacement still runs.
  */
 export async function nextFrames(page: Page): Promise<void> {
   await page.evaluate(async () => {
     await new Promise<void>((resolve) => {
       requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
     });
-    const finite = document
-      .getAnimations()
-      .filter((animation) => Number.isFinite(Number(animation.effect?.getComputedTiming().endTime)));
-    await Promise.race([
-      Promise.allSettled(finite.map((animation) => animation.finished)),
-      // eslint-disable-next-line test-hygiene/no-wall-clock-wait -- caps a stuck animation; the race ends as soon as the finite animations finish
-      new Promise((resolve) => setTimeout(resolve, 2_000)),
-    ]);
+    let capped = false;
+    const cap = new Promise<void>((resolve) =>
+      // eslint-disable-next-line test-hygiene/no-wall-clock-wait -- caps a stuck animation; the wait ends as soon as no finite animation runs
+      setTimeout(() => {
+        capped = true;
+        resolve();
+      }, 2_000),
+    );
+    const running = (): Animation[] =>
+      document
+        .getAnimations()
+        .filter(
+          (animation) =>
+            (animation.playState === 'running' || animation.pending) &&
+            Number.isFinite(Number(animation.effect?.getComputedTiming().endTime)),
+        );
+    for (let current = running(); current.length > 0 && !capped; current = running())
+      await Promise.race([Promise.allSettled(current.map((animation) => animation.finished)), cap]);
   });
 }
 
