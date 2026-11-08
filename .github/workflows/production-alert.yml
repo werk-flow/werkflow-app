@@ -1,10 +1,11 @@
 name: Production alert
 
 # Opens, updates or closes a production alert for ops/ci-alert.py in werkflow-planning: a
-# scheduled release that never started, and the production watcher's deploy, server-error and
-# watcher alerts. The PC's gh acts as the owner, and GitHub tells nobody of their own actions,
-# so an issue it opened and assigned would reach no inbox. This job writes as github-actions,
-# so the owner's assignment notifies them (docs/technical/recovery-and-incidents.md#monitoring).
+# scheduled release that never started, and the production watcher's deploy, server-error,
+# handled-failure and watcher alerts. The PC's gh acts as the owner, and GitHub tells nobody of
+# their own actions, so an issue it opened and assigned would reach no inbox. This job writes as
+# github-actions, so the owner's assignment notifies them
+# (docs/technical/recovery-and-incidents.md#monitoring).
 on:
   workflow_dispatch:
     inputs:
@@ -16,6 +17,7 @@ on:
           - 'CI alert: release (proof)'
           - 'Production alert: deploy'
           - 'Production alert: server errors'
+          - 'Production alert: handled failures'
           - 'Production alert: watcher'
       action:
         description: keep opens the alert or comments on the open one; close closes it

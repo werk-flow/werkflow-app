@@ -1,26 +1,28 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { LAB_SPEC_DIRECTORY } from '../lab-steps';
 
 /**
- * Speed measurements, captures and sweeps run in release mode, in CI's full
- * runs and on explicit request only: the wall-clock and lab groups, the visual
+ * Wall-clock measurements, captures and sweeps run in release mode, in CI's
+ * full runs and on explicit request only: the wall-clock groups, the visual
  * references and acceptance captures, and the layout and accessibility sweeps.
  * A change plan selects one only when its own spec or test support changed.
  */
 function isReleaseOnlySpec(file: string): boolean {
-  return /^tests\/audit\/(performance|lab|visual|layout)\//.test(file);
+  return /^tests\/audit\/(performance|visual|layout)\//.test(file);
 }
 
 /**
- * What selects a browser group in a change plan (decision 0007, amendment
- * 2026-10-29, group-selection.ts). Every trigger also selects a group whose
- * own spec or test support changed.
- * - `critical`: any product file, migration or shared test support.
+ * What selects a browser group in a change plan (decision 0007, amendments
+ * 2026-10-29 and 2026-11-08, group-selection.ts). Every trigger also selects a
+ * group whose own spec or test support changed.
+ * - `critical`: any product file, migration, dependency or shared test support.
+ * - `product`: the lab groups; what selects `critical`, except shared test support.
  * - `scope`: a product file under one of its declared scopes, until stage 4 moves its denials below the browser.
  * - `own-test`: its own spec or test support only; nightly and release runs take the rest.
  * - `release-only`: like `own-test`, except a wall-clock group never runs in a change plan.
  */
-export type ChangeTrigger = 'critical' | 'scope' | 'own-test' | 'release-only';
+export type ChangeTrigger = 'critical' | 'product' | 'scope' | 'own-test' | 'release-only';
 
 /**
  * The critical journeys a change plan runs whenever product code, a migration
@@ -72,6 +74,7 @@ export const ROLE_DENIAL_GROUPS: Readonly<
 /** How a change plan selects the browser group `id` with its spec `files`. */
 export function changeTrigger(repositoryRoot: string, id: string, files: readonly string[]): ChangeTrigger {
   if (files.some(isReleaseOnlySpec)) return 'release-only';
+  if (files.some((file) => file.startsWith(LAB_SPEC_DIRECTORY))) return 'product';
   if (id in CRITICAL_JOURNEYS) return 'critical';
   if (id === SECURITY_GROUP || id in ROLE_DENIAL_GROUPS) return 'scope';
   return files.some((file) => OUTSIDER_SESSION.test(readFileSync(join(repositoryRoot, file), 'utf8')))
