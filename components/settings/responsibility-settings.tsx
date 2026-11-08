@@ -8,7 +8,7 @@ import {
   ResponsibilityEffectPreview,
   ResponsibilityHolderChecklist,
 } from '@/components/settings/responsibility-configuration-sections';
-import { DelegationDialog } from '@/components/settings/responsibility-delegation-dialog';
+import { lazyDialog } from '@/components/shared/lazy-dialog';
 import { DelegationList } from '@/components/settings/responsibility-delegation-list';
 import { holderSourceLabel, personName } from '@/components/settings/responsibility-display';
 import { useResponsibilityConfigurationForm } from '@/components/settings/use-responsibility-configuration-form';
@@ -30,6 +30,7 @@ import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resolution';
 import type { ResponsibilitySettingsData } from '@/lib/responsibilities/server';
 import {
+  orderByPersonName,
   ORGANIZATION_RESPONSIBILITIES,
   RESPONSIBILITY_DESCRIPTIONS,
   RESPONSIBILITY_LABELS,
@@ -37,6 +38,13 @@ import {
   type ResponsibilityPerson,
 } from '@/lib/responsibilities/types';
 import { Constants } from '@/lib/supabase/database.types';
+
+// Only the owner names substitutes. The delegation dialog, with its absence
+// marks and warning, downloads on intent, so the settings page's first load
+// never carries it (`lab.admin.settings-open`).
+const lazyDelegationDialog = lazyDialog(() =>
+  import('@/components/settings/responsibility-delegation-dialog').then((mod) => mod.DelegationDialog),
+);
 
 export function ResponsibilitySettings({ data }: { data: ResponsibilitySettingsData }) {
   useRealtimeRouterRefresh({
@@ -120,7 +128,7 @@ function CurrentHolderSection({
       <h3 className="text-sm font-medium">Aktuell verantwortlich</h3>
       <ul className="grid gap-2">
         {holders.length > 0 ? (
-          holders.map((holder) => (
+          orderByPersonName(holders, people).map((holder) => (
             <li
               key={holder.employeeRecordId}
               className="flex flex-col gap-1 rounded-md border px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
@@ -153,6 +161,8 @@ function ResponsibilityCard({
   const canEdit = data.isOwner;
   const [configurationOpen, setConfigurationOpen] = useState(false);
   const [delegationOpen, setDelegationOpen] = useState(false);
+  // The button waits while the delegation dialog downloads.
+  const delegationWaiting = lazyDelegationDialog.useWaiting(delegationOpen);
 
   return (
     <Card data-testid={`responsibility-${responsibility}`}>
@@ -187,7 +197,14 @@ function ResponsibilityCard({
         </p>
         {canEdit ? (
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={() => setDelegationOpen(true)}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={delegationWaiting}
+              onPointerEnter={lazyDelegationDialog.preload}
+              onFocus={lazyDelegationDialog.preload}
+              onClick={() => setDelegationOpen(true)}
+            >
               Vertretung eintragen
             </Button>
             <Button type="button" onClick={() => setConfigurationOpen(true)}>
@@ -204,7 +221,7 @@ function ResponsibilityCard({
         open={configurationOpen}
         onOpenChange={setConfigurationOpen}
       />
-      <DelegationDialog
+      <lazyDelegationDialog.Dialog
         key={`delegation-${effective.configurationId ?? 'default'}`}
         data={data}
         responsibility={responsibility}

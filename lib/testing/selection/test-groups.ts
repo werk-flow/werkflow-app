@@ -361,6 +361,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['work-creation-writes', ['work_creation_writes.sql'], ['work', 'customers', 'documents', 'service']],
   ['unpark-into-schedule', ['unpark_into_schedule.sql'], ['work', 'planning']],
   ['job-plan-bridge', ['job_plan_bridge.sql'], ['work', 'planning']],
+  ['responsibility-delegation-end', ['responsibility_delegation_end.sql'], ['personnel']],
   ['user-preference-writes', ['user_preference_writes.sql'], ['work', 'planning']],
   ['rate-limits', ['rate_limits.sql'], ['*']],
   ['organization-deletion', ['organization_deletion.sql'], ['*']],
