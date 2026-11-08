@@ -27,12 +27,12 @@ import {
   approveCorrectionButton,
   calendarTimeCorrectionDialog,
   expectNoTimeCorrectionCard,
-  fillMissedTime,
-  openMissedTimeDialog,
+  fillOwnPastTime,
+  manualEntryDialog,
+  openOwnTimeDialog,
   submitCalendarTimeCorrection,
   TIME_CORRECTION_COPY,
   timeCorrectionCard,
-  timeCorrectionDialog,
   timeCorrectionSaveButton,
   timeCorrectionStatus,
   timeHistoryTab,
@@ -49,7 +49,10 @@ test.describe('P1-22 consistent time corrections @P1-22', () => {
     world,
   }) => {
     const reason = `Vergessene Arbeitszeit ${world.runId}`;
-    const date = berlinDateAtOffset(1);
+    // Own time of an earlier day: the employee's form asks for the reason and
+    // submits a correction. The world's employees enter on the business date.
+    const date = berlinDateAtOffset(-1);
+    await ensureEmployedSince({ organizationId: world.orgId, userIds: [world.users.employee.id], date });
     const requestId = await test.step('The employee submits a correction for review', async () => {
       await previewResponsibilityChange(adminPage, {
         responsibility: 'time_approval',
@@ -61,13 +64,15 @@ test.describe('P1-22 consistent time corrections @P1-22', () => {
       await confirmResponsibilityPreview(adminPage);
       await employeePage.goto('/zeiterfassung?tab=history');
       await expect(timeHistoryTab(employeePage)).toHaveAttribute('data-state', 'active');
-      const dialog = timeCorrectionDialog(employeePage);
+      // The employee's one „Zeit nachtragen“: time of an earlier day goes in
+      // as a correction with its reason.
+      const dialog = manualEntryDialog(employeePage);
       await retryDialogTransaction({
         dialog,
         open: async () => {
-          await openMissedTimeDialog(employeePage, 'P1-22 time correction form options');
+          await openOwnTimeDialog(employeePage, 'P1-22 own time form');
         },
-        prepare: () => fillMissedTime(employeePage, dialog, { date, from: '08:00', to: '10:00', reason }),
+        prepare: () => fillOwnPastTime(dialog, { date, from: '08:00', to: '10:00', reason }),
         submit: () => timeCorrectionSaveButton(dialog).click({ timeout: 5_000 }),
       });
       await expect(visibleText(employeePage, TIME_CORRECTION_COPY.submittedForReview)).toBeVisible();

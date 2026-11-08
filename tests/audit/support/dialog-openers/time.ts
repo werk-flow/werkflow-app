@@ -7,7 +7,7 @@ import {
   seedOpenOnboardingRequirement,
 } from '../../../golden/support/db/personnel';
 import { seedSicknessReport } from '../../../golden/support/db/sickness';
-import { seedPendingManualInterval } from '../../../golden/support/db/time-tracking';
+import { seedApprovedManualInterval, seedPendingManualInterval } from '../../../golden/support/db/time-tracking';
 import { seedPendingVacationRequest } from '../../../golden/support/db/vacation';
 import {
   newWorkArtifactButton,
@@ -34,7 +34,9 @@ import {
   manualEntryDialog,
   manualEntryHeaderButton,
   openTimeApprovals,
+  TIME_CORRECTION_COPY,
   timeCorrectionDialog,
+  timeHistoryPanel,
   timeHistoryTab,
 } from '../../../golden/support/steps/time-tracking';
 import {
@@ -73,6 +75,32 @@ async function openClockSheet(page: Page): Promise<Locator> {
   const sheet = clockStartSheet(page);
   await expect(sheet).toBeVisible();
   return sheet;
+}
+
+/**
+ * An employee's „Korrigieren“ on an own accepted entry of the history: the
+ * employee adds time through the header's „Zeit nachtragen“ and corrects
+ * recorded time from its row.
+ */
+async function historyCorrectOwnEntry({ page, world, businessDate }: SurfaceContext): Promise<Locator> {
+  await surfaceFixture(world, 'time.own-approved-interval', async () => {
+    const date = addLocalDays(businessDate, -6);
+    await seedApprovedManualInterval({
+      organizationId: world.orgId,
+      userId: world.users.employee.id,
+      date,
+      from: '07:00',
+      to: '08:00',
+    });
+    return date;
+  });
+  await page.reload();
+  await hydratedAndSettled(page);
+  await timeHistoryTab(page).click();
+  await expect(timeHistoryTab(page)).toHaveAttribute('aria-selected', 'true');
+  return enabled(
+    timeHistoryPanel(page).getByRole('button', { name: TIME_CORRECTION_COPY.correct, exact: true }).first(),
+  );
 }
 
 /** The history tab's „Zeit nachtragen“, which opens an empty correction. */
@@ -144,7 +172,7 @@ export const TIME_OPENERS = {
     layer: timeCorrectionDialog,
   },
   'field.time-correction': {
-    trigger: historyAddTime,
+    trigger: historyCorrectOwnEntry,
     layer: timeCorrectionDialog,
   },
   'time.approve-all': {

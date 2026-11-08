@@ -4,7 +4,7 @@ import {
   getLatestResponsibilityConfigurationState,
   setResponsibilityHolders,
 } from './support/db/personnel';
-import { getLatestManualTimeEntryState } from './support/db/time-tracking';
+import { getLatestManualTimeEntryState, seedPendingManualInterval } from './support/db/time-tracking';
 import {
   confirmResponsibilityPreview,
   createResponsibilityDelegationViaSettings,
@@ -121,15 +121,19 @@ test.describe('P1-05 Verantwortlichkeiten und Vertretung @P1-05', () => {
   test('Der eigene Eintrag eines Verantwortlichen wartet auf die zweite verantwortliche Person', async ({
     adminPage,
     businessDate,
-    employeePage,
     world,
   }) => {
     await pinTimeApprovalHolders(world, ['admin', 'employee']);
 
-    await createOwnManualTimeEntry(employeePage, {
-      dateDigits: toDatePickerDigits(shiftIsoDate(businessDate, -1)),
-      clockInDigits: '0600',
-      clockOutDigits: '0700',
+    // The holder's own pending submission of an earlier day. An employee adds
+    // time of an earlier day as a correction (p1-22.spec.ts), so the
+    // submission is seeded: this case proves only who decides it.
+    await seedPendingManualInterval({
+      organizationId: world.orgId,
+      userId: world.users.employee.id,
+      date: shiftIsoDate(businessDate, -1),
+      from: '06:00',
+      to: '07:00',
     });
     expect((await getLatestManualTimeEntryState(world.orgId, world.users.employee.id)).status).toBe(
       'pending',

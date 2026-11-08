@@ -62,6 +62,7 @@ describe('the pending corrections in sum', () => {
     );
     expect(summary).toEqual({
       count: 2,
+      submissionCount: 0,
       beforeMinutes: 450,
       proposedMinutes: 510 + 510,
       days: ['2026-10-26', '2026-10-27'],
@@ -131,5 +132,38 @@ describe('the pending corrections in sum', () => {
       '2026-10-30',
     ]);
     expect(summarizePendingCorrections([request(spanning, snapshot())], 'b').days).toEqual(['2026-10-28']);
+  });
+});
+
+describe('pending manual submissions in the sum', () => {
+  test('count as time they would add, beside the corrections, on their own days', () => {
+    // 27.10. in Berlin: a correction adds 06:00 to 08:00 local; a submission
+    // of the 28th adds 09:00 to 17:00 local, an open clock-in of the 29th none.
+    const summary = summarizePendingCorrections(
+      [
+        request(
+          snapshot(),
+          snapshot(
+            fact('clock_in', '2026-10-27T05:00:00.000Z'),
+            fact('clock_out', '2026-10-27T07:00:00.000Z'),
+          ),
+        ),
+      ],
+      'user',
+      [
+        [
+          { entryType: 'clock_out', timestamp: '2026-10-28T16:00:00.000Z' },
+          { entryType: 'clock_in', timestamp: '2026-10-28T08:00:00.000Z' },
+        ],
+        [{ entryType: 'clock_in', timestamp: '2026-10-29T06:00:00.000Z' }],
+      ],
+    );
+    expect(summary).toEqual({
+      count: 1,
+      submissionCount: 2,
+      beforeMinutes: 0,
+      proposedMinutes: 120 + 480,
+      days: ['2026-10-27', '2026-10-28', '2026-10-29'],
+    });
   });
 });

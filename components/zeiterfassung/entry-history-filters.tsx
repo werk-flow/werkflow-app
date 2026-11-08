@@ -22,7 +22,8 @@ type EntryHistoryFiltersProps = {
   setStatusFilter: (value: string) => void;
   onRefresh: () => Promise<void>;
   hydrated: boolean;
-  onAddTime: () => void;
+  /** Absent for an employee, whose page header carries the one „Zeit nachtragen“. */
+  onAddTime: (() => void) | undefined;
   isSettlingNewEntry: boolean;
 };
 
@@ -90,10 +91,14 @@ export function EntryHistoryFilters({
         </Select>
       </Field>
       <RefreshButton onRefresh={onRefresh} label="Einträge aktualisieren" />
-      <Button variant="outline" size="sm" disabled={!hydrated} onClick={onAddTime}>
-        <Plus className="mr-1.5 size-4" /> Zeit nachtragen
-      </Button>
-      <InlinePending active={isSettlingNewEntry} />
+      {onAddTime ? (
+        <>
+          <Button variant="outline" size="sm" disabled={!hydrated} onClick={onAddTime}>
+            <Plus className="mr-1.5 size-4" /> Zeit nachtragen
+          </Button>
+          <InlinePending active={isSettlingNewEntry} />
+        </>
+      ) : null}
     </div>
   );
 }

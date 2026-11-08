@@ -348,7 +348,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['inventory-ledger', ['inventory_ledger.sql', 'inventory_atomic_writes.sql'], ['inventory']],
   ['closed-period-writes', ['closed_period_writes.sql'], ['time']],
   ['entry-change-request-decisions', ['entry_change_request_decisions.sql'], ['time']],
-  ['own-time-entry-changes', ['own_time_entry_changes.sql'], ['time']],
+  ['own-time-entry-changes', ['own_time_entry_changes.sql', 'pending_entry_withdrawals.sql'], ['time']],
   ['manual-entry-job-assignment', ['manual_entry_job_assignment.sql'], ['time', 'work']],
   ['document-writes', ['document_writes.sql', 'document_retention.sql'], ['documents', 'work']],
   ['payroll-export-recovery', ['payroll_export_recovery.sql'], ['time']],

@@ -3,19 +3,20 @@
 import { StaleRegion } from '@/components/shared/stale-region';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useRef, useState } from 'react';
-import { Clock, Lock, Pencil } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { InlinePending } from '@/components/ui/inline-pending';
+import { Clock } from 'lucide-react';
+import { ErrorText } from '@/components/ui/error-text';
 import { ListRow } from '@/components/ui/list-row';
 import { SectionError } from '@/components/ui/section-error';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SkeletonList, SkeletonRows, type SkeletonColumn } from '@/components/ui/skeleton-table';
 import { cn, formatBerlinDateTime } from '@/lib/utils';
+import { useOrganization } from '@/components/organization/organization-context';
+import { useUserProfile } from '@/components/user/user-profile-context';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { Constants } from '@/lib/supabase/database.types';
 import { constrainedValue } from '@/lib/validation/constrained-value';
-import { isEntryInClosedPeriod, type ClosedTimePeriod } from '@/lib/time-tracking/closed-period-dates';
+import { isEntryInClosedPeriod } from '@/lib/time-tracking/closed-period-dates';
 import type { TimeEntry, TimeEntryAuditEvent } from '@/lib/time-tracking/types';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useHydrated } from '@/hooks/use-hydrated';
@@ -27,6 +28,8 @@ import { EntryHistoryFilters } from './entry-history-filters';
 import { OwnEntryChanges } from './own-entry-changes';
 import { STATUS_LABELS, getEntryTypeLabel } from './entry-history-labels';
 import { historyRange, useHistoryDates } from './entry-history-range';
+import { EntryHistoryRowAction, type EntryHistoryRowActionProps } from './entry-history-row-action';
+import { useWithdrawSubmission } from './use-withdraw-submission';
 
 // Settle key for a correction that adds time (no row yet); entry ids are UUIDs.
 const NEW_ENTRY_ID = 'new';
@@ -198,31 +201,12 @@ function EntryHistorySkeleton() {
   );
 }
 
-type EntryHistoryRowsProps = {
+type EntryHistoryRowsProps = Omit<EntryHistoryRowActionProps, 'entry' | 'align'> & {
   entries: EntryWithProfile[];
-  settling: { isBusy: (id: string) => boolean };
-  hydrated: boolean;
-  setCorrectionEntry: (entry: TimeEntry) => void;
-  closedPeriods: readonly ClosedTimePeriod[];
 };
 
-/** In place of „Korrigieren“ on an entry of a closed month: the server would refuse the correction. */
-function ClosedMonthLabel({ className }: { className?: string }) {
-  return (
-    <span className={cn('inline-flex items-center gap-1.5 text-sm text-muted-foreground', className)}>
-      <Lock className="size-4" aria-hidden="true" /> Monat abgeschlossen
-    </span>
-  );
-}
-
 /* Mobile cards */
-function EntryHistoryCards({
-  entries,
-  settling,
-  hydrated,
-  setCorrectionEntry,
-  closedPeriods,
-}: EntryHistoryRowsProps) {
+function EntryHistoryCards({ entries, ...actionProps }: EntryHistoryRowsProps) {
   return (
     <div className="space-y-2 md:hidden">
       {entries.map((entry) => (
@@ -248,19 +232,7 @@ function EntryHistoryCards({
           {entry.isManual && (
             <span className="inline-block rounded bg-muted px-1.5 py-0.5 text-xs">Manuell</span>
           )}
-          {settling.isBusy(entry.id) ? (
-            <InlinePending active />
-          ) : entry.pendingCorrectionRequestId ? (
-            <Button variant="ghost" size="sm" disabled>
-              <Clock className="mr-1.5 size-4" /> Korrektur in Prüfung
-            </Button>
-          ) : entry.status === 'approved' && isEntryInClosedPeriod(entry, closedPeriods) ? (
-            <ClosedMonthLabel />
-          ) : entry.status === 'approved' ? (
-            <Button variant="ghost" size="sm" disabled={!hydrated} onClick={() => setCorrectionEntry(entry)}>
-              <Pencil className="mr-1.5 size-4" /> Korrigieren
-            </Button>
-          ) : null}
+          <EntryHistoryRowAction entry={entry} {...actionProps} />
         </ListRow>
       ))}
     </div>
@@ -268,13 +240,7 @@ function EntryHistoryCards({
 }
 
 /* Desktop table */
-function EntryHistoryTable({
-  entries,
-  settling,
-  hydrated,
-  setCorrectionEntry,
-  closedPeriods,
-}: EntryHistoryRowsProps) {
+function EntryHistoryTable({ entries, ...actionProps }: EntryHistoryRowsProps) {
   return (
     <div className="hidden md:block">
       <Table>
@@ -302,24 +268,7 @@ function EntryHistoryTable({
                 {entry.reviewedAt ? formatBerlinDateTime(entry.reviewedAt) : '-'}
               </TableCell>
               <TableCell className="text-right">
-                {settling.isBusy(entry.id) ? (
-                  <InlinePending active className="ml-auto" />
-                ) : entry.pendingCorrectionRequestId ? (
-                  <Button variant="ghost" size="sm" disabled>
-                    <Clock className="mr-1.5 size-4" /> Korrektur in Prüfung
-                  </Button>
-                ) : entry.status === 'approved' && isEntryInClosedPeriod(entry, closedPeriods) ? (
-                  <ClosedMonthLabel className="justify-end" />
-                ) : entry.status === 'approved' ? (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={!hydrated}
-                    onClick={() => setCorrectionEntry(entry)}
-                  >
-                    <Pencil className="mr-1.5 size-4" /> Korrigieren
-                  </Button>
-                ) : null}
+                <EntryHistoryRowAction entry={entry} {...actionProps} align="end" />
               </TableCell>
             </TableRow>
           ))}
@@ -357,16 +306,7 @@ type EntryHistoryRegionProps = Omit<EntryHistoryRowsProps, 'entries'> & {
 };
 
 /** Results: a failed refresh keeps the last rows, marked stale and inert below its retry. */
-function EntryHistoryRegion({
-  hasRange,
-  view,
-  isStale,
-  members,
-  settling,
-  hydrated,
-  setCorrectionEntry,
-  closedPeriods,
-}: EntryHistoryRegionProps) {
+function EntryHistoryRegion({ hasRange, view, isStale, members, ...actionProps }: EntryHistoryRegionProps) {
   const entries = view.data?.entries ?? [];
   const loadError = (
     <SectionError onRetry={() => void view.refresh()} retryPending={view.isRefreshing}>
@@ -393,17 +333,41 @@ function EntryHistoryRegion({
           description="Für den ausgewählten Zeitraum gibt es keine Einträge. Wähle einen anderen Zeitraum."
         />
       ) : (
-        <EntryHistoryResults
-          entries={entries}
-          settling={settling}
-          hydrated={hydrated}
-          setCorrectionEntry={setCorrectionEntry}
-          closedPeriods={closedPeriods}
-        />
+        <EntryHistoryResults entries={entries} {...actionProps} />
       )}
       <OwnEntryChanges events={view.data.ownChanges} members={members} />
     </StaleRegion>
   );
+}
+
+/**
+ * The viewer, for the actions on their own time. An employee adds forgotten
+ * time through the page header's one „Zeit nachtragen“; the office adds time
+ * for anyone through a correction here.
+ */
+function useHistoryViewer(): { currentUserId: string | null; addsTimeHere: boolean } {
+  const { profile } = useUserProfile();
+  const { activeOrg } = useOrganization();
+  return { currentUserId: profile?.id ?? null, addsTimeHere: activeOrg?.role !== 'employee' };
+}
+
+/** The live read of the history for the chosen filters. */
+function useEntryHistoryView(query: EntryHistoryQuery, hasRange: boolean): LiveViewState<EntryHistoryData> {
+  const knownNames = useRef<ProfileNames>(new Map());
+  const { organizationId, statusFilter, memberFilter, dateFrom, dateTo } = query;
+  return useLiveView<EntryHistoryData>({
+    tables: ['time_entries', 'time_sessions', 'time_segments', 'time_correction_requests'],
+    read: ({ signal }) => readEntryHistory(query, knownNames.current, signal),
+    enabled: hasRange,
+    // A filter change is a new view of the data: discard and read fresh.
+    resetKey: [
+      organizationId,
+      statusFilter,
+      memberFilter,
+      dateFrom?.toISOString() ?? '',
+      dateTo?.toISOString() ?? '',
+    ].join('|'),
+  });
 }
 
 export function EntryHistory({
@@ -422,26 +386,13 @@ export function EntryHistory({
   // spinner from the dialog's close until the live read carries the change.
   const settling = useBusyIds();
   const closedPeriods = useClosedTimePeriods(organizationId);
+  const { currentUserId, addsTimeHere } = useHistoryViewer();
+  const view = useEntryHistoryView(
+    { organizationId, dateFrom, dateTo, statusFilter, memberFilter, withOwnChanges: showOwnEntryChanges },
+    hasRange,
+  );
 
-  const knownNames = useRef<ProfileNames>(new Map());
-  const view = useLiveView<EntryHistoryData>({
-    tables: ['time_entries', 'time_sessions', 'time_segments', 'time_correction_requests'],
-    read: ({ signal }) =>
-      readEntryHistory(
-        { organizationId, dateFrom, dateTo, statusFilter, memberFilter, withOwnChanges: showOwnEntryChanges },
-        knownNames.current,
-        signal,
-      ),
-    enabled: hasRange,
-    // A filter change is a new view of the data: discard and read fresh.
-    resetKey: [
-      organizationId,
-      statusFilter,
-      memberFilter,
-      dateFrom?.toISOString() ?? '',
-      dateTo?.toISOString() ?? '',
-    ].join('|'),
-  });
+  const { withdraw, withdrawError } = useWithdrawSubmission(settling, view.refresh);
 
   return (
     <section className="space-y-4" aria-labelledby="entry-history-heading">
@@ -461,7 +412,7 @@ export function EntryHistory({
         setStatusFilter={setStatusFilter}
         onRefresh={view.refresh}
         hydrated={hydrated}
-        onAddTime={() => setCorrectionEntry(null)}
+        onAddTime={addsTimeHere ? () => setCorrectionEntry(null) : undefined}
         isSettlingNewEntry={settling.isBusy(NEW_ENTRY_ID)}
       />
 
@@ -474,7 +425,10 @@ export function EntryHistory({
         hydrated={hydrated}
         setCorrectionEntry={setCorrectionEntry}
         closedPeriods={closedPeriods}
+        currentUserId={currentUserId}
+        withdraw={withdraw}
       />
+      <ErrorText>{withdrawError}</ErrorText>
       {correctionEntry !== undefined ? (
         <TimeCorrectionDialog
           key={correctionEntry?.id ?? 'add'}

@@ -5,6 +5,7 @@ import {
   getOrganizationTimeEntrySnapshot,
   getTimeCorrectionState,
   seedApprovedManualInterval,
+  seedPendingManualInterval,
 } from '../../golden/support/db/time-tracking';
 import { dismissDialog, pressKey } from '../../golden/support/steps/interaction';
 import {
@@ -19,18 +20,20 @@ import {
   calendarTimeCorrectionDialog,
   createOwnManualTimeEntry,
   fillManualEntryInterval,
-  manualEntryButton,
+  fillOwnPastTime,
+  manualEntryDialog,
   manualEntryHeaderButton,
   openTimeApprovals,
-  pendingSubmission,
   refreshTimeHistoryButton,
   saveAutomaticBreakRule,
   selectManualEntryJob,
   selectTimeHistoryStatus,
   setTimeHistoryDay,
   submitCalendarTimeCorrection,
+  TIME_CORRECTION_COPY,
   TIME_ENTRY_COPY,
   TIME_ENTRY_STATUS_TEXT,
+  timeCorrectionCard,
   TIME_SETTINGS_COPY,
   timeHistoryFilter,
   timeHistoryPanel,
@@ -48,6 +51,7 @@ import {
   visibleCalendarLayerToggle,
 } from '../../golden/support/plantafel';
 import { createJob } from '../../golden/support/steps/work';
+import { getJobIdByNumber } from '../../golden/support/db/work';
 import { berlinDateAtOffset } from '../../golden/support/date-ownership';
 import { clockOutTimeGroup, moveCalendarBlockToMember, visibleCalendarTimeBlock } from '../support/a1-steps';
 import { nextFrames } from '../support/layout-measure';
@@ -57,7 +61,7 @@ function dateDigits(date: string): string {
 }
 
 // Time windows inside this file's world: A1-29, A1-30 and A1-32 book Emil's time
-// on the previous business day (00:00-00:05, 10:00-13:00, 14:00-22:00), A1-31
+// on the previous business day (00:00-00:09, 10:00-13:00, 14:00-22:00), A1-31
 // books Emil's time on the business date between 00:01 and 00:08, so no test's
 // counts or overlaps see another test's rows.
 test.describe('A1 Zeiterfassung @AUDIT-W1-A1', () => {
@@ -81,9 +85,10 @@ test.describe('A1 Zeiterfassung @AUDIT-W1-A1', () => {
       assignEmployeeName: world.users.employee.firstName,
     });
     await employeePage.goto('/zeiterfassung');
-    // The page's primary action sits in the page header beside the title.
+    // The page's primary action sits in the page header beside the title. An
+    // earlier day asks for the reason, and the time goes in as a correction.
     await manualEntryHeaderButton(employeePage).click();
-    const invalidOrderDialog = employeePage.getByRole('dialog');
+    const invalidOrderDialog = manualEntryDialog(employeePage);
     await fillManualEntryInterval(invalidOrderDialog, {
       dateDigits: digits,
       clockInDigits: '0900',
@@ -93,39 +98,52 @@ test.describe('A1 Zeiterfassung @AUDIT-W1-A1', () => {
     await expect(invalidOrderDialog.getByText(TIME_ENTRY_COPY.clockOutBeforeClockIn)).toBeVisible();
     await invalidOrderDialog.getByRole('button', { name: SHARED_COPY.action.close }).click();
 
-    await manualEntryButton(employeePage).click();
-    const validDialog = employeePage.getByRole('dialog');
+    const reason = `A1 vergessene Zeit ${world.runId}`;
+    await manualEntryHeaderButton(employeePage).click();
+    const validDialog = manualEntryDialog(employeePage);
     await selectManualEntryJob(employeePage, validDialog, manualTimeJobNumber);
-    await fillManualEntryInterval(validDialog, {
-      dateDigits: digits,
-      clockInDigits: '0000',
-      clockOutDigits: '0005',
-    });
+    await fillOwnPastTime(validDialog, { date: previousBusinessDate, from: '00:00', to: '00:05', reason });
     await validDialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
     // Close-then-banner (M5): the dialog closes and the global banner confirms.
-    await expect(visibleText(employeePage, TIME_ENTRY_COPY.submittedForApproval)).toBeVisible();
+    await expect(visibleText(employeePage, TIME_CORRECTION_COPY.submittedForReview)).toBeVisible();
     await expect(validDialog).toHaveCount(0, { timeout: 10_000 });
 
-    await manualEntryButton(employeePage).click();
-    const overlapDialog = employeePage.getByRole('dialog');
-    await fillManualEntryInterval(overlapDialog, {
-      dateDigits: digits,
-      clockInDigits: '0002',
-      clockOutDigits: '0004',
+    // Time over recorded time of that day is refused with the overlap.
+    await seedApprovedManualInterval({
+      organizationId: world.orgId,
+      userId: world.users.employee.id,
+      date: previousBusinessDate,
+      from: '00:06',
+      to: '00:09',
+    });
+    await manualEntryHeaderButton(employeePage).click();
+    const overlapDialog = manualEntryDialog(employeePage);
+    await fillOwnPastTime(overlapDialog, {
+      date: previousBusinessDate,
+      from: '00:07',
+      to: '00:08',
+      reason: `${reason} Überlappung`,
     });
     await overlapDialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
     await expect(overlapDialog.getByText(TIME_ENTRY_COPY.overlap)).toBeVisible();
 
     // The accepted submission reaches the manager's approvals with its job.
+    const state = await getTimeCorrectionState(world.orgId);
+    const revision = expectDefined(
+      state.revisions.find((item) => item.reason === reason),
+      'the submitted revision',
+    );
+    expect(JSON.stringify(revision.proposed_snapshot)).toContain(
+      await getJobIdByNumber(world.orgId, manualTimeJobNumber),
+    );
     await openTimeApprovals(adminPage);
-    const submission = pendingSubmission(adminPage, manualTimeJobTitle);
-    await expect(submission).toContainText(/00:00.*00:05/);
+    const submission = timeCorrectionCard(adminPage, revision.request_id);
+    await expect(submission).toContainText(/00:00[\s\S]*00:05/);
     await expect(submission).toContainText(world.users.employee.firstName);
   });
 
   test('A1-30: Manager korrigiert, hängt um und löscht bestehende Arbeitsblöcke', async ({
     adminPage,
-    employeePage,
     world,
   }) => {
     const previousBusinessDate = berlinDateAtOffset(-1);
@@ -135,10 +153,14 @@ test.describe('A1 Zeiterfassung @AUDIT-W1-A1', () => {
       userIds: [world.users.employee.id, world.users.buero.id],
       date: previousBusinessDate,
     });
-    await createOwnManualTimeEntry(employeePage, {
-      dateDigits: dateDigits(previousBusinessDate),
-      clockInDigits: '1000',
-      clockOutDigits: '1100',
+    // Emil's pending submission of the earlier day; an employee enters such
+    // time as a correction (A1-29), so the submission is seeded.
+    await seedPendingManualInterval({
+      organizationId: world.orgId,
+      userId: world.users.employee.id,
+      date: previousBusinessDate,
+      from: '10:00',
+      to: '11:00',
     });
     await openTimeApprovals(adminPage);
     await approvePendingTimeEntry(adminPage, world.users.employee.id, /10:00.*11:00/);

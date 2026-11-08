@@ -87,7 +87,10 @@ const STANDBY_CONTEXT_LABELS = {
 /** Copy of /zeiterfassung: the manual entry dialog, the history and the approvals. */
 export const TIME_ENTRY_COPY = {
   pageTitle: 'Zeiterfassung',
+  /** The office's name of the manual entry action and dialog; an employee's is „Zeit nachtragen“. */
   manualEntry: 'Manuelle Eintragung',
+  /** The manual entry action and dialog for every role. */
+  manualEntryAnyRole: /^(Manuelle Eintragung|Zeit nachtragen)$/,
   date: SHARED_COPY.field.date,
   noJob: 'Kein Auftrag',
   clockOutBeforeClockIn: 'Die Einstempelzeit muss vor der Ausstempelzeit liegen.',
@@ -133,7 +136,7 @@ export const TIME_SETTINGS_COPY = {
 export const TIME_CORRECTION_COPY = {
   dialogTitle: 'Zeitkorrektur',
   addTime: 'Zeit nachtragen',
-  kind: 'Art der Zeitkorrektur',
+  correct: 'Korrigieren',
   person: 'Person für Zeitkorrektur',
   submittedForReview: 'Die Korrektur wurde zur Prüfung eingereicht.',
   applied: 'Die Zeit wurde korrigiert.',
@@ -462,21 +465,19 @@ export function chooseActivityDialog(page: Page): Locator {
 // ---------------------------------------------------------------------------
 // Manual entries
 
-/** The „Manuelle Eintragung“ action of the page header beside the title „Zeiterfassung“. */
+/**
+ * The manual entry action of the page header beside the title „Zeiterfassung“:
+ * „Manuelle Eintragung“ for the office, „Zeit nachtragen“ for an employee.
+ */
 export function manualEntryHeaderButton(page: Page): Locator {
   return pageHeader(page)
     .filter({ has: page.getByRole('heading', { level: 1, name: TIME_ENTRY_COPY.pageTitle }) })
-    .getByRole('button', { name: TIME_ENTRY_COPY.manualEntry });
+    .getByRole('button', { name: TIME_ENTRY_COPY.manualEntryAnyRole });
 }
 
-/** The manual entry action wherever /zeiterfassung renders it. */
-export function manualEntryButton(page: Page): Locator {
-  return page.getByRole('button', { name: TIME_ENTRY_COPY.manualEntry });
-}
-
-/** The open manual entry dialog, named by its title. */
+/** The open manual entry dialog, named by its title for the role. */
 export function manualEntryDialog(page: Page): Locator {
-  return page.getByRole('dialog', { name: TIME_ENTRY_COPY.manualEntry, exact: true });
+  return page.getByRole('dialog', { name: TIME_ENTRY_COPY.manualEntryAnyRole });
 }
 
 /** Types the date, the clock-in and the clock-out time of an open manual entry dialog. */
@@ -519,8 +520,8 @@ export async function createOwnManualTimeEntry(
   },
 ): Promise<void> {
   await page.goto('/zeiterfassung');
-  await manualEntryButton(page).click();
-  const dialog = page.getByRole('dialog');
+  await manualEntryHeaderButton(page).click();
+  const dialog = manualEntryDialog(page);
   if (options.memberName) {
     await selectFromSearchable(page, manualEntryMemberPicker(dialog), options.memberName);
   }
@@ -686,27 +687,61 @@ export function timeCorrectionDialog(page: Page): Locator {
 }
 
 /**
- * Opens „Zeit nachtragen“ on the history and measures until the correction kind
- * is usable; `observation` names the recorded readiness observation.
+ * The reason field of the correction dialog. It renders once the form options
+ * have loaded, so it shows that the dialog is usable.
  */
-/** The correction kind field: the control that shows the dialog is usable. */
-export function timeCorrectionKindField(dialog: Locator): Locator {
-  return dialog.getByRole('combobox', { name: TIME_CORRECTION_COPY.kind, exact: true });
+export function timeCorrectionReasonField(dialog: Locator): Locator {
+  return dialog.getByLabel(SHARED_COPY.field.reason);
 }
 
-/** The history's „add missed time“ button that opens the correction dialog. */
+/** The office's „Zeit nachtragen“ on the history, which opens an empty correction. */
 export function addMissedTimeButton(page: Page): Locator {
-  return page.getByRole('button', { name: TIME_CORRECTION_COPY.addTime });
+  return timeHistoryPanel(page).getByRole('button', { name: TIME_CORRECTION_COPY.addTime });
 }
 
+/**
+ * Opens the office's „Zeit nachtragen“ on the history and measures until the
+ * correction form is usable; `observation` names the recorded readiness observation.
+ */
 export async function openMissedTimeDialog(page: Page, observation: string): Promise<Locator> {
   const dialog = timeCorrectionDialog(page);
-  await expectReadyWithin(timeCorrectionKindField(dialog), {
+  await expectReadyWithin(timeCorrectionReasonField(dialog), {
     label: observation,
     targetMs: TIME_CORRECTION_READY_MS,
     trigger: () => addMissedTimeButton(page).click({ timeout: 10_000 }),
   });
   return dialog;
+}
+
+/**
+ * Opens an employee's „Zeit nachtragen“ in the page header and measures until
+ * its form is usable; `observation` names the recorded readiness observation.
+ */
+export async function openOwnTimeDialog(page: Page, observation: string): Promise<Locator> {
+  const dialog = manualEntryDialog(page);
+  await expectReadyWithin(dialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }), {
+    label: observation,
+    targetMs: TIME_CORRECTION_READY_MS,
+    trigger: () => manualEntryHeaderButton(page).click({ timeout: 10_000 }),
+  });
+  return dialog;
+}
+
+/**
+ * Fills an employee's own time of an earlier day (Berlin `YYYY-MM-DD`,
+ * `HH:MM`): the day asks for the reason, and the time goes in as a correction.
+ */
+export async function fillOwnPastTime(
+  dialog: Locator,
+  input: { date: string; from: string; to: string; reason: string },
+): Promise<void> {
+  const bounded = { timeout: 5_000 };
+  await fillManualEntryInterval(dialog, {
+    dateDigits: input.date.split('-').reverse().join(''),
+    clockInDigits: input.from.replace(':', ''),
+    clockOutDigits: input.to.replace(':', ''),
+  });
+  await dialog.getByLabel(SHARED_COPY.field.reason).fill(input.reason, bounded);
 }
 
 /** Fills an open missed-time correction; a person is chosen only for someone else's time. */

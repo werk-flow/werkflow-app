@@ -43,7 +43,7 @@ export const DIALOG_INVENTORY = {
   'components/job-picker-modal.tsx#JobPickerModal|{title}': {
     audits: [{ route: '/dashboard', role: 'employee', opener: 'field.job-picker' }],
   },
-  'components/manual-entry-dialog.tsx#ManualEntryDialog|Manuelle Eintragung': {
+  'components/manual-entry-dialog.tsx#ManualEntryDialog|{title}': {
     audits: [
       { route: '/zeiterfassung', role: 'admin', opener: 'time.manual-entry' },
       { route: '/zeiterfassung', role: 'employee', opener: 'field.manual-entry' },

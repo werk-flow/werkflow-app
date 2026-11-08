@@ -15,8 +15,10 @@ import type { CalendarEntryDraft } from '@/components/kalender/calendar-entry-dr
 import { useManualEntryDraftReport, type ManualEntryMode } from '@/components/use-manual-entry-form-draft';
 import {
   ManualEntryAssignmentFields,
+  ManualEntryReasonField,
   ManualEntryTimeFields,
 } from '@/components/manual-entry-form-content-fields';
+import { isBeforeToday } from '@/components/manual-entry-past-day';
 import { useManualEntryMembers } from '@/components/use-manual-entry-form-members';
 import { useManualEntrySubmit } from '@/components/use-manual-entry-form-submit';
 import { useClosedTimePeriods } from '@/components/zeiterfassung/use-closed-time-periods';
@@ -53,10 +55,12 @@ function useManualEntryFormState({
   const { activeOrgId, activeOrg } = useOrganization();
   const { profile } = useUserProfile();
 
-  const [entryMode, setEntryMode] = useState<ManualEntryMode>('both');
+  const [chosenEntryMode, setEntryMode] = useState<ManualEntryMode>('both');
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(preselectedDate ?? new Date());
-  const [clockInTime, setClockInTime] = useState(preselectedClockInTime || '09:00');
-  const [clockOutTime, setClockOutTime] = useState(preselectedClockOutTime || '17:00');
+  // Times start empty: the form sends only what the person entered.
+  const [clockInTime, setClockInTime] = useState(preselectedClockInTime ?? '');
+  const [clockOutTime, setClockOutTime] = useState(preselectedClockOutTime ?? '');
+  const [reason, setReason] = useState('');
   const isAdmin = activeOrg?.role === 'admin';
   const isAdminOrManager = activeOrg?.role === 'admin' || activeOrg?.role === 'buero';
   const currentUserId = profile?.id || null;
@@ -64,6 +68,11 @@ function useManualEntryFormState({
     preselectedUserId || (isAdminOrManager ? '' : currentUserId || ''),
   );
   const [selectedJobId, setSelectedJobId] = useState<string>('');
+  // An employee's time of an earlier day needs a reason for the approver and
+  // goes in as start and end (manual-entry-past-day.ts); the office keeps
+  // entering earlier days directly.
+  const needsReason = activeOrg?.role === 'employee' && isBeforeToday(selectedDate);
+  const entryMode: ManualEntryMode = needsReason ? 'both' : chosenEntryMode;
   const canAssignJob = entryMode === 'clock_in' || entryMode === 'both';
 
   function changeEntryMode(mode: ManualEntryMode) {
@@ -91,6 +100,9 @@ function useManualEntryFormState({
     selectedJobId,
     setSelectedJobId,
     canAssignJob,
+    reason,
+    setReason,
+    needsReason,
   };
 }
 
@@ -127,6 +139,8 @@ function useManualEntryForm({
     selectedUserId: form.selectedUserId,
     canAssignJob: form.canAssignJob,
     selectedJobId: form.selectedJobId,
+    needsReason: form.needsReason,
+    reason: form.reason,
     closedPeriods,
     onSuccess,
   });
@@ -196,7 +210,7 @@ export function ManualEntryFormContent({
       <DialogBody className="space-y-4">
         {form.membersFailure && <SectionError failure={form.membersFailure} />}
         <ManualEntryAssignmentFields
-          lockEntryMode={lockEntryMode}
+          lockEntryMode={lockEntryMode || form.needsReason}
           entryMode={form.entryMode}
           setEntryMode={form.changeEntryMode}
           isAdminOrManager={form.isAdminOrManager}
@@ -214,7 +228,7 @@ export function ManualEntryFormContent({
 
         <ManualEntryTimeFields
           entryMode={form.entryMode}
-          dateError={form.fieldErrors.date}
+          fieldErrors={form.fieldErrors}
           selectedDate={form.selectedDate}
           setSelectedDate={form.setSelectedDate}
           clockInTime={form.clockInTime}
@@ -222,6 +236,10 @@ export function ManualEntryFormContent({
           clockOutTime={form.clockOutTime}
           setClockOutTime={form.setClockOutTime}
         />
+
+        {form.needsReason ? (
+          <ManualEntryReasonField reason={form.reason} setReason={form.setReason} error={form.fieldErrors.reason} />
+        ) : null}
 
         <ErrorText>{form.error}</ErrorText>
 

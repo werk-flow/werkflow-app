@@ -2,9 +2,16 @@ import { addLocalDays, formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import { correctionDayOwner } from './timeline-validation';
 import type { TimeCorrectionFact, TimeCorrectionRequest, TimeCorrectionSnapshot } from './types';
 
-/** The pending corrections of one person in sum: how many, their minutes before and after, and their days. */
+/**
+ * The time of one person that waits for a decision, in sum: the pending
+ * corrections and the pending manual submissions, their minutes before and
+ * after, and their days.
+ */
 export type ProvisionalTimeSummary = {
+  /** Pending corrections. */
   count: number;
+  /** Pending manual submissions („Nachträge“). */
+  submissionCount: number;
   beforeMinutes: number;
   proposedMinutes: number;
   /** The Berlin days (`YYYY-MM-DD`) the pending corrections change, in order. */
@@ -54,28 +61,47 @@ function ownerDays(facts: readonly TimeCorrectionFact[]): string[] {
   return days;
 }
 
-/** The sum of one person's pending corrections, each counted by its current revision and only by that person's facts. */
+/** One clock fact of a pending manual submission. */
+export type PendingSubmissionFact = Pick<TimeCorrectionFact, 'entryType' | 'timestamp'>;
+
+/** A pending manual submission as a correction that adds its facts to nothing. */
+function submissionAsAddition(facts: readonly PendingSubmissionFact[]): TimeCorrectionFact[] {
+  return [...facts]
+    .sort((left, right) => left.timestamp.localeCompare(right.timestamp))
+    .map((fact) => ({ ...fact, factId: fact.timestamp, employeeRecordId: '', userId: '', jobId: null, activityKind: null, isManual: true }));
+}
+
+/**
+ * The sum of one person's pending time: each correction counted by its
+ * current revision and only by that person's facts, and each pending manual
+ * submission as time it would add.
+ */
 export function summarizePendingCorrections(
   pending: readonly Pick<TimeCorrectionRequest, 'revision'>[],
   subjectUserId: string,
+  pendingSubmissions: readonly (readonly PendingSubmissionFact[])[] = [],
 ): ProvisionalTimeSummary {
-  const days = new Set(
-    pending.flatMap(({ revision }) => [
+  const submissions = pendingSubmissions.map(submissionAsAddition);
+  const days = new Set([
+    ...pending.flatMap(({ revision }) => [
       ...ownerDays(subjectFacts(revision.beforeSnapshot, subjectUserId)),
       ...ownerDays(subjectFacts(revision.proposedSnapshot, subjectUserId)),
     ]),
-  );
+    ...submissions.flatMap(ownerDays),
+  ]);
   return {
     count: pending.length,
+    submissionCount: submissions.length,
     beforeMinutes: pending.reduce(
       (total, request) => total + ownerMinutes(subjectFacts(request.revision.beforeSnapshot, subjectUserId)),
       0,
     ),
-    proposedMinutes: pending.reduce(
-      (total, request) =>
-        total + ownerMinutes(subjectFacts(request.revision.proposedSnapshot, subjectUserId)),
-      0,
-    ),
+    proposedMinutes:
+      pending.reduce(
+        (total, request) =>
+          total + ownerMinutes(subjectFacts(request.revision.proposedSnapshot, subjectUserId)),
+        0,
+      ) + submissions.reduce((total, facts) => total + ownerMinutes(facts), 0),
     days: [...days].sort(),
   };
 }
