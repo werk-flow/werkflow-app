@@ -17,7 +17,8 @@ if test "${BREAK_CHECK:-}" = "$check"; then
   ceiling=-1
 fi
 
-since="$(date --utc --date '7 days ago' +%Y-%m-%dT%H:%M:%SZ)"
+# jq, not GNU date --date, so the unit test runs on macOS too.
+since="$(jq --null-input --raw-output 'now - 7 * 86400 | strftime("%Y-%m-%dT%H:%M:%SZ")')"
 workflow_runs="repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?created=>=${since}&per_page=100"
 
 # Writes the queue in seconds of each job of one run that got a runner, one per line, to <folder>/<run>.

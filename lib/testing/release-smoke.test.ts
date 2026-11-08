@@ -132,6 +132,24 @@ test('the query counts the served build per status', () => {
   expect(query.metrics.value).toEqual({ metric: 'vercel.request.count', aggregation: 'count' });
 });
 
+// The window takes this machine's clock with portable tools: GNU-only `date -d` left it empty on
+// macOS while every other test still passed.
+test('the query counts the last 15 minutes to the minute', () => {
+  const before = Math.floor(Date.now() / 60_000) * 60_000;
+  expect(smoke({ summary: [row('200', 1)] }).status).toBe(0);
+  const after = Date.now();
+  const { timeRange } = z
+    .object({ timeRange: z.object({ start: z.string(), end: z.string() }) })
+    .parse(JSON.parse(readFileSync(join(stub, 'query.json'), 'utf8')));
+  const minute = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00Z$/;
+  expect(timeRange.start).toMatch(minute);
+  expect(timeRange.end).toMatch(minute);
+  const end = Date.parse(timeRange.end);
+  expect(end).toBeGreaterThanOrEqual(before);
+  expect(end).toBeLessThanOrEqual(after);
+  expect(end - Date.parse(timeRange.start)).toBe(15 * 60_000);
+});
+
 test('the wait and the counted window are named as they run', () => {
   expect(smoke({ summary: [row('200', 1)] }).output).toContain(
     `Waiting 5 minutes, then counting the server errors of ${SERVED} in the last 15 minutes.`,
