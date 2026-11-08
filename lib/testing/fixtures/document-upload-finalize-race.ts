@@ -131,6 +131,7 @@ await finalizeTwice(
     finalizeDocumentVersionUpload({
       documentId: versionedDocumentId,
       versionNumber: versionTicket.ticket.versionNumber,
+      uploadId: versionTicket.ticket.uploadId,
       fileName: 'vertrag.pdf',
     }),
   'version_conflict',

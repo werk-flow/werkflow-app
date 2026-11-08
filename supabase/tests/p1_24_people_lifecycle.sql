@@ -1,35 +1,5 @@
 begin;
 
-do $$
-declare
-  table_name text;
-  business_row_count bigint;
-begin
-  foreach table_name in array array[
-    'personnel_access_lifecycles',
-    'personnel_access_transitions',
-    'personnel_employment_lifecycles',
-    'personnel_employment_transitions',
-    'personnel_documents',
-    'personnel_document_releases',
-    'personnel_onboarding_templates',
-    'personnel_onboarding_template_versions',
-    'personnel_onboarding_template_items',
-    'personnel_onboarding_plans',
-    'personnel_onboarding_requirements',
-    'personnel_requirement_references',
-    'personnel_acknowledgements',
-    'personnel_lifecycle_operations'
-  ] loop
-    execute format('select count(*) from public.%I', table_name)
-      into business_row_count;
-    if business_row_count <> 0 then
-      raise exception 'deploy-day table % contains % rows', table_name, business_row_count;
-    end if;
-  end loop;
-end;
-$$;
-
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
   raw_app_meta_data, raw_user_meta_data, created_at, updated_at
@@ -57,6 +27,44 @@ insert into public.organization_members (organization_id, user_id, role) values
 ('24000000-0000-0000-0000-000000000010', '24000000-0000-0000-0000-000000000002', 'buero'),
 ('24000000-0000-0000-0000-000000000010', '24000000-0000-0000-0000-000000000003', 'employee'),
 ('24000000-0000-0000-0000-000000000011', '24000000-0000-0000-0000-000000000003', 'employee');
+
+-- Organizations, members and their employee records that exist before anyone
+-- acts get no lifecycle, onboarding, document or operation row: they stay
+-- "not controlled". Scoped to this test's organizations because every worktree
+-- shares the stack, and a retained or running browser world holds its own rows.
+do $$
+declare
+  table_name text;
+  business_row_count bigint;
+begin
+  foreach table_name in array array[
+    'personnel_access_lifecycles',
+    'personnel_access_transitions',
+    'personnel_employment_lifecycles',
+    'personnel_employment_transitions',
+    'personnel_documents',
+    'personnel_document_releases',
+    'personnel_onboarding_templates',
+    'personnel_onboarding_template_versions',
+    'personnel_onboarding_template_items',
+    'personnel_onboarding_plans',
+    'personnel_onboarding_requirements',
+    'personnel_requirement_references',
+    'personnel_acknowledgements',
+    'personnel_lifecycle_operations'
+  ] loop
+    execute format(
+      'select count(*) from public.%I where organization_id = any($1)', table_name
+    ) into business_row_count using array[
+      '24000000-0000-0000-0000-000000000010',
+      '24000000-0000-0000-0000-000000000011'
+    ]::uuid[];
+    if business_row_count <> 0 then
+      raise exception 'deploy-day table % contains % rows', table_name, business_row_count;
+    end if;
+  end loop;
+end;
+$$;
 
 set local role service_role;
 

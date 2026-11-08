@@ -178,6 +178,7 @@ export type CreateDocumentVersionUploadTicketInput = z.input<
 export const finalizeDocumentVersionUploadInputSchema = z.object({
   documentId: uuidSchema,
   versionNumber: z.number().int(),
+  uploadId: uuidSchema,
   fileName: fileNameSchema,
 });
 export type FinalizeDocumentVersionUploadInput = z.input<typeof finalizeDocumentVersionUploadInputSchema>;
