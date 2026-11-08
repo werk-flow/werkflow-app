@@ -625,21 +625,27 @@ export function refuseEarlyDeletion(document: DocumentRow): ActionResult {
   return refusal ? { success: false, error: refusal } : { success: true };
 }
 
+/** A new version takes neither a filed document nor a category without versions. */
+export function refuseNewVersion(document: DocumentRow): ActionResult {
+  const filed = refuseFiledDocument(document);
+  if (!filed.success) return filed;
+
+  const category = toDocumentCategory(document.category);
+  if (!['contract', 'invoice', 'offer', 'report'].includes(category)) {
+    return { success: false, error: 'versioning_not_supported' };
+  }
+
+  return { success: true };
+}
+
 export async function getVersionableDocument(
   context: AuthorizedDocumentContext,
   documentId: string,
 ): Promise<ActionResult<{ document: DocumentRow }>> {
   const existing = await getManageableDocument(context, documentId);
   if (!existing.success) return existing;
-  const filed = refuseFiledDocument(existing.document);
-  if (!filed.success) return filed;
-
-  const category = toDocumentCategory(existing.document.category);
-  if (!['contract', 'invoice', 'offer', 'report'].includes(category)) {
-    return { success: false, error: 'versioning_not_supported' };
-  }
-
-  return existing;
+  const versionable = refuseNewVersion(existing.document);
+  return versionable.success ? existing : versionable;
 }
 
 export type NormalizedUploadTarget = {

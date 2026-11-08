@@ -3,7 +3,8 @@
 // stand-in commits like `finalize_document_version_upload`: it refuses a stale
 // version number, archives the current file and makes the upload current.
 // A retry whose earlier answer got lost finds its own saved version, current
-// or archived, and reports it saved. A version another upload saved under the
+// or archived, and reports it saved, also after the document was filed or
+// recategorized. A version another upload saved under the
 // same number and file name, by another person or by the same person in
 // another tab, never counts as the retry's.
 import assert from 'node:assert/strict';
@@ -159,6 +160,27 @@ assert.deepEqual(
   await finalize(firstTab),
   { success: false, error: 'version_conflict' },
   'a retry counted another upload of the same person as its own',
+);
+
+// The second tab's retry still finds its saved version after a manager filed the
+// document, and after the category changed to one without versions.
+contract.filed_at = '2026-10-01T09:00:00.000Z';
+contract.filed_by = COLLEAGUE_ID;
+assert.deepEqual(
+  await finalize(secondTab),
+  { success: false, error: 'already_finalized' },
+  'a retry after its own save failed once the document was filed',
+);
+assert.deepEqual(
+  await finalize(firstTab),
+  { success: false, error: 'document_filed' },
+  "a retry of a filed document counted another upload's version as its own",
+);
+Object.assign(contract, { filed_at: null, filed_by: null, category: 'photo' });
+assert.deepEqual(
+  await finalize(secondTab),
+  { success: false, error: 'already_finalized' },
+  'a retry after its own save failed once the category took no versions',
 );
 
 assert.equal(contract.current_version_number, 5);

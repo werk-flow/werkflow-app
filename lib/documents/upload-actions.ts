@@ -9,8 +9,10 @@ import { rpcArgs } from '@/lib/supabase/rpc-args';
 import {
   authorizeDocumentUploadTarget,
   getAuthorizedDocumentContext,
+  getManageableDocument,
   getVersionableDocument,
   normalizeUploadTarget,
+  refuseNewVersion,
   type AuthorizedDocumentContext,
   type NormalizedUploadTarget,
 } from './access';
@@ -330,24 +332,32 @@ export async function finalizeDocumentVersionUpload(
     fileName: originalFileName,
   });
 
-  const existing = await getVersionableDocument(auth.context, input.documentId);
-  if (!existing.success) {
-    // A manager filed the document after this ticket, so no finalize of the
-    // upload can succeed. Only its staging object goes, never a registered key.
-    if (existing.error === 'document_filed') await discardStagedUpload(auth.context.orgId, ticketPath);
-    return existing;
-  }
+  const existing = await getManageableDocument(auth.context, input.documentId);
+  if (!existing.success) return existing;
 
   const nextVersionNumber = existing.document.current_version_number + 1;
-  if (input.versionNumber !== nextVersionNumber) {
+  const ticketIsStale = input.versionNumber !== nextVersionNumber;
+  if (ticketIsStale) {
     // A version landed between ticket and finalize; the upload must not become
     // the current file. Its staging object goes, which no saved version shares.
     await discardStagedUpload(auth.context.orgId, ticketPath);
-    // That version may be this upload's own, saved by a try whose answer got lost.
+    // That version may be this upload's own, saved by a try whose answer got
+    // lost, also when the document was filed or recategorized since.
     const ownVersion = await isOwnSavedVersion(auth.context, existing.document, input);
     if (ownVersion === undefined) return { success: false, error: 'load_failed' };
-    return { success: false, error: ownVersion ? 'already_finalized' : 'version_conflict' };
+    if (ownVersion) return { success: false, error: 'already_finalized' };
   }
+
+  const versionable = refuseNewVersion(existing.document);
+  if (!versionable.success) {
+    // A manager filed the document after this ticket, so no finalize of the
+    // upload can succeed. Only its staging object goes, never a registered key.
+    if (versionable.error === 'document_filed' && !ticketIsStale) {
+      await discardStagedUpload(auth.context.orgId, ticketPath);
+    }
+    return versionable;
+  }
+  if (ticketIsStale) return { success: false, error: 'version_conflict' };
 
   const head = await acceptUploadedObject({
     organizationId: auth.context.orgId,
