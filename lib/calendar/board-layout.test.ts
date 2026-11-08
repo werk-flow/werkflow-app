@@ -1,4 +1,5 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
+import * as berlin from '@/lib/date-time/berlin';
 import { boardColumns, minutesOfDay, mondayOf, packLanes } from './board-layout';
 
 describe('board columns', () => {
@@ -74,6 +75,32 @@ describe('lane packing', () => {
       workdays,
     );
     expect(lanes[0]).toMatchObject({ column: 4, span: 2 });
+  });
+
+  test('an absence longer than the horizon costs work bounded by the visible columns, not its length', () => {
+    const farColumns = boardColumns({
+      anchorIso: '2036-06-04',
+      horizonWeeks: 6,
+      hideWeekends: true,
+      todayIso: '2026-01-01',
+    });
+    const dayStepper = spyOn(berlin, 'addLocalDays');
+    try {
+      const { lanes } = packLanes(
+        [
+          // An open-ended absence reaches to the end of the read window.
+          { key: 'open-ended', startDate: '2026-01-05', endDateExclusive: '2036-07-20', sortMinutes: -2 },
+          { key: 'ended-before', startDate: '2016-01-04', endDateExclusive: '2036-06-02', sortMinutes: -2 },
+        ],
+        farColumns,
+      );
+      expect(dayStepper.mock.calls.length).toBeLessThanOrEqual(farColumns.length);
+      expect(lanes.map((lane) => [lane.item.key, lane.column, lane.span])).toEqual([
+        ['open-ended', 0, farColumns.length],
+      ]);
+    } finally {
+      dayStepper.mockRestore();
+    }
   });
 
   test('minutes of the day', () => {

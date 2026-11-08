@@ -66,3 +66,4 @@ Kein Feiertagskalender
 Die Auswahl gilt ab jetzt; frühere Zeiträume werden nicht rückwirkend geändert. WerkFlow zeigt die Wirkung des gewählten Kalenders, ersetzt aber keine rechtliche Prüfung.
 Änderungen gelten ab dem Zeitpunkt der Speicherung.
 Feiertagskalender speichern
+Nicht eingestempelt

@@ -96,4 +96,7 @@ assert.ok(
 assert.equal(clockProviderProps.initialState, undefined);
 assert.equal(activeJobsProviderProps.initialActiveJobIds, undefined);
 assert.equal(activeJobsProviderProps.initialOrganizationId, undefined);
-assert.equal(propsByName.get('AppShell')?.children, 'Authorized page content');
+// The page content sits in the clock dock's bottom reserve inside the shell.
+const reserve = propsByName.get('AppShell')?.children;
+assert.ok(isValidElement<{ children: ReactNode }>(reserve), 'the shell holds the clock dock reserve');
+assert.equal(reserve.props.children, 'Authorized page content');

@@ -66,3 +66,4 @@ Gefahrenzone
 Löscht die Organisation dauerhaft inklusive Mitgliedschaften und Einladungen.
 Diese Aktion sollte nur genutzt werden, wenn die Organisation wirklich nicht mehr benötigt wird.
 Organisation löschen
+Nicht eingestempelt

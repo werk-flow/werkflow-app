@@ -86,13 +86,13 @@ Trap: a reference rewritten because the comparison failed. A reference records w
 
 ## Density and layout
 
-- The shell's `<main>` is the one main landmark. `PageBody` owns padding, scrolling and the clock button's bottom clearance.
+- The shell's `<main>` is the one main landmark. `PageBody` owns padding and scrolling. The app layout ends the page column above the clock dock, so no page reserves space for it.
 - Headings: the page or area `h1` from `PageHeader`, the subpage `h2` from `SubpageHeader`, sections `h3`. In-page state tabs are `Tabs` pills, never in a header.
 - No page scrolls sideways at any width. Below the tablet breakpoint a table renders `ListRow` cards that keep every column's information.
 - Only a `ScrollRegion` scrolls sideways: calendar surfaces, tab strips, area navs, tables from the tablet breakpoint.
 - Columns follow the content width, not the screen, because the sidebar takes 256 px. A detail page uses `DetailColumns`. Column tracks are `minmax(0, …)`. A toolbar wraps.
 - Full height is `h-dvh` or `min-h-dvh`, never `h-screen` or a `vh` length.
-- The bottom right corner belongs to the clock button. Page actions sit in `PageHeader` or `SubpageHeader`, never in a fixed button.
+- The bottom edge belongs to the clock dock. Page actions sit in `PageHeader` or `SubpageHeader`, never in a fixed button or bar.
 - Managers (admin, buero) get dense, scannable tables, filters and inline actions. Field workers (employee) get simple screens with one big primary action. Inside `data-field-worker`, the registry grows buttons, tabs and row links to 44 × 44 px on phones.
 - Prefer sections with headings and dividers. Use a card only for a separate object.
 - Rejected patterns: multi-step wizards for operational forms, celebration states, mobile bottom navigation.
