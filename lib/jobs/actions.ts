@@ -36,6 +36,7 @@ import {
   toJob,
   toClient,
   toJobAssignment,
+  normalizeJobPlannedTime,
 } from './types';
 import type { AssignmentApproval } from '@/lib/qualifications/types';
 import {
@@ -225,7 +226,7 @@ export async function createJob(rawInput: CreateJobInput): Promise<CreateJobResu
       storedSchedule: null,
       schedule: {
         plannedDate: input.plannedDate || null,
-        plannedTime: input.plannedTime || null,
+        plannedTime: normalizeJobPlannedTime(input.plannedTime),
         estimatedDurationMinutes: input.estimatedDurationMinutes ?? null,
       },
       nextUserIds: input.selectedUserIds ?? [],

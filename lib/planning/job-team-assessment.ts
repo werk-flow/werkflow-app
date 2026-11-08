@@ -21,7 +21,12 @@ import {
   type PlanningWarningFailure,
 } from './conflict-acknowledgement';
 import { assessPlanningOccurrences } from './server';
-import { legacyVisitWindow, type JobSchedule, type VisitWindow } from './legacy-visit-window';
+import {
+  legacyVisitWindow,
+  sameLegacyVisitSchedule,
+  type JobSchedule,
+  type VisitWindow,
+} from './legacy-visit-window';
 import type { MaterializedOccurrence, PlanningAssignmentDraft } from './types';
 
 /** The assessment of one visit with its people, and the reason a capacity conflict needed. */
@@ -244,14 +249,6 @@ export async function assessJobTeamChange(input: {
   };
 }
 
-function sameSchedule(left: JobSchedule, right: JobSchedule): boolean {
-  return (
-    left.plannedDate === right.plannedDate &&
-    normalizeJobPlannedTime(left.plannedTime) === normalizeJobPlannedTime(right.plannedTime) &&
-    left.estimatedDurationMinutes === right.estimatedDurationMinutes
-  );
-}
-
 /**
  * What a job save records for the legacy visit it plans, as
  * app_private.record_job_visit_assessment compares and stores it: the visit's
@@ -306,7 +303,8 @@ export async function assessJobPlan(input: {
   ]);
   if (legacyVisit === null || change === null) return { success: false, error: 'load_failed' };
 
-  const scheduleChanged = !input.storedSchedule || !sameSchedule(input.storedSchedule, input.schedule);
+  const scheduleChanged =
+    !input.storedSchedule || !sameLegacyVisitSchedule(input.storedSchedule, input.schedule);
   // An unchanged schedule leaves the visit where and as it is.
   if (!scheduleChanged && legacyVisit?.status !== 'scheduled') return nothing;
   const visitWindow = scheduleChanged || !legacyVisit ? window : windowOf(legacyVisit);

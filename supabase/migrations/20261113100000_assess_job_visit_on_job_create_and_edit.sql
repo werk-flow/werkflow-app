@@ -211,8 +211,11 @@ declare
   v_before_version integer;
   v_before_crew uuid[];
 begin
-  -- The job row first, as update_job_with_assignments locks it, then its
-  -- legacy visit: the visit as it was before this save.
+  -- The job row, as update_job_with_assignments locks it, so two saves of
+  -- one job run in turn. The visit is read without a lock: the calendar
+  -- locks a visit before its job, so locking it here could deadlock. A
+  -- visit changed between this read and the write reads as changed by the
+  -- save and is refused as stale, never passed unassessed.
   perform 1
   from public.jobs job
   where job.organization_id = p_organization_id and job.id = p_job_id
@@ -232,8 +235,7 @@ begin
   into v_before_version, v_before_crew
   from public.planning_occurrences occurrence
   where occurrence.organization_id = p_organization_id
-    and occurrence.legacy_source_job_id = p_job_id
-  for update;
+    and occurrence.legacy_source_job_id = p_job_id;
 
   v_job := public.update_job_with_assignments(
     p_organization_id, p_job_id, p_actor_id, p_changes, p_replace_assignments,

@@ -318,7 +318,11 @@ function jobSchedules(
     storedSchedule,
     schedule: {
       plannedDate: input.plannedDate !== undefined ? input.plannedDate || null : storedSchedule.plannedDate,
-      plannedTime: input.plannedTime !== undefined ? input.plannedTime || null : storedSchedule.plannedTime,
+      // A sent time is written as normalizeJobPlannedTime leaves it; a stored one keeps its seconds.
+      plannedTime:
+        input.plannedTime !== undefined
+          ? normalizeJobPlannedTime(input.plannedTime)
+          : storedSchedule.plannedTime,
       estimatedDurationMinutes:
         input.estimatedDurationMinutes !== undefined
           ? (input.estimatedDurationMinutes ?? null)
