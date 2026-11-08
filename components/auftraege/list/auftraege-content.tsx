@@ -1,4 +1,5 @@
 'use client';
+import dynamic from 'next/dynamic';
 import { useListNavigation } from '@/hooks/use-list-navigation';
 import type { JobListPagination } from '@/lib/jobs/list-page';
 
@@ -12,7 +13,6 @@ import type { UnifiedListEntry } from '@/lib/jobs/unified-list';
 import type { AuftraegeColumnId } from '@/lib/jobs/auftraege-table-columns';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
 import { useLiveAuftraegeData } from '@/hooks/use-live-auftraege-data';
-import { AuftraegeCreateDialogs } from './auftraege-create-dialogs';
 import type { AuftraegeActiveStatusFilter } from './auftraege-list-filters';
 import {
   AuftraegeCollapsibleSection,
@@ -22,6 +22,12 @@ import {
 } from './auftraege-list-sections';
 import { useAuftraegeOptimisticList } from './use-auftraege-optimistic-list';
 import { useAuftraegeSectionQuery, type AuftraegeSectionQuery } from './use-auftraege-section-query';
+
+// Only Admin and Büro create work here. Loading the create forms on demand keeps
+// them out of the field worker's cold start (`lab.field.cold-start`).
+const AuftraegeCreateDialogs = dynamic(() =>
+  import('./auftraege-create-dialogs').then((mod) => mod.AuftraegeCreateDialogs),
+);
 
 interface AuftraegeContentProps {
   jobs: Job[];
