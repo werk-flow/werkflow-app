@@ -18,6 +18,8 @@ export type MachineOptions = {
   /** False only for a machine that becomes a saved snapshot: without snapshots an auto-stop erases it. */
   snapshots: boolean;
   log: (line: string) => void;
+  /** An interruption stops the wait for readiness; the machine is then deleted. */
+  signal?: AbortSignal;
 };
 
 export type Machine = {
@@ -47,6 +49,7 @@ export async function createMachine(client: BoatClient, options: MachineOptions)
   try {
     const deadline = Date.now() + 300_000;
     for (;;) {
+      options.signal?.throwIfAborted();
       const state = await client.state(id);
       if (READY_STATES.has(state)) return machine;
       if (FAILED_STATES.has(state) || Date.now() > deadline)

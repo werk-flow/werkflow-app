@@ -121,8 +121,32 @@ function planReason(repository: string, args: readonly string[]): string | undef
     : undefined;
 }
 
+/**
+ * The variables that point git at another repository (`git rev-parse --local-env-vars`): a git
+ * child runs without them, so it reads the repository at its working folder.
+ */
+const GIT_LOCATION = new Set([
+  'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+  'GIT_CONFIG',
+  'GIT_CONFIG_PARAMETERS',
+  'GIT_CONFIG_COUNT',
+  'GIT_OBJECT_DIRECTORY',
+  'GIT_DIR',
+  'GIT_WORK_TREE',
+  'GIT_IMPLICIT_WORK_TREE',
+  'GIT_GRAFT_FILE',
+  'GIT_INDEX_FILE',
+  'GIT_NO_REPLACE_OBJECTS',
+  'GIT_REPLACE_REF_BASE',
+  'GIT_PREFIX',
+  'GIT_SHALLOW_FILE',
+  'GIT_COMMON_DIR',
+]);
+
 function git(repository: string, args: readonly string[]): string {
-  return execFileSync('git', args, { cwd: repository, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  const env = { ...process.env };
+  for (const name of GIT_LOCATION) Reflect.deleteProperty(env, name);
+  return execFileSync('git', args, { cwd: repository, env, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 }
 
 /** Subfolder names of an evidence folder, or none when it does not exist. */
@@ -225,6 +249,12 @@ export function linkedDestination(repository: string, paths: readonly string[]):
   return undefined;
 }
 
+/** The fallback line for a Boat failure; an interruption by the user is rethrown, never a fallback. */
+export function fallbackLine(error: unknown, signal: AbortSignal): string {
+  if (signal.aborted) throw error;
+  return `Running locally: ${boatFailure(error)}`;
+}
+
 /** A Boat refusal in one line, with the renewal advice when Boat rejected the key itself. */
 export function boatFailure(error: unknown): string {
   if (error instanceof BoatError && (error.status === 401 || error.code.startsWith('api_key_')))
@@ -254,7 +284,27 @@ export async function verifyOnBoat(
     return undefined;
   }
   if (key.reminder) say(key.reminder);
+  // From here a Ctrl-C stops the run; it never falls back to a local one.
+  const interrupt = new AbortController();
+  const stop = () => interrupt.abort();
+  process.once('SIGINT', stop);
+  process.once('SIGTERM', stop);
+  try {
+    return await prepareAndRun(args, repository, key.key, interrupt.signal);
+  } finally {
+    process.off('SIGINT', stop);
+    process.off('SIGTERM', stop);
+  }
+}
+
+async function prepareAndRun(
+  args: readonly string[],
+  repository: string,
+  key: string,
+  signal: AbortSignal,
+): Promise<number | undefined> {
   const planned = planReason(repository, args);
+  signal.throwIfAborted();
   if (planned) {
     say(`Running locally: ${planned}`);
     return undefined;
@@ -264,21 +314,15 @@ export async function verifyOnBoat(
     mkdirSync(join(homedir(), '.cache'), { recursive: true });
     folder = mkdtempSync(join(homedir(), '.cache', 'werkflow-boat-'));
   } catch (error) {
-    say(`Running locally: ${boatFailure(error)}`);
+    say(fallbackLine(error, signal));
     return undefined;
   }
-  const interrupt = new AbortController();
-  const stop = () => interrupt.abort();
-  process.once('SIGINT', stop);
-  process.once('SIGTERM', stop);
   try {
     return await withWorkspaceTestLock(
       { operation: 'verification on Boat', repositoryRoot: repository },
-      () => runOnBoat({ args, repository, folder, key: key.key, signal: interrupt.signal }),
+      () => runOnBoat({ args, repository, folder, key, signal }),
     );
   } finally {
-    process.off('SIGINT', stop);
-    process.off('SIGTERM', stop);
     rmSync(folder, { recursive: true, force: true });
   }
 }
@@ -379,6 +423,7 @@ async function runOnBoat(input: {
   } catch (error) {
     packed = { refused: `packing the run failed: ${boatFailure(error)}` };
   }
+  signal.throwIfAborted();
   if ('refused' in packed) {
     say(`Running locally: ${packed.refused}`);
     return undefined;
@@ -393,9 +438,10 @@ async function runOnBoat(input: {
       ttlSeconds: MACHINE_TTL_SECONDS,
       snapshots: false,
       log: say,
+      signal,
     });
   } catch (error) {
-    say(`Running locally: ${boatFailure(error)}`);
+    say(fallbackLine(error, signal));
     return undefined;
   }
   say(
@@ -403,7 +449,9 @@ async function runOnBoat(input: {
   );
   let code: number | undefined;
   try {
+    signal.throwIfAborted();
     await uploadRun(machine, repository, folder, packed.bundle);
+    signal.throwIfAborted();
     const form = lstatSync(join(repository, '.git')).isFile() ? 'linked' : 'main';
     const command = ['bash', '~/remote-verify.sh', repository, packed.head, form, ...args].map(
       (word, index) => (index === 1 ? word : shellQuote(word)),
@@ -430,8 +478,7 @@ async function runOnBoat(input: {
     }
     return code;
   } catch (error) {
-    if (signal.aborted) throw error;
-    say(`Running locally: ${boatFailure(error)}`);
+    say(fallbackLine(error, signal));
     return undefined;
   } finally {
     const usage = await machineUsage(machine);

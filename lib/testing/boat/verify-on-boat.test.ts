@@ -16,10 +16,11 @@ import { join } from 'node:path';
 
 import { BoatError, boatClient } from './boat-api';
 import { readBoatKey } from './boat-key';
-import { runScript } from './boat-machine';
+import { createMachine, runScript } from './boat-machine';
 import { backendValueDigests } from '../evidence/proof-environment';
 import {
   boatFailure,
+  fallbackLine,
   copyResults,
   evidenceFiles,
   localReason,
@@ -294,6 +295,12 @@ test('results are copied from outside the checkout and never through a symbolic 
   }
 });
 
+// GNU tar unquotes a backslash in a name given on its command line unless told not to; bsdtar
+// (macOS) keeps it and knows no such option.
+const NAMES_AS_WRITTEN = execFileSync('tar', ['--version'], { encoding: 'utf8' }).includes('GNU tar')
+  ? ['--no-unquote']
+  : [];
+
 // Crafted archives, built with tar itself, go through the same unpack and copy as a Boat run.
 test('a crafted results archive is refused whole and writes nothing into the checkout', () => {
   const crafted = (name: string, build: (work: string) => string[], extra: string[] = []) => {
@@ -301,8 +308,7 @@ test('a crafted results archive is refused whole and writes nothing into the che
     mkdirSync(join(work, '.agent-logs', 'verification'), { recursive: true });
     const members = build(work);
     const archive = join(work, `${name}.tgz`);
-    // --no-unquote keeps a backslash in a name as written.
-    execFileSync('tar', ['-czf', archive, '--no-unquote', ...extra, ...members], { cwd: work });
+    execFileSync('tar', ['-czf', archive, ...NAMES_AS_WRITTEN, ...extra, ...members], { cwd: work });
     const checkout = mkdtempSync(join(tmpdir(), 'boat-checkout-'));
     const staging = mkdtempSync(join(tmpdir(), 'boat-staging-'));
     let refusal: string | undefined;
@@ -334,10 +340,8 @@ test('a crafted results archive is refused whole and writes nothing into the che
       return ['.agent-logs/first', '.agent-logs/hard'];
     }),
     crafted('outside', (work) => [file(work, 'package.json')]),
-    crafted('escape', (work) => [file(work, '.agent-logs/verification/report.json')], [
-      '--transform',
-      's,^,.agent-logs/../,',
-    ]),
+    // -P (GNU tar and bsdtar alike) keeps the `..` in the member name.
+    crafted('escape', (work) => [file(work, '.agent-logs/../package.json')], ['-P']),
     crafted('backslash', (work) => [file(work, '.agent-logs/a\\b/report.json')]),
     crafted('newline', (work) => [file(work, '.agent-logs/a\nb/report.json')]),
   ];
@@ -359,4 +363,33 @@ test('an existing destination link whose name holds a backslash or a newline is 
     expect(() => copyResults(staging, checkout), JSON.stringify(name)).toThrow();
     expect(existsSync(join(outside, 'report.json')), JSON.stringify(name)).toBe(false);
   }
+});
+
+test('a Ctrl-C while a machine starts deletes it and never falls back to a local run', async () => {
+  const interrupt = new AbortController();
+  const calls: string[] = [];
+  const client = boatClient('boat_secret', async (url, init) => {
+    calls.push(`${init?.method ?? 'GET'} ${new URL(url).pathname}`);
+    if (init?.method === 'POST') {
+      interrupt.abort();
+      return Response.json({ sandbox: { id: 'bx_test', state: 'provisioning' } });
+    }
+    if (init?.method === 'DELETE') return Response.json({ operation: { id: 'op', status: 'pending' } });
+    return Response.json({ code: 'not_found' }, { status: 404 });
+  });
+  const failure = await createMachine(client, {
+    from: 'werkflow-verify',
+    name: 'verify-test',
+    ttlSeconds: 60,
+    snapshots: false,
+    log: () => undefined,
+    signal: interrupt.signal,
+  }).catch((error: unknown) => error);
+  // The interruption itself stops the wait: no readiness poll, and the started machine is deleted.
+  expect(failure instanceof Error && failure.name).toBe('AbortError');
+  expect(calls.slice(0, 2)).toEqual(['POST /api/v1/sandboxes', 'DELETE /api/v1/sandboxes/bx_test']);
+  expect(() => fallbackLine(failure, interrupt.signal)).toThrow();
+  expect(fallbackLine(new BoatError(503, 'no_ready_machine', ''), new AbortController().signal)).toBe(
+    'Running locally: Boat answered 503 no_ready_machine.',
+  );
 });
