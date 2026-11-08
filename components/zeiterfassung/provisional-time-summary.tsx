@@ -33,7 +33,8 @@ export function ProvisionalTimeSummary({
   userId: string;
 }) {
   const view = useLiveView<ProvisionalTimeSummaryData>({
-    tables: ['time_correction_requests', 'time_entries'],
+    // The accepted day comes from recorded entries and live capture too.
+    tables: ['time_correction_requests', 'time_entries', 'time_sessions', 'time_segments'],
     read: async ({ signal }): Promise<LiveViewResult<ProvisionalTimeSummaryData>> => {
       const result = await readInBackground('provisional-time-summary', { organizationId, userId }, signal);
       return result.success ? { ok: true, data: result } : { ok: false };
