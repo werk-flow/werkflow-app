@@ -97,7 +97,8 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
                 args.importer.endsWith('page-header.tsx') ||
                 args.importer.endsWith('anfragen-content.tsx') ||
                 args.importer.endsWith('client-sites-card.tsx') ||
-                args.importer.endsWith('reset-password-form.tsx')
+                args.importer.endsWith('reset-password-form.tsx') ||
+                args.importer.endsWith('aufgaben-task-row.tsx')
               )
                 return { path: join(import.meta.dir, 'day-view-link-boundary.tsx') };
             });
