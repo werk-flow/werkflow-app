@@ -4,7 +4,7 @@ import type { ActionResult } from '@/lib/action-result';
 import type { Job } from '@/lib/jobs/types';
 import { logError } from '@/lib/logging';
 import { getOrgMembersForUser } from '@/lib/members/queries';
-import { createSignedDownloadUrl, discardStorageObjects } from '@/lib/storage/r2';
+import { createSignedDownloadUrl } from '@/lib/storage/r2';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { uuidSchema } from '@/lib/validation/uuid';
 import {
@@ -604,17 +604,17 @@ export async function permanentlyDeleteDocument(rawDocumentId: string): Promise<
   const early = refuseEarlyDeletion(existing.document);
   if (!early.success) return early;
 
-  // The row goes first, in one transaction with its version rows, links and
-  // audit event: a refused delete (a protected personnel document, a released
-  // handover or another `on delete restrict` reference) leaves the files in
-  // place, while storage that fails after the row is gone only leaves an
-  // orphaned object.
-  const { data: storagePaths, error } = await auth.context.admin.rpc('permanently_delete_document', {
+  // One transaction removes the row with its version rows, links and audit
+  // event, and queues every object for the scheduled purge: the bytes outlive
+  // the backup window, so a restored row still finds its file. A refusal (a
+  // protected personnel document, a released handover or another `on delete
+  // restrict` reference) queues nothing.
+  const { error } = await auth.context.admin.rpc('permanently_delete_document', {
     p_actor_id: auth.context.userId,
     p_organization_id: auth.context.orgId,
     p_document_id: existing.document.id,
   });
-  if (error || !storagePaths) {
+  if (error) {
     return documentWriteFailure(
       'Failed to permanently delete document metadata',
       error,
@@ -622,9 +622,6 @@ export async function permanentlyDeleteDocument(rawDocumentId: string): Promise<
       'delete_failed',
     );
   }
-
-  // The row is gone, so a storage failure leaves only an orphaned object, which discardStorageObjects logs.
-  await discardStorageObjects({ organizationId: auth.context.orgId, paths: storagePaths });
 
   revalidateDocuments();
   return { success: true };

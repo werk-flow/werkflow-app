@@ -37,6 +37,8 @@ const ERROR_MESSAGES: Readonly<Record<string, string>> = {
   name_mismatch: NAME_MISMATCH,
   has_time_records:
     'Die Organisation enthält inzwischen erfasste Arbeitszeiten oder abgeschlossene Perioden und kann deshalb nicht gelöscht werden.',
+  has_retained_documents:
+    'Die Organisation enthält inzwischen Dokumente mit laufender Aufbewahrungsfrist und kann deshalb nicht gelöscht werden.',
   delete_org_failed:
     'Die Organisation konnte nicht gelöscht werden. Es wurde nichts gelöscht. Versuche es erneut.',
 };
@@ -60,8 +62,19 @@ function ScopeList({ rows }: { rows: readonly (readonly [string, number])[] }) {
   );
 }
 
-/** Why the organization stays and what it holds. */
+/** Why the organization stays, each reason with what it holds and what to do. */
 function RetainedDescription({ scope }: { scope: OrganizationDeletionScope }) {
+  const timeRecords = scope.retentionRefusals.includes('has_time_records');
+  const retainedDocuments = scope.retentionRefusals.includes('has_retained_documents');
+  const rows: (readonly [string, number])[] = [];
+  if (timeRecords) {
+    rows.push(
+      ['Personen mit erfasster Arbeitszeit', scope.timeTrackedPeople],
+      ['Abgeschlossene Perioden', scope.closedPeriods],
+      ['Lohnexporte', scope.payrollExports],
+    );
+  }
+  if (retainedDocuments) rows.push(['Dokumente mit laufender Aufbewahrungsfrist', scope.retainedDocuments]);
   return (
     <AlertDialogDescription asChild>
       <div className="space-y-3 text-left text-muted-foreground text-sm">
@@ -69,23 +82,24 @@ function RetainedDescription({ scope }: { scope: OrganizationDeletionScope }) {
           <span className="font-semibold text-foreground">
             Diese Organisation kann nicht gelöscht werden,
           </span>{' '}
-          weil sie erfasste Arbeitszeiten oder abgeschlossene Perioden enthält:
+          weil sie Unterlagen enthält, die du gesetzlich aufbewahren musst:
         </p>
-        <ScopeList
-          rows={[
-            ['Personen mit erfasster Arbeitszeit', scope.timeTrackedPeople],
-            ['Abgeschlossene Perioden', scope.closedPeriods],
-            ['Lohnexporte', scope.payrollExports],
-          ]}
-        />
-        <p>
-          Arbeitszeitaufzeichnungen und Lohnunterlagen musst du gesetzlich aufbewahren, zum Beispiel nach dem
-          Arbeitszeitgesetz und dem Mindestlohngesetz. Mit der Organisation wären sie unwiderruflich weg.
-        </p>
-        <p>
-          Unter Perioden schließt du offene Monate ab und lädst für jede abgeschlossene Periode den Lohnexport
-          herunter.
-        </p>
+        <ScopeList rows={rows} />
+        {timeRecords ? (
+          <p>
+            Arbeitszeitaufzeichnungen und Lohnunterlagen musst du zum Beispiel nach dem Arbeitszeitgesetz und
+            dem Mindestlohngesetz aufbewahren. Unter Perioden schließt du offene Monate ab und lädst für jede
+            abgeschlossene Periode den Lohnexport herunter.
+          </p>
+        ) : null}
+        {retainedDocuments ? (
+          <p>
+            Rechnungen, Angebote, Verträge und andere Dokumente mit Aufbewahrungsfrist lassen sich erst nach
+            dem Ende ihrer Frist löschen. Unter Dokumente steht bei jeder Datei, bis wann du sie aufbewahren
+            musst.
+          </p>
+        ) : null}
+        <p>Mit der Organisation wären diese Unterlagen unwiderruflich weg.</p>
       </div>
     </AlertDialogDescription>
   );
@@ -161,9 +175,9 @@ function DeletionConfirmation({
         return;
       }
       setError(describeFailure(result.error, ERROR_MESSAGES, SHARED_FAILURE_MESSAGES.unexpected_error));
-      // Time recorded since the page loaded: the re-read scope turns the
-      // dialog into the refusal with its retention reason and the export.
-      if (result.error === 'has_time_records') refresh();
+      // Time recorded or a document filed since the page loaded: the re-read
+      // scope turns the dialog into the refusal with its retention reasons.
+      if (result.error === 'has_time_records' || result.error === 'has_retained_documents') refresh();
     } catch {
       setError(SHARED_FAILURE_MESSAGES.unexpected_error);
     }
@@ -228,13 +242,15 @@ function DeletionActions({
 }
 
 /**
- * An organization with time records offers its periods instead of the
- * deletion; otherwise the dialog lists what goes and asks for the name.
+ * An organization with records under a retention duty names each reason
+ * instead of the deletion, and offers its periods for recorded time;
+ * otherwise the dialog lists what goes and asks for the name.
  */
 export function DeleteOrgDialog({ orgName, scope }: DeleteOrgDialogProps) {
   const [open, setOpen] = useState(false);
   const { run: runDelete, isPending: isLoading } = useServerAction(deleteOrganization);
-  const retained = scope?.retainsTimeRecords ?? false;
+  const refusals = scope?.retentionRefusals ?? [];
+  const retained = refusals.length > 0;
 
   return (
     <AlertDialog open={open} onOpenChange={setOpen} pending={isLoading}>
@@ -255,10 +271,14 @@ export function DeleteOrgDialog({ orgName, scope }: DeleteOrgDialogProps) {
           <>
             <AlertDialogBody>{scope ? <RetainedDescription scope={scope} /> : null}</AlertDialogBody>
             <AlertDialogFooter>
-              <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-              <AlertDialogAction asChild>
-                <Link href="/zeiterfassung/perioden">Zu den Perioden</Link>
-              </AlertDialogAction>
+              <AlertDialogCancel>
+                {refusals.includes('has_time_records') ? 'Abbrechen' : 'Schließen'}
+              </AlertDialogCancel>
+              {refusals.includes('has_time_records') ? (
+                <AlertDialogAction asChild>
+                  <Link href="/zeiterfassung/perioden">Zu den Perioden</Link>
+                </AlertDialogAction>
+              ) : null}
             </AlertDialogFooter>
           </>
         ) : (

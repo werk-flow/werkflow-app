@@ -54,6 +54,7 @@ This table is the one home of every credential the deployments and workflows use
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Vercel | Supabase clients | Never | Supabase API keys: create one, set it in Vercel, redeploy, delete the old one. |
 | `SUPABASE_SECRET_KEY` | Vercel | Admin client, edge-function calls | Never | As above. The functions accept every secret key of their project. |
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | Vercel | Document storage | As set on the token | Cloudflare R2, Manage API tokens: one token scoped to the bucket; set both, redeploy, delete the old token. |
+| `CRON_SECRET` | Vercel, Production | Vercel Cron's call of the [storage purge](document-storage-and-access.md#storage-cleanup) | Never | `openssl rand -hex 32`, then redeploy. |
 | `EMAIL_OTP_HASH_SECRET` | Vercel | Email-change code hashes and rate-limit subjects | Never | Only after a leak: a new value voids pending email-change codes and restarts every rate-limit window. |
 | `RESEND_API_KEY` | Supabase secrets, one key per project | The mail functions | Never | Resend, API keys: a sending key for the project, `supabase secrets set --project-ref <ref> RESEND_API_KEY`, delete the old key. |
 | `FROM_EMAIL` | Supabase secrets | The mail functions' sender | Never | `supabase secrets set`. |
@@ -83,8 +84,6 @@ bun run env:local  # .env.local -> the local Supabase stack (application tests)
 bun run env:dev    # .env.local -> the cloud dev backend (canary, live inspection)
 bun run env:prod   # .env.local -> PRODUCTION (loud warning; no tests)
 ```
-
-Never run the test harness or a destructive script while `.env.local` points at production; switch back as soon as the task is done.
 
 ## Which tool reaches what
 

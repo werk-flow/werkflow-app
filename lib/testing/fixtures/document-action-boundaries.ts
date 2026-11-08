@@ -370,3 +370,29 @@ for (const [role, documentId] of [
   );
   assert.deepEqual(storageCalls, ['createSignedUploadUrl'], `${role}: the version ticket was not signed`);
 }
+
+// Permanent deletion leaves every object in the bucket: the database function
+// removes the row and queues its paths for the purge after the backup window
+// (werk-flow/werkflow-planning#286), so the action touches no storage.
+signInAs(world, 'buero');
+world.rpcCalls.length = 0;
+storageCalls.length = 0;
+world.rpc = ({ name }) =>
+  name === 'permanently_delete_document'
+    ? { data: [`${ORGANIZATION_A}/${standardDeletedDocumentId}/vertrag.pdf`], error: null }
+    : { data: null, error: null };
+assert.deepEqual(await permanentlyDeleteDocument(standardDeletedDocumentId), { success: true });
+assert.deepEqual(
+  world.rpcCalls.map((call) => [call.name, call.args]),
+  [
+    [
+      'permanently_delete_document',
+      { p_actor_id: CALLER_ID, p_organization_id: ORGANIZATION_A, p_document_id: standardDeletedDocumentId },
+    ],
+  ],
+);
+assert.deepEqual(
+  storageCalls,
+  [],
+  'the permanent deletion removed an object before the backup window passed',
+);

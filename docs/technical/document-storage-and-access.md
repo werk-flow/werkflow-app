@@ -63,7 +63,7 @@ Server actions in `lib/documents/actions.ts` and RLS through `app_private` helpe
 
 - Move changes metadata only. A folder never moves or copies into itself or its descendants.
 - Copy creates new rows and copies each object server-side, without links, with the prefix `Kopie von ` and collision-safe naming.
-- Delete is soft; storage keeps the bytes. Restore keeps the folder if it still exists, otherwise uses the root. Permanent delete removes every object and the row, unless [retention](#retention-and-filing) refuses it.
+- Delete is soft; storage keeps the bytes. Restore keeps the folder if it still exists, otherwise uses the root. Permanent delete removes the row and queues every object for the [purge](#storage-cleanup), unless [retention](#retention-and-filing) refuses it.
 - Versioning applies to `contract`, `invoice`, `offer` and `report`. No rollback.
 - Every mutation writes rows and audit events in one database function call. Storage is not transactional: write an object before the call and discard it on refusal; delete an object only after its row is gone.
 - `/dokumente?document=<document-id>` opens that document. Other features link to the library record, never a copy.
@@ -82,4 +82,10 @@ The owner's schedule (werk-flow/werkflow-planning#24) has one class: ten years f
 
 ## Storage cleanup
 
-Deleting an organization lists every object under its prefix, deletes its rows, and only then deletes the listed objects, so a refusal in the database keeps every file. A failed object deletion after the rows went is logged and leaves orphaned objects. Apart from that, no feature reports or deletes orphaned objects (a staging object whose finalize never ran). When reconciliation becomes a need, build an admin maintenance page with a reviewed authorization boundary and follow the [recovery runbook](recovery-and-incidents.md#restore-procedure-database): list candidates, never purge by prefix, keep objects for review.
+A database restore brings back rows as old as its backup, so their objects must still exist. Permanent deletion and organization deletion never delete an object at once: the database function that removes the rows queues their paths in `storage_purge_queue`, in the same transaction, eight days ahead, one day past the [backup retention](recovery-and-incidents.md#what-is-backed-up). Deleting an organization lists its prefix first, and `delete_organization_with_files` queues the listed objects, rows or not, in the same transaction; a refusal queues nothing.
+
+- Vercel Cron calls `GET /api/storage-purge` daily on production with `CRON_SECRET` (`vercel.json`). `claim_storage_purge` first releases each due entry whose path a row references again, such as a restored document: it reads every public column whose name ends in `storage_path`, so a new path column needs that suffix. It then claims due entries for an hour. The purge deletes each organization's claimed keys inside its prefix and completes them; it never searches by prefix.
+- A failed deletion keeps its entry and attempt count, and the next run retries it. The route answers 500, which the [production watcher](recovery-and-incidents.md#monitoring) reports, and 503 without `CRON_SECRET`. Its body and logs carry counts and error codes, never a path.
+- DEV and the local stack queue but never purge. Seeder and test resets delete their objects at once. An object no row ever referenced, such as a refused upload's copy, is still discarded at once.
+
+Apart from that, no feature reports or deletes orphaned objects (a staging object whose finalize never ran). When reconciliation becomes a need, build an admin maintenance page with a reviewed authorization boundary and follow the [recovery runbook](recovery-and-incidents.md#restore-procedure-database): list candidates, never purge by prefix, keep objects for review.

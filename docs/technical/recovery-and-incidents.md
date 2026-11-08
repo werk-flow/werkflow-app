@@ -7,7 +7,7 @@ What a backup can restore, what loss the owner accepted, and who acts in an inci
 | Data | Protection | Limit |
 | --- | --- | --- |
 | Postgres on Supabase PROD | Daily provider backups, seven-day retention | Up to 24 hours of writes can be lost. No point-in-time recovery. |
-| File bytes in the production R2 bucket | Durable object storage; the app's trash keeps a deleted document until permanent deletion | No object versioning. A permanently deleted or overwritten object is gone. The database backup holds no bytes. |
+| File bytes in the production R2 bucket | Durable object storage; the app's trash keeps a deleted document until permanent deletion. A permanent deletion or an organization deletion takes effect in the app at once and in storage eight days later, one day past the backups, so a restored row finds its file ([storage cleanup](document-storage-and-access.md#storage-cleanup)). | No object versioning. An object is gone once the purge deleted it. The database backup holds no bytes. |
 | Auth users and sessions | In the database backup | Treat a dump as a credential. A restored session row revokes no issued token. |
 | Configuration and secrets | Manual: provider dashboards, the owner's password manager, the gitignored env backups | No automated export. Update the env backups after every provider change. |
 | Edge function source | `supabase/functions/` in git | Function secrets exist only in each project's secret store. |
