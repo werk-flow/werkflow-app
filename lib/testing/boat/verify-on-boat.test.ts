@@ -2,7 +2,15 @@
 // falls back to the local run on any Boat failure, and an unusable key says so in one line.
 import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -12,6 +20,7 @@ import { runScript } from './boat-machine';
 import { backendValueDigests } from '../evidence/proof-environment';
 import {
   boatFailure,
+  copyResults,
   evidenceFiles,
   localReason,
   machineBoundGroup,
@@ -307,4 +316,27 @@ test('a crafted results archive is refused whole: a link, a hard link, an escape
   expect(
     check('escape', ['.agent-logs/verification/report.json'], ['--transform', 's,^,.agent-logs/../,']),
   ).toContain('outside');
+});
+
+test('results are copied from outside the checkout and never through a symbolic link', () => {
+  const unpacked = () => {
+    const staging = mkdtempSync(join(tmpdir(), 'boat-staging-'));
+    mkdirSync(join(staging, '.agent-logs', 'verification', 'r1'), { recursive: true });
+    writeFileSync(join(staging, '.agent-logs', 'verification', 'r1', 'report.json'), '{"ok":true}');
+    return staging;
+  };
+  const repository = mkdtempSync(join(tmpdir(), 'boat-checkout-'));
+  copyResults(unpacked(), repository);
+  expect(readFileSync(join(repository, '.agent-logs', 'verification', 'r1', 'report.json'), 'utf8')).toBe(
+    '{"ok":true}',
+  );
+  // `.agent-logs` itself, or a folder below it, already a link: nothing is written anywhere.
+  for (const link of ['.agent-logs', '.agent-logs/verification']) {
+    const checkout = mkdtempSync(join(tmpdir(), 'boat-checkout-'));
+    const outside = mkdtempSync(join(tmpdir(), 'boat-outside-'));
+    mkdirSync(join(checkout, link, '..'), { recursive: true });
+    symlinkSync(outside, join(checkout, link));
+    expect(() => copyResults(unpacked(), checkout), link).toThrow('is a symbolic link in the checkout');
+    expect(existsSync(join(outside, 'verification')) || existsSync(join(outside, 'r1')), link).toBe(false);
+  }
 });

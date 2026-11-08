@@ -1,5 +1,6 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import {
+  copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -10,7 +11,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 
 import { z } from '../../zod';
 
@@ -321,16 +322,52 @@ async function uploadRun(
     await machine.client.upload(machine.id, `${HOME}/${name}`, readFileSync(source));
 }
 
-/** Downloads the run's results, checks the archive and unpacks it into the checkout. */
+/**
+ * Copies the regular files of an unpacked results folder into the checkout's `.agent-logs/`.
+ * Every destination is checked before the first copy: no existing component of its path,
+ * `.agent-logs` itself included, may be a symbolic link, so nothing is written through one and a
+ * refusal writes nothing. Anything but a regular file or a folder refuses the whole import.
+ */
+export function copyResults(staging: string, repository: string): void {
+  const source = join(staging, '.agent-logs');
+  if (!existsSync(source)) return;
+  const files: string[] = [];
+  for (const entry of readdirSync(source, { recursive: true, withFileTypes: true })) {
+    const path = relative(staging, join(entry.parentPath, entry.name));
+    if (entry.isDirectory()) continue;
+    if (!entry.isFile()) throw new Error(`${path} is not a regular file.`);
+    files.push(path);
+  }
+  const linked = linkedDestination(repository, files);
+  if (linked) throw new Error(linked);
+  for (const path of files) {
+    mkdirSync(dirname(join(repository, path)), { recursive: true });
+    copyFileSync(join(staging, path), join(repository, path));
+  }
+}
+
+/**
+ * Downloads the run's results and checks the archive, unpacks it into a fresh folder outside the
+ * checkout, and copies its regular files into `.agent-logs/`.
+ */
 async function importResults(machine: Machine, folder: string, repository: string): Promise<void> {
   const archive = join(folder, 'results.tgz');
   writeFileSync(archive, await machine.client.download(machine.id, `${HOME}/results.tgz`));
   const list = (flags: string) =>
     execFileSync('tar', [flags, archive], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   const refused = resultsArchiveProblem(list('-tvzf'), list('-tzf'));
-  const linked = linkedDestination(repository, list('-tzf').split('\n').filter(Boolean));
-  if (refused ?? linked) throw new Error(`The Boat results archive was refused: ${refused ?? linked}`);
-  execFileSync('tar', ['-xzf', archive, '--no-same-owner', '--no-same-permissions'], { cwd: repository });
+  if (refused) throw new Error(`The Boat results archive was refused: ${refused}`);
+  const staging = mkdtempSync(join(folder, 'results-'));
+  try {
+    execFileSync('tar', ['-xzf', archive, '--no-same-owner', '--no-same-permissions'], { cwd: staging });
+    copyResults(staging, repository);
+  } catch (error) {
+    throw new Error(
+      `The Boat results archive was refused: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  } finally {
+    rmSync(staging, { recursive: true, force: true });
+  }
 }
 
 async function runOnBoat(input: {
