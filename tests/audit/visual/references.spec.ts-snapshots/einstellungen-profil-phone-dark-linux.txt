@@ -13,3 +13,4 @@ Unterstützt werden gängige Bildformate bis 5 MB. Vor dem Speichern kannst du d
 Profilbild hochladen
 Anzeigename
 Diese Angaben erscheinen in der Sidebar und an weiteren Stellen der App als dein Name.
+Nicht eingestempelt

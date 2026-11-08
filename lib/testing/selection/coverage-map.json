@@ -91,7 +91,7 @@
     "P1-16-F01": "6b3666d20f48bf25b32b8bb20e0722b72bfc7da048fa301e72a538cd77d25e9f",
     "P1-16-F45": "f019487b8615fdd0d27b9ba90ceb732d5de1ea568ce700c51455526c43d8e27a",
     "P1-16-F49": "f205c9ca9f88aabf4fcefe6b08c2bb006c93e821323f26390dd6a836dc7491bd",
-    "P1-21-F01": "4149324d499778d87cce1296694173718701405f1a75467518cbefdbb8429d96",
+    "P1-21-F01": "992163954881e00528179f06c09fa8c0396be686bfe9595751b1e9322577bf38",
     "P1-21-F04": "dc04fac403ff2710aa302f29dd50181217efafeafd2d9328c17bf713e19cb0c6",
     "P1-21-F48": "3497009acfd5f5183d70d87680354cdd60ea02c06afc2982b1dbf1ba42e76c2b",
     "P1-21-F50": "2974946fe4628ac80ffbc7a1f34a0f7d3144ed1f2e174e638491f58e4f35567f",
@@ -2748,10 +2748,20 @@
         {
           "file": "tests/ui-contracts/clock-readiness.spec.ts",
           "kind": "browser",
-          "description": "Pre-Wave-3 step 3 (2026-09-15): the clock button opens the next-action sheet, the state-dependent hot keys resume the interrupted job in one tap and wait for readiness, the pill shows the running activity and time, and the styled contract proves 44 px targets and an unclipped selected tile (`P1-21-F01`, `F09`, `F10`); the picker groups today's planned jobs first (`P1-21-F19`, application proof through the repointed `clockInOnJob` helper).",
+          "description": "The clock button opens the next-action sheet, the state-dependent hot keys resume the interrupted job in one tap and wait for readiness, the dock's status line names the running activity and job, the dock publishes its own height for the layout reserve, keeps its button still on a late read and puts both hot keys in one row on a phone, and the styled contract proves 44 px targets and an unclipped selected tile (`P1-21-F01`, `F09`, `F10`); the picker groups today's planned jobs first (`P1-21-F19`, application proof through the repointed `clockInOnJob` helper).",
           "titles": [
             "a break resumes its job from the hot key and the sheet, and hot keys wait for readiness",
+            "the clock dock publishes its height for the layout reserve, keeps its button still on a late read, and its hot keys share one row on a phone",
             "with the app stylesheet at phone width every clock action is a 44 px target and the selected tile is not clipped"
+          ]
+        },
+        {
+          "file": "tests/audit/layout/viewport-details.spec.ts",
+          "kind": "browser",
+          "description": "Every page ends above the dock: walking each named page from top to end, no visible control lies under the dock, for the employee clocked out and clocked in on a job and for the admin on the period's findings, at 375 and 1280 px.",
+          "titles": [
+            "employee at ${…} px, clocked out and clocked in on a job: work pack, time pages and settings stay clear",
+            "admin clocked out at ${…} px: the period's findings stay clear"
           ]
         }
       ],

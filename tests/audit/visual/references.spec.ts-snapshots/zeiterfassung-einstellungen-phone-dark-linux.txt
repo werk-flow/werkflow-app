@@ -23,3 +23,4 @@ Standardversion bestätigen
 Neue Ausnahmeregel anlegen
 Vorschlag 01.01.2026: der erste Tag des ältesten Monats ohne Abschluss. Ein Monat lässt sich nur abschließen, wenn Regel und Zeitkonto spätestens an seinem ersten Tag beginnen.
 Individuelle Regeln
+Nicht eingestempelt

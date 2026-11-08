@@ -78,3 +78,4 @@ Operative Angaben für die Planung.
 Verwalten
 Teams
 Keine aktuelle Teamzuordnung.
+Nicht eingestempelt

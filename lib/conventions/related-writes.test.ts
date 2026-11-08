@@ -44,7 +44,7 @@ const ALLOWED_SEPARATE_WRITES: Readonly<Record<string, string>> = {
   'lib/inventory/actions.ts::importInventoryRows':
     'Independent by design: each CSV row is booked by its own import_inventory_row call so a refused row keeps the rows before it; the batch row records the counts.',
   'lib/org/join-request-actions.ts::requestOrganizationJoin':
-    'Independent housekeeping: the attempt row of the hourly limit must persist when the join request is refused, and expired attempts are deleted first.',
+    'Independent housekeeping: the rate-limit attempt must persist when the join request is refused.',
   'lib/time-accounts/actions.ts::generatePayrollExport':
     'Documented recovery: the export is reserved, its file stored and the export finalized; a failed step marks the reservation failed, and recover_failed_payroll_exports resolves the rest.',
   'lib/personnel/actions.ts::sendPersonnelInvite':

@@ -19,3 +19,4 @@ Periodenabschluss
 Monat abschließen
 Lohnexport
 Der Export wird nach dem Abschluss freigeschaltet.
+Nicht eingestempelt
