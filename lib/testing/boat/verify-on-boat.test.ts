@@ -26,7 +26,10 @@ import {
   evidenceFiles,
   localReason,
   machineBoundGroup,
+  prepareAndRun,
+  runOnBoat,
   unpackResults,
+  withMachine,
   linkedDestination,
   withheldFile,
 } from './verify-on-boat';
@@ -410,4 +413,77 @@ test('a crafted archive imported over an existing link with a backslash or newli
     expect(readdirSync(outside), JSON.stringify(name)).toEqual([]);
     expect(readdirSync(join(checkout, '.agent-logs')), JSON.stringify(name)).toEqual([name]);
   }
+});
+
+// A Ctrl-C never turns into a local run, wherever it lands: planning, packing, or the cleanup that
+// follows a failed or out-of-memory setup.
+const interrupted = () => {
+  const controller = new AbortController();
+  controller.abort();
+  return controller.signal;
+};
+
+test('a Ctrl-C during planning stops the run instead of falling back', async () => {
+  const repository = mkdtempSync(join(tmpdir(), 'boat-plan-'));
+  mkdirSync(join(repository, 'scripts'));
+  writeFileSync(
+    join(repository, 'scripts', 'verify.ts'),
+    "console.log('RUN   sql:security | Explicit selection');\n",
+  );
+  const outcome = await prepareAndRun([], repository, 'boat_secret', interrupted()).catch(
+    (error: unknown) => error,
+  );
+  expect(outcome instanceof Error && outcome.name).toBe('AbortError');
+});
+
+test('a Ctrl-C during packing stops the run instead of falling back', async () => {
+  const repository = mkdtempSync(join(tmpdir(), 'boat-pack-'));
+  execFileSync('git', ['init', '-q'], { cwd: repository });
+  writeFileSync(join(repository, 'README.md'), 'x');
+  execFileSync('git', ['add', '.'], { cwd: repository });
+  execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'x'], {
+    cwd: repository,
+  });
+  // Without a local-stack .env.local the pack is refused, which alone would fall back to local.
+  const outcome = await runOnBoat({
+    args: [],
+    repository,
+    folder: mkdtempSync(join(tmpdir(), 'boat-pack-folder-')),
+    key: 'boat_secret',
+    signal: interrupted(),
+  }).catch((error: unknown) => error);
+  expect(outcome instanceof Error && outcome.name).toBe('AbortError');
+});
+
+test('a Ctrl-C during the cleanup after a failed setup never falls back', async () => {
+  const controller = new AbortController();
+  const client = boatClient('boat_secret', async (url, init) => {
+    if (init?.method === 'DELETE') {
+      controller.abort();
+      return Response.json({ operation: { id: 'op', status: 'pending' } });
+    }
+    if (new URL(url).pathname.endsWith('/usage'))
+      return Response.json({ seconds: 2, dollars: 0, sandboxType: 'large' });
+    return Response.json({ code: 'not_found' }, { status: 404 });
+  });
+  // `work` stands for a setup that failed: it returns the fallback's undefined.
+  const outcome = await withMachine(
+    { id: 'bx_test', client, log: () => undefined },
+    controller.signal,
+    async () => undefined,
+  ).catch((error: unknown) => error);
+  expect(outcome instanceof Error && outcome.name).toBe('AbortError');
+  // Without an interruption the fallback stands.
+  const quiet = boatClient('boat_secret', async (_url, init) =>
+    init?.method === 'DELETE'
+      ? Response.json({ operation: { id: 'op', status: 'pending' } })
+      : Response.json({ code: 'not_found' }, { status: 404 }),
+  );
+  expect(
+    await withMachine(
+      { id: 'bx_test', client: quiet, log: () => undefined },
+      new AbortController().signal,
+      async () => undefined,
+    ),
+  ).toBeUndefined();
 });

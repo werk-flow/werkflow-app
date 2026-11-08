@@ -297,7 +297,7 @@ export async function verifyOnBoat(
   }
 }
 
-async function prepareAndRun(
+export async function prepareAndRun(
   args: readonly string[],
   repository: string,
   key: string,
@@ -408,7 +408,30 @@ async function importResults(machine: Machine, folder: string, repository: strin
   }
 }
 
-async function runOnBoat(input: {
+/**
+ * Runs `work` on a started machine, then reports its cost and deletes it, whatever `work` did. A
+ * Ctrl-C during that cleanup still stops the run: no fallback to a local run follows an interruption.
+ */
+export async function withMachine<T>(
+  machine: Machine,
+  signal: AbortSignal,
+  work: () => Promise<T>,
+): Promise<T> {
+  let result: T;
+  try {
+    result = await work();
+  } finally {
+    const usage = await machineUsage(machine);
+    await deleteMachine(machine);
+    say(
+      `Boat machine ${machine.id} deleted${usage ? `: ${Math.round(usage.seconds / 2)} s of large, $${usage.dollars.toFixed(4)}` : ''}.`,
+    );
+  }
+  signal.throwIfAborted();
+  return result;
+}
+
+export async function runOnBoat(input: {
   args: readonly string[];
   repository: string;
   folder: string;
@@ -447,44 +470,40 @@ async function runOnBoat(input: {
   say(
     `Running on Boat machine ${machine.id} (large), ready in ${((Date.now() - started) / 1000).toFixed(1)} s.`,
   );
-  let code: number | undefined;
-  try {
-    signal.throwIfAborted();
-    await uploadRun(machine, repository, folder, packed.bundle);
-    signal.throwIfAborted();
-    const form = lstatSync(join(repository, '.git')).isFile() ? 'linked' : 'main';
-    const command = ['bash', '~/remote-verify.sh', repository, packed.head, form, ...args].map(
-      (word, index) => (index === 1 ? word : shellQuote(word)),
-    );
-    const result = await runScript(
-      machine,
-      command.join(' '),
-      { stdout: (text) => process.stdout.write(text), stderr: (text) => process.stderr.write(text) },
-      signal,
-    );
-    if (result.exitCode === SETUP_FAILED || result.oomKilled) {
-      say(
-        `Running locally: the Boat machine ${result.oomKilled ? 'ran out of memory' : 'failed to set up'}.`,
+  return withMachine(machine, signal, async () => {
+    let code: number | undefined;
+    try {
+      signal.throwIfAborted();
+      await uploadRun(machine, repository, folder, packed.bundle);
+      signal.throwIfAborted();
+      const form = lstatSync(join(repository, '.git')).isFile() ? 'linked' : 'main';
+      const command = ['bash', '~/remote-verify.sh', repository, packed.head, form, ...args].map(
+        (word, index) => (index === 1 ? word : shellQuote(word)),
       );
+      const result = await runScript(
+        machine,
+        command.join(' '),
+        { stdout: (text) => process.stdout.write(text), stderr: (text) => process.stderr.write(text) },
+        signal,
+      );
+      if (result.exitCode === SETUP_FAILED || result.oomKilled) {
+        say(
+          `Running locally: the Boat machine ${result.oomKilled ? 'ran out of memory' : 'failed to set up'}.`,
+        );
+        return undefined;
+      }
+      await importResults(machine, folder, repository);
+      // The machine pruned only its copy of the archive; the workstation's shrinks as after a local run.
+      console.info(pruneRunArchive('prune'));
+      code = result.exitCode;
+      if (changedInputs(before, captureInputSnapshot(repository)).length) {
+        console.error('Inputs changed during verification; this report cannot qualify acceptance.');
+        code = 1;
+      }
+      return code;
+    } catch (error) {
+      say(fallbackLine(error, signal));
       return undefined;
     }
-    await importResults(machine, folder, repository);
-    // The machine pruned only its copy of the archive; the workstation's shrinks as after a local run.
-    console.info(pruneRunArchive('prune'));
-    code = result.exitCode;
-    if (changedInputs(before, captureInputSnapshot(repository)).length) {
-      console.error('Inputs changed during verification; this report cannot qualify acceptance.');
-      code = 1;
-    }
-    return code;
-  } catch (error) {
-    say(fallbackLine(error, signal));
-    return undefined;
-  } finally {
-    const usage = await machineUsage(machine);
-    await deleteMachine(machine);
-    say(
-      `Boat machine ${machine.id} deleted${usage ? `: ${Math.round(usage.seconds / 2)} s of large, $${usage.dollars.toFixed(4)}` : ''}.`,
-    );
-  }
+  });
 }
