@@ -20,7 +20,7 @@ import {
 } from './resolution';
 import type { OrgRole } from '@/lib/roles';
 import type { OrganizationResponsibility, ResponsibilityPerson } from './types';
-import { delegationWindowState } from './delegation-window';
+import { delegationWindowState, revokedOnOf } from './delegation-window';
 import type { SubstituteAbsenceSpan } from './substitute-absence';
 import { loadSubstituteAbsenceSpans } from './substitute-absence-server';
 
@@ -331,6 +331,7 @@ function toResponsibilityDelegation(
     validFrom: delegation.valid_from,
     validUntil: delegation.valid_until,
     revokedFrom: delegation.revoked_from,
+    revokedOn: revokedOnOf(delegation),
   };
 }
 

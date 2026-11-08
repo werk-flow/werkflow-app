@@ -40,6 +40,8 @@ export type ResponsibilityDelegation = {
   validFrom: string;
   validUntil: string;
   revokedFrom: string | null;
+  /** The Berlin date the revocation was written; null while the window is not revoked. */
+  revokedOn: string | null;
 };
 
 type RoleDefaultResponsibilitySource = {

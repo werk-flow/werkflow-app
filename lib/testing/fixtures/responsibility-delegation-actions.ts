@@ -50,7 +50,11 @@ const world = installActionWorld({
   organization_responsibility_delegations: [
     delegation(plannedId, ORGANIZATION_A, day(7), day(11)),
     delegation(activeId, ORGANIZATION_A, day(-2), day(3)),
-    { ...delegation(endedId, ORGANIZATION_A, day(-5), day(3)), revoked_from: day(-1) },
+    {
+      ...delegation(endedId, ORGANIZATION_A, day(-5), day(3)),
+      revoked_from: day(-1),
+      updated_at: `${day(-1)}T10:00:00.000Z`,
+    },
     delegation(foreignId, ORGANIZATION_B, day(7), day(11)),
   ],
 });

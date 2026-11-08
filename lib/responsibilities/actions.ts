@@ -15,7 +15,7 @@ import {
   type ResponsibilityMember,
 } from './resolution';
 import { loadResponsibilityRuntimeState } from './server';
-import { delegationRevocationDate } from './delegation-window';
+import { delegationRevocationDate, revokedOnOf } from './delegation-window';
 import { isAbsentForWholeWindow } from './substitute-absence';
 import { loadSubstituteAbsenceSpans } from './substitute-absence-server';
 import type { OrganizationResponsibility, ResponsibilityConfigurationMode } from './types';
@@ -324,7 +324,7 @@ export async function endResponsibilityDelegation(rawDelegationId: string): Prom
   // read binds the delegation to the active organization first.
   const { data: delegation, error: delegationError } = await owner.context.admin
     .from('organization_responsibility_delegations')
-    .select('id, valid_from, valid_until, revoked_from')
+    .select('id, valid_from, valid_until, revoked_from, updated_at')
     .eq('organization_id', owner.context.orgId)
     .eq('id', delegationId)
     .maybeSingle();
@@ -339,6 +339,7 @@ export async function endResponsibilityDelegation(rawDelegationId: string): Prom
       validFrom: delegation.valid_from,
       validUntil: delegation.valid_until,
       revokedFrom: delegation.revoked_from,
+      revokedOn: revokedOnOf(delegation),
     },
     getBusinessTodayIso(),
   );
