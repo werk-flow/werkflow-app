@@ -24,6 +24,7 @@ declare global {
       | 'personnel'
       | 'join-requests'
       | 'own-personnel'
+      | 'task-sections'
       | 'calendar'
       | 'options'
       | 'list-navigation'
@@ -40,6 +41,8 @@ declare global {
       | 'live-view'
       | 'route-refresh'
       | 'customer'
+      | 'sickness-record'
+      | 'absence-picker'
       | AuthUrlFixtureName
       | FeedbackFixtureName;
     uiContractLifecycle: LifecycleBoundaryState;

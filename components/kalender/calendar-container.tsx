@@ -34,6 +34,7 @@ import { useCalendarViewState, type CalendarViewState } from './use-calendar-vie
 import { useManualEntryBridge } from './use-manual-entry-bridge';
 import { useParkFlow } from './use-park-flow';
 import { useScopeActive } from './use-scope-active';
+import { BoardAbsencesContext, useIndexedBoardAbsences } from './board-absences-context';
 
 export type CalendarView = 'day' | 'week' | 'month';
 
@@ -317,73 +318,78 @@ function ScopedCalendarContainer(props: CalendarContainerProps) {
   const { mutations, parkFlow, viewScope, handleManualEntrySuccess } = flows;
   const { handleSilentRefresh } = data;
   const boardRows = data.range.board.rows;
+  // The board, its card popovers, the header's create dialog and the overlay
+  // dialogs all mark absent people from the days this range loaded.
+  const absences = useIndexedBoardAbsences(data.range.board.days, boardRows);
 
   return (
-    <PageShell>
-      {mutations.timeCorrectionDraft && (
-        <CalendarTimeCorrectionDialog
-          organizationId={organizationId}
-          draft={mutations.timeCorrectionDraft}
-          rows={boardRows}
-          onClose={mutations.closeTimeCorrection}
-          onSubmitted={handleSilentRefresh}
+    <BoardAbsencesContext value={absences}>
+      <PageShell>
+        {mutations.timeCorrectionDraft && (
+          <CalendarTimeCorrectionDialog
+            organizationId={organizationId}
+            draft={mutations.timeCorrectionDraft}
+            rows={boardRows}
+            onClose={mutations.closeTimeCorrection}
+            onSubmitted={handleSilentRefresh}
+          />
+        )}
+        <CalendarToolbar
+          viewState={viewState}
+          viewScope={viewScope}
+          overlays={overlays}
+          members={members}
+          isAdminOrManager={isAdminOrManager}
+          phone={phone}
+          todayIso={todayIso}
+          calendarHeaderRef={reads.calendarHeaderRef}
+          parkplatzButtonRef={reads.parkplatzButtonRef}
+          onRefresh={data.handleManualRefresh}
+          onManualEntrySuccess={handleManualEntrySuccess}
+          onSilentRefresh={handleSilentRefresh}
         />
-      )}
-      <CalendarToolbar
-        viewState={viewState}
-        viewScope={viewScope}
-        overlays={overlays}
-        members={members}
-        isAdminOrManager={isAdminOrManager}
-        phone={phone}
-        todayIso={todayIso}
-        calendarHeaderRef={reads.calendarHeaderRef}
-        parkplatzButtonRef={reads.parkplatzButtonRef}
-        onRefresh={data.handleManualRefresh}
-        onManualEntrySuccess={handleManualEntrySuccess}
-        onSilentRefresh={handleSilentRefresh}
-      />
-      <CalendarBody
-        overlays={overlays}
-        scrollContainerRef={flows.scrollContainerRef}
-        isLoading={flows.isLoading}
-        isReloading={flows.isReloading}
-        calendarStale={flows.calendarStale}
-        showUnavailable={flows.showUnavailable}
-        viewState={viewState}
-        viewScope={viewScope}
-        data={data}
-        mutations={mutations}
-        surfaceActions={flows.surfaceActions}
-        parkFlow={parkFlow}
-        phone={phone}
-        organizationSettings={props.organizationSettings}
-        currentUserId={currentUserId}
-        currentUserRole={currentUserRole}
-        isAdminOrManager={isAdminOrManager}
-        onSessionClick={flows.handleSessionClick}
-        verticalScroller={flows.verticalScroller}
-        todayIso={todayIso}
-      />
-      <CalendarDialogs
-        overlays={overlays}
-        parkFlow={parkFlow}
-        data={data}
-        viewScope={viewScope}
-        mutations={mutations}
-        members={members}
-        boardRows={boardRows}
-        isAdminOrManager={isAdminOrManager}
-        currentUserId={currentUserId}
-        currentUserRole={currentUserRole}
-        calendarHeaderHeight={reads.calendarHeaderHeight}
-        showBanner={showBanner}
-        announce={announce}
-        onManualEntrySuccess={handleManualEntrySuccess}
-      />
-      {reads.warningDialog}
-      {reads.planningWarningDialog}
-    </PageShell>
+        <CalendarBody
+          overlays={overlays}
+          scrollContainerRef={flows.scrollContainerRef}
+          isLoading={flows.isLoading}
+          isReloading={flows.isReloading}
+          calendarStale={flows.calendarStale}
+          showUnavailable={flows.showUnavailable}
+          viewState={viewState}
+          viewScope={viewScope}
+          data={data}
+          mutations={mutations}
+          surfaceActions={flows.surfaceActions}
+          parkFlow={parkFlow}
+          phone={phone}
+          organizationSettings={props.organizationSettings}
+          currentUserId={currentUserId}
+          currentUserRole={currentUserRole}
+          isAdminOrManager={isAdminOrManager}
+          onSessionClick={flows.handleSessionClick}
+          verticalScroller={flows.verticalScroller}
+          todayIso={todayIso}
+        />
+        <CalendarDialogs
+          overlays={overlays}
+          parkFlow={parkFlow}
+          data={data}
+          viewScope={viewScope}
+          mutations={mutations}
+          members={members}
+          boardRows={boardRows}
+          isAdminOrManager={isAdminOrManager}
+          currentUserId={currentUserId}
+          currentUserRole={currentUserRole}
+          calendarHeaderHeight={reads.calendarHeaderHeight}
+          showBanner={showBanner}
+          announce={announce}
+          onManualEntrySuccess={handleManualEntrySuccess}
+        />
+        {reads.warningDialog}
+        {reads.planningWarningDialog}
+      </PageShell>
+    </BoardAbsencesContext>
   );
 }
 

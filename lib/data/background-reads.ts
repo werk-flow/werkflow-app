@@ -3,6 +3,8 @@ import 'server-only';
 import { z } from '@/lib/zod';
 
 import { getAttentionOverview } from '@/lib/attention/actions';
+import { getAbsenceAffectedVisits } from '@/lib/calendar/actions';
+import { absenceAffectedVisitsInputSchema } from '@/lib/calendar/absence-visits-types';
 import { getClientRelations } from '@/lib/clients/actions';
 import { getDispatchOverview, getJobDispatchCards, previewDispatchReadiness } from '@/lib/dispatch/actions';
 import { attachableDocumentsInputSchema } from '@/lib/documents/action-schemas';
@@ -263,6 +265,10 @@ export const BACKGROUND_READS = {
   ),
   'approved-artifact-actions': defineRead(targetInput, (input) => getApprovedArtifactActionsForTarget(input)),
   'assignment-team-options': defineRead(noInput, () => getAssignmentTeamOptions()),
+  // A read by record id: the reader filters by the caller's organization.
+  'absence-affected-visits': defineRead(absenceAffectedVisitsInputSchema, (input) =>
+    getAbsenceAffectedVisits(input),
+  ),
   'assignment-availability': defineRead(
     assignmentAvailabilityInputSchema.extend({ organizationId: uuidSchema }),
     (input) => getAssignmentAvailability({ localDate: input.localDate }),

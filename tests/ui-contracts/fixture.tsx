@@ -3,6 +3,7 @@ import { RouteRefreshFixture } from './route-refresh-boundaries';
 import { PresentationFixture } from './presentation-fixture';
 import { CustomerContractFixture } from './customer-boundaries';
 import { VacationApprovals } from '@/components/zeiterfassung/vacation-approvals';
+import { AbsencePickerContractFixture, SicknessRecordContractFixture } from './absence-boundaries';
 import { ClockContractFixture } from './clock-boundaries';
 import { SidebarContractFixture } from './sidebar-boundaries';
 import {
@@ -69,6 +70,7 @@ import { PersonnelLifecycleSection } from '@/components/mitarbeiter/personnel-li
 import { PersonnelOwnActionsSection } from '@/components/mitarbeiter/personnel-own-actions-section';
 import { JoinRequestsSection } from '@/components/mitarbeiter/join-requests-section';
 import { initializePersonnelBoundary } from './personnel-boundaries';
+import { TaskSectionsContractFixture } from './task-section-boundaries';
 
 initializeServiceBoundaries();
 initializeLifecycleBoundary();
@@ -547,9 +549,13 @@ createRoot(root).render(
     <BannerProvider>
       <main>
         <h1>Komponentenverträge</h1>
-        <VacationApprovals />
+        <VacationApprovals plansWork />
       </main>
     </BannerProvider>
+  ) : window.uiContractFixture === 'sickness-record' ? (
+    <SicknessRecordContractFixture />
+  ) : window.uiContractFixture === 'absence-picker' ? (
+    <AbsencePickerContractFixture />
   ) : window.uiContractFixture === 'route-refresh' ? (
     <RouteRefreshFixture />
   ) : window.uiContractFixture === 'live-view' ? (
@@ -590,6 +596,11 @@ createRoot(root).render(
         <LifecycleRouteFixture />
       </main>
     </BannerProvider>
+  ) : window.uiContractFixture === 'task-sections' ? (
+    <main>
+      <h1>Komponentenverträge</h1>
+      <TaskSectionsContractFixture />
+    </main>
   ) : window.uiContractFixture === 'own-personnel' ? (
     <BannerProvider>
       <main>

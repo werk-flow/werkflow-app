@@ -51,7 +51,9 @@ export function attentionItemKey(identity: AttentionItemIdentity): string {
 // Actionable work for the current viewer. Authorization is resolved by the
 // owning domain's own loaders at derivation time (time_approval /
 // leave_approval responsibility for approvals, manager role for requests) —
-// an item only exists for a viewer who can act on it right now.
+// an item only exists for a viewer who can act on it right now. An approval
+// or an open request carries `openSinceDays`: Berlin calendar days since it
+// was submitted (a correction: since its current revision).
 export type AttentionTask =
   | {
       sourceType: 'time_session_approval';
@@ -59,12 +61,14 @@ export type AttentionTask =
       personName: string;
       date: string;
       jobTitle: string | null;
+      openSinceDays: number;
     }
   | {
       sourceType: 'time_change_request_approval';
       sourceId: string;
       personName: string;
       requestType: 'edit' | 'delete';
+      openSinceDays: number;
     }
   | {
       sourceType: 'time_correction_approval';
@@ -72,6 +76,7 @@ export type AttentionTask =
       personName: string;
       correctionLabel: string;
       stateVersion: string;
+      openSinceDays: number;
     }
   | {
       sourceType: 'vacation_request_approval';
@@ -81,6 +86,7 @@ export type AttentionTask =
       endDate: string;
       dayPortion: VacationDayPortion;
       totalDays: number;
+      openSinceDays: number;
     }
   | {
       sourceType: 'client_request_open';
