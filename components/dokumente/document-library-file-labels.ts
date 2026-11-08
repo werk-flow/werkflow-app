@@ -10,6 +10,7 @@ import {
 
 import type {
   DocumentArchive,
+  DocumentAuditEvent,
   DocumentFolder,
   DocumentOrigin,
   OrganizationDocument,
@@ -29,6 +30,12 @@ export function getUserDisplayName(
 
   const fullName = [uploader.firstName, uploader.lastName].filter(Boolean).join(' ').trim();
   return fullName || uploader.email || 'Unbekannt';
+}
+
+/** The audit history names a member by email; a former member keeps no email and is named instead. */
+export function getAuditActorLabel(actor: DocumentAuditEvent['actor']): string | null {
+  if (!actor) return null;
+  return actor.email ?? getUserDisplayName(actor);
 }
 
 export function getFileIcon(document: OrganizationDocument): LucideIcon {

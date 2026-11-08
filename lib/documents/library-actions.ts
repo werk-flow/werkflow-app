@@ -103,7 +103,7 @@ export async function getDocumentLibrary(
   try {
     const [breadcrumbs, folders, documents] = await Promise.all([
       view === 'trash' ? [] : getFolderBreadcrumbs({ admin: context.admin, orgId: context.orgId, folderId }),
-      hydrateFolders(context.admin, foldersResult.data),
+      hydrateFolders(context, foldersResult.data),
       hydrateDocuments(context, documentRowsFromOrdinaryView(rows)),
     ]);
     return {

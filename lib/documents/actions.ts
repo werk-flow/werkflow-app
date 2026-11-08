@@ -587,8 +587,8 @@ export async function getDocumentDetails(rawDocumentId: string): Promise<Documen
   }
 
   const [versions, auditEvents] = await Promise.all([
-    hydrateDocumentVersions(auth.context.admin, versionsResult.data),
-    hydrateDocumentAuditEvents(auth.context.admin, auditResult.data),
+    hydrateDocumentVersions(auth.context, versionsResult.data),
+    hydrateDocumentAuditEvents(auth.context, auditResult.data),
   ]);
   if (!versions) return { success: false, error: 'versions_failed', document };
   if (!auditEvents) return { success: false, error: 'audit_failed', document };
