@@ -1,6 +1,7 @@
 import type { Database } from '@/lib/supabase/database.types';
 import type { VacationDayPortion } from '@/lib/vacation/types';
 import type { RequestStatus, RequestUrgency } from '@/lib/requests/types';
+import type { CalendarDispatchState } from '@/lib/calendar/board';
 
 // ============================================
 // Item identity (P1-07 pattern contract)
@@ -33,7 +34,8 @@ type AttentionSourceType =
   | 'work_artifact_correction'
   | 'work_defect_due'
   | 'work_handover_review'
-  | 'organization_join_request';
+  | 'organization_join_request'
+  | 'planning_visit_replan';
 
 export type AttentionItemIdentity = {
   sourceType: AttentionSourceType;
@@ -192,6 +194,22 @@ export type AttentionTask =
       sourceId: string;
       personName: string;
       email: string | null;
+    }
+  // An approved vacation takes a person away from a scheduled visit. The
+  // identity is the visit's assignment of that person: it resolves once the
+  // person leaves the visit or the vacation is withdrawn. It never names the
+  // absence's kind.
+  | {
+      sourceType: 'planning_visit_replan';
+      sourceId: string;
+      personName: string;
+      /** Berlin date the visit starts on. */
+      date: string;
+      /** Berlin start time HH:MM; null for an all-day visit. */
+      time: string | null;
+      visitTitle: string;
+      jobNumber: string | null;
+      dispatchState: CalendarDispatchState;
     };
 
 // Informational notices, deduplicated per source record: a domain state

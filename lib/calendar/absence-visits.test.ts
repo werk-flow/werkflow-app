@@ -41,3 +41,16 @@ test('a date that does not exist or an end before the start has no window', () =
   expect(absenceVisitWindow({ startDate: '2026-02-30', endDate: null }, '2026-11-08')).toBeNull();
   expect(absenceVisitWindow({ startDate: '2026-11-03', endDate: '2026-11-02' }, '2026-11-08')).toBeNull();
 });
+
+test('an absence batch past the row bound splits until each part fits; a single absence still fails', async () => {
+  const child = Bun.spawn(
+    [process.execPath, resolve(import.meta.dir, '../testing/fixtures/absence-batch-overflow.ts')],
+    { cwd: resolve(import.meta.dir, '../..'), stdout: 'pipe', stderr: 'pipe' },
+  );
+  const [code, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  expect(code, `${stdout}\n${stderr}`).toBe(0);
+});

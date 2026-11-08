@@ -18,6 +18,16 @@ const TASK_OF_EVERY_KIND: AttentionTask[] = [
   },
   { sourceType: 'organization_join_request', sourceId: 'join-1', personName: 'Jo Neu', email: null },
   {
+    sourceType: 'planning_visit_replan',
+    sourceId: 'assignment-1',
+    personName: 'Max Muster',
+    date: '2026-11-11',
+    time: '07:30',
+    visitTitle: 'Gastherme',
+    jobNumber: 'A-1',
+    dispatchState: 'nicht_gesendet',
+  },
+  {
     sourceType: 'dispatch_acknowledgement',
     sourceId: 'dispatch-1',
     jobId: 'job-1',
@@ -135,10 +145,11 @@ const TASK_OF_EVERY_KIND: AttentionTask[] = [
 ];
 
 describe('groupAttentionTasks', () => {
-  test('time-bound decisions lead: time approvals, vacation requests and open Anfragen come first, handovers last', () => {
+  test('time-bound decisions lead: time approvals, vacation requests, visits to replan and open Anfragen come first, handovers last', () => {
     expect(groupAttentionTasks(TASK_OF_EVERY_KIND).map((section) => section.key)).toEqual([
       'time',
       'vacation',
+      'visitReplan',
       'request',
       'joinRequest',
       'dispatchAcknowledgement',

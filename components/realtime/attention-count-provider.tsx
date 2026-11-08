@@ -84,6 +84,8 @@ export function AttentionCountProvider({
       'organization_join_requests',
       'client_requests',
       'client_follow_ups',
+      'planning_occurrences',
+      'planning_occurrence_assignments',
       'planning_dispatches',
       'planning_dispatch_acknowledgements',
       'work_blockers',
