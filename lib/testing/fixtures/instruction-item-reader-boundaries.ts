@@ -99,7 +99,7 @@ const world = installActionWorld({
 });
 // The database function `list_profile_references`, answered from the world's tables:
 // each named profile and whether that person is a member of the organization asked
-// about. `supabase/tests/profile_references.sql` proves the function itself.
+// about. `supabase/tests/organization_member_reads.sql` proves the function itself.
 world.rpc = ({ name, args }) => {
   assert.equal(name, 'list_profile_references');
   const userIds = args.p_user_ids;
