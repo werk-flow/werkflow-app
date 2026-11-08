@@ -7,7 +7,7 @@ import { seedJob, seedJobAssignment } from './support/db/work';
 import { createCustomer } from './support/steps/customers';
 import { documentLibraryHeading, uploadDocumentOnJobPage } from './support/steps/documents';
 import {
-  materialStillOutText,
+  materialAtJobText,
   returnMaterialOnJobPage,
   takeMaterialOnJobPage,
 } from './support/steps/inventory';
@@ -200,7 +200,7 @@ test.describe('GG-00 Bestandsfunktionen @GG-00', () => {
     );
 
     await returnMaterialOnJobPage(employeePage, jobNumber, itemName, 3);
-    await expect(visibleText(employeePage, materialStillOutText(0))).toBeVisible();
+    await expect(visibleText(employeePage, materialAtJobText(0))).toBeVisible();
     expect((await getInventoryLedgerState(world.orgId, itemId, locationId)).quantityOnHand).toBe(
       initialQuantity,
     );
