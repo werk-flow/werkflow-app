@@ -42,16 +42,7 @@ const workArtifactContentSchema = z.object({
           .string()
           .regex(/^\d{1,11}(?:[.,]\d{1,3})?$/)
           .refine((value) => Number(value.replace(',', '.')) > 0, 'quantity_must_be_positive'),
-        unit: z.enum([
-          'piece',
-          'meter',
-          'square_meter',
-          'cubic_meter',
-          'liter',
-          'kilogram',
-          'hour',
-          'flat_rate',
-        ]),
+        unit: z.enum(Constants.public.Enums.work_artifact_measurement_unit),
         note: z.string().trim().max(1000).optional(),
       }),
     )

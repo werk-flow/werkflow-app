@@ -77,4 +77,20 @@ describe('recordedVisitWindow', () => {
     ];
     expect(recordedVisitWindow(entries, { jobId, userId, now }).startedAt).toBe('2026-11-02T07:00:00+01:00');
   });
+
+  test('an open break keeps Ende empty, and a clock-out during the break is the end', () => {
+    const working = [
+      entry('in-1', 'clock_in', '2026-11-02T07:00:00+01:00'),
+      entry('break', 'break_start', '2026-11-02T12:00:00+01:00'),
+    ];
+    expect(recordedVisitWindow(working, { jobId, userId, now })).toEqual({
+      startedAt: '2026-11-02T07:00:00+01:00',
+      endedAt: null,
+    });
+    const clockedOutDuringBreak = [...working, entry('out-1', 'clock_out', '2026-11-02T12:20:00+01:00')];
+    expect(recordedVisitWindow(clockedOutDuringBreak, { jobId, userId, now })).toEqual({
+      startedAt: '2026-11-02T07:00:00+01:00',
+      endedAt: '2026-11-02T12:20:00+01:00',
+    });
+  });
 });
