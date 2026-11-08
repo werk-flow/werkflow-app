@@ -1,8 +1,19 @@
-import { OrganizationExportSection } from '@/components/settings/organization-export/organization-export-section';
+import dynamic from 'next/dynamic';
 import { LiveRouteRefresh } from '@/components/shared/live-route-refresh';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { readOrganizationExports } from '@/lib/org-export/reads';
 import { readSettingsSectionMembership } from '@/lib/settings/section-access';
+
+// The section still renders on the server and its chunks still load with the
+// page. Imported statically, its client graph made Turbopack regroup the chunks
+// every route shares, and each route loaded one chunk more, the field worker's
+// cold start included (audit:lab:field). Its own chunk group keeps them as
+// they were.
+const OrganizationExportSection = dynamic(() =>
+  import('@/components/settings/organization-export/organization-export-section').then(
+    (mod) => mod.OrganizationExportSection,
+  ),
+);
 
 // Only Admin opens this section; Büro and employees go to their profile
 // (lib/settings/sections.ts). Each action checks the Admin again.
