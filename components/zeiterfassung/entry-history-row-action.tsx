@@ -111,7 +111,7 @@ function WithdrawSubmissionButton({
           variant="outline"
           size="sm"
           disabled={disabled}
-          aria-label={`${getEntryTypeLabel(entry)} vom ${formatBerlinDateTime(entry.timestamp)} zurückziehen`}
+          aria-label={`Nachtrag vom ${day} zurückziehen (${getEntryTypeLabel(entry)}, ${formatBerlinDateTime(entry.timestamp)})`}
         >
           <Undo2 className="mr-1.5 size-4" /> Zurückziehen
         </Button>
