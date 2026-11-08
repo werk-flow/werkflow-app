@@ -1,8 +1,9 @@
 name: Supabase CLI
 description: >-
-  Puts the pinned Supabase CLI on PATH. The binary is kept in the Actions cache, so an outage of
-  GitHub's release downloads, which supabase/setup-cli uses, does not stop CI or staging: on
-  2026-11-08 those downloads answered 504 for hours. The production release does not use this
+  Puts the pinned Supabase CLI on PATH. The binary is kept in the Actions cache, so once a
+  download has filled it, an outage of GitHub's release downloads, which supabase/setup-cli uses,
+  does not stop CI or staging: on 2026-11-08 those downloads answered 504 for hours. A cache miss
+  still downloads, so an outage before the first fill still blocks. The production release does not use this
   action; it downloads the pinned release directly, so such an outage can still hold a release.
 runs:
   using: composite
