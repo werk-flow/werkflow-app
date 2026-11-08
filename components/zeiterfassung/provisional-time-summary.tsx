@@ -46,6 +46,15 @@ export function ProvisionalTimeSummary({
       return result.success ? { ok: true, data: result } : { ok: false };
     },
     resetKey: `${organizationId}:${userId}`,
+    // Admin and Büro receive every member's clock rows; only this person's
+    // entries and sessions change the summary. Correction and segment events
+    // stay relevant (a reassignment names a second person; a segment names
+    // none), and so does any row whose person the event does not carry.
+    eventFilter: (event) => {
+      if (event.table !== 'time_entries' && event.table !== 'time_sessions') return true;
+      const person = (event.new ?? event.old)?.user_id;
+      return typeof person !== 'string' || person === userId;
+    },
   });
   const summary = view.data;
   if (view.isLoading) return null;

@@ -348,7 +348,11 @@ function EntryHistoryRegion({ hasRange, view, isStale, members, ...actionProps }
 function useHistoryViewer(): { currentUserId: string | null; addsTimeHere: boolean } {
   const { profile } = useUserProfile();
   const { activeOrg } = useOrganization();
-  return { currentUserId: profile?.id ?? null, addsTimeHere: activeOrg?.role !== 'employee' };
+  // Fail closed until the organization loaded: only Admin and Büro add time here.
+  return {
+    currentUserId: profile?.id ?? null,
+    addsTimeHere: activeOrg ? activeOrg.role !== 'employee' : false,
+  };
 }
 
 /** The live read of the history for the chosen filters. */

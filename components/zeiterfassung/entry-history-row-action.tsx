@@ -2,11 +2,22 @@
 
 import { Clock, Lock, Pencil, Undo2 } from 'lucide-react';
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { isEntryInClosedPeriod, type ClosedTimePeriod } from '@/lib/time-tracking/closed-period-dates';
 import type { TimeEntry } from '@/lib/time-tracking/types';
-import { cn, formatBerlinDateTime } from '@/lib/utils';
+import { cn, formatBerlin, formatBerlinDateTime } from '@/lib/utils';
 import { getEntryTypeLabel } from './entry-history-labels';
 
 // The one action of a row in the Verlauf: „Korrigieren“ on accepted time,
@@ -15,7 +26,8 @@ import { getEntryTypeLabel } from './entry-history-labels';
 
 export type EntryHistoryRowActionProps = {
   entry: TimeEntry;
-  settling: { isBusy: (id: string) => boolean };
+  /** `anyBusy`: one withdrawal at a time, since a submission spans several rows. */
+  settling: { isBusy: (id: string) => boolean; anyBusy: boolean };
   hydrated: boolean;
   closedPeriods: readonly ClosedTimePeriod[];
   setCorrectionEntry: (entry: TimeEntry) => void;
@@ -65,15 +77,7 @@ export function EntryHistoryRowAction({
   }
   if (isOwnPendingSubmission(entry, currentUserId)) {
     return (
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={!hydrated}
-        onClick={() => withdraw(entry)}
-        aria-label={`${getEntryTypeLabel(entry)} vom ${formatBerlinDateTime(entry.timestamp)} zurückziehen`}
-      >
-        <Undo2 className="mr-1.5 size-4" /> Zurückziehen
-      </Button>
+      <WithdrawSubmissionButton entry={entry} disabled={!hydrated || settling.anyBusy} withdraw={withdraw} />
     );
   }
   if (entry.status === 'approved') {
@@ -84,4 +88,49 @@ export function EntryHistoryRowAction({
     );
   }
   return null;
+}
+
+/**
+ * „Zurückziehen“ removes the whole pending submission of that day, every row
+ * of it, so the author confirms first.
+ */
+function WithdrawSubmissionButton({
+  entry,
+  disabled,
+  withdraw,
+}: {
+  entry: TimeEntry;
+  disabled: boolean;
+  withdraw: (entry: TimeEntry) => void;
+}) {
+  const day = formatBerlin(entry.timestamp, 'weekdayDate');
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={disabled}
+          aria-label={`${getEntryTypeLabel(entry)} vom ${formatBerlinDateTime(entry.timestamp)} zurückziehen`}
+        >
+          <Undo2 className="mr-1.5 size-4" /> Zurückziehen
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Nachtrag zurückziehen?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Alle Einträge deines Nachtrags vom {day} werden zurückgezogen und nicht mehr geprüft. Du kannst
+            die Zeit danach neu nachtragen.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" onClick={() => withdraw(entry)}>
+            Zurückziehen
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
 }

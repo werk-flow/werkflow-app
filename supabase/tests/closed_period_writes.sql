@@ -284,6 +284,24 @@ select pg_temp.expect_period_closed('service midnight clock_out', $sql$
   values ('26100000-0000-0000-0000-000000000002', '26100000-0000-0000-0000-000000000010',
     'clock_out', '2026-07-01 00:00+02', true, 'pending')
 $sql$);
+-- A withdrawal of an own pending submission that names an entry of the
+-- closed June refuses as a whole (20261109090000): the open July entry stays
+-- pending too, and the withdrawal ledger keeps no event.
+select pg_temp.expect_period_closed('service withdrawal of a pending entry in June', $sql$
+  select public.withdraw_pending_time_entries('26100000-0000-0000-0000-000000000002',
+    '26100000-0000-0000-0000-000000000010',
+    array['26100000-0000-0000-0000-000000000032', '26100000-0000-0000-0000-000000000034']::uuid[])
+$sql$);
+do $$
+begin
+  if (select count(*) from public.time_entries
+      where id in ('26100000-0000-0000-0000-000000000032', '26100000-0000-0000-0000-000000000034')
+        and status = 'pending') <> 2
+    or exists (select 1 from public.time_entry_withdrawals
+      where organization_id = '26100000-0000-0000-0000-000000000010')
+  then raise exception 'a withdrawal refused by the closed June changed something'; end if;
+end;
+$$;
 
 do $$
 begin
