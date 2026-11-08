@@ -140,9 +140,7 @@ function ArtifactRevisionLinks({
 
 function ArtifactHistory({ detail, currentUserId }: Pick<ArtifactDetailProps, 'detail' | 'currentUserId'>) {
   return (
-    <FormDisclosure
-      label={`Verlauf (${detail.revisions.length} Versionen, ${detail.actions.length} Aktionen)`}
-    >
+    <FormDisclosure label={historyLabel(detail.revisions.length, detail.actions.length)}>
       <div className="space-y-3">
         <div className="divide-y rounded-md border">
           {detail.revisions.map((revision) => (
@@ -177,7 +175,13 @@ function ArtifactHistory({ detail, currentUserId }: Pick<ArtifactDetailProps, 'd
   );
 }
 
-/** The revision's recorded text fields as label and value. */
+/** „Verlauf (1 Version, 2 Aktionen)“: each count with its singular or plural noun. */
+function historyLabel(revisions: number, actions: number): string {
+  const versions = `${revisions} ${revisions === 1 ? 'Version' : 'Versionen'}`;
+  return `Verlauf (${versions}, ${actions} ${actions === 1 ? 'Aktion' : 'Aktionen'})`;
+}
+
+/** The revision's recorded fields as label and value. */
 function artifactDetailFields(
   detail: WorkArtifactDetail,
   currentRevision: ArtifactDetailProps['currentRevision'],
@@ -185,13 +189,19 @@ function artifactDetailFields(
   const defect = detail.defectDetails.find((entry) => entry.revision_id === currentRevision.id);
   const change = detail.changeDetails.find((entry) => entry.revision_id === currentRevision.id);
   // Only absent values are hidden: zero labor minutes is a recorded value.
+  const dateTime = (value: string | null) => (value ? displayDateTime(value) : null);
   return [
     ['Zusammenfassung', currentRevision.summary],
+    ['Arbeitstag', formatGermanDate(currentRevision.work_date, { empty: '' })],
+    ['Beginn', dateTime(currentRevision.visit_started_at)],
+    ['Ende', dateTime(currentRevision.visit_ended_at)],
     ['Fortschritt', currentRevision.progress],
     ['Ausgeführte Arbeiten', currentRevision.performed_work],
     ['Offene Arbeiten', currentRevision.outstanding_work],
     ['Material', currentRevision.materials_summary],
+    ['Nächster Besuch', dateTime(currentRevision.next_visit_at)],
     ['Kundenaussage', currentRevision.customer_statement],
+    ['Aufmaßdatum', formatGermanDate(currentRevision.measurement_date, { empty: '' })],
     ['Aufmaßort', currentRevision.measurement_location],
     ['Hinweise', currentRevision.measurement_notes],
     ['Mangelbeschreibung', defect?.description],

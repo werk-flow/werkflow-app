@@ -12,6 +12,7 @@ import { JobMaterialsSection } from '@/components/inventar/job-materials-section
 import { ApplyWorkTemplateCard } from '@/components/arbeitsvorlagen/apply-work-template-card';
 import type { WorkArtifactSummary } from '@/lib/work-artifacts/types';
 import type { TimeEntry } from '@/lib/time-tracking/types';
+import { recordedVisitWindow } from '@/lib/work-artifacts/visit-window';
 import {
   type JobWithDetails,
   type JobInstructionItemWithDetails,
@@ -104,12 +105,17 @@ function useJobDetailMainColumnOptions({
         })),
     [liveJob.id, timeEntries],
   );
+  const artifactRecordedVisit = useMemo(
+    () => recordedVisitWindow(timeEntries, { jobId: liveJob.id, userId: currentUserId, now: new Date() }),
+    [currentUserId, liveJob.id, timeEntries],
+  );
 
   return {
     currentUserActor,
     artifactEvidenceRequirements,
     artifactInstructionOptions,
     artifactTimeEntryOptions,
+    artifactRecordedVisit,
   };
 }
 
@@ -169,6 +175,7 @@ export function JobDetailMainColumn({
     artifactEvidenceRequirements,
     artifactInstructionOptions,
     artifactTimeEntryOptions,
+    artifactRecordedVisit,
   } = useJobDetailMainColumnOptions({ liveJob, currentUserId, members, instructionItems, timeEntries });
 
   return (
@@ -199,6 +206,7 @@ export function JobDetailMainColumn({
           instructionOptions={artifactInstructionOptions}
           defaultSiteId={liveJob.site?.id}
           timeEntryOptions={artifactTimeEntryOptions}
+          recordedVisit={artifactRecordedVisit}
         />
       ) : (
         <RegionLoadError>Arbeitsnachweise konnten nicht geladen werden.</RegionLoadError>

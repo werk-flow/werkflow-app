@@ -20,10 +20,10 @@ import {
   type GetTimeEntryAuditEventsResult,
   type TimeEntryRow,
   type TimeEntryStatus,
-  type WorkSession,
   toTimeEntries,
 } from './types';
-import { calculateWorkSessions, canViewEntries } from './helpers';
+import { canViewEntries } from './helpers';
+import { getEffectiveTimeEntries } from './effective-entries';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { formatBerlinLocalDate, getLocalDayEnd, getLocalDayStart } from '@/lib/date-time/berlin';
 import { getCanonicalTimeEntries } from './canonical-entries';
@@ -337,11 +337,10 @@ function mergedDaySpans(jobs: readonly JobSources[]): DaySpan[] {
 }
 
 /**
- * The work sessions of every person-day a clock-in of the span's jobs sits
- * in, paired from the whole days of the span's people; the read's error
- * otherwise.
+ * The whole days of the span's people that a clock-in of the span's jobs sits
+ * in, by person-day; the read's error otherwise.
  */
-async function readSpanSessions(
+async function readSpanDayEntries(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   scope: JobReadScope,
   span: DaySpan,
@@ -369,7 +368,7 @@ async function readSpanSessions(
       LIST_ROW_CAP,
     ),
   );
-  if (error) return { sessions: null, error };
+  if (error) return { entriesByUserDay: null, error };
 
   const entriesByUserDay = new Map<string, TimeEntry[]>();
   for (const entry of toTimeEntries(data)) {
@@ -382,74 +381,79 @@ async function readSpanSessions(
       entriesByUserDay.set(key, [entry]);
     }
   }
-  const sessions: ReadonlyMap<string, WorkSession[]> = new Map(
-    [...entriesByUserDay].map(([dayKey, entries]) => [dayKey, calculateWorkSessions(entries)]),
-  );
-  return { sessions, error: null };
+  return { entriesByUserDay, error: null };
 }
 
 /**
- * The sessions each job of a span sees, by job id; null when a read fails.
+ * The person-days each job of a span sees, by job id; null when a read fails.
  * A merged span is read once for all its jobs. When that read exceeds the
  * row bound, each job reads its own span instead, as a single-job read does,
  * so merging never fails a read that per-job reads complete.
  */
-async function readSpanJobSessions(
+async function readSpanJobDays(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   scope: JobReadScope,
   span: DaySpan,
-): Promise<Array<[string, ReadonlyMap<string, WorkSession[]>]> | null> {
-  const merged = await readSpanSessions(admin, scope, span);
+): Promise<Array<[string, ReadonlyMap<string, TimeEntry[]>]> | null> {
+  const merged = await readSpanDayEntries(admin, scope, span);
   const reads =
     merged.error?.code === 'row_overflow' && span.jobs.length > 1
       ? await mapInWindows(
           span.jobs,
-          async (job) => ({ jobs: [job], read: await readSpanSessions(admin, scope, jobDaySpan(job)) }),
+          async (job) => ({ jobs: [job], read: await readSpanDayEntries(admin, scope, jobDaySpan(job)) }),
           ({ read }) => read.error !== null,
         )
       : [{ jobs: span.jobs, read: merged }];
-  const sessionsByJob: Array<[string, ReadonlyMap<string, WorkSession[]>]> = [];
+  const daysByJob: Array<[string, ReadonlyMap<string, TimeEntry[]>]> = [];
   for (const { jobs, read } of reads) {
-    if (!read.sessions) {
+    if (!read.entriesByUserDay) {
       logError('Error fetching session-aware time entries for job:', read.error);
       return null;
     }
-    for (const job of jobs) sessionsByJob.push([job.jobId, read.sessions]);
+    for (const job of jobs) daysByJob.push([job.jobId, read.entriesByUserDay]);
   }
-  return sessionsByJob;
+  return daysByJob;
 }
 
 /**
- * One job's corrected entries the caller may see: its canonical entries and
- * the legacy sessions its own clock-ins open on their days.
+ * One job's corrected entries the caller may see: its canonical entries and,
+ * on each day one of its own clock-ins opens, the stretch that clock-in
+ * starts. A break or clock-out that names no job (a same-day manual entry)
+ * belongs to the job whose clock-in precedes it, so the stretch runs until
+ * the next clock-in or an entry of another job. The days are walked after
+ * the approved corrections, so a corrected end still closes the stretch.
  */
 function jobTimeEntries(
   scope: JobReadScope,
   job: JobSources,
-  sessionsByUserDay: ReadonlyMap<string, WorkSession[]>,
+  entriesByUserDay: ReadonlyMap<string, TimeEntry[]>,
 ): TimeEntry[] {
-  const projectJobEntries = (entries: readonly TimeEntry[]): TimeEntry[] =>
-    applyApprovedTimeCorrections(entries, scope.correctionApplications, scope.organizationId).filter(
-      (entry) => entry.jobId === job.jobId && (scope.isManager || entry.userId === scope.userId),
-    );
-  if (job.clockIns.length === 0) return projectJobEntries(job.canonicalEntries);
-
+  const project = (entries: readonly TimeEntry[]): TimeEntry[] =>
+    applyApprovedTimeCorrections(entries, scope.correctionApplications, scope.organizationId);
+  const jobEntries = new Map(
+    project(job.canonicalEntries)
+      .filter((entry) => entry.jobId === job.jobId)
+      .map((entry) => [entry.id, entry]),
+  );
   const jobDayKeys = new Set(job.clockIns.map(userDayKey));
-  const dedupedEntries = new Map(job.canonicalEntries.map((entry) => [entry.id, entry]));
-  for (const [dayKey, sessions] of sessionsByUserDay) {
+  for (const [dayKey, dayEntries] of entriesByUserDay) {
     if (!jobDayKeys.has(dayKey)) continue;
-    for (const { clockIn, clockOut } of sessions) {
-      if (clockIn?.jobId !== job.jobId) continue;
-      dedupedEntries.set(clockIn.id, clockIn);
-      if (clockOut) dedupedEntries.set(clockOut.id, clockOut);
+    // The projection adds every correction's facts; the walk takes this day's.
+    const day = getEffectiveTimeEntries(project(dayEntries).filter((entry) => userDayKey(entry) === dayKey));
+    let inJobStretch = false;
+    for (const entry of day) {
+      if (entry.jobId !== null || entry.entryType === 'clock_in') inJobStretch = entry.jobId === job.jobId;
+      if (inJobStretch) jobEntries.set(entry.id, entry);
     }
   }
 
-  return projectJobEntries([...dedupedEntries.values()]).sort((a, b) => {
-    const timestampDiff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
-    if (timestampDiff !== 0) return timestampDiff;
-    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-  });
+  return [...jobEntries.values()]
+    .filter((entry) => scope.isManager || entry.userId === scope.userId)
+    .sort((a, b) => {
+      const timestampDiff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+      if (timestampDiff !== 0) return timestampDiff;
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    });
 }
 
 /**
@@ -470,16 +474,16 @@ async function readJobsTimeEntries(
   );
   const jobs = sources.flatMap((source) => (source ? [source] : []));
   if (jobs.length !== jobIds.length) return null;
-  const spanSessions = await mapInWindows(
+  const spanDays = await mapInWindows(
     mergedDaySpans(jobs),
-    (span) => readSpanJobSessions(admin, scope, span),
+    (span) => readSpanJobDays(admin, scope, span),
     (result) => result === null,
   );
-  if (spanSessions.some((result) => result === null)) return null;
-  const sessionsByJob = new Map(spanSessions.flatMap((result) => result ?? []));
+  if (spanDays.some((result) => result === null)) return null;
+  const daysByJob = new Map(spanDays.flatMap((result) => result ?? []));
   return jobs.map((job) => ({
     jobId: job.jobId,
-    entries: jobTimeEntries(scope, job, sessionsByJob.get(job.jobId) ?? new Map()),
+    entries: jobTimeEntries(scope, job, daysByJob.get(job.jobId) ?? new Map()),
   }));
 }
 

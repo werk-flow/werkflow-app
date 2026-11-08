@@ -209,7 +209,9 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
 
     dialog = await beginWorkArtifact(employeePage, newArtifact('measurement', `Aufmaß ${world.runId}`));
     await workArtifactAction(dialog, 'submitForReview').click();
-    await expect(workArtifactMessage(dialog, 'requiredFields')).toBeVisible();
+    // A submit with missing input marks the fields and focuses the first one.
+    await expect(workArtifactMessage(dialog, 'missingMeasurementDate')).toBeVisible();
+    await expect(workArtifactInput(dialog, 'measurementDate')).toBeFocused();
     await typeIntoDatePickerById(dialog, 'artifact-measurement-date', workDate);
     await workArtifactField(dialog, 'measurementLocation').fill('Heizraum');
     await workArtifactField(dialog, 'measurementNotes').fill('Lichte Maße vor Ort geprüft.');
