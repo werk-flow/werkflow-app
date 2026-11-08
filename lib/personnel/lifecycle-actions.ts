@@ -791,7 +791,7 @@ export async function finalizePersonnelDocumentUpload(
     }),
   );
   if (error || !data) {
-    await discardRefusedPersonnelCopy(upload, head);
+    await discardRefusedPersonnelCopy(upload, head, error);
     return { success: false, error: lifecycleFailureCode(error) };
   }
   revalidatePersonnel();

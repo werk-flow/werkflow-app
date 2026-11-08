@@ -404,3 +404,28 @@ assert.deepEqual(storageCalls, [
   `upload:${abandoned.path}`,
   `discard:${stagingOf(abandoned.path)}`,
 ]);
+
+// A refused registration removes the finalize's own copy; an unknown outcome keeps it.
+for (const [error, kept] of [
+  [{ code: 'P0001', message: 'operation_id_conflict' }, false],
+  [{ code: '', message: 'TypeError: fetch failed' }, true],
+] as const) {
+  const refused = await issueTicket();
+  world.rpc = (call) =>
+    call.name === 'finalize_personnel_document_metadata' ? { data: null, error } : rpcBeforeUploads(call);
+  storageCalls.length = 0;
+  world.rpcCalls.length = 0;
+  const result = await finalizePersonnelDocumentUpload({
+    ...refused.request,
+    documentType: 'Vertrag',
+    evidenceState: 'valid',
+    validUntil: null,
+  });
+  assert.equal(result.success, false);
+  const copyPath = String(world.rpcCalls.at(-1)?.args.p_storage_path);
+  assert.deepEqual(
+    storageCalls,
+    [`promote:${refused.path}`, ...(kept ? [] : [`discard:${copyPath}`])],
+    error.message,
+  );
+}

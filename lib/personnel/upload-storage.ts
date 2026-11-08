@@ -2,7 +2,6 @@ import 'server-only';
 
 import type { ActionResult } from '@/lib/action-result';
 import { loggedRead } from '@/lib/data/read-request-cache';
-import { discardUnreferencedObject } from '@/lib/documents/storage-references';
 import { DOCUMENT_MAX_FILE_SIZE_BYTES } from '@/lib/documents/types';
 import { logError } from '@/lib/logging';
 import {
@@ -12,6 +11,7 @@ import {
   type PromotedUpload,
 } from '@/lib/storage/r2';
 import type { AdminClient } from '@/lib/supabase/admin';
+import { isConfirmedWriteRefusal } from '@/lib/supabase/write-refusal';
 
 // The storage steps of a protected personnel upload. The actions in
 // lifecycle-actions.ts authorize the caller and verify the cleanup token first.
@@ -92,21 +92,17 @@ export async function acceptPersonnelUpload(
 }
 
 /**
- * Removes a finalize's copy after a refused registration, unless a document or
- * version references it: a lost answer can hide a committed registration. A
- * replay copied nothing.
+ * Removes a finalize's own copy after the database refused its registration.
+ * After an unknown outcome the copy stays, since the registration may still
+ * commit; a replay copied nothing.
  */
 export async function discardRefusedPersonnelCopy(
-  { admin, organizationId }: PersonnelUpload,
+  { organizationId }: PersonnelUpload,
   accepted: { storagePath: string; copied: boolean },
+  error: { code?: string } | null,
 ): Promise<void> {
-  if (!accepted.copied) return;
-  await discardUnreferencedObject(
-    admin,
-    organizationId,
-    accepted.storagePath,
-    'discardRefusedPersonnelCopy: reference read failed',
-  );
+  if (!accepted.copied || !isConfirmedWriteRefusal(error)) return;
+  await discardStorageObjects({ organizationId, paths: [accepted.storagePath] });
 }
 
 /** Removes an unregistered upload's staging object; a finalize removes its own copy. */

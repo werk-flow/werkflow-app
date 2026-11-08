@@ -16,7 +16,7 @@ import { rpcArgs } from '@/lib/supabase/rpc-args';
 import type { Json } from '@/lib/supabase/database.types';
 import { putStorageObject } from '@/lib/storage/r2';
 import { logError } from '@/lib/logging';
-import { discardUnreferencedObject } from '@/lib/documents/storage-references';
+import { discardUnreferencedExportObject } from '@/lib/work-artifacts/export-storage';
 import type { WorkTargetType } from '@/lib/work-lifecycle/types';
 import { mapHandoverError } from './errors';
 import { buildWorkHandoverExport } from './export';
@@ -433,7 +433,7 @@ export async function releaseWorkHandover(
       }),
     );
     if (error) {
-      await discardUnreferencedObject(
+      await discardUnreferencedExportObject(
         admin,
         auth.context.orgId,
         storagePath,

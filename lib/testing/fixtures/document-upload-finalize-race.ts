@@ -3,8 +3,8 @@
 // replays two finalizes of one upload: the second read the database before the
 // first committed, and a still-valid signed URL wrote the staging key again in
 // between. The file the first finalize registered keeps its bytes, and the
-// refused second finalize leaves no object behind. A finalize whose answer is
-// lost after its registration committed keeps its copy.
+// refused second finalize leaves no object behind. A finalize whose
+// registration has an unknown outcome keeps its copy.
 import assert from 'node:assert/strict';
 import { CALLER_ID, ORGANIZATION_A, installActionWorld, signInAs } from './action-boundary-world';
 import { installInMemoryBucket } from './in-memory-bucket';
@@ -136,34 +136,25 @@ await finalizeTwice(
   'version_conflict',
 );
 
-// A finalize whose answer is lost after its registration committed keeps its
-// copy: the refusal it sees does not prove the copy unregistered.
-const lostTicket = await createDocumentUploadTicket({
+// A finalize whose registration has an unknown outcome keeps its copy: a
+// transport failure arrives while the transaction may still commit.
+const unknownTicket = await createDocumentUploadTicket({
   kind: 'library',
   fileName: 'angebot.pdf',
   fileSizeBytes: 8,
   mimeType: 'application/pdf',
 });
-assert.ok(lostTicket.success, JSON.stringify(lostTicket));
+assert.ok(unknownTicket.success, JSON.stringify(unknownTicket));
 bucket.clear();
-bucket.set(uploadStagingPath(ORGANIZATION_A, lostTicket.ticket.storagePath), pdf('original'));
-world.rpc = ({ args }) => {
-  world.tables.documents?.push(
-    documentRow({
-      id: String(args.p_document_id),
-      storage_path: String(args.p_storage_path),
-      current_version_number: 1,
-    }),
-  );
-  return { data: null, error: { message: 'connection lost' } };
-};
+bucket.set(uploadStagingPath(ORGANIZATION_A, unknownTicket.ticket.storagePath), pdf('original'));
+world.rpc = () => ({ data: null, error: { code: '', message: 'TypeError: fetch failed' } });
 assert.deepEqual(
   await finalizeDocumentUpload({
     kind: 'library',
-    documentId: lostTicket.ticket.documentId,
+    documentId: unknownTicket.ticket.documentId,
     fileName: 'angebot.pdf',
   }),
   { success: false, error: 'create_failed' },
 );
-const committedPath = String(world.rpcCalls.at(-1)?.args.p_storage_path);
-assert.deepEqual(bucket.get(committedPath), pdf('original'), 'a lost answer removed a committed copy');
+const pendingPath = String(world.rpcCalls.at(-1)?.args.p_storage_path);
+assert.deepEqual(bucket.get(pendingPath), pdf('original'), 'an unknown outcome removed the copy');

@@ -639,7 +639,7 @@ export async function exportWorkArtifact(
   });
   const status = mutationStatus(data);
   if (error || !isJsonRecord(data) || !status) {
-    return refuseWorkArtifactExport(admin, auth.context.orgId, storagePath, error);
+    return refuseWorkArtifactExport(auth.context.orgId, storagePath, error);
   }
   // A concurrent export of the same content committed first; its document owns another object.
   if (data.duplicate === true) {

@@ -8,7 +8,8 @@
 // organization is not found and nothing is stored. An internal revision is
 // never exported, not even by a manager. Each export stores its object under a
 // key of its own: a refused or duplicate export of the same content removes
-// only its own object, never the one a committed export registered.
+// only its own object, never the one a committed export registered, and an
+// export with an unknown outcome keeps its object.
 import { mock } from 'bun:test';
 import assert from 'node:assert/strict';
 import {
@@ -212,3 +213,12 @@ assert.ok(
 );
 assert.equal(new Set(storedPaths).size, storedPaths.length, 'two exports stored one key');
 assert.deepEqual(discardedPaths, storedPaths.slice(2));
+
+// An export whose registration has an unknown outcome keeps its object.
+world.rpc = () => ({ data: null, error: { code: '', message: 'TypeError: fetch failed' } });
+assert.deepEqual(await exportOf(jobArtifactId, crypto.randomUUID()), {
+  success: false,
+  error: 'work_artifact_export_failed',
+});
+assert.equal(storedPaths.length, 5);
+assert.deepEqual(discardedPaths, storedPaths.slice(2, 4), 'an unknown outcome removed the export object');
