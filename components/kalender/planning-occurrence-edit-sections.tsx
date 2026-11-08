@@ -12,10 +12,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { TimeInput } from '@/components/ui/time-input';
 import type { usePlanningOptions } from '@/hooks/use-planning-options';
+import { absencesNotLoadedHint, withAbsenceMarks } from '@/lib/calendar/absence-marks';
 import type { PlanningTimeKind } from '@/lib/calendar/planning-entry-draft';
 import type { PlanningEditScope, PlanningStatusIntent } from '@/lib/calendar/planning-occurrence-edit';
 import type { PlanningConflict } from '@/lib/planning/types';
 import { formatGermanDate, parseIsoLocalDate, toLocalDateString } from '@/lib/utils';
+import { useBoardAbsences } from './board-absences-context';
 import type { usePlanningSeriesExtension } from './use-planning-series-extension';
 
 const EDIT_SCOPES: readonly PlanningEditScope[] = ['one', 'future', 'series'];
@@ -152,6 +154,7 @@ export function PlanningOccurrenceScheduleFields({
   onEmployeeRecordIdsChange,
   onConflictsChange,
 }: PlanningOccurrenceScheduleFieldsProps) {
+  const absences = useBoardAbsences();
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -193,9 +196,11 @@ export function PlanningOccurrenceScheduleFields({
         label="Mitarbeiter"
         htmlFor="planning-edit-employees"
         error={employeeSelect.loadFailure?.message}
+        description={absencesNotLoadedHint(absences, date)}
       >
         <SearchableMultiSelect
           {...employeeSelect}
+          options={withAbsenceMarks(employeeSelect.options, absences, date)}
           selectedIds={employeeRecordIds}
           onSelectionChange={(ids) => {
             onEmployeeRecordIdsChange(ids);

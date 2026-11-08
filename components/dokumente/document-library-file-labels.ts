@@ -8,7 +8,12 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-import type { DocumentArchive, DocumentFolder, OrganizationDocument } from '@/lib/documents/types';
+import type {
+  DocumentArchive,
+  DocumentAuditEvent,
+  DocumentFolder,
+  OrganizationDocument,
+} from '@/lib/documents/types';
 import { formatGermanDate } from '@/lib/utils';
 
 /** How the document library names a file: icon, type, uploader, links and audit events. */
@@ -24,6 +29,12 @@ export function getUserDisplayName(
 
   const fullName = [uploader.firstName, uploader.lastName].filter(Boolean).join(' ').trim();
   return fullName || uploader.email || 'Unbekannt';
+}
+
+/** The audit history names a member by email; a former member keeps no email and is named instead. */
+export function getAuditActorLabel(actor: DocumentAuditEvent['actor']): string | null {
+  if (!actor) return null;
+  return actor.email ?? getUserDisplayName(actor);
 }
 
 export function getFileIcon(document: OrganizationDocument): LucideIcon {

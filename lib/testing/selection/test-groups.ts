@@ -360,6 +360,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['user-preference-writes', ['user_preference_writes.sql'], ['work', 'planning']],
   ['rate-limits', ['rate_limits.sql'], ['*']],
   ['organization-deletion', ['organization_deletion.sql'], ['*']],
+  ['storage-purge', ['storage_purge.sql'], ['documents']],
   ['record-numbers', ['record_numbers.sql'], ['work', 'customers', 'personnel', 'service']],
   [
     'list-pagination',

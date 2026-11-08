@@ -22,6 +22,8 @@ import {
 export const SICKNESS_COPY = {
   reportSickness: 'Krank melden',
   recordSickness: 'Krankmeldung erfassen',
+  affectedVisits: 'Betroffene Termine',
+  recordedDone: 'Fertig',
   ownNoDiagnosisHint: 'bitte gib keine Diagnose an.',
   managerNoDetailsHint: 'Es werden keine Krankheitsdetails erfasst.',
   correctionReasonRequired: 'Bitte gib einen Grund für die Korrektur an.',
@@ -259,11 +261,12 @@ export async function recordSicknessForMemberViaSection(
       }
       submitted = true;
       await dialog.getByRole('button', { name: SICKNESS_COPY.recordSickness }).click();
+      // The saved report stays open on what it affects until the office closes it.
+      await expect(dialog.getByRole('heading', { name: SICKNESS_COPY.affectedVisits })).toBeVisible();
       if (options.expectVacationOverlapHint) {
-        // The saved report shows the overlap hint until explicitly acknowledged.
         await expect(dialog.getByText('überschneidet sich mit genehmigtem Urlaub')).toBeVisible();
-        await dialog.getByRole('button', { name: 'Verstanden' }).click();
       }
+      await dialog.getByRole('button', { name: SICKNESS_COPY.recordedDone }).click();
       await expect(page.getByRole('dialog')).toHaveCount(0);
       return;
     } catch (error) {

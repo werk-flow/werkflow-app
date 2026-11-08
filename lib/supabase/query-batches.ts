@@ -26,6 +26,25 @@ function chunkIds(ids: readonly string[], size = ID_BATCH_SIZE): string[][] {
 export const BATCH_CONCURRENCY = 8;
 
 /**
+ * Maps the items, at most `BATCH_CONCURRENCY` at a time, and returns the
+ * results in item order. After a window that holds a failed result it starts
+ * no further window, so the results end there.
+ */
+export async function mapInWindows<Item, Result>(
+  items: readonly Item[],
+  map: (item: Item) => PromiseLike<Result>,
+  failed: (result: Result) => boolean,
+): Promise<Result[]> {
+  const results: Result[] = [];
+  for (let index = 0; index < items.length; index += BATCH_CONCURRENCY) {
+    const window = await Promise.all(items.slice(index, index + BATCH_CONCURRENCY).map(map));
+    results.push(...window);
+    if (window.some(failed)) break;
+  }
+  return results;
+}
+
+/**
  * Runs one query per batch, at most `BATCH_CONCURRENCY` at a time, and
  * concatenates the rows in id order. The first error wins; callers keep their
  * existing error handling.
@@ -35,16 +54,10 @@ export async function readInBatches<Row, ReadError extends { message: string }>(
   read: (batch: readonly string[]) => PromiseLike<{ data: Row[] | null; error: ReadError | null }>,
   size = ID_BATCH_SIZE,
 ): Promise<{ data: Row[]; error: ReadError | null }> {
-  const batches = chunkIds(ids, size);
-  const rows: Row[] = [];
-  for (let index = 0; index < batches.length; index += BATCH_CONCURRENCY) {
-    const window = batches.slice(index, index + BATCH_CONCURRENCY);
-    const results = await Promise.all(window.map((batch) => read(batch)));
-    const failed = results.find((result) => result.error);
-    if (failed?.error) return { data: [], error: failed.error };
-    for (const result of results) rows.push(...(result.data ?? []));
-  }
-  return { data: rows, error: null };
+  const results = await mapInWindows(chunkIds(ids, size), read, (result) => result.error !== null);
+  const failed = results.find((result) => result.error);
+  if (failed?.error) return { data: [], error: failed.error };
+  return { data: results.flatMap((result) => result.data ?? []), error: null };
 }
 
 /**

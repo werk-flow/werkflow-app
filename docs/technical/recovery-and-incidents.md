@@ -7,7 +7,7 @@ What a backup can restore, what loss the owner accepted, and who acts in an inci
 | Data | Protection | Limit |
 | --- | --- | --- |
 | Postgres on Supabase PROD | Daily provider backups, seven-day retention | Up to 24 hours of writes can be lost. No point-in-time recovery. |
-| File bytes in the production R2 bucket | Durable object storage; the app's trash keeps a deleted document until permanent deletion | No object versioning. A permanently deleted or overwritten object is gone. The database backup holds no bytes. |
+| File bytes in the production R2 bucket | Durable object storage; the app's trash keeps a deleted document until permanent deletion. A permanent deletion or an organization deletion takes effect in the app at once and in storage eight days later, one day past the backups, so a restored row finds its file ([storage cleanup](document-storage-and-access.md#storage-cleanup)). | No object versioning. An object is gone once the purge deleted it. The database backup holds no bytes. |
 | Auth users and sessions | In the database backup | Treat a dump as a credential. A restored session row revokes no issued token. |
 | Configuration and secrets | Manual: provider dashboards, the owner's password manager, the gitignored env backups | No automated export. Update the env backups after every provider change. |
 | Edge function source | `supabase/functions/` in git | Function secrets exist only in each project's secret store. |
@@ -44,20 +44,20 @@ A missing object fails acceptance. The journal names missing documents and orpha
 ## Restore procedure (database)
 
 1. Record source, target, backup timestamp, application revision, expected loss and rollback limits. Get the owner's authorization. Never load production material into DEV or the local stack.
-2. Stop writes through enforced maintenance or provider controls, and notify the customer; staff work on paper and by phone until writes reopen. A notice alone stops no direct client, job or session.
+2. Stop writes through enforced maintenance or provider controls, and notify the customer; staff work on paper and by phone until writes reopen. A notice alone stops no direct client, job or session. Pause the storage purge until step 5 is done: remove `CRON_SECRET` from Vercel Production and redeploy production, since a variable change reaches only a new deployment. Before the restore, confirm that `/api/storage-purge` answers 503 and that no purge request is still running; a run that has not started yet never will. The paused route deletes nothing and raises the production-watcher alert. After step 5, set a new value and redeploy again.
 3. Follow the provider's current restore procedure. Run only the authorized operation and keep its result. A partial load or a nonzero exit is a failed restore.
 4. Compare `supabase_migrations.schema_migrations` on the target with the intended revision, and check that `cron.job` holds the scheduled jobs. `bun run migrations:check` checks DEV only. For a missing migration, follow [the migration rule](environments.md#the-migration-rule) without relinking the CLI to production.
-5. Reconcile current and historical document and version paths against the correct bucket, with the rehearsal's path query and comparison (`lib/testing/runs/recovery-rehearsal.ts`). Metadata without an object means missing bytes. An object uploaded after the backup can survive without metadata. Keep orphan objects for review; never purge them automatically.
+5. Reconcile current and historical document and version paths against the correct bucket, with the rehearsal's path query and comparison (`lib/testing/runs/recovery-rehearsal.ts`). Metadata without an object means missing bytes. An object uploaded after the backup, or one whose deletion was queued after it, can survive without metadata or queue entry. Keep orphan objects for review; never purge them automatically.
 6. Check tenant and role access, protected documents and session revocation. A database restore revokes no token.
 7. Run the provider canary on cloud DEV; it does not prove production recovery. On production, use metadata and configuration checks and the customer verification the owner agreed before you resume writes. Record unresolved evidence and every loss.
 
 ## Restore procedure (files)
 
-Restore a trashed document in the app (`/dokumente`, Papierkorb). A permanently deleted object is gone. If a whole bucket is lost, the database still holds every path and size, so the owner can ask customers to upload again.
+Restore a trashed document in the app (`/dokumente`, Papierkorb). A permanently deleted document's bytes stay in storage for eight days, so a database restore within that window finds them; after the purge they are gone. If a whole bucket is lost, the database still holds every path and size, so the owner can ask customers to upload again.
 
 ## Monitoring
 
-Signals: the production watcher below, Vercel's dashboards (runtime logs there are PROD data, for the owner only), Supabase logs, advisors and usage pages, and provider e-mail notifications. A notification setting does not prove an outage raises an alert; never provoke an outage to test it. Redact provider details and personal data before you export a log.
+Signals: the production watcher below, the failure count `werkflow.failure`, Vercel's dashboards (runtime logs there are PROD data, for the owner only), Supabase logs, advisors and usage pages, and provider e-mail notifications. A notification setting does not prove an outage raises an alert; never provoke an outage to test it. Redact provider details and personal data before you export a log.
 
 A red nightly or release, a scheduled release that stopped at a red full run, and a scheduled run that never started each open or update one issue with the label `ci-alert`: `CI alert: nightly` or `CI alert: release` (`.github/scripts/alert-issue.sh`). The next green run closes it. A release that stops because `main` equals `production` leaves the issue as it is, because it proves nothing. `ops/ci-alert.py` in `werk-flow/werkflow-planning` runs every 10 minutes on [the PC and the Mac](environments.md#background-jobs): it finds a run that never started and hands each open issue, and the weekly health issue, to one T3 thread. These issues only report; no release decision reads them.
 
@@ -69,7 +69,22 @@ On the machine with the watcher's token, `ops/ci-alert.py` also runs the product
 - `Production alert: server errors`: a burst of server errors against the week before, or a route that starts to fail. It adds a comment at most every few hours and closes a day after the newest error.
 - `Production alert: watcher`: several failed passes in a row, such as an expired token. `python3 -I ops/prod_watch.py --health` in werkflow-planning checks the token.
 
-Its thread reads no PROD data: no runtime log, build log, request record or row, and of a failed `Apply pending migrations to PROD` step only the result, since its log may quote a row. It works from the route, status, error code and commit range, and reproduces the failure on staging or the local stack. The watcher closes the deploy alert once production serves its head and no build is failed or stuck. It misses a handled failure answered below 500: no metric counts log levels.
+Its thread reads no PROD data: no runtime log, build log, request record or row, and of a failed `Apply pending migrations to PROD` step only the result, since its log may quote a row. It works from the route, status, error code and commit range, and reproduces the failure on staging or the local stack. The watcher closes the deploy alert once production serves its head and no build is failed or stuck.
+
+A handled failure answers below 500, so the 5xx count misses it. Server-side `logError` (`lib/logging.ts`) therefore also records the Vercel custom metric `werkflow.failure` with the value 1 and two tags:
+
+- `label`: the log label in Vercel's tag characters (letters, digits, `-`, `_`, `.`, `/`), each other run of characters as `_`, at most 63 bytes.
+- `code`: the failure's stable code, written the same way, or `none`.
+
+A label or code that holds an email address, a link, six digits in a row, or twenty hex characters and dashes in a row (a UUID, a token) becomes `withheld`. The metric carries no message, id, user, organization or request value; Vercel adds the deployment, route and region. Failures in the browser are not counted, because a browser has no Vercel runtime. Recording needs Observability Plus on the Vercel team, at $1.20 per million recorded failures, and only the owner turns it on. Outside Vercel, and when recording fails, `logError` logs as before and never throws.
+
+`ops/prod_watch.py` owns the rule that turns the count into `Production alert: handled failures`, per label and code. Until it has that rule, the count shows only in the Vercel dashboard under Observability, Custom Metrics. The alert goes through `.github/workflows/production-alert.yml` like every watcher alert: it assigns the owner, and its thread works from the label, code and route, never from a log line.
+
+Check the path without an outage:
+
+1. `bun test lib/logging.test.ts lib/testing/ci-alert.test.ts` proves the tags, the withheld values, the silent fallback, and that one issue opens, updates and closes.
+2. Open `/auth/callback?code=check` once on [the staging URL](environments.md#vercel). The made-up code fails its exchange, and `logError` handles the failure. Under Observability, Custom Metrics, the staging deployment then shows `werkflow.failure` with a label that starts with `auth.callback_code_exchange`.
+3. In werkflow-planning, the watcher's own tests prove the rule's thresholds.
 
 `.github/workflows/date-lookahead.yml` runs the suite nightly on dates still to come, so a test that fails on a date alone surfaces weeks before that date. It reports the same way, on `CI alert: date look-ahead`, and a failed job's name is its date. Each job steps its runner's kernel clock (`.github/scripts/shift-clock.sh`). Containers share that clock, so Bun, Chromium, the app, Postgres and the Supabase services all show the date, and SQL tests read it too. A job fails if the shell, Bun or Postgres shows another date, or if the clock leaves the shift.
 

@@ -20,6 +20,7 @@ import {
 import { formatGermanDate as formatDate } from '@/lib/utils';
 import { DocumentDetailsArchive, type DocumentDetailsArchiveProps } from './document-details-archive';
 import {
+  getAuditActorLabel,
   getAuditEventLabel,
   getFileTypeLabel,
   getLinkBadges,
@@ -317,15 +318,18 @@ function DocumentDetailsHistory({ details, isLoading }: DocumentDetailsHistoryPr
         </div>
       ) : details?.auditEvents.length ? (
         <div className="mt-2 max-h-48 space-y-2 overflow-y-auto rounded-md border p-2">
-          {details.auditEvents.map((event) => (
-            <div key={event.id} className="text-sm">
-              <p className="font-medium">{getAuditEventLabel(event.eventType)}</p>
-              <p className="text-xs text-muted-foreground">
-                {formatDate(event.createdAt)}
-                {event.actor?.email ? ` · ${event.actor.email}` : ''}
-              </p>
-            </div>
-          ))}
+          {details.auditEvents.map((event) => {
+            const actorLabel = getAuditActorLabel(event.actor);
+            return (
+              <div key={event.id} className="text-sm">
+                <p className="font-medium">{getAuditEventLabel(event.eventType)}</p>
+                <p className="text-xs text-muted-foreground">
+                  {formatDate(event.createdAt)}
+                  {actorLabel ? ` · ${actorLabel}` : ''}
+                </p>
+              </div>
+            );
+          })}
         </div>
       ) : (
         <EmptyState size="compact" className="mt-1" title="Noch kein Verlauf vorhanden." />

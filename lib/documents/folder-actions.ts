@@ -55,7 +55,7 @@ export async function getDocumentFolderOptions(): Promise<ActionResult<{ folders
   try {
     return {
       success: true,
-      folders: await hydrateFolders(auth.context.admin, data),
+      folders: await hydrateFolders(auth.context, data),
     };
   } catch (hydrationError) {
     logError('Failed to hydrate document folder options', hydrationError);

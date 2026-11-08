@@ -37,10 +37,13 @@ declare global {
       | 'calendar-month'
       | 'organization'
       | 'sidebar'
+      | 'lazy-dialog'
       | 'clock'
       | 'live-view'
       | 'route-refresh'
       | 'customer'
+      | 'sickness-record'
+      | 'absence-picker'
       | AuthUrlFixtureName
       | FeedbackFixtureName;
     uiContractLifecycle: LifecycleBoundaryState;

@@ -22,7 +22,7 @@ declare global {
 const request: VacationRequest = {
   id: 'contract-vacation',
   organizationId: 'contract-organization',
-  employeeRecordId: 'contract-employee',
+  employeeRecordId: '00000000-0000-4000-8000-000000000031',
   requestedBy: 'contract-user',
   startDate: '2026-11-02',
   endDate: '2026-11-06',

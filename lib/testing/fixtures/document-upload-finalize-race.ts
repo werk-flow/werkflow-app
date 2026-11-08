@@ -6,7 +6,13 @@
 // refused second finalize leaves no object behind. A finalize whose
 // registration has an unknown outcome keeps its copy.
 import assert from 'node:assert/strict';
-import { CALLER_ID, ORGANIZATION_A, installActionWorld, signInAs } from './action-boundary-world';
+import {
+  CALLER_ID,
+  ORGANIZATION_A,
+  installActionWorld,
+  listProfileReferencesInWorld,
+  signInAs,
+} from './action-boundary-world';
 import { installInMemoryBucket } from './in-memory-bucket';
 
 const bucket = installInMemoryBucket();
@@ -48,6 +54,7 @@ const refusalAfterCommit: Record<string, string> = {
   finalize_document_version_upload: 'version_conflict',
 };
 world.rpc = ({ name, args }) => {
+  if (name === 'list_profile_references') return listProfileReferencesInWorld(world, args);
   const refusal = refusalAfterCommit[name];
   if (!refusal) return { data: null, error: { message: `${name} is outside this fixture` } };
   if (world.rpcCalls.filter((call) => call.name === name).length > 1) {

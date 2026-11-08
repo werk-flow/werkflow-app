@@ -229,7 +229,7 @@ export const ACTION_PRECHECKS: readonly ActionPrecheck[] = [
       guards: [{ module: 'lib/jobs/job-detail-reads.ts', exportName: 'refuseScheduleOfSeveralVisits' }],
     },
     exempt: {
-      'components/auftraege/forms/create-project-form-content.tsx':
+      'components/auftraege/forms/create-project-submission.ts':
         'Links the chosen jobs to the new project: the edit names projectId only, never a schedule column.',
       'components/auftraege/forms/use-edit-project-submit.ts':
         'Links and unlinks jobs of the edited project: the edit names projectId only, never a schedule column.',

@@ -13,6 +13,15 @@ import { getSicknessCalendarEntries, type SicknessCalendarEntry } from '@/lib/si
 import { getTimeEntries } from '@/lib/time-tracking/entry-read-actions';
 import { getChangeRequestsForEntries } from '@/lib/time-tracking/review-actions';
 import { completeCalendarEntryRead } from './entry-read';
+import { loadAbsenceAffectedVisits } from './absence-visits';
+import {
+  absenceAffectedVisitsInputSchema,
+  absenceVisitWindow,
+  type AbsenceAffectedVisits,
+} from './absence-visits-types';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
+import { logError } from '@/lib/logging';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { TimeEntry, EntryChangeRequestMap } from '@/lib/time-tracking/types';
 import { getVacationCalendarEntries, type VacationCalendarEntry } from '@/lib/vacation/calendar-actions';
 import { uuidSchema } from '@/lib/validation/uuid';
@@ -120,4 +129,39 @@ export async function getCalendarWindow(rawInput: CalendarWindowInput): Promise<
     sickness: sickness.entries,
     holidays,
   };
+}
+
+/**
+ * The planned visits an absence takes the person away from (P1-08 with P1-24a):
+ * the office reads them right after it records a sickness or approves a
+ * vacation, with each visit's dispatch state for that person. Planning is
+ * office work, so only Admin and Büro read it, for a record of their active
+ * organization.
+ */
+export async function getAbsenceAffectedVisits(
+  rawInput: unknown,
+): Promise<ActionResult<AbsenceAffectedVisits>> {
+  const parsed = absenceAffectedVisitsInputSchema.safeParse(rawInput);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const window = absenceVisitWindow(parsed.data, getBusinessTodayIso());
+  if (!window) return { success: false, error: 'invalid_input' };
+  const auth = await authenticateAndAuthorize();
+  if (!auth.success) return auth;
+  if (!auth.context.isManagerOrAbove) return { success: false, error: 'not_authorized' };
+  const { orgId } = auth.context;
+  const admin = createSupabaseAdminClient();
+  const { data: record, error } = await admin
+    .from('employee_records')
+    .select('id')
+    .eq('organization_id', orgId)
+    .eq('id', parsed.data.employeeRecordId)
+    .maybeSingle();
+  if (error) {
+    logError('getAbsenceAffectedVisits: employee record failed', error);
+    return { success: false, error: 'load_failed' };
+  }
+  if (!record) return { success: false, error: 'employee_not_found' };
+  const visits = await loadAbsenceAffectedVisits({ admin, orgId, employeeRecordId: record.id, ...window });
+  if (!visits) return { success: false, error: 'load_failed' };
+  return { success: true, visits, through: window.to };
 }
