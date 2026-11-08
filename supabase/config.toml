@@ -249,6 +249,13 @@ otp_expiry = 300
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
+# The reset mail links its token hash to /auth/callback, as on the hosted
+# projects. The browser client reads no session from a page URL, so the
+# default link, which carries tokens in its fragment, would sign nobody in.
+[auth.email.template.recovery]
+subject = "Passwort zurücksetzen"
+content_path = "./supabase/templates/recovery.html"
+
 # Uncomment to customize email template
 # [auth.email.template.invite]
 # subject = "You have been invited"

@@ -83,7 +83,8 @@ export type UploadFailureReason =
   | 'refused'
   | 'not_saved'
   | 'version_conflict'
-  | 'version_unconfirmed';
+  | 'version_unconfirmed'
+  | 'document_filed';
 
 /**
  * The upload whose bytes reached storage. A retry first registers these
@@ -120,6 +121,8 @@ function refusalReason(error: string): UploadFailureReason {
       return 'empty';
     case 'version_conflict':
       return 'version_conflict';
+    case 'document_filed':
+      return 'document_filed';
     case 'ticket_failed':
     case 'load_failed':
     case 'upload_failed':

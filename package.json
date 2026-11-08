@@ -114,5 +114,8 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "typescript7": "npm:typescript@7.0.2"
+  },
+  "patchedDependencies": {
+    "@supabase/ssr@0.7.0": "patches/@supabase%2Fssr@0.7.0.patch"
   }
 }

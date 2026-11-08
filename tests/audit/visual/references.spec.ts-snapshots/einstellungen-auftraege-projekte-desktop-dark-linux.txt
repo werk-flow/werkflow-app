@@ -59,3 +59,4 @@ Mitarbeiter
 Datum
 Aktionen, Aufklappen und andere strukturelle Bedienelemente bleiben weiterhin immer sichtbar.
 Ansicht speichern
+Nicht eingestempelt

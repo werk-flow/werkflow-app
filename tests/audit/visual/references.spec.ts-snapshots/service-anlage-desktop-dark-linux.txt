@@ -75,3 +75,4 @@ Verknüpfen
 Noch kein Auftrag oder Projekt verknüpft.
 Herkunftsnachweis verknüpfen
 Archivieren
+Nicht eingestempelt

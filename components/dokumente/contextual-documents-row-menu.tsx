@@ -78,11 +78,16 @@ export function ContextualDocumentRowMenu({
                 </DropdownMenuItem>
               </>
             )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onClick={() => onDelete(document)}>
-              <Trash2 className="size-4" />
-              In Papierkorb verschieben
-            </DropdownMenuItem>
+            {/* A filed document never reaches the trash. */}
+            {!document.archive?.filedAt && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" onClick={() => onDelete(document)}>
+                  <Trash2 className="size-4" />
+                  In Papierkorb verschieben
+                </DropdownMenuItem>
+              </>
+            )}
           </>
         )}
       </DropdownMenuContent>

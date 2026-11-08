@@ -35,6 +35,8 @@ export type CaptureSpec = {
   state?: CaptureState;
   /** Visible text scrolled to the middle of its scroll area before the image, for a change below the fold. */
   reveal?: string;
+  /** Captured while the role works on the layout job; the capture clocks out afterwards. */
+  clockedIn?: true;
   /** The seeded record to open instead of the route's layout record. */
   record?: AcceptanceRecord;
 };
@@ -284,6 +286,44 @@ function periodBlockerCaptures(): AcceptanceSet {
 }
 
 /**
+ * werk-flow/werkflow-planning#138 of 2026-11-07: the clock dock clocked in on
+ * the work pack and the time history, and clocked out on the period's findings.
+ */
+function clockDockCaptures(): AcceptanceSet {
+  const both = { widths: [1280, 375], schemes: ['light', 'dark'] } as const;
+  return {
+    id: 'clock-dock-2026-11-07',
+    captures: [
+      {
+        id: 'employee-auftraege-jobNumber-clocked-in',
+        role: 'employee',
+        route: '/auftraege/[jobNumber]',
+        view: { kind: 'page' },
+        clockedIn: true,
+        ...both,
+      },
+      {
+        id: 'employee-zeiterfassung-tab-history-clocked-in',
+        role: 'employee',
+        route: '/zeiterfassung',
+        view: { kind: 'tab', value: 'history' },
+        clockedIn: true,
+        ...both,
+      },
+      {
+        id: 'admin-zeiterfassung-perioden-periodId',
+        role: 'admin',
+        route: '/zeiterfassung/perioden/[periodId]',
+        view: { kind: 'page' },
+        reveal: 'Prüfhinweise',
+        ...both,
+      },
+    ],
+    standalone: [],
+  };
+}
+
+/**
  * werk-flow/werkflow-planning#142 of 2026-11-07: an unmatched caller who is
  * already a customer, and the conversion of a promoted caller that starts with
  * the captured address as Einsatzort.
@@ -315,6 +355,29 @@ function callerMatchCaptures(): AcceptanceSet {
   };
 }
 
+/**
+ * werk-flow/werkflow-planning#283 of 2026-11-07: the library rows with their
+ * archive line and the „Aufbewahrung“ section of the file details.
+ */
+function documentRetentionCaptures(): AcceptanceSet {
+  const both = { widths: [1280, 375], schemes: ['light', 'dark'] } as const;
+  return {
+    id: 'document-retention-2026-11-07',
+    captures: [
+      { id: 'admin-dokumente', role: 'admin', route: '/dokumente', view: { kind: 'page' }, ...both },
+      {
+        id: 'admin-dokumente-details',
+        role: 'admin',
+        route: '/dokumente',
+        view: { kind: 'dialog', opener: 'documents.details' },
+        reveal: 'Aufbewahrung',
+        ...both,
+      },
+    ],
+    standalone: [],
+  };
+}
+
 export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   uiRoundCaptures(),
   fieldTargetCaptures(),
@@ -325,5 +388,7 @@ export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   settingsRoleCaptures(),
   timeAccountOpeningCaptures(),
   periodBlockerCaptures(),
+  clockDockCaptures(),
   callerMatchCaptures(),
+  documentRetentionCaptures(),
 ];

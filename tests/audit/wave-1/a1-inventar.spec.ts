@@ -137,7 +137,7 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
   }) => {
     const inventoryLocationName = `A1 Lager ${world.runId}`;
     const inventoryItemName = `A1 Artikel ${world.runId}`;
-    await createInventoryLocation(adminPage, inventoryLocationName);
+    await createInventoryLocation(adminPage, { orgId: world.orgId, name: inventoryLocationName });
     await createInventoryItem(adminPage, {
       name: inventoryItemName,
       locationName: inventoryLocationName,
@@ -253,7 +253,7 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     const outboundReason = testData`A1 Ausgang`;
     // Each save renders the route once at most (tests/golden/route-renders.json).
     const renders = observeRouteRenders(adminPage, 'a1-inventar');
-    await createInventoryLocation(adminPage, locationName);
+    await createInventoryLocation(adminPage, { orgId: world.orgId, name: locationName });
     await renders.forSave('item.create', () =>
       createInventoryItem(adminPage, { name: itemName, locationName, initialQuantity: 5 }),
     );

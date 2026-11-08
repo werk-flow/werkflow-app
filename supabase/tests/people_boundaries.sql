@@ -312,6 +312,99 @@ begin
 end;
 $$;
 
+-- An employment transition that ends or pauses a holder's employment keeps
+-- every selected group with an active holder: a member of the organization
+-- whose personnel record has no exit date, as the last-holder check on a
+-- member removal counts. A holder who already exited or left the
+-- organization stays listed in the group but holds nothing. The transition
+-- takes the organization holder lock before it counts, so it serializes with
+-- the other holder changes, and before it writes the personnel record, in the
+-- same lock order. Each probe rolls back.
+do $$
+declare
+  org constant uuid := '39000000-0000-0000-0000-000000000012';
+  owner_user constant uuid := '39000000-0000-0000-0000-000000000007';
+  holder_one_record uuid;
+  holder_two_record uuid;
+  berlin_today constant date := (clock_timestamp() at time zone 'Europe/Berlin')::date;
+  transition_source text;
+begin
+  select id into holder_one_record from public.employee_records
+  where organization_id = org and user_id = '39000000-0000-0000-0000-000000000008';
+  select id into holder_two_record from public.employee_records
+  where organization_id = org and user_id = '39000000-0000-0000-0000-000000000009';
+  if not exists (
+    select 1
+    from public.organization_responsibility_configurations configuration
+    where configuration.organization_id = org
+      and configuration.responsibility = 'time_approval'
+      and configuration.mode = 'selected'
+      and (
+        select array_agg(assignment.employee_record_id order by assignment.employee_record_id)
+        from public.organization_responsibility_assignments assignment
+        where assignment.configuration_id = configuration.id
+      ) = (select array_agg(holder order by holder) from unnest(array[holder_one_record, holder_two_record]) holder)
+  ) then raise exception 'the selected time approval group of both holders is missing'; end if;
+  if pg_temp.holds_responsibility_holder_lock(org)
+    then raise exception 'the responsibility holder lock was held before the transition probes'; end if;
+
+  begin
+    perform public.set_personnel_employment_transition(
+      owner_user, org, holder_one_record, 0, 'mark_inactive', berlin_today,
+      'Ruhendes Arbeitsverhältnis', '[]'::jsonb,
+      '39000000-0000-0000-0000-0000000000d1', repeat('d', 64));
+    if not pg_temp.holds_responsibility_holder_lock(org)
+      then raise exception 'an employment transition does not take the organization holder lock'; end if;
+    raise exception 'responsibility_holder_probe';
+  exception when others then
+    if sqlerrm <> 'responsibility_holder_probe' then raise; end if;
+  end;
+
+  begin
+    update public.employee_records set exit_date = entry_date
+    where id = holder_two_record;
+    begin
+      perform public.set_personnel_employment_transition(
+        owner_user, org, holder_one_record, 0, 'exit', berlin_today,
+        'Austritt', '[]'::jsonb,
+        '39000000-0000-0000-0000-0000000000d2', repeat('e', 64));
+      raise exception 'an employment transition ended the last active holder beside an exited one';
+    exception when others then
+      if sqlerrm <> 'last_responsibility_holder' then raise; end if;
+    end;
+    raise exception 'responsibility_holder_probe';
+  exception when others then
+    if sqlerrm <> 'responsibility_holder_probe' then raise; end if;
+  end;
+
+  begin
+    delete from public.organization_members
+    where organization_id = org and user_id = '39000000-0000-0000-0000-000000000009';
+    begin
+      perform public.set_personnel_employment_transition(
+        owner_user, org, holder_one_record, 0, 'plan_exit', berlin_today + 30,
+        'Geplanter Austritt', '[]'::jsonb,
+        '39000000-0000-0000-0000-0000000000d3', repeat('f', 64));
+      raise exception 'an employment transition ended the last active holder beside one who left';
+    exception when others then
+      if sqlerrm <> 'last_responsibility_holder' then raise; end if;
+    end;
+    raise exception 'responsibility_holder_probe';
+  exception when others then
+    if sqlerrm <> 'responsibility_holder_probe' then raise; end if;
+  end;
+
+  transition_source := pg_get_functiondef(
+    'public.set_personnel_employment_transition(uuid,uuid,uuid,bigint,public.personnel_employment_transition_kind,date,text,jsonb,uuid,text)'::regprocedure);
+  if strpos(transition_source, ':responsibility-holders') = 0
+    or strpos(transition_source, ':responsibility-holders')
+      > strpos(transition_source, 'from public.organization_responsibility_configurations')
+    or strpos(transition_source, ':responsibility-holders')
+      > strpos(transition_source, 'update public.employee_records')
+  then raise exception 'an employment transition counts holders or writes the personnel record before the organization holder lock'; end if;
+end;
+$$;
+
 create function pg_temp.visible_people(p_org uuid)
 returns table (relation text, record_ids uuid[], user_ids uuid[], row_count bigint)
 language sql as $$
