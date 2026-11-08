@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { addLocalDays } from '../date-time/berlin';
-import { askedDay, failedBrowserDates, lookaheadDays, lookaheadLegs } from './date-lookahead';
+import { agentHosts, askedDay, failedBrowserDates, lookaheadDays, lookaheadLegs } from './date-lookahead';
 
 const input = {
   sql: 'sql:planning,sql:security',
@@ -8,6 +8,7 @@ const input = {
     { shard: 1, groups: 'audit:visual' },
     { shard: 2, groups: 'golden:p1-06,audit:wave-1:a4' },
   ],
+  certificateExpiry: new Date('2027-06-30T23:59:59Z'),
 };
 
 function labelled(runDay: string, label: string) {
@@ -162,4 +163,47 @@ test('a day runs the suite, and a browser day also runs every shard, each named 
       browser: true,
     },
   ]);
+});
+
+test("a browser leg runs only on a date that ends a day before the runner agent's certificate expires", () => {
+  const certificateExpiry = new Date('2026-12-22T23:59:59Z');
+  const legs = lookaheadLegs([askedDay('2026-12-21'), askedDay('2026-12-22'), askedDay('2026-12-31')], {
+    ...input,
+    certificateExpiry,
+  });
+
+  // Past the expiry GitHub shuts the runner down within 13 to 20 minutes; the suite ends first.
+  expect(legs.map((leg) => leg.name)).toEqual([
+    '2026-12-21 asked / Suite',
+    '2026-12-21 asked / Browser 1',
+    '2026-12-21 asked / Browser 2',
+    '2026-12-22 asked / Suite',
+    '2026-12-31 asked / Suite',
+  ]);
+});
+
+test('a browser leg keeps a whole day between its midday start and the expiry', () => {
+  const browserLegs = (certificateExpiry: string) =>
+    lookaheadLegs([askedDay('2026-12-21')], {
+      ...input,
+      certificateExpiry: new Date(certificateExpiry),
+    }).filter((leg) => leg.browser).length;
+
+  expect(browserLegs('2026-12-22T11:00:00.000Z')).toBe(2);
+  expect(browserLegs('2026-12-22T10:59:59.999Z')).toBe(0);
+});
+
+test("the runner agent's hosts are read from its journal, each once", () => {
+  const journal = [
+    '{"level":"INFO","msg":"hca platform and download urls","url":"https://github.com/actions/runner"}',
+    'Post "https://hosted-compute-request-orchestrator-prod-iad-02.githubapp.com/v1/trace": EOF',
+    'Post "https://hosted-compute-request-orchestrator-prod-iad-02.githubapp.com/v1/finish": EOF',
+    'Starting runner process',
+  ].join('\n');
+
+  expect(agentHosts(journal)).toEqual([
+    'github.com',
+    'hosted-compute-request-orchestrator-prod-iad-02.githubapp.com',
+  ]);
+  expect(agentHosts('')).toEqual([]);
 });
