@@ -57,8 +57,7 @@ A customer's export stays on the owner's machine, outside every repository. The 
 
 - **Server Actions.** Every exported action has a boundary test for a foreign id or a lower role, unless it is self-scoped and takes no id.
 - **Route handlers.** Each handler authenticates the caller or delegates to an action that does. No response body or redirect URL carries an error's message or details.
-- **Invites.** A GET redeems an invite only right after a code exchange in the same request.
-- **Reset links.** The GET stores the hash in an httpOnly cookie; a click on the reset page redeems it (`lib/auth/recovery-link.ts`).
+- **Auth links.** No browser client reads a URL session (`auth-url-session.spec.ts`). A GET redeems an invite only after a code exchange in that request; a reset hash waits in an httpOnly cookie for the reset page's click (`lib/auth/recovery-link.ts`).
 - **Email in URLs.** No URL carries a provider message or an email address. The next step reads the address from an httpOnly cookie scoped to its page (`lib/auth/address-cookies.ts`), the invite row, or the session.
 - **Page routing.** `proxy.ts` sends a visitor without a session away from every authenticated area; a new authenticated area is routed there. `app/(app)/layout.tsx` checks the session again and is the authority.
 - **Identity failure.** An identity check that cannot complete is a failure, never a signed-out caller and never access: a page shows the error page, a route handler a private 500 or 503, the auth callback `/auth/unavailable`. The proxy lets the request through to the layout. `lib/auth/identity-errors.ts` classifies Auth failures for both.
