@@ -23,6 +23,7 @@ import { backendValueDigests } from '../evidence/proof-environment';
 import {
   boatFailure,
   fallbackLine,
+  gitEnvironment,
   copyResults,
   evidenceFiles,
   localReason,
@@ -440,11 +441,12 @@ test('a Ctrl-C during planning stops the run instead of falling back', async () 
 
 test('a Ctrl-C during packing stops the run instead of falling back', async () => {
   const repository = mkdtempSync(join(tmpdir(), 'boat-pack-'));
-  execFileSync('git', ['init', '-q'], { cwd: repository });
+  execFileSync('git', ['init', '-q'], { cwd: repository, env: gitEnvironment() });
   writeFileSync(join(repository, 'README.md'), 'x');
-  execFileSync('git', ['add', '.'], { cwd: repository });
+  execFileSync('git', ['add', '.'], { cwd: repository, env: gitEnvironment() });
   execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'x'], {
     cwd: repository,
+    env: gitEnvironment(),
   });
   // Without a local-stack .env.local the pack is refused, which alone would fall back to local.
   const outcome = await runOnBoat({
@@ -569,11 +571,12 @@ test('a real SIGINT during planning stops the run instead of falling back', asyn
 
 test('a real SIGINT during packing stops the run instead of falling back', async () => {
   const repository = mkdtempSync(join(tmpdir(), 'boat-pack-sigint-'));
-  execFileSync('git', ['init', '-q'], { cwd: repository });
+  execFileSync('git', ['init', '-q'], { cwd: repository, env: gitEnvironment() });
   writeFileSync(join(repository, 'README.md'), 'x');
-  execFileSync('git', ['add', '.'], { cwd: repository });
+  execFileSync('git', ['add', '.'], { cwd: repository, env: gitEnvironment() });
   execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'x'], {
     cwd: repository,
+    env: gitEnvironment(),
   });
   const outcome = await withSigint((signal) => {
     // Delivered now, handled only when the event loop turns: as for a SIGINT during the synchronous

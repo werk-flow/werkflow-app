@@ -145,10 +145,20 @@ const GIT_LOCATION = new Set([
   'GIT_COMMON_DIR',
 ]);
 
-function git(repository: string, args: readonly string[]): string {
+/** The process environment without the variables in GIT_LOCATION, for a git child. */
+export function gitEnvironment(): NodeJS.ProcessEnv {
   const env = { ...process.env };
   for (const name of GIT_LOCATION) Reflect.deleteProperty(env, name);
-  return execFileSync('git', args, { cwd: repository, env, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  return env;
+}
+
+function git(repository: string, args: readonly string[]): string {
+  return execFileSync('git', args, {
+    cwd: repository,
+    env: gitEnvironment(),
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  });
 }
 
 /** Subfolder names of an evidence folder, or none when it does not exist. */
