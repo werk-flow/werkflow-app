@@ -26,6 +26,8 @@ Each visual and interaction finding needs an explicit disposition. Visual polish
 
 `audit:visual` (`tests/audit/visual/references.spec.ts`) compares one screenshot per page family with its reference, desktop and phone, light and dark. `tests/audit/support/visual-families.ts` names the families. The browser runs in Playwright's pinned image, so every reference carries the suffix `-linux`. The spec replaces clock-derived and run-specific text with constant stand-ins, and a text reference (`.txt`) beside each image must match exactly, so a changed word fails even under the pixel tolerance. A verification run never writes a reference.
 
+On an Apple Silicon Mac, that image is amd64, and its Chromium crashes on launch under Colima's default QEMU emulation; it needs Rosetta ([machine setup](environments.md#set-up-a-new-machine)). `colima ssh -- ls /proc/sys/fs/binfmt_misc` lists `rosetta` when it is on. An existing VM takes `rosetta: true` in `~/.colima/default/colima.yaml` and a `colima restart`. The restart stops the shared stack, so restart only while no worktree holds it, then run `supabase start`.
+
 A failed comparison is a design change that waits for acceptance, or a regression to repair. Never update a reference to make a run pass.
 
 To update references after an intended design change:
