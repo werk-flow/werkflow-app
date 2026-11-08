@@ -21,6 +21,7 @@
   "scripts": {
     "test:plan": "bun scripts/verify.ts plan",
     "test:verify": "bun scripts/verify.ts run",
+    "boat:snapshot": "bun scripts/boat/build-snapshot.ts",
     "test:coverage": "bun scripts/check-test-coverage.ts",
     "dev": "bun scripts/dev-server.ts",
     "build": "bun scripts/build.ts",

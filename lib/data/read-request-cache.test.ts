@@ -32,9 +32,11 @@ test('read-request scopes stay confined to the reviewed GET handlers and identit
             ? ['getAuthenticatedUser', 'getCachedMemberships', 'getCachedPrestartMemberships']
             : path === 'lib/jobs/job-access-reads.ts'
               ? ['readOrganizationJob', 'readJobAssignmentOfUser']
-              : ['loadResponsibilityRuntimeState'],
+              : path === 'lib/vacation/server.ts'
+                ? ['readOpenVacationRequests']
+                : ['loadResponsibilityRuntimeState'],
         );
-        if (path === 'lib/responsibilities/server.ts')
+        if (path === 'lib/responsibilities/server.ts' || path === 'lib/vacation/server.ts')
           expect(source).toContain("{ outsideRequest: 'fresh' }");
       }
     }
@@ -51,5 +53,7 @@ test('read-request scopes stay confined to the reviewed GET handlers and identit
     'lib/data/cached.ts',
     'lib/jobs/job-access-reads.ts',
     'lib/responsibilities/server.ts',
+    // Request data, not an authorization snapshot: both callers authorize before they read.
+    'lib/vacation/server.ts',
   ]);
 });

@@ -85,15 +85,16 @@ export function splitSicknessAudiences(
 }
 
 /**
- * The person names of manager-audience notices (two-step lookup; no FK path
- * from employee_records to profiles for PostgREST embeds). Null when a read failed.
+ * The person names of the employee records the rows name, for manager-audience
+ * notices and the office's tasks (two-step lookup; no FK path from
+ * employee_records to profiles for PostgREST embeds). Null when a read failed.
  */
-export async function readSicknessNoticeNames(
+export async function readPersonNames(
   admin: AdminClient,
   organizationId: string,
-  managerRows: SicknessNoticeRow[],
+  rows: ReadonlyArray<{ employee_record_id: string }>,
 ): Promise<Map<string, string> | null> {
-  const nameRecordIds = [...new Set(managerRows.map((row) => row.employee_record_id))];
+  const nameRecordIds = [...new Set(rows.map((row) => row.employee_record_id))];
   if (nameRecordIds.length === 0) return new Map<string, string>();
   const { data: records, error: recordsError } = await readInBatches(nameRecordIds, (batch) =>
     admin
@@ -103,7 +104,7 @@ export async function readSicknessNoticeNames(
       .in('id', [...batch]),
   );
   if (recordsError) {
-    logError('Failed to load records for sickness notices', recordsError);
+    logError('Failed to load records for attention names', recordsError);
     return null;
   }
   const userIds = [
@@ -116,7 +117,7 @@ export async function readSicknessNoticeNames(
       .in('id', [...batch]),
   );
   if (profilesResult.error) {
-    logError('Failed to load profiles for sickness notices', profilesResult.error);
+    logError('Failed to load profiles for attention names', profilesResult.error);
     return null;
   }
   const profileById = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile]));

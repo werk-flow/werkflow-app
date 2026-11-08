@@ -5,6 +5,7 @@ import type { AttentionTask } from '@/lib/attention/types';
 import { formatVacationDays } from '@/lib/vacation/balance';
 import { REQUEST_STATUS_LABELS, REQUEST_URGENCY_LABELS } from '@/lib/requests/types';
 import { WORK_ARTIFACT_KIND_LABELS } from '@/lib/work-artifacts/types';
+import { CALENDAR_DISPATCH_STATE_LABELS } from '@/lib/calendar/board';
 import { formatOpenSince } from '@/lib/attention/task-sections';
 import { formatGermanDate, formatGermanDateRange, formatBerlinDateTime } from '@/lib/utils';
 
@@ -66,6 +67,25 @@ export function TaskRow({ task }: { task: AttentionTask }) {
     case 'client_follow_up':
     case 'client_request_open':
       return <AttentionClientTaskRow task={task} />;
+    // The visit's day on the Plantafel, where the office plans someone else.
+    case 'planning_visit_replan':
+      return (
+        <TaskLink
+          href={`/kalender?date=${task.date}`}
+          ariaLabel={`Einsatz ${task.visitTitle} von ${task.personName} am ${formatGermanDate(task.date)} umplanen`}
+          sourceId={task.sourceId}
+        >
+          <p className="truncate text-sm font-medium">
+            {task.personName} · {task.visitTitle}
+          </p>
+          <p className="text-xs text-muted-foreground tabular-nums">
+            {formatGermanDate(task.date)}
+            {task.time ? `, ${task.time} Uhr` : ''}
+            {task.jobNumber ? ` · ${task.jobNumber}` : ''}
+            {` · Abwesend · Einsatz ${CALENDAR_DISPATCH_STATE_LABELS[task.dispatchState]}`}
+          </p>
+        </TaskLink>
+      );
   }
 }
 
