@@ -15,7 +15,8 @@ import {
   buildCreateJobInput,
   type CreateJobFormValues,
 } from './create-job-submission';
-import { isPlanningWarning, usePlanningApprovalRetry } from './use-planning-approval-retry';
+import { isPlanningWarning } from './planning-warning-result';
+import { usePlanningApprovalRetry } from './use-planning-approval-retry';
 
 type CreateJobSubmitOptions = {
   values: CreateJobFormValues;

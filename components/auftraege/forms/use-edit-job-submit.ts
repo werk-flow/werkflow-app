@@ -8,11 +8,8 @@ import type { Job } from '@/lib/jobs/types';
 import { buildEditJobInput } from './edit-job-input';
 import type { EditJobForm } from './use-edit-job-form';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
-import {
-  PLANNING_CHANGED_MESSAGE,
-  isPlanningWarning,
-  usePlanningApprovalRetry,
-} from './use-planning-approval-retry';
+import { PLANNING_CHANGED_MESSAGE, isPlanningWarning } from './planning-warning-result';
+import { usePlanningApprovalRetry } from './use-planning-approval-retry';
 
 const CONTENT_REQUIRED_MESSAGE = 'Bitte gib mindestens einen Titel oder eine Beschreibung ein.';
 

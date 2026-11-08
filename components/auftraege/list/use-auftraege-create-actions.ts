@@ -17,6 +17,7 @@ import {
   createFailureMessage,
 } from './auftraege-list-drafts';
 import { CREATE_JOB_ERROR_MESSAGES, type CreateJobSubmission } from '../forms/create-job-submission';
+import { isPlanningWarning, type RetryWithPlanningApproval } from '../forms/planning-warning-result';
 import {
   CREATE_PROJECT_ERROR_MESSAGES,
   linkJobsToProject,
@@ -91,7 +92,7 @@ function useAuftraegeProjectCreate({
   );
 }
 
-/** Deferred creates from the dialog: pending row, server call, qualification confirm, rollback. */
+/** Deferred creates from the dialog: pending row, server call, qualification and planning confirms, rollback. */
 export function useAuftraegeCreateActions({
   showBanner,
   insertJob,
@@ -106,7 +107,12 @@ export function useAuftraegeCreateActions({
     useState<JobCreateAwaitingApproval | null>(null);
 
   const runJobCreate = useCallback(
-    async (pending: CreateJobSubmission & { tempId: string }, approval: AssignmentApproval | null) => {
+    async (
+      pending: CreateJobSubmission & { tempId: string },
+      approval: AssignmentApproval | null,
+      // The planning confirm step, from the lazily loaded create dialogs.
+      retryWithPlanningApproval: RetryWithPlanningApproval,
+    ) => {
       const rejectJobCreate = (error: string) => {
         setJobCreateAwaitingApproval(null);
         rollbackJob(pending.tempId);
@@ -116,10 +122,16 @@ export function useAuftraegeCreateActions({
         });
       };
       try {
-        const result = await runCreateJob({
-          ...pending.input,
-          assignmentApproval: approval,
-        });
+        const result = await retryWithPlanningApproval((planningApproval) =>
+          runCreateJob({ ...pending.input, assignmentApproval: approval, planningApproval }),
+        );
+        if (isPlanningWarning(result)) {
+          // Taken back in the planning dialog: the pending row goes, nothing was created.
+          setJobCreateAwaitingApproval(null);
+          rollbackJob(pending.tempId);
+          showBanner({ variant: 'info', message: JOB_NOT_CREATED });
+          return;
+        }
         if (result.success) {
           setJobCreateAwaitingApproval(null);
           rollbackJob(pending.tempId);
@@ -148,10 +160,10 @@ export function useAuftraegeCreateActions({
   );
 
   const handleJobSubmit = useCallback(
-    (submission: CreateJobSubmission) => {
+    (submission: CreateJobSubmission, retryWithPlanningApproval: RetryWithPlanningApproval) => {
       const tempId = `pending-job-${crypto.randomUUID()}`;
       insertJob(tempId, buildJobDraft(tempId, submission.input));
-      void runJobCreate({ ...submission, tempId }, null);
+      void runJobCreate({ ...submission, tempId }, null, retryWithPlanningApproval);
     },
     [insertJob, runJobCreate],
   );

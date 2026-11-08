@@ -3,7 +3,7 @@ import type { JobPriority } from '@/lib/jobs/types';
 import { parseHoursInputToMinutes } from '@/lib/jobs/planned-working';
 import type { AssignmentApproval } from '@/lib/qualifications/types';
 import { toLocalDateString } from '@/lib/utils';
-import { PLANNING_CHANGED_MESSAGE } from './use-planning-approval-retry';
+import { PLANNING_CHANGED_MESSAGE } from './planning-warning-result';
 
 export const CREATE_JOB_ERROR_MESSAGES = {
   not_authorized: 'Du bist nicht berechtigt, Aufträge zu verwalten.',
