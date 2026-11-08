@@ -1,19 +1,32 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { homedir, totalmem } from 'node:os';
 import { join } from 'node:path';
 import { errorCode } from './error-code';
 
 // One shared machine runs many worktrees' agents at once. `check:changed`,
 // `test:verify` and the local test server's build each run their own tsc,
 // Next build or browsers, and six at once exhausted memory (2026-10-29: load
-// 82 on 14 cores). Each takes one of HEAVY_SLOTS machine-wide slots first and
+// 82 on 14 cores). Each takes one of the machine's heavy slots first and
 // waits for a free one. A slot is a kernel `flock` on a file, held by a small
 // holder process that watches its owner: the slot frees on release, and within
 // a second of the owner's exit, also when it is killed. The owner keeps its own
 // signal handling and exit code.
 
-const HEAVY_SLOTS = 3;
+const GIB = 1024 ** 3;
+// Measured on the 16 GB PC (werk-flow/werkflow-planning#294): a heavy command
+// peaks at up to 4 GiB (type-aware eslint 3.3 to 4.1 GiB, the build 2.9 GiB),
+// and the machine's own load, the shared stack (1.3 to 2.1 GiB), the agent CLIs
+// and the system, keeps about 6 GiB. Three slots there filled swap and stalled
+// the machine for 40 min.
+const MACHINE_LOAD_BYTES = 6 * GIB;
+const SLOT_BYTES = 4 * GIB;
+
+/** The heavy slots a machine's memory holds: two on the 16 GB PC, at least one. */
+export function heavySlotCount(totalMemoryBytes: number): number {
+  return Math.max(1, Math.floor((totalMemoryBytes - MACHINE_LOAD_BYTES) / SLOT_BYTES));
+}
+
 /** Set in a slot's owner, so a heavy command it starts reuses that slot. */
 export const HEAVY_SLOT_VARIABLE = 'WERKFLOW_HEAVY_SLOT';
 /** flock's exit code when the slot is taken. */
@@ -100,10 +113,11 @@ export async function acquireHeavySlot(label: string, signal?: AbortSignal): Pro
     console.warn(`[heavy-slot] flock is missing, so ${label} runs without the machine-wide limit.`);
   if (skip) return null;
   const directory = process.env.WERKFLOW_HEAVY_SLOT_DIR ?? join(homedir(), '.cache', 'werkflow-heavy');
+  const slots = heavySlotCount(totalmem());
   let announced = false;
   for (;;) {
     signal?.throwIfAborted();
-    for (let slot = 0; slot < HEAVY_SLOTS; slot += 1) {
+    for (let slot = 0; slot < slots; slot += 1) {
       const held = await tryHeavySlot(directory, slot, process.pid);
       if (held) {
         process.env[HEAVY_SLOT_VARIABLE] = String(slot);
@@ -120,7 +134,7 @@ export async function acquireHeavySlot(label: string, signal?: AbortSignal): Pro
     if (!announced) {
       announced = true;
       console.info(
-        `[heavy-slot] ${label} waits: all ${HEAVY_SLOTS} heavy slots of this machine are busy (${directory}).`,
+        `[heavy-slot] ${label} waits: all ${slots} heavy slots of this machine are busy (${directory}).`,
       );
     }
     // An abort during the attempts above ends the wait before it starts.

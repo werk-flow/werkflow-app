@@ -224,6 +224,7 @@ const libraryWrites = [
       finalizeDocumentVersionUpload({
         documentId: foreignDocumentId,
         versionNumber: 2,
+        uploadId: '8e000000-0000-4000-8000-0000000000ff',
         fileName: 'vertrag.pdf',
       }),
     'document_not_found',
@@ -310,7 +311,13 @@ const documentWrites = (documentId: string) =>
     ],
     [
       'finalizeDocumentVersionUpload',
-      () => finalizeDocumentVersionUpload({ documentId, versionNumber: 2, fileName: 'vertrag.pdf' }),
+      () =>
+        finalizeDocumentVersionUpload({
+          documentId,
+          versionNumber: 2,
+          uploadId: '8e000000-0000-4000-8000-0000000000ff',
+          fileName: 'vertrag.pdf',
+        }),
     ],
     ['deleteDocument', () => deleteDocument(documentId)],
     ['moveDocument', () => moveDocument({ documentId, folderId: ownFolderId })],

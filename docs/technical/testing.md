@@ -9,7 +9,7 @@ Write each test at its boundary while you build the behavior. Run the narrowest 
 ### Choose the boundary for a rule
 
 1. A calculation or a pure rule: a unit test beside its module under `lib/`.
-2. A permission, a grant or a history rule: an SQL assertion in `supabase/tests/`, one rolled-back transaction with a failure message per invariant.
+2. A permission, grant or history rule: a rolled-back SQL transaction in `supabase/tests/`, a failure message per invariant, counting only its organizations' rows.
 3. A Server Action's authorization: a boundary fixture on `lib/testing/fixtures/action-boundary-world.ts`.
 4. A shared control, pending feedback or a held write: a contract in `tests/ui-contracts/`.
 5. A connected outcome across roles or sessions: a step in the slice's golden or audit spec.

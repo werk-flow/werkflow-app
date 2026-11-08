@@ -3,6 +3,7 @@
 // ./actions.ts feed this from the owning domains. Unit-tested in
 // resolution.test.ts; browser specs assert the surface, not these rules.
 
+import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import type { VacationRequest } from '@/lib/vacation/types';
 import {
   attentionItemKey,
@@ -200,12 +201,21 @@ export function isWithinNotificationWindow(
  * Whole calendar days a request has been open, measured between two ISO
  * business dates (Europe/Berlin). Same day → 0.
  */
-export function computeOpenSinceDays(openedBusinessDateIso: string, businessTodayIso: string): number {
+function computeOpenSinceDays(openedBusinessDateIso: string, businessTodayIso: string): number {
   const opened = Date.parse(`${openedBusinessDateIso}T00:00:00Z`);
   const today = Date.parse(`${businessTodayIso}T00:00:00Z`);
   if (Number.isNaN(opened) || Number.isNaN(today)) return 0;
   const diff = Math.floor((today - opened) / (24 * 60 * 60 * 1000));
   return Math.max(0, diff);
+}
+
+/**
+ * Whole Berlin calendar days since an instant (a submission or a receipt),
+ * measured against the business date. Late evening in Berlin counts for its
+ * own day, not for the next UTC day.
+ */
+export function openSinceDaysAt(openedAtIso: string, businessTodayIso: string): number {
+  return computeOpenSinceDays(formatBerlinLocalDate(openedAtIso), businessTodayIso);
 }
 
 /**
