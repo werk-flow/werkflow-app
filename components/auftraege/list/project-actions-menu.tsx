@@ -134,11 +134,14 @@ export function ProjectActionsMenu({
     handleDelete,
   } = useProjectActionsMenuState({ project, onProjectDeleted, onDeleteRequested });
 
+  // The trigger shows a spinner while the edit form downloads for this row.
+  const editWaiting = lazyEditProjectDialog.useWaiting(showEditDialog);
+
   return (
     <>
       <RowActionsMenu
         onOpen={lazyEditProjectDialog.preload}
-        disabled={isDeleting}
+        disabled={isDeleting || editWaiting}
         actions={rowMenuActions({
           openDetails: () => router.push(detailHref),
           openEdit: () => setShowEditDialog(true),

@@ -279,7 +279,7 @@
             "rows": null
           },
           "runKeys": ["2026-11-08T112625699Z-6f644d"],
-          "reason": "Manager-only create and edit dialogs load on intent (lazyDialog), the create-project helpers left the form module, and the Auftraege table skeleton left the table module the app shell imported: the field worker no longer downloads the create and edit forms or the job table on every page. 697,836 on 86b61f9b to 687,657 on this PC, script requests unchanged at 43. Back below the 691,787 that werk-flow/werkflow-app#272 accepted as the follow-up's target (owner decision of 2026-11-08)."
+          "reason": "Manager-only create and edit dialogs load on intent (lazyDialog), the create-project helpers left the form module, and the Auftraege table skeleton left the table module the app shell imported: the field worker no longer downloads the create and edit forms or the job table on every page. 697,836 to 687,657 on this PC, script requests unchanged at 43. Back below the 691,787 that werk-flow/werkflow-app#272 named as this follow-up's target (owner decision of 2026-11-08)."
         }
       ]
     },
@@ -795,7 +795,7 @@
             "rows": null
           },
           "runKeys": ["2026-11-08T112625699Z-6f644d"],
-          "reason": "The dashboard's clock action response lists fewer client chunks now that the app shell no longer imports the Auftraege table, its row menus and their edit forms (AuftraegeTableSkeleton has its own module): 26,210 to 25,593 decoded bytes, rows unchanged."
+          "reason": "The dashboard's clock action response lists fewer client chunks now that the app shell no longer imports the Auftraege table, its row menus and their edit forms (AuftraegeTableSkeleton has its own module): about 617 decoded bytes less, rows unchanged."
         }
       ]
     },
@@ -1045,7 +1045,7 @@
             "rows": null
           },
           "runKeys": ["2026-11-08T112625699Z-6f644d"],
-          "reason": "The dashboard's clock action response lists fewer client chunks now that the app shell no longer imports the Auftraege table, its row menus and their edit forms (AuftraegeTableSkeleton has its own module): 26,210 to 25,593 decoded bytes, rows unchanged."
+          "reason": "The dashboard's clock action response lists fewer client chunks now that the app shell no longer imports the Auftraege table, its row menus and their edit forms (AuftraegeTableSkeleton has its own module): about 617 decoded bytes less, rows unchanged."
         }
       ]
     },
@@ -1323,7 +1323,7 @@
             "rows": null
           },
           "runKeys": ["2026-11-08T112625699Z-098a70"],
-          "reason": "Manager-only create and edit dialogs load on intent (lazyDialog) instead of in the cold start, and the app shell no longer imports the Auftraege table through its skeleton: 600,972 on 86b61f9b to 575,135 on this PC, with requests 54 to 53. The create dialog downloads on the hover, focus or press of „Neu“, the edit dialogs when a row menu opens."
+          "reason": "Manager-only create and edit dialogs load on intent (lazyDialog) instead of in the cold start, and the app shell no longer imports the Auftraege table through its skeleton: 597,427 to 575,135 on this PC (main read 600,972 here), with requests 54 to 53 against main. The create dialog downloads on the hover, focus or press of „Neu“, the edit dialogs when a row menu opens."
         }
       ]
     },
@@ -2530,7 +2530,7 @@
             "rows": null
           },
           "runKeys": ["2026-11-08T112625699Z-098a70"],
-          "reason": "Owner decision of 2026-11-08 via the CI lead (werk-flow/werkflow-planning#222): accept. TimeInput (components/ui/time-input) left every page's shared chunk, where the Auftraege edit form held it through the app shell's table skeleton, and now arrives with the /zeiterfassung chunks that Aufgaben prefetches: 33,645 to 35,153, script requests unchanged at 4. No new code; every cold start drops the module instead."
+          "reason": "Owner decision of 2026-11-08 via the CI lead (werk-flow/werkflow-planning#222): accept. TimeInput (components/ui/time-input) left every page's shared chunk, where the Auftraege edit form held it through the app shell's table skeleton, and now arrives with the /zeiterfassung chunks that Aufgaben prefetches: 33,652 to 35,153 (main read 33,645 here), script requests unchanged at 4. No new code; every cold start drops the module instead."
         }
       ]
     },

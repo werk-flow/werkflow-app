@@ -12,7 +12,7 @@ import { BannerProvider } from '@/components/ui/banner';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { RowActionsMenu } from '@/components/ui/row-actions-menu';
 
-type ContractDialogProps = { open: boolean; onOpenChange: (open: boolean) => void };
+type ContractDialogProps = { open: boolean; onOpenChange: (open: boolean) => void; title: string };
 
 declare global {
   interface Window {
@@ -23,19 +23,21 @@ declare global {
       menuLoads: number;
       /** Answers the open download: the module, or a failed download. */
       answer: ((loaded: boolean) => void) | null;
+      /** Answers the row menu's open download with the module. */
+      answerMenu: (() => void) | null;
     };
   }
 }
 
 export function initializeLazyDialogBoundary(): void {
-  window.uiContractLazyDialog = { loads: 0, menuLoads: 0, answer: null };
+  window.uiContractLazyDialog = { loads: 0, menuLoads: 0, answer: null, answerMenu: null };
 }
 
-function ContractDialog({ open, onOpenChange }: ContractDialogProps): ReactElement {
+function ContractDialog({ open, onOpenChange, title }: ContractDialogProps): ReactElement {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogTitle>Geladener Dialog</DialogTitle>
+        <DialogTitle>{title}</DialogTitle>
         <DialogDescription>Das Modul ist da.</DialogDescription>
       </DialogContent>
     </Dialog>
@@ -55,22 +57,39 @@ const pageDialog = lazyDialog<ContractDialogProps>(() => {
 });
 
 const menuDialog = lazyDialog<ContractDialogProps>(() => {
-  window.uiContractLazyDialog.menuLoads += 1;
-  return Promise.resolve(ContractDialog);
+  const state = window.uiContractLazyDialog;
+  state.menuLoads += 1;
+  return new Promise((resolve) => {
+    state.answerMenu = () => {
+      state.answerMenu = null;
+      resolve(ContractDialog);
+    };
+  });
 });
+
+/** A list row whose menu opens its edit dialog, as the Aufträge rows do. */
+function ContractRow({ name }: { name: string }): ReactElement {
+  const [open, setOpen] = useState(false);
+  return (
+    <section aria-label={name}>
+      <RowActionsMenu
+        onOpen={menuDialog.preload}
+        disabled={menuDialog.useWaiting(open)}
+        actions={[{ label: 'Bearbeiten', icon: null, onSelect: () => setOpen(true) }]}
+      />
+      <menuDialog.Dialog open={open} onOpenChange={setOpen} title={`${name} bearbeiten`} />
+    </section>
+  );
+}
 
 function PageContent(): ReactElement {
   const { open, setOpen } = usePageAction();
-  const [menuDialogOpen, setMenuDialogOpen] = useState(false);
   usePageActionLoader(pageDialog.preload, pageDialog.useWaiting(open));
   return (
     <>
-      <RowActionsMenu
-        onOpen={menuDialog.preload}
-        actions={[{ label: 'Bearbeiten', icon: null, onSelect: () => setMenuDialogOpen(true) }]}
-      />
-      <pageDialog.Dialog open={open} onOpenChange={setOpen} />
-      <menuDialog.Dialog open={menuDialogOpen} onOpenChange={setMenuDialogOpen} />
+      <ContractRow name="Erste Zeile" />
+      <ContractRow name="Zweite Zeile" />
+      <pageDialog.Dialog open={open} onOpenChange={setOpen} title="Geladener Dialog" />
     </>
   );
 }

@@ -21,12 +21,14 @@ export type LazyDialog<P extends DialogOpenProps> = {
   useWaiting: (open: boolean) => boolean;
 };
 
-/**
- * A dialog only some roles open, loaded on its opener's intent or on first open,
- * so a role that never opens it never downloads it (`lab.field.cold-start`).
- * A failed download closes the dialog with an error banner; the next open retries.
- */
-export function lazyDialog<P extends DialogOpenProps>(load: () => Promise<ComponentType<P>>): LazyDialog<P> {
+type ModuleDownload<P> = {
+  /** Starts the download once; a failed one starts again on the next call. */
+  start: () => Promise<ComponentType<P>>;
+  subscribe: (listener: () => void) => () => void;
+  read: () => LoadState<P>;
+};
+
+function moduleDownload<P>(load: () => Promise<ComponentType<P>>): ModuleDownload<P> {
   let state: LoadState<P> = IDLE;
   let download: Promise<ComponentType<P>> | null = null;
   const listeners = new Set<() => void>();
@@ -36,8 +38,9 @@ export function lazyDialog<P extends DialogOpenProps>(load: () => Promise<Compon
     for (const listener of listeners) listener();
   }
 
-  function start(): Promise<ComponentType<P>> {
-    if (!download) {
+  return {
+    start: () => {
+      if (download) return download;
       update({ status: 'loading' });
       download = load().then(
         (component) => {
@@ -50,22 +53,30 @@ export function lazyDialog<P extends DialogOpenProps>(load: () => Promise<Compon
           throw error;
         },
       );
-    }
-    return download;
-  }
+      return download;
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    read: () => state,
+  };
+}
 
-  function subscribe(listener: () => void): () => void {
-    listeners.add(listener);
-    return () => listeners.delete(listener);
-  }
+/**
+ * A dialog only some roles open, loaded on its opener's intent or on first open,
+ * so a role that never opens it never downloads it (`lab.field.cold-start`).
+ * A failed download closes the dialog with an error banner; the next open retries.
+ */
+export function lazyDialog<P extends DialogOpenProps>(load: () => Promise<ComponentType<P>>): LazyDialog<P> {
+  const { start, subscribe, read } = moduleDownload(load);
+  // Only the latest open waits for the download: an open from another row closes the earlier one,
+  // so two dialogs never appear together when the module lands.
+  let closeWaitingOpen: (() => void) | null = null;
 
   // The server and the hydrating client never hold the module: a closed dialog renders nothing.
   function useLoadState(): LoadState<P> {
-    return useSyncExternalStore(
-      subscribe,
-      () => state,
-      () => IDLE,
-    );
+    return useSyncExternalStore(subscribe, read, () => IDLE);
   }
 
   function Dialog(props: P): ReactNode {
@@ -74,15 +85,28 @@ export function lazyDialog<P extends DialogOpenProps>(load: () => Promise<Compon
     const { open, onOpenChange } = props;
 
     useEffect(() => {
-      if (!open || state.status === 'loaded') return;
+      if (!open || read().status === 'loaded') return;
       let waiting = true;
-      start().catch(() => {
-        if (!waiting) return;
+      const close = (): void => {
+        waiting = false;
         onOpenChange(false);
-        showBanner({ variant: 'error', message: LOAD_FAILED_MESSAGE });
-      });
+      };
+      closeWaitingOpen?.();
+      closeWaitingOpen = close;
+      start().then(
+        () => {
+          if (closeWaitingOpen === close) closeWaitingOpen = null;
+        },
+        () => {
+          if (closeWaitingOpen === close) closeWaitingOpen = null;
+          if (!waiting) return;
+          onOpenChange(false);
+          showBanner({ variant: 'error', message: LOAD_FAILED_MESSAGE });
+        },
+      );
       return () => {
         waiting = false;
+        if (closeWaitingOpen === close) closeWaitingOpen = null;
       };
     }, [open, onOpenChange, showBanner]);
 

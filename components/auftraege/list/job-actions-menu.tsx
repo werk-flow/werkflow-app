@@ -143,11 +143,14 @@ export function JobActionsMenu({
     handleDelete,
   } = useJobActionsMenuState({ job, onJobDeleted, onDeleteRequested });
 
+  // The trigger shows a spinner while the edit form downloads for this row.
+  const editWaiting = lazyEditJobDialog.useWaiting(showEditDialog);
+
   return (
     <>
       <RowActionsMenu
         onOpen={lazyEditJobDialog.preload}
-        disabled={isDeleting}
+        disabled={isDeleting || editWaiting}
         actions={rowMenuActions({
           openDetails: () => router.push(detailHref),
           openEdit: () => setShowEditDialog(true),
