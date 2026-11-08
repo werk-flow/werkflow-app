@@ -45,7 +45,7 @@ Each lab group prints one table per step with reference, value, ceiling, floor a
 
 ### Move a reference to a new digest
 
-A reference counts only under the digests of the code and the workload it measured. Lab groups run nightly, so the unit suite derives both digests from the tree (`lib/testing/reference-digests.ts`) and fails the PR that moves one. The failure names the references and prints the fix.
+A reference counts only under the digests of the code and the workload it measured. The unit suite derives both digests from the tree (`lib/testing/reference-digests.ts`) and fails the PR that moves one. The failure names the references and prints the fix.
 
 A workload digest hashes its files with the workload a run archived. `lib/testing/workload-archive/` keeps the reviewed archives byte for byte, so never reformat them.
 
@@ -64,7 +64,7 @@ The check sees edits to digest inputs. A change elsewhere that alters what a see
 ## What each instrument proves
 
 - **Wall-clock scenarios** (`audit:performance:*`) are a manual tool for one machine. They hold every sample to its budget and compare the median with a reference recorded on that machine, and run alone. Nothing proves them on a schedule ([selection](testing.md#how-selection-works)). A moved digest fails on its PR. A change to what the reference records about the machine, such as its memory or CPU, shows only at the next `--fresh` run, as "no reviewed baseline"; recalibrate then. Without `--fresh`, a run can reuse an earlier pass. Anything it does not record shows as slower readings and no warning: a laptop on battery runs far slower and breaks budgets, so measure on mains power.
-- **Lab counts** (`audit:lab:*`) prove a step does the same work as its reference. A count does not show when a page became usable, and it counts background reads that cost the user nothing. Read it with the wall-clock time. They run nightly, in the release gate and with `--group`; a change plan selects them only when their own spec or support changed.
+- **Lab counts** (`audit:lab:*`) prove a step does the same work as its reference. A count does not show when a page became usable, and it counts background reads that cost the user nothing. Read it with the wall-clock time. Every change plan that touches product code runs them ([selection](testing.md#how-selection-works)), so a regression fails its own PR.
 - **Payload budgets**: the ceiling catches growth, the floor lost data.
 
 A metric earns its gate by two jobs: it repeats across five runs within tolerance, and moving it in a recorded experiment moved the time the user waits.
@@ -119,6 +119,6 @@ Tier 3 defaults. Diverge after the owner tried the alternative.
 
 ## Verify your work
 
-1. With `bun run test:server local` running, run the lab group of each journey the change touches with `--group audit:lab:<name>`, and a wall-clock group the plan names with `--group audit:performance:<name>` on a quiet machine.
+1. With `bun run test:server local` running, run `bun run test:verify`: its plan takes both lab groups for any product change. Run a wall-clock group the plan names with `--group audit:performance:<name>` on a quiet machine.
 2. For a page, skeleton or shared control, run `bun run test:verify --group audit:layout` and `--group audit:layout:<area>` for each changed area.
 3. Commit the lowered or accepted references with the change. Record the journey decision, the numbers and the person's verdict in the slice record.
