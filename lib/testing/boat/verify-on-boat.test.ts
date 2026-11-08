@@ -514,3 +514,31 @@ test('an import never writes through a destination hard link and writes nothing 
   copyResults(staging, clean);
   expect(readdirSync(join(clean, '.agent-logs', 'runs')).sort()).toEqual(['a-first', 'z-last']);
 });
+
+// A link member followed by a file member below it. GNU tar (1.35 measured) creates an escaping
+// link as a placeholder until the end of the run, and bsdtar refuses a member whose folder a link
+// would alter unless given -P; either way nothing may land outside the staging folder.
+test('a link member followed by a file through it writes nothing outside staging', () => {
+  for (const target of ['absolute', '../../outside']) {
+    const base = mkdtempSync(join(tmpdir(), 'boat-link-file-'));
+    const outside = join(base, 'outside');
+    mkdirSync(join(base, 'one', '.agent-logs'), { recursive: true });
+    mkdirSync(join(base, 'two', '.agent-logs', 'x'), { recursive: true });
+    mkdirSync(outside);
+    symlinkSync(target === 'absolute' ? outside : target, join(base, 'one', '.agent-logs', 'x'));
+    writeFileSync(join(base, 'two', '.agent-logs', 'x', 'file'), 'planted');
+    // Create, append, then compress: the same three steps on GNU tar and bsdtar.
+    const archive = join(base, 'results.tar');
+    execFileSync('tar', ['-cf', archive, '-C', join(base, 'one'), '.agent-logs/x']);
+    execFileSync('tar', ['-rf', archive, '-C', join(base, 'two'), '.agent-logs/x/file']);
+    execFileSync('gzip', [archive]);
+    const staging = join(base, 'staging');
+    mkdirSync(staging);
+    const checkout = mkdtempSync(join(tmpdir(), 'boat-checkout-'));
+    expect(() => unpackResults(`${archive}.gz`, staging, checkout), target).toThrow(
+      'The Boat results archive was refused',
+    );
+    expect(readdirSync(outside), target).toEqual([]);
+    expect(existsSync(join(checkout, '.agent-logs')), target).toBe(false);
+  }
+});
