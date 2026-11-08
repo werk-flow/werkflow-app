@@ -13,6 +13,7 @@ import {
   parseDocumentPaths,
   planRepresentativeOrganization,
   reconcileDocumentPaths,
+  restoreObjects,
   runRecoveryStages,
   type DocumentPath,
   type RecoveryResource,
@@ -369,4 +370,39 @@ test('two dumps of one schema match despite their random restrict keys, and any 
     `\\restrict ${key}\nCREATE TABLE public.documents ();\n${body}\\unrestrict ${key}\n`;
   expect(dumpDigest(dump('a1', ''))).toBe(dumpDigest(dump('b2', '')));
   expect(dumpDigest(dump('a1', ''))).not.toBe(dumpDigest(dump('a1', 'CREATE TABLE public.extra ();\n')));
+});
+
+test('an object the backup lacks is skipped by the restore, and reconciliation names its document', async () => {
+  const organization = planRepresentativeOrganization();
+  const [lost, ...kept] = organization.objects;
+  if (!lost) throw new Error('The plan has no object.');
+  const backup = new Map(kept.map((object) => [object.path, object.content]));
+  const restored = new Map<string, string>();
+  await restoreObjects(
+    organization.objects,
+    async (path) => backup.get(path),
+    async (path, content) => {
+      restored.set(path, content);
+    },
+  );
+  expect(restored).toEqual(backup);
+  const reconciliation = reconcileDocumentPaths(
+    paths(organization),
+    [...restored].map(([key, content]) => ({ key, sizeBytes: Buffer.byteLength(content) })),
+  );
+  expect(reconciliation.missingDocumentIds).toEqual([lost.documentId]);
+  expect(() => assertFilesReconciled(reconciliation, [])).toThrow(lost.documentId);
+});
+
+test('every personnel file belongs to the employee record its membership created, never a separate record', () => {
+  const { seedSql } = planRepresentativeOrganization();
+  expect(seedSql).not.toContain('insert into public.employee_records');
+  const personnel = seedSql
+    .split('\n')
+    .filter((line) => line.includes('finalize_personnel_document_metadata('));
+  expect(personnel.length).toBeGreaterThan(0);
+  for (const line of personnel)
+    expect(line).toMatch(
+      /\(select record\.id from public\.employee_records record where .* and record\.user_id = '[0-9a-f-]{36}'\)/,
+    );
 });

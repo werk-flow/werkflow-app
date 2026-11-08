@@ -193,14 +193,13 @@ export type RepresentativeOrganization = Readonly<{
 
 type Category = 'contract' | 'invoice' | 'offer' | 'other' | 'photo' | 'report';
 type Person = Readonly<{ id: string; first: string; last: string; email: string }>;
-type FieldWorker = Person & Readonly<{ recordId: string }>;
-type Job = Readonly<{ id: string; title: string; number: string; assignees: readonly FieldWorker[] }>;
+type Job = Readonly<{ id: string; title: string; number: string; assignees: readonly Person[] }>;
 type Company = Readonly<{
   organizationId: string;
   foreignOrganizationId: string;
   admin: Person;
   office: readonly Person[];
-  field: readonly FieldWorker[];
+  field: readonly Person[];
   outsider: Person;
   jobs: readonly Job[];
 }>;
@@ -215,7 +214,6 @@ const JOB_TITLES = ['Heizungstausch Gasbrennwert', 'Badsanierung', 'Wartung Wär
 function planCompany(newId: () => string): Company {
   const field = FIELD_NAMES.map((first, index) => ({
     id: newId(),
-    recordId: newId(),
     first,
     last: 'Rohrbach',
     email: `monteur-${index + 1}`,
@@ -288,6 +286,8 @@ function addUpload(
 function addPersonnelFiles(log: SeedLog, company: Company): string[] {
   const protectedDocumentIds: string[] = [];
   for (const [index, person] of company.field.entries()) {
+    // The record a membership creates for its user; without one the function refuses the file.
+    const employeeRecord = `(select record.id from public.employee_records record where record.organization_id = ${literal(company.organizationId)} and record.user_id = ${literal(person.id)})`;
     const files = [
       { type: 'Arbeitsvertrag', access: 'personnel_standard' },
       ...(index === 0 ? [{ type: 'Lohnabrechnung', access: 'admin_restricted' }] : []),
@@ -301,7 +301,7 @@ function addPersonnelFiles(log: SeedLog, company: Company): string[] {
       if (file.access !== 'personnel_standard') protectedDocumentIds.push(documentId);
       const operation = log.newId();
       log.statements.push(
-        `select public.finalize_personnel_document_metadata(${literal(company.admin.id)}, ${literal(company.organizationId)}, ${literal(person.recordId)}, ${literal(documentId)}, 'organization-documents', ${literal(path)}, ${literal(fileName)}, ${literal(fileName)}, 'other', 'application/pdf', ${size}, ${literal(file.type)}, '${file.access}', 'valid', null, ${literal(operation)}, '${createHash('sha256').update(operation).digest('hex')}');`,
+        `select public.finalize_personnel_document_metadata(${literal(company.admin.id)}, ${literal(company.organizationId)}, ${employeeRecord}, ${literal(documentId)}, 'organization-documents', ${literal(path)}, ${literal(fileName)}, ${literal(fileName)}, 'other', 'application/pdf', ${size}, ${literal(file.type)}, '${file.access}', 'valid', null, ${literal(operation)}, '${createHash('sha256').update(operation).digest('hex')}');`,
       );
     }
   }
@@ -384,12 +384,6 @@ function companySql(company: Company): string[] {
       ...company.office.map((person) => `(${organization}, ${literal(person.id)}, 'buero')`),
       ...company.field.map((person) => `(${organization}, ${literal(person.id)}, 'employee')`),
     ])};`,
-    `insert into public.employee_records (id, organization_id, first_name, last_name) values\n${rows(
-      company.field.map(
-        (person) =>
-          `(${literal(person.recordId)}, ${organization}, ${literal(person.first)}, ${literal(person.last)})`,
-      ),
-    )};`,
     `insert into public.jobs (id, organization_id, title, job_number, created_by) values\n${rows(
       company.jobs.map(
         (job) =>
@@ -449,6 +443,22 @@ export function planRepresentativeOrganization(newId: () => string = randomUUID)
       'commit;',
     ].join('\n'),
   };
+}
+
+/**
+ * Copies every object the backup still holds into the restored bucket. An
+ * object the backup lacks is skipped, so reconciliation names its document
+ * instead of the copy failing without one.
+ */
+export async function restoreObjects(
+  objects: readonly RehearsalObject[],
+  readBackup: (path: string) => Promise<string | undefined>,
+  writeRestored: (path: string, content: string) => Promise<void>,
+): Promise<void> {
+  for (const object of objects) {
+    const content = await readBackup(object.path);
+    if (content !== undefined) await writeRestored(object.path, content);
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -28,6 +28,7 @@ import {
   parseDocumentPaths,
   planRepresentativeOrganization,
   reconcileDocumentPaths,
+  restoreObjects,
   runRecoveryStages,
   type AccessSnapshot,
   type FileReconciliation,
@@ -482,8 +483,18 @@ async function main(): Promise<void> {
               ],
               databaseBackup,
             );
-            for (const object of everyObject)
-              await put(target.restoredBucket, object.path, await get(target.backupBucket, object.path));
+            await restoreObjects(
+              everyObject,
+              async (path) => {
+                try {
+                  return await get(target.backupBucket, path);
+                } catch (error) {
+                  if (error instanceof Error && error.name === 'NoSuchKey') return undefined;
+                  throw error;
+                }
+              },
+              (path, content) => put(target.restoredBucket, path, content),
+            );
           },
           verify: async () => {
             const restoredMigrations = await sql(
