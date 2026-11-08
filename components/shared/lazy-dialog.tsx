@@ -86,13 +86,15 @@ export function lazyDialog<P extends DialogOpenProps>(load: () => Promise<Compon
     const { open, onOpenChange } = props;
 
     useEffect(() => {
-      if (!open || read().status === 'loaded') return;
+      if (!open) return;
+      // Every open ends an earlier one still waiting, also when this dialog is already loaded.
+      closeWaitingOpen?.();
+      if (read().status === 'loaded') return;
       let waiting = true;
       const close = (): void => {
         waiting = false;
         onOpenChange(false);
       };
-      closeWaitingOpen?.();
       closeWaitingOpen = close;
       start().then(
         () => {

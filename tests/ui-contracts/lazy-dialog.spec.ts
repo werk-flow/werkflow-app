@@ -88,6 +88,25 @@ test('an edit chosen on a row of another dialog closes the earlier waiting open'
   await expect(page.getByRole('dialog')).toHaveCount(1);
 });
 
+test('opening a loaded dialog closes an edit still waiting for its download', async ({ page }) => {
+  await openFixture(page);
+  const create = page.getByRole('button', { name: 'Neu' });
+  const first = page.getByRole('region', { name: 'Erste Zeile' });
+  await create.hover();
+  await answer(page, true);
+
+  await first.getByRole('button', { name: 'Aktionen öffnen' }).click();
+  await page.getByRole('menuitem', { name: 'Bearbeiten' }).click();
+  await expect(first.getByRole('button', { name: 'Aktionen öffnen' })).toBeDisabled();
+  await create.click();
+  await expect(page.getByRole('dialog', { name: 'Geladener Dialog' })).toBeVisible();
+
+  await page.evaluate(() => window.uiContractLazyDialog.answerMenu?.());
+  await page.keyboard.press('Escape');
+  await expect(first.getByRole('button', { name: 'Aktionen öffnen' })).toBeEnabled();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
 test('a failed download closes the open with an error, and the next open retries', async ({ page }) => {
   await openFixture(page);
   const create = page.getByRole('button', { name: 'Neu' });
