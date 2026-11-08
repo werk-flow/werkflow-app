@@ -2241,7 +2241,7 @@
         },
         "script": {
           "requests": { "reference": 4, "tolerance": 0 },
-          "encodedBytes": { "reference": 33652, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 36110, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         }
@@ -2417,6 +2417,24 @@
           },
           "runKeys": ["2026-11-07T212454898Z-a83f9b"],
           "reason": "werk-flow/werkflow-app#232: #225 put the manual entry bridge and its Zod schemas into the startup chunk of every page through the menu sign-out (cold start 54 to 55 requests). Its fix keeps only an import-free clear in the sign-out, so the bridge returns to the /zeiterfassung chunks the task list prefetches (32720 to 33652 bytes) while every cold start loads 602426 to 599628 script bytes and 39 to 38 scripts."
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 4, "tolerance": 0 },
+            "encodedBytes": { "reference": 33652, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 4, "tolerance": 0 },
+            "encodedBytes": { "reference": 36110, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-08T134441152Z-be7805"],
+          "reason": "werk-flow/werkflow-app#276 adds the employee's „Zeit nachtragen“ flow to /zeiterfassung (earlier-day Zeitkorrektur, withdrawal confirmation, extended „Vorgemerkte Zeit“). The Aufgaben step prefetches that route from the sidebar, so its script grew by about 2.4 kB; the Aufgaben route and its reads are unchanged."
         }
       ]
     },
