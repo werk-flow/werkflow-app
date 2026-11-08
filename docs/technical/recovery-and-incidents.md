@@ -36,7 +36,7 @@ The team moved to Vercel Pro on 2026-11-05; its checklist is open in werk-flow/w
 ## Restore procedure (database)
 
 1. Record source, target, backup timestamp, application revision, expected loss and rollback limits. Get the owner's authorization. Never load production material into DEV or the local stack.
-2. Stop writes through enforced maintenance or provider controls, and notify the customer. A notice alone stops no direct client, job or session.
+2. Stop writes through enforced maintenance or provider controls, and notify the customer. A notice alone stops no direct client, job or session. Pause the storage purge until step 5 is done: remove `CRON_SECRET` from Vercel Production, so `/api/storage-purge` answers 503, deletes nothing and raises the production-watcher alert; set a new value when the paths reconcile.
 3. Follow the provider's current restore procedure. Run only the authorized operation and keep its result. A partial load or a nonzero exit is a failed restore.
 4. Compare `supabase_migrations.schema_migrations` on the target with the intended revision. `bun run migrations:check` checks DEV only. For a missing migration, follow [the migration rule](environments.md#the-migration-rule) without relinking the CLI to production.
 5. Reconcile current and historical document and version paths against the correct bucket. Metadata without an object means missing bytes. An object uploaded after the backup can survive without metadata. Keep orphan objects for review; never purge them automatically.
@@ -45,7 +45,7 @@ The team moved to Vercel Pro on 2026-11-05; its checklist is open in werk-flow/w
 
 ## Restore procedure (files)
 
-Restore a trashed document in the app (`/dokumente`, Papierkorb). A permanently deleted object is gone. If a whole bucket is lost, the database still holds every path and size, so the owner can ask customers to upload again.
+Restore a trashed document in the app (`/dokumente`, Papierkorb). A permanently deleted document's bytes stay in storage for eight days, so a database restore within that window finds them; after the purge they are gone. If a whole bucket is lost, the database still holds every path and size, so the owner can ask customers to upload again.
 
 ## Monitoring
 
