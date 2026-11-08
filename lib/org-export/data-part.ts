@@ -195,8 +195,9 @@ function readme(input: { organizationName: string; generatedAt: string; partCoun
     'Die Originaldateien sind die vom Start dieses Exports. Wurde ein Dokument danach endgültig',
     'gelöscht oder bekam es eine neue Version, nennt das die Spalte „Hinweis“ im',
     'Dokumentenverzeichnis, sofern es vor der Erstellung dieses Archivs geschah. Ein Dokument, das',
-    'nach dem Start hochgeladen wurde, steht nur in „Daten/Dokumente.csv“. Den Stand nach späteren',
-    'Änderungen enthält ein neuer Export.',
+    'nach dem Start hochgeladen wurde, steht in „Daten/Dokumente.csv“ nur, wenn es vor der',
+    'Erstellung dieses Archivs hochgeladen wurde; seine Originaldatei fehlt in jedem Fall. Den',
+    'Stand nach späteren Änderungen enthält ein neuer Export.',
     '',
   ].join('\r\n');
 }

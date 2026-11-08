@@ -421,7 +421,9 @@ const readmeOf = (archive: Map<string, string>) =>
   (archive.get('LIESMICH.txt') ?? '').replaceAll('\r\n', ' ');
 assert.ok(readmeOf(entries).includes('Der Export besteht aus 3 Teilen.'), 'the README miscounts the parts');
 assert.ok(
-  readmeOf(entries).includes('nach dem Start hochgeladen wurde, steht nur in „Daten/Dokumente.csv“'),
+  readmeOf(entries).includes(
+    'nach dem Start hochgeladen wurde, steht in „Daten/Dokumente.csv“ nur, wenn es vor der',
+  ),
   'the README claims the manifest notes a document uploaded after the start',
 );
 const manifest = entries.get('Dokumentenverzeichnis.csv') ?? '';
