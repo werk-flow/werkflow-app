@@ -21,7 +21,7 @@ type CaptureView =
   | { kind: 'dialog'; opener: DialogOpenerId };
 
 /** A seeded record a capture opens instead of its route's layout record (acceptance-records.ts). */
-export type AcceptanceRecord = 'caller-match-request' | 'promoted-caller-request';
+export type AcceptanceRecord = 'caller-match-request' | 'promoted-caller-request' | 'office-task-backlog';
 
 export type CaptureSpec = {
   /** Unique within its set; part of the image name and the citation token. */
@@ -368,6 +368,17 @@ function taskOrderCaptures(): AcceptanceSet {
         role: 'buero',
         route: '/aufgaben',
         view: { kind: 'page' },
+        record: 'office-task-backlog',
+        widths: [1280, 375],
+        schemes: ['light', 'dark'],
+      },
+      {
+        id: 'buero-aufgaben-uebergaben',
+        role: 'buero',
+        route: '/aufgaben',
+        view: { kind: 'page' },
+        record: 'office-task-backlog',
+        reveal: 'Alle anzeigen',
         widths: [1280, 375],
         schemes: ['light', 'dark'],
       },

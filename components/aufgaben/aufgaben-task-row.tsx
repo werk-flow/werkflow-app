@@ -77,7 +77,7 @@ function AttentionApprovalTaskRow({ task }: { task: AttentionApprovalTask }) {
         ariaLabel={`Zeitfreigabe von ${task.personName} öffnen`}
         sourceId={task.sourceId}
       >
-        <p className="text-sm font-medium">{task.personName}</p>
+        <p className="truncate text-sm font-medium">{task.personName}</p>
         <p className="text-xs text-muted-foreground tabular-nums">
           {formatGermanDate(task.date)}
           {task.jobTitle ? ` · ${task.jobTitle}` : ''}
@@ -94,7 +94,7 @@ function AttentionApprovalTaskRow({ task }: { task: AttentionApprovalTask }) {
         ariaLabel={`Änderungsantrag von ${task.personName} öffnen`}
         sourceId={task.sourceId}
       >
-        <p className="text-sm font-medium">{task.personName}</p>
+        <p className="truncate text-sm font-medium">{task.personName}</p>
         <p className="text-xs text-muted-foreground">
           {task.requestType === 'delete' ? 'Löschung eines Zeiteintrags' : 'Änderung eines Zeiteintrags'}
           {` · ${formatOpenSince(task.openSinceDays)}`}
@@ -110,7 +110,7 @@ function AttentionApprovalTaskRow({ task }: { task: AttentionApprovalTask }) {
         ariaLabel={`Zeitkorrektur von ${task.personName} öffnen`}
         sourceId={task.sourceId}
       >
-        <p className="text-sm font-medium">{task.personName}</p>
+        <p className="truncate text-sm font-medium">{task.personName}</p>
         <p className="text-xs text-muted-foreground">
           {task.correctionLabel}
           {` · ${formatOpenSince(task.openSinceDays)}`}
@@ -125,7 +125,7 @@ function AttentionApprovalTaskRow({ task }: { task: AttentionApprovalTask }) {
       ariaLabel={`Urlaubsantrag von ${task.personName} öffnen`}
       sourceId={task.sourceId}
     >
-      <p className="text-sm font-medium">{task.personName}</p>
+      <p className="truncate text-sm font-medium">{task.personName}</p>
       <p className="text-xs text-muted-foreground tabular-nums">
         {formatGermanDateRange(task.startDate, task.endDate)}
         {task.dayPortion === 'half_day' ? ' (halbtags)' : ''}
