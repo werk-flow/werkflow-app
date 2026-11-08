@@ -19,10 +19,10 @@ import {
 // Sun 08.11.2026, 11:00 Berlin.
 setSystemTime(new Date('2026-11-08T10:00:00.000Z'));
 
-const mehmetRecordId = '86000000-0000-4000-8000-000000000001';
+const jonasRecordId = '86000000-0000-4000-8000-000000000001';
 const lenaRecordId = '86000000-0000-4000-8000-000000000002';
 const foreignRecordId = '86000000-0000-4000-8000-000000000003';
-const mehmetUserId = '86000000-0000-4000-8000-000000000004';
+const jonasUserId = '86000000-0000-4000-8000-000000000004';
 const vacationId = '86000000-0000-4000-8000-000000000011';
 const secondVacationId = '86000000-0000-4000-8000-000000000012';
 const lenaPendingId = '86000000-0000-4000-8000-000000000013';
@@ -33,9 +33,9 @@ const longVisitId = '86000000-0000-4000-8000-000000000023';
 const parkedVisitId = '86000000-0000-4000-8000-000000000024';
 const foreignVisitId = '86000000-0000-4000-8000-000000000025';
 const forgedVisitId = '86000000-0000-4000-8000-000000000026';
-const mehmetOnVisit = '86000000-0000-4000-8000-000000000031';
+const jonasOnVisit = '86000000-0000-4000-8000-000000000031';
 const lenaOnVisit = '86000000-0000-4000-8000-000000000032';
-const mehmetOnLongVisit = '86000000-0000-4000-8000-000000000033';
+const jonasOnLongVisit = '86000000-0000-4000-8000-000000000033';
 const foreignOnVisit = '86000000-0000-4000-8000-000000000034';
 
 const assignment = (id: string, employeeRecordId: string) => ({ id, employee_record_id: employeeRecordId });
@@ -87,9 +87,9 @@ const vacation = (input: {
 const world = installActionWorld({
   employee_records: [
     {
-      id: mehmetRecordId,
+      id: jonasRecordId,
       organization_id: ORGANIZATION_A,
-      user_id: mehmetUserId,
+      user_id: jonasUserId,
       first_name: 'M',
       last_name: 'A',
     },
@@ -98,7 +98,7 @@ const world = installActionWorld({
       organization_id: ORGANIZATION_A,
       user_id: null,
       first_name: 'Lena',
-      last_name: 'Wolf',
+      last_name: 'Hartmann',
     },
     {
       id: foreignRecordId,
@@ -108,10 +108,10 @@ const world = installActionWorld({
       last_name: 'Fremd',
     },
   ],
-  profiles: [{ id: mehmetUserId, first_name: 'Mehmet', last_name: 'Aydın', email: 'mehmet@example.test' }],
+  profiles: [{ id: jonasUserId, first_name: 'Jonas', last_name: 'Becker', email: 'jonas@example.test' }],
   vacation_requests: [
     // Approved, already running: 05.–13.11.2026.
-    vacation({ id: vacationId, recordId: mehmetRecordId, startDate: '2026-11-05', endDate: '2026-11-13' }),
+    vacation({ id: vacationId, recordId: jonasRecordId, startDate: '2026-11-05', endDate: '2026-11-13' }),
     // Requested only: no task until it is approved.
     vacation({
       id: lenaPendingId,
@@ -129,20 +129,20 @@ const world = installActionWorld({
     }),
   ],
   planning_occurrences: [
-    // Wed 11.11.2026 07:30 Berlin: Mehmet and Lena.
+    // Wed 11.11.2026 07:30 Berlin: Jonas and Lena.
     visit({
       id: visitId,
       startAt: '2026-11-11T06:30:00.000Z',
       endAt: '2026-11-11T10:30:00.000Z',
-      absent: [assignment(mehmetOnVisit, mehmetRecordId), assignment(lenaOnVisit, lenaRecordId)],
-      job: job('Gastherme Inbetriebnahme', 'AUF-2026-121'),
+      absent: [assignment(jonasOnVisit, jonasRecordId), assignment(lenaOnVisit, lenaRecordId)],
+      job: job('Heizungswartung', 'AUF-2026-201'),
     }),
     // Fri 06.11.2026: inside the vacation, but past.
     visit({
       id: pastVisitId,
       startAt: '2026-11-06T07:00:00.000Z',
       endAt: '2026-11-06T09:00:00.000Z',
-      absent: [assignment('86000000-0000-4000-8000-000000000035', mehmetRecordId)],
+      absent: [assignment('86000000-0000-4000-8000-000000000035', jonasRecordId)],
       job: job('Wartung', 'AUF-2026-110'),
     }),
     // Today 07:00 Berlin, finished before 11:00: started visits are history.
@@ -150,7 +150,7 @@ const world = installActionWorld({
       id: '86000000-0000-4000-8000-000000000027',
       startAt: '2026-11-08T06:00:00.000Z',
       endAt: '2026-11-08T08:00:00.000Z',
-      absent: [assignment('86000000-0000-4000-8000-000000000038', mehmetRecordId)],
+      absent: [assignment('86000000-0000-4000-8000-000000000038', jonasRecordId)],
       job: job('Notdienst', 'AUF-2026-111'),
     }),
     // Fri 13.11. 07:00 to Mon 16.11. 16:00 Berlin: one visit across two vacations.
@@ -158,14 +158,14 @@ const world = installActionWorld({
       id: longVisitId,
       startAt: '2026-11-13T06:00:00.000Z',
       endAt: '2026-11-16T15:00:00.000Z',
-      absent: [assignment(mehmetOnLongVisit, mehmetRecordId)],
+      absent: [assignment(jonasOnLongVisit, jonasRecordId)],
       job: job('Badsanierung', 'AUF-2026-130'),
     }),
     visit({
       id: parkedVisitId,
       startAt: '2026-11-12T07:00:00.000Z',
       endAt: '2026-11-12T09:00:00.000Z',
-      absent: [assignment('86000000-0000-4000-8000-000000000036', mehmetRecordId)],
+      absent: [assignment('86000000-0000-4000-8000-000000000036', jonasRecordId)],
       job: job('Geparkt', 'AUF-2026-131', 'geparkt'),
     }),
     visit({
@@ -182,7 +182,7 @@ const world = installActionWorld({
       organizationId: ORGANIZATION_B,
       startAt: '2026-11-12T07:00:00.000Z',
       endAt: '2026-11-12T09:00:00.000Z',
-      absent: [assignment('86000000-0000-4000-8000-000000000037', mehmetRecordId)],
+      absent: [assignment('86000000-0000-4000-8000-000000000037', jonasRecordId)],
       job: job('Fremder Einsatz', 'AUF-2026-998'),
     }),
   ],
@@ -205,18 +205,18 @@ signInAs(world, 'buero');
 assert.deepEqual(await tasksOfCaller(), [
   {
     sourceType: 'planning_visit_replan',
-    sourceId: mehmetOnVisit,
-    personName: 'Mehmet Aydın',
+    sourceId: jonasOnVisit,
+    personName: 'Jonas Becker',
     date: '2026-11-11',
     time: '07:30',
-    visitTitle: 'Gastherme Inbetriebnahme',
-    jobNumber: 'AUF-2026-121',
+    visitTitle: 'Heizungswartung',
+    jobNumber: 'AUF-2026-201',
     dispatchState: 'nicht_gesendet',
   },
   {
     sourceType: 'planning_visit_replan',
-    sourceId: mehmetOnLongVisit,
-    personName: 'Mehmet Aydın',
+    sourceId: jonasOnLongVisit,
+    personName: 'Jonas Becker',
     date: '2026-11-13',
     time: '07:00',
     visitTitle: 'Badsanierung',
@@ -229,14 +229,14 @@ assert.deepEqual(await tasksOfCaller(), [
 tableRows(world, 'vacation_requests').push(
   vacation({
     id: secondVacationId,
-    recordId: mehmetRecordId,
+    recordId: jonasRecordId,
     startDate: '2026-11-16',
     endDate: '2026-11-17',
   }),
 );
 assert.deepEqual(
   (await tasksOfCaller()).map((task) => task.sourceId),
-  [mehmetOnVisit, mehmetOnLongVisit],
+  [jonasOnVisit, jonasOnLongVisit],
 );
 
 // Lena's approval adds her own task on the shared visit.
@@ -245,16 +245,16 @@ assert.ok(lenaRequest);
 lenaRequest.status = 'approved';
 assert.deepEqual(
   (await tasksOfCaller()).map((task) => task.sourceId),
-  [mehmetOnVisit, lenaOnVisit, mehmetOnLongVisit],
+  [jonasOnVisit, lenaOnVisit, jonasOnLongVisit],
 );
 
-// Replanning the visit without Mehmet resolves his task there; Lena's stays.
+// Replanning the visit without Jonas resolves his task there; Lena's stays.
 const sharedVisit = tableRows(world, 'planning_occurrences').find((row) => row.id === visitId);
 assert.ok(sharedVisit);
 sharedVisit.absent = [assignment(lenaOnVisit, lenaRecordId)];
 assert.deepEqual(
   (await tasksOfCaller()).map((task) => task.sourceId),
-  [lenaOnVisit, mehmetOnLongVisit],
+  [lenaOnVisit, jonasOnLongVisit],
 );
 
 // Withdrawing a vacation resolves its tasks: the long visit still meets the second one.
@@ -264,7 +264,7 @@ firstVacation.status = 'cancelled';
 lenaRequest.status = 'withdrawn';
 assert.deepEqual(
   (await tasksOfCaller()).map((task) => task.sourceId),
-  [mehmetOnLongVisit],
+  [jonasOnLongVisit],
 );
 
 // Admin sees the same; a foreign cookie selects nothing in organization B.
@@ -272,7 +272,7 @@ signInAs(world, 'admin');
 world.activeOrganizationCookie = ORGANIZATION_B;
 assert.deepEqual(
   (await tasksOfCaller()).map((task) => task.sourceId),
-  [mehmetOnLongVisit],
+  [jonasOnLongVisit],
 );
 
 // The office of organization B sees its own visit only, never A's person on its forged assignment.
