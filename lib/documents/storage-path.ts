@@ -22,11 +22,24 @@ export function buildDocumentStoragePath(input: {
   return `${input.organizationId}/${input.documentId}/${sanitizeDocumentStorageFileName(input.fileName)}`;
 }
 
+/**
+ * The folder of one version upload: its ticket's staging key and every copy a
+ * finalize promotes from it lie inside, and no other upload's do.
+ */
+export function buildDocumentVersionUploadFolder(input: {
+  organizationId: string;
+  documentId: string;
+  uploadId: string;
+}): string {
+  return `${input.organizationId}/${input.documentId}/versions/${input.uploadId}`;
+}
+
 export function buildDocumentVersionStoragePath(input: {
   organizationId: string;
   documentId: string;
+  uploadId: string;
   versionNumber: number;
   fileName: string;
 }): string {
-  return `${input.organizationId}/${input.documentId}/versions/${input.versionNumber}-${sanitizeDocumentStorageFileName(input.fileName)}`;
+  return `${buildDocumentVersionUploadFolder(input)}/${input.versionNumber}-${sanitizeDocumentStorageFileName(input.fileName)}`;
 }

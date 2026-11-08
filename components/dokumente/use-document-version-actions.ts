@@ -83,7 +83,7 @@ async function showUploadedVersion({
 
 /** The document changed under the upload, so the details reload to show its versions or its filing. */
 function meetsChangedDocument(reason: UploadFailureReason): boolean {
-  return reason === 'version_conflict' || reason === 'version_unconfirmed' || reason === 'document_filed';
+  return reason === 'version_conflict' || reason === 'document_filed';
 }
 
 type VersionUpload = { document: OrganizationDocument; row: DocumentUploadRow };
