@@ -21,9 +21,27 @@ const LINUX_RUNNER_ONLY: Readonly<Record<string, string>> = {
 // the options that follow it up to the first word that is no option.
 const DATE_CALL = /(?:^|[\s(;|&`])date((?:\s+-[^\s)"'`;|&]*)*)(?=[\s)"'`;|&]|$)/g;
 
+/** The script's commands with each `\\` line continuation joined, numbered by their first line. */
+function logicalLines(script: string): { number: number; text: string }[] {
+  const lines: { number: number; text: string }[] = [];
+  let pending: { number: number; text: string } | undefined;
+  for (const [index, line] of script.split('\n').entries()) {
+    const current = pending
+      ? { number: pending.number, text: `${pending.text} ${line}` }
+      : { number: index + 1, text: line };
+    if (current.text.endsWith('\\')) pending = { number: current.number, text: current.text.slice(0, -1) };
+    else {
+      lines.push(current);
+      pending = undefined;
+    }
+  }
+  if (pending) lines.push(pending);
+  return lines;
+}
+
 /** Each `<line>: date <option name>` that BSD date may not know, outside comments. */
 function gnuOnlyDateOptions(script: string): string[] {
-  return script.split('\n').flatMap((line, index) => {
+  return logicalLines(script).flatMap(({ number, text: line }) => {
     if (line.trimStart().startsWith('#')) return [];
     return [...line.matchAll(DATE_CALL)].flatMap(([, options = '']) =>
       options
@@ -31,7 +49,7 @@ function gnuOnlyDateOptions(script: string): string[] {
         .split(/\s+/)
         .map((option) => option.split('=')[0] ?? option)
         .filter((option) => option !== '' && !PORTABLE_OPTIONS.has(option))
-        .map((option) => `${index + 1}: date ${option}`),
+        .map((option) => `${number}: date ${option}`),
     );
   });
 }
@@ -53,9 +71,18 @@ test('the scan names GNU-only date options and passes portable calls', () => {
         'now="$(date +%s)"; stamp=`date -u`',
         '# date --date is GNU-only',
         'echo "update --all"',
+        'start="$(date -u \\',
+        "  -d '15 minutes ago' +%H)\"",
       ].join('\n'),
     ),
-  ).toEqual(['1: date --utc', '1: date --date', '2: date -d', '3: date --utc', '3: date --set']);
+  ).toEqual([
+    '1: date --utc',
+    '1: date --date',
+    '2: date -d',
+    '3: date --utc',
+    '3: date --set',
+    '7: date -d',
+  ]);
 });
 
 test('every .github/scripts shell script calls date with options macOS knows too', () => {
