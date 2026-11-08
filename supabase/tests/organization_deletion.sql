@@ -2,8 +2,9 @@
 -- 20261029205025_refuse_organization_delete_with_time_records.sql) refuses
 -- while the organization holds a time entry, a time session or a closed
 -- period, refuses everyone but the owner and a wrong confirmation name, and
--- removes the organization with its rows otherwise. Only the service role
--- executes the function and the scope read.
+-- removes the organization with its rows otherwise, also when a selected
+-- responsibility group has one holder left. Only the service role executes
+-- the function and the scope read.
 begin;
 
 insert into auth.users (
@@ -17,15 +18,18 @@ insert into auth.users (
  'authenticated', 'authenticated', 'org-delete-employee@example.test', '', now(), '{}',
  '{"first_name":"Employee","last_name":"Delete"}', now(), now());
 
--- 10 has no time, 11 a time entry, 12 a time session, 13 only a closed period.
+-- 10 has no time, 11 a time entry, 12 a time session, 13 only a closed period,
+-- 14 a selected responsibility group with one holder.
 insert into public.organizations (id, name, admin_id, unique_code) values
+('27900000-0000-0000-0000-000000000014', 'Mit Zuständigkeit', '27900000-0000-0000-0000-000000000001', 'ODEL14'),
 ('27900000-0000-0000-0000-000000000010', 'Ohne Zeiten', '27900000-0000-0000-0000-000000000001', 'ODEL10'),
 ('27900000-0000-0000-0000-000000000011', 'Mit Zeiteintrag', '27900000-0000-0000-0000-000000000001', 'ODEL11'),
 ('27900000-0000-0000-0000-000000000012', 'Mit Sitzung', '27900000-0000-0000-0000-000000000001', 'ODEL12'),
 ('27900000-0000-0000-0000-000000000013', 'Mit Periode', '27900000-0000-0000-0000-000000000001', 'ODEL13');
 insert into public.organization_members (organization_id, user_id, role) values
 ('27900000-0000-0000-0000-000000000010', '27900000-0000-0000-0000-000000000002', 'employee'),
-('27900000-0000-0000-0000-000000000012', '27900000-0000-0000-0000-000000000002', 'employee');
+('27900000-0000-0000-0000-000000000012', '27900000-0000-0000-0000-000000000002', 'employee'),
+('27900000-0000-0000-0000-000000000014', '27900000-0000-0000-0000-000000000002', 'employee');
 insert into public.clients (organization_id, name) values
 ('27900000-0000-0000-0000-000000000010', 'Kundin Löschtest');
 
@@ -46,6 +50,26 @@ begin
     and user_id = '27900000-0000-0000-0000-000000000002';
   if not found then raise exception 'employee record prerequisite missing'; end if;
   perform set_config('app.time_capture_write', v_previous_capture_write, true);
+end;
+$$;
+
+do $$
+declare
+  v_holder_record_id uuid;
+  v_current_configuration_id uuid;
+begin
+  select employee.id into v_holder_record_id from public.employee_records employee
+  where employee.organization_id = '27900000-0000-0000-0000-000000000014'
+    and employee.user_id = '27900000-0000-0000-0000-000000000002';
+  select configuration.id into v_current_configuration_id
+  from public.organization_responsibility_configurations configuration
+  where configuration.organization_id = '27900000-0000-0000-0000-000000000014'
+    and configuration.responsibility = 'time_approval'
+  order by configuration.effective_from desc, configuration.created_at desc, configuration.id desc
+  limit 1;
+  perform public.apply_responsibility_configuration(
+    '27900000-0000-0000-0000-000000000014', 'time_approval', 'selected', array[v_holder_record_id],
+    '27900000-0000-0000-0000-000000000001', v_current_configuration_id);
 end;
 $$;
 
@@ -144,6 +168,19 @@ begin
     or exists (select 1 from public.organization_members where organization_id = '27900000-0000-0000-0000-000000000010')
     or exists (select 1 from public.clients where organization_id = '27900000-0000-0000-0000-000000000010')
   then raise exception 'the owner''s deletion of an organization without time left rows'; end if;
+
+  -- Its members go with the organization, so the last holder of a selected
+  -- group goes too; a live organization still refuses that removal
+  -- (people_boundaries.sql).
+  perform public.delete_organization(
+    '27900000-0000-0000-0000-000000000014', '27900000-0000-0000-0000-000000000001', 'Mit Zuständigkeit');
+  if exists (select 1 from public.organizations where id = '27900000-0000-0000-0000-000000000014')
+    or exists (select 1 from public.organization_members where organization_id = '27900000-0000-0000-0000-000000000014')
+    or exists (
+      select 1 from public.organization_responsibility_configurations
+      where organization_id = '27900000-0000-0000-0000-000000000014'
+    )
+  then raise exception 'the owner''s deletion of an organization with a selected responsibility group left rows'; end if;
 end;
 $$;
 

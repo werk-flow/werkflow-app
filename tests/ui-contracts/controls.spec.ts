@@ -657,6 +657,38 @@ test(
   },
 );
 
+test('a row menu settles its focus in the commit that opens it, so a chosen item keeps it', async ({
+  page,
+}) => {
+  // Styled, so focusing an item cannot scroll the page and close the menu (see the test above).
+  const css = process.env.WERKFLOW_UI_CONTRACT_CSS;
+  if (!css) throw new Error('Run the styled contracts through test:ui.');
+  await page.addStyleTag({ path: css });
+  const section = page.getByRole('region', { name: 'Zeilenaktionen' });
+  const trigger = section.getByRole('button', { name: 'Aktionen öffnen' });
+  // Open and choose the second item in one task, as a fast keyboard user or a test does: no frame
+  // passes between them. A focus the menu defers to a later frame would land after the choice.
+  const focusedOnOpen = await trigger.evaluate(async (button) => {
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    // React commits the click's update in a microtask, which runs before any next input event.
+    await Promise.resolve();
+    const focused = document.activeElement;
+    const opened =
+      focused?.getAttribute('role') === 'menuitem' ? (focused.textContent ?? '') : (focused?.tagName ?? '');
+    const edit = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
+      (item) => item.textContent === 'Bearbeiten',
+    );
+    edit?.focus();
+    return opened;
+  });
+  expect(focusedOnOpen, 'the first item holds focus once the opening click commits').toBe('Markieren');
+  await page.keyboard.press('Enter');
+  await expect(
+    page.getByRole('dialog', { name: 'Eintrag bearbeiten' }),
+    'Enter selects the item the user focused, not the first item',
+  ).toBeVisible();
+});
+
 test('a scroll that leaves the row menu trigger in place keeps the menu open', async ({ page }) => {
   const section = page.getByRole('region', { name: 'Zeilenaktionen' });
   const trigger = section.getByRole('button', { name: 'Aktionen öffnen' });
