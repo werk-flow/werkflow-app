@@ -127,6 +127,11 @@ phase "test:verify exited $code; peak memory in use $(sort -n "$HOME/memory.log"
 # The run's own evidence: every report and run folder that did not exist before, and the server log.
 find .agent-logs -mindepth 2 -maxdepth 2 -type d | sort > "$HOME/evidence-after.txt"
 comm -13 "$HOME/evidence-before.txt" "$HOME/evidence-after.txt" > "$HOME/evidence-new.txt"
+# A failed browser group's retained world dies with this machine: clean it here, so its manifest
+# says so. A run without a retained world refuses the cleanup, which changes nothing.
+grep '^\.agent-logs/playwright-runs/' "$HOME/evidence-new.txt" | while read -r run; do
+  bun run test:runs cleanup "$(basename "$run")" > /dev/null 2>&1 || true
+done
 [ -d .agent-logs/test-server ] && echo .agent-logs/test-server >> "$HOME/evidence-new.txt"
 tar --create --gzip --file "$HOME/results.tgz" --files-from "$HOME/evidence-new.txt"
 exit "$code"

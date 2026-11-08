@@ -30,7 +30,7 @@ A proof records its backend by a digest of `.env.local`, which on a workstation 
 
 Any Boat failure before the results are back runs the plan locally with one line: no ready machine, a start or member limit (at most 10 machines at once), an exhausted plan, a failed setup, a memory kill or a network failure. An expired or rejected key says so and how to renew. A test failure on Boat is a result, never a fallback.
 
-A failed browser group's retained world is deleted with its machine. Diagnose it from the trace and screenshot that came back. A replay on a retained world (`--reuse-run`) needs a local run: `WERKFLOW_VERIFY_LOCAL=1 bun run test:verify --group <id>`.
+A failed browser group's world is cleaned on its machine before the machine goes. Diagnose the failure from the trace and screenshot that came back, and classify it as usual. The one `environment` retry on unchanged inputs needs a diagnostic replay on the retained world or the same build, which a Boat run does not keep; until a Boat replay exists (werk-flow/werkflow-planning#294), repair through a change of the inputs.
 
 ## The key contract
 

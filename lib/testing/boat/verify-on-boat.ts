@@ -22,6 +22,7 @@ import {
   proofEnvironmentDigest,
 } from '../evidence/proof-environment';
 import { withWorkspaceTestLock } from '../runner/workspace-test-lock';
+import { pruneRunArchive } from '../runs/run-retention';
 import { BoatError, boatClient } from './boat-api';
 import { RENEW_ADVICE, readBoatKey } from './boat-key';
 import {
@@ -330,6 +331,8 @@ async function runOnBoat(input: {
     const results = await client.download(machine.id, `${HOME}/results.tgz`);
     writeFileSync(join(folder, 'results.tgz'), results);
     execFileSync('tar', ['-xzf', join(folder, 'results.tgz')], { cwd: repository });
+    // The machine pruned only its copy of the archive; the workstation's shrinks as after a local run.
+    console.info(pruneRunArchive('prune'));
     code = result.exitCode;
     if (changedInputs(before, captureInputSnapshot(repository)).length) {
       console.error('Inputs changed during verification; this report cannot qualify acceptance.');
