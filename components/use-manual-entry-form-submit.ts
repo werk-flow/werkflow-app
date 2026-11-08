@@ -15,7 +15,13 @@ import {
 import type { AddManualEntryResult, ManualEntryInput, TimeEntry } from '@/lib/time-tracking/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { submitPastDayTime } from '@/components/manual-entry-past-day';
-import { EARLIER_VERSION_SAVED, pastDayOutcome } from '@/components/manual-entry-past-day-outcome';
+import {
+  EARLIER_VERSION_SAVED,
+  finishPastDaySend,
+  pastDayOutcome,
+  startPastDaySend,
+  type PastDayOperation,
+} from '@/components/manual-entry-past-day-outcome';
 import {
   manualEntryFieldIds,
   NO_MANUAL_ENTRY_FIELD_ERRORS,
@@ -208,10 +214,10 @@ export function useManualEntrySubmit(input: ManualEntrySubmitInput): {
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<ManualEntryFieldErrors>(NO_MANUAL_ENTRY_FIELD_ERRORS);
   const { showBanner } = useBanner();
-  // One operation id per form, with the content it was first sent with: a
-  // retry after a lost response replays the saved correction, and an edit
-  // since then must not pass as saved.
-  const operationRef = useRef<{ id: string; content: string } | null>(null);
+  // One operation id per form, with the content that may have been saved
+  // under it: a retry after a lost response replays the saved correction, and
+  // an edit since then must not pass as saved.
+  const operationRef = useRef<PastDayOperation | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -247,20 +253,21 @@ export function useManualEntrySubmit(input: ManualEntrySubmitInput): {
             selectedJobId,
             input.reason.trim(),
           ]);
-          const operation = (operationRef.current ??= { id: crypto.randomUUID(), content });
+          // A thrown send keeps this operation: its outcome is unknown.
+          const send = startPastDaySend(operationRef.current, content, () => crypto.randomUUID());
+          operationRef.current = send.operation;
           const outcome = await savePastDayTime({
             organizationId: activeOrgId,
             dateIso: plan.dateIso,
             values: input,
             selectedJobId,
-            operationId: operation.id,
-            editedSinceFirstSend: operation.content !== content,
+            operationId: send.operation.id,
+            editedSinceFirstSend: send.editedSinceFirstSend,
             setError,
             showBanner,
             onSuccess,
           });
-          // Saved, or an earlier version stands: the next send is a new correction.
-          if (outcome !== 'failed') operationRef.current = null;
+          operationRef.current = finishPastDaySend(send.operation, outcome);
           return;
         }
         await saveManualEntries({
