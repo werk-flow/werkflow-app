@@ -69,6 +69,25 @@ test('an edit chosen while its form downloads shows a busy row, and only the lat
   await expect(page.getByRole('dialog')).toHaveCount(1);
 });
 
+test('an edit chosen on a row of another dialog closes the earlier waiting open', async ({ page }) => {
+  await openFixture(page);
+  const first = page.getByRole('region', { name: 'Erste Zeile' });
+  const project = page.getByRole('region', { name: 'Projektzeile' });
+  await first.getByRole('button', { name: 'Aktionen öffnen' }).click();
+  await page.getByRole('menuitem', { name: 'Bearbeiten' }).click();
+  await expect(first.getByRole('button', { name: 'Aktionen öffnen' })).toBeDisabled();
+
+  await project.getByRole('button', { name: 'Aktionen öffnen' }).click();
+  await page.getByRole('menuitem', { name: 'Bearbeiten' }).click();
+  await expect(first.getByRole('button', { name: 'Aktionen öffnen' })).toBeEnabled();
+  await expect(project.getByRole('button', { name: 'Aktionen öffnen' })).toBeDisabled();
+
+  await page.evaluate(() => window.uiContractLazyDialog.answerMenu?.());
+  await page.evaluate(() => window.uiContractLazyDialog.answerOtherMenu?.());
+  await expect(page.getByRole('dialog', { name: 'Projektzeile bearbeiten' })).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(1);
+});
+
 test('a failed download closes the open with an error, and the next open retries', async ({ page }) => {
   await openFixture(page);
   const create = page.getByRole('button', { name: 'Neu' });

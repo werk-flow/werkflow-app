@@ -25,12 +25,20 @@ declare global {
       answer: ((loaded: boolean) => void) | null;
       /** Answers the row menu's open download with the module. */
       answerMenu: (() => void) | null;
+      /** Answers the other row menu dialog's open download with the module. */
+      answerOtherMenu: (() => void) | null;
     };
   }
 }
 
 export function initializeLazyDialogBoundary(): void {
-  window.uiContractLazyDialog = { loads: 0, menuLoads: 0, answer: null, answerMenu: null };
+  window.uiContractLazyDialog = {
+    loads: 0,
+    menuLoads: 0,
+    answer: null,
+    answerMenu: null,
+    answerOtherMenu: null,
+  };
 }
 
 function ContractDialog({ open, onOpenChange, title }: ContractDialogProps): ReactElement {
@@ -67,17 +75,28 @@ const menuDialog = lazyDialog<ContractDialogProps>(() => {
   });
 });
 
+// A second lazy dialog, as the project rows open their own edit form beside the job rows.
+const otherMenuDialog = lazyDialog<ContractDialogProps>(() => {
+  const state = window.uiContractLazyDialog;
+  return new Promise((resolve) => {
+    state.answerOtherMenu = () => {
+      state.answerOtherMenu = null;
+      resolve(ContractDialog);
+    };
+  });
+});
+
 /** A list row whose menu opens its edit dialog, as the Aufträge rows do. */
-function ContractRow({ name }: { name: string }): ReactElement {
+function ContractRow({ name, dialog }: { name: string; dialog: typeof menuDialog }): ReactElement {
   const [open, setOpen] = useState(false);
   return (
     <section aria-label={name}>
       <RowActionsMenu
-        onOpen={menuDialog.preload}
-        disabled={menuDialog.useWaiting(open)}
+        onOpen={dialog.preload}
+        disabled={dialog.useWaiting(open)}
         actions={[{ label: 'Bearbeiten', icon: null, onSelect: () => setOpen(true) }]}
       />
-      <menuDialog.Dialog open={open} onOpenChange={setOpen} title={`${name} bearbeiten`} />
+      <dialog.Dialog open={open} onOpenChange={setOpen} title={`${name} bearbeiten`} />
     </section>
   );
 }
@@ -87,8 +106,9 @@ function PageContent(): ReactElement {
   usePageActionLoader(pageDialog.preload, pageDialog.useWaiting(open));
   return (
     <>
-      <ContractRow name="Erste Zeile" />
-      <ContractRow name="Zweite Zeile" />
+      <ContractRow name="Erste Zeile" dialog={menuDialog} />
+      <ContractRow name="Zweite Zeile" dialog={menuDialog} />
+      <ContractRow name="Projektzeile" dialog={otherMenuDialog} />
       <pageDialog.Dialog open={open} onOpenChange={setOpen} title="Geladener Dialog" />
     </>
   );

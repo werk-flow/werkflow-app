@@ -21,6 +21,10 @@ export type LazyDialog<P extends DialogOpenProps> = {
   useWaiting: (open: boolean) => boolean;
 };
 
+// Only the latest open of any lazy dialog waits for its download: an open from another row,
+// or of another dialog, closes the earlier one, so two dialogs never appear together.
+let closeWaitingOpen: (() => void) | null = null;
+
 type ModuleDownload<P> = {
   /** Starts the download once; a failed one starts again on the next call. */
   start: () => Promise<ComponentType<P>>;
@@ -70,9 +74,6 @@ function moduleDownload<P>(load: () => Promise<ComponentType<P>>): ModuleDownloa
  */
 export function lazyDialog<P extends DialogOpenProps>(load: () => Promise<ComponentType<P>>): LazyDialog<P> {
   const { start, subscribe, read } = moduleDownload(load);
-  // Only the latest open waits for the download: an open from another row closes the earlier one,
-  // so two dialogs never appear together when the module lands.
-  let closeWaitingOpen: (() => void) | null = null;
 
   // The server and the hydrating client never hold the module: a closed dialog renders nothing.
   function useLoadState(): LoadState<P> {
