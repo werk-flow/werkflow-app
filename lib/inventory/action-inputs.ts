@@ -106,6 +106,9 @@ export type InventoryImportRow = {
   notes?: string | null;
 };
 
+/** The most rows one CSV import takes; the dialog refuses a longer file before it reads its rows. */
+export const INVENTORY_IMPORT_MAX_ROWS = 5000;
+
 export type ImportInventoryRowsInput = {
   fileName: string;
   columnMapping: Record<string, string>;
