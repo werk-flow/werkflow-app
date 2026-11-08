@@ -39,11 +39,15 @@ esac
 
 let stub = '';
 
+// The instant the stubbed `date +%s` reports: the window must end at its minute and start 15 minutes earlier.
+const NOW_SECONDS = Date.UTC(2026, 10, 8, 13, 37, 42) / 1000;
+
 beforeEach(() => {
   stub = mkdtempSync(join(tmpdir(), 'release-smoke-'));
   for (const [name, body] of [
     ['curl', CURL_STUB],
     ['sleep', '#!/usr/bin/env bash\n'],
+    ['date', `#!/usr/bin/env bash\necho ${NOW_SECONDS}\n`],
   ] as const) {
     writeFileSync(join(stub, name), body);
     chmodSync(join(stub, name), 0o755);
@@ -130,6 +134,16 @@ test('the query counts the served build per status', () => {
   expect(query.filter).toBe(`deploymentId:${SERVED}`);
   expect(query.groupBy).toEqual(['httpStatus']);
   expect(query.metrics.value).toEqual({ metric: 'vercel.request.count', aggregation: 'count' });
+});
+
+// The window ends at the minute of the clock the script reads and starts 15 minutes earlier. GNU-only
+// `date -d` left it empty on macOS while every other test still passed.
+test('the query counts the last 15 minutes to the minute', () => {
+  expect(smoke({ summary: [row('200', 1)] }).status).toBe(0);
+  const { timeRange } = z
+    .object({ timeRange: z.object({ start: z.string(), end: z.string() }) })
+    .parse(JSON.parse(readFileSync(join(stub, 'query.json'), 'utf8')));
+  expect(timeRange).toEqual({ start: '2026-11-08T13:22:00Z', end: '2026-11-08T13:37:00Z' });
 });
 
 test('the wait and the counted window are named as they run', () => {
