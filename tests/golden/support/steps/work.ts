@@ -1336,7 +1336,9 @@ export async function createJob(
 ): Promise<void> {
   if (options.plannedDateDigits && options.assignEmployeeName && !options.planningOverride) {
     // The save runs the calendar's capacity check on the job's visit; a pending row would hang on its warning.
-    throw new Error('createJob: a dated job with a person may ask for a planning reason; pass planningOverride');
+    throw new Error(
+      'createJob: a dated job with a person may ask for a planning reason; pass planningOverride',
+    );
   }
   await page.goto('/auftraege');
   await workCreateButton(page).click();
