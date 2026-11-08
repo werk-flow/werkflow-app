@@ -256,13 +256,26 @@ function sourceFileImports(repositoryRoot: string, file: string, resolution: Imp
   return [...imports];
 }
 
-/** Static package imports are qualified through the globally selected lockfile. */
-export function sourceImportGraph(repositoryRoot: string, files: readonly string[]): Map<string, string[]> {
+/**
+ * Static package imports are qualified through the globally selected lockfile.
+ * With `entries`, only the source files those entries reach are parsed: the
+ * same edges for that closure, without parsing the whole repository.
+ */
+export function sourceImportGraph(
+  repositoryRoot: string,
+  files: readonly string[],
+  entries?: readonly string[],
+): Map<string, string[]> {
   const resolution = importResolution(repositoryRoot, files);
   const graph = new Map<string, string[]>();
-  for (const file of files) {
-    if (!/\.[cm]?[jt]sx?$/.test(file) || !existsSync(resolve(repositoryRoot, file))) continue;
-    graph.set(file, sourceFileImports(repositoryRoot, file, resolution));
+  const pending = [...(entries ?? files)];
+  // An array iterator also visits the imports pushed during the walk.
+  for (const file of pending) {
+    if (graph.has(file) || !/\.[cm]?[jt]sx?$/.test(file) || !existsSync(resolve(repositoryRoot, file)))
+      continue;
+    const imports = sourceFileImports(repositoryRoot, file, resolution);
+    graph.set(file, imports);
+    if (entries) pending.push(...imports);
   }
   return graph;
 }

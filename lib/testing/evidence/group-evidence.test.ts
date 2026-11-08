@@ -319,6 +319,24 @@ test('static relative and root imports follow source files including emitted ext
   );
 });
 
+test('an entry-limited import graph parses only the modules its entries reach', () => {
+  withImportFiles(
+    {
+      'tests/support/live.ts': 'import { value } from "../../lib/people/save";',
+      'lib/people/save.ts': 'import { value } from "../inventory/read"; export { value };',
+      'lib/inventory/read.ts': 'export const value = 1;',
+      'tests/support/scenario.ts': 'import value from "../../temporary-transcripts/check.mjs";',
+    },
+    (root, listed) => {
+      expect([...sourceImportGraph(root, listed, ['tests/support/live.ts'])]).toEqual([
+        ['tests/support/live.ts', ['lib/people/save.ts']],
+        ['lib/people/save.ts', ['lib/inventory/read.ts']],
+        ['lib/inventory/read.ts', []],
+      ]);
+    },
+  );
+});
+
 test('ordinary calls and static external packages do not create false import dependencies', () => {
   withImportFiles(
     {
