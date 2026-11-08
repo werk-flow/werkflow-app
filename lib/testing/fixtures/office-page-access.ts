@@ -23,6 +23,7 @@ const emptyInventoryPage = {
   locationCounts: {},
   summary: {
     totalItems: 0,
+    shortfallItems: 0,
     lowStockItems: 0,
     outOfStockItems: 0,
     plannedQuantity: 0,

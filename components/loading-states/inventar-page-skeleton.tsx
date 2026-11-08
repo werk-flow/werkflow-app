@@ -2,8 +2,9 @@ import { INVENTORY_ITEM_COLUMNS } from '@/components/inventar/inventory-table-co
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SkeletonList, SkeletonTable } from '@/components/ui/skeleton-table';
+import { cn } from '@/lib/utils';
 
-// Mirrors `InventoryContent`: page header with three actions, four summary
+// Mirrors `InventoryContent`: page header with three actions, five summary
 // tiles, the tab strip with filters, then the item list. Item rows do nothing
 // on click, so neither the table nor the card skeletons are interactive.
 export function InventarPageSkeleton(): React.JSX.Element {
@@ -24,9 +25,12 @@ export function InventarPageSkeleton(): React.JSX.Element {
       </header>
 
       <PageBody>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <div key={index} className="rounded-lg border bg-card px-3 py-3">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div
+              key={index}
+              className={cn('rounded-lg border bg-card px-3 py-3', index === 0 && 'col-span-2 lg:col-span-1')}
+            >
               <Skeleton className="h-4 w-28 max-w-full" />
               <Skeleton className="mt-2 h-6 w-20" />
             </div>

@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { TableCell } from '@/components/ui/table';
+import { formatAvailableQuantity } from '@/lib/inventory/stock-facts';
 import type { InventoryOverviewItem } from '@/lib/inventory/types';
 import {
   formatInventoryQuantity,
@@ -52,8 +53,10 @@ export function InventoryItemCardBody({
         {item.categoryName && <span>{item.categoryName}</span>}
       </div>
       <p className="text-xs tabular-nums">
-        <span className="font-medium">
-          {formatInventoryQuantity(item.availableQuantity, item.unit)} verfügbar
+        <span className={cn('font-medium', item.availableQuantity < 0 && 'text-destructive')}>
+          {item.availableQuantity < 0
+            ? formatAvailableQuantity(item.availableQuantity, item.unit)
+            : `${formatAvailableQuantity(item.availableQuantity, item.unit)} verfügbar`}
         </span>
         <span className="text-muted-foreground">
           {' '}
@@ -151,8 +154,13 @@ export function InventoryItemCells({
       <TableCell className="text-right tabular-nums text-muted-foreground">
         {formatInventoryQuantity(item.plannedQuantity, item.unit)}
       </TableCell>
-      <TableCell className="text-right tabular-nums font-medium">
-        {formatInventoryQuantity(item.availableQuantity, item.unit)}
+      <TableCell
+        className={cn(
+          'text-right tabular-nums font-medium',
+          item.availableQuantity < 0 && 'text-destructive',
+        )}
+      >
+        {formatAvailableQuantity(item.availableQuantity, item.unit)}
       </TableCell>
       <TableCell>
         <Badge variant="outline" className={stockStatusClasses(item.stockStatus)}>
