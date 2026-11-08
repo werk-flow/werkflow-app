@@ -498,6 +498,9 @@ test.describe('P1-20 exhaustive maintenance audit @AUDIT-W2-P1-20 @AUDIT-W2', ()
           'headerY',
           'headerWidth',
           'headerHeight',
+          // The placeholders carry the real labels, so the toolbar keeps its
+          // place in every platform's text metrics.
+          'actionsX',
           'actionsY',
           'actionsHeight',
         ] as const) {
@@ -506,12 +509,6 @@ test.describe('P1-20 exhaustive maintenance audit @AUDIT-W2-P1-20 @AUDIT-W2', ()
             `${width}px document ${property}`,
           ).toBeLessThanOrEqual(1);
         }
-        // Placeholder label widths are approximate; toolbar height and its
-        // position within the shared frame still have to match.
-        expect(
-          Math.abs(loaded.actionsX - loading.actionsX),
-          `${width}px document actionsX`,
-        ).toBeLessThanOrEqual(8);
         // Long real metadata may wrap on phones. Compare exact row height
         // only when its text fits the skeleton's single metadata line.
         if (!loaded.metadataWraps)
