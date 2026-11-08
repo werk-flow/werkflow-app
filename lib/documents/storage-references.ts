@@ -17,26 +17,21 @@ export async function discardUnreferencedObject(
   storagePath: string,
   failureLabel: string,
 ): Promise<void> {
-  const [current, archived] = await Promise.all([
-    admin
-      .from('documents')
+  // A version upload moves a key from `documents` to `document_versions`, never
+  // back, so the current read must come first: a move that commits after it
+  // lands in the archived read that follows.
+  for (const table of ['documents', 'document_versions'] as const) {
+    const reference = await admin
+      .from(table)
       .select('id')
       .eq('organization_id', organizationId)
       .eq('storage_path', storagePath)
-      .limit(1),
-    admin
-      .from('document_versions')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .eq('storage_path', storagePath)
-      .limit(1),
-  ]);
-  const error = current.error ?? archived.error;
-  if (error) {
-    logError(failureLabel, error);
-    return;
+      .limit(1);
+    if (reference.error) {
+      logError(failureLabel, reference.error);
+      return;
+    }
+    if ((reference.data?.length ?? 0) > 0) return;
   }
-  if ((current.data?.length ?? 0) + (archived.data?.length ?? 0) === 0) {
-    await discardStorageObjects({ organizationId, paths: [storagePath] });
-  }
+  await discardStorageObjects({ organizationId, paths: [storagePath] });
 }
