@@ -58,3 +58,4 @@ Nachname
 *
 Pflichtfeld
 Profil speichern
+Nicht eingestempelt
