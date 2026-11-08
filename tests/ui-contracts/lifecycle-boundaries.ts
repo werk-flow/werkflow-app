@@ -24,6 +24,7 @@ declare global {
       | 'personnel'
       | 'join-requests'
       | 'own-personnel'
+      | 'task-sections'
       | 'calendar'
       | 'options'
       | 'list-navigation'

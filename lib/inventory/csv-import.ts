@@ -1,4 +1,4 @@
-import type { InventoryImportRow } from '@/lib/inventory/action-inputs';
+import { INVENTORY_IMPORT_MAX_ROWS, type InventoryImportRow } from '@/lib/inventory/action-inputs';
 import type { InventoryItemType } from '@/lib/inventory/types';
 import { parseDecimalInput } from '@/lib/ui/decimal';
 
@@ -59,7 +59,17 @@ function parseCsvLine(line: string, delimiter: string): string[] {
   return cells;
 }
 
-export function parseCsv(text: string): { headers: string[]; rows: Record<string, string>[] } {
+// A header wider than this is refused: each data row holds one cell per header,
+// so a wide header over many short rows would build millions of empty cells.
+// It leaves room for many unmapped columns beside the import columns.
+const IMPORT_MAX_HEADER_COLUMNS = 200;
+
+type ParsedCsv =
+  | { ok: true; headers: string[]; rows: Record<string, string>[] }
+  | { ok: false; message: string };
+
+/** Reads a CSV file, or refuses it before building any row when it is longer or wider than one import takes. */
+export function parseCsv(text: string): ParsedCsv {
   const lines = text
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
@@ -67,9 +77,21 @@ export function parseCsv(text: string): { headers: string[]; rows: Record<string
     .filter((line) => line.trim().length > 0);
 
   const [firstLine] = lines;
-  if (firstLine === undefined) return { headers: [], rows: [] };
+  if (firstLine === undefined) return { ok: true, headers: [], rows: [] };
+  if (lines.length - 1 > INVENTORY_IMPORT_MAX_ROWS) {
+    return {
+      ok: false,
+      message: `Die CSV-Datei hat mehr als ${INVENTORY_IMPORT_MAX_ROWS.toLocaleString('de-DE')} Datenzeilen. Teile sie auf mehrere Dateien auf und importiere sie nacheinander.`,
+    };
+  }
   const delimiter = parseCsvLine(firstLine, ';').length >= parseCsvLine(firstLine, ',').length ? ';' : ',';
   const headers = parseCsvLine(firstLine, delimiter).map((header) => header.trim());
+  if (headers.length > IMPORT_MAX_HEADER_COLUMNS) {
+    return {
+      ok: false,
+      message: `Die CSV-Datei hat mehr als ${IMPORT_MAX_HEADER_COLUMNS} Spalten. Lösche die Spalten, die du nicht importierst, und wähle die Datei erneut.`,
+    };
+  }
   const rows = lines.slice(1).map((line) => {
     const cells = parseCsvLine(line, delimiter);
     return headers.reduce<Record<string, string>>((acc, header, index) => {
@@ -78,7 +100,7 @@ export function parseCsv(text: string): { headers: string[]; rows: Record<string
     }, {});
   });
 
-  return { headers, rows };
+  return { ok: true, headers, rows };
 }
 
 // Substring needles per column, the more specific columns first: a header

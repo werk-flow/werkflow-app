@@ -24,8 +24,12 @@ function bodyText(body: unknown): string {
   return body instanceof Uint8Array ? Buffer.from(body).toString('utf8') : String(body);
 }
 
-/** The bucket's objects by key: a test writes an upload into it and reads what the adapter left. */
-export function installInMemoryBucket(): Map<string, StoredObject> {
+/**
+ * The bucket's objects by key: a test writes an upload into it and reads what
+ * the adapter left. `writes`, when given, receives each copy, put and delete
+ * in the order the adapter sent them, as `<command> <key>`.
+ */
+export function installInMemoryBucket(writes?: string[]): Map<string, StoredObject> {
   process.env.R2_ACCOUNT_ID = 'synthetic-account';
   process.env.R2_ACCESS_KEY_ID = 'synthetic-key';
   process.env.R2_SECRET_ACCESS_KEY = 'synthetic-secret';
@@ -37,10 +41,12 @@ export function installInMemoryBucket(): Map<string, StoredObject> {
     if (command instanceof CopyObjectCommand) {
       const source = bucket.get(String(command.input.CopySource).replace(`${BUCKET_NAME}/`, ''));
       if (!source) throw notFound();
+      writes?.push(`copy ${String(command.input.Key)}`);
       bucket.set(String(command.input.Key), { ...source });
       return {};
     }
     if (command instanceof PutObjectCommand) {
+      writes?.push(`put ${String(command.input.Key)}`);
       bucket.set(String(command.input.Key), {
         body: bodyText(command.input.Body),
         contentType: String(command.input.ContentType),
@@ -48,7 +54,10 @@ export function installInMemoryBucket(): Map<string, StoredObject> {
       return {};
     }
     if (command instanceof DeleteObjectsCommand) {
-      for (const object of command.input.Delete?.Objects ?? []) bucket.delete(String(object.Key));
+      for (const object of command.input.Delete?.Objects ?? []) {
+        writes?.push(`delete ${String(object.Key)}`);
+        bucket.delete(String(object.Key));
+      }
       return {};
     }
     if (command instanceof HeadObjectCommand) {
