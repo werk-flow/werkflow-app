@@ -34,14 +34,18 @@ type InventoryCsvImport = {
 function importValidationErrors(
   rowCount: number,
   mapping: ImportColumnMapping,
+  fileRefusal: string | undefined,
 ): Record<'inventory-import-file' | 'inventory-import-name', string | undefined> {
   return {
     'inventory-import-file':
-      rowCount === 0 ? 'Wähle eine CSV-Datei mit mindestens einer Datenzeile.' : undefined,
+      fileRefusal ?? (rowCount === 0 ? 'Wähle eine CSV-Datei mit mindestens einer Datenzeile.' : undefined),
     'inventory-import-name':
       rowCount > 0 && !mapping.name ? 'Ordne die Spalte mit dem Artikelnamen zu.' : undefined,
   };
 }
+
+type CsvSource = { fileName: string; headers: string[]; rows: Record<string, string>[] };
+const NO_SOURCE: CsvSource = { fileName: '', headers: [], rows: [] };
 
 /** The CSV import dialog's state: the parsed file, the column mapping, the import run. */
 export function useInventoryCsvImport({
@@ -50,23 +54,23 @@ export function useInventoryCsvImport({
   onOpenChange: (open: boolean) => void;
 }): InventoryCsvImport {
   const { showBanner } = useBanner();
-  const [fileName, setFileName] = useState('');
-  const [headers, setHeaders] = useState<string[]>([]);
-  const [rows, setRows] = useState<Record<string, string>[]>([]);
+  const [source, setSource] = useState(NO_SOURCE);
+  const { fileName, headers, rows } = source;
   const [mapping, setMapping] = useState<ImportColumnMapping>({});
   const [error, setError] = useState<string | null>(null);
+  // Why the chosen file was refused; shown on the file field at once, not only after a submit.
+  const [fileRefusal, setFileRefusal] = useState<string | undefined>();
   const { run: runImportTask, isPending } = usePendingTask();
   const [attempted, setAttempted] = useState(false);
-  const validationErrors = importValidationErrors(rows.length, mapping);
-  const fileError = attempted ? validationErrors['inventory-import-file'] : undefined;
+  const validationErrors = importValidationErrors(rows.length, mapping, fileRefusal);
+  const fileError = fileRefusal ?? (attempted ? validationErrors['inventory-import-file'] : undefined);
   const nameMappingError = attempted ? validationErrors['inventory-import-name'] : undefined;
 
   function resetImportState() {
-    setFileName('');
-    setHeaders([]);
-    setRows([]);
+    setSource(NO_SOURCE);
     setMapping({});
     setError(null);
+    setFileRefusal(undefined);
     setAttempted(false);
   }
 
@@ -83,10 +87,11 @@ export function useInventoryCsvImport({
       .text()
       .then((content) => {
         const parsed = parseCsv(content);
-        setFileName(file.name);
-        setHeaders(parsed.headers);
-        setRows(parsed.rows);
-        setMapping(guessMapping(parsed.headers));
+        setFileRefusal(parsed.ok ? undefined : parsed.message);
+        setSource(
+          parsed.ok ? { fileName: file.name, headers: parsed.headers, rows: parsed.rows } : NO_SOURCE,
+        );
+        setMapping(parsed.ok ? guessMapping(parsed.headers) : {});
       })
       .catch(() => setError('Die Datei konnte nicht gelesen werden.'));
   }
