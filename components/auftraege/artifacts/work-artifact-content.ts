@@ -59,14 +59,19 @@ export const EMPTY_CONTENT: WorkArtifactContentInput = {
   scheduleImpact: '',
 };
 
-/** The draft a kind saves: only a work report records a visit window, so another kind drops a prefilled one. */
+/**
+ * The draft a kind saves and validates. Only a work report records a visit
+ * window and only a measurement its lines, so after a kind switch another
+ * kind drops them: neither a prefilled window nor an empty line rides along
+ * hidden, and no rule names a field the form no longer shows.
+ */
 export function contentForKind(
   kind: WorkArtifactKind,
   content: WorkArtifactContentDraft,
 ): WorkArtifactContentDraft {
-  return kind === 'work_report'
-    ? content
-    : { ...content, visitStartedAt: undefined, visitEndedAt: undefined };
+  const visit = kind === 'work_report' ? {} : { visitStartedAt: undefined, visitEndedAt: undefined };
+  const lines = kind === 'measurement' ? {} : { measurementLines: undefined };
+  return { ...content, ...visit, ...lines };
 }
 
 export function localDateTime(value?: string | null): string {

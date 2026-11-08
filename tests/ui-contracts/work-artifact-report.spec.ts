@@ -61,3 +61,23 @@ test("Beginn and Ende come from today's recorded time and show on the submitted 
     [true, '2026-11-02T06:00:00.000Z', '2026-11-02T11:15:00.000Z'],
   ]);
 });
+
+test('an empty Aufmaß position left behind by a kind switch never blocks the Arbeitsbericht', async ({
+  page,
+}) => {
+  const dialog = await openNewReport(page);
+  const kind = dialog.getByRole('combobox', { name: 'Art des Arbeitsnachweises', exact: true });
+  await kind.click();
+  await page.getByRole('option', { name: 'Aufmaß', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Position ergänzen', exact: true }).click();
+  await kind.click();
+  await page.getByRole('option', { name: 'Arbeitsbericht', exact: true }).click();
+
+  await page.getByRole('button', { name: 'Als Entwurf speichern', exact: true }).click();
+
+  await expect(page.getByRole('dialog', { name: 'Wartung Heizung', exact: true })).toBeVisible();
+  const saves = await page.evaluate(() => window.uiContractWorkArtifacts.saves);
+  expect(saves.map((save) => [save.kind, save.content.measurementLines])).toEqual([
+    ['work_report', undefined],
+  ]);
+});

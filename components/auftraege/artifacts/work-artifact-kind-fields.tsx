@@ -5,7 +5,7 @@ import { Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DateTimeField } from '@/components/ui/date-time-field';
-import { Field } from '@/components/ui/field';
+import { Field, useFieldContext } from '@/components/ui/field';
 import { QuantityStepper } from '@/components/ui/quantity-stepper';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Constants } from '@/lib/supabase/database.types';
@@ -177,18 +177,11 @@ export function WorkArtifactMeasurementFields({
       />
       <div className="space-y-3">
         <Field label="Positionen" htmlFor={lines.id} required={lines.required} error={lines.error}>
-          <Button
-            id={lines.id}
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="justify-self-start"
-            onClick={() =>
+          <AddMeasurementLineButton
+            onAdd={() =>
               setMeasurementLines([...measurementLines, { description: '', quantity: '1', unit: 'piece' }])
             }
-          >
-            Position ergänzen
-          </Button>
+          />
         </Field>
         {measurementLines.map((line, index) => (
           <MeasurementLineFields
@@ -202,6 +195,27 @@ export function WorkArtifactMeasurementFields({
         ))}
       </div>
     </div>
+  );
+}
+
+/** The control of „Positionen“: it keeps its own name and carries the field's required mark and error. */
+function AddMeasurementLineButton({ onAdd }: { onAdd: () => void }) {
+  const field = useFieldContext();
+  return (
+    <Button
+      id={field?.controlId}
+      type="button"
+      size="sm"
+      variant="ghost"
+      className="justify-self-start"
+      aria-label="Position ergänzen"
+      aria-describedby={
+        [field?.describedBy, field?.requiredDescriptionId].filter(Boolean).join(' ') || undefined
+      }
+      onClick={onAdd}
+    >
+      Position ergänzen
+    </Button>
   );
 }
 
