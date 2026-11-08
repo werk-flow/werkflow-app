@@ -25,3 +25,7 @@ test('a second finalize of one upload never changes the registered file and leav
 test('a version finalize refused because the document was filed deletes only its own staging object', async () => {
   await runFixture('document-version-filed-staging');
 });
+
+test("a version retry after a lost answer counts only its own upload's saved version as saved", async () => {
+  await runFixture('document-version-retry-identity');
+});

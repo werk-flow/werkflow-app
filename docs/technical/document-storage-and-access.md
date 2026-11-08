@@ -9,7 +9,7 @@ Postgres holds metadata: folders, documents, links, categories, trash state, ver
 - Metadata and bytes target the same environment.
 - `documents.storage_bucket` keeps the logical label `organization-documents`, not the bucket name.
 - The server authorizes a transfer and signs a short-lived URL; the browser moves the bytes. Server-generated files (artifact exports, handover packages, payroll exports) are the one exception: the server writes them with `putStorageObject`.
-- `lib/documents/storage-path.ts` builds an upload's path, `{organizationId}/{documentId}/{sanitizedFileName}` or the `versions/{versionNumber}-…` path. Finalize registers a copy beside it whose file name starts with a fresh id per attempt. A registered path never changes; rename and move update metadata only.
+- `lib/documents/storage-path.ts` builds an upload's path, `{organizationId}/{documentId}/{sanitizedFileName}`, or for a new version `{organizationId}/{documentId}/versions/{uploadId}/{versionNumber}-…` with a fresh id per version ticket. Finalize registers a copy beside it whose file name starts with a fresh id per attempt. A registered path never changes; rename and move update metadata only.
 - `lib/storage/r2.ts` refuses a key outside the given organization, and a copy, put, delete or list whose keys do not share one organization prefix.
 - A view URL renders inline only for MIME types safe to render; every other type downloads. The viewer fetches a new URL each time it opens.
 
@@ -20,6 +20,7 @@ Postgres holds metadata: folders, documents, links, categories, trash state, ver
 3. `finalizeDocumentUpload` authorizes again, recomputes the path on the server, and copies the staging object to a key of its own beside it (`promoteUploadedObject`). A HEAD request checks the copy's size and content type. One database function inserts metadata, link and audit events with that key.
 
 - Only the server writes a key a row references, and only the finalize attempt that registers it. A still-valid signed URL reaches only the staging key after finalize, and a second finalize of the same upload copies to another key, so the bytes of a registered file never change.
+- A new version's finalize recomputes its path from the ticket's upload id. When a version with the ticket's number is already saved, the finalize answers `already_finalized` only when the caller saved it from that upload's folder (`isOwnSavedVersion`), so a retry whose answer got lost reports its own save as saved. A version another upload saved, of another person or of the same person, stays a `version_conflict`, even with the same number and file name.
 - A finalize whose registration the database refused deletes its own copy. After an unknown outcome, such as a transport failure, the copy stays, since the registration may still commit. A finalize refused before the copy deletes the staging object.
 - `DOCUMENT_MAX_FILE_SIZE_BYTES` applies at the ticket and again to the copy.
 - Protected personnel uploads (`createPersonnelDocumentUploadTicket`, `finalizePersonnelDocumentUpload`) follow the same steps. A signed cleanup capability binds actor, organization, owner, document, file name, class and operation. The cleanup removes only the staging object, so it never removes a registered copy. A replay of a registered upload touches no storage.
