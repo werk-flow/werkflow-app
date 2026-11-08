@@ -81,7 +81,7 @@ The owner's schedule (werk-flow/werkflow-planning#24) has one class: ten years f
 - Filing (`Festschreiben`) is final and audited. `lib/documents/filing.ts` is the server-only path: a server that generates an original, such as an invoice, files it right after its registration. A filed document refuses a new version, any byte replacement and the trash. Rename, move, category label and links stay possible and audited.
 - A filed document names its filer (`filed_by`) for as long as it exists. As with the uploader, that person cannot delete their account while the document remains.
 - `lib/documents/retention.ts` owns the deletion rule the feature spec states, for the actions and the library; `get_organization_deletion_scope` and `delete_organization` apply it to organization deletion. The trigger `documents_retention_guard` repeats every refusal under each database write, and lets organization teardown pass only once the organization row is gone.
-- Only Admin and Büro receive a document's archive data (`hydrateDocuments`).
+- Only Admin and Büro receive a document's retention and filing data (`hydrateDocuments`); its origin follows the access table.
 
 ## Origin of legacy originals
 
