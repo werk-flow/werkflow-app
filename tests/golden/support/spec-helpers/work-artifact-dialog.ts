@@ -94,7 +94,7 @@ const ARTIFACT_COPY = {
   fulfilEvidence: 'Nachweiserwartung erfüllen',
   message: {
     empty: 'Noch keine Arbeitsnachweise erfasst.',
-    requiredFields: 'Bitte fülle die Pflichtangaben',
+    missingMeasurementDate: 'Bitte wähle das Aufmaßdatum.',
     changedMeanwhile: 'Der Arbeitsnachweis wurde zwischenzeitlich geändert. Deine Eingaben bleiben erhalten.',
     legalNotice: 'keine besondere Rechtswirksamkeit',
   },
@@ -206,6 +206,7 @@ const ARTIFACT_INPUT_IDS = {
   customerRole: 'artifact-customer-role',
   customerRelationship: 'artifact-customer-relationship',
   firstMeasurementQuantity: 'artifact-measurement-quantity-0',
+  measurementDate: 'artifact-measurement-date',
 } as const;
 
 /** An input of the open work report dialog. */
