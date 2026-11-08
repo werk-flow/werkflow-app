@@ -10,6 +10,8 @@
 # clock would pass and prove nothing. `restore` puts the real clock back, and fails if the clock
 # left the shift during the leg. Run everything that needs the network or the stack's images first:
 # a certificate can be expired on a date weeks ahead.
+# The runner's own agent needs GitHub throughout: past its certificate's expiry GitHub shuts the
+# runner down, so scripts/date-lookahead-plan.ts gives a long leg only dates before that expiry.
 set -euo pipefail
 
 state="${RUNNER_TEMP}/shifted-clock"

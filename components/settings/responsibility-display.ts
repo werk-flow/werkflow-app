@@ -20,6 +20,9 @@ export const ERROR_MESSAGES = {
   responsibility_delegation_overlap:
     'Für diese Vertretung besteht in diesem Zeitraum bereits eine Überschneidung.',
   responsibility_delegation_not_found: 'Die Vertretung wurde nicht gefunden.',
+  responsibility_substitute_absent: 'Die Vertretung ist an jedem Tag des Zeitraums abwesend.',
+  responsibility_absence_check_failed:
+    'Die Abwesenheiten der Vertretung konnten nicht geprüft werden. Bitte versuche es erneut.',
   save_failed: 'Die Änderung konnte nicht gespeichert werden.',
 } satisfies Record<string, string>;
 

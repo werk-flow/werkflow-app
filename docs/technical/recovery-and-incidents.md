@@ -91,14 +91,17 @@ Check the path without an outage:
 | Dates | Groups |
 | --- | --- |
 | The next 14 days, the first month end and year end past them, and the year turn (00:30 in Berlin, still December 31 in UTC) | Unit, SQL and component |
-| Day 14, on Sundays also that month end and year end, and every date the open issue names for a browser job | Every browser group |
+| Day 14, on Sundays also that month end and year end, and every date the open issue names for a browser job, each only if it is at least a day before the runner's certificate expires | Every browser group |
 
-A date keeps its browser jobs while the issue names it, so a green run cannot close the issue on a date it skipped. Started by hand, `gh workflow run date-lookahead.yml -f date=<YYYY-MM-DD>` reruns one date and reports nothing.
+The runner's agent reaches GitHub over TLS. On a clock past the expiry of that certificate the agent loses GitHub, and GitHub shuts the runner down 13 to 20 minutes later. A suite job ends before that, but a browser job does not. So the plan reads the agent's hosts from the runner's journal and gives browser jobs only to dates whose midday is at least a day before the earliest of their certificates' expiries. Its log names each held date. GitHub renews the certificate, so a held date gets its browser jobs again later. A runner shut down mid-job with "The runner has received a shutdown signal" means a leg went past that horizon.
+
+A date keeps its browser jobs while the issue names it, so a green run cannot close the issue on a date it skipped. The exception is a date past the horizon, whose browser jobs could not have run. Started by hand, `gh workflow run date-lookahead.yml -f date=<YYYY-MM-DD>` reruns one date and reports nothing.
 
 The look-ahead does not cover:
 
 - A spec merged after its date was day 14: only the suite groups and the real nightly reach that date.
 - Any hour but midday, apart from the year turn.
+- Browser groups on a date past the runner's certificate horizon, until GitHub renews the certificate.
 - Data that aged into the date: the stack migrates on the real clock, and each browser group seeds a fresh world on the shifted one.
 - The cloud providers: every job uses the local stack.
 

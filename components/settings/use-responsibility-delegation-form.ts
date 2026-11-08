@@ -8,7 +8,8 @@ import { useServerAction } from '@/hooks/use-server-action';
 import { createResponsibilityDelegation } from '@/lib/responsibilities/actions';
 import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resolution';
 import type { ResponsibilitySettingsData } from '@/lib/responsibilities/server';
-import type { OrganizationResponsibility } from '@/lib/responsibilities/types';
+import { isAbsentForWholeWindow } from '@/lib/responsibilities/substitute-absence';
+import { orderByPersonName, type OrganizationResponsibility } from '@/lib/responsibilities/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 type DelegationPersonErrors = {
@@ -28,6 +29,8 @@ type ResponsibilityDelegationForm = {
   personErrors: DelegationPersonErrors;
   dateRangeError: string | null;
   canSave: boolean;
+  /** The substitute is away on every day of the window: the dialog warns, and saving accepts it. */
+  substituteAbsent: boolean;
   selectDelegator: (value: string) => void;
   selectSubstitute: (value: string) => void;
   setValidFrom: (value: string) => void;
@@ -63,8 +66,11 @@ type DelegationSaveContext = {
   note: string;
   isSaving: boolean;
   dateRangeError: string | null;
+  substituteAbsent: boolean;
   runSave: typeof createResponsibilityDelegation;
   setSaveError: (error: string | null) => void;
+  /** The server found the substitute away on every day; the dialog warns for this choice. */
+  markSubstituteAbsent: () => void;
   setPersonErrors: (errors: DelegationPersonErrors) => void;
   handleOpenChange: (nextOpen: boolean) => void;
   showBanner: ReturnType<typeof useBanner>['showBanner'];
@@ -83,8 +89,10 @@ function createDelegationSave({
   note,
   isSaving,
   dateRangeError,
+  substituteAbsent,
   runSave,
   setSaveError,
+  markSubstituteAbsent,
   setPersonErrors,
   handleOpenChange,
   showBanner,
@@ -112,7 +120,13 @@ function createDelegationSave({
         validFrom,
         validUntil,
         note,
+        acceptAbsentSubstitute: substituteAbsent,
       });
+      if (!result.success && result.error === 'responsibility_substitute_absent') {
+        // The warning is this failure's one surface; the next save accepts it.
+        markSubstituteAbsent();
+        return;
+      }
       if (!result.success) {
         setSaveError(responsibilityErrorMessage(result.error));
         return;
@@ -123,6 +137,48 @@ function createDelegationSave({
     } catch {
       setSaveError(ERROR_MESSAGES.save_failed);
     }
+  };
+}
+
+/** The holders a substitute can stand in for, by name: those who hold the responsibility themselves. */
+function baseHoldersOf(
+  data: ResponsibilitySettingsData,
+  responsibility: OrganizationResponsibility,
+): EffectiveResponsibilityHolder[] {
+  return orderByPersonName(
+    data.effective[responsibility].holders.filter((holder) => holder.source.kind !== 'delegation'),
+    data.people,
+  );
+}
+
+/**
+ * Whether the chosen substitute is away on every day of the window: by the
+ * owner's absence read, or by the server's answer to a save. The server's
+ * finding holds for the exact choice it checked; a new choice asks again.
+ */
+function useAbsentSubstituteChoice({
+  data,
+  substituteId,
+  validFrom,
+  validUntil,
+  canSave,
+}: {
+  data: ResponsibilitySettingsData;
+  substituteId: string;
+  validFrom: string;
+  validUntil: string;
+  canSave: boolean;
+}): { substituteAbsent: boolean; markAbsent: () => void; reset: () => void } {
+  const choiceKey = `${substituteId}|${validFrom}|${validUntil}`;
+  const [serverAbsentChoice, setServerAbsentChoice] = useState<string | null>(null);
+  const substituteAbsent =
+    canSave &&
+    (serverAbsentChoice === choiceKey ||
+      isAbsentForWholeWindow(data.substituteAbsences ?? [], substituteId, validFrom, validUntil));
+  return {
+    substituteAbsent,
+    markAbsent: () => setServerAbsentChoice(choiceKey),
+    reset: () => setServerAbsentChoice(null),
   };
 }
 
@@ -137,9 +193,7 @@ export function useResponsibilityDelegationForm({
   onOpenChange: (open: boolean) => void;
 }): ResponsibilityDelegationForm {
   const { showBanner } = useBanner();
-  const baseHolders = data.effective[responsibility].holders.filter(
-    (holder) => holder.source.kind !== 'delegation',
-  );
+  const baseHolders = baseHoldersOf(data, responsibility);
   const [delegatorId, setDelegatorId] = useState(baseHolders[0]?.employeeRecordId ?? '');
   const [substituteId, setSubstituteId] = useState('');
   const [validFrom, setValidFrom] = useState(data.businessDate);
@@ -148,9 +202,9 @@ export function useResponsibilityDelegationForm({
   const { run: runSave, isPending: isSaving } = useServerAction(createResponsibilityDelegation);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [personErrors, setPersonErrors] = useState<DelegationPersonErrors>({});
-  const hasInvalidDateRange = validUntil < validFrom;
-  const dateRangeError = hasInvalidDateRange ? 'Das Enddatum darf nicht vor dem Startdatum liegen.' : null;
-  const canSave = Boolean(delegatorId) && Boolean(substituteId) && !hasInvalidDateRange;
+  const dateRangeError = validUntil < validFrom ? 'Das Enddatum darf nicht vor dem Startdatum liegen.' : null;
+  const canSave = Boolean(delegatorId) && Boolean(substituteId) && dateRangeError === null;
+  const absentChoice = useAbsentSubstituteChoice({ data, substituteId, validFrom, validUntil, canSave });
 
   const reset = () => {
     setDelegatorId(baseHolders[0]?.employeeRecordId ?? '');
@@ -160,6 +214,7 @@ export function useResponsibilityDelegationForm({
     setNote('');
     setSaveError(null);
     setPersonErrors({});
+    absentChoice.reset();
   };
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) reset();
@@ -181,8 +236,10 @@ export function useResponsibilityDelegationForm({
     note,
     isSaving,
     dateRangeError,
+    substituteAbsent: absentChoice.substituteAbsent,
     runSave,
     setSaveError,
+    markSubstituteAbsent: absentChoice.markAbsent,
     setPersonErrors,
     handleOpenChange,
     showBanner,
@@ -200,6 +257,7 @@ export function useResponsibilityDelegationForm({
     personErrors,
     dateRangeError,
     canSave,
+    substituteAbsent: absentChoice.substituteAbsent,
     selectDelegator,
     selectSubstitute,
     setValidFrom,
