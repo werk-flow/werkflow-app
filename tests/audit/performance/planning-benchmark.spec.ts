@@ -20,6 +20,7 @@ import {
   watchRealtimeSignals,
 } from '../../golden/support/scenario-measurement';
 import { getPlanningState } from '../../golden/support/db/calendar';
+import { ensureEmployedSince } from '../../golden/support/db/personnel';
 import {
   calendarDateVisits,
   calendarEventTarget,
@@ -38,9 +39,17 @@ test('fixed planning workload proves overlapping saves and both role openings @A
   baseURL,
   world,
 }) => {
+  const teamMembers = [world.users.employee, world.users.buero];
+  // The world's people enter on its seed day. Before entry the capacity check
+  // records the one outside_employment conflict, never the overlap this test proves.
+  await ensureEmployedSince({
+    organizationId: world.orgId,
+    userIds: teamMembers.map((user) => user.id),
+    date: PLANNING_DATE,
+  });
   const teamName = `Kalender Messgruppe ${world.runId}`;
   await createTeamViaManagement(adminPage, teamName);
-  for (const user of [world.users.employee, world.users.buero]) {
+  for (const user of teamMembers) {
     await addTeamMemberViaManagement(adminPage, {
       teamName,
       employeeName: `${user.firstName} ${user.lastName}`,
