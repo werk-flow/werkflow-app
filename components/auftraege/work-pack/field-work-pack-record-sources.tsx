@@ -56,8 +56,15 @@ export function FieldWorkPackRecordSources({ job, currentUserId, data }: FieldWo
 
 /** Progress and evidence recorded on the job. */
 function FieldWorkPackArtifactsSource({ job, currentUserId, data }: FieldWorkPackRecordProps) {
-  const { artifactsResult, documents, evidenceRequirements, instructionItems, timeEntryOptions, readOnly } =
-    data;
+  const {
+    artifactsResult,
+    documents,
+    evidenceRequirements,
+    instructionItems,
+    timeEntryOptions,
+    recordedVisit,
+    readOnly,
+  } = data;
   return (
     <FieldWorkPackSource
       sourceId={`${job.id}:artifacts`}
@@ -82,6 +89,7 @@ function FieldWorkPackArtifactsSource({ job, currentUserId, data }: FieldWorkPac
           }))}
           defaultSiteId={job.site?.id}
           timeEntryOptions={timeEntryOptions}
+          recordedVisit={recordedVisit}
           readOnly={readOnly}
         />
       ) : null}

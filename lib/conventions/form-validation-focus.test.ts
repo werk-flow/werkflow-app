@@ -20,6 +20,13 @@ import { listProductSources, parseProductSource } from './product-sources';
 //   (b) records the submit attempt that reveals derived field errors:
 //       `setAttempted(true)`, `setHasAttemptedSubmit(true)`.
 // Such a module calls `focusFirstInvalidField` itself.
+//
+// A form that marks nothing escapes (a) and (b). So a module that answers the
+// server's `invalid_input` with its own sentence (`if (result.error ===
+// 'invalid_input') setError('…')`, or the sentence as a conditional's branch)
+// must mark fields by (a) or (b) as well: a missing input is named at its
+// field, never only in one sentence below the fold. The Arbeitsbericht did
+// this until werk-flow/werkflow-planning#67.
 
 /**
  * Error states that hold no field's message: the submit-level failure in
@@ -77,28 +84,63 @@ function fieldErrorSetterName(node: ts.Node): string | null {
   return FIELD_ERROR_NAME.test(name) && !NOT_A_FIELD_ERROR.test(name) ? setter.name.text : null;
 }
 
-/** The first call that marks fields, when the module never focuses through the owner; else null. */
+const isInvalidInputLiteral = (node: ts.Expression): boolean =>
+  ts.isStringLiteralLike(node) && node.text === 'invalid_input';
+
+/** A `=== 'invalid_input'` test whose branch is a literal sentence or sets one. */
+function answersInvalidInputWithSentence(node: ts.Node): boolean {
+  if (
+    !ts.isBinaryExpression(node) ||
+    node.operatorToken.kind !== ts.SyntaxKind.EqualsEqualsEqualsToken ||
+    !(isInvalidInputLiteral(node.left) || isInvalidInputLiteral(node.right))
+  )
+    return false;
+  const parent = node.parent;
+  if (ts.isConditionalExpression(parent) && parent.condition === node)
+    return ts.isStringLiteralLike(parent.whenTrue);
+  if (!ts.isIfStatement(parent) || parent.expression !== node) return false;
+  let setsSentence = false;
+  const visit = (child: ts.Node): void => {
+    if (
+      ts.isCallExpression(child) &&
+      ts.isIdentifier(child.expression) &&
+      /^set[A-Z]/.test(child.expression.text) &&
+      child.arguments[0] !== undefined &&
+      ts.isStringLiteralLike(child.arguments[0])
+    )
+      setsSentence = true;
+    ts.forEachChild(child, visit);
+  };
+  visit(parent.thenStatement);
+  return setsSentence;
+}
+
+/** The first call that marks fields, or the `invalid_input` sentence of a form that marks none; else null. */
 function fieldMarkingWithoutFocus(fileName: string, text?: string): string | null {
   const source = parseProductSource(fileName, text);
   const setters = new Set<string>();
   const calls: ts.CallExpression[] = [];
   let focuses = false;
+  let invalidInputSentence = false;
   const visit = (node: ts.Node): void => {
     const setter = fieldErrorSetterName(node);
     if (setter) setters.add(setter);
     if (ts.isIdentifier(node) && node.text === FOCUS_OWNER) focuses = true;
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) calls.push(node);
+    if (answersInvalidInputWithSentence(node)) invalidInputSentence = true;
     ts.forEachChild(node, visit);
   };
   visit(source);
-  if (focuses) return null;
+  let marking: string | null = null;
   for (const call of calls) {
     const name = ts.isIdentifier(call.expression) ? call.expression.text : '';
     const [argument] = call.arguments;
-    if (setters.has(name) && !isEmptyValue(argument)) return `${name}(…)`;
-    if (ATTEMPT_SETTER.test(name) && argument?.kind === ts.SyntaxKind.TrueKeyword) return `${name}(true)`;
+    if (setters.has(name) && !isEmptyValue(argument)) marking ??= `${name}(…)`;
+    if (ATTEMPT_SETTER.test(name) && argument?.kind === ts.SyntaxKind.TrueKeyword)
+      marking ??= `${name}(true)`;
   }
-  return null;
+  if (marking) return focuses ? null : marking;
+  return invalidInputSentence ? 'invalid_input answered with a sentence, no field marked' : null;
 }
 
 describe('form validation focus', () => {
@@ -125,6 +167,9 @@ describe('form validation focus', () => {
       'const [fieldErrors, setFieldErrors] = useState({}); const submit = () => setFieldErrors(check(reason));',
       'const [attempted, setAttempted] = useState(false); const submit = () => { setAttempted(true); };',
       "const [dateErrors, setDateErrors] = React.useState({}); const submit = () => { setDateErrors({ start: 'Bitte wähle ein Datum.' }); document.getElementById('start')?.focus(); };",
+      // The Arbeitsbericht before werk-flow/werkflow-planning#67: it focused only its correction reason.
+      "const [error, setError] = useState<string | null>(null); const submit = async () => { if (focusFirstInvalidField({ reason: undefined })) return; const result = await save(); if (!result.success) { if (result.error === 'invalid_input') setError('Bitte fülle die Pflichtangaben aus.'); return; } };",
+      "const [error, setError] = useState<string | null>(null); const submit = async () => { const result = await save(); if (!result.success) setError(result.error === 'invalid_input' ? 'Bitte gib einen Namen an.' : 'Fehler'); };",
     ]) {
       expect(fieldMarkingWithoutFocus('components/probe.tsx', component(body)), body).not.toBeNull();
     }
@@ -136,6 +181,8 @@ describe('form validation focus', () => {
       'const [fieldErrors, setFieldErrors] = useState({}); const change = () => setFieldErrors({});',
       'const [reasonError, setReasonError] = useState<string | null>(null); const change = () => setReasonError(null);',
       'const [attempted, setAttempted] = useState(false); const reset = () => setAttempted(false);',
+      "const [nameError, setNameError] = useState<string | null>(null); const [error, setError] = useState<string | null>(null); const submit = async () => { const next = reason ? undefined : 'Bitte gib einen Namen an.'; setNameError(next ?? null); if (focusFirstInvalidField({ name: next })) return; const result = await save(); if (!result.success) setError(result.error === 'invalid_input' ? 'Bitte prüfe den Namen.' : 'Fehler'); };",
+      'const [error, setError] = useState<string | null>(null); const submit = async () => { const result = await save(); if (!result.success) setError(describeFailure(result.error)); };',
     ]) {
       expect(fieldMarkingWithoutFocus('components/probe.tsx', component(body)), body).toBeNull();
     }

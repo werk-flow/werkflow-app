@@ -43,7 +43,6 @@ export type {
   infer,
   input,
   output,
-  RefinementCtx,
   ZodNullable,
   ZodOptional,
   ZodPreprocess,

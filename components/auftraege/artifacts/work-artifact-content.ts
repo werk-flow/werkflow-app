@@ -1,4 +1,8 @@
-import type { WorkArtifactContentInput, WorkArtifactDetail } from '@/lib/work-artifacts/types';
+import type {
+  WorkArtifactContentInput,
+  WorkArtifactDetail,
+  WorkArtifactKind,
+} from '@/lib/work-artifacts/types';
 
 export type WorkArtifactEvidenceRequirement = {
   id: string;
@@ -54,6 +58,16 @@ export const EMPTY_CONTENT: WorkArtifactContentInput = {
   authorizationState: 'not_requested',
   scheduleImpact: '',
 };
+
+/** The draft a kind saves: only a work report records a visit window, so another kind drops a prefilled one. */
+export function contentForKind(
+  kind: WorkArtifactKind,
+  content: WorkArtifactContentDraft,
+): WorkArtifactContentDraft {
+  return kind === 'work_report'
+    ? content
+    : { ...content, visitStartedAt: undefined, visitEndedAt: undefined };
+}
 
 export function localDateTime(value?: string | null): string {
   if (!value) return '';

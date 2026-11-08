@@ -136,6 +136,11 @@ export type WorkArtifactSaveResult =
   | (Extract<WorkArtifactMutationResult, { success: true }> & { artifact: WorkArtifactDetail | null })
   | ActionFailure;
 
+/** A work report's Beginn and Ende as recorded instants; null where the time records give none. */
+export type RecordedVisitWindow = { startedAt: string | null; endedAt: string | null };
+
+export const NO_RECORDED_VISIT: RecordedVisitWindow = { startedAt: null, endedAt: null };
+
 export type WorkArtifactTimeSourceOption = {
   id: string;
   label: string;

@@ -11,6 +11,7 @@ import type { JobInstructionActor, JobWithDetails } from '@/lib/jobs/types';
 import { getTimeEntriesForJob } from '@/lib/time-tracking/entry-read-actions';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { getWorkArtifacts } from '@/lib/work-artifacts/actions';
+import { recordedVisitWindow } from '@/lib/work-artifacts/visit-window';
 import { getWorkLifecycleSnapshot } from '@/lib/work-lifecycle/actions';
 import { getWorkHandoverFieldStatus } from '@/lib/work-handover/actions';
 import { getAssignedEquipmentForJob } from '@/lib/installed-equipment/actions';
@@ -104,6 +105,11 @@ export async function loadFieldWorkPackData(
   const dispatchCards = dispatchResult.success ? dispatchResult.cards : undefined;
   const evidenceRequirements = instructionItems.flatMap((item) => item.evidenceRequirements);
   const timeEntryOptions = fieldTimeEntryOptions(timeEntries, job.id);
+  const recordedVisit = recordedVisitWindow(timeEntries, {
+    jobId: job.id,
+    userId: currentUserId,
+    now: new Date(),
+  });
 
   return {
     instructionItemsResult,
@@ -127,6 +133,7 @@ export async function loadFieldWorkPackData(
     dispatchCards,
     evidenceRequirements,
     timeEntryOptions,
+    recordedVisit,
   };
 }
 
