@@ -20,6 +20,19 @@ describe('inventoryStockFacts', () => {
     );
   });
 
+  test('decimal quantities compare as the database stores them, so rows agree with the SQL status', () => {
+    expect(inventoryStockFacts(tracked, 0.3, 0.1 + 0.2)).toEqual({
+      availableQuantity: 0,
+      stockStatus: 'in_stock',
+    });
+    expect(
+      inventoryStockFacts({ trackQuantity: true, globalMinimumStock: 0.3 }, 0.1 + 0.2, 0).stockStatus,
+    ).toBe('low_stock');
+    expect(
+      formatAvailableQuantity(inventoryStockFacts(tracked, 0.3, 0.1 + 0.2).availableQuantity, 'meter'),
+    ).toBe('0 Meter');
+  });
+
   test('demand the stock covers keeps the stock status', () => {
     expect(inventoryStockFacts(tracked, 3, 3).stockStatus).toBe('in_stock');
     expect(inventoryStockFacts(tracked, 0, 0).stockStatus).toBe('out_of_stock');
