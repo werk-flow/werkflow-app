@@ -64,25 +64,22 @@ export type BoardLaneItem<Item extends BoardSpanItem> = {
  * Greedy lane packing over visible columns: an item takes the first lane
  * whose columns are free over its span. Longer items pack first so bars stay
  * high in the row; ties keep the day order. Items entirely outside the
- * visible columns are dropped; partly visible ones are clipped.
+ * visible columns are dropped; partly visible ones are clipped. The work per
+ * item follows the visible columns, never the item's length.
  */
 export function packLanes<Item extends BoardSpanItem>(
   items: readonly Item[],
   columns: readonly BoardColumn[],
 ): { lanes: BoardLaneItem<Item>[]; laneCount: number } {
-  const columnIndex = new Map(columns.map((column, index) => [column.date, index]));
   const placed: Array<{ item: Item; column: number; span: number }> = [];
   for (const item of items) {
-    let first: number | null = null;
-    let last: number | null = null;
-    for (let date = item.startDate; date < item.endDateExclusive; date = addLocalDays(date, 1)) {
-      const index = columnIndex.get(date);
-      if (index === undefined) continue;
-      if (first === null) first = index;
-      last = index;
-    }
-    if (first === null || last === null) continue;
-    placed.push({ item, column: first, span: last - first + 1 });
+    // Intersect with the columns, never walk the item's days: an open-ended
+    // absence can reach years past the visible range.
+    const covers = (column: BoardColumn) =>
+      column.date >= item.startDate && column.date < item.endDateExclusive;
+    const first = columns.findIndex(covers);
+    if (first === -1) continue;
+    placed.push({ item, column: first, span: columns.findLastIndex(covers) - first + 1 });
   }
   placed.sort((left, right) => {
     if (left.column !== right.column) return left.column - right.column;
