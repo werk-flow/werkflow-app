@@ -69,6 +69,23 @@ test('a relative path from the folder of a secret file is refused', () => {
   expect(refused('cat config.json', '/home/agent/.config/ascii/boat')).toContain('names a file');
   expect(refused('head -c 9 ./config.json', '/home/agent/.config/ascii/boat')).toContain('names a file');
   expect(refused('cat ../ascii/boat/config.json', '/home/agent/.config/werkflow')).toContain('names a file');
+  // Chained folder changes are followed, and an input redirection reads its file.
+  expect(refused('cd ~/.config/ascii && cd boat && cat config.json')).toContain('names a file');
+  expect(refused('cat < config.json', '/home/agent/.config/ascii/boat')).toContain('names a file');
+  expect(refused('jq . < ./config.json', '/home/agent/.config/ascii/boat')).toContain('names a file');
+});
+
+test('a recursive read keeps the folder it runs in through launchers and nested shells', () => {
+  for (const command of [
+    'env -C ~ rg --hidden token .config',
+    'cd ~ && bash -c "rg --hidden token .config"',
+    // An attached pattern option leaves the folder operand a folder.
+    'rg --hidden -etoken ~/.config',
+    'grep -r -etoken ~/.config',
+    // A value flag the guard does not know cannot hide the folder it runs in.
+    'cd ~ && rg --hidden --sort path token',
+  ])
+    expect(refused(command), command).toMatch(/would read every file under/);
 });
 
 test('ordinary work, the expiry file and the runner pass', () => {
