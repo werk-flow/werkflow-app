@@ -1,0 +1,39 @@
+name: Supabase CLI
+description: >-
+  Puts the pinned Supabase CLI on PATH. The binary is kept in the Actions cache, so an outage of
+  GitHub's release downloads, which supabase/setup-cli uses, does not stop CI, staging or a
+  release: on 2026-11-08 those downloads answered 504 for hours.
+runs:
+  using: composite
+  steps:
+    - name: Restore the Supabase CLI
+      id: cli
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/supabase-cli
+        key: supabase-cli-2.116.0-${{ runner.os }}-${{ runner.arch }}
+
+    - name: Use the cached Supabase CLI
+      if: steps.cli.outputs.cache-hit == 'true'
+      shell: bash
+      run: echo "$RUNNER_TEMP/supabase-cli" >> "$GITHUB_PATH"
+
+    - name: Download the Supabase CLI
+      if: steps.cli.outputs.cache-hit != 'true'
+      uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb # v1.7.3
+      with:
+        version: 2.116.0
+
+    - name: Keep the downloaded Supabase CLI
+      if: steps.cli.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        mkdir -p "$RUNNER_TEMP/supabase-cli"
+        cp "$(command -v supabase)" "$RUNNER_TEMP/supabase-cli/supabase"
+
+    - name: Cache the Supabase CLI
+      if: steps.cli.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/supabase-cli
+        key: ${{ steps.cli.outputs.cache-primary-key }}
