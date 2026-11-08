@@ -98,6 +98,9 @@ export const TIME_ENTRY_COPY = {
   submittedForApproval: 'Antrag wurde zur Genehmigung eingereicht.',
   createdOrSubmitted: /Antrag wurde zur Genehmigung eingereicht\.|Eintrag erfolgreich erstellt!/,
   approvalsTab: /Anträge/,
+  /** A pending manual submission in the overview's „Vorgemerkte Zeit“. */
+  pendingSubmission: /Nachtr(ag|äge)/,
+  provisionalTime: 'Vorgemerkte Zeit',
   historyTab: 'Verlauf',
   entriesFound: /Einträge? gefunden/,
   noEntriesFound: 'Keine Einträge gefunden',
@@ -531,6 +534,15 @@ export async function createOwnManualTimeEntry(
   // confirms the save (M5).
   await expect(page.getByText(TIME_ENTRY_COPY.createdOrSubmitted)).toBeVisible();
   await expect(dialog).toHaveCount(0);
+}
+
+/** The overview's „Vorgemerkte Zeit“: pending corrections and manual submissions in sum. */
+export function provisionalTimeSummary(page: Page): Locator {
+  return page
+    .getByRole('main')
+    .locator('div')
+    .filter({ has: page.getByText(TIME_ENTRY_COPY.provisionalTime) })
+    .last();
 }
 
 // ---------------------------------------------------------------------------

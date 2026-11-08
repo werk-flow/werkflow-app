@@ -24,6 +24,7 @@ import {
   manualEntryDialog,
   manualEntryHeaderButton,
   openTimeApprovals,
+  provisionalTimeSummary,
   refreshTimeHistoryButton,
   saveAutomaticBreakRule,
   selectManualEntryJob,
@@ -144,6 +145,7 @@ test.describe('A1 Zeiterfassung @AUDIT-W1-A1', () => {
 
   test('A1-30: Manager korrigiert, hängt um und löscht bestehende Arbeitsblöcke', async ({
     adminPage,
+    employeePage,
     world,
   }) => {
     const previousBusinessDate = berlinDateAtOffset(-1);
@@ -162,8 +164,14 @@ test.describe('A1 Zeiterfassung @AUDIT-W1-A1', () => {
       from: '10:00',
       to: '11:00',
     });
+    // Emil's open overview counts the submission in „Vorgemerkte Zeit“ and
+    // drops it when the manager decides it in another session, without navigation.
+    await employeePage.goto('/zeiterfassung');
+    const provisional = provisionalTimeSummary(employeePage);
+    await expect(provisional).toContainText(TIME_ENTRY_COPY.pendingSubmission);
     await openTimeApprovals(adminPage);
     await approvePendingTimeEntry(adminPage, world.users.employee.id, /10:00.*11:00/);
+    await expect(provisional.filter({ hasText: TIME_ENTRY_COPY.pendingSubmission })).toHaveCount(0);
 
     await adminPage.goto('/kalender');
     await calendarViewTab(adminPage, 'day').click();
