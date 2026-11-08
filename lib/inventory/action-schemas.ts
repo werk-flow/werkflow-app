@@ -1,6 +1,7 @@
 import { z } from '@/lib/zod';
 import { boundedText, nullableBoundedText } from '@/lib/validation/text';
 import { uuidSchema } from '@/lib/validation/uuid';
+import { INVENTORY_IMPORT_MAX_ROWS } from '@/lib/inventory/action-inputs';
 
 // Boundary schemas of the inventory Server Actions: types, ids and bounds.
 // The value rules inside the actions (names, units, quantities) keep their own
@@ -116,5 +117,5 @@ export const importInventoryRowsSchema = z.object({
   // Keyed by the row fields, so a client cannot send an unbounded mapping.
   columnMapping: z.partialRecord(importRowSchema.keyof(), boundedText(200)),
   // One spreadsheet import; the dialog previews the same rows.
-  rows: z.array(importRowSchema).max(5000),
+  rows: z.array(importRowSchema).max(INVENTORY_IMPORT_MAX_ROWS),
 });
