@@ -1,5 +1,5 @@
 -- Deleted file bytes outlive the backup window
--- (20261108130000_keep_deleted_file_bytes_past_the_backup_window.sql,
+-- (20261108210001_keep_deleted_file_bytes_past_the_backup_window.sql,
 -- werk-flow/werkflow-planning#286). Permanent deletion of a document and
 -- organization deletion remove the rows at once and queue every object path
 -- eight days ahead. A claim of the purge returns only due paths no row
