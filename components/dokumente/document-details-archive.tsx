@@ -27,7 +27,7 @@ function retentionSummary(archive: DocumentArchive): string {
   if (archive.filedAt) {
     const filed = `Festgeschrieben am ${formatDate(archive.filedAt)} von ${getUserDisplayName(archive.filer)}.`;
     return endsOn
-      ? `${filed} Die Datei bleibt bis ${endsOn} unverändert und lässt sich nicht löschen.`
+      ? `${filed} Die Datei bleibt unverändert und lässt sich nicht löschen. Die Aufbewahrungsfrist endet am ${endsOn}.`
       : `${filed} Die Datei bleibt unverändert und lässt sich nicht löschen.`;
   }
   return endsOn
