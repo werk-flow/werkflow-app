@@ -3,6 +3,7 @@
   "installCommand": "bun install --frozen-lockfile",
   "buildCommand": "next build",
   "regions": ["fra1"],
+  "crons": [{ "path": "/api/storage-purge", "schedule": "0 2 * * *" }],
   "git": {
     "deploymentEnabled": {
       "**": false,

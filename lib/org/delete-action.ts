@@ -5,7 +5,7 @@ import { updateTag } from 'next/cache';
 import type { ActionResult } from '@/lib/action-result';
 import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import { writeRefusalFor } from '@/lib/supabase/write-refusal';
-import { discardStorageObjects, listStorageObjectPaths } from '@/lib/storage/r2';
+import { listStorageObjectPaths } from '@/lib/storage/r2';
 import { readOrganizationDeletionScope } from '@/lib/org/deletion-scope';
 import { CURRENT_ORG_COOKIE, CURRENT_ORG_MAX_AGE } from '@/lib/org/cookies';
 import { resolveActionContext } from '@/lib/org/action-context';
@@ -19,7 +19,7 @@ export type DeleteOrgResult = ActionResult<{ nextOrgId: string | null }>;
 const confirmationNameSchema = z.string();
 
 const deleteRefusal = writeRefusalFor(
-  new Set(['org_not_found', 'not_authorized', 'name_mismatch', 'has_time_records']),
+  new Set(['org_not_found', 'not_authorized', 'name_mismatch', 'has_time_records', 'has_retained_documents']),
 );
 
 /** Every stored file of the organization; null when the listing fails. */
@@ -33,20 +33,31 @@ async function listOrganizationFiles(organizationId: string): Promise<string[] |
 }
 
 /**
- * Removes the files of a deleted organization. No row references them any
- * more, so the folder is listed again: an upload finalized after the first
- * list goes too. A failed list or removal is logged and leaves orphaned
- * objects, never a second error for a finished deletion.
+ * Queues each object that reached the prefix after the first listing, such as
+ * a signed upload that landed during the deletion; no row names it. The
+ * organization is already gone, so a failure is logged and the deletion stands.
  */
-async function discardOrganizationFiles(organizationId: string, listed: readonly string[]): Promise<void> {
-  const late = (await listOrganizationFiles(organizationId)) ?? [];
-  await discardStorageObjects({ organizationId, paths: [...new Set([...listed, ...late])] });
+async function queueLateFiles(
+  admin: AdminClient,
+  organizationId: string,
+  listed: readonly string[],
+): Promise<void> {
+  const paths = await listOrganizationFiles(organizationId);
+  if (!paths) return;
+  const known = new Set(listed);
+  const late = paths.filter((path) => !known.has(path));
+  if (late.length === 0) return;
+  const { error } = await admin.rpc('queue_storage_purge', {
+    p_organization_id: organizationId,
+    p_paths: late,
+  });
+  if (error) logError('deleteOrganization: late file queueing failed', error);
 }
 
 /**
  * True only when a read confirms the organization row is gone. A failed call
  * can still have committed, when only its response was lost: then the
- * deletion finished and its files must go.
+ * deletion finished and its files are queued.
  */
 async function organizationIsGone(admin: AdminClient, organizationId: string): Promise<boolean> {
   const { data, error } = await admin
@@ -63,13 +74,16 @@ async function organizationIsGone(admin: AdminClient, organizationId: string): P
  * Rules:
  * - Only the admin can delete the organization
  * - The confirmation name must match the organization name exactly
- * - Recorded working time or a closed period refuses the deletion, here and
- *   again in delete_organization under its lock
- * - Storage is not transactional, so the database decides first: the action
- *   lists the organization's stored files, delete_organization deletes the
- *   organization row, and only then do the listed files go. A refusal leaves
- *   every file in place; a failed file removal after the row went is logged
- *   and leaves orphaned objects, the lesser failure
+ * - Recorded working time, a closed period or a document inside its
+ *   retention period refuses the deletion, here and again in
+ *   delete_organization under its lock
+ * - Storage is not transactional, so no file goes at once: the action lists
+ *   the organization's stored files, and delete_organization_with_files
+ *   deletes the organization row and queues the listed files and every file a
+ *   row names, in one transaction. The scheduled purge deletes them after
+ *   the backup window. A refusal queues no file
+ * - After the deletion the action lists the prefix again and queues each
+ *   object that landed after the first listing
  * - The foreign key cascade removes the memberships, invites and all other
  *   organization data in the same statement as the organization row
  * - Users who lose their only org will be redirected to onboarding on next login
@@ -109,20 +123,22 @@ export async function deleteOrganization(confirmationName: string): Promise<Dele
     // The database repeats this check under its lock.
     const scope = await readOrganizationDeletionScope(activeOrgId);
     if (!scope.success) return scope;
-    if (scope.scope.retainsTimeRecords) return { success: false, error: 'has_time_records' };
+    const [refusal] = scope.scope.retentionRefusals;
+    if (refusal) return { success: false, error: refusal };
 
-    // Listed while the rows still name the organization: without the list,
-    // the deletion would knowingly leave every file behind.
+    // Listed while the organization still exists: without the list, the
+    // deletion would knowingly leave every object without a row behind.
     const paths = await listOrganizationFiles(activeOrgId);
     if (!paths) return { success: false, error: 'delete_org_failed' };
 
-    // One statement: the cascade removes the memberships, invites and every
-    // other organization row with it, or nothing. Deleting the memberships
-    // first was refused by the owner-membership guard.
-    const { error: orgDeleteError } = await admin.rpc('delete_organization', {
+    // One transaction: the cascade removes the memberships, invites and every
+    // other organization row, and the files are queued, or nothing happens.
+    // Deleting the memberships first was refused by the owner-membership guard.
+    const { error: orgDeleteError } = await admin.rpc('delete_organization_with_files', {
       p_organization_id: activeOrgId,
       p_actor_id: userId,
       p_confirmation_name: parsedConfirmation.data.trim(),
+      p_storage_paths: paths,
     });
     if (orgDeleteError && !(await organizationIsGone(admin, activeOrgId))) {
       return deleteRefusal(
@@ -131,8 +147,7 @@ export async function deleteOrganization(confirmationName: string): Promise<Dele
         'deleteOrganization: organization delete failed',
       );
     }
-
-    await discardOrganizationFiles(activeOrgId, paths);
+    await queueLateFiles(admin, activeOrgId, paths);
 
     // Get the user's remaining organizations using admin client
     // (to bypass RLS - the org we just deleted might affect RLS queries)

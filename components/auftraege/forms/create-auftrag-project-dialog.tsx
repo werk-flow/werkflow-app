@@ -14,7 +14,8 @@ import {
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CreateJobFormContent, type CreateJobSubmission } from './create-job-form-content';
-import { CreateProjectFormContent, type CreateProjectSubmission } from './create-project-form-content';
+import { CreateProjectFormContent } from './create-project-form-content';
+import type { CreateProjectSubmission } from './create-project-submission';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
 import type { Job, Project } from '@/lib/jobs/types';
 import type { ClientSelectItem } from '../shared/client-select-with-create';

@@ -6,6 +6,7 @@ import { VacationApprovals } from '@/components/zeiterfassung/vacation-approvals
 import { AbsencePickerContractFixture, SicknessRecordContractFixture } from './absence-boundaries';
 import { ClockContractFixture } from './clock-boundaries';
 import { SidebarContractFixture } from './sidebar-boundaries';
+import { initializeLazyDialogBoundary, LazyDialogContractFixture } from './lazy-dialog-boundaries';
 import {
   CalendarBoardContractFixture,
   CalendarDayContractFixture,
@@ -75,6 +76,7 @@ import { TaskSectionsContractFixture } from './task-section-boundaries';
 initializeServiceBoundaries();
 initializeLifecycleBoundary();
 initializeDocumentArchiveBoundary();
+initializeLazyDialogBoundary();
 const personnelInitialData = initializePersonnelBoundary();
 
 function LifecycleRouteFixture(): React.JSX.Element {
@@ -567,6 +569,8 @@ createRoot(root).render(
     <ClockContractFixture />
   ) : window.uiContractFixture === 'sidebar' ? (
     <SidebarContractFixture />
+  ) : window.uiContractFixture === 'lazy-dialog' ? (
+    <LazyDialogContractFixture />
   ) : window.uiContractFixture === 'organization' ? (
     <OrganizationContractFixture />
   ) : window.uiContractFixture === 'calendar-board' ? (
