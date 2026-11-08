@@ -311,6 +311,7 @@ declare
   v_part_count integer;
   v_file_count integer;
   v_file_bytes bigint;
+  v_unmatched integer;
 begin
   if not app_private.p1_24_is_admin(p_organization_id, p_actor_id) then
     raise exception 'not_authorized';
@@ -336,23 +337,6 @@ begin
   ) then
     raise exception 'export_plan_repeats_name';
   end if;
-  -- A file the plan misses, or a path that is no file of this organization:
-  -- the documents changed since the server listed them, or the plan is wrong.
-  if exists (
-    select 1 from app_private.organization_export_sources(p_organization_id) source
-    where not exists (
-      select 1 from app_private.organization_export_plan(p_file_parts) plan
-      where plan.source_path = source.source_path
-    )
-  ) or exists (
-    select 1 from app_private.organization_export_plan(p_file_parts) plan
-    where not exists (
-      select 1 from app_private.organization_export_sources(p_organization_id) source
-      where source.source_path = plan.source_path
-    )
-  ) then
-    raise exception 'export_plan_stale';
-  end if;
 
   v_part_count := jsonb_array_length(p_file_parts) + 1;
 
@@ -367,17 +351,36 @@ begin
     format('%s/datenexporte/%s/teil-%s.zip', p_organization_id, v_export_id, part_number)
   from generate_series(1, v_part_count) as part_number;
   -- One join of the plan with the files, not one per part: neither function
-  -- inlines, so a join per part would read every file once per part.
-  insert into public.organization_export_files (
-    organization_id, export_id, part_id, document_id, version_number, source_path, archive_name, file_bytes
+  -- inlines, so a join per part would read every file once per part. The
+  -- check and the file rows come from that one join in one statement, so
+  -- both see the same files: a deletion that commits during the start
+  -- cannot drop a planned file from the rows unnoticed. A file the plan
+  -- misses, or a path that is no file of this organization, means the
+  -- documents changed since the server listed them, or the plan is wrong;
+  -- the refusal rolls back the rows inserted here.
+  with matched as (
+    select plan.part_index, plan.archive_name, plan.source_path as planned_path, source.source_path,
+      source.document_id, source.version_number, source.file_bytes
+    from app_private.organization_export_plan(p_file_parts) plan
+    full join app_private.organization_export_sources(p_organization_id) source
+      on source.source_path = plan.source_path
+  ), inserted as (
+    insert into public.organization_export_files (
+      organization_id, export_id, part_id, document_id, version_number, source_path, archive_name, file_bytes
+    )
+    select p_organization_id, v_export_id, part.id, matched.document_id, matched.version_number,
+      matched.source_path, matched.archive_name, matched.file_bytes
+    from matched
+    join public.organization_export_parts part
+      on part.export_id = v_export_id and part.part_number = matched.part_index + 1
+    where matched.source_path is not null
   )
-  select p_organization_id, v_export_id, part.id, source.document_id, source.version_number,
-    source.source_path, plan.archive_name, source.file_bytes
-  from app_private.organization_export_plan(p_file_parts) plan
-  join app_private.organization_export_sources(p_organization_id) source
-    on source.source_path = plan.source_path
-  join public.organization_export_parts part
-    on part.export_id = v_export_id and part.part_number = plan.part_index + 1;
+  select count(*) filter (where matched.planned_path is null or matched.source_path is null)
+  into v_unmatched
+  from matched;
+  if v_unmatched > 0 then
+    raise exception 'export_plan_stale';
+  end if;
   update public.organization_export_parts part
   set file_count = totals.file_count, file_bytes = totals.file_bytes
   from (

@@ -422,9 +422,10 @@ const readmeOf = (archive: Map<string, string>) =>
 assert.ok(readmeOf(entries).includes('Der Export besteht aus 3 Teilen.'), 'the README miscounts the parts');
 assert.ok(
   readmeOf(entries).includes(
-    'nach dem Start hochgeladen wurde, steht in „Daten/Dokumente.csv“ nur, wenn es vor der',
+    'Ein Dokument, das nach dem Start hochgeladen wurde, steht in „Daten/Dokumente.csv“ nur, wenn es ' +
+      'vor der Erstellung dieses Archivs hochgeladen wurde; seine Originaldatei fehlt in jedem Fall.',
   ),
-  'the README claims the manifest notes a document uploaded after the start',
+  'the README misstates when a document uploaded after the start is listed, or that its original is missing',
 );
 const manifest = entries.get('Dokumentenverzeichnis.csv') ?? '';
 for (const documentId of [currentDoc, trashedDoc, personnelDoc])
@@ -541,3 +542,44 @@ assert.ok(listed.success, 'the export list failed');
 assert.equal(listed.exports[0]?.parts.length, 1_001, 'the export list lost parts');
 world.tables.organization_export_parts = manyParts.slice(1);
 assert.deepEqual(await readOrganizationExports(ORGANIZATION_A), { success: false, error: 'load_failed' });
+
+// Five newer exports hide no older one while one of its parts is still downloadable;
+// an older export whose every part is past its seven days stays off the page.
+const ago = (milliseconds: number) => new Date(Date.now() - milliseconds).toISOString();
+const DAY_MS = 24 * 60 * 60 * 1000;
+const listedExport = (suffix: string, requestedAt: string, parts: Array<Record<string, unknown>>) => {
+  world.tables.organization_exports?.push({
+    id: id(suffix),
+    organization_id: ORGANIZATION_A,
+    requested_at: requestedAt,
+    part_count: parts.length,
+  });
+  world.tables.organization_export_parts?.push(
+    ...parts.map((part, index) => ({
+      ...exportPart(id(`${suffix}${index}`), index + 1, index === 0 ? 'data' : 'files'),
+      export_id: id(suffix),
+      ...part,
+    })),
+  );
+};
+world.tables.organization_exports = [];
+world.tables.organization_export_parts = [];
+const newerExports = ['e3', 'e4', 'e5', 'e6', 'e7'];
+newerExports.forEach((suffix, index) => listedExport(suffix, ago((index + 1) * 60_000), [{}]));
+listedExport('e8', ago(10 * DAY_MS), [
+  { state: 'ready', expires_at: ago(-2 * DAY_MS) },
+  { state: 'ready', expires_at: ago(DAY_MS) },
+]);
+listedExport('e9', ago(10 * DAY_MS + 60_000), [{ state: 'ready', expires_at: ago(DAY_MS) }]);
+const available = await readOrganizationExports(ORGANIZATION_A);
+assert.ok(available.success, 'the export list failed');
+assert.deepEqual(
+  available.exports.map((row) => row.id),
+  [...newerExports, 'e8'].map(id),
+  'the export list hid an export with a downloadable part, or showed one without',
+);
+assert.deepEqual(
+  available.exports.at(-1)?.parts.map((part) => part.state),
+  ['ready', 'expired'],
+  'the older export lost the state of its parts',
+);

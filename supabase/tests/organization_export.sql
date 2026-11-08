@@ -4,7 +4,7 @@
 -- organization's Admin are refused, and a foreign part answers like an
 -- unknown one. The start refuses a plan that misses, repeats or adds a file,
 -- or repeats a name in any letter case, so every original lands in exactly
--- one part. The export totals are the sums of its file rows, also when a
+-- one part, also when a planned document is deleted during the start. The export totals are the sums of its file rows, also when a
 -- file changes during the start. A failed part leaves the others as they are
 -- and completes alone later; a ready part refuses a second result. A build's
 -- claim queues the part's archive for the purge seven days after the build
@@ -594,6 +594,33 @@ begin
     or (select count(*) from public.organization_export_events
       where organization_id = '28700000-0000-0000-0000-000000000010') <> (select events from ledger_before) + 2 then
     raise exception 'a start removed more than the expired plan';
+  end if;
+end;
+$$;
+
+-- A planned document permanently deleted while the export starts, as a
+-- deletion committed between two of its statements can, refuses the start
+-- as stale: no export leaves out a planned original. The test trigger
+-- deletes the document right after the export row exists.
+create function pg_temp.delete_document_during_start() returns trigger language plpgsql as $$
+begin
+  delete from public.documents where id = '28700000-0000-0000-0000-000000000041';
+  return null;
+end;
+$$;
+grant execute on function pg_temp.delete_document_during_start() to service_role;
+create trigger delete_document_during_start after insert on public.organization_exports
+  for each row execute function pg_temp.delete_document_during_start();
+set local role service_role;
+select pg_temp.expect_refusal('start losing a planned document', format(
+  'select public.start_organization_export(%L, %L, %L)', '28700000-0000-0000-0000-000000000001',
+  '28700000-0000-0000-0000-000000000010', (select plan from full_plan)), 'export_plan_stale');
+reset role;
+drop trigger delete_document_during_start on public.organization_exports;
+do $$
+begin
+  if not exists (select 1 from public.documents where id = '28700000-0000-0000-0000-000000000041') then
+    raise exception 'the refused start kept the deletion of its test trigger';
   end if;
 end;
 $$;

@@ -5,16 +5,19 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { ActionResult } from '@/lib/action-result';
 import type { AdminClient } from '@/lib/supabase/admin';
 import type { Tables } from '@/lib/supabase/database.types';
-import { readCompleteRows } from '@/lib/supabase/query-batches';
+import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
 import type { OrganizationExportView, PartState } from './view';
 
-// The Datenexport page's read: the latest exports of the organization with
-// every part's state. The page renders it for an Admin only.
+// The Datenexport page's read: the latest exports of the organization and
+// every older one with a part still to build or download, each with every
+// part's state. The page renders it for an Admin only.
 
-/** The page shows the latest exports; their archives are gone a week after each build. */
+/** The page shows the latest exports, and an older one only while a part is available. */
 const SHOWN_EXPORTS = 5;
 /** Parts are built, and built parts downloaded, for seven days (lib/org-export/build.ts). */
 const WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+/** A part builds within seven days of the start and stays downloadable seven days after its build. */
+const AVAILABLE_MS = 2 * WINDOW_MS;
 
 type PartRow = { state: string; expires_at: string | null };
 
@@ -58,26 +61,49 @@ export async function readOrganizationExports(
   organizationId: string,
 ): Promise<ActionResult<{ exports: OrganizationExportView[] }, 'load_failed'>> {
   const admin = createSupabaseAdminClient();
-  const { data: exports, error } = await loggedRead(
-    'readOrganizationExports: organization_exports read failed',
-    admin
-      .from('organization_exports')
-      .select('id, requested_at, part_count, file_count, file_bytes')
-      .eq('organization_id', organizationId)
-      .order('requested_at', { ascending: false })
-      .order('id')
-      .limit(SHOWN_EXPORTS),
+  const columns = 'id, requested_at, part_count, file_count, file_bytes';
+  const now = Date.now();
+  const availableSince = new Date(now - AVAILABLE_MS).toISOString();
+  const [latest, recent] = await Promise.all([
+    loggedRead(
+      'readOrganizationExports: organization_exports read failed',
+      admin
+        .from('organization_exports')
+        .select(columns)
+        .eq('organization_id', organizationId)
+        .order('requested_at', { ascending: false })
+        .order('id')
+        .limit(SHOWN_EXPORTS),
+    ),
+    loggedRead(
+      'readOrganizationExports: recent organization_exports read failed',
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('organization_exports')
+            .select(columns)
+            .eq('organization_id', organizationId)
+            .gte('requested_at', availableSince)
+            .order('requested_at', { ascending: false })
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+    ),
+  ]);
+  if (latest.error || recent.error) return { success: false, error: 'load_failed' };
+  const latestIds = new Set(latest.data.map((row) => row.id));
+  const exports = [...new Map([...latest.data, ...recent.data].map((row) => [row.id, row])).values()].sort(
+    (left, right) =>
+      Date.parse(right.requested_at) - Date.parse(left.requested_at) || left.id.localeCompare(right.id),
   );
-  if (error) return { success: false, error: 'load_failed' };
   const parts = await Promise.all(exports.map((row) => readExportParts(admin, organizationId, row))).then(
     (rows) => rows,
     () => null,
   );
   if (parts === null) return { success: false, error: 'load_failed' };
-  const now = Date.now();
-  return {
-    success: true,
-    exports: exports.map((row, index) => ({
+  const views = exports.map(
+    (row, index): OrganizationExportView => ({
       id: row.id,
       requestedAt: row.requested_at,
       fileCount: row.file_count,
@@ -92,6 +118,12 @@ export async function readOrganizationExports(
         expiresAt: part.expires_at,
         failureReason: part.failure_reason,
       })),
-    })),
+    }),
+  );
+  return {
+    success: true,
+    exports: views.filter(
+      (view) => latestIds.has(view.id) || view.parts.some((part) => part.state !== 'expired'),
+    ),
   };
 }
