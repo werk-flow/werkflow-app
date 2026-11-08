@@ -1,8 +1,8 @@
 -- A responsibility delegation ends once (werk-flow/werkflow-planning#152).
 -- Two requests that read the same unended window, such as „Entfernen“ from
 -- two tabs, could both write a revocation and an end event; the second could
--- turn a removed window into an ended one. The function now refuses an
--- already ended window under its row lock. Signature, grants and every other
+-- turn a removed window into an ended one. The function now leaves an
+-- already ended window unchanged under its row lock. Signature, grants and every other
 -- check stay as they were.
 
 create or replace function public.end_responsibility_delegation(
@@ -33,9 +33,10 @@ begin
   end if;
 
   -- A window ends once. Two requests that read the same open window wait on
-  -- the row lock above; the second finds it ended and changes nothing.
+  -- the row lock above; the second finds it ended and returns without a
+  -- write. No refusal, so the previous release's action reads it as done too.
   if delegation_record.revoked_from is not null then
-    raise exception 'responsibility_delegation_already_ended';
+    return;
   end if;
 
   if p_revoked_from < berlin_today

@@ -1,7 +1,6 @@
 -- A responsibility delegation ends once (20261114090000): a second end of
--- the same window, removal or end, refuses with
--- responsibility_delegation_already_ended and writes no second revocation or
--- end event. One rolled-back transaction.
+-- the same window, removal or end, succeeds without a write: no second
+-- revocation and no second end event. One rolled-back transaction.
 begin;
 
 insert into auth.users (
@@ -33,7 +32,6 @@ declare
   v_today constant date := (now() at time zone 'Europe/Berlin')::date;
   v_planned uuid;
   v_running uuid;
-  v_refusal text;
 begin
   insert into public.organization_responsibility_delegations (
     organization_id, responsibility, delegator_employee_record_id, substitute_employee_record_id,
@@ -52,38 +50,20 @@ begin
 
   -- „Entfernen“ of a planned window, twice.
   perform public.end_responsibility_delegation(v_planned, v_today + 3, v_admin);
-  v_refusal := null;
-  begin
-    perform public.end_responsibility_delegation(v_planned, v_today + 3, v_admin);
-  exception when raise_exception then
-    v_refusal := sqlerrm;
-  end;
-  if v_refusal is distinct from 'responsibility_delegation_already_ended' then
-    raise exception 'a second removal ended with % instead of the already-ended refusal',
-      coalesce(v_refusal, 'acceptance');
-  end if;
+  perform public.end_responsibility_delegation(v_planned, v_today + 3, v_admin);
 
   -- „Heute beenden“ of a running window, then a removal of the same window.
   perform public.end_responsibility_delegation(v_running, v_today, v_admin);
-  v_refusal := null;
-  begin
-    perform public.end_responsibility_delegation(v_running, v_today + 1, v_admin);
-  exception when raise_exception then
-    v_refusal := sqlerrm;
-  end;
-  if v_refusal is distinct from 'responsibility_delegation_already_ended' then
-    raise exception 'a second end ended with % instead of the already-ended refusal',
-      coalesce(v_refusal, 'acceptance');
-  end if;
+  perform public.end_responsibility_delegation(v_running, v_today + 1, v_admin);
 
   if (select revoked_from from public.organization_responsibility_delegations where id = v_planned)
        is distinct from v_today + 3
     or (select revoked_from from public.organization_responsibility_delegations where id = v_running)
        is distinct from v_today
-  then raise exception 'a refused second end changed the revocation'; end if;
+  then raise exception 'a second end changed the revocation'; end if;
   if (select count(*) from public.organization_responsibility_events
       where delegation_id in (v_planned, v_running) and event_type = 'delegation_ended') <> 2
-  then raise exception 'a refused second end wrote an end event'; end if;
+  then raise exception 'a second end wrote an end event'; end if;
 end;
 $$;
 
