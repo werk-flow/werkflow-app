@@ -15,6 +15,9 @@ const MIDDAY_UTC = 'T11:00:00Z';
 /** 00:30 in Berlin on January 1 while UTC still shows December 31: the new year on one clock only. */
 const YEAR_TURN_UTC = 'T23:30:00Z';
 
+/** A browser leg may use its whole 45-minute timeout on the shifted clock; a day holds that. */
+const BROWSER_LEG_MARGIN_MS = 24 * 60 * 60 * 1000;
+
 export type LookaheadDay = {
   date: string;
   label: string;
@@ -93,10 +96,27 @@ export function askedDay(date: string): LookaheadDay {
   return midday(date, 'asked', true);
 }
 
-/** Every day's suite leg and, on a browser day, one leg per shard of the full run. */
+/**
+ * The hosts the runner's agent reaches GitHub through, as its journal names them. A clock past the
+ * expiry of their certificates cuts the agent off, and GitHub shuts the runner down 13 to 20 minutes
+ * later, mid-leg.
+ */
+export function agentHosts(journal: string): string[] {
+  return [...new Set([...journal.matchAll(/https:\/\/([a-z0-9.-]+)/gi)].flatMap((match) => match[1] ?? []))];
+}
+
+/**
+ * Whether a browser leg ends before the agent's certificate expires. A suite leg ends within minutes,
+ * before the shutdown, so it runs on every date.
+ */
+export function browserLegFits(day: LookaheadDay, certificateExpiry: Date): boolean {
+  return Date.parse(day.instant) + BROWSER_LEG_MARGIN_MS <= certificateExpiry.getTime();
+}
+
+/** Every day's suite leg and, on a browser day the runner can hold, one leg per shard of the full run. */
 export function lookaheadLegs(
   days: readonly LookaheadDay[],
-  input: { sql: string; shards: readonly LookaheadShard[] },
+  input: { sql: string; shards: readonly LookaheadShard[]; certificateExpiry: Date },
 ): LookaheadLeg[] {
   return days.flatMap((day) => {
     const name = `${day.date} ${day.label}`;
@@ -109,13 +129,15 @@ export function lookaheadLegs(
         groups: `unit:all,ui:contracts,${input.sql}`,
         browser: false,
       },
-      ...(day.browser ? input.shards : []).map(({ shard, groups }) => ({
-        name: `${name} / Browser ${shard}`,
-        slug: `${slug}-browser-${shard}`,
-        instant: day.instant,
-        groups,
-        browser: true,
-      })),
+      ...(day.browser && browserLegFits(day, input.certificateExpiry) ? input.shards : []).map(
+        ({ shard, groups }) => ({
+          name: `${name} / Browser ${shard}`,
+          slug: `${slug}-browser-${shard}`,
+          instant: day.instant,
+          groups,
+          browser: true,
+        }),
+      ),
     ];
   });
 }
