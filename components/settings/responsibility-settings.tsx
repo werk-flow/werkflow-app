@@ -8,7 +8,7 @@ import {
   ResponsibilityEffectPreview,
   ResponsibilityHolderChecklist,
 } from '@/components/settings/responsibility-configuration-sections';
-import { DelegationDialog } from '@/components/settings/responsibility-delegation-dialog';
+import { lazyDialog } from '@/components/shared/lazy-dialog';
 import { DelegationList } from '@/components/settings/responsibility-delegation-list';
 import { holderSourceLabel, personName } from '@/components/settings/responsibility-display';
 import { useResponsibilityConfigurationForm } from '@/components/settings/use-responsibility-configuration-form';
@@ -38,6 +38,13 @@ import {
   type ResponsibilityPerson,
 } from '@/lib/responsibilities/types';
 import { Constants } from '@/lib/supabase/database.types';
+
+// Only the owner names substitutes. The delegation dialog, with its absence
+// marks and warning, downloads on intent, so the settings page's first load
+// never carries it (`lab.admin.settings-open`).
+const lazyDelegationDialog = lazyDialog(() =>
+  import('@/components/settings/responsibility-delegation-dialog').then((mod) => mod.DelegationDialog),
+);
 
 export function ResponsibilitySettings({ data }: { data: ResponsibilitySettingsData }) {
   useRealtimeRouterRefresh({
@@ -154,6 +161,8 @@ function ResponsibilityCard({
   const canEdit = data.isOwner;
   const [configurationOpen, setConfigurationOpen] = useState(false);
   const [delegationOpen, setDelegationOpen] = useState(false);
+  // The button waits while the delegation dialog downloads.
+  const delegationWaiting = lazyDelegationDialog.useWaiting(delegationOpen);
 
   return (
     <Card data-testid={`responsibility-${responsibility}`}>
@@ -188,7 +197,14 @@ function ResponsibilityCard({
         </p>
         {canEdit ? (
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={() => setDelegationOpen(true)}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={delegationWaiting}
+              onPointerEnter={lazyDelegationDialog.preload}
+              onFocus={lazyDelegationDialog.preload}
+              onClick={() => setDelegationOpen(true)}
+            >
               Vertretung eintragen
             </Button>
             <Button type="button" onClick={() => setConfigurationOpen(true)}>
@@ -205,7 +221,7 @@ function ResponsibilityCard({
         open={configurationOpen}
         onOpenChange={setConfigurationOpen}
       />
-      <DelegationDialog
+      <lazyDelegationDialog.Dialog
         key={`delegation-${effective.configurationId ?? 'default'}`}
         data={data}
         responsibility={responsibility}
