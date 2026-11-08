@@ -26,11 +26,11 @@ export type OrganizationExportView = {
 
 /**
  * A part the Admin can build: not built yet, or failed for a reason a new
- * build can fix. `refusal` is this page's latest refusal of the part's build,
- * which counts before the stored reason the page read.
+ * build can fix. `refusal` is this page's latest refusal of the part's build;
+ * the stored reason may be newer, from another session, so either one that
+ * a new build cannot fix ends the retry.
  */
 export function isBuildable(part: OrganizationExportPartView, refusal: string | undefined): boolean {
   if (part.state !== 'pending' && part.state !== 'failed') return false;
-  const reason = refusal ?? part.failureReason;
-  return reason === null || isRetryablePartFailure(reason);
+  return [refusal, part.failureReason].every((reason) => reason == null || isRetryablePartFailure(reason));
 }

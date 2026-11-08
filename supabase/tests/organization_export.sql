@@ -504,7 +504,8 @@ insert into public.organization_export_files (
 update public.organization_exports set requested_at = now() - interval '13 days 23 hours'
 where id = (select export_id from started);
 create temporary table ledger_before on commit drop as
-select count(*) as events from public.organization_export_events;
+select count(*) as events from public.organization_export_events
+where organization_id = '28700000-0000-0000-0000-000000000010';
 set local role service_role;
 create temporary table later_starts on commit drop as
 select public.start_organization_export('28700000-0000-0000-0000-000000000001',
@@ -534,7 +535,8 @@ begin
     or (select count(*) from public.organization_export_files
       where export_id = '28700000-0000-0000-0000-000000000090') <> 1
     or (select count(*) from public.organization_export_parts where export_id = (select export_id from started)) <> 3
-    or (select count(*) from public.organization_export_events) <> (select events from ledger_before) + 2 then
+    or (select count(*) from public.organization_export_events
+      where organization_id = '28700000-0000-0000-0000-000000000010') <> (select events from ledger_before) + 2 then
     raise exception 'a start removed more than the expired plan';
   end if;
 end;
