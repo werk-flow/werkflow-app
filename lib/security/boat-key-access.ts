@@ -136,7 +136,16 @@ function pathsOf(text: string, folders: readonly string[], home: string): string
 /** Whether the program reads every file under a folder it is given or runs in. */
 function readsRecursively(name: string, args: readonly ShellWord[], viaXargs: boolean): boolean {
   const texts = args.map((arg) => arg.text);
-  if (SEARCHERS.has(name)) return ALWAYS_RECURSIVE.has(name) || texts.some((text) => RECURSE_FLAG.test(text));
+  if (SEARCHERS.has(name))
+    return (
+      ALWAYS_RECURSIVE.has(name) ||
+      texts.some(
+        (text, index) =>
+          RECURSE_FLAG.test(text) ||
+          // `-d recurse` and `--directories recurse` name the action in the next word.
+          ((text === '-d' || text === '--directories') && texts[index + 1] === 'recurse'),
+      )
+    );
   const flag = COPIERS.get(name);
   if (COPIERS.has(name)) return flag === undefined || texts.some((text) => flag.test(text));
   return name === 'find' && (viaXargs || texts.some((text) => FIND_RUNS.has(text)));

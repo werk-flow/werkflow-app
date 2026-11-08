@@ -82,6 +82,8 @@ test('a recursive read keeps the folder it runs in through launchers and nested 
     // An attached pattern option leaves the folder operand a folder.
     'rg --hidden -etoken ~/.config',
     'grep -r -etoken ~/.config',
+    'grep -d recurse token ~/.config',
+    'grep --directories recurse token ~/.config',
     // A value flag the guard does not know cannot hide the folder it runs in.
     'cd ~ && rg --hidden --sort path token',
   ])
