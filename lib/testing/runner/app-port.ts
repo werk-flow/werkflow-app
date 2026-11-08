@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { lstatSync, realpathSync } from 'node:fs';
 import { createServer } from 'node:net';
+import { networkInterfaces } from 'node:os';
 import { join } from 'node:path';
 
 /** The main checkout serves the recorded build and `next dev` on Next's default port. */
@@ -40,9 +41,19 @@ function refusal(port: number): string {
 /**
  * Every address a server on the port can listen on: each loopback, which
  * `localhost` resolves to, and each wildcard, which `next start` binds. Linux
- * refuses any overlapping bind; macOS refuses only the same address.
+ * refuses any overlapping bind; macOS refuses only the same address, so the
+ * host's own addresses are probed one by one as well.
  */
 const LISTEN_ADDRESSES = ['127.0.0.1', '::1', '0.0.0.0', '::'];
+
+/** The host's own addresses besides loopback, where a server can also listen alone. */
+function hostAddresses(): string[] {
+  return Object.values(networkInterfaces())
+    .flat()
+    .flatMap((entry) =>
+      entry && !entry.internal && !entry.address.startsWith('fe80:') ? [entry.address] : [],
+    );
+}
 /** This host lacks the address family, so nothing can listen there. */
 const ABSENT_FAMILY = new Set(['EAFNOSUPPORT', 'EADDRNOTAVAIL']);
 
@@ -66,5 +77,5 @@ function probe(host: string, port: number): Promise<void> {
  * production build therefore refuses while anything listens on the app port.
  */
 export async function assertAppPortFree(port: number): Promise<void> {
-  for (const host of LISTEN_ADDRESSES) await probe(host, port);
+  for (const host of [...LISTEN_ADDRESSES, ...hostAddresses()]) await probe(host, port);
 }
