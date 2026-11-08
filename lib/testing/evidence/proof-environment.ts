@@ -107,21 +107,36 @@ export function backendIdentity(supabaseUrl: string | undefined, repositoryRoot:
   return `local:${projectId}`;
 }
 
-/** A workstation credential that names no backend and never leaves the workstation. */
-const WORKSTATION_ONLY = new Set(['SUPABASE_ACCESS_TOKEN']);
+/**
+ * Values a workstation holds that name no backend and never leave it: the owner's Supabase token,
+ * and the code-hash secret a Boat run draws at random, as CI does.
+ */
+const WORKSTATION_ONLY = new Set(['SUPABASE_ACCESS_TOKEN', 'EMAIL_OTP_HASH_SECRET']);
 
 /**
- * A digest of each backend value in `.env.local`, origins normalized, so a Boat machine can prove
- * its stack equals the workstation's without either side sending a value.
+ * A digest of every value proofEnvironmentDigest reads, from each environment file and from the
+ * process, origins normalized, except WORKSTATION_ONLY. A Boat machine compares its own with the
+ * workstation's, so it proves the same backend without either side sending a value.
  */
-export function backendValueDigests(repositoryRoot: string): Record<string, string> {
-  const path = join(repositoryRoot, '.env.local');
-  if (!existsSync(path)) return {};
+export function backendValueDigests(
+  repositoryRoot: string,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): Record<string, string> {
+  const fromFiles = ENVIRONMENT_FILES.flatMap((filename) => {
+    const path = join(repositoryRoot, filename);
+    if (!existsSync(path)) return [];
+    return Object.entries(parseEnvironmentFile(readFileSync(path, 'utf8'))).map(
+      ([key, value]): [string, string] => [`${filename}:${key}`, value],
+    );
+  });
+  const fromProcess = Object.keys(environment)
+    .filter((key) => APPLICATION_ENVIRONMENT_PATTERN.test(key))
+    .map((key): [string, string] => [`process:${key}`, environment[key] ?? '']);
   return Object.fromEntries(
-    Object.entries(parseEnvironmentFile(readFileSync(path, 'utf8')))
-      .filter(([key]) => APPLICATION_ENVIRONMENT_PATTERN.test(key) && !WORKSTATION_ONLY.has(key))
-      .map(([key, value]) => [
-        key,
+    [...fromFiles, ...fromProcess]
+      .filter(([name]) => !WORKSTATION_ONLY.has(name.slice(name.indexOf(':') + 1)))
+      .map(([name, value]) => [
+        name,
         createHash('sha256').update(normalizeEnvironmentValue(value)).digest('hex'),
       ]),
   );

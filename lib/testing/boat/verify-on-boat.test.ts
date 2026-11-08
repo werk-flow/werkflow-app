@@ -8,7 +8,8 @@ import { join } from 'node:path';
 import { BoatError, boatClient } from './boat-api';
 import { readBoatKey } from './boat-key';
 import { runScript } from './boat-machine';
-import { boatFailure, localReason } from './verify-on-boat';
+import { backendValueDigests } from '../evidence/proof-environment';
+import { boatFailure, localReason, machineBoundGroup, withheldFile } from './verify-on-boat';
 
 test('change plans and ordinary groups may run on Boat', () => {
   expect(localReason([], {})).toBeUndefined();
@@ -75,7 +76,12 @@ test('an expired, malformed or exposed key falls back to local with the reason',
 test('a Boat refusal keeps its status and code, and the key never appears in a message', async () => {
   const client = boatClient('boat_secret', async () =>
     Response.json(
-      { ok: false, code: 'api_key_expired', error: { code: 'api_key_expired', message: 'The TTL elapsed' } },
+      // A provider body may echo the request; none of it may reach a message or a log.
+      {
+        ok: false,
+        code: 'api_key_expired',
+        error: { code: 'api_key_expired', message: 'Bearer boat_secret expired' },
+      },
       { status: 403 },
     ),
   );
@@ -133,4 +139,57 @@ test('each Boat refusal becomes one fallback line, and a rejected key says how t
   );
   for (const refusal of [new BoatError(403, 'api_key_expired', ''), new BoatError(401, 'unauthorized', '')])
     expect(boatFailure(refusal)).toContain('Renew it in the Boat dashboard');
+});
+
+test('an untracked credential or local setting stays on the workstation', () => {
+  for (const file of [
+    '.npmrc',
+    '.netrc',
+    '.git-credentials',
+    '.env.preview',
+    'lib/.pgpass',
+    'certs/dev.pem',
+    'id_ed25519',
+    'r2-token.txt',
+  ])
+    expect(withheldFile(['lib/new-module.ts', file]), file).toBe(file);
+  expect(
+    withheldFile(['lib/new-module.ts', '.claude/skills/new/SKILL.md', 'tests/golden/new.spec.ts']),
+  ).toBeUndefined();
+});
+
+test('a plan that runs a measuring or capturing group stays local, whatever selected it', () => {
+  const plan = [
+    'RUN   static:lint | Static gate | 12 proof inputs | missing or changed proof',
+    'REUSE audit:lab:office | Changed spec | 30 proof inputs | passed 2026-11-07',
+    'RUN   audit:visual | Changed spec | 30 proof inputs | no pass since selection',
+  ].join('\n');
+  expect(machineBoundGroup(plan)).toBe('audit:visual');
+  expect(
+    machineBoundGroup('RUN   golden:gg-00 | Critical journey | 9 proof inputs | no pass'),
+  ).toBeUndefined();
+});
+
+test('the backend comparison covers every source the proof digest reads, but no workstation credential', () => {
+  const folder = mkdtempSync(join(tmpdir(), 'proof-env-'));
+  writeFileSync(
+    join(folder, '.env.local'),
+    'NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321\nSUPABASE_ACCESS_TOKEN=sbp_x\nEMAIL_OTP_HASH_SECRET=y\n',
+  );
+  writeFileSync(join(folder, '.env'), 'R2_BUCKET_NAME=werkflow-documents-local\n');
+  const digests = backendValueDigests(folder, {
+    NEXT_PUBLIC_EXTRA: 'z',
+    SUPABASE_ACCESS_TOKEN: 'sbp_x',
+    PATH: '/bin',
+  });
+  expect(Object.keys(digests).sort()).toEqual([
+    '.env.local:NEXT_PUBLIC_SUPABASE_URL',
+    '.env:R2_BUCKET_NAME',
+    'process:NEXT_PUBLIC_EXTRA',
+  ]);
+  // The WSL address is transport: any private stack origin compares equal.
+  writeFileSync(join(folder, '.env.local'), 'NEXT_PUBLIC_SUPABASE_URL=http://172.20.0.5:54321\n');
+  expect(backendValueDigests(folder, {})['.env.local:NEXT_PUBLIC_SUPABASE_URL']).toBe(
+    digests['.env.local:NEXT_PUBLIC_SUPABASE_URL'],
+  );
 });

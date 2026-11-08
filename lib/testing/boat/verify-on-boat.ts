@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import {
   existsSync,
   lstatSync,
@@ -46,9 +46,13 @@ const SETUP_FAILED = 90;
 const MACHINE_TTL_SECONDS = 3 * 3_600;
 /** Groups that measure the machine or compare screenshots, against references taken on the workstation. */
 const MACHINE_BOUND_GROUP = /^audit:(?:lab|performance|visual|layout)/;
-/** Untracked files that look like a credential never leave the workstation. */
+/**
+ * Untracked files that may hold a credential or a local setting never leave the workstation: every
+ * dotfile (`.env.*`, `.npmrc`, `.netrc`, `.git-credentials`, `.pgpass`), keys and certificates, and
+ * names that say secret, credential, token or password.
+ */
 const SECRET_NAME =
-  /(?:^|\/)(?:\.env[^/]*|[^/]*\.(?:pem|key|p12|pfx)|id_[a-z0-9]+|[^/]*(?:secret|credential|token)[^/]*)$/i;
+  /(?:^|\/)(?:\.[^/]*|[^/]*\.(?:pem|key|p12|pfx|jks|keystore)|id_[a-z0-9]+|[^/]*(?:secret|credential|token|passw)[^/]*)$/i;
 /** Evidence planning reads; traces, screenshots and logs stay home. */
 const EVIDENCE_FILE = /\.(?:json|jsonl|md)$/;
 const EVIDENCE_ROOTS = ['.agent-logs/verification', '.agent-logs/playwright-runs'];
@@ -74,6 +78,35 @@ export function localReason(args: readonly string[], env: Environment): string |
   return undefined;
 }
 
+/** The first group a printed plan runs that measures or captures against the workstation. */
+export function machineBoundGroup(plan: string): string | undefined {
+  return [...plan.matchAll(/^RUN +(\S+)/gm)]
+    .map((match) => match[1] ?? '')
+    .find((id) => MACHINE_BOUND_GROUP.test(id));
+}
+
+/** The first untracked file that may hold a credential or a local setting, which Boat never gets. */
+export function withheldFile(untracked: readonly string[]): string | undefined {
+  return untracked.find((file) => SECRET_NAME.test(file));
+}
+
+/**
+ * Why the plan these arguments select runs locally, from `test:plan` itself: a group that measures
+ * or captures against the workstation, or a plan that cannot be read. Undefined when Boat may run it.
+ */
+function planReason(repository: string, args: readonly string[]): string | undefined {
+  const plan = spawnSync(process.execPath, ['scripts/verify.ts', 'plan', ...args], {
+    cwd: repository,
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  if (plan.status !== 0) return 'the plan could not be read here; the local run reports why.';
+  const bound = machineBoundGroup(plan.stdout);
+  return bound
+    ? `the plan runs ${bound}, which measures or captures against this machine's references.`
+    : undefined;
+}
+
 function git(repository: string, args: readonly string[]): string {
   return execFileSync('git', args, { cwd: repository, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 }
@@ -95,8 +128,11 @@ function packRun(
 ): { head: string; bundle: boolean } | { refused: string } {
   const list = (args: string[]) => git(repository, args).split('\0').filter(Boolean);
   const untracked = list(['ls-files', '--others', '--exclude-standard', '-z']);
-  const secret = untracked.find((file) => SECRET_NAME.test(file));
-  if (secret) return { refused: `the untracked file ${secret} looks like a credential, and Boat gets none.` };
+  const secret = withheldFile(untracked);
+  if (secret)
+    return {
+      refused: `the untracked file ${secret} may hold a credential or a local setting, which Boat never gets.`,
+    };
   const environment = resolve(repository, '.env.local');
   const supabaseUrl = existsSync(environment)
     ? parseEnvironmentFile(readFileSync(environment, 'utf8')).NEXT_PUBLIC_SUPABASE_URL
@@ -123,7 +159,9 @@ function packRun(
     });
   };
   tar('tree', [...tracked, ...untracked].filter(exists));
-  writeFileSync(join(folder, 'deleted.txt'), tracked.filter((file) => !exists(file)).join('\n'));
+  // Against HEAD's tree, so a staged deletion or rename removes the old path on the machine too.
+  const committed = list(['ls-tree', '-r', '-z', '--name-only', 'HEAD']);
+  writeFileSync(join(folder, 'deleted.txt'), committed.filter((file) => !exists(file)).join('\n'));
   tar(
     'evidence',
     EVIDENCE_ROOTS.flatMap((root) => evidenceFiles(repository, root)),
@@ -160,8 +198,19 @@ export async function verifyOnBoat(
     return undefined;
   }
   if (key.reminder) say(key.reminder);
-  mkdirSync(join(homedir(), '.cache'), { recursive: true });
-  const folder = mkdtempSync(join(homedir(), '.cache', 'werkflow-boat-'));
+  const planned = planReason(repository, args);
+  if (planned) {
+    say(`Running locally: ${planned}`);
+    return undefined;
+  }
+  let folder: string;
+  try {
+    mkdirSync(join(homedir(), '.cache'), { recursive: true });
+    folder = mkdtempSync(join(homedir(), '.cache', 'werkflow-boat-'));
+  } catch (error) {
+    say(`Running locally: ${boatFailure(error)}`);
+    return undefined;
+  }
   const interrupt = new AbortController();
   const stop = () => interrupt.abort();
   process.once('SIGINT', stop);
@@ -204,7 +253,12 @@ async function runOnBoat(input: {
 }): Promise<number | undefined> {
   const { args, repository, folder, signal } = input;
   const before = captureInputSnapshot(repository);
-  const packed = packRun(repository, folder);
+  let packed: ReturnType<typeof packRun>;
+  try {
+    packed = packRun(repository, folder);
+  } catch (error) {
+    packed = { refused: `packing the run failed: ${boatFailure(error)}` };
+  }
   if ('refused' in packed) {
     say(`Running locally: ${packed.refused}`);
     return undefined;

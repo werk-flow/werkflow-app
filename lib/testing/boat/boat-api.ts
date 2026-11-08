@@ -89,12 +89,9 @@ async function request<T>(
   if (response.ok) return call.schema.parse(json);
   const parsed = errorSchema.safeParse(json);
   const code = parsed.success ? (parsed.data.error?.code ?? parsed.data.code ?? 'unknown') : 'unknown';
-  const message = parsed.success ? (parsed.data.error?.message ?? parsed.data.message ?? '') : '';
-  throw new BoatError(
-    response.status,
-    code,
-    `${method} ${path}: ${response.status} ${code} ${message}`.trim(),
-  );
+  // Only Boat's status and a code of its known shape reach a message: a provider body is never logged.
+  const safeCode = /^[a-z0-9_]{1,64}$/.test(code) ? code : 'unknown';
+  throw new BoatError(response.status, safeCode, `${method} ${path}: ${response.status} ${safeCode}`);
 }
 
 /** A client that signs every request with `key`; `fetchImpl` is a test's stand-in for the network. */
