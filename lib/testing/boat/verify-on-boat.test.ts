@@ -4,6 +4,7 @@ import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import {
   chmodSync,
+  renameSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -26,6 +27,7 @@ import {
   evidenceFiles,
   localReason,
   machineBoundGroup,
+  placeFiles,
   prepareAndRun,
   runOnBoat,
   unpackResults,
@@ -586,4 +588,37 @@ test('a real SIGINT during packing stops the run instead of falling back', async
     });
   });
   expect(outcome instanceof Error && outcome.name).toBe('AbortError');
+});
+
+test('a failed rename puts the checkout back as it was', () => {
+  const staging = mkdtempSync(join(tmpdir(), 'boat-staging-'));
+  mkdirSync(join(staging, '.agent-logs', 'runs'), { recursive: true });
+  for (const name of ['a-first', 'b-existing', 'c-fails'])
+    writeFileSync(join(staging, '.agent-logs', 'runs', name), 'new');
+  const checkout = mkdtempSync(join(tmpdir(), 'boat-checkout-'));
+  mkdirSync(join(checkout, '.agent-logs', 'runs'), { recursive: true });
+  writeFileSync(join(checkout, '.agent-logs', 'runs', 'b-existing'), 'old');
+  const files = ['a-first', 'b-existing', 'c-fails'].map((name) => `.agent-logs/runs/${name}`);
+  // The third rename into place fails, as ENAMETOOLONG or a full disk would.
+  const failing = (from: string, to: string) => {
+    if (to.endsWith('c-fails')) throw new Error('ENAMETOOLONG');
+    renameSync(from, to);
+  };
+  expect(() => placeFiles(staging, checkout, files, failing)).toThrow('ENAMETOOLONG');
+  expect(readdirSync(join(checkout, '.agent-logs', 'runs'))).toEqual(['b-existing']);
+  expect(readFileSync(join(checkout, '.agent-logs', 'runs', 'b-existing'), 'utf8')).toBe('old');
+});
+
+test('a destination longer than the system allows is refused before any write', () => {
+  const staging = mkdtempSync(join(tmpdir(), 'boat-staging-'));
+  mkdirSync(join(staging, '.agent-logs', 'runs'), { recursive: true });
+  writeFileSync(join(staging, '.agent-logs', 'runs', 'a-first'), 'new');
+  writeFileSync(join(staging, '.agent-logs', 'runs', 'x'.repeat(200)), 'new');
+  // A checkout deep enough that the long name's destination passes PATH_MAX while a-first fits.
+  const limit = process.platform === 'darwin' ? 1023 : 4095;
+  let checkout = mkdtempSync(join(tmpdir(), 'boat-checkout-'));
+  while (checkout.length < limit - 150) checkout = join(checkout, 'd'.repeat(100));
+  mkdirSync(checkout, { recursive: true });
+  expect(() => copyResults(staging, checkout)).toThrow('too long');
+  expect(existsSync(join(checkout, '.agent-logs'))).toBe(false);
 });

@@ -356,6 +356,10 @@ async function uploadRun(
     await machine.client.upload(machine.id, `${HOME}/${name}`, readFileSync(source));
 }
 
+/** The longest file name, and the longest path (the platform's PATH_MAX less one), a copy may write. */
+const MAX_NAME_BYTES = 255;
+const MAX_PATH_BYTES = process.platform === 'darwin' ? 1023 : 4095;
+
 /** A name the guard does not copy: a control character, a backslash or a newline. */
 const UNSAFE_NAME = /[\u0000-\u001f\u007f\\]/;
 
@@ -396,12 +400,17 @@ export function copyResults(staging: string, repository: string): void {
 function destinationConflict(repository: string, files: readonly string[]): string | undefined {
   for (const path of files) {
     const parts = path.split('/');
+    const target = join(repository, path);
+    if (
+      parts.some((part) => Buffer.byteLength(part) > MAX_NAME_BYTES) ||
+      Buffer.byteLength(target) > MAX_PATH_BYTES
+    )
+      return `${JSON.stringify(path)} is too long for a path in the checkout.`;
     for (let index = 1; index < parts.length; index++) {
       const folder = join(repository, ...parts.slice(0, index));
       if (existsSync(folder) && !lstatSync(folder).isDirectory())
         return `${JSON.stringify(parts.slice(0, index).join('/'))} is not a folder in the checkout.`;
     }
-    const target = join(repository, path);
     if (!existsSync(target)) continue;
     const stat = lstatSync(target);
     if (!stat.isFile()) return `${JSON.stringify(path)} exists in the checkout and is not a regular file.`;
@@ -412,12 +421,19 @@ function destinationConflict(repository: string, files: readonly string[]): stri
 
 /**
  * Writes every file to a temporary name beside its destination, then renames each into place, so
- * no existing file is written through. A failure while writing removes every temporary file and
- * every folder it created, so the checkout is as before.
+ * no existing file is written through. Any failure, while writing or while renaming, restores the
+ * checkout: installed files are removed, replaced files come back from their backup, and every
+ * temporary file and created folder is removed. `rename` is a test's stand-in.
  */
-function placeFiles(staging: string, repository: string, files: readonly string[]): void {
+export function placeFiles(
+  staging: string,
+  repository: string,
+  files: readonly string[],
+  rename: (from: string, to: string) => void = renameSync,
+): void {
   const created: string[] = [];
   const temporary: [string, string][] = [];
+  const placed: { target: string; backup: string | undefined }[] = [];
   try {
     for (const path of files) {
       const target = join(repository, path);
@@ -432,12 +448,22 @@ function placeFiles(staging: string, repository: string, files: readonly string[
       copyFileSync(join(staging, path), temp);
       temporary.push([temp, target]);
     }
+    for (const [temp, target] of temporary) {
+      const backup = existsSync(target) ? `${temp}.previous` : undefined;
+      if (backup) rename(target, backup);
+      placed.push({ target, backup });
+      rename(temp, target);
+    }
   } catch (error) {
+    for (const { target, backup } of placed.reverse()) {
+      if (backup === undefined) rmSync(target, { force: true });
+      else if (existsSync(backup)) renameSync(backup, target);
+    }
     for (const [temp] of temporary) rmSync(temp, { force: true });
     for (const folder of created.reverse()) rmSync(folder, { recursive: true, force: true });
     throw error;
   }
-  for (const [temp, target] of temporary) renameSync(temp, target);
+  for (const { backup } of placed) if (backup) rmSync(backup, { force: true });
 }
 
 /**
