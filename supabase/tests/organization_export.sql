@@ -662,6 +662,33 @@ begin
 end;
 $$;
 
+-- A claim whose transaction started before that of a claim committed
+-- first keeps the later start: the part expires when its archive falls due.
+reset role;
+update public.organization_export_parts set build_started_at = now() + interval '1 minute'
+where id = (select id from resized_parts where part_number = 1);
+insert into public.storage_purge_queue (organization_id, storage_path, purge_after, writes_end_at)
+select '28700000-0000-0000-0000-000000000010', archive_path, now() + interval '1 minute 7 days',
+  now() + interval '16 minutes'
+from resized_parts where part_number = 1;
+set local role service_role;
+do $$
+declare
+  v_part public.organization_export_parts;
+begin
+  perform public.claim_organization_export_part_build('28700000-0000-0000-0000-000000000001',
+    '28700000-0000-0000-0000-000000000010', (select id from resized_parts where part_number = 1));
+  perform public.complete_organization_export_part('28700000-0000-0000-0000-000000000001',
+    '28700000-0000-0000-0000-000000000010', (select id from resized_parts where part_number = 1), 100);
+  select * into v_part from public.organization_export_parts where id = (select id from resized_parts where part_number = 1);
+  if v_part.build_started_at <> now() + interval '1 minute'
+    or (select purge_after from public.storage_purge_queue where storage_path = v_part.archive_path)
+      is distinct from v_part.expires_at then
+    raise exception 'an earlier claim moved the part''s build start back, apart from its archive''s purge';
+  end if;
+end;
+$$;
+
 -- The organization's deletion during two builds: part 2's archive is stored
 -- and listed, part 3's lands after the listing. Each falls due when the
 -- builds that may store it have ended, fifteen minutes after their claims,
@@ -688,9 +715,9 @@ begin
     raise exception 'the purge claimed an archive while a build may still store it';
   end if;
   perform public.complete_storage_purge(array(select queued.id from public.storage_purge_queue queued
-    join resized_parts part on part.archive_path = queued.storage_path));
+    join resized_parts part on part.archive_path = queued.storage_path where part.part_number in (2, 3)));
   if (select count(*) from public.storage_purge_queue queued
-      join resized_parts part on part.archive_path = queued.storage_path) <> 2 then
+      join resized_parts part on part.archive_path = queued.storage_path where part.part_number in (2, 3)) <> 2 then
     raise exception 'the purge completed an archive''s entry while a build may still store it';
   end if;
 end;
@@ -711,7 +738,8 @@ begin
     array[(select archive_path from resized_parts where part_number = 3)]);
   select array_agg(claimed.id) into v_claimed from public.claim_storage_purge(500) claimed
   join resized_parts part on part.archive_path = claimed.storage_path;
-  if cardinality(v_claimed) is distinct from 2 then
+  -- Part 1's ready archive falls due with them.
+  if cardinality(v_claimed) is distinct from 3 then
     raise exception 'an archive stored late is not due once its builds ended';
   end if;
   perform public.complete_storage_purge(v_claimed);

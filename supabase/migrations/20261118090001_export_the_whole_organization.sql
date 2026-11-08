@@ -418,8 +418,9 @@ $$;
 -- in the same call, so an archive whose completion is never recorded is
 -- deleted too. The entry also holds the end of the build's write window,
 -- fifteen minutes from now. A later build of a part not yet ready moves both
--- to its own start: the archive it records is the one stored first (the
--- build's conditional write), downloadable until the entry falls due.
+-- to its own start, never back: the archive it records is the one stored
+-- first (the build's conditional write), downloadable until the entry falls
+-- due.
 -- Refuses a ready part, and an export older than seven days. Returns what
 -- the build needs: { exportId, kind, archivePath, partCount }.
 create function public.claim_organization_export_part_build(
@@ -435,6 +436,7 @@ as $$
 declare
   v_part public.organization_export_parts;
   v_export public.organization_exports;
+  v_started timestamptz;
 begin
   if not app_private.p1_24_is_admin(p_organization_id, p_actor_id) then
     raise exception 'not_authorized';
@@ -444,16 +446,19 @@ begin
   for update;
   if not found then raise exception 'export_part_not_found'; end if;
   if v_part.state = 'ready' then raise exception 'export_part_ready'; end if;
+  -- now() is the transaction's start: a claim that waited for the part's
+  -- lock keeps the later start of the claim committed before it, so the
+  -- part's expiry and its archive's purge stay one date.
+  v_started := greatest(now(), v_part.build_started_at);
   select * into v_export from public.organization_exports export_row
   where export_row.id = v_part.export_id and export_row.organization_id = p_organization_id;
   if v_export.requested_at <= now() - interval '7 days' then raise exception 'export_part_expired'; end if;
 
-  update public.organization_export_parts part set build_started_at = now() where part.id = p_part_id;
+  update public.organization_export_parts part set build_started_at = v_started where part.id = p_part_id;
   insert into public.storage_purge_queue as queued (organization_id, storage_path, purge_after, writes_end_at)
-  values (p_organization_id, v_part.archive_path, now() + interval '7 days', now() + interval '15 minutes')
+  values (p_organization_id, v_part.archive_path, v_started + interval '7 days', v_started + interval '15 minutes')
   on conflict (storage_path) do update
-    set purge_after = greatest(queued.purge_after, excluded.purge_after),
-      writes_end_at = greatest(queued.writes_end_at, excluded.writes_end_at);
+    set purge_after = excluded.purge_after, writes_end_at = excluded.writes_end_at;
   return jsonb_build_object(
     'exportId', v_part.export_id,
     'kind', v_part.kind,
