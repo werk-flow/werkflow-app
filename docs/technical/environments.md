@@ -45,7 +45,7 @@ This table is the one home of every credential the deployments and workflows use
 | `SUPABASE_ACCESS_TOKEN` | GitHub repository secret | Staging and release: deploy the edge functions | 2027-10-26 | Supabase account settings, Access Tokens; `gh secret set`; revoke the old one. |
 | `VERCEL_TOKEN` | GitHub repository secret | Staging deploys, release promotes | 2027-10-26 | Vercel account settings, Tokens, team-scoped; `gh secret set`. |
 | `werkflow app prod-watch` | The owner's PC: `~/.config/werkflow/prod-watch.env`, mode 600 | The [production watcher](recovery-and-incidents.md#monitoring), which checks it | 2027-11-07 | Vercel Tokens: same name, team-scoped (`werkflows-projects`, also werkflow-website), 1 year; set the file's `VERCEL_TOKEN=`. |
-| Boat API key | Workstations | [Boat](boat-verification.md) | `.expires` | [Renew](boat-verification.md#renew-the-key) |
+| Boat API key | `~/.config/werkflow/boat-api-key`, [mode 600](boat-verification.md#the-key-contract) | [Boat](boat-verification.md) | `boat-api-key.expires` | [Renew](boat-verification.md#renew-the-key) |
 | `SIBLING_REPOSITORIES_TOKEN` | GitHub repository secret | CI clones werkflow-business for `docs:check` | 2027-10-26 | Fine-grained GitHub token, read access to werkflow-business contents; `gh secret set`. |
 | `DEV_DATABASE_URL` | GitHub repository secret | Staging: `supabase db push` | With its password | DEV Database settings: reset the password; `gh secret set` the new connection string. |
 | `PROD_DATABASE_URL` | GitHub environment `production` | Release: `supabase db push` | With its password | As for DEV, with `gh secret set --env production`. |
@@ -133,8 +133,8 @@ T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts`
 4. Add the DEV MCP server `supabase` above to Claude Code (`claude mcp add --scope user --transport http supabase "<url>"`) and Codex (`[mcp_servers.supabase]` in `~/.codex/config.toml`). The owner signs in once per tool. Never add a server for PROD. The Vercel CLI, signed in as the owner, serves both.
 5. Run `supabase start` and `supabase db reset`. Create `.env.local-stack-backup` from `supabase status`, then run `bun run env:local`.
 6. Run `bunx playwright install --with-deps chromium` once.
-7. CodeRabbit: `curl -fsSL https://cli.coderabbit.ai/install.sh | sh` (into `~/.local/bin`). The owner signs in once with `coderabbit auth login`. `bun run review:doctor` confirms both. This is the only time an agent installs CodeRabbit.
-8. Verify: `bunx supabase projects list` shows both projects, `bun scripts/check-r2.ts` passes, and `bun run test:verify --group golden:gg-00` passes beside `bun run test:server local`.
+7. CodeRabbit: `curl -fsSL https://cli.coderabbit.ai/install.sh | sh` (into `~/.local/bin`). The owner signs in once with `coderabbit auth login`. `bun run review:doctor` confirms both. Agents install CodeRabbit only here.
+8. Verify: `bunx supabase projects list` shows both projects, `bun scripts/check-r2.ts` passes, and `WERKFLOW_VERIFY_LOCAL=1 bun run test:verify --group golden:gg-00` passes locally beside `bun run test:server local`.
 
 ## Background jobs
 
