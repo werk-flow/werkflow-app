@@ -20,6 +20,7 @@ runs:
     # (scripts/test-server.ts --prebuilt); if that proof fails on a cache hit, raise the v1 here.
     - name: Restore the stack environment
       id: environment
+      continue-on-error: true
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: .env.local-stack-backup
@@ -44,10 +45,13 @@ runs:
       with:
         version: 2.116.0
 
-    # The stack's images, saved after the first start. A key change pulls them again.
+    # The stack's images, saved after the first start. A key change pulls them again. A cache
+    # service error (a 504 on download failed every browser shard for hours on 2026-11-08) is a
+    # miss: `supabase start` then pulls the images from GitHub's registry, which takes longer.
     - name: Restore the stack images
       id: images
       if: steps.start.outputs.start == 'true'
+      continue-on-error: true
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ runner.temp }}/supabase-images.tar
