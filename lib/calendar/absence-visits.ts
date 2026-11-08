@@ -113,12 +113,15 @@ function overlaps(row: AffectedOccurrenceRow, window: InstantWindow): boolean {
   );
 }
 
-/** The scheduled visits of one batch's people over its windows in one paged read; null when it fails or overflows. */
+/**
+ * The scheduled visits of one batch's people over its windows in one paged
+ * read; 'overflow' past the row bound, null when the read fails.
+ */
 async function readAffectedOccurrences(
   admin: AdminClient,
   orgId: string,
   batch: readonly AbsenceInstantWindow[],
-): Promise<AffectedOccurrenceRow[] | null> {
+): Promise<AffectedOccurrenceRow[] | 'overflow' | null> {
   const employeeRecordIds = [...new Set(batch.map((absence) => absence.employeeRecordId))];
   const overlapFilter = mergeWindows(batch).map(overlapTerms).join(',');
   const occurrenceQuery = () =>
@@ -134,12 +137,11 @@ async function readAffectedOccurrences(
     (rangeFrom, rangeTo) => occurrenceQuery().range(rangeFrom, rangeTo),
     { cap: LIST_ROW_CAP },
   );
-  if (rows.error || rows.overflow) {
-    logReadFailure('loadAbsenceAffectedVisits: occurrences failed', {
-      code: rows.overflow ? 'row_overflow' : (rows.error?.code ?? 'unknown'),
-    });
+  if (rows.error) {
+    logReadFailure('loadAbsenceAffectedVisits: occurrences failed', { code: rows.error.code ?? 'unknown' });
     return null;
   }
+  if (rows.overflow) return 'overflow';
   const parsed = z.array(affectedOccurrenceRowSchema).safeParse(rows.data);
   if (!parsed.success) {
     logReadFailure('loadAbsenceAffectedVisits: occurrences failed', { code: 'unexpected_shape' });
@@ -165,6 +167,35 @@ function toAffectedVisit(row: AffectedOccurrenceRow, dispatchState: AbsenceAffec
     jobNumber: row.job?.job_number ?? null,
     dispatchState,
   } satisfies AbsenceAffectedVisit;
+}
+
+/**
+ * The scheduled visits of a batch. A batch's windows span every absence in
+ * it, so other people's visits inside another person's window fill the read:
+ * a read past the row bound splits the batch until each part fits. A single
+ * absence past the bound fails; null then or when a read fails.
+ */
+async function readBatchOccurrences(
+  admin: AdminClient,
+  orgId: string,
+  batch: readonly AbsenceInstantWindow[],
+): Promise<AffectedOccurrenceRow[] | null> {
+  const rows: AffectedOccurrenceRow[] = [];
+  const parts = [batch];
+  for (let part = parts.pop(); part; part = parts.pop()) {
+    const read = await readAffectedOccurrences(admin, orgId, part);
+    if (read === null) return null;
+    if (read !== 'overflow') {
+      rows.push(...read);
+    } else if (part.length === 1) {
+      logReadFailure('loadAbsenceAffectedVisits: occurrences failed', { code: 'row_overflow' });
+      return null;
+    } else {
+      const half = Math.ceil(part.length / 2);
+      parts.push(part.slice(half), part.slice(0, half));
+    }
+  }
+  return rows;
 }
 
 /**
@@ -201,7 +232,7 @@ export async function loadAbsencesAffectedVisits(input: {
   if (known.length !== absences.length) return null;
   const batches = await mapInWindows(
     absenceBatches(known),
-    (batch) => readAffectedOccurrences(admin, orgId, batch),
+    (batch) => readBatchOccurrences(admin, orgId, batch),
     (rows) => rows === null,
   );
   if (batches.some((rows) => rows === null)) return null;
