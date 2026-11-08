@@ -1,5 +1,5 @@
 // Rule test: both agent tools run the edit guard before every tool call that can write a file,
-// and Claude runs the delete guard before every shell call.
+// Claude runs the delete guard before every shell call, and both run the Boat key guard.
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -10,6 +10,7 @@ const GUARD = 'scripts/guard-edits-during-verification.ts';
 const DELETE_GUARD = '.claude/hooks/refuse-unresolvable-delete.ts';
 const PRODUCTION_MCP_GUARD = '.claude/hooks/refuse-production-mcp.ts';
 const PRODUCTION_LOG_GUARD = '.claude/hooks/refuse-production-logs.ts';
+const BOAT_KEY_GUARD = '.claude/hooks/refuse-boat-key-reads.ts';
 
 const hookFileSchema = z.object({
   hooks: z.object({
@@ -74,4 +75,25 @@ test('both agent tools run the production MCP guard before every MCP tool', () =
 test('both agent tools run the production log guard before every shell call', () => {
   expect(guardedTools('.claude/settings.json', ['Bash'], PRODUCTION_LOG_GUARD)).toEqual(['Bash']);
   expect(guardedTools('.codex/hooks.json', ['Bash'], PRODUCTION_LOG_GUARD)).toEqual(['Bash']);
+});
+
+// Only the process that calls Boat reads the Boat API key (lib/security/boat-key-access.ts). Claude
+// reads files through Read and Grep as well as the shell; Codex reads them only through the shell.
+test('both agent tools run the Boat key guard before every call that can read a file', () => {
+  const tools = ['Bash', 'Read', 'Grep'];
+  expect(guardedTools('.claude/settings.json', tools, BOAT_KEY_GUARD)).toEqual(tools);
+  expect(guardedTools('.codex/hooks.json', ['Bash'], BOAT_KEY_GUARD)).toEqual(['Bash']);
+});
+
+test('Claude denies its file tools the Boat API key and the Boat CLI config', () => {
+  const settings = z
+    .object({ permissions: z.object({ deny: z.array(z.string()) }) })
+    .parse(JSON.parse(readFileSync(resolve(repositoryRoot, '.claude/settings.json'), 'utf8')));
+  for (const rule of [
+    'Read(~/.config/werkflow/boat-api-key)',
+    'Read(~/.config/ascii/boat/**)',
+    'Edit(~/.config/werkflow/boat-api-key)',
+    'Edit(~/.config/ascii/boat/**)',
+  ])
+    expect(settings.permissions.deny).toContain(rule);
 });
