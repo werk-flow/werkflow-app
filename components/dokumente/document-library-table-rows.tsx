@@ -26,7 +26,7 @@ import {
   type DocumentActionHandlers,
   type FolderActionHandlers,
 } from './document-row-actions';
-import { DocumentArchiveLabel } from './document-archive-label';
+import { DocumentArchiveLabel, DocumentOriginLabel } from './document-archive-label';
 import {
   getFileIcon,
   getFileTypeLabel,
@@ -259,7 +259,12 @@ export function DocumentLibraryTableDocumentRow({
         className: 'size-4 shrink-0 text-muted-foreground',
       })}
       name={document.displayName}
-      detail={<DocumentArchiveLabel archive={document.archive} className="mt-0.5 pl-6" />}
+      detail={
+        <>
+          <DocumentOriginLabel origin={document.origin} className="mt-0.5 pl-6" />
+          <DocumentArchiveLabel archive={document.archive} className="mt-0.5 pl-6" />
+        </>
+      }
       onOpen={handlers.onOpen}
       actionsMenu={
         <DocumentActionsMenu

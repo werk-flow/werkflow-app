@@ -68,6 +68,7 @@ function document(id: string, links: DocumentLink[], updatedAt = timestamp): Org
     updatedAt,
     uploader: null,
     links,
+    origin: { sourceSystem: null, sourceReference: null },
     archive: null,
   };
 }

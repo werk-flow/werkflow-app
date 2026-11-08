@@ -18,6 +18,11 @@ import {
 import { documentDateRange, isDocumentDateInRange } from '@/lib/documents/retention';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { formatGermanDate as formatDate, parseIsoLocalDate, toLocalDateString } from '@/lib/utils';
+import {
+  DocumentDetailsOrigin,
+  useDocumentOriginDraft,
+  type UpdateDocumentOrigin,
+} from './document-details-origin';
 import { getUserDisplayName } from './document-library-file-labels';
 
 const NO_RETENTION_CLASS = 'none';
@@ -188,13 +193,15 @@ export type DocumentDetailsArchiveProps = {
   disabled: boolean;
   isTrashView: boolean;
   onUpdateRetention: (document: OrganizationDocument, terms: DocumentRetentionTerms) => Promise<boolean>;
+  onUpdateOrigin: UpdateDocumentOrigin;
   onFile: (document: OrganizationDocument) => void;
 };
 
 /**
- * „Aufbewahrung" in the details: document date, retention class and end, and
- * the filed state. Admin and Büro change date and class until they file the
- * document; an employee receives no archive data, so nothing renders.
+ * „Herkunft“ and „Aufbewahrung" in the details: origin, document date,
+ * retention class and end, and the filed state. Admin and Büro change origin,
+ * date and class until they file the document; an employee receives no
+ * archive data, so nothing renders.
  */
 export function DocumentDetailsArchive(props: DocumentDetailsArchiveProps) {
   const { archive } = props.document;
@@ -208,43 +215,53 @@ function DocumentArchiveSection({
   disabled,
   isTrashView,
   onUpdateRetention,
+  onUpdateOrigin,
   onFile,
 }: DocumentDetailsArchiveProps & { archive: DocumentArchive }) {
   const editable = !archive.filedAt && !isTrashView;
   const onChange = (terms: DocumentRetentionTerms) => onUpdateRetention(document, terms);
   const date = useDocumentDateDraft(archive, onChange);
+  const origin = useDocumentOriginDraft(document, onUpdateOrigin);
   const fieldProps: RetentionFieldProps = { archive, editable, disabled, onChange };
   return (
-    <div>
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Aufbewahrung</p>
-        {archive.filedAt ? (
-          <Badge variant="outline">
-            <Lock />
-            Festgeschrieben
-          </Badge>
-        ) : (
-          editable && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                if (!date.refuseFiling()) onFile(document);
-              }}
-              disabled={disabled}
-            >
-              <Lock className="size-4" />
-              Festschreiben
-            </Button>
-          )
-        )}
+    <>
+      <DocumentDetailsOrigin
+        origin={document.origin}
+        editable={editable}
+        disabled={disabled}
+        draft={origin}
+      />
+      <div>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Aufbewahrung</p>
+          {archive.filedAt ? (
+            <Badge variant="outline">
+              <Lock />
+              Festgeschrieben
+            </Badge>
+          ) : (
+            editable && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (!date.refuseFiling() && !origin.refuseFiling()) onFile(document);
+                }}
+                disabled={disabled}
+              >
+                <Lock className="size-4" />
+                Festschreiben
+              </Button>
+            )
+          )}
+        </div>
+        <div className="mt-2 grid gap-3 sm:grid-cols-2">
+          <DocumentDateField archive={archive} editable={editable} disabled={disabled} date={date} />
+          <RetentionClassField {...fieldProps} />
+        </div>
+        <p className="mt-2 text-muted-foreground">{retentionSummary(archive)}</p>
       </div>
-      <div className="mt-2 grid gap-3 sm:grid-cols-2">
-        <DocumentDateField archive={archive} editable={editable} disabled={disabled} date={date} />
-        <RetentionClassField {...fieldProps} />
-      </div>
-      <p className="mt-2 text-muted-foreground">{retentionSummary(archive)}</p>
-    </div>
+    </>
   );
 }
