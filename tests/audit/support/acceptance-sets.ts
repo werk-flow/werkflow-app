@@ -21,7 +21,7 @@ type CaptureView =
   | { kind: 'dialog'; opener: DialogOpenerId };
 
 /** A seeded record a capture opens instead of its route's layout record (acceptance-records.ts). */
-export type AcceptanceRecord = 'caller-match-request' | 'promoted-caller-request';
+export type AcceptanceRecord = 'caller-match-request' | 'promoted-caller-request' | 'office-task-backlog';
 
 export type CaptureSpec = {
   /** Unique within its set; part of the image name and the citation token. */
@@ -401,6 +401,38 @@ function documentOriginCaptures(): AcceptanceSet {
   };
 }
 
+/**
+ * werk-flow/werkflow-planning#144 of 2026-11-08: Aufgaben for Büro, with the
+ * time-bound decisions first and the handover backlog counted at the end.
+ */
+function taskOrderCaptures(): AcceptanceSet {
+  return {
+    id: 'task-order-2026-11-08',
+    captures: [
+      {
+        id: 'buero-aufgaben',
+        role: 'buero',
+        route: '/aufgaben',
+        view: { kind: 'page' },
+        record: 'office-task-backlog',
+        widths: [1280, 375],
+        schemes: ['light', 'dark'],
+      },
+      {
+        id: 'buero-aufgaben-uebergaben',
+        role: 'buero',
+        route: '/aufgaben',
+        view: { kind: 'page' },
+        record: 'office-task-backlog',
+        reveal: 'Alle anzeigen',
+        widths: [1280, 375],
+        schemes: ['light', 'dark'],
+      },
+    ],
+    standalone: [],
+  };
+}
+
 export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   uiRoundCaptures(),
   fieldTargetCaptures(),
@@ -415,4 +447,5 @@ export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   callerMatchCaptures(),
   documentRetentionCaptures(),
   documentOriginCaptures(),
+  taskOrderCaptures(),
 ];

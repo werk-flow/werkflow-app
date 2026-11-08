@@ -69,6 +69,7 @@ import { PersonnelLifecycleSection } from '@/components/mitarbeiter/personnel-li
 import { PersonnelOwnActionsSection } from '@/components/mitarbeiter/personnel-own-actions-section';
 import { JoinRequestsSection } from '@/components/mitarbeiter/join-requests-section';
 import { initializePersonnelBoundary } from './personnel-boundaries';
+import { TaskSectionsContractFixture } from './task-section-boundaries';
 
 initializeServiceBoundaries();
 initializeLifecycleBoundary();
@@ -590,6 +591,11 @@ createRoot(root).render(
         <LifecycleRouteFixture />
       </main>
     </BannerProvider>
+  ) : window.uiContractFixture === 'task-sections' ? (
+    <main>
+      <h1>Komponentenverträge</h1>
+      <TaskSectionsContractFixture />
+    </main>
   ) : window.uiContractFixture === 'own-personnel' ? (
     <BannerProvider>
       <main>
