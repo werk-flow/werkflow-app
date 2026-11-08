@@ -21,7 +21,7 @@ export type InventoryItemType = (typeof INVENTORY_ITEM_TYPES)[number];
 export type InventoryLocationType = (typeof INVENTORY_LOCATION_TYPES)[number];
 export type InventoryMovementType = (typeof INVENTORY_MOVEMENT_TYPES)[number];
 export type JobMaterialStatus = (typeof JOB_MATERIAL_STATUSES)[number];
-export type InventoryStockStatus = 'in_stock' | 'low_stock' | 'out_of_stock';
+export type InventoryStockStatus = 'in_stock' | 'shortfall' | 'low_stock' | 'out_of_stock';
 
 export function toJobMaterialStatus(value: string): JobMaterialStatus {
   return constrainedValue(JOB_MATERIAL_STATUSES, value, 'job material status');
@@ -151,6 +151,7 @@ export type InventoryOverview = {
     totalItems: number;
     stockedItems: number;
     plannedItems: number;
+    shortfallItems: number;
     lowStockItems: number;
     outOfStockItems: number;
     plannedQuantity: number;
@@ -240,6 +241,7 @@ export const INVENTORY_LOCATION_TYPE_LABELS: Record<InventoryLocationType, strin
 
 export const INVENTORY_STOCK_STATUS_LABELS: Record<InventoryStockStatus, string> = {
   in_stock: 'Auf Lager',
+  shortfall: 'Unterdeckt',
   low_stock: 'Knapp',
   out_of_stock: 'Leer',
 };
@@ -279,9 +281,9 @@ export const INVENTORY_UNIT_OPTIONS: InventoryUnitOption[] = [
   { value: 'pallet', label: 'Palette' },
 ];
 
-export function formatInventoryQuantity(quantity: number, unit: string): string {
+export function formatInventoryQuantity(quantity: number, unit: string, maximumFractionDigits = 2): string {
   const formatter = new Intl.NumberFormat('de-DE', {
-    maximumFractionDigits: 2,
+    maximumFractionDigits,
   });
   return `${formatter.format(quantity)} ${getInventoryUnitLabel(unit)}`;
 }

@@ -4,7 +4,7 @@ export const inventoryPageQuerySchema = z.object({
   page: z.coerce.number().int().min(1).max(100000).catch(1),
   search: z.string().trim().max(200).catch(''),
   type: z.enum(['all', 'material', 'consumable', 'tool', 'asset']).catch('all'),
-  stock: z.enum(['all', 'in_stock', 'low_stock', 'out_of_stock']).catch('all'),
+  stock: z.enum(['all', 'in_stock', 'shortfall', 'low_stock', 'out_of_stock']).catch('all'),
   location: z.union([z.literal('all'), uuidSchema]).catch('all'),
   tab: z.enum(['all', 'planned', 'locations', 'movements']).catch('all'),
 });
@@ -17,6 +17,7 @@ export const inventoryPageResultSchema = z.object({
   locationCounts: z.record(z.string(), z.number().int().nonnegative()),
   summary: z.object({
     totalItems: z.number(),
+    shortfallItems: z.number(),
     lowStockItems: z.number(),
     outOfStockItems: z.number(),
     plannedQuantity: z.number(),

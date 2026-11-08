@@ -22,7 +22,27 @@ export type MaterialDialogState = {
   rows: MaterialDialogRow[];
   search: string;
   error: string | null;
+  /** A take opened on a line hides the catalog until „Weiteres Material“ opens it. */
+  catalogOpen: boolean;
 };
+
+/**
+ * What the dialog shows beside its positions: the catalog, the notice that
+ * the item is fixed, or nothing until the worker asks for further material.
+ * A return keeps its item, and so does an edit once the position has bookings.
+ */
+export function materialDialogCatalog({
+  mode,
+  rows,
+  catalogOpen,
+}: MaterialDialogState): 'catalog' | 'locked' | 'collapsed' {
+  if (mode === 'return') return 'locked';
+  if (mode === 'edit' && rows.some((row) => row.takenQuantity !== 0 || row.returnedQuantity !== 0)) {
+    return 'locked';
+  }
+  if (mode === 'take' && rows.length > 0 && !catalogOpen) return 'collapsed';
+  return 'catalog';
+}
 
 type ValidatedMaterialRow = { row: MaterialDialogRow; quantity: number };
 

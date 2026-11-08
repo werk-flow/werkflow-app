@@ -22,7 +22,7 @@ import {
   linkJobsToProject,
   projectCreatedBanner,
   type CreateProjectSubmission,
-} from '../forms/create-project-form-content';
+} from '../forms/create-project-submission';
 import type { useAuftraegeLocalUpdates } from './use-auftraege-local-updates';
 
 /** A deferred job create the server answered with a qualification confirm step. */

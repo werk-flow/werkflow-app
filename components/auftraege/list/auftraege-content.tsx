@@ -5,14 +5,14 @@ import type { JobListPagination } from '@/lib/jobs/list-page';
 import { useState, type ComponentProps } from 'react';
 import { RefreshButton } from '@/components/ui/refresh-button';
 
-import { usePageAction } from '@/components/shared/page-action';
+import { usePageAction, usePageActionLoader } from '@/components/shared/page-action';
+import { lazyDialog } from '@/components/shared/lazy-dialog';
 import { UsableContent } from '@/components/shared/usable-content';
 import type { Job, ProjectWithDetails } from '@/lib/jobs/types';
 import type { UnifiedListEntry } from '@/lib/jobs/unified-list';
 import type { AuftraegeColumnId } from '@/lib/jobs/auftraege-table-columns';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
 import { useLiveAuftraegeData } from '@/hooks/use-live-auftraege-data';
-import { AuftraegeCreateDialogs } from './auftraege-create-dialogs';
 import type { AuftraegeActiveStatusFilter } from './auftraege-list-filters';
 import {
   AuftraegeCollapsibleSection,
@@ -22,6 +22,12 @@ import {
 } from './auftraege-list-sections';
 import { useAuftraegeOptimisticList } from './use-auftraege-optimistic-list';
 import { useAuftraegeSectionQuery, type AuftraegeSectionQuery } from './use-auftraege-section-query';
+
+// Only Admin and Büro create work here. The create forms download on the header
+// button's intent, so the field worker's cold start never carries them (`lab.field.cold-start`).
+const lazyCreateDialogs = lazyDialog(() =>
+  import('./auftraege-create-dialogs').then((mod) => mod.AuftraegeCreateDialogs),
+);
 
 interface AuftraegeContentProps {
   jobs: Job[];
@@ -222,6 +228,10 @@ export function AuftraegeContent(props: AuftraegeContentProps) {
   const state = useAuftraegeContentState(props);
   const { list, navigation, activeQuery, archivedQuery, archiveExpanded } = state;
   const { rawActive, rawParked, rawArchived } = list;
+  usePageActionLoader(
+    isAdminOrManager ? lazyCreateDialogs.preload : null,
+    lazyCreateDialogs.useWaiting(state.createDialogOpen),
+  );
 
   const sectionTableProps: AuftraegeSectionTableSharedProps = {
     pagination,
@@ -282,7 +292,7 @@ export function AuftraegeContent(props: AuftraegeContentProps) {
         />
 
         {isAdminOrManager && (
-          <AuftraegeCreateDialogs
+          <lazyCreateDialogs.Dialog
             members={members}
             open={state.createDialogOpen}
             onOpenChange={state.setCreateDialogOpen}

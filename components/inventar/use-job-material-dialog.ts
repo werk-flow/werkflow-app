@@ -270,6 +270,7 @@ export function useJobMaterialDialog({
         rows: [buildDialogRow(item, picker.locations, mode, line)],
         search: '',
         error: null,
+        catalogOpen: false,
       });
       return;
     }
@@ -279,6 +280,7 @@ export function useJobMaterialDialog({
       rows: [],
       search: '',
       error: null,
+      catalogOpen: true,
     });
   }
 

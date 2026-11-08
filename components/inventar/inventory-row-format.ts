@@ -49,6 +49,7 @@ export function formatMovementTarget(movement: InventoryOverview['movements'][nu
 
 export function stockStatusClasses(status: InventoryOverviewItem['stockStatus']): string {
   switch (status) {
+    case 'shortfall':
     case 'out_of_stock':
       return 'border-destructive/40 bg-destructive-soft text-destructive-soft-foreground';
     case 'low_stock':
