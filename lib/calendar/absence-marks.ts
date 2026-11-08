@@ -75,18 +75,21 @@ type AbsenceCard = Pick<
   'plannedDate' | 'endDateExclusive' | 'startAt' | 'endAt' | 'assignedUserIds' | 'assignedEmployeeRecordIds'
 >;
 
-/** The Berlin dates a card covers: each day of a timed interval, its day, or each day of an all-day entry. */
-function cardDates(job: AbsenceCard): string[] {
+/**
+ * The loaded Berlin dates a card covers: each day of a timed interval, or each
+ * loaded day of an all-day entry. Only loaded days can carry a mark, so an
+ * all-day range reads the window's dates instead of stepping through its own.
+ */
+function cardDates(job: AbsenceCard, loaded: ReadonlySet<string>): string[] {
   if (job.startAt && job.endAt) {
     return splitTimedIntervalByBerlinDate(new Date(job.startAt), new Date(job.endAt)).map(
       (allocation) => allocation.localDate,
     );
   }
-  if (!job.plannedDate) return [];
-  const end = job.endDateExclusive ?? addLocalDays(job.plannedDate, 1);
-  const dates: string[] = [];
-  for (let date = job.plannedDate; date < end; date = addLocalDays(date, 1)) dates.push(date);
-  return dates;
+  const start = job.plannedDate;
+  if (!start) return [];
+  const end = job.endDateExclusive ?? addLocalDays(start, 1);
+  return [...loaded].filter((date) => date >= start && date < end).toSorted();
 }
 
 /**
@@ -98,7 +101,7 @@ export function absentAssignees(
   job: AbsenceCard,
   absences: BoardAbsences,
 ): Array<{ employeeRecordId: string; name: string; mark: string }> {
-  const dates = cardDates(job);
+  const dates = cardDates(job, absences.dates);
   const recordIds =
     job.assignedEmployeeRecordIds ??
     job.assignedUserIds.flatMap((userId) => absences.recordIdByUserId.get(userId) ?? []);

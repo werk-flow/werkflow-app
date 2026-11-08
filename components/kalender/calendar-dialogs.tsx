@@ -6,7 +6,6 @@ import type { CalendarBoardRow } from '@/lib/calendar/board';
 import type { CalendarJob } from '@/lib/jobs/types';
 import { isOrgRole, type OrgRole } from '@/lib/roles';
 import type { InteractiveCalendarSession, TimeEntry } from '@/lib/time-tracking/types';
-import { BoardAbsencesContext, useIndexedBoardAbsences } from './board-absences-context';
 import { ShortcutsHelp } from './board/shortcuts-help';
 import { CalendarEntryDialog } from './calendar-entry-dialog';
 import { DispatchIssueDialog } from './dispatch-issue-dialog';
@@ -189,9 +188,8 @@ export function CalendarDialogs(props: CalendarDialogsProps): React.JSX.Element 
   const { parkingContextJob, scheduleParkedJob, setScheduleParkedJob } = parkFlow;
   const { handleSilentRefresh } = data;
   const boardRowsForForms = isAdminOrManager ? boardRows : [];
-  const absences = useIndexedBoardAbsences(data.range.board.days, boardRows);
   return (
-    <BoardAbsencesContext value={absences}>
+    <>
       {isAdminOrManager && overlays.dispatchPanelOpen && (
         <DispatchPanel
           onClose={() => overlays.setDispatchPanelOpen(false)}
@@ -263,6 +261,6 @@ export function CalendarDialogs(props: CalendarDialogsProps): React.JSX.Element 
         />
       )}
       <ShortcutsHelp open={overlays.helpOpen} onOpenChange={overlays.setHelpOpen} />
-    </BoardAbsencesContext>
+    </>
   );
 }

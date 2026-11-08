@@ -332,7 +332,8 @@ function CardPopover({
 
 /** When, for whom, where and with whom the occurrence is planned, and which assignee is away then. */
 function JobEventFacts({ job, memberNames }: { job: CalendarJob; memberNames: Record<string, string> }) {
-  const absent = absentAssignees(job, useBoardAbsences());
+  const absences = useBoardAbsences();
+  const absent = absentAssignees(job, absences);
   return (
     <div className="space-y-2 text-sm">
       <div className="flex items-center gap-2 text-muted-foreground">
