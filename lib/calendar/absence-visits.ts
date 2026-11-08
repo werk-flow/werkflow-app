@@ -168,6 +168,20 @@ function toAffectedVisit(row: AffectedOccurrenceRow, dispatchState: AbsenceAffec
 }
 
 /**
+ * A visit two batches both reach comes back twice, each copy with only its
+ * batch's people: one row per visit, with every person either copy carries.
+ */
+function mergeBatchRows(rows: readonly AffectedOccurrenceRow[]): AffectedOccurrenceRow[] {
+  const byId = new Map<string, AffectedOccurrenceRow>();
+  for (const row of rows) {
+    const known = byId.get(row.id);
+    const absent = known ? [...known.absent, ...row.absent] : row.absent;
+    byId.set(row.id, { ...row, absent: [...new Map(absent.map((entry) => [entry.id, entry])).values()] });
+  }
+  return [...byId.values()];
+}
+
+/**
  * The scheduled visits each absence takes its person away from, in the
  * calendar's order and in the order of the absences, each with that person's
  * dispatch state and assignment. The reads follow the number of absences in
@@ -191,10 +205,7 @@ export async function loadAbsencesAffectedVisits(input: {
     (rows) => rows === null,
   );
   if (batches.some((rows) => rows === null)) return null;
-  // A visit two batches both reach is read twice; it counts once.
-  const occurrences = [
-    ...new Map(batches.flatMap((rows) => rows ?? []).map((row) => [row.id, row])).values(),
-  ];
+  const occurrences = mergeBatchRows(batches.flatMap((rows) => rows ?? []));
   const dispatch = await loadOccurrenceDispatchStates(
     admin,
     orgId,

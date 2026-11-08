@@ -6,7 +6,7 @@ import 'server-only';
 // reader the approval card uses; never stored.
 
 import { loadAbsencesAffectedVisits } from '@/lib/calendar/absence-visits';
-import { getBusinessTodayIso } from '@/lib/date-time/berlin';
+import { getBusinessTodayIso, resolveBerlinWallTime } from '@/lib/date-time/berlin';
 import type { ActionContext } from '@/lib/org/action-context';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { logError } from '@/lib/logging';
@@ -14,11 +14,22 @@ import { readOpenVacationRequests } from '@/lib/vacation/server';
 import { readPersonNames } from './notifications';
 import { dedupeAttentionItems } from './resolution';
 import type { AttentionTask } from './types';
+import type { AbsenceAffectedVisit } from '@/lib/calendar/absence-visits-types';
+
+/**
+ * Whether the visit has started, the rule that makes it history the planning
+ * actions refuse to change: a timed visit at its start, an all-day one on its day.
+ */
+function hasStarted(visit: AbsenceAffectedVisit, now: number, today: string): boolean {
+  if (visit.time === null) return visit.date <= today;
+  const start = resolveBerlinWallTime(`${visit.date}T${visit.time}`);
+  return !start || start.instant.getTime() <= now;
+}
 
 /**
  * One task per visit and person an approved vacation still ahead takes away,
  * in the calendar's order. Planning is office work, so only Admin and Büro
- * get it, as the affected-visits reader they share. A visit already past
+ * get it, as the affected-visits reader they share. A visit that started
  * needs no replanning, so each vacation counts from today.
  */
 export async function deriveVisitReplanTasks(
@@ -44,8 +55,14 @@ export async function deriveVisitReplanTasks(
     })),
   });
   if (!affected) return { tasks: [], failed: true };
+  // A started visit can no longer be replanned, so it is no task.
+  const now = Date.now();
   const affectedVacations = vacations.flatMap((vacation, index) =>
-    (affected[index] ?? []).map((entry) => ({ employee_record_id: vacation.employee_record_id, ...entry })),
+    (affected[index] ?? []).flatMap((entry) =>
+      hasStarted(entry.visit, now, today)
+        ? []
+        : [{ employee_record_id: vacation.employee_record_id, ...entry }],
+    ),
   );
   const nameByRecordId = await readPersonNames(admin, context.orgId, affectedVacations);
   if (!nameByRecordId) return { tasks: [], failed: true };

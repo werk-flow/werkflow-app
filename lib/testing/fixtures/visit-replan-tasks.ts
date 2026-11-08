@@ -1,7 +1,7 @@
 // The planner's „Einsatz umplanen“ tasks through the real derivation and the
 // real affected-visits reader over the in-memory database. An approved
 // vacation over a scheduled visit gives the office exactly one task per visit
-// and person; a past visit, a parked job and a pending request give none;
+// and person; a past or started visit, a parked job and a pending request give none;
 // a second vacation over the same visit adds none; replanning the visit or
 // withdrawing the vacation resolves it. Another organization's vacation,
 // visit or forged assignment never reaches the caller, and a field worker
@@ -144,6 +144,14 @@ const world = installActionWorld({
       endAt: '2026-11-06T09:00:00.000Z',
       absent: [assignment('86000000-0000-4000-8000-000000000035', mehmetRecordId)],
       job: job('Wartung', 'AUF-2026-110'),
+    }),
+    // Today 07:00 Berlin, finished before 11:00: started visits are history.
+    visit({
+      id: '86000000-0000-4000-8000-000000000027',
+      startAt: '2026-11-08T06:00:00.000Z',
+      endAt: '2026-11-08T08:00:00.000Z',
+      absent: [assignment('86000000-0000-4000-8000-000000000038', mehmetRecordId)],
+      job: job('Notdienst', 'AUF-2026-111'),
     }),
     // Fri 13.11. 07:00 to Mon 16.11. 16:00 Berlin: one visit across two vacations.
     visit({
