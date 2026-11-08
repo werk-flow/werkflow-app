@@ -14,6 +14,7 @@ import {
   MoveRight,
   ParkingSquare,
   Repeat2,
+  UserX,
   Users,
   X,
 } from 'lucide-react';
@@ -23,6 +24,7 @@ import { Field } from '@/components/ui/field';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { cn, toLocalDateString } from '@/lib/utils';
+import { absencesNotLoadedHint, absentAssignees, withAbsenceMarks } from '@/lib/calendar/absence-marks';
 import { JOB_PRIORITY_LABELS, type CalendarJob } from '@/lib/jobs/types';
 import { PRIORITY_CLASSES } from '@/components/auftraege/job-detail/job-detail-format';
 import { getJobStatusClass, getJobStatusLabel } from '@/components/auftraege/status-classes';
@@ -36,6 +38,7 @@ import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { PlanningOccurrenceEditDialog } from './planning-occurrence-edit-dialog';
 import type { CalendarMutations } from './mutations/use-calendar-mutations';
 import { moveSuccessMessage } from './board/board-surface-drop';
+import { useBoardAbsences } from './board-absences-context';
 
 /** `w-80` on the popover content. */
 const POPOVER_WIDTH_PX = 320;
@@ -327,8 +330,9 @@ function CardPopover({
   );
 }
 
-/** When, for whom, where and with whom the occurrence is planned. */
+/** When, for whom, where and with whom the occurrence is planned, and which assignee is away then. */
 function JobEventFacts({ job, memberNames }: { job: CalendarJob; memberNames: Record<string, string> }) {
+  const absent = absentAssignees(job, useBoardAbsences());
   return (
     <div className="space-y-2 text-sm">
       <div className="flex items-center gap-2 text-muted-foreground">
@@ -370,6 +374,14 @@ function JobEventFacts({ job, memberNames }: { job: CalendarJob; memberNames: Re
           <Users className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
           <span className="truncate">
             {job.assignedUserIds.map((userId) => memberNames[userId] ?? 'Mitarbeiter').join(', ')}
+          </span>
+        </div>
+      )}
+      {absent.length > 0 && (
+        <div className="flex items-start gap-2 font-medium text-warning-text" data-card-absence="">
+          <UserX className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+          <span>
+            {absent.map(({ userId, mark }) => `${memberNames[userId] ?? 'Mitarbeiter'}: ${mark}`).join(', ')}
           </span>
         </div>
       )}
@@ -421,7 +433,13 @@ function MoveForm({ job, row, rows, mutations, onDone, onCancel }: MoveFormProps
   );
   const [moveRecordId, setMoveRecordId] = useState(row?.employeeRecordId ?? '');
   const [moveError, setMoveError] = useState<string | null>(null);
-  const rowOptions = rows.map((entry) => ({ value: entry.employeeRecordId, label: entry.displayName }));
+  const absences = useBoardAbsences();
+  const moveDateIso = moveDate ? toLocalDateString(moveDate) : '';
+  const rowOptions = withAbsenceMarks(
+    rows.map((entry) => ({ value: entry.employeeRecordId, label: entry.displayName })),
+    absences,
+    moveDateIso,
+  );
 
   const submitMove = (event: React.FormEvent) => {
     event.preventDefault();
@@ -446,7 +464,11 @@ function MoveForm({ job, row, rows, mutations, onDone, onCancel }: MoveFormProps
         />
       </Field>
       {rows.length > 0 && (
-        <Field label="Mitarbeiter" htmlFor="popover-move-person">
+        <Field
+          label="Mitarbeiter"
+          htmlFor="popover-move-person"
+          description={absencesNotLoadedHint(absences, moveDateIso)}
+        >
           <SearchableSelect
             id="popover-move-person"
             value={moveRecordId}

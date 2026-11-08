@@ -138,6 +138,7 @@ mock.module('@/lib/service-cases/actions', () => ({
   getServiceClientOption: seam('service-client-option'),
 }));
 mock.module('@/lib/attention/actions', () => ({ getAttentionOverview: seam('attention-overview') }));
+mock.module('@/lib/calendar/actions', () => ({ getAbsenceAffectedVisits: seam('absence-affected-visits') }));
 mock.module('@/lib/personnel/lifecycle-actions', () => ({
   getOwnPersonnelActions: selfSeam('own-personnel-actions'),
   getPersonnelLifecycle: seam('personnel-lifecycle'),
@@ -430,6 +431,7 @@ const inputs: Record<string, unknown> = {
   'job-inventory-picker-options': { jobId, search: 'Rohr', exactItemId: jobId },
   'dispatch-readiness': { occurrenceId: jobId },
   'assignment-availability': { organizationId, localDate: '2026-11-04' },
+  'absence-affected-visits': { employeeRecordId: jobId, startDate: '2026-10-30', endDate: null },
   'maintenance-coverage-documents': { maintenanceCoverageId: jobId },
   'maintenance-evidence-options': { jobId },
   'next-job-number': { organizationId },

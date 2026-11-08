@@ -52,4 +52,11 @@ test('the success banner appears only after the server accepted the approval', a
   await expect(page.getByRole('alert')).toContainText(confirmation);
   await expect(approve).toHaveCount(0);
   expect(await page.evaluate(() => window.uiContractApprovals.decisions)).toBe(1);
+
+  // The office sees the visits the approved vacation takes the person away from, until it closes them.
+  const affected = page.getByRole('region', { name: 'Betroffene Termine' });
+  await expect(affected.getByRole('listitem')).toHaveCount(2);
+  await expect(affected.getByRole('listitem').first()).toContainText('Einsatz gesendet');
+  await page.getByRole('button', { name: 'Schließen', exact: true }).click();
+  await expect(affected).toHaveCount(0);
 });
