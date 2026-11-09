@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { EditClientDialog } from './edit-client-dialog';
-import { ClientRemovalDialog, type ClientRemoval } from './client-removal-dialog';
+import type { ClientRemoval } from './client-removal-dialog';
 import type { Client } from '@/lib/jobs/types';
 
 /** What a row of the customer list can do beyond opening and editing. */
@@ -22,8 +22,8 @@ export type ClientRowActions = {
   isArchivedView: boolean;
   /** An edit was confirmed by the server; the list keeps the row marked until props land. */
   onSaved: (clientId: string) => void;
-  /** The customer was archived or deleted; the list removes the row and confirms. */
-  onRemoved: (client: Client, removal: ClientRemoval) => Promise<void>;
+  /** Opens the list's one archive or delete dialog for this customer. */
+  onRequestRemoval: (client: Client, removal: ClientRemoval) => void;
   /** The list owns the optimistic removal from the archived view, its rollback and the feedback. */
   onRestore: (client: Client) => Promise<void>;
 };
@@ -38,7 +38,6 @@ interface ClientActionsMenuProps {
 export function ClientActionsMenu({ client, isBusy = false, actions }: ClientActionsMenuProps) {
   const router = useRouter();
   const [showEditDialog, setShowEditDialog] = useState(false);
-  const [removal, setRemoval] = useState<ClientRemoval | null>(null);
 
   return (
     <>
@@ -65,12 +64,12 @@ export function ClientActionsMenu({ client, isBusy = false, actions }: ClientAct
               Wiederherstellen
             </DropdownMenuItem>
           ) : (
-            <DropdownMenuItem onClick={() => setRemoval('archive')}>
+            <DropdownMenuItem onClick={() => actions.onRequestRemoval(client, 'archive')}>
               <Archive className="size-4" />
               Archivieren
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem variant="destructive" onClick={() => setRemoval('delete')}>
+          <DropdownMenuItem variant="destructive" onClick={() => actions.onRequestRemoval(client, 'delete')}>
             <Trash2 className="size-4" />
             Löschen
           </DropdownMenuItem>
@@ -82,17 +81,6 @@ export function ClientActionsMenu({ client, isBusy = false, actions }: ClientAct
         open={showEditDialog}
         onOpenChange={setShowEditDialog}
         onSaved={() => actions.onSaved(client.id)}
-      />
-
-      <ClientRemovalDialog
-        client={client}
-        isArchived={actions.isArchivedView}
-        removal={removal}
-        onClose={() => setRemoval(null)}
-        onRemoved={async (done) => {
-          await actions.onRemoved(client, done);
-          setRemoval(null);
-        }}
       />
     </>
   );

@@ -11,7 +11,11 @@ import { useListNavigation } from '@/hooks/use-list-navigation';
 import { ClientsTable } from './clients-table';
 import { clientCreations } from './create-client-dialog';
 import type { ClientRowActions } from './client-actions-menu';
-import { CLIENT_REMOVAL_ERROR_MESSAGES, type ClientRemoval } from './client-removal-dialog';
+import {
+  CLIENT_REMOVAL_ERROR_MESSAGES,
+  ClientRemovalDialog,
+  type ClientRemoval,
+} from './client-removal-dialog';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useOptimisticChannel } from '@/hooks/use-optimistic-channel';
 import { useOptimisticList } from '@/hooks/use-optimistic-list';
@@ -201,10 +205,13 @@ function useRestoredSearchFocus(focusedRef: RefObject<boolean>) {
 
 const REMOVAL_DONE: Record<ClientRemoval, string> = { archive: 'archiviert', delete: 'gelöscht' };
 
+type RemovalTarget = { client: Client; removal: ClientRemoval };
+
 /**
- * The row actions of the list: an archived or deleted customer leaves the
- * list once the dialog's save is confirmed; a restored one leaves the
- * archived view at once and comes back with the error on failure.
+ * The row actions of the list and its one archive or delete dialog: an
+ * archived or deleted customer leaves the list once the dialog's save is
+ * confirmed; a restored one leaves the archived view at once and comes back
+ * with the error on failure.
  */
 function useKundenRowActions(
   list: ReturnType<typeof useOptimisticList<Client>>,
@@ -212,17 +219,23 @@ function useKundenRowActions(
   live: Pick<LiveViewState<KundenLivePage>, 'invalidate' | 'refresh'>,
   onSaved: (clientId: string) => void,
   showBanner: ReturnType<typeof useBanner>['showBanner'],
-): ClientRowActions {
+) {
   const { remove, rollback } = list;
   const { invalidate, refresh } = live;
+  const [removalTarget, setRemovalTarget] = useState<RemovalTarget | null>(null);
   const onRemoved = useCallback(
     async (client: Client, removal: ClientRemoval) => {
       invalidate();
       remove(client.id);
       showBanner({ variant: 'success', message: `Kunde „${client.name}“ wurde ${REMOVAL_DONE[removal]}.` });
+      setRemovalTarget(null);
       await refresh();
     },
     [invalidate, remove, refresh, showBanner],
+  );
+  const onRequestRemoval = useCallback(
+    (client: Client, removal: ClientRemoval) => setRemovalTarget({ client, removal }),
+    [],
   );
   const onRestore = useCallback(
     async (client: Client) => {
@@ -246,7 +259,13 @@ function useKundenRowActions(
     },
     [invalidate, remove, rollback, refresh, showBanner],
   );
-  return { isArchivedView: view === 'archiviert', onSaved, onRemoved, onRestore };
+  const actions: ClientRowActions = {
+    isArchivedView: view === 'archiviert',
+    onSaved,
+    onRequestRemoval,
+    onRestore,
+  };
+  return { actions, removalTarget, closeRemoval: () => setRemovalTarget(null), onRemoved };
 }
 
 /** The count, the search that keeps its focus across remounts, and the refresh. */
@@ -334,6 +353,7 @@ function KundenList(props: KundenListProps) {
     [runBusy, refresh],
   );
   const rowActions = useKundenRowActions(list, view, live, handleClientSaved, showBanner);
+  const { removalTarget } = rowActions;
 
   return (
     <UsableContent name="kunden" count={filteredRows.length}>
@@ -354,10 +374,20 @@ function KundenList(props: KundenListProps) {
         <ClientsTable
           rows={filteredRows}
           isBusy={isBusy}
-          actions={rowActions}
+          actions={rowActions.actions}
           isFiltered={searchQuery.trim() !== ''}
         />
       </div>
+      {removalTarget && (
+        <ClientRemovalDialog
+          key={removalTarget.client.id}
+          client={removalTarget.client}
+          isArchived={view === 'archiviert'}
+          removal={removalTarget.removal}
+          onClose={rowActions.closeRemoval}
+          onRemoved={(done) => rowActions.onRemoved(removalTarget.client, done)}
+        />
+      )}
       <ListPagination
         label="Kunden"
         page={page}
