@@ -183,7 +183,7 @@ $sql$, 'request_not_found');
 
 do $$
 begin
-  if pg_temp.request_state() <> (select state from request_state_before) then
+  if pg_temp.request_state() is distinct from (select state from request_state_before) then
     raise exception 'a refused capture or edit changed a request or its history';
   end if;
 end;
@@ -202,20 +202,20 @@ begin
   v_request := public.create_client_request(v_actor, v_org,
     'Heizung kalt', null, null, '41909000-0000-0000-0000-000000000020', '41909000-0000-0000-0000-000000000030', null,
     null, null, null, null, null, 'notfall', null, v_actor, null, v_due, '41909000-0000-0000-0000-000000000050');
-  if v_request.callback_due_at <> v_due or v_request.equipment_id <> '41909000-0000-0000-0000-000000000050' then
+  if v_request.callback_due_at is distinct from v_due or v_request.equipment_id is distinct from '41909000-0000-0000-0000-000000000050' then
     raise exception 'a capture did not store its callback and Anlage: %', to_jsonb(v_request);
   end if;
   select event_payload into v_payload from public.client_request_events
   where request_id = v_request.id and event_type = 'created';
-  if v_payload ->> 'equipmentId' <> '41909000-0000-0000-0000-000000000050'
-    or (v_payload ->> 'callbackDueAt')::timestamptz <> v_due then
+  if v_payload ->> 'equipmentId' is distinct from '41909000-0000-0000-0000-000000000050'
+    or (v_payload ->> 'callbackDueAt')::timestamptz is distinct from v_due then
     raise exception 'the created history row lacks the callback or the Anlage: %', v_payload;
   end if;
 
   v_request := public.update_client_request(v_actor, v_org, v_request.id,
     jsonb_build_object('callback_due_at', v_due + interval '2 hours'));
-  if v_request.callback_due_at <> v_due + interval '2 hours'
-    or v_request.equipment_id <> '41909000-0000-0000-0000-000000000050' then
+  if v_request.callback_due_at is distinct from v_due + interval '2 hours'
+    or v_request.equipment_id is distinct from '41909000-0000-0000-0000-000000000050' then
     raise exception 'moving the callback did not keep the Anlage: %', to_jsonb(v_request);
   end if;
 
@@ -226,7 +226,7 @@ begin
   end if;
   select event_payload into v_payload from public.client_request_events
   where request_id = v_request.id and event_type = 'updated' and event_payload -> 'changedFields' ? 'site_id';
-  if v_payload <> '{"changedFields": ["equipment_id", "site_id"]}'::jsonb then
+  if v_payload is distinct from '{"changedFields": ["equipment_id", "site_id"]}'::jsonb then
     raise exception 'the site change did not record the dropped Anlage: %', v_payload;
   end if;
   perform public.close_client_request(v_actor, v_org, v_request.id, 'kein_bedarf', null);
@@ -234,7 +234,7 @@ begin
   -- An Anlage archived after the capture stays while other fields change.
   v_request := public.update_client_request(v_actor, v_org, '41909000-0000-0000-0000-000000000041',
     '{"summary":"Kessel ausgebaut, Rückruf"}');
-  if v_request.equipment_id <> '41909000-0000-0000-0000-000000000053' then
+  if v_request.equipment_id is distinct from '41909000-0000-0000-0000-000000000053' then
     raise exception 'an edit dropped or refused an Anlage archived after the capture: %', to_jsonb(v_request);
   end if;
 end;
