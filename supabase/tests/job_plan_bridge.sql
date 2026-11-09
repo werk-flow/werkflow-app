@@ -14,7 +14,8 @@
 -- same transaction (migrations 20261005110000, 20261006100000 and
 -- 20261006100100). A job-page team change records the assessment of the
 -- visit it reaches (20261108120000), and so does a job created or edited
--- with a date and people (20261124100000).
+-- with a date and people (20261124100000), a request converted into a job
+-- and a parked job planned from the calendar (20261125090000).
 begin;
 
 insert into auth.users (
@@ -863,6 +864,152 @@ begin
 end;
 $$;
 
+-- 14. Turning an Anfrage into an Auftrag and planning a parked job from the
+-- calendar plan the legacy visit with its people too (20261125090000). The
+-- unpark puts the whole team on the visit, also a person a calendar move took
+-- off it. Without the assessment of exactly that visit, neither writes
+-- anything: the request stays open, the job stays parked.
+reset role;
+insert into public.clients (id, organization_id, name) values
+('b1d9e000-0000-4000-8000-000000000060', 'b1d9e000-0000-4000-8000-000000000010', 'Kunde Brücke'),
+('b1d9e000-0000-4000-8000-000000000061', 'b1d9e000-0000-4000-8000-000000000011', 'Fremder Kunde Brücke');
+insert into public.client_requests (id, organization_id, summary, client_id, created_by) values
+('b1d9e000-0000-4000-8000-000000000062', 'b1d9e000-0000-4000-8000-000000000010', 'Heizung kalt',
+ 'b1d9e000-0000-4000-8000-000000000060', 'b1d9e000-0000-4000-8000-000000000001');
+create function pg_temp.convert_request(p_organization_id uuid, p_users uuid[], p_assessment jsonb)
+returns public.jobs language sql as $$
+  select * from public.convert_client_request_to_job_with_visit_assessment(
+    p_organization_id, 'b1d9e000-0000-4000-8000-000000000001', 'b1d9e000-0000-4000-8000-000000000062',
+    jsonb_build_object('title', 'Heizung kalt', 'job_number', 'BRIDGE-14-A',
+      'client_id', 'b1d9e000-0000-4000-8000-000000000060',
+      'planned_date', pg_temp.day(21), 'planned_time', '08:00', 'estimated_duration_minutes', 60),
+    p_users, pg_temp.day(21), '{}', '[]', '{}', 'fingerprint', null, null, false, null, false,
+    p_assessment);
+$$;
+create function pg_temp.unpark(p_organization_id uuid, p_job_id uuid, p_users uuid[], p_assessment jsonb)
+returns public.jobs language sql as $$
+  select * from public.unpark_job_into_schedule_with_visit_assessment(
+    p_organization_id, 'b1d9e000-0000-4000-8000-000000000001', p_job_id, 1, 'Im Kalender neu eingeplant',
+    jsonb_build_object('planned_date', pg_temp.day(22), 'planned_time', '09:00'), true,
+    p_users, pg_temp.day(22), '{}', '[]', '{}', 'fingerprint', null, null, false, p_assessment);
+$$;
+grant execute on all functions in schema pg_temp to service_role;
+set local role service_role;
+
+do $$
+declare
+  v_anna uuid := 'b1d9e000-0000-4000-8000-000000000001';
+  v_bea uuid := 'b1d9e000-0000-4000-8000-000000000002';
+  v_crew uuid[] := pg_temp.users('b1d9e000-0000-4000-8000-000000000001',
+    'b1d9e000-0000-4000-8000-000000000002');
+  v_job public.jobs;
+  v_visit uuid;
+  v_written bigint[];
+begin
+  -- A conversion that plans people without the visit's assessment, or with
+  -- the assessment of other people, converts nothing.
+  v_written := pg_temp.assessment_counts();
+  begin
+    perform pg_temp.convert_request('b1d9e000-0000-4000-8000-000000000010', v_crew, null);
+    raise exception 'a request was converted into a planned job with people without the visit''s assessment';
+  exception when others then
+    if sqlerrm <> 'stale_planning_occurrence' then raise; end if;
+  end;
+  begin
+    perform pg_temp.convert_request('b1d9e000-0000-4000-8000-000000000010', v_crew,
+      pg_temp.visit_assessment(pg_temp.day(21), '08:00', 60, pg_temp.users(v_anna::text), 'Abgestimmt'));
+    raise exception 'a request was converted with the assessment of another crew';
+  exception when others then
+    if sqlerrm <> 'stale_planning_occurrence' then raise; end if;
+  end;
+  -- A foreign organization's id reaches no request.
+  begin
+    perform pg_temp.convert_request('b1d9e000-0000-4000-8000-000000000011', v_crew,
+      pg_temp.visit_assessment(pg_temp.day(21), '08:00', 60, v_crew, 'Fremde Organisation'));
+    raise exception 'a conversion reached a request of another organization';
+  exception when others then
+    if sqlerrm <> 'request_not_found' then raise; end if;
+  end;
+  if exists (select 1 from public.jobs where job_number = 'BRIDGE-14-A')
+     or (select status from public.client_requests where id = 'b1d9e000-0000-4000-8000-000000000062')
+       = 'umgewandelt'
+     or pg_temp.assessment_counts() <> v_written
+  then raise exception 'a refused conversion left the job, converted the request or wrote history'; end if;
+
+  -- With the assessment of exactly its visit, the conversion records it with the reason.
+  v_job := pg_temp.convert_request('b1d9e000-0000-4000-8000-000000000010', v_crew,
+    pg_temp.visit_assessment(pg_temp.day(21), '08:00', 60, v_crew, '  Bea kommt vor dem Urlaub  '));
+  if pg_temp.crew(pg_temp.legacy_visit(v_job.id)) <> v_crew
+     or (select status from public.client_requests where id = 'b1d9e000-0000-4000-8000-000000000062')
+       <> 'umgewandelt'
+     or not exists (
+       select 1 from public.planning_occurrence_assessments
+       where occurrence_id = pg_temp.legacy_visit(v_job.id)
+         and override_reason = 'Bea kommt vor dem Urlaub'
+         and created_by = v_anna
+     )
+  then raise exception 'a confirmed conversion did not record its visit''s assessment with the reason'; end if;
+  perform pg_temp.assert_bridge('a conversion with a visit assessment');
+
+  -- A job for Anna and Bea, whose visit a calendar move left to Anna alone, is parked.
+  v_job := public.create_job_with_assignments(
+    'b1d9e000-0000-4000-8000-000000000010', v_anna,
+    jsonb_build_object('title', 'Speicher tauschen', 'job_number', 'BRIDGE-14-B',
+      'planned_date', pg_temp.day(20), 'planned_time', '07:00', 'estimated_duration_minutes', 60),
+    v_crew, pg_temp.day(20), '{}', '[]', '{}', 'fingerprint', null, null, false, null, false);
+  v_visit := pg_temp.legacy_visit(v_job.id);
+  perform public.update_planning_occurrence(
+    'b1d9e000-0000-4000-8000-000000000010', v_anna, v_visit,
+    pg_temp.version_of(v_visit), pg_temp.timed_item(v_job.id, pg_temp.day(20), '07:00', 60),
+    jsonb_build_array(jsonb_build_object('employeeRecordId', pg_temp.record_of(v_anna))),
+    '{}', 'capacity', '{}', 'qualification');
+  perform public.park_work_target('b1d9e000-0000-4000-8000-000000000010', v_anna, 'job', v_job.id, 0,
+    'material', null, pg_temp.record_of(v_anna), pg_temp.day(25));
+
+  -- Unparking it with people needs the assessment of the visit with the whole
+  -- team: Anna's alone is stale, and a foreign organization reaches no job.
+  v_written := pg_temp.assessment_counts();
+  begin
+    perform pg_temp.unpark('b1d9e000-0000-4000-8000-000000000010', v_job.id, v_crew, null);
+    raise exception 'a parked job was planned with people without the visit''s assessment';
+  exception when others then
+    if sqlerrm <> 'stale_planning_occurrence' then raise; end if;
+  end;
+  begin
+    perform pg_temp.unpark('b1d9e000-0000-4000-8000-000000000010', v_job.id, v_crew,
+      pg_temp.visit_assessment(pg_temp.day(22), '09:00', 60, pg_temp.users(v_anna::text), 'Nur Anna'));
+    raise exception 'a parked job was planned with an assessment that misses the team the unpark adds';
+  exception when others then
+    if sqlerrm <> 'stale_planning_occurrence' then raise; end if;
+  end;
+  begin
+    perform pg_temp.unpark('b1d9e000-0000-4000-8000-000000000011', v_job.id, v_crew,
+      pg_temp.visit_assessment(pg_temp.day(22), '09:00', 60, v_crew, 'Fremde Organisation'));
+    raise exception 'an unpark reached a job of another organization';
+  exception when others then
+    if sqlerrm <> 'job_not_found' then raise; end if;
+  end;
+  select * into v_job from public.jobs where id = v_job.id;
+  if v_job.status <> 'geparkt'
+     or v_job.planned_date is not null
+     or (select status from public.planning_occurrences where id = v_visit) <> 'cancelled'
+     or pg_temp.assessment_counts() <> v_written
+  then raise exception 'a refused unpark planned the job, revived its visit or wrote history'; end if;
+
+  -- The confirmed unpark plans the visit for the whole team and records its assessment.
+  perform pg_temp.unpark('b1d9e000-0000-4000-8000-000000000010', v_job.id, v_crew,
+    pg_temp.visit_assessment(pg_temp.day(22), '09:00', 60, v_crew, 'Material ist da'));
+  if (select status from public.planning_occurrences where id = v_visit) <> 'scheduled'
+     or pg_temp.crew(v_visit) <> v_crew
+     or not exists (
+       select 1 from public.planning_occurrence_assessments
+       where occurrence_id = v_visit and override_reason = 'Material ist da'
+     )
+  then raise exception 'a confirmed unpark did not plan the whole team or record the visit''s assessment'; end if;
+  perform pg_temp.assert_bridge('an unpark with a visit assessment');
+end;
+$$;
+
 reset role;
 
 -- One owner sets the marker and every job-to-plan trigger reads it. A second
@@ -908,6 +1055,8 @@ begin
     'public.update_job_with_assignments(uuid, uuid, uuid, jsonb, boolean, uuid[], date, uuid[], jsonb, jsonb, text, text, uuid, boolean)',
     'public.create_job_with_visit_assessment(uuid, uuid, jsonb, uuid[], date, uuid[], jsonb, jsonb, text, text, uuid, boolean, uuid, boolean, jsonb)',
     'public.update_job_with_visit_assessment(uuid, uuid, uuid, jsonb, boolean, uuid[], date, uuid[], jsonb, jsonb, text, text, uuid, boolean, jsonb)',
+    'public.convert_client_request_to_job_with_visit_assessment(uuid, uuid, uuid, jsonb, uuid[], date, uuid[], jsonb, jsonb, text, text, uuid, boolean, uuid, boolean, jsonb)',
+    'public.unpark_job_into_schedule_with_visit_assessment(uuid, uuid, uuid, bigint, text, jsonb, boolean, uuid[], date, uuid[], jsonb, jsonb, text, text, uuid, boolean, jsonb)',
     'app_private.record_job_visit_assessment(uuid, uuid, uuid, integer, uuid[], jsonb)'
   ] loop
     if not has_function_privilege('service_role', v_function, 'execute') then

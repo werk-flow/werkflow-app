@@ -13738,6 +13738,58 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      convert_client_request_to_job_with_visit_assessment: {
+        Args: {
+          p_actor_id: string;
+          p_assessed_for_date: string;
+          p_coverage_fingerprint: string;
+          p_coverage_snapshot: Json;
+          p_job: Json;
+          p_organization_id: string;
+          p_override_reason: string;
+          p_record_assessment: boolean;
+          p_request_id: string;
+          p_requirements_snapshot: Json;
+          p_selected_employee_record_ids: string[];
+          p_selected_user_ids: string[];
+          p_team_source_id: string;
+          p_template_assessment: boolean;
+          p_template_version_id: string;
+          p_visit_assessment: Json;
+        };
+        Returns: {
+          actual_completion_date: string | null;
+          client_id: string | null;
+          contact_id: string | null;
+          created_at: string;
+          created_by: string;
+          description: string | null;
+          estimated_duration_minutes: number | null;
+          execution_state:
+            | Database["public"]["Enums"]["work_execution_state"]
+            | null;
+          execution_version: number;
+          id: string;
+          job_number: string | null;
+          location: string | null;
+          organization_id: string;
+          planned_date: string | null;
+          planned_time: string | null;
+          planned_working_minutes: number | null;
+          priority: Database["public"]["Enums"]["job_priority"];
+          project_id: string | null;
+          site_id: string | null;
+          status: Database["public"]["Enums"]["job_status"];
+          title: string;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "jobs";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       convert_client_request_to_project: {
         Args: {
           p_actor_id: string;
@@ -17706,6 +17758,59 @@ export type Database = {
           p_selected_employee_record_ids: string[];
           p_selected_user_ids: string[];
           p_team_source_id: string;
+        };
+        Returns: {
+          actual_completion_date: string | null;
+          client_id: string | null;
+          contact_id: string | null;
+          created_at: string;
+          created_by: string;
+          description: string | null;
+          estimated_duration_minutes: number | null;
+          execution_state:
+            | Database["public"]["Enums"]["work_execution_state"]
+            | null;
+          execution_version: number;
+          id: string;
+          job_number: string | null;
+          location: string | null;
+          organization_id: string;
+          planned_date: string | null;
+          planned_time: string | null;
+          planned_working_minutes: number | null;
+          priority: Database["public"]["Enums"]["job_priority"];
+          project_id: string | null;
+          site_id: string | null;
+          status: Database["public"]["Enums"]["job_status"];
+          title: string;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "jobs";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      unpark_job_into_schedule_with_visit_assessment: {
+        Args: {
+          p_actor_id: string;
+          p_assessed_for_date: string;
+          p_changes: Json;
+          p_coverage_fingerprint: string;
+          p_coverage_snapshot: Json;
+          p_expected_blocker_version: number;
+          p_job_id: string;
+          p_organization_id: string;
+          p_override_reason: string;
+          p_reason: string;
+          p_record_assessment: boolean;
+          p_replace_assignments: boolean;
+          p_requirements_snapshot: Json;
+          p_selected_employee_record_ids: string[];
+          p_selected_user_ids: string[];
+          p_team_source_id: string;
+          p_visit_assessment: Json;
         };
         Returns: {
           actual_completion_date: string | null;

@@ -1,10 +1,15 @@
 'use client';
 
 import { useCallback } from 'react';
+import {
+  isPlanningWarning,
+  saveUntilPlanningSettled,
+} from '@/components/auftraege/forms/planning-warning-result';
 import { calendarActionResult } from '@/lib/calendar/action-result';
 import type { CalendarRefusalContext } from '@/lib/calendar/messages';
-import { unparkPlacement, type UnparkRequest } from '@/lib/calendar/visit-placement';
-import type { CalendarJob } from '@/lib/jobs/types';
+import { unparkPlacement, type UnparkPlacement, type UnparkRequest } from '@/lib/calendar/visit-placement';
+import type { CalendarJob, UpdateJobResult } from '@/lib/jobs/types';
+import type { AssignmentApproval } from '@/lib/qualifications/types';
 import { parkWorkTarget, unparkJobIntoSchedule } from '@/lib/work-lifecycle/actions';
 import type { ActionResult } from '@/lib/action-result';
 import type { OptimisticOperation } from './use-optimistic-run';
@@ -19,6 +24,7 @@ type ParkMutationInput = Pick<
   | 'jobsRef'
   | 'showBanner'
   | 'requestApproval'
+  | 'requestPlanningApproval'
   | 'silentRefresh'
 > & {
   feedback: MutationFeedback;
@@ -98,16 +104,69 @@ function useBeginPark({
   );
 }
 
+/** What an unpark sends apart from the approvals its warnings ask for. */
+type UnparkScheduleInput = {
+  jobId: string;
+  blockerVersion: number;
+  reason: string;
+  schedule: UnparkPlacement['schedule'];
+};
+
+/**
+ * The unpark's one server call with its warnings: after a qualification
+ * warning the same call with the approval, after a planning warning with the
+ * reason. Each warning changed nothing, so a declined one leaves the job parked.
+ */
+async function unparkWithApprovals(
+  unpark: UnparkScheduleInput,
+  {
+    requestApproval,
+    requestPlanningApproval,
+    isScopeActive,
+  }: Pick<ParkMutationInput, 'requestApproval' | 'requestPlanningApproval'> & {
+    isScopeActive: () => boolean;
+  },
+): Promise<UpdateJobResult> {
+  const declined: UpdateJobResult = { success: false, error: 'qualification_declined' };
+  const unparkWithReasons = async (
+    assignmentApproval: AssignmentApproval | null,
+  ): Promise<UpdateJobResult> => {
+    const result = await saveUntilPlanningSettled(
+      (planningApproval) => unparkJobIntoSchedule({ ...unpark, assignmentApproval, planningApproval }),
+      async (conflicts, fingerprint) => {
+        const approval = await requestPlanningApproval(conflicts, fingerprint);
+        return approval && isScopeActive() ? approval : null;
+      },
+    );
+    return isPlanningWarning(result) ? declined : result;
+  };
+  const result = await unparkWithReasons(null);
+  if (
+    !result.success &&
+    (result.error === 'qualification_warning' || result.error === 'stale_evaluation') &&
+    'evaluation' in result
+  ) {
+    const approval = await requestApproval(result.evaluation);
+    if (!approval || !isScopeActive()) return declined;
+    return unparkWithReasons(approval);
+  }
+  return result;
+}
+
 function useUnparkJob({
   updateJobs,
   updateParkedJobs,
   jobsRef,
   requestApproval,
+  requestPlanningApproval,
   feedback,
   run,
 }: ParkMutationInput) {
   const { isScopeActive } = feedback;
-  /** Unpark by drag: one server call; after a qualification warning the same call with the approval. */
+  /**
+   * Unpark by drag: one server call; after a qualification warning the same
+   * call with the approval, after a planning warning with the reason.
+   */
   return useCallback(
     (input: UnparkRequest & { successMessage: string; context?: CalendarRefusalContext | undefined }) => {
       const { job, parkingContext } = input;
@@ -120,20 +179,7 @@ function useUnparkJob({
             reason: 'Im Kalender neu eingeplant',
             schedule,
           };
-          const result = await unparkJobIntoSchedule(unpark);
-          if (result.success) return result;
-          if (
-            (result.error === 'qualification_warning' || result.error === 'stale_evaluation') &&
-            'evaluation' in result
-          ) {
-            // The warning changed nothing: the job is still parked.
-            const approval = await requestApproval(result.evaluation);
-            if (!approval || !isScopeActive()) {
-              return { success: false as const, error: 'qualification_declined' };
-            }
-            return unparkJobIntoSchedule({ ...unpark, assignmentApproval: approval });
-          }
-          return result;
+          return unparkWithApprovals(unpark, { requestApproval, requestPlanningApproval, isScopeActive });
         });
       return run({
         apply: () => {
@@ -165,14 +211,14 @@ function useUnparkJob({
         context: input.context,
       });
     },
-    [isScopeActive, jobsRef, requestApproval, run, updateJobs, updateParkedJobs],
+    [isScopeActive, jobsRef, requestApproval, requestPlanningApproval, run, updateJobs, updateParkedJobs],
   );
 }
 
 /**
  * Parking from the grid. Park by drag hands the write to the context dialog
  * and returns the release for its outcome; unpark by drag is one server call
- * whose warning changes nothing and is repeated with the approval.
+ * whose warning changes nothing and is repeated with the approval or reason.
  */
 export function useCalendarParkMutations(input: ParkMutationInput) {
   const beginPark = useBeginPark(input);

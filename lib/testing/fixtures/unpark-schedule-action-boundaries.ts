@@ -1,7 +1,8 @@
 // The actual unparkJobIntoSchedule action over the in-memory database: only
 // managers pass, a job of another organization is unreachable, a
 // qualification warning changes nothing, and the unpark with its schedule
-// write is one database function call (supabase/tests/unpark_into_schedule.sql).
+// write is one database function call (supabase/tests/unpark_into_schedule.sql,
+// supabase/tests/job_plan_bridge.sql).
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
 import type { AssignmentEvaluation } from '@/lib/qualifications/types';
@@ -106,7 +107,9 @@ assert.equal(approved.success && approved.job.plannedDate, '2026-11-02');
 assert.equal(world.rpcCalls.length, 1);
 const [call] = world.rpcCalls;
 assert.ok(call);
-assert.equal(call.name, 'unpark_job_into_schedule');
+assert.equal(call.name, 'unpark_job_into_schedule_with_visit_assessment');
+// The worker has no personnel record, so the unpark plans nobody on a visit.
+assert.equal(call.args.p_visit_assessment, null);
 assert.deepEqual(
   [
     call.args.p_organization_id,

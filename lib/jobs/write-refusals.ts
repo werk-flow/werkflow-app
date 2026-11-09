@@ -26,3 +26,19 @@ export function workWriteFailure(
   logError(label, error);
   return { success: false, error: fallback };
 }
+
+/**
+ * The failure of a write that plans a job's legacy visit and records its
+ * assessment (app_private.record_job_visit_assessment). The visit the write
+ * left is not the one the server assessed, because the team, the visit or the
+ * people's records changed meanwhile: save again on the new state.
+ */
+export function jobPlanWriteFailure(
+  label: string,
+  error: { message: string },
+  refusals: readonly string[],
+  fallback: string,
+): ActionFailure {
+  if (error.message === 'stale_planning_occurrence') return { success: false, error: 'stale_occurrence' };
+  return workWriteFailure(label, error, refusals, fallback);
+}

@@ -7,11 +7,9 @@ import { uuidSchema } from '@/lib/validation/uuid';
 
 import { logReadFailure, logReadErrors } from '@/lib/data/read-request-cache';
 import { logError } from '@/lib/logging';
-import { assignmentApprovalSchema } from '@/lib/jobs/action-schemas';
 import { toJob, type UpdateJobResult } from '@/lib/jobs/types';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
-import { prepareJobUpdate } from '@/lib/jobs/update-preparation';
-import { workWriteFailure } from '@/lib/jobs/write-refusals';
+import { jobPlanWriteFailure } from '@/lib/jobs/write-refusals';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import type { Database } from '@/lib/supabase/database.types';
@@ -25,6 +23,7 @@ import {
   predecessorOptionsSchema,
   toPredecessorOption,
 } from './options';
+import { prepareUnparkIntoSchedule, unparkScheduleInputSchema } from './unpark-schedule-preparation';
 
 import {
   parseWorkLifecycleSnapshot,
@@ -525,19 +524,6 @@ export async function unparkWorkTarget(input: {
   return { success: true as const, version: data };
 }
 
-const unparkScheduleInputSchema = z.object({
-  jobId: uuidSchema,
-  blockerVersion: versionSchema,
-  reason: reasonSchema,
-  schedule: z.object({
-    plannedDate: z.string().date(),
-    plannedTime: z.string().max(5),
-    estimatedDurationMinutes: z.number().int().positive().nullable().optional(),
-    selectedUserIds: z.array(uuidSchema).max(100),
-  }),
-  assignmentApproval: assignmentApprovalSchema.nullish(),
-});
-
 /** A refusal of the unpark keeps its work code; a refusal of the schedule write is the job edit's. */
 function unparkScheduleFailure(error: { message: string }): ActionFailure {
   const workCode = mapWorkError(error);
@@ -546,15 +532,16 @@ function unparkScheduleFailure(error: { message: string }): ActionFailure {
     logError('Failed to unpark job into schedule', error);
     return { success: false, error: workCode };
   }
-  return workWriteFailure('Failed to unpark job into schedule', error, ['job_not_found'], 'update_failed');
+  return jobPlanWriteFailure('Failed to unpark job into schedule', error, ['job_not_found'], 'update_failed');
 }
 
 /**
  * Unpark and schedule in one call (P1-24a, criterion 26). The qualification
- * assessment runs first: a warning returns with nothing changed and the job
- * still parked, and the caller repeats the call with the approval. The unpark
- * and the schedule write then run in one database transaction, so a refused
- * write leaves the job parked with its context.
+ * assessment and the capacity check of the visit run first: a warning returns
+ * with nothing changed and the job still parked, and the caller repeats the
+ * call with the approval or the reason. The unpark, the schedule write and the
+ * visit's assessment then run in one database transaction, so a refused write
+ * leaves the job parked with its context.
  */
 export async function unparkJobIntoSchedule(input: unknown): Promise<UpdateJobResult> {
   const parsed = unparkScheduleInputSchema.safeParse(input);
@@ -562,30 +549,19 @@ export async function unparkJobIntoSchedule(input: unknown): Promise<UpdateJobRe
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
   if (!auth.context.isManagerOrAbove) return { success: false, error: 'not_authorized' };
-  const { jobId, schedule } = parsed.data;
   const admin = createSupabaseAdminClient();
-  const prepared = await prepareJobUpdate({
+  const prepared = await prepareUnparkIntoSchedule({
     admin,
     orgId: auth.context.orgId,
     actorId: auth.context.userId,
-    jobId,
-    input: {
-      plannedDate: schedule.plannedDate,
-      plannedTime: schedule.plannedTime,
-      ...(schedule.estimatedDurationMinutes !== undefined
-        ? { estimatedDurationMinutes: schedule.estimatedDurationMinutes }
-        : {}),
-      selectedUserIds: schedule.selectedUserIds,
-      assignmentApproval: parsed.data.assignmentApproval,
-    },
+    input: parsed.data,
   });
   if (!prepared.success) return prepared;
-  // tenant-scope: built-from-context — prepareJobUpdate sets p_organization_id from the orgId passed above, which authenticateAndAuthorize resolved.
-  const { data, error } = await admin.rpc('unpark_job_into_schedule', {
-    ...prepared.arguments,
-    p_expected_blocker_version: parsed.data.blockerVersion,
-    p_reason: parsed.data.reason,
-  });
+  // tenant-scope: built-from-context — prepareUnparkIntoSchedule sets p_organization_id from the orgId passed above, which authenticateAndAuthorize resolved.
+  const { data, error } = await admin.rpc(
+    'unpark_job_into_schedule_with_visit_assessment',
+    prepared.arguments,
+  );
   if (error) return unparkScheduleFailure(error);
   revalidateWork();
   return { success: true, job: toJob(data) };

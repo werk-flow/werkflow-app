@@ -1,9 +1,9 @@
-// The real job create and edit actions over the in-memory database: a job
-// saved with a date and people plans its legacy visit, so a person on
-// approved vacation, or one who left, is refused with the planning conflict
-// until a manager confirms it with a reason. The confirmed save sends the
-// assessed visit (its people and time) with the reason to the one database
-// call that writes the job. The capacity facts (employment, vacation,
+// The real job create and edit, request conversion and unpark actions over
+// the in-memory database: a job saved with a date and people plans its legacy
+// visit, so a person on approved vacation, or one who left, is refused with
+// the planning conflict until a manager confirms it with a reason. The
+// confirmed save sends the assessed visit (its people and time) with the
+// reason to the one database call that writes the job. The capacity facts (employment, vacation,
 // schedules) are the real planning reads; only the qualification evaluation
 // and the holiday calendar stand in.
 import assert from 'node:assert/strict';
@@ -20,7 +20,12 @@ import {
 
 const jobId = '60000000-0000-4000-8000-000000000101';
 const foreignJobId = '60000000-0000-4000-8000-000000000102';
+const parkedJobId = '60000000-0000-4000-8000-000000000103';
 const visitId = '61000000-0000-4000-8000-000000000101';
+const parkedVisitId = '61000000-0000-4000-8000-000000000103';
+const requestId = '66000000-0000-4000-8000-000000000101';
+const foreignRequestId = '66000000-0000-4000-8000-000000000102';
+const clientId = '67000000-0000-4000-8000-000000000101';
 const erikUserId = '30000000-0000-4000-8000-000000000031';
 const erikRecordId = '62000000-0000-4000-8000-000000000031';
 const mehmetUserId = '30000000-0000-4000-8000-000000000032';
@@ -63,19 +68,42 @@ const storedJob = {
   updated_at: now,
 };
 
+const requestRow = (id: string, organizationId: string) => ({
+  id,
+  organization_id: organizationId,
+  client_id: clientId,
+  summary: 'Heizung fällt aus',
+  status: 'offen',
+  created_by: CALLER_ID,
+  created_at: now,
+  updated_at: now,
+});
+
 const world = installActionWorld({
   jobs: [
     storedJob,
     { ...storedJob, id: foreignJobId, organization_id: ORGANIZATION_B, job_number: 'B-2099-001' },
+    // Parked: its schedule is empty, its team stays.
+    {
+      ...storedJob,
+      id: parkedJobId,
+      job_number: 'A-2099-104',
+      status: 'geparkt',
+      planned_date: null,
+      planned_time: null,
+    },
   ],
-  job_assignments: [CALLER_ID, mehmetUserId].map((userId, index) => ({
-    id: `63000000-0000-4000-8000-00000000010${index}`,
-    organization_id: ORGANIZATION_A,
-    job_id: jobId,
-    user_id: userId,
-    assigned_by: CALLER_ID,
-    assigned_at: now,
-  })),
+  job_assignments: [jobId, parkedJobId].flatMap((assignedJobId, jobIndex) =>
+    [CALLER_ID, mehmetUserId].map((userId, index) => ({
+      id: `63000000-0000-4000-8000-0000000001${jobIndex}${index}`,
+      organization_id: ORGANIZATION_A,
+      job_id: assignedJobId,
+      user_id: userId,
+      assigned_by: CALLER_ID,
+      assigned_at: now,
+    })),
+  ),
+  client_requests: [requestRow(requestId, ORGANIZATION_A), requestRow(foreignRequestId, ORGANIZATION_B)],
   // The job's legacy visit at its schedule (08:00 Berlin is 07:00 UTC in November), with its people.
   planning_occurrences: [
     {
@@ -95,6 +123,22 @@ const world = installActionWorld({
         { employee_record_id: callerRecordId, team_source_id: null },
         { employee_record_id: mehmetRecordId, team_source_id: null },
       ],
+    },
+    // The parked job's cancelled visit: a calendar move had taken Mehmet off it.
+    {
+      id: parkedVisitId,
+      organization_id: ORGANIZATION_A,
+      job_id: parkedJobId,
+      legacy_source_job_id: parkedJobId,
+      status: 'cancelled',
+      version: 4,
+      time_kind: 'timed',
+      start_at: `${freeDate}T07:00:00.000Z`,
+      end_at: `${freeDate}T11:00:00.000Z`,
+      start_date: null,
+      end_date_exclusive: null,
+      original_start_local: `${freeDate}T08:00`,
+      assignments: [{ employee_record_id: callerRecordId, team_source_id: null }],
     },
   ],
   employee_records: [
@@ -164,6 +208,8 @@ mock.module('@/lib/planning/qualification-evaluations', () => ({
 world.rpc = () => ({ data: storedJob, error: null });
 
 const { createJob, updateJob } = await import('@/lib/jobs/actions');
+const { convertRequestToJob } = await import('@/lib/requests/actions');
+const { unparkJobIntoSchedule } = await import('@/lib/work-lifecycle/actions');
 signInAs(world, 'admin');
 
 /** The visit assessment the one write call carried. */
@@ -312,11 +358,143 @@ assert.deepEqual(await updateJob(foreignJobId, { plannedDate: vacationDate }), {
 });
 assert.equal(world.rpcCalls.length, 0);
 
-// An employee neither creates nor edits a job.
+// --- Conversion: the Anfrage becomes a job planned for Mehmet on his vacation. ---
+world.rpcCalls = [];
+const conversion = { ...newJob, jobNumber: 'A-2099-105', clientId };
+const conversionRefused = await convertRequestToJob(requestId, conversion);
+assert.ok(!conversionRefused.success && 'conflicts' in conversionRefused);
+assert.equal(conversionRefused.error, 'planning_warning');
+assert.deepEqual(
+  conversionRefused.conflicts.map((conflict) => [conflict.kind, conflict.employeeName]),
+  [
+    ['approved_absence', 'Mehmet Aydın'],
+    ['over_capacity', 'Mehmet Aydın'],
+  ],
+);
+assert.equal(world.rpcCalls.length, 0, 'an unconfirmed conflict converts nothing');
+
+const converted = await convertRequestToJob(requestId, {
+  ...conversion,
+  planningApproval: { fingerprint: conversionRefused.fingerprint, reason },
+});
+assert.equal(converted.success, true);
+const convertedAssessment = sentVisitAssessment('convert_client_request_to_job_with_visit_assessment');
+assert.ok(isJsonRecord(convertedAssessment));
+assert.deepEqual(
+  [
+    world.rpcCalls[0]?.args.p_request_id,
+    convertedAssessment.employee_record_ids,
+    convertedAssessment.start_at,
+    convertedAssessment.capacity_fingerprint,
+    convertedAssessment.override_reason,
+  ],
+  [requestId, [mehmetRecordId], `${vacationDate}T07:00:00.000Z`, conversionRefused.fingerprint, reason],
+  'the confirmed conversion sends the assessed visit with the reason',
+);
+
+// A request of another organization is not found, and nothing is assessed or written.
+world.rpcCalls = [];
+assert.deepEqual(await convertRequestToJob(foreignRequestId, conversion), {
+  success: false,
+  error: 'request_not_found',
+});
+assert.equal(world.rpcCalls.length, 0);
+
+// --- Unpark: the parked job dropped on Mehmet's vacation day. The unpark puts ---
+// --- the whole team on the visit, Mehmet too, though a move had taken him off. ---
+world.rpcCalls = [];
+const unpark = {
+  jobId: parkedJobId,
+  blockerVersion: 3,
+  reason: 'Im Kalender neu eingeplant',
+  schedule: { plannedDate: vacationDate, plannedTime: '08:00', selectedUserIds: [CALLER_ID, mehmetUserId] },
+};
+const unparkRefused = await unparkJobIntoSchedule(unpark);
+assert.ok(!unparkRefused.success && 'conflicts' in unparkRefused);
+assert.equal(unparkRefused.error, 'planning_warning');
+assert.deepEqual(
+  unparkRefused.conflicts.map((conflict) => [conflict.kind, conflict.employeeName]),
+  [
+    ['approved_absence', 'Mehmet Aydın'],
+    ['over_capacity', 'Mehmet Aydın'],
+  ],
+);
+assert.equal(world.rpcCalls.length, 0, 'an unconfirmed conflict leaves the job parked');
+
+const unparkStale = await unparkJobIntoSchedule({
+  ...unpark,
+  planningApproval: { fingerprint: 'f'.repeat(64), reason },
+});
+assert.ok(!unparkStale.success && unparkStale.error === 'stale_assessment');
+assert.equal(world.rpcCalls.length, 0, 'a reason for another assessment leaves the job parked');
+
+const unparked = await unparkJobIntoSchedule({
+  ...unpark,
+  planningApproval: { fingerprint: unparkRefused.fingerprint, reason },
+});
+assert.equal(unparked.success, true);
+const unparkedAssessment = sentVisitAssessment('unpark_job_into_schedule_with_visit_assessment');
+assert.ok(isJsonRecord(unparkedAssessment));
+const unparkedCrew = unparkedAssessment.employee_record_ids;
+assert.ok(Array.isArray(unparkedCrew));
+assert.deepEqual(
+  [
+    world.rpcCalls[0]?.args.p_job_id,
+    world.rpcCalls[0]?.args.p_expected_blocker_version,
+    unparkedCrew.toSorted(),
+    unparkedAssessment.start_at,
+    unparkedAssessment.end_at,
+    unparkedAssessment.capacity_fingerprint,
+    unparkedAssessment.override_reason,
+  ],
+  [
+    parkedJobId,
+    3,
+    [callerRecordId, mehmetRecordId],
+    `${vacationDate}T07:00:00.000Z`,
+    `${vacationDate}T11:00:00.000Z`,
+    unparkRefused.fingerprint,
+    reason,
+  ],
+  'the confirmed unpark sends the visit with the whole team and the reason',
+);
+
+// The visit changed after the server assessed it: the conversion and the unpark ask to save again.
+world.rpc = () => ({ data: null, error: { code: 'P0001', message: 'stale_planning_occurrence' } });
+assert.deepEqual(
+  await convertRequestToJob(requestId, { title: 'Wartung', jobNumber: 'A-2099-106', clientId }),
+  {
+    success: false,
+    error: 'stale_occurrence',
+  },
+);
+assert.deepEqual(
+  await unparkJobIntoSchedule({ ...unpark, schedule: { ...unpark.schedule, plannedDate: freeDate } }),
+  {
+    success: false,
+    error: 'stale_occurrence',
+  },
+);
+world.rpc = () => ({ data: storedJob, error: null });
+
+// A foreign organization's job is not found.
+world.rpcCalls = [];
+assert.deepEqual(await unparkJobIntoSchedule({ ...unpark, jobId: foreignJobId }), {
+  success: false,
+  error: 'job_not_found',
+});
+assert.equal(world.rpcCalls.length, 0);
+
+// An employee neither creates, edits, converts nor unparks.
 signInAs(world, 'employee');
 assert.deepEqual(await createJob(newJob), { success: false, error: 'not_authorized' });
 assert.deepEqual(await updateJob(jobId, { plannedDate: vacationDate }), {
   success: false,
   error: 'not_authorized',
 });
+assert.deepEqual(await convertRequestToJob(requestId, conversion), {
+  success: false,
+  error: 'not_authorized',
+});
+assert.deepEqual(await unparkJobIntoSchedule(unpark), { success: false, error: 'not_authorized' });
 assert.equal(world.rpcCalls.length, 0);

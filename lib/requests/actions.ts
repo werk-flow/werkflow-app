@@ -8,7 +8,8 @@ import type { CreateJobInput } from '@/lib/jobs/actions';
 import { JOB_CREATION_REFUSALS, prepareJobCreation } from '@/lib/jobs/creation';
 import type { CreateProjectInput } from '@/lib/projects/actions';
 import { PROJECT_CREATION_REFUSALS, projectCreationColumns } from '@/lib/projects/creation';
-import { workWriteFailure } from '@/lib/jobs/write-refusals';
+import { jobPlanWriteFailure, workWriteFailure } from '@/lib/jobs/write-refusals';
+import { assessNewJobPlan } from '@/lib/planning/job-team-assessment';
 import { CACHE_TAGS } from '@/lib/data/cached';
 import { updateTag } from 'next/cache';
 import type { ClientType } from '@/lib/jobs/types';
@@ -594,18 +595,23 @@ export async function convertRequestToJob(
       input.jobNumber ?? '',
     );
     if (!prepared.success) return prepared;
+    // The calendar's capacity check of the visit the new job plans with its people.
+    const plan = await assessNewJobPlan({ admin, orgId, job: input });
+    if (!plan.success) return plan;
 
+    // One transaction: the job with its team and its visit's assessment, and the converted request, or nothing.
     const { data, error } = await admin.rpc(
-      'convert_client_request_to_job',
-      rpcArgs('convert_client_request_to_job', {
+      'convert_client_request_to_job_with_visit_assessment',
+      rpcArgs('convert_client_request_to_job_with_visit_assessment', {
         ...prepared.arguments,
         p_organization_id: orgId,
         p_actor_id: userId,
         p_request_id: requestId,
+        p_visit_assessment: plan.planAssessment,
       }),
     );
     if (error) {
-      return workWriteFailure(
+      return jobPlanWriteFailure(
         'Error converting request to job:',
         error,
         [...CONVERSION_REFUSALS, ...JOB_CREATION_REFUSALS],

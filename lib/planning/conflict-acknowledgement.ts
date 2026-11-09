@@ -16,6 +16,13 @@ export type ConflictAcknowledgement = {
 /** A manager's confirmation of the planning conflicts they saw, as a job-page save sends it. */
 export type PlanningConflictApproval = { fingerprint: string; reason: string };
 
+/** The acknowledgement a job save sends for the planning conflicts of the visit it plans. */
+export function planningAcknowledgement(
+  approval: PlanningConflictApproval | null | undefined,
+): ConflictAcknowledgement {
+  return { overrideReason: approval?.reason ?? null, assessmentFingerprint: approval?.fingerprint ?? null };
+}
+
 /** The refusal of a conflicting write: the conflicts and the fingerprint the manager must confirm. */
 export type PlanningWarningFailure = ActionFailure<'planning_warning' | 'stale_assessment'> & {
   conflicts: PlanningConflict[];
