@@ -81,6 +81,11 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
       'a shared token in a header, compared in constant time (proxy.ts answers a request without it like an unknown route, the handler checks again); a per-backend limit before any dependency is asked; read-only checks that answer only a check name and ok or failed, no-store',
     mustCall: ['hasHealthCheckToken', 'consumeRateLimit', 'runAppHealthChecks'],
   },
+  'app/api/problem-report-retention/route.ts': {
+    authorization:
+      'Vercel Cron sends the shared CRON_SECRET as a bearer token, compared in constant time; without a configured secret the handler runs nothing and answers 503, a wrong one 404; the run deletes only problem-report originals and reports whose period has passed, one database call per report, and their file rows queue the objects for the storage purge; the body holds counts only, no-store',
+    mustCall: ['cronRequestAccess', 'runProblemReportRetention'],
+  },
   'app/api/storage-purge/route.ts': {
     authorization:
       'Vercel Cron sends the shared CRON_SECRET as a bearer token, compared in constant time; without a configured secret the handler runs nothing and answers 503, a wrong one 404; the purge deletes only due paths no row references, each inside its organization prefix; the body holds counts only, no-store',

@@ -91,6 +91,14 @@ A legacy original keeps its source system (`source_system`) and the number that 
 - The library search (`list_document_page`) and the link search (`applyDocumentSearch`) match `source_reference` exactly or by prefix, ignoring case, inside the query before the page boundary. A number that only contains the text is no match, so a short search does not flood the list.
 - The client column grant on `documents` leaves out both columns: the origin reaches a reader only through the server, with a document the server already lets them read.
 
+## Report files
+
+A problem report's screenshot and attachments lie in the same private bucket; [problem reports](../features/problem-reports.md) owns who reads them.
+
+- The key is `{organizationId}/problem-reports/{reportId}/{fileId}/{kind}`, and a check constraint refuses a key outside its report. A key holds no file name, so no name a person chose reaches a key, the purge queue or a log; the row keeps the name.
+- No customer role reads a report file, not even an Admin of the organization.
+- Every deleted file row queues its object for the [purge](#storage-cleanup) in the same transaction, whichever path deleted it: the retention run, an organization deletion or an account deletion.
+
 ## Storage cleanup
 
 A database restore brings back rows as old as its backup, so their objects must still exist. Permanent deletion and organization deletion never delete an object at once: the database function that removes the rows queues their paths in `storage_purge_queue`, in the same transaction, eight days ahead, one day past the [backup retention](recovery-and-incidents.md#what-is-backed-up). Deleting an organization lists its prefix first, and `delete_organization_with_files` queues the listed objects, rows or not, in the same transaction; a refusal queues nothing. After the deletion, the action lists the prefix again and queues, through `queue_storage_purge`, each object the first listing missed, such as a signed upload that landed meanwhile.
