@@ -17,6 +17,7 @@ import { useBanner } from '@/components/ui/banner';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import type { ActionResult } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
+import { clearTodayOnDevice } from '@/lib/field-sync/device/today-wipe';
 import { clearServiceWorkerCaches, restoreOfflineShell } from '@/lib/offline/service-worker-caches';
 import { setActiveOrgCookie } from '@/lib/org/actions';
 import type { UserOrg } from '@/lib/org/types';
@@ -162,6 +163,7 @@ async function refreshOwnMemberships({
       const newActiveId = newMemberships[0]?.orgId ?? null;
       if (newActiveId) {
         await setActiveOrgCookie(newActiveId).then(rejectRefusal);
+        await clearTodayOnDevice();
       }
       if (generation !== refreshGenerationRef.current) return;
       setActiveOrgId(newActiveId);
@@ -312,6 +314,8 @@ export function OrganizationProvider({
       try {
         // The cookie call stays in this handler, where the double-render check sees it.
         await clearCachesAfterSwitch(setActiveOrgCookie(orgId));
+        // Nothing the previous organization's day held stays on the device.
+        await clearTodayOnDevice();
         // GET readers authorize against this cookie. Publish the new scope only
         // after its response commits, otherwise their first read is denied.
         setActiveOrgId(orgId);

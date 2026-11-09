@@ -1,0 +1,351 @@
+import 'fake-indexeddb/auto';
+
+import { afterEach, describe, expect, test } from 'bun:test';
+
+import type { FieldSyncToday } from '@/lib/field-sync/today-snapshot';
+import { keepTodayFresh } from './today-refresh';
+import { refreshTodayOnDevice, type TodayHolder } from './today-sync';
+import { readTodayOnDevice, saveTodayOnDevice } from './today-store';
+import { TODAY_DATABASE, TODAY_HOLDER_KEY, TODAY_WIPE_KEY, clearTodayOnDevice } from './today-wipe';
+
+/** localStorage, shared by every tab of an origin: the stand-in for another tab's wipe signal. */
+class MemoryStorage implements Storage {
+  private readonly values = new Map<string, string>();
+  get length(): number {
+    return this.values.size;
+  }
+  clear(): void {
+    this.values.clear();
+  }
+  getItem(key: string): string | null {
+    return this.values.get(key) ?? null;
+  }
+  key(index: number): string | null {
+    return [...this.values.keys()][index] ?? null;
+  }
+  removeItem(key: string): void {
+    this.values.delete(key);
+  }
+  setItem(key: string, value: string): void {
+    this.values.set(key, value);
+  }
+}
+globalThis.localStorage = new MemoryStorage();
+
+/** What a sign-out in another tab does to this device: the shared signal and the deleted database. */
+let otherTabWipes = 0;
+async function wipeFromAnotherTab(): Promise<void> {
+  otherTabWipes += 1;
+  localStorage.setItem(TODAY_WIPE_KEY, `another-tab-${otherTabWipes}`);
+  await new Promise<void>((resolve) => {
+    const request = indexedDB.deleteDatabase(TODAY_DATABASE);
+    request.onsuccess = () => resolve();
+  });
+}
+
+/** Lets queued tasks and IndexedDB events run until the condition holds; no clock is involved. */
+async function until(condition: () => Promise<boolean> | boolean): Promise<void> {
+  for (let turn = 0; turn < 500; turn += 1) {
+    if (await condition()) return;
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  throw new Error('The condition never held.');
+}
+
+/** A 200 whose body arrives only after `beforeBody` ran: a wipe that lands while the answer streams in. */
+function slowBody(body: unknown, beforeBody: () => Promise<void>): Response {
+  const stream = new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        await beforeBody();
+        controller.enqueue(new TextEncoder().encode(JSON.stringify(body)));
+        controller.close();
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  return new Response(stream, { status: 200, headers: { 'content-type': 'application/json' } });
+}
+
+// The phone keeps one snapshot of the current Berlin day for the signed-in
+// person and organization (decision record 0010, "Device data"), in real
+// IndexedDB semantics (fake-indexeddb).
+
+const MORNING = new Date('2026-11-09T06:42:00.000Z'); // 07:42 in Berlin
+const NEXT_DAY = new Date('2026-11-09T23:30:00.000Z'); // 00:30 on 10 November in Berlin
+const holder: TodayHolder = {
+  userId: '9a000000-0000-4000-8000-000000000001',
+  organizationId: '9a000000-0000-4000-8000-0000000000a1',
+};
+
+function snapshot(overrides: Partial<FieldSyncToday> = {}): FieldSyncToday {
+  return {
+    version: 'v1',
+    berlinDate: '2026-11-09',
+    validUntil: '2026-11-09T23:00:00.000Z',
+    ...holder,
+    assignments: [
+      {
+        jobId: '9a000000-0000-4000-8000-000000000021',
+        jobNumber: 'AUF-2026-21',
+        title: 'Heizung tauschen',
+        requestedOutcome: null,
+        plannedWorkingMinutes: null,
+        visits: [{ startAt: '2026-11-09T07:00:00.000Z', endAt: '2026-11-09T09:00:00.000Z' }],
+        customerName: 'Familie Muster',
+        customerPhone: null,
+        siteName: 'Wohnhaus',
+        siteAddress: 'Musterweg 1, 10115 Berlin',
+        accessNotes: null,
+        contactName: null,
+        contactRole: null,
+        contactPhone: null,
+        project: null,
+        instructions: [],
+      },
+    ],
+    ...overrides,
+  };
+}
+
+async function databaseNames(): Promise<string[]> {
+  return (await indexedDB.databases()).flatMap((info) => (info.name ? [info.name] : []));
+}
+
+/** A fetch that answers once with the given response and records the request. */
+function answer(response: Response | Error) {
+  const requests: Request[] = [];
+  const send = async (url: string, init: RequestInit): Promise<Response> => {
+    requests.push(new Request(new URL(url, 'http://localhost'), init));
+    if (response instanceof Error) throw response;
+    return response;
+  };
+  return { send, requests };
+}
+
+afterEach(async () => {
+  await clearTodayOnDevice();
+  localStorage.clear();
+});
+
+describe('the today snapshot on the device', () => {
+  test('a saved snapshot of today reads back with the time the server confirmed it', async () => {
+    await saveTodayOnDevice(snapshot(), MORNING);
+    expect(await readTodayOnDevice(MORNING)).toEqual({
+      snapshot: snapshot(),
+      confirmedAt: MORNING.toISOString(),
+    });
+  });
+
+  test('a sign-out empties the store: no snapshot and no database remain', async () => {
+    await saveTodayOnDevice(snapshot(), MORNING);
+    await clearTodayOnDevice();
+    expect(await databaseNames()).not.toContain(TODAY_DATABASE);
+    expect(await readTodayOnDevice(MORNING)).toBeNull();
+  });
+
+  test('a day that has ended is dropped at its first read after Berlin midnight, not shown', async () => {
+    await saveTodayOnDevice(snapshot(), MORNING);
+    expect(await readTodayOnDevice(NEXT_DAY)).toBeNull();
+    // The record is gone, not merely hidden: an earlier clock still finds nothing.
+    expect(await readTodayOnDevice(MORNING)).toBeNull();
+  });
+
+  test('a record this version cannot read is dropped, never shown', async () => {
+    await saveTodayOnDevice({ ...snapshot(), assignments: [] }, MORNING);
+    const request = indexedDB.open(TODAY_DATABASE, 1);
+    const database = await new Promise<IDBDatabase>((resolve) => {
+      request.onsuccess = () => resolve(request.result);
+    });
+    const written = database.transaction('today', 'readwrite');
+    written.objectStore('today').put({ snapshot: { version: 'v0' }, confirmedAt: 'gestern' }, 'current');
+    await new Promise((resolve) => {
+      written.oncomplete = resolve;
+    });
+    database.close();
+    expect(await readTodayOnDevice(MORNING)).toBeNull();
+  });
+});
+
+describe('refreshing the today snapshot', () => {
+  test('a new snapshot is saved; the request names the organization and passes the same-origin guard', async () => {
+    const { send, requests } = answer(Response.json(snapshot()));
+    expect(await refreshTodayOnDevice(holder, { fetch: send, now: () => MORNING })).toBe('saved');
+    expect(new URL(requests[0]?.url ?? '').searchParams.get('organizationId')).toBe(holder.organizationId);
+    expect(requests[0]?.headers.get('content-type')).toBe('application/json');
+    expect(requests[0]?.headers.get('if-none-match')).toBeNull();
+    expect((await readTodayOnDevice(MORNING))?.snapshot).toEqual(snapshot());
+  });
+
+  test('an unchanged day is confirmed by its version and moves the „Stand“', async () => {
+    await saveTodayOnDevice(snapshot(), MORNING);
+    const later = new Date(MORNING.getTime() + 3_600_000);
+    const { send, requests } = answer(new Response(null, { status: 304 }));
+    expect(await refreshTodayOnDevice(holder, { fetch: send, now: () => later })).toBe('confirmed');
+    expect(requests[0]?.headers.get('if-none-match')).toBe('"v1"');
+    expect((await readTodayOnDevice(later))?.confirmedAt).toBe(later.toISOString());
+  });
+
+  test('without signal or with a failing server the stored day stays, with its old „Stand“', async () => {
+    await saveTodayOnDevice(snapshot(), MORNING);
+    for (const response of [new TypeError('Failed to fetch'), new Response(null, { status: 503 })]) {
+      const { send } = answer(response);
+      expect(await refreshTodayOnDevice(holder, { fetch: send, now: () => MORNING })).toBe('kept');
+      expect((await readTodayOnDevice(MORNING))?.confirmedAt).toBe(MORNING.toISOString());
+    }
+  });
+
+  test('a refused person or organization leaves nothing on the device', async () => {
+    await saveTodayOnDevice(snapshot(), MORNING);
+    const { send } = answer(Response.json({ outcome: 'rejected', code: 'forbidden' }, { status: 403 }));
+    expect(await refreshTodayOnDevice(holder, { fetch: send, now: () => MORNING })).toBe('cleared');
+    expect(await readTodayOnDevice(MORNING)).toBeNull();
+  });
+
+  test("another person's day is deleted before this person's is fetched, and a snapshot for someone else is not saved", async () => {
+    const otherPerson = { ...holder, userId: '9a000000-0000-4000-8000-000000000002' };
+    await saveTodayOnDevice(snapshot(otherPerson), MORNING);
+    const { send, requests } = answer(Response.json(snapshot(otherPerson)));
+    expect(await refreshTodayOnDevice(holder, { fetch: send, now: () => MORNING })).toBe('kept');
+    expect(requests[0]?.headers.get('if-none-match')).toBeNull();
+    expect(await readTodayOnDevice(MORNING)).toBeNull();
+  });
+
+  test('a wipe while the device reads its stored day wins: the refresh saves nothing', async () => {
+    await saveTodayOnDevice(snapshot(), MORNING);
+    const { send } = answer(Response.json(snapshot({ version: 'v2' })));
+    const refresh = refreshTodayOnDevice(holder, { fetch: send, now: () => MORNING });
+    const wiped = wipeFromAnotherTab();
+    expect(await refresh).toBe('superseded');
+    await wiped;
+    expect(await readTodayOnDevice(MORNING)).toBeNull();
+  });
+
+  test('an ended day in storage does not stop the new day from being saved', async () => {
+    await saveTodayOnDevice(snapshot(), MORNING);
+    const nextDay = snapshot({ berlinDate: '2026-11-10', validUntil: '2026-11-10T23:00:00.000Z' });
+    const { send } = answer(Response.json(nextDay));
+    expect(await refreshTodayOnDevice(holder, { fetch: send, now: () => NEXT_DAY })).toBe('saved');
+    expect((await readTodayOnDevice(NEXT_DAY))?.snapshot.berlinDate).toBe('2026-11-10');
+  });
+
+  test("a tab left on an older organization neither deletes nor replaces the newer start page's day", async () => {
+    const newer = { ...holder, organizationId: '9a000000-0000-4000-8000-0000000000b1' };
+    localStorage.setItem(TODAY_HOLDER_KEY, `${newer.userId}:${newer.organizationId}`);
+    await saveTodayOnDevice(snapshot(newer), MORNING);
+    const { send, requests } = answer(
+      Response.json({ outcome: 'rejected', code: 'organization_mismatch' }, { status: 403 }),
+    );
+    expect(await refreshTodayOnDevice(holder, { fetch: send, now: () => MORNING })).toBe('superseded');
+    expect(requests).toEqual([]);
+    expect((await readTodayOnDevice(MORNING))?.snapshot.organizationId).toBe(newer.organizationId);
+  });
+
+  test('a wipe while the answer streams in wins: its body is not saved', async () => {
+    const { send } = answer(slowBody(snapshot(), clearTodayOnDevice));
+    expect(await refreshTodayOnDevice(holder, { fetch: send, now: () => MORNING })).toBe('superseded');
+    expect(await readTodayOnDevice(MORNING)).toBeNull();
+  });
+
+  test("a sign-out in another tab wins over this tab's refresh: neither a new nor a confirmed day is saved", async () => {
+    const { send } = answer(slowBody(snapshot(), wipeFromAnotherTab));
+    expect(await refreshTodayOnDevice(holder, { fetch: send, now: () => MORNING })).toBe('superseded');
+    expect(await readTodayOnDevice(MORNING)).toBeNull();
+    await saveTodayOnDevice(snapshot(), MORNING);
+    const confirm = async (): Promise<Response> => {
+      await wipeFromAnotherTab();
+      return new Response(null, { status: 304 });
+    };
+    expect(await refreshTodayOnDevice(holder, { fetch: confirm, now: () => MORNING })).toBe('superseded');
+    expect(await readTodayOnDevice(MORNING)).toBeNull();
+  });
+
+  test('a wipe while the request runs wins: its answer is not saved', async () => {
+    const send = async (): Promise<Response> => {
+      await clearTodayOnDevice();
+      return Response.json(snapshot());
+    };
+    expect(await refreshTodayOnDevice(holder, { fetch: send, now: () => MORNING })).toBe('superseded');
+    expect(await readTodayOnDevice(MORNING)).toBeNull();
+  });
+});
+
+describe('keeping the day fresh while the app is open', () => {
+  const otherOrganization = { ...holder, organizationId: '9a000000-0000-4000-8000-0000000000b1' };
+  const requested: string[] = [];
+  const realFetch = globalThis.fetch;
+
+  function installBrowser(answerFor: (organizationId: string) => Promise<Response>): void {
+    const listeners = { addEventListener: () => undefined };
+    Object.assign(globalThis, {
+      window: { ...listeners, matchMedia: () => ({ matches: false }) },
+      fetch: async (url: string) => {
+        const organizationId = new URL(url, 'http://localhost').searchParams.get('organizationId') ?? '';
+        requested.push(organizationId);
+        return answerFor(organizationId);
+      },
+    });
+  }
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    requested.length = 0;
+  });
+
+  test("an organization switch during a refresh still refreshes the new organization's day", async () => {
+    let releaseFirst = (): void => undefined;
+    const firstHeld = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    installBrowser(async (organizationId) => {
+      if (organizationId === holder.organizationId) await firstHeld;
+      return Response.json(snapshot({ organizationId }));
+    });
+    const failures: unknown[] = [];
+    keepTodayFresh(holder, (retry) => failures.push(retry));
+    await until(() => requested.length === 1);
+    await clearTodayOnDevice();
+    keepTodayFresh(otherOrganization, (retry) => failures.push(retry));
+    releaseFirst();
+    await until(
+      async () =>
+        (await readTodayOnDevice(MORNING))?.snapshot.organizationId === otherOrganization.organizationId,
+    );
+    expect(requested).toEqual([holder.organizationId, otherOrganization.organizationId]);
+    expect(failures).toEqual([]);
+  });
+
+  test("a switch's wipe that lands after the new start page started its refresh is followed by one more refresh", async () => {
+    let first = true;
+    installBrowser(async (organizationId) => {
+      if (first) {
+        first = false;
+        await clearTodayOnDevice();
+      }
+      return Response.json(snapshot({ organizationId }));
+    });
+    keepTodayFresh(otherOrganization, () => undefined);
+    await until(
+      async () =>
+        (await readTodayOnDevice(MORNING))?.snapshot.organizationId === otherOrganization.organizationId,
+    );
+    expect(requested).toEqual([otherOrganization.organizationId, otherOrganization.organizationId]);
+  });
+
+  test('a day the device cannot store reaches the person with a retry, not only the log', async () => {
+    installBrowser(async (organizationId) => Response.json(snapshot({ organizationId })));
+    const realOpen = indexedDB.open.bind(indexedDB);
+    indexedDB.open = () => {
+      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    };
+    const retries: Array<() => void> = [];
+    try {
+      keepTodayFresh(holder, (retry) => retries.push(retry));
+      await until(() => retries.length === 1);
+    } finally {
+      indexedDB.open = realOpen;
+    }
+    retries[0]?.();
+    await until(async () => (await readTodayOnDevice(MORNING))?.snapshot.version === 'v1');
+  });
+});

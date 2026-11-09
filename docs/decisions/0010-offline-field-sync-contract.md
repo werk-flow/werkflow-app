@@ -126,3 +126,12 @@ Decided by the E7 lead on the review of werk-flow/werkflow-planning#317.
 
 - **Recorded time.** A `capturedAt` up to 5 minutes after receipt is recorded at the receipt time, because nothing happens after the server receives it. A later transition then never ends a segment before it started. The operation keeps the device's `capturedAt` and `sentAt`, and the window, the closed period and the order rule still check that `capturedAt`.
 - **Blocked job.** A start or switch onto a job the office blocked meanwhile, by an open blocker or start dependency, answers `conflict` with `office_changed`, never `retry`.
+
+## Amendment 2026-11-09: the today snapshot
+
+Decided for werk-flow/werkflow-planning#318.
+
+- **Read.** `GET /api/field-sync/v1/today` answers the caller's own scheduled job visits on the current Berlin day, limited to jobs the caller is assigned to, with the field facts of the work pack before work starts: schedule, customer and contact with phone, site with address and access, goal and instructions. Every field is named; nothing the online work pack hides from its assignee is in it. `lib/field-sync/today-snapshot.ts` owns the JSON shape.
+- **Freshness.** The snapshot names its Berlin day and `validUntil`, the next Berlin midnight, so a device drops it by comparing instants and never computes a Berlin date. It carries a content `version`, also its `ETag`. A request whose `If-None-Match` names it gets `304`, and the device moves its „Stand“ to that time.
+- **Organization.** An optional `organizationId` query value is a hint, refused with `organization_mismatch` when it is not the active organization, as for an operation.
+- **Device.** A `rejected` answer deletes the device's day. A `retry` answer keeps it. The web device refreshes on the field worker's start page, where the app opens, and on `online`; a return to the visible app is the Realtime provider's catch-up for the page on screen, so the stored day can be older than that page. The „Stand“ says how old.

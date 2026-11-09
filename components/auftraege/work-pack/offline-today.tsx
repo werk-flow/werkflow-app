@@ -1,0 +1,339 @@
+'use client';
+
+import {
+  CalendarClock,
+  ChevronRight,
+  MapPin,
+  Navigation,
+  Phone,
+  UserRound,
+  WifiOff,
+  type LucideIcon,
+} from 'lucide-react';
+import { useEffect, type ReactElement, type ReactNode } from 'react';
+
+import { StandaloneTitle } from '@/components/shared/standalone-screen';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
+import { ListRow } from '@/components/ui/list-row';
+import { SectionError } from '@/components/ui/section-error';
+import { useClientRead } from '@/hooks/use-client-read';
+import { readTodayOnDevice, type StoredToday } from '@/lib/field-sync/device/today-store';
+import { TODAY_WIPE_KEY } from '@/lib/field-sync/device/today-wipe';
+import type { FieldSyncTodayAssignment } from '@/lib/field-sync/today-snapshot';
+import { jobDetailHref } from '@/lib/jobs/routes';
+import { logError } from '@/lib/logging';
+import { formatDuration } from '@/lib/time-tracking/helpers';
+import { formatBerlinTime } from '@/lib/utils';
+
+// What a phone shows without signal (decision record 0010, "Device data"):
+// today's assignments and each one's work pack, read from the snapshot the
+// device keeps, with when the server last confirmed it. It reads the device
+// only; the server never sees this view. A job page's address shows that
+// job's pack, any other address the day's list. Links are plain document
+// links, so each one opens without signal the same way.
+
+/** The job number a job page's address names: `/auftraege/<nummer>` or `/auftraege/projekt/<projekt>/<nummer>`. */
+function jobNumberOf(pathname: string): string | null {
+  const match = /^\/auftraege\/(?:projekt\/[^/]+\/)?([^/]+)\/?$/.exec(pathname);
+  if (!match?.[1] || match[1] === 'projekt' || match[1] === 'uebergaben') return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    // A malformed address names no job; the day's list shows instead.
+    return null;
+  }
+}
+
+function hrefOf(assignment: FieldSyncTodayAssignment): string {
+  return jobDetailHref(
+    { id: assignment.jobId, jobNumber: assignment.jobNumber },
+    assignment.project
+      ? { id: assignment.project.projectNumber, projectNumber: assignment.project.projectNumber }
+      : null,
+  );
+}
+
+function offlineVisitLabel(visit: FieldSyncTodayAssignment['visits'][number]): string {
+  return visit.startAt && visit.endAt
+    ? `${formatBerlinTime(visit.startAt)}–${formatBerlinTime(visit.endAt)} Uhr`
+    : 'Ganztägig';
+}
+
+/** The first line of every offline view: that this is the device's copy, and from when. */
+function FreshnessLine({ confirmedAt }: { confirmedAt: string }): ReactElement {
+  return (
+    <p
+      role="status"
+      className="flex items-center gap-2 text-sm text-muted-foreground"
+      data-testid="offline-today-stand"
+    >
+      <WifiOff className="size-4 shrink-0" aria-hidden="true" />
+      Offline · Stand {formatBerlinTime(confirmedAt)}
+    </p>
+  );
+}
+
+function TodayList({ assignments }: { assignments: FieldSyncTodayAssignment[] }): ReactElement {
+  if (assignments.length === 0)
+    return (
+      <EmptyState
+        icon={CalendarClock}
+        title="Keine Einsätze für heute"
+        description="Neue Einsätze siehst du, sobald du wieder Netz hast."
+      />
+    );
+  return (
+    <ul className="space-y-3" aria-label="Deine Einsätze heute">
+      {assignments.map((assignment) => (
+        <li key={assignment.jobId}>
+          <ListRow asChild interactive>
+            <a href={hrefOf(assignment)}>
+              <div className="min-w-0">
+                <p className="text-sm font-medium">{assignment.title}</p>
+                <p className="text-xs text-muted-foreground tabular-nums">
+                  {assignment.visits.map(offlineVisitLabel).join(', ')}
+                  {assignment.siteAddress ? ` · ${assignment.siteAddress}` : ''}
+                </p>
+              </div>
+              <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            </a>
+          </ListRow>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function OfflineFact({
+  icon: Icon,
+  label,
+  children,
+}: {
+  icon: LucideIcon;
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex gap-3">
+      <Icon className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <div className="min-w-0">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function PackFacts({ assignment }: { assignment: FieldSyncTodayAssignment }): ReactElement {
+  const phone = assignment.contactPhone ?? assignment.customerPhone;
+  return (
+    <section
+      className="rounded-lg border bg-card p-4 shadow-xs wrap-anywhere sm:p-5"
+      aria-labelledby="offline-pack-facts"
+    >
+      <h2 id="offline-pack-facts" className="text-base font-semibold">
+        Vor dem Einsatz
+      </h2>
+      <div className="mt-3 space-y-3">
+        <OfflineFact icon={CalendarClock} label="Termin">
+          <p className="mt-0.5 text-sm font-medium tabular-nums">
+            {assignment.visits.map(offlineVisitLabel).join(', ')}
+          </p>
+          {assignment.plannedWorkingMinutes ? (
+            <p className="text-xs text-muted-foreground">
+              Geplant: {formatDuration(assignment.plannedWorkingMinutes)}
+            </p>
+          ) : null}
+        </OfflineFact>
+        <OfflineFact icon={UserRound} label="Kontakt">
+          <p className="mt-0.5 text-sm font-medium">
+            {assignment.contactName ?? assignment.customerName ?? 'Nicht hinterlegt'}
+          </p>
+          {assignment.contactRole && (
+            <p className="text-xs text-muted-foreground">{assignment.contactRole}</p>
+          )}
+          {assignment.contactName && assignment.customerName && (
+            <p className="text-xs text-muted-foreground">{assignment.customerName}</p>
+          )}
+        </OfflineFact>
+        <OfflineFact icon={MapPin} label="Einsatzort">
+          <p className="mt-0.5 text-sm font-medium">{assignment.siteName ?? 'Einsatzort'}</p>
+          {assignment.siteAddress && (
+            <p className="text-sm text-muted-foreground">{assignment.siteAddress}</p>
+          )}
+          {assignment.accessNotes && (
+            <p className="mt-1 text-sm">
+              <span className="font-medium">Zugang:</span> {assignment.accessNotes}
+            </p>
+          )}
+        </OfflineFact>
+      </div>
+      {assignment.requestedOutcome && (
+        <div className="mt-3 border-t pt-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Arbeitsziel</p>
+          <p className="mt-1 whitespace-pre-wrap text-sm leading-6">{assignment.requestedOutcome}</p>
+        </div>
+      )}
+      {(phone || assignment.siteAddress) && (
+        <div className="mt-3 flex gap-2 border-t pt-3">
+          {phone && (
+            <Button asChild className="min-h-11 min-w-0 flex-1 px-2 sm:flex-none sm:px-4">
+              <a href={`tel:${phone.replace(/[^\d+]/g, '')}`}>
+                <Phone className="size-4" />
+                Anrufen
+              </a>
+            </Button>
+          )}
+          {assignment.siteAddress && (
+            <Button
+              asChild
+              variant={phone ? 'outline' : 'default'}
+              className="min-h-11 min-w-0 flex-1 px-2 sm:flex-none sm:px-4"
+            >
+              <a href={`geo:0,0?q=${encodeURIComponent(assignment.siteAddress)}`}>
+                <Navigation className="size-4" />
+                Route
+              </a>
+            </Button>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PackInstructions({ instructions }: { instructions: FieldSyncTodayAssignment['instructions'] }) {
+  return (
+    <section
+      className="rounded-lg border bg-card p-4 shadow-xs sm:p-5"
+      aria-labelledby="offline-pack-instructions"
+    >
+      <h2 id="offline-pack-instructions" className="text-base font-semibold">
+        Anweisungen
+      </h2>
+      {instructions.length === 0 ? (
+        <EmptyState size="compact" title="Keine Anweisungen für diesen Auftrag." className="mt-2" />
+      ) : (
+        <ul className="mt-3 divide-y">
+          {instructions.map((item) => (
+            <li key={item.id} className="flex items-start justify-between gap-3 py-2.5">
+              <div className="min-w-0">
+                {item.groupLabel && <p className="text-xs text-muted-foreground">{item.groupLabel}</p>}
+                <p className="text-sm">{item.content}</p>
+                {item.notes && <p className="text-xs text-muted-foreground">{item.notes}</p>}
+              </div>
+              <div className="flex shrink-0 gap-1">
+                {item.required && <Badge variant="outline">Pflicht</Badge>}
+                {item.done && <Badge variant="success">Erledigt</Badge>}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function PackView({ assignment }: { assignment: FieldSyncTodayAssignment }): ReactElement {
+  return (
+    <div className="space-y-4" data-testid="offline-work-pack">
+      <div>
+        <StandaloneTitle>{assignment.title}</StandaloneTitle>
+        <p className="text-sm text-muted-foreground">Auftrag {assignment.jobNumber ?? 'Ohne Nummer'}</p>
+      </div>
+      <PackFacts assignment={assignment} />
+      <PackInstructions instructions={assignment.instructions} />
+      <Button asChild variant="link" className="px-0">
+        <a href="/dashboard">Alle Einsätze von heute</a>
+      </Button>
+    </div>
+  );
+}
+
+function OfflineDayView({ stored, pathname }: { stored: StoredToday; pathname: string }): ReactElement {
+  const jobNumber = jobNumberOf(pathname);
+  const assignment = stored.snapshot.assignments.find((entry) => entry.jobNumber === jobNumber);
+  return (
+    <div className="w-full max-w-2xl space-y-4 text-left" data-testid="offline-today">
+      <FreshnessLine confirmedAt={stored.confirmedAt} />
+      {assignment ? (
+        <PackView assignment={assignment} />
+      ) : (
+        <>
+          <StandaloneTitle>Heute</StandaloneTitle>
+          {jobNumber && (
+            <p className="text-sm text-muted-foreground">
+              Dieser Auftrag ist ohne Netz nicht auf deinem Gerät. Ohne Netz siehst du nur deine Einsätze von
+              heute.
+            </p>
+          )}
+          <TodayList assignments={stored.snapshot.assignments} />
+        </>
+      )}
+    </div>
+  );
+}
+
+/** The longest delay `setTimeout` keeps; a longer one fires at once. */
+const MAX_TIMER_MS = 2_147_483_647;
+
+/**
+ * Reads the device again when the shown day can no longer stand: a sign-out
+ * or organization switch in another tab wiped it, from mount on, so a read in
+ * flight is superseded too; or Berlin midnight passed (`validUntil`), also
+ * while the page was in the back-forward cache.
+ */
+function useDayEnds(stored: StoredToday | null, readAgain: () => void): void {
+  useEffect(() => {
+    const onStorage = (event: StorageEvent): void => {
+      if (event.key === TODAY_WIPE_KEY) readAgain();
+    };
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('pageshow', readAgain);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('pageshow', readAgain);
+    };
+  }, [readAgain]);
+  useEffect(() => {
+    if (!stored) return;
+    const remaining = Date.parse(stored.snapshot.validUntil) - Date.now();
+    const timer = window.setTimeout(readAgain, Math.min(Math.max(remaining, 0), MAX_TIMER_MS));
+    return () => window.clearTimeout(timer);
+  }, [stored, readAgain]);
+}
+
+/**
+ * The device's day for the address the person opened. Without a stored day
+ * (never refreshed, another day, or wiped), and while the device reads, it
+ * shows `withoutDay`, the plain no-signal page.
+ */
+export function OfflineToday({ withoutDay }: { withoutDay: ReactNode }): ReactNode {
+  const day = useClientRead({
+    read: async () => {
+      try {
+        const stored = await readTodayOnDevice();
+        return { success: true as const, stored, pathname: window.location.pathname };
+      } catch (error) {
+        logError('OfflineToday: device storage failed', error);
+        return { success: false as const, error: 'load_failed' };
+      }
+    },
+    deps: [],
+    failureMessage: 'Der Speicher deines Geräts hat nicht geantwortet.',
+  });
+  useDayEnds(day.data?.stored ?? null, day.reload);
+
+  if (day.failure)
+    return (
+      <div className="w-full max-w-2xl">
+        <SectionError title="Deine Einsätze von heute konnten nicht gelesen werden" failure={day.failure} />
+      </div>
+    );
+  // The device answers within a frame; until then the plain no-signal page stands, never a skeleton that
+  // most phones, which keep no day, would replace with exactly that page.
+  if (!day.data?.stored) return withoutDay;
+  return <OfflineDayView stored={day.data.stored} pathname={day.data.pathname} />;
+}

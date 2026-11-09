@@ -21,6 +21,7 @@ import { deleteAccount } from '@/lib/auth/actions';
 import { clearServiceWorkerCaches } from '@/lib/offline/service-worker-caches';
 import { loadDocument } from '@/lib/navigation/document-load';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { clearTodayOnDevice } from '@/lib/field-sync/device/today-wipe';
 import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
 
 const ERROR_MESSAGES: Readonly<Record<string, string>> = {
@@ -48,6 +49,7 @@ export function DeleteAccountButton() {
 
         clearManualEntryBridge();
         await clearServiceWorkerCaches();
+        await clearTodayOnDevice();
         // Sign out locally and load the login page fresh — the deleted account's
         // other sessions are already gone server-side.
         await supabase.auth.signOut({ scope: 'local' });
