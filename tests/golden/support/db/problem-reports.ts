@@ -11,25 +11,25 @@ export type PersistedProblemReport = Persisted<{
   fileKinds: string[];
 }>;
 
-/** The report a person just sent, by its organization and number, with the kinds of its files. */
-export async function getProblemReportByNumber(
+/** The report a person just sent, by its organization and test-specific description, with the kinds of its files. */
+export async function getProblemReportByDescription(
   orgId: string,
-  number: number,
+  description: string,
 ): Promise<PersistedProblemReport> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from('problem_reports')
     .select('id, number, reporter_id, status, description, scrub_state')
     .eq('organization_id', orgId)
-    .eq('number', number)
+    .eq('description', description)
     .single();
-  if (error) throw new Error(`Problem report ${number} lookup failed: ${error.message}`);
+  if (error) throw new Error(`Problem report lookup failed: ${error.message}`);
   const files = await admin
     .from('problem_report_files')
     .select('kind')
     .eq('organization_id', orgId)
     .eq('report_id', data.id);
-  if (files.error) throw new Error(`Problem report ${number} file lookup failed: ${files.error.message}`);
+  if (files.error) throw new Error(`Problem report file lookup failed: ${files.error.message}`);
   return persisted({
     number: data.number,
     reporterId: data.reporter_id,

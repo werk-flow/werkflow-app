@@ -11,7 +11,7 @@ const PROBLEM_REPORT_COPY = {
   includeScreenshot: 'Screenshot mitsenden',
   screenshot: 'Vorschau des Screenshots mit deinen Schwärzungen',
   send: 'Senden',
-  receipt: /Danke! Deine Meldung Nr\. (\d+) ist eingegangen\./,
+  receipt: /Danke! Deine Meldung Nr\. \d+ ist eingegangen\./,
   ownReports: 'Meine Meldungen',
 } as const;
 
@@ -48,16 +48,21 @@ export async function redactScreenshotMiddle(dialog: Locator): Promise<void> {
   await page.mouse.up();
 }
 
-/** Describes the problem and sends it; returns the report number the receipt names. */
-export async function sendProblemReport(dialog: Locator, description: string): Promise<number> {
+/** Describes the problem and sends it; the dialog closes on the receipt. */
+export async function sendProblemReport(dialog: Locator, description: string): Promise<void> {
   const page = dialog.page();
   await dialog.getByRole('textbox', { name: PROBLEM_REPORT_COPY.description, exact: true }).fill(description);
   await expectBannerAfter(page, PROBLEM_REPORT_COPY.receipt, async () => {
     await dialog.getByRole('button', { name: PROBLEM_REPORT_COPY.send, exact: true }).click();
   });
-  const receipt = await page.getByText(PROBLEM_REPORT_COPY.receipt).textContent();
   await expect(dialog).toBeHidden();
-  return Number(PROBLEM_REPORT_COPY.receipt.exec(receipt ?? '')?.[1] ?? 0);
+}
+
+/** The receipt banner naming the report's number. */
+export function problemReportReceipt(page: Page, number: number): Locator {
+  return page
+    .getByRole('alert')
+    .getByText(`Danke! Deine Meldung Nr. ${number} ist eingegangen.`, { exact: true });
 }
 
 /** The receipt's „Meine Meldungen“ action, which opens the reporter's list. */

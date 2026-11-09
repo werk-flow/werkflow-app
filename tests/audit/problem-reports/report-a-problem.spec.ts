@@ -1,10 +1,11 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../support/fixtures';
-import { getProblemReportByNumber } from '../../golden/support/db/problem-reports';
+import { getProblemReportByDescription } from '../../golden/support/db/problem-reports';
 import {
   openOwnReportsFromReceipt,
   openProblemReport,
   ownReport,
+  problemReportReceipt,
   redactScreenshotMiddle,
   sendProblemReport,
 } from '../../golden/support/steps/problem-reports';
@@ -26,10 +27,10 @@ async function reportFrom(
     await page.goto(path);
     const dialog = await openProblemReport(page);
     await redactScreenshotMiddle(dialog);
-    const number = await sendProblemReport(dialog, description);
-    expect(number).toBeGreaterThan(0);
+    await sendProblemReport(dialog, description);
 
-    const stored = await getProblemReportByNumber(world.orgId, number);
+    const stored = await getProblemReportByDescription(world.orgId, description);
+    await expect(problemReportReceipt(page, stored.number)).toBeVisible();
     expect(stored.reporterId).toBe(world.users[role].id);
     expect(stored.description).toBe(description);
     expect(stored.status).toBe('eingegangen');
@@ -42,7 +43,7 @@ async function reportFrom(
   });
 }
 
-test.describe('Report a problem @AUDIT-PROBLEM-REPORTS', () => {
+test.describe('Report a problem @AUDIT-SECURITY-PROBLEM-REPORT', () => {
   test('E6-F01 E6-F02 a field worker reports from a phone, redacts the screenshot and finds the report', async ({
     employeePage,
     world,
