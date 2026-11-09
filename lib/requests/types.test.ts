@@ -26,6 +26,7 @@ const requestRow: ClientRequestRow = {
   contact_id: 'contact-1',
   site_id: 'site-1',
   equipment_id: 'equipment-1',
+  attempt_key: null,
   caller_name: 'Erika Muster',
   caller_phone: '0301234567',
   caller_email: 'erika@example.test',

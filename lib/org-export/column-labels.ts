@@ -55,6 +55,7 @@ export const COLUMN_LABELS: Record<LabeledColumn, string> = {
   assigned_by: 'Zugewiesen von (ID)',
   assigned_to: 'Zugewiesen an (ID)',
   assigned_to_user_id: 'Zugewiesen an Person (ID)',
+  attempt_key: 'Erfassungsschlüssel',
   authoritative_targets: 'Maßgebliche Ziele',
   authorization_state: 'Freigabestatus',
   auto_break_duration_minutes: 'Automatische Pause (Minuten)',

@@ -44,6 +44,7 @@ declare global {
       | 'route-refresh'
       | 'customer'
       | 'customer-create'
+      | 'request-capture'
       | 'sickness-record'
       | 'absence-picker'
       | 'schedule-parked-picker'
