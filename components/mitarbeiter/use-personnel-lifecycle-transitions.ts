@@ -31,7 +31,6 @@ function usePersonnelTransitionFields() {
   const [employmentKind, setEmploymentKind] = useState<PersonnelEmploymentTransitionKind>('record_notice');
   const [employmentDate, setEmploymentDate] = useState<Date | undefined>(todayDate());
   const [reason, setReason] = useState('');
-  const [acceptUnresolved, setAcceptUnresolved] = useState(false);
 
   return {
     accessOpen,
@@ -48,8 +47,6 @@ function usePersonnelTransitionFields() {
     setEmploymentDate,
     reason,
     setReason,
-    acceptUnresolved,
-    setAcceptUnresolved,
   };
 }
 
@@ -122,15 +119,7 @@ async function saveEmploymentTransition(
     reconcileMutation,
     failureMessage,
   } = lifecycle;
-  const {
-    employmentKind,
-    employmentDate,
-    reason,
-    acceptUnresolved,
-    setEmploymentOpen,
-    setReason,
-    setAcceptUnresolved,
-  } = fields;
+  const { employmentKind, employmentDate, reason, setEmploymentOpen, setReason } = fields;
   if (mutationDisabled) return;
   setError(null);
   const nextErrors: Record<string, string> = {};
@@ -146,7 +135,6 @@ async function saveEmploymentTransition(
         transitionKind: employmentKind,
         effectiveOn: toLocalDateString(employmentDate),
         reason,
-        acceptUnresolvedWork: acceptUnresolved,
         operationId: crypto.randomUUID(),
       });
       if (!result.success) {
@@ -155,7 +143,6 @@ async function saveEmploymentTransition(
       }
       setEmploymentOpen(false);
       setReason('');
-      setAcceptUnresolved(false);
       showBanner({
         variant: 'success',
         message: 'Beschäftigungsübergang wurde gespeichert.',
@@ -168,12 +155,20 @@ async function saveEmploymentTransition(
   }
 }
 
-/** Access and employment transition dialogs; both share one reason text. */
-export function usePersonnelLifecycleTransitions(lifecycle: PersonnelLifecycleController) {
+/**
+ * Access and employment transition dialogs; both share one reason text. A
+ * transition that takes the person away offers the handover of their open
+ * work (`openHandover`, from a Berlin date on).
+ */
+export function usePersonnelLifecycleTransitions(
+  lifecycle: PersonnelLifecycleController,
+  openHandover: (from?: string) => void,
+) {
   const fields = usePersonnelTransitionFields();
 
   return {
     ...fields,
+    openHandover,
     submitAccess: (): Promise<void> => saveAccessTransition(lifecycle, fields),
     submitEmployment: (): Promise<void> => saveEmploymentTransition(lifecycle, fields),
   };

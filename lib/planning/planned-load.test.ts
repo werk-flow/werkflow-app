@@ -63,3 +63,47 @@ describe('planned load of a visit', () => {
     expect(later.conflicts.map((conflict) => conflict.kind)).not.toContain('access_ended');
   });
 });
+
+describe('planned load of several visits in one write', () => {
+  const target = resolveDailyTarget({
+    dateIso: VISIT_DATE,
+    schedules: [],
+    conditions: [],
+    calendar: EMPTY_HOLIDAY_CALENDAR,
+    employment: { entryDate: '2020-01-01', exitDate: null },
+  });
+  const at = (id: string, startAt: string, endAt: string): MaterializedOccurrence => ({
+    ...visit,
+    originalStartLocal: id,
+    startAt,
+    endAt,
+  });
+  const assess = (occurrences: MaterializedOccurrence[]) =>
+    evaluateProposedCapacity({
+      occurrences,
+      assignmentsFor: () => [{ employeeRecordId: 'erik', teamSourceId: null }],
+      existingRows: [],
+      excludedOccurrenceIds: new Set(),
+      employeeRecordIds: ['erik'],
+      uniqueDates: [VISIT_DATE],
+      targets: { targetByEmployeeDate: new Map([[`erik:${VISIT_DATE}`, target]]), pendingVacation: [] },
+      accessEndDateByRecord: new Map(),
+    });
+
+  test('two of them that overlap for one person are an overlap, though the day has room', () => {
+    // 08:00–10:00 and 09:00–11:00 Berlin: four hours of an eight-hour day, one hour at once.
+    const result = assess([
+      at('a', '2026-11-04T07:00:00.000Z', '2026-11-04T09:00:00.000Z'),
+      at('b', '2026-11-04T08:00:00.000Z', '2026-11-04T10:00:00.000Z'),
+    ]);
+    expect(result.conflicts.map((conflict) => conflict.kind)).toContain('overlap');
+  });
+
+  test('two of them one after the other are no overlap', () => {
+    const result = assess([
+      at('a', '2026-11-04T07:00:00.000Z', '2026-11-04T08:00:00.000Z'),
+      at('b', '2026-11-04T08:00:00.000Z', '2026-11-04T09:00:00.000Z'),
+    ]);
+    expect(result.conflicts.map((conflict) => conflict.kind)).not.toContain('overlap');
+  });
+});

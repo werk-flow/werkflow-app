@@ -43,7 +43,8 @@ export function initializePersonnelBoundary(): PersonnelLifecycleView {
     plans: [],
     templates: [],
     documents: [],
-    transitionInventory: { activeJobs: [], strandedResponsibilities: [] },
+    transitionInventory: { openWork: [], strandedResponsibilities: [] },
+    handoverFrom: '2026-10-01',
   };
   window.uiContractPersonnel = {
     snapshot,
