@@ -90,12 +90,14 @@ type BoardRowCardsInput = Pick<
   columns: BoardColumn[];
   days: ReadonlyMap<string, CalendarBoardDay>;
   planned: ReadonlyMap<string, number>;
+  workDays: ReadonlySet<string>;
   dispatch: ReadonlyMap<string, DispatchRecipientDerivedState>;
 };
 
 /** The search-filtered cards, the filtered team groups, the visible rows and each row's cards. */
 function useBoardRowCards(input: BoardRowCardsInput) {
-  const { preferences, board, jobs, isManager, collapsedTeams, columns, days, planned, dispatch } = input;
+  const { preferences, board, jobs, isManager, collapsedTeams, columns, days, planned, workDays, dispatch } =
+    input;
   const { people } = useBoardAbsences();
   const visibleJobs = useMemo(
     () => (preferences.showJobs ? jobs.filter((job) => matchesBoardSearch(job, preferences.search)) : []),
@@ -116,6 +118,7 @@ function useBoardRowCards(input: BoardRowCardsInput) {
         columns,
         days,
         planned,
+        workDays,
         dispatch,
         dispatchStates: preferences.dispatchStates,
         onlyConflicts: preferences.onlyConflicts,
@@ -129,6 +132,7 @@ function useBoardRowCards(input: BoardRowCardsInput) {
       days,
       dispatch,
       planned,
+      workDays,
       preferences.dispatchStates,
       preferences.memberUserIds,
       preferences.onlyConflicts,
@@ -194,6 +198,7 @@ export function usePlantafelModel(input: PlantafelModelInput) {
     columns,
     days,
     planned,
+    workDays,
     dispatch,
   });
 

@@ -373,12 +373,49 @@ describe('a person outside their employment or app access on the visit date', ()
       columns: [{ date: '2026-11-03' }, { date: '2026-11-04' }],
       days: new Map(),
       planned: new Map(),
+      workDays: new Set<string>(),
       dispatch: new Map(),
       dispatchStates: [],
       onlyConflicts: true,
       people: afterExit,
     });
     expect(kept.flatMap((group) => group.rows.map((model) => model.key))).toEqual(['unassigned', 'r-anna']);
+  });
+
+  test('„Nur Konflikte“ keeps a leaver’s row whose hatched day holds work a search hides', () => {
+    const erikRow = row({ ...erik, role: null, hasLogin: false });
+    const hatched: CalendarBoardDay = {
+      employeeRecordId: 'r-erik',
+      date: '2026-10-31',
+      targetMinutes: 0,
+      baseTargetMinutes: 0,
+      reason: 'no_work_day',
+      label: null,
+      absence: null,
+      pendingVacation: false,
+    };
+    const allDay = job({
+      ...solo,
+      plannedTime: null,
+      plannedDate: '2026-10-31',
+      endDateExclusive: '2026-11-01',
+    });
+    const kept = filterBoardGroups({
+      groups: [
+        { key: 'no-team', name: 'Ohne Team', rows: [{ key: 'r-erik', kind: 'person', row: erikRow }] },
+      ],
+      // The search hid the all-day card, and it plans zero minutes on a zero-target day.
+      visibleJobs: [],
+      columns: [{ date: '2026-10-31' }],
+      days: new Map([['r-erik:2026-10-31', hatched]]),
+      planned: new Map(),
+      workDays: plannedWorkDays([allDay], new Map()),
+      dispatch: new Map(),
+      dispatchStates: [],
+      onlyConflicts: true,
+      people: indexBoardPeople([erikRow], []),
+    });
+    expect(kept.flatMap((group) => group.rows.map((model) => model.key))).toEqual(['r-erik']);
   });
 
   test('a card taken from „Ohne Zuweisung“ replaces the leaver with its new person', () => {

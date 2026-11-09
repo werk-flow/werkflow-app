@@ -1,4 +1,5 @@
-import { boardDayKey, deriveCapacityState, type CalendarBoardDay } from './board';
+import { unavailabilityOn } from '@/lib/planning/availability';
+import { boardCellCapacity, boardDayKey, type CalendarBoardDay } from './board';
 import {
   dispatchStateMatches,
   rowOwnsJob,
@@ -31,13 +32,14 @@ export function filterBoardGroups(input: {
   columns: readonly { date: string }[];
   days: ReadonlyMap<string, CalendarBoardDay>;
   planned: ReadonlyMap<string, number>;
+  /** The person-days with work from every visit, so a search never hides an overbooked hatched day. */
+  workDays: ReadonlySet<string>;
   dispatch: BoardDispatchIndex;
   dispatchStates: readonly string[];
   onlyConflicts: boolean;
   people: BoardPeople;
 }): BoardTeamGroup[] {
-  const { groups, visibleJobs, columns, days, planned, dispatch, dispatchStates, onlyConflicts, people } =
-    input;
+  const { groups, visibleJobs, columns, dispatch, dispatchStates, onlyConflicts, people } = input;
   if (!onlyConflicts && dispatchStates.length === 0) return groups;
   return groups
     .map((group) => ({
@@ -56,12 +58,22 @@ export function filterBoardGroups(input: {
         if (!matchesDispatch) return false;
         if (!onlyConflicts) return true;
         if (rowJobs.some((job) => unavailableAssignees(job, people).length > 0)) return true;
-        if (!recordId) return false;
+        if (model.kind !== 'person' || !recordId) return false;
+        const { row } = model;
+        // The cells' own rating, so a hatched day with work counts as the cell shows it.
         const overbooked = columns.some((column) => {
-          const day = days.get(boardDayKey(recordId, column.date));
-          return day
-            ? deriveCapacityState(day, planned.get(boardDayKey(recordId, column.date)) ?? 0) === 'overbooked'
-            : false;
+          const key = boardDayKey(recordId, column.date);
+          const day = input.days.get(key);
+          if (!day) return false;
+          return (
+            boardCellCapacity({
+              day,
+              plannedMinutes: input.planned.get(key) ?? 0,
+              hasPlannedWork: input.workDays.has(key),
+              unavailability: unavailabilityOn(row, column.date),
+              isWeekend: false,
+            }).state === 'overbooked'
+          );
         });
         const challenged = rowJobs.some(
           (job) => dispatch.get(`${job.occurrenceId}:${recordId}`) === 'rueckfrage',
