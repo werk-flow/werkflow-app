@@ -170,7 +170,14 @@ function editRequestInput(
     urgency,
     source,
     ...(receivedAtDate ? { receivedAt: receivedAtDate.toISOString() } : {}),
-    callbackDueAt: callbackDueAtDate ? callbackDueAtDate.toISOString() : null,
+    // An untouched field keeps the saved instant: its Berlin wall-clock text
+    // names two instants in the hour the clocks go back.
+    callbackDueAt:
+      fields.callbackDueAt === callbackInput(request)
+        ? request.callbackDueAt
+        : callbackDueAtDate
+          ? callbackDueAtDate.toISOString()
+          : null,
     // The Anlage hangs off the request's site; without one there is none to name.
     ...(request.siteId ? { equipmentId: equipmentId || null } : {}),
     assignedTo,

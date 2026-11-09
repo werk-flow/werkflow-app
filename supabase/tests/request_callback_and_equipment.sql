@@ -306,6 +306,31 @@ begin
 end;
 $$;
 
+-- A request whose Anlage was archived after the capture does not convert into
+-- a Servicefall: the conversion leaves no Servicefall, request change or
+-- history behind.
+do $$
+declare
+  v_before text := pg_temp.request_state();
+begin
+  perform pg_temp.expect_refusal('conversion with an archived Anlage', $sql$
+    select public.create_service_case('41909000-0000-0000-0000-000000000010',
+      '41909000-0000-0000-0000-000000000072',
+      '{"sourceRequestId":"41909000-0000-0000-0000-000000000041","chargeContext":"unknown","equipmentIds":[]}',
+      '41909000-0000-0000-0000-000000000002', '41909000-0000-0000-0000-000000000073')
+  $sql$, 'service_case_equipment_mismatch');
+  if exists (
+    select 1 from public.service_cases service_case
+    where service_case.source_request_id = '41909000-0000-0000-0000-000000000041'
+  ) then
+    raise exception 'a refused conversion left a Servicefall behind';
+  end if;
+  if pg_temp.request_state() is distinct from v_before then
+    raise exception 'a refused conversion changed a request or its history';
+  end if;
+end;
+$$;
+
 reset role;
 
 do $$
