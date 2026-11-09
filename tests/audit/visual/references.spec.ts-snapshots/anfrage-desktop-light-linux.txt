@@ -52,7 +52,7 @@ Eingegangen
 01.01.2026, 08:00
 Die Heizkörper im Dachgeschoss werden nicht warm. Unten ist alles in Ordnung.
 Dokumente & Bilder
-Fotos, Nachrichten oder Unterlagen zur Anfrage. Bei einer Umwandlung werden sie automatisch mit dem Auftrag oder Projekt verknüpft.
+Fotos, Nachrichten oder Unterlagen zur Anfrage. Beim Umwandeln oder Hinzufügen zu bestehender Arbeit werden sie automatisch dort mit verknüpft.
 Hochladen
 Noch keine Dokumente vorhanden.
 Lade Dateien direkt zu dieser Anfrage hoch.
