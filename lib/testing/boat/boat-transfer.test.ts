@@ -20,12 +20,12 @@ import { boatClient } from './boat-api';
 import { transfer } from './boat-transfer';
 import {
   changedSinceHead,
-  fallbackLine,
   gitEnvironment,
   importResults,
   rebuiltTreeProblem,
   tarPackArguments,
   treeFiles,
+  unavailable,
 } from './verify-on-boat';
 
 /** A results archive as remote-verify.sh packs it: one report under .agent-logs/. */
@@ -111,10 +111,10 @@ test('a results download that fails on every attempt falls back after four fresh
   expect(signedUrls).toHaveLength(4);
   expect(waits).toEqual([2_000, 10_000, 30_000]);
   expect(existsSync(join(run.repository, '.agent-logs'))).toBe(false);
-  // runOnBoat turns the last failure into its one fallback line and runs the plan locally.
-  expect(fallbackLine(failure, signal)).toBe(
-    'Running locally: ECONNRESET: The socket connection was closed unexpectedly.',
-  );
+  // runOnBoat turns the last failure into Boat's unavailability; only the cheap groups then run here.
+  expect(unavailable(failure, signal)).toEqual({
+    unavailable: 'ECONNRESET: The socket connection was closed unexpectedly.',
+  });
 });
 
 test('a refused signed URL is signed afresh, and the run keeps its results', async () => {
@@ -166,7 +166,7 @@ test("a refusal of Boat's API, or an interruption, ends the download without a r
     wait,
   }).catch((error: unknown) => error);
   expect(stopped instanceof Error && 'code' in stopped && stopped.code).toBe('ECONNRESET');
-  expect(() => fallbackLine(stopped, interrupt.signal)).toThrow();
+  expect(() => unavailable(stopped, interrupt.signal)).toThrow();
   expect(interrupted.signedUrls).toHaveLength(1);
   expect(waits).toEqual([]);
 });

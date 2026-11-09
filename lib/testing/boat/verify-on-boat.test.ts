@@ -1,5 +1,5 @@
 // Rule test: test:verify picks Boat only where a Boat run proves the same thing as a local one,
-// falls back to the local run on any Boat failure, and an unusable key says so in one line.
+// turns any Boat failure into Boat's unavailability with its reason, and an unusable key says why.
 import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import {
@@ -24,7 +24,6 @@ import { backendValueDigests } from '../evidence/proof-environment';
 import {
   boatFailure,
   changedSinceHead,
-  fallbackLine,
   gitEnvironment,
   copyResults,
   evidenceFiles,
@@ -34,6 +33,7 @@ import {
   rebuiltTreeProblem,
   runOnBoat,
   tarPackArguments,
+  unavailable,
   unpackResults,
   withMachine,
   linkedDestination,
@@ -167,7 +167,7 @@ test('a command streams its output in order and reports its exit and a memory ki
   expect(offsets).toEqual(['?stdoutOffset=0&stderrOffset=0', '?stdoutOffset=4&stderrOffset=0']);
 });
 
-test('each Boat refusal becomes one fallback line, and a rejected key says how to renew', () => {
+test('each Boat refusal becomes one reason, and a rejected key says how to renew', () => {
   expect(boatFailure(new BoatError(503, 'no_ready_machine', 'POST /sandboxes: 503'))).toBe(
     'Boat answered 503 no_ready_machine.',
   );
@@ -404,10 +404,10 @@ test('a Ctrl-C while a machine starts deletes it and never falls back to a local
   // The interruption itself stops the wait: no readiness poll, and the started machine is deleted.
   expect(failure instanceof Error && failure.name).toBe('AbortError');
   expect(calls.slice(0, 2)).toEqual(['POST /api/v1/sandboxes', 'DELETE /api/v1/sandboxes/bx_test']);
-  expect(() => fallbackLine(failure, interrupt.signal)).toThrow();
-  expect(fallbackLine(new BoatError(503, 'no_ready_machine', ''), new AbortController().signal)).toBe(
-    'Running locally: Boat answered 503 no_ready_machine.',
-  );
+  expect(() => unavailable(failure, interrupt.signal)).toThrow();
+  expect(unavailable(new BoatError(503, 'no_ready_machine', ''), new AbortController().signal)).toEqual({
+    unavailable: 'Boat answered 503 no_ready_machine.',
+  });
 });
 
 test('a run machine keeps no snapshot and no monitoring; only the snapshot build keeps both', async () => {

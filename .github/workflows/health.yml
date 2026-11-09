@@ -5,7 +5,10 @@ name: Health
 # (docs/technical/environments.md#credentials). Each credential check is its own
 # step named after its credential and runs even when an earlier one failed. The
 # `CI queue` job reports how long CI jobs waited for a runner this week, so a rise
-# surfaces (docs/technical/testing.md#ci). A failed run opens or updates one issue
+# surfaces (docs/technical/testing.md#ci). The `vercel-build-step` check compares the
+# Vercel project's Ignored Build Step with .github/vercel/ignored-build-step.sh
+# (docs/technical/environments.md#vercel); `pr-asset-branches` fails while a branch holds
+# PR images (the file-pr skill). A failed run opens or updates one issue
 # that lists the failed check ids; the next green run closes it. Each credential
 # check names its environment, dev or prod, and only a failed prod check assigns
 # the owner (.github/scripts/health-check.sh).
@@ -33,6 +36,8 @@ on:
           - prod-database-url
           - production-deploy-key
           - ci-queue
+          - vercel-build-step
+          - pr-asset-branches
 
 permissions:
   contents: read
@@ -60,6 +65,7 @@ jobs:
       SIBLING_REPOSITORIES_TOKEN: ${{ secrets.SIBLING_REPOSITORIES_TOKEN }}
       HEALTH_CHECK_TOKEN: ${{ secrets.HEALTH_CHECK_TOKEN }}
       VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+      VERCEL_PROJECT: https://api.vercel.com/v9/projects/prj_h5ZIXgvJqyy4A7Qqy8Z0j9Ovo86R?teamId=team_B8v4QHjpjZWyFXo6wkhiXkgN
     steps:
       # Only the check script is read; no step needs the job token in .git/config.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -80,7 +86,17 @@ jobs:
       - name: VERCEL_TOKEN reads the project
         id: vercel-token
         if: ${{ !cancelled() }}
-        run: $CHECK prod vercel-token bearer VERCEL_TOKEN 'https://api.vercel.com/v9/projects/prj_h5ZIXgvJqyy4A7Qqy8Z0j9Ovo86R?teamId=team_B8v4QHjpjZWyFXo6wkhiXkgN'
+        run: $CHECK prod vercel-token bearer VERCEL_TOKEN "$VERCEL_PROJECT"
+      - name: The Vercel project builds only production and staging (Ignored Build Step)
+        id: vercel-build-step
+        if: ${{ !cancelled() }}
+        run: bash .github/scripts/vercel-build-step.sh "$VERCEL_PROJECT"
+      - name: No pr-assets branch holds PR images
+        id: pr-asset-branches
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/pr-asset-branches.sh
       - name: SIBLING_REPOSITORIES_TOKEN reads werkflow-business
         id: sibling-repositories-token
         if: ${{ !cancelled() }}
@@ -221,8 +237,8 @@ jobs:
           fi
           mapfile -t names <<< "$failed"
           list="$(printf -- '- %s\n' "${names[@]}")"
-          body="$(printf 'The weekly health check failed. Failed checks:\n\n%s\n\nThe step of each credential check in the run names its credential. [Credentials](https://github.com/%s/blob/main/docs/technical/environments.md#credentials) says how to rotate it. `ci-queue` means CI jobs waited longer for a runner this week; the summary of its job has the numbers, and [CI](https://github.com/%s/blob/main/docs/technical/testing.md#ci) says what to look at.' \
-            "$list" "$GH_REPO" "$GH_REPO")"
+          body="$(printf 'The weekly health check failed. Failed checks:\n\n%s\n\nThe step of each credential check in the run names its credential. [Credentials](https://github.com/%s/blob/main/docs/technical/environments.md#credentials) says how to rotate it. `ci-queue` means CI jobs waited longer for a runner this week; the summary of its job has the numbers, and [CI](https://github.com/%s/blob/main/docs/technical/testing.md#ci) says what to look at. `vercel-build-step` means the Ignored Build Step of the Vercel project differs from `.github/vercel/ignored-build-step.sh`; [Vercel](https://github.com/%s/blob/main/docs/technical/environments.md#vercel) says how to change both. `pr-asset-branches` names branches that hold PR images, for the thread of each such PR to delete.' \
+            "$list" "$GH_REPO" "$GH_REPO" "$GH_REPO")"
           bash .github/scripts/alert-issue.sh open "$title" "$body"
           echo "::error::Failed checks: $(paste -sd ' ' <<< "$failed")"
           exit 1
