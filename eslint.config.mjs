@@ -812,6 +812,15 @@ const radixPrimitivesPattern = {
   message:
     'Radix primitives are wrapped once in components/ui (refresh suspension, pending guard, focus restoration). Import the registry component; see the werkflow-design component registry.',
 };
+// Only Admin and Büro open the job edit form, and the job page rides in the field worker's
+// cold start as the list's prefetch. A static import puts the form into every role's
+// download (`lab.field.cold-start`); `lazyDialog` loads it on its opener's intent.
+const editJobDialogPattern = {
+  group: ['**/forms/edit-job-dialog'],
+  allowTypeImports: true,
+  message:
+    'Load the job edit form on intent with lazyDialog (components/shared/lazy-dialog.tsx), so roles that cannot edit a job never download it (lab.field.cold-start).',
+};
 function importRestrictions({ realtimeHooks = true, libLayer = false, radixPrimitives = true } = {}) {
   return [
     'error',
@@ -842,6 +851,7 @@ function importRestrictions({ realtimeHooks = true, libLayer = false, radixPrimi
           : []),
         ...(libLayer ? [libToComponentsPattern] : []),
         ...(radixPrimitives ? [radixPrimitivesPattern] : []),
+        editJobDialogPattern,
       ],
     },
   ];

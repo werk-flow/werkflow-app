@@ -3,13 +3,19 @@
 import { useState, type ReactNode, type RefObject } from 'react';
 import type { JobWithDetails, Project } from '@/lib/jobs/types';
 import { QualificationWarningDialog } from '../shared/qualification-warning-dialog';
-import { EditJobDialog } from '../forms/edit-job-dialog';
+import { lazyDialog } from '@/components/shared/lazy-dialog';
 import { knownProjectOption } from '../forms/job-form-options';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
 import { JobDetailAssignDialog } from './job-detail-assign-dialog-sections';
 import { JobDetailDeleteDialog } from './job-detail-delete-dialog';
 import { JobDetailRelationDialogs } from './job-detail-relation-dialogs';
 import type { JobDetailAssignments } from './use-job-detail-assignments';
+
+// Only Admin and Büro open the job page's actions menu. The edit form downloads on that
+// menu's intent, so the field worker's cold start never carries it (`lab.field.cold-start`).
+export const lazyEditJobDialog = lazyDialog(() =>
+  import('../forms/edit-job-dialog').then((mod) => mod.EditJobDialog),
+);
 
 /** Which of the job page's dialogs is open. */
 export function useJobDetailDialogVisibility() {
@@ -97,7 +103,7 @@ export function JobDetailContentDialogs({
         suppressRefreshRef={suppressRefreshRef}
       />
 
-      <EditJobDialog
+      <lazyEditJobDialog.Dialog
         job={liveJob}
         open={dialogs.showEditDialog}
         onOpenChange={dialogs.handleEditDialogOpenChange}

@@ -15,6 +15,7 @@ import { DetailPageHeader } from '@/components/shared/detail-page-header';
 import { type JobWithDetails, JOB_PRIORITY_LABELS } from '@/lib/jobs/types';
 import { getJobStatusClass, getJobStatusLabel } from '../status-classes';
 import { PRIORITY_CLASSES } from './job-detail-format';
+import { lazyEditJobDialog } from './job-detail-content-dialogs';
 
 type JobDetailHeaderProps = {
   liveJob: JobWithDetails;
@@ -22,6 +23,7 @@ type JobDetailHeaderProps = {
   displayTitle: string;
   isJobActive: boolean;
   isAdminOrManager: boolean;
+  showEditDialog: boolean;
   handleEditDialogOpenChange: (open: boolean) => void;
   setShowDeleteDialog: (open: boolean) => void;
 };
@@ -32,6 +34,7 @@ export function JobDetailHeader({
   displayTitle,
   isJobActive,
   isAdminOrManager,
+  showEditDialog,
   handleEditDialogOpenChange,
   setShowDeleteDialog,
 }: JobDetailHeaderProps) {
@@ -75,29 +78,57 @@ export function JobDetailHeader({
       }
       actions={
         isAdminOrManager ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" className="size-8" aria-label="Aktionen öffnen">
-                <MoreVertical className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => handleEditDialogOpenChange(true)}>
-                <Pencil className="mr-2 size-4" />
-                Bearbeiten
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onClick={() => setShowDeleteDialog(true)}
-              >
-                <Trash2 className="mr-2 size-4" />
-                Auftrag löschen
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <JobDetailActionsMenu
+            showEditDialog={showEditDialog}
+            handleEditDialogOpenChange={handleEditDialogOpenChange}
+            setShowDeleteDialog={setShowDeleteDialog}
+          />
         ) : undefined
       }
     />
+  );
+}
+
+/** Admin and Büro's edit and delete menu. Opening it starts the edit form's download. */
+function JobDetailActionsMenu({
+  showEditDialog,
+  handleEditDialogOpenChange,
+  setShowDeleteDialog,
+}: Pick<JobDetailHeaderProps, 'showEditDialog' | 'handleEditDialogOpenChange' | 'setShowDeleteDialog'>) {
+  // The trigger shows a spinner while the edit form downloads.
+  const editWaiting = lazyEditJobDialog.useWaiting(showEditDialog);
+
+  return (
+    <DropdownMenu
+      onOpenChange={(open) => {
+        if (open) lazyEditJobDialog.preload();
+      }}
+    >
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          size="icon"
+          className="size-8"
+          aria-label="Aktionen öffnen"
+          pending={editWaiting}
+        >
+          <MoreVertical className="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={() => handleEditDialogOpenChange(true)}>
+          <Pencil className="mr-2 size-4" />
+          Bearbeiten
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          className="text-destructive focus:text-destructive"
+          onClick={() => setShowDeleteDialog(true)}
+        >
+          <Trash2 className="mr-2 size-4" />
+          Auftrag löschen
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
