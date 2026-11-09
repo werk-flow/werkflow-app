@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, createContext, useContext, useMemo } from 'react';
+import { useState, useEffect, useRef, createContext, useContext, useMemo, useSyncExternalStore } from 'react';
 import { SidebarLink as Link } from './sidebar-link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
@@ -29,6 +29,26 @@ const OrganizationSwitcher = dynamic(
     loading: () => <Skeleton className="h-9 w-full rounded-md border border-input" />,
   },
 );
+
+const IosInstallHint = dynamic(
+  () => import('@/components/shared/ios-install-hint').then((mod) => mod.IosInstallHint),
+  { ssr: false },
+);
+
+const subscribeNever = (): (() => void) => () => {};
+const onServer = (): boolean => false;
+
+/**
+ * iOS browsers have no install prompt, so the field role gets a hint there,
+ * outside the installed app. iPadOS reports a Mac with touch. Every other
+ * browser never downloads the hint's module.
+ */
+function needsIosInstallHint(): boolean {
+  const ios =
+    /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+    (navigator.userAgent.includes('Macintosh') && navigator.maxTouchPoints > 1);
+  return ios && !window.matchMedia('(display-mode: standalone)').matches;
+}
 
 // Context for sidebar state
 type SidebarContextType = {
@@ -345,6 +365,7 @@ export function AppShell({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const { isSwitchingOrg, activeOrg } = useOrganization();
+  const showIosInstallHint = useSyncExternalStore(subscribeNever, needsIosInstallHint, onServer);
   const mainRef = useRef<HTMLElement>(null);
   usePageBodyKeyboardScroll(mainRef);
 
@@ -369,6 +390,7 @@ export function AppShell({
               {children}
             </main>
             <OrgSwitchOverlay />
+            {activeOrg?.role === 'employee' && showIosInstallHint && <IosInstallHint />}
           </div>
         </div>
       </AttentionCountProvider>

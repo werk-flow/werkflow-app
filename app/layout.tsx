@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
+import { ServiceWorkerRegistration } from '@/components/shared/service-worker';
 import { getOptionalSupabaseUrl } from '@/lib/env/public';
 import './globals.css';
 
@@ -40,7 +41,10 @@ export default function RootLayout({
           </>
         )}
       </head>
-      <body className="min-h-dvh bg-background text-foreground antialiased">{children}</body>
+      <body className="min-h-dvh bg-background text-foreground antialiased">
+        {children}
+        <ServiceWorkerRegistration />
+      </body>
     </html>
   );
 }

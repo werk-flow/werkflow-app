@@ -8,6 +8,7 @@ import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { clearEmailChangeChallengeBeforeSignOut } from '@/lib/settings/email-change-actions';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { logError } from '@/lib/logging';
+import { clearServiceWorkerCaches } from '@/lib/offline/service-worker-caches';
 import { clockOutBeforeSignOut } from '@/lib/time-tracking/clock-state-actions';
 import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
 
@@ -68,6 +69,7 @@ export function useSignOut() {
 
         await clearEmailChangeChallengeQuietly();
         clearManualEntryBridge();
+        await clearServiceWorkerCaches();
 
         // Explicit global: the menu sign-out currently ends the user's sessions
         // on every device (pre-existing behavior, made explicit by the scope
