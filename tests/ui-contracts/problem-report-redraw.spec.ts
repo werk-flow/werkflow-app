@@ -42,6 +42,8 @@ const PAGE = `<!doctype html><html lang="de"><head><meta charset="utf-8"><style>
 body{font-family:sans-serif;margin:0;padding:16px} .block{width:40px;height:30px}
 </style>
 <style>.css-record::before{content:"${SEEDED.person}"} .css-image{background-image:url("data:image/png;base64,iVBORw0KGgo=")} .css-var{--seeded:"${SEEDED.street}"} .css-escape{--photo:\\75rl(data:image/gif;base64,R0lGODlhRUNTSEVFVA==);background-image:var(--photo)}</style>
+<style media="print">.print-only{color:rgb(9, 8, 7)}</style>
+<style id="switched-off">.disabled-only{color:rgb(7, 6, 5)}</style>
 <link rel="stylesheet" href="/_next/static/css/app.css"><link rel="stylesheet" href="/dynamic/record.css">
 </head><body><main>
 <h1 class="ui-heading">Aufträge</h1>
@@ -76,6 +78,8 @@ body{font-family:sans-serif;margin:0;padding:16px} .block{width:40px;height:30px
 <input class="hidden-value" type="hidden" value="${SEEDED.person}">
 <input class="ticked" type="checkbox" checked>
 </form>
+<div class="scroller" style="height:40px;width:200px;overflow:auto"><div class="scroll-child" style="height:200px;width:2000px">Abbrechen</div><div class="scroll-moved" style="translate:5px 6px;height:10px">x</div></div>
+<div class="spacer" style="height:2000px"></div>
 </main></body></html>`;
 
 // A build asset keeps its CSS verbatim; a sheet outside the build gets the style rule.
@@ -245,6 +249,67 @@ test('style rule: CSS outside the build loses generated text and images, build C
   expect(svg, 'no escape survives').not.toContain('75rl');
   expect(svg, 'a safe rule of a style element stays').toContain('font-family: sans-serif');
   expect(svg, 'a build style sheet stays verbatim').toContain('font-family: "Geist Probe"');
+});
+
+test('style rule: a disabled sheet and a sheet for other media stay out of the image', async ({ page }) => {
+  await openSyntheticPage(page);
+  const svg = await page.evaluate(async () => {
+    const isPageModule = (value: unknown): value is RedrawPageModule =>
+      typeof value === 'object' && value !== null && 'redrawPage' in value;
+    const isCatalogModule = (value: unknown): value is CatalogModule =>
+      typeof value === 'object' && value !== null && 'loadUiStringCatalog' in value;
+    const isRasterizeModule = (value: unknown): value is RasterizeModule =>
+      typeof value === 'object' && value !== null && 'pageToSvg' in value;
+    const switchedOff = document.getElementById('switched-off');
+    if (!(switchedOff instanceof HTMLStyleElement) || !switchedOff.sheet)
+      throw new Error('The test sheet is missing.');
+    switchedOff.sheet.disabled = true;
+    const paths = ['/redraw/redraw-page.js', '/redraw/load-ui-string-catalog.js', '/redraw/rasterize.js'];
+    const loaded: unknown[] = await Promise.all(paths.map((path) => import(path)));
+    const [pageModule, catalogModule, rasterizeModule] = loaded;
+    if (!isPageModule(pageModule) || !isCatalogModule(catalogModule) || !isRasterizeModule(rasterizeModule))
+      throw new Error('The redraw bundle is incomplete.');
+    const redrawn = pageModule.redrawPage(document, catalogModule.loadUiStringCatalog(), Math.random);
+    return rasterizeModule.pageToSvg(redrawn, document);
+  });
+  expect(svg, 'a print sheet does not style the screenshot').not.toContain('rgb(9, 8, 7)');
+  expect(svg, 'a disabled sheet does not style the screenshot').not.toContain('rgb(7, 6, 5)');
+  expect(svg, 'an applying sheet still does').toContain('font-family: sans-serif');
+});
+
+test('scroll rule: a scrolled container and the scrolled page shift their children in the clone', async ({
+  page,
+}) => {
+  await openSyntheticPage(page);
+  const shifts = await page.evaluate(async () => {
+    const isPageModule = (value: unknown): value is RedrawPageModule =>
+      typeof value === 'object' && value !== null && 'redrawPage' in value;
+    const isCatalogModule = (value: unknown): value is CatalogModule =>
+      typeof value === 'object' && value !== null && 'loadUiStringCatalog' in value;
+    const scroller = document.querySelector('.scroller');
+    if (!scroller) throw new Error('The scroller is missing.');
+    scroller.scrollTop = 30;
+    scroller.scrollLeft = 20;
+    window.scrollTo(0, 50);
+    const paths = ['/redraw/redraw-page.js', '/redraw/load-ui-string-catalog.js'];
+    const loaded: unknown[] = await Promise.all(paths.map((path) => import(path)));
+    const [pageModule, catalogModule] = loaded;
+    if (!isPageModule(pageModule) || !isCatalogModule(catalogModule))
+      throw new Error('The redraw bundle is incomplete.');
+    const clone = pageModule.redrawPage(document, catalogModule.loadUiStringCatalog(), Math.random).root;
+    const translateOf = (selector: string): string => {
+      const element = clone.querySelector(selector);
+      return element instanceof HTMLElement ? element.style.translate : '';
+    };
+    return {
+      child: translateOf('.scroll-child'),
+      moved: translateOf('.scroll-moved'),
+      body: translateOf('body'),
+    };
+  });
+  expect(shifts.child, 'a child moves by the container scroll').toMatch(/-20px.*-30px/u);
+  expect(shifts.moved, 'an own translate adds to the scroll shift').toMatch(/-15px.*-24px/u);
+  expect(shifts.body, 'the body moves by the page scroll').toMatch(/-50px/u);
 });
 
 test('frame rule: iframes are dropped', async ({ page }) => {

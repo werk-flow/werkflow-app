@@ -71,7 +71,11 @@ function sanitizedRuleText(rules: readonly CSSRule[]): string {
 async function collectPageCss(document: Document): Promise<string> {
   const origin = document.location.origin;
   const parts: string[] = [];
+  const view = document.defaultView;
   const visit = async (sheet: CSSStyleSheet): Promise<void> => {
+    // A sheet that does not style the live page, disabled or for other media (print), stays out.
+    if (sheet.disabled) return;
+    if (sheet.media.length > 0 && view && !view.matchMedia(sheet.media.mediaText).matches) return;
     let rules: CSSRule[];
     try {
       rules = Array.from(sheet.cssRules);
