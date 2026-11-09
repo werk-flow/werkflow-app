@@ -87,13 +87,16 @@ Apple's 2024 statement that kept the EU web apps is no longer on its developer s
 
 ## The device test matrix
 
+Android Chrome and iOS Safari are equal targets: many field workers use Android phones, privately and as work phones. A field journey passes on both.
+
 | Device | Proves | Cannot prove |
 | --- | --- | --- |
 | Mac Safari | WebKit's IndexedDB, Cache Storage and service worker behavior, a reload with the Mac's network turned off | Home Screen install, iOS storage separation, eviction, the camera |
 | iOS simulator | The Home Screen web app, its separate storage, standalone mode, sign-in inside the web app, offline through the Mac's network | Real eviction under storage pressure, the camera, real signal loss |
+| Android emulator, Chrome, current Android with Google Play | Chrome's install to the home screen, the installed app's standalone mode and storage, offline through the emulator's network, the camera input with the emulated camera | Real eviction under storage pressure, real signal loss, a manufacturer's battery saver |
 | Chrome emulation at 375 px, Android profile | Layout and touch at phone width, `context.setOffline(true)` journeys in Playwright | Any WebKit or iOS behavior, eviction, the camera |
 
-No device in the matrix proves eviction or the camera. Those stay covered by the design rules above, and by a real phone once one is available.
+No device in the matrix proves eviction or a real camera. Those stay covered by the design rules above, and by a real phone once one is available.
 
 ## Rejected alternatives
 
