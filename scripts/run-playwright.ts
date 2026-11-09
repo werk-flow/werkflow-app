@@ -44,6 +44,11 @@ import {
   validateRunRequest,
 } from '../lib/testing/runner/run-policy';
 import { runPlaywrightPreflight } from './playwright-preflight';
+import {
+  captureOnBoat,
+  captureUnavailableNotice,
+  isAcceptanceCapture,
+} from '../lib/testing/boat/capture-on-boat';
 import { loadEnvLocal } from '../tests/golden/support/env';
 import { finalizeQualifiedWorld } from '../tests/golden/global-teardown';
 import {
@@ -439,6 +444,18 @@ function recordRunnerFailure(error: unknown): void {
     } catch (manifestError) {
       console.error(`Could not record runner failure: ${String(manifestError)}`);
     }
+  }
+}
+
+// A focused acceptance capture runs on Boat when this workstation has a key
+// (lib/testing/boat/capture-on-boat.ts); an unavailable Boat never turns it into a local build.
+if (isAcceptanceCapture(process.argv.slice(2))) {
+  const capture = process.argv.slice(4);
+  const boat = await captureOnBoat(capture, resolve(import.meta.dir, '..'));
+  if (typeof boat === 'number') process.exit(boat);
+  if (boat) {
+    for (const line of captureUnavailableNotice(boat.unavailable, capture)) console.error(line);
+    process.exit(1);
   }
 }
 
