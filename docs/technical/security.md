@@ -1,6 +1,6 @@
 # Security control map
 
-Every rule here is hard, also where only review enforces it. Only the two Tier 3 defaults of virtue 3 in `AGENTS.md` admit a divergence.
+Every rule here is hard, even where only review enforces it; virtue 3 in `AGENTS.md` names the two exceptions.
 
 ## How to work
 
@@ -74,7 +74,7 @@ A customer's export stays on the owner's machine, outside every repository. The 
 - Client roles write no table directly, except a user's own name and avatar.
 - Nothing is granted to `anon` without the owner's approval.
 - A table's migration revokes everything from `public`, `anon`, `authenticated` and `service_role`, then grants exactly the needed operations to the needed roles. Default grants are revoked, so a new object has no Data API access until its migration grants it.
-- Grant sequence privileges when an intended insert needs them. The service role bypasses RLS, not SQL privileges.
+- Grant the sequence privileges an intended insert needs. The service role bypasses RLS, not SQL privileges.
 - A ledger table refuses direct UPDATE and DELETE, also for privileged roles, with a real denial and a permitted-cleanup assertion. Cascade or reference-nulling follows the domain's retention rule.
 - **Service-role queries.** A query on organization data passes an organization from the resolved context, or carries a reviewed `tenant-scope` reason.
 - **Closed periods.** A closed period freezes the recorded time of its month for every writer, service-role code included. Triggers raise SQLSTATE `WFP01`; `isPeriodClosedError` maps it to `period_closed`. Close refuses with `period_open_sessions` while a session that began before the period end is open.
@@ -96,9 +96,9 @@ The edge functions accept only the project's secret keys and escape every interp
 
 ### Browser
 
-Responses carry the hardening headers and the enforced Content-Security-Policy from `buildSecurityHeaders` in `next.config.ts`. The script policy allows the app's own origin and inline scripts. Violations go to `POST /api/csp-report`, which is unauthenticated by design, stores nothing and logs a redacted summary. An `eval` report, or one that names another origin, is a finding. Product code has no HTML string sink and no `eval`, and imports Zod through `lib/zod.ts`; `lib/zod-members.ts` turns off its `eval` probe.
+Responses carry the hardening headers and enforced Content-Security-Policy from `buildSecurityHeaders` in `next.config.ts`. Violations go to `POST /api/csp-report`, which is unauthenticated by design, stores nothing and logs a redacted summary. An `eval` report, or one that names another origin, is a finding. Product code imports Zod through `lib/zod.ts`; `lib/zod-members.ts` turns off its `eval` probe.
 
-A phone's offline data is wiped on sign-out and organization switch; the server never trusts it ([decision 0010](../decisions/0010-offline-field-sync-contract.md#device-data)).
+The service worker (`public/sw.js`) caches only the cookie-free offline page and its build files, never a response it did not request; the CSP allows `worker-src` and `manifest-src` `'self'`. Sign-out and organization switch delete its caches and the offline data, which the server never trusts ([decision 0010](../decisions/0010-offline-field-sync-contract.md#device-data)).
 
 ### Server caches
 
