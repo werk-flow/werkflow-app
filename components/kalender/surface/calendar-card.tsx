@@ -172,7 +172,8 @@ function cardTitleLine(
       >
         {job.title}
       </span>
-      {oneLine && alert && (
+      {/* A day timeline card can be too short for its warning chip: its title line always carries the icon. */}
+      {(oneLine || size === 'day') && alert && (
         <UserX className="ml-auto size-3 shrink-0 text-warning-text" aria-hidden="true">
           <title>{alert}</title>
         </UserX>

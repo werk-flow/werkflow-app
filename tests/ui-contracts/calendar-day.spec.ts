@@ -231,6 +231,8 @@ test('every day card names a person who left, on the timeline, in the all-day tr
   // The timed card shows the warning; the compact all-day card says it in its name.
   await expect(card(page, 'Heizung zu zweit am Tag')).toContainText(left);
   await expect(card(page, 'Baustelle zu zweit ganztägig')).toHaveAccessibleName(new RegExp(`${left}$`));
+  // A short timeline card may clip its chip; its title line always carries the warning icon.
+  await expect(card(page, 'Heizung zu zweit am Tag').locator('svg title', { hasText: left })).toHaveCount(1);
 
   await page.getByRole('button', { name: 'Telefonansicht', exact: true }).click();
   await expect(card(page, 'Heizung zu zweit am Tag')).toContainText(left);
