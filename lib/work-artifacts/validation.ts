@@ -2,7 +2,8 @@ import { z } from '@/lib/zod';
 import { Constants } from '@/lib/supabase/database.types';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { workArtifactFieldIssues } from './field-rules';
-import { WORK_ARTIFACT_KINDS, type WorkArtifactActionType } from './types';
+import { CUSTOMER_DECISION_TYPES, customerDecisionNeedsReason } from './customer-decision';
+import { WORK_ARTIFACT_KINDS, type WorkArtifactActionType, type WorkArtifactReviewActionType } from './types';
 
 const artifactText = z.string().trim().max(5000).optional();
 const optionalUuid = uuidSchema.optional();
@@ -127,73 +128,57 @@ export const voidWorkArtifactSchema = z.object({
   reason: z.string().trim().min(3).max(2000),
 });
 
+/** The review steps a single action records; a customer decision goes through its own schema below. */
+const WORK_ARTIFACT_REVIEW_ACTION_TYPES = [
+  'review_requested',
+  'review_withdrawn',
+  'internal_approved',
+  'internal_rejected',
+  'correction_requested',
+] as const satisfies readonly WorkArtifactReviewActionType[];
+
 export const workArtifactActionSchema = z
   .object({
     artifactId: uuidSchema,
     revisionId: uuidSchema,
     actionId: uuidSchema,
     expectedVersion: z.number().int().positive(),
-    actionType: z.enum([
-      'review_requested',
-      'review_withdrawn',
-      'internal_approved',
-      'internal_rejected',
-      'correction_requested',
-      'customer_acknowledged',
-      'customer_refused',
-      'customer_reserved',
-      'signature_captured',
-      'exported',
-      'voided',
-    ]),
+    actionType: z.enum(WORK_ARTIFACT_REVIEW_ACTION_TYPES),
     reason: z.string().trim().min(3).max(2000).optional(),
     comment: artifactText,
-    customerContext: z
-      .object({
-        signerName: z.string().trim().min(2).max(200),
-        signerRole: z.string().trim().max(200).optional(),
-        signerRelationship: z.string().trim().min(1).max(200),
-        companyContext: z.string().trim().max(500).optional(),
-        captureMethod: z.string().trim().min(1).max(100),
-        wordingSnapshot: z.string().trim().min(3).max(5000),
-        witnessContext: z.string().trim().max(500).optional(),
-      })
-      .optional(),
-    signatureDocumentId: optionalUuid,
   })
   .superRefine((value, context) => {
-    const reasonRequired: WorkArtifactActionType[] = [
-      'internal_rejected',
-      'correction_requested',
-      'customer_refused',
-      'customer_reserved',
-      'voided',
-    ];
-    const customerContextRequired: WorkArtifactActionType[] = [
-      'customer_acknowledged',
-      'customer_refused',
-      'customer_reserved',
-      'signature_captured',
-    ];
+    const reasonRequired: WorkArtifactActionType[] = ['internal_rejected', 'correction_requested'];
     if (reasonRequired.includes(value.actionType) && !value.reason) {
       context.addIssue({ code: 'custom', path: ['reason'], message: 'reason_required' });
     }
-    if (customerContextRequired.includes(value.actionType) && !value.customerContext) {
-      context.addIssue({ code: 'custom', path: ['customerContext'], message: 'customer_context_required' });
+  });
+
+/**
+ * The customer's decision on the current revision with the signer and, when
+ * the customer signed, the reserved signature upload: one save records both.
+ */
+export const workArtifactCustomerDecisionSchema = z
+  .object({
+    artifactId: uuidSchema,
+    revisionId: uuidSchema,
+    expectedVersion: z.number().int().positive(),
+    decisionActionId: uuidSchema,
+    decision: z.enum(CUSTOMER_DECISION_TYPES),
+    reason: z.string().trim().min(3).max(2000).optional(),
+    signer: z.object({
+      name: z.string().trim().min(2).max(200),
+      role: z.string().trim().max(200).optional(),
+      relationship: z.string().trim().min(1).max(200),
+    }),
+    signature: z.object({ actionId: uuidSchema, documentId: uuidSchema }).optional(),
+  })
+  .superRefine((value, context) => {
+    if (customerDecisionNeedsReason(value.decision) && !value.reason) {
+      context.addIssue({ code: 'custom', path: ['reason'], message: 'reason_required' });
     }
-    if (value.actionType === 'signature_captured' && !value.signatureDocumentId) {
-      context.addIssue({
-        code: 'custom',
-        path: ['signatureDocumentId'],
-        message: 'signature_document_required',
-      });
-    }
-    if (value.signatureDocumentId && value.actionType !== 'signature_captured') {
-      context.addIssue({
-        code: 'custom',
-        path: ['signatureDocumentId'],
-        message: 'signature_action_required',
-      });
+    if (value.signature?.actionId === value.decisionActionId) {
+      context.addIssue({ code: 'custom', path: ['signature'], message: 'distinct_action_ids_required' });
     }
   });
 

@@ -364,7 +364,7 @@ function useWorkArtifactDialogActions({
   });
   const save = useWorkArtifactSave({ targetType, targetId, editor });
   const review = useWorkArtifactReviewActions(editor);
-  const customer = useWorkArtifactCustomerActions({ targetType, targetId, editor, review, onClose });
+  const customer = useWorkArtifactCustomerActions({ targetType, targetId, editor, onClose });
   const links = useWorkArtifactLinks({ editor, review, timeEntryOptions });
   return { editor, save, review, customer, links };
 }

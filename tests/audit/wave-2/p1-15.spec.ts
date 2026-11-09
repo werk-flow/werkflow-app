@@ -56,6 +56,8 @@ import {
   WORK_ARTIFACTS_EMPTY,
   workArtifactAction,
   workArtifactCustomerDecisionPanel,
+  recordedCustomerDecision,
+  selectCustomerDecision,
   workArtifactDialog,
   workArtifactEntry,
   workArtifactField,
@@ -507,45 +509,11 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     dialog = await openWorkArtifact(employeePage, artifactTitle, { attempts: 2, timeout: 5_000 });
     await workArtifactCustomerDecisionPanel(dialog).click();
     await expect(workArtifactMessage(dialog, 'legalNotice')).toBeVisible();
-    await workArtifactInput(dialog, 'customerName').fill('Erika Beispiel');
+    const signerName = 'Erika Beispiel';
+    await workArtifactInput(dialog, 'customerName').fill(signerName);
     await workArtifactInput(dialog, 'customerRole').fill('Objektleitung');
     await workArtifactInput(dialog, 'customerRelationship').fill('Bevollmächtigte Ansprechperson vor Ort');
-    const acknowledge = workArtifactAction(dialog, 'recordAcknowledgement');
-    await acknowledge.click();
-    await expect
-      .poll(
-        async () =>
-          (await getWorkArtifactState(world.orgId, { jobNumber })).actions.filter(
-            (action) => action.action_type === 'customer_acknowledged',
-          ).length,
-      )
-      .toBe(1);
-    await expect(acknowledge).toBeEnabled();
-    await workArtifactInput(dialog, 'actionReason').fill('Kundin bittet um Ergänzung der Seriennummer.');
-    await workArtifactAction(dialog, 'recordReservation').click();
-    await expect
-      .poll(
-        async () =>
-          (await getWorkArtifactState(world.orgId, { jobNumber })).actions.filter(
-            (action) => action.action_type === 'customer_reserved',
-          ).length,
-      )
-      .toBe(1);
-    await expect(acknowledge).toBeEnabled();
-    await workArtifactInput(dialog, 'actionReason').fill(
-      'Kunde möchte erst nach eigener Prüfung bestätigen.',
-    );
-    await workArtifactAction(dialog, 'recordRefusal').click();
-    await expect
-      .poll(
-        async () =>
-          (await getWorkArtifactState(world.orgId, { jobNumber })).actions.filter(
-            (action) => action.action_type === 'customer_refused',
-          ).length,
-      )
-      .toBe(1);
-    await expect(acknowledge).toBeEnabled();
-
+    await selectCustomerDecision(employeePage, dialog, 'customer_acknowledged');
     const canvas = workArtifactField(dialog, 'signaturePad');
     await canvas.scrollIntoViewIfNeeded();
     const box = await canvas.boundingBox();
@@ -555,15 +523,18 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     await employeePage.mouse.move(box.x + 120, box.y + 80, { steps: 8 });
     await employeePage.mouse.up();
     await expect(workArtifactAction(dialog, 'resetSignature')).toBeEnabled();
-    await workArtifactAction(dialog, 'saveSignature').click();
+    // One „Speichern“ records the decision with its signature; the dialog then shows them in place.
+    await workArtifactAction(dialog, 'saveCustomerDecision').click();
     await expect
-      .poll(
-        async () =>
-          (await getWorkArtifactState(world.orgId, { jobNumber })).actions.filter(
-            (action) => action.action_type === 'signature_captured',
-          ).length,
+      .poll(async () =>
+        (await getWorkArtifactState(world.orgId, { jobNumber })).actions
+          .map((action) => action.action_type)
+          .filter((type) => type === 'customer_acknowledged' || type === 'signature_captured')
+          .sort(),
       )
-      .toBe(1);
+      .toEqual(['customer_acknowledged', 'signature_captured']);
+    await expect(recordedCustomerDecision(dialog).getByRole('img')).toBeVisible();
+    await expect(workArtifactCustomerDecisionPanel(dialog)).toHaveCount(0);
     const exportButton = workArtifactAction(dialog, 'export');
     await expect(exportButton).toBeEnabled();
 
@@ -648,11 +619,11 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
           row.action_type,
         ),
       ),
-    ).toHaveLength(4);
+    ).toHaveLength(2);
     expect(
       state.actions
         .filter((row) => row.signer_name)
-        .every((row) => row.signer_name === 'Erika Beispiel' && row.revision_id === currentRevisionId),
+        .every((row) => row.signer_name === signerName && row.revision_id === currentRevisionId),
     ).toBe(true);
     expect(state.documents.filter((row) => row.relation === 'rendered_export')).toHaveLength(1);
     expect(state.documents.find((row) => row.relation === 'rendered_export')).toMatchObject({

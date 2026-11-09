@@ -93,6 +93,23 @@ export const ACTION_PRECHECKS: readonly ActionPrecheck[] = [
     },
   },
   {
+    // A revision holds one customer decision and one signature: the dialog shows a recorded one instead of the form.
+    kind: 'work-artifact-customer-decision',
+    serverCodes: ['work_artifact_customer_decision_recorded'],
+    predicate: { module: 'lib/work-artifacts/customer-decision.ts', exportName: 'recordedCustomerDecision' },
+    wrappers: [],
+    actions: [
+      {
+        module: 'lib/work-artifacts/customer-decision-actions.ts',
+        exportName: 'recordWorkArtifactCustomerDecision',
+      },
+    ],
+    screenedReads: [],
+    props: [],
+    server: { kind: 'sql', test: 'supabase/tests/work_artifact_customer_decisions.sql' },
+    exempt: {},
+  },
+  {
     kind: 'work-lifecycle-transition',
     serverCodes: ['work_transition_not_allowed', 'work_transition_not_authorized'],
     predicate: { module: 'lib/work-lifecycle/types.ts', exportName: 'getAllowedWorkTransitions' },
