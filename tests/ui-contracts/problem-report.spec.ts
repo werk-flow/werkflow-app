@@ -14,6 +14,12 @@ async function openReportFixture(page: Page): Promise<StoredPut[]> {
     await route.fulfill({ status: 200, body: '' });
   });
   await openContractFixture(page, 'problem-report');
+  // The app's styles, as the dialog renders for a person: its open animation and the preview's
+  // pulsing placeholder draw frames. Unstyled, a headless page draws none after the click, and
+  // the screenshot's encode waits about a second for an idle period.
+  const css = process.env.WERKFLOW_UI_CONTRACT_CSS;
+  if (!css) throw new Error('Run through bun tests/ui-contracts/run.ts.');
+  await page.addStyleTag({ path: css });
   return puts;
 }
 
