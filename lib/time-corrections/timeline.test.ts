@@ -204,4 +204,42 @@ describe('the rows a forgotten day starts from', () => {
       insertBreakIntoRow(rows({ kind: 'break', start: '07:00', end: '09:00' }), 'row-0', key),
     ).toBeNull();
   });
+
+  test('„Pause einfügen“ on a night activity keeps its span: each part ends on the right day', () => {
+    // 26.10.2026 is CET (UTC+1). Every split must resolve to the original row's span.
+    const instants = (timeline: CorrectionTimelineRow[] | null) => {
+      if (!timeline) throw new Error('no split');
+      const resolved = resolveCorrectionTimeline('2026-10-26', timeline);
+      if (!resolved.valid) throw new Error(JSON.stringify(resolved.errors));
+      return resolved.segments.map((segment) => [
+        segment.row.kind,
+        segment.startedAt.toISOString(),
+        segment.endedAt.toISOString(),
+      ]);
+    };
+    // The break falls after midnight: only the first part crosses it.
+    expect(
+      instants(insertBreakIntoRow(rows({ start: '22:00', end: '06:00', endsNextDay: true }), 'row-0', key)),
+    ).toEqual([
+      ['work', '2026-10-26T21:00:00.000Z', '2026-10-27T00:45:00.000Z'],
+      ['break', '2026-10-27T00:45:00.000Z', '2026-10-27T01:15:00.000Z'],
+      ['work', '2026-10-27T01:15:00.000Z', '2026-10-27T05:00:00.000Z'],
+    ]);
+    // The break falls before midnight: the third part crosses it.
+    expect(
+      instants(insertBreakIntoRow(rows({ start: '20:00', end: '01:00', endsNextDay: true }), 'row-0', key)),
+    ).toEqual([
+      ['work', '2026-10-26T19:00:00.000Z', '2026-10-26T21:15:00.000Z'],
+      ['break', '2026-10-26T21:15:00.000Z', '2026-10-26T21:45:00.000Z'],
+      ['work', '2026-10-26T21:45:00.000Z', '2026-10-27T00:00:00.000Z'],
+    ]);
+    // The break starts at midnight exactly: the first part ends at 00:00 of the next day.
+    expect(
+      instants(insertBreakIntoRow(rows({ start: '22:00', end: '02:30', endsNextDay: true }), 'row-0', key)),
+    ).toEqual([
+      ['work', '2026-10-26T21:00:00.000Z', '2026-10-26T23:00:00.000Z'],
+      ['break', '2026-10-26T23:00:00.000Z', '2026-10-26T23:30:00.000Z'],
+      ['work', '2026-10-26T23:30:00.000Z', '2026-10-27T01:30:00.000Z'],
+    ]);
+  });
 });

@@ -180,6 +180,11 @@ export function CorrectionTimelineFields({
       <h3 id="correction-timeline-heading" className="text-sm font-medium">
         Ablauf des Tages
       </h3>
+      {timeline.loadingVisits ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          Geplante Einsätze werden geladen …
+        </p>
+      ) : null}
       {timeline.visitsNotice === 'failed' ? (
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <p>Die geplanten Einsätze konnten nicht geladen werden.</p>

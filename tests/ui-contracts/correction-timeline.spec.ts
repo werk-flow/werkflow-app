@@ -45,11 +45,15 @@ test('the planned visit prefills the timeline, and another person never inherits
 
   await page.getByRole('button', { name: 'Andere Person', exact: true }).click();
   await expect(timeline).toHaveAttribute('aria-busy', 'true');
+  // The read shows at the timeline, not only to assistive tech.
+  const loading = timeline.getByText('Geplante Einsätze werden geladen …');
+  await expect(loading).toBeVisible();
   await check.click();
   await expect(result).toHaveText('unvollständig');
 
   await answerPlannedVisits(page, { success: false, error: 'load_failed' });
   await expect(timeline).toHaveAttribute('aria-busy', 'false');
+  await expect(loading).toHaveCount(0);
   await expect(timeline.getByText('Die geplanten Einsätze konnten nicht geladen werden.')).toBeVisible();
   await check.click();
   await expect(result).toHaveText('unvollständig');

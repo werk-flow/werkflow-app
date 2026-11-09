@@ -42,8 +42,9 @@ function SnapshotSummary({
     <>
       <p className="mt-1">{summarizeSnapshot(request, state)}</p>
       <ul className="mt-2 space-y-1">
-        {request.activities[state].map((activity) => (
-          <li key={activity.times} className="flex flex-wrap gap-x-2">
+        {request.activities[state].map((activity, index) => (
+          // Two days can hold the same times, so the position keeps the key unique.
+          <li key={`${index}:${activity.times}`} className="flex flex-wrap gap-x-2">
             <span className="tabular-nums">{activity.times}</span>
             <span className="font-medium">{activity.kind}</span>
             <span className="min-w-0 break-words text-muted-foreground">{activity.job}</span>
