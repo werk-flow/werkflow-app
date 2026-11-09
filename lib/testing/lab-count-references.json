@@ -74,7 +74,7 @@
         },
         "script": {
           "requests": { "reference": 43, "tolerance": 1 },
-          "encodedBytes": { "reference": 687657, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 686629, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         },
@@ -280,6 +280,24 @@
           },
           "runKeys": ["2026-11-08T112625699Z-6f644d"],
           "reason": "Manager-only create and edit dialogs load on intent (lazyDialog), the create-project helpers left the form module, and the Auftraege table skeleton left the table module the app shell imported: the field worker no longer downloads the create and edit forms or the job table on every page. 697,836 to 687,657 on this PC, script requests unchanged at 43. Back below the 691,787 that werk-flow/werkflow-app#272 named as this follow-up's target (owner decision of 2026-11-08)."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 43, "tolerance": 1 },
+            "encodedBytes": { "reference": 687657, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 43, "tolerance": 1 },
+            "encodedBytes": { "reference": 686629, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-09T090629248Z-6a09fe"],
+          "reason": "werk-flow/werkflow-planning#314: the job detail route, which the /auftraege list prefetches into the field cold start, loads EditJobDialog on its actions menu's intent (lazyDialog) instead of importing it statically; #280 had moved only the list's edit dialog. The job form left the detail route's entry chunks: gzip of the /auftraege plus /auftraege/[jobNumber] entry chunks on a production build of 9e1eb5b6 falls from 684,601 to 677,960 (-6,641). This run (Boat, the PC's verification machine) reads 686,629 against 693,153 for main at 9e1eb5b6 (run 2026-11-09T085633435Z-4ccd37) and 693,150 on CI main; script requests unchanged at 43. Below the owner's 691,787 target of 2026-11-08."
         }
       ]
     },
