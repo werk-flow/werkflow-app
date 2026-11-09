@@ -1,7 +1,7 @@
 import { PlanningOptionContractFixture } from './planning-option-boundaries';
 import { RouteRefreshFixture } from './route-refresh-boundaries';
 import { PresentationFixture } from './presentation-fixture';
-import { CustomerContractFixture } from './customer-boundaries';
+import { CreateClientContractFixture, CustomerContractFixture } from './customer-boundaries';
 import { VacationApprovals } from '@/components/zeiterfassung/vacation-approvals';
 import {
   AbsencePickerContractFixture,
@@ -552,6 +552,8 @@ createRoot(root).render(
     <PresentationFixture />
   ) : window.uiContractFixture === 'customer' ? (
     <CustomerContractFixture />
+  ) : window.uiContractFixture === 'customer-create' ? (
+    <CreateClientContractFixture />
   ) : window.uiContractFixture === 'approvals' ? (
     <BannerProvider>
       <main>

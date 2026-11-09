@@ -60,6 +60,10 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve({ filter: /^@\/lib\/clients\/actions$/ }, () => ({
               path: join(import.meta.dir, 'customer-service-boundaries.ts'),
             }));
+            builder.onResolve({ filter: /^next\/navigation$/ }, (args) => {
+              if (args.importer.endsWith('create-client-dialog.tsx'))
+                return { path: join(import.meta.dir, 'customer-service-boundaries.ts') };
+            });
             builder.onResolve({ filter: /^@\/lib\/vacation\/actions$/ }, () => ({
               path: join(import.meta.dir, 'approval-service-boundaries.ts'),
             }));
@@ -103,7 +107,8 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
                 args.importer.endsWith('client-sites-card.tsx') ||
                 args.importer.endsWith('reset-password-form.tsx') ||
                 args.importer.endsWith('aufgaben-task-row.tsx') ||
-                args.importer.endsWith('text-link.tsx')
+                args.importer.endsWith('text-link.tsx') ||
+                args.importer.endsWith('client-duplicate-matches.tsx')
               )
                 return { path: join(import.meta.dir, 'day-view-link-boundary.tsx') };
             });

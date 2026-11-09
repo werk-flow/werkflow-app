@@ -336,6 +336,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['customer-atomic-writes', ['customer_atomic_writes.sql'], ['customers']],
   ['request-history-writes', ['request_history_writes.sql'], ['customers']],
   ['request-caller-matches', ['request_caller_matches.sql'], ['customers']],
+  ['client-duplicates', ['client_duplicates.sql'], ['customers']],
   ['sickness-report-writes', ['sickness_report_writes.sql'], ['personnel']],
   ['vacation-history-writes', ['vacation_history_writes.sql'], ['personnel']],
   [

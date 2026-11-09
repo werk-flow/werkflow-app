@@ -1,5 +1,11 @@
 import type { ActionResult } from '@/lib/action-result';
 import type { QualificationWarningResult } from '@/lib/jobs/types';
+import {
+  CLIENT_MATCH_REASON_LABELS,
+  toClientMatch,
+  type ClientMatch,
+  type ClientMatchList,
+} from '@/lib/clients/types';
 import type { PlanningWarningFailure } from '@/lib/planning/conflict-acknowledgement';
 import type { Database } from '@/lib/supabase/database.types';
 import { jsonRecordOrEmpty } from '@/lib/supabase/json';
@@ -146,22 +152,13 @@ export function requestUrgencyToJobPriority(
   }
 }
 
-/** What a caller and a customer share: the phone, the email or the name. */
-const CALLER_MATCH_FIELDS = ['phone', 'email', 'name'] as const;
-export type CallerMatchField = (typeof CALLER_MATCH_FIELDS)[number];
+/**
+ * A customer of the organization the caller of an unmatched request may
+ * already be. The customer matcher owns the reasons and their labels.
+ */
+export type CallerMatch = ClientMatch;
 
-/** A customer of the organization the caller of an unmatched request may already be. */
-export type CallerMatch = {
-  clientId: string;
-  clientName: string;
-  matchedOn: CallerMatchField[];
-};
-
-export const CALLER_MATCH_FIELD_LABELS: Record<CallerMatchField, string> = {
-  phone: 'Telefon',
-  email: 'E-Mail',
-  name: 'Name',
-};
+export const CALLER_MATCH_FIELD_LABELS = CLIENT_MATCH_REASON_LABELS;
 
 // ============================================
 // Result Types
@@ -169,8 +166,7 @@ export const CALLER_MATCH_FIELD_LABELS: Record<CallerMatchField, string> = {
 
 export type ClientRequestResult = ActionResult<{ request: ClientRequest }>;
 
-/** The strongest matches; `moreMatches` says that more customers match than are listed. */
-export type CallerMatchList = { matches: CallerMatch[]; moreMatches: boolean };
+export type CallerMatchList = ClientMatchList;
 
 export type CallerMatchesResult = ActionResult<CallerMatchList>;
 
@@ -219,20 +215,8 @@ export function toClientRequest(row: ClientRequestRow): ClientRequest {
   };
 }
 
-type CallerMatchRow =
-  Database['public']['Functions']['find_client_request_caller_matches']['Returns'][number];
-
-function isCallerMatchField(value: string): value is CallerMatchField {
-  return CALLER_MATCH_FIELDS.some((field) => field === value);
-}
-
-export function toCallerMatch(row: CallerMatchRow): CallerMatch {
-  return {
-    clientId: row.client_id,
-    clientName: row.client_name,
-    matchedOn: row.matched_on.filter(isCallerMatchField),
-  };
-}
+/** The caller matches come from the customer matcher, so they read as its rows. */
+export const toCallerMatch = toClientMatch;
 
 export function toClientRequestEvent(row: ClientRequestEventRow): ClientRequestEvent {
   return {
