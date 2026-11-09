@@ -45,31 +45,35 @@ export function IosInstallHint() {
   };
 
   return (
-    <aside
-      aria-label="WerkFlow installieren"
-      className="absolute inset-x-4 top-4 z-20 mx-auto max-w-md rounded-lg border bg-card p-4 text-card-foreground shadow-lg"
-    >
-      <div className="flex items-start gap-3">
-        <Share className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
-        <div className="min-w-0 flex-1 text-sm">
-          <p className="font-medium">WerkFlow auf den Home-Bildschirm legen</p>
-          <p className="mt-1 text-muted-foreground">
-            Tippe in Safari auf „Teilen“, bei neuem iOS im Menü neben der Adresse. Wähle dann „Zum
-            Home-Bildschirm“, falls nötig unter „Mehr anzeigen“. Danach öffnest du WerkFlow direkt wie eine
-            App.
-          </p>
+    // The wrapper spans the content width and gives the 16 px side gutter; it lets clicks
+    // through beside the card, so the page header stays usable on a wide screen.
+    <div className="pointer-events-none absolute inset-x-0 top-4 z-20 px-4">
+      <aside
+        aria-label="WerkFlow installieren"
+        className="pointer-events-auto mx-auto max-w-md rounded-lg border bg-card p-4 text-card-foreground shadow-lg"
+      >
+        <div className="flex items-start gap-3">
+          <Share className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
+          <div className="min-w-0 flex-1 text-sm">
+            <p className="font-medium">WerkFlow auf den Home-Bildschirm legen</p>
+            <p className="mt-1 text-muted-foreground">
+              Tippe in Safari auf „Teilen“, bei neuem iOS im Menü neben der Adresse. Wähle dann „Zum
+              Home-Bildschirm“, falls nötig unter „Mehr anzeigen“. Danach öffnest du WerkFlow direkt wie eine
+              App.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="-mx-1 -my-1 size-11"
+            aria-label="Installationshinweis schließen"
+            onClick={dismiss}
+          >
+            <X />
+          </Button>
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="-mt-2 -mr-2 size-11"
-          aria-label="Installationshinweis schließen"
-          onClick={dismiss}
-        >
-          <X />
-        </Button>
-      </div>
-    </aside>
+      </aside>
+    </div>
   );
 }
