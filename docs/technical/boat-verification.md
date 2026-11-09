@@ -40,7 +40,7 @@ A failed browser group's world is cleaned on its machine before the machine goes
 | Setting | Value |
 | --- | --- |
 | Name | `werkflow-pc` on the PC (WSL user), `werkflow-mac` on the Mac |
-| Organization | `WerkFlow`; it bills the plan's included $20 a month. The wallet stays empty, so a start past the plan fails and the run falls back. |
+| Organization | `WerkFlow`; it bills the plan's included $20 a month, then a $20 wallet reserve. Auto top-up stays off, so once both are spent a start fails and the run falls back. |
 | Expiry | 90 days |
 | Actions | Custom: exactly `sandbox.create`, `sandbox.read`, `sandbox.stop`, `sandbox.resume`, `sandbox.fork`, `sandbox.delete-own`, `exec`, `file.read`, `file.write`, `snapshot.read`, `snapshot.write`. No environment or sandbox restriction. |
 | File | `~/.config/werkflow/boat-api-key`, mode 600, folder mode 700, one line holding the key |
