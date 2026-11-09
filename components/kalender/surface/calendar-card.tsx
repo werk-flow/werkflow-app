@@ -2,7 +2,7 @@
 
 import { PlainButton } from '@/components/ui/plain-button';
 import { forwardRef, type ReactNode } from 'react';
-import { Briefcase, CalendarDays, Lock, Repeat2, StickyNote } from 'lucide-react';
+import { Briefcase, CalendarDays, Lock, Repeat2, StickyNote, UserX } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   CALENDAR_DISPATCH_STATE_LABELS,
@@ -12,6 +12,7 @@ import {
 import { PLANNING_OCCURRENCE_STATUS_LABELS } from '@/lib/planning/types';
 import type { CalendarJob } from '@/lib/jobs/types';
 import { MATERIAL_UNRESERVED_LABEL } from '@/lib/dispatch/readiness';
+import { unavailabilityLabel, type UnavailableAssignee } from '@/lib/calendar/board-model';
 
 /**
  * The one card anatomy (P1-24a, criterion 4 and the design direction): a
@@ -54,6 +55,14 @@ export function readinessChips(hasMaterialDemand: boolean): CalendarCardChip[] {
   return hasMaterialDemand ? [{ label: MATERIAL_UNRESERVED_LABEL, tone: 'neutral' }] : [];
 }
 
+/** One warning per assignee who cannot work the visit by its date: „Ausgeschieden: Erik Lindner“. */
+export function unavailableAssigneeChips(assignees: readonly UnavailableAssignee[]): CalendarCardChip[] {
+  return assignees.map((assignee) => ({
+    label: `${unavailabilityLabel(assignee.reason)}: ${assignee.name}`,
+    tone: 'warning',
+  }));
+}
+
 function isInactiveOccurrence(job: Pick<CalendarJob, 'occurrenceStatus'>): boolean {
   return job.occurrenceStatus === 'skipped' || job.occurrenceStatus === 'cancelled';
 }
@@ -92,6 +101,11 @@ export type CalendarCardProps = {
   draggable?: boolean;
   /** A started or past occurrence: shown as history, never a drag source (P1-11). */
   locked?: boolean;
+  /**
+   * A warning the card always says, such as a person who left: part of its
+   * accessible name, and an icon where the one-line card has no chip row.
+   */
+  alert?: string | undefined;
   onPointerDown?: (event: React.PointerEvent<HTMLButtonElement>) => void;
   onOpen?: (element: HTMLButtonElement) => void;
   onHoverLink?: (occurrenceId: string | null) => void;
@@ -110,12 +124,13 @@ type CardFacts = {
   inactive: boolean;
   locked: boolean;
   oneLine: boolean;
+  alert: string | undefined;
 };
 
 /** The title line: kind icon, title and the marks for locked, series, inactive and the month's job number. */
 function cardTitleLine(
   job: CalendarJob,
-  { size, note, inactive, locked, oneLine }: CardFacts,
+  { size, note, inactive, locked, oneLine, alert }: CardFacts,
 ): React.JSX.Element {
   const statusLabel = job.occurrenceStatus
     ? PLANNING_OCCURRENCE_STATUS_LABELS[job.occurrenceStatus]
@@ -139,6 +154,11 @@ function cardTitleLine(
       >
         {job.title}
       </span>
+      {oneLine && alert && (
+        <UserX className="ml-auto size-3 shrink-0 text-warning-text" aria-hidden="true">
+          <title>{alert}</title>
+        </UserX>
+      )}
       {locked && <Lock className="ml-auto size-3 shrink-0 opacity-70" aria-hidden="true" />}
       {job.seriesId && (
         <Repeat2 className="size-3 shrink-0 opacity-70" role="img" aria-label="Serientermin" />
@@ -174,14 +194,17 @@ function cardSubtitleLine(job: CalendarJob, subtitle: string, size: CalendarCard
   );
 }
 
+/** A chip truncates inside the card; a warning wraps, because its name is the point. */
 function cardChipRow(chips: readonly CalendarCardChip[]): React.JSX.Element {
   return (
     <span className="flex min-w-0 flex-wrap gap-1 pt-0.5">
       {chips.map((chip) => (
         <span
           key={chip.label}
+          title={chip.label}
           className={cn(
-            'max-w-full truncate whitespace-nowrap rounded-sm px-1 text-xs leading-4',
+            'max-w-full rounded-sm px-1 text-xs leading-4',
+            chip.tone === 'warning' ? 'break-words' : 'truncate whitespace-nowrap',
             CHIP_CLASS[chip.tone],
           )}
         >
@@ -202,6 +225,7 @@ export const CalendarCard = forwardRef<HTMLButtonElement, CalendarCardProps>(fun
     linked = false,
     draggable = false,
     locked = false,
+    alert,
     onPointerDown,
     onOpen,
     onHoverLink,
@@ -227,7 +251,7 @@ export const CalendarCard = forwardRef<HTMLButtonElement, CalendarCardProps>(fun
       // A move that is taken back renders the card anew; a closing dialog finds it again by this key.
       data-focus-key={`calendar-card:${size}:${rest['data-occurrence-id'] ?? job.occurrenceId ?? job.id}:${rest['data-employee-record-id'] ?? ''}`}
       data-locked={locked ? '' : undefined}
-      aria-label={`${rest['aria-label'] ?? `${job.title}, ${cardTime(job)}${subtitle ? `, ${subtitle}` : ''}`}${locked ? ', begonnen oder vergangen' : ''}`}
+      aria-label={`${rest['aria-label'] ?? `${job.title}, ${cardTime(job)}${subtitle ? `, ${subtitle}` : ''}`}${locked ? ', begonnen oder vergangen' : ''}${alert ? `, ${alert}` : ''}`}
       className={cn(
         'group/card relative flex min-w-0 flex-col gap-1 overflow-hidden rounded-md border border-l-2 text-left text-xs leading-snug transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         note
@@ -254,7 +278,7 @@ export const CalendarCard = forwardRef<HTMLButtonElement, CalendarCardProps>(fun
       onFocus={() => onHoverLink?.(job.occurrenceId ?? null)}
       onBlur={() => onHoverLink?.(null)}
     >
-      {cardTitleLine(job, { size, note, inactive, locked, oneLine })}
+      {cardTitleLine(job, { size, note, inactive, locked, oneLine, alert })}
       {!oneLine && job.plannedTime && (
         <span className="text-xs tabular-nums opacity-80">{cardTime(job)}</span>
       )}

@@ -13,11 +13,20 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { OrgRole } from '@/lib/roles';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { uuidSchema } from '@/lib/validation/uuid';
-import type { CalendarBoardContext, CalendarBoardDay, CalendarBoardRow } from './board';
 import {
+  EMPTY_CALENDAR_BOARD,
+  type CalendarBoardContext,
+  type CalendarBoardDay,
+  type CalendarBoardRow,
+} from './board';
+import { accessEndDatesByRecord } from '@/lib/planning/availability';
+import {
+  boardDisplayName,
   boardLoadFailed,
   loadBoardRecords,
+  loadRowlessAssignees,
   loadTeamByRecord,
+  loadTeamMemberships,
   type BoardRecord,
   type BoardTeam,
 } from './board-reads';
@@ -37,7 +46,14 @@ export type CalendarBoardInput = {
 
 export type CalendarBoardResult = ActionResult<CalendarBoardContext>;
 
-const occurrenceRowSchema = z.array(z.object({ id: z.string(), job_id: z.string().nullable() }));
+const occurrenceRowSchema = z.array(
+  z.object({
+    id: z.string(),
+    job_id: z.string().nullable(),
+    // A manager's read names every assignee; an employee's names only their own.
+    assignments: z.array(z.object({ employee_record_id: z.string() })).optional(),
+  }),
+);
 
 function isoDatesBetween(from: string, to: string): string[] {
   const dates: string[] = [];
@@ -72,7 +88,7 @@ export async function getCalendarBoardContext(rawInput: CalendarBoardInput): Pro
   const userIds = records.flatMap((record) => (record.user_id ? [record.user_id] : []));
   const ownRecordId = isManagerOrAbove ? null : (recordIds[0] ?? null);
   if (!isManagerOrAbove && !ownRecordId) {
-    return { success: true, rows: [], days: [], dispatch: [], materialDemandJobIds: [] };
+    return { success: true, ...EMPTY_CALENDAR_BOARD };
   }
 
   // Capacity/person labels and occurrence badges are independent once the
@@ -95,18 +111,7 @@ export async function getCalendarBoardContext(rawInput: CalendarBoardInput): Pro
             .in('user_id', [...ids]),
         )
       : { data: [], error: null },
-    recordIds.length
-      ? readInBatches(recordIds, (ids) =>
-          admin
-            .from('team_memberships')
-            .select('employee_record_id, team_id')
-            .eq('organization_id', orgId)
-            .in('employee_record_id', [...ids])
-            .lte('valid_from', dates.from)
-            .or(`valid_until.is.null,valid_until.gte.${dates.from}`)
-            .order('valid_from', { ascending: false }),
-        )
-      : { data: [], error: null },
+    loadTeamMemberships(admin, orgId, recordIds, dates.from),
     loadDailyTargetsByRecord({
       admin,
       orgId,
@@ -121,13 +126,29 @@ export async function getCalendarBoardContext(rawInput: CalendarBoardInput): Pro
   if (!targets) return boardLoadFailed('daily targets', null);
   if (!occurrenceContext) return boardLoadFailed('occurrence context', null);
   const memberships = membershipsResult.data ?? [];
-  const teamByRecord = await loadTeamByRecord(admin, orgId, memberships);
+  const rowRecordIds = new Set(recordIds);
+  const [teamByRecord, rowless] = await Promise.all([
+    loadTeamByRecord(admin, orgId, memberships),
+    loadRowlessAssignees(
+      admin,
+      orgId,
+      occurrenceContext.assignedRecordIds.filter((recordId) => !rowRecordIds.has(recordId)),
+    ),
+  ]);
   if (!teamByRecord.success) return teamByRecord;
+  if (!rowless.success) return rowless;
   const profiles = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile]));
   const roles = new Map((membersResult.data ?? []).map((member) => [member.user_id, member.role]));
   const rows = toBoardRows({ records, profiles, roles, teamByRecord: teamByRecord.teams });
-
-  return { success: true, rows, days: toBoardDays(targets), ...occurrenceContext };
+  const { dispatch, materialDemandJobIds } = occurrenceContext;
+  return {
+    success: true,
+    rows,
+    days: toBoardDays(targets),
+    dispatch,
+    materialDemandJobIds,
+    rowlessAssignees: rowless.assignees,
+  };
 }
 
 function toBoardRows(input: {
@@ -137,6 +158,7 @@ function toBoardRows(input: {
   teamByRecord: Map<string, BoardTeam>;
 }): CalendarBoardRow[] {
   const { profiles, roles, teamByRecord } = input;
+  const accessEndByRecord = accessEndDatesByRecord(input.records);
   return input.records.map((record) => {
     const profile = record.user_id ? profiles.get(record.user_id) : undefined;
     const role = record.user_id ? (roles.get(record.user_id) ?? null) : null;
@@ -144,16 +166,14 @@ function toBoardRows(input: {
     return {
       employeeRecordId: record.id,
       userId: record.user_id,
-      displayName:
-        [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') ||
-        [record.first_name, record.last_name].filter(Boolean).join(' ') ||
-        'Unbenannt',
+      displayName: boardDisplayName(record, profile),
       role,
       hasLogin: role !== null,
       teamId: team?.id ?? null,
       teamName: team?.name ?? null,
       entryDate: record.entry_date,
       exitDate: record.exit_date,
+      accessEndDate: accessEndByRecord.get(record.id) ?? null,
     };
   });
 }
@@ -190,8 +210,14 @@ function toBoardDays(targets: DailyTargetsByRecord): CalendarBoardDay[] {
   return days;
 }
 
-/** Caller supplies only the organization and employee scope it authorized. */
-async function loadCalendarBoardOccurrenceContext({
+type OccurrenceRow = z.infer<typeof occurrenceRowSchema>[number];
+
+/**
+ * The window's scheduled occurrences, with the overlap filter of the window
+ * reader. An employee's read keeps the own-assignment join and names nobody
+ * else; a manager's read names every assignee. Null after a logged failure.
+ */
+async function loadWindowOccurrences({
   admin,
   orgId,
   dates,
@@ -201,9 +227,7 @@ async function loadCalendarBoardOccurrenceContext({
   orgId: string;
   dates: { from: string; to: string };
   ownRecordId: string | null;
-}): Promise<Pick<CalendarBoardContext, 'dispatch' | 'materialDemandJobIds'> | null> {
-  // Match the window reader's overlap filter. Employee reads keep the own
-  // assignment join and recipient filter at both boundaries.
+}): Promise<OccurrenceRow[] | null> {
   const fromInstant = resolveBerlinWallTime(`${dates.from}T00:00`);
   const toInstant = resolveBerlinWallTime(`${addLocalDays(dates.to, 1)}T00:00`);
   if (!fromInstant || !toInstant) return null;
@@ -211,7 +235,7 @@ async function loadCalendarBoardOccurrenceContext({
   // select is assembled as a string, so the rows are validated after the read.
   const occurrenceSelect: string = ownRecordId
     ? 'id, job_id, own:planning_occurrence_assignments!inner(employee_record_id)'
-    : 'id, job_id';
+    : 'id, job_id, assignments:planning_occurrence_assignments!planning_occurrence_assignments_occurrence_id_fkey(employee_record_id)';
   const occurrenceQuery = () => {
     let query = admin
       .from('planning_occurrences')
@@ -241,7 +265,21 @@ async function loadCalendarBoardOccurrenceContext({
     logReadFailure('Calendar board read failed: window occurrences', { code: 'unexpected_shape' });
     return null;
   }
-  const occurrenceRows = parsedRows.data;
+  return parsedRows.data;
+}
+
+/** Caller supplies only the organization and employee scope it authorized. */
+async function loadCalendarBoardOccurrenceContext(input: {
+  admin: ReturnType<typeof createSupabaseAdminClient>;
+  orgId: string;
+  dates: { from: string; to: string };
+  ownRecordId: string | null;
+}): Promise<
+  (Pick<CalendarBoardContext, 'dispatch' | 'materialDemandJobIds'> & { assignedRecordIds: string[] }) | null
+> {
+  const { admin, orgId, ownRecordId } = input;
+  const occurrenceRows = await loadWindowOccurrences(input);
+  if (!occurrenceRows) return null;
   const jobIds = [...new Set(occurrenceRows.flatMap((row) => (row.job_id ? [row.job_id] : [])))];
 
   const [dispatch, materialResult] = await Promise.all([
@@ -273,5 +311,14 @@ async function loadCalendarBoardOccurrenceContext({
     materialDemandJobIds: [
       ...new Set((materialResult.data ?? []).flatMap((line) => (line.job_id ? [line.job_id] : []))),
     ],
+    // An employee's board names nobody else, so only a manager's read collects the assignees.
+    assignedRecordIds: ownRecordId ? [] : assignedRecordIdsOf(occurrenceRows),
   };
+}
+
+/** Every person the occurrences name, once. */
+function assignedRecordIdsOf(rows: readonly OccurrenceRow[]): string[] {
+  return [
+    ...new Set(rows.flatMap((row) => (row.assignments ?? []).map((entry) => entry.employee_record_id))),
+  ];
 }

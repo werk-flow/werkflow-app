@@ -26,6 +26,7 @@ const boardRow = (employeeRecordId: string): CalendarBoardRow => ({
   teamName: null,
   entryDate: null,
   exitDate: null,
+  accessEndDate: null,
 });
 
 const columns: BoardColumn[] = [

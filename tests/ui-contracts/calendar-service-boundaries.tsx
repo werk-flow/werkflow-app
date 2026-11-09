@@ -136,7 +136,7 @@ export async function getCalendarBoard(
   signal?: AbortSignal,
 ): Promise<CalendarBoardResult> {
   window.calendarContract.boardSignals.push(signal);
-  return { success: true, rows: [], days: [], dispatch: [], materialDemandJobIds: [] };
+  return { success: true, rows: [], days: [], dispatch: [], materialDemandJobIds: [], rowlessAssignees: [] };
 }
 export async function getChangeRequestsForEntries(): Promise<{ success: true; requests: [] }> {
   return { success: true, requests: [] };

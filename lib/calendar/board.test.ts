@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import type { CalendarJob } from '@/lib/jobs/types';
 import {
+  boardCellCapacity,
   absenceMark,
   boardDayKey,
   deriveCapacityState,
-  describeCapacity,
   dispatchStateFor,
   indexBoardDispatch,
   plannedMinutesByEmployeeDate,
@@ -152,13 +152,15 @@ describe('capacity state', () => {
   });
 
   test('describes the cell for hover and assistive technology', () => {
+    const sentence = (cell: CalendarBoardDay, plannedMinutes: number): string =>
+      boardCellCapacity({ day: cell, plannedMinutes, unavailability: null, isWeekend: false }).description;
     expect(
-      describeCapacity(day({ targetMinutes: 0, reason: 'holiday', label: 'Tag der Deutschen Einheit' }), 0),
+      sentence(day({ targetMinutes: 0, reason: 'holiday', label: 'Tag der Deutschen Einheit' }), 0),
     ).toBe('Feiertag: Tag der Deutschen Einheit');
-    expect(
-      describeCapacity(day({ targetMinutes: 0, absence: { type: 'sickness', portion: 'full' } }), 0),
-    ).toBe('Abwesend');
-    expect(describeCapacity(day({ pendingVacation: true }), 150)).toBe(
+    expect(sentence(day({ targetMinutes: 0, absence: { type: 'sickness', portion: 'full' } }), 0)).toBe(
+      'Abwesend',
+    );
+    expect(sentence(day({ pendingVacation: true }), 150)).toBe(
       'teilweise geplant: 2,5 h von 8 h geplant, Urlaub angefragt',
     );
   });

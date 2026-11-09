@@ -23,6 +23,7 @@ const boardRow = (overrides: Partial<CalendarBoardRow>): CalendarBoardRow => ({
   teamName: null,
   entryDate: null,
   exitDate: null,
+  accessEndDate: null,
   ...overrides,
 });
 const visit = (overrides: Partial<CalendarJob>): CalendarJob => ({
@@ -87,6 +88,7 @@ function input(overrides: Partial<DayRowsInput>): DayRowsInput {
     organizationSettings: getDefaultTimeTrackingSettings('org'),
     hourWidth: 80,
     isManager: true,
+    people: new Map(),
     ...overrides,
   };
 }

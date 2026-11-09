@@ -150,6 +150,7 @@ function windowDatasets(
       days: board.days,
       dispatch: board.dispatch,
       materialDemandJobIds: board.materialDemandJobIds,
+      rowlessAssignees: board.rowlessAssignees,
     },
   };
 }
@@ -501,7 +502,8 @@ function useDatasetUpdaters(scopeKey: string, dispatch: Dispatch<Action>) {
 
 // Every table whose change can alter one of the six datasets. Provisional
 // corrections are projected from `time_correction_requests` (PF-05); the
-// board context follows schedules, teams, memberships and dispatches.
+// board context follows schedules, teams, memberships, dispatches, and the
+// exits and access ends that take a person off a visit.
 const CALENDAR_TABLES = [
   'organization_closure_days',
   'organization_settings',
@@ -521,6 +523,7 @@ const CALENDAR_TABLES = [
   'planning_dispatch_acknowledgements',
   'organization_members',
   'employee_records',
+  'personnel_access_lifecycles',
   'work_schedules',
   'team_memberships',
   'vacation_requests',

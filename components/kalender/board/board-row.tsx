@@ -22,6 +22,7 @@ import type { CalendarJob } from '@/lib/jobs/types';
 import type { SicknessCalendarEntry } from '@/lib/sickness/actions';
 import type { VacationCalendarEntry } from '@/lib/vacation/calendar-actions';
 import type { DispatchRecipientDerivedState } from '@/lib/dispatch/types';
+import { unavailabilityOn } from '@/lib/planning/availability';
 import { getRoleLabel } from '@/lib/roles';
 import { memoPropsEqual } from '@/lib/ui/memo-equality';
 import { BarSegment } from '../surface/bar-segment';
@@ -133,9 +134,6 @@ function boardRowCell(
   columnIndex: number,
 ): React.JSX.Element {
   const key = row ? boardDayKey(row.employeeRecordId, column.date) : '';
-  const employed =
-    !row ||
-    ((!row.entryDate || column.date >= row.entryDate) && (!row.exitDate || column.date <= row.exitDate));
   return (
     <BoardCell
       key={column.date}
@@ -148,7 +146,7 @@ function boardRowCell(
       actual={row?.userId && actual ? actual.get(`${row.userId}:${column.date}`) : undefined}
       compact={compact}
       actions={actions}
-      employed={employed}
+      unavailability={row ? unavailabilityOn(row, column.date) : null}
     />
   );
 }

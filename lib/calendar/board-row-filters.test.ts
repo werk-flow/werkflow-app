@@ -16,6 +16,7 @@ const person = (employeeRecordId: string): BoardRowModel => {
     teamName: null,
     entryDate: null,
     exitDate: null,
+    accessEndDate: null,
   };
   return { key: employeeRecordId, kind: 'person', row };
 };
@@ -69,6 +70,7 @@ function dispatchIndex(entries: Array<[string, DispatchRecipientDerivedState]>) 
 describe('board group filters', () => {
   test('returns the same groups when no filter is active', () => {
     const result = filterBoardGroups({
+      people: new Map(),
       groups,
       visibleJobs: jobs,
       columns,
@@ -83,6 +85,7 @@ describe('board group filters', () => {
 
   test('keeps rows with a card in a selected dispatch state and reads a missing state as not sent', () => {
     const result = filterBoardGroups({
+      people: new Map(),
       groups,
       visibleJobs: jobs,
       columns,
@@ -97,6 +100,7 @@ describe('board group filters', () => {
 
   test('„Nur Konflikte" keeps overbooked or challenged person rows and drops empty groups', () => {
     const result = filterBoardGroups({
+      people: new Map(),
       groups,
       visibleJobs: jobs,
       columns,
@@ -114,6 +118,7 @@ describe('board jobs by row', () => {
   test('gives each row its own cards, narrowed to the selected dispatch states', () => {
     const rows = [person('a'), person('b'), unassigned];
     const all = boardJobsByRow({
+      people: new Map(),
       rowModels: rows,
       visibleJobs: jobs,
       dispatch: dispatchIndex([]),
@@ -125,6 +130,7 @@ describe('board jobs by row', () => {
       ['unassigned', ['o3']],
     ]);
     const confirmed = boardJobsByRow({
+      people: new Map(),
       rowModels: rows,
       visibleJobs: jobs,
       dispatch: dispatchIndex([['o1:a', 'bestaetigt']]),

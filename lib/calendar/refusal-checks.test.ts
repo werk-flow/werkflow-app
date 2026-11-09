@@ -19,6 +19,7 @@ const row: CalendarBoardRow = {
   teamName: null,
   entryDate: '2020-01-01',
   exitDate: '2026-09-30',
+  accessEndDate: null,
 };
 const day = (overrides: Partial<CalendarBoardDay>): CalendarBoardDay => ({
   employeeRecordId: 'r1',

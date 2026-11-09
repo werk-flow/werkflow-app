@@ -7,6 +7,7 @@ import {
   indexBoardDispatch,
   plannedMinutesByEmployeeDate,
   type CalendarBoardContext,
+  type CalendarBoardDay,
 } from '@/lib/calendar/board';
 import { boardColumns } from '@/lib/calendar/board-layout';
 import {
@@ -21,6 +22,7 @@ import type { CalendarPreferences } from '@/lib/calendar/preferences';
 import type { CalendarJob } from '@/lib/jobs/types';
 import { DEFAULT_DAILY_TARGET_MINUTES } from '@/lib/personnel/targets';
 import type { TimeEntry } from '@/lib/time-tracking/types';
+import { useBoardAbsences } from '../board-absences-context';
 
 type PlantafelModelInput = {
   anchorIso: string;
@@ -52,6 +54,32 @@ function useBoardIndexes(board: CalendarBoardContext) {
   return { days, dispatch, materialDemandJobIds, recordIdByUserId };
 }
 
+/** Planned minutes per person-day from the window's visits, and recorded minutes while the toggle is on. */
+function useBoardMinutes(input: {
+  jobs: CalendarJob[];
+  entries: TimeEntry[];
+  days: ReadonlyMap<string, CalendarBoardDay>;
+  recordIdByUserId: ReadonlyMap<string, string>;
+  showActualTime: boolean;
+  nowTick: number;
+}) {
+  const { jobs, entries, days, recordIdByUserId, showActualTime, nowTick } = input;
+  const planned = useMemo(
+    () =>
+      plannedMinutesByEmployeeDate(
+        jobs,
+        (record, date) => days.get(boardDayKey(record, date))?.targetMinutes ?? DEFAULT_DAILY_TARGET_MINUTES,
+        recordIdByUserId,
+      ),
+    [days, jobs, recordIdByUserId],
+  );
+  const actual = useMemo(
+    () => (showActualTime ? actualMinutesByUserDate(entries, new Date(nowTick)) : null),
+    [entries, nowTick, showActualTime],
+  );
+  return { planned, actual };
+}
+
 /**
  * The Plantafel's derived data (P1-24a): columns, the day and dispatch
  * indexes, planned and actual minutes, the filtered team groups, the visible
@@ -73,19 +101,15 @@ export function usePlantafelModel(input: PlantafelModelInput) {
     [anchorIso, preferences.hideWeekends, preferences.horizonWeeks, todayIso],
   );
   const { days, dispatch, materialDemandJobIds, recordIdByUserId } = useBoardIndexes(board);
-  const planned = useMemo(
-    () =>
-      plannedMinutesByEmployeeDate(
-        jobs,
-        (record, date) => days.get(boardDayKey(record, date))?.targetMinutes ?? DEFAULT_DAILY_TARGET_MINUTES,
-        recordIdByUserId,
-      ),
-    [days, jobs, recordIdByUserId],
-  );
-  const actual = useMemo(
-    () => (showActualTime ? actualMinutesByUserDate(entries, new Date(nowTick)) : null),
-    [entries, nowTick, showActualTime],
-  );
+  const { people } = useBoardAbsences();
+  const { planned, actual } = useBoardMinutes({
+    jobs,
+    entries,
+    days,
+    recordIdByUserId,
+    showActualTime,
+    nowTick,
+  });
 
   const visibleJobs = useMemo(
     () => (preferences.showJobs ? jobs.filter((job) => matchesBoardSearch(job, preferences.search)) : []),
@@ -109,9 +133,11 @@ export function usePlantafelModel(input: PlantafelModelInput) {
         dispatch,
         dispatchStates: preferences.dispatchStates,
         onlyConflicts: preferences.onlyConflicts,
+        people,
       }),
     [
       isManager,
+      people,
       board.rows,
       columns,
       days,
@@ -130,8 +156,15 @@ export function usePlantafelModel(input: PlantafelModelInput) {
     [collapsedTeams, groups],
   );
   const jobsByRow = useMemo(
-    () => boardJobsByRow({ rowModels, visibleJobs, dispatch, dispatchStates: preferences.dispatchStates }),
-    [dispatch, preferences.dispatchStates, rowModels, visibleJobs],
+    () =>
+      boardJobsByRow({
+        rowModels,
+        visibleJobs,
+        dispatch,
+        dispatchStates: preferences.dispatchStates,
+        people,
+      }),
+    [dispatch, people, preferences.dispatchStates, rowModels, visibleJobs],
   );
 
   return { columns, days, dispatch, materialDemandJobIds, planned, actual, groups, rowModels, jobsByRow };

@@ -26,7 +26,7 @@ export function sessionSourceEntries(session: InteractiveCalendarSession, clockI
 
 /** A visit moved in time or between people; an untimed card leaves the first row that owns it. */
 function dropVisit(
-  { mutations, rows, dateIso }: DaySurfaceInput,
+  { mutations, rows, dateIso, people }: DaySurfaceInput,
   target: CalendarDragCell,
   payload: Extract<CalendarDragPayload, { kind: 'occurrence' | 'untimed' }>,
   { time, name, dateLabel }: DayDropFacts,
@@ -34,8 +34,9 @@ function dropVisit(
   const { job } = payload;
   // An untimed card leaves the first row that owns it, by record as on the board.
   const trayRow =
-    rows.find((candidate) => candidate.key !== UNASSIGNED_DAY_ROW_KEY && dayRowOwnsJob(candidate, job)) ??
-    null;
+    rows.find(
+      (candidate) => candidate.key !== UNASSIGNED_DAY_ROW_KEY && dayRowOwnsJob(candidate, job, people),
+    ) ?? null;
   const sourceRecordId =
     payload.kind === 'occurrence' ? payload.sourceEmployeeRecordId : (trayRow?.row?.employeeRecordId ?? null);
   const sourceUserId = payload.kind === 'occurrence' ? payload.sourceUserId : (trayRow?.userId ?? null);
@@ -45,6 +46,7 @@ function dropVisit(
       sourceEmployeeRecordId: sourceRecordId,
       sourceUserId,
       target: { employeeRecordId: target.employeeRecordId, userId: target.userId, date: dateIso },
+      people,
     }) ?? {};
   const timeChanged = job.plannedTime !== time;
   if (!timeChanged && Object.keys(reassign).length === 0) return;
