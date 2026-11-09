@@ -14,7 +14,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { logError } from '@/lib/logging';
-import { SHELL_REFILL_MESSAGE } from '@/lib/offline/service-worker-caches';
+import { restoreOfflineShell } from '@/lib/offline/service-worker-caches';
 import { cn } from '@/lib/utils';
 import { useOrganization } from '@/components/organization/organization-context';
 import { SidebarProfileCard } from '@/components/sidebar/sidebar-profile-card';
@@ -68,7 +68,7 @@ function useOfflineShell(): void {
     const start = () => {
       navigator.serviceWorker
         .register('/sw.js')
-        .then((registration) => registration.active?.postMessage(SHELL_REFILL_MESSAGE))
+        .then(restoreOfflineShell)
         .catch((error: unknown) => logError('AppShell: service worker registration failed', error));
     };
     if (document.readyState === 'complete') start();

@@ -13,10 +13,9 @@ const SERVICE_WORKER_CACHE_PREFIX = 'werkflow-';
 
 /**
  * The message public/sw.js answers by filling its offline shell again when it
- * is missing. The app shell sends it on mount, the organization switch after
- * it cleared the caches (lib/security/service-worker.test.ts pins both sides).
+ * is missing (lib/security/service-worker.test.ts pins both sides).
  */
-export const SHELL_REFILL_MESSAGE = 'werkflow:refill-shell';
+const SHELL_REFILL_MESSAGE = 'werkflow:refill-shell';
 
 /**
  * Deletes every cache the service worker owns. Sign-out and an organization
@@ -37,12 +36,13 @@ export async function clearServiceWorkerCaches(): Promise<void> {
 }
 
 /**
- * Asks the active service worker to fill the offline shell again. The
- * organization switch calls it after its cache clear has finished: the switch
- * navigates on the client, which never refills the shell otherwise.
+ * Asks the active service worker to fill the offline shell again. The app
+ * shell calls it once the worker is registered, the organization switch after
+ * its cache clear has finished: both navigate on the client, which never
+ * refills the shell otherwise.
  */
 export async function restoreOfflineShell(): Promise<void> {
-  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+  if (!('serviceWorker' in navigator)) return;
   try {
     const registration = await navigator.serviceWorker.getRegistration();
     registration?.active?.postMessage(SHELL_REFILL_MESSAGE);
