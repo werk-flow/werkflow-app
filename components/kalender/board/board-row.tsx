@@ -16,7 +16,12 @@ import {
   type BoardLaneItem,
   type BoardSpanItem,
 } from '@/lib/calendar/board-layout';
-import { absenceItems, occurrenceSpan, type BoardRowModel } from '@/lib/calendar/board-model';
+import {
+  absenceItems,
+  occurrenceSpan,
+  plannedWorkDates,
+  type BoardRowModel,
+} from '@/lib/calendar/board-model';
 import { BOARD_ROW_CONTENT_CHECKS } from '@/lib/calendar/board-row-memo';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { SicknessCalendarEntry } from '@/lib/sickness/actions';
@@ -132,6 +137,7 @@ function boardRowCell(
   row: CalendarBoardRow | null,
   column: BoardColumn,
   columnIndex: number,
+  workDates: ReadonlySet<string>,
 ): React.JSX.Element {
   const key = row ? boardDayKey(row.employeeRecordId, column.date) : '';
   return (
@@ -146,6 +152,7 @@ function boardRowCell(
       actual={row?.userId && actual ? actual.get(`${row.userId}:${column.date}`) : undefined}
       compact={compact}
       actions={actions}
+      hasPlannedWork={workDates.has(column.date)}
       unavailability={row ? unavailabilityOn(row, column.date) : null}
     />
   );
@@ -208,6 +215,7 @@ export const BoardRow = memo(function BoardRow(props: BoardRowProps) {
     [columns, jobs, row, sickness, vacation],
   );
 
+  const workDates = useMemo(() => plannedWorkDates(jobs), [jobs]);
   const rowLabel = row ? row.displayName : 'Ohne Zuweisung';
   return (
     <div
@@ -221,7 +229,7 @@ export const BoardRow = memo(function BoardRow(props: BoardRowProps) {
       }}
     >
       {boardRowHeader(row, compact, isolate)}
-      {columns.map((column, columnIndex) => boardRowCell(props, row, column, columnIndex))}
+      {columns.map((column, columnIndex) => boardRowCell(props, row, column, columnIndex, workDates))}
       {lanes.map((lane) => boardRowLane(props, row, lane))}
     </div>
   );

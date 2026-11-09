@@ -153,7 +153,13 @@ describe('capacity state', () => {
 
   test('describes the cell for hover and assistive technology', () => {
     const sentence = (cell: CalendarBoardDay, plannedMinutes: number): string =>
-      boardCellCapacity({ day: cell, plannedMinutes, unavailability: null, isWeekend: false }).description;
+      boardCellCapacity({
+        day: cell,
+        plannedMinutes,
+        hasPlannedWork: plannedMinutes > 0,
+        unavailability: null,
+        isWeekend: false,
+      }).description;
     expect(
       sentence(day({ targetMinutes: 0, reason: 'holiday', label: 'Tag der Deutschen Einheit' }), 0),
     ).toBe('Feiertag: Tag der Deutschen Einheit');

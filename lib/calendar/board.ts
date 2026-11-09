@@ -244,24 +244,24 @@ export type BoardCellCapacity = { state: CapacityState; off: boolean; descriptio
 /**
  * A person-day of the board. A day the person cannot be planned (before
  * entry, after exit, or with app access ended) is off; work planned on it is
- * overbooked, because nobody can do it.
+ * overbooked, because nobody can do it. An all-day visit there has no planned
+ * minutes (the day's target is zero), so the row's visits say whether work
+ * is planned.
  */
 export function boardCellCapacity(input: {
   day: CalendarBoardDay | undefined;
   plannedMinutes: number;
+  /** One of the row's visits covers the day. */
+  hasPlannedWork: boolean;
   unavailability: Unavailability | null;
   isWeekend: boolean;
 }): BoardCellCapacity {
   const { day, plannedMinutes, unavailability, isWeekend } = input;
   if (unavailability) {
     const reason = unavailability === 'access_ended' ? 'App-Zugang beendet' : 'Nicht beschäftigt';
-    return plannedMinutes > 0
-      ? {
-          state: 'overbooked',
-          off: true,
-          description: `${reason}, trotzdem ${formatShortHours(plannedMinutes)} geplant`,
-        }
-      : { state: 'off', off: true, description: reason };
+    if (plannedMinutes <= 0 && !input.hasPlannedWork) return { state: 'off', off: true, description: reason };
+    const planned = plannedMinutes > 0 ? `${formatShortHours(plannedMinutes)} geplant` : 'eingeplant';
+    return { state: 'overbooked', off: true, description: `${reason}, trotzdem ${planned}` };
   }
   if (!day) {
     return {

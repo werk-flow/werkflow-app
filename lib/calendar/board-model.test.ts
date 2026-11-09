@@ -8,6 +8,7 @@ import {
   indexBoardPeople,
   matchesBoardSearch,
   occurrenceSpan,
+  plannedWorkDates,
   reassignmentChanges,
   rowOwnsJob,
   unavailableAssignees,
@@ -404,14 +405,26 @@ describe('a person outside their employment or app access on the visit date', ()
       pendingVacation: false,
     };
     expect(
-      boardCellCapacity({ day, plannedMinutes: 120, unavailability: 'after_exit', isWeekend: false }),
+      boardCellCapacity({
+        day,
+        plannedMinutes: 120,
+        hasPlannedWork: true,
+        unavailability: 'after_exit',
+        isWeekend: false,
+      }),
     ).toEqual({
       state: 'overbooked',
       off: true,
       description: 'Nicht beschäftigt, trotzdem 2 h geplant',
     });
     expect(
-      boardCellCapacity({ day, plannedMinutes: 0, unavailability: 'after_exit', isWeekend: false }),
+      boardCellCapacity({
+        day,
+        plannedMinutes: 0,
+        hasPlannedWork: false,
+        unavailability: 'after_exit',
+        isWeekend: false,
+      }),
     ).toEqual({
       state: 'off',
       off: true,
@@ -422,12 +435,50 @@ describe('a person outside their employment or app access on the visit date', ()
       boardCellCapacity({
         day: working,
         plannedMinutes: 120,
+        hasPlannedWork: true,
         unavailability: 'access_ended',
         isWeekend: false,
       }),
     ).toMatchObject({ state: 'overbooked', description: 'App-Zugang beendet, trotzdem 2 h geplant' });
     expect(
-      boardCellCapacity({ day: working, plannedMinutes: 120, unavailability: null, isWeekend: false }).state,
+      boardCellCapacity({
+        day: working,
+        plannedMinutes: 120,
+        hasPlannedWork: true,
+        unavailability: null,
+        isWeekend: false,
+      }).state,
     ).toBe('partial');
+    // An all-day visit on a day after the exit plans zero minutes, because the day's target is zero.
+    const allDay = job({ plannedTime: null, plannedDate: '2026-10-30', endDateExclusive: '2026-10-31' });
+    const hasPlannedWork = plannedWorkDates([allDay]).has('2026-10-30');
+    expect(
+      boardCellCapacity({
+        day,
+        plannedMinutes: 0,
+        hasPlannedWork,
+        unavailability: 'after_exit',
+        isWeekend: false,
+      }),
+    ).toEqual({ state: 'overbooked', off: true, description: 'Nicht beschäftigt, trotzdem eingeplant' });
+    expect(plannedWorkDates([{ ...allDay, occurrenceStatus: 'cancelled' }]).size).toBe(0);
+  });
+
+  test('a card from „Ohne Zuweisung“ lets go of every person who cannot work it, two leavers included', () => {
+    const second = { ...erik, employeeRecordId: 'r-ina', userId: 'u-ina', displayName: 'Ina Roth' };
+    const twoLeavers = job({
+      ...solo,
+      assignedEmployeeRecordIds: ['r-erik', 'r-ina'],
+      assignedUserIds: ['u-erik', 'u-ina'],
+    });
+    expect(
+      reassignmentChanges({
+        job: twoLeavers,
+        sourceEmployeeRecordId: null,
+        sourceUserId: null,
+        target: { employeeRecordId: 'r-anna', userId: 'u-anna', date: '2026-11-04' },
+        people: indexBoardPeople([anna], [erik, second]),
+      }),
+    ).toEqual({ assignedUserIds: ['u-anna'], assignedEmployeeRecordIds: ['r-anna'] });
   });
 });

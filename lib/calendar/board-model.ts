@@ -1,4 +1,9 @@
-import type { CalendarBoardRow, CalendarBoardRowlessAssignee, CalendarDispatchState } from './board';
+import {
+  isNoteEntry,
+  type CalendarBoardRow,
+  type CalendarBoardRowlessAssignee,
+  type CalendarDispatchState,
+} from './board';
 import { minutesOfDay, type BoardSpanItem } from './board-layout';
 import type { CalendarJob } from '@/lib/jobs/types';
 import { addLocalDays, formatBerlinLocalDate } from '@/lib/date-time/berlin';
@@ -158,6 +163,24 @@ export function occurrenceSpan(job: CalendarJob): BoardSpanItem | null {
     endDateExclusive: endDateExclusive > startDate ? endDateExclusive : addLocalDays(startDate, 1),
     sortMinutes: job.plannedTime ? minutesOfDay(job.plannedTime) : -1,
   };
+}
+
+/**
+ * The Berlin dates a row's visits cover. A note and a skipped or cancelled
+ * visit carry no work; an all-day visit counts on every day it spans, even
+ * where its planned minutes are zero.
+ */
+export function plannedWorkDates(jobs: readonly CalendarJob[]): Set<string> {
+  const dates = new Set<string>();
+  for (const job of jobs) {
+    if (job.occurrenceStatus === 'skipped' || job.occurrenceStatus === 'cancelled' || isNoteEntry(job))
+      continue;
+    const span = occurrenceSpan(job);
+    if (!span) continue;
+    for (let date = span.startDate; date < span.endDateExclusive; date = addLocalDays(date, 1))
+      dates.add(date);
+  }
+  return dates;
 }
 
 export type BoardAbsenceItem = BoardSpanItem & {

@@ -201,7 +201,7 @@ function DayUntimedTray({
           onPointerDown={(event) => {
             const rect = event.currentTarget.getBoundingClientRect();
             startDrag(event, {
-              payload: { kind: 'untimed', job, sourceDate: dateIso },
+              payload: { kind: 'untimed', job, sourceDate: dateIso, sourceRowKey: model.key },
               ghost: {
                 label: job.title,
                 secondary: job.clientName ?? undefined,

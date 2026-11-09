@@ -12,7 +12,7 @@ import { formatRefusalDate } from '@/lib/calendar/messages';
 import type { InteractiveCalendarSession, TimeEntry } from '@/lib/time-tracking/types';
 import type { CalendarDragCell, CalendarDragPayload, CalendarDragTarget } from '../drag-engine/payload';
 import { moveSuccessMessage } from '../board/board-surface-drop';
-import { dayRowFor, dayRowKey, dayRowOwnsJob, UNASSIGNED_DAY_ROW_KEY } from '@/lib/calendar/day-rows';
+import { dayRowFor, dayRowKey } from '@/lib/calendar/day-rows';
 import { jobSpanMinutes } from './day-surface-rules';
 import type { DaySurfaceInput } from './use-day-surface';
 
@@ -24,7 +24,7 @@ export function sessionSourceEntries(session: InteractiveCalendarSession, clockI
   return session.sourceEntries ?? [clockIn, ...(session.clockOut ? [session.clockOut] : [])];
 }
 
-/** A visit moved in time or between people; an untimed card leaves the first row that owns it. */
+/** A visit moved in time or between people; an untimed card leaves the tray row it was taken from. */
 function dropVisit(
   { mutations, rows, dateIso, people }: DaySurfaceInput,
   target: CalendarDragCell,
@@ -32,11 +32,8 @@ function dropVisit(
   { time, name, dateLabel }: DayDropFacts,
 ): void {
   const { job } = payload;
-  // An untimed card leaves the first row that owns it, by record as on the board.
-  const trayRow =
-    rows.find(
-      (candidate) => candidate.key !== UNASSIGNED_DAY_ROW_KEY && dayRowOwnsJob(candidate, job, people),
-    ) ?? null;
+  // „Ohne Zuweisung" is no person: a card taken from there lets go of the people who cannot work it.
+  const trayRow = payload.kind === 'untimed' ? dayRowFor(rows, payload.sourceRowKey) : null;
   const sourceRecordId =
     payload.kind === 'occurrence' ? payload.sourceEmployeeRecordId : (trayRow?.row?.employeeRecordId ?? null);
   const sourceUserId = payload.kind === 'occurrence' ? payload.sourceUserId : (trayRow?.userId ?? null);

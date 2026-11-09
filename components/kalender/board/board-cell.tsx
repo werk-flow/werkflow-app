@@ -35,6 +35,8 @@ export type BoardCellProps = {
   actual: { minutes: number; pending: boolean } | undefined;
   compact: boolean;
   actions: CalendarSurfaceActions;
+  /** One of the row's visits covers this day. */
+  hasPlannedWork: boolean;
   /** Why the person cannot be planned on this day; null when they can (and on the „Ohne Zuweisung" row). */
   unavailability: Unavailability | null;
 };
@@ -77,11 +79,13 @@ export const BoardCell = memo(function BoardCell({
   actual,
   compact,
   actions,
+  hasPlannedWork,
   unavailability,
 }: BoardCellProps) {
   const { state, off, description } = boardCellCapacity({
     day,
     plannedMinutes,
+    hasPlannedWork,
     unavailability,
     isWeekend: column.isWeekend,
   });

@@ -95,7 +95,7 @@ export function dayRowFor<Row extends { key: string }>(rows: readonly Row[], key
 }
 
 /** Visits belong to the rows of their assignees by record, as on the board; a login without a board row keeps its user id. */
-export function dayRowOwnsJob(
+function dayRowOwnsJob(
   model: Pick<DayRowModel, 'key' | 'userId' | 'row'>,
   job: CalendarJob,
   people: BoardPeople,
