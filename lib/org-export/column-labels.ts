@@ -73,6 +73,7 @@ export const COLUMN_LABELS: Record<LabeledColumn, string> = {
   break_policy_history: 'Verlauf der Pausenregel',
   calculation_id: 'Berechnung-ID',
   calculation_schema_version: 'Berechnungsschema-Version',
+  callback_due_at: 'Rückruf bis',
   caller_address: 'Adresse des Anrufers',
   caller_email: 'E-Mail des Anrufers',
   caller_name: 'Name des Anrufers',

@@ -30,7 +30,7 @@ import type {
   RequestStatusFilter,
 } from '@/lib/requests/list-page';
 import { REQUEST_CATEGORY_LABELS } from '@/lib/requests/types';
-import { RequestStatusBadge, RequestUrgencyBadge } from './request-badges';
+import { CallbackOverdueBadge, RequestStatusBadge, RequestUrgencyBadge } from './request-badges';
 
 type AnfragenContentProps = RequestPage & { query: RequestListQuery };
 
@@ -183,8 +183,9 @@ function AnfragenCards({ entries }: { entries: RequestListEntry[] }) {
                 <span className="text-muted-foreground">&middot;</span>
                 <span>{formatReceivedAt(entry.request.receivedAt)}</span>
               </div>
-              <div className="mt-1.5 flex items-center gap-2">
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
                 <RequestUrgencyBadge urgency={entry.request.urgency} />
+                {entry.callbackOverdue && <CallbackOverdueBadge />}
                 {entry.convertedLabel && (
                   <span className="text-xs text-muted-foreground">→ {entry.convertedLabel}</span>
                 )}
@@ -237,7 +238,10 @@ function AnfragenTable({ entries }: { entries: RequestListEntry[] }) {
                 <RequestUrgencyBadge urgency={entry.request.urgency} />
               </TableCell>
               <TableCell>
-                <RequestStatusBadge status={entry.request.status} />
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <RequestStatusBadge status={entry.request.status} />
+                  {entry.callbackOverdue && <CallbackOverdueBadge />}
+                </div>
               </TableCell>
               <TableCell className="text-muted-foreground">
                 {formatReceivedAt(entry.request.receivedAt)}

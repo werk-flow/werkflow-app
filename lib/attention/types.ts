@@ -20,6 +20,7 @@ type AttentionSourceType =
   | 'time_correction_approval'
   | 'vacation_request_approval'
   | 'client_request_open'
+  | 'client_request_callback_overdue'
   | 'vacation_decision'
   | 'sickness_report'
   | 'employee_certification_expiry'
@@ -101,6 +102,20 @@ export type AttentionTask =
       openSinceDays: number;
       assigneeName: string | null;
       assignedToMe: boolean;
+    }
+  // An open request whose promised callback has passed: its owner's task, and
+  // every manager's while it has no owner who is still a manager. It replaces
+  // the request's client_request_open task for that viewer.
+  | {
+      sourceType: 'client_request_callback_overdue';
+      sourceId: string;
+      requestNumber: string | null;
+      summary: string;
+      urgency: RequestUrgency;
+      callbackDueAt: string;
+      /** Null without an owner. */
+      ownerName: string | null;
+      ownerUnavailable: boolean;
     }
   | {
       sourceType: 'client_follow_up';

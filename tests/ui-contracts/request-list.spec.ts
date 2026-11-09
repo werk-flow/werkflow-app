@@ -34,3 +34,23 @@ test('a status tab echoes at once and the list follows the committed URL', async
   await expect(table.getByRole('link', { name: 'Rückruf zur Abrechnung', exact: true })).toBeVisible();
   await expect(table.getByRole('link', { name: 'Heizung fällt aus', exact: true })).toHaveCount(0);
 });
+
+// An open request whose promised callback has passed says so in its list row
+// and in its detail facts; a closed one never does.
+test('an overdue callback shows „Rückruf überfällig“ in the list and the detail', async ({ page }) => {
+  await openContractFixture(page, 'request-list');
+  const overdueRow = page.getByRole('row', { name: /Heizung fällt aus/ });
+  await expect(overdueRow.getByText('Rückruf überfällig', { exact: true })).toBeVisible();
+  const details = page.getByRole('region', { name: 'Anfragedetails', exact: true });
+  await expect(details.getByText('Rückruf überfällig', { exact: true })).toBeVisible();
+
+  await page.getByRole('tab', { name: 'Geschlossen', exact: true }).click();
+  await page.evaluate(() => {
+    const [request] = window.listNavigationContract.requests;
+    if (!request) throw new Error('expected a recorded list navigation request');
+    window.listNavigationContract.commit(request);
+  });
+  const closedRow = page.getByRole('row', { name: /Rückruf zur Abrechnung/ });
+  await expect(closedRow).toBeVisible();
+  await expect(closedRow.getByText('Rückruf überfällig', { exact: true })).toHaveCount(0);
+});

@@ -46,6 +46,10 @@ export type RequestDetailData = {
   contactLabel: string | null;
   contactPhone: string | null;
   assigneeName: string | null;
+  /** The promised callback had passed when the page was read. */
+  callbackOverdue: boolean;
+  /** The request's Anlage with the number of its detail page. */
+  equipment: { label: string; equipmentNumber: string } | null;
   convertedLink: { label: string; href: string | null } | null;
   /** Null when the read failed, so the region shows the failure instead of "none". */
   documents: OrganizationDocument[] | null;
@@ -89,7 +93,12 @@ function RequestDetailSections({ data, isEditable, ...customerProps }: RequestDe
         <RequestCustomerCard request={request} data={data} isEditable={isEditable} {...customerProps} />
 
         {/* Request facts */}
-        <RequestFactsCard request={request} assigneeName={data.assigneeName} />
+        <RequestFactsCard
+          request={request}
+          assigneeName={data.assigneeName}
+          callbackOverdue={data.callbackOverdue}
+          equipment={data.equipment}
+        />
       </DetailColumns>
 
       {data.documents ? (

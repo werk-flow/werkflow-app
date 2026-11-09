@@ -9,6 +9,7 @@ import {
   REQUEST_SOURCE_ORDER,
   REQUEST_URGENCY_LABELS,
   REQUEST_URGENCY_ORDER,
+  isCallbackOverdue,
   requestUrgencyToJobPriority,
   toClientRequest,
   toClientRequestEvent,
@@ -23,6 +24,7 @@ const requestRow: ClientRequestRow = {
   client_id: 'client-1',
   contact_id: 'contact-1',
   site_id: 'site-1',
+  equipment_id: 'equipment-1',
   caller_name: 'Erika Muster',
   caller_phone: '0301234567',
   caller_email: 'erika@example.test',
@@ -35,6 +37,7 @@ const requestRow: ClientRequestRow = {
   status: 'geschlossen',
   assigned_to: 'user-2',
   received_at: '2026-10-01T08:00:00.000Z',
+  callback_due_at: '2026-10-01T10:00:00.000Z',
   closed_reason: 'duplikat',
   closed_note: 'Doppelt erfasst',
   closed_by: 'user-3',
@@ -91,6 +94,7 @@ describe('toClientRequest', () => {
       clientId: 'client-1',
       contactId: 'contact-1',
       siteId: 'site-1',
+      equipmentId: 'equipment-1',
       callerName: 'Erika Muster',
       callerPhone: '0301234567',
       callerEmail: 'erika@example.test',
@@ -103,6 +107,7 @@ describe('toClientRequest', () => {
       status: 'geschlossen',
       assignedTo: 'user-2',
       receivedAt: '2026-10-01T08:00:00.000Z',
+      callbackDueAt: '2026-10-01T10:00:00.000Z',
       closedReason: 'duplikat',
       closedNote: 'Doppelt erfasst',
       closedBy: 'user-3',
@@ -115,6 +120,21 @@ describe('toClientRequest', () => {
       createdAt: '2026-10-01T07:00:00.000Z',
       updatedAt: '2026-10-03T09:00:00.000Z',
     });
+  });
+});
+
+describe('isCallbackOverdue', () => {
+  const due = '2026-10-01T10:00:00.000Z';
+  const afterDue = new Date('2026-10-01T10:00:01.000Z');
+  test('an open or clarifying request is overdue once its promised callback has passed', () => {
+    expect(isCallbackOverdue({ status: 'offen', callbackDueAt: due }, afterDue)).toBe(true);
+    expect(isCallbackOverdue({ status: 'in_klaerung', callbackDueAt: due }, afterDue)).toBe(true);
+    expect(isCallbackOverdue({ status: 'offen', callbackDueAt: due }, new Date(due))).toBe(false);
+  });
+  test('a request without a promise, or a converted or closed one, is never overdue', () => {
+    expect(isCallbackOverdue({ status: 'offen', callbackDueAt: null }, afterDue)).toBe(false);
+    expect(isCallbackOverdue({ status: 'umgewandelt', callbackDueAt: due }, afterDue)).toBe(false);
+    expect(isCallbackOverdue({ status: 'geschlossen', callbackDueAt: due }, afterDue)).toBe(false);
   });
 });
 

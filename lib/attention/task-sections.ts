@@ -4,12 +4,14 @@
 import type { AttentionTask } from './types';
 
 /**
- * The Aufgaben sections, most urgent first. Time-bound decisions lead: time
+ * The Aufgaben sections, most urgent first. An overdue callback leads: the
+ * promise to the customer is already broken. Time-bound decisions follow: time
  * approvals (MiLoG timeliness), vacation requests, the visits an approved
  * vacation takes a planned person away from, and open Anfragen. The
  * handover backlog comes last, because it waits without a deadline.
  */
 const ATTENTION_TASK_SECTION_ORDER = [
+  'callback',
   'time',
   'vacation',
   'visitReplan',
@@ -35,6 +37,7 @@ const SECTION_OF_TASK_KIND = {
   vacation_request_approval: 'vacation',
   planning_visit_replan: 'visitReplan',
   client_request_open: 'request',
+  client_request_callback_overdue: 'callback',
   organization_join_request: 'joinRequest',
   dispatch_acknowledgement: 'dispatchAcknowledgement',
   dispatch_challenge_open: 'dispatchChallenge',
