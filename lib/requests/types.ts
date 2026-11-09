@@ -1,5 +1,6 @@
 import type { ActionResult } from '@/lib/action-result';
 import type { QualificationWarningResult } from '@/lib/jobs/types';
+import type { ServiceCaseEquipment } from '@/lib/service-cases/types';
 import type { PlanningWarningFailure } from '@/lib/planning/conflict-acknowledgement';
 import type { Database } from '@/lib/supabase/database.types';
 import { jsonRecordOrEmpty } from '@/lib/supabase/json';
@@ -149,21 +150,12 @@ export function isCallbackOverdue(
   );
 }
 
-type ActiveEquipment = {
-  id: string;
-  equipmentNumber: string;
-  name: string;
-  manufacturer: string | null;
-  model: string | null;
-  locationDetail: string | null;
-};
-
 /**
  * The Anlagen a request form offers: the site's active ones, and a saved
  * Anlage that is no longer active, so the form can still clear it.
  */
 export function requestEquipmentOptions(
-  activeEquipment: readonly ActiveEquipment[],
+  activeEquipment: readonly ServiceCaseEquipment[],
   savedEquipmentId: string,
 ): Array<{ value: string; label: string; description?: string }> {
   const options = activeEquipment.map((item) => {
