@@ -60,7 +60,7 @@ Boat counts every create, fork and resume as a start, and the plan includes 200 
 
 The window is 15 minutes because most follow-up runs in a checkout start within 15 minutes of the last one's end, and a longer window catches few more. An idle `large` machine costs $0.072 an hour, so a full window costs about $0.02, less than one paid start. A kept machine also sets up faster: its packages and stack images are in place.
 
-Idle machines count toward the 10 machines a member may run at once.
+Idle machines count toward the 10 machines a member may run at once, and toward the plan's limit. When Boat refuses a start at either limit (`429 member_limit_reached` or `limit_reached`), the run deletes this workstation's idle machines, oldest first, through the same rename as the reaper, so a machine a run took is never among them, and tries the start once more. Only a second refusal, or one with no idle machine to delete, makes Boat unavailable. `503 out_of_capacity` and `no_ready_machine` are Boat's own shortage and delete nothing.
 
 ## The key contract
 

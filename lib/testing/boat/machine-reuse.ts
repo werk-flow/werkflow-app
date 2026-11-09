@@ -63,7 +63,10 @@ function takeIdleRecord(path: string): string | undefined {
   }
 }
 
-/** Takes every idle record in `folder` that `chosen` picks by name and age, and answers their ids. */
+/**
+ * Takes every idle record in `folder` that `chosen` picks by name and age, oldest first, and answers
+ * their ids. A record a run already took is renamed away, so it is never among them.
+ */
 function takeIdleRecords(folder: string, chosen: (name: string, ageMs: number) => boolean): string[] {
   let names: string[];
   try {
@@ -71,16 +74,18 @@ function takeIdleRecords(folder: string, chosen: (name: string, ageMs: number) =
   } catch {
     return [];
   }
-  return names.flatMap((name) => {
-    const path = join(folder, name);
-    let ageMs: number;
-    try {
-      ageMs = Date.now() - statSync(path).mtimeMs;
-    } catch {
-      return [];
-    }
-    return name.endsWith('.json') && chosen(name, ageMs) ? (takeIdleRecord(path) ?? []) : [];
-  });
+  return names
+    .flatMap((name) => {
+      try {
+        return name.endsWith('.json')
+          ? [{ name, ageMs: Date.now() - statSync(join(folder, name)).mtimeMs }]
+          : [];
+      } catch {
+        return [];
+      }
+    })
+    .sort((a, b) => b.ageMs - a.ageMs)
+    .flatMap(({ name, ageMs }) => (chosen(name, ageMs) ? (takeIdleRecord(join(folder, name)) ?? []) : []));
 }
 
 /** Asks Boat to delete a machine no run will use; a refusal leaves it to its auto-stop. */
@@ -144,7 +149,8 @@ async function runWipe(machine: Machine, command: string, signal: AbortSignal): 
  * This checkout's kept machine with the most life left, when that is a run's life, else a new one
  * from `from`. Every other machine of the checkout is left over, from a killed run or past its use,
  * and is deleted, as is any machine of this workstation whose idle window passed without its reaper.
- * A new machine first records what its snapshot holds, which every later wipe restores.
+ * A start refused at the machine limit evicts this workstation's idle machines and is tried once
+ * more. A new machine first records what its snapshot holds, which every later wipe restores.
  */
 export async function acquireMachine(
   client: BoatClient,
@@ -179,15 +185,38 @@ export async function acquireMachine(
     throw error;
   }
   if (kept) return { machine: { id: kept.id, client, log: input.log }, reused: true };
-  const machine = await createMachine(client, {
-    from: input.from,
-    name: input.name,
-    ttlSeconds: MACHINE_TTL_SECONDS,
-    purpose: 'run',
-    labels: { checkout },
-    log: input.log,
-    signal: input.signal,
-  });
+  const create = () =>
+    createMachine(client, {
+      from: input.from,
+      name: input.name,
+      ttlSeconds: MACHINE_TTL_SECONDS,
+      purpose: 'run',
+      labels: { checkout },
+      log: input.log,
+      signal: input.signal,
+    });
+  let machine: Machine;
+  try {
+    machine = await create();
+  } catch (error) {
+    // Kept machines count toward the machines a member, and the plan, may run at once. At that
+    // limit, this workstation's idle ones go, oldest first, and the start is tried once more. Boat
+    // out of capacity or without a ready machine is no limit of ours: deleting would not help.
+    const limit =
+      error instanceof BoatError &&
+      error.status === 429 &&
+      (error.code === 'member_limit_reached' || error.code === 'limit_reached')
+        ? error.code
+        : undefined;
+    const evicted = limit ? takeIdleRecords(folder, () => true) : [];
+    if (!evicted.length) throw error;
+    for (const id of evicted) {
+      input.log(`Boat refused a start at the machine limit (${limit}); deleting the idle machine ${id}.`);
+      // Confirmed, so the machine no longer counts when the start is tried again.
+      await deleteMachine({ id, client, log: input.log }, RUN_DELETION_CONFIRM_MS);
+    }
+    machine = await create();
+  }
   try {
     await runWipe(machine, wipeCommand(input.repository, ['record']), input.signal);
   } catch (error) {

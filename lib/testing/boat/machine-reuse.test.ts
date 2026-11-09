@@ -8,7 +8,7 @@ import { join } from 'node:path';
 
 import { z } from '../../zod';
 
-import { boatClient } from './boat-api';
+import { BoatError, boatClient } from './boat-api';
 import { acquireMachine, keepMachine, reapIdleMachine, withMachine } from './machine-reuse';
 
 const repository = join(import.meta.dir, '../../..');
@@ -26,6 +26,8 @@ function fakeBoat(
   onExit: () => void = () => undefined,
   /** Calls Boat refuses with a 500, as `GET /sandboxes?…` or `GET /sandboxes/bx_…`. */
   refused: (call: string) => boolean = () => false,
+  /** Answers to the next starts (`POST /sandboxes`) before Boat accepts them, as a 429 at a limit. */
+  startRefusals: Response[] = [],
 ) {
   const calls: string[] = [];
   const commands: string[] = [];
@@ -46,6 +48,8 @@ function fakeBoat(
       };
     };
     if (method === 'POST' && pathname.endsWith('/sandboxes')) {
+      const refusal = startRefusals.shift();
+      if (refusal) return refusal;
       machines.bx_created = { lifeMs: 180 * MINUTE };
       return Response.json({ sandbox: { id: 'bx_created', state: 'provisioning' } });
     }
@@ -333,4 +337,62 @@ test('a Boat refusal while a run looks for its machine falls back instead of sta
     machine: { id: 'bx_created' },
     reused: false,
   });
+});
+
+test('a start refused at the machine limit evicts idle machines, oldest first, and starts once more', async () => {
+  const atLimit = () => Response.json({ error: { code: 'member_limit_reached' } }, { status: 429 });
+  const evicting = async (refusals: Response[], idle: Record<string, number>, taken: string[] = []) => {
+    const records = mkdtempSync(join(tmpdir(), 'boat-idle-'));
+    for (const [id, ageMinutes] of Object.entries(idle)) {
+      const path = join(records, `f00dfeedf00dfeed--${id}.json`);
+      writeFileSync(path, JSON.stringify({ id }));
+      utimesSync(
+        path,
+        new Date(NOW.getTime() - ageMinutes * MINUTE),
+        new Date(NOW.getTime() - ageMinutes * MINUTE),
+      );
+    }
+    // A record a running run took is renamed away; its machine serves that run.
+    for (const id of taken)
+      writeFileSync(join(records, `f00dfeedf00dfeed--${id}.json.taken-run`), JSON.stringify({ id }));
+    const boat = fakeBoat(
+      {},
+      0,
+      () => undefined,
+      () => false,
+      refusals,
+    );
+    const outcome = await acquire(boat.client, records).catch((error: unknown) => error);
+    const deleted = boat.calls
+      .filter((call) => call.startsWith('DELETE'))
+      .map((call) => call.slice('DELETE /sandboxes/'.length));
+    return {
+      outcome,
+      deleted,
+      starts: boat.calls.filter((call) => call === 'POST /sandboxes').length,
+      records,
+    };
+  };
+  // Idle machines of other checkouts go, oldest first, and the second start succeeds.
+  const evicted = await evicting([atLimit()], { bx_newer001: 5, bx_older001: 10 }, ['bx_inuse001']);
+  expect(evicted.outcome).toMatchObject({ machine: { id: 'bx_created' }, reused: false });
+  expect(evicted.deleted).toEqual(['bx_older001', 'bx_newer001']);
+  expect(evicted.starts).toBe(2);
+  // The machine a running run took is never evicted.
+  expect(readdirSync(evicted.records)).toEqual(['f00dfeedf00dfeed--bx_inuse001.json.taken-run']);
+  // Without an idle machine, the refusal stands: the run reports Boat unavailable.
+  const none = await evicting([atLimit()], {}, ['bx_inuse001']);
+  expect(none.outcome instanceof BoatError && none.outcome.code).toBe('member_limit_reached');
+  expect(none.deleted).toEqual([]);
+  expect(none.starts).toBe(1);
+  // A second refusal after the eviction stands too: one more start, not a loop.
+  const twice = await evicting([atLimit(), atLimit()], { bx_older001: 10 });
+  expect(twice.outcome instanceof BoatError && twice.outcome.code).toBe('member_limit_reached');
+  expect(twice.starts).toBe(2);
+  // Boat out of capacity is not a limit of ours: nothing is evicted.
+  const capacity = await evicting([Response.json({ error: { code: 'out_of_capacity' } }, { status: 503 })], {
+    bx_older001: 10,
+  });
+  expect(capacity.outcome instanceof BoatError && capacity.outcome.code).toBe('out_of_capacity');
+  expect(capacity.deleted).toEqual([]);
 });
