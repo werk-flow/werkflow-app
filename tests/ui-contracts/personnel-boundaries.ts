@@ -160,6 +160,7 @@ export const acknowledgePersonnelRequirement = unexpectedPersonnelAction;
 export const createPersonnelOnboardingPlan = unexpectedPersonnelAction;
 export const exportPersonnelLifecycleManifest = unexpectedPersonnelAction;
 export const getPersonnelDocumentSignedUrl = unexpectedPersonnelAction;
+export const handOverPersonnelWork = unexpectedPersonnelAction;
 export const savePersonnelOnboardingRequirement = unexpectedPersonnelAction;
 export const setPersonnelAccessTransition = unexpectedPersonnelAction;
 export const setPersonnelDocumentRelease = unexpectedPersonnelAction;
