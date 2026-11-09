@@ -96,9 +96,9 @@ The edge functions accept only the project's secret keys and escape every interp
 
 ### Browser
 
-Responses carry the hardening headers and enforced Content-Security-Policy from `buildSecurityHeaders` in `next.config.ts`. Violations go to `POST /api/csp-report`, which is unauthenticated by design, stores nothing and logs a redacted summary. An `eval` report, or one that names another origin, is a finding. Product code imports Zod through `lib/zod.ts`; `lib/zod-members.ts` turns off its `eval` probe.
+Responses carry the hardening headers and enforced Content-Security-Policy from `buildSecurityHeaders` (`next.config.ts`). Violations go to `POST /api/csp-report`, which is unauthenticated by design, stores nothing and logs a redacted summary. An `eval` report, or one that names another origin, is a finding. Product code has no HTML string sink or `eval`, and imports Zod through `lib/zod.ts`; `lib/zod-members.ts` turns off its `eval` probe.
 
-The service worker (`public/sw.js`) caches only the cookie-free offline page and its build files, never a response it did not request; the CSP allows `worker-src` and `manifest-src` `'self'`. Sign-out and organization switch delete its caches and the offline data, which the server never trusts ([decision 0010](../decisions/0010-offline-field-sync-contract.md#device-data)).
+The service worker (`public/sw.js`) caches only the cookie-free offline page and its build files; the CSP allows `worker-src` and `manifest-src` `'self'`. Sign-out and organization switch delete its caches and the offline data, which the server never trusts ([decision 0010](../decisions/0010-offline-field-sync-contract.md#device-data)).
 
 ### Server caches
 
