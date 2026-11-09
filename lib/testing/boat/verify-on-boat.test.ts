@@ -410,7 +410,13 @@ test('a run machine keeps no snapshot and no monitoring; only the snapshot build
       }
       return Response.json({ sandbox: { id: 'bx_test', state: 'ready' } });
     });
-    await createMachine(client, { from: undefined, name: 'verify-test', ttlSeconds: 60, purpose, log: () => undefined });
+    await createMachine(client, {
+      from: undefined,
+      name: 'verify-test',
+      ttlSeconds: 60,
+      purpose,
+      log: () => undefined,
+    });
     return body;
   };
   // Without monitoring Boat keeps none of a run's output after the run; without snapshots a stop erases it.
