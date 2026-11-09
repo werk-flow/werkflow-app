@@ -65,6 +65,8 @@ export const IDENTITY_ONLY_ACTIONS: Record<string, string> = {
     "Ends the caller's own open sessions in every organization at sign-out.",
   'lib/time-tracking/review-actions.ts#getChangeRequestsForEntries':
     "Reads only organizations from the caller's current memberships, with the role in each.",
+  'lib/problem-reports/support-actions.ts#openProblemReportAsSupport':
+    'WerkFlow support belongs to no customer organization; the allowlist of lib/support/allowlist.ts admits the verified user.',
   'lib/time-corrections/actions.ts#withdrawTimeCorrection':
     "withdraw_time_correction accepts only the request's author and changes only that request.",
 };

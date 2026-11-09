@@ -80,6 +80,10 @@ const UNSCOPED_FUNCTIONS: Readonly<Record<string, string>> = {
   claim_storage_purge:
     'The scheduled purge has no caller and spans every organization; each claimed entry names its organization, whose prefix alone its object is deleted in.',
   complete_storage_purge: 'Removes, by id, only the entries the scheduled purge just claimed and deleted.',
+  list_problem_reports_due_for_retention:
+    'The scheduled retention run has no caller and applies the deletion periods of every organization.',
+  apply_problem_report_retention:
+    'Applies the due deletion to one report the scheduled run just listed, inside that report; it reads no caller input.',
 };
 
 const ORGANIZATION_ARGUMENT_NAMES = ['p_organization_id', 'p_org_id', 'organization_id', 'org_id'];
