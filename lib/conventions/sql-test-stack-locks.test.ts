@@ -21,27 +21,37 @@ const testsDirectory = resolve(repositoryRoot, 'supabase/tests');
 const EVENT =
   /\b(?:rollback\s+to\s+(?:savepoint\s+)?(\w+)|release\s+(?:savepoint\s+)?(\w+)|savepoint\s+(\w+)|(drop\s+trigger)|((?:create|alter|drop)\s+policy))\b/gi;
 
+type Savepoint = { readonly name: string; readonly id: number };
+
 /** Each statement the hook turns into stack-wide locks, outside the allowed form. */
 function stackLockStatements(source: string): string[] {
   const code = source.replace(/--[^\n]*/g, '');
-  const open: string[] = [];
-  const pending: { readonly statement: string; readonly savepoints: readonly string[] }[] = [];
+  // Savepoint instances, innermost last. A repeated name opens a new instance,
+  // and a rollback or release reaches only the newest one of that name.
+  const open: Savepoint[] = [];
+  const pending: { readonly statement: string; readonly within: ReadonlySet<number> }[] = [];
   const findings: string[] = [];
   for (const match of code.matchAll(EVENT)) {
     const [, rolledBack, released, opened, dropTrigger, policy] = match;
     const line = code.slice(0, match.index).split('\n').length;
-    if (opened) open.push(opened.toLowerCase());
+    if (opened) open.push({ name: opened.toLowerCase(), id: match.index });
     if (dropTrigger) findings.push(`line ${line}: DROP TRIGGER`);
-    if (policy) pending.push({ statement: `line ${line}: ${policy.toUpperCase()}`, savepoints: [...open] });
-    const closed = (rolledBack ?? released)?.toLowerCase();
-    if (closed === undefined) continue;
-    const depth = open.lastIndexOf(closed);
-    if (depth >= 0) open.length = rolledBack ? depth + 1 : depth;
+    if (policy) {
+      pending.push({
+        statement: `line ${line}: ${policy.toUpperCase()}`,
+        within: new Set(open.map(({ id }) => id)),
+      });
+    }
+    const name = (rolledBack ?? released)?.toLowerCase();
+    const depth = open.findLastIndex((savepoint) => savepoint.name === name);
+    const target = open[depth];
+    if (target === undefined) continue;
+    // A release merges the savepoint's locks into the enclosing scope; only a
+    // rollback ends them.
+    open.length = rolledBack ? depth + 1 : depth;
+    if (!rolledBack) continue;
     for (let index = pending.length - 1; index >= 0; index -= 1) {
-      const entry = pending[index];
-      if (entry === undefined || entry.savepoints.lastIndexOf(closed) < 0) continue;
-      pending.splice(index, 1);
-      if (!rolledBack) findings.push(`${entry.statement} (savepoint released, not rolled back)`);
+      if (pending[index]?.within.has(target.id)) pending.splice(index, 1);
     }
   }
   return [...findings, ...pending.map((entry) => `${entry.statement} (no rollback to savepoint)`)];
@@ -60,7 +70,17 @@ test('the scan names a dropped trigger and policy DDL outside a rolled-back save
   ]);
   expect(
     stackLockStatements('savepoint probe;\nalter policy p on t using (false);\nrelease savepoint probe;'),
-  ).toEqual(['line 2: ALTER POLICY (savepoint released, not rolled back)']);
+  ).toEqual(['line 2: ALTER POLICY (no rollback to savepoint)']);
+  expect(
+    stackLockStatements(
+      'savepoint p;\ncreate policy q on t using (true);\nsavepoint p;\nrollback to savepoint p;',
+    ),
+  ).toEqual(['line 2: CREATE POLICY (no rollback to savepoint)']);
+  expect(
+    stackLockStatements(
+      'savepoint outer_probe;\nsavepoint p;\ncreate policy q on t using (true);\nrelease savepoint p;\nrollback to savepoint outer_probe;',
+    ),
+  ).toEqual([]);
   expect(
     stackLockStatements(
       'savepoint a;\nrollback to savepoint a;\ndrop policy p on t;\nsavepoint b;\nrollback to savepoint b;',
