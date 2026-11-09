@@ -146,6 +146,25 @@ function lazyCacheClearLoads(file: string, host: SourceHost): string[] {
   return found;
 }
 
+/** What the cache clear imports beyond the logging, static or lazy: a sign-out would wait for it. */
+function foreignCacheClearImports(host: SourceHost): string[] {
+  const text = host(CACHE_CLEAR_MODULE);
+  if (text === null) return [];
+  const found: string[] = [];
+  const visit = (node: ts.Node): void => {
+    const specifier =
+      ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword
+        ? (node.arguments[0]?.getText() ?? 'import()')
+        : ts.isImportDeclaration(node) || ts.isExportDeclaration(node)
+          ? moduleSpecifierOf(node)
+          : null;
+    if (specifier !== null && !CACHE_CLEAR_IMPORTS.includes(specifier)) found.push(specifier);
+    ts.forEachChild(node, visit);
+  };
+  visit(parseProductSource(CACHE_CLEAR_MODULE, text));
+  return found;
+}
+
 describe('offline code loads lazily', () => {
   test('no product module outside the offline modules imports one statically', () => {
     expect(listProductSources().flatMap((file) => staticOfflineImports(file, repositorySources))).toEqual([]);
@@ -159,11 +178,8 @@ describe('offline code loads lazily', () => {
     expect(listProductSources().flatMap((file) => lazyCacheClearLoads(file, repositorySources))).toEqual([]);
   });
 
-  test('the cache clear imports nothing but the logging every startup chunk carries', () => {
-    const imports = parseProductSource(CACHE_CLEAR_MODULE)
-      .statements.map(moduleSpecifierOf)
-      .filter((specifier) => specifier !== null);
-    expect(imports.filter((specifier) => !CACHE_CLEAR_IMPORTS.includes(specifier))).toEqual([]);
+  test('the cache clear imports nothing but the logging every startup chunk carries, and loads nothing lazily', () => {
+    expect(foreignCacheClearImports(repositorySources)).toEqual([]);
   });
 
   const LAZY = 'lib/offline/offline-data.ts';
@@ -233,6 +249,21 @@ describe('offline code loads lazily', () => {
       expect(uncaughtOfflineLoads(file, host), file).toEqual([`${file}:1`]);
     for (const file of ['components/probe-caught.ts', 'components/probe-caller.ts'])
       expect(uncaughtOfflineLoads(file, host), file).toEqual([]);
+  });
+
+  test('probes: the cache clear may import the logging only, and never load a module lazily', () => {
+    const probe =
+      (text: string): SourceHost =>
+      (file) =>
+        file === CACHE_CLEAR_MODULE ? text : null;
+    expect(foreignCacheClearImports(probe("import { logError } from '@/lib/logging';"))).toEqual([]);
+    expect(
+      foreignCacheClearImports(
+        probe(
+          "import { z } from 'zod'; export async function f() { try { await import('@/lib/offline/offline-data'); } catch {} }",
+        ),
+      ),
+    ).toEqual(['zod', "'@/lib/offline/offline-data'"]);
   });
 
   test('probes: a lazy load of the cache clear is reported even when caught; a static import is not', () => {
