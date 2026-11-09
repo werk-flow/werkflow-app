@@ -11,7 +11,12 @@ import { collectUiStringCatalog } from './extract-ui-strings';
 const repositoryRoot = resolve(__dirname, '../../..');
 
 // The modules a browser test imports, each served as `<name>.js`.
-const REDRAW_TEST_ENTRIES = ['redraw-page', 'redraw-screenshot', 'load-ui-string-catalog'] as const;
+const REDRAW_TEST_ENTRIES = [
+  'redraw-page',
+  'rasterize',
+  'redraw-screenshot',
+  'load-ui-string-catalog',
+] as const;
 
 // The catalog arrives on stdin: it is too long for an argument.
 const BUILD_SCRIPT = `

@@ -22,16 +22,17 @@ Each rule has a test that fails without it: `tests/ui-contracts/problem-report-r
 
 1. **Clone only.** The redraw reads the live page and builds the clone in a separate document. The live page never changes.
 2. **Text.** A text node keeps its text only when the whole text is a catalog entry. Every other text becomes a fake of the same shape: each letter a made-up letter of the same case, each digit another digit; punctuation and spacing stay, so the layout holds. Fakes are random per redraw, so they cannot be mapped back.
-3. **Form values.** Every input value, textarea, select option and `contenteditable` text is faked, whatever its text. A checked box stays checked; a hidden input is dropped.
+3. **Form values.** Every input value, textarea, select option and `contenteditable` text is faked, whatever its text, and so is every text attribute inside a select, such as an option's label. A checked box stays checked; a hidden input is dropped.
 4. **Attributes.** Layout and state attributes (`class`, `role`, `type`, `checked`, SVG geometry) stay verbatim. Attributes that load or link (`href`, `src`, `srcset`, `poster`, `action`, event handlers) are dropped. Every other attribute (`title`, `aria-*`, `alt`, `placeholder`, `value`, `data-*`, `id`) follows the text rule. An inline style loses each declaration with a `url()`, an image function or a quoted string.
 5. **Media.** Images, pictures, video, audio, canvas, embedded objects and every SVG with anything but shapes (text, an image, a foreign object, a reference) become neutral blocks of the same size. An icon drawn from shapes stays.
 6. **Frames.** Iframes, scripts, templates and style elements are dropped.
-7. **Rasterize on the device.** The clone and the page's own CSS, with same-origin fonts inlined, become an SVG `foreignObject` drawn onto a canvas. An SVG drawn as an image loads nothing from the network. This needs `img-src data:` in the enforced content security policy (`lib/security/csp-report.ts`).
+7. **Styles.** A style sheet the build compiled from the source (same origin, under `/_next/static/`) stays verbatim, with its fonts inlined. Every other sheet, a style element included, may be written at runtime, so a detached copy of it gets the inline-style rule and loses its fonts. The live sheets never change.
+8. **Rasterize on the device.** The clone and those styles become an SVG `foreignObject` drawn onto a canvas. An SVG drawn as an image loads nothing from the network. This needs `img-src data:` in the enforced content security policy (`lib/security/csp-report.ts`).
 
 ### Accepted limits
 
 - A record value that alone fills a text node and exactly equals one of the app's own UI words stays readable, such as a surname `Lager`. The owner accepted this.
-- The redraw shows the visible viewport. Scrolled containers are shifted to their scroll position; the rest of a long page is not in the image.
+- The redraw shows the visible viewport. Scrolled containers are shifted to their scroll position; the rest of a long page is not in the image. A sticky element inside a scrolled container shows where it sits unscrolled, so it may leave the image.
 - A Radix state that only a library sets (such as `data-state="checked"`) is faked like any other value, so that element may render in its default state.
 
 ## How to work

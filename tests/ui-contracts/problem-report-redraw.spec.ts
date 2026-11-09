@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { loadUiStringCatalog } from '@/lib/problem-reports/screenshot/load-ui-string-catalog';
 import type { redrawPage } from '@/lib/problem-reports/screenshot/redraw-page';
+import type { pageToSvg } from '@/lib/problem-reports/screenshot/rasterize';
 import type { redrawScreenshot } from '@/lib/problem-reports/screenshot/redraw-screenshot';
 import { buildRedrawForBrowserTest } from '@/lib/problem-reports/screenshot/browser-test-bundle';
 import { assertWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-lock';
@@ -8,6 +9,7 @@ import { assertWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-loc
 type RedrawPageModule = { redrawPage: typeof redrawPage };
 type CatalogModule = { loadUiStringCatalog: typeof loadUiStringCatalog };
 type ScreenshotModule = { redrawScreenshot: typeof redrawScreenshot };
+type RasterizeModule = { pageToSvg: typeof pageToSvg };
 
 // Rule tests of the screenshot redraw (docs/technical/problem-report-scrubbing.md),
 // one per rule, on a synthetic page of a made-up company. Each test reads the
@@ -38,7 +40,10 @@ const SEEDED_SOURCES = [
 
 const PAGE = `<!doctype html><html lang="de"><head><meta charset="utf-8"><style>
 body{font-family:sans-serif;margin:0;padding:16px} .block{width:40px;height:30px}
-</style></head><body><main>
+</style>
+<style>.css-record::before{content:"${SEEDED.person}"} .css-image{background-image:url("data:image/png;base64,iVBORw0KGgo=")} .css-var{--seeded:"${SEEDED.street}"}</style>
+<link rel="stylesheet" href="/_next/static/css/app.css"><link rel="stylesheet" href="/dynamic/record.css">
+</head><body><main>
 <h1 class="ui-heading">Aufträge</h1>
 <p class="record-text">${SEEDED.company}</p>
 <p class="lone-city">Hamburg</p>
@@ -65,10 +70,22 @@ body{font-family:sans-serif;margin:0;padding:16px} .block{width:40px;height:30px
 <textarea class="note">${SEEDED.note}</textarea>
 <select class="choice"><option>${SEEDED.company}</option><option selected>Abbrechen</option></select>
 <div class="editable" contenteditable="true">Abbrechen</div>
+<div class="editable-upper" contenteditable="TRUE">Speichern</div>
+<select class="labelled"><option label="Speichern" value="Abbrechen">x</option></select>
 <input class="hidden-value" type="hidden" value="${SEEDED.person}">
 <input class="ticked" type="checkbox" checked>
 </form>
 </main></body></html>`;
+
+// A build asset keeps its CSS verbatim; a sheet outside the build gets the style rule.
+const SERVED: Record<string, { contentType: string; body: string }> = {
+  '/redraw-page': { contentType: 'text/html', body: PAGE },
+  '/_next/static/css/app.css': { contentType: 'text/css', body: '.brand{font-family:"Geist Probe"}' },
+  '/dynamic/record.css': {
+    contentType: 'text/css',
+    body: `.linked-record::after{content:"${SEEDED.company}"}`,
+  },
+};
 
 let modules: ReadonlyMap<string, string> = new Map();
 
@@ -85,12 +102,11 @@ async function openSyntheticPage(page: Page): Promise<void> {
       ? route.fulfill({ contentType: 'text/javascript', body: code })
       : route.fulfill({ status: 404, body: '' });
   });
-  // Every other request answers 404: a seeded source the redraw fetched would show up here.
-  await page.route(`${ORIGIN}/**`, (route) =>
-    route.request().url() === `${ORIGIN}/redraw-page`
-      ? route.fulfill({ contentType: 'text/html', body: PAGE })
-      : route.fallback(),
-  );
+  // Every other request fails: a seeded source the redraw fetched would show up as a request.
+  await page.route(`${ORIGIN}/**`, (route) => {
+    const served = SERVED[new URL(route.request().url()).pathname];
+    return served ? route.fulfill(served) : route.fallback();
+  });
   await page.goto(`${ORIGIN}/redraw-page`);
   await page.getByRole('textbox', { name: 'Eingabe' }).fill(SEEDED.typed);
 }
@@ -166,6 +182,10 @@ test('form value rule: every form value is faked, whatever its text', async ({ p
   expect(shapeOf(texts.note ?? '')).toBe(shapeOf(SEEDED.note));
   expect(texts.choice, 'select options are faked').not.toContain('Abbrechen');
   expect(texts.editable, 'contenteditable text is faked').not.toBe('Abbrechen');
+  expect(texts['editable-upper'], 'an upper-case contenteditable value is a form value').not.toBe(
+    'Speichern',
+  );
+  expect(markup, 'an option label is faked').not.toMatch(/<option label="Speichern"|value="Abbrechen"/u);
   expect(markup, 'a hidden input is dropped').not.toContain('hidden-value');
   expect(markup, 'a checked box stays checked').toMatch(/class="ticked" type="checkbox" checked=""/u);
 });
@@ -195,6 +215,32 @@ test('media rule: images, canvas, video and SVG text become neutral blocks', asy
   expect(markup, 'a background image is dropped').not.toContain('url(');
   expect(markup, 'the rest of an inline style stays').toContain('color: rgb(1, 2, 3)');
   for (const source of SEEDED_SOURCES) expect(markup).not.toContain(source);
+});
+
+test('style rule: CSS outside the build loses generated text and images, build CSS stays', async ({
+  page,
+}) => {
+  await openSyntheticPage(page);
+  const svg = await page.evaluate(async () => {
+    const isPageModule = (value: unknown): value is RedrawPageModule =>
+      typeof value === 'object' && value !== null && 'redrawPage' in value;
+    const isCatalogModule = (value: unknown): value is CatalogModule =>
+      typeof value === 'object' && value !== null && 'loadUiStringCatalog' in value;
+    const isRasterizeModule = (value: unknown): value is RasterizeModule =>
+      typeof value === 'object' && value !== null && 'pageToSvg' in value;
+    const paths = ['/redraw/redraw-page.js', '/redraw/load-ui-string-catalog.js', '/redraw/rasterize.js'];
+    const loaded: unknown[] = await Promise.all(paths.map((path) => import(path)));
+    const [pageModule, catalogModule, rasterizeModule] = loaded;
+    if (!isPageModule(pageModule) || !isCatalogModule(catalogModule) || !isRasterizeModule(rasterizeModule))
+      throw new Error('The redraw bundle is incomplete.');
+    const redrawn = pageModule.redrawPage(document, catalogModule.loadUiStringCatalog(), Math.random);
+    return rasterizeModule.pageToSvg(redrawn, document);
+  });
+  for (const value of [SEEDED.person, SEEDED.street, SEEDED.company])
+    expect(svg, `generated text "${value}" is dropped`).not.toContain(value);
+  expect(svg, 'an image in a style element is dropped').not.toContain('data:image/png');
+  expect(svg, 'a safe rule of a style element stays').toContain('font-family: sans-serif');
+  expect(svg, 'a build style sheet stays verbatim').toContain('font-family: "Geist Probe"');
 });
 
 test('frame rule: iframes are dropped', async ({ page }) => {

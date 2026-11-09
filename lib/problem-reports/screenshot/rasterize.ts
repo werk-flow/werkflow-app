@@ -1,4 +1,5 @@
 import { type RedrawnPage } from './redraw-page';
+import { removeUnsafeDeclarations } from './unsafe-style';
 
 // Turns the redrawn clone into a PNG on the device: the clone and the page's
 // own CSS go into an SVG foreignObject, which the browser draws onto a canvas.
@@ -35,19 +36,54 @@ async function inlineFontFace(rule: CSSFontFaceRule, base: string, origin: strin
   return cssText;
 }
 
-/** The text of every readable rule of the page's style sheets, fonts inlined. */
+/** A build asset of this origin: CSS compiled from the source, never from a record. */
+function isBuildStyleSheet(sheet: CSSStyleSheet, origin: string): boolean {
+  if (!sheet.href) return false;
+  const url = new URL(sheet.href);
+  return url.origin === origin && url.pathname.startsWith('/_next/static/');
+}
+
+function sanitizeRules(rules: CSSRuleList): void {
+  for (const rule of Array.from(rules)) {
+    if ('style' in rule && rule.style instanceof CSSStyleDeclaration) removeUnsafeDeclarations(rule.style);
+    if ('cssRules' in rule && rule.cssRules instanceof CSSRuleList) sanitizeRules(rule.cssRules);
+  }
+}
+
+/**
+ * A style element or a sheet outside the build may be written at runtime, so
+ * it gets the inline-style rule on a detached copy: no generated text, no
+ * image, no font. The live sheet never changes.
+ */
+function sanitizedRuleText(rules: readonly CSSRule[]): string {
+  const copy = new CSSStyleSheet();
+  copy.replaceSync(
+    rules
+      .filter((rule) => !(rule instanceof CSSFontFaceRule || rule instanceof CSSImportRule))
+      .map((rule) => rule.cssText)
+      .join('\n'),
+  );
+  sanitizeRules(copy.cssRules);
+  return Array.from(copy.cssRules, (rule) => rule.cssText).join('\n');
+}
+
+/** The text of every readable rule of the page's style sheets, fonts of the build inlined. */
 async function collectPageCss(document: Document): Promise<string> {
   const origin = document.location.origin;
   const parts: string[] = [];
   const visit = async (sheet: CSSStyleSheet): Promise<void> => {
-    let rules: CSSRuleList;
+    let rules: CSSRule[];
     try {
-      rules = sheet.cssRules;
+      rules = Array.from(sheet.cssRules);
     } catch {
       // best-effort: a cross-origin sheet hides its rules; the app serves none, and a missing rule only changes the look.
       return;
     }
-    for (const rule of Array.from(rules)) {
+    if (!isBuildStyleSheet(sheet, origin)) {
+      parts.push(sanitizedRuleText(rules));
+      return;
+    }
+    for (const rule of rules) {
       if (rule instanceof CSSImportRule && rule.styleSheet) await visit(rule.styleSheet);
       else if (rule instanceof CSSFontFaceRule)
         parts.push(await inlineFontFace(rule, sheet.href ?? document.baseURI, origin));
@@ -59,8 +95,9 @@ async function collectPageCss(document: Document): Promise<string> {
   return parts.join('\n');
 }
 
-/** The clone as an SVG document: the page's CSS in its head, the viewport as its size. */
-function serializePage(page: RedrawnPage, css: string): string {
+/** The redrawn page as an SVG document: the page's CSS in its head, the viewport as its size. */
+export async function pageToSvg(page: RedrawnPage, document: Document): Promise<string> {
+  const css = await collectPageCss(document);
   const factory = page.root.ownerDocument;
   const head = factory.createElementNS(XHTML_NAMESPACE, 'head');
   const style = factory.createElementNS(XHTML_NAMESPACE, 'style');
@@ -84,9 +121,8 @@ function pageBackground(document: Document): string {
   return 'white';
 }
 
-/** Draws the redrawn page into a PNG at the device's pixel ratio, at most twice the CSS size. */
-export async function rasterizePage(page: RedrawnPage, document: Document): Promise<Blob> {
-  const svg = serializePage(page, await collectPageCss(document));
+/** Draws the page's SVG into a PNG at the device's pixel ratio, at most twice the CSS size. */
+export async function rasterizeSvg(svg: string, page: RedrawnPage, document: Document): Promise<Blob> {
   const image = new Image();
   image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
   await image.decode();

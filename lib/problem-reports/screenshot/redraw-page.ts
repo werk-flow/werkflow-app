@@ -1,5 +1,6 @@
 import { fakeText, type RandomSource } from './fake-text';
 import { isUiString, type UiStringCatalog } from './ui-string-catalog';
+import { removeUnsafeDeclarations } from './unsafe-style';
 
 // The default-deny redraw of the visible page. It reads the live page and
 // builds a detached clone in a separate document; the live page never
@@ -126,9 +127,6 @@ const DROPPED_ATTRIBUTES = new Set([
   'itemid',
 ]);
 
-// A declaration that can load or carry a text: dropped from inline styles.
-const UNSAFE_STYLE_VALUE = /url\(|image-set\(|image\(|element\(|["']/iu;
-
 const TEXT_INPUT_EXEMPT = new Set(['checkbox', 'radio']);
 
 function textRule(text: string, context: RedrawContext): string {
@@ -139,19 +137,25 @@ function copyStyle(live: Element, clone: Element & ElementCSSInlineStyle): void 
   const value = live.getAttribute('style');
   if (!value) return;
   clone.setAttribute('style', value);
-  for (const property of Array.from(clone.style)) {
-    if (UNSAFE_STYLE_VALUE.test(clone.style.getPropertyValue(property))) clone.style.removeProperty(property);
-  }
+  removeUnsafeDeclarations(clone.style);
   if (clone.style.length === 0) clone.removeAttribute('style');
 }
 
-/** Copies each attribute by its rule: kept, dropped, or text that is kept only as a UI string. */
-function copyAttributes(live: Element, clone: Element & ElementCSSInlineStyle, context: RedrawContext): void {
+/**
+ * Copies each attribute by its rule: kept, dropped, or text that is kept only
+ * as a UI string. Inside a form value (an option's label) every text is faked.
+ */
+function copyAttributes(
+  live: Element,
+  clone: Element & ElementCSSInlineStyle,
+  context: RedrawContext,
+  formValue: boolean,
+): void {
   for (const { name, value } of Array.from(live.attributes)) {
     if (name === 'style') copyStyle(live, clone);
     else if (KEPT_ATTRIBUTES.has(name)) clone.setAttribute(name, value);
     else if (!DROPPED_ATTRIBUTES.has(name) && !name.startsWith('on'))
-      clone.setAttribute(name, textRule(value, context));
+      clone.setAttribute(name, formValue ? fakeText(value, context.random) : textRule(value, context));
   }
 }
 
@@ -217,9 +221,7 @@ function isFormValueRoot(live: Element): boolean {
   return (
     live instanceof HTMLSelectElement ||
     live instanceof HTMLDataListElement ||
-    live.getAttribute('contenteditable') === '' ||
-    live.getAttribute('contenteditable') === 'true' ||
-    live.getAttribute('contenteditable') === 'plaintext-only'
+    (live instanceof HTMLElement && live.isContentEditable)
   );
 }
 
@@ -244,7 +246,7 @@ function redrawElement(live: Element, context: RedrawContext, formValue: boolean
   if (name === 'svg' && !isShapeOnlySvg(live)) return neutralBlock(live, context);
   const clone = context.factory.createElementNS(live.namespaceURI, name);
   if (!(clone instanceof HTMLElement || clone instanceof SVGElement)) return null;
-  copyAttributes(live, clone, context);
+  copyAttributes(live, clone, context, formValue);
   const insideFormValue = formValue || isFormValueRoot(live);
   if (!(live instanceof HTMLTextAreaElement))
     applyScroll(live, redrawChildren(live, clone, context, insideFormValue));
@@ -273,7 +275,7 @@ export function redrawPage(document: Document, catalog: UiStringCatalog, random:
   const context: RedrawContext = { catalog, random, factory };
   const live = document.documentElement;
   const root = factory.createElement('html');
-  copyAttributes(live, root, context);
+  copyAttributes(live, root, context, false);
   const body = redrawElement(document.body, context, false);
   if (body instanceof Element) {
     root.appendChild(body);

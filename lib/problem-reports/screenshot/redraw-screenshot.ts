@@ -1,6 +1,6 @@
 import { cryptoRandom } from './fake-text';
 import { loadUiStringCatalog } from './load-ui-string-catalog';
-import { rasterizePage } from './rasterize';
+import { pageToSvg, rasterizeSvg } from './rasterize';
 import { redrawPage } from './redraw-page';
 
 // The one entry of the screenshot redraw. The report dialog imports this
@@ -14,5 +14,5 @@ import { redrawPage } from './redraw-page';
  */
 export async function redrawScreenshot(): Promise<Blob> {
   const page = redrawPage(document, loadUiStringCatalog(), cryptoRandom);
-  return rasterizePage(page, document);
+  return rasterizeSvg(await pageToSvg(page, document), page, document);
 }
