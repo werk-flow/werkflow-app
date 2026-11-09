@@ -8,6 +8,7 @@ import { NewPasswordFieldsForm } from '@/components/password/new-password-fields
 import { Button } from '@/components/ui/button';
 import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { clearEmailChangeChallengeQuietly } from '@/hooks/use-sign-out';
+import { clearServiceWorkerCaches } from '@/lib/offline/service-worker-caches';
 import { logError } from '@/lib/logging';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
@@ -135,8 +136,6 @@ async function resetPasswordAndLeave({
   setFormError: (message: string | null) => void;
 }): Promise<void> {
   try {
-    // Loaded before the password changes, so a failed load cannot leave a changed password signed in.
-    const { clearServiceWorkerCaches } = await import('@/lib/offline/service-worker-caches');
     // Update the user's password
     const { error: updateError } = await supabase.auth.updateUser({
       password: values.password,

@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import { deleteAccount } from '@/lib/auth/actions';
+import { clearServiceWorkerCaches } from '@/lib/offline/service-worker-caches';
 import { loadDocument } from '@/lib/navigation/document-load';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
@@ -38,8 +39,6 @@ export function DeleteAccountButton() {
 
     await runDelete(async () => {
       try {
-        // Loaded before the deletion, so a failed load cannot strand a deleted account's session.
-        const { clearServiceWorkerCaches } = await import('@/lib/offline/service-worker-caches');
         const result = await deleteAccount();
 
         if (!result.success) {

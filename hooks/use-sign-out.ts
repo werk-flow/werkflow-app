@@ -7,6 +7,7 @@ import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 
 import { clearEmailChangeChallengeBeforeSignOut } from '@/lib/settings/email-change-actions';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { clearServiceWorkerCaches } from '@/lib/offline/service-worker-caches';
 import { logError } from '@/lib/logging';
 import { clockOutBeforeSignOut } from '@/lib/time-tracking/clock-state-actions';
 import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
@@ -54,8 +55,6 @@ export function useSignOut() {
 
     await runSignOut(async () => {
       try {
-        // Loaded before the clock-out, so a failed load changes no recorded time.
-        const { clearServiceWorkerCaches } = await import('@/lib/offline/service-worker-caches');
         const clockedOut = await endOpenWorkBeforeSignOut();
         if (clockedOut) clockOutWarningShownRef.current = false;
         if (!clockedOut && !clockOutWarningShownRef.current) {

@@ -9,15 +9,31 @@
 // under lib/offline/ is awaited (or returned) inside a try block with a catch clause in its own
 // function, or sits in a function the module calls only that way: a sign-out or switch whose
 // load fails shows its error instead of stopping silently.
+//
+// The one exception is the cache clear (lib/offline/service-worker-caches.ts). Sign-out, an
+// organization switch and account deletion call it, and in a tab open across a deployment a lazy
+// chunk can be gone, so every retry of a lazy load fails and the person can never sign out on a
+// shared phone. Every such flow imports it statically and never loads it lazily. It imports
+// nothing but the logging every startup chunk already carries, so it costs the cold start only
+// its own few lines, the same precedent as the manual entry bridge's import-free clear
+// (sign-out-clears-tab-state.test.ts, werk-flow/werkflow-app#232).
 import { describe, expect, test } from 'bun:test';
 import ts from 'typescript';
 import { resolveSpecifier } from './action-prechecks-scan';
 import { moduleSpecifierOf, repositorySources, resolveModuleFile, type SourceHost } from './module-imports';
 import { listProductSources, parseProductSource } from './product-sources';
 
-/** The offline modules: the cache clear, later the offline data, and the iOS install hint. */
+/** The cache clear every sign-out, switch and deletion imports statically. */
+const CACHE_CLEAR_MODULE = 'lib/offline/service-worker-caches.ts';
+/** The only module the cache clear may import: every startup chunk already carries it. */
+const CACHE_CLEAR_IMPORTS = ['@/lib/logging'];
+
+/** The offline modules that load lazily: later the offline data, and the iOS install hint. */
 function isOfflineModule(file: string): boolean {
-  return file.startsWith('lib/offline/') || file === 'components/shared/ios-install-hint.tsx';
+  return (
+    (file.startsWith('lib/offline/') && file !== CACHE_CLEAR_MODULE) ||
+    file === 'components/shared/ios-install-hint.tsx'
+  );
 }
 
 /** The product module a specifier names, with or without its file extension. */
@@ -99,7 +115,29 @@ function uncaughtOfflineLoads(file: string, host: SourceHost): string[] {
       const [specifier] = node.arguments;
       const target =
         specifier && ts.isStringLiteralLike(specifier) ? resolveTarget(file, specifier.text, host) : null;
-      if (target?.startsWith('lib/offline/') && !caught(node, source))
+      if (target?.startsWith('lib/offline/') && target !== CACHE_CLEAR_MODULE && !caught(node, source))
+        found.push(`${file}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1}`);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return found;
+}
+
+/** The `import()` calls of the cache clear, as file and line: a flow that waits for a chunk can fail for good. */
+function lazyCacheClearLoads(file: string, host: SourceHost): string[] {
+  const text = host(file);
+  if (text === null) return [];
+  const source = parseProductSource(file, text);
+  const found: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+      const [specifier] = node.arguments;
+      if (
+        specifier &&
+        ts.isStringLiteralLike(specifier) &&
+        resolveTarget(file, specifier.text, host) === CACHE_CLEAR_MODULE
+      )
         found.push(`${file}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1}`);
     }
     ts.forEachChild(node, visit);
@@ -117,40 +155,53 @@ describe('offline code loads lazily', () => {
     expect(listProductSources().flatMap((file) => uncaughtOfflineLoads(file, repositorySources))).toEqual([]);
   });
 
+  test('no flow loads the cache clear lazily, so a sign-out, switch or deletion never waits for a chunk', () => {
+    expect(listProductSources().flatMap((file) => lazyCacheClearLoads(file, repositorySources))).toEqual([]);
+  });
+
+  test('the cache clear imports nothing but the logging every startup chunk carries', () => {
+    const imports = parseProductSource(CACHE_CLEAR_MODULE)
+      .statements.map(moduleSpecifierOf)
+      .filter((specifier) => specifier !== null);
+    expect(imports.filter((specifier) => !CACHE_CLEAR_IMPORTS.includes(specifier))).toEqual([]);
+  });
+
+  const LAZY = 'lib/offline/offline-data.ts';
   const files: Record<string, string> = {
-    'lib/offline/service-worker-caches.ts': 'export async function clearServiceWorkerCaches() {}',
-    'components/probe-static.ts':
-      "import { clearServiceWorkerCaches } from '@/lib/offline/service-worker-caches';",
-    'components/probe-extension.ts':
-      "import { clearServiceWorkerCaches } from '@/lib/offline/service-worker-caches.ts';",
-    'components/probe-reexport.ts':
-      "export { clearServiceWorkerCaches } from '../lib/offline/service-worker-caches';",
-    'components/probe-type.ts': "import type { X } from '@/lib/offline/service-worker-caches';",
-    'lib/offline/outbox.ts':
+    [CACHE_CLEAR_MODULE]: 'export async function clearServiceWorkerCaches() {}',
+    [LAZY]: 'export async function readOfflineData() {}',
+    'components/probe-static.ts': "import { readOfflineData } from '@/lib/offline/offline-data';",
+    'components/probe-extension.ts': "import { readOfflineData } from '@/lib/offline/offline-data.ts';",
+    'components/probe-reexport.ts': "export { readOfflineData } from '../lib/offline/offline-data';",
+    'components/probe-type.ts': "import type { X } from '@/lib/offline/offline-data';",
+    'lib/offline/outbox.ts': "import { readOfflineData } from '@/lib/offline/offline-data';",
+    'components/probe-cache-clear.ts':
       "import { clearServiceWorkerCaches } from '@/lib/offline/service-worker-caches';",
     'components/probe-uncaught.ts':
-      "export async function out() { const m = await import('@/lib/offline/service-worker-caches'); }",
+      "export async function out() { const m = await import('@/lib/offline/offline-data'); }",
     'components/probe-caught.ts':
-      "export async function out() { try { await import('@/lib/offline/service-worker-caches'); } catch {} }",
+      "export async function out() { try { await import('@/lib/offline/offline-data'); } catch {} }",
     'components/probe-caller.ts': [
-      "async function load() { return import('@/lib/offline/service-worker-caches'); }",
+      "async function load() { return import('@/lib/offline/offline-data'); }",
       'export async function out() { try { await load(); } catch {} }',
     ].join('\n'),
     'components/probe-finally.ts':
-      "export async function out() { try { await import('@/lib/offline/service-worker-caches'); } finally {} }",
+      "export async function out() { try { await import('@/lib/offline/offline-data'); } finally {} }",
     'components/probe-unawaited.ts':
-      "export async function out() { try { void import('@/lib/offline/service-worker-caches'); } catch {} }",
+      "export async function out() { try { void import('@/lib/offline/offline-data'); } catch {} }",
     'components/probe-nested.ts':
-      "export function out() { try { setTimeout(async () => { await import('@/lib/offline/service-worker-caches'); }); } catch {} }",
+      "export function out() { try { setTimeout(async () => { await import('@/lib/offline/offline-data'); }); } catch {} }",
     'components/probe-unawaited-caller.ts': [
-      "async function load() { return import('@/lib/offline/service-worker-caches'); }",
+      "async function load() { return import('@/lib/offline/offline-data'); }",
       'export async function out() { try { void load(); } catch {} }',
     ].join('\n'),
     'components/probe-uncaught-caller.ts': [
-      "async function load() { return import('@/lib/offline/service-worker-caches'); }",
+      "async function load() { return import('@/lib/offline/offline-data'); }",
       'export async function out() { try { await load(); } catch {} }',
       'export async function other() { await load(); }',
     ].join('\n'),
+    'components/probe-lazy-cache-clear.ts':
+      "export async function out() { try { await import('@/lib/offline/service-worker-caches.ts'); } catch {} }",
   };
   const host: SourceHost = (file) => files[file] ?? null;
 
@@ -160,10 +211,13 @@ describe('offline code loads lazily', () => {
       'components/probe-extension.ts',
       'components/probe-reexport.ts',
     ])
-      expect(staticOfflineImports(file, host), file).toEqual([
-        `${file} -> lib/offline/service-worker-caches.ts`,
-      ]);
-    for (const file of ['components/probe-uncaught.ts', 'components/probe-type.ts', 'lib/offline/outbox.ts'])
+      expect(staticOfflineImports(file, host), file).toEqual([`${file} -> ${LAZY}`]);
+    for (const file of [
+      'components/probe-uncaught.ts',
+      'components/probe-type.ts',
+      'lib/offline/outbox.ts',
+      'components/probe-cache-clear.ts',
+    ])
       expect(staticOfflineImports(file, host), file).toEqual([]);
   });
 
@@ -179,5 +233,13 @@ describe('offline code loads lazily', () => {
       expect(uncaughtOfflineLoads(file, host), file).toEqual([`${file}:1`]);
     for (const file of ['components/probe-caught.ts', 'components/probe-caller.ts'])
       expect(uncaughtOfflineLoads(file, host), file).toEqual([]);
+  });
+
+  test('probes: a lazy load of the cache clear is reported even when caught; a static import is not', () => {
+    expect(lazyCacheClearLoads('components/probe-lazy-cache-clear.ts', host)).toEqual([
+      'components/probe-lazy-cache-clear.ts:1',
+    ]);
+    for (const file of ['components/probe-cache-clear.ts', 'components/probe-caught.ts'])
+      expect(lazyCacheClearLoads(file, host), file).toEqual([]);
   });
 });

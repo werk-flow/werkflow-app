@@ -8,6 +8,7 @@ import { ErrorText } from '@/components/ui/error-text';
 import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { clearEmailChangeChallengeQuietly } from '@/hooks/use-sign-out';
 import { loadDocument } from '@/lib/navigation/document-load';
+import { clearServiceWorkerCaches } from '@/lib/offline/service-worker-caches';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
 
@@ -31,8 +32,6 @@ export function SignOutAndRedirectButton({ inviteCode }: SignOutAndRedirectButto
 
     await runSignOut(async () => {
       try {
-        // Loaded first, so a failed load leaves the challenge and the queued entries untouched.
-        const { clearServiceWorkerCaches } = await import('@/lib/offline/service-worker-caches');
         await clearEmailChangeChallengeQuietly();
         clearManualEntryBridge();
         await clearServiceWorkerCaches();

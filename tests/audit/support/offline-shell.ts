@@ -30,6 +30,20 @@ export async function setNetwork(page: Page, state: 'offline' | 'online'): Promi
   await page.context().setOffline(state === 'offline');
 }
 
+/**
+ * Takes the browser's HTTP cache out of the offline proof and keeps the
+ * service worker's Cache Storage. Filling the shell warms the HTTP cache,
+ * which could otherwise serve a file the worker failed to store, so an
+ * offline page would hydrate without the worker. The clear covers the
+ * worker's own fetches; the disabled cache covers the page's. Chromium only.
+ */
+export async function bypassHttpCache(page: Page): Promise<void> {
+  const session = await page.context().newCDPSession(page);
+  await session.send('Network.enable');
+  await session.send('Network.clearBrowserCache');
+  await session.send('Network.setCacheDisabled', { cacheDisabled: true });
+}
+
 /** Waits until the service worker is active and its shell cache holds the offline page. */
 export async function waitForOfflineShell(page: Page): Promise<void> {
   await page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined));

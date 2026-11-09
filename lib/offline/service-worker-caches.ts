@@ -1,10 +1,22 @@
 'use client';
 
+// The page side of the service worker's caches. Sign-out, an organization
+// switch and account deletion import it statically: a lazy chunk can be gone
+// in a tab open across a deployment, and a sign-out that waits for it could
+// never run. So it imports nothing but the logging every startup chunk
+// already carries (lib/conventions/offline-code-loads-lazily.test.ts).
+
 import { logError } from '@/lib/logging';
-import { SHELL_REFILL_MESSAGE } from '@/lib/service-worker-message';
 
 /** Every cache the service worker (public/sw.js) owns starts with this. */
 const SERVICE_WORKER_CACHE_PREFIX = 'werkflow-';
+
+/**
+ * The message public/sw.js answers by filling its offline shell again when it
+ * is missing. The app shell sends it on mount, the organization switch after
+ * it cleared the caches (lib/security/service-worker.test.ts pins both sides).
+ */
+export const SHELL_REFILL_MESSAGE = 'werkflow:refill-shell';
 
 /**
  * Deletes every cache the service worker owns. Sign-out and an organization

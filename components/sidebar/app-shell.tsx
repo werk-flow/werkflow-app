@@ -14,7 +14,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { logError } from '@/lib/logging';
-import { SHELL_REFILL_MESSAGE } from '@/lib/service-worker-message';
+import { SHELL_REFILL_MESSAGE } from '@/lib/offline/service-worker-caches';
 import { cn } from '@/lib/utils';
 import { useOrganization } from '@/components/organization/organization-context';
 import { SidebarProfileCard } from '@/components/sidebar/sidebar-profile-card';
@@ -57,10 +57,10 @@ function needsIosInstallHint(): boolean {
  * nothing to the first paint. It registers the service worker (production
  * only: development files change on every edit) and asks it to refill its
  * cookie-free shell: signing in navigates on the client, so a shell a sign-out
- * deleted comes back here. Every cold start needs this much; code that runs
- * only sometimes (the iOS hint, the cache clear and the switch's refill) loads
- * lazily, since a chunk loaded after the load event still costs the cold start
- * a request.
+ * deleted comes back here. Every cold start needs this much; the iOS hint runs
+ * only sometimes and loads lazily, since a chunk loaded after the load event
+ * still costs the cold start a request. The cache clear is the exception: a
+ * sign-out must never wait for a chunk, so it is a small static import.
  */
 function useOfflineShell(): void {
   useEffect(() => {

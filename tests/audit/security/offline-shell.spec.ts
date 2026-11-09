@@ -8,6 +8,7 @@ import {
 import { selectFromSearchable } from '../../golden/support/steps/shared';
 import { jobListReady } from '../support/lab-journeys';
 import {
+  bypassHttpCache,
   offlineFallback,
   offlineRetryButton,
   expectNoServiceWorkerCaches,
@@ -43,6 +44,8 @@ test('the app shell opens without signal and keeps nothing of the person @AUDIT-
   });
 
   await test.step('a navigation without network shows the fallback, and the retry opens the page', async () => {
+    // Only the worker's cache may serve the fallback's files, so the retry proves the shell.
+    await bypassHttpCache(page);
     await setNetwork(page, 'offline');
     await page.goto('/auftraege');
     await expect(offlineFallback(page)).toBeVisible();

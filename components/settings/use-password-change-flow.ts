@@ -11,7 +11,7 @@ import { useUserProfile } from '@/components/user/user-profile-context';
 import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { clearEmailChangeChallengeQuietly } from '@/hooks/use-sign-out';
 import { rememberPasswordResetAddress } from '@/lib/auth/actions';
-import { logError } from '@/lib/logging';
+import { clearServiceWorkerCaches } from '@/lib/offline/service-worker-caches';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
 import {
@@ -220,22 +220,17 @@ async function redirectToPasswordReset(
   supabase: ReturnType<typeof createSupabaseBrowserClient>,
   setFormError: (error: string | null) => void,
 ): Promise<void> {
-  let knownAddress: boolean;
-  try {
-    // Loaded first, so a failed load leaves the challenge and the queued entries untouched.
-    const { clearServiceWorkerCaches } = await import('@/lib/offline/service-worker-caches');
-    await clearEmailChangeChallengeQuietly();
-    // The address reaches the reset form in a cookie the server sets from the
-    // session, so this must run before the sign-out below.
-    knownAddress = await rememberResetAddress();
+  await clearEmailChangeChallengeQuietly();
+  // The address reaches the reset form in a cookie the server sets from the
+  // session, so this must run before the sign-out below.
+  const knownAddress = await rememberResetAddress();
 
-    // Global on purpose: a password change ends every existing session.
-    clearManualEntryBridge();
-    await clearServiceWorkerCaches();
-    const { error } = await supabase.auth.signOut({ scope: 'global' });
-    if (error) throw error;
-  } catch (error) {
-    logError('redirectToPasswordReset: sign-out failed', error);
+  // Global on purpose: a password change ends every existing session.
+  clearManualEntryBridge();
+  await clearServiceWorkerCaches();
+  const { error } = await supabase.auth.signOut({ scope: 'global' });
+
+  if (error) {
     setFormError('Wir konnten dich nicht sicher abmelden. Bitte versuche es erneut.');
     return;
   }

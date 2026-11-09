@@ -17,6 +17,7 @@ import { useBanner } from '@/components/ui/banner';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import type { ActionResult } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
+import { clearServiceWorkerCaches, restoreOfflineShell } from '@/lib/offline/service-worker-caches';
 import { setActiveOrgCookie } from '@/lib/org/actions';
 import type { UserOrg } from '@/lib/org/types';
 import type { OrgRole } from '@/lib/roles';
@@ -38,16 +39,6 @@ function rejectRefusal(result: ActionResult): void {
   if (!result.success) throw new Error(result.error);
 }
 
-type OfflineCaches = typeof import('@/lib/offline/service-worker-caches');
-
-/**
- * Offline code loads lazily (lib/conventions/offline-code-loads-lazily.test.ts). The switch loads
- * it before the cookie changes, so a failed load keeps the old organization.
- */
-function loadOfflineCaches(): Promise<OfflineCaches> {
-  return import('@/lib/offline/service-worker-caches');
-}
-
 /**
  * Waits for the active organization cookie to change, then deletes every cache the service
  * worker owns, so nothing the previous organization's views cached stays on the device, and
@@ -55,13 +46,10 @@ function loadOfflineCaches(): Promise<OfflineCaches> {
  * refills it, and the cookie action's response can render the new organization before the
  * clear has finished.
  */
-async function clearCachesAfterSwitch(
-  offline: OfflineCaches,
-  cookieChange: Promise<ActionResult>,
-): Promise<void> {
+async function clearCachesAfterSwitch(cookieChange: Promise<ActionResult>): Promise<void> {
   rejectRefusal(await cookieChange);
-  await offline.clearServiceWorkerCaches();
-  await offline.restoreOfflineShell();
+  await clearServiceWorkerCaches();
+  await restoreOfflineShell();
 }
 
 type MembershipRow = {
@@ -323,8 +311,7 @@ export function OrganizationProvider({
 
       try {
         // The cookie call stays in this handler, where the double-render check sees it.
-        const offline = await loadOfflineCaches();
-        await clearCachesAfterSwitch(offline, setActiveOrgCookie(orgId));
+        await clearCachesAfterSwitch(setActiveOrgCookie(orgId));
         // GET readers authorize against this cookie. Publish the new scope only
         // after its response commits, otherwise their first read is denied.
         setActiveOrgId(orgId);
