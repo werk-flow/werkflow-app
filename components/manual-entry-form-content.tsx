@@ -193,6 +193,7 @@ function useManualEntryForm({
         ? { start: preselectedClockInTime, end: preselectedClockOutTime }
         : undefined,
     enabled: isActive,
+    closedPeriods,
   };
   return { ...form, ...submit, ...members, jobSearch, isOwnBueroEntry, timeline };
 }
@@ -220,6 +221,7 @@ function EarlierDayFields({ form }: { form: ReturnType<typeof useManualEntryForm
         enabled={form.timeline.enabled}
         initialTimes={form.timeline.initialTimes}
         showErrors={form.showTimelineErrors}
+        closedPeriods={form.timeline.closedPeriods}
         onSpanChange={form.timeline.reportSpan}
       />
       <ManualEntryReasonField

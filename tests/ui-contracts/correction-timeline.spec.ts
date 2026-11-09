@@ -43,8 +43,8 @@ test('the planned visit prefills the timeline, and another person never inherits
   // Person A's visit, 07:00 to 15:30 Berlin, stands in the first row.
   const from = timeline.getByRole('group', { name: 'Von' });
   const to = timeline.getByRole('group', { name: 'Bis' });
-  await expect(from).toContainText('07');
-  await expect(to).toContainText('15');
+  await expect(from).toHaveText(/^\s*07\s*:\s*00\s*$/);
+  await expect(to).toHaveText(/^\s*15\s*:\s*30\s*$/);
   // The host offers no job names, so the selected job shows its id.
   const job = timeline.getByRole('combobox', { name: 'Auftrag der Tätigkeit 1' });
   await expect(job).toContainText('000000000153');
@@ -85,4 +85,41 @@ test('the planned visit prefills the timeline, and another person never inherits
       employeeRecordId: 'contract-person-b',
     },
   ]);
+});
+
+test("an edited timeline keeps its edits for another person but drops the previous person's untouched visits", async ({
+  page,
+}) => {
+  const timeline = page.getByRole('region', { name: 'Ablauf des Tages' });
+  await answerPlannedVisits(page, {
+    success: true,
+    visits: [
+      {
+        jobId: '00000000-0000-4000-8000-000000000153',
+        startAt: '2026-10-26T06:00:00.000Z',
+        endAt: '2026-10-26T10:00:00.000Z',
+      },
+      {
+        jobId: '00000000-0000-4000-8000-000000000154',
+        startAt: '2026-10-26T11:00:00.000Z',
+        endAt: '2026-10-26T14:30:00.000Z',
+      },
+    ],
+  });
+  await expect(timeline.getByText('Tätigkeit 2')).toBeVisible();
+  // Splitting the first visit around a break edits it; the second stays as prefilled.
+  await timeline
+    .getByRole('listitem')
+    .filter({ hasText: 'Tätigkeit 1' })
+    .getByRole('button', { name: 'Pause einfügen' })
+    .click();
+  await expect(timeline.getByText('Tätigkeit 4')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Andere Person', exact: true }).click();
+
+  // The edited visit and its break stay; person A's untouched second visit leaves.
+  await expect(timeline.getByText('Tätigkeit 3')).toBeVisible();
+  await expect(timeline.getByText('Tätigkeit 4')).toHaveCount(0);
+  await expect(timeline).not.toContainText('000000000154');
+  await expect(timeline).toContainText('000000000153');
 });

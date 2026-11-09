@@ -2,9 +2,11 @@
 
 import { useEffect, useImperativeHandle, type Ref } from 'react';
 
-import { buildTimelineFacts, type TimelineFact } from '@/lib/time-corrections/timeline';
+import { SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
+import { buildTimelineFacts, closedPeriodRowKeys, type TimelineFact } from '@/lib/time-corrections/timeline';
+import type { ClosedTimePeriod } from '@/lib/time-tracking/closed-period-dates';
 import { CorrectionTimelineFields } from './time-correction-dialog-timeline';
-import { useCorrectionTimeline } from './time-correction-dialog-timeline-state';
+import { timelineFieldId, useCorrectionTimeline } from './time-correction-dialog-timeline-state';
 
 // The caller's own timeline of an earlier day as one section that loads on
 // demand (manual-entry-form-content.tsx): it holds the rows, and the form
@@ -13,7 +15,7 @@ import { useCorrectionTimeline } from './time-correction-dialog-timeline-state';
 /** What a save of the timeline sends: its facts for the subject, or the error of each invalid control in order. */
 export type CorrectionTimelineCheck =
   | { valid: true; facts: (employeeRecordId: string) => TimelineFact[] }
-  | { valid: false; fieldErrors: Record<string, string | undefined> };
+  | { valid: false; fieldErrors: Record<string, string | undefined>; message?: string };
 
 export type CorrectionTimelineHandle = { check: () => CorrectionTimelineCheck };
 
@@ -24,6 +26,7 @@ export function CorrectionTimelineSection({
   enabled,
   initialTimes,
   showErrors,
+  closedPeriods,
   onSpanChange,
 }: {
   handleRef: Ref<CorrectionTimelineHandle>;
@@ -32,6 +35,8 @@ export function CorrectionTimelineSection({
   enabled: boolean;
   initialTimes: { start: string; end: string } | undefined;
   showErrors: boolean;
+  /** The organization's closed periods: no row may reach into one, an overnight end included. */
+  closedPeriods: readonly ClosedTimePeriod[];
   /** The first start and the last end, which the calendar draws as the draft. */
   onSpanChange: (start: string, end: string) => void;
 }) {
@@ -45,12 +50,20 @@ export function CorrectionTimelineSection({
   useImperativeHandle(handleRef, () => ({
     check: () => {
       const { resolved, fieldErrors } = timeline.validate();
-      return resolved.valid
-        ? {
-            valid: true,
-            facts: (employeeRecordId) => buildTimelineFacts(resolved.segments, employeeRecordId),
-          }
-        : { valid: false, fieldErrors };
+      if (!resolved.valid) return { valid: false, fieldErrors };
+      const closed = closedPeriodRowKeys(resolved.segments, closedPeriods);
+      if (closed.length > 0)
+        return {
+          valid: false,
+          fieldErrors: Object.fromEntries(
+            closed.map((key) => [timelineFieldId(key, 'end'), SHARED_FAILURE_MESSAGES.period_closed]),
+          ),
+          message: SHARED_FAILURE_MESSAGES.period_closed,
+        };
+      return {
+        valid: true,
+        facts: (employeeRecordId) => buildTimelineFacts(resolved.segments, employeeRecordId),
+      };
     },
   }));
   const start = timeline.rows[0]?.start ?? '';

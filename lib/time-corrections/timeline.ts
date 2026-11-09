@@ -1,4 +1,10 @@
-import { addLocalDays, formatBerlinLocalDateTime, parseBerlinDateTimeInput } from '@/lib/date-time/berlin';
+import {
+  addLocalDays,
+  formatBerlinLocalDate,
+  formatBerlinLocalDateTime,
+  parseBerlinDateTimeInput,
+} from '@/lib/date-time/berlin';
+import type { ClosedTimePeriod } from '@/lib/time-tracking/closed-period-dates';
 import { UNUSUALLY_LONG_SESSION_MS } from '@/lib/time-tracking/segments';
 import type {
   TimeActivitySelection,
@@ -90,7 +96,8 @@ function resolveRowTimes(dateIso: string, rows: readonly CorrectionTimelineRow[]
       previousEnd = null;
       continue;
     }
-    if (row.end === row.start) rowErrors.end = 'Das Ende muss nach dem Beginn liegen.';
+    // Equal times are a whole day only when the end is marked for the next day.
+    if (row.end === row.start && !row.endsNextDay) rowErrors.end = 'Das Ende muss nach dem Beginn liegen.';
     else if (row.end < row.start && !row.endsNextDay)
       rowErrors.end =
         'Das Ende liegt vor dem Beginn. Geht die Tätigkeit über Mitternacht, wähl „Endet am nächsten Tag“.';
@@ -309,4 +316,22 @@ export function insertBreakIntoRow(
     { ...row, key: newKey(), start: wallTimeOf(breakEnd), endsNextDay: crossesMidnight(breakEnd, end) },
     ...rows.slice(index + 1),
   ];
+}
+
+/**
+ * The rows whose time reaches into a closed period, by key. An overnight row
+ * can end in a closed month although its day is open; an end at midnight
+ * touches no time of the next day.
+ */
+export function closedPeriodRowKeys(
+  segments: readonly ResolvedTimelineSegment[],
+  closedPeriods: readonly ClosedTimePeriod[],
+): string[] {
+  return segments
+    .filter((segment) => {
+      const firstDay = formatBerlinLocalDate(segment.startedAt);
+      const lastDay = formatBerlinLocalDate(new Date(segment.endedAt.getTime() - 1));
+      return closedPeriods.some((period) => period.startDate <= lastDay && firstDay <= period.endDate);
+    })
+    .map((segment) => segment.row.key);
 }

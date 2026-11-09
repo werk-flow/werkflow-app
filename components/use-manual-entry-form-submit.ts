@@ -233,6 +233,7 @@ export function useManualEntrySubmit(input: ManualEntrySubmitInput): {
     if (plan.kind === 'invalid' || (timelineCheck && !timelineCheck.valid)) {
       const errors = plan.kind === 'invalid' ? plan.fieldErrors : NO_MANUAL_ENTRY_FIELD_ERRORS;
       setFieldErrors(errors);
+      if (timelineCheck && !timelineCheck.valid && timelineCheck.message) setError(timelineCheck.message);
       focusFirstInvalidField(
         manualEntryFieldIds(errors, timelineCheck && !timelineCheck.valid ? timelineCheck.fieldErrors : {}),
       );

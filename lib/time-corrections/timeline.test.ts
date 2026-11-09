@@ -7,6 +7,7 @@ import {
   newTimelineRow,
   resolveCorrectionTimeline,
   timelineRowsFromVisits,
+  closedPeriodRowKeys,
   type CorrectionTimelineRow,
 } from './timeline';
 
@@ -203,6 +204,42 @@ describe('the rows a forgotten day starts from', () => {
     expect(
       insertBreakIntoRow(rows({ kind: 'break', start: '07:00', end: '09:00' }), 'row-0', key),
     ).toBeNull();
+  });
+
+  test('an overnight row that ends in a closed month is refused; one ending at midnight is not', () => {
+    const closedNovember = [{ startDate: '2026-11-01', endDate: '2026-11-30' }];
+    const resolve = (timeline: CorrectionTimelineRow[]) => {
+      const resolved = resolveCorrectionTimeline('2026-10-31', timeline);
+      if (!resolved.valid) throw new Error(JSON.stringify(resolved.errors));
+      return resolved.segments;
+    };
+    // 31.10. 22:00 to 02:00 on 1.11.: the end lies in the closed November.
+    expect(
+      closedPeriodRowKeys(resolve(rows({ start: '22:00', end: '02:00', endsNextDay: true })), closedNovember),
+    ).toEqual(['row-0']);
+    // Ending at midnight touches no time of 1.11.
+    expect(
+      closedPeriodRowKeys(resolve(rows({ start: '20:00', end: '00:00', endsNextDay: true })), closedNovember),
+    ).toEqual([]);
+    expect(closedPeriodRowKeys(resolve(rows({ start: '08:00', end: '16:00' })), closedNovember)).toEqual([]);
+  });
+
+  test('a visit over the whole Berlin day prefills 00:00 to 00:00 of the next day and resolves to 24 hours', () => {
+    const {
+      rows: [fullDay],
+    } = timelineRowsFromVisits(
+      [{ jobId: JOB, startAt: '2026-10-25T23:00:00.000Z', endAt: '2026-10-26T23:00:00.000Z' }],
+      key,
+    );
+    expect(fullDay && [fullDay.start, fullDay.end, fullDay.endsNextDay]).toEqual(['00:00', '00:00', true]);
+    const resolved = resolveCorrectionTimeline('2026-10-26', fullDay ? [fullDay] : []);
+    if (!resolved.valid) throw new Error(JSON.stringify(resolved.errors));
+    expect(
+      resolved.segments.map((segment) => [segment.startedAt.toISOString(), segment.endedAt.toISOString()]),
+    ).toEqual([['2026-10-25T23:00:00.000Z', '2026-10-26T23:00:00.000Z']]);
+    // Without the next-day mark, equal times stay an error.
+    const same = resolveCorrectionTimeline('2026-10-26', rows({ start: '08:00', end: '08:00' }));
+    expect(same.valid).toBe(false);
   });
 
   test('„Pause einfügen“ on a night activity keeps its span: each part ends on the right day', () => {

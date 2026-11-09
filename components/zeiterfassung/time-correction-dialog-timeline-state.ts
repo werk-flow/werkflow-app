@@ -65,11 +65,16 @@ export type CorrectionTimelineState = {
   validate: () => { resolved: ResolvedTimeline; fieldErrors: Record<string, string | undefined> };
 };
 
+/** Whose planned visits a prefill shows: the person and the day. */
+function ownerOf(input: Pick<TimelineInput, 'employeeRecordId' | 'dateIso'>): string {
+  return `${input.employeeRecordId ?? 'own'}:${input.dateIso ?? ''}`;
+}
+
 /** The planned visits of the day prefill the rows until the person changes one. */
 function usePlannedVisitRows(
   input: TimelineInput,
   touched: boolean,
-  setRows: (rows: CorrectionTimelineRow[]) => void,
+  setRows: (rows: CorrectionTimelineRow[], prefilledFor: string) => void,
 ) {
   const { organizationId, employeeRecordId, dateIso, enabled } = input;
   const [attempt, setAttempt] = useState(0);
@@ -92,7 +97,7 @@ function usePlannedVisitRows(
       const prefill = result.success
         ? timelineRowsFromVisits(result.visits, newKey)
         : { rows: [newTimelineRow(newKey())], overflow: false };
-      setRows(prefill.rows);
+      setRows(prefill.rows, ownerOf({ employeeRecordId, dateIso }));
       setAnswer({
         key: requestKey,
         notice: !result.success ? 'failed' : prefill.overflow ? 'overflow' : null,
@@ -112,8 +117,33 @@ export function useCorrectionTimeline(input: TimelineInput): CorrectionTimelineS
     newTimelineRow(newKey(), input.initialTimes ?? {}),
   ]);
   const [touched, setTouched] = useState(input.initialTimes !== undefined);
-  const setRows = useCallback((next: CorrectionTimelineRow[]) => setRowsState(next), []);
+  // The rows a prefill set that nobody has edited since, and whose visits they show.
+  const [prefill, setPrefill] = useState<{ owner: string; keys: ReadonlySet<string> } | null>(null);
+  const setRows = useCallback((next: CorrectionTimelineRow[], prefilledFor: string) => {
+    setRowsState(next);
+    setPrefill({ owner: prefilledFor, keys: new Set(next.map((row) => row.key)) });
+  }, []);
   const { visitsNotice, loadingVisits, retryVisits } = usePlannedVisitRows(input, touched, setRows);
+  // Another person or day: the previous one's unedited visits leave, edited rows stay. With
+  // nothing edited left, the new person's visits load as for a fresh timeline.
+  const owner = ownerOf(input);
+  const [seenOwner, setSeenOwner] = useState(owner);
+  if (owner !== seenOwner) {
+    setSeenOwner(owner);
+    if (touched && prefill && prefill.owner !== owner) {
+      const kept = storedRows.filter((row) => !prefill.keys.has(row.key));
+      setPrefill(null);
+      if (kept.length > 0) setRowsState(kept);
+      else {
+        setRowsState([newTimelineRow(newKey())]);
+        setTouched(false);
+      }
+    }
+  }
+  const markEdited = (key: string): void => {
+    if (prefill?.keys.has(key))
+      setPrefill({ owner: prefill.owner, keys: new Set([...prefill.keys].filter((each) => each !== key)) });
+  };
   // While the visits of a new person or day load, the untouched rows of the
   // previous ones never stand for them: the timeline is empty until the answer.
   const [pendingRows] = useState(() => [newTimelineRow(newKey())]);
@@ -129,8 +159,10 @@ export function useCorrectionTimeline(input: TimelineInput): CorrectionTimelineS
   const errors = resolved && !resolved.valid ? resolved.errors : rows.map(() => ({}));
   return {
     rows,
-    updateRow: (key, patch) =>
-      edit((current) => current.map((row) => (row.key === key ? editTimelineRow(row, patch) : row))),
+    updateRow: (key, patch) => {
+      markEdited(key);
+      edit((current) => current.map((row) => (row.key === key ? editTimelineRow(row, patch) : row)));
+    },
     addRow: () =>
       edit((current) => {
         const last = current.at(-1);
@@ -139,7 +171,10 @@ export function useCorrectionTimeline(input: TimelineInput): CorrectionTimelineS
       }),
     removeRow: (key) =>
       edit((current) => (current.length > 1 ? current.filter((row) => row.key !== key) : current)),
-    insertBreak: (key) => edit((current) => insertBreakIntoRow(current, key, newKey) ?? current),
+    insertBreak: (key) => {
+      markEdited(key);
+      edit((current) => insertBreakIntoRow(current, key, newKey) ?? current);
+    },
     canInsertBreak: (key) => insertBreakIntoRow(rows, key, () => key) !== null,
     canAddRow: rows.length < MAX_TIMELINE_ROWS,
     visitsNotice,
