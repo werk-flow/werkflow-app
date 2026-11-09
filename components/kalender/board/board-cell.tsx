@@ -5,13 +5,13 @@ import { memo } from 'react';
 import { CalendarPlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
-  deriveCapacityState,
-  describeCapacity,
+  boardCellCapacity,
   formatShortHours,
   type CalendarBoardDay,
   type CalendarBoardRow,
   type CapacityState,
 } from '@/lib/calendar/board';
+import type { Unavailability } from '@/lib/planning/availability';
 import type { BoardColumn } from '@/lib/calendar/board-layout';
 import { WEEKDAY_SHORT } from '@/lib/calendar/board-layout';
 import { formatRefusalDate } from '@/lib/calendar/messages';
@@ -35,7 +35,10 @@ export type BoardCellProps = {
   actual: { minutes: number; pending: boolean } | undefined;
   compact: boolean;
   actions: CalendarSurfaceActions;
-  employed: boolean;
+  /** One of the row's visits covers this day. */
+  hasPlannedWork: boolean;
+  /** Why the person cannot be planned on this day; null when they can (and on the „Ohne Zuweisung" row). */
+  unavailability: Unavailability | null;
 };
 
 /** Planned against target hours in the cell's corner; compact keeps only a full or overbooked day. */
@@ -76,23 +79,18 @@ export const BoardCell = memo(function BoardCell({
   actual,
   compact,
   actions,
-  employed,
+  hasPlannedWork,
+  unavailability,
 }: BoardCellProps) {
-  const state: CapacityState = day
-    ? deriveCapacityState(day, plannedMinutes)
-    : plannedMinutes > 0
-      ? 'partial'
-      : 'free';
-  const off = !employed || (day ? day.targetMinutes === 0 && plannedMinutes === 0 : column.isWeekend);
-  const description = !employed
-    ? 'Nicht beschäftigt'
-    : day
-      ? describeCapacity(day, plannedMinutes)
-      : column.isWeekend
-        ? 'Wochenende'
-        : '';
+  const { state, off, description } = boardCellCapacity({
+    day,
+    plannedMinutes,
+    hasPlannedWork,
+    unavailability,
+    isWeekend: column.isWeekend,
+  });
   const dateLabel = `${WEEKDAY_SHORT[column.weekday]} ${formatRefusalDate(column.date)}`;
-  const canAdd = actions.isManager && employed;
+  const canAdd = actions.isManager && !unavailability;
   return (
     <div
       role="gridcell"
@@ -107,7 +105,7 @@ export const BoardCell = memo(function BoardCell({
         'group/cell relative min-w-0 border-b border-r border-calendar-grid outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
         off ? 'bg-calendar-cell-off' : column.isToday ? 'bg-calendar-today' : 'bg-background',
         day?.reason === 'holiday' || day?.reason === 'closure' ? 'bg-calendar-holiday' : '',
-        !employed &&
+        unavailability &&
           'bg-[repeating-linear-gradient(-45deg,transparent,transparent_6px,var(--calendar-grid)_6px,var(--calendar-grid)_7px)]',
       )}
       style={{ gridColumn: columnIndex + 2, gridRow: '1 / -1' }}

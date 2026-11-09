@@ -62,6 +62,7 @@ function boardRow(employeeRecordId: string, displayName: string): CalendarBoardR
     teamName: null,
     entryDate: null,
     exitDate: null,
+    accessEndDate: null,
   };
 }
 
@@ -71,6 +72,7 @@ const WINDOW_ROWS = [boardRow(ABSENT_RECORD_ID, 'Daniel Krüger'), boardRow(PRES
 const WINDOW_ABSENCES = indexBoardAbsences(
   [boardDay(ABSENT_RECORD_ID, '2026-10-30', true), boardDay(PRESENT_RECORD_ID, '2026-10-30', false)],
   WINDOW_ROWS,
+  [],
 );
 
 function AbsencePicker(): React.JSX.Element {

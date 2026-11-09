@@ -27,6 +27,7 @@ const employeeRecords = [
     last_name: 'Hartmann',
     entry_date: null,
     exit_date: null,
+    personnel_access_lifecycles: [],
   },
   {
     id: 'record-worker',
@@ -35,6 +36,7 @@ const employeeRecords = [
     last_name: 'Neumann',
     entry_date: '2012-08-01',
     exit_date: null,
+    personnel_access_lifecycles: [],
   },
   {
     id: 'record-no-login',
@@ -43,8 +45,26 @@ const employeeRecords = [
     last_name: 'Login',
     entry_date: null,
     exit_date: null,
+    personnel_access_lifecycles: [],
   },
 ];
+// Left before the window, so the window's records read skips him; a visit of the window still names him.
+const leaverRecord = {
+  id: 'record-leaver',
+  user_id: 'leaver',
+  first_name: null,
+  last_name: null,
+  entry_date: '2020-04-01',
+  exit_date: '2026-06-12',
+  personnel_access_lifecycles: [
+    {
+      state: 'ended',
+      state_effective_at: '2026-06-12T22:00:00.000Z',
+      scheduled_state: null,
+      scheduled_for: null,
+    },
+  ],
+};
 type FixtureRow = {
   user_id?: string | null;
   own?: Array<{ employee_record_id: string }>;
@@ -55,6 +75,7 @@ const tables: Record<string, FixtureRow[]> = {
   profiles: [
     { id: 'manager', first_name: 'Lena', last_name: 'Hartmann' },
     { id: 'worker', first_name: 'Sven', last_name: 'Neumann' },
+    { id: 'leaver', first_name: 'Erik', last_name: 'Lindner' },
   ],
   organization_members: [
     { user_id: 'manager', role: 'buero' },
@@ -62,7 +83,12 @@ const tables: Record<string, FixtureRow[]> = {
   ],
   team_memberships: [{ employee_record_id: 'record-worker', team_id: 'team-heizung' }],
   planning_occurrences: [
-    { id: 'occurrence-one', job_id: 'job-one', own: [{ employee_record_id: 'record-worker' }] },
+    {
+      id: 'occurrence-one',
+      job_id: 'job-one',
+      own: [{ employee_record_id: 'record-worker' }],
+      assignments: [{ employee_record_id: 'record-worker' }, { employee_record_id: 'record-leaver' }],
+    },
   ],
   job_material_lines: [{ job_id: 'job-one' }],
   teams: [{ id: 'team-heizung', name: 'Heizung' }],
@@ -114,7 +140,11 @@ mock.module('@/lib/supabase/admin', () => ({
             },
           }));
         }
+        // A read by record ids is the rowless assignees' read; the leaver exists only for it.
+        if (table === 'employee_records' && filters.some(([column]) => column === 'id'))
+          rows = [...employeeRecords, leaverRecord];
         for (const [column, value] of filters) {
+          if (column === 'id' && Array.isArray(value)) rows = rows.filter((row) => value.includes(row.id));
           if (column === 'user_id' && !Array.isArray(value))
             rows = rows.filter((row) => row.user_id === value);
           if (column === 'own.employee_record_id')
@@ -200,6 +230,7 @@ const boardSchema = z.looseObject({
     }),
   ),
   dispatch: z.array(z.unknown()),
+  rowlessAssignees: z.array(z.unknown()),
 });
 
 authenticated = false;
@@ -254,6 +285,17 @@ assert.deepEqual(days.find((day) => day.employeeRecordId === 'record-no-login')?
 });
 assert.equal(managerBoard.dispatch.length, 2);
 assert.deepEqual(managerBoard.materialDemandJobIds, ['job-one']);
+// A visit names a person who left before the window: the manager learns who and since when.
+assert.deepEqual(managerBoard.rowlessAssignees, [
+  {
+    employeeRecordId: 'record-leaver',
+    userId: 'leaver',
+    displayName: 'Erik Lindner',
+    entryDate: '2020-04-01',
+    exitDate: '2026-06-12',
+    accessEndDate: '2026-06-13',
+  },
+]);
 
 // An employee receives exactly their own row, their own targets and their own dispatch states.
 memberships = [{ orgId: organizationId, role: 'employee' }];
@@ -267,6 +309,7 @@ assert.deepEqual([...new Set(employeeBoard.days.map((day) => day.employeeRecordI
 assert.deepEqual(employeeBoard.dispatch, [
   { occurrenceId: 'occurrence-one', employeeRecordId: 'record-worker', state: 'bestaetigt' },
 ]);
+assert.deepEqual(employeeBoard.rowlessAssignees, []);
 assert.equal(dispatchReads, 2);
 
 // A member without an employee record sees nothing, not a failure.
@@ -278,5 +321,6 @@ assert.deepEqual(strangerBoard, {
   days: [],
   dispatch: [],
   materialDemandJobIds: [],
+  rowlessAssignees: [],
 });
 console.info('calendar-board-http fixture passed');

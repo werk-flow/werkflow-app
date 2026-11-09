@@ -11,6 +11,7 @@ import { CalendarClockContext } from '@/components/kalender/surface/use-now-tick
 import { useCalendarRangeData } from '@/components/kalender/use-calendar-range-data';
 import { RealtimeProvider } from '@/components/realtime/realtime-provider';
 import { BannerProvider, useBanner } from '@/components/ui/banner';
+import { BoardAbsencesContext, useIndexedBoardAbsences } from '@/components/kalender/board-absences-context';
 import type { CalendarBoardContext, CalendarBoardRow } from '@/lib/calendar/board';
 import { getCalendarFetchRange } from '@/lib/calendar/navigation';
 import { DEFAULT_CALENDAR_PREFERENCES } from '@/lib/calendar/preferences';
@@ -64,6 +65,7 @@ const rows: CalendarBoardRow[] = [
     teamName: null,
     entryDate: null,
     exitDate: null,
+    accessEndDate: null,
   },
   {
     employeeRecordId: 'r2',
@@ -75,6 +77,7 @@ const rows: CalendarBoardRow[] = [
     teamName: null,
     entryDate: null,
     exitDate: null,
+    accessEndDate: null,
   },
 ];
 function boardFor(dates: string[]): CalendarBoardContext {
@@ -94,6 +97,7 @@ function boardFor(dates: string[]): CalendarBoardContext {
     ),
     dispatch: [],
     materialDemandJobIds: [],
+    rowlessAssignees: [],
   };
 }
 function visit(
@@ -340,8 +344,76 @@ const boardSickness: SicknessCalendarEntry[] = [
   },
 ];
 
+// werk-flow/werkflow-planning#62: Erik Lindner leaves. In his exit week his row hatches the days after
+// 9.9.; in the week after, his row is gone and his visits name him as an assignee without a row.
+const leaver: CalendarBoardRow = {
+  employeeRecordId: 'r-erik',
+  userId: 'worker-erik',
+  displayName: 'Erik Lindner',
+  role: null,
+  hasLogin: false,
+  teamId: null,
+  teamName: null,
+  entryDate: '2020-04-01',
+  exitDate: '2026-09-09',
+  accessEndDate: '2026-09-10',
+};
+const leaverJobs = [
+  visit('Wartung Erik allein', 'o-solo', '2026-09-10', '09:00', ['r-erik'], ['worker-erik']),
+  visit('Heizung zu zweit', 'o-shared', '2026-09-11', '10:00', ['r-erik', 'r2'], ['worker-erik', 'worker-2']),
+  visit('Montage Erik ganztägig', 'o-all-day', '2026-09-12', null, ['r-erik'], ['worker-erik']),
+];
+type ExitScenario = 'none' | 'exit-week' | 'after-exit';
+
+function boardForScenario(scenario: ExitScenario): CalendarBoardContext {
+  const board = boardFor(weekDates);
+  if (scenario === 'after-exit') {
+    return {
+      ...board,
+      rowlessAssignees: [
+        {
+          employeeRecordId: leaver.employeeRecordId,
+          userId: leaver.userId,
+          displayName: leaver.displayName,
+          entryDate: leaver.entryDate,
+          exitDate: '2026-09-04',
+          accessEndDate: '2026-09-05',
+        },
+      ],
+    };
+  }
+  if (scenario === 'none') return board;
+  const leaverDays = weekDates.map((date) => {
+    const employed = date <= '2026-09-09';
+    return {
+      employeeRecordId: leaver.employeeRecordId,
+      date,
+      targetMinutes: employed ? 480 : 0,
+      baseTargetMinutes: employed ? 480 : 0,
+      reason: employed ? ('working' as const) : ('no_work_day' as const),
+      label: null,
+      absence: null,
+      pendingVacation: false,
+    };
+  });
+  return { ...board, rows: [...board.rows, leaver], days: [...board.days, ...leaverDays] };
+}
+
+/** The container's absence and people context, built from the harness's board. */
+function WithBoardAbsences({
+  board,
+  children,
+}: {
+  board: CalendarBoardContext;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return <BoardAbsencesContext value={useIndexedBoardAbsences(board)}>{children}</BoardAbsencesContext>;
+}
+
 export function CalendarBoardContractFixture(): React.JSX.Element {
+  const [scenario, setScenario] = useState<ExitScenario>('none');
   const [compact, setCompact] = useState(false);
+  const [search, setSearch] = useState('');
   const [populated, setPopulated] = useState(false);
   const [absent, setAbsent] = useState(false);
   const [phone, setPhone] = useState(false);
@@ -377,49 +449,116 @@ export function CalendarBoardContractFixture(): React.JSX.Element {
       <button type="button" onClick={() => setPhone(!phone)}>
         Telefonansicht
       </button>
+      <button type="button" onClick={() => setSearch('Prüfauftrag')}>
+        Nach Prüfauftrag suchen
+      </button>
+      <button type="button" onClick={() => setScenario('exit-week')}>
+        Austrittswoche
+      </button>
+      <button type="button" onClick={() => setScenario('after-exit')}>
+        Woche nach dem Austritt
+      </button>
       <ViewHarness
-        jobs={boardJobs}
-        board={boardFor(weekDates)}
+        key={scenario}
+        jobs={scenario === 'none' ? boardJobs : [...boardJobs, ...leaverJobs]}
+        board={boardForScenario(scenario)}
         needed={getCalendarFetchRange(weekAnchor, 'week')}
       >
         {({ jobs, board, mutations, actions, scroller }) => (
-          <Plantafel
-            anchorIso="2026-09-08"
-            todayIso="2026-09-08"
-            preferences={{ ...DEFAULT_CALENDAR_PREFERENCES, density: compact ? 'compact' : 'comfortable' }}
-            showActualTime={populated}
-            board={board}
-            jobs={
-              populated
-                ? [
-                    ...jobs,
-                    {
-                      ...visit('Zweiter Auftrag', 'full-day', '2026-09-08', '10:00', ['r1'], ['worker']),
-                      estimatedDurationMinutes: 480,
-                    },
-                  ]
-                : jobs
-            }
-            entries={entries}
-            vacation={absent ? boardVacation : []}
-            sickness={absent ? boardSickness : []}
-            holidays={holidays}
-            mutations={mutations}
-            parkingContexts={new Map()}
-            onParkedContextMissing={() => {}}
-            actions={actions}
-            verticalScroller={scroller}
-            onIsolateRow={() => {}}
-            phone={phone}
-          />
+          <WithBoardAbsences board={board}>
+            <Plantafel
+              anchorIso="2026-09-08"
+              todayIso="2026-09-08"
+              preferences={{
+                ...DEFAULT_CALENDAR_PREFERENCES,
+                density: compact ? 'compact' : 'comfortable',
+                search,
+              }}
+              showActualTime={populated}
+              board={board}
+              jobs={
+                populated
+                  ? [
+                      ...jobs,
+                      {
+                        ...visit('Zweiter Auftrag', 'full-day', '2026-09-08', '10:00', ['r1'], ['worker']),
+                        estimatedDurationMinutes: 480,
+                      },
+                    ]
+                  : jobs
+              }
+              entries={entries}
+              vacation={absent ? boardVacation : []}
+              sickness={absent ? boardSickness : []}
+              holidays={holidays}
+              mutations={mutations}
+              parkingContexts={new Map()}
+              onParkedContextMissing={() => {}}
+              actions={actions}
+              verticalScroller={scroller}
+              onIsolateRow={() => {}}
+              phone={phone}
+            />
+          </WithBoardAbsences>
         )}
       </ViewHarness>
     </Providers>
   );
 }
 
+/** The day after Erik Lindner's exit: he has no row, and two shared visits still name him. */
+const dayLeaverJobs = [
+  visit(
+    'Heizung zu zweit am Tag',
+    'o-day-shared',
+    '2026-09-08',
+    '10:00',
+    ['r-erik', 'r2'],
+    ['worker-erik', 'worker-2'],
+  ),
+  visit(
+    'Baustelle zu zweit ganztägig',
+    'o-day-all-day',
+    '2026-09-08',
+    null,
+    ['r-erik', 'r2'],
+    ['worker-erik', 'worker-2'],
+  ),
+  // A minimum-width card: the warning must stay visible and reachable beside the resize handle.
+  {
+    ...visit(
+      'Kurz zu zweit',
+      'o-day-short',
+      '2026-09-08',
+      '14:00',
+      ['r-erik', 'r2'],
+      ['worker-erik', 'worker-2'],
+    ),
+    estimatedDurationMinutes: 2,
+  },
+];
+
+function dayBoard(withLeaver: boolean): CalendarBoardContext {
+  const board = boardFor(['2026-09-08']);
+  if (!withLeaver) return board;
+  return {
+    ...board,
+    rowlessAssignees: [
+      {
+        employeeRecordId: leaver.employeeRecordId,
+        userId: leaver.userId,
+        displayName: leaver.displayName,
+        entryDate: leaver.entryDate,
+        exitDate: '2026-09-04',
+        accessEndDate: '2026-09-05',
+      },
+    ],
+  };
+}
+
 export function CalendarDayContractFixture(): React.JSX.Element {
   const [phone, setPhone] = useState(false);
+  const [withLeaver, setWithLeaver] = useState(false);
   const shortEntries: TimeEntry[] = [0, 2].map((minute, index) => {
     const timestamp = `2026-09-08T05:0${minute}:00.000Z`;
     return {
@@ -447,13 +586,18 @@ export function CalendarDayContractFixture(): React.JSX.Element {
       estimatedDurationMinutes: 2,
     },
     visit('Ganztägige Baustelle', 'all-day-visit', '2026-09-08', null, ['r2'], ['worker-2']),
+    ...(withLeaver ? dayLeaverJobs : []),
   ];
   return (
     <Providers>
       <button type="button" onClick={() => setPhone(!phone)}>
         Telefonansicht
       </button>
+      <button type="button" onClick={() => setWithLeaver(true)}>
+        Mit Ausgeschiedenem
+      </button>
       <ViewHarness
+        key={String(withLeaver)}
         jobs={dayJobs}
         entries={[
           ...shortEntries,
@@ -464,35 +608,37 @@ export function CalendarDayContractFixture(): React.JSX.Element {
             status: 'pending' as const,
           })),
         ]}
-        board={boardFor(['2026-09-08'])}
+        board={dayBoard(withLeaver)}
         needed={getCalendarFetchRange(weekAnchor, 'day')}
       >
         {({ jobs, entries, board, mutations, actions, scroller }) => (
-          <DayView
-            phone={phone}
-            date={weekAnchor}
-            todayIso="2026-09-08"
-            zoom={1}
-            onZoomChange={() => {}}
-            entries={entries}
-            jobs={jobs}
-            members={members}
-            board={board}
-            holidays={holidays}
-            organizationSettings={settings}
-            currentUserId="manager"
-            currentUserRole="admin"
-            changeRequestMap={{}}
-            mutations={mutations}
-            actions={actions}
-            parkingContexts={new Map()}
-            onParkedContextMissing={() => {}}
-            onSessionClick={() => {
-              window.calendarViewContract.opened.push('Arbeitszeit');
-            }}
-            highlightMemberId={null}
-            verticalScroller={scroller}
-          />
+          <WithBoardAbsences board={board}>
+            <DayView
+              phone={phone}
+              date={weekAnchor}
+              todayIso="2026-09-08"
+              zoom={1}
+              onZoomChange={() => {}}
+              entries={entries}
+              jobs={jobs}
+              members={members}
+              board={board}
+              holidays={holidays}
+              organizationSettings={settings}
+              currentUserId="manager"
+              currentUserRole="admin"
+              changeRequestMap={{}}
+              mutations={mutations}
+              actions={actions}
+              parkingContexts={new Map()}
+              onParkedContextMissing={() => {}}
+              onSessionClick={() => {
+                window.calendarViewContract.opened.push('Arbeitszeit');
+              }}
+              highlightMemberId={null}
+              verticalScroller={scroller}
+            />
+          </WithBoardAbsences>
         )}
       </ViewHarness>
     </Providers>

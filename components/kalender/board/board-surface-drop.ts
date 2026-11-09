@@ -27,7 +27,7 @@ export function moveSuccessMessage(
 
 /** A visit dropped on a cell: Alt copies it, otherwise it moves and the card takes the focus. */
 function dropOccurrence(
-  { mutations, focusCard }: BoardSurfaceInput,
+  { mutations, focusCard, people }: BoardSurfaceInput,
   payload: Extract<CalendarDragPayload, { kind: 'occurrence' }>,
   target: CalendarDragCell,
   modifiers: DragModifiers,
@@ -48,6 +48,7 @@ function dropOccurrence(
     sourceEmployeeRecordId: payload.sourceEmployeeRecordId,
     sourceUserId: payload.sourceUserId,
     target,
+    people,
   });
   if (!changes) return;
   void mutations

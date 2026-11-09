@@ -1,6 +1,7 @@
 // Whether a person can be planned on a date at all: employed, and with app
-// access. The planning assessment warns on these facts, and the assignment
-// picker marks the people they exclude, so both read one rule.
+// access. The planning assessment warns on these facts, the assignment
+// picker marks the people they exclude, and the calendar shows their visits
+// as missing a person, so all of them read one rule.
 
 import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import type { Tables } from '@/lib/supabase/database.types';
@@ -41,20 +42,43 @@ export function accessEndDatesByRecord(
   );
 }
 
+/** The facts that decide whether a person can be planned on a Berlin date. */
+export type PlanningAvailabilityFacts = {
+  entryDate: string | null;
+  exitDate: string | null;
+  /** The Berlin date from which app access has ended; null while it goes on. */
+  accessEndDate: string | null;
+};
+
+/** Why a person cannot be planned on a date: after their exit, before their entry, or with app access ended. */
+export type Unavailability = 'after_exit' | 'before_entry' | 'access_ended';
+
+/**
+ * The one rule of who can be planned on a Berlin date. The picker marks it,
+ * and the calendar treats an assignment it refuses like a missing one.
+ */
+export function unavailabilityOn(facts: PlanningAvailabilityFacts, localDate: string): Unavailability | null {
+  if (facts.exitDate && localDate > facts.exitDate) return 'after_exit';
+  if (facts.entryDate && localDate < facts.entryDate) return 'before_entry';
+  if (facts.accessEndDate && facts.accessEndDate <= localDate) return 'access_ended';
+  return null;
+}
+
 /**
  * Why the person cannot be planned on the Berlin date, as the picker marks
  * it; null when nothing excludes them.
  */
 export function availabilityNote(record: AvailabilityRecord, localDate: string): string | null {
-  if (record.exit_date && localDate > record.exit_date) {
-    return `Ausgetreten am ${formatGermanDate(record.exit_date)}`;
+  const accessEndDate = accessEndDateOf(record.personnel_access_lifecycles[0]) ?? null;
+  const facts = { entryDate: record.entry_date, exitDate: record.exit_date, accessEndDate };
+  switch (unavailabilityOn(facts, localDate)) {
+    case 'after_exit':
+      return `Ausgetreten am ${formatGermanDate(record.exit_date ?? localDate)}`;
+    case 'before_entry':
+      return `Eintritt am ${formatGermanDate(record.entry_date ?? localDate)}`;
+    case 'access_ended':
+      return `App-Zugang beendet am ${formatGermanDate(accessEndDate ?? localDate)}`;
+    case null:
+      return null;
   }
-  if (record.entry_date && localDate < record.entry_date) {
-    return `Eintritt am ${formatGermanDate(record.entry_date)}`;
-  }
-  const accessEndDate = accessEndDateOf(record.personnel_access_lifecycles[0]);
-  if (accessEndDate && accessEndDate <= localDate) {
-    return `App-Zugang beendet am ${formatGermanDate(accessEndDate)}`;
-  }
-  return null;
 }

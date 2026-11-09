@@ -107,6 +107,8 @@ export function ManualEntryAssignmentFields({
 }
 
 type ManualEntryTimeFieldsProps = {
+  /** Own time of an earlier day: the times live in its timeline. */
+  dateOnly: boolean;
   entryMode: ManualEntryMode;
   fieldErrors: Pick<ManualEntryFieldErrors, 'date' | 'clockIn' | 'clockOut'>;
   selectedDate: Date | undefined;
@@ -118,6 +120,7 @@ type ManualEntryTimeFieldsProps = {
 };
 
 export function ManualEntryTimeFields({
+  dateOnly,
   entryMode,
   fieldErrors,
   selectedDate,
@@ -138,24 +141,26 @@ export function ManualEntryTimeFields({
         />
       </Field>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {(entryMode === 'clock_in' || entryMode === 'both') && (
-          <Field label="Einstempeln" htmlFor="clockInTime" required error={fieldErrors.clockIn}>
-            <div className="relative">
-              <Clock className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <TimeInput value={clockInTime} onChange={setClockInTime} className="pl-10 pr-3" />
-            </div>
-          </Field>
-        )}
-        {(entryMode === 'clock_out' || entryMode === 'both') && (
-          <Field label="Ausstempeln" htmlFor="clockOutTime" required error={fieldErrors.clockOut}>
-            <div className="relative">
-              <Clock className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <TimeInput value={clockOutTime} onChange={setClockOutTime} className="pl-10 pr-3" />
-            </div>
-          </Field>
-        )}
-      </div>
+      {dateOnly ? null : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {(entryMode === 'clock_in' || entryMode === 'both') && (
+            <Field label="Einstempeln" htmlFor="clockInTime" required error={fieldErrors.clockIn}>
+              <div className="relative">
+                <Clock className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <TimeInput value={clockInTime} onChange={setClockInTime} className="pl-10 pr-3" />
+              </div>
+            </Field>
+          )}
+          {(entryMode === 'clock_out' || entryMode === 'both') && (
+            <Field label="Ausstempeln" htmlFor="clockOutTime" required error={fieldErrors.clockOut}>
+              <div className="relative">
+                <Clock className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <TimeInput value={clockOutTime} onChange={setClockOutTime} className="pl-10 pr-3" />
+              </div>
+            </Field>
+          )}
+        </div>
+      )}
     </>
   );
 }

@@ -579,6 +579,7 @@ export const COLUMN_LABELS: Record<LabeledColumn, string> = {
   segment_start_local: 'Abschnittsbeginn',
   selected_employee_record_ids: 'Ausgewählte Mitarbeiter (IDs)',
   selected_user_ids: 'Ausgewählte Personen (IDs)',
+  sent_at: 'Gesendet am (Gerät)',
   serial_number: 'Seriennummer',
   series_id: 'Serie-ID',
   series_lineage_id: 'Serienabstammung-ID',

@@ -24,12 +24,12 @@ import { Field } from '@/components/ui/field';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { cn, toLocalDateString } from '@/lib/utils';
-import { absencesNotLoadedHint, absentAssignees, withAbsenceMarks } from '@/lib/calendar/absence-marks';
+import { absencesNotLoadedHint, cardAssigneeMarks, withAbsenceMarks } from '@/lib/calendar/absence-marks';
 import { JOB_PRIORITY_LABELS, type CalendarJob } from '@/lib/jobs/types';
 import { PRIORITY_CLASSES } from '@/components/auftraege/job-detail/job-detail-format';
 import { getJobStatusClass, getJobStatusLabel } from '@/components/auftraege/status-classes';
 import { isStartedOccurrence, type CalendarBoardRow } from '@/lib/calendar/board';
-import { reassignmentChanges } from '@/lib/calendar/board-model';
+import { reassignmentChanges, type BoardPeople } from '@/lib/calendar/board-model';
 import { calendarRefusalMessage, formatRefusalDate } from '@/lib/calendar/messages';
 import { useClock } from './surface/use-now-tick';
 import { checkOccurrenceMovable, checkParkable } from '@/lib/calendar/refusal-checks';
@@ -333,7 +333,7 @@ function CardPopover({
 /** When, for whom, where and with whom the occurrence is planned, and which assignee is away then. */
 function JobEventFacts({ job, memberNames }: { job: CalendarJob; memberNames: Record<string, string> }) {
   const absences = useBoardAbsences();
-  const absent = absentAssignees(job, absences);
+  const absent = cardAssigneeMarks(job, absences);
   return (
     <div className="space-y-2 text-sm">
       <div className="flex items-center gap-2 text-muted-foreground">
@@ -402,6 +402,7 @@ function moveToTarget(
   { job, row, rows, mutations }: Pick<MoveFormProps, 'job' | 'row' | 'rows' | 'mutations'>,
   moveRecordId: string,
   moveDate: Date,
+  people: BoardPeople,
 ): void {
   const targetRow = rows.find((entry) => entry.employeeRecordId === moveRecordId) ?? null;
   const target = {
@@ -414,6 +415,7 @@ function moveToTarget(
     sourceEmployeeRecordId: row?.employeeRecordId ?? null,
     sourceUserId: row?.userId ?? null,
     target,
+    people,
   });
   if (!changes) return;
   const targetName = targetRow?.displayName ?? 'Ohne Zuweisung';
@@ -445,7 +447,7 @@ function MoveForm({ job, row, rows, mutations, onDone, onCancel }: MoveFormProps
     const dateError = moveDate ? undefined : 'Bitte wähle ein Datum.';
     setMoveError(dateError ?? null);
     if (focusFirstInvalidField({ 'popover-move-date': dateError }) || !moveDate) return;
-    moveToTarget({ job, row, rows, mutations }, moveRecordId, moveDate);
+    moveToTarget({ job, row, rows, mutations }, moveRecordId, moveDate, absences.people);
     onDone();
   };
 

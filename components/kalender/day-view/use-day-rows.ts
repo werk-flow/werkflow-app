@@ -2,10 +2,12 @@
 
 import { useMemo } from 'react';
 import { indexBoardDays, type CalendarBoardContext, type CalendarBoardDay } from '@/lib/calendar/board';
+import type { BoardPeople } from '@/lib/calendar/board-model';
 import { deriveDayRows, type DayRow } from '@/lib/calendar/day-rows';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { OrganizationTimeTrackingSettings } from '@/lib/time-tracking/settings';
 import type { TimeEntry } from '@/lib/time-tracking/types';
+import { useBoardAbsences } from '../board-absences-context';
 import { memberDisplayName, type CalendarMember } from '../members';
 
 /** The day view's rows at the current zoom and minute; `deriveDayRows` owns the rule. */
@@ -31,8 +33,9 @@ export function useDayRows({
   organizationSettings: OrganizationTimeTrackingSettings;
   hourWidth: number;
   isManager: boolean;
-}): { days: ReadonlyMap<string, CalendarBoardDay>; rows: DayRow[] } {
+}): { days: ReadonlyMap<string, CalendarBoardDay>; rows: DayRow[]; people: BoardPeople } {
   const days = useMemo(() => indexBoardDays(board.days), [board.days]);
+  const { people } = useBoardAbsences();
   const dayMembers = useMemo(
     () =>
       members.map((member) => ({
@@ -56,8 +59,10 @@ export function useDayRows({
         organizationSettings,
         hourWidth,
         isManager,
+        people,
       }),
     [
+      people,
       board.rows,
       days,
       dayMembers,
@@ -71,5 +76,5 @@ export function useDayRows({
       isManager,
     ],
   );
-  return { days, rows };
+  return { days, rows, people };
 }

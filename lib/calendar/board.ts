@@ -1,5 +1,6 @@
 import type { DispatchRecipientDerivedState } from '@/lib/dispatch/types';
 import type { CalendarJob } from '@/lib/jobs/types';
+import type { Unavailability } from '@/lib/planning/availability';
 import type { OrgRole } from '@/lib/roles';
 import {
   addLocalDays,
@@ -28,7 +29,19 @@ export type CalendarBoardRow = {
   teamName: string | null;
   entryDate: string | null;
   exitDate: string | null;
+  /** The Berlin date from which the person's app access has ended; null while it goes on. */
+  accessEndDate: string | null;
 };
+
+/**
+ * A person a scheduled visit of the window names who has no row, because
+ * they are employed outside the whole window. The board shows their visits
+ * as missing a person and names them.
+ */
+export type CalendarBoardRowlessAssignee = Pick<
+  CalendarBoardRow,
+  'employeeRecordId' | 'userId' | 'displayName' | 'entryDate' | 'exitDate' | 'accessEndDate'
+>;
 
 type CalendarBoardAbsence = {
   type: 'vacation' | 'sickness';
@@ -81,6 +94,8 @@ export type CalendarBoardContext = {
   dispatch: CalendarBoardDispatch[];
   /** Jobs with at least one planned material line (readiness chip: „nicht reserviert"). */
   materialDemandJobIds: string[];
+  /** For a manager: the assignees of the window's scheduled visits without a row. */
+  rowlessAssignees: CalendarBoardRowlessAssignee[];
 };
 
 export const EMPTY_CALENDAR_BOARD: CalendarBoardContext = {
@@ -88,6 +103,7 @@ export const EMPTY_CALENDAR_BOARD: CalendarBoardContext = {
   days: [],
   dispatch: [],
   materialDemandJobIds: [],
+  rowlessAssignees: [],
 };
 
 export function boardDayKey(employeeRecordId: string, date: string): string {
@@ -186,7 +202,7 @@ export type CapacityState = 'off' | 'free' | 'partial' | 'full' | 'overbooked';
 /** Fifteen minutes of slack keep a full day from reading as overbooked. */
 const FULL_TOLERANCE_MINUTES = 15;
 
-export function deriveCapacityState(day: CalendarBoardDay, plannedMinutes: number): CapacityState {
+function deriveCapacityState(day: CalendarBoardDay, plannedMinutes: number): CapacityState {
   if (plannedMinutes <= 0) return day.targetMinutes === 0 ? 'off' : 'free';
   if (day.targetMinutes === 0) return 'overbooked';
   if (plannedMinutes > day.targetMinutes + FULL_TOLERANCE_MINUTES) return 'overbooked';
@@ -208,7 +224,7 @@ export function formatShortHours(minutes: number): string {
 }
 
 /** The sentence behind a capacity cell, for hover and for assistive technology. */
-export function describeCapacity(day: CalendarBoardDay, plannedMinutes: number): string {
+function describeCapacity(day: CalendarBoardDay, plannedMinutes: number): string {
   const state = deriveCapacityState(day, plannedMinutes);
   if (state === 'off') {
     if (day.reason === 'holiday') return `Feiertag${day.label ? `: ${day.label}` : ''}`;
@@ -220,6 +236,45 @@ export function describeCapacity(day: CalendarBoardDay, plannedMinutes: number):
   const target = formatShortHours(day.targetMinutes);
   const suffix = day.pendingVacation ? ', Urlaub angefragt' : '';
   return `${CAPACITY_STATE_LABELS[state]}: ${planned} von ${target} geplant${suffix}`;
+}
+
+/** What one person-day of the board says: its capacity, whether it is off, and the sentence behind it. */
+export type BoardCellCapacity = { state: CapacityState; off: boolean; description: string };
+
+/**
+ * A person-day of the board. A day the person cannot be planned (before
+ * entry, after exit, or with app access ended) is off; work planned on it is
+ * overbooked, because nobody can do it. An all-day visit there has no planned
+ * minutes (the day's target is zero), so the row's visits say whether work
+ * is planned.
+ */
+export function boardCellCapacity(input: {
+  day: CalendarBoardDay | undefined;
+  plannedMinutes: number;
+  /** One of the row's visits covers the day. */
+  hasPlannedWork: boolean;
+  unavailability: Unavailability | null;
+  isWeekend: boolean;
+}): BoardCellCapacity {
+  const { day, plannedMinutes, unavailability, isWeekend } = input;
+  if (unavailability) {
+    const reason = unavailability === 'access_ended' ? 'App-Zugang beendet' : 'Nicht beschäftigt';
+    if (plannedMinutes <= 0 && !input.hasPlannedWork) return { state: 'off', off: true, description: reason };
+    const planned = plannedMinutes > 0 ? `${formatShortHours(plannedMinutes)} geplant` : 'eingeplant';
+    return { state: 'overbooked', off: true, description: `${reason}, trotzdem ${planned}` };
+  }
+  if (!day) {
+    return {
+      state: plannedMinutes > 0 ? 'partial' : 'free',
+      off: isWeekend,
+      description: isWeekend ? 'Wochenende' : '',
+    };
+  }
+  return {
+    state: deriveCapacityState(day, plannedMinutes),
+    off: day.targetMinutes === 0 && plannedMinutes === 0,
+    description: describeCapacity(day, plannedMinutes),
+  };
 }
 
 /**

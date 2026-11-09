@@ -14,9 +14,14 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { Tables } from '@/lib/supabase/database.types';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { PENDING_CORRECTION_STATUSES } from './pending-projection';
+import { TIME_ACTIVITY_LABELS } from '@/lib/time-tracking/types';
+import { formatBerlinTime } from '@/lib/utils';
+import { snapshotSegments } from './snapshot-segments';
 import {
   isTimeCorrectionSnapshot,
   namesAnotherPerson,
+  type CorrectionActivity,
+  type TimeCorrectionSnapshot,
   type TimeCorrectionListResult,
   type TimeCorrectionRequest,
 } from './types';
@@ -194,6 +199,7 @@ function toCorrectionRequest(
       request.status === 'clarification_required' &&
       (request.kind !== 'reassign' || isManagerRole(caller.callerRole)) &&
       !namesAnotherPerson(request, revision.proposed_snapshot),
+    activities: { before: [], proposed: [] },
     revision: {
       revision: revision.revision,
       reason: revision.reason,
@@ -235,5 +241,55 @@ export async function hydrateCorrectionRequests(
     }
     requests.push(hydrated);
   }
-  return { success: true, requests };
+  const jobLabels = await readJobLabels(admin, organizationId, requests);
+  if (!jobLabels) return { success: false, error: 'fetch_failed' };
+  const activities = (snapshot: TimeCorrectionSnapshot): CorrectionActivity[] =>
+    snapshotSegments(snapshot.facts).map((segment) => ({
+      times: `${formatBerlinTime(segment.startedAt)}–${segment.endedAt ? formatBerlinTime(segment.endedAt) : 'offen'}`,
+      kind: TIME_ACTIVITY_LABELS[segment.activityKind],
+      job: segment.jobId ? (jobLabels.get(segment.jobId) ?? null) : null,
+    }));
+  return {
+    success: true,
+    requests: requests.map((request) => ({
+      ...request,
+      activities: {
+        before: activities(request.revision.beforeSnapshot),
+        proposed: activities(request.revision.proposedSnapshot),
+      },
+    })),
+  };
+}
+
+function requestJobIds(request: TimeCorrectionRequest): string[] {
+  return [
+    ...new Set(
+      [...request.revision.beforeSnapshot.facts, ...request.revision.proposedSnapshot.facts].flatMap(
+        (fact) => (fact.jobId ? [fact.jobId] : []),
+      ),
+    ),
+  ];
+}
+
+/** Each job the requests name, as number and title: what the card shows beside the times. Null when the read fails. */
+async function readJobLabels(
+  admin: AdminClient,
+  organizationId: string,
+  requests: readonly TimeCorrectionRequest[],
+): Promise<Map<string, string> | null> {
+  const jobIds = [...new Set(requests.flatMap(requestJobIds))];
+  const { data, error } = await readInBatches(jobIds, (batch) =>
+    admin
+      .from('jobs')
+      .select('id, job_number, title')
+      .eq('organization_id', organizationId)
+      .in('id', [...batch]),
+  );
+  if (error) {
+    logReadFailure('getTimeCorrectionRequests: jobs failed', error);
+    return null;
+  }
+  return new Map(
+    data.map((job) => [job.id, [job.job_number, job.title].filter(Boolean).join(' · ') || 'Auftrag']),
+  );
 }

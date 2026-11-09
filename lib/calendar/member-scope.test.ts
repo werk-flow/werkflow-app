@@ -60,6 +60,7 @@ function row(employeeRecordId: string, team: { id: string; name: string } | null
     teamName: team?.name ?? null,
     entryDate: null,
     exitDate: null,
+    accessEndDate: null,
   };
 }
 

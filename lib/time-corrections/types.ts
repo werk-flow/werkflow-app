@@ -45,6 +45,9 @@ export type TimeCorrectionFact = {
   activity?: TimeActivitySelection;
 };
 
+/** A planned job visit of a forgotten day, its times clipped to the day; an all-day visit has none. */
+export type PlannedCorrectionVisit = { jobId: string; startAt: string | null; endAt: string | null };
+
 export type TimeCorrectionSnapshot = {
   schemaVersion: 1;
   facts: TimeCorrectionFact[];
@@ -95,7 +98,21 @@ export type TimeCorrectionRequest = {
   canReview: boolean;
   canWithdraw: boolean;
   canResubmit: boolean;
+  /** Each recorded and proposed activity, as the card lists them. */
+  activities: { before: CorrectionActivity[]; proposed: CorrectionActivity[] };
 };
+
+/**
+ * One activity of a correction snapshot as the card prints it: its Berlin
+ * times („07:00–11:30“, an open one „07:00–offen“), its kind and the number
+ * and title of its job.
+ */
+export type CorrectionActivity = { times: string; kind: string; job: string | null };
+
+/** Whether a value is a complete wall time `HH:MM`. */
+export function isClockTime(value: string): boolean {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
 
 export type TimeCorrectionResult =
   | {

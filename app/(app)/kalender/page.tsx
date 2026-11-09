@@ -154,6 +154,7 @@ function calendarInitialData(
             days: boardResult.days,
             dispatch: boardResult.dispatch,
             materialDemandJobIds: boardResult.materialDemandJobIds,
+            rowlessAssignees: boardResult.rowlessAssignees,
           },
         }
       : {}),

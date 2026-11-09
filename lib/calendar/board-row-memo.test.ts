@@ -26,6 +26,7 @@ const boardRow = (employeeRecordId: string): CalendarBoardRow => ({
   teamName: null,
   entryDate: null,
   exitDate: null,
+  accessEndDate: null,
 });
 
 const columns: BoardColumn[] = [
@@ -77,6 +78,7 @@ function rowProps(): RowProps {
     jobs,
     days: new Map(columns.map((column) => [`a:${column.date}`, day('a', column.date)])),
     planned: new Map([['a:2026-10-05', 120]]),
+    workDays: new Set(['a:2026-10-05']),
     actual: new Map([['user-a:2026-10-05', { minutes: 30, pending: false }]]),
     dispatch: new Map([['o1:a', 'ausstehend']]),
     materialDemandJobIds: new Set(['job-o1']),
@@ -95,6 +97,7 @@ function rebuilt(props: RowProps): RowProps {
     jobs: [...props.jobs],
     days: new Map([...props.days, ['b:2026-10-05', day('b', '2026-10-05')]]),
     planned: new Map([...props.planned, ['b:2026-10-05', 60]]),
+    workDays: new Set([...props.workDays, 'b:2026-10-05']),
     actual: new Map([...(props.actual ?? [])].map(([key, value]) => [key, { ...value }] as const)),
     dispatch: new Map([...props.dispatch, ['o9:b', 'bestaetigt']]),
     materialDemandJobIds: new Set([...props.materialDemandJobIds, 'job-o9']),
@@ -118,6 +121,7 @@ describe('a Plantafel row', () => {
       (props) => ({ ...props, days: new Map([...props.days, ['a:2026-10-06', day('a', '2026-10-06')]]) }),
     ],
     ['its planned minutes', (props) => ({ ...props, planned: new Map([['a:2026-10-05', 180]]) })],
+    ['its planned work', (props) => ({ ...props, workDays: new Set(['a:2026-10-06']) })],
     [
       'its recorded minutes',
       (props) => ({ ...props, actual: new Map([['user-a:2026-10-05', { minutes: 45, pending: false }]]) }),
@@ -139,6 +143,14 @@ describe('a Plantafel row', () => {
   test('the unassigned row shows no person-days', () => {
     const unassigned: BoardRowModel = { key: 'unassigned', kind: 'unassigned', row: null };
     const props = { ...previous, model: unassigned };
-    expect(sameRow(props, { ...props, days: new Map(), planned: new Map(), actual: null })).toBe(true);
+    expect(
+      sameRow(props, {
+        ...props,
+        days: new Map(),
+        planned: new Map(),
+        workDays: new Set<string>(),
+        actual: null,
+      }),
+    ).toBe(true);
   });
 });

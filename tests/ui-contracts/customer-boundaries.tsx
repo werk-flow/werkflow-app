@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { KundenContent } from '@/components/kunden/kunden-content';
 import { RealtimeProvider } from '@/components/realtime/realtime-provider';
 import { BannerProvider } from '@/components/ui/banner';
-import { clientCreations } from '@/components/kunden/create-client-dialog';
+import { clientCreations, CreateClientDialog } from '@/components/kunden/create-client-dialog';
 import type { Client } from '@/lib/jobs/types';
 
 const organizationId = '10000000-0000-4000-8000-000000000001';
@@ -91,6 +91,18 @@ export function CustomerContractFixture(): React.JSX.Element {
           searchQuery="Kontakt"
         />
       </RealtimeProvider>
+    </BannerProvider>
+  );
+}
+
+/** The create dialog on its own, its save held at the write gate. */
+export function CreateClientContractFixture(): React.JSX.Element {
+  return (
+    <BannerProvider>
+      <main>
+        <h1>Komponentenverträge</h1>
+        <CreateClientDialog />
+      </main>
     </BannerProvider>
   );
 }

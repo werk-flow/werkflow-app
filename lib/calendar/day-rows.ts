@@ -1,5 +1,5 @@
 import { boardDayKey, type CalendarBoardDay, type CalendarBoardRow } from './board';
-import { groupBoardRows, rowOwnsJob } from './board-model';
+import { groupBoardRows, rowOwnsJob, type BoardPeople } from './board-model';
 import {
   DAY_MIN_ITEM_WIDTH,
   DEFAULT_VISIT_MINUTES,
@@ -26,7 +26,7 @@ import { toLocalDateString } from '@/lib/utils';
  */
 
 /** The key of the „Ohne Zuweisung" row; never an employee record id. */
-export const UNASSIGNED_DAY_ROW_KEY = 'unassigned';
+const UNASSIGNED_DAY_ROW_KEY = 'unassigned';
 
 /** A login of the organization as the day view needs it. */
 type DayRowMember = { userId: string; name: string; role: string };
@@ -77,6 +77,8 @@ export type DayRowsInput = {
   organizationSettings: OrganizationTimeTrackingSettings;
   hourWidth: number;
   isManager: boolean;
+  /** Who can work a visit by its date: a visit nobody can work goes to „Ohne Zuweisung". */
+  people: BoardPeople;
 };
 
 type DayRowPerson = Omit<DayRowModel, 'blocks'> & { role: string | undefined };
@@ -93,10 +95,14 @@ export function dayRowFor<Row extends { key: string }>(rows: readonly Row[], key
 }
 
 /** Visits belong to the rows of their assignees by record, as on the board; a login without a board row keeps its user id. */
-export function dayRowOwnsJob(model: Pick<DayRowModel, 'key' | 'userId' | 'row'>, job: CalendarJob): boolean {
-  if (model.row) return rowOwnsJob({ key: model.key, kind: 'person', row: model.row }, job);
+function dayRowOwnsJob(
+  model: Pick<DayRowModel, 'key' | 'userId' | 'row'>,
+  job: CalendarJob,
+  people: BoardPeople,
+): boolean {
+  if (model.row) return rowOwnsJob({ key: model.key, kind: 'person', row: model.row }, job, people);
   if (model.userId) return job.assignedUserIds.includes(model.userId);
-  return rowOwnsJob({ key: UNASSIGNED_DAY_ROW_KEY, kind: 'unassigned', row: null }, job);
+  return rowOwnsJob({ key: UNASSIGNED_DAY_ROW_KEY, kind: 'unassigned', row: null }, job, people);
 }
 
 export function deriveDayRows(input: DayRowsInput): DayRow[] {
@@ -154,7 +160,7 @@ export function deriveDayRows(input: DayRowsInput): DayRow[] {
     buildDayRow(
       input,
       person,
-      dayJobs.filter((job) => dayRowOwnsJob(person, job)),
+      dayJobs.filter((job) => dayRowOwnsJob(person, job, input.people)),
       person.userId ? dayEntries.filter((entry) => entry.userId === person.userId) : [],
     ),
   );
@@ -166,7 +172,7 @@ export function deriveDayRows(input: DayRowsInput): DayRow[] {
     row: null,
     role: undefined,
   };
-  const unassignedJobs = dayJobs.filter((job) => dayRowOwnsJob(unassigned, job));
+  const unassignedJobs = dayJobs.filter((job) => dayRowOwnsJob(unassigned, job, input.people));
   return unassignedJobs.length > 0 ? [buildDayRow(input, unassigned, unassignedJobs, []), ...rows] : rows;
 }
 

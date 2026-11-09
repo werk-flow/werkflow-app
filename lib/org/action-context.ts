@@ -50,14 +50,24 @@ function contextOf(userId: string, orgId: string, role: OrgRole): ActionContext 
 export async function resolveActionContext(): Promise<
   ActionContextResult<'not_authenticated' | 'no_active_org'>
 > {
-  const [user, cookieStore] = await Promise.all([getAuthenticatedUser(), cookies()]);
+  const user = await getAuthenticatedUser();
   if (!user) return { success: false, error: 'not_authenticated' };
+  return resolveActiveContextForUser(user.id);
+}
 
-  const memberships = await getCachedMemberships(user.id);
+/**
+ * A verified user in the active organization, for an entry point that
+ * verified the identity itself: a route handler that also accepts a bearer
+ * access token (lib/field-sync/caller.ts). The organization cookie selects
+ * among the current memberships, as for every other caller.
+ */
+export async function resolveActiveContextForUser(
+  userId: string,
+): Promise<ActionContextResult<'no_active_org'>> {
+  const [memberships, cookieStore] = await Promise.all([getCachedMemberships(userId), cookies()]);
   const membership = selectActiveMembership(memberships, cookieStore.get(CURRENT_ORG_COOKIE)?.value);
   if (!membership) return { success: false, error: 'no_active_org' };
-
-  return { success: true, context: contextOf(user.id, membership.orgId, membership.role) };
+  return { success: true, context: contextOf(userId, membership.orgId, membership.role) };
 }
 
 async function membershipContext(

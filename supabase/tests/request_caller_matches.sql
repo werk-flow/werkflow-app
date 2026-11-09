@@ -1,8 +1,10 @@
 -- The caller of an open, unmatched Anfrage is compared with the customers of
--- the request's organization only: by phone in any common German notation, by
--- email ignoring case, and by name ignoring case and repeated spaces, each on
--- the customer or one of its contacts (migration
--- 20261107200000_promote_caller_with_site_and_find_matches.sql).
+-- the request's organization only, through the customer duplicate matcher
+-- (supabase/tests/client_duplicates.sql owns its reasons): by phone in any
+-- common German notation, by email ignoring case, and by name together with
+-- the postal code of the captured address. A name alone no longer matches
+-- (migrations 20261107200000_promote_caller_with_site_and_find_matches.sql
+-- and 20261128090000_find_client_duplicates.sql).
 begin;
 
 insert into auth.users (
@@ -39,6 +41,11 @@ insert into public.clients (id, organization_id, name, phone, email) values
  'Wohnanlage Süd', null, null),
 ('42000000-0000-0000-0000-000000000029', '42000000-0000-0000-0000-000000000011',
  'Erika Sommer', '030 44 40 123', 'erika.sommer@example.test');
+update public.clients set address = 'Lindenweg 1, 10115 Berlin'
+where id = '42000000-0000-0000-0000-000000000021';
+insert into public.client_sites (organization_id, client_id, name, street, postal_code, city) values
+('42000000-0000-0000-0000-000000000010', '42000000-0000-0000-0000-000000000027',
+ 'Haus Süd', 'Südring 4', '10115', 'Berlin');
 insert into public.client_contacts (organization_id, client_id, name, phone, email) values
 ('42000000-0000-0000-0000-000000000010', '42000000-0000-0000-0000-000000000023',
  'Frau Sommer', '0049 30 444-0123', null),
@@ -47,14 +54,15 @@ insert into public.client_contacts (organization_id, client_id, name, phone, ema
 ('42000000-0000-0000-0000-000000000011', '42000000-0000-0000-0000-000000000029',
  'Fremder Kontakt', '+49 30 4440123', 'erika.sommer@example.test');
 
-insert into public.client_requests (id, organization_id, summary, caller_name, caller_phone, caller_email)
-values
+insert into public.client_requests (
+  id, organization_id, summary, caller_name, caller_phone, caller_email, caller_address
+) values
 ('42000000-0000-0000-0000-000000000040', '42000000-0000-0000-0000-000000000010', 'Heizung kalt',
- 'Erika Sommer', '030 44 40 123', 'Erika.Sommer@Example.test'),
+ 'Erika Sommer', '030 44 40 123', 'Erika.Sommer@Example.test', 'Ahornweg 3, 10115 Berlin'),
 ('42000000-0000-0000-0000-000000000041', '42000000-0000-0000-0000-000000000010', 'Kurze Nummer',
- null, '150', null),
+ null, '150', null, null),
 ('42000000-0000-0000-0000-000000000049', '42000000-0000-0000-0000-000000000011', 'Fremde Anfrage',
- 'Erika Sommer', '030 44 40 123', 'erika.sommer@example.test');
+ 'Erika Sommer', '030 44 40 123', 'erika.sommer@example.test', 'Ahornweg 3, 10115 Berlin');
 insert into public.client_requests (id, organization_id, client_id, summary, caller_name) values
 ('42000000-0000-0000-0000-000000000042', '42000000-0000-0000-0000-000000000010',
  '42000000-0000-0000-0000-000000000021', 'Schon zugeordnet', 'Erika Sommer');
@@ -108,10 +116,9 @@ begin
     '42000000-0000-0000-0000-000000000021:phone,name',
     '42000000-0000-0000-0000-000000000022:email',
     '42000000-0000-0000-0000-000000000023:phone',
-    '42000000-0000-0000-0000-000000000024:name',
     '42000000-0000-0000-0000-000000000027:name'
   ] then
-    raise exception 'the caller matches are not the customers with an equal phone, email or name: %', v_matches;
+    raise exception 'the caller matches are not the customers with an equal phone, email, or name and postal code: %', v_matches;
   end if;
   if exists (
     select 1 from unnest(v_matches) entry where entry like '42000000-0000-0000-0000-000000000029:%'

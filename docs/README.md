@@ -53,6 +53,7 @@ Read the spec you change and the connected specs your change touches. Planned sc
 - [0007](decisions/0007-independent-test-groups.md): independent test groups.
 - [0008](decisions/0008-development-workflow.md): release by push, superseded by 0009.
 - [0009](decisions/0009-pull-requests-and-ci.md): a PR per task, `Check` as the gate.
+- [0010](decisions/0010-offline-field-sync-contract.md): the offline field sync contract, iOS limits.
 
 ## How to work
 

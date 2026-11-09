@@ -101,6 +101,15 @@ const boardRow = z.object({
   teamName: nullableText,
   entryDate: nullableText,
   exitDate: nullableText,
+  accessEndDate: nullableText,
+});
+const boardRowlessAssignee = boardRow.pick({
+  employeeRecordId: true,
+  userId: true,
+  displayName: true,
+  entryDate: true,
+  exitDate: true,
+  accessEndDate: true,
 });
 const boardDay = z.object({
   employeeRecordId: text,
@@ -129,6 +138,7 @@ export const calendarBoardResponseSchema = z.discriminatedUnion('success', [
     days: z.array(boardDay),
     dispatch: z.array(boardDispatch),
     materialDemandJobIds: z.array(text),
+    rowlessAssignees: z.array(boardRowlessAssignee),
   }),
 ]) satisfies z.ZodType<CalendarBoardResult>;
 

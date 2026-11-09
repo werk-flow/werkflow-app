@@ -16,7 +16,8 @@ export type CalendarDragPayload =
       sourceDate: string;
     }
   | { kind: 'parked'; job: CalendarJob }
-  | { kind: 'untimed'; job: CalendarJob; sourceDate: string }
+  /** A card of the day view's „Ohne Uhrzeit" tray, with the key of the row it was taken from. */
+  | { kind: 'untimed'; job: CalendarJob; sourceDate: string; sourceRowKey: string }
   | {
       kind: 'timeBlock';
       session: InteractiveCalendarSession;
