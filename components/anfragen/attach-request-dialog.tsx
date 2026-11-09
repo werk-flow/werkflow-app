@@ -147,13 +147,11 @@ function WorkTargetPicker({
       ) : targets.length === 0 ? (
         searchedQuery ? (
           <EmptyState
-            size="compact"
             title="Keine offene Arbeit gefunden"
             description="Prüf die Schreibweise oder leere die Suche."
           />
         ) : (
           <EmptyState
-            size="compact"
             title="Noch keine offene Arbeit bei diesem Kunden"
             description="Wandle die Anfrage stattdessen in neue Arbeit um."
           />

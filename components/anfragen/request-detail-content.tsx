@@ -108,7 +108,7 @@ function RequestDetailSections({ data, isEditable, ...customerProps }: RequestDe
       {data.documents ? (
         <ContextualDocumentsSection
           title="Dokumente & Bilder"
-          description="Fotos, Nachrichten oder Unterlagen zur Anfrage. Bei einer Umwandlung werden sie automatisch mit dem Auftrag oder Projekt verknüpft."
+          description="Fotos, Nachrichten oder Unterlagen zur Anfrage. Beim Umwandeln oder Hinzufügen zu bestehender Arbeit werden sie automatisch dort mit verknüpft."
           documents={data.documents}
           documentTarget={{ kind: 'request', requestId: request.id }}
           canUpload={isEditable}
