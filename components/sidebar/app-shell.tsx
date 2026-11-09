@@ -205,9 +205,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: (() => void) | undefined 
         </ul>
       </nav>
 
-      <div className="px-4 pb-2">
-        <ProblemReportButton placement="sidebar" />
-      </div>
+      <ProblemReportButton placement="sidebar" />
 
       {/* Profile card */}
       <div className="mt-auto border-t">
