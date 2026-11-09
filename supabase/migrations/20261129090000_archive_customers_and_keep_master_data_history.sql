@@ -50,10 +50,11 @@ create table public.client_master_events (
     references public.clients (id, organization_id) on delete cascade,
   constraint client_master_events_subject_check check (contact_id is null or site_id is null),
   constraint client_master_events_type_check check (event_type in ('changed', 'archived', 'restored')),
+  -- No payload cap: a change keeps an old value whatever its size, so an
+  -- address saved before today's input limit can still be corrected.
   constraint client_master_events_change_check check (
     (event_type = 'changed') = (event_payload ? 'field')
-  ),
-  constraint client_master_events_payload_check check (octet_length(event_payload::text) <= 16384)
+  )
 );
 
 create index client_master_events_client_created_idx

@@ -376,6 +376,25 @@ select pg_temp.expect_refusal('the table owner deleting a history entry',
   $sql$delete from public.client_master_events where client_id = '44000000-0000-0000-0000-000000000020'$sql$,
   'event_ledger_history_immutable');
 
+-- An address saved before today's input limit, longer than any payload cap,
+-- still changes, and its history keeps both complete values.
+insert into public.clients (id, organization_id, name, address) values
+('44000000-0000-0000-0000-000000000024', '44000000-0000-0000-0000-000000000010',
+ 'Alte Adresse', repeat('Lindenweg 1, Hinterhaus, ', 1000));
+do $$
+declare
+  v_long text := repeat('Lindenweg 1, Hinterhaus, ', 1000);
+begin
+  perform public.update_client_master(
+    '44000000-0000-0000-0000-000000000002', '44000000-0000-0000-0000-000000000010',
+    '44000000-0000-0000-0000-000000000024', '{"address": "Lindenweg 1, 10115 Berlin"}');
+  if not exists (select 1 from public.client_master_events event
+    where event.client_id = '44000000-0000-0000-0000-000000000024'
+      and event.event_payload = jsonb_build_object('field', 'address', 'old', v_long, 'new', 'Lindenweg 1, 10115 Berlin'))
+  then raise exception 'a change of an oversized address did not keep both complete values'; end if;
+end;
+$$;
+
 -- Organization teardown still removes linked customers and their history.
 delete from public.organizations where id = '44000000-0000-0000-0000-000000000011';
 delete from public.organizations where id = '44000000-0000-0000-0000-000000000010';

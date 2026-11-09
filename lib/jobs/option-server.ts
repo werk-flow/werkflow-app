@@ -109,7 +109,7 @@ async function loadClientOptions(
 ): Promise<JobOptionResult> {
   const base = () => database.from('clients').select('id,name,email').eq('organization_id', context.orgId);
   const search = filterText(input.query);
-  let query = input.purpose === 'filter' ? base() : base().is('archived_at', null);
+  let query = input.purpose === 'customer-work' ? base().is('archived_at', null) : base();
   if (search) query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%`);
   const [page, selected] = await Promise.all([
     query

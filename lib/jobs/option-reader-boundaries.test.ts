@@ -125,3 +125,21 @@ test("an employee cannot reach a manager's kind or purpose, and no read starts",
     expect(rpcs).toEqual([]);
   }
 });
+
+test('a work picker leaves archived customers out of its pages, a filter and a selection keep them', async () => {
+  caller = { userId: 'manager', orgId: organizationId, role: 'admin', isManagerOrAbove: true };
+  const archivedFilters = async (purpose: 'customer-work' | 'filter') => {
+    calls.length = 0;
+    await readEntityOptions({ organizationId, kind: 'clients', purpose, selectedIds: [foreignRecordId] });
+    return calls.filter(
+      (call) =>
+        call.table === 'clients' &&
+        call.method === 'is' &&
+        call.args[0] === 'archived_at' &&
+        call.args[1] === null,
+    ).length;
+  };
+  // One page query and one read of the selected ids; only the work picker's page drops archived customers.
+  expect(await archivedFilters('customer-work')).toBe(1);
+  expect(await archivedFilters('filter')).toBe(0);
+});
