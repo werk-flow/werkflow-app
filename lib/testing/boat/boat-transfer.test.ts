@@ -3,7 +3,16 @@
 // never thrown away for one reset.
 import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -175,23 +184,37 @@ test('a stalled upload gives way to one fresh request at its deadline, and a sec
   expect(failure instanceof Error && failure.message).toBe('The upload of tree.tgz took longer than 0.1 s.');
 });
 
-test('only the files that differ from HEAD travel, and the checkout they rebuild reads as changed where the workstation does', () => {
+const git = (cwd: string, ...args: string[]) =>
+  execFileSync('git', args, { cwd, env: gitEnvironment(), encoding: 'utf8' });
+
+/** A committed checkout with LF text, as this repository's .gitattributes keeps it, an executable and a link. */
+function committedCheckout(): string {
   const workstation = mkdtempSync(join(tmpdir(), 'boat-tree-'));
-  const git = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, env: gitEnvironment() });
   git(workstation, 'init', '-q');
   mkdirSync(join(workstation, 'lib'));
+  writeFileSync(join(workstation, '.gitattributes'), '* text=auto eol=lf\n');
   for (const name of ['kept', 'changed', 'deleted', 'staged'])
     writeFileSync(join(workstation, `lib/${name}.ts`), `export const name = '${name}';\n`);
+  writeFileSync(join(workstation, 'lib/run.sh'), '#!/bin/sh\n', { mode: 0o755 });
+  symlinkSync('kept.ts', join(workstation, 'lib/link.ts'));
   git(workstation, 'add', '.');
   git(workstation, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'x');
+  return workstation;
+}
+
+const packed = (workstation: string) => treeFiles(workstation, changedSinceHead(workstation));
+
+test('only the files that differ from HEAD travel, and the checkout they rebuild reads as changed where the workstation does', () => {
+  const workstation = committedCheckout();
   writeFileSync(join(workstation, 'lib/changed.ts'), 'export const name = 1;\n');
   writeFileSync(join(workstation, 'lib/staged.ts'), 'export const name = 2;\n');
   git(workstation, 'add', 'lib/staged.ts');
   rmSync(join(workstation, 'lib/deleted.ts'));
   writeFileSync(join(workstation, 'lib/new.ts'), 'export const name = 3;\n');
 
-  const files = treeFiles(workstation);
-  expect(files).toEqual(['lib/changed.ts', 'lib/new.ts', 'lib/staged.ts']);
+  const tree = packed(workstation);
+  expect(tree).toEqual({ files: ['lib/changed.ts', 'lib/new.ts', 'lib/staged.ts'] });
+  const files = 'files' in tree ? tree.files : [];
 
   // The machine clones HEAD, unpacks the packed files over it and removes the deleted ones, as remote-verify.sh does.
   const folder = mkdtempSync(join(tmpdir(), 'boat-pack-'));
@@ -209,4 +232,79 @@ test('only the files that differ from HEAD travel, and the checkout they rebuild
     expect(readFileSync(join(machine, `lib/${name}.ts`), 'utf8')).toBe(
       readFileSync(join(workstation, `lib/${name}.ts`), 'utf8'),
     );
+});
+
+test('a file git reads as unchanged although it differs from HEAD keeps the run off Boat', () => {
+  const hidden = (change: (workstation: string) => void) => {
+    const workstation = committedCheckout();
+    change(workstation);
+    return packed(workstation);
+  };
+  const edit = (workstation: string) =>
+    writeFileSync(join(workstation, 'lib/kept.ts'), 'export const name = 0;\n');
+  // Each of these makes git read lib/kept.ts as unchanged, so the machine would check out HEAD's version.
+  expect(
+    hidden((workstation) => {
+      edit(workstation);
+      git(workstation, 'update-index', '--assume-unchanged', 'lib/kept.ts');
+    }),
+  ).toEqual({ hidden: 'lib/kept.ts' });
+  expect(
+    hidden((workstation) => {
+      edit(workstation);
+      git(workstation, 'update-index', '--skip-worktree', 'lib/kept.ts');
+    }),
+  ).toEqual({ hidden: 'lib/kept.ts' });
+  expect(
+    hidden((workstation) => {
+      git(workstation, 'config', 'core.filemode', 'false');
+      chmodSync(join(workstation, 'lib/kept.ts'), 0o755);
+    }),
+  ).toEqual({ hidden: 'lib/kept.ts' });
+  const crlf = hidden((workstation) =>
+    writeFileSync(join(workstation, 'lib/kept.ts'), "export const name = 'kept';\r\n"),
+  );
+  expect(crlf).toEqual({ hidden: 'lib/kept.ts' });
+  expect(
+    hidden((workstation) => {
+      rmSync(join(workstation, 'lib/link.ts'));
+      symlinkSync('changed.ts', join(workstation, 'lib/link.ts'));
+      git(workstation, 'update-index', '--assume-unchanged', 'lib/link.ts');
+    }),
+  ).toEqual({ hidden: 'lib/link.ts' });
+  // An untouched checkout with an executable and a link packs nothing.
+  expect(packed(committedCheckout())).toEqual({ files: [] });
+});
+
+test('a stalled signing request ends at the attempt deadline and the interruption, not after 60 s', async () => {
+  let signings = 0;
+  const client = boatClient('boat_secret', async (url, init) => {
+    if (!url.endsWith('/files/upload-url')) return new Response(null, { status: 200 });
+    signings++;
+    const signal = init?.signal;
+    if (signings > 1) return Response.json({ url: 'https://box.example/upload' });
+    return new Promise<Response>((_, fail) => signal?.addEventListener('abort', () => fail(signal.reason)));
+  });
+  const lines: string[] = [];
+  await transfer(
+    'The upload of tree.tgz',
+    { waits: [2_000], attemptMs: 100 },
+    { signal: new AbortController().signal, log: (line) => lines.push(line), wait: async () => undefined },
+    (signal) => client.upload('bx_test', '/home/user/tree.tgz', new Uint8Array([1]), signal),
+  );
+  expect(signings).toBe(2);
+  expect(lines).toEqual(['The upload of tree.tgz took longer than 0.1 s; attempt 2 of 2 in 2 s.']);
+
+  // Ctrl-C while Boat has not answered the signing request ends the download at once.
+  const neverSigns = boatClient('boat_secret', async (_url, init) => {
+    const signal = init?.signal;
+    return new Promise<Response>((_, fail) => signal?.addEventListener('abort', () => fail(signal.reason)));
+  });
+  const interrupt = new AbortController();
+  const stalled = neverSigns
+    .download('bx_test', '/home/user/results.tgz', interrupt.signal)
+    .catch((error: unknown) => error);
+  interrupt.abort();
+  const outcome = await stalled;
+  expect(outcome instanceof Error && outcome.name).toBe('AbortError');
 });

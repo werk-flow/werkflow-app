@@ -72,6 +72,8 @@ async function request<T>(
     schema: z.ZodType<T>;
     body?: unknown;
     headers?: Record<string, string>;
+    /** Ends the call early, as a transfer attempt's deadline or the user's interruption does. */
+    signal?: AbortSignal;
   },
 ): Promise<T> {
   const { method, path, body } = call;
@@ -83,7 +85,9 @@ async function request<T>(
       ...call.headers,
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    signal: AbortSignal.timeout(60_000),
+    signal: call.signal
+      ? AbortSignal.any([call.signal, AbortSignal.timeout(60_000)])
+      : AbortSignal.timeout(60_000),
   });
   const json = await responseJson(response);
   if (response.ok) return call.schema.parse(json);
@@ -92,6 +96,23 @@ async function request<T>(
   // Only Boat's status and a code of its known shape reach a message: a provider body is never logged.
   const safeCode = /^[a-z0-9_]{1,64}$/.test(code) ? code : 'unknown';
   throw new BoatError(response.status, safeCode, `${method} ${path}: ${response.status} ${safeCode}`);
+}
+
+/** A fresh signed URL for one file transfer; `signal` ends the request, as it ends the transfer. */
+async function signedUrl(
+  signed: { key: string; fetchImpl: Fetch },
+  endpoint: string,
+  path: string,
+  signal: AbortSignal,
+): Promise<string> {
+  const { url } = await request(signed, {
+    method: 'POST',
+    path: endpoint,
+    schema: fileUrlSchema,
+    body: { path },
+    signal,
+  });
+  return url;
 }
 
 /** A client that signs every request with `key`; `fetchImpl` is a test's stand-in for the network. */
@@ -139,7 +160,7 @@ export function boatClient(key: string, fetchImpl: Fetch = fetch) {
       bytes: Uint8Array,
       signal: AbortSignal = AbortSignal.timeout(600_000),
     ): Promise<void> {
-      const { url } = await call('POST', `/sandboxes/${id}/files/upload-url`, fileUrlSchema, { path });
+      const url = await signedUrl({ key, fetchImpl }, `/sandboxes/${id}/files/upload-url`, path, signal);
       const response = await fetchImpl(url, { method: 'PUT', body: new Blob([bytes.slice()]), signal });
       if (!response.ok)
         throw new BoatError(response.status, 'upload_failed', `upload of ${path}: ${response.status}`);
@@ -150,7 +171,7 @@ export function boatClient(key: string, fetchImpl: Fetch = fetch) {
       path: string,
       signal: AbortSignal = AbortSignal.timeout(600_000),
     ): Promise<Uint8Array> {
-      const { url } = await call('POST', `/sandboxes/${id}/files/download-url`, fileUrlSchema, { path });
+      const url = await signedUrl({ key, fetchImpl }, `/sandboxes/${id}/files/download-url`, path, signal);
       const response = await fetchImpl(url, { signal });
       if (!response.ok)
         throw new BoatError(response.status, 'download_failed', `download of ${path}: ${response.status}`);

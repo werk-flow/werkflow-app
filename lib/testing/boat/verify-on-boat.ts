@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   copyFileSync,
   renameSync,
@@ -9,6 +9,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  readlinkSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -229,11 +230,38 @@ export function changedSinceHead(repository: string): string[] {
 }
 
 /**
- * The files the machine's checkout of HEAD lacks: those that differ from HEAD and still exist.
- * Only they travel; the rest come from the checkout, which costs a slow upload nothing.
+ * The files the machine's checkout of HEAD lacks: those in `changed` that still exist. Only they
+ * travel; the rest come from the checkout, which costs a slow upload nothing. That holds only when
+ * every other tracked file has HEAD's bytes, mode and link target, so a file git reads as unchanged
+ * although it differs (assume-unchanged, skip-worktree, core.filemode=false, a line-ending
+ * conversion) is named instead: the machine would test HEAD's version of it.
  */
-export function treeFiles(repository: string): string[] {
-  return changedSinceHead(repository).filter((file) => existsSync(resolve(repository, file)));
+export function treeFiles(
+  repository: string,
+  changed: readonly string[],
+): { files: string[] } | { hidden: string } {
+  const listed = new Set(changed);
+  const algorithm = git(repository, ['rev-parse', '--show-object-format']).trim();
+  for (const entry of git(repository, ['ls-tree', '-r', '-z', '--full-tree', 'HEAD']).split('\0')) {
+    const [, mode, object, path] = /^(\d+) \w+ ([0-9a-f]+)\t([\s\S]+)$/.exec(entry) ?? [];
+    if (!mode || !object || !path || listed.has(path) || mode === '160000') continue;
+    const file = join(repository, path);
+    let actual: { mode: string; bytes: Buffer };
+    try {
+      const stat = lstatSync(file);
+      actual = stat.isSymbolicLink()
+        ? { mode: '120000', bytes: Buffer.from(readlinkSync(file)) }
+        : { mode: stat.mode & 0o100 ? '100755' : '100644', bytes: readFileSync(file) };
+    } catch {
+      return { hidden: path };
+    }
+    const digest = createHash(algorithm)
+      .update(`blob ${actual.bytes.byteLength}\0`)
+      .update(actual.bytes)
+      .digest('hex');
+    if (actual.mode !== mode || digest !== object) return { hidden: path };
+  }
+  return { files: changed.filter((file) => existsSync(resolve(repository, file))) };
 }
 
 /**
@@ -279,6 +307,12 @@ function packRun(
     return {
       refused: `the untracked file ${secret} may hold a credential or a local setting, which Boat never gets.`,
     };
+  const changed = changedSinceHead(repository);
+  const tree = treeFiles(repository, changed);
+  if ('hidden' in tree)
+    return {
+      refused: `git reads ${tree.hidden} as unchanged, but it differs from HEAD (assume-unchanged, skip-worktree, core.filemode or a line-ending conversion), so the machine would test HEAD's version.`,
+    };
   const environment = resolve(repository, '.env.local');
   const supabaseUrl = existsSync(environment)
     ? parseEnvironmentFile(readFileSync(environment, 'utf8')).NEXT_PUBLIC_SUPABASE_URL
@@ -308,11 +342,11 @@ function packRun(
       },
     );
   };
-  tar('tree', treeFiles(repository));
+  tar('tree', tree.files);
   // Against HEAD's tree, so a staged deletion or rename removes the old path on the machine too.
   const committed = list(['ls-tree', '-r', '-z', '--name-only', 'HEAD']);
   writeFileSync(join(folder, 'deleted.txt'), committed.filter((file) => !exists(file)).join('\n'));
-  writeFileSync(join(folder, 'changed.json'), JSON.stringify(changedSinceHead(repository)));
+  writeFileSync(join(folder, 'changed.json'), JSON.stringify(changed));
   tar('evidence', evidenceFiles(repository));
   return { head, bundle: !pushed };
 }
