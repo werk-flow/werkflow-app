@@ -80,6 +80,7 @@ body{font-family:sans-serif;margin:0;padding:16px} .block{width:40px;height:30px
 </form>
 <div class="scroller" style="height:40px;width:200px;overflow:auto"><div class="scroll-child" style="height:200px;width:2000px">Abbrechen</div><div class="scroll-moved" style="translate:5px 6px;height:10px">x</div></div>
 <div class="spacer" style="height:2000px"></div>
+<div class="pixel-probe" style="position:fixed;left:0;top:0;width:24px;height:24px;background-color:rgb(10, 200, 30)"></div>
 </main></body></html>`;
 
 // A build asset keeps its CSS verbatim; a sheet outside the build gets the style rule.
@@ -346,11 +347,18 @@ test('the redraw draws a PNG of the viewport and loads nothing', async ({ page }
     if (!isScreenshotModule(screenshotModule)) throw new Error('The redraw bundle is incomplete.');
     const blob = await screenshotModule.redrawScreenshot();
     const bitmap = await createImageBitmap(blob);
-    return { type: blob.type, width: bitmap.width, height: bitmap.height, ratio: devicePixelRatio };
+    // The probe is a fixed 24 px block in the top-left corner; sample its centre.
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('The test cannot read the image.');
+    context.drawImage(bitmap, 0, 0);
+    const probe = Array.from(context.getImageData(12 * devicePixelRatio, 12 * devicePixelRatio, 1, 1).data);
+    return { type: blob.type, width: bitmap.width, height: bitmap.height, ratio: devicePixelRatio, probe };
   });
   expect(image.type).toBe('image/png');
   expect(image.width).toBe(900 * image.ratio);
   expect(image.height).toBe(900 * image.ratio);
+  expect(image.probe, 'the image shows the page, not a blank canvas').toEqual([10, 200, 30, 255]);
   const loaded = requests.slice(loadedBefore).filter((path) => !path.startsWith('/redraw/'));
   expect(loaded, 'the redraw fetches no seeded source').toEqual([]);
 });
