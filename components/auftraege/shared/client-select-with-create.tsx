@@ -14,9 +14,7 @@ const lazyCreateClientDialog = lazyDialog<{
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onClientCreated: (client: Client) => void;
-}>(() =>
-  import('@/components/kunden/create-client-dialog').then((mod) => mod.CreateClientDialog),
-);
+}>(() => import('@/components/kunden/create-client-dialog').then((mod) => mod.CreateClientDialog));
 
 /** A customer the page already knows: identity and display fields only. */
 export type ClientSelectItem = Pick<Client, 'id' | 'name'> & Partial<Pick<Client, 'email'>>;
