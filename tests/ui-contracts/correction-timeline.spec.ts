@@ -45,6 +45,9 @@ test('the planned visit prefills the timeline, and another person never inherits
   const to = timeline.getByRole('group', { name: 'Bis' });
   await expect(from).toContainText('07');
   await expect(to).toContainText('15');
+  // The host offers no job names, so the selected job shows its id.
+  const job = timeline.getByRole('combobox', { name: 'Auftrag der Tätigkeit 1' });
+  await expect(job).toContainText('000000000153');
   await check.click();
   await expect(result).toHaveText('1 Tätigkeiten');
 
@@ -53,9 +56,10 @@ test('the planned visit prefills the timeline, and another person never inherits
   // The read shows at the timeline, not only to assistive tech.
   const loading = timeline.getByText('Geplante Einsätze werden geladen …');
   await expect(loading).toBeVisible();
-  // Person B never sees person A's times while B's visits load.
+  // Person B never sees person A's job or times while B's visits load.
   await expect(from).not.toContainText('07');
   await expect(to).not.toContainText('15');
+  await expect(job).not.toContainText('000000000153');
   await check.click();
   await expect(result).toHaveText('unvollständig');
 
@@ -65,6 +69,7 @@ test('the planned visit prefills the timeline, and another person never inherits
   // Nor after B's read failed.
   await expect(from).not.toContainText('07');
   await expect(to).not.toContainText('15');
+  await expect(job).not.toContainText('000000000153');
   await expect(timeline.getByText('Die geplanten Einsätze konnten nicht geladen werden.')).toBeVisible();
   await check.click();
   await expect(result).toHaveText('unvollständig');
