@@ -41,7 +41,7 @@ const SEEDED_SOURCES = [
 const PAGE = `<!doctype html><html lang="de"><head><meta charset="utf-8"><style>
 body{font-family:sans-serif;margin:0;padding:16px} .block{width:40px;height:30px}
 </style>
-<style>.css-record::before{content:"${SEEDED.person}"} .css-image{background-image:url("data:image/png;base64,iVBORw0KGgo=")} .css-var{--seeded:"${SEEDED.street}"}</style>
+<style>.css-record::before{content:"${SEEDED.person}"} .css-image{background-image:url("data:image/png;base64,iVBORw0KGgo=")} .css-var{--seeded:"${SEEDED.street}"} .css-escape{--photo:\\75rl(data:image/gif;base64,R0lGODlhRUNTSEVFVA==);background-image:var(--photo)}</style>
 <link rel="stylesheet" href="/_next/static/css/app.css"><link rel="stylesheet" href="/dynamic/record.css">
 </head><body><main>
 <h1 class="ui-heading">Aufträge</h1>
@@ -62,6 +62,7 @@ body{font-family:sans-serif;margin:0;padding:16px} .block{width:40px;height:30px
 <svg class="svg-text" width="40" height="30"><text x="0" y="20">${SEEDED.street}</text></svg>
 <svg class="svg-image" width="40" height="30"><image href="/maps/lindenallee.png" width="40" height="30"/></svg>
 <svg class="icon" width="24" height="24" viewBox="0 0 24 24"><path d="M4 4L20 20" stroke="currentColor"/></svg>
+<div class="escaped" style="--avatar:\\75rl(data:image/gif;base64,R0lGODlhSU5MSU5F);background-image:var(--avatar)">x</div>
 <div class="background" style="background-image:url('/photos/avatar-erika.png');color:rgb(1, 2, 3)">Abbrechen</div>
 <iframe class="map" src="/maps/embed?q=${SEEDED.street}" title="Karte ${SEEDED.street}"></iframe>
 <form>
@@ -239,6 +240,9 @@ test('style rule: CSS outside the build loses generated text and images, build C
   for (const value of [SEEDED.person, SEEDED.street, SEEDED.company])
     expect(svg, `generated text "${value}" is dropped`).not.toContain(value);
   expect(svg, 'an image in a style element is dropped').not.toContain('data:image/png');
+  expect(svg, 'an escaped url() in a style element is dropped').not.toContain('R0lGODlhRUNTSEVFVA');
+  expect(svg, 'an escaped url() in an inline style is dropped').not.toContain('R0lGODlhSU5MSU5F');
+  expect(svg, 'no escape survives').not.toContain('75rl');
   expect(svg, 'a safe rule of a style element stays').toContain('font-family: sans-serif');
   expect(svg, 'a build style sheet stays verbatim').toContain('font-family: "Geist Probe"');
 });
