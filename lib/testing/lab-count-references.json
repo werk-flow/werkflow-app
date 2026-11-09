@@ -945,8 +945,7 @@
         "echoRenders": { "reference": 0, "tolerance": 0 },
         "actionRoundTrips": { "reference": 1, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
-        "backendRequests": { "reference": 18, "tolerance": 1 },
-        "componentRenders": { "reference": 696, "tolerance": 13 }
+        "backendRequests": { "reference": 18, "tolerance": 1 }
       },
       "payloads": {
         "action:/dashboard": {
@@ -1082,6 +1081,14 @@
           },
           "runKeys": ["2026-11-08T112625699Z-6f644d"],
           "reason": "The dashboard's clock action response lists fewer client chunks now that the app shell no longer imports the Auftraege table, its row menus and their edit forms (AuftraegeTableSkeleton has its own module): about 617 decoded bytes less, rows unchanged."
+        },
+        {
+          "kind": "ungate",
+          "target": "componentRenders",
+          "from": { "reference": 696, "tolerance": 13 },
+          "to": null,
+          "runKeys": ["2026-11-09T222647863Z-a2e761"],
+          "reason": "CI read this count as 623 twice (runs 42494386179 on 2026-11-08 and 42706161239 on 2026-11-09, the second on PR #330, which changes no app code, ten minutes after run 42704658540 read 694 on its base 636f5d44) and as 694 to 696 in the 170 other CI readings since 2026-11-05, with requests, routeRenders, actionRoundTrips and backendRequests equal in every run. A fall of 71 renders with identical requests is React batching on a busy runner, beyond the tolerance of 13, so the count does not repeat on this step (performance.md). Boat run 2026-11-09T222647863Z-a2e761 read 694."
         }
       ]
     },
