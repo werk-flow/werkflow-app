@@ -54,6 +54,10 @@ create table public.problem_reports (
 
 create index problem_reports_reporter_idx
   on public.problem_reports (organization_id, reporter_id, created_at desc);
+-- The account-deletion cascade and the filer's set-null look a report up by these alone.
+create index problem_reports_reporter_id_idx on public.problem_reports (reporter_id);
+create index problem_reports_filed_by_idx on public.problem_reports (filed_by_id)
+  where filed_by_id is not null;
 
 create table public.problem_report_files (
   id uuid primary key,
@@ -75,6 +79,9 @@ create table public.problem_report_files (
 
 create unique index problem_report_files_one_screenshot
   on public.problem_report_files (report_id) where kind = 'screenshot';
+-- The report cascade and the retention run delete a report's files by this key.
+create index problem_report_files_report_idx
+  on public.problem_report_files (report_id, organization_id);
 
 -- The history of a report: status, bucket, assignee and response changes, and
 -- every opening of an original by support. Append-only.
