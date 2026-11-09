@@ -3,20 +3,15 @@
 import { EmptyState } from '@/components/ui/empty-state';
 import { cn } from '@/lib/utils';
 import { WEEKDAY_SHORT, type BoardColumn } from '@/lib/calendar/board-layout';
-import {
-  absenceItems,
-  unavailableAssignees,
-  type BoardAbsenceItem,
-  type BoardRowModel,
-} from '@/lib/calendar/board-model';
+import { absenceItems, type BoardAbsenceItem, type BoardRowModel } from '@/lib/calendar/board-model';
 import { formatRefusalDate } from '@/lib/calendar/messages';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { SicknessCalendarEntry } from '@/lib/sickness/actions';
 import type { VacationCalendarEntry } from '@/lib/vacation/calendar-actions';
 import { useBoardAbsences } from '../board-absences-context';
 import { BarSegment } from '../surface/bar-segment';
-import { CalendarCard, unavailableAssigneeChips } from '../surface/calendar-card';
-import { boardCardAlert, boardCardChips } from './board-row-card';
+import { CalendarCard, unavailableAssigneeWarnings } from '../surface/calendar-card';
+import { boardCardChips } from './board-row-card';
 import type { CalendarSurfaceActions } from './types';
 
 type DispatchByRecipient = ReadonlyMap<
@@ -130,18 +125,18 @@ function PhoneBoardDay({
       ) : (
         visits.map(({ job, model }) => {
           const recordId = model.kind === 'person' ? model.row.employeeRecordId : null;
-          const unavailable = unavailableAssigneeChips(unavailableAssignees(job, people));
+          const warnings = unavailableAssigneeWarnings(job, people);
           return (
             <CalendarCard
               key={`${model.key}:${job.id}`}
               job={job}
               size="board"
               chips={boardCardChips(job, {
-                unavailable,
+                unavailable: warnings.chips,
                 dispatchState: dispatch.get(`${job.occurrenceId}:${recordId}`) ?? 'nicht_gesendet',
                 materialDemand: materialDemandJobIds.has(job.jobId ?? ''),
               })}
-              alert={boardCardAlert(unavailable)}
+              alert={warnings.alert}
               className="min-h-11 w-full"
               onOpen={(element) =>
                 actions.onOpenCard(job, element, model.kind === 'person' ? model.row : null)

@@ -2,7 +2,6 @@
 
 import { memo } from 'react';
 import { isNoteEntry, type CalendarBoardRow, type CalendarDispatchState } from '@/lib/calendar/board';
-import { unavailableAssignees } from '@/lib/calendar/board-model';
 import type { CalendarJob } from '@/lib/jobs/types';
 import { useBoardAbsences } from '../board-absences-context';
 import type { DragSession } from '../drag-engine/drag-engine';
@@ -10,7 +9,7 @@ import {
   CalendarCard,
   dispatchChip,
   readinessChips,
-  unavailableAssigneeChips,
+  unavailableAssigneeWarnings,
   type CalendarCardChip,
 } from '../surface/calendar-card';
 import type { CalendarSurfaceActions } from './types';
@@ -61,10 +60,6 @@ export function boardCardChips(
 }
 
 /** The card's warning sentence for assistive technology and the one-line icon; undefined without one. */
-export function boardCardAlert(unavailable: readonly CalendarCardChip[]): string | undefined {
-  return unavailable.length > 0 ? unavailable.map((chip) => chip.label).join(', ') : undefined;
-}
-
 /** The grid placement of a lane item: its first column after the name column, its column count and its lane. */
 export function boardLaneStyle({ column, span, lane }: { column: number; span: number; lane: number }) {
   return { gridColumn: `${column + 2} / span ${span}`, gridRow: lane + 1 } as const;
@@ -138,8 +133,8 @@ export const BoardRowCard = memo(function BoardRowCard(props: BoardRowCardProps)
   const { job, startDate, row, dispatchState, materialDemand, compact, locked, actions, startDrag } = props;
   const { hovered, onHoverLink } = props;
   const { people } = useBoardAbsences();
-  const unavailable = unavailableAssigneeChips(unavailableAssignees(job, people));
-  const chips = boardCardChips(job, { unavailable, dispatchState, materialDemand });
+  const warnings = unavailableAssigneeWarnings(job, people);
+  const chips = boardCardChips(job, { unavailable: warnings.chips, dispatchState, materialDemand });
   const linked = hovered && (job.assignedEmployeeRecordIds?.length ?? 0) > 1;
   const draggable = actions.isManager && !locked;
   const allDay = !job.plannedTime;
@@ -153,7 +148,7 @@ export const BoardRowCard = memo(function BoardRowCard(props: BoardRowCardProps)
         linked={linked}
         draggable={draggable}
         locked={locked}
-        alert={boardCardAlert(unavailable)}
+        alert={warnings.alert}
         className="h-full w-full"
         {...(row ? { 'data-employee-record-id': row.employeeRecordId } : {})}
         onHoverLink={onHoverLink}

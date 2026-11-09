@@ -222,3 +222,17 @@ test('the phone day list exposes short activities and visits without a cropped t
   ).toBe(true);
   expect(await writeCount(page)).toBe(0);
 });
+
+test('every day card names a person who left, on the timeline, in the all-day tray and on a phone', async ({
+  page,
+}) => {
+  const left = 'Ausgeschieden: Erik Lindner';
+  await page.getByRole('button', { name: 'Mit Ausgeschiedenem', exact: true }).click();
+  // The timed card shows the warning; the compact all-day card says it in its name.
+  await expect(card(page, 'Heizung zu zweit am Tag')).toContainText(left);
+  await expect(card(page, 'Baustelle zu zweit ganztägig')).toHaveAccessibleName(new RegExp(`${left}$`));
+
+  await page.getByRole('button', { name: 'Telefonansicht', exact: true }).click();
+  await expect(card(page, 'Heizung zu zweit am Tag')).toContainText(left);
+  await expect(card(page, 'Baustelle zu zweit ganztägig')).toContainText(left);
+});

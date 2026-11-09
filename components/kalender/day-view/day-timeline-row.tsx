@@ -13,7 +13,8 @@ import { cn } from '@/lib/utils';
 import type { DayRow } from '@/lib/calendar/day-rows';
 import type { CalendarSurfaceActions } from '../board/types';
 import type { useCalendarDrag } from '../drag-engine/drag-engine';
-import { CalendarCard } from '../surface/calendar-card';
+import { useBoardAbsences } from '../board-absences-context';
+import { CalendarCard, unavailableAssigneeWarnings } from '../surface/calendar-card';
 import { CALENDAR_LAYER_CLASS } from '../surface/layers';
 import { DayLaneItem } from './day-lane-item';
 import type { useDayCreateDrag } from './use-day-create-drag';
@@ -179,6 +180,7 @@ function DayUntimedTray({
   startDrag,
 }: DayTimelineProps & { row: DayRow }): React.JSX.Element {
   const { model, untimed } = row;
+  const { people } = useBoardAbsences();
   return (
     // The tray sticks beside the sticky name column, not under it: the day
     // opens scrolled to the working hours, and at left 0 the name column
@@ -194,6 +196,7 @@ function DayUntimedTray({
           job={job}
           size="day"
           compact
+          alert={unavailableAssigneeWarnings(job, people).alert}
           draggable={draggable}
           locked={isStartedOccurrence(job, nowTick)}
           className="h-6 max-w-56 shrink-0"

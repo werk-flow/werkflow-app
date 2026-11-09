@@ -12,7 +12,12 @@ import {
 import { PLANNING_OCCURRENCE_STATUS_LABELS } from '@/lib/planning/types';
 import type { CalendarJob } from '@/lib/jobs/types';
 import { MATERIAL_UNRESERVED_LABEL } from '@/lib/dispatch/readiness';
-import { unavailabilityLabel, type UnavailableAssignee } from '@/lib/calendar/board-model';
+import {
+  unavailabilityLabel,
+  unavailableAssignees,
+  type BoardPeople,
+  type UnavailableAssignee,
+} from '@/lib/calendar/board-model';
 
 /**
  * The one card anatomy (P1-24a, criterion 4 and the design direction): a
@@ -56,11 +61,24 @@ export function readinessChips(hasMaterialDemand: boolean): CalendarCardChip[] {
 }
 
 /** One warning per assignee who cannot work the visit by its date: „Ausgeschieden: Erik Lindner“. */
-export function unavailableAssigneeChips(assignees: readonly UnavailableAssignee[]): CalendarCardChip[] {
+function unavailableAssigneeChips(assignees: readonly UnavailableAssignee[]): CalendarCardChip[] {
   return assignees.map((assignee) => ({
     label: `${unavailabilityLabel(assignee.reason)}: ${assignee.name}`,
     tone: 'warning',
   }));
+}
+
+/**
+ * A card's warnings for its assignees who cannot work the visit: the chips a
+ * card shows, and the alert a compact card says instead. Board, phone board
+ * and day view take them from here.
+ */
+export function unavailableAssigneeWarnings(
+  job: CalendarJob,
+  people: BoardPeople,
+): { chips: CalendarCardChip[]; alert: string | undefined } {
+  const chips = unavailableAssigneeChips(unavailableAssignees(job, people));
+  return { chips, alert: chips.length > 0 ? chips.map((chip) => chip.label).join(', ') : undefined };
 }
 
 function isInactiveOccurrence(job: Pick<CalendarJob, 'occurrenceStatus'>): boolean {

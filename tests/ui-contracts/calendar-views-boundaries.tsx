@@ -506,8 +506,47 @@ export function CalendarBoardContractFixture(): React.JSX.Element {
   );
 }
 
+/** The day after Erik Lindner's exit: he has no row, and two shared visits still name him. */
+const dayLeaverJobs = [
+  visit(
+    'Heizung zu zweit am Tag',
+    'o-day-shared',
+    '2026-09-08',
+    '10:00',
+    ['r-erik', 'r2'],
+    ['worker-erik', 'worker-2'],
+  ),
+  visit(
+    'Baustelle zu zweit ganztägig',
+    'o-day-all-day',
+    '2026-09-08',
+    null,
+    ['r-erik', 'r2'],
+    ['worker-erik', 'worker-2'],
+  ),
+];
+
+function dayBoard(withLeaver: boolean): CalendarBoardContext {
+  const board = boardFor(['2026-09-08']);
+  if (!withLeaver) return board;
+  return {
+    ...board,
+    rowlessAssignees: [
+      {
+        employeeRecordId: leaver.employeeRecordId,
+        userId: leaver.userId,
+        displayName: leaver.displayName,
+        entryDate: leaver.entryDate,
+        exitDate: '2026-09-04',
+        accessEndDate: '2026-09-05',
+      },
+    ],
+  };
+}
+
 export function CalendarDayContractFixture(): React.JSX.Element {
   const [phone, setPhone] = useState(false);
+  const [withLeaver, setWithLeaver] = useState(false);
   const shortEntries: TimeEntry[] = [0, 2].map((minute, index) => {
     const timestamp = `2026-09-08T05:0${minute}:00.000Z`;
     return {
@@ -535,13 +574,18 @@ export function CalendarDayContractFixture(): React.JSX.Element {
       estimatedDurationMinutes: 2,
     },
     visit('Ganztägige Baustelle', 'all-day-visit', '2026-09-08', null, ['r2'], ['worker-2']),
+    ...(withLeaver ? dayLeaverJobs : []),
   ];
   return (
     <Providers>
       <button type="button" onClick={() => setPhone(!phone)}>
         Telefonansicht
       </button>
+      <button type="button" onClick={() => setWithLeaver(true)}>
+        Mit Ausgeschiedenem
+      </button>
       <ViewHarness
+        key={String(withLeaver)}
         jobs={dayJobs}
         entries={[
           ...shortEntries,
@@ -552,35 +596,37 @@ export function CalendarDayContractFixture(): React.JSX.Element {
             status: 'pending' as const,
           })),
         ]}
-        board={boardFor(['2026-09-08'])}
+        board={dayBoard(withLeaver)}
         needed={getCalendarFetchRange(weekAnchor, 'day')}
       >
         {({ jobs, entries, board, mutations, actions, scroller }) => (
-          <DayView
-            phone={phone}
-            date={weekAnchor}
-            todayIso="2026-09-08"
-            zoom={1}
-            onZoomChange={() => {}}
-            entries={entries}
-            jobs={jobs}
-            members={members}
-            board={board}
-            holidays={holidays}
-            organizationSettings={settings}
-            currentUserId="manager"
-            currentUserRole="admin"
-            changeRequestMap={{}}
-            mutations={mutations}
-            actions={actions}
-            parkingContexts={new Map()}
-            onParkedContextMissing={() => {}}
-            onSessionClick={() => {
-              window.calendarViewContract.opened.push('Arbeitszeit');
-            }}
-            highlightMemberId={null}
-            verticalScroller={scroller}
-          />
+          <WithBoardAbsences board={board}>
+            <DayView
+              phone={phone}
+              date={weekAnchor}
+              todayIso="2026-09-08"
+              zoom={1}
+              onZoomChange={() => {}}
+              entries={entries}
+              jobs={jobs}
+              members={members}
+              board={board}
+              holidays={holidays}
+              organizationSettings={settings}
+              currentUserId="manager"
+              currentUserRole="admin"
+              changeRequestMap={{}}
+              mutations={mutations}
+              actions={actions}
+              parkingContexts={new Map()}
+              onParkedContextMissing={() => {}}
+              onSessionClick={() => {
+                window.calendarViewContract.opened.push('Arbeitszeit');
+              }}
+              highlightMemberId={null}
+              verticalScroller={scroller}
+            />
+          </WithBoardAbsences>
         )}
       </ViewHarness>
     </Providers>
