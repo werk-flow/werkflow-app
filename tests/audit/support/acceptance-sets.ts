@@ -21,7 +21,12 @@ type CaptureView =
   | { kind: 'dialog'; opener: DialogOpenerId };
 
 /** A seeded record a capture opens instead of its route's layout record (acceptance-records.ts). */
-export type AcceptanceRecord = 'caller-match-request' | 'promoted-caller-request' | 'office-task-backlog';
+export type AcceptanceRecord =
+  | 'caller-match-request'
+  | 'promoted-caller-request'
+  | 'office-task-backlog'
+  | 'archived-customer'
+  | 'archived-customer-list';
 
 export type CaptureSpec = {
   /** Unique within its set; part of the image name and the citation token. */
@@ -498,6 +503,56 @@ function organizationExportCaptures(): AcceptanceSet {
   };
 }
 
+/**
+ * werk-flow/werkflow-planning#325 of 2026-11-09: the list's view select, the
+ * archive and delete dialogs, the archived customer list, and an archived
+ * customer's notice and master-data entries in the chronology.
+ */
+function customerArchiveCaptures(): AcceptanceSet {
+  const both = { role: 'buero', widths: [1280, 375], schemes: ['light', 'dark'] } as const;
+  return {
+    id: 'customer-archive-2026-11-09',
+    captures: [
+      { id: 'buero-kunden', route: '/kunden', view: { kind: 'page' }, ...both },
+      {
+        id: 'buero-kunden-dialog-customers-list-archive',
+        route: '/kunden',
+        view: { kind: 'dialog', opener: 'customers.list-archive' },
+        ...both,
+      },
+      {
+        id: 'buero-kunden-clientId-dialog-customers-delete',
+        route: '/kunden/[clientId]',
+        view: { kind: 'dialog', opener: 'customers.delete' },
+        ...both,
+      },
+      {
+        id: 'buero-kunden-archiviert',
+        route: '/kunden',
+        view: { kind: 'page' },
+        record: 'archived-customer-list',
+        ...both,
+      },
+      {
+        id: 'buero-kunde-archiviert',
+        route: '/kunden/[clientId]',
+        view: { kind: 'page' },
+        record: 'archived-customer',
+        ...both,
+      },
+      {
+        id: 'buero-kunde-archiviert-verlauf',
+        route: '/kunden/[clientId]',
+        view: { kind: 'page' },
+        record: 'archived-customer',
+        reveal: 'Stammdaten geändert',
+        ...both,
+      },
+    ],
+    standalone: [],
+  };
+}
+
 export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   uiRoundCaptures(),
   fieldTargetCaptures(),
@@ -515,4 +570,5 @@ export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   taskOrderCaptures(),
   addTimeCaptures(),
   organizationExportCaptures(),
+  customerArchiveCaptures(),
 ];

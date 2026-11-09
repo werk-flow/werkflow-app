@@ -86,6 +86,7 @@ export function ClientActionsMenu({ client, isBusy = false, actions }: ClientAct
 
       <ClientRemovalDialog
         client={client}
+        isArchived={actions.isArchivedView}
         removal={removal}
         onClose={() => setRemoval(null)}
         onRemoved={async (done) => {

@@ -327,6 +327,41 @@ begin
 end;
 $$;
 
+-- Deleting a contact or site keeps its history: the delete refuses while
+-- history exists (a contact or site is archived instead).
+select pg_temp.expect_refusal('deleting a contact with history',
+  $sql$delete from public.client_contacts where id = '44000000-0000-0000-0000-000000000030'$sql$,
+  'update or delete on table "client_contacts" violates foreign key constraint "client_master_events_contact_id_fkey" on table "client_master_events"');
+select pg_temp.expect_refusal('deleting a site with history',
+  $sql$delete from public.client_sites where id = '44000000-0000-0000-0000-000000000040'$sql$,
+  'update or delete on table "client_sites" violates foreign key constraint "client_master_events_site_id_fkey" on table "client_master_events"');
+
+-- An unlinked customer whose contact and site have history is still deleted
+-- with them and their history.
+do $$
+declare
+  v_result jsonb;
+begin
+  insert into public.clients (id, organization_id, name) values
+  ('44000000-0000-0000-0000-000000000024', '44000000-0000-0000-0000-000000000010', 'Doppelt angelegt');
+  insert into public.client_contacts (id, organization_id, client_id, name) values
+  ('44000000-0000-0000-0000-000000000032', '44000000-0000-0000-0000-000000000010',
+   '44000000-0000-0000-0000-000000000024', 'Tippfehler');
+  insert into public.client_sites (id, organization_id, client_id, name) values
+  ('44000000-0000-0000-0000-000000000042', '44000000-0000-0000-0000-000000000010',
+   '44000000-0000-0000-0000-000000000024', 'Tippfehler');
+  perform public.update_client_contact('44000000-0000-0000-0000-000000000002',
+    '44000000-0000-0000-0000-000000000010', '44000000-0000-0000-0000-000000000032', '{"name": "Korrigiert"}');
+  perform public.update_client_site('44000000-0000-0000-0000-000000000002',
+    '44000000-0000-0000-0000-000000000010', '44000000-0000-0000-0000-000000000042', '{"name": "Korrigiert"}');
+  v_result := public.delete_unlinked_client('44000000-0000-0000-0000-000000000002',
+    '44000000-0000-0000-0000-000000000010', '44000000-0000-0000-0000-000000000024');
+  if v_result ->> 'deleted' <> 'true'
+    or exists (select 1 from public.client_master_events where client_id = '44000000-0000-0000-0000-000000000024')
+  then raise exception 'an unlinked customer with contact and site history was not deleted: %', v_result; end if;
+end;
+$$;
+
 -- The history is append-only for every role.
 select pg_temp.expect_refusal('rewriting a history entry',
   $sql$update public.client_master_events set event_payload = '{"field": "name"}'

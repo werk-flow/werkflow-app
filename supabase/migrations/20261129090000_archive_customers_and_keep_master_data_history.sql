@@ -34,9 +34,12 @@ create table public.client_master_events (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations (id) on delete cascade,
   client_id uuid not null,
-  -- Set when the event concerns a contact or a site of the customer.
-  contact_id uuid references public.client_contacts (id) on delete cascade,
-  site_id uuid references public.client_sites (id) on delete cascade,
+  -- Set when the event concerns a contact or a site of the customer. No
+  -- cascade: deleting a contact or site with history refuses at the end of
+  -- the statement, while the customer's own deletion removes both in one
+  -- statement through client_id.
+  contact_id uuid references public.client_contacts (id),
+  site_id uuid references public.client_sites (id),
   event_type text not null,
   -- A change: {"field": <column>, "old": <text or null>, "new": <text or null>}.
   event_payload jsonb not null default '{}'::jsonb,

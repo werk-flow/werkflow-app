@@ -59,15 +59,22 @@ function RemovalDescription({
   clientName,
   removal,
   refusedLinks,
+  isArchived,
 }: {
   clientName: string;
   removal: ClientRemoval;
   refusedLinks: ClientLinks | null;
+  isArchived: boolean;
 }) {
   const name = <span className="font-medium">{clientName}</span>;
   return (
     <AlertDialogDescription>
-      {refusedLinks ? (
+      {refusedLinks && isArchived ? (
+        <>
+          {name} bleibt erhalten, denn damit verknüpft sind: {describeLinks(refusedLinks)}. Der Kunde ist
+          bereits archiviert.
+        </>
+      ) : refusedLinks ? (
         <>
           {name} bleibt erhalten, denn damit verknüpft sind: {describeLinks(refusedLinks)}. Archiviere den
           Kunden stattdessen. {ARCHIVE_EFFECT}
@@ -87,8 +94,55 @@ function RemovalDescription({
   );
 }
 
+/** The confirming action, or only „Schließen“ once nothing is left to do. */
+function RemovalFooter({
+  removal,
+  isFinal,
+  isPending,
+  error,
+  onConfirm,
+}: {
+  removal: ClientRemoval;
+  isFinal: boolean;
+  isPending: boolean;
+  error: string | null;
+  onConfirm: () => void;
+}) {
+  if (isFinal)
+    return (
+      <AlertDialogFooter error={error}>
+        <AlertDialogCancel>Schließen</AlertDialogCancel>
+      </AlertDialogFooter>
+    );
+  const label =
+    removal === 'delete'
+      ? isPending
+        ? 'Wird gelöscht…'
+        : 'Löschen'
+      : isPending
+        ? 'Wird archiviert…'
+        : 'Archivieren';
+  return (
+    <AlertDialogFooter error={error}>
+      <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+      <AlertDialogAction
+        onClick={(event) => {
+          event.preventDefault();
+          onConfirm();
+        }}
+        pending={isPending}
+        variant={removal === 'delete' ? 'destructive' : 'default'}
+      >
+        {label}
+      </AlertDialogAction>
+    </AlertDialogFooter>
+  );
+}
+
 interface ClientRemovalDialogProps {
   client: { id: string; name: string };
+  /** An archived customer kept by a refused deletion is offered no second archiving. */
+  isArchived: boolean;
   /** The removal the menu asked for; null while the dialog is closed. */
   removal: ClientRemoval | null;
   onClose: () => void;
@@ -104,16 +158,25 @@ interface ClientRemovalDialogProps {
  * server keeps the customer because something links to it, the dialog names
  * those links and offers archiving instead.
  */
-export function ClientRemovalDialog({ client, removal, onClose, onRemoved }: ClientRemovalDialogProps) {
+export function ClientRemovalDialog({
+  client,
+  isArchived,
+  removal,
+  onClose,
+  onRemoved,
+}: ClientRemovalDialogProps) {
   const { run, isPending } = usePendingTask();
   const [refusedLinks, setRefusedLinks] = useState<ClientLinks | null>(null);
   const [error, setError] = useState<string | null>(null);
   const shown: ClientRemoval = refusedLinks ? 'archive' : (removal ?? 'archive');
-  const title = refusedLinks
-    ? 'Archivieren statt löschen?'
-    : shown === 'delete'
-      ? 'Kunde löschen?'
-      : 'Kunde archivieren?';
+  const isFinal = refusedLinks !== null && isArchived;
+  const title = isFinal
+    ? 'Kunde bleibt erhalten'
+    : refusedLinks
+      ? 'Archivieren statt löschen?'
+      : shown === 'delete'
+        ? 'Kunde löschen?'
+        : 'Kunde archivieren?';
 
   const close = () => {
     setRefusedLinks(null);
@@ -155,27 +218,20 @@ export function ClientRemovalDialog({ client, removal, onClose, onRemoved }: Cli
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
-          <RemovalDescription clientName={client.name} removal={shown} refusedLinks={refusedLinks} />
+          <RemovalDescription
+            clientName={client.name}
+            removal={shown}
+            refusedLinks={refusedLinks}
+            isArchived={isArchived}
+          />
         </AlertDialogHeader>
-        <AlertDialogFooter error={error}>
-          <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={(event) => {
-              event.preventDefault();
-              void confirm();
-            }}
-            pending={isPending}
-            variant={shown === 'delete' ? 'destructive' : 'default'}
-          >
-            {shown === 'delete'
-              ? isPending
-                ? 'Wird gelöscht…'
-                : 'Löschen'
-              : isPending
-                ? 'Wird archiviert…'
-                : 'Archivieren'}
-          </AlertDialogAction>
-        </AlertDialogFooter>
+        <RemovalFooter
+          removal={shown}
+          isFinal={isFinal}
+          isPending={isPending}
+          error={error}
+          onConfirm={() => void confirm()}
+        />
       </AlertDialogContent>
     </AlertDialog>
   );

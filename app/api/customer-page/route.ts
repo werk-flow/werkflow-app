@@ -9,9 +9,13 @@ const headers = { 'Cache-Control': 'private, no-store' };
 export async function GET(request: Request): Promise<NextResponse> {
   try {
     const query = new URL(request.url).searchParams;
-    const keys = ['organizationId', 'page', 'search', 'view'];
+    const keys = ['organizationId', 'page', 'search'];
     const input = customerPageInputSchema.safeParse(Object.fromEntries(query));
-    if (!input.success || keys.some((key) => query.getAll(key).length !== 1)) {
+    if (
+      !input.success ||
+      keys.some((key) => query.getAll(key).length !== 1) ||
+      query.getAll('view').length > 1
+    ) {
       return NextResponse.json({ error: 'invalid_input' }, { status: 400, headers });
     }
     return await withReadRequest(request, async () => {

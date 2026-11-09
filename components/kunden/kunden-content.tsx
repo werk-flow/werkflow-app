@@ -152,11 +152,16 @@ function useKundenOptimisticClients(
         rollback(tempId);
         return;
       }
+      // The archived view never inserted the new, active customer.
+      if (!showsCreations) {
+        void refresh();
+        return;
+      }
       confirmedCreations.current.add(client.id);
       commit(tempId, client);
       void refresh();
     },
-    [commit, refresh, organizationId, rollback, confirmedCreations],
+    [commit, refresh, organizationId, rollback, confirmedCreations, showsCreations],
   );
   const rollbackCreation = useCallback(
     (tempId: string) => {

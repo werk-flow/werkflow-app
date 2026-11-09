@@ -11,7 +11,8 @@ export const customerPageInputSchema = z.object({
   organizationId: uuidSchema,
   page: z.coerce.number().int().min(1).max(1_000_000),
   search: z.string().trim().max(250),
-  view: customerListViewSchema,
+  // An open tab of the previous release asks without a view.
+  view: customerListViewSchema.default('aktiv'),
 });
 export type CustomerPageInput = z.infer<typeof customerPageInputSchema>;
 

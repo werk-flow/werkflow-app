@@ -132,6 +132,7 @@ export function KundenDetailContent({
 
       <ClientRemovalDialog
         client={client}
+        isArchived={archivedAt !== null}
         removal={removal.removal}
         onClose={removal.closeRemoval}
         onRemoved={removal.onRemoved}

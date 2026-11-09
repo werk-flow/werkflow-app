@@ -151,7 +151,7 @@ for (const input of [
   new Request(request().url.replace('page=2', 'page=0')),
   new Request(request().url.replace('page=2', 'page=1.5')),
   request(organizationId, 'alle'),
-  new Request(request().url.replace('&view=aktiv', '')),
+  new Request(`${request().url}&view=archiviert`),
 ])
   await check(input, 400);
 assert.equal(protectedReads, 0, 'invalid or unauthorized requests cannot reach protected rows');
@@ -191,6 +191,8 @@ malformedRows = false;
 foreignRows = true;
 await check(request(), 500);
 foreignRows = false;
+// An open tab of the previous release asks without a view and gets the active list.
+assert.deepEqual(await check(new Request(request().url.replace('&view=aktiv', '')), 200), expectedPage);
 archivedView = true;
 assert.deepEqual(await check(request(organizationId, 'archiviert'), 200), expectedPage);
 archivedView = false;
