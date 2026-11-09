@@ -2,18 +2,24 @@
 -- (docs/technical/performance.md, "Database work of a hot read").
 --
 -- Two organizations hold the same current work: active jobs, open projects, one week of visits and
--- time, pending approvals. The large one then gains a year of closed history and ten times the
+-- time, pending approvals. The large one also holds a year of closed history and ten times the
 -- customers. Each hot read runs in its app call shape as service_role, the role of the admin client
--- the readers use. The transaction's own statistics counters (pg_stat_get_xact_*) give the rows a
--- read touched per table: heap rows sequential scans read plus index entries index scans returned.
+-- the readers use, for the small organization and right after for the large one. The transaction's
+-- own statistics counters (pg_stat_get_xact_*) give the rows a read touched per table: heap rows
+-- sequential scans read plus index entries index scans returned.
 -- - The history may add touched rows only to a read that history_reads below names.
--- - The small organization's reads touch the same rows before and after the large one gains its
---   history, so a read that loses its organization bound fails.
 -- - enable_seqscan is off: a sequential scan means that no index serves the predicate.
--- The planner keeps the stack's statistics: an ANALYZE of this seed flipped the Aufträge plan
--- between runs on identical rows. Every run takes fresh ids, so no dead index entry of an earlier
--- rolled-back run shares a measured key range, and each read runs once before its measured run.
+-- The comparison holds for whichever plan the planner picks, as long as both organizations get the
+-- same one. Neither organization id is in the statistics, so both get the same estimates, and the
+-- measured tables stay locked against autovacuum and ANALYZE, so the statistics cannot change
+-- between the two runs. Merge joins are off: one walks an index in key order and stops at a point
+-- among other organizations' keys, so it touched a random number of rows. Every run takes fresh ids,
+-- so no dead index entry of an earlier rolled-back run shares a measured key range, and each read
+-- runs once before its measured run.
 begin;
+-- Autovacuum and ANALYZE need this lock too, so the statistics stay as they are until the rollback.
+lock table public.clients, public.projects, public.jobs, public.job_assignments, public.documents,
+  public.time_entries, public.planning_occurrences in share update exclusive mode;
 create temp table hot_ids as select gen_random_uuid() run, gen_random_uuid() owner,
   gen_random_uuid() large_org, gen_random_uuid() small_org, gen_random_uuid() large_worker, gen_random_uuid() small_worker;
 grant select on hot_ids to service_role;
@@ -37,18 +43,16 @@ insert into public.organization_members(organization_id,user_id,role)
 select pg_temp.org(o),pg_temp.worker(o),'employee' from generate_series(1,2) o;
 reset role;
 
--- The current work exists in both organizations; the closed history (p_history) only in the large one.
-create function pg_temp.seeds(p_organization integer, p_current boolean, p_history boolean) returns boolean
-language sql immutable as $$ select case when p_history then p_organization = 1 and not p_current else p_current end $$;
-create function pg_temp.seed(p_history boolean) returns void language sql as $$
+-- The current work exists in both organizations; the closed history (o=1 only) in the large one.
+create function pg_temp.seed() returns void language sql as $$
   insert into public.clients(id,organization_id,name)
   select pg_temp.id('client',o,c),pg_temp.org(o),'Kunde '||c
-  from generate_series(1,2) o, generate_series(1,1000) c where pg_temp.seeds(o, c<=100, p_history);
+  from generate_series(1,2) o, generate_series(1,1000) c where (o=1 or c<=100);
   -- Projects 1 and 2 are open; the history's projects were handed over.
   insert into public.projects(id,organization_id,name,project_number,created_by,execution_state_override)
   select pg_temp.id('project',o,p),pg_temp.org(o),'Projekt '||p,'HP'||o||'-'||p,owner,
     case when p>2 then 'handed_over'::public.work_execution_state end
-  from hot_ids, generate_series(1,2) o, generate_series(1,100) p where pg_temp.seeds(o, p<=2, p_history);
+  from hot_ids, generate_series(1,2) o, generate_series(1,100) p where (o=1 or p<=2);
   -- Jobs 1 to 200 belong to the first 20 projects, ten each; jobs above 1900 are active, the others finished.
   insert into public.jobs(id,organization_id,title,job_number,created_by,client_id,project_id,status,execution_state,created_at)
   select pg_temp.id('job',o,j),pg_temp.org(o),'Auftrag '||j,'HJ'||o||'-'||j,owner,pg_temp.id('client',o,j%100+1),
@@ -56,30 +60,30 @@ create function pg_temp.seed(p_history boolean) returns void language sql as $$
     case when j>1900 then 'nicht_bearbeitet'::public.job_status else 'fertig' end,
     case when j>1900 then 'not_started'::public.work_execution_state else 'handed_over' end,
     '2025-11-01T08:00:00Z'::timestamptz+j*interval '4 hours'
-  from hot_ids, generate_series(1,2) o, generate_series(1,2000) j where pg_temp.seeds(o, j<=20 or j>1900, p_history);
+  from hot_ids, generate_series(1,2) o, generate_series(1,2000) j where (o=1 or j<=20 or j>1900);
   insert into public.job_assignments(organization_id,job_id,user_id,assigned_by)
   select pg_temp.org(o),pg_temp.id('job',o,j),pg_temp.worker(o),owner
-  from hot_ids, generate_series(1,2) o, generate_series(10,2000,10) j where pg_temp.seeds(o, j<=20 or j>1900, p_history);
+  from hot_ids, generate_series(1,2) o, generate_series(10,2000,10) j where (o=1 or j<=20 or j>1900);
   insert into public.documents(organization_id,storage_path,original_file_name,display_name,size_bytes,uploaded_by)
   select pg_temp.org(o),pg_temp.org(o)||'/hot-read/'||d,'datei.pdf','Datei '||lpad(d::text,4,'0'),1,owner
-  from hot_ids, generate_series(1,2) o, generate_series(1,1000) d where pg_temp.seeds(o, d<=50, p_history);
+  from hot_ids, generate_series(1,2) o, generate_series(1,1000) d where (o=1 or d<=50);
   -- A year of the worker's approved days from 2025-11-02 (days 337 to 343 are the measured week,
   -- 2026-10-05 to 2026-10-11), and four entries waiting for approval.
   insert into public.time_entries(organization_id,user_id,entry_type,timestamp,status,is_manual)
   select pg_temp.org(o),pg_temp.worker(o),kind,
     '2025-11-02T07:00:00Z'::timestamptz+d*interval '1 day'+case kind when 'clock_in' then interval '0' else interval '8 hours' end,'approved',true
   from generate_series(1,2) o, generate_series(0,364) d, unnest(array['clock_in','clock_out']) kind
-  where extract(isodow from '2025-11-02'::date+d)<6 and pg_temp.seeds(o, d between 337 and 343, p_history);
+  where extract(isodow from '2025-11-02'::date+d)<6 and (o=1 or d between 337 and 343);
   insert into public.time_entries(organization_id,user_id,entry_type,timestamp,status,is_manual)
   select pg_temp.org(o),pg_temp.worker(o),kind,
     '2026-11-01T07:00:00Z'::timestamptz+d*interval '1 day'+case kind when 'clock_in' then interval '0' else interval '4 hours' end,'pending',true
-  from generate_series(1,2) o, generate_series(0,1) d, unnest(array['clock_in','clock_out']) kind where not p_history;
+  from generate_series(1,2) o, generate_series(0,1) d, unnest(array['clock_in','clock_out']) kind;
   -- Four visits a day over the same year.
   insert into public.planning_occurrences(organization_id,entry_kind,time_kind,internal_type,title,start_at,end_at)
   select pg_temp.org(o),'internal','timed','other','Einsatz',
     '2025-11-02T06:00:00Z'::timestamptz+d*interval '1 day'+s*interval '2 hours',
     '2025-11-02T06:00:00Z'::timestamptz+d*interval '1 day'+(s+1)*interval '2 hours'
-  from generate_series(1,2) o, generate_series(0,364) d, generate_series(0,3) s where pg_temp.seeds(o, d between 337 and 343, p_history);
+  from generate_series(1,2) o, generate_series(0,364) d, generate_series(0,3) s where (o=1 or d between 337 and 343);
 $$;
 
 -- Per public table: sequential scans, and rows touched so far in this transaction.
@@ -108,6 +112,7 @@ grant execute on all functions in schema pg_temp to service_role;
 
 set local role service_role;
 set local enable_seqscan = off;
+set local enable_mergejoin = off;
 do $$ declare
   -- Reads whose touched rows grow with the closed history, and why (werk-flow/werkflow-planning#340).
   -- Shrink-only: a read that stops growing fails until its entry goes.
@@ -149,7 +154,6 @@ do $$ declare
   label text;
   read jsonb;
   template text;
-  before jsonb := '{}';
   costs jsonb := '{}';
   large jsonb;
   small jsonb;
@@ -157,12 +161,7 @@ do $$ declare
   grown bigint;
 begin
   select * into ids from hot_ids;
-  perform pg_temp.seed(false);
-  for label, read in select key, value from jsonb_each(reads) loop
-    template := read->>1;
-    before := before || jsonb_build_object(label, pg_temp.measure(format(template, ids.small_org, ids.owner, ids.small_worker)));
-  end loop;
-  perform pg_temp.seed(true);
+  perform pg_temp.seed();
   for label, read in select key, value from jsonb_each(reads) loop
     template := read->>1;
     small := pg_temp.measure(format(template, ids.small_org, ids.owner, ids.small_worker));
@@ -171,12 +170,6 @@ begin
     if large->'seqScans' <> '{}' or small->'seqScans' <> '{}' then
       raise exception 'hot read % scans a table sequentially: no index serves its predicate (%)', label, large->'seqScans';
     end if;
-    for table_name in select jsonb_object_keys(small->'touched') union select jsonb_object_keys(before->label->'touched') loop
-      if abs(coalesce((small->'touched'->>table_name)::bigint, 0) - coalesce((before->label->'touched'->>table_name)::bigint, 0)) > probe_noise then
-        raise exception 'hot read % touches % once another organization holds a history, % before: it reads beyond its organization',
-          label, small->'touched', before->label->'touched';
-      end if;
-    end loop;
     grown := 0;
     for table_name in select jsonb_object_keys(large->'touched') union select jsonb_object_keys(small->'touched') loop
       if abs(coalesce((large->'touched'->>table_name)::bigint, 0) - coalesce((small->'touched'->>table_name)::bigint, 0)) > probe_noise then

@@ -68,14 +68,14 @@ The lab world holds six weeks of visits and time and no documents, so a read tha
 1. Add a read that a daily journey runs on a table that grows with history to its `reads`, with the tables it bounds by organization.
 2. When it fails, fix the predicate or the index. `history_reads` is a [shrink-only list](testing.md#grow-a-shrink-only-list); werk-flow/werkflow-planning#340 owns its entries' fixes.
 
-Wrong turn: an EXPLAIN check that the read uses an index. The Plantafel week seeks one and still walks every earlier visit. The test turns off sequential scans and runs on the stack's own statistics: with fresh ones, the planner's choice flipped between runs on identical data.
+Wrong turn: an EXPLAIN check that the read uses an index. The Plantafel week seeks one and still walks every earlier visit. Wrong turn: comparing plans across runs or table sizes. The planner's choice on a small seed flips between runs, with or without ANALYZE, so the test compares the two organizations under one plan: it measures them back to back and locks the statistics.
 
 ## What each instrument proves
 
 - **Wall-clock scenarios** (`audit:performance:*`) are a manual tool for one machine. They hold every sample to its budget and compare the median with a reference recorded on that machine, and run alone. Nothing proves them on a schedule ([selection](testing.md#how-selection-works)). A moved digest fails on its PR. A change to what the reference records about the machine, such as its memory or CPU, shows only at the next `--fresh` run, as "no reviewed baseline"; recalibrate then. Without `--fresh`, a run can reuse an earlier pass. Anything it does not record shows as slower readings and no warning: a laptop on battery runs far slower and breaks budgets, so measure on mains power.
 - **Lab counts** (`audit:lab:*`) prove a step does the same work as its reference. A count does not show when a page became usable, and it counts background reads that cost the user nothing. Read it with the wall-clock time. Every change plan that touches product code runs them ([selection](testing.md#how-selection-works)), so a regression fails its own PR.
 - **Payload budgets**: the ceiling catches growth, the floor lost data.
-- **Hot read volume** (`sql:hot-read-volume`) proves a read touches no more rows when its organization gains history, and none of another organization's. It sees index entries returned, not walked past, so it also requires a whole (not partial) index that leads with `organization_id` on each table a read bounds.
+- **Hot read volume** (`sql:hot-read-volume`) proves a read touches no more rows when its organization gains history. A read that drops its organization filter is a tenant leak, which the SQL security and list-page groups prove. It sees index entries returned, not walked past, so it also requires a whole (not partial) index that leads with `organization_id` on each table a read bounds.
 
 A metric earns its gate by two jobs: it repeats across five runs within tolerance, and moving it in a recorded experiment moved the time the user waits.
 
