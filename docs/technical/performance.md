@@ -68,7 +68,7 @@ The lab world holds six weeks of visits and time and no documents, so a read tha
 1. Add a read that a daily journey runs on a table that grows with history to its `reads`, with the tables it bounds by organization.
 2. When it fails, fix the predicate or the index. `history_reads` is a [shrink-only list](testing.md#grow-a-shrink-only-list); werk-flow/werkflow-planning#340 owns its entries' fixes.
 
-Wrong turn: an EXPLAIN check that the read uses an index. The Plantafel week seeks one and still walks every earlier visit. Wrong turn: comparing plans across runs or table sizes. The planner's choice on a small seed flips between runs, with or without ANALYZE, so the test compares the two organizations under one plan: it measures them back to back and locks the statistics.
+Wrong turn: an EXPLAIN check that the read uses an index. The Plantafel week seeks one and still walks every earlier visit. Wrong turn: comparing plans across runs or table sizes. The planner's choice on a small seed flips between runs, with or without ANALYZE, so the test compares the two organizations under one plan: it measures them back to back and locks the measured tables, whose statistics and sizes the planner reads.
 
 ## What each instrument proves
 

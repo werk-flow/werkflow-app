@@ -11,15 +11,16 @@
 -- - enable_seqscan is off: a sequential scan means that no index serves the predicate.
 -- The comparison holds for whichever plan the planner picks, as long as both organizations get the
 -- same one. Neither organization id is in the statistics, so both get the same estimates, and the
--- measured tables stay locked against autovacuum and ANALYZE, so the statistics cannot change
--- between the two runs. Merge joins are off: one walks an index in key order and stops at a point
+-- measured tables stay locked, so neither their statistics nor their sizes, which the planner reads
+-- too, change between the two runs. Merge joins are off: one walks an index in key order and stops at a point
 -- among other organizations' keys, so it touched a random number of rows. Every run takes fresh ids,
 -- so no dead index entry of an earlier rolled-back run shares a measured key range, and each read
 -- runs once before its measured run.
 begin;
--- Autovacuum and ANALYZE need this lock too, so the statistics stay as they are until the rollback.
+-- Until the rollback, no other session writes these tables, no autovacuum or ANALYZE runs on them,
+-- and a concurrent run of this file waits. Another worktree's writes to them wait about a second.
 lock table public.clients, public.projects, public.jobs, public.job_assignments, public.documents,
-  public.time_entries, public.planning_occurrences in share update exclusive mode;
+  public.time_entries, public.planning_occurrences in share row exclusive mode;
 create temp table hot_ids as select gen_random_uuid() run, gen_random_uuid() owner,
   gen_random_uuid() large_org, gen_random_uuid() small_org, gen_random_uuid() large_worker, gen_random_uuid() small_worker;
 grant select on hot_ids to service_role;
