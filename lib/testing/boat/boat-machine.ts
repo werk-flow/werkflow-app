@@ -15,8 +15,11 @@ export type MachineOptions = {
   from: string | undefined;
   name: string;
   ttlSeconds: number;
-  /** False only for a machine that becomes a saved snapshot: without snapshots an auto-stop erases it. */
-  snapshots: boolean;
+  /**
+   * A run machine keeps no snapshot, so an auto-stop erases it, and no monitoring, so Boat keeps no
+   * command output after it. Only the machine that becomes the saved snapshot keeps both.
+   */
+  purpose: 'run' | 'snapshot';
   log: (line: string) => void;
   /** An interruption stops the wait for readiness; the machine is then deleted. */
   signal?: AbortSignal;
@@ -36,7 +39,8 @@ export async function createMachine(client: BoatClient, options: MachineOptions)
     {
       type: 'large',
       noEnv: true,
-      snapshots: options.snapshots,
+      snapshots: options.purpose === 'snapshot',
+      monitoring: options.purpose === 'snapshot',
       failFast: true,
       ttlSeconds: options.ttlSeconds,
       name: options.name,
