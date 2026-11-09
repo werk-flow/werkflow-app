@@ -98,9 +98,14 @@ test('an expired, malformed or exposed key falls back to local with the reason',
   expect(malformed.kind).toBe('unusable');
   const exposed = readBoatKey(keyFolder({ 'boat-api-key': 'boat_abc' }, 0o700, 0o644), now);
   expect(exposed.kind === 'unusable' && exposed.reason).toContain('chmod');
-  // A key file this process cannot read, such as one being replaced.
-  const unreadable = readBoatKey(keyFolder({ 'boat-api-key': 'boat_abc' }, 0o700, 0o200), now);
-  expect(unreadable).toEqual({ kind: 'unusable', reason: 'the key file could not be read.' });
+  // A key file the read fails on, such as one being replaced. A directory fails the read for every
+  // user; a mode-200 file does not where the process may read any file, as on a Boat machine.
+  const unreadable = keyFolder({});
+  mkdirSync(join(unreadable, 'boat-api-key'), { mode: 0o700 });
+  expect(readBoatKey(unreadable, now)).toEqual({
+    kind: 'unusable',
+    reason: 'the key file could not be read.',
+  });
 });
 
 test('a Boat refusal keeps its status and code, and the key never appears in a message', async () => {
