@@ -59,6 +59,12 @@ const MACHINE_TTL_SECONDS = 3 * 3_600;
  */
 const MACHINE_BOUND_GROUP = /^audit:(?:performance|visual|layout)/;
 /**
+ * Groups that cost this workstation less than a Boat run's fixed upload and setup, about 95 s of
+ * machine time: a SQL group takes about 1 s against the shared stack, `unit:all` 60 to 90 s and a
+ * static gate up to 35 s. Type-aware lint takes 170 to 370 s and 3 to 4 GB, the load Boat takes off.
+ */
+const CHEAP_HERE = /^(?:sql:|unit:all$|static:(?!lint$))/;
+/**
  * Untracked files that may hold a credential or a local setting never leave the workstation: every
  * dotfile (`.env.*`, `.npmrc`, `.netrc`, `.git-credentials`, `.pgpass`), keys and certificates, and
  * names that say secret, credential, token or password.
@@ -110,11 +116,29 @@ export function localReason(args: readonly string[], env: Environment): string |
   return undefined;
 }
 
+/** The groups a printed plan runs. */
+function plannedRuns(plan: string): string[] {
+  return [...plan.matchAll(/^RUN +(\S+)/gm)].map((match) => match[1] ?? '');
+}
+
 /** The first group a printed plan runs that measures or captures against the workstation. */
 export function machineBoundGroup(plan: string): string | undefined {
-  return [...plan.matchAll(/^RUN +(\S+)/gm)]
-    .map((match) => match[1] ?? '')
-    .find((id) => MACHINE_BOUND_GROUP.test(id));
+  return plannedRuns(plan).find((id) => MACHINE_BOUND_GROUP.test(id));
+}
+
+/**
+ * Why a printed plan costs less here than on Boat: it runs no group, or only cheap groups of which
+ * at most one is not a SQL group. Undefined when Boat may run it.
+ */
+export function cheapPlanReason(plan: string): string | undefined {
+  const runs = plannedRuns(plan);
+  if (!runs.every((id) => CHEAP_HERE.test(id))) return undefined;
+  const others = runs.filter((id) => !id.startsWith('sql:'));
+  if (others.length > 1) return undefined;
+  if (runs.length === 0) return 'the plan runs no group, which is cheaper here.';
+  if (runs.length === 1) return `a single ${runs.join('')} is cheaper here.`;
+  const sql = runs.length - others.length;
+  return `${sql} SQL groups${others.length ? ` and ${others.join('')}` : ''} are cheaper here.`;
 }
 
 /** The first untracked file that may hold a credential or a local setting, which Boat never gets. */
@@ -124,7 +148,8 @@ export function withheldFile(untracked: readonly string[]): string | undefined {
 
 /**
  * Why the plan these arguments select runs locally, from `test:plan` itself: a group that measures
- * or captures against the workstation, or a plan that cannot be read. Undefined when Boat may run it.
+ * or captures against the workstation, a plan cheaper here than a Boat machine's setup, or a plan
+ * that cannot be read. Undefined when Boat may run it.
  */
 function planReason(repository: string, args: readonly string[]): string | undefined {
   const plan = spawnSync(process.execPath, ['scripts/verify.ts', 'plan', ...args], {
@@ -134,9 +159,8 @@ function planReason(repository: string, args: readonly string[]): string | undef
   });
   if (plan.status !== 0) return 'the plan could not be read here; the local run reports why.';
   const bound = machineBoundGroup(plan.stdout);
-  return bound
-    ? `the plan runs ${bound}, which measures or captures against this machine's references.`
-    : undefined;
+  if (bound) return `the plan runs ${bound}, which measures or captures against this machine's references.`;
+  return cheapPlanReason(plan.stdout);
 }
 
 /**

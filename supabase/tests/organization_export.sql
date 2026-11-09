@@ -616,7 +616,7 @@ select pg_temp.expect_refusal('start losing a planned document', format(
   'select public.start_organization_export(%L, %L, %L)', '28700000-0000-0000-0000-000000000001',
   '28700000-0000-0000-0000-000000000010', (select plan from full_plan)), 'export_plan_stale');
 reset role;
-drop trigger delete_document_during_start on public.organization_exports;
+alter table public.organization_exports disable trigger delete_document_during_start;
 do $$
 begin
   if not exists (select 1 from public.documents where id = '28700000-0000-0000-0000-000000000041') then
@@ -643,7 +643,7 @@ create temporary table resized_start on commit drop as
 select public.start_organization_export('28700000-0000-0000-0000-000000000001',
   '28700000-0000-0000-0000-000000000010', (select plan from full_plan)) as export_id;
 reset role;
-drop trigger resize_file_during_start on public.organization_exports;
+alter table public.organization_exports disable trigger resize_file_during_start;
 do $$
 declare
   v_export uuid := (select export_id from resized_start);

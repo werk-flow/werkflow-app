@@ -237,7 +237,7 @@ select pg_temp.expect_refusal('evidence whose history row is refused', $sql$
 $sql$, 'history refused');
 reset role;
 
-drop trigger refuse_sickness_event on public.sickness_report_events;
+alter table public.sickness_report_events disable trigger refuse_sickness_event;
 
 do $$
 begin

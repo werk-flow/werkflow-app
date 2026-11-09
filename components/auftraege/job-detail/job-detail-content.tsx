@@ -254,6 +254,7 @@ export function JobDetailContent(props: JobDetailContentProps) {
         displayTitle={displayTitle}
         isJobActive={view.isJobActive}
         isAdminOrManager={isAdminOrManager}
+        showEditDialog={dialogs.showEditDialog}
         handleEditDialogOpenChange={dialogs.handleEditDialogOpenChange}
         setShowDeleteDialog={dialogs.setShowDeleteDialog}
       />

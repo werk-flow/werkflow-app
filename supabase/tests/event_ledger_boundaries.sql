@@ -98,7 +98,7 @@ begin
   end;
 end;
 $$;
-drop trigger "AA_test_nested_history_edit" on public.documents;
+alter table public.documents disable trigger "AA_test_nested_history_edit";
 
 -- Real parent deletion keeps the history payload and nulls only the declared FK.
 delete from auth.users where id = '73000000-0000-4000-8000-000000000002';
