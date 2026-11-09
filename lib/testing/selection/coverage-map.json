@@ -3063,7 +3063,9 @@
             "a failed attachment keeps the saved report and its sent screenshot, and the retry sends only the attachment",
             "a registration whose answer got lost counts once on the retry, under the same file",
             "the send shows its pending state in the first frame, and neither cancel, the list link nor the attachments change until the answer",
-            "a save whose outcome is unknown keeps the description frozen through a failed retry, and the report saves once"
+            "a save whose outcome is unknown keeps the description frozen through a failed retry, and the report saves once",
+            "a screenshot over its size limit says to send without it, and the report then saves without one",
+            "a screenshot whose first registration commits while its retry uploads anew counts as sent"
           ]
         },
         {

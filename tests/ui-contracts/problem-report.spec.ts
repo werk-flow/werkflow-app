@@ -303,3 +303,59 @@ test('a save whose outcome is unknown keeps the description frozen through a fai
   expect(submissions).toHaveLength(3);
   expect(new Set(submissions.map((submission) => submission.reportId)).size).toBe(1);
 });
+
+test('a screenshot over its size limit says to send without it, and the report then saves without one', async ({
+  page,
+}) => {
+  await openReportFixture(page);
+  await page.evaluate(() => {
+    window.uiContractProblemReport.refuseTicketOnce = { screenshot: 'file_too_large' };
+  });
+  const dialog = await openDialog(page);
+  await dialog.getByRole('textbox', { name: 'Was ist passiert?', exact: true }).fill('Das Bild ist riesig.');
+  await dialog.getByRole('button', { name: 'Senden', exact: true }).click();
+  await expect(
+    dialog.getByText(
+      'Deine Meldung Nr. 7 ist gespeichert, aber der Screenshot fehlt noch. Der Screenshot ist zu groß. Entferne den Haken bei „Screenshot mitsenden“ und sende noch einmal.',
+    ),
+  ).toBeVisible();
+  // Nothing of the refused screenshot stayed stored, so its switch still follows the advice.
+  const include = dialog.getByRole('checkbox', { name: 'Screenshot mitsenden' });
+  await expect(include).toBeEnabled();
+  await include.click();
+  await dialog.getByRole('button', { name: 'Senden', exact: true }).click();
+  await expect(
+    page.getByRole('alert').getByText('Danke! Deine Meldung Nr. 7 ist eingegangen.'),
+  ).toBeVisible();
+  const state = await boundary(page);
+  expect(state.submissions).toHaveLength(1);
+  expect(state.registered).toEqual([]);
+});
+
+test('a screenshot whose first registration commits while its retry uploads anew counts as sent', async ({
+  page,
+}) => {
+  await openReportFixture(page);
+  // The first finalize registers, but its answer is lost; the retry then finds the staging key
+  // gone, uploads again under a new id, and that registration meets the first screenshot.
+  await page.evaluate(() => {
+    window.uiContractProblemReport.loseFinalizeAnswer = ['screenshot'];
+    window.uiContractProblemReport.finalizeMissingOnce = ['screenshot'];
+  });
+  const dialog = await openDialog(page);
+  await dialog.getByRole('textbox', { name: 'Was ist passiert?', exact: true }).fill('Doppelt gesendet.');
+  const send = dialog.getByRole('button', { name: 'Senden', exact: true });
+  await send.click();
+  await expect(
+    dialog.getByText('Deine Meldung Nr. 7 ist gespeichert, aber der Screenshot fehlt noch.', {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await send.click();
+  await expect(
+    page.getByRole('alert').getByText('Danke! Deine Meldung Nr. 7 ist eingegangen.'),
+  ).toBeVisible();
+  const state = await boundary(page);
+  expect(state.tickets).toEqual(['screenshot', 'screenshot']);
+  expect(state.registered).toEqual(['screenshot']);
+});

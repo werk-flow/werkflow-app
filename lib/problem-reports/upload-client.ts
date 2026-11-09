@@ -10,6 +10,18 @@ import type { ProblemReportFileKind } from './types';
 
 export type ProblemReportFile = { kind: ProblemReportFileKind; bytes: Blob; fileName: string };
 
+/** Finalize refusals after which the server discarded the stored copy. */
+const DISCARDED_ON_REFUSAL: ReadonlySet<string> = new Set([
+  'file_type_not_allowed',
+  'file_empty',
+  'file_too_large',
+]);
+
+/** The stored file id a retry may register: none once a refusal discarded the copy. */
+function kept(result: ActionResult, fileId: string): string | null {
+  return !result.success && DISCARDED_ON_REFUSAL.has(result.error) ? null : fileId;
+}
+
 /** One try: its result, and the file id whose bytes reached storage, for the next try. */
 export type ProblemReportUploadOutcome = { result: ActionResult; storedFileId: string | null };
 
@@ -27,13 +39,20 @@ export async function uploadProblemReportFile(
   const fields = { ...target, kind: file.kind, fileName: file.fileName };
   const register = async (fileId: string): Promise<ActionResult> => {
     const finalized = await finalizeProblemReportFileUpload({ ...fields, fileId });
-    return !finalized.success && finalized.error === 'already_finalized' ? { success: true } : finalized;
+    if (finalized.success) return finalized;
+    // A screenshot whose first finalize committed after this retry found its
+    // staging key gone is the report's screenshot: there is only one.
+    const registered =
+      finalized.error === 'already_finalized' ||
+      (file.kind === 'screenshot' && finalized.error === 'screenshot_exists');
+    return registered ? { success: true } : finalized;
   };
   let stored = storedFileId;
   try {
     if (stored) {
       const result = await register(stored);
-      if (result.success || result.error !== 'file_missing') return { result, storedFileId: stored };
+      if (result.success || result.error !== 'file_missing')
+        return { result, storedFileId: kept(result, stored) };
       stored = null;
     }
     const ticket = await createProblemReportFileUploadTicket({
@@ -50,7 +69,8 @@ export async function uploadProblemReportFile(
     });
     if (!put.ok) return { result: { success: false, error: 'upload_failed' }, storedFileId: null };
     stored = ticket.ticket.fileId;
-    return { result: await register(stored), storedFileId: stored };
+    const result = await register(stored);
+    return { result, storedFileId: kept(result, stored) };
   } catch (error) {
     logError('uploadProblemReportFile: transfer failed', error);
     return { result: { success: false, error: 'upload_failed' }, storedFileId: stored };

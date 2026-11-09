@@ -1,5 +1,5 @@
 import { describeFailure } from '@/lib/action-messages';
-import type { ProblemReportStatus } from './types';
+import type { ProblemReportFileKind, ProblemReportStatus } from './types';
 
 // The German words of a problem report for its reporter.
 
@@ -17,6 +17,17 @@ const FAILURE_MESSAGES: Readonly<Record<string, string>> = {
   file_empty: 'Diese Datei ist leer.',
   too_many_attachments: 'Eine Meldung nimmt höchstens fünf Anhänge.',
 };
+
+/** A screenshot over its size limit: the person sends without it. */
+const SCREENSHOT_TOO_LARGE =
+  'Der Screenshot ist zu groß. Entferne den Haken bei „Screenshot mitsenden“ und sende noch einmal.';
+
+/** The sentence for a failed upload of one file of a report. */
+export function problemReportFileFailureMessage(code: string, kind: ProblemReportFileKind): string {
+  return kind === 'screenshot' && code === 'file_too_large'
+    ? SCREENSHOT_TOO_LARGE
+    : problemReportFailureMessage(code);
+}
 
 /** The sentence for a failed send or upload of a report. */
 export function problemReportFailureMessage(code: string): string {

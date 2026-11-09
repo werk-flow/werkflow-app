@@ -8,7 +8,7 @@ import { usePendingTask } from '@/hooks/use-server-action';
 import { logError } from '@/lib/logging';
 import { submitProblemReport } from '@/lib/problem-reports/actions';
 import { buildProblemReportContext } from '@/lib/problem-reports/capture/context';
-import { problemReportFailureMessage } from '@/lib/problem-reports/messages';
+import { problemReportFailureMessage, problemReportFileFailureMessage } from '@/lib/problem-reports/messages';
 import { burnRedactions, type RedactionBox } from '@/lib/problem-reports/redaction';
 import { loadUiStringCatalog } from '@/lib/problem-reports/screenshot/load-ui-string-catalog';
 import { uploadProblemReportFile, type ProblemReportFile } from '@/lib/problem-reports/upload-client';
@@ -80,7 +80,7 @@ function useReportFiles(setError: (error: string) => void) {
       setStoredFiles(new Map(stored));
       if (!result.success) {
         const what = file.kind === 'screenshot' ? 'der Screenshot' : `„${file.fileName}“`;
-        const reason = problemReportFailureMessage(result.error);
+        const reason = problemReportFileFailureMessage(result.error, file.kind);
         setError(`Deine Meldung Nr. ${report.number} ist gespeichert, aber ${what} fehlt noch. ${reason}`);
         return false;
       }

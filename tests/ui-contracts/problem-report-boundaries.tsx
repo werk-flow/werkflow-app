@@ -37,6 +37,13 @@ type ProblemReportBoundaryState = {
   submitAnswers: ('lost' | 'refused')[];
   /** File kinds whose next finalize registers the file, but whose answer never reaches the browser. */
   loseFinalizeAnswer: string[];
+  /**
+   * File kinds whose next finalize of an already registered file finds its
+   * staging key gone, as a retry does while the first finalize still commits.
+   */
+  finalizeMissingOnce: string[];
+  /** The refusal the next ticket of a file kind answers, such as `file_too_large`. */
+  refuseTicketOnce: Record<string, string>;
 };
 
 declare global {
@@ -54,6 +61,8 @@ export function initializeProblemReportBoundary(): void {
     holdSubmission: false,
     submitAnswers: [],
     loseFinalizeAnswer: [],
+    finalizeMissingOnce: [],
+    refuseTicketOnce: {},
   };
 }
 
@@ -80,6 +89,11 @@ export const submitProblemReport: ReportActions['submitProblemReport'] = async (
 export const createProblemReportFileUploadTicket: FileActions['createProblemReportFileUploadTicket'] = async (
   input,
 ) => {
+  const refusal = window.uiContractProblemReport.refuseTicketOnce[input.kind];
+  if (refusal) {
+    Reflect.deleteProperty(window.uiContractProblemReport.refuseTicketOnce, input.kind);
+    return { success: false, error: refusal };
+  }
   window.uiContractProblemReport.tickets.push(input.kind);
   const fileId = `33400000-0000-4000-8000-${String(window.uiContractProblemReport.tickets.length).padStart(12, '0')}`;
   return { success: true, ticket: { fileId, uploadUrl: `http://localhost/storage/${input.kind}/${fileId}` } };
@@ -92,7 +106,14 @@ export const finalizeProblemReportFileUpload: FileActions['finalizeProblemReport
   input,
 ) => {
   const state = window.uiContractProblemReport;
-  if (registeredFileIds.has(input.fileId)) return { success: false, error: 'already_finalized' };
+  if (registeredFileIds.has(input.fileId)) {
+    const missing = state.finalizeMissingOnce.indexOf(input.kind);
+    if (missing < 0) return { success: false, error: 'already_finalized' };
+    state.finalizeMissingOnce.splice(missing, 1);
+    return { success: false, error: 'file_missing' };
+  }
+  if (input.kind === 'screenshot' && state.registered.includes('screenshot'))
+    return { success: false, error: 'screenshot_exists' };
   registeredFileIds.add(input.fileId);
   state.registered.push(input.kind);
   const lost = state.loseFinalizeAnswer.indexOf(input.kind);
