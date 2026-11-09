@@ -36,6 +36,7 @@ Read the spec you change and the connected specs your change touches. Planned sc
 - [service-and-maintenance.md](features/service-and-maintenance.md): Anlagen, Servicefälle, Wartungspläne.
 - [commercial-and-finance.md](features/commercial-and-finance.md): prices, billable quantities, handover readiness.
 - [ai-automations.md](features/ai-automations.md): the AI direction and its foundations.
+- [problem-reports.md](features/problem-reports.md): problem reports to WerkFlow support, their access and deletion.
 
 ### Product (`docs/product/`)
 
