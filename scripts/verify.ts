@@ -897,16 +897,17 @@ async function main(): Promise<void> {
             }),
           )}`,
         );
-        if (heldBack.size)
-          console.log(
-            `[verify] NOT A PASS: ${heldBack.size} heavy groups did not run because Boat was unavailable (${boatUnavailable ?? ''}). See the block after the plan.`,
-          );
         process.exitCode = report.status === 'passed' ? 0 : 1;
       },
       // Inside the workspace lock, so no run writes the archive while it shrinks.
       prune: () => pruneRunArchive('prune'),
     });
   });
+  // The run's last line, after the summary and the archive pruning.
+  if (heldBack.size)
+    console.log(
+      `[verify] NOT A PASS: ${heldBack.size} heavy groups did not run because Boat was unavailable (${boatUnavailable ?? ''}). See the block after the plan.`,
+    );
 }
 
 try {
