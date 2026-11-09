@@ -10,6 +10,7 @@ import {
   REQUEST_URGENCY_LABELS,
   REQUEST_URGENCY_ORDER,
   isCallbackOverdue,
+  requestEquipmentOptions,
   requestUrgencyToJobPriority,
   toClientRequest,
   toClientRequestEvent,
@@ -135,6 +136,29 @@ describe('isCallbackOverdue', () => {
     expect(isCallbackOverdue({ status: 'offen', callbackDueAt: null }, afterDue)).toBe(false);
     expect(isCallbackOverdue({ status: 'umgewandelt', callbackDueAt: due }, afterDue)).toBe(false);
     expect(isCallbackOverdue({ status: 'geschlossen', callbackDueAt: due }, afterDue)).toBe(false);
+  });
+});
+
+describe('requestEquipmentOptions', () => {
+  const boiler = {
+    id: 'equipment-1',
+    equipmentNumber: 'ANL-1',
+    name: 'Gaskessel',
+    manufacturer: 'Hersteller',
+    model: null,
+    locationDetail: 'Keller',
+  };
+  test('offers the active Anlagen of the site', () => {
+    expect(requestEquipmentOptions([boiler], '')).toEqual([
+      { value: 'equipment-1', label: 'ANL-1 · Gaskessel', description: 'Hersteller · Keller' },
+    ]);
+    expect(requestEquipmentOptions([], '')).toEqual([]);
+  });
+  test('keeps a saved Anlage that is no longer active, so the form can clear it', () => {
+    expect(requestEquipmentOptions([], 'archived-1')).toEqual([
+      { value: 'archived-1', label: 'Bisherige Anlage (nicht mehr aktiv)' },
+    ]);
+    expect(requestEquipmentOptions([boiler], 'equipment-1')).toHaveLength(1);
   });
 });
 

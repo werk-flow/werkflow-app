@@ -6,7 +6,8 @@ import { markAllAttentionNotificationsRead, markAttentionNotificationRead } from
 import type { ActionResult } from '@/lib/action-result';
 import type { AttentionNotification, AttentionOverview } from '@/lib/attention/types';
 import { readInBackground } from '@/lib/data/background-read-client';
-import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
+import { useBusinessDayRefresh, useDeadlineRefresh } from '@/hooks/use-business-day-refresh';
+import { nextCallbackDeadline } from '@/lib/attention/task-sections';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 
@@ -92,6 +93,8 @@ export function useAufgabenOverview() {
     },
   });
   useBusinessDayRefresh(view.refresh);
+  // A promised callback that passes moves its request into „Rückruf überfällig“.
+  useDeadlineRefresh(nextCallbackDeadline(view.data?.tasks ?? []), view.refresh);
 
   const overview = view.data ?? null;
   // The badges count this overview while the page is open: one derivation

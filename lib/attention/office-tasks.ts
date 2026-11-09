@@ -176,22 +176,25 @@ export async function deriveOpenRequestTasks(
   };
 
   // For the viewer whose task it is, an overdue callback replaces the
-  // request's open task.
+  // request's open task. An open task names the deadline at which it would.
   const businessToday = getBusinessTodayIso();
-  const tasks: AttentionTask[] = rows.map((row) =>
-    row.callback_overdue &&
-    row.callback_due_at !== null &&
-    showsOverdueCallback(
-      { assignedTo: row.assigned_to, ownerIsManager: row.owner_is_manager },
-      context.userId,
-    )
+  const tasks: AttentionTask[] = rows.map((row) => {
+    const viewersCallback =
+      row.callback_due_at !== null &&
+      showsOverdueCallback(
+        { assignedTo: row.assigned_to, ownerIsManager: row.owner_is_manager },
+        context.userId,
+      )
+        ? row.callback_due_at
+        : null;
+    return row.callback_overdue && viewersCallback !== null
       ? {
           sourceType: 'client_request_callback_overdue',
           sourceId: row.id,
           requestNumber: row.request_number,
           summary: row.summary,
           urgency: row.urgency,
-          callbackDueAt: row.callback_due_at,
+          callbackDueAt: viewersCallback,
           ownerName: row.assigned_to ? (profileName(row.assigned_to) ?? 'Nicht verfügbar') : null,
           ownerUnavailable: row.assigned_to !== null && !row.owner_is_manager,
         }
@@ -206,8 +209,9 @@ export async function deriveOpenRequestTasks(
           openSinceDays: openSinceDaysAt(row.received_at, businessToday),
           assigneeName: profileName(row.assigned_to),
           assignedToMe: row.assigned_to === context.userId,
-        },
-  );
+          callbackDueAt: viewersCallback,
+        };
+  });
 
   return { tasks, failed: false };
 }

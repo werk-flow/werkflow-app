@@ -3,6 +3,7 @@
 import { Field } from '@/components/ui/field';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useClientOption } from '@/components/service/use-client-option';
+import { requestEquipmentOptions } from '@/lib/requests/types';
 
 interface RequestEquipmentFieldProps {
   /** `request` in the create dialog, `edit-request` in the edit dialog. */
@@ -15,8 +16,9 @@ interface RequestEquipmentFieldProps {
 }
 
 /**
- * The active Anlagen of the chosen site, read once a site is chosen. Nothing
- * without a site; an empty list says that nothing is recorded there.
+ * The active Anlagen of the chosen site, read once a site is chosen, and a
+ * saved Anlage that is no longer active, so it can be cleared. Nothing without
+ * a site; an empty list says that nothing is recorded there.
  */
 export function RequestEquipmentField({
   idPrefix,
@@ -28,9 +30,12 @@ export function RequestEquipmentField({
 }: RequestEquipmentFieldProps) {
   const { client, loading, loadFailure } = useClientOption(siteId ? clientId : '');
   if (!clientId || !siteId) return null;
-  const equipment = client?.sites.find((site) => site.id === siteId)?.equipment ?? [];
+  const options = requestEquipmentOptions(
+    client?.sites.find((site) => site.id === siteId)?.equipment ?? [],
+    value,
+  );
 
-  if (!loading && !loadFailure && equipment.length === 0) {
+  if (!loading && !loadFailure && options.length === 0) {
     return (
       <div className="space-y-1">
         <p className="text-sm font-medium">Anlage</p>
@@ -42,12 +47,7 @@ export function RequestEquipmentField({
   return (
     <Field label="Anlage" htmlFor={`${idPrefix}-equipment`}>
       <SearchableSelect
-        options={equipment.map((item) => ({
-          value: item.id,
-          label: `${item.equipmentNumber} · ${item.name}`,
-          description:
-            [item.manufacturer, item.model, item.locationDetail].filter(Boolean).join(' · ') || undefined,
-        }))}
+        options={options}
         value={value}
         onChange={onChange}
         loading={loading}

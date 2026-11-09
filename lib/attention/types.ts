@@ -102,6 +102,8 @@ export type AttentionTask =
       openSinceDays: number;
       assigneeName: string | null;
       assignedToMe: boolean;
+      /** When it becomes this viewer's overdue callback; null when it never does. */
+      callbackDueAt: string | null;
     }
   // An open request whose promised callback has passed: its owner's task, and
   // every manager's while it has no owner who is still a manager. It replaces

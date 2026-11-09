@@ -35,13 +35,23 @@ test('a status tab echoes at once and the list follows the committed URL', async
   await expect(table.getByRole('link', { name: 'Heizung fällt aus', exact: true })).toHaveCount(0);
 });
 
-// An open request whose promised callback has passed says so in its list row
-// and in its detail facts; a closed one never does.
+// An open request whose promised callback has passed says so in its list row,
+// and a callback that passes while the page is open turns the row and the
+// detail overdue on the minute tick, without a database event or a reload.
+// A closed request never shows it.
 test('an overdue callback shows „Rückruf überfällig“ in the list and the detail', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-01T11:58:00.000Z') });
   await openContractFixture(page, 'request-list');
   const overdueRow = page.getByRole('row', { name: /Heizung fällt aus/ });
-  await expect(overdueRow.getByText('Rückruf überfällig', { exact: true })).toBeVisible();
+  const dueRow = page.getByRole('row', { name: /Wartung bestätigen/ });
   const details = page.getByRole('region', { name: 'Anfragedetails', exact: true });
+  await expect(overdueRow.getByText('Rückruf überfällig', { exact: true })).toBeVisible();
+  await expect(dueRow).toBeVisible();
+  await expect(dueRow.getByText('Rückruf überfällig', { exact: true })).toHaveCount(0);
+  await expect(details.getByText('Rückruf überfällig', { exact: true })).toHaveCount(0);
+
+  await page.clock.fastForward('03:00');
+  await expect(dueRow.getByText('Rückruf überfällig', { exact: true })).toBeVisible();
   await expect(details.getByText('Rückruf überfällig', { exact: true })).toBeVisible();
 
   await page.getByRole('tab', { name: 'Geschlossen', exact: true }).click();

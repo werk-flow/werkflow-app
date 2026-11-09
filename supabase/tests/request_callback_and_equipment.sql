@@ -2,7 +2,7 @@
 -- capture and edit refuse an Anlage of another organization, customer or site,
 -- the attention read marks overdue only the organization's open requests whose
 -- callback has passed, and a Servicefall conversion links the request's
--- Anlage (migration 20261125090001_record_request_callback_and_equipment.sql).
+-- Anlage (migration 20261126090001_record_request_callback_and_equipment.sql).
 begin;
 
 insert into auth.users (

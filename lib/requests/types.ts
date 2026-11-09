@@ -149,6 +149,36 @@ export function isCallbackOverdue(
   );
 }
 
+type ActiveEquipment = {
+  id: string;
+  equipmentNumber: string;
+  name: string;
+  manufacturer: string | null;
+  model: string | null;
+  locationDetail: string | null;
+};
+
+/**
+ * The Anlagen a request form offers: the site's active ones, and a saved
+ * Anlage that is no longer active, so the form can still clear it.
+ */
+export function requestEquipmentOptions(
+  activeEquipment: readonly ActiveEquipment[],
+  savedEquipmentId: string,
+): Array<{ value: string; label: string; description?: string }> {
+  const options = activeEquipment.map((item) => {
+    const description = [item.manufacturer, item.model, item.locationDetail].filter(Boolean).join(' · ');
+    return {
+      value: item.id,
+      label: `${item.equipmentNumber} · ${item.name}`,
+      ...(description ? { description } : {}),
+    };
+  });
+  return savedEquipmentId && !activeEquipment.some((item) => item.id === savedEquipmentId)
+    ? [...options, { value: savedEquipmentId, label: 'Bisherige Anlage (nicht mehr aktiv)' }]
+    : options;
+}
+
 // Conversion maps the request urgency onto the existing job priority
 // vocabulary; "notfall" has no job equivalent and becomes "hoch".
 export function requestUrgencyToJobPriority(

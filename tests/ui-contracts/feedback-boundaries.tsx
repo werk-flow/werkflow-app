@@ -134,7 +134,7 @@ function contractRequest(
   id: string,
   summary: string,
   status: ClientRequest['status'],
-  callbackOverdue = false,
+  callback: { dueAt: string; overdue: boolean } = { dueAt: '2026-10-01T10:00:00.000Z', overdue: false },
 ): RequestListEntry {
   return {
     request: {
@@ -157,7 +157,7 @@ function contractRequest(
       status,
       assignedTo: null,
       receivedAt: '2026-10-01T08:00:00.000Z',
-      callbackDueAt: '2026-10-01T10:00:00.000Z',
+      callbackDueAt: callback.dueAt,
       closedReason: null,
       closedNote: null,
       closedBy: null,
@@ -173,13 +173,21 @@ function contractRequest(
     clientName: null,
     assigneeName: null,
     convertedLabel: null,
-    callbackOverdue,
+    callbackOverdue: callback.overdue,
   };
 }
 
-// The open request's promised callback had passed when the page was read.
+// The first open request's promised callback had passed when the page was
+// read; the second one's passes at noon, with no database event.
 const REQUESTS = [
-  contractRequest('contract-request-open', 'Heizung fällt aus', 'offen', true),
+  contractRequest('contract-request-open', 'Heizung fällt aus', 'offen', {
+    dueAt: '2026-10-01T10:00:00.000Z',
+    overdue: true,
+  }),
+  contractRequest('contract-request-due', 'Wartung bestätigen', 'offen', {
+    dueAt: '2026-10-01T12:00:00.000Z',
+    overdue: false,
+  }),
   contractRequest('contract-request-closed', 'Rückruf zur Abrechnung', 'geschlossen'),
 ];
 const STATUSES_BY_FILTER: Record<RequestStatusFilter, readonly ClientRequest['status'][]> = {
@@ -199,16 +207,16 @@ function RequestListHost(): React.JSX.Element {
       STATUSES_BY_FILTER[query.status].includes(entry.request.status) &&
       entry.request.summary.toLocaleLowerCase('de').includes(search),
   );
-  const [overdue] = REQUESTS;
+  const due = REQUESTS[1];
   return (
     <>
       <AnfragenContent entries={entries} total={entries.length} hasAnyRequest query={query} />
-      {overdue && (
+      {due && (
         <section aria-label="Anfragedetails">
           <RequestFactsCard
-            request={overdue.request}
+            request={due.request}
             assigneeName="Erika Musterfrau"
-            callbackOverdue={overdue.callbackOverdue}
+            callbackOverdue={due.callbackOverdue}
             equipment={null}
           />
         </section>

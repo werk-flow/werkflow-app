@@ -62,6 +62,20 @@ export function groupAttentionTasks(tasks: readonly AttentionTask[]): AttentionT
   });
 }
 
+/**
+ * The earliest instant (epoch milliseconds) at which an open Anfrage becomes
+ * the viewer's overdue callback, or null. Passing it writes no row, so the
+ * Aufgaben page reads its overview again then.
+ */
+export function nextCallbackDeadline(tasks: readonly AttentionTask[]): number | null {
+  const deadlines = tasks.flatMap((task) =>
+    task.sourceType === 'client_request_open' && task.callbackDueAt !== null
+      ? [Date.parse(task.callbackDueAt)]
+      : [],
+  );
+  return deadlines.length > 0 ? Math.min(...deadlines) : null;
+}
+
 /** How long an approval or an Anfrage has waited, in Berlin calendar days. */
 export function formatOpenSince(days: number): string {
   if (days <= 0) return 'heute eingegangen';
