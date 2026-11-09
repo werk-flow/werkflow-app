@@ -1,5 +1,5 @@
 // Rule test: test:verify picks Boat only where a Boat run proves the same thing as a local one,
-// falls back to the local run on any Boat failure, and an unusable key says so in one line.
+// turns any Boat failure into Boat's unavailability with its reason, and an unusable key says why.
 import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import {
@@ -24,20 +24,20 @@ import { backendValueDigests } from '../evidence/proof-environment';
 import {
   boatFailure,
   changedSinceHead,
-  fallbackLine,
   gitEnvironment,
   copyResults,
   evidenceFiles,
   localReason,
-  machineBoundGroup,
   placeFiles,
   prepareAndRun,
   rebuiltTreeProblem,
   runOnBoat,
   tarPackArguments,
+  unavailable,
   unpackResults,
   withMachine,
   linkedDestination,
+  wallClockGroup,
   withheldFile,
 } from './verify-on-boat';
 
@@ -47,13 +47,15 @@ test('change plans and ordinary groups may run on Boat', () => {
   expect(localReason(['--mode', 'change'], {})).toBeUndefined();
   // Lab counts repeat on any machine; every product change selects both lab groups.
   expect(localReason(['--group', 'audit:lab:office,audit:lab:field'], {})).toBeUndefined();
+  // Layout checks computed boxes; visual groups render in the pinned image, whatever the machine.
+  for (const group of ['audit:visual', 'audit:visual:acceptance', 'audit:layout:field'])
+    expect(localReason(['--group', group], {}), group).toBeUndefined();
 });
 
 test('runs that measure this machine, reach DEV or are asked local stay local', () => {
   expect(localReason(['--mode', 'release'], {})).toContain('release mode');
   expect(localReason(['--target', 'cloud'], {})).toContain('DEV');
-  for (const group of ['audit:performance:calendar', 'audit:visual', 'audit:layout-field'])
-    expect(localReason(['--group', `sql:security,${group}`], {}), group).toContain('references');
+  expect(localReason(['--group', 'sql:security,audit:performance:calendar'], {})).toContain('wall clock');
   expect(localReason([], { WERKFLOW_VERIFY_LOCAL: '1' })).toContain('WERKFLOW_VERIFY_LOCAL');
   // CI and the Boat machine itself run locally without a line.
   expect(localReason([], { CI: 'true' })).toBe('');
@@ -165,7 +167,7 @@ test('a command streams its output in order and reports its exit and a memory ki
   expect(offsets).toEqual(['?stdoutOffset=0&stderrOffset=0', '?stdoutOffset=4&stderrOffset=0']);
 });
 
-test('each Boat refusal becomes one fallback line, and a rejected key says how to renew', () => {
+test('each Boat refusal becomes one reason, and a rejected key says how to renew', () => {
   expect(boatFailure(new BoatError(503, 'no_ready_machine', 'POST /sandboxes: 503'))).toBe(
     'Boat answered 503 no_ready_machine.',
   );
@@ -193,15 +195,18 @@ test('an untracked credential or local setting stays on the workstation', () => 
   ).toBeUndefined();
 });
 
-test('a plan that runs a measuring or capturing group stays local, whatever selected it', () => {
+test('a plan that runs a wall-clock group stays local, whatever selected it', () => {
   const plan = [
     'RUN   static:lint | Static gate | 12 proof inputs | missing or changed proof',
-    'REUSE audit:lab:office | Changed spec | 30 proof inputs | passed 2026-11-07',
     'RUN   audit:visual | Changed spec | 30 proof inputs | no pass since selection',
+    'REUSE audit:performance:office | Changed spec | 30 proof inputs | passed 2026-11-07',
+    'RUN   audit:performance:calendar | Release | 30 proof inputs | no pass since selection',
   ].join('\n');
-  expect(machineBoundGroup(plan)).toBe('audit:visual');
+  expect(wallClockGroup(plan)).toBe('audit:performance:calendar');
   expect(
-    machineBoundGroup('RUN   golden:gg-00 | Critical journey | 9 proof inputs | no pass'),
+    wallClockGroup(
+      'RUN   audit:visual | Changed spec | 30 proof inputs | no pass\nRUN   audit:layout:job | Changed spec | 9 proof inputs | no pass',
+    ),
   ).toBeUndefined();
 });
 
@@ -399,10 +404,10 @@ test('a Ctrl-C while a machine starts deletes it and never falls back to a local
   // The interruption itself stops the wait: no readiness poll, and the started machine is deleted.
   expect(failure instanceof Error && failure.name).toBe('AbortError');
   expect(calls.slice(0, 2)).toEqual(['POST /api/v1/sandboxes', 'DELETE /api/v1/sandboxes/bx_test']);
-  expect(() => fallbackLine(failure, interrupt.signal)).toThrow();
-  expect(fallbackLine(new BoatError(503, 'no_ready_machine', ''), new AbortController().signal)).toBe(
-    'Running locally: Boat answered 503 no_ready_machine.',
-  );
+  expect(() => unavailable(failure, interrupt.signal)).toThrow();
+  expect(unavailable(new BoatError(503, 'no_ready_machine', ''), new AbortController().signal)).toEqual({
+    unavailable: 'Boat answered 503 no_ready_machine.',
+  });
 });
 
 test('a run machine keeps no snapshot and no monitoring; only the snapshot build keeps both', async () => {

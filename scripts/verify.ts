@@ -96,14 +96,18 @@ import {
   type BackendHealth,
 } from '../lib/testing/runner/backend-health';
 import { acquireHeavySlot } from '../lib/testing/runner/heavy-slot';
-import { verifyOnBoat } from '../lib/testing/boat/verify-on-boat';
+import { unavailableNotice } from '../lib/testing/boat/boat-unavailable';
+import { heldBackHere, verifyOnBoat } from '../lib/testing/boat/verify-on-boat';
 
-// A run goes to a Boat machine when this workstation has a Boat key, and falls back here on any
-// Boat failure (lib/testing/boat/verify-on-boat.ts). A local run holds one of the machine's heavy
-// slots until it exits (lib/testing/runner/heavy-slot.ts); a plan takes neither.
+// A run goes to a Boat machine when this workstation has a Boat key (lib/testing/boat/verify-on-boat.ts).
+// When Boat is unavailable, only the cheap groups run here and the heavy ones are recorded blocked.
+// A local run holds one of the machine's heavy slots until it exits
+// (lib/testing/runner/heavy-slot.ts); a plan takes neither.
+let boatUnavailable: string | undefined;
 if (process.argv[2] === 'run') {
-  const boatExit = await verifyOnBoat(process.argv.slice(3), resolve(import.meta.dir, '..'));
-  if (boatExit !== undefined) process.exit(boatExit);
+  const boat = await verifyOnBoat(process.argv.slice(3), resolve(import.meta.dir, '..'));
+  if (typeof boat === 'number') process.exit(boat);
+  boatUnavailable = boat?.unavailable;
   await acquireHeavySlot('test:verify');
 }
 
@@ -383,8 +387,17 @@ async function main(): Promise<void> {
       return { ...entry, reusable };
     },
   );
+  // Without Boat the heavy groups never run here by default; they are recorded blocked.
+  const heldBack = new Set(
+    boatUnavailable === undefined
+      ? []
+      : planning
+          .filter((entry) => !entry.reusable && heldBackHere(entry.group.id))
+          .map((entry) => entry.group.id),
+  );
+  const heldBackReason = `Boat was unavailable (${boatUnavailable ?? ''}), and a heavy group never runs on this workstation by default. Run it on Boat, or here with WERKFLOW_VERIFY_LOCAL=1.`;
   const freshBrowserEntries = planning.filter(
-    (entry) => !entry.reusable && BROWSER_KINDS.has(entry.group.kind),
+    (entry) => !entry.reusable && BROWSER_KINDS.has(entry.group.kind) && !heldBack.has(entry.group.id),
   );
   const repairing =
     automatic &&
@@ -437,6 +450,9 @@ async function main(): Promise<void> {
       console.log(
         `[verify] Wall-clock group for this change, not selected: ${measured.id} (first file ${measured.changedFiles[0]}). CI never runs it (docs/technical/performance.md); before a release, on a quiet machine run: bun run test:verify --group ${measured.id}`,
       );
+  if (boatUnavailable !== undefined)
+    for (const line of unavailableNotice(boatUnavailable, [...heldBack], process.argv.slice(3)))
+      console.log(`[verify] ${line}`);
   // The breaker and the archive guard refuse in run mode and only warn in plan mode, so the plan still lists what a focused run must prove.
   const refusals = [
     options.mode === 'release'
@@ -460,7 +476,10 @@ async function main(): Promise<void> {
     }),
     undiagnosedAttemptProblem({
       groupIds: planning
-        .filter((entry) => !entry.reusable && DIAGNOSED_ATTEMPT_KINDS.has(entry.group.kind))
+        .filter(
+          (entry) =>
+            !entry.reusable && DIAGNOSED_ATTEMPT_KINDS.has(entry.group.kind) && !heldBack.has(entry.group.id),
+        )
         .map((entry) => entry.group.id),
       results: priorResults,
       diagnoses: readGroupDiagnoses(archive),
@@ -619,6 +638,7 @@ async function main(): Promise<void> {
             const browser = BROWSER_KINDS.has(entry.group.kind);
             // A browser group may run again once anything in the tree changed since its failure; the cheap groups compare their own inputs.
             const blocked =
+              (heldBack.has(entry.group.id) ? heldBackReason : undefined) ??
               globalBlock ??
               (entry.tier > 0 ? changedTestsFirstBlock(failedFirstTier) : undefined) ??
               (entry.group.kind === 'static'
@@ -884,6 +904,11 @@ async function main(): Promise<void> {
       prune: () => pruneRunArchive('prune'),
     });
   });
+  // The run's last line, after the summary and the archive pruning.
+  if (heldBack.size)
+    console.log(
+      `[verify] NOT A PASS: ${heldBack.size} heavy groups did not run because Boat was unavailable (${boatUnavailable ?? ''}). See the block after the plan.`,
+    );
 }
 
 try {
