@@ -25,6 +25,7 @@ const jobId = '87000000-0000-4000-8000-000000000005';
 const foreignJobId = '87000000-0000-4000-8000-000000000006';
 const visitId = '87000000-0000-4000-8000-000000000007';
 const otherDayVisitId = '87000000-0000-4000-8000-000000000008';
+const colleagueVisitId = '87000000-0000-4000-8000-000000000009';
 const operationIds = Array.from(
   { length: 8 },
   (_, index) => `87000000-0000-4000-8000-0000000001${String(index).padStart(2, '0')}`,
@@ -45,10 +46,7 @@ const world = installActionWorld({
     { id: foreignJobId, organization_id: ORGANIZATION_B },
   ],
   time_entries: [],
-  planning_occurrence_assignments: [
-    { organization_id: ORGANIZATION_A, occurrence_id: visitId, employee_record_id: ownRecordId },
-    { organization_id: ORGANIZATION_A, occurrence_id: otherDayVisitId, employee_record_id: ownRecordId },
-  ],
+  // Each visit carries its people, as the read's `!inner` join hands them out.
   planning_occurrences: [
     {
       id: visitId,
@@ -61,6 +59,21 @@ const world = installActionWorld({
       end_at: '2026-10-26T14:30:00.000Z',
       start_date: null,
       end_date_exclusive: null,
+      assignee: [{ employee_record_id: ownRecordId }],
+    },
+    // The colleague's visit on the same day: never part of the caller's timeline.
+    {
+      id: colleagueVisitId,
+      organization_id: ORGANIZATION_A,
+      entry_kind: 'job_visit',
+      status: 'scheduled',
+      job_id: jobId,
+      time_kind: 'timed',
+      start_at: '2026-10-26T07:00:00.000Z',
+      end_at: '2026-10-26T09:00:00.000Z',
+      start_date: null,
+      end_date_exclusive: null,
+      assignee: [{ employee_record_id: colleagueRecordId }],
     },
     {
       id: otherDayVisitId,
@@ -73,6 +86,7 @@ const world = installActionWorld({
       end_at: '2026-10-27T14:30:00.000Z',
       start_date: null,
       end_date_exclusive: null,
+      assignee: [{ employee_record_id: ownRecordId }],
     },
   ],
 });
@@ -241,5 +255,9 @@ assert.deepEqual(
     localDate: '2026-10-26',
     employeeRecordId: colleagueRecordId,
   }),
-  { success: true, visits: [] },
+  {
+    success: true,
+    // The office reads the colleague's day: their visit, never the caller's.
+    visits: [{ jobId, startAt: '2026-10-26T07:00:00.000Z', endAt: '2026-10-26T09:00:00.000Z' }],
+  },
 );

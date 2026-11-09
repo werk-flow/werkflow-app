@@ -224,10 +224,12 @@ export function useManualEntrySubmit(input: ManualEntrySubmitInput): {
     // An untouched or incomplete form sends nothing: it marks the fields instead.
     const plan = planManualEntrySubmission(input);
     if (input.needsReason) setAttempted(true);
-    // A timeline still loading sends nothing: its section shows a skeleton.
-    const timelineCheck = input.needsReason
-      ? (input.timelineRef.current?.check() ?? { valid: false, fieldErrors: {} })
-      : null;
+    // A timeline still loading sends nothing, and says so at the button.
+    if (input.needsReason && !input.timelineRef.current) {
+      setError('Die Zeitleiste lädt noch. Bitte speichere gleich noch einmal.');
+      return;
+    }
+    const timelineCheck = input.needsReason ? (input.timelineRef.current?.check() ?? null) : null;
     if (plan.kind === 'invalid' || (timelineCheck && !timelineCheck.valid)) {
       const errors = plan.kind === 'invalid' ? plan.fieldErrors : NO_MANUAL_ENTRY_FIELD_ERRORS;
       setFieldErrors(errors);

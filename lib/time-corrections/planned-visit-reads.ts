@@ -6,7 +6,7 @@ import { logReadFailure } from '@/lib/data/read-request-cache';
 import { resolveActionContextFor } from '@/lib/org/action-context';
 import { isManagerRole } from '@/lib/roles';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
+import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 import type { PlannedCorrectionVisit } from './types';
@@ -66,35 +66,26 @@ async function readPlannedVisits(
   if (!noon) return { success: false, error: 'invalid_input' };
   const from = getLocalDayStart(noon).toISOString();
   const to = new Date(getLocalDayEnd(noon).getTime() + 1).toISOString();
-  const assignments = await readCompleteRows(
+  // The day's scheduled job visits that name the person, in one paged read:
+  // never the person's whole assignment history.
+  const occurrences = await readCompleteRows(
     (start, end) =>
       admin
-        .from('planning_occurrence_assignments')
-        .select('occurrence_id')
-        .eq('organization_id', organizationId)
-        .eq('employee_record_id', employeeRecordId)
-        .order('occurrence_id')
-        .range(start, end),
-    LIST_ROW_CAP,
-  );
-  if (assignments.error) {
-    logReadFailure('getPlannedCorrectionVisits: assignments failed', assignments.error);
-    return { success: false, error: 'load_failed' };
-  }
-  const occurrences = await readInBatches(
-    [...new Set(assignments.data.map((assignment) => assignment.occurrence_id))],
-    (batch) =>
-      admin
         .from('planning_occurrences')
-        .select('job_id, time_kind, start_at, end_at')
+        .select(
+          'id, job_id, time_kind, start_at, end_at, assignee:planning_occurrence_assignments!inner(employee_record_id)',
+        )
         .eq('organization_id', organizationId)
         .eq('entry_kind', 'job_visit')
         .eq('status', 'scheduled')
-        .in('id', [...batch])
+        .eq('assignee.employee_record_id', employeeRecordId)
         .or(
           `and(time_kind.eq.timed,start_at.lt.${to},end_at.gt.${from}),` +
             `and(time_kind.eq.all_day,start_date.lte.${localDate},end_date_exclusive.gt.${localDate})`,
-        ),
+        )
+        .order('id')
+        .range(start, end),
+    LIST_ROW_CAP,
   );
   if (occurrences.error) {
     logReadFailure('getPlannedCorrectionVisits: occurrences failed', occurrences.error);
