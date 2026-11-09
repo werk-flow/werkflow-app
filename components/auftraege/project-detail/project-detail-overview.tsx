@@ -55,7 +55,9 @@ export function ProjectDetailOverview({
           </div>
         )}
       </div>
-      {isAdminOrManager ? <WorkRequestEntriesSection kind="project" id={liveProject.id} className="mb-6" /> : null}
+      {isAdminOrManager ? (
+        <WorkRequestEntriesSection kind="project" id={liveProject.id} className="mb-6" />
+      ) : null}
     </>
   );
 }
