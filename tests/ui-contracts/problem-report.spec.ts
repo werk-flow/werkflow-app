@@ -141,7 +141,7 @@ test('the context keeps a control label only when the app names it, and routes o
   expect(JSON.stringify(submission?.context)).not.toContain('Musterbau');
 });
 
-test('the send shows its pending state in the first frame and keeps the dialog until the answer', async ({
+test('the send shows its pending state in the first frame, and neither cancel nor the list link leaves the dialog until the answer', async ({
   page,
 }) => {
   await openReportFixture(page);
@@ -154,6 +154,9 @@ test('the send shows its pending state in the first frame and keeps the dialog u
   const send = dialog.getByRole('button', { name: 'Senden', exact: true });
   await send.click();
   await expect(send).toHaveAttribute('aria-busy', 'true');
+  // Neither control leaves the dialog while its answer is out.
+  await expect(dialog.getByRole('button', { name: 'Abbrechen', exact: true })).toBeDisabled();
+  await dialog.getByRole('link', { name: 'Meine Meldungen' }).click();
   await expect(dialog).toBeVisible();
   await page.evaluate(() => window.uiContractProblemReport.releaseSubmission?.());
   await expect(
@@ -173,4 +176,116 @@ test('F2 opens the report dialog from the keyboard, and Escape returns to where 
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
   await expect(working).toBeFocused();
+});
+
+const INTERRUPTED =
+  'Deine Meldung konnte gerade nicht vollständig gesendet werden. Prüfe deine Verbindung und versuche es erneut.';
+
+async function chooseAttachment(
+  page: Page,
+  dialog: ReturnType<Page['getByRole']>,
+  name: string,
+): Promise<void> {
+  const chooser = page.waitForEvent('filechooser');
+  await dialog.getByRole('button', { name: 'Anhänge' }).click();
+  await (
+    await chooser
+  ).setFiles({ name, mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 vertrag') });
+  await expect(dialog.getByText(name, { exact: true })).toBeVisible();
+}
+
+test('a failed attachment keeps the saved report and its sent screenshot, and the retry sends only the attachment', async ({
+  page,
+}) => {
+  const puts = await openReportFixture(page);
+  await page.unroute('http://localhost/storage/**');
+  let attachmentPuts = 0;
+  await page.route('http://localhost/storage/**', async (route) => {
+    const kind = new URL(route.request().url()).pathname.split('/')[2] ?? '';
+    puts.push({ kind, body: Buffer.alloc(0) });
+    if (kind === 'anhang' && (attachmentPuts += 1) === 1) await route.fulfill({ status: 503, body: '' });
+    else await route.fulfill({ status: 200, body: '' });
+  });
+  const dialog = await openDialog(page);
+  await chooseAttachment(page, dialog, 'aufmass.pdf');
+  await dialog.getByRole('textbox', { name: 'Was ist passiert?', exact: true }).fill('Der Plan fehlt.');
+  await dialog.getByRole('button', { name: 'Senden', exact: true }).click();
+  await expect(
+    dialog.getByText('Deine Meldung Nr. 7 ist gespeichert, aber „aufmass.pdf“ fehlt noch.', { exact: false }),
+  ).toBeVisible();
+  // The sent screenshot no longer changes: no switch, no box can change what storage holds.
+  await expect(dialog.getByRole('checkbox', { name: 'Screenshot mitsenden' })).toBeDisabled();
+  await expect(dialog.getByRole('textbox', { name: 'Was ist passiert?', exact: true })).toHaveAttribute(
+    'readonly',
+    '',
+  );
+
+  await dialog.getByRole('button', { name: 'Senden', exact: true }).click();
+  await expect(
+    page.getByRole('alert').getByText('Danke! Deine Meldung Nr. 7 ist eingegangen.'),
+  ).toBeVisible();
+  const state = await boundary(page);
+  expect(state.submissions).toHaveLength(1);
+  expect(state.tickets).toEqual(['screenshot', 'anhang', 'anhang']);
+  expect(state.registered).toEqual(['screenshot', 'anhang']);
+});
+
+test('a registration whose answer got lost counts once on the retry, under the same file', async ({
+  page,
+}) => {
+  await openReportFixture(page);
+  await page.evaluate(() => {
+    window.uiContractProblemReport.loseFinalizeAnswer = ['screenshot'];
+  });
+  const dialog = await openDialog(page);
+  await dialog
+    .getByRole('textbox', { name: 'Was ist passiert?', exact: true })
+    .fill('Das Bild kam nicht an.');
+  await dialog.getByRole('button', { name: 'Senden', exact: true }).click();
+  await expect(
+    dialog.getByText('Deine Meldung Nr. 7 ist gespeichert, aber der Screenshot fehlt noch.', {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await expect(dialog.getByRole('checkbox', { name: 'Screenshot mitsenden' })).toBeDisabled();
+  // Its bytes left the device, so the preview takes no new box that storage would lack.
+  const preview = dialog.getByRole('img', { name: 'Vorschau des Screenshots mit deinen Schwärzungen' });
+  const pixels = () =>
+    preview.evaluate((canvas) => (canvas instanceof HTMLCanvasElement ? canvas.toDataURL() : ''));
+  const before = await pixels();
+  const box = await preview.boundingBox();
+  if (!box) throw new Error('The preview has no box.');
+  await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.6, { steps: 4 });
+  await page.mouse.up();
+  expect(await pixels()).toBe(before);
+  await dialog.getByRole('button', { name: 'Senden', exact: true }).click();
+  await expect(
+    page.getByRole('alert').getByText('Danke! Deine Meldung Nr. 7 ist eingegangen.'),
+  ).toBeVisible();
+  const state = await boundary(page);
+  expect(state.tickets).toEqual(['screenshot']);
+  expect(state.registered).toEqual(['screenshot']);
+});
+
+test('a send that throws shows its failure in the dialog, and the retry saves the report once', async ({
+  page,
+}) => {
+  await openReportFixture(page);
+  await page.evaluate(() => {
+    window.uiContractProblemReport.throwSubmissionOnce = true;
+  });
+  const dialog = await openDialog(page);
+  await dialog.getByRole('checkbox', { name: 'Screenshot mitsenden' }).click();
+  await dialog.getByRole('textbox', { name: 'Was ist passiert?', exact: true }).fill('Keine Verbindung.');
+  const send = dialog.getByRole('button', { name: 'Senden', exact: true });
+  await send.click();
+  await expect(dialog.getByText(INTERRUPTED)).toBeVisible();
+  await expect(send).toBeEnabled();
+  await send.click();
+  await expect(
+    page.getByRole('alert').getByText('Danke! Deine Meldung Nr. 7 ist eingegangen.'),
+  ).toBeVisible();
+  expect((await boundary(page)).submissions).toHaveLength(1);
 });

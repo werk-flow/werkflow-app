@@ -30,6 +30,10 @@ type ProblemReportBoundaryState = {
   /** Resolves the held submission; null while none is held or holding is off. */
   releaseSubmission: (() => void) | null;
   holdSubmission: boolean;
+  /** The next submission throws, as a lost connection does. */
+  throwSubmissionOnce: boolean;
+  /** File kinds whose next finalize registers the file, but whose answer never reaches the browser. */
+  loseFinalizeAnswer: string[];
 };
 
 declare global {
@@ -45,12 +49,18 @@ export function initializeProblemReportBoundary(): void {
     registered: [],
     releaseSubmission: null,
     holdSubmission: false,
+    throwSubmissionOnce: false,
+    loseFinalizeAnswer: [],
   };
 }
 
 // `@/lib/problem-reports/actions`
 export const submitProblemReport: ReportActions['submitProblemReport'] = async (input) => {
   const state = window.uiContractProblemReport;
+  if (state.throwSubmissionOnce) {
+    state.throwSubmissionOnce = false;
+    throw new TypeError('Failed to fetch');
+  }
   state.submissions.push(input);
   if (state.holdSubmission)
     await new Promise<void>((resolve) => {
@@ -64,14 +74,25 @@ export const createProblemReportFileUploadTicket: FileActions['createProblemRepo
   input,
 ) => {
   window.uiContractProblemReport.tickets.push(input.kind);
-  const fileId = `33400000-0000-4000-8000-00000000003${window.uiContractProblemReport.tickets.length}`;
+  const fileId = `33400000-0000-4000-8000-${String(window.uiContractProblemReport.tickets.length).padStart(12, '0')}`;
   return { success: true, ticket: { fileId, uploadUrl: `http://localhost/storage/${input.kind}/${fileId}` } };
 };
 
+const registeredFileIds = new Set<string>();
+
+/** Registers each file id once, like `register_problem_report_file`. */
 export const finalizeProblemReportFileUpload: FileActions['finalizeProblemReportFileUpload'] = async (
   input,
 ) => {
-  window.uiContractProblemReport.registered.push(input.kind);
+  const state = window.uiContractProblemReport;
+  if (registeredFileIds.has(input.fileId)) return { success: false, error: 'already_finalized' };
+  registeredFileIds.add(input.fileId);
+  state.registered.push(input.kind);
+  const lost = state.loseFinalizeAnswer.indexOf(input.kind);
+  if (lost >= 0) {
+    state.loseFinalizeAnswer.splice(lost, 1);
+    throw new TypeError('Failed to fetch');
+  }
   return { success: true };
 };
 

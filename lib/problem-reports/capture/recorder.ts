@@ -105,3 +105,22 @@ export function startRecording(): () => void {
     window.removeEventListener('unhandledrejection', onRejection);
   };
 }
+
+/** What the device says about itself, read at the press. */
+export type DeviceFacts = {
+  userAgent: string;
+  viewport: { width: number; height: number };
+  online: boolean;
+  /** The build of this bundle, or null when the build named none. */
+  appVersion: string | null;
+};
+
+/** The device's own facts now: read at the press, so reconnecting or the phone keyboard later changes nothing. */
+export function readDeviceFacts(): DeviceFacts {
+  return {
+    userAgent: navigator.userAgent,
+    viewport: { width: window.innerWidth, height: window.innerHeight },
+    online: navigator.onLine,
+    appVersion: process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA?.slice(0, 12) ?? null,
+  };
+}

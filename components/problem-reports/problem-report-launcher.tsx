@@ -17,9 +17,11 @@ import { useAnyDialogOpen } from '@/components/ui/open-dialog-context';
 import { usePendingTask } from '@/hooks/use-server-action';
 import { logError } from '@/lib/logging';
 import {
+  readDeviceFacts,
   recordedActivity,
   setRecordedRoute,
   startRecording,
+  type DeviceFacts,
   type RecordedActivity,
 } from '@/lib/problem-reports/capture/recorder';
 import { routeTemplate } from '@/lib/problem-reports/capture/route-template';
@@ -34,6 +36,7 @@ import type { ProblemReportDialogProps } from './problem-report-dialog';
 export type ProblemReportCapture = {
   id: number;
   activity: RecordedActivity;
+  device: DeviceFacts;
   screenshot: Promise<ImageBitmap | null>;
 };
 
@@ -94,11 +97,12 @@ export function ProblemReportLauncher({ children }: { children: ReactNode }) {
     starting.current = true;
     // Nothing is captured before the press: the activity is copied now.
     const activity = recordedActivity();
+    const device = readDeviceFacts();
     reportDialog.preload();
     void run(async () => {
       try {
         const { image } = await startScreenshot();
-        setCapture((previous) => ({ id: (previous?.id ?? 0) + 1, activity, screenshot: image }));
+        setCapture((previous) => ({ id: (previous?.id ?? 0) + 1, activity, device, screenshot: image }));
         setOpen(true);
       } finally {
         starting.current = false;

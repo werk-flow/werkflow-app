@@ -10,34 +10,49 @@ import type { ProblemReportFileKind } from './types';
 
 export type ProblemReportFile = { kind: ProblemReportFileKind; bytes: Blob; fileName: string };
 
+/** One try: its result, and the file id whose bytes reached storage, for the next try. */
+export type ProblemReportUploadOutcome = { result: ActionResult; storedFileId: string | null };
+
 /**
- * Sends one file of a saved report. A finalize whose earlier answer got lost
- * finds its own registration and counts as sent.
+ * Sends one file of a saved report. After a failed try, pass its
+ * `storedFileId` back: the retry registers those bytes first, so a finalize
+ * whose answer got lost is found, not repeated under a new id. It sends the
+ * bytes again only when storage no longer holds them.
  */
 export async function uploadProblemReportFile(
   target: { organizationId: string; reportId: string },
   file: ProblemReportFile,
-): Promise<ActionResult> {
+  storedFileId: string | null,
+): Promise<ProblemReportUploadOutcome> {
   const fields = { ...target, kind: file.kind, fileName: file.fileName };
+  const register = async (fileId: string): Promise<ActionResult> => {
+    const finalized = await finalizeProblemReportFileUpload({ ...fields, fileId });
+    return !finalized.success && finalized.error === 'already_finalized' ? { success: true } : finalized;
+  };
+  let stored = storedFileId;
   try {
+    if (stored) {
+      const result = await register(stored);
+      if (result.success || result.error !== 'file_missing') return { result, storedFileId: stored };
+      stored = null;
+    }
     const ticket = await createProblemReportFileUploadTicket({
       ...fields,
       mimeType: file.bytes.type,
       fileSizeBytes: file.bytes.size,
     });
-    if (!ticket.success) return ticket;
-    const stored = await fetch(ticket.ticket.uploadUrl, {
+    if (!ticket.success) return { result: ticket, storedFileId: null };
+    const put = await fetch(ticket.ticket.uploadUrl, {
       method: 'PUT',
       body: file.bytes,
       // The signed URL was created for this content type.
       headers: { 'Content-Type': file.bytes.type },
     });
-    if (!stored.ok) return { success: false, error: 'upload_failed' };
-    const finalized = await finalizeProblemReportFileUpload({ ...fields, fileId: ticket.ticket.fileId });
-    if (!finalized.success && finalized.error === 'already_finalized') return { success: true };
-    return finalized;
+    if (!put.ok) return { result: { success: false, error: 'upload_failed' }, storedFileId: null };
+    stored = ticket.ticket.fileId;
+    return { result: await register(stored), storedFileId: stored };
   } catch (error) {
     logError('uploadProblemReportFile: transfer failed', error);
-    return { success: false, error: 'upload_failed' };
+    return { result: { success: false, error: 'upload_failed' }, storedFileId: stored };
   }
 }

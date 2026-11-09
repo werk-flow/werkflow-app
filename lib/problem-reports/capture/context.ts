@@ -1,20 +1,11 @@
 import { isUiString, type UiStringCatalog } from '@/lib/problem-reports/screenshot/ui-string-catalog';
 import type { ProblemReportContext } from '@/lib/problem-reports/schemas';
-import type { RecordedActivity } from './recorder';
+import type { DeviceFacts, RecordedActivity } from './recorder';
 
 // The context a report carries, built at the press from what the recorder
 // remembered and what the device says about itself. A control's label stays
 // only when the whole label is one of the app's own UI strings; any other
 // label, such as a customer's name on a row link, becomes null.
-
-/** What the device says about itself at the press. */
-export type DeviceFacts = {
-  userAgent: string;
-  viewport: { width: number; height: number };
-  online: boolean;
-  /** The build of this bundle, or null when the build named none. */
-  appVersion: string | null;
-};
 
 type Device = ProblemReportContext['device'];
 

@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 
 import { useBanner } from '@/components/ui/banner';
 import { usePendingTask } from '@/hooks/use-server-action';
+import { logError } from '@/lib/logging';
 import { submitProblemReport } from '@/lib/problem-reports/actions';
 import { buildProblemReportContext } from '@/lib/problem-reports/capture/context';
 import { problemReportFailureMessage } from '@/lib/problem-reports/messages';
@@ -29,15 +30,6 @@ export type ProblemReportDraft = {
 
 type SavedReport = { reportId: string; number: number };
 type KeyedFile = { key: string; file: ProblemReportFile };
-
-function deviceFacts() {
-  return {
-    userAgent: navigator.userAgent,
-    viewport: { width: window.innerWidth, height: window.innerHeight },
-    online: navigator.onLine,
-    appVersion: process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA?.slice(0, 12) ?? null,
-  };
-}
 
 /** The screenshot with its boxes burned in, then the attachments, each with its retry key. */
 async function filesOf(
@@ -64,15 +56,17 @@ export function useProblemReportSend(capture: ProblemReportCapture, close: () =>
   const { run, isPending } = usePendingTask();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<SavedReport | null>(null);
-  // The files that reached the saved report, so a retry sends only the rest.
+  // The files that reached the saved report, so a retry sends only the rest,
+  // and the stored bytes of each file whose registration has not answered yet.
   const [sentFiles, setSentFiles] = useState<ReadonlySet<string>>(new Set());
+  const [storedFiles, setStoredFiles] = useState<ReadonlyMap<string, string>>(new Map());
 
   const saveReport = async (organizationId: string, description: string): Promise<SavedReport | null> => {
     if (saved) return saved;
     const result = await submitProblemReport({
       organizationId,
       description,
-      context: buildProblemReportContext(capture.activity, loadUiStringCatalog(), deviceFacts()),
+      context: buildProblemReportContext(capture.activity, loadUiStringCatalog(), capture.device),
     });
     if (!result.success) {
       setError(problemReportFailureMessage(result.error));
@@ -89,12 +83,17 @@ export function useProblemReportSend(capture: ProblemReportCapture, close: () =>
     files: KeyedFile[],
   ): Promise<boolean> => {
     const sent = new Set(sentFiles);
+    const stored = new Map(storedFiles);
     for (const { key, file } of files) {
       if (sent.has(key)) continue;
-      const upload = await uploadProblemReportFile({ organizationId, reportId: report.reportId }, file);
-      if (!upload.success) {
+      const target = { organizationId, reportId: report.reportId };
+      const { result, storedFileId } = await uploadProblemReportFile(target, file, stored.get(key) ?? null);
+      if (storedFileId) stored.set(key, storedFileId);
+      else stored.delete(key);
+      setStoredFiles(new Map(stored));
+      if (!result.success) {
         const what = file.kind === 'screenshot' ? 'der Screenshot' : `„${file.fileName}“`;
-        const reason = problemReportFailureMessage(upload.error);
+        const reason = problemReportFailureMessage(result.error);
         setError(`Deine Meldung Nr. ${report.number} ist gespeichert, aber ${what} fehlt noch. ${reason}`);
         return false;
       }
@@ -107,20 +106,33 @@ export function useProblemReportSend(capture: ProblemReportCapture, close: () =>
   const send = (organizationId: string, draft: ProblemReportDraft): void => {
     void run(async () => {
       setError(null);
-      const report = await saveReport(organizationId, draft.description.trim());
-      if (!report) return;
-      if (!(await sendFiles(organizationId, report, await filesOf(draft, capture.screenshot)))) return;
-      close();
-      showBanner({
-        variant: 'success',
-        message: `Danke! Deine Meldung Nr. ${report.number} ist eingegangen.`,
-        actionLabel: 'Meine Meldungen',
-        onAction: () => router.push('/meldungen'),
-      });
-      // The list reads per request; only an open list needs a new read.
-      if (pathname === '/meldungen') router.refresh();
+      try {
+        const report = await saveReport(organizationId, draft.description.trim());
+        if (!report) return;
+        if (!(await sendFiles(organizationId, report, await filesOf(draft, capture.screenshot)))) return;
+        confirm(report);
+      } catch (thrown) {
+        // A lost connection or a device that cannot encode the image: the
+        // dialog stays open with what is saved, and „Senden“ tries again.
+        logError('useProblemReportSend: send failed', thrown);
+        setError(problemReportFailureMessage('send_interrupted'));
+      }
     });
   };
 
-  return { send, isPending, error, setError, saved: saved !== null, sentFiles };
+  const confirm = (report: SavedReport): void => {
+    close();
+    showBanner({
+      variant: 'success',
+      message: `Danke! Deine Meldung Nr. ${report.number} ist eingegangen.`,
+      actionLabel: 'Meine Meldungen',
+      onAction: () => router.push('/meldungen'),
+    });
+    // The list reads per request; only an open list needs a new read.
+    if (pathname === '/meldungen') router.refresh();
+  };
+
+  // A file whose bytes left the device no longer changes: a retry sends those bytes.
+  const frozenFiles: ReadonlySet<string> = new Set([...sentFiles, ...storedFiles.keys()]);
+  return { send, isPending, error, setError, saved: saved !== null, frozenFiles };
 }

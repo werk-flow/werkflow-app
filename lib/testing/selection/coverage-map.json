@@ -3053,14 +3053,17 @@
         {
           "file": "tests/ui-contracts/problem-report.spec.ts",
           "kind": "browser",
-          "description": "An empty description is marked and focused; a text-only report uploads no screenshot; a drawn box is black in the uploaded image; the context keeps only catalog labels and route templates; the send shows its pending state at once. F2 opens the dialog from the keyboard.",
+          "description": "An empty description is marked and focused; a text-only report uploads no screenshot; a drawn box is black in the uploaded image; the context keeps only catalog labels and route templates; the send shows its pending state at once. F2 opens the dialog from the keyboard. A failed file keeps the saved report, freezes what left the device and resends only what is missing.",
           "titles": [
             "an empty description marks the field, focuses it and sends nothing",
             "a text-only report sends no screenshot",
             "a redaction box is burned into the uploaded image",
             "the context keeps a control label only when the app names it, and routes only as templates",
-            "the send shows its pending state in the first frame and keeps the dialog until the answer",
-            "F2 opens the report dialog from the keyboard, and Escape returns to where the person was"
+            "F2 opens the report dialog from the keyboard, and Escape returns to where the person was",
+            "the send shows its pending state in the first frame, and neither cancel nor the list link leaves the dialog until the answer",
+            "a failed attachment keeps the saved report and its sent screenshot, and the retry sends only the attachment",
+            "a registration whose answer got lost counts once on the retry, under the same file",
+            "a send that throws shows its failure in the dialog, and the retry saves the report once"
           ]
         },
         {

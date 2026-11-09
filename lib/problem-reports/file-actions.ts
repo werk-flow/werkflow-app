@@ -113,7 +113,9 @@ export async function finalizeProblemReportFileUpload(
   const admin = createSupabaseAdminClient();
   const report = await readFilableReport(admin, auth.context, input.reportId);
   if (!report.success) {
-    if (report.error !== 'load_failed')
+    // Only the filer's own report whose originals are gone discards the staged
+    // bytes; a report the caller did not file never lets them touch a key.
+    if (report.error === 'report_originals_deleted')
       await discardStorageObjects({ organizationId, paths: [uploadStagingPath(organizationId, path)] });
     return report;
   }

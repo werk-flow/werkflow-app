@@ -9,18 +9,21 @@ import {
   type ImagePoint,
   type RedactionBox,
 } from '@/lib/problem-reports/redaction';
+import { cn } from '@/lib/utils';
 
 type ScreenshotRedactorProps = {
   image: ImageBitmap;
   boxes: readonly RedactionBox[];
   onBoxesChange: (boxes: RedactionBox[]) => void;
+  /** While sending, and once the image left the device, no box can be drawn. */
+  disabled: boolean;
 };
 
 /**
  * The screenshot preview, on which a drag with the finger or the mouse draws
  * a black box. The preview shows exactly what the upload will hold.
  */
-export function ScreenshotRedactor({ image, boxes, onBoxesChange }: ScreenshotRedactorProps) {
+export function ScreenshotRedactor({ image, boxes, onBoxesChange, disabled }: ScreenshotRedactorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragStart = useRef<ImagePoint | null>(null);
   const [draft, setDraft] = useState<RedactionBox | null>(null);
@@ -46,8 +49,12 @@ export function ScreenshotRedactor({ image, boxes, onBoxesChange }: ScreenshotRe
       ref={canvasRef}
       role="img"
       aria-label="Vorschau des Screenshots mit deinen Schwärzungen"
-      className="mx-auto block h-auto max-h-[60dvh] w-auto max-w-full cursor-crosshair touch-none rounded-md border"
+      className={cn(
+        'mx-auto block h-auto max-h-[60dvh] w-auto max-w-full touch-none rounded-md border',
+        disabled ? 'opacity-70' : 'cursor-crosshair',
+      )}
       onPointerDown={(event) => {
+        if (disabled) return;
         event.currentTarget.setPointerCapture(event.pointerId);
         dragStart.current = pointOf(event);
       }}

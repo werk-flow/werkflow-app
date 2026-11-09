@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { submitProblemReportInputSchema } from '@/lib/problem-reports/schemas';
-import { buildProblemReportContext, type DeviceFacts } from './context';
+import { buildProblemReportContext } from './context';
+import type { DeviceFacts } from './recorder';
 
 const ANDROID_CHROME =
   'Mozilla/5.0 (Linux; Android 15; Pixel 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Mobile Safari/537.36';

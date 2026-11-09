@@ -204,8 +204,8 @@ assert.deepEqual(
   }),
   { success: false, error: 'file_too_large' },
 );
-// A refused finalize discards only the staging key; nothing was signed or promoted.
-assert.ok(storageCalls.every((call) => call.startsWith('discard ')));
+// A refused ticket or finalize touches no storage key, not even a staged one.
+assert.equal(storageCalls.length, 0, `storage was touched: ${storageCalls.join(', ')}`);
 const issued = await fileActions.createProblemReportFileUploadTicket(ticket(ORGANIZATION_A, ownReportId));
 assert.ok(issued.success);
 assert.equal(

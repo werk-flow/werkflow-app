@@ -103,14 +103,14 @@ export function ProblemReportDialog({ open, onOpenChange, capture }: ProblemRepo
                   onIncludeChange={setIncludeScreenshot}
                   boxes={boxes}
                   onBoxesChange={setBoxes}
-                  locked={report.sentFiles.has('screenshot')}
+                  locked={report.isPending || report.frozenFiles.has('screenshot')}
                 />
               </Suspense>
             </section>
             <AttachmentsField
               attachments={attachments}
               onAttachmentsChange={setAttachments}
-              sentFiles={report.sentFiles}
+              frozenFiles={report.frozenFiles}
             />
             <ErrorText>{report.error}</ErrorText>
           </DialogBody>
@@ -121,17 +121,27 @@ export function ProblemReportDialog({ open, onOpenChange, capture }: ProblemRepo
   );
 }
 
-/** „Meine Meldungen“ on the left; cancel and send on the right. */
+/**
+ * „Meine Meldungen“ on the left; cancel and send on the right. While a send
+ * runs, neither leaves the dialog, so its answer never lands in a closed one.
+ */
 function ProblemReportFooter({ pending, onClose }: { pending: boolean; onClose: () => void }) {
   return (
     <DialogFooter className="sm:justify-between">
       <Button variant="link" asChild className="px-0">
-        <Link href="/meldungen" onClick={onClose}>
+        <Link
+          href="/meldungen"
+          aria-disabled={pending || undefined}
+          onClick={(event) => {
+            if (pending) event.preventDefault();
+            else onClose();
+          }}
+        >
           Meine Meldungen
         </Link>
       </Button>
       <div className="flex flex-col-reverse gap-2 sm:flex-row">
-        <Button type="button" variant="outline" onClick={onClose}>
+        <Button type="button" variant="outline" disabled={pending} onClick={onClose}>
           Abbrechen
         </Button>
         <Button type="submit" pending={pending}>
@@ -154,10 +164,10 @@ function attachmentProblem(file: File, chosen: number): string | null {
 type AttachmentsFieldProps = {
   attachments: ChosenAttachment[];
   onAttachmentsChange: (update: (current: ChosenAttachment[]) => ChosenAttachment[]) => void;
-  sentFiles: ReadonlySet<string>;
+  frozenFiles: ReadonlySet<string>;
 };
 
-function AttachmentsField({ attachments, onAttachmentsChange, sentFiles }: AttachmentsFieldProps) {
+function AttachmentsField({ attachments, onAttachmentsChange, frozenFiles }: AttachmentsFieldProps) {
   const [problem, setProblem] = useState<string | null>(null);
   const nextKey = useRef(1);
   return (
@@ -193,7 +203,7 @@ function AttachmentsField({ attachments, onAttachmentsChange, sentFiles }: Attac
                 variant="ghost"
                 size="icon"
                 aria-label={`„${file.name}“ entfernen`}
-                disabled={sentFiles.has(`anhang-${key}`)}
+                disabled={frozenFiles.has(`anhang-${key}`)}
                 onClick={() => onAttachmentsChange((current) => current.filter((entry) => entry.key !== key))}
               >
                 <X className="size-4" />
@@ -212,7 +222,7 @@ type ScreenshotSectionProps = {
   onIncludeChange: (include: boolean) => void;
   boxes: RedactionBox[];
   onBoxesChange: (boxes: RedactionBox[]) => void;
-  /** True once the screenshot reached the saved report: it no longer changes. */
+  /** True while sending and once the screenshot's bytes left the device: it no longer changes. */
   locked: boolean;
 };
 
@@ -248,7 +258,7 @@ function ScreenshotSection({
             Kundendaten sind schon durch Platzhalter ersetzt. Ziehe Rechtecke über alles, was trotzdem niemand
             sehen soll. Sie werden schwarz, bevor das Bild dein Gerät verlässt.
           </p>
-          <ScreenshotRedactor image={image} boxes={boxes} onBoxesChange={onBoxesChange} />
+          <ScreenshotRedactor image={image} boxes={boxes} onBoxesChange={onBoxesChange} disabled={locked} />
           {boxes.length > 0 && !locked && (
             <Button type="button" variant="outline" onClick={() => onBoxesChange([])}>
               Schwärzungen entfernen
