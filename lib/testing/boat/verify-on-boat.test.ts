@@ -20,6 +20,7 @@ import { join } from 'node:path';
 import { BoatError, boatClient } from './boat-api';
 import { readBoatKey } from './boat-key';
 import { createMachine, runScript } from './boat-machine';
+import { withMachine } from './machine-reuse';
 import { backendValueDigests } from '../evidence/proof-environment';
 import {
   boatFailure,
@@ -35,7 +36,6 @@ import {
   tarPackArguments,
   unavailable,
   unpackResults,
-  withMachine,
   linkedDestination,
   wallClockGroup,
   withheldFile,

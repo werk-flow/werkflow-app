@@ -1,0 +1,283 @@
+import { spawn } from 'node:child_process';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { homedir, hostname } from 'node:os';
+import { join, resolve } from 'node:path';
+
+import { z } from '../../zod';
+
+import { type BoatClient, BoatError, READY_STATES, boatClient } from './boat-api';
+import { readBoatKey } from './boat-key';
+import {
+  type Machine,
+  createMachine,
+  deleteMachine,
+  machineUsage,
+  runScript,
+  shellQuote,
+} from './boat-machine';
+
+// One Boat machine serves a checkout's consecutive verification runs, because Boat counts every
+// create as a start (docs/technical/boat-verification.md#machine-reuse). After a run the machine is
+// wiped back to what the snapshot holds and kept for IDLE_SECONDS; a run in the same checkout takes
+// it, or a reaper deletes it. Boat's auto-stop erases it in any case MACHINE_TTL_SECONDS after its
+// creation, whatever the workstation does: the key may not move that deadline (no sandbox.update).
+
+/** A machine's whole life: Boat stops it, and without snapshots erases it, this long after its creation. */
+const MACHINE_TTL_SECONDS = 3 * 3_600;
+/** How long a run waits to see Boat drop a machine it deleted, after Boat accepted the deletion. */
+const RUN_DELETION_CONFIRM_MS = 15_000;
+/** How long a wiped machine waits for the next run in its checkout before it is deleted. */
+const IDLE_SECONDS = 15 * 60;
+/** The life a kept machine needs left to take a run, so Boat's auto-stop never cuts one short. */
+const RUN_LIFE_SECONDS = 60 * 60;
+/** One file per kept machine, named by its checkout; only the workstation's own processes read it. */
+const IDLE_RECORDS = join(homedir(), '.cache', 'werkflow-boat', 'idle-machines');
+
+const recordSchema = z.object({ id: z.string().regex(/^bx_[a-z0-9]{8}$/) });
+
+const sleep = (milliseconds: number) => new Promise((done) => setTimeout(done, milliseconds));
+
+/** The label that ties a machine to one checkout on one workstation, without naming either. */
+function checkoutLabel(repository: string, host = hostname()): string {
+  return createHash('sha256').update(`${host}\0${repository}`).digest('hex').slice(0, 16);
+}
+
+/**
+ * The machine id in the idle record at `path`, or undefined when another taker was first. A rename
+ * hands each record to exactly one taker, a run or the reaper, so two never share a machine.
+ */
+function takeIdleRecord(path: string): string | undefined {
+  const taken = `${path}.taken-${randomUUID()}`;
+  try {
+    renameSync(path, taken);
+  } catch {
+    return undefined;
+  }
+  try {
+    return recordSchema.parse(JSON.parse(readFileSync(taken, 'utf8'))).id;
+  } catch {
+    return undefined;
+  } finally {
+    rmSync(taken, { force: true });
+  }
+}
+
+/** Takes every idle record in `folder` that `chosen` picks by name and age, and answers their ids. */
+function takeIdleRecords(folder: string, chosen: (name: string, ageMs: number) => boolean): string[] {
+  let names: string[];
+  try {
+    names = readdirSync(folder);
+  } catch {
+    return [];
+  }
+  return names.flatMap((name) => {
+    const path = join(folder, name);
+    let ageMs: number;
+    try {
+      ageMs = Date.now() - statSync(path).mtimeMs;
+    } catch {
+      return [];
+    }
+    return name.endsWith('.json') && chosen(name, ageMs) ? (takeIdleRecord(path) ?? []) : [];
+  });
+}
+
+/** Asks Boat to delete a machine no run will use; a refusal leaves it to its auto-stop. */
+async function deleteLeftover(client: BoatClient, id: string, log: (line: string) => void): Promise<void> {
+  await client
+    .delete(id)
+    .catch((error: unknown) =>
+      log(`Deleting the leftover Boat machine ${id} failed (${String(error)}); its auto-stop erases it.`),
+    );
+}
+
+/** Records machine `id` as idle for `checkout` and answers the record's path. */
+function writeIdleRecord(checkout: string, id: string, folder: string): string {
+  mkdirSync(folder, { recursive: true, mode: 0o700 });
+  const path = join(folder, `${checkout}--${randomUUID()}.json`);
+  // A taker reads only names that end in .json, so it never reads a record half written.
+  writeFileSync(`${path}.writing`, JSON.stringify({ id }), { mode: 0o600 });
+  renameSync(`${path}.writing`, path);
+  return path;
+}
+
+/**
+ * Seconds until Boat stops the machine, or 0 when it is gone, not ready or would never stop by
+ * itself. Any other refusal throws, so the run falls back instead of paying for a new machine.
+ */
+async function lifeLeft(client: BoatClient, id: string): Promise<number> {
+  let sandbox;
+  try {
+    sandbox = await client.sandbox(id);
+  } catch (error) {
+    if (error instanceof BoatError && error.status === 404) return 0;
+    throw error;
+  }
+  if (!READY_STATES.has(sandbox.state) || !sandbox.archiveAfter) return 0;
+  return (Date.parse(sandbox.archiveAfter) - Date.now()) / 1_000;
+}
+
+/** The command that runs scripts/boat/wipe-machine.sh of `repository` with `args`, sent as text. */
+function wipeCommand(repository: string, args: readonly string[]): string {
+  const script = readFileSync(resolve(repository, 'scripts/boat/wipe-machine.sh'), 'utf8');
+  return `set -- ${args.map(shellQuote).join(' ')}\n${script}`;
+}
+
+/**
+ * Runs the wipe script; a non-zero exit throws with the script's own reason. The login shell may
+ * print after it, such as clear_console's complaint about TERM.
+ */
+async function runWipe(machine: Machine, command: string, signal: AbortSignal): Promise<void> {
+  let output = '';
+  const collect = (text: string) => {
+    output += text;
+  };
+  const { exitCode } = await runScript(machine, command, { stdout: collect, stderr: collect }, signal);
+  if (exitCode === 0) return;
+  // Unanchored: stdout and stderr interleave, so the line may follow output without a newline.
+  const reason = /\[boat\] wipe failed: ([^\n]*)/.exec(output)?.[1];
+  throw new Error(reason ?? `the wipe exited ${exitCode}`);
+}
+
+/**
+ * This checkout's kept machine with the most life left, when that is a run's life, else a new one
+ * from `from`. Every other machine of the checkout is left over, from a killed run or past its use,
+ * and is deleted, as is any machine of this workstation whose idle window passed without its reaper.
+ * A new machine first records what its snapshot holds, which every later wipe restores.
+ */
+export async function acquireMachine(
+  client: BoatClient,
+  input: {
+    repository: string;
+    from: string;
+    name: string;
+    log: (line: string) => void;
+    signal: AbortSignal;
+    /** The idle records' folder; a test's stand-in. */
+    records?: string;
+  },
+): Promise<{ machine: Machine; reused: boolean }> {
+  const checkout = checkoutLabel(input.repository);
+  const folder = input.records ?? IDLE_RECORDS;
+  // A reaper can die with its workstation process; the next run here deletes what it left.
+  for (const id of takeIdleRecords(folder, (_name, ageMs) => ageMs > IDLE_SECONDS * 1_000))
+    await deleteLeftover(client, id, input.log);
+  let kept: { id: string; life: number } | undefined;
+  const taken = takeIdleRecords(folder, (name) => name.startsWith(`${checkout}--`));
+  try {
+    for (const id of taken) {
+      const life = await lifeLeft(client, id);
+      if (life >= RUN_LIFE_SECONDS && life > (kept?.life ?? 0)) kept = { id, life };
+    }
+    // A refused listing throws, as any Boat failure before the run does: the run falls back.
+    for (const { id } of await client.list({ purpose: 'werkflow-verify', checkout }))
+      if (id !== kept?.id) await deleteLeftover(client, id, input.log);
+  } catch (error) {
+    // The records are taken, so no reaper deletes these machines any more: this run does.
+    for (const id of taken) await deleteLeftover(client, id, input.log);
+    throw error;
+  }
+  if (kept) return { machine: { id: kept.id, client, log: input.log }, reused: true };
+  const machine = await createMachine(client, {
+    from: input.from,
+    name: input.name,
+    ttlSeconds: MACHINE_TTL_SECONDS,
+    purpose: 'run',
+    labels: { checkout },
+    log: input.log,
+    signal: input.signal,
+  });
+  try {
+    await runWipe(machine, wipeCommand(input.repository, ['record']), input.signal);
+  } catch (error) {
+    await deleteMachine(machine);
+    throw error;
+  }
+  return { machine, reused: false };
+}
+
+/**
+ * Runs `work` on a started machine, then hands the machine to `keep` when `work` returned a result,
+ * and deletes it when `keep` declines or fails, `work` failed or the user interrupted. It reports the
+ * machine's cost so far either way. A Ctrl-C during that cleanup still stops the run: no fallback to
+ * a local run follows an interruption.
+ */
+export async function withMachine<T>(
+  machine: Machine,
+  signal: AbortSignal,
+  work: () => Promise<T>,
+  keep: (result: T) => Promise<boolean> = async () => false,
+): Promise<T> {
+  let returned: { result: T } | undefined;
+  try {
+    returned = { result: await work() };
+  } finally {
+    // Read before the keep, so nothing awaits between the keep's last interruption check and the end.
+    const usage = await machineUsage(machine);
+    let kept = false;
+    if (returned && !signal.aborted)
+      kept = await keep(returned.result).catch((error: unknown) => {
+        machine.log(
+          `Wiping Boat machine ${machine.id} failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        return false;
+      });
+    // The run's user waits on this deletion, so its confirmation is short.
+    if (!kept) await deleteMachine(machine, RUN_DELETION_CONFIRM_MS);
+    const cost = usage ? `${Math.round(usage.seconds / 2)} s of large, $${usage.dollars.toFixed(4)}` : '';
+    machine.log(
+      kept
+        ? `Boat machine ${machine.id} wiped and kept ${IDLE_SECONDS / 60} min for this checkout's next run${cost ? `; ${cost} so far` : ''}.`
+        : `Boat machine ${machine.id} deleted${cost ? `: ${cost}` : ''}.`,
+    );
+  }
+  signal.throwIfAborted();
+  return returned.result;
+}
+
+/** Starts the detached reaper of one idle record (scripts/boat/reap-idle-machine.ts). */
+function startReaper(repository: string, record: string): void {
+  spawn(process.execPath, [resolve(repository, 'scripts/boat/reap-idle-machine.ts'), record], {
+    detached: true,
+    stdio: 'ignore',
+  }).unref();
+}
+
+/**
+ * Wipes the machine after a run and keeps it for this checkout's next run, with a reaper that deletes
+ * it after IDLE_SECONDS unless a run took it. False, and nothing kept, when too little of its life is
+ * left for another run; a failed wipe throws. Either way the caller then deletes the machine.
+ */
+export async function keepMachine(
+  machine: Machine,
+  input: { repository: string; form: 'main' | 'linked'; signal: AbortSignal; records?: string },
+  reaper: (repository: string, record: string) => void = startReaper,
+): Promise<boolean> {
+  if ((await lifeLeft(machine.client, machine.id)) < RUN_LIFE_SECONDS) return false;
+  await runWipe(machine, wipeCommand(input.repository, ['wipe', input.repository, input.form]), input.signal);
+  // A Ctrl-C deletes the machine: nothing is kept once the user interrupted.
+  if (input.signal.aborted) return false;
+  const checkout = checkoutLabel(input.repository);
+  reaper(input.repository, writeIdleRecord(checkout, machine.id, input.records ?? IDLE_RECORDS));
+  return true;
+}
+
+/**
+ * Deletes the machine of the idle record at `record` after `idleMs`, unless a run took the record
+ * first. When this process dies, Boat's auto-stop still erases the wiped machine.
+ */
+export async function reapIdleMachine(
+  record: string,
+  idleMs = IDLE_SECONDS * 1_000,
+  client: () => BoatClient | undefined = () => {
+    const key = readBoatKey();
+    return key.kind === 'usable' ? boatClient(key.key) : undefined;
+  },
+): Promise<void> {
+  await sleep(idleMs);
+  const id = takeIdleRecord(record);
+  const signed = id === undefined ? undefined : client();
+  if (id === undefined || signed === undefined) return;
+  await deleteMachine({ id, client: signed, log: () => undefined });
+}
