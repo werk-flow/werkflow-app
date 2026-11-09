@@ -9909,6 +9909,7 @@ export type Database = {
       time_operations: {
         Row: {
           actor_id: string | null;
+          captured_at: string | null;
           created_at: string;
           employee_record_id: string;
           expected_session_id: string | null;
@@ -9921,9 +9922,11 @@ export type Database = {
           resulting_segment_id: string | null;
           resulting_session_id: string | null;
           resulting_version: number | null;
+          sent_at: string | null;
         };
         Insert: {
           actor_id?: string | null;
+          captured_at?: string | null;
           created_at?: string;
           employee_record_id: string;
           expected_session_id?: string | null;
@@ -9936,9 +9939,11 @@ export type Database = {
           resulting_segment_id?: string | null;
           resulting_session_id?: string | null;
           resulting_version?: number | null;
+          sent_at?: string | null;
         };
         Update: {
           actor_id?: string | null;
+          captured_at?: string | null;
           created_at?: string;
           employee_record_id?: string;
           expected_session_id?: string | null;
@@ -9951,6 +9956,7 @@ export type Database = {
           resulting_segment_id?: string | null;
           resulting_session_id?: string | null;
           resulting_version?: number | null;
+          sent_at?: string | null;
         };
         Relationships: [
           {
@@ -15441,6 +15447,22 @@ export type Database = {
         };
         Returns: Json;
       };
+      find_client_duplicates: {
+        Args: {
+          p_address: string;
+          p_customer_number: string;
+          p_email: string;
+          p_limit: number;
+          p_name: string;
+          p_organization_id: string;
+          p_phone: string;
+        };
+        Returns: {
+          client_id: string;
+          client_name: string;
+          matched_on: string[];
+        }[];
+      };
       find_client_request_caller_matches: {
         Args: {
           p_limit: number;
@@ -17831,6 +17853,7 @@ export type Database = {
           p_action: Database["public"]["Enums"]["time_operation_kind"];
           p_actor_id: string;
           p_allocation_kind?: Database["public"]["Enums"]["time_allocation_kind"];
+          p_captured_at?: string;
           p_expected_session_id?: string;
           p_expected_version?: number;
           p_internal_type?: Database["public"]["Enums"]["planning_internal_type"];
@@ -17839,6 +17862,7 @@ export type Database = {
           p_organization_id: string;
           p_request_hash: string;
           p_segment_kind?: Database["public"]["Enums"]["time_segment_kind"];
+          p_sent_at?: string;
           p_standby_context?: Database["public"]["Enums"]["time_standby_context"];
           p_travel_role?: Database["public"]["Enums"]["time_travel_role"];
           p_travel_route?: Database["public"]["Enums"]["time_travel_route"];

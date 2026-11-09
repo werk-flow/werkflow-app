@@ -1,4 +1,4 @@
-import type { ActionResult } from '@/lib/action-result';
+import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import type { Database } from '@/lib/supabase/database.types';
 
 // ============================================
@@ -60,6 +60,33 @@ export const CONTACT_ROLE_SUGGESTIONS = [
   'Notfallkontakt',
 ] as const;
 
+/**
+ * Why an existing customer may be the one a draft or a caller describes, in
+ * the order `find_client_duplicates` lists them: the customer number, the
+ * phone, the email, the name together with the postal code, and the street
+ * together with the postal code.
+ */
+const CLIENT_MATCH_REASONS = ['customer_number', 'phone', 'email', 'name', 'address'] as const;
+export type ClientMatchReason = (typeof CLIENT_MATCH_REASONS)[number];
+
+export const CLIENT_MATCH_REASON_LABELS: Record<ClientMatchReason, string> = {
+  customer_number: 'Kundennummer',
+  phone: 'Telefon',
+  email: 'E-Mail',
+  name: 'Name und PLZ',
+  address: 'Straße und PLZ',
+};
+
+/** A customer of the organization that a draft customer or a caller may already be. */
+export type ClientMatch = {
+  clientId: string;
+  clientName: string;
+  matchedOn: ClientMatchReason[];
+};
+
+/** The strongest matches; `moreMatches` says that more customers match than are listed. */
+export type ClientMatchList = { matches: ClientMatch[]; moreMatches: boolean };
+
 // ============================================
 // Result Types
 // ============================================
@@ -70,9 +97,26 @@ export type ClientSiteResult = ActionResult<{ site: ClientSite }>;
 
 export type ClientRelationsResult = ActionResult<{ contacts: ClientContact[]; sites: ClientSite[] }>;
 
+/** The first save of a new customer that matches existing ones saves nothing and lists them. */
+export type ClientDuplicatesFailure = ActionFailure<'possible_duplicates'> & ClientMatchList;
+
 // ============================================
 // Converters And Helpers
 // ============================================
+
+type ClientMatchRow = Database['public']['Functions']['find_client_duplicates']['Returns'][number];
+
+function isClientMatchReason(value: string): value is ClientMatchReason {
+  return CLIENT_MATCH_REASONS.some((reason) => reason === value);
+}
+
+export function toClientMatch(row: ClientMatchRow): ClientMatch {
+  return {
+    clientId: row.client_id,
+    clientName: row.client_name,
+    matchedOn: row.matched_on.filter(isClientMatchReason),
+  };
+}
 
 export function toClientContact(row: ClientContactRow): ClientContact {
   return {

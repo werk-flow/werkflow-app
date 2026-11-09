@@ -18,6 +18,7 @@ export type BoardRowContent = {
   jobs: readonly CalendarJob[];
   days: ReadonlyMap<string, CalendarBoardDay>;
   planned: ReadonlyMap<string, number>;
+  workDays: ReadonlySet<string>;
   actual: ReadonlyMap<string, { minutes: number; pending: boolean }> | null;
   dispatch: ReadonlyMap<string, DispatchRecipientDerivedState>;
   materialDemandJobIds: ReadonlySet<string>;
@@ -69,6 +70,8 @@ export const BOARD_ROW_CONTENT_CHECKS = {
     sameColumnValues(next, dayKey, (key) => previous.days.get(key) === next.days.get(key)),
   planned: (previous, next) =>
     sameColumnValues(next, dayKey, (key) => previous.planned.get(key) === next.planned.get(key)),
+  workDays: (previous, next) =>
+    sameColumnValues(next, dayKey, (key) => previous.workDays.has(key) === next.workDays.has(key)),
   actual: (previous, next) =>
     sameColumnValues(next, actualKey, (key) => sameFields(previous.actual?.get(key), next.actual?.get(key))),
   dispatch: (previous, next) => {

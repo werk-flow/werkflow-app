@@ -5,6 +5,7 @@ import { indexAtOffset } from '@/lib/calendar/drag-math';
 import { dayMinutesAtPoint, edgeResizedSpan } from '@/lib/calendar/day-drag-geometry';
 import { DAY_NAME_COLUMN_PX, MIN_ITEM_MINUTES, wallMinutesFrom } from '@/lib/calendar/day-layout';
 import type { CalendarBoardDay } from '@/lib/calendar/board';
+import type { BoardPeople } from '@/lib/calendar/board-model';
 import { dayRowFor, dayRowKey, type DayRowModel } from '@/lib/calendar/day-rows';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { JobParkingContext } from '@/lib/parking/types';
@@ -41,6 +42,8 @@ export type DaySurfaceInput = {
   onParkedContextMissing: () => void;
   onPark: (job: CalendarJob) => void;
   nowMs: () => number;
+  /** Who can work a visit by its date, so a card from „Ohne Zuweisung" replaces its leaver. */
+  people: BoardPeople;
 };
 
 /** Reads the row edges once at drag start; the resolver then only reads scroll offsets. */

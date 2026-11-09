@@ -320,7 +320,7 @@ function ScopedCalendarContainer(props: CalendarContainerProps) {
   const boardRows = data.range.board.rows;
   // The board, its card popovers, the header's create dialog and the overlay
   // dialogs all mark absent people from the days this range loaded.
-  const absences = useIndexedBoardAbsences(data.range.board.days, boardRows);
+  const absences = useIndexedBoardAbsences(data.range.board);
 
   return (
     <BoardAbsencesContext value={absences}>

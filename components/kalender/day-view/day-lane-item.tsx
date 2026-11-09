@@ -8,7 +8,8 @@ import { formatMinutesOfDay } from '@/lib/calendar/drag-math';
 import { createSessionFromCalendarBlock } from '@/lib/time-tracking/calendar-blocks';
 import type { InteractiveCalendarSession } from '@/lib/time-tracking/types';
 import type { DragSession } from '../drag-engine/drag-engine';
-import { CalendarCard } from '../surface/calendar-card';
+import { useBoardAbsences } from '../board-absences-context';
+import { CalendarCard, unavailableAssigneeWarnings } from '../surface/calendar-card';
 import { useClock } from '../surface/use-now-tick';
 import { TimeBlock } from './time-block';
 import type { DayTimelineProps } from './day-timeline-row';
@@ -256,6 +257,8 @@ function DayLaneJob({
   const { model } = row;
   const { job } = item;
   const locked = isStartedOccurrence(job, nowTick);
+  const { people } = useBoardAbsences();
+  const warnings = unavailableAssigneeWarnings(job, people);
   const width = Math.max(DAY_MIN_ITEM_WIDTH, ((item.endMinutes - item.startMinutes) / 60) * hourWidth);
   return (
     <div
@@ -270,6 +273,8 @@ function DayLaneJob({
       <CalendarCard
         job={job}
         size="day"
+        chips={warnings.chips}
+        alert={warnings.alert}
         draggable={draggable}
         locked={locked}
         className="h-full w-full"

@@ -56,6 +56,16 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
       'consumeRateLimit',
     ],
   },
+  'app/api/field-sync/v1/operations/route.ts': {
+    authorization:
+      'verified identity from an Authorization bearer token or, after the same-origin JSON guard, the cookie session; an identity check that cannot complete answers retry; the active organization and role from the current memberships, an operation naming another organization refused, the session it expects must belong to the caller, and transition_time_activity reauthorizes and applies the closed-period and offline-window rules; validated bounded batch, private no-store responses',
+    mustCall: [
+      'identifyFieldSyncCaller',
+      'fieldSyncBatchSchema',
+      'resolveActiveContextForUser',
+      'runFieldSyncOperations',
+    ],
+  },
   'app/api/csp-report/route.ts': {
     authorization:
       'unauthenticated by design: receives the browser reports of the enforced script policy, reads and writes nothing, bounds the body, and logs a redacted summary without script samples or query strings',

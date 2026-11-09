@@ -17,6 +17,7 @@ import type { CalendarMutations } from '../mutations/use-calendar-mutations';
 import { CALENDAR_LAYER_CLASS } from '../surface/layers';
 import { useClock, useNowTick } from '../surface/use-now-tick';
 import { BoardHeader, useBoardHeaderLabels } from './board-header';
+import { useBoardAbsences } from '../board-absences-context';
 import { BoardRow, type BoardRowProps } from './board-row';
 import { BoardTeamHeader } from './board-team-header';
 import { PhoneBoard } from './phone-board';
@@ -102,6 +103,7 @@ function sharedRowProps(
     sickness,
     days: model.days,
     planned: model.planned,
+    workDays: model.workDays,
     actual: model.actual,
     dispatch: model.dispatch,
     materialDemandJobIds: model.materialDemandJobIds,
@@ -160,6 +162,7 @@ function usePlantafelView(props: PlantafelProps) {
 
   const model = usePlantafelModel({ ...props, nowTick, isManager: actions.isManager, collapsedTeams });
   const { columns, days, rowModels } = model;
+  const { people } = useBoardAbsences();
 
   const focusCard = useCallback((occurrenceId: string, employeeRecordId: string | null) => {
     requestAnimationFrame(() => focusBoardCard(rootRef.current, occurrenceId, employeeRecordId));
@@ -175,6 +178,7 @@ function usePlantafelView(props: PlantafelProps) {
     nowMs: clock,
     onPark: actions.onPark,
     focusCard,
+    people,
   });
   useDragSurface(surface);
 

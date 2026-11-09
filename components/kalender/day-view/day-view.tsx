@@ -79,7 +79,7 @@ function useDayViewState(props: DayViewProps) {
     enabled: !phone,
   });
 
-  const { days, rows } = useDayRows({
+  const { days, rows, people } = useDayRows({
     board,
     members,
     jobs,
@@ -108,6 +108,7 @@ function useDayViewState(props: DayViewProps) {
     onParkedContextMissing,
     onPark: actions.onPark,
     nowMs: clock,
+    people,
   });
   useDragSurface(surface);
 

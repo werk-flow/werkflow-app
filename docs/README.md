@@ -19,12 +19,13 @@ Start with `AGENTS.md`, then read only the entries whose condition applies. A ta
 - [integrated-test-state.md](technical/integrated-test-state.md): seeding test state, fixture dates, stable browser steps.
 - [coderabbit.md](technical/coderabbit.md): review levels, babysitting and merging a PR, review findings.
 - [recovery-and-incidents.md](technical/recovery-and-incidents.md): something lost, leaked or down.
+- [problem-report-scrubbing.md](technical/problem-report-scrubbing.md): what a problem report may carry out of WerkFlow.
 - [standards-audit.md](technical/standards-audit.md): rendered design acceptance, wave audits.
 - [enforcement-ladder-backlog.md](technical/enforcement-ladder-backlog.md): planned Tier 1 and 2 conversions.
 
 ### Feature specifications (`docs/features/`)
 
-Read the spec you change and the connected specs your change touches. Planned scope lives in `werk-flow/werkflow-planning`.
+Read the spec you change and the specs it touches. Planned scope lives in `werk-flow/werkflow-planning`.
 
 - [customers-and-crm.md](features/customers-and-crm.md): Kunden, contacts, sites, Anfragen.
 - [jobs-and-projects.md](features/jobs-and-projects.md): Aufträge, Projekte, lifecycle, Arbeitsvorlagen, handovers.
@@ -64,7 +65,7 @@ This section owns virtue 6.
 
 A doc holds intent and behavior per role, decisions and their reasons, rules with the path of their mechanism, procedures with exact commands, and limits the owner accepted.
 
-It holds no schema, no list of files, handlers, functions or tests, no count or value a constant holds, no report id, build id or commit hash, and no dated narrative. The code, `lib/supabase/database.types.ts` and live Supabase inspection answer those. Point at them instead.
+It holds no schema, no list of files, handlers, functions or tests, no count or value a constant holds, no report id, build id or commit hash, and no dated narrative. The code, `lib/supabase/database.types.ts` and live Supabase inspection answer those; point at them.
 
 ### Add, change and remove docs
 

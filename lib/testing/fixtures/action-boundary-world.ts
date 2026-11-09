@@ -3,6 +3,7 @@
 // replaced. Each fixture is its own process, so these module mocks never reach
 // another test file. Import the action under test only after `installActionWorld`.
 import { mock } from 'bun:test';
+import { AuthApiError } from '@supabase/supabase-js';
 import { getAuftraegePreferencesFromJson } from '@/lib/jobs/auftraege-table-columns';
 import { createInMemoryAdmin, type BeforeWrite, type InMemoryTables } from './in-memory-admin';
 
@@ -27,6 +28,8 @@ export type ActionWorld = {
   prestartOrganizationIds: string[];
   /** Value of the active-organization cookie; `null` is a missing cookie. */
   activeOrganizationCookie: string | null;
+  /** Bearer access tokens Auth accepts, each naming its user; any other token is rejected. */
+  accessTokens: Record<string, string>;
   tables: InMemoryTables;
   rpc: (call: RpcCall) => RpcOutcome;
   rpcCalls: RpcCall[];
@@ -73,6 +76,12 @@ function createAdminStandIn(world: ActionWorld, database: () => { from: (table: 
       },
     },
     auth: {
+      getUser: async (token: string) => {
+        const userId = world.accessTokens[token];
+        return userId === undefined
+          ? { data: { user: null }, error: new AuthApiError('invalid JWT', 401, 'bad_jwt') }
+          : { data: { user: { id: userId, email: 'caller@example.test' } }, error: null };
+      },
       admin: {
         deleteUser: async (userId: string) => {
           world.deletedUserIds.push(userId);
@@ -130,6 +139,7 @@ export function installActionWorld(
     memberships: [],
     prestartOrganizationIds: [],
     activeOrganizationCookie: null,
+    accessTokens: {},
     tables,
     rpc: () => ({ data: null, error: null }),
     rpcCalls: [],

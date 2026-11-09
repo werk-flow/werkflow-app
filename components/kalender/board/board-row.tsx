@@ -22,6 +22,7 @@ import type { CalendarJob } from '@/lib/jobs/types';
 import type { SicknessCalendarEntry } from '@/lib/sickness/actions';
 import type { VacationCalendarEntry } from '@/lib/vacation/calendar-actions';
 import type { DispatchRecipientDerivedState } from '@/lib/dispatch/types';
+import { unavailabilityOn } from '@/lib/planning/availability';
 import { getRoleLabel } from '@/lib/roles';
 import { memoPropsEqual } from '@/lib/ui/memo-equality';
 import { BarSegment } from '../surface/bar-segment';
@@ -51,6 +52,8 @@ export type BoardRowProps = {
   sickness: readonly SicknessCalendarEntry[];
   days: ReadonlyMap<string, CalendarBoardDay>;
   planned: ReadonlyMap<string, number>;
+  /** The person-days scheduled work covers, from every visit, filtered or not. */
+  workDays: ReadonlySet<string>;
   actual: ReadonlyMap<string, { minutes: number; pending: boolean }> | null;
   dispatch: ReadonlyMap<string, DispatchRecipientDerivedState>;
   materialDemandJobIds: ReadonlySet<string>;
@@ -127,15 +130,12 @@ function boardRowHeader(
 
 /** One day column of the row, with the day's capacity, planned and actual minutes. */
 function boardRowCell(
-  { rowIndex, days, planned, actual, compact, actions }: BoardRowProps,
+  { rowIndex, days, planned, workDays, actual, compact, actions }: BoardRowProps,
   row: CalendarBoardRow | null,
   column: BoardColumn,
   columnIndex: number,
 ): React.JSX.Element {
   const key = row ? boardDayKey(row.employeeRecordId, column.date) : '';
-  const employed =
-    !row ||
-    ((!row.entryDate || column.date >= row.entryDate) && (!row.exitDate || column.date <= row.exitDate));
   return (
     <BoardCell
       key={column.date}
@@ -148,7 +148,8 @@ function boardRowCell(
       actual={row?.userId && actual ? actual.get(`${row.userId}:${column.date}`) : undefined}
       compact={compact}
       actions={actions}
-      employed={employed}
+      hasPlannedWork={row ? workDays.has(key) : false}
+      unavailability={row ? unavailabilityOn(row, column.date) : null}
     />
   );
 }

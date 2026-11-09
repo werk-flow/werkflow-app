@@ -1,10 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import type { CalendarJob } from '@/lib/jobs/types';
 import {
+  boardCellCapacity,
   absenceMark,
   boardDayKey,
-  deriveCapacityState,
-  describeCapacity,
   dispatchStateFor,
   indexBoardDispatch,
   plannedMinutesByEmployeeDate,
@@ -138,27 +137,45 @@ describe('planned minutes per person and Berlin date', () => {
   });
 });
 
+/** A planned day's capacity state, read through the board cell's public rule. */
+const capacityState = (planned: CalendarBoardDay, plannedMinutes: number) =>
+  boardCellCapacity({
+    day: planned,
+    plannedMinutes,
+    hasPlannedWork: plannedMinutes > 0,
+    unavailability: null,
+    isWeekend: false,
+  }).state;
+
 describe('capacity state', () => {
   test('derives the five states with a fifteen-minute tolerance around full', () => {
-    expect(deriveCapacityState(day({ targetMinutes: 0, reason: 'holiday' }), 0)).toBe('off');
-    expect(deriveCapacityState(day({}), 0)).toBe('free');
-    expect(deriveCapacityState(day({}), 120)).toBe('partial');
-    expect(deriveCapacityState(day({}), 470)).toBe('full');
-    expect(deriveCapacityState(day({}), 495)).toBe('full');
-    expect(deriveCapacityState(day({}), 496)).toBe('overbooked');
-    expect(
-      deriveCapacityState(day({ targetMinutes: 0, absence: { type: 'vacation', portion: 'full' } }), 30),
-    ).toBe('overbooked');
+    expect(capacityState(day({ targetMinutes: 0, reason: 'holiday' }), 0)).toBe('off');
+    expect(capacityState(day({}), 0)).toBe('free');
+    expect(capacityState(day({}), 120)).toBe('partial');
+    expect(capacityState(day({}), 470)).toBe('full');
+    expect(capacityState(day({}), 495)).toBe('full');
+    expect(capacityState(day({}), 496)).toBe('overbooked');
+    expect(capacityState(day({ targetMinutes: 0, absence: { type: 'vacation', portion: 'full' } }), 30)).toBe(
+      'overbooked',
+    );
   });
 
   test('describes the cell for hover and assistive technology', () => {
+    const sentence = (cell: CalendarBoardDay, plannedMinutes: number): string =>
+      boardCellCapacity({
+        day: cell,
+        plannedMinutes,
+        hasPlannedWork: plannedMinutes > 0,
+        unavailability: null,
+        isWeekend: false,
+      }).description;
     expect(
-      describeCapacity(day({ targetMinutes: 0, reason: 'holiday', label: 'Tag der Deutschen Einheit' }), 0),
+      sentence(day({ targetMinutes: 0, reason: 'holiday', label: 'Tag der Deutschen Einheit' }), 0),
     ).toBe('Feiertag: Tag der Deutschen Einheit');
-    expect(
-      describeCapacity(day({ targetMinutes: 0, absence: { type: 'sickness', portion: 'full' } }), 0),
-    ).toBe('Abwesend');
-    expect(describeCapacity(day({ pendingVacation: true }), 150)).toBe(
+    expect(sentence(day({ targetMinutes: 0, absence: { type: 'sickness', portion: 'full' } }), 0)).toBe(
+      'Abwesend',
+    );
+    expect(sentence(day({ pendingVacation: true }), 150)).toBe(
       'teilweise geplant: 2,5 h von 8 h geplant, Urlaub angefragt',
     );
   });

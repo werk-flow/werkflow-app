@@ -6,7 +6,9 @@ import {
   indexBoardDays,
   type CalendarBoardDay,
   type CalendarBoardRow,
+  type CalendarBoardRowlessAssignee,
 } from './board';
+import { indexBoardPeople, unavailabilityLabel, unavailableAssignees, type BoardPeople } from './board-model';
 
 // The card and the person pickers mark who is away from the capacity days the
 // calendar window already holds (the planning rules' daily targets), so a
@@ -18,8 +20,8 @@ export type BoardAbsences = {
   days: ReadonlyMap<string, CalendarBoardDay>;
   /** The Berlin dates the window holds capacity days for. */
   dates: ReadonlySet<string>;
-  /** Each board row's name, people without a login included. */
-  nameByRecordId: ReadonlyMap<string, string>;
+  /** Each board row and each assignee without one, people without a login included. */
+  people: BoardPeople;
   /** For a legacy card that names its people by user id only. */
   recordIdByUserId: ReadonlyMap<string, string>;
 };
@@ -27,7 +29,7 @@ export type BoardAbsences = {
 export const NO_BOARD_ABSENCES: BoardAbsences = {
   days: new Map(),
   dates: new Set(),
-  nameByRecordId: new Map(),
+  people: new Map(),
   recordIdByUserId: new Map(),
 };
 
@@ -38,13 +40,17 @@ const ABSENCES_NOT_LOADED_HINT =
 export function indexBoardAbsences(
   days: readonly CalendarBoardDay[],
   rows: readonly CalendarBoardRow[],
+  rowlessAssignees: readonly CalendarBoardRowlessAssignee[],
 ): BoardAbsences {
+  const people = indexBoardPeople(rows, rowlessAssignees);
   return {
     days: indexBoardDays(days),
     dates: new Set(days.map((day) => day.date)),
-    nameByRecordId: new Map(rows.map((row) => [row.employeeRecordId, row.displayName] as const)),
+    people,
     recordIdByUserId: new Map(
-      rows.flatMap((row) => (row.userId ? [[row.userId, row.employeeRecordId] as const] : [])),
+      [...people.values()].flatMap((person) =>
+        person.userId ? [[person.userId, person.employeeRecordId] as const] : [],
+      ),
     ),
   };
 }
@@ -97,7 +103,7 @@ function cardDates(job: AbsenceCard, loaded: ReadonlySet<string>): string[] {
  * mark found and the board row's name. A card names its people by record,
  * people without a login included; a legacy card by user id.
  */
-export function absentAssignees(
+function absentAssignees(
   job: AbsenceCard,
   absences: BoardAbsences,
 ): Array<{ employeeRecordId: string; name: string; mark: string }> {
@@ -109,10 +115,28 @@ export function absentAssignees(
     for (const date of dates) {
       const mark = absenceMark(absences.days.get(boardDayKey(employeeRecordId, date)));
       if (mark) {
-        const name = absences.nameByRecordId.get(employeeRecordId) ?? 'Mitarbeiter';
+        const name = absences.people.get(employeeRecordId)?.displayName ?? 'Mitarbeiter';
         return [{ employeeRecordId, name, mark }];
       }
     }
     return [];
   });
+}
+
+/**
+ * What the card popover says about its people: first who cannot work the
+ * visit at all („Ausgeschieden“, „Zugang beendet“, „Noch nicht eingetreten“),
+ * then who of the others is away on one of its days.
+ */
+export function cardAssigneeMarks(
+  job: CalendarJob,
+  absences: BoardAbsences,
+): Array<{ name: string; mark: string }> {
+  const unavailable = unavailableAssignees(job, absences.people);
+  return [
+    ...unavailable.map(({ name, reason }) => ({ name, mark: unavailabilityLabel(reason) })),
+    ...absentAssignees(job, absences)
+      .filter((entry) => !unavailable.some((person) => person.employeeRecordId === entry.employeeRecordId))
+      .map(({ name, mark }) => ({ name, mark })),
+  ];
 }
