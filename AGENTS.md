@@ -97,7 +97,7 @@ Owner: [the docs index](docs/README.md#how-to-work), with the `writing-for-agent
 2. **The shared local stack.** Every worktree uses one Supabase stack. On Windows it runs in WSL Ubuntu; run every command inside Linux or macOS. `supabase db reset` and `supabase stop` hit all worktrees ([work in a worktree](docs/technical/environments.md#work-in-a-worktree)).
 3. **Money and time records.** Recorded time, the Zeitkonto, Perioden, payroll exports and prices are money, so their logic is review level 2. Change recorded time only through an audited correction. Never erase history or write into a closed period.
 4. **The public repo.** `werkflow-app` is public. Never commit a secret, customer or personal data, or content from `werkflow-planning` or `werkflow-business`. Cite a planning issue as `werk-flow/werkflow-planning#<n>`.
-5. **Unresolvable deletes.** Delete with an explicit absolute path, or inside a fresh `mktemp -d` folder. Never `rm` a variable or a relative wildcard (`rm -f logs/*`): Claude Code cannot resolve it and stops for the owner, even in full access (`.claude/hooks/refuse-unresolvable-delete.ts` refuses it).
+5. **Unresolvable deletes.** Delete with an explicit absolute path, or inside a fresh `mktemp -d` folder. Never `rm` a variable or a relative wildcard (`rm -f logs/*`): `.claude/hooks/refuse-unresolvable-delete.ts` refuses it, even in full access.
 
 ## Hit every surface
 
@@ -112,12 +112,13 @@ Before UI work is done, check each surface and name in the PR the ones that appl
 
 ## Decide or ask
 
-- Do whatever your tools can do. The owner supplies only the owner's own passwords, tokens and account settings.
-- Commit, push, merge and release on your own once a change is not risky and its required checks passed.
-- The owner decides business scope, money and paid services, analytics or new personal data, and what a virtue demands. Decide everything else as you would recommend, and record why in the commit body, or the owning doc for a lasting rule.
-- Ask when scope, acceptance or an edge case is ambiguous; never invent business strategy. Ask through the ask-user tool and end your turn, so T3 Code flags the thread. Never bury an owner action in a status message.
-- **The Willert rule.** When a decision would be expensive to rebuild if an SHK assumption is wrong, ask the owner through the question tool and propose a concrete question for a named role at Willert Haustechnik, the beta partner.
-- Tamay owns product and offer; John owns sales and customers. A business ambition never adds a feature, entitlement or analytics by itself, and sales positioning stays out of feature logic.
+- Do whatever your tools allow. The owner supplies only their passwords, tokens and account settings.
+- Commit, push, merge and release on your own once a change is low-risk and its required checks passed.
+- The owner decides business scope, money and paid services, analytics or new personal data, and what a virtue demands. Decide everything else as you would recommend; record why in the commit body, or the owning doc for a lasting rule.
+- Ask through the ask-user tool when scope, acceptance or an edge case is ambiguous, and end your turn so T3 Code flags the thread. Never invent business strategy or bury an owner action in a status message.
+- Legal questions never block work: decide on researched evidence, preferring less data and easy undo; record them in `werkflow-planning`'s legal register.
+- **The Willert rule.** When a wrong SHK assumption would make a decision expensive to rebuild, ask the owner through the question tool, proposing a concrete question for a named role at Willert Haustechnik, the beta partner.
+- Tamay owns product and offer; John owns sales and customers. A business ambition never adds a feature, entitlement or analytics by itself; sales positioning stays out of feature logic.
 
 ## Pull requests
 
