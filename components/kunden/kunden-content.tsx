@@ -286,10 +286,10 @@ function KundenListToolbar({
           {total} {total === 1 ? 'Kunde' : 'Kunden'}
         </p>
       </div>
-      <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+      <div className="flex min-w-0 flex-1 basis-full items-center justify-end gap-2 sm:basis-auto">
         <SearchInput
           ref={searchInput}
-          wrapperClassName="w-full max-w-xs"
+          wrapperClassName="w-full sm:max-w-xs"
           value={search.value}
           onValueChange={search.onChange}
           onFocus={() => {
