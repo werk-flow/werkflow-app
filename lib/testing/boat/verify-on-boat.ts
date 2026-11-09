@@ -27,9 +27,9 @@ import {
 } from '../evidence/proof-environment';
 import { withWorkspaceTestLock } from '../runner/workspace-test-lock';
 import { pruneRunArchive } from '../runs/run-retention';
-import { BoatError, boatClient } from './boat-api';
-import { RENEW_ADVICE, readBoatKey } from './boat-key';
-import { type TransferContext, type TransferPolicy, transfer } from './boat-transfer';
+import { BoatError, type BoatClient, boatClient } from './boat-api';
+import { type BoatKeyReading, RENEW_ADVICE, readBoatKey } from './boat-key';
+import { type TransferContext, type TransferPolicy, transfer, transportFailure } from './boat-transfer';
 import {
   createMachine,
   deleteMachine,
@@ -42,7 +42,8 @@ import {
 // `bun run test:verify` runs on a short-lived Boat machine when this workstation has a Boat key
 // (docs/technical/boat-verification.md). The machine plans and runs the same command on the same
 // tree and evidence, at the same absolute path, so selection, proofs, reports and .agent-logs/
-// come back as a local run writes them. Any Boat failure falls back to the local run.
+// come back as a local run writes them. When Boat is unavailable, only the cheap groups run here:
+// the heavy ones are recorded blocked unless WERKFLOW_VERIFY_LOCAL=1 asks for them.
 
 /** The saved snapshot every verification machine starts from (scripts/boat/build-snapshot.ts). */
 export const SNAPSHOT_NAME = 'werkflow-verify';
@@ -88,6 +89,17 @@ const runTargetSchema = z.object({ target: z.string().optional() });
  * connection gets three fresh attempts over about 40 s before the run falls back.
  */
 const RESULTS_DOWNLOAD: TransferPolicy = { waits: [2_000, 10_000, 30_000], attemptMs: 300_000 };
+/**
+ * The machine's creation, before any machine exists: a connection that fails on the way to Boat
+ * gets two fresh attempts over 30 s with the same idempotency key, so Boat starts one machine at
+ * most. Boat's own refusal (a 401, 403, 429 or 503 with its code) gets none. Each request ends after
+ * 60 s by itself (boat-api.ts), well inside the attempt's deadline.
+ */
+const MACHINE_START: TransferPolicy = {
+  waits: [10_000, 20_000],
+  attemptMs: 90_000,
+  retryable: transportFailure,
+};
 
 /**
  * One upload's deadline and retry. A machine's file host accepts between 0.07 and 12 MB/s, so a
@@ -99,6 +111,14 @@ function uploadPolicy(bytes: number): TransferPolicy {
 }
 
 type Environment = Readonly<Record<string, string | undefined>>;
+
+/** Boat was wanted but cannot run the plan; the heavy groups then stay blocked here (heldBackHere). */
+export type BoatUnavailable = { unavailable: string };
+/**
+ * A Boat attempt's outcome: Boat's exit code, undefined when the plan belongs on this workstation
+ * (CI, an explicit local run, a cheap or wall-clock plan), or Boat's unavailability.
+ */
+export type BoatOutcome = number | undefined | BoatUnavailable;
 
 const say = (line: string) => console.info(`[verify] ${line}`);
 
@@ -142,6 +162,44 @@ export function cheapPlanReason(plan: string): string | undefined {
   if (runs.length === 1) return `a single ${runs.join('')} is cheaper here.`;
   const sql = runs.length - others.length;
   return `${sql} SQL groups${others.length ? ` and ${others.join('')}` : ''} are cheaper here.`;
+}
+
+/**
+ * Whether a group stays blocked on this workstation when Boat is unavailable: every group but the
+ * cheap ones and the wall-clock groups, which run here by design. Type-aware lint, `ui:contracts`
+ * and every browser group: run here together, they overloaded the shared PC for hours.
+ */
+export function heldBackHere(id: string): boolean {
+  return !CHEAP_HERE.test(id) && !WALL_CLOCK_GROUP.test(id);
+}
+
+/** What a held-back group usually costs this workstation (lib/testing/runner/heavy-slot.ts). */
+function localCost(id: string): string {
+  if (id === 'static:lint') return 'type-aware lint, 170 to 370 s at up to 4.1 GiB on an idle PC';
+  return 'a production build at up to 2.9 GiB, then the stack and a browser';
+}
+
+/**
+ * The notice a local run prints when Boat is unavailable: why, which heavy groups it leaves blocked
+ * with their usual cost, and how to run them here deliberately with `args`.
+ */
+export function unavailableNotice(
+  reason: string,
+  heldBack: readonly string[],
+  args: readonly string[],
+): string[] {
+  if (!heldBack.length) return [`Boat is unavailable: ${reason} The plan runs only cheap groups, here.`];
+  const rule = '='.repeat(72);
+  return [
+    rule,
+    `BOAT IS UNAVAILABLE: ${reason}`,
+    `${heldBack.length} heavy groups do NOT run here and are recorded as blocked:`,
+    ...heldBack.map((id) => `  ${id}: ${localCost(id)}`),
+    'Only the cheap groups run. This run cannot pass: it exits 1 and its report reads failed.',
+    'Run again later to use Boat, or run the heavy groups here deliberately:',
+    `  WERKFLOW_VERIFY_LOCAL=1 bun run test:verify${args.length ? ` ${args.map(shellQuote).join(' ')}` : ''}`,
+    rule,
+  ];
 }
 
 /** The first untracked file that may hold a credential or a local setting, which Boat never gets. */
@@ -411,10 +469,10 @@ async function honorInterrupt(signal: AbortSignal): Promise<void> {
   signal.throwIfAborted();
 }
 
-/** The fallback line for a Boat failure; an interruption by the user is rethrown, never a fallback. */
-export function fallbackLine(error: unknown, signal: AbortSignal): string {
+/** Boat's unavailability after a failure; an interruption by the user is rethrown, never a fallback. */
+export function unavailable(error: unknown, signal: AbortSignal): BoatUnavailable {
   if (signal.aborted) throw error;
-  return `Running locally: ${boatFailure(error)}`;
+  return { unavailable: boatFailure(error) };
 }
 
 /** A Boat refusal in one line, with the renewal advice when Boat rejected the key itself. */
@@ -426,25 +484,28 @@ export function boatFailure(error: unknown): string {
 }
 
 /**
- * Runs `test:verify <args>` on Boat and answers its exit code, or undefined when the run belongs
- * on this workstation: no key, a local reason, or any Boat failure before the run started.
+ * Runs `test:verify <args>` on Boat and answers its exit code, undefined when the run belongs on
+ * this workstation, or Boat's unavailability: no key, an unusable key, or any Boat failure before
+ * the results are back. `readKey` is a test's stand-in.
  */
 export async function verifyOnBoat(
   args: readonly string[],
   repository: string,
   env: Environment = process.env,
-): Promise<number | undefined> {
+  readKey: () => BoatKeyReading = readBoatKey,
+): Promise<BoatOutcome> {
   const reason = localReason(args, env);
   if (reason !== undefined) {
     if (reason) say(`Running locally: ${reason}`);
     return undefined;
   }
-  const key = readBoatKey();
-  if (key.kind === 'absent') return undefined;
-  if (key.kind === 'unusable') {
-    say(`Running locally: ${key.reason}`);
-    return undefined;
-  }
+  const key = readKey();
+  if (key.kind === 'absent')
+    return {
+      unavailable:
+        'this workstation has no Boat key (docs/technical/boat-verification.md, "Set up a workstation").',
+    };
+  if (key.kind === 'unusable') return { unavailable: key.reason };
   if (key.reminder) say(key.reminder);
   // From here a Ctrl-C stops the run; it never falls back to a local one.
   const interrupt = new AbortController();
@@ -464,7 +525,7 @@ export async function prepareAndRun(
   repository: string,
   key: string,
   signal: AbortSignal,
-): Promise<number | undefined> {
+): Promise<BoatOutcome> {
   const planned = planReason(repository, args);
   await honorInterrupt(signal);
   if (planned) {
@@ -476,8 +537,7 @@ export async function prepareAndRun(
     mkdirSync(join(homedir(), '.cache'), { recursive: true });
     folder = mkdtempSync(join(homedir(), '.cache', 'werkflow-boat-'));
   } catch (error) {
-    say(fallbackLine(error, signal));
-    return undefined;
+    return unavailable(error, signal);
   }
   try {
     return await withWorkspaceTestLock(
@@ -689,13 +749,28 @@ export async function withMachine<T>(
   return result;
 }
 
+/**
+ * The client whose machine creation retries a failed connection (MACHINE_START). Every attempt
+ * sends the same idempotency key, so a request that reached Boat before its connection failed
+ * starts no second machine. `wait` is a test's stand-in.
+ */
+export function retryingStart(client: BoatClient, context: TransferContext): BoatClient {
+  return {
+    ...client,
+    create: (request, idempotencyKey) =>
+      transfer('Starting a Boat machine', MACHINE_START, context, () =>
+        client.create(request, idempotencyKey),
+      ),
+  };
+}
+
 export async function runOnBoat(input: {
   args: readonly string[];
   repository: string;
   folder: string;
   key: string;
   signal: AbortSignal;
-}): Promise<number | undefined> {
+}): Promise<BoatOutcome> {
   const { args, repository, folder, signal } = input;
   const before = captureInputSnapshot(repository);
   let packed: ReturnType<typeof packRun>;
@@ -705,11 +780,8 @@ export async function runOnBoat(input: {
     packed = { refused: `packing the run failed: ${boatFailure(error)}` };
   }
   await honorInterrupt(signal);
-  if ('refused' in packed) {
-    say(`Running locally: ${packed.refused}`);
-    return undefined;
-  }
-  const client = boatClient(input.key);
+  if ('refused' in packed) return { unavailable: packed.refused };
+  const client = retryingStart(boatClient(input.key), { signal, log: say });
   const started = Date.now();
   let machine: Machine;
   try {
@@ -722,14 +794,13 @@ export async function runOnBoat(input: {
       signal,
     });
   } catch (error) {
-    say(fallbackLine(error, signal));
-    return undefined;
+    return unavailable(error, signal);
   }
   say(
     `Running on Boat machine ${machine.id} (large), ready in ${((Date.now() - started) / 1000).toFixed(1)} s.`,
   );
-  return withMachine(machine, signal, async () => {
-    let code: number | undefined;
+  return withMachine(machine, signal, async (): Promise<BoatOutcome> => {
+    let code: number;
     try {
       signal.throwIfAborted();
       await uploadRun(machine, { repository, folder, bundle: packed.bundle }, { signal, log: say });
@@ -744,12 +815,10 @@ export async function runOnBoat(input: {
         { stdout: (text) => process.stdout.write(text), stderr: (text) => process.stderr.write(text) },
         signal,
       );
-      if (result.exitCode === SETUP_FAILED || result.oomKilled) {
-        say(
-          `Running locally: the Boat machine ${result.oomKilled ? 'ran out of memory' : 'failed to set up'}.`,
-        );
-        return undefined;
-      }
+      if (result.exitCode === SETUP_FAILED || result.oomKilled)
+        return {
+          unavailable: `the Boat machine ${result.oomKilled ? 'ran out of memory' : 'failed to set up'}.`,
+        };
       await importResults(machine, { folder, repository }, { signal, log: say });
       // The machine pruned only its copy of the archive; the workstation's shrinks as after a local run.
       console.info(pruneRunArchive('prune'));
@@ -760,8 +829,7 @@ export async function runOnBoat(input: {
       }
       return code;
     } catch (error) {
-      say(fallbackLine(error, signal));
-      return undefined;
+      return unavailable(error, signal);
     }
   });
 }
