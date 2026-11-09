@@ -28,7 +28,7 @@ import {
 import { withWorkspaceTestLock } from '../runner/workspace-test-lock';
 import { pruneRunArchive } from '../runs/run-retention';
 import { type BoatClient, BoatError, boatClient } from './boat-api';
-import { type BoatKeyReading, RENEW_ADVICE, readBoatKey } from './boat-key';
+import { type BoatKeyReading, RENEW_ADVICE, readBoatKey, withBoatKey } from './boat-key';
 import { type BoatUnavailable, retryingStart } from './boat-unavailable';
 import { type TransferContext, type TransferPolicy, transfer } from './boat-transfer';
 import { runScript, shellQuote, type Machine } from './boat-machine';
@@ -446,30 +446,9 @@ export async function verifyOnBoat(
   env: Environment = process.env,
   readKey: () => BoatKeyReading = readBoatKey,
 ): Promise<BoatOutcome> {
-  const reason = localReason(args, env);
-  if (reason !== undefined) {
-    if (reason) say(`Running locally: ${reason}`);
-    return undefined;
-  }
-  const key = readKey();
-  if (key.kind === 'absent')
-    return {
-      unavailable:
-        'this workstation has no Boat key (docs/technical/boat-verification.md, "Set up a workstation").',
-    };
-  if (key.kind === 'unusable') return { unavailable: key.reason };
-  if (key.reminder) say(key.reminder);
-  // From here a Ctrl-C stops the run; it never falls back to a local one.
-  const interrupt = new AbortController();
-  const stop = () => interrupt.abort();
-  process.once('SIGINT', stop);
-  process.once('SIGTERM', stop);
-  try {
-    return await prepareAndRun(args, repository, key.key, interrupt.signal);
-  } finally {
-    process.off('SIGINT', stop);
-    process.off('SIGTERM', stop);
-  }
+  return withBoatKey(localReason(args, env), readKey, (key, signal) =>
+    prepareAndRun(args, repository, key, signal),
+  );
 }
 
 export async function prepareAndRun(
@@ -484,6 +463,21 @@ export async function prepareAndRun(
     say(`Running locally: ${planned}`);
     return undefined;
   }
+  return withRunFolder(repository, signal, 'verification on Boat', (folder) =>
+    runOnBoat({ args, repository, folder, key, signal }),
+  );
+}
+
+/**
+ * Runs `work` with a fresh folder for the packed run and its results, under the workspace test
+ * lock, so the edit guard works as during a local run. The folder is removed afterwards.
+ */
+export async function withRunFolder(
+  repository: string,
+  signal: AbortSignal,
+  operation: string,
+  work: (folder: string) => Promise<BoatOutcome>,
+): Promise<BoatOutcome> {
   let folder: string;
   try {
     mkdirSync(join(homedir(), '.cache'), { recursive: true });
@@ -492,10 +486,7 @@ export async function prepareAndRun(
     return unavailable(error, signal);
   }
   try {
-    return await withWorkspaceTestLock(
-      { operation: 'verification on Boat', repositoryRoot: repository },
-      () => runOnBoat({ args, repository, folder, key, signal }),
-    );
+    return await withWorkspaceTestLock({ operation, repositoryRoot: repository }, () => work(folder));
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
