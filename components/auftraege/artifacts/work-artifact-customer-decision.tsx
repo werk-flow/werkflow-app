@@ -215,7 +215,7 @@ function RecordedCustomerDecisionView({ recorded }: { recorded: RecordedCustomer
         {signature?.signature_document_id ? (
           <RecordedSignatureImage
             documentId={signature.signature_document_id}
-            signerName={signature.signer_name ?? 'der Kundin oder des Kunden'}
+            signerName={signature.signer_name}
           />
         ) : (
           // A coworker reads that a signature exists, never its image or signer (redactWorkArtifactActionForField).
@@ -239,7 +239,13 @@ function RecordedFact({ label, children }: { label: string; children: React.Reac
  * The recorded signature image, read through a short-lived view URL, with its
  * loading state and a retry for a failed URL read or a failed image load.
  */
-function RecordedSignatureImage({ documentId, signerName }: { documentId: string; signerName: string }) {
+function RecordedSignatureImage({
+  documentId,
+  signerName,
+}: {
+  documentId: string;
+  signerName: string | null;
+}) {
   const { activeOrgId } = useOrganization();
   const view = useClientRead({
     read: (signal) =>
@@ -271,7 +277,7 @@ function RecordedSignatureImage({ documentId, signerName }: { documentId: string
     // eslint-disable-next-line @next/next/no-img-element -- short-lived signed private URL; next/image optimization cannot cache it
     <img
       src={signedUrl}
-      alt={`Unterschrift von ${signerName}`}
+      alt={signerName ? `Unterschrift von ${signerName}` : 'Unterschrift der Kundin oder des Kunden'}
       className="h-24 w-full max-w-xs rounded-md border object-contain"
       onError={() => setFailedUrl(signedUrl)}
     />

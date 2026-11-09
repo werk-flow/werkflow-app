@@ -43,6 +43,8 @@ declare global {
     uiContractLegacySignature?: boolean;
     /** Set by a spec's init script: an earlier release saved the decision and the signature apart, by two people. */
     uiContractSplitSigners?: boolean;
+    /** Set by a spec's init script: canvas conversions held until the spec releases them. */
+    uiContractHeldCanvasConversions?: Array<() => void>;
     /** Set by a spec's init script: who opens the customer-decision fixture; the field worker by default. */
     uiContractWorkArtifactViewer?: 'employee' | 'admin';
   }
@@ -326,7 +328,11 @@ export const uploadWorkArtifactSignatureDirect: UploadClient['uploadWorkArtifact
 
 export const discardUnlinkedWorkArtifactSignature: WorkArtifactActions['discardUnlinkedWorkArtifactSignature'] =
   async (documentId) => {
-    window.uiContractWorkArtifacts.discards.push(documentId);
+    const state = window.uiContractWorkArtifacts;
+    // As the server: a signature a recorded action links is no longer discardable.
+    if (state.detail?.actions.some((action) => action.signature_document_id === documentId))
+      return { success: false, error: 'work_artifact_signature_in_use' };
+    state.discards.push(documentId);
     return { success: true };
   };
 

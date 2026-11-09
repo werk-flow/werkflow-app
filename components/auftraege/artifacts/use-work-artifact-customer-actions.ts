@@ -54,18 +54,17 @@ async function uploadSignature(
 
 /** Discards a signature upload no action links; a failure leaves it in the library and says so. */
 async function discardPendingSignature(documentId: string, showBanner: ShowBanner): Promise<void> {
-  const discarded = await discardUnlinkedWorkArtifactSignature(documentId).catch(() => ({
-    success: false as const,
-  }));
-  if (!discarded.success) {
-    // The dialog is closing, so the banner is the only surface left; the
-    // orphaned upload stays reachable in the library.
-    showBanner({
-      variant: 'error',
-      message:
-        'Die nicht gespeicherte Unterschrift konnte nicht verworfen werden. Sie bleibt unter Dokumente sichtbar und kann dort gelöscht werden.',
-    });
-  }
+  const discarded = await discardUnlinkedWorkArtifactSignature(documentId).catch(() => null);
+  if (discarded?.success) return;
+  // A save whose answer was lost may have recorded it: the signature then belongs to the decision.
+  if (discarded?.error === 'work_artifact_signature_in_use') return;
+  // The dialog is closing, so the banner is the only surface left; the
+  // orphaned upload stays reachable in the library.
+  showBanner({
+    variant: 'error',
+    message:
+      'Die nicht gespeicherte Unterschrift konnte nicht verworfen werden. Sie bleibt unter Dokumente sichtbar und kann dort gelöscht werden.',
+  });
 }
 
 type CustomerDecisionErrors = Record<'name' | 'relationship' | 'decision' | 'reason', string | undefined>;

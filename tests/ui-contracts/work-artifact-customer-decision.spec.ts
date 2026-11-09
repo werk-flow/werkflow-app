@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { openContractFixture } from './open-fixture';
+import { textInDom } from '../golden/support/steps/shared';
 
 // The customer's decision on a customer-facing Arbeitsbericht is one step:
 // name, role, decision and signature, then one „Speichern“ that sends the
@@ -387,15 +388,49 @@ test('an error that does not say whether the save stood locks the entries like a
 });
 
 test('a save right after the last stroke carries the drawing', async ({ page }) => {
+  // The browser's asynchronous canvas conversion answers only after „Speichern“:
+  // a signature that waits for it would leave the save without the drawing.
+  await page.addInitScript(() => {
+    const held: Array<() => void> = [];
+    window.uiContractHeldCanvasConversions = held;
+    const toBlob = HTMLCanvasElement.prototype.toBlob;
+    HTMLCanvasElement.prototype.toBlob = function (callback, ...rest) {
+      held.push(() => toBlob.call(this, callback, ...rest));
+    };
+  });
   const dialog = await openReport(page);
   await openDecisionForm(dialog);
   await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('Erika Beispiel');
   await chooseDecision(page, dialog, 'Bestätigt');
   await drawSignature(page, dialog);
   await saveButton(dialog).click();
+  await page.evaluate(() => {
+    for (const release of window.uiContractHeldCanvasConversions ?? []) release();
+  });
 
   await expect(dialog.getByRole('region', { name: 'Kundenentscheidung' })).toContainText('Bestätigt');
   expect(await decisions(page)).toMatchObject([{ signature: { documentId: expect.any(String) } }]);
+});
+
+test('closing after a lost answer keeps quiet about a signature the recorded save uses', async ({ page }) => {
+  const dialog = await openReport(page);
+  await openDecisionForm(dialog);
+  await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('Erika Beispiel');
+  await chooseDecision(page, dialog, 'Bestätigt');
+  await drawSignature(page, dialog);
+  await page.evaluate(() => {
+    window.uiContractWorkArtifacts.loseDecisionAnswer = true;
+  });
+  await saveButton(dialog).click();
+  await expect(dialog.getByRole('textbox', { name: 'Name', exact: true })).toBeDisabled();
+
+  await page.keyboard.press('Escape');
+
+  await expect(dialog).toBeHidden();
+  await expect(
+    textInDom(page, 'Die nicht gespeicherte Unterschrift konnte nicht verworfen werden.'),
+  ).toHaveCount(0);
+  expect(await page.evaluate(() => window.uiContractWorkArtifacts.discards)).toEqual([]);
 });
 
 test('a decision and a signature saved apart by two people name each signer', async ({ page }) => {
