@@ -54,8 +54,9 @@ export function IosInstallHint() {
         <div className="min-w-0 flex-1 text-sm">
           <p className="font-medium">WerkFlow auf den Home-Bildschirm legen</p>
           <p className="mt-1 text-muted-foreground">
-            Tippe in der Browserleiste auf „Teilen“ und dann auf „Zum Home-Bildschirm“. Danach öffnest du
-            WerkFlow direkt wie eine App.
+            Tippe in Safari auf „Teilen“, bei neuem iOS im Menü neben der Adresse. Wähle dann „Zum
+            Home-Bildschirm“, falls nötig unter „Mehr anzeigen“. Danach öffnest du WerkFlow direkt wie eine
+            App.
           </p>
         </div>
         <Button
