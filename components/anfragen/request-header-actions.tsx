@@ -1,8 +1,15 @@
 'use client';
 
-import { ArrowRightLeft, Link2, Pencil, RotateCcw, XCircle } from 'lucide-react';
+import { ArrowRightLeft, CircleHelp, Link2, MoreVertical, Pencil, RotateCcw, XCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { InlinePending } from '@/components/ui/inline-pending';
 import type { ClientRequest } from '@/lib/requests/types';
 import { ConvertRequestToServiceDialog } from './convert-request-to-service-dialog';
@@ -57,17 +64,18 @@ export function RequestHeaderActions({
           )}
           <Button size="sm" variant="outline" onClick={onEdit} disabled={isPending}>
             <Pencil className="size-4" />
-            Bearbeiten
+            {/* Phones show the pencil alone so it shares a row with the menu; the name stays for screen readers. */}
+            <span className="sr-only sm:not-sr-only">Bearbeiten</span>
           </Button>
-          <Button size="sm" variant="outline" onClick={onStatusToggle} disabled={isPending}>
-            {shownStatus === 'offen' ? 'In Klärung setzen' : 'Zurück auf Offen'}
-          </Button>
-          <Button size="sm" variant="outline" onClick={onClose} disabled={isPending}>
-            <XCircle className="size-4" />
-            Schließen
-          </Button>
+          <RequestStatusMenu
+            shownStatus={shownStatus}
+            isPending={isPending}
+            onStatusToggle={onStatusToggle}
+            onClose={onClose}
+          />
         </>
       )}
+      {/* A closed request has this one action, so it stays a button. */}
       {request.status === 'geschlossen' && (
         <Button size="sm" variant="outline" onClick={onReopen} disabled={isPending}>
           <RotateCcw className="size-4" />
@@ -75,5 +83,34 @@ export function RequestHeaderActions({
         </Button>
       )}
     </>
+  );
+}
+
+/** The rarer status steps of an open request, so the header keeps room for its title. */
+function RequestStatusMenu({
+  shownStatus,
+  isPending,
+  onStatusToggle,
+  onClose,
+}: Pick<RequestHeaderActionsProps, 'shownStatus' | 'isPending' | 'onStatusToggle' | 'onClose'>) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="icon" className="size-8" aria-label="Weitere Aktionen">
+          <MoreVertical className="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={onStatusToggle} disabled={isPending}>
+          {shownStatus === 'offen' ? <CircleHelp className="size-4" /> : <RotateCcw className="size-4" />}
+          {shownStatus === 'offen' ? 'In Klärung setzen' : 'Zurück auf Offen'}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={onClose} disabled={isPending}>
+          <XCircle className="size-4" />
+          Schließen
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

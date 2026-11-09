@@ -8,7 +8,6 @@ import {
   requestAttachToWorkDialog,
   requestCaptureButton,
   requestCaptureDialog,
-  requestCloseButton,
   requestCloseDialog,
   requestConversionDialog,
   requestConvertButton,
@@ -18,6 +17,8 @@ import {
   requestEditDialog,
   requestMatchCustomerButton,
   requestMatchCustomerDialog,
+  requestMoreActionsButton,
+  openRequestCloseItem,
 } from '../../../golden/support/steps/requests';
 import { testData } from '../../../golden/support/steps/shared';
 import {
@@ -86,8 +87,9 @@ export const REQUESTS_OPENERS = {
     layer: requestEditDialog,
   },
   'requests.close': {
-    trigger: async ({ page }) => requestCloseButton(page),
+    trigger: ({ page }) => openRequestCloseItem(page),
     layer: requestCloseDialog,
+    returnFocus: ({ page }) => requestMoreActionsButton(page),
   },
   'requests.convert': {
     trigger: async ({ page }) => requestConvertButton(page),
