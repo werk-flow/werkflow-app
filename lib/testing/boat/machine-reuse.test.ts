@@ -20,7 +20,8 @@ afterAll(() => setSystemTime());
 
 /** A Boat stand-in: machines by id with their auto-stop, every call it got, and the commands it ran. */
 function fakeBoat(
-  machines: Record<string, { lifeMs: number | null; state?: string }>,
+  /** Each machine's life left, or `archiveAfter` as Boat sends it when a test needs it verbatim. */
+  machines: Record<string, { lifeMs: number | null; state?: string; archiveAfter?: string }>,
   wipeExit = 0,
   /** Called as Boat reports a command finished; a test's interruption at that moment. */
   onExit: () => void = () => undefined,
@@ -44,7 +45,9 @@ function fakeBoat(
       return {
         id: key,
         state: machine?.state ?? 'ready',
-        archiveAfter: machine?.lifeMs == null ? null : new Date(NOW.getTime() + machine.lifeMs).toISOString(),
+        archiveAfter:
+          machine?.archiveAfter ??
+          (machine?.lifeMs == null ? null : new Date(NOW.getTime() + machine.lifeMs).toISOString()),
       };
     };
     if (method === 'POST' && pathname.endsWith('/sandboxes')) {
@@ -395,4 +398,18 @@ test('a start refused at the machine limit evicts idle machines, oldest first, a
   });
   expect(capacity.outcome instanceof BoatError && capacity.outcome.code).toBe('out_of_capacity');
   expect(capacity.deleted).toEqual([]);
+});
+
+test('a machine whose auto-stop time does not parse is neither wiped nor kept', async () => {
+  const records = mkdtempSync(join(tmpdir(), 'boat-idle-'));
+  const boat = fakeBoat({ bx_garbled1: { lifeMs: 120 * MINUTE, archiveAfter: 'not a date' } });
+  const kept = await keepMachine(
+    { id: 'bx_garbled1', client: boat.client, log: () => undefined },
+    { repository, form: 'main', signal: new AbortController().signal, records },
+    () => undefined,
+  );
+  // A run could never take it (acquireMachine needs a known hour of life), so it is deleted instead.
+  expect(kept).toBe(false);
+  expect(boat.commands).toEqual([]);
+  expect(readdirSync(records)).toEqual([]);
 });

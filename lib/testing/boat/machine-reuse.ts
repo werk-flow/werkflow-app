@@ -120,7 +120,9 @@ async function lifeLeft(client: BoatClient, id: string): Promise<number> {
     throw error;
   }
   if (!READY_STATES.has(sandbox.state) || !sandbox.archiveAfter) return 0;
-  return (Date.parse(sandbox.archiveAfter) - Date.now()) / 1_000;
+  const stopsAt = Date.parse(sandbox.archiveAfter);
+  // A deadline that does not parse is no deadline Boat is known to keep.
+  return Number.isFinite(stopsAt) ? (stopsAt - Date.now()) / 1_000 : 0;
 }
 
 /** The command that runs scripts/boat/wipe-machine.sh of `repository` with `args`, sent as text. */
