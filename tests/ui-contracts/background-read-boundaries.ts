@@ -9,6 +9,7 @@ import { readTimeApprovalContract } from './time-approval-boundaries';
 import { readMaterialLinesContract, readMaterialPickerContract } from './material-boundaries';
 import { getOwnPersonnelActions, getPersonnelLifecycle } from './personnel-boundaries';
 import { readAffectedVisitsContract } from './absence-service-boundaries';
+import { readPlannedVisitsContract } from './correction-timeline-boundaries';
 import { readSignatureViewContract, readWorkArtifactDetailContract } from './work-artifact-boundaries';
 import { absenceAffectedVisitsInputSchema } from '@/lib/calendar/absence-visits-types';
 
@@ -25,6 +26,7 @@ export async function readInBackground(kind: string, input: unknown, signal?: Ab
     kind === 'time-correction-requests'
   )
     return readTimeApprovalContract(kind);
+  if (kind === 'time-correction-planned-visits') return readPlannedVisitsContract(input);
   if (kind === 'job-material-lines') return readMaterialLinesContract();
   if (kind === 'inventory-picker-page' || kind === 'job-inventory-picker-options')
     return readMaterialPickerContract();

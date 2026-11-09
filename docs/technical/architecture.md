@@ -42,6 +42,10 @@ One client factory per trust boundary under `lib/supabase/`:
 - Time transitions use that form: the action validates and calls a versioned RPC that reauthorizes and writes every row in one transaction. Browser clients keep SELECT-only access to the time tables.
 - Supabase environment values are read only through `lib/env/public.ts` and `lib/env/server.ts`. The R2 credentials are the exception, read in `lib/storage/r2.ts`.
 
+## Offline field sync
+
+Phone work that starts without signal syncs through versioned JSON route handlers under `/api/field-sync/v1/`, never a Server Action. The handlers accept the session cookie or a bearer token, recheck every permission at replay time, and serve the web app and the planned native client unchanged. Only device storage is web-specific. [Decision 0010](../decisions/0010-offline-field-sync-contract.md) owns the contract and the iOS limits it designs around.
+
 ## Authentication and organization context
 
 After sign-in a user enters the app, or onboarding without an organization. A cookie stores the active organization. The roles `admin`, `buero` and `employee` differ on purpose: employees get simple, focused flows; Admin and Büro get overview and control.

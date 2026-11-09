@@ -56,6 +56,7 @@ import {
   getTimeCorrectionHistoryPage,
   getTimeCorrectionRequests,
 } from '@/lib/time-corrections/read-actions';
+import { getPlannedCorrectionVisits } from '@/lib/time-corrections/planned-visit-reads';
 import {
   getTimeEntries,
   getTimeEntriesForJob,
@@ -181,6 +182,11 @@ export const BACKGROUND_READS = {
   // The people of the correction dialog, read when it opens; its job picker is an entity search.
   'time-correction-form-options': defineRead(organizationInput, (input) =>
     getTimeCorrectionFormOptions(input.organizationId),
+  ),
+  // The planned visits a forgotten day's timeline starts from: the caller's own day, or Admin and Büro another person's.
+  'time-correction-planned-visits': defineRead(
+    z.object({ organizationId: uuidSchema, localDate: isoDate, employeeRecordId: uuidSchema.optional() }),
+    (input) => getPlannedCorrectionVisits(input),
   ),
   // The closed periods every surface that edits recorded time asks before it offers an edit.
   'closed-time-periods': defineRead(organizationInput, (input) => getClosedTimePeriods(input.organizationId)),

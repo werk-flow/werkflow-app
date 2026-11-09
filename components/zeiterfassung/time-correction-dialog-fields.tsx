@@ -1,5 +1,6 @@
 'use client';
 
+import { DatePicker } from '@/components/ui/date-picker';
 import { DateTimeField } from '@/components/ui/date-time-field';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
@@ -13,6 +14,8 @@ import type { TimeEntry, TimeSegmentKind } from '@/lib/time-tracking/types';
 import { Constants } from '@/lib/supabase/database.types';
 import { constrainedValue } from '@/lib/validation/constrained-value';
 import { isManagerRole } from '@/lib/roles';
+import { parseIsoLocalDate, toLocalDateString } from '@/lib/utils';
+import { CorrectionTimelineFields } from './time-correction-dialog-timeline';
 import type { TimeCorrectionDialogForm } from './use-time-correction-dialog';
 
 const SOURCE_KINDS: TimeCorrectionKind[] = [
@@ -126,7 +129,7 @@ function TimeCorrectionTimeFields({ form }: { form: TimeCorrectionDialogForm }) 
           <DateTimeField value={splitAt} onChange={setSplitAt} idPrefix="time-correction-split" />
         </Field>
       ) : null}
-      {kind === 'add' || kind === 'missed_clock' || kind === 'split' ? (
+      {kind === 'split' ? (
         <Field
           label="Ende"
           htmlFor="time-correction-end-date"
@@ -137,6 +140,30 @@ function TimeCorrectionTimeFields({ form }: { form: TimeCorrectionDialogForm }) 
           <DateTimeField value={endAt} onChange={setEndAt} idPrefix="time-correction-end" />
         </Field>
       ) : null}
+    </>
+  );
+}
+
+/** Added time: the day, then what happened that day, activity by activity. */
+function AddedTimeFields({ form }: { form: TimeCorrectionDialogForm }) {
+  const { dateIso, setDateIso, fieldErrors, timeline, showTimelineErrors } = form;
+  return (
+    <>
+      <Field
+        label="Datum"
+        htmlFor="time-correction-date"
+        required
+        error={fieldErrors.date}
+        className="gap-1.5"
+      >
+        <DatePicker
+          ariaLabel="Datum"
+          value={parseIsoLocalDate(dateIso)}
+          onChange={(date) => setDateIso(date ? toLocalDateString(date) : '')}
+          placeholder="Datum wählen"
+        />
+      </Field>
+      <CorrectionTimelineFields timeline={timeline} showErrors={showTimelineErrors} />
     </>
   );
 }
@@ -275,13 +302,13 @@ export function TimeCorrectionDialogFields({ entry, form }: TimeCorrectionDialog
 
           <TimeCorrectionPersonFields entry={entry} form={form} canChoosePerson={isOffice} />
 
-          <TimeCorrectionTimeFields form={form} />
+          {entry ? <TimeCorrectionTimeFields form={form} /> : <AddedTimeFields form={form} />}
 
           {kind === 'reclassify' ? (
             <TimeCorrectionActivityField activityKind={activityKind} setActivityKind={setActivityKind} />
           ) : null}
 
-          {kind === 'reallocate' || kind === 'add' || kind === 'missed_clock' ? (
+          {kind === 'reallocate' ? (
             <TimeCorrectionJobField jobSearch={jobSearch} jobId={jobId} setJobId={setJobId} />
           ) : null}
 
