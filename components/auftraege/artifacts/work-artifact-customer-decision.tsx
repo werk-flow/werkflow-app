@@ -193,6 +193,9 @@ function RecordedCustomerDecisionView({ recorded }: { recorded: RecordedCustomer
   const signerLine = [signer?.signer_name, signer?.signer_role, signer?.signer_relationship]
     .filter(Boolean)
     .join(' · ');
+  // Older records saved the decision and the signature apart, possibly by two people.
+  const signatureSigner =
+    signature?.signer_name && signature.signer_name !== signer?.signer_name ? signature.signer_name : null;
   return (
     <section aria-label="Kundenentscheidung" className="space-y-3 rounded-md border p-4">
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Kundenentscheidung</p>
@@ -204,6 +207,7 @@ function RecordedCustomerDecisionView({ recorded }: { recorded: RecordedCustomer
           {signer ? formatBerlinDateTime(signer.created_at) : '–'}
         </RecordedFact>
         {signerLine && <RecordedFact label="Kundin oder Kunde">{signerLine}</RecordedFact>}
+        {signatureSigner && <RecordedFact label="Unterschrieben von">{signatureSigner}</RecordedFact>}
         {decision?.reason && <RecordedFact label="Begründung">{decision.reason}</RecordedFact>}
       </dl>
       <div className="space-y-2">

@@ -94,6 +94,14 @@ function signatureImage(canvas: HTMLCanvasElement): HTMLCanvasElement {
   return image;
 }
 
+/** The drawn signature as the PNG file the upload sends; null when the canvas gave no image. */
+function pngFile(dataUrl: string): File | null {
+  const base64 = dataUrl.split(',')[1];
+  if (!base64) return null;
+  const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+  return new File([bytes], 'Unterschrift.png', { type: 'image/png' });
+}
+
 type SignaturePadProps = {
   disabled?: boolean;
   onChange: (file: File | null) => void;
@@ -138,9 +146,9 @@ function useSignatureDrawing(disabled: boolean | undefined, onChange: (file: Fil
     event.currentTarget.releasePointerCapture(event.pointerId);
     // A tap that drew nothing leaves the signature as it was, a chosen image included.
     if (!hasMarkRef.current) return;
-    signatureImage(event.currentTarget).toBlob((blob) => {
-      onChange(blob ? new File([blob], 'Unterschrift.png', { type: 'image/png' }) : null);
-    }, 'image/png');
+    // Read at once, so a save right after the stroke carries it and no late
+    // callback overwrites a reset or a chosen image.
+    onChange(pngFile(signatureImage(event.currentTarget).toDataURL('image/png')));
   }
 
   /** Erases the drawn mark. */

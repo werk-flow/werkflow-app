@@ -142,6 +142,16 @@ function useCustomerDecisionDraft() {
   };
 }
 
+/**
+ * The answers that do not say whether the save stood: an unknown database
+ * error, a reply that failed to read after a commit, or a failure around the
+ * action. Like a lost answer, they leave the outcome to a retry.
+ */
+const OUTCOME_UNKNOWN_ERRORS: ReadonlySet<string> = new Set([
+  'work_artifact_action_failed',
+  'unexpected_error',
+]);
+
 type CustomerDecisionDraft = ReturnType<typeof useCustomerDecisionDraft>;
 
 /** The save's input: the decision, its signer and, when uploaded, the signature, under the attempt's action ids. */
@@ -228,7 +238,7 @@ export function useWorkArtifactCustomerActions({
           signatureDocumentId,
         }),
       ).catch(() => null);
-      if (result === null) {
+      if (result === null || (!result.success && OUTCOME_UNKNOWN_ERRORS.has(result.error))) {
         setOutcomeUnknown(true);
         setError(
           'Die Antwort zum Speichern ist nicht angekommen. Speichere erneut, um zu prüfen, was erfasst wurde.',

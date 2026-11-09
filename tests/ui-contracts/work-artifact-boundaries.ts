@@ -41,6 +41,8 @@ declare global {
     uiContractRedactedDecision?: boolean;
     /** Set by a spec's init script: an earlier release saved the customer's signature alone, without a decision. */
     uiContractLegacySignature?: boolean;
+    /** Set by a spec's init script: an earlier release saved the decision and the signature apart, by two people. */
+    uiContractSplitSigners?: boolean;
     /** Set by a spec's init script: who opens the customer-decision fixture; the field worker by default. */
     uiContractWorkArtifactViewer?: 'employee' | 'admin';
   }
@@ -187,7 +189,25 @@ export function approvedCustomerReport(): WorkArtifactDetail {
   const signature =
     (window.uiContractRedactedDecision || window.uiContractLegacySignature) &&
     redacted('00000000-0000-4000-8000-000000005157', 'signature_captured');
-  const recorded = [signature, decision].filter((action) => action !== undefined && action !== false);
+  const named = (id: string, actionType: WorkArtifactActionRow['action_type'], signer: string) =>
+    approval && {
+      ...approval,
+      id,
+      action_type: actionType,
+      created_by: 'contract-coworker',
+      signer_name: signer,
+      signer_relationship: 'Ansprechperson vor Ort',
+      signature_document_id: actionType === 'signature_captured' ? 'contract-split-signature' : null,
+    };
+  const split = window.uiContractSplitSigners
+    ? [
+        named('00000000-0000-4000-8000-000000005257', 'signature_captured', 'Max Beispiel'),
+        named('00000000-0000-4000-8000-000000004257', 'customer_acknowledged', 'Erika Beispiel'),
+      ]
+    : [];
+  const recorded = [signature, decision, ...split].filter(
+    (action) => action !== undefined && action !== false,
+  );
   return {
     ...submitted,
     status: 'approved',

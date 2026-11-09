@@ -365,6 +365,50 @@ test('the signer and reason fields stop at the lengths the server accepts', asyn
   ).toHaveAttribute('maxlength', '2000');
 });
 
+test('an error that does not say whether the save stood locks the entries like a lost answer', async ({
+  page,
+}) => {
+  const dialog = await openReport(page);
+  await openDecisionForm(dialog);
+  await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('Erika Beispiel');
+  await chooseDecision(page, dialog, 'Bestätigt');
+  await page.evaluate(() => {
+    window.uiContractWorkArtifacts.refuseDecision = 'work_artifact_action_failed';
+  });
+
+  await saveButton(dialog).click();
+
+  await expect(
+    dialog.getByText(
+      'Die Antwort zum Speichern ist nicht angekommen. Speichere erneut, um zu prüfen, was erfasst wurde.',
+    ),
+  ).toBeVisible();
+  await expect(dialog.getByRole('textbox', { name: 'Name', exact: true })).toBeDisabled();
+});
+
+test('a save right after the last stroke carries the drawing', async ({ page }) => {
+  const dialog = await openReport(page);
+  await openDecisionForm(dialog);
+  await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('Erika Beispiel');
+  await chooseDecision(page, dialog, 'Bestätigt');
+  await drawSignature(page, dialog);
+  await saveButton(dialog).click();
+
+  await expect(dialog.getByRole('region', { name: 'Kundenentscheidung' })).toContainText('Bestätigt');
+  expect(await decisions(page)).toMatchObject([{ signature: { documentId: expect.any(String) } }]);
+});
+
+test('a decision and a signature saved apart by two people name each signer', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.uiContractSplitSigners = true;
+  });
+  const dialog = await openReport(page, 'admin');
+  const recorded = dialog.getByRole('region', { name: 'Kundenentscheidung' });
+  await expect(recorded).toContainText('Erika Beispiel');
+  await expect(recorded.getByText('Unterschrieben von')).toBeVisible();
+  await expect(recorded).toContainText('Max Beispiel');
+});
+
 test('an Admin keeps the reason field for voiding', async ({ page }) => {
   const dialog = await openReport(page, 'admin');
   await expect(dialog.getByRole('textbox', { name: 'Begründung für Ungültigkeit' })).toBeVisible();
