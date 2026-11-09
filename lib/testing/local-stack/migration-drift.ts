@@ -116,7 +116,8 @@ export function sqlShape(sql: string): string {
   while (at < text.length) {
     const char = text[at] ?? '';
     if (char === ';' || /\s/.test(char)) {
-      gap = char === ';' || gap === ';' ? ';' : ' ';
+      if (char === ';') gap = ';';
+      else if (!gap) gap = ' ';
       at++;
     } else if (text.startsWith('--', at) || text.startsWith('/*', at)) {
       const end = char === '-' ? text.indexOf('\n', at) : blockCommentEnd(text, at);
