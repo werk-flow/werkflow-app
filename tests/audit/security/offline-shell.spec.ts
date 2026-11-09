@@ -4,8 +4,8 @@ import { jobListReady } from '../support/lab-journeys';
 import {
   offlineFallback,
   offlineRetryButton,
-  serviceWorkerCacheEntries,
-  serviceWorkerCacheNames,
+  expectNoServiceWorkerCaches,
+  expectOnlyShellFilesCached,
   setNetwork,
   waitForOfflineShell,
 } from '../support/offline-shell';
@@ -13,11 +13,6 @@ import {
 // The installable app shell (werk-flow/werkflow-planning#316): the service
 // worker answers a navigation without network with the offline fallback, and
 // no cache it owns ever holds an authenticated response or outlives a sign-out.
-
-/** The only responses the shell may hold: the offline page and static files. */
-function isShellFile(path: string): boolean {
-  return path === '/offline' || path.startsWith('/_next/static/') || /^\/[\w-]+\.(?:svg|png)$/.test(path);
-}
 
 test('the app shell opens without signal and keeps nothing of the person @AUDIT-SECURITY-OFFLINE-SHELL', async ({
   employeePage: page,
@@ -36,11 +31,7 @@ test('the app shell opens without signal and keeps nothing of the person @AUDIT-
       await page.goto(path);
       await expect(page).toHaveURL(new RegExp(`${path}$`));
     }
-    const entries = await serviceWorkerCacheEntries(page);
-    expect(entries.map((entry) => entry.path).filter((path) => !isShellFile(path))).toEqual([]);
-    const offlinePage = entries.find((entry) => entry.path === '/offline');
-    expect(offlinePage?.body).toContain('Gerade kein Netz');
-    expect(offlinePage?.body).not.toContain(world.users.employee.email);
+    await expectOnlyShellFilesCached(page, [world.users.employee.email]);
   });
 
   await test.step('a navigation without network shows the fallback, and the retry opens the page', async () => {
@@ -57,6 +48,6 @@ test('the app shell opens without signal and keeps nothing of the person @AUDIT-
   await test.step('sign-out empties every cache the service worker owns', async () => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await signOutViaUi(page);
-    expect(await serviceWorkerCacheNames(page)).toEqual([]);
+    await expectNoServiceWorkerCaches(page);
   });
 });

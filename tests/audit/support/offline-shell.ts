@@ -40,32 +40,39 @@ export async function waitForOfflineShell(page: Page): Promise<void> {
     .toBe(true);
 }
 
-export type CachedEntry = { cache: string; path: string; body: string };
-
-/** Every request the service worker owns a cached response for, with the response text. */
-export async function serviceWorkerCacheEntries(page: Page): Promise<CachedEntry[]> {
-  return page.evaluate(async (prefix) => {
-    const entries: { cache: string; path: string; body: string }[] = [];
+/**
+ * Asserts that every response a service worker cache holds is the offline page
+ * or a static file, and that the offline page names none of `personalTexts`.
+ */
+export async function expectOnlyShellFilesCached(
+  page: Page,
+  personalTexts: readonly string[],
+): Promise<void> {
+  const entries = await page.evaluate(async (prefix) => {
+    const found: { path: string; body: string }[] = [];
     for (const name of await caches.keys()) {
       if (!name.startsWith(prefix)) continue;
       const cache = await caches.open(name);
       for (const request of await cache.keys()) {
         const response = await cache.match(request);
-        entries.push({
-          cache: name,
-          path: new URL(request.url).pathname,
-          body: (await response?.text()) ?? '',
-        });
+        found.push({ path: new URL(request.url).pathname, body: (await response?.text()) ?? '' });
       }
     }
-    return entries;
+    return found;
   }, CACHE_PREFIX);
+  const isShellFile = (path: string): boolean =>
+    path === '/offline' || path.startsWith('/_next/static/') || /^\/[\w-]+\.(?:svg|png)$/.test(path);
+  expect(entries.map((entry) => entry.path).filter((path) => !isShellFile(path))).toEqual([]);
+  const offlinePage = entries.find((entry) => entry.path === '/offline');
+  expect(offlinePage?.body).toContain(OFFLINE_COPY.title);
+  for (const text of personalTexts) expect(offlinePage?.body).not.toContain(text);
 }
 
-/** The names of the caches the service worker owns. */
-export async function serviceWorkerCacheNames(page: Page): Promise<string[]> {
-  return page.evaluate(
+/** Asserts that no cache the service worker owns is left. */
+export async function expectNoServiceWorkerCaches(page: Page): Promise<void> {
+  const names = await page.evaluate(
     async (prefix) => (await caches.keys()).filter((name) => name.startsWith(prefix)),
     CACHE_PREFIX,
   );
+  expect(names).toEqual([]);
 }

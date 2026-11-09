@@ -2,12 +2,8 @@
 
 import { logError } from '@/lib/logging';
 
-/**
- * Every cache the service worker (public/sw.js) owns starts with this. Its other
- * reader is lib/security/service-worker.test.ts, which `knip --production` does not read.
- * @internal
- */
-export const SERVICE_WORKER_CACHE_PREFIX = 'werkflow-';
+/** Every cache the service worker (public/sw.js) owns starts with this. */
+const SERVICE_WORKER_CACHE_PREFIX = 'werkflow-';
 
 /**
  * Deletes every cache the service worker owns. Sign-out and an organization
