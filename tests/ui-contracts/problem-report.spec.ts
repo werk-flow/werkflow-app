@@ -179,9 +179,6 @@ test('F2 opens the report dialog from the keyboard, and Escape returns to where 
   await expect(working).toBeFocused();
 });
 
-const INTERRUPTED =
-  'Deine Meldung konnte gerade nicht vollständig gesendet werden. Prüfe deine Verbindung und versuche es erneut.';
-
 async function chooseAttachment(
   page: Page,
   dialog: ReturnType<Page['getByRole']>,
@@ -270,7 +267,7 @@ test('a registration whose answer got lost counts once on the retry, under the s
   expect(state.registered).toEqual(['screenshot']);
 });
 
-test('a report whose answer got lost is saved once: the retry finds it under the same id and number', async ({
+test('a report whose answer got lost is saved once: its description freezes, and the retry finds it under the same id and number', async ({
   page,
 }) => {
   await openReportFixture(page);
@@ -282,7 +279,16 @@ test('a report whose answer got lost is saved once: the retry finds it under the
   await dialog.getByRole('textbox', { name: 'Was ist passiert?', exact: true }).fill('Keine Verbindung.');
   const send = dialog.getByRole('button', { name: 'Senden', exact: true });
   await send.click();
-  await expect(dialog.getByText(INTERRUPTED)).toBeVisible();
+  await expect(
+    dialog.getByText(
+      'Deine Meldung kam vielleicht nicht an. Prüfe deine Verbindung und tippe noch einmal auf „Senden“. Die Beschreibung bleibt dafür, wie sie ist.',
+    ),
+  ).toBeVisible();
+  // The lost save may have stored the description, so it no longer changes.
+  await expect(dialog.getByRole('textbox', { name: 'Was ist passiert?', exact: true })).toHaveAttribute(
+    'readonly',
+    '',
+  );
   await expect(send).toBeEnabled();
   await send.click();
   await expect(

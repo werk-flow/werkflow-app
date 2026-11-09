@@ -88,7 +88,7 @@ export function ProblemReportDialog({ open, onOpenChange, capture }: ProblemRepo
                 onChange={(event) => setDescription(event.target.value)}
                 maxLength={PROBLEM_REPORT_DESCRIPTION_MAX_LENGTH}
                 rows={4}
-                readOnly={report.saved}
+                readOnly={report.descriptionFrozen}
                 required
               />
             </Field>

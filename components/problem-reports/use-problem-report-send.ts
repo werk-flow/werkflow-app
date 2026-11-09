@@ -49,42 +49,15 @@ async function filesOf(
   ];
 }
 
-export function useProblemReportSend(capture: ProblemReportCapture, close: () => void) {
-  const { showBanner } = useBanner();
-  const router = useRouter();
-  const pathname = usePathname();
-  const { run, isPending } = usePendingTask();
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState<SavedReport | null>(null);
-  // Chosen once per dialog: a retry after a lost answer saves the same report.
-  const [reportId] = useState(() => crypto.randomUUID());
-  // The files that reached the saved report, so a retry sends only the rest,
-  // and the stored bytes of each file whose registration has not answered yet.
+/**
+ * The files of a saved report: which reached it, so a retry sends only the
+ * rest, and the stored bytes of each file whose registration has not answered.
+ */
+function useReportFiles(setError: (error: string) => void) {
   const [sentFiles, setSentFiles] = useState<ReadonlySet<string>>(new Set());
   const [storedFiles, setStoredFiles] = useState<ReadonlyMap<string, string>>(new Map());
 
-  const saveReport = async (organizationId: string, description: string): Promise<SavedReport | null> => {
-    if (saved) return saved;
-    const result = await submitProblemReport({
-      organizationId,
-      reportId,
-      description,
-      context: buildProblemReportContext(capture.activity, loadUiStringCatalog(), capture.device),
-    });
-    if (!result.success) {
-      setError(problemReportFailureMessage(result.error));
-      return null;
-    }
-    const report = { reportId: result.reportId, number: result.number };
-    setSaved(report);
-    return report;
-  };
-
-  const sendFiles = async (
-    organizationId: string,
-    report: SavedReport,
-    files: KeyedFile[],
-  ): Promise<boolean> => {
+  const send = async (organizationId: string, report: SavedReport, files: KeyedFile[]): Promise<boolean> => {
     const sent = new Set(sentFiles);
     const stored = new Map(storedFiles);
     for (const { key, file } of files) {
@@ -106,19 +79,62 @@ export function useProblemReportSend(capture: ProblemReportCapture, close: () =>
     return true;
   };
 
+  // A file whose bytes left the device no longer changes: a retry sends those bytes.
+  const frozen: ReadonlySet<string> = new Set([...sentFiles, ...storedFiles.keys()]);
+  return { send, frozen };
+}
+
+export function useProblemReportSend(capture: ProblemReportCapture, close: () => void) {
+  const { showBanner } = useBanner();
+  const router = useRouter();
+  const pathname = usePathname();
+  const { run, isPending } = usePendingTask();
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState<SavedReport | null>(null);
+  // Chosen once per dialog: a retry after a lost answer saves the same report.
+  const [reportId] = useState(() => crypto.randomUUID());
+  // A save whose answer got lost may have stored the description: until a
+  // retry answers, the description stays as that save sent it.
+  const [saveUnanswered, setSaveUnanswered] = useState(false);
+  const files = useReportFiles(setError);
+
+  const saveReport = async (organizationId: string, description: string): Promise<SavedReport | null> => {
+    if (saved) return saved;
+    setSaveUnanswered(true);
+    const result = await submitProblemReport({
+      organizationId,
+      reportId,
+      description,
+      context: buildProblemReportContext(capture.activity, loadUiStringCatalog(), capture.device),
+    });
+    setSaveUnanswered(false);
+    if (!result.success) {
+      setError(problemReportFailureMessage(result.error));
+      return null;
+    }
+    const report = { reportId: result.reportId, number: result.number };
+    setSaved(report);
+    return report;
+  };
+
   const send = (organizationId: string, draft: ProblemReportDraft): void => {
     void run(async () => {
       setError(null);
+      let report = saved;
       try {
-        const report = await saveReport(organizationId, draft.description.trim());
+        report = await saveReport(organizationId, draft.description.trim());
         if (!report) return;
-        if (!(await sendFiles(organizationId, report, await filesOf(draft, capture.screenshot)))) return;
+        if (!(await files.send(organizationId, report, await filesOf(draft, capture.screenshot)))) return;
         confirm(report);
       } catch (thrown) {
         // A lost connection or a device that cannot encode the image: the
         // dialog stays open with what is saved, and „Senden“ tries again.
         logError('useProblemReportSend: send failed', thrown);
-        setError(problemReportFailureMessage('send_interrupted'));
+        setError(
+          report
+            ? problemReportFailureMessage('send_interrupted')
+            : 'Deine Meldung kam vielleicht nicht an. Prüfe deine Verbindung und tippe noch einmal auf „Senden“. Die Beschreibung bleibt dafür, wie sie ist.',
+        );
       }
     });
   };
@@ -135,7 +151,7 @@ export function useProblemReportSend(capture: ProblemReportCapture, close: () =>
     if (pathname === '/meldungen') router.refresh();
   };
 
-  // A file whose bytes left the device no longer changes: a retry sends those bytes.
-  const frozenFiles: ReadonlySet<string> = new Set([...sentFiles, ...storedFiles.keys()]);
-  return { send, isPending, error, setError, saved: saved !== null, frozenFiles };
+  /** The description no longer changes once a save may have stored it. */
+  const descriptionFrozen = saved !== null || saveUnanswered;
+  return { send, isPending, error, setError, descriptionFrozen, frozenFiles: files.frozen };
 }
