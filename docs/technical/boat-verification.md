@@ -1,6 +1,6 @@
 # Verify on Boat
 
-On a workstation with a Boat key, `bun run test:verify` runs on a short-lived Boat machine instead of the workstation (owner decision 15, werk-flow/werkflow-planning#294). Type-aware lint, the build, the stack and the browsers then load Boat's machine, not the 16 GB PC that agents share. CI stays on GitHub's runners ([decision 0009](../decisions/0009-pull-requests-and-ci.md)).
+On a workstation with a Boat key, `bun run test:verify` and each [rendered acceptance capture](#captures-on-boat) run on a short-lived Boat machine instead of the workstation (owner decision 15, werk-flow/werkflow-planning#294). Type-aware lint, the build, the stack and the browsers then load Boat's machine, not the 16 GB PC that agents share. CI stays on GitHub's runners ([decision 0009](../decisions/0009-pull-requests-and-ci.md)).
 
 ## How a run picks Boat
 
@@ -45,6 +45,16 @@ Before a machine exists, a connection that fails on the way to Boat (refused, re
 A file transfer retries on a fresh request before it counts as a failure, because the machine still holds the file (`lib/testing/boat/boat-transfer.ts`). Each upload gets one retry after a deadline of 30 s plus 1 s per 256 kB, so a stalled upload does not hold a billed machine for minutes. The results download gets three retries over about 40 s, so a dropped connection never throws away a finished run. `Uploaded the run (… MB) in … s.` records each upload's size and time.
 
 A failed browser group's world is cleaned on its machine before the machine goes; when that fails, the run says so and names `bun run test:runs cleanup <run-key>` for the workstation. Diagnose the failure from the trace and screenshot that came back, and classify it as usual. The one `environment` retry on unchanged inputs needs a diagnostic replay on the retained world or the same build, which a Boat run does not keep; until a Boat replay exists (werk-flow/werkflow-planning#294), repair through a change of the inputs.
+
+## Captures on Boat
+
+A rendered acceptance capture, `bun run test:audit:focused --grep "@ACCEPT <set>"`, goes to Boat through the same machinery (`lib/testing/boat/capture-on-boat.ts`): the same snapshot, packing, checks and results import. On the workstation it needs a production build and its server beside the stack and a browser, one of the largest loads on the shared PC. The machine builds and serves the app itself and runs the same command on the same tree. The run folder comes back, so the images land where a local capture writes them, under `.agent-logs/playwright-runs/<run>/acceptance/<set>/`. Start no test server for a capture.
+
+The images render in the pinned Playwright image on both sides. Measured on one set: a Boat capture and a local capture of the same commit differ only in the world's run id, which every run changes, and in at most 99 other pixels an image, each by 1 of 255. The Boat run took about 3 minutes and 180 s of machine time, and the workstation spent 19 s of processor time and 0.26 GB on it. The local capture spent about 500 s of processor time at up to 3 GB, most of it the build.
+
+A capture runs locally, with a `Running locally:` line, under `WERKFLOW_VERIFY_LOCAL=1`, with `--reuse-run` (the retained world lives on the workstation's stack) or with `--target cloud`. CI and the Boat machine run it locally without a line. Other focused runs and reference updates stay on the workstation.
+
+When Boat is [unavailable](#fallback), the capture does not run: a block names the reason, writes no image and exits 1. To capture on the workstation on purpose, start `bun run test:server local` in a second shell, then run `WERKFLOW_VERIFY_LOCAL=1 bun run test:audit:focused --grep "@ACCEPT <set>"`.
 
 ## The key contract
 
