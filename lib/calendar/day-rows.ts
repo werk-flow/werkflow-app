@@ -26,7 +26,7 @@ import { toLocalDateString } from '@/lib/utils';
  */
 
 /** The key of the „Ohne Zuweisung" row; never an employee record id. */
-export const UNASSIGNED_DAY_ROW_KEY = 'unassigned';
+const UNASSIGNED_DAY_ROW_KEY = 'unassigned';
 
 /** A login of the organization as the day view needs it. */
 type DayRowMember = { userId: string; name: string; role: string };

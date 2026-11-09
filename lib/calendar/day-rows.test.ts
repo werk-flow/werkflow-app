@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { CalendarBoardRow } from './board';
-import { dayRowFor, dayRowKey, deriveDayRows, UNASSIGNED_DAY_ROW_KEY, type DayRowsInput } from './day-rows';
+import { dayRowFor, dayRowKey, deriveDayRows, type DayRowsInput } from './day-rows';
 import type { CalendarJob } from '@/lib/jobs/types';
 import { getDefaultTimeTrackingSettings } from '@/lib/time-tracking/settings';
 import type { TimeEntry } from '@/lib/time-tracking/types';
@@ -165,7 +165,8 @@ describe('day rows', () => {
 
   test('a manager sees „Ohne Zuweisung“ first; the member scope keeps rows without a login', () => {
     expect(deriveDayRows(input({ jobs: [openVisit] })).map((row) => row.model.key)).toEqual([
-      UNASSIGNED_DAY_ROW_KEY,
+      // „Ohne Zuweisung“ has a key no employee record can have.
+      'unassigned',
       'r-kai',
       'r-sven',
     ]);

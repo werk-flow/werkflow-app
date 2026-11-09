@@ -202,7 +202,7 @@ export type CapacityState = 'off' | 'free' | 'partial' | 'full' | 'overbooked';
 /** Fifteen minutes of slack keep a full day from reading as overbooked. */
 const FULL_TOLERANCE_MINUTES = 15;
 
-export function deriveCapacityState(day: CalendarBoardDay, plannedMinutes: number): CapacityState {
+function deriveCapacityState(day: CalendarBoardDay, plannedMinutes: number): CapacityState {
   if (plannedMinutes <= 0) return day.targetMinutes === 0 ? 'off' : 'free';
   if (day.targetMinutes === 0) return 'overbooked';
   if (plannedMinutes > day.targetMinutes + FULL_TOLERANCE_MINUTES) return 'overbooked';
