@@ -92,6 +92,8 @@ begin
     array['street', ' , ', null],
     array['address', 'Ahornstraße 9, 12345 Musterstadt', 'Ahornstraße 9,'],
     array['address', 'Ahorn Strasse 9 12345 Musterstadt', 'Ahorn Strasse 9'],
+    array['address', 'Ahornstraße 9, D-12345 Musterstadt', 'Ahornstraße 9,'],
+    array['address', 'Ahornstraße 9 DE-12345 Musterstadt', 'Ahornstraße 9'],
     array['address', 'Musterstadt', null]
   ] loop
     if (case v_case[1]

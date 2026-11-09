@@ -67,9 +67,10 @@ as $$
   );
 $$;
 
--- The street of a free-form address: the text before its postal code, as in
--- "Lindenstraße 5, 12345 Musterstadt"; street_key drops the separator. An
--- address without one has no street.
+-- The street of a free-form address: the text before its postal code and a
+-- country prefix of it ("D-", "DE-"), as in "Lindenstraße 5, D-12345
+-- Musterstadt"; street_key drops the separator. An address without a postal
+-- code has no street.
 create function app_private.address_street(p_address text)
 returns text
 language sql
@@ -77,7 +78,10 @@ immutable
 parallel safe
 set search_path to ''
 as $$
-  select (regexp_match(coalesce(p_address, ''), '^(.*?)(?:^|[^0-9])[0-9]{5}(?:[^0-9]|$)'))[1];
+  select (regexp_match(
+    coalesce(p_address, ''),
+    '^(.*?)(?:(?:^|[^0-9A-Za-z])(?:[Dd][Ee]?)-|^|[^0-9])[0-9]{5}(?:[^0-9]|$)'
+  ))[1];
 $$;
 
 revoke all on function app_private.normalized_name(text) from public, anon, authenticated;
