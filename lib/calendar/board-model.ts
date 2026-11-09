@@ -1,10 +1,17 @@
-import type { CalendarBoardRow, CalendarDispatchState } from './board';
+import {
+  boardDayKey,
+  isNoteEntry,
+  type CalendarBoardRow,
+  type CalendarBoardRowlessAssignee,
+  type CalendarDispatchState,
+} from './board';
 import { minutesOfDay, type BoardSpanItem } from './board-layout';
 import type { CalendarJob } from '@/lib/jobs/types';
 import { addLocalDays, formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import type { SicknessCalendarEntry } from '@/lib/sickness/actions';
 import { calculateCalendarWorkBlocks } from '@/lib/time-tracking/calendar-blocks';
 import type { TimeEntry } from '@/lib/time-tracking/types';
+import { unavailabilityOn, type Unavailability } from '@/lib/planning/availability';
 import { toLocalDateString } from '@/lib/utils';
 import type { VacationCalendarEntry } from '@/lib/vacation/calendar-actions';
 
@@ -63,11 +70,74 @@ export function groupBoardRows(input: {
   return [...groups.values()].filter((group) => group.rows.length > 0);
 }
 
-/** Cards belong to the rows of their assignees; legacy jobs know only user ids. */
-export function rowOwnsJob(model: BoardRowModel, job: CalendarJob): boolean {
+/** Every person the board knows by record: its rows and the visits' assignees without one. */
+export type BoardPeople = ReadonlyMap<string, CalendarBoardRowlessAssignee>;
+
+export function indexBoardPeople(
+  rows: readonly CalendarBoardRow[],
+  rowlessAssignees: readonly CalendarBoardRowlessAssignee[],
+): Map<string, CalendarBoardRowlessAssignee> {
+  return new Map([...rows, ...rowlessAssignees].map((person) => [person.employeeRecordId, person] as const));
+}
+
+/** An assignee who cannot work the visit: outside their employment or app access on one of its days. */
+export type UnavailableAssignee = { employeeRecordId: string; name: string; reason: Unavailability };
+
+const UNAVAILABILITY_LABELS: Record<Unavailability, string> = {
+  after_exit: 'Ausgeschieden',
+  before_entry: 'Noch nicht eingetreten',
+  access_ended: 'Zugang beendet',
+};
+
+/** Why the assignee cannot work the visit, in one word or two: „Ausgeschieden“. */
+export function unavailabilityLabel(reason: Unavailability): string {
+  return UNAVAILABILITY_LABELS[reason];
+}
+
+/** The visit's people by record; a legacy job names them by user id. */
+function assigneeRecordIds(job: CalendarJob, people: BoardPeople): string[] {
+  if (job.assignedEmployeeRecordIds) return job.assignedEmployeeRecordIds;
+  const recordIdByUserId = new Map(
+    [...people.values()].flatMap((person) =>
+      person.userId ? [[person.userId, person.employeeRecordId] as const] : [],
+    ),
+  );
+  return job.assignedUserIds.flatMap((userId) => recordIdByUserId.get(userId) ?? []);
+}
+
+/**
+ * The scheduled visit's assignees who are outside their employment or app
+ * access on its first or last day (both change only once, so the two ends
+ * decide the whole span). A skipped or cancelled visit is history and names
+ * none, and so does a person the board does not know.
+ */
+export function unavailableAssignees(job: CalendarJob, people: BoardPeople): UnavailableAssignee[] {
+  if (job.occurrenceStatus === 'skipped' || job.occurrenceStatus === 'cancelled') return [];
+  const span = occurrenceSpan(job);
+  if (!span) return [];
+  const lastDate = addLocalDays(span.endDateExclusive, -1);
+  return assigneeRecordIds(job, people).flatMap((employeeRecordId) => {
+    const person = people.get(employeeRecordId);
+    const reason = person
+      ? (unavailabilityOn(person, span.startDate) ?? unavailabilityOn(person, lastDate))
+      : null;
+    return person && reason ? [{ employeeRecordId, name: person.displayName, reason }] : [];
+  });
+}
+
+/**
+ * Cards belong to the rows of their assignees; legacy jobs know only user ids.
+ * „Ohne Zuweisung“ holds a visit nobody can work: without people, or with
+ * only people outside their employment or app access on its days. A shared
+ * visit stays with the people who remain.
+ */
+export function rowOwnsJob(model: BoardRowModel, job: CalendarJob, people: BoardPeople): boolean {
   const recordIds = job.assignedEmployeeRecordIds ?? [];
   const userIds = job.assignedUserIds;
-  if (model.kind === 'unassigned') return recordIds.length === 0 && userIds.length === 0;
+  if (model.kind === 'unassigned') {
+    const assigneeCount = recordIds.length > 0 ? recordIds.length : userIds.length;
+    return assigneeCount === 0 || unavailableAssignees(job, people).length >= assigneeCount;
+  }
   if (recordIds.length > 0) return recordIds.includes(model.row.employeeRecordId);
   return model.row.userId !== null && userIds.includes(model.row.userId);
 }
@@ -94,6 +164,33 @@ export function occurrenceSpan(job: CalendarJob): BoardSpanItem | null {
     endDateExclusive: endDateExclusive > startDate ? endDateExclusive : addLocalDays(startDate, 1),
     sortMinutes: job.plannedTime ? minutesOfDay(job.plannedTime) : -1,
   };
+}
+
+/**
+ * The person-days (`boardDayKey`) that scheduled work covers, from every
+ * visit of the window, so a filter that hides a card never hides the work. A
+ * note and a skipped or cancelled visit carry none; an all-day visit counts on
+ * every day it spans, even where its planned minutes are zero. A legacy job
+ * names its people by user id, which `recordIdByUserId` resolves.
+ */
+export function plannedWorkDays(
+  jobs: readonly CalendarJob[],
+  recordIdByUserId: ReadonlyMap<string, string>,
+): Set<string> {
+  const keys = new Set<string>();
+  for (const job of jobs) {
+    if (job.occurrenceStatus === 'skipped' || job.occurrenceStatus === 'cancelled' || isNoteEntry(job))
+      continue;
+    const span = occurrenceSpan(job);
+    if (!span) continue;
+    const records =
+      job.assignedEmployeeRecordIds ??
+      job.assignedUserIds.flatMap((userId) => recordIdByUserId.get(userId) ?? []);
+    for (let date = span.startDate; date < span.endDateExclusive; date = addLocalDays(date, 1)) {
+      for (const record of records) keys.add(boardDayKey(record, date));
+    }
+  }
+  return keys;
 }
 
 export type BoardAbsenceItem = BoardSpanItem & {
@@ -179,14 +276,17 @@ export type BoardReassignmentTarget = {
  * The one place that turns "this card, from that row, onto this cell" into
  * the fields to write: the drop and the popover's „Verschieben" form share
  * it. Returns null when nothing changes. A card taken from the unassigned
- * row gains the person; one dropped there loses the source person; between
- * rows the source person is replaced, so a two-person visit keeps the other.
+ * row gains the person and lets go of the people who cannot work it, so a
+ * leaver's visit moves to its new person; one dropped there loses the source
+ * person; between rows the source person is replaced, so a two-person visit
+ * keeps the other.
  */
 export function reassignmentChanges(input: {
   job: CalendarJob;
   sourceEmployeeRecordId: string | null;
   sourceUserId: string | null;
   target: BoardReassignmentTarget;
+  people: BoardPeople;
 }): { plannedDate?: string; assignedUserIds?: string[]; assignedEmployeeRecordIds?: string[] } | null {
   const { job, sourceEmployeeRecordId, sourceUserId, target } = input;
   const dateChanged = job.plannedDate !== target.date;
@@ -197,12 +297,18 @@ export function reassignmentChanges(input: {
     if (source === null) return ids.includes(next) ? [...ids] : [...ids, next];
     return ids.map((id) => (id === source ? next : id));
   };
-  const recordIds = job.assignedEmployeeRecordIds ?? [];
+  const released =
+    sourceEmployeeRecordId === null && target.employeeRecordId !== null
+      ? unavailableAssignees(job, input.people).map((assignee) => assignee.employeeRecordId)
+      : [];
+  const releasedUserIds = released.flatMap((recordId) => input.people.get(recordId)?.userId ?? []);
+  const recordIds = (job.assignedEmployeeRecordIds ?? []).filter((id) => !released.includes(id));
+  const userIds = job.assignedUserIds.filter((id) => !releasedUserIds.includes(id));
   return {
     ...(dateChanged ? { plannedDate: target.date } : {}),
     ...(rowChanged
       ? {
-          assignedUserIds: swap(job.assignedUserIds, sourceUserId, target.userId),
+          assignedUserIds: swap(userIds, sourceUserId, target.userId),
           ...(job.occurrenceId
             ? { assignedEmployeeRecordIds: swap(recordIds, sourceEmployeeRecordId, target.employeeRecordId) }
             : {}),

@@ -14,7 +14,9 @@ import {
   type InteractiveCalendarSession,
 } from '@/lib/time-tracking/types';
 import type { CalendarSurfaceActions } from '../board/types';
-import { CalendarCard } from '../surface/calendar-card';
+import type { CalendarJob } from '@/lib/jobs/types';
+import { useBoardAbsences } from '../board-absences-context';
+import { CalendarCard, unavailableAssigneeWarnings } from '../surface/calendar-card';
 import { useClock } from '../surface/use-now-tick';
 import type { DayRow, DayRowItem } from '@/lib/calendar/day-rows';
 
@@ -73,6 +75,11 @@ export function DayViewList({
   onSessionClick: (session: InteractiveCalendarSession) => void;
 }): React.JSX.Element {
   const clock = useClock();
+  const { people } = useBoardAbsences();
+  const warningProps = (job: CalendarJob) => {
+    const warnings = unavailableAssigneeWarnings(job, people);
+    return { chips: warnings.chips, alert: warnings.alert };
+  };
   return (
     <div
       data-day-view={dateIso}
@@ -90,6 +97,7 @@ export function DayViewList({
               key={job.id}
               job={job}
               size="board"
+              {...warningProps(job)}
               locked={isStartedOccurrence(job, nowTick)}
               className="min-h-11 w-full"
               onOpen={(element) => actions.onOpenCard(job, element, model.row)}
@@ -103,6 +111,7 @@ export function DayViewList({
                   key={item.key}
                   job={item.job}
                   size="board"
+                  {...warningProps(item.job)}
                   locked={isStartedOccurrence(item.job, nowTick)}
                   className="min-h-11 w-full"
                   onOpen={(element) => actions.onOpenCard(item.job, element, model.row)}

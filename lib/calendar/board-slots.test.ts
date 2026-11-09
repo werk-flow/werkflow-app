@@ -22,6 +22,7 @@ function personRow(employeeRecordId: string): BoardRowModel {
     teamName: null,
     entryDate: null,
     exitDate: null,
+    accessEndDate: null,
   };
   return { key: employeeRecordId, kind: 'person', row };
 }

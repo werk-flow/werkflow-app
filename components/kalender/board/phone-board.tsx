@@ -2,15 +2,16 @@
 
 import { EmptyState } from '@/components/ui/empty-state';
 import { cn } from '@/lib/utils';
-import { isNoteEntry } from '@/lib/calendar/board';
 import { WEEKDAY_SHORT, type BoardColumn } from '@/lib/calendar/board-layout';
 import { absenceItems, type BoardAbsenceItem, type BoardRowModel } from '@/lib/calendar/board-model';
 import { formatRefusalDate } from '@/lib/calendar/messages';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { SicknessCalendarEntry } from '@/lib/sickness/actions';
 import type { VacationCalendarEntry } from '@/lib/vacation/calendar-actions';
+import { useBoardAbsences } from '../board-absences-context';
 import { BarSegment } from '../surface/bar-segment';
-import { CalendarCard, dispatchChip, readinessChips } from '../surface/calendar-card';
+import { CalendarCard, unavailableAssigneeWarnings } from '../surface/calendar-card';
+import { boardCardChips } from './board-row-card';
 import type { CalendarSurfaceActions } from './types';
 
 type DispatchByRecipient = ReadonlyMap<
@@ -97,6 +98,7 @@ function PhoneBoardDay({
   materialDemandJobIds: ReadonlySet<string>;
   actions: CalendarSurfaceActions;
 }): React.JSX.Element {
+  const { people } = useBoardAbsences();
   return (
     <section
       className={cn('space-y-1.5 px-4 py-2', column.isToday && 'bg-calendar-today')}
@@ -123,19 +125,18 @@ function PhoneBoardDay({
       ) : (
         visits.map(({ job, model }) => {
           const recordId = model.kind === 'person' ? model.row.employeeRecordId : null;
+          const warnings = unavailableAssigneeWarnings(job, people);
           return (
             <CalendarCard
               key={`${model.key}:${job.id}`}
               job={job}
               size="board"
-              chips={
-                isNoteEntry(job) || job.entryKind === 'internal'
-                  ? []
-                  : [
-                      dispatchChip(dispatch.get(`${job.occurrenceId}:${recordId}`) ?? 'nicht_gesendet'),
-                      ...readinessChips(materialDemandJobIds.has(job.jobId ?? '')),
-                    ]
-              }
+              chips={boardCardChips(job, {
+                unavailable: warnings.chips,
+                dispatchState: dispatch.get(`${job.occurrenceId}:${recordId}`) ?? 'nicht_gesendet',
+                materialDemand: materialDemandJobIds.has(job.jobId ?? ''),
+              })}
+              alert={warnings.alert}
               className="min-h-11 w-full"
               onOpen={(element) =>
                 actions.onOpenCard(job, element, model.kind === 'person' ? model.row : null)
