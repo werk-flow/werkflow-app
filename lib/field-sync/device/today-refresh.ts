@@ -3,6 +3,7 @@
 import { logError } from '@/lib/logging';
 import { readPersistenceOnDevice, savePersistenceOnDevice } from './today-store';
 import { claimToday, refreshTodayOnDevice, type TodayHolder } from './today-sync';
+import { todayWipeGeneration } from './today-wipe';
 
 // Keeps the phone's today snapshot current while the app is open (decision
 // record 0010, "Sync triggers"): on app start and on `online`. A return to
@@ -65,10 +66,18 @@ function refreshNow(): void {
 
 /**
  * Refreshes the snapshot now, and again on every `online`, for the person and
- * organization the latest start page was rendered for. A storage failure goes
- * to `onFailure` with a retry.
+ * organization the latest start page was rendered for, unless the device was
+ * wiped since `generationAtStart` (`todayWipeGeneration()` when the page
+ * started loading this code). A storage failure goes to `onFailure` with a retry.
  */
-export function keepTodayFresh(next: TodayHolder, onFailure: TodayStorageFailure): void {
+export function keepTodayFresh(
+  next: TodayHolder,
+  onFailure: TodayStorageFailure,
+  generationAtStart: string,
+): void {
+  // A sign-out that wiped while this code loaded ends the session next: its page must not claim
+  // the device again while that session still answers.
+  if (todayWipeGeneration() !== generationAtStart) return;
   if (!holder) window.addEventListener('online', refreshNow);
   holder = next;
   claimToday(next);

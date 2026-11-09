@@ -6,7 +6,13 @@ import type { FieldSyncToday } from '@/lib/field-sync/today-snapshot';
 import { keepTodayFresh } from './today-refresh';
 import { claimToday, refreshTodayOnDevice, type TodayHolder } from './today-sync';
 import { readTodayOnDevice, saveTodayOnDevice } from './today-store';
-import { TODAY_DATABASE, TODAY_HOLDER_KEY, TODAY_WIPE_KEY, clearTodayOnDevice } from './today-wipe';
+import {
+  TODAY_DATABASE,
+  TODAY_HOLDER_KEY,
+  TODAY_WIPE_KEY,
+  clearTodayOnDevice,
+  todayWipeGeneration,
+} from './today-wipe';
 
 /** localStorage, shared by every tab of an origin: the stand-in for another tab's wipe signal. */
 class MemoryStorage implements Storage {
@@ -394,10 +400,10 @@ describe('keeping the day fresh while the app is open', () => {
       return Response.json(snapshot({ organizationId }));
     });
     const failures: unknown[] = [];
-    keepTodayFresh(holder, (retry) => failures.push(retry));
+    keepTodayFresh(holder, (retry) => failures.push(retry), todayWipeGeneration());
     await until(() => requested.length === 1);
     await clearTodayOnDevice();
-    keepTodayFresh(otherOrganization, (retry) => failures.push(retry));
+    keepTodayFresh(otherOrganization, (retry) => failures.push(retry), todayWipeGeneration());
     releaseFirst();
     await until(
       async () =>
@@ -405,6 +411,18 @@ describe('keeping the day fresh while the app is open', () => {
     );
     expect(requested).toEqual([holder.organizationId, otherOrganization.organizationId]);
     expect(failures).toEqual([]);
+  });
+
+  test('a sign-out while the start page loads the refresh code keeps that page from claiming or refreshing', async () => {
+    installBrowser(async (organizationId) => Response.json(snapshot({ organizationId })));
+    const generationAtStart = todayWipeGeneration();
+    // The sign-out wipes, then waits for the session to end; meanwhile the import resolves.
+    await clearTodayOnDevice();
+    keepTodayFresh(holder, () => undefined, generationAtStart);
+    await letQueuedWorkRun();
+    expect(requested).toEqual([]);
+    expect(localStorage.getItem(TODAY_HOLDER_KEY)).toBeNull();
+    expect(await readTodayOnDevice(MORNING)).toBeNull();
   });
 
   test('a sign-out during a refresh leaves no day, even though the session still answered', async () => {
@@ -416,7 +434,7 @@ describe('keeping the day fresh while the app is open', () => {
       await held;
       return Response.json(snapshot({ organizationId }));
     });
-    keepTodayFresh(holder, () => undefined);
+    keepTodayFresh(holder, () => undefined, todayWipeGeneration());
     await until(() => requested.length === 1);
     // The sign-out wipes first and ends the session afterwards: the held answer still arrives.
     await clearTodayOnDevice();
@@ -434,7 +452,7 @@ describe('keeping the day fresh while the app is open', () => {
     };
     const retries: Array<() => void> = [];
     try {
-      keepTodayFresh(holder, (retry) => retries.push(retry));
+      keepTodayFresh(holder, (retry) => retries.push(retry), todayWipeGeneration());
       await until(() => retries.length === 1);
     } finally {
       indexedDB.open = realOpen;

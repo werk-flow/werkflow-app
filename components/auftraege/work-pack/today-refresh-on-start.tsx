@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
+import { todayWipeGeneration } from '@/lib/field-sync/device/today-wipe';
 import { logError } from '@/lib/logging';
 
 /**
@@ -21,18 +22,23 @@ export function TodayRefreshOnStart({
   const { showBanner } = useBanner();
   useEffect(() => {
     let current = true;
+    // Taken before the code loads: a sign-out that wipes meanwhile keeps this page from refreshing.
+    const generationAtStart = todayWipeGeneration();
     void (async () => {
       try {
         const { keepTodayFresh } = await import('@/lib/field-sync/device/today-refresh');
         if (current)
-          keepTodayFresh({ userId, organizationId }, (retry) =>
-            showBanner({
-              variant: 'error',
-              message:
-                'Deine Einsätze von heute konnten nicht auf dem Gerät gespeichert werden. Ohne Netz siehst du sie nicht.',
-              actionLabel: 'Erneut versuchen',
-              onAction: retry,
-            }),
+          keepTodayFresh(
+            { userId, organizationId },
+            (retry) =>
+              showBanner({
+                variant: 'error',
+                message:
+                  'Deine Einsätze von heute konnten nicht auf dem Gerät gespeichert werden. Ohne Netz siehst du sie nicht.',
+                actionLabel: 'Erneut versuchen',
+                onAction: retry,
+              }),
+            generationAtStart,
           );
       } catch (error) {
         // best-effort: a chunk gone after a deployment leaves the phone with the day it has until the next start.
