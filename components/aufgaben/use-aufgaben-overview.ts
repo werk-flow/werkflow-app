@@ -31,6 +31,9 @@ const AUFGABEN_OVERVIEW_TABLES = [
   'client_requests',
   'client_follow_ups',
   'organization_join_requests',
+  // An owner who leaves or loses the role hands their overdue callbacks and
+  // follow-ups to every manager.
+  'organization_members',
   // A replanned visit or a changed team resolves an „Einsatz umplanen“ task.
   'planning_occurrences',
   'planning_occurrence_assignments',
