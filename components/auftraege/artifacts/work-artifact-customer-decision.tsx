@@ -59,7 +59,7 @@ function CustomerDecisionForm({
   customer: WorkArtifactCustomerActions;
 }) {
   const { anyBusy, isBusy } = editor;
-  const { errors, decision, pendingSignatureDocumentId } = customer;
+  const { errors, decision, pendingSignatureDocumentId, outcomeUnknown } = customer;
   return (
     <form
       className="space-y-4 rounded-md border p-4"
@@ -74,6 +74,7 @@ function CustomerDecisionForm({
       <CustomerSignerFields customer={customer} />
       <Field label="Entscheidung" htmlFor={FIELD_IDS.decision} required error={errors.decision}>
         <Select
+          disabled={outcomeUnknown}
           value={decision ?? ''}
           onValueChange={(value) => {
             if (isCustomerDecisionType(value)) customer.setDecision(value);
@@ -99,6 +100,7 @@ function CustomerDecisionForm({
           error={errors.reason}
         >
           <Textarea
+            disabled={outcomeUnknown}
             value={customer.decisionReason}
             onChange={(event) => customer.setDecisionReason(event.target.value)}
           />
@@ -107,7 +109,7 @@ function CustomerDecisionForm({
       <div className="space-y-2">
         <p className="text-sm font-medium">Unterschrift</p>
         <SignaturePad
-          disabled={anyBusy || Boolean(pendingSignatureDocumentId)}
+          disabled={anyBusy || outcomeUnknown || Boolean(pendingSignatureDocumentId)}
           onChange={customer.setSignatureFile}
         />
         {pendingSignatureDocumentId && (
@@ -131,12 +133,14 @@ function CustomerSignerFields({ customer }: { customer: WorkArtifactCustomerActi
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Name" htmlFor={FIELD_IDS.name} required error={customer.errors.name}>
           <Input
+            disabled={customer.outcomeUnknown}
             value={customer.customerName}
             onChange={(event) => customer.setCustomerName(event.target.value)}
           />
         </Field>
         <Field label="Rolle/Funktion" htmlFor={FIELD_IDS.role}>
           <Input
+            disabled={customer.outcomeUnknown}
             value={customer.customerRole}
             onChange={(event) => customer.setCustomerRole(event.target.value)}
           />
@@ -149,6 +153,7 @@ function CustomerSignerFields({ customer }: { customer: WorkArtifactCustomerActi
         error={customer.errors.relationship}
       >
         <Input
+          disabled={customer.outcomeUnknown}
           value={customer.customerRelationship}
           onChange={(event) => customer.setCustomerRelationship(event.target.value)}
         />

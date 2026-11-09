@@ -142,6 +142,37 @@ function useCustomerDecisionDraft() {
   };
 }
 
+type CustomerDecisionDraft = ReturnType<typeof useCustomerDecisionDraft>;
+
+/** The save's input: the decision, its signer and, when uploaded, the signature, under the attempt's action ids. */
+function customerDecisionRequest(input: {
+  artifactId: string;
+  revisionId: string;
+  expectedVersion: number;
+  decision: CustomerDecisionType;
+  draft: CustomerDecisionDraft;
+  actionIds: { decision: string; signature: string };
+  signatureDocumentId: string | null;
+}): Parameters<typeof recordWorkArtifactCustomerDecision>[0] {
+  const { decision, draft, actionIds, signatureDocumentId } = input;
+  return {
+    artifactId: input.artifactId,
+    revisionId: input.revisionId,
+    expectedVersion: input.expectedVersion,
+    decisionActionId: actionIds.decision,
+    decision,
+    ...(customerDecisionNeedsReason(decision) ? { reason: draft.decisionReason } : {}),
+    signer: {
+      name: draft.customerName,
+      ...(draft.customerRole.trim() ? { role: draft.customerRole } : {}),
+      relationship: draft.customerRelationship,
+    },
+    ...(signatureDocumentId
+      ? { signature: { actionId: actionIds.signature, documentId: signatureDocumentId } }
+      : {}),
+  };
+}
+
 /**
  * The customer's decision with its optional signature in one save, the
  * recorded decision of the current revision, and the close flow that discards
@@ -163,6 +194,10 @@ export function useWorkArtifactCustomerActions({
   const [pendingActionIds, setPendingActionIds] = useState<{ decision: string; signature: string } | null>(
     null,
   );
+  // A save whose answer was lost may have been recorded. The replay of its ids
+  // returns the first entries without comparing, so the form locks its entries
+  // until a retry or a refusal settles what was recorded.
+  const [outcomeUnknown, setOutcomeUnknown] = useState(false);
   const recorded = detail && currentRevision ? recordedCustomerDecision(detail, currentRevision.id) : null;
 
   function saveDecision() {
@@ -181,22 +216,25 @@ export function useWorkArtifactCustomerActions({
         }
         setPendingSignatureDocumentId(signatureDocumentId);
       }
-      const result = await recordWorkArtifactCustomerDecision({
-        artifactId: detail.id,
-        revisionId: currentRevision.id,
-        expectedVersion: detail.version,
-        decisionActionId: actionIds.decision,
-        decision,
-        ...(customerDecisionNeedsReason(decision) ? { reason: draft.decisionReason } : {}),
-        signer: {
-          name: draft.customerName,
-          ...(draft.customerRole.trim() ? { role: draft.customerRole } : {}),
-          relationship: draft.customerRelationship,
-        },
-        ...(signatureDocumentId
-          ? { signature: { actionId: actionIds.signature, documentId: signatureDocumentId } }
-          : {}),
-      });
+      const result = await recordWorkArtifactCustomerDecision(
+        customerDecisionRequest({
+          artifactId: detail.id,
+          revisionId: currentRevision.id,
+          expectedVersion: detail.version,
+          decision,
+          draft,
+          actionIds,
+          signatureDocumentId,
+        }),
+      ).catch(() => null);
+      if (result === null) {
+        setOutcomeUnknown(true);
+        setError(
+          'Die Antwort zum Speichern ist nicht angekommen. Speichere erneut, um zu prüfen, was erfasst wurde.',
+        );
+        return;
+      }
+      setOutcomeUnknown(false);
       if (!result.success && result.error === 'work_artifact_customer_decision_recorded') {
         // Someone recorded the decision meanwhile: the reload shows it in place of the form.
         await load(detail.id);
@@ -222,12 +260,13 @@ export function useWorkArtifactCustomerActions({
     }
     setPendingSignatureDocumentId(null);
     setPendingActionIds(null);
+    setOutcomeUnknown(false);
     onClose();
   }
 
   const requestClose = () => void runArtifactTask('close', closeDialog);
 
-  return { ...draft, recorded, pendingSignatureDocumentId, saveDecision, requestClose };
+  return { ...draft, recorded, pendingSignatureDocumentId, outcomeUnknown, saveDecision, requestClose };
 }
 
 export type WorkArtifactCustomerActions = ReturnType<typeof useWorkArtifactCustomerActions>;

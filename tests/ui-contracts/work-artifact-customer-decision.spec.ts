@@ -177,7 +177,7 @@ test('a chosen signature image survives a tap on the pad and a resize, and is sa
   ]);
 });
 
-test('a retry after a lost answer sends the same action ids and shows the recorded decision', async ({
+test('after a lost answer the entries lock, and the retry sends the same ids and shows the recorded decision', async ({
   page,
 }) => {
   const dialog = await openReport(page);
@@ -190,7 +190,15 @@ test('a retry after a lost answer sends the same action ids and shows the record
   });
 
   await saveButton(dialog).click();
-  await expect.poll(async () => (await decisions(page)).length).toBe(1);
+  await expect(
+    dialog.getByText(
+      'Die Antwort zum Speichern ist nicht angekommen. Speichere erneut, um zu prüfen, was erfasst wurde.',
+    ),
+  ).toBeVisible();
+  // The first save may stand, and its replay would not carry edits: the entries stay locked.
+  await expect(dialog.getByRole('textbox', { name: 'Name', exact: true })).toBeDisabled();
+  await expect(dialog.getByRole('textbox', { name: /^Bezug zum Kunden/ })).toBeDisabled();
+  await expect(dialog.getByRole('combobox', { name: 'Entscheidung' })).toBeDisabled();
   await expect(saveButton(dialog)).toBeEnabled();
   await saveButton(dialog).click();
 
