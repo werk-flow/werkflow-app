@@ -110,3 +110,12 @@ No device in the matrix proves eviction or a real camera. Those stay covered by 
 - Field research shows workers are offline for more than a day at a time: change the window values, not the design.
 - Safari ships Background Sync, or Apple changes Home Screen web apps in the EU.
 - The native client needs an operation the envelope cannot express.
+
+## Amendment 2026-11-09: late offline time events need the user's correction request
+
+Decided by the E7 lead for werk-flow/werkflow-planning#317. The accepted text above stays as written; where it differs, this section wins.
+
+- **Late events.** An offline time event that arrives more than 24 hours and at most 7 days after `capturedAt` is not recorded and creates no request. The server answers `conflict` with the code `correction_required`, not `correction_requested`. The device keeps the event visible and offers a `Zeitkorrektur` prefilled with the captured times. The person files it through the existing audited correction path, and the office decides it there.
+- **Why.** That path establishes its caller from the cookie session, so a bearer request cannot reach it unchanged. A correction also proposes clock-in and clock-out pairs, and one late transition is half a pair.
+- **Unchanged.** After 7 days the server refuses the event with `outside_recording_window`. A field sync kind for correction requests, which the native client needs, waits for V2.
+- **Values fixed by #317.** The caller's organization is the active one, chosen as for every request: the organization cookie among the current memberships, otherwise the first. An operation naming another organization is `rejected` with `organization_mismatch`; a caller without a current membership gets `forbidden` for the whole request. The clock-skew tolerance is 5 minutes: a `capturedAt` later than that after receipt is `rejected` with `invalid`. A captured time before the person's last recorded event is `conflict` with `version_conflict`. A transition whose session needs the recovery decision answers `conflict` with `recovery_required`, also on every resend. The operation stores `capturedAt` and `sentAt`; its creation time is the receipt time. The three limits are named constants in the database function `transition_time_activity`.
