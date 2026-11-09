@@ -47,7 +47,7 @@ The runner reads the key in its own process and calls Boat's REST API with it. I
 
 Agents never read the key or the Boat CLI's config, which holds a key in plain text after `boat login`. `.claude/hooks/refuse-boat-key-reads.ts` refuses such a call in Claude Code and Codex, and `permissions.deny` in `.claude/settings.json` covers Claude's file tools. The expiry file stays readable.
 
-Machines get code and the local stack's synthetic data only: no customer data, no PROD or DEV secret, no Claude, Codex or GitHub credential. Each machine is created with `noEnv`, the organization's environment `base` is "Safe for third parties", and the snapshot holds no agent CLI folder.
+Machines get code and the local stack's synthetic data only: no customer data, no PROD or DEV secret, no Claude, Codex or GitHub credential. Each machine is created with `noEnv`, the organization's environment `base` is "Safe for third parties", and the snapshot holds no agent CLI folder. A run machine is created with snapshots and monitoring off: a stop erases it, and Boat keeps none of its command output, process list or memory samples once the run has read them.
 
 ## Set up a workstation
 
@@ -80,4 +80,4 @@ The owner accepts these residual exposures.
 
 - Agents run as the owner's OS user. The guard stops accidental and habitual reads, not a deliberate one.
 - The key reaches every machine of the organization, but deletes only its own.
-- With monitoring on, Boat keeps a command's output for 90 days. Runs print no secret.
+- The snapshot build keeps monitoring on, so Boat keeps its output for 90 days. It prints no secret.

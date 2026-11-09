@@ -54,14 +54,14 @@ function observation(overrides: Partial<Record<LabMetric, number>> = {}): LabObs
   };
 }
 
-function references(): LabReferences {
+function references(calibrated: LabObservation = observation()): LabReferences {
   const runs = ['r1', 'r2', 'r3', 'r4', 'r5'];
   return {
     version: 2,
     steps: [
       initialLabReference({
         step: STEP,
-        observations: runs.map(() => observation()),
+        observations: runs.map(() => calibrated),
         runKeys: runs,
         buildId: 'build',
         gated: ['requests', 'routeRenders'],
@@ -83,23 +83,23 @@ function run(lines: readonly string[]): string {
   return directory;
 }
 
-function check(lines: readonly string[], mode: { enforceCeilings: boolean; release: boolean }) {
+function check(lines: readonly string[], enforceCeilings: boolean, base = references()) {
   return checkLabEvidence({
     directory: run(lines),
     runKey: 'run-key',
     requiredSteps: [STEP.id],
-    references: references(),
-    ...mode,
+    references: base,
+    enforceCeilings,
   });
 }
 
-const RELEASE = { enforceCeilings: true, release: true };
-const EXPLICIT = { enforceCeilings: true, release: false };
-const RECORDED = { enforceCeilings: false, release: false };
+// scripts/verify.ts enforces ceilings in every plan: CI's change plan, an explicit --group and release.
+const ENFORCED = true;
+const RECORDED = false;
 
 describe('lab evidence', () => {
   test('a record within its reference passes and prints its table', () => {
-    const result = check([JSON.stringify(observation())], RELEASE);
+    const result = check([JSON.stringify(observation())], ENFORCED);
     expect(result.problems).toEqual([]);
     expect(result.table[0]).toContain(STEP.id);
   });
@@ -117,18 +117,37 @@ describe('lab evidence', () => {
 
   test('a regression fails when ceilings are enforced and is a note otherwise', () => {
     const regressed = [JSON.stringify(observation({ requests: 5 }))];
-    expect(check(regressed, EXPLICIT).problems.join()).toContain('regressed');
+    expect(check(regressed, ENFORCED).problems.join()).toContain('regressed');
     expect(check(regressed, RECORDED).problems).toEqual([]);
     expect(check(regressed, RECORDED).overTarget.join()).toContain('regressed');
   });
 
-  test('an improvement names the lowering command and fails in release mode only', () => {
-    const improved = [JSON.stringify(observation({ requests: 1 }))];
-    expect(check(improved, EXPLICIT).problems).toEqual([]);
-    expect(check(improved, EXPLICIT).overTarget.join()).toContain(
-      'bun scripts/lab-counts.ts ratchet --run run-key',
-    );
-    expect(check(improved, RELEASE).problems.join()).toContain('ratchet --run run-key');
+  // 2026-11-08: werk-flow/werkflow-app#280 lowered a count, CI passed it as a note, and the
+  // stale reference failed the next release run on another machine.
+  describe('against a reference of 50 requests with a tolerance of one', () => {
+    const base = references(observation({ requests: 50 }));
+    const judge = (requests: number, enforceCeilings = ENFORCED) =>
+      check([JSON.stringify(observation({ requests }))], enforceCeilings, base);
+
+    test('a fall beyond the tolerance fails where ceilings count and names the step, metric and ratchet', () => {
+      const problem = judge(48).problems.join();
+      expect(problem).toContain(`${STEP.id} requests fell to 48, below its floor 49`);
+      expect(problem).toContain('bun scripts/lab-counts.ts ratchet --run run-key');
+      expect(problem).toContain(`bun scripts/lab-counts.ts accept --run <that run> --step ${STEP.id}`);
+      expect(judge(48, RECORDED).problems).toEqual([]);
+      expect(judge(48, RECORDED).overTarget.join()).toContain('ratchet --run run-key');
+    });
+
+    test('a fall or rise within the tolerance passes, as a machine that measures one off must', () => {
+      expect(judge(49).problems).toEqual([]);
+      expect(judge(51).problems).toEqual([]);
+    });
+
+    test('a rise beyond the tolerance still fails as a regression', () => {
+      expect(judge(52).problems.join()).toContain(
+        `${STEP.id} requests is regressed: 52 against reference 50`,
+      );
+    });
   });
 
   test('a payload that shrank below its floor asks to confirm nothing is missing', () => {
@@ -141,7 +160,7 @@ describe('lab evidence', () => {
       decodedBytes: 1_000,
       rows: null,
     };
-    const result = check([JSON.stringify({ ...shrunk, payloads: [payload] })], EXPLICIT);
+    const result = check([JSON.stringify({ ...shrunk, payloads: [payload] })], ENFORCED);
     expect(result.problems.join()).toContain('confirm nothing is missing');
   });
 
@@ -160,7 +179,6 @@ describe('lab evidence', () => {
         references: references(),
         steps: [{ ...STEP, comparison }],
         enforceCeilings,
-        release: false,
       });
     expect(judge(true).problems.join()).toContain('no reviewed lab reference');
     expect(judge(false).problems).toEqual([]);
@@ -177,7 +195,6 @@ test('a required step that the registry does not know fails every mode', () => {
     references: references(),
     steps: [],
     enforceCeilings: false,
-    release: false,
   });
   expect(result.problems.join()).toContain('not a registered lab step');
 });

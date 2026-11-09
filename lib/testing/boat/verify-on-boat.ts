@@ -613,7 +613,7 @@ export async function runOnBoat(input: {
       from: SNAPSHOT_NAME,
       name: `verify-${repository.split('/').at(-1) ?? 'checkout'}`,
       ttlSeconds: MACHINE_TTL_SECONDS,
-      snapshots: false,
+      purpose: 'run',
       log: say,
       signal,
     });

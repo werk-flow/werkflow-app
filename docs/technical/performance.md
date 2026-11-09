@@ -31,7 +31,7 @@ A journey is a step one role repeats many times a day, measured from the user's 
 Each lab group prints one table per step with reference, value, ceiling, floor and status per metric.
 
 - `regressed` or `budget-exceeded`: more work than the reference or budget allows. Find the cause; never raise the reference.
-- `ratchet-pending`: less work. Lower the reference with the command the table names.
+- `ratchet-pending`: less work than the floor allows. It fails in every run, CI included, so the change that lowered the count lowers its reference with the command the table names. When CI fails but your own run measures inside the tolerance, `accept` your run's value and name CI's value as the reason.
 - `grew` or `shrank`: bytes above the ceiling or below the floor (a deliberate cut, or missing data). Open the response, then `bun scripts/lab-counts.ts accept --run <run key> --step <id> --target <shape> --reason "<what changed>"`. A framework upgrade can shrink every payload at once: compare `backendByPath` and rows with the last passing run, open one response, and accept each target naming that comparison.
 - `measurement-missing`: a bounded value was not recorded. It fails like a regression.
 - `shape-added` or `shape-removed`: a new or stopped request. Either is a behavior change that needs its reason.
@@ -74,7 +74,6 @@ A metric earns its gate by two jobs: it repeats across five runs within toleranc
 - A count reference moves down without review. Only `ratchet` and `calibrate` write it. Never edit `lib/testing/lab-count-references.json` by hand: every reference replays from its history, and a hand edit fails.
 - A count of ten or more keeps a tolerance of one or 2 %, whichever is larger.
 - A payload is judged by decoded bytes and rows. Per-shape request counts, the encoded size of a streamed text response and prefetch shapes print only, because they follow timing.
-- An improvement not lowered fails in release mode.
 - A lab step fails when it released a live read that a dialog held since before the step (`<html data-live-read-held>`). Settle the page before you open the dialog: `settleLiveShell` waits until no live read is queued or running.
 - A request shape is named by its route pattern or background-read kind, never by ids or query values.
 

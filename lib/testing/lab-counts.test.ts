@@ -116,7 +116,7 @@ describe('lab counts', () => {
     expect(new Set(LAB_METRICS).size).toBe(LAB_METRICS.length);
   });
 
-  test('a count above its reference fails; one below it waits for the ratchet, which fails in release mode only', () => {
+  test('a count above its reference regressed; one below it fails until the ratchet lowers the reference', () => {
     const higher = compareLabStep({
       step: STEP,
       observation: observation({ counts: { requests: 4 } }),
@@ -130,8 +130,7 @@ describe('lab counts', () => {
     });
     const pending = rowOf(lower, 'requests');
     expect(pending.status).toBe('ratchet-pending');
-    expect(isFailingRow(pending, false)).toBe(false);
-    expect(isFailingRow(pending, true)).toBe(true);
+    expect(isFailingRow(pending)).toBe(true);
   });
 
   test('a count above the absolute budget fails even when the metric has no reference', () => {
@@ -151,7 +150,7 @@ describe('lab counts', () => {
     });
     const row = rowOf(rows, 'domMutations');
     expect(row.status).toBe('ungated');
-    expect(isFailingRow(row, true)).toBe(false);
+    expect(isFailingRow(row)).toBe(false);
   });
 
   test('a payload above its ceiling grew, one below its floor shrank, and an added or missing shape fails', () => {
@@ -176,9 +175,9 @@ describe('lab counts', () => {
     });
     expect(moved.map((row) => row.status)).toContain('shape-added');
     expect(moved.map((row) => row.status)).toContain('shape-removed');
-    expect(
-      moved.filter((row) => row.status.startsWith('shape')).every((row) => isFailingRow(row, false)),
-    ).toBe(true);
+    expect(moved.filter((row) => row.status.startsWith('shape')).every((row) => isFailingRow(row))).toBe(
+      true,
+    );
   });
 
   test('a bound whose observation is missing fails as a missing measurement, never as within', () => {
@@ -196,7 +195,7 @@ describe('lab counts', () => {
     for (const target of [`${shape}#decodedBytes`, `${shape}#rows`]) {
       const row = rowOf(rows, target);
       expect(row.status).toBe('measurement-missing');
-      expect(isFailingRow(row, false)).toBe(true);
+      expect(isFailingRow(row)).toBe(true);
     }
     // The encoded bytes stay informational beside a decoded bound, so they print and never fail.
     expect(rowOf(rows, `${shape}#encodedBytes`).status).toBe('ungated');
