@@ -53,11 +53,14 @@ const SETUP_FAILED = 90;
 /** A hard stop for a machine whose run or deletion went wrong; without snapshots it is then erased. */
 const MACHINE_TTL_SECONDS = 3 * 3_600;
 /**
- * Groups that measure wall-clock time or compare screenshots against references taken on the
- * workstation. Lab groups count requests, payloads and renders, which repeat on any machine (CI gates
- * on them), so they may run on Boat.
+ * Groups whose medians measure this workstation's wall clock. Every other group may run on Boat:
+ * lab groups count requests, payloads and renders, which repeat on any machine (CI gates on them),
+ * layout groups check computed boxes, and visual groups render in the pinned Playwright image on
+ * linux/amd64 (lib/testing/runner/visual-browser.ts). On a Boat `large` machine that image renders
+ * the references as the workstation does: measured, at most 13 pixels an image differ, each by 1 of
+ * 255, under the comparison's threshold (werk-flow/werkflow-planning#294).
  */
-const MACHINE_BOUND_GROUP = /^audit:(?:performance|visual|layout)/;
+const WALL_CLOCK_GROUP = /^audit:performance/;
 /**
  * Groups that cost this workstation less than a Boat run's fixed upload and setup, about 95 s of
  * machine time: a SQL group takes about 1 s against the shared stack, `unit:all` 60 to 90 s and a
@@ -111,8 +114,8 @@ export function localReason(args: readonly string[], env: Environment): string |
     return 'the cloud canary reaches DEV, whose secrets stay on this workstation.';
   if (value('--mode') === 'release')
     return "release mode measures wall-clock groups against this machine's references.";
-  if ((value('--group') ?? '').split(',').some((id) => MACHINE_BOUND_GROUP.test(id)))
-    return "the group measures or captures against this machine's references.";
+  if ((value('--group') ?? '').split(',').some((id) => WALL_CLOCK_GROUP.test(id)))
+    return "the group measures this machine's wall clock.";
   return undefined;
 }
 
@@ -121,9 +124,9 @@ function plannedRuns(plan: string): string[] {
   return [...plan.matchAll(/^RUN +(\S+)/gm)].map((match) => match[1] ?? '');
 }
 
-/** The first group a printed plan runs that measures or captures against the workstation. */
-export function machineBoundGroup(plan: string): string | undefined {
-  return plannedRuns(plan).find((id) => MACHINE_BOUND_GROUP.test(id));
+/** The first group a printed plan runs that measures this workstation's wall clock. */
+export function wallClockGroup(plan: string): string | undefined {
+  return plannedRuns(plan).find((id) => WALL_CLOCK_GROUP.test(id));
 }
 
 /**
@@ -148,8 +151,8 @@ export function withheldFile(untracked: readonly string[]): string | undefined {
 
 /**
  * Why the plan these arguments select runs locally, from `test:plan` itself: a group that measures
- * or captures against the workstation, a plan cheaper here than a Boat machine's setup, or a plan
- * that cannot be read. Undefined when Boat may run it.
+ * this workstation's wall clock, a plan cheaper here than a Boat machine's setup, or a plan that
+ * cannot be read. Undefined when Boat may run it.
  */
 function planReason(repository: string, args: readonly string[]): string | undefined {
   const plan = spawnSync(process.execPath, ['scripts/verify.ts', 'plan', ...args], {
@@ -158,8 +161,8 @@ function planReason(repository: string, args: readonly string[]): string | undef
     maxBuffer: 64 * 1024 * 1024,
   });
   if (plan.status !== 0) return 'the plan could not be read here; the local run reports why.';
-  const bound = machineBoundGroup(plan.stdout);
-  if (bound) return `the plan runs ${bound}, which measures or captures against this machine's references.`;
+  const measured = wallClockGroup(plan.stdout);
+  if (measured) return `the plan runs ${measured}, which measures this machine's wall clock.`;
   return cheapPlanReason(plan.stdout);
 }
 
