@@ -38,17 +38,28 @@ function rejectRefusal(result: ActionResult): void {
   if (!result.success) throw new Error(result.error);
 }
 
+type OfflineCaches = typeof import('@/lib/offline/service-worker-caches');
+
 /**
- * Sets the active organization cookie, then deletes every cache the service worker owns, so
- * nothing the previous organization's views cached stays on the device, and only then asks for
- * the offline shell again: the switch navigates on the client, which never refills it, and the
- * cookie action's response can render the new organization before the clear has finished.
- * Offline code loads lazily; it loads before the cookie changes, so a failed load keeps the old
- * organization.
+ * Offline code loads lazily (lib/conventions/offline-code-loads-lazily.test.ts). The switch loads
+ * it before the cookie changes, so a failed load keeps the old organization.
  */
-async function switchOrgCookieAndCaches(orgId: string): Promise<void> {
-  const offline = await import('@/lib/offline/service-worker-caches');
-  await setActiveOrgCookie(orgId).then(rejectRefusal);
+function loadOfflineCaches(): Promise<OfflineCaches> {
+  return import('@/lib/offline/service-worker-caches');
+}
+
+/**
+ * Waits for the active organization cookie to change, then deletes every cache the service
+ * worker owns, so nothing the previous organization's views cached stays on the device, and
+ * only then asks for the offline shell again: the switch navigates on the client, which never
+ * refills it, and the cookie action's response can render the new organization before the
+ * clear has finished.
+ */
+async function clearCachesAfterSwitch(
+  offline: OfflineCaches,
+  cookieChange: Promise<ActionResult>,
+): Promise<void> {
+  rejectRefusal(await cookieChange);
   await offline.clearServiceWorkerCaches();
   await offline.restoreOfflineShell();
 }
@@ -311,7 +322,9 @@ export function OrganizationProvider({
       refreshGenerationRef.current += 1;
 
       try {
-        await switchOrgCookieAndCaches(orgId);
+        // The cookie call stays in this handler, where the double-render check sees it.
+        const offline = await loadOfflineCaches();
+        await clearCachesAfterSwitch(offline, setActiveOrgCookie(orgId));
         // GET readers authorize against this cookie. Publish the new scope only
         // after its response commits, otherwise their first read is denied.
         setActiveOrgId(orgId);
