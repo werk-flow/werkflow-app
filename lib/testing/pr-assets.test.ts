@@ -55,13 +55,17 @@ describe('the PR asset branch check', () => {
   afterEach(() => rmSync(stub, { recursive: true, force: true }));
 
   function writeRefs(branches: string[]) {
-    writeFileSync(join(stub, 'refs.json'), JSON.stringify(branches.map((branch) => ({ ref: `refs/heads/${branch}` }))));
+    writeFileSync(
+      join(stub, 'refs.json'),
+      JSON.stringify(branches.map((branch) => ({ ref: `refs/heads/${branch}` }))),
+    );
   }
 
   function check(extraEnv: Record<string, string> = {}) {
     const result = spawnSync('bash', [script], {
       encoding: 'utf8',
       env: {
+        NODE_ENV: 'test',
         PATH: `${stub}:${process.env.PATH}`,
         STUB: stub,
         GITHUB_REPOSITORY: 'owner/repo',

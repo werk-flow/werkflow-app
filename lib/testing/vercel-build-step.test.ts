@@ -45,6 +45,7 @@ function check(extraEnv: Record<string, string> = {}) {
   const result = spawnSync('bash', [script, 'https://api.vercel.com/v9/projects/prj_test'], {
     encoding: 'utf8',
     env: {
+      NODE_ENV: 'test',
       PATH: `${stub}:${process.env.PATH}`,
       STUB: stub,
       VERCEL_TOKEN: TOKEN,
@@ -64,7 +65,10 @@ describe('the committed command', () => {
 
   // Vercel's convention: exit 1 builds, exit 0 skips.
   function decides(env: Record<string, string>) {
-    return spawnSync('sh', ['-c', committed[0] ?? 'exit 2'], { encoding: 'utf8', env }).status;
+    return spawnSync('sh', ['-c', committed[0] ?? 'exit 2'], {
+      encoding: 'utf8',
+      env: { NODE_ENV: 'test', ...env },
+    }).status;
   }
 
   test('builds production from the production branch', () => {

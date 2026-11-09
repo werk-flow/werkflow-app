@@ -29,8 +29,9 @@ if test "${BREAK_CHECK:-}" = "$check"; then
   expected="${expected} # proof"
 fi
 
-body="$(mktemp)"
-trap 'rm -f "$body"' EXIT
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+body="$work/project.json"
 status="$(curl --silent --max-time 30 --output "$body" --write-out '%{http_code}' \
   -H "Authorization: Bearer ${VERCEL_TOKEN}" "$url" || true)"
 test "$status" = 200 || fail "VERCEL_TOKEN could not read the project (HTTP ${status})."
