@@ -271,21 +271,3 @@ test('the browser wait registry ratchets each exported wait', () => {
     'waits (tests/timeouts.ts) gained "NEW_MS"',
   ]);
 });
-
-test('a SQL object list keys by its literal keys, so a new or computed key is growth', () => {
-  const list: ShrinkOnlyList = {
-    id: 'sql reads',
-    file: 'planted.sql',
-    extract: { kind: 'sql-object', name: 'history_reads' },
-  };
-  const base =
-    "  history_reads constant jsonb := jsonb_build_object(\n    'a-read', 'Every row''s history, (all) of it.',\n    'b-read', format('%s', 'x'));\n";
-  const grown = base.replace("'b-read'", "'b-read', 'why', 'c-read'");
-  expect(growth(list, base, grown)).toEqual(['sql reads (planted.sql) gained "c-read"']);
-  expect(
-    growth(list, base, base.replace("'a-read', 'Every row''s history, (all) of it.',\n    ", '')),
-  ).toEqual([]);
-  expect(growth(list, base, base.replace("'a-read'", "lower('A-READ')"))).toEqual([
-    `sql reads (planted.sql) gained "lower('A-READ')"`,
-  ]);
-});

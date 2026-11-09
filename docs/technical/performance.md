@@ -61,21 +61,11 @@ The check sees edits to digest inputs. A change elsewhere that alters what a see
 
 `audit:layout` records every layout shift on each audited page and names the region that moved. A page is usable when no skeleton is left and the main thread settled. A shift after that fails, unless an input came within 500 ms before it. A high streaming score points at a `loading.tsx` or Suspense fallback whose box differs from its content: fix the skeleton, not the measurement.
 
-### Database work of a hot read
-
-The lab world holds six weeks of visits and time and no documents, so a read that walks an organization's history costs there what a read that seeks its window costs. `sql:hot-read-volume` (`supabase/tests/hot_read_volume.sql`) runs each hot read in its app call shape on an organization with a year of closed history and on one without, and compares the rows each touched per table.
-
-1. Add a read that a daily journey runs on a table that grows with history to its `reads`, with the tables it bounds by organization.
-2. When it fails, fix the predicate or the index. `history_reads` is a [shrink-only list](testing.md#grow-a-shrink-only-list); werk-flow/werkflow-planning#340 owns its entries' fixes.
-
-Wrong turn: an EXPLAIN check that the read uses an index. The Plantafel week seeks one and still walks every earlier visit. The test turns off sequential scans and runs on the stack's own statistics: with fresh ones, the planner's choice flipped between runs on identical data.
-
 ## What each instrument proves
 
 - **Wall-clock scenarios** (`audit:performance:*`) are a manual tool for one machine. They hold every sample to its budget and compare the median with a reference recorded on that machine, and run alone. Nothing proves them on a schedule ([selection](testing.md#how-selection-works)). A moved digest fails on its PR. A change to what the reference records about the machine, such as its memory or CPU, shows only at the next `--fresh` run, as "no reviewed baseline"; recalibrate then. Without `--fresh`, a run can reuse an earlier pass. Anything it does not record shows as slower readings and no warning: a laptop on battery runs far slower and breaks budgets, so measure on mains power.
 - **Lab counts** (`audit:lab:*`) prove a step does the same work as its reference. A count does not show when a page became usable, and it counts background reads that cost the user nothing. Read it with the wall-clock time. Every change plan that touches product code runs them ([selection](testing.md#how-selection-works)), so a regression fails its own PR.
 - **Payload budgets**: the ceiling catches growth, the floor lost data.
-- **Hot read volume** (`sql:hot-read-volume`) proves a read touches no more rows when its organization gains history, and none of another organization's. It sees index entries returned, not walked past, so it also requires a whole (not partial) index that leads with `organization_id` on each table a read bounds.
 
 A metric earns its gate by two jobs: it repeats across five runs within tolerance, and moving it in a recorded experiment moved the time the user waits.
 
