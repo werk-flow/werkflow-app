@@ -7664,6 +7664,161 @@ export type Database = {
           },
         ];
       };
+      problem_report_events: {
+        Row: {
+          actor_id: string;
+          created_at: string;
+          event_type: string;
+          id: string;
+          organization_id: string;
+          payload: Json;
+          report_id: string;
+        };
+        Insert: {
+          actor_id: string;
+          created_at?: string;
+          event_type: string;
+          id?: string;
+          organization_id: string;
+          payload?: Json;
+          report_id: string;
+        };
+        Update: {
+          actor_id?: string;
+          created_at?: string;
+          event_type?: string;
+          id?: string;
+          organization_id?: string;
+          payload?: Json;
+          report_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "problem_report_events_report_id_organization_id_fkey";
+            columns: ["report_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "problem_reports";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      problem_report_files: {
+        Row: {
+          created_at: string;
+          file_name: string;
+          id: string;
+          kind: string;
+          mime_type: string;
+          organization_id: string;
+          report_id: string;
+          size_bytes: number;
+          storage_path: string;
+        };
+        Insert: {
+          created_at?: string;
+          file_name: string;
+          id: string;
+          kind: string;
+          mime_type: string;
+          organization_id: string;
+          report_id: string;
+          size_bytes: number;
+          storage_path: string;
+        };
+        Update: {
+          created_at?: string;
+          file_name?: string;
+          id?: string;
+          kind?: string;
+          mime_type?: string;
+          organization_id?: string;
+          report_id?: string;
+          size_bytes?: number;
+          storage_path?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "problem_report_files_report_id_organization_id_fkey";
+            columns: ["report_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "problem_reports";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      problem_reports: {
+        Row: {
+          bucket: string | null;
+          closed_at: string | null;
+          context: Json | null;
+          created_at: string;
+          description: string | null;
+          filed_by_id: string | null;
+          id: string;
+          organization_id: string;
+          originals_deleted_at: string | null;
+          reporter_id: string;
+          response: string | null;
+          scrub_state: string;
+          scrubbed_description: string | null;
+          status: string;
+        };
+        Insert: {
+          bucket?: string | null;
+          closed_at?: string | null;
+          context?: Json | null;
+          created_at?: string;
+          description?: string | null;
+          filed_by_id?: string | null;
+          id?: string;
+          organization_id: string;
+          originals_deleted_at?: string | null;
+          reporter_id: string;
+          response?: string | null;
+          scrub_state?: string;
+          scrubbed_description?: string | null;
+          status?: string;
+        };
+        Update: {
+          bucket?: string | null;
+          closed_at?: string | null;
+          context?: Json | null;
+          created_at?: string;
+          description?: string | null;
+          filed_by_id?: string | null;
+          id?: string;
+          organization_id?: string;
+          originals_deleted_at?: string | null;
+          reporter_id?: string;
+          response?: string | null;
+          scrub_state?: string;
+          scrubbed_description?: string | null;
+          status?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "problem_reports_filed_by_id_fkey";
+            columns: ["filed_by_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "problem_reports_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "problem_reports_reporter_id_fkey";
+            columns: ["reporter_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       profiles: {
         Row: {
           avatar_path: string | null;
@@ -13348,6 +13503,10 @@ export type Database = {
         };
         Returns: string;
       };
+      apply_problem_report_retention: {
+        Args: { p_organization_id: string; p_report_id: string };
+        Returns: string;
+      };
       apply_responsibility_configuration: {
         Args: {
           p_actor_id: string;
@@ -15801,6 +15960,13 @@ export type Database = {
         Returns: {
           dispatch_id: string;
           revision_id: string;
+        }[];
+      };
+      list_problem_reports_due_for_retention: {
+        Args: { p_after?: string; p_limit: number };
+        Returns: {
+          id: string;
+          organization_id: string;
         }[];
       };
       list_profile_references: {
