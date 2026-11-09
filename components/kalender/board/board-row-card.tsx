@@ -137,7 +137,8 @@ function barEdgeHandle(
 export const BoardRowCard = memo(function BoardRowCard(props: BoardRowCardProps): React.JSX.Element {
   const { job, startDate, row, dispatchState, materialDemand, compact, locked, actions, startDrag } = props;
   const { hovered, onHoverLink } = props;
-  const unavailable = unavailableAssigneeChips(unavailableAssignees(job, useBoardAbsences().people));
+  const { people } = useBoardAbsences();
+  const unavailable = unavailableAssigneeChips(unavailableAssignees(job, people));
   const chips = boardCardChips(job, { unavailable, dispatchState, materialDemand });
   const linked = hovered && (job.assignedEmployeeRecordIds?.length ?? 0) > 1;
   const draggable = actions.isManager && !locked;
