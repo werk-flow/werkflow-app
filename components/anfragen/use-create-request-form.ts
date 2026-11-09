@@ -206,9 +206,10 @@ function useCreateRequestCustomerFields(): { fields: IntakeCustomerFields; reset
     setContactId('');
   };
 
+  // Picking the chosen site again keeps its Anlage.
   const handleSiteChange = (nextSiteId: string) => {
+    if (nextSiteId !== siteId) setEquipmentId('');
     setSiteId(nextSiteId);
-    setEquipmentId('');
   };
 
   return {

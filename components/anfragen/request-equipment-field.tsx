@@ -30,12 +30,16 @@ export function RequestEquipmentField({
 }: RequestEquipmentFieldProps) {
   const { client, loading, loadFailure } = useClientOption(siteId ? clientId : '');
   if (!clientId || !siteId) return null;
-  const options = requestEquipmentOptions(
-    client?.sites.find((site) => site.id === siteId)?.equipment ?? [],
-    value,
-  );
+  // Only a settled read says that a saved Anlage is no longer active; until
+  // then, or after a failed read, it keeps a neutral label.
+  const settled = !loading && !loadFailure;
+  const options = settled
+    ? requestEquipmentOptions(client?.sites.find((site) => site.id === siteId)?.equipment ?? [], value)
+    : value
+      ? [{ value, label: 'Gespeicherte Anlage' }]
+      : [];
 
-  if (!loading && !loadFailure && options.length === 0) {
+  if (settled && options.length === 0) {
     return (
       <div className="space-y-1">
         <p className="text-sm font-medium">Anlage</p>
