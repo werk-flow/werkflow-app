@@ -144,7 +144,13 @@ test('a work picker leaves archived customers out of its pages, a filter and a s
           call.args[1] === null,
       );
     // The page query ends in a range; the read of the selected ids filters by id.
-    return { page: dropsArchived(queryWith('range')), selected: dropsArchived(queryWith('in')) };
+    const page = queryWith('range');
+    const selected = queryWith('in');
+    // Both reads ran: a reader that returned early would otherwise pass as filtering nothing.
+    expect(page).toBeDefined();
+    expect(selected).toBeDefined();
+    expect(page).not.toBe(selected);
+    return { page: dropsArchived(page), selected: dropsArchived(selected) };
   };
   expect(await archiveFilters('customer-work')).toEqual({ page: true, selected: false });
   expect(await archiveFilters('filter')).toEqual({ page: false, selected: false });
