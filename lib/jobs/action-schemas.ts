@@ -33,7 +33,7 @@ export const assignmentApprovalSchema = z
   );
 
 /** A manager's reason for the planning conflicts they saw, for the fingerprint of that assessment. */
-const planningApprovalSchema = z
+export const planningApprovalSchema = z
   // The reason fits planning_occurrence_assessments.override_reason.
   .object({ fingerprint: z.string().length(64), reason: z.string().trim().min(8).max(500) })
   .nullish();

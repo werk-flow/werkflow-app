@@ -50,6 +50,7 @@ import {
   densityToggle,
   DRAG_REFUSALS,
   dragCardTo,
+  dropParkedCard,
   dragGhost,
   dragHandleBy,
   dragHandleTo,
@@ -363,7 +364,11 @@ test.describe('P1-24a Plantafel, day and month audit @AUDIT-W3-P1-24A @AUDIT-W3'
       await parkplatzButton(adminPage).click();
       const parkedCard = parkplatzCardOf(adminPage, visit.title);
       await expect(parkedCard).toBeVisible();
-      await dragCardTo(adminPage, parkedCard, boardCell(adminPage, employeeRecord.id, tuesday));
+      await dropParkedCard(adminPage, parkedCard, boardCell(adminPage, employeeRecord.id, tuesday), {
+        orgId: world.orgId,
+        jobNumber: visit.jobNumber,
+        reason: OVERRIDE_REASON,
+      });
       await expect(calendarBanner(adminPage, 'scheduled')).toBeVisible();
       await closeBanners(adminPage);
       await expect

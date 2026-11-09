@@ -28,7 +28,7 @@ import {
   parkplatzCardOf,
   parkplatzScheduleButton,
   scheduleParkedDialog,
-  scheduleParkedSubmit,
+  submitScheduleParked,
   shiftIsoDate,
 } from './support/plantafel';
 import { seedPlanningVisit } from './support/planning-fixture';
@@ -182,7 +182,11 @@ test.describe('P1-24a independent Plantafel scenarios @P1-24a', () => {
     await parkplatzScheduleButton(parkedCard, title).click();
     const schedule = scheduleParkedDialog(adminPage);
     await typeIntoDatePickerById(schedule, 'schedule-parked-date', visitDate);
-    await scheduleParkedSubmit(schedule).click();
+    await submitScheduleParked(adminPage, schedule, {
+      orgId: world.orgId,
+      jobNumber: visit.jobNumber,
+      reason: 'Kapazität für den Termin geklärt',
+    });
     await expect(schedule).toHaveCount(0);
     await expect(calendarBanner(adminPage, 'scheduled')).toBeVisible();
     await closeBanners(adminPage);

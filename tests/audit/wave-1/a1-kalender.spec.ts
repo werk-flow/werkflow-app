@@ -35,7 +35,7 @@ import {
   dayRow,
   dayTimeline,
   dayViewCards,
-  dragCardTo,
+  dropParkedCard,
   dragHandleBy,
   memberFilterBulkAction,
   memberFilterButton,
@@ -232,8 +232,11 @@ test.describe('A1 Kalender @AUDIT-W1-A1', () => {
     const parkedPill = parkplatzCardOf(adminPage, title);
     await expect(parkedPill).toBeVisible();
     await expect(parkingContextLine(parkedPill)).toHaveAttribute('data-parking-context', 'set');
-    await dragCardTo(adminPage, parkedPill, dayTimeline(dayRow(adminPage, world.users.employee.id)));
-    await confirmPlanningWarning(adminPage, 'A1 Auftrag aus Parkplatz eingeplant', false);
+    await dropParkedCard(adminPage, parkedPill, dayTimeline(dayRow(adminPage, world.users.employee.id)), {
+      orgId: world.orgId,
+      jobNumber,
+      reason: 'A1 Auftrag aus Parkplatz eingeplant',
+    });
     await expect(scheduledFromParkplatzConfirmation(adminPage)).toBeVisible();
     await expectGone(parkedPill);
     // The visit kept Bruno and gained Emil: the card sits in both rows; the drop row is the proof.

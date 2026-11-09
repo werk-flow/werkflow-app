@@ -1,5 +1,6 @@
 import type { ActionResult } from '@/lib/action-result';
 import type { QualificationWarningResult } from '@/lib/jobs/types';
+import type { PlanningWarningFailure } from '@/lib/planning/conflict-acknowledgement';
 import type { Database } from '@/lib/supabase/database.types';
 import { jsonRecordOrEmpty } from '@/lib/supabase/json';
 
@@ -177,6 +178,7 @@ export type CallerMatchesResult = ActionResult<CallerMatchList>;
 export type ConvertRequestResult =
   | { success: true; target: 'job'; jobId: string; jobNumber: string | null }
   | QualificationWarningResult
+  | PlanningWarningFailure
   | ActionResult<{ target: 'project'; projectId: string; projectNumber: string | null }>;
 
 // ============================================

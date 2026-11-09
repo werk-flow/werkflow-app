@@ -1,8 +1,16 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { CALENDAR_DISPATCH_STATE_LABELS, type CalendarDispatchState } from '../../../lib/calendar/board';
 import { calendarRefusalMessage } from '../../../lib/calendar/messages';
+import { getParkingState } from './db/dispatch';
 import { occurrenceStatusLabel } from './steps/calendar';
-import { confirmed, SHARED_COPY, visibleMatchingText, visibleText } from './steps/shared';
+import {
+  confirmed,
+  confirmPlanningWarning,
+  planningWarningDialog,
+  SHARED_COPY,
+  visibleMatchingText,
+  visibleText,
+} from './steps/shared';
 
 /**
  * Named lookups for the calendar of P1-24a (the Plantafel, the day and the
@@ -411,8 +419,63 @@ export function scheduleParkedDialog(page: Page): Locator {
     .filter({ has: page.getByRole('heading', { name: BOARD_COPY.scheduleDialog }) });
 }
 
-export function scheduleParkedSubmit(dialog: Locator): Locator {
+function scheduleParkedSubmit(dialog: Locator): Locator {
   return dialog.getByRole('button', { name: BOARD_COPY.schedule, exact: true });
+}
+
+/** The job an unpark plans, and the reason for its planning warning when it asks for one. */
+type UnparkPlanning = { orgId: string; jobNumber: string; reason: string };
+
+async function unparkCount({ orgId, jobNumber }: UnparkPlanning): Promise<number> {
+  const { eventTypes } = await getParkingState(orgId, jobNumber);
+  return eventTypes.filter((eventType) => eventType === 'unparked').length;
+}
+
+/**
+ * Runs an unpark into the schedule and answers its planning warning when it
+ * asks. The unpark runs the calendar's capacity check on the visit it plans
+ * with the job's team (werk-flow/werkflow-planning#304), and whether a person
+ * is free that day depends on the world and the run day, so every caller
+ * brings a reason. The unpark has ended when the warning shows or the job is
+ * unparked.
+ */
+async function unparkAnsweringPlanning(
+  page: Page,
+  planning: UnparkPlanning,
+  start: () => Promise<void>,
+): Promise<void> {
+  const before = await unparkCount(planning);
+  await start();
+  const warning = planningWarningDialog(page);
+  await expect
+    .poll(async () => (await warning.isVisible()) || (await unparkCount(planning)) > before, {
+      message: 'the unpark asks for a planning reason or plans the job',
+    })
+    .toBe(true);
+  if (await warning.isVisible()) await confirmPlanningWarning(page, planning.reason);
+}
+
+/** Submits „Einplanen am …“ and answers the planning warning when the unpark asks. */
+export async function submitScheduleParked(
+  page: Page,
+  dialog: Locator,
+  planning: UnparkPlanning,
+): Promise<void> {
+  await unparkAnsweringPlanning(page, planning, () => scheduleParkedSubmit(dialog).click());
+}
+
+/**
+ * Drops a Parkplatz card onto the board and answers the planning warning when
+ * the unpark asks. Every drag of a Parkplatz card goes through here
+ * (lib/testing/spec-support/dated-job-planning.test.ts).
+ */
+export async function dropParkedCard(
+  page: Page,
+  card: Locator,
+  target: Locator,
+  planning: UnparkPlanning,
+): Promise<void> {
+  await unparkAnsweringPlanning(page, planning, () => dragCardTo(page, card, target));
 }
 
 export function dayRow(page: Page, userId: string): Locator {

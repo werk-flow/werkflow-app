@@ -1,4 +1,4 @@
-// Rule test: a browser step that creates a dated job with a person answers its planning warning.
+// Rule test: a browser step that plans a job with a person answers its planning warning.
 import { describe, expect, test } from 'bun:test';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -14,6 +14,12 @@ import ts from 'typescript';
 // any browser group runs: every literal createJob call that sets
 // `plannedDateDigits` and `assignEmployeeName` passes `planningOverride`.
 // Options built elsewhere stay with the run-time guard.
+//
+// An unpark into the schedule runs the same check on the visit it plans with
+// the job's team (werk-flow/werkflow-planning#304). dropParkedCard and
+// submitScheduleParked in tests/golden/support/plantafel.ts answer it; a
+// spec that drags a Parkplatz card itself would hang on the warning, so this
+// check fails every dragCardTo call whose source is a Parkplatz card.
 
 const ROOT = join(import.meta.dir, '../../..');
 const REQUIRED_TOGETHER = ['plannedDateDigits', 'assignEmployeeName'];
@@ -51,6 +57,51 @@ function datedJobsWithoutPlanningOverride(fileName: string, source: string): str
   return offenders;
 }
 
+const PARKPLATZ_CARD_LOCATORS = new Set(['parkplatzCardOf', 'parkplatzCard']);
+
+function isParkplatzCardCall(node: ts.Node): boolean {
+  return (
+    ts.isCallExpression(node) &&
+    ts.isIdentifier(node.expression) &&
+    PARKPLATZ_CARD_LOCATORS.has(node.expression.text)
+  );
+}
+
+/** The `file:line` of each dragCardTo call that drags a Parkplatz card, directly or through a variable. */
+function parkedCardDragsWithoutPlanning(fileName: string, source: string): string[] {
+  const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
+  const parkedCards = new Set<string>();
+  const collect = (node: ts.Node): void => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer &&
+      isParkplatzCardCall(node.initializer)
+    ) {
+      parkedCards.add(node.name.text);
+    }
+    ts.forEachChild(node, collect);
+  };
+  collect(sourceFile);
+  const offenders: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'dragCardTo'
+    ) {
+      const from = node.arguments[1];
+      if (from && ((ts.isIdentifier(from) && parkedCards.has(from.text)) || isParkplatzCardCall(from))) {
+        const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart());
+        offenders.push(`${fileName}:${line + 1}`);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return offenders;
+}
+
 function testSourceFiles(): string[] {
   return readdirSync(join(ROOT, 'tests'), { recursive: true, encoding: 'utf8' })
     .filter((file) => file.endsWith('.ts') && !file.includes('node_modules'))
@@ -72,5 +123,25 @@ describe('a dated job with a person answers its planning warning in browser step
     expect(datedJobsWithoutPlanningOverride('probe.ts', missing)).toEqual(['probe.ts:1']);
     expect(datedJobsWithoutPlanningOverride('probe.ts', answered)).toEqual([]);
     expect(datedJobsWithoutPlanningOverride('probe.ts', undated)).toEqual([]);
+  });
+});
+
+describe('an unpark into the schedule answers its planning warning in browser steps', () => {
+  test('every drag of a Parkplatz card goes through dropParkedCard', () => {
+    const offenders = testSourceFiles().flatMap((file) =>
+      parkedCardDragsWithoutPlanning(file, readFileSync(join(ROOT, file), 'utf8')),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  test('the check finds a direct drag of a Parkplatz card and passes the helper', () => {
+    const throughVariable = `const card = parkplatzCardOf(page, title);\nawait dragCardTo(page, card, cell);`;
+    const direct = `await dragCardTo(page, parkplatzCardOf(page, title), cell);`;
+    const helper = `const card = parkplatzCardOf(page, title);\nawait dropParkedCard(page, card, cell, planning);`;
+    const boardCard = `await dragCardTo(page, boardCard(page, id, title), cell);`;
+    expect(parkedCardDragsWithoutPlanning('probe.ts', throughVariable)).toEqual(['probe.ts:2']);
+    expect(parkedCardDragsWithoutPlanning('probe.ts', direct)).toEqual(['probe.ts:1']);
+    expect(parkedCardDragsWithoutPlanning('probe.ts', helper)).toEqual([]);
+    expect(parkedCardDragsWithoutPlanning('probe.ts', boardCard)).toEqual([]);
   });
 });

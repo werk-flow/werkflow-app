@@ -16,8 +16,10 @@ import type { AdminClient } from '@/lib/supabase/admin';
 import type { Json } from '@/lib/supabase/database.types';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import {
+  planningAcknowledgement,
   rejectUnacknowledgedConflicts,
   type ConflictAcknowledgement,
+  type PlanningConflictApproval,
   type PlanningWarningFailure,
 } from './conflict-acknowledgement';
 import { assessPlanningOccurrences } from './server';
@@ -90,12 +92,17 @@ function windowOf(visit: LegacyVisit): VisitWindow {
   };
 }
 
-/** The current team and the personnel records of the people a change adds or removes; a new job has no team. */
+/**
+ * The current team and the personnel records of the people a change adds or
+ * removes; a new job has no team. With `wholeTeamJoinsVisit`, every person of
+ * the next team counts as added.
+ */
 async function loadTeamChange(input: {
   admin: AdminClient;
   orgId: string;
   jobId: string | null;
   nextUserIds: string[];
+  wholeTeamJoinsVisit?: boolean;
 }) {
   const { jobId } = input;
   const { data: currentRows, error } = jobId
@@ -117,7 +124,9 @@ async function loadTeamChange(input: {
   }
   const currentUserIds = new Set(currentRows.map((row) => row.user_id));
   const nextUserIds = new Set(input.nextUserIds);
-  const addedUserIds = [...nextUserIds].filter((userId) => !currentUserIds.has(userId));
+  const addedUserIds = [...nextUserIds].filter(
+    (userId) => input.wholeTeamJoinsVisit || !currentUserIds.has(userId),
+  );
   const removedUserIds = [...currentUserIds].filter((userId) => !nextUserIds.has(userId));
   const records = await readInBatches([...addedUserIds, ...removedUserIds], (batch) =>
     input.admin
@@ -289,6 +298,12 @@ export async function assessJobPlan(input: {
   schedule: JobSchedule;
   /** The team after the save; null when the save keeps it. */
   nextUserIds: string[] | null;
+  /**
+   * The save puts every person of the next team on the visit, also when it
+   * started, as unpark_job_into_schedule does. A started visit then keeps the
+   * people the save removes from the team.
+   */
+  wholeTeamJoinsVisit?: boolean;
   acknowledgement: ConflictAcknowledgement;
 }): Promise<JobPlanAssessmentResult> {
   const nothing = { success: true, planAssessment: null } as const;
@@ -298,7 +313,13 @@ export async function assessJobPlan(input: {
   const [legacyVisit, change] = await Promise.all([
     jobId ? loadLegacyVisit(input.admin, input.orgId, jobId) : undefined,
     nextUserIds
-      ? loadTeamChange({ admin: input.admin, orgId: input.orgId, jobId, nextUserIds })
+      ? loadTeamChange({
+          admin: input.admin,
+          orgId: input.orgId,
+          jobId,
+          nextUserIds,
+          wholeTeamJoinsVisit: input.wholeTeamJoinsVisit ?? false,
+        })
       : { currentUserIds: [], addedRecordIds: [], removedRecordIds: [] },
   ]);
   if (legacyVisit === null || change === null) return { success: false, error: 'load_failed' };
@@ -308,8 +329,13 @@ export async function assessJobPlan(input: {
   // An unchanged schedule leaves the visit where and as it is.
   if (!scheduleChanged && legacyVisit?.status !== 'scheduled') return nothing;
   const visitWindow = scheduleChanged || !legacyVisit ? window : windowOf(legacyVisit);
-  if (hasWindowStarted(visitWindow)) return nothing;
-  const crew = crewAfterChange(legacyVisit?.assignments ?? [], change);
+  // The team triggers leave a started visit as it is; only the unpark still puts the team on it.
+  const started = hasWindowStarted(visitWindow);
+  if (started && !input.wholeTeamJoinsVisit) return nothing;
+  const crew = crewAfterChange(
+    legacyVisit?.assignments ?? [],
+    started ? { ...change, removedRecordIds: [] } : change,
+  );
   if (crew.length === 0 || (!scheduleChanged && change.addedRecordIds.length === 0)) return nothing;
 
   const assessed = await assessVisit({
@@ -343,4 +369,32 @@ export async function assessJobPlan(input: {
       override_reason: assessed.assessment.overrideReason,
     },
   };
+}
+
+/** The capacity assessment of the visit a new job plans with its people: a job create or a request conversion. */
+export function assessNewJobPlan(input: {
+  admin: AdminClient;
+  orgId: string;
+  job: {
+    plannedDate?: string | null | undefined;
+    plannedTime?: string | null | undefined;
+    estimatedDurationMinutes?: number | null | undefined;
+    selectedUserIds?: string[] | undefined;
+    planningApproval?: PlanningConflictApproval | null | undefined;
+  };
+}): Promise<JobPlanAssessmentResult> {
+  const { job } = input;
+  return assessJobPlan({
+    admin: input.admin,
+    orgId: input.orgId,
+    jobId: null,
+    storedSchedule: null,
+    schedule: {
+      plannedDate: job.plannedDate || null,
+      plannedTime: normalizeJobPlannedTime(job.plannedTime),
+      estimatedDurationMinutes: job.estimatedDurationMinutes ?? null,
+    },
+    nextUserIds: job.selectedUserIds ?? [],
+    acknowledgement: planningAcknowledgement(job.planningApproval),
+  });
 }
