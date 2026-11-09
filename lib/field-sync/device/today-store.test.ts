@@ -262,6 +262,39 @@ describe('refreshing the today snapshot', () => {
     expect((await readTodayOnDevice(MORNING))?.snapshot.organizationId).toBe(newer.organizationId);
   });
 
+  test("a stale save deletes nothing of its own: only the other tab's wipe deletes, and that tab's newer day stays", async () => {
+    const newer = { ...holder, organizationId: '9a000000-0000-4000-8000-0000000000b1' };
+    const realPut = IDBObjectStore.prototype.put;
+    const realDelete = indexedDB.deleteDatabase.bind(indexedDB);
+    let deletions = 0;
+    let newerSaved: Promise<boolean> | null = null;
+    indexedDB.deleteDatabase = (name: string) => {
+      deletions += 1;
+      return realDelete(name);
+    };
+    // Right after this refresh queues its write, another tab switches the organization and saves its day.
+    IDBObjectStore.prototype.put = function put(this: IDBObjectStore, value: unknown, key?: IDBValidKey) {
+      const request = realPut.call(this, value, key);
+      newerSaved ??= wipeFromAnotherTab().then(() => {
+        claimToday(newer);
+        return saveTodayOnDevice(snapshot(newer), MORNING);
+      });
+      return request;
+    };
+    try {
+      const { send } = answer(Response.json(snapshot()));
+      await refreshTodayOnDevice(holder, { fetch: send, now: () => MORNING });
+      await newerSaved;
+      await letQueuedWorkRun();
+    } finally {
+      IDBObjectStore.prototype.put = realPut;
+      indexedDB.deleteDatabase = realDelete;
+    }
+    // A cleanup by the stale refresh could land after the newer day and delete it.
+    expect(deletions).toBe(1);
+    expect((await readTodayOnDevice(MORNING))?.snapshot.organizationId).toBe(newer.organizationId);
+  });
+
   test('a wipe while the answer streams in wins: its body is not saved', async () => {
     const { send } = answer(slowBody(snapshot(), clearTodayOnDevice));
     expect(await refreshTodayOnDevice(holder, { fetch: send, now: () => MORNING })).toBe('superseded');

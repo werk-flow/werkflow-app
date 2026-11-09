@@ -32,20 +32,20 @@ type TodayRefreshOutcome =
 type RefreshOptions = { fetch?: (url: string, init: RequestInit) => Promise<Response>; now?: () => Date };
 
 /**
- * Saves the snapshot unless a wipe, in this tab or another, came after the refresh started. A wipe
- * that lands while the save runs deletes the database again, so the device never keeps a day the
- * person or organization left.
+ * Saves the snapshot unless a wipe, in this tab or another, or a newer start page came after the
+ * refresh started. The check runs where the write is queued, so a stale answer never overwrites a
+ * newer day, and a wipe queued after the write deletes it.
  */
-async function saveUnlessWiped(
+function saveUnlessWiped(
   snapshot: FieldSyncToday,
   confirmedAt: Date,
-  generation: string,
+  owner: { holder: TodayHolder; generation: string },
 ): Promise<boolean> {
-  if (todayWipeGeneration() !== generation) return false;
-  await saveTodayOnDevice(snapshot, confirmedAt);
-  if (todayWipeGeneration() === generation) return true;
-  await clearTodayOnDevice();
-  return false;
+  return saveTodayOnDevice(
+    snapshot,
+    confirmedAt,
+    () => todayWipeGeneration() === owner.generation && !superseded(owner.holder),
+  );
 }
 
 function todayHolderKey(holder: TodayHolder): string {
@@ -122,12 +122,14 @@ export async function refreshTodayOnDevice(
     return 'cleared';
   }
   if (response.status === 304 && stored)
-    return (await saveUnlessWiped(stored.snapshot, now(), generation)) ? 'confirmed' : 'superseded';
+    return (await saveUnlessWiped(stored.snapshot, now(), { holder, generation }))
+      ? 'confirmed'
+      : 'superseded';
   if (response.status !== 200) return 'kept';
   const snapshot = fieldSyncTodaySchema.safeParse(await response.json());
   if (!snapshot.success || !belongsTo(snapshot.data, holder)) {
     logError('refreshTodayOnDevice: unexpected snapshot', { readable: snapshot.success });
     return 'kept';
   }
-  return (await saveUnlessWiped(snapshot.data, now(), generation)) ? 'saved' : 'superseded';
+  return (await saveUnlessWiped(snapshot.data, now(), { holder, generation })) ? 'saved' : 'superseded';
 }

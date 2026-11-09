@@ -87,10 +87,25 @@ function currentDay(value: unknown, now: Date): StoredToday | null {
   return stored.success && now.getTime() < Date.parse(stored.data.snapshot.validUntil) ? stored.data : null;
 }
 
-/** Replaces whatever the device held with this snapshot. A full disk rejects (`QuotaExceededError`). */
-export async function saveTodayOnDevice(snapshot: FieldSyncToday, confirmedAt: Date): Promise<void> {
+/**
+ * Replaces whatever the device held with this snapshot. With `stillCurrent`, the write happens
+ * only if it holds when the write's transaction is queued: the browser runs the transactions of
+ * the store in that order, so a wipe or a newer day queued earlier always comes first, and a stale
+ * answer never overwrites them. Returns whether it wrote. A full disk rejects (`QuotaExceededError`).
+ */
+export async function saveTodayOnDevice(
+  snapshot: FieldSyncToday,
+  confirmedAt: Date,
+  stillCurrent: () => boolean = () => true,
+): Promise<boolean> {
   const entry: StoredToday = { snapshot, confirmedAt: confirmedAt.toISOString() };
-  await withStore('readwrite', (store) => store.put(entry, CURRENT));
+  let written = false;
+  await withStore('readwrite', (store) => {
+    written = stillCurrent();
+    // A skipped write still needs one request for the transaction to settle on.
+    return written ? store.put(entry, CURRENT) : store.get(CURRENT);
+  });
+  return written;
 }
 
 /** Whether the browser already granted persistent storage when this device last asked. */
