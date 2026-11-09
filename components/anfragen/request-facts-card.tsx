@@ -1,8 +1,7 @@
-import Link from 'next/link';
-
 import { formatBerlinDateTime as formatDateTime } from '@/lib/utils';
 import { REQUEST_CATEGORY_LABELS, REQUEST_SOURCE_LABELS, type ClientRequest } from '@/lib/requests/types';
 import { SectionTitle } from '@/components/shared/section-title';
+import { TextLink } from '@/components/ui/text-link';
 import { CallbackOverdueBadge } from './request-badges';
 
 interface RequestFactsCardProps {
@@ -39,12 +38,9 @@ export function RequestFactsCard({
           <dt className="w-28 shrink-0 text-muted-foreground">Anlage</dt>
           <dd className="min-w-0">
             {equipment ? (
-              <Link
-                href={`/service/anlagen/${encodeURIComponent(equipment.equipmentNumber)}`}
-                className="text-primary-text underline-offset-4 hover:underline"
-              >
+              <TextLink href={`/service/anlagen/${encodeURIComponent(equipment.equipmentNumber)}`}>
                 {equipment.label}
-              </Link>
+              </TextLink>
             ) : (
               '—'
             )}
