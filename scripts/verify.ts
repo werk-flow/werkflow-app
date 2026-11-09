@@ -97,6 +97,7 @@ import {
 } from '../lib/testing/runner/backend-health';
 import { acquireHeavySlot } from '../lib/testing/runner/heavy-slot';
 import { verifyOnBoat } from '../lib/testing/boat/verify-on-boat';
+import { localDriftNotice } from '../lib/testing/local-stack/migration-drift';
 
 // A run goes to a Boat machine when this workstation has a Boat key, and falls back here on any
 // Boat failure (lib/testing/boat/verify-on-boat.ts). A local run holds one of the machine's heavy
@@ -410,6 +411,10 @@ async function main(): Promise<void> {
       `${entry.reusable ? 'REUSE' : 'RUN  '} ${entry.group.id} | ${automatic ? (selections.get(entry.group.id)?.reason ?? 'Explicit selection') : 'Explicit selection'} | ${entry.inputs.length} proof inputs | ${proof}`,
     );
   }
+  // Every worktree shares one local stack; a local plan that reads it names any migration drift first.
+  const fresh = planning.filter((entry) => !entry.reusable).map((entry) => entry.group.id);
+  const drift = options.target === 'local' ? localDriftNotice(repository, fresh) : undefined;
+  if (drift) console.log(`[verify] ${drift}`);
   if (automatic) {
     // One line per reason, so a large selection names the change that caused it.
     const causes = new Map<string, { groups: number; file: string | undefined }>();

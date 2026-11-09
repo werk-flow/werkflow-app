@@ -12,6 +12,7 @@ On a workstation with a Boat key, `bun run test:verify` runs on a short-lived Bo
 - `--target cloud`: the canary needs DEV's secrets.
 - `.env.local` points elsewhere than the local stack.
 - The plan runs no group, or only cheap groups, at most one of them not a SQL group. A Boat run's upload and setup cost about 95 s of machine time; here a SQL group takes about 1 s against the shared stack, `unit:all` 60 to 90 s and a static gate up to 35 s. `static:lint` takes 170 to 370 s and 3 to 4 GB, so it goes to Boat even alone, as do `ui:contracts` and the browser groups. The line reads `Running locally: a single <group> is cheaper here.`
+- A cheap plan that runs a SQL group still goes to Boat when the shared stack's migrations drift from this tree's: a migration only on the stack, one only in the tree, or one name with other statements (`lib/testing/local-stack/migration-drift.ts`). Versions, comments and layout never count, so a migration renamed before merge is no drift. Boat starts a fresh stack at this tree's migrations, so the plan tests this tree's schema. The line reads `The shared stack's migrations drift from this tree's: N migrations only on the shared stack (…), M only in this tree (…).` A local run that reads the stack, such as a fallback or a browser group bound to this machine, prints the same line before it starts. An unreachable stack counts as no drift.
 
 The whole plan runs there, static gates included: type-aware lint is the largest local load. A Boat run takes no heavy slot, and holds the workspace lock while the machine runs, so the edit guard works as during a local run.
 
@@ -65,7 +66,7 @@ On the PC inside WSL Ubuntu, on the Mac in Terminal:
 
 3. Record the expiry date the dashboard shows: `echo <YYYY-MM-DD> > ~/.config/werkflow/boat-api-key.expires`.
 4. Codex: trust the project hooks once with `/hooks`. Claude Code reads its rules from the repository.
-5. Check: `bun run test:verify --group static:lint` prints `Running on Boat machine`. A single SQL group runs locally.
+5. Check: `bun run test:verify --group static:lint` prints `Running on Boat machine`. A single SQL group runs locally while the shared stack matches the tree's migrations.
 
 Never export the key from a shell profile, and never run `boat login` on a workstation. For manual inspection, `bash scripts/boat/install-cli.sh` installs the pinned CLI with a checksum check.
 

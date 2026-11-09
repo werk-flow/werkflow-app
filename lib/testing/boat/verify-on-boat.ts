@@ -25,6 +25,12 @@ import {
   parseEnvironmentFile,
   proofEnvironmentDigest,
 } from '../evidence/proof-environment';
+import {
+  type MigrationDrift,
+  driftLine,
+  readMigrationDrift,
+  readsSharedStack,
+} from '../local-stack/migration-drift';
 import { withWorkspaceTestLock } from '../runner/workspace-test-lock';
 import { pruneRunArchive } from '../runs/run-retention';
 import { BoatError, boatClient } from './boat-api';
@@ -141,6 +147,23 @@ export function cheapPlanReason(plan: string): string | undefined {
   return `${sql} SQL groups${others.length ? ` and ${others.join('')}` : ''} are cheaper here.`;
 }
 
+/**
+ * Why a cheap plan runs here, or undefined when Boat may run it. A cheap plan that reads the shared
+ * stack goes to Boat while that stack's migrations drift from this tree's, with one line naming the
+ * drift: Boat starts a fresh stack at this tree's migrations, so the plan tests this tree's schema.
+ */
+export function cheapLocalReason(
+  plan: string,
+  readDrift: () => MigrationDrift | undefined,
+): string | undefined {
+  const cheap = cheapPlanReason(plan);
+  if (!cheap || !readsSharedStack(plannedRuns(plan))) return cheap;
+  const drift = driftLine(readDrift());
+  if (!drift) return cheap;
+  say(`${drift} Boat runs the plan on a fresh stack at this tree's migrations.`);
+  return undefined;
+}
+
 /** The first untracked file that may hold a credential or a local setting, which Boat never gets. */
 export function withheldFile(untracked: readonly string[]): string | undefined {
   return untracked.find((file) => SECRET_NAME.test(file));
@@ -160,7 +183,7 @@ function planReason(repository: string, args: readonly string[]): string | undef
   if (plan.status !== 0) return 'the plan could not be read here; the local run reports why.';
   const bound = machineBoundGroup(plan.stdout);
   if (bound) return `the plan runs ${bound}, which measures or captures against this machine's references.`;
-  return cheapPlanReason(plan.stdout);
+  return cheapLocalReason(plan.stdout, () => readMigrationDrift(repository));
 }
 
 /**
