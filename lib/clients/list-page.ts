@@ -3,10 +3,15 @@ import { uuidSchema } from '@/lib/validation/uuid';
 import { LIST_PAGE_SIZE } from '@/lib/ui/list-pagination';
 import type { Client } from '@/lib/jobs/types';
 
+/** `aktiv` lists the active customers, `archiviert` only the archived ones. */
+export const customerListViewSchema = z.enum(['aktiv', 'archiviert']);
+export type CustomerListView = z.infer<typeof customerListViewSchema>;
+
 export const customerPageInputSchema = z.object({
   organizationId: uuidSchema,
   page: z.coerce.number().int().min(1).max(1_000_000),
   search: z.string().trim().max(250),
+  view: customerListViewSchema,
 });
 export type CustomerPageInput = z.infer<typeof customerPageInputSchema>;
 
@@ -37,6 +42,7 @@ export async function fetchCustomerPage(
     organizationId: input.organizationId,
     page: String(input.page),
     search: input.search,
+    view: input.view,
   });
   const response = await fetch(`/api/customer-page?${query}`, { cache: 'no-store', signal });
   if (!response.ok) throw new Error('customer_page_read_failed');

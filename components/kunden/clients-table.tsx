@@ -19,7 +19,7 @@ import {
   type SkeletonColumn,
 } from '@/components/ui/skeleton-table';
 import type { OptimisticListItem } from '@/hooks/use-optimistic-list';
-import { ClientActionsMenu } from './client-actions-menu';
+import { ClientActionsMenu, type ClientRowActions } from './client-actions-menu';
 import { CLIENT_TYPE_LABELS, type Client } from '@/lib/jobs/types';
 
 interface ClientsTableProps {
@@ -27,8 +27,7 @@ interface ClientsTableProps {
   isFiltered: boolean;
   rows: OptimisticListItem<Client>[];
   isBusy: (clientId: string) => boolean;
-  onSaved: (clientId: string) => void;
-  onDelete: (client: Client) => Promise<void>;
+  actions: ClientRowActions;
 }
 
 const PENDING_LABEL = 'Kunde wird gespeichert';
@@ -143,13 +142,11 @@ function PendingClientCard({ client }: { client: Client }) {
 function ClientCard({
   client,
   isBusy,
-  onSaved,
-  onDelete,
+  actions,
 }: {
   client: Client;
   isBusy: boolean;
-  onSaved: (clientId: string) => void;
-  onDelete: (client: Client) => Promise<void>;
+  actions: ClientRowActions;
 }) {
   const router = useRouter();
 
@@ -170,7 +167,7 @@ function ClientCard({
         <ClientContactLine client={client} />
       </div>
       <ListRowActions>
-        <ClientActionsMenu client={client} isBusy={isBusy} onSaved={onSaved} onDelete={onDelete} />
+        <ClientActionsMenu client={client} isBusy={isBusy} actions={actions} />
       </ListRowActions>
     </ListRow>
   );
@@ -180,13 +177,11 @@ function ClientCard({
 function ClientTableRow({
   client,
   isBusy,
-  onSaved,
-  onDelete,
+  actions,
 }: {
   client: Client;
   isBusy: boolean;
-  onSaved: (clientId: string) => void;
-  onDelete: (client: Client) => Promise<void>;
+  actions: ClientRowActions;
 }) {
   const router = useRouter();
 
@@ -214,7 +209,7 @@ function ClientTableRow({
       <TableCell>{client.email || '—'}</TableCell>
       <TableCell>{client.phone || '—'}</TableCell>
       <TableCell onClick={(e) => e.stopPropagation()}>
-        <ClientActionsMenu client={client} isBusy={isBusy} onSaved={onSaved} onDelete={onDelete} />
+        <ClientActionsMenu client={client} isBusy={isBusy} actions={actions} />
       </TableCell>
     </TableRow>
   );
@@ -223,8 +218,16 @@ function ClientTableRow({
 // No loading prop on purpose: the list never turns into a skeleton over data
 // it already has (feedback canon); `ClientsTableSkeleton` serves loading.tsx.
 // A record the user just created rides along as an optimistic row.
-export function ClientsTable({ rows, isBusy, onSaved, onDelete, isFiltered }: ClientsTableProps) {
+export function ClientsTable({ rows, isBusy, actions, isFiltered }: ClientsTableProps) {
   if (rows.length === 0) {
+    if (actions.isArchivedView && !isFiltered)
+      return (
+        <EmptyState
+          icon={Building2}
+          title="Noch keine archivierten Kunden"
+          description="Hier landen Kunden, die du über ihr Aktionsmenü archivierst. Aufträge und Verlauf bleiben dabei erhalten."
+        />
+      );
     return isFiltered ? (
       <EmptyState
         icon={Building2}
@@ -248,13 +251,7 @@ export function ClientsTable({ rows, isBusy, onSaved, onDelete, isFiltered }: Cl
           isOptimistic ? (
             <PendingClientCard key={client.id} client={client} />
           ) : (
-            <ClientCard
-              key={client.id}
-              client={client}
-              isBusy={isBusy(client.id)}
-              onSaved={onSaved}
-              onDelete={onDelete}
-            />
+            <ClientCard key={client.id} client={client} isBusy={isBusy(client.id)} actions={actions} />
           ),
         )}
       </div>
@@ -284,8 +281,7 @@ export function ClientsTable({ rows, isBusy, onSaved, onDelete, isFiltered }: Cl
                   key={client.id}
                   client={client}
                   isBusy={isBusy(client.id)}
-                  onSaved={onSaved}
-                  onDelete={onDelete}
+                  actions={actions}
                 />
               ),
             )}

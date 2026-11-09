@@ -12,12 +12,14 @@ let failSelection = false;
 let malformedRows = false;
 let foreignRows = false;
 let selectedIds = [clientId];
+let archivedView = false;
 const row: Database['public']['Tables']['clients']['Row'] = {
   id: clientId,
   organization_id: organizationId,
   name: 'Seite zwei',
   client_type: 'privat',
   customer_number: null,
+  archived_at: null,
   email: null,
   phone: null,
   address: null,
@@ -44,6 +46,7 @@ async function listCustomerPage(name: string, input: Record<string, unknown>) {
     p_search: 'Kontakt',
     p_page: 2,
     p_page_size: 50,
+    p_archived: archivedView,
   });
   return {
     data: {
@@ -121,9 +124,9 @@ mock.module('@/lib/supabase/admin', () => ({
 }));
 
 const { GET } = await import('@/app/api/customer-page/route');
-const request = (org = organizationId): Request =>
+const request = (org = organizationId, view = 'aktiv'): Request =>
   new Request(
-    `http://localhost/api/customer-page?${new URLSearchParams({ organizationId: org, page: '2', search: 'Kontakt' })}`,
+    `http://localhost/api/customer-page?${new URLSearchParams({ organizationId: org, page: '2', search: 'Kontakt', view })}`,
   );
 async function check(input: Request, status: number): Promise<unknown> {
   const response = await GET(input);
@@ -147,30 +150,32 @@ for (const input of [
   new Request(`${request().url}&page=3`),
   new Request(request().url.replace('page=2', 'page=0')),
   new Request(request().url.replace('page=2', 'page=1.5')),
+  request(organizationId, 'alle'),
+  new Request(request().url.replace('&view=aktiv', '')),
 ])
   await check(input, 400);
 assert.equal(protectedReads, 0, 'invalid or unauthorized requests cannot reach protected rows');
+const expectedPage = {
+  clients: [
+    {
+      id: clientId,
+      organizationId,
+      name: row.name,
+      clientType: row.client_type,
+      customerNumber: null,
+      email: null,
+      phone: null,
+      address: null,
+      notes: null,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    },
+  ],
+  total: 61,
+};
 for (const allowedRole of ['admin', 'buero'] as const) {
   role = allowedRole;
-  const data = await check(request(), 200);
-  assert.deepEqual(data, {
-    clients: [
-      {
-        id: clientId,
-        organizationId,
-        name: row.name,
-        clientType: row.client_type,
-        customerNumber: null,
-        email: null,
-        phone: null,
-        address: null,
-        notes: null,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      },
-    ],
-    total: 61,
-  });
+  assert.deepEqual(await check(request(), 200), expectedPage);
 }
 const previousReads = protectedReads;
 role = null;
@@ -186,5 +191,8 @@ malformedRows = false;
 foreignRows = true;
 await check(request(), 500);
 foreignRows = false;
+archivedView = true;
+assert.deepEqual(await check(request(organizationId, 'archiviert'), 200), expectedPage);
+archivedView = false;
 selectedIds = [];
 assert.deepEqual(await check(request(), 200), { clients: [], total: 61 });

@@ -49,6 +49,7 @@ State a deviation in the domain that deviates.
 ## Customers and requests
 
 - A customer (`Kunde`) owns its contacts (`Ansprechpartner`), sites (`Einsatzort`), follow-ups and communication guidance. A contact or site belongs to one customer, never shared or merged. Changing a job's customer clears the old customer's site and contact references.
+- A customer with anything linked to it is archived, never deleted: a delete guard refuses it for every role, organization teardown aside. Identity changes of a customer, contact or site write `client_master_events` in the changing statement, by trigger, so no path changes them without history.
 - A request (`Anfrage`) holds provisional caller text until matched, converts exactly once into a job or project, and can reopen. Requests and customer master data are manager-only.
 - Communication guidance states allowed, disallowed or unknown per purpose and channel. Absence never implies consent.
 - The relationship timeline has no table. A resolver merges bounded windows from owning rows and ledgers.
