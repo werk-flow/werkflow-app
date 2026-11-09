@@ -1,32 +1,8 @@
 import { expect, test } from 'bun:test';
 import type { CorrectionOperation } from '@/components/correction-operation';
 import { sendTimeCorrection } from '@/components/zeiterfassung/time-correction-dialog-send';
-import type { TimeCorrectionResult } from '@/lib/time-corrections/types';
+import { timeCorrectionReplayServer } from '@/lib/testing/fixtures/time-correction-replay-server';
 import type { SubmitTimeCorrectionInput } from '@/lib/time-corrections/validation';
-
-// create_time_correction_request's replay rule: a repeated operation id
-// answers with the request it first saved and never compares the payload.
-// `next` sets how the next call ends: answered, saved with its response
-// lost, or refused before anything is saved.
-function correctionServer() {
-  const saved = new Map<string, SubmitTimeCorrectionInput>();
-  const server: {
-    saved: typeof saved;
-    next: 'answer' | 'lose' | 'refuse';
-    submit: (input: SubmitTimeCorrectionInput) => Promise<TimeCorrectionResult>;
-  } = {
-    saved,
-    next: 'answer',
-    submit: async (input: SubmitTimeCorrectionInput): Promise<TimeCorrectionResult> => {
-      if (server.next === 'refuse') return { success: false, error: 'correction_timeline_conflict' };
-      const replayed = saved.has(input.operationId);
-      if (!replayed) saved.set(input.operationId, input);
-      if (server.next === 'lose') throw new Error('response lost');
-      return { success: true, requestId: 'request-1', status: 'submitted', replayed };
-    },
-  };
-  return server;
-}
 
 const submission = {
   organizationId: '00000000-0000-4000-8000-000000000001',
@@ -46,7 +22,7 @@ const edited = { ...submission, reason: 'Stempeln vergessen, Baustelle Nord' };
 
 // One opening of the dialog whose first send was saved but lost its response.
 async function openingWithLostResponse() {
-  const server = correctionServer();
+  const server = timeCorrectionReplayServer();
   const operationRef: { current: CorrectionOperation | null } = { current: null };
   server.next = 'lose';
   await expect(sendTimeCorrection(operationRef, submission, server.submit)).rejects.toThrow('response lost');
