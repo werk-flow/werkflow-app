@@ -54,6 +54,8 @@ export function useSignOut() {
 
     await runSignOut(async () => {
       try {
+        // Loaded before the clock-out, so a failed load changes no recorded time.
+        const { clearServiceWorkerCaches } = await import('@/lib/offline/service-worker-caches');
         const clockedOut = await endOpenWorkBeforeSignOut();
         if (clockedOut) clockOutWarningShownRef.current = false;
         if (!clockedOut && !clockOutWarningShownRef.current) {
@@ -68,7 +70,6 @@ export function useSignOut() {
 
         await clearEmailChangeChallengeQuietly();
         clearManualEntryBridge();
-        const { clearServiceWorkerCaches } = await import('@/lib/offline/service-worker-caches');
         await clearServiceWorkerCaches();
 
         // Explicit global: the menu sign-out currently ends the user's sessions

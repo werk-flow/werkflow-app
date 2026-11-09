@@ -6,8 +6,9 @@
 // the lab's cold start a request and its bytes.
 //
 // A lazy load can fail (a lost connection, a new deployment), so each `import()` of a module
-// under lib/offline/ sits in a try block, or in a function the module calls only inside try blocks: a
-// sign-out or switch whose load fails shows its error instead of stopping silently.
+// under lib/offline/ is awaited (or returned) inside a try block with a catch clause in its own
+// function, or sits in a function the module calls only that way: a sign-out or switch whose
+// load fails shows its error instead of stopping silently.
 import { describe, expect, test } from 'bun:test';
 import ts from 'typescript';
 import { resolveSpecifier } from './action-prechecks-scan';
@@ -43,15 +44,31 @@ function staticOfflineImports(file: string, host: SourceHost): string[] {
     });
 }
 
-function insideTryBlock(node: ts.Node): boolean {
-  for (let current: ts.Node = node; current.parent; current = current.parent) {
-    if (ts.isTryStatement(current.parent) && current.parent.tryBlock === current) return true;
+/** True when the promise is awaited, or returned to a caller that the same rule then checks. */
+function awaitedOrReturned(call: ts.CallExpression): boolean {
+  return ts.isAwaitExpression(call.parent) || ts.isReturnStatement(call.parent);
+}
+
+/** True when the node sits in the try block of a try with a catch clause, inside its own function. */
+function insideCatchingTry(node: ts.Node): boolean {
+  for (let current: ts.Node = node; current.parent && !ts.isFunctionLike(current); current = current.parent) {
+    const parent = current.parent;
+    if (ts.isTryStatement(parent) && parent.tryBlock === current && parent.catchClause) return true;
   }
   return false;
 }
 
-/** True when every call of the module-level function `name` in the module sits in a try block. */
-function calledOnlyInsideTry(source: ts.SourceFile, name: string): boolean {
+/** The function declaration whose body holds the node directly, not through a nested function. */
+function enclosingFunctionDeclaration(node: ts.Node): ts.FunctionDeclaration | null {
+  for (let current: ts.Node = node.parent; current; current = current.parent) {
+    if (ts.isFunctionDeclaration(current)) return current;
+    if (ts.isFunctionLike(current)) return null;
+  }
+  return null;
+}
+
+/** True when the module calls function `name`, and every call is awaited inside a catching try. */
+function calledOnlyCaught(source: ts.SourceFile, name: string): boolean {
   const calls: ts.CallExpression[] = [];
   const visit = (node: ts.Node): void => {
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === name)
@@ -59,16 +76,16 @@ function calledOnlyInsideTry(source: ts.SourceFile, name: string): boolean {
     ts.forEachChild(node, visit);
   };
   visit(source);
-  return calls.length > 0 && calls.every(insideTryBlock);
+  return (
+    calls.length > 0 && calls.every((call) => ts.isAwaitExpression(call.parent) && insideCatchingTry(call))
+  );
 }
 
 function caught(load: ts.CallExpression, source: ts.SourceFile): boolean {
-  if (insideTryBlock(load)) return true;
-  for (let current: ts.Node = load; current.parent; current = current.parent) {
-    if (ts.isFunctionDeclaration(current) && current.name)
-      return calledOnlyInsideTry(source, current.name.text);
-  }
-  return false;
+  if (!awaitedOrReturned(load)) return false;
+  if (ts.isAwaitExpression(load.parent) && insideCatchingTry(load)) return true;
+  const declaration = enclosingFunctionDeclaration(load);
+  return declaration?.name !== undefined && calledOnlyCaught(source, declaration.name.text);
 }
 
 /** The `import()` calls of lib/offline/ modules that no try block catches, as file and line. */
@@ -119,6 +136,16 @@ describe('offline code loads lazily', () => {
       "async function load() { return import('@/lib/offline/service-worker-caches'); }",
       'export async function out() { try { await load(); } catch {} }',
     ].join('\n'),
+    'components/probe-finally.ts':
+      "export async function out() { try { await import('@/lib/offline/service-worker-caches'); } finally {} }",
+    'components/probe-unawaited.ts':
+      "export async function out() { try { void import('@/lib/offline/service-worker-caches'); } catch {} }",
+    'components/probe-nested.ts':
+      "export function out() { try { setTimeout(async () => { await import('@/lib/offline/service-worker-caches'); }); } catch {} }",
+    'components/probe-unawaited-caller.ts': [
+      "async function load() { return import('@/lib/offline/service-worker-caches'); }",
+      'export async function out() { try { void load(); } catch {} }',
+    ].join('\n'),
     'components/probe-uncaught-caller.ts': [
       "async function load() { return import('@/lib/offline/service-worker-caches'); }",
       'export async function out() { try { await load(); } catch {} }',
@@ -140,13 +167,16 @@ describe('offline code loads lazily', () => {
       expect(staticOfflineImports(file, host), file).toEqual([]);
   });
 
-  test('probes: a lazy load outside a try block is reported, unless every caller of its function catches', () => {
-    expect(uncaughtOfflineLoads('components/probe-uncaught.ts', host)).toEqual([
-      'components/probe-uncaught.ts:1',
-    ]);
-    expect(uncaughtOfflineLoads('components/probe-uncaught-caller.ts', host)).toEqual([
-      'components/probe-uncaught-caller.ts:1',
-    ]);
+  test('probes: a lazy load is reported unless awaited in a catching try, or every caller of its function catches', () => {
+    for (const file of [
+      'components/probe-uncaught.ts',
+      'components/probe-uncaught-caller.ts',
+      'components/probe-finally.ts',
+      'components/probe-unawaited.ts',
+      'components/probe-nested.ts',
+      'components/probe-unawaited-caller.ts',
+    ])
+      expect(uncaughtOfflineLoads(file, host), file).toEqual([`${file}:1`]);
     for (const file of ['components/probe-caught.ts', 'components/probe-caller.ts'])
       expect(uncaughtOfflineLoads(file, host), file).toEqual([]);
   });

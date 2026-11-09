@@ -135,6 +135,8 @@ async function resetPasswordAndLeave({
   setFormError: (message: string | null) => void;
 }): Promise<void> {
   try {
+    // Loaded before the password changes, so a failed load cannot leave a changed password signed in.
+    const { clearServiceWorkerCaches } = await import('@/lib/offline/service-worker-caches');
     // Update the user's password
     const { error: updateError } = await supabase.auth.updateUser({
       password: values.password,
@@ -158,7 +160,6 @@ async function resetPasswordAndLeave({
 
     await clearEmailChangeChallengeQuietly();
     clearManualEntryBridge();
-    const { clearServiceWorkerCaches } = await import('@/lib/offline/service-worker-caches');
     await clearServiceWorkerCaches();
 
     // Immediately sign out the user for security — global on purpose: a

@@ -38,6 +38,8 @@ export function DeleteAccountButton() {
 
     await runDelete(async () => {
       try {
+        // Loaded before the deletion, so a failed load cannot strand a deleted account's session.
+        const { clearServiceWorkerCaches } = await import('@/lib/offline/service-worker-caches');
         const result = await deleteAccount();
 
         if (!result.success) {
@@ -46,7 +48,6 @@ export function DeleteAccountButton() {
         }
 
         clearManualEntryBridge();
-        const { clearServiceWorkerCaches } = await import('@/lib/offline/service-worker-caches');
         await clearServiceWorkerCaches();
         // Sign out locally and load the login page fresh — the deleted account's
         // other sessions are already gone server-side.
