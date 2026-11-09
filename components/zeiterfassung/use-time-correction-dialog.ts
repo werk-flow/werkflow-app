@@ -8,6 +8,7 @@ import { SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { submitTimeCorrection } from '@/lib/time-corrections/actions';
+import type { SubmitTimeCorrectionInput } from '@/lib/time-corrections/validation';
 import type { TimeCorrectionFormOptions } from '@/lib/time-corrections/read-actions';
 import type { TimeCorrectionKind } from '@/lib/time-corrections/types';
 import {
@@ -16,9 +17,12 @@ import {
   type ClosedTimePeriod,
 } from '@/lib/time-tracking/closed-period-dates';
 import type { TimeEntry, TimeSegmentKind } from '@/lib/time-tracking/types';
+import { formatBerlinLocalDate, getBusinessTodayIso } from '@/lib/date-time/berlin';
+import { buildTimelineFacts } from '@/lib/time-corrections/timeline';
 import type { CorrectionOperation } from '@/components/correction-operation';
 import { buildTimeCorrectionProposedFacts } from './time-correction-dialog-facts';
 import { sendTimeCorrection, TIME_CORRECTION_SAVE_FAILURE } from './time-correction-dialog-send';
+import { useCorrectionTimeline, type CorrectionTimelineState } from './time-correction-dialog-timeline-state';
 
 function toLocalDateTime(iso: string): string {
   const date = new Date(iso);
@@ -37,6 +41,7 @@ function oneHourAfter(value: string): string {
 
 type TimeCorrectionFieldErrors = {
   person?: string | undefined;
+  date?: string | undefined;
   startAt?: string | undefined;
   splitAt?: string | undefined;
   endAt?: string | undefined;
@@ -49,8 +54,8 @@ function isCompleteLocalDateTime(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value) && !Number.isNaN(new Date(value).getTime());
 }
 
-// The time fields the kind shows must be complete and in order
-// (start, split, end); a deletion has none.
+// The time fields a correction of an entry shows must be complete and in
+// order (start, split, end); a deletion has none.
 function validateTimeCorrectionTimes({
   kind,
   startAt,
@@ -64,18 +69,16 @@ function validateTimeCorrectionTimes({
 }): Pick<TimeCorrectionFieldErrors, 'startAt' | 'splitAt' | 'endAt'> {
   if (kind === 'delete') return {};
   const startError = isCompleteLocalDateTime(startAt) ? undefined : MISSING_TIME_MESSAGE;
-  const hasEnd = kind === 'add' || kind === 'missed_clock' || kind === 'split';
-  if (!hasEnd) return { startAt: startError };
+  if (kind !== 'split') return { startAt: startError };
   const endError = isCompleteLocalDateTime(endAt) ? undefined : MISSING_TIME_MESSAGE;
-  const splitError = kind === 'split' && !isCompleteLocalDateTime(splitAt) ? MISSING_TIME_MESSAGE : undefined;
+  const splitError = isCompleteLocalDateTime(splitAt) ? undefined : MISSING_TIME_MESSAGE;
   if (startError || splitError || endError) {
     return { startAt: startError, splitAt: splitError, endAt: endError };
   }
   // Same-format local values compare correctly as strings.
-  if (kind === 'split' && !(startAt < splitAt && splitAt < endAt)) {
+  if (!(startAt < splitAt && splitAt < endAt)) {
     return { splitAt: 'Die Trennzeit muss zwischen Beginn und Ende liegen.' };
   }
-  if (startAt >= endAt) return { endAt: 'Das Ende muss nach dem Beginn liegen.' };
   return {};
 }
 
@@ -95,11 +98,10 @@ function closedPeriodTimeErrors(
     isDateInClosedPeriod(value.slice(0, 10), closedPeriods)
       ? SHARED_FAILURE_MESSAGES.period_closed
       : undefined;
-  const hasEnd = kind === 'add' || kind === 'missed_clock' || kind === 'split';
   return {
     startAt: closed(startAt),
     splitAt: kind === 'split' ? closed(splitAt) : undefined,
-    endAt: hasEnd ? closed(endAt) : undefined,
+    endAt: kind === 'split' ? closed(endAt) : undefined,
   };
 }
 
@@ -259,6 +261,12 @@ export type TimeCorrectionDialogForm = {
   activityKind: TimeSegmentKind;
   setActivityKind: (value: TimeSegmentKind) => void;
   fieldErrors: TimeCorrectionFieldErrors;
+  /** Added time: the Berlin day its timeline starts on, `YYYY-MM-DD`, '' while none is chosen. */
+  dateIso: string;
+  setDateIso: (value: string) => void;
+  timeline: CorrectionTimelineState;
+  /** „Speichern“ was pressed: the timeline's rows show their errors. */
+  showTimelineErrors: boolean;
 };
 
 // The source a correction changes: the canonical segment, the applied
@@ -299,6 +307,7 @@ function timeCorrectionFieldErrors(
 function timeCorrectionFieldIds(errors: TimeCorrectionFieldErrors): Record<string, string | undefined> {
   return {
     'time-correction-person': errors.person,
+    'time-correction-date': errors.date,
     'time-correction-start-date': errors.startAt,
     'time-correction-split-date': errors.splitAt,
     'time-correction-end-date': errors.endAt,
@@ -335,6 +344,106 @@ function useTimeCorrectionFieldState(entry: TimeEntry | undefined) {
   };
 }
 
+type ProposedFacts = SubmitTimeCorrectionInput['proposedFacts'];
+type CorrectionPlan = { fieldErrors: TimeCorrectionFieldErrors; proposedFacts: ProposedFacts | null };
+
+/** A correction of an entry: its fields' errors, else the facts it proposes. */
+function planEntryCorrection(
+  entry: TimeEntry,
+  fields: Pick<
+    TimeCorrectionDialogForm,
+    'kind' | 'startAt' | 'splitAt' | 'endAt' | 'reason' | 'activityKind'
+  >,
+  people: {
+    closedPeriods: readonly ClosedTimePeriod[];
+    subjectEmployeeRecordId: string;
+    targetEmployeeRecordId: string;
+    jobId: string;
+  },
+): CorrectionPlan {
+  const { kind, startAt, splitAt, endAt } = fields;
+  const fieldErrors = timeCorrectionFieldErrors(
+    { kind, startAt, splitAt, endAt },
+    people.closedPeriods,
+    people.subjectEmployeeRecordId,
+    fields.reason,
+  );
+  if (focusFirstInvalidField(timeCorrectionFieldIds(fieldErrors)))
+    return { fieldErrors, proposedFacts: null };
+  return {
+    fieldErrors,
+    proposedFacts: buildTimeCorrectionProposedFacts({
+      kind,
+      entry,
+      // A reassignment proposes the entry's time for the new person.
+      baseEmployeeRecordId:
+        kind === 'reassign' ? people.targetEmployeeRecordId : people.subjectEmployeeRecordId,
+      jobId: people.jobId,
+      activityKind: fields.activityKind,
+      startAt,
+      splitAt,
+      endAt,
+    }),
+  };
+}
+
+/**
+ * Added time: the person, the day, every activity of the timeline and the
+ * reason, else the timeline's facts. A day of a closed period is marked
+ * before the request.
+ */
+function planAddedTime(input: {
+  dateIso: string;
+  timeline: CorrectionTimelineState;
+  closedPeriods: readonly ClosedTimePeriod[];
+  subjectEmployeeRecordId: string;
+  reason: string;
+}): CorrectionPlan {
+  const { resolved, fieldErrors: timelineErrors } = input.timeline.validate();
+  const segments = resolved.valid ? resolved.segments : [];
+  const touchesClosedDay = segments.some((segment) =>
+    [segment.startedAt, new Date(segment.endedAt.getTime() - 1)].some((instant) =>
+      isDateInClosedPeriod(formatBerlinLocalDate(instant), input.closedPeriods),
+    ),
+  );
+  const fieldErrors: TimeCorrectionFieldErrors = {
+    person: input.subjectEmployeeRecordId ? undefined : 'Bitte wähle eine Person aus.',
+    date: !input.dateIso
+      ? 'Bitte wähle ein Datum.'
+      : touchesClosedDay
+        ? SHARED_FAILURE_MESSAGES.period_closed
+        : undefined,
+    reason: input.reason.trim() ? undefined : 'Bitte gib einen Grund an.',
+  };
+  const invalid = focusFirstInvalidField({
+    'time-correction-person': fieldErrors.person,
+    'time-correction-date': fieldErrors.date,
+    ...timelineErrors,
+    'time-correction-reason': fieldErrors.reason,
+  });
+  return {
+    fieldErrors,
+    proposedFacts: invalid ? null : buildTimelineFacts(segments, input.subjectEmployeeRecordId),
+  };
+}
+
+/** Added time: its day, its timeline, and whether „Speichern“ was pressed, which shows the rows' errors. */
+function useAddedTimeState(input: {
+  organizationId: string;
+  subjectEmployeeRecordId: string;
+  enabled: boolean;
+}) {
+  const [dateIso, setDateIso] = useState(getBusinessTodayIso);
+  const [attempted, setAttempted] = useState(false);
+  const timeline = useCorrectionTimeline({
+    organizationId: input.organizationId,
+    employeeRecordId: input.subjectEmployeeRecordId || undefined,
+    dateIso: /^\d{4}-\d{2}-\d{2}$/.test(dateIso) ? dateIso : null,
+    enabled: input.enabled && Boolean(input.subjectEmployeeRecordId),
+  });
+  return { dateIso, setDateIso, timeline, attempted, setAttempted };
+}
+
 export function useTimeCorrectionDialogForm({
   organizationId,
   entry,
@@ -355,36 +464,31 @@ export function useTimeCorrectionDialogForm({
   const { setOpen, subjectEmployeeRecordId, targetEmployeeRecordId, jobId, setSubmitError } = sessionState;
   const { run: runSubmit, isPending: submitting } = useServerAction(submitTimeCorrection);
   const { setFieldErrors, ...fields } = useTimeCorrectionFieldState(entry);
-  const { kind, startAt, splitAt, endAt, reason, setReason, activityKind } = fields;
+  const { kind, reason, setReason } = fields;
+  const { dateIso, setDateIso, timeline, attempted, setAttempted } = useAddedTimeState({
+    organizationId,
+    subjectEmployeeRecordId,
+    enabled: sessionState.open && !entry,
+  });
 
   const source = useMemo(() => correctionSource(entry), [entry]);
 
   const submit = async () => {
-    const nextFieldErrors = timeCorrectionFieldErrors(
-      { kind, startAt, splitAt, endAt },
-      closedPeriods,
-      subjectEmployeeRecordId,
-      reason,
-    );
-    setFieldErrors(nextFieldErrors);
-    if (focusFirstInvalidField(timeCorrectionFieldIds(nextFieldErrors))) {
-      return;
-    }
+    if (!entry) setAttempted(true);
+    const plan = entry
+      ? planEntryCorrection(entry, fields, {
+          closedPeriods,
+          subjectEmployeeRecordId,
+          targetEmployeeRecordId,
+          jobId,
+        })
+      : planAddedTime({ dateIso, timeline, closedPeriods, subjectEmployeeRecordId, reason });
+    setFieldErrors(plan.fieldErrors);
+    if (!plan.proposedFacts) return;
     if (entry && isEntryInClosedPeriod(entry, closedPeriods)) {
       setSubmitError(SHARED_FAILURE_MESSAGES.period_closed);
       return;
     }
-    const baseEmployeeRecordId = kind === 'reassign' ? targetEmployeeRecordId : subjectEmployeeRecordId;
-    const proposedFacts = buildTimeCorrectionProposedFacts({
-      kind,
-      entry,
-      baseEmployeeRecordId,
-      jobId,
-      activityKind,
-      startAt,
-      splitAt,
-      endAt,
-    });
 
     setSubmitError(null);
     try {
@@ -396,7 +500,7 @@ export function useTimeCorrectionDialogForm({
           kind,
           reason,
           source: kind === 'add' || kind === 'missed_clock' ? null : source,
-          proposedFacts,
+          proposedFacts: plan.proposedFacts,
         },
         runSubmit,
       );
@@ -413,5 +517,14 @@ export function useTimeCorrectionDialogForm({
     }
   };
 
-  return { ...sessionState, submitting, submit, ...fields };
+  return {
+    ...sessionState,
+    submitting,
+    submit,
+    ...fields,
+    dateIso,
+    setDateIso,
+    timeline,
+    showTimelineErrors: attempted,
+  };
 }
