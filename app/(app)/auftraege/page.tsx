@@ -1,5 +1,5 @@
 import { loadJobListPage } from '@/lib/jobs/list-server';
-import { parseJobListQuery, type ListSearchParams } from '@/lib/jobs/list-page';
+import { defaultJobListDirection, parseJobListQuery, type ListSearchParams } from '@/lib/jobs/list-page';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { Suspense } from 'react';
 import { Plus } from 'lucide-react';
@@ -29,10 +29,11 @@ async function AuftraegeData({
   searchParams: Promise<ListSearchParams>;
 }) {
   const params = await searchParams;
+  const direction = defaultJobListDirection(isAdminOrManager);
   const queries = {
-    active: parseJobListQuery(params, 'active', initialVisibleColumns),
-    parked: parseJobListQuery(params, 'parked', initialVisibleColumns),
-    archived: parseJobListQuery(params, 'archived', initialVisibleColumns),
+    active: parseJobListQuery(params, 'active', initialVisibleColumns, direction),
+    parked: parseJobListQuery(params, 'parked', initialVisibleColumns, direction),
+    archived: parseJobListQuery(params, 'archived', initialVisibleColumns, direction),
   };
   const result = await Promise.all([
     loadJobListPage(queries),

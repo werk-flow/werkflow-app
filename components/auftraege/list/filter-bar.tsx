@@ -135,7 +135,7 @@ export function FilterBar({
       <div className="flex items-center gap-2">
         <SearchInput
           wrapperClassName="flex-1"
-          placeholder="Suche nach Titel, Nummer, Kunde, Ort…"
+          placeholder="Titel, Nr., Kunde, Ort …"
           aria-label="Aufträge durchsuchen"
           value={localSearch}
           onValueChange={handleSearchValueChange}

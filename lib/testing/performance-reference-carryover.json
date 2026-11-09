@@ -1,30 +1,30 @@
 {
-  "reason": "A carry-over entry re-keys a reviewed reference from the measurement digest it was recorded under (fileDigest) to the current one (measuredTestDigest) when a support-file edit cannot change what the scenario measures; each entry is proven in the change that adds it. Current entries: tests/golden/support/scenario-measurement.ts replaced two type casts on performance.getEntriesByType in readAttribution with instanceof narrowing. The change touches only attribution, which is read after the measured interval has ended and is never compared, and every entry that call returns is an instance of the narrowed class, so measuredMs and every recorded attribution value stay as they were.",
+  "reason": "A carry-over entry re-keys a reviewed reference from the measurement digest it was recorded under (fileDigest) to the current one (measuredTestDigest) when a support-file edit cannot change what the scenario measures; each entry is proven in the change that adds it. Current entries: tests/golden/support/scenario-measurement.ts replaced two type casts on performance.getEntriesByType in readAttribution with instanceof narrowing. The change touches only attribution, which is read after the measured interval has ended and is never compared, and every entry that call returns is an instance of the narrowed class, so measuredMs and every recorded attribution value stay as they were. tests/audit/performance/lists.spec.ts follows the Aufträge search field's new placeholder in its untimed global-search assertion, which runs after the measured interval has ended, so no measured value of a scenario in that file changes.",
   "entries": [
     {
       "scenarioId": "customers.list.open",
       "fileDigest": "05598191ea2c43349993f569fb4fb510637be9089456766d4ce6d7e28bfc4fe7",
-      "measuredTestDigest": "770a2f2f7df409b7218bb18f04e5b88ae5fb40c9f4a0418c7f6086b3a09b2547"
+      "measuredTestDigest": "18b43bb95d77e37e02ef99f2a74acaf69dceac06a16c0b1e90c2ba242c906580"
     },
     {
       "scenarioId": "jobs.list.open",
       "fileDigest": "83f533102717ce2600c974d8f635ab3339405821d53d8ac5b524ff018fc440f9",
-      "measuredTestDigest": "72fc6d95b3f567345cacc2de27038c2319ad91a95d5e61bb616a25e689363fc1"
+      "measuredTestDigest": "a3f6daeec33544a596ccc6ee0f41ee419ed9bf630b7c7dd8ee45ac8dcb1c97cc"
     },
     {
       "scenarioId": "jobs.detail.open",
       "fileDigest": "a873965288a3635aae8a112de429232397dca0da35fc77b8333ed60700a0ff2e",
-      "measuredTestDigest": "ec311d5d85c2538f695d53baa770fe0bd32a48fa9047e72fa73859eb30c82507"
+      "measuredTestDigest": "c56275937c507a9712dd9adf1c4c89d6aeac2c9615f2a485a8f336f4062c7ce5"
     },
     {
       "scenarioId": "equipment.list.open",
       "fileDigest": "52ac1b2e1fe805aebeb0b88131be2917803d8cb5bb0deaa94944bb25b422696e",
-      "measuredTestDigest": "6f488457097638ff5061c2c0b778b604fe6263404dd9500a40ee2acd8f929f09"
+      "measuredTestDigest": "cd7fd9db152e5f3de10531a35269997e863a7488623e4d68bb7127035bf1b9f3"
     },
     {
       "scenarioId": "tasks.list.open",
       "fileDigest": "6341573f15e500159d70f8f01f85e68746af6664a09c272e6bcef15c83ec11b4",
-      "measuredTestDigest": "55f622187436ca1ec1c7a25f4679649c045937ecb2082b183c9e5602fc95d107"
+      "measuredTestDigest": "2046483f57b5515d31f58e252ce62f7678fb5c3e96e66314598372da449a1b3a"
     },
     {
       "scenarioId": "calendar.board.cold-open",
