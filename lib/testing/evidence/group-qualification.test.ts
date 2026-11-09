@@ -73,12 +73,18 @@ test('real freshness helper imports stay independent of scenario references', ()
       ),
     ),
   ];
-  const graph = sourceImportGraph(root, files);
-  for (const [entry, measured] of [
+  const helpers = [
     ['tests/golden/support/live.ts', false],
     ['tests/golden/support/calendar-change-observation.ts', false],
     ['tests/golden/support/scenario-measurement.ts', true],
-  ] as const) {
+  ] as const;
+  // Parse only what the helpers reach; the whole repository takes seconds under load.
+  const graph = sourceImportGraph(
+    root,
+    files,
+    helpers.map(([entry]) => entry),
+  );
+  for (const [entry, measured] of helpers) {
     const reachable = new Set<string>();
     const pending: string[] = [entry];
     while (pending.length) {

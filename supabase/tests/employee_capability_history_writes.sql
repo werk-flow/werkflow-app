@@ -176,7 +176,7 @@ select pg_temp.expect_refusal('correction whose history row is refused', $sql$
 $sql$, 'history refused');
 reset role;
 
-drop trigger refuse_employee_record_event on public.employee_record_events;
+alter table public.employee_record_events disable trigger refuse_employee_record_event;
 
 do $$
 begin

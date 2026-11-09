@@ -378,9 +378,12 @@ export function compareLabStep(input: {
   return rows;
 }
 
-/** A row that fails when ceilings are enforced; `ratchet-pending` fails in release mode only. */
-export function isFailingRow(row: LabRow, release: boolean): boolean {
-  if (row.status === 'ratchet-pending') return release;
+/**
+ * A row that fails when ceilings are enforced. A fall beyond the tolerance
+ * (`ratchet-pending`) fails like a rise, in CI and in release mode alike: an
+ * unlowered reference is room for the next regression and fails a later run.
+ */
+export function isFailingRow(row: LabRow): boolean {
   return row.status !== 'within' && row.status !== 'ungated';
 }
 

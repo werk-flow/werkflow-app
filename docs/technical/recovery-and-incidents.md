@@ -12,43 +12,43 @@ What a backup can restore, what loss the owner accepted, and who acts in an inci
 | Configuration and secrets | Manual: provider dashboards, the owner's password manager, the gitignored env backups | No automated export. Update the env backups after every provider change. |
 | Edge function source | `supabase/functions/` in git | Function secrets exist only in each project's secret store. |
 
-The owner accepted these limits until the point-in-time upgrade below. The recovery objectives: at most one day of data lost and at most one working day down. While WerkFlow is down, staff work on paper and by phone. The [recovery rehearsal](#recovery-rehearsal) measures a local restore; no provider restore time is demonstrated.
+Until the point-in-time upgrade below, the owner accepts at most one day of data lost and one working day down. A daily PROD backup restored into a new project in under 5 minutes, every file matching its row (werk-flow/werkflow-planning#289); plan with 10, since the database grows.
 
 ## Planned provider upgrades
 
-The team moved to Vercel Pro on 2026-11-05; its checklist is open in werk-flow/werkflow-planning#216. The owner deferred point-in-time recovery until the first customer who pays about $1000 a month, after Willert; Supabase gets no further spend before Willert pays ([decision 0008](../decisions/0008-development-workflow.md#amendment-2026-11-07-point-in-time-recovery-waits-for-a-larger-customer)). Whoever completes a checklist updates this page.
+The Vercel Pro checklist is open in werk-flow/werkflow-planning#216. The owner deferred point-in-time recovery until a larger customer after Willert ([decision 0008](../decisions/0008-development-workflow.md#amendment-2026-11-07-point-in-time-recovery-waits-for-a-larger-customer)). Whoever completes a checklist updates this page.
 
 | Upgrade | Why | Checklist after enabling |
 | --- | --- | --- |
-| Vercel Pro for the team | Active since 2026-11-05. It brings Firewall rate limits. | Rate-limit `/login`, `/auth/*`, `/api/*` and Server Action POSTs (`Next-Action` header), sized for shared office IPs. Add runtime-log alerts or a drain. Confirm deployment protection. Record the settings in [environments](environments.md). |
+| Vercel Pro for the team | It brings Firewall rate limits. | Rate-limit `/login`, `/auth/*`, `/api/*` and Server Action POSTs (`Next-Action` header), sized for shared office IPs. Add runtime-log alerts or a drain. Confirm deployment protection. Record the settings in [environments](environments.md). |
 | Supabase point-in-time recovery on PROD | Too expensive before that customer. | Enable it on PROD only and record the recovery objectives here. Within a month, rehearse the provider restore in a disposable target, never shared DEV. Then repeat that drill quarterly, automated where the provider allows. No schedule runs it before then. |
 
 ## Recovery rehearsal
 
-`bun scripts/rehearse-recovery.ts` restores a representative organization with every file link in disposable local databases and buckets. It needs healthy local containers, Docker on the machine's own socket (Linux, or Colima's default profile on a Mac) and `.env.local-stack-backup`. It takes the workspace test lock and journals each operation and stage duration to `.agent-logs/recovery/<run-id>/journal.json`; the `restore` stage's duration is the measured restore time. Its stages:
+`bun scripts/rehearse-recovery.ts` restores a representative organization with every file link in disposable local databases and buckets. It needs healthy local containers, Docker on the machine's own socket (Linux, or Colima's default profile on a Mac) and `.env.local-stack-backup`. It takes the workspace test lock and journals each operation and stage duration, the `restore` stage's being the restore time, to `.agent-logs/recovery/<run-id>/journal.json`. Its stages:
 
-1. `seed` copies the stack's migrated schema, never a row, into a new database. It fails when the stack lacks a migration of the revision. It writes a made-up SHK company through the app's database functions: staff of every role, jobs with assignees, document versions, filed originals, a trashed document, protected personnel files and a second organization.
+1. `seed` copies the stack's migrated schema, never a row, into a new database. It fails when the stack lacks a migration of the revision. It writes a made-up SHK company through the app's database functions: every role, assigned jobs, document versions, filed, trashed and personnel documents, and a second organization.
 2. `backup` takes a full `pg_dump` as the superuser, as the provider's daily backup does, and copies the bytes to a backup bucket, with one upload made after the dump.
 3. `remove-source` drops the source database and deletes its objects key by key.
 4. `restore` loads the dump in one transaction and copies the bytes to a new bucket.
 5. `verify` compares migration history, schema and row counts. Every current and historical document path must have its object, size and bytes, and the late upload must be the only orphan. A deliberately removed object must fail and name its document. A member of another organization and an employee without assignment must read exactly what they read before. Signed access must work, unsigned and tampered access fail.
 
-A missing object fails acceptance. The journal names missing documents and orphan objects by id, never a path, file name or content.
+The journal names missing documents and orphan objects by id, never a path, file name or content.
 
-`ops/recovery-rehearsal.py` in `werk-flow/werkflow-planning` runs it on [the PC](environments.md#background-jobs): at 04:00 Berlin on the first Monday of January, April, July and October, in a checkout of its own at `origin/main`. After a backup or storage change, run that script with `--revision <branch>`. It shares the stack with every worktree: it adds two databases and three buckets for seconds and restarts nothing, so it takes no heavy slot. A stopped or unhealthy stack fails it. A failure opens or updates `CI alert: recovery rehearsal`, the next pass closes it, and `ops/ci-alert.py` hands it to a thread and reports a quarter without a run. It assigns nobody: no production data is at stake.
+`ops/recovery-rehearsal.py` in `werk-flow/werkflow-planning` runs it on [the PC](environments.md#background-jobs): at 04:00 Berlin on the first Monday of January, April, July and October, in a checkout of its own at `origin/main`. After a backup or storage change, run that script with `--revision <branch>`. It adds two databases and three buckets to the shared stack for seconds, restarts nothing and takes no heavy slot; an unhealthy stack fails it. A failure opens or updates `CI alert: recovery rehearsal`, the next pass closes it, and `ops/ci-alert.py` hands it to a thread and reports a quarter without a run. It assigns nobody.
 
 - A cleanup or journal failure prevents acceptance. After a killed run, reconcile the journal's exact resource names before you run again.
 - Never drop a resource by prefix search, remove a shared bucket or database, reset the shared stack, or load a production or DEV dump into it.
-- The rehearsal proves the full-schema restore on the local stack, not a provider restore, its recovery time or R2 durability. It leaves out pg_cron, which runs only in the cluster's `postgres` database. A production restore needs separate owner authorization.
+- It proves the restore on the local stack, not R2 durability. It leaves out pg_cron, which runs only in the cluster's `postgres` database.
 
 ## Restore procedure (database)
 
 1. Record source, target, backup timestamp, application revision, expected loss and rollback limits. Get the owner's authorization. Never load production material into DEV or the local stack.
 2. Stop writes through enforced maintenance or provider controls, and notify the customer; staff work on paper and by phone until writes reopen. A notice alone stops no direct client, job or session. Pause the storage purge until step 5 is done: remove `CRON_SECRET` from Vercel Production and redeploy production, since a variable change reaches only a new deployment. Before the restore, confirm that `/api/storage-purge` answers 503 and that no purge request is still running; a run that has not started yet never will. The paused route deletes nothing and raises the production-watcher alert. After step 5, set a new value and redeploy again.
-3. Follow the provider's current restore procedure. Run only the authorized operation and keep its result. A partial load or a nonzero exit is a failed restore.
+3. Follow the provider's current restore procedure. Run only the authorized operation and keep its result; a partial load or nonzero exit is a failed restore. Restore in place (Backups, Scheduled backups); PROD is offline meanwhile. Moving production onto a restored new project is a cutover this runbook does not cover: pause releases and plan it with the owner. It needs at least its Edge Functions, every PROD reference retargeted (`release.yml` too) and every open tab reloaded. A drill copy gets its own password, never PROD's; from IPv4, connect through its session pooler with `sslmode=verify-full` and the project's CA certificate (Database settings, SSL).
 4. Compare `supabase_migrations.schema_migrations` on the target with the intended revision, and check that `cron.job` holds the scheduled jobs. `bun run migrations:check` checks DEV only. For a missing migration, follow [the migration rule](environments.md#the-migration-rule) without relinking the CLI to production.
 5. Reconcile current and historical document and version paths against the correct bucket, with the rehearsal's path query and comparison (`lib/testing/runs/recovery-rehearsal.ts`). Metadata without an object means missing bytes. An object uploaded after the backup, or one whose deletion was queued after it, can survive without metadata or queue entry. Keep orphan objects for review; never purge them automatically.
-6. Check tenant and role access, protected documents and session revocation. A database restore revokes no token.
+6. Check tenant and role access, protected documents and session revocation.
 7. Run the provider canary on cloud DEV; it does not prove production recovery. On production, use metadata and configuration checks and the customer verification the owner agreed before you resume writes. Record unresolved evidence and every loss.
 
 ## Restore procedure (files)
@@ -63,10 +63,11 @@ A red nightly or release, a scheduled release that stopped at a red full run, an
 
 Assignment is the owner's one notification, so only a failure that affects production assigns `tamaycbn`: a failed or held release, a release that never started, a production watcher alert, a failed health check of a credential production depends on, and a Boat key about to expire. A caller of `alert-issue.sh` says so with `AFFECTS_PRODUCTION=true`. Every other alert reaches its thread only. An open issue that turns into a production failure gains the owner; no update removes an assignee. No issue text or comment mentions the owner. GitHub never notifies a user of their own actions, and `ops/ci-alert.py` runs `gh` as the owner, so it reports a release that never started, every production watcher alert and `Owner action: Boat key`, by dispatching `.github/workflows/production-alert.yml`, which writes as `github-actions`.
 
-On the machine with the watcher's token, `ops/ci-alert.py` also runs the production watcher, `ops/prod_watch.py`, which owns the rules and thresholds. It reads metadata only, with the token `werkflow app prod-watch` ([credentials](environments.md#credentials)): Vercel's production deployments, the deployment `app.werk-flow.app` serves, the head of `production`, and counts of `vercel.request.count` with a 5xx status per route pattern, status, error code and deployment. It opens one issue per incident:
+On the machine with the watcher's token, `ops/ci-alert.py` also runs the production watcher, `ops/prod_watch.py`, which owns the rules and thresholds. It reads metadata only, with the token `werkflow app prod-watch` ([credentials](environments.md#credentials)): Vercel's production deployments, the deployment `app.werk-flow.app` serves, the head of `production`, and counts of `vercel.request.count` with a 5xx status per route pattern, status, error code and deployment, and of `werkflow.failure` (below) per label, code and deployment. It opens one issue per incident:
 
 - `Production alert: deploy`: a production build failed or stuck past its deadline, or production not serving the `production` head for an hour, which is a rollback or a failed promotion.
 - `Production alert: server errors`: a burst of server errors against the week before, or a route that starts to fail. It adds a comment at most every few hours and closes a day after the newest error.
+- `Production alert: handled failures`: the same two rules per label and code.
 - `Production alert: watcher`: several failed passes in a row, such as an expired token. `python3 -I ops/prod_watch.py --health` in werkflow-planning checks the token.
 
 On every machine with a Boat key, the pass opens `Owner action: Boat key` before the key expires (`ops/boat_key.py`; [renew the key](boat-verification.md#renew-the-key) owns the schedule).
@@ -78,15 +79,15 @@ A handled failure answers below 500, so the 5xx count misses it. Server-side `lo
 - `label`: the log label in Vercel's tag characters (letters, digits, `-`, `_`, `.`, `/`), each other run of characters as `_`, at most 63 bytes.
 - `code`: the failure's stable code, written the same way, or `none`.
 
-A label or code that holds an email address, a link, six digits in a row, or twenty hex characters and dashes in a row (a UUID, a token) becomes `withheld`. The metric carries no message, id, user, organization or request value; Vercel adds the deployment, route and region. Failures in the browser are not counted, because a browser has no Vercel runtime. Recording needs Observability Plus on the Vercel team, at $1.20 per million recorded failures, and only the owner turns it on. Outside Vercel, and when recording fails, `logError` logs as before and never throws.
+A label or code that holds an email address, a link, six digits in a row, or twenty hex characters and dashes in a row (a UUID, a token) becomes `withheld`. The metric carries no message, id, user, organization or request value; Vercel adds the deployment and region but no route or environment. Staging shares the project, so the watcher filters by production deployment. Failures in the browser are not counted, because a browser has no Vercel runtime. Recording needs Observability Plus on the Vercel team, at $1.20 per million recorded failures, and only the owner turns it on. Outside Vercel, and when recording fails, `logError` logs as before and never throws.
 
-`ops/prod_watch.py` owns the rule that turns the count into `Production alert: handled failures`, per label and code. Until it has that rule, the count shows only in the Vercel dashboard under Observability, Custom Metrics. The alert goes through `.github/workflows/production-alert.yml` like every watcher alert: it assigns the owner, and its thread works from the label, code and route, never from a log line.
+`ops/prod_watch.py` owns the rule that turns the count into `Production alert: handled failures`, per label and code. The alert goes through `.github/workflows/production-alert.yml` like every watcher alert: it assigns the owner, and its thread works from the label, code and deployment, never from a log line. The production-access guard refuses `label` and `code` as dimensions, so the issue holds the counts.
 
 Check the path without an outage:
 
 1. `bun test lib/logging.test.ts lib/testing/ci-alert.test.ts` proves the tags, the withheld values, the silent fallback, and that one issue opens, updates and closes.
 2. Open `/auth/callback?code=check` once on [the staging URL](environments.md#vercel). The made-up code fails its exchange, and `logError` handles the failure. Under Observability, Custom Metrics, the staging deployment then shows `werkflow.failure` with a label that starts with `auth.callback_code_exchange`.
-3. In werkflow-planning, the watcher's own tests prove the rule's thresholds.
+3. In werkflow-planning, the watcher's own tests prove the rule's thresholds and that staging raises nothing; `--health` proves the query's shape, not the metric name.
 
 `.github/workflows/date-lookahead.yml` runs the suite nightly on dates still to come, so a test that fails on a date alone surfaces weeks before that date. It reports the same way, on `CI alert: date look-ahead`, and a failed job's name is its date. Each job steps its runner's kernel clock (`.github/scripts/shift-clock.sh`). Containers share that clock, so Bun, Chromium, the app, Postgres and the Supabase services all show the date, and SQL tests read it too. A job fails if the shell, Bun or Postgres shows another date, or if the clock leaves the shift.
 

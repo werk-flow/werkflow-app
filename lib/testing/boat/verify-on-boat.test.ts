@@ -98,9 +98,14 @@ test('an expired, malformed or exposed key falls back to local with the reason',
   expect(malformed.kind).toBe('unusable');
   const exposed = readBoatKey(keyFolder({ 'boat-api-key': 'boat_abc' }, 0o700, 0o644), now);
   expect(exposed.kind === 'unusable' && exposed.reason).toContain('chmod');
-  // A key file this process cannot read, such as one being replaced.
-  const unreadable = readBoatKey(keyFolder({ 'boat-api-key': 'boat_abc' }, 0o700, 0o200), now);
-  expect(unreadable).toEqual({ kind: 'unusable', reason: 'the key file could not be read.' });
+  // A key file the read fails on, such as one being replaced. A directory fails the read for every
+  // user; a mode-200 file does not where the process may read any file, as on a Boat machine.
+  const unreadable = keyFolder({});
+  mkdirSync(join(unreadable, 'boat-api-key'), { mode: 0o700 });
+  expect(readBoatKey(unreadable, now)).toEqual({
+    kind: 'unusable',
+    reason: 'the key file could not be read.',
+  });
 });
 
 test('a Boat refusal keeps its status and code, and the key never appears in a message', async () => {
@@ -387,7 +392,7 @@ test('a Ctrl-C while a machine starts deletes it and never falls back to a local
     from: 'werkflow-verify',
     name: 'verify-test',
     ttlSeconds: 60,
-    snapshots: false,
+    purpose: 'run',
     log: () => undefined,
     signal: interrupt.signal,
   }).catch((error: unknown) => error);
@@ -398,6 +403,30 @@ test('a Ctrl-C while a machine starts deletes it and never falls back to a local
   expect(fallbackLine(new BoatError(503, 'no_ready_machine', ''), new AbortController().signal)).toBe(
     'Running locally: Boat answered 503 no_ready_machine.',
   );
+});
+
+test('a run machine keeps no snapshot and no monitoring; only the snapshot build keeps both', async () => {
+  const created = async (purpose: 'run' | 'snapshot') => {
+    let body: unknown;
+    const client = boatClient('boat_secret', async (_url, init) => {
+      if (init?.method === 'POST') {
+        body = JSON.parse(String(init.body));
+        return Response.json({ sandbox: { id: 'bx_test', state: 'provisioning' } });
+      }
+      return Response.json({ sandbox: { id: 'bx_test', state: 'ready' } });
+    });
+    await createMachine(client, {
+      from: undefined,
+      name: 'verify-test',
+      ttlSeconds: 60,
+      purpose,
+      log: () => undefined,
+    });
+    return body;
+  };
+  // Without monitoring Boat keeps none of a run's output after the run; without snapshots a stop erases it.
+  expect(await created('run')).toMatchObject({ noEnv: true, snapshots: false, monitoring: false });
+  expect(await created('snapshot')).toMatchObject({ noEnv: true, snapshots: true, monitoring: true });
 });
 
 test('a crafted archive imported over an existing link with a backslash or newline name writes nothing', () => {

@@ -268,8 +268,8 @@ select pg_temp.expect_refusal('apprentice warning whose history row is refused',
 $sql$, 'history refused');
 reset role;
 
-drop trigger refuse_team_event on public.team_events;
-drop trigger refuse_qualification_event on public.qualification_events;
+alter table public.team_events disable trigger refuse_team_event;
+alter table public.qualification_events disable trigger refuse_qualification_event;
 
 do $$
 begin
