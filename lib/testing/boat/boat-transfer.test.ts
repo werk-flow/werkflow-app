@@ -117,19 +117,41 @@ test('a results download that fails on every attempt falls back after four fresh
   );
 });
 
-test('a refusal a retry cannot change, or an interruption, ends the download without a retry', async () => {
-  const missing = machineAnswering([() => new Response('', { status: 404 })]);
+test('a refused signed URL is signed afresh, and the run keeps its results', async () => {
+  const archive = resultsArchive();
+  const { machine, signedUrls } = machineAnswering([
+    () => new Response('', { status: 403 }),
+    () => new Response(archive.slice()),
+  ]);
+  const run = checkout();
+  await importResults(machine, run, {
+    signal: new AbortController().signal,
+    log: () => undefined,
+    wait: async () => undefined,
+  });
+  expect(signedUrls).toHaveLength(2);
+  expect(existsSync(join(run.repository, '.agent-logs', 'verification', 'r1', 'report.json'))).toBe(true);
+});
+
+test("a refusal of Boat's API, or an interruption, ends the download without a retry", async () => {
+  let signings = 0;
+  const expired = boatClient('boat_secret', async () => {
+    signings++;
+    return Response.json({ error: { code: 'api_key_expired' } }, { status: 401 });
+  });
   const waits: number[] = [];
   const wait = async (milliseconds: number) => {
     waits.push(milliseconds);
   };
-  const refused = await importResults(missing.machine, checkout(), {
+  const refused = await importResults({ id: 'bx_test', client: expired, log: () => undefined }, checkout(), {
     signal: new AbortController().signal,
     log: () => undefined,
     wait,
   }).catch((error: unknown) => error);
-  expect(refused instanceof Error && refused.message).toBe('download of /home/user/results.tgz: 404');
-  expect(missing.signedUrls).toHaveLength(1);
+  expect(refused instanceof Error && refused.message).toBe(
+    'POST /sandboxes/bx_test/files/download-url: 401 api_key_expired',
+  );
+  expect(signings).toBe(1);
 
   const interrupt = new AbortController();
   const interrupted = machineAnswering([

@@ -34,10 +34,14 @@ function pause(milliseconds: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-/** Boat refused the key, the request or the path: a fresh request gets the same answer. */
+/** Refusals of a signed URL (boat-api.ts): an expired or refused URL recovers, because each attempt signs a new one. */
+const SIGNED_URL_FAILURES = new Set(['upload_failed', 'download_failed']);
+
+/** Boat's API refused the key, the request or the path: a fresh request gets the same answer. */
 function permanent(error: unknown): boolean {
   return (
     error instanceof BoatError &&
+    !SIGNED_URL_FAILURES.has(error.code) &&
     error.status >= 400 &&
     error.status < 500 &&
     error.status !== 408 &&
