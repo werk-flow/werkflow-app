@@ -28,7 +28,7 @@ const machine = await createMachine(client, {
   from: undefined,
   name: `${SNAPSHOT_NAME}-build`,
   ttlSeconds: 7_200,
-  snapshots: true,
+  purpose: 'snapshot',
   log,
 });
 log(
