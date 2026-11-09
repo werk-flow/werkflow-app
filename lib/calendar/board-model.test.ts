@@ -8,7 +8,7 @@ import {
   indexBoardPeople,
   matchesBoardSearch,
   occurrenceSpan,
-  plannedWorkDates,
+  plannedWorkDays,
   reassignmentChanges,
   rowOwnsJob,
   unavailableAssignees,
@@ -451,7 +451,8 @@ describe('a person outside their employment or app access on the visit date', ()
     ).toBe('partial');
     // An all-day visit on a day after the exit plans zero minutes, because the day's target is zero.
     const allDay = job({ plannedTime: null, plannedDate: '2026-10-30', endDateExclusive: '2026-10-31' });
-    const hasPlannedWork = plannedWorkDates([allDay]).has('2026-10-30');
+    // A search or dispatch filter that hides the card leaves the work: the days come from every visit.
+    const hasPlannedWork = plannedWorkDays([allDay], new Map()).has('r1:2026-10-30');
     expect(
       boardCellCapacity({
         day,
@@ -461,7 +462,9 @@ describe('a person outside their employment or app access on the visit date', ()
         isWeekend: false,
       }),
     ).toEqual({ state: 'overbooked', off: true, description: 'Nicht beschäftigt, trotzdem eingeplant' });
-    expect(plannedWorkDates([{ ...allDay, occurrenceStatus: 'cancelled' }]).size).toBe(0);
+    expect(plannedWorkDays([{ ...allDay, occurrenceStatus: 'cancelled' }], new Map()).size).toBe(0);
+    const legacy = { ...allDay, occurrenceId: undefined, assignedEmployeeRecordIds: undefined };
+    expect([...plannedWorkDays([legacy], new Map([['u1', 'r1']]))]).toEqual(['r1:2026-10-30']);
   });
 
   test('a card from „Ohne Zuweisung“ lets go of every person who cannot work it, two leavers included', () => {

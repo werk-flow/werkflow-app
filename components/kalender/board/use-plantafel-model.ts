@@ -9,11 +9,13 @@ import {
   type CalendarBoardContext,
   type CalendarBoardDay,
 } from '@/lib/calendar/board';
-import { boardColumns } from '@/lib/calendar/board-layout';
+import { boardColumns, type BoardColumn } from '@/lib/calendar/board-layout';
+import type { DispatchRecipientDerivedState } from '@/lib/dispatch/types';
 import {
   actualMinutesByUserDate,
   groupBoardRows,
   matchesBoardSearch,
+  plannedWorkDays,
   type BoardRowModel,
   type BoardTeamGroup,
 } from '@/lib/calendar/board-model';
@@ -54,7 +56,7 @@ function useBoardIndexes(board: CalendarBoardContext) {
   return { days, dispatch, materialDemandJobIds, recordIdByUserId };
 }
 
-/** Planned minutes per person-day from the window's visits, and recorded minutes while the toggle is on. */
+/** Planned minutes and work per person-day from the window's visits, and recorded minutes while the toggle is on. */
 function useBoardMinutes(input: {
   jobs: CalendarJob[];
   entries: TimeEntry[];
@@ -77,46 +79,30 @@ function useBoardMinutes(input: {
     () => (showActualTime ? actualMinutesByUserDate(entries, new Date(nowTick)) : null),
     [entries, nowTick, showActualTime],
   );
-  return { planned, actual };
+  const workDays = useMemo(() => plannedWorkDays(jobs, recordIdByUserId), [jobs, recordIdByUserId]);
+  return { planned, actual, workDays };
 }
 
-/**
- * The Plantafel's derived data (P1-24a): columns, the day and dispatch
- * indexes, planned and actual minutes, the filtered team groups, the visible
- * rows and each row's cards. Every value is memoized on its own inputs, so a
- * row only re-renders when something it shows changes.
- */
-export function usePlantafelModel(input: PlantafelModelInput) {
-  const { anchorIso, todayIso, preferences, showActualTime, board, jobs, entries, nowTick, isManager } =
-    input;
-  const { collapsedTeams } = input;
-  const columns = useMemo(
-    () =>
-      boardColumns({
-        anchorIso,
-        horizonWeeks: preferences.horizonWeeks,
-        hideWeekends: preferences.hideWeekends,
-        todayIso,
-      }),
-    [anchorIso, preferences.hideWeekends, preferences.horizonWeeks, todayIso],
-  );
-  const { days, dispatch, materialDemandJobIds, recordIdByUserId } = useBoardIndexes(board);
-  const { people } = useBoardAbsences();
-  const { planned, actual } = useBoardMinutes({
-    jobs,
-    entries,
-    days,
-    recordIdByUserId,
-    showActualTime,
-    nowTick,
-  });
+type BoardRowCardsInput = Pick<
+  PlantafelModelInput,
+  'preferences' | 'board' | 'jobs' | 'isManager' | 'collapsedTeams'
+> & {
+  columns: BoardColumn[];
+  days: ReadonlyMap<string, CalendarBoardDay>;
+  planned: ReadonlyMap<string, number>;
+  dispatch: ReadonlyMap<string, DispatchRecipientDerivedState>;
+};
 
+/** The search-filtered cards, the filtered team groups, the visible rows and each row's cards. */
+function useBoardRowCards(input: BoardRowCardsInput) {
+  const { preferences, board, jobs, isManager, collapsedTeams, columns, days, planned, dispatch } = input;
+  const { people } = useBoardAbsences();
   const visibleJobs = useMemo(
     () => (preferences.showJobs ? jobs.filter((job) => matchesBoardSearch(job, preferences.search)) : []),
     [jobs, preferences.search, preferences.showJobs],
   );
 
-  // „Nur Konflikte" keeps rows with an overbooked day or a challenge; a dispatch filter keeps rows with a matching card.
+  // „Nur Konflikte" keeps rows with an overbooked day, a challenge or a visit missing its person; a dispatch filter keeps rows with a matching card.
   const groups = useMemo<BoardTeamGroup[]>(
     () =>
       filterBoardGroups({
@@ -166,8 +152,63 @@ export function usePlantafelModel(input: PlantafelModelInput) {
       }),
     [dispatch, people, preferences.dispatchStates, rowModels, visibleJobs],
   );
+  return { visibleJobs, groups, rowModels, jobsByRow };
+}
 
-  return { columns, days, dispatch, materialDemandJobIds, planned, actual, groups, rowModels, jobsByRow };
+/**
+ * The Plantafel's derived data (P1-24a): columns, the day and dispatch
+ * indexes, planned and actual minutes, the filtered team groups, the visible
+ * rows and each row's cards. Every value is memoized on its own inputs, so a
+ * row only re-renders when something it shows changes.
+ */
+export function usePlantafelModel(input: PlantafelModelInput) {
+  const { anchorIso, todayIso, preferences, showActualTime, board, jobs, entries, nowTick, isManager } =
+    input;
+  const { collapsedTeams } = input;
+  const columns = useMemo(
+    () =>
+      boardColumns({
+        anchorIso,
+        horizonWeeks: preferences.horizonWeeks,
+        hideWeekends: preferences.hideWeekends,
+        todayIso,
+      }),
+    [anchorIso, preferences.hideWeekends, preferences.horizonWeeks, todayIso],
+  );
+  const { days, dispatch, materialDemandJobIds, recordIdByUserId } = useBoardIndexes(board);
+  const { planned, actual, workDays } = useBoardMinutes({
+    jobs,
+    entries,
+    days,
+    recordIdByUserId,
+    showActualTime,
+    nowTick,
+  });
+
+  const { groups, rowModels, jobsByRow } = useBoardRowCards({
+    preferences,
+    board,
+    jobs,
+    isManager,
+    collapsedTeams,
+    columns,
+    days,
+    planned,
+    dispatch,
+  });
+
+  return {
+    columns,
+    days,
+    dispatch,
+    materialDemandJobIds,
+    planned,
+    workDays,
+    actual,
+    groups,
+    rowModels,
+    jobsByRow,
+  };
 }
 
 export type PlantafelModel = ReturnType<typeof usePlantafelModel>;

@@ -361,6 +361,7 @@ const leaver: CalendarBoardRow = {
 const leaverJobs = [
   visit('Wartung Erik allein', 'o-solo', '2026-09-10', '09:00', ['r-erik'], ['worker-erik']),
   visit('Heizung zu zweit', 'o-shared', '2026-09-11', '10:00', ['r-erik', 'r2'], ['worker-erik', 'worker-2']),
+  visit('Montage Erik ganztägig', 'o-all-day', '2026-09-12', null, ['r-erik'], ['worker-erik']),
 ];
 type ExitScenario = 'none' | 'exit-week' | 'after-exit';
 
@@ -412,6 +413,7 @@ function WithBoardAbsences({
 export function CalendarBoardContractFixture(): React.JSX.Element {
   const [scenario, setScenario] = useState<ExitScenario>('none');
   const [compact, setCompact] = useState(false);
+  const [search, setSearch] = useState('');
   const [populated, setPopulated] = useState(false);
   const [absent, setAbsent] = useState(false);
   const [phone, setPhone] = useState(false);
@@ -447,6 +449,9 @@ export function CalendarBoardContractFixture(): React.JSX.Element {
       <button type="button" onClick={() => setPhone(!phone)}>
         Telefonansicht
       </button>
+      <button type="button" onClick={() => setSearch('Prüfauftrag')}>
+        Nach Prüfauftrag suchen
+      </button>
       <button type="button" onClick={() => setScenario('exit-week')}>
         Austrittswoche
       </button>
@@ -464,7 +469,11 @@ export function CalendarBoardContractFixture(): React.JSX.Element {
             <Plantafel
               anchorIso="2026-09-08"
               todayIso="2026-09-08"
-              preferences={{ ...DEFAULT_CALENDAR_PREFERENCES, density: compact ? 'compact' : 'comfortable' }}
+              preferences={{
+                ...DEFAULT_CALENDAR_PREFERENCES,
+                density: compact ? 'compact' : 'comfortable',
+                search,
+              }}
               showActualTime={populated}
               board={board}
               jobs={

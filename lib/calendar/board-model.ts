@@ -1,4 +1,5 @@
 import {
+  boardDayKey,
   isNoteEntry,
   type CalendarBoardRow,
   type CalendarBoardRowlessAssignee,
@@ -166,21 +167,30 @@ export function occurrenceSpan(job: CalendarJob): BoardSpanItem | null {
 }
 
 /**
- * The Berlin dates a row's visits cover. A note and a skipped or cancelled
- * visit carry no work; an all-day visit counts on every day it spans, even
- * where its planned minutes are zero.
+ * The person-days (`boardDayKey`) that scheduled work covers, from every
+ * visit of the window, so a filter that hides a card never hides the work. A
+ * note and a skipped or cancelled visit carry none; an all-day visit counts on
+ * every day it spans, even where its planned minutes are zero. A legacy job
+ * names its people by user id, which `recordIdByUserId` resolves.
  */
-export function plannedWorkDates(jobs: readonly CalendarJob[]): Set<string> {
-  const dates = new Set<string>();
+export function plannedWorkDays(
+  jobs: readonly CalendarJob[],
+  recordIdByUserId: ReadonlyMap<string, string>,
+): Set<string> {
+  const keys = new Set<string>();
   for (const job of jobs) {
     if (job.occurrenceStatus === 'skipped' || job.occurrenceStatus === 'cancelled' || isNoteEntry(job))
       continue;
     const span = occurrenceSpan(job);
     if (!span) continue;
-    for (let date = span.startDate; date < span.endDateExclusive; date = addLocalDays(date, 1))
-      dates.add(date);
+    const records =
+      job.assignedEmployeeRecordIds ??
+      job.assignedUserIds.flatMap((userId) => recordIdByUserId.get(userId) ?? []);
+    for (let date = span.startDate; date < span.endDateExclusive; date = addLocalDays(date, 1)) {
+      for (const record of records) keys.add(boardDayKey(record, date));
+    }
   }
-  return dates;
+  return keys;
 }
 
 export type BoardAbsenceItem = BoardSpanItem & {

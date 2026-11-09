@@ -16,12 +16,7 @@ import {
   type BoardLaneItem,
   type BoardSpanItem,
 } from '@/lib/calendar/board-layout';
-import {
-  absenceItems,
-  occurrenceSpan,
-  plannedWorkDates,
-  type BoardRowModel,
-} from '@/lib/calendar/board-model';
+import { absenceItems, occurrenceSpan, type BoardRowModel } from '@/lib/calendar/board-model';
 import { BOARD_ROW_CONTENT_CHECKS } from '@/lib/calendar/board-row-memo';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { SicknessCalendarEntry } from '@/lib/sickness/actions';
@@ -57,6 +52,8 @@ export type BoardRowProps = {
   sickness: readonly SicknessCalendarEntry[];
   days: ReadonlyMap<string, CalendarBoardDay>;
   planned: ReadonlyMap<string, number>;
+  /** The person-days scheduled work covers, from every visit, filtered or not. */
+  workDays: ReadonlySet<string>;
   actual: ReadonlyMap<string, { minutes: number; pending: boolean }> | null;
   dispatch: ReadonlyMap<string, DispatchRecipientDerivedState>;
   materialDemandJobIds: ReadonlySet<string>;
@@ -133,11 +130,10 @@ function boardRowHeader(
 
 /** One day column of the row, with the day's capacity, planned and actual minutes. */
 function boardRowCell(
-  { rowIndex, days, planned, actual, compact, actions }: BoardRowProps,
+  { rowIndex, days, planned, workDays, actual, compact, actions }: BoardRowProps,
   row: CalendarBoardRow | null,
   column: BoardColumn,
   columnIndex: number,
-  workDates: ReadonlySet<string>,
 ): React.JSX.Element {
   const key = row ? boardDayKey(row.employeeRecordId, column.date) : '';
   return (
@@ -152,7 +148,7 @@ function boardRowCell(
       actual={row?.userId && actual ? actual.get(`${row.userId}:${column.date}`) : undefined}
       compact={compact}
       actions={actions}
-      hasPlannedWork={workDates.has(column.date)}
+      hasPlannedWork={row ? workDays.has(key) : false}
       unavailability={row ? unavailabilityOn(row, column.date) : null}
     />
   );
@@ -215,7 +211,6 @@ export const BoardRow = memo(function BoardRow(props: BoardRowProps) {
     [columns, jobs, row, sickness, vacation],
   );
 
-  const workDates = useMemo(() => plannedWorkDates(jobs), [jobs]);
   const rowLabel = row ? row.displayName : 'Ohne Zuweisung';
   return (
     <div
@@ -229,7 +224,7 @@ export const BoardRow = memo(function BoardRow(props: BoardRowProps) {
       }}
     >
       {boardRowHeader(row, compact, isolate)}
-      {columns.map((column, columnIndex) => boardRowCell(props, row, column, columnIndex, workDates))}
+      {columns.map((column, columnIndex) => boardRowCell(props, row, column, columnIndex))}
       {lanes.map((lane) => boardRowLane(props, row, lane))}
     </div>
   );

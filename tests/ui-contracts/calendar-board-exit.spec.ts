@@ -53,3 +53,13 @@ test('in the exit week a visit on a hatched day stays in the leaver’s row, war
   );
   await expect(boardCell(page, 'r-erik', '2026-09-09')).not.toHaveAttribute('data-capacity', 'overbooked');
 });
+
+test('a search that hides the leaver’s all-day visit leaves its hatched day overbooked', async ({ page }) => {
+  await page.getByRole('button', { name: 'Austrittswoche', exact: true }).click();
+  const saturday = boardCell(page, 'r-erik', '2026-09-12');
+  await expect(saturday).toHaveAttribute('data-capacity', 'overbooked');
+  await page.getByRole('button', { name: 'Nach Prüfauftrag suchen', exact: true }).click();
+  await expect(boardRowCard(page, 'r-erik', 'Montage Erik ganztägig')).toHaveCount(0);
+  await expect(saturday).toHaveAttribute('data-capacity', 'overbooked');
+  await expect(saturday).toHaveAccessibleName(/Nicht beschäftigt, trotzdem eingeplant$/);
+});

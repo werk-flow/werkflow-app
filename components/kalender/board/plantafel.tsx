@@ -103,6 +103,7 @@ function sharedRowProps(
     sickness,
     days: model.days,
     planned: model.planned,
+    workDays: model.workDays,
     actual: model.actual,
     dispatch: model.dispatch,
     materialDemandJobIds: model.materialDemandJobIds,
