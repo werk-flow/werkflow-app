@@ -41,6 +41,7 @@ function answer(status: number, project: Record<string, unknown>) {
   writeFileSync(join(stub, 'project.json'), JSON.stringify(project));
 }
 
+/** Runs the weekly check against the stubbed API and fails the test if the token ever prints. */
 function check(extraEnv: Record<string, string> = {}) {
   const result = spawnSync('bash', [script, 'https://api.vercel.com/v9/projects/prj_test'], {
     encoding: 'utf8',
@@ -63,7 +64,7 @@ describe('the committed command', () => {
     expect(committed).toHaveLength(1);
   });
 
-  // Vercel's convention: exit 1 builds, exit 0 skips.
+  /** Runs the committed command with Vercel's variables; Vercel's convention: exit 1 builds, exit 0 skips. */
   function decides(env: Record<string, string>) {
     return spawnSync('sh', ['-c', committed[0] ?? 'exit 2'], {
       encoding: 'utf8',

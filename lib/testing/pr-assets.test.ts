@@ -61,6 +61,7 @@ describe('the PR asset branch check', () => {
     );
   }
 
+  /** Runs the weekly branch check against the stubbed `gh` and returns its exit status and output. */
   function check(extraEnv: Record<string, string> = {}) {
     const result = spawnSync('bash', [script], {
       encoding: 'utf8',
