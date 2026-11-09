@@ -95,17 +95,17 @@ declare
   v_events_before jsonb;
 begin
   if to_regprocedure(
-    'public.transition_time_activity(uuid,uuid,uuid,text,time_operation_kind,uuid,bigint,time_segment_kind,time_allocation_kind,uuid,planning_internal_type,time_travel_route,time_travel_role,time_standby_context,boolean)'
+    'public.transition_time_activity(uuid,uuid,uuid,text,time_operation_kind,uuid,bigint,time_segment_kind,time_allocation_kind,uuid,planning_internal_type,time_travel_route,time_travel_role,time_standby_context,boolean,timestamptz,timestamptz)'
   ) is null or to_regprocedure(
-    'app_private.transition_time_activity(uuid,uuid,uuid,text,time_operation_kind,uuid,bigint,time_segment_kind,time_allocation_kind,uuid,planning_internal_type,time_travel_route,time_travel_role,time_standby_context,boolean)'
+    'app_private.transition_time_activity(uuid,uuid,uuid,text,time_operation_kind,uuid,bigint,time_segment_kind,time_allocation_kind,uuid,planning_internal_type,time_travel_route,time_travel_role,time_standby_context,boolean,timestamptz,timestamptz)'
   ) is null then raise exception 'serialized transition wrapper is incomplete'; end if;
   if pg_get_functiondef(to_regprocedure(
-    'public.transition_time_activity(uuid,uuid,uuid,text,time_operation_kind,uuid,bigint,time_segment_kind,time_allocation_kind,uuid,planning_internal_type,time_travel_route,time_travel_role,time_standby_context,boolean)'
+    'public.transition_time_activity(uuid,uuid,uuid,text,time_operation_kind,uuid,bigint,time_segment_kind,time_allocation_kind,uuid,planning_internal_type,time_travel_route,time_travel_role,time_standby_context,boolean,timestamptz,timestamptz)'
   )) not like '%pg_advisory_xact_lock%'
   then raise exception 'serialized transition lock is missing'; end if;
   if has_function_privilege(
     'service_role',
-    'app_private.transition_time_activity(uuid,uuid,uuid,text,time_operation_kind,uuid,bigint,time_segment_kind,time_allocation_kind,uuid,planning_internal_type,time_travel_route,time_travel_role,time_standby_context,boolean)',
+    'app_private.transition_time_activity(uuid,uuid,uuid,text,time_operation_kind,uuid,bigint,time_segment_kind,time_allocation_kind,uuid,planning_internal_type,time_travel_route,time_travel_role,time_standby_context,boolean,timestamptz,timestamptz)',
     'EXECUTE'
   ) then raise exception 'private transition implementation is executable'; end if;
 
@@ -660,6 +660,471 @@ begin
       and event_type = 'automatic_time_start'
       and created_by = '21000000-0000-0000-0000-000000000001'
   ) then raise exception 'job-linked call-out did not start attributed job execution'; end if;
+end;
+$$;
+
+-- werk-flow/werkflow-planning#317: a transition captured on a phone without
+-- signal is recorded once, at its captured time, and only inside the offline
+-- window (decision record 0010). An online call keeps the server clock.
+reset role;
+insert into auth.users (
+  id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
+  raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+) values
+('21000000-0000-0000-0000-000000000701', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'offline-admin@example.test', '', now(), '{}',
+ '{"first_name":"Offline","last_name":"Admin"}', now(), now()),
+('21000000-0000-0000-0000-000000000702', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'offline-field@example.test', '', now(), '{}',
+ '{"first_name":"Offline","last_name":"Field"}', now(), now()),
+('21000000-0000-0000-0000-000000000703', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'offline-leaver@example.test', '', now(), '{}',
+ '{"first_name":"Offline","last_name":"Leaver"}', now(), now()),
+('21000000-0000-0000-0000-000000000704', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'offline-twin@example.test', '', now(), '{}',
+ '{"first_name":"Offline","last_name":"Twin"}', now(), now());
+insert into public.organizations (id, name, admin_id, unique_code) values
+('21000000-0000-0000-0000-000000000710', 'Offline capture SQL',
+  '21000000-0000-0000-0000-000000000701', 'OFFLNSQL'),
+('21000000-0000-0000-0000-000000000711', 'Offline foreign SQL',
+  '21000000-0000-0000-0000-000000000701', 'OFFLNFRN');
+insert into public.organization_members (organization_id, user_id, role) values
+('21000000-0000-0000-0000-000000000710', '21000000-0000-0000-0000-000000000702', 'employee'),
+('21000000-0000-0000-0000-000000000710', '21000000-0000-0000-0000-000000000703', 'employee'),
+('21000000-0000-0000-0000-000000000710', '21000000-0000-0000-0000-000000000704', 'employee'),
+('21000000-0000-0000-0000-000000000711', '21000000-0000-0000-0000-000000000704', 'employee');
+insert into public.jobs (id, organization_id, title, job_number, created_by)
+values (
+  '21000000-0000-0000-0000-000000000712', '21000000-0000-0000-0000-000000000710',
+  'Offline unassigned job', 'OFFLINE-JOB', '21000000-0000-0000-0000-000000000701'
+), (
+  '21000000-0000-0000-0000-000000000713', '21000000-0000-0000-0000-000000000710',
+  'Offline blocked job', 'OFFLINE-BLOCKED', '21000000-0000-0000-0000-000000000701'
+);
+-- The office blocked an assigned job while the phone was offline.
+insert into public.job_assignments (organization_id, job_id, user_id, assigned_by) values (
+  '21000000-0000-0000-0000-000000000710', '21000000-0000-0000-0000-000000000713',
+  '21000000-0000-0000-0000-000000000702', '21000000-0000-0000-0000-000000000701'
+);
+insert into public.work_blockers (organization_id, job_id, is_legacy) values (
+  '21000000-0000-0000-0000-000000000710', '21000000-0000-0000-0000-000000000713', true
+);
+set local role service_role;
+
+do $$
+declare
+  v_org constant uuid := '21000000-0000-0000-0000-000000000710';
+  v_field constant uuid := '21000000-0000-0000-0000-000000000702';
+  v_start_at constant timestamptz := clock_timestamp() - interval '3 hours';
+  v_switch_at constant timestamptz := clock_timestamp() - interval '2 hours';
+  v_end_at constant timestamptz := clock_timestamp() - interval '1 hour';
+  v_sent_at constant timestamptz := clock_timestamp();
+  v_result jsonb;
+  v_session_id uuid;
+  v_version bigint;
+  v_online_started timestamptz;
+  v_refusal text;
+begin
+  if to_regprocedure(
+    'public.transition_time_activity(uuid,uuid,uuid,text,time_operation_kind,uuid,bigint,time_segment_kind,time_allocation_kind,uuid,planning_internal_type,time_travel_route,time_travel_role,time_standby_context,boolean)'
+  ) is not null then raise exception 'the transition without a captured time still has a second overload'; end if;
+
+  v_result := public.transition_time_activity(
+    p_organization_id => v_org, p_actor_id => v_field,
+    p_operation_id => '21000000-0000-0000-0000-000000000720',
+    p_request_hash => repeat('1', 64), p_action => 'start',
+    p_segment_kind => 'work', p_allocation_kind => 'unallocated',
+    p_captured_at => v_start_at, p_sent_at => v_sent_at
+  );
+  v_session_id := (v_result->>'sessionId')::uuid;
+  v_version := (v_result->>'version')::bigint;
+  v_result := public.transition_time_activity(
+    p_organization_id => v_org, p_actor_id => v_field,
+    p_operation_id => '21000000-0000-0000-0000-000000000721',
+    p_request_hash => repeat('2', 64), p_action => 'switch',
+    p_expected_session_id => v_session_id, p_expected_version => v_version,
+    p_segment_kind => 'break', p_allocation_kind => 'none',
+    p_captured_at => v_switch_at, p_sent_at => v_sent_at
+  );
+  v_version := (v_result->>'version')::bigint;
+  v_result := public.transition_time_activity(
+    p_organization_id => v_org, p_actor_id => v_field,
+    p_operation_id => '21000000-0000-0000-0000-000000000722',
+    p_request_hash => repeat('3', 64), p_action => 'end',
+    p_expected_session_id => v_session_id, p_expected_version => v_version,
+    p_captured_at => v_end_at, p_sent_at => v_sent_at
+  );
+  if v_result->>'outcome' <> 'ended'
+    or (select started_at from public.time_sessions where id = v_session_id) <> v_start_at
+    or (select ended_at from public.time_sessions where id = v_session_id) <> v_end_at
+    or (select ended_at from public.time_segments where session_id = v_session_id and kind = 'work') <> v_switch_at
+    or (select started_at from public.time_segments where session_id = v_session_id and kind = 'break') <> v_switch_at
+    or exists (
+      select 1 from public.time_segment_events event
+      where event.session_id = v_session_id
+        and event.occurred_at not in (v_start_at, v_switch_at, v_end_at)
+    )
+  then raise exception 'an offline-captured transition was not recorded at its captured time'; end if;
+  if (
+    select count(*) from public.time_operations operation
+    where operation.id in (
+      '21000000-0000-0000-0000-000000000720', '21000000-0000-0000-0000-000000000721',
+      '21000000-0000-0000-0000-000000000722'
+    ) and operation.sent_at = v_sent_at and operation.created_at >= operation.captured_at
+  ) <> 3 or (
+    select captured_at from public.time_operations where id = '21000000-0000-0000-0000-000000000720'
+  ) <> v_start_at
+  then raise exception 'an offline-captured operation did not store its captured, sent and receipt times'; end if;
+
+  -- A resend of a recorded operation answers its first result and writes nothing.
+  v_result := public.transition_time_activity(
+    p_organization_id => v_org, p_actor_id => v_field,
+    p_operation_id => '21000000-0000-0000-0000-000000000722',
+    p_request_hash => repeat('3', 64), p_action => 'end',
+    p_expected_session_id => v_session_id, p_expected_version => v_version,
+    p_captured_at => v_end_at, p_sent_at => clock_timestamp()
+  );
+  if (v_result->>'replayed')::boolean is not true
+    or (select count(*) from public.time_operations where id = '21000000-0000-0000-0000-000000000722') <> 1
+    or (select count(*) from public.time_segment_events where operation_id = '21000000-0000-0000-0000-000000000722') <> 2
+    or (select count(*) from public.time_sessions where employee_record_id = (
+      select id from public.employee_records where organization_id = v_org and user_id = v_field
+    )) <> 1
+  then raise exception 'an offline replay wrote a second row'; end if;
+
+  -- Each refusal writes nothing: the operation id stays free.
+  foreach v_refusal in array array[
+    'time_transition_captured_in_future',
+    'time_transition_correction_required',
+    'time_transition_outside_recording_window',
+    'time_transition_captured_out_of_order',
+    'time_transition_job_not_assigned',
+    'time_transition_action_invalid',
+    'time_transition_invalid_input'
+  ] loop
+    begin
+      perform public.transition_time_activity(
+        p_organization_id => v_org, p_actor_id => v_field,
+        p_operation_id => '21000000-0000-0000-0000-000000000723',
+        p_request_hash => repeat('4', 64),
+        p_action => case v_refusal
+          when 'time_transition_action_invalid' then 'recover_end'
+          else 'start' end::public.time_operation_kind,
+        p_segment_kind => 'work',
+        p_allocation_kind => case v_refusal
+          when 'time_transition_job_not_assigned' then 'job'
+          else 'unallocated' end::public.time_allocation_kind,
+        p_job_id => case v_refusal
+          when 'time_transition_job_not_assigned' then '21000000-0000-0000-0000-000000000712'::uuid
+          end,
+        p_captured_at => case v_refusal
+          when 'time_transition_captured_in_future' then clock_timestamp() + interval '10 minutes'
+          when 'time_transition_correction_required' then clock_timestamp() - interval '25 hours'
+          when 'time_transition_outside_recording_window' then clock_timestamp() - interval '8 days'
+          when 'time_transition_captured_out_of_order' then v_end_at - interval '1 minute'
+          else clock_timestamp() - interval '1 minute' end,
+        p_sent_at => case v_refusal
+          when 'time_transition_invalid_input' then null else clock_timestamp() end
+      );
+      raise exception 'offline refusal % was accepted', v_refusal;
+    exception when others then
+      if sqlerrm <> v_refusal then raise; end if;
+    end;
+  end loop;
+  if exists (select 1 from public.time_operations where id = '21000000-0000-0000-0000-000000000723')
+  then raise exception 'a refused offline transition recorded an operation'; end if;
+
+  -- A replay is a fresh request: a person outside the organization and a
+  -- removed member are refused like any other caller.
+  begin
+    perform public.transition_time_activity(
+      p_organization_id => '21000000-0000-0000-0000-000000000711', p_actor_id => v_field,
+      p_operation_id => '21000000-0000-0000-0000-000000000724',
+      p_request_hash => repeat('5', 64), p_action => 'start',
+      p_segment_kind => 'work', p_allocation_kind => 'unallocated',
+      p_captured_at => clock_timestamp() - interval '1 minute', p_sent_at => clock_timestamp()
+    );
+    raise exception 'an offline transition into a foreign organization was accepted';
+  exception when others then
+    if sqlerrm <> 'time_transition_not_authorized' then raise; end if;
+  end;
+  delete from public.organization_members
+  where organization_id = v_org and user_id = '21000000-0000-0000-0000-000000000703';
+  begin
+    perform public.transition_time_activity(
+      p_organization_id => v_org, p_actor_id => '21000000-0000-0000-0000-000000000703',
+      p_operation_id => '21000000-0000-0000-0000-000000000725',
+      p_request_hash => repeat('6', 64), p_action => 'start',
+      p_segment_kind => 'work', p_allocation_kind => 'unallocated',
+      p_captured_at => clock_timestamp() - interval '1 minute', p_sent_at => clock_timestamp()
+    );
+    raise exception 'an offline transition of a removed member was accepted';
+  exception when others then
+    if sqlerrm <> 'time_transition_not_authorized' then raise; end if;
+  end;
+
+  -- An online call keeps the server clock and stores no captured time.
+  v_result := public.transition_time_activity(
+    p_organization_id => v_org, p_actor_id => v_field,
+    p_operation_id => '21000000-0000-0000-0000-000000000726',
+    p_request_hash => repeat('7', 64), p_action => 'start',
+    p_segment_kind => 'work', p_allocation_kind => 'unallocated'
+  );
+  select started_at into v_online_started from public.time_sessions
+  where id = (v_result->>'sessionId')::uuid;
+  if v_online_started < now() or v_online_started > clock_timestamp()
+    or (select captured_at from public.time_operations where id = '21000000-0000-0000-0000-000000000726') is not null
+    or (select sent_at from public.time_operations where id = '21000000-0000-0000-0000-000000000726') is not null
+  then raise exception 'an online transition did not keep the server clock'; end if;
+  perform public.transition_time_activity(
+    p_organization_id => v_org, p_actor_id => v_field,
+    p_operation_id => '21000000-0000-0000-0000-000000000727',
+    p_request_hash => repeat('8', 64), p_action => 'end',
+    p_expected_session_id => (v_result->>'sessionId')::uuid,
+    p_expected_version => (v_result->>'version')::bigint
+  );
+end;
+$$;
+
+-- An offline start onto a job the office blocked meanwhile is refused with
+-- the start gate's own error, which field sync answers as a conflict, and
+-- writes nothing.
+do $$
+begin
+  perform public.transition_time_activity(
+    p_organization_id => '21000000-0000-0000-0000-000000000710',
+    p_actor_id => '21000000-0000-0000-0000-000000000702',
+    p_operation_id => '21000000-0000-0000-0000-000000000728',
+    p_request_hash => repeat('1', 64), p_action => 'start',
+    p_segment_kind => 'work', p_allocation_kind => 'job',
+    p_job_id => '21000000-0000-0000-0000-000000000713',
+    p_captured_at => clock_timestamp(), p_sent_at => clock_timestamp()
+  );
+  raise exception 'an offline start onto a blocked job was accepted';
+exception when others then
+  if sqlerrm <> 'work_transition_start_blocked' then raise; end if;
+end;
+$$;
+do $$
+begin
+  if exists (select 1 from public.time_operations where id = '21000000-0000-0000-0000-000000000728')
+    or exists (
+      select 1 from public.time_sessions
+      where user_id = '21000000-0000-0000-0000-000000000702' and ended_at is null
+    )
+  then raise exception 'a refused start onto a blocked job wrote time'; end if;
+end;
+$$;
+
+-- A device clock that runs ahead, inside the 5 minutes tolerance, records the
+-- event at its receipt, never later: an online end right after it still ends
+-- the segment after it started. The operation keeps the device's times.
+do $$
+declare
+  v_org constant uuid := '21000000-0000-0000-0000-000000000710';
+  v_field constant uuid := '21000000-0000-0000-0000-000000000702';
+  v_captured_at constant timestamptz := clock_timestamp() + interval '3 minutes';
+  v_sent_at constant timestamptz := clock_timestamp() + interval '3 minutes';
+  v_received_after timestamptz := clock_timestamp();
+  v_result jsonb;
+  v_session public.time_sessions%rowtype;
+begin
+  v_result := public.transition_time_activity(
+    p_organization_id => v_org, p_actor_id => v_field,
+    p_operation_id => '21000000-0000-0000-0000-000000000729',
+    p_request_hash => repeat('2', 64), p_action => 'start',
+    p_segment_kind => 'work', p_allocation_kind => 'unallocated',
+    p_captured_at => v_captured_at, p_sent_at => v_sent_at
+  );
+  select * into v_session from public.time_sessions where id = (v_result->>'sessionId')::uuid;
+  if v_session.started_at < v_received_after or v_session.started_at > clock_timestamp()
+    or exists (
+      select 1 from public.time_segment_events
+      where operation_id = '21000000-0000-0000-0000-000000000729'
+        and occurred_at <> v_session.started_at
+    )
+    or (select started_at from public.time_segments where session_id = v_session.id) <> v_session.started_at
+  then raise exception 'an offline event captured ahead of the receipt was not recorded at the receipt'; end if;
+  if (select captured_at from public.time_operations where id = '21000000-0000-0000-0000-000000000729')
+      <> v_captured_at
+    or (select sent_at from public.time_operations where id = '21000000-0000-0000-0000-000000000729')
+      <> v_sent_at
+  then raise exception 'an offline operation captured ahead did not keep the device times'; end if;
+
+  v_result := public.transition_time_activity(
+    p_organization_id => v_org, p_actor_id => v_field,
+    p_operation_id => '21000000-0000-0000-0000-000000000730',
+    p_request_hash => repeat('3', 64), p_action => 'end',
+    p_expected_session_id => v_session.id,
+    p_expected_version => v_session.version
+  );
+  if v_result->>'outcome' <> 'ended'
+    or (select ended_at from public.time_sessions where id = v_session.id) < v_session.started_at
+  then raise exception 'an online end after an offline start captured ahead failed'; end if;
+end;
+$$;
+
+-- The order rule reads the person's latest event in every session of every
+-- organization: two sessions that start at the same instant, the shorter one
+-- sorting first by id, still bound an offline start to the end of the longer
+-- one, and time recorded since in another organization bounds it too.
+reset role;
+do $$
+declare
+  v_org constant uuid := '21000000-0000-0000-0000-000000000710';
+  v_user constant uuid := '21000000-0000-0000-0000-000000000704';
+  v_operation constant uuid := '21000000-0000-0000-0000-000000000740';
+  v_long constant uuid := '21000000-0000-0000-0000-000000000741';
+  v_short constant uuid := '21000000-0000-0000-0000-000000000749';
+  v_base constant timestamptz := date_trunc('minute', clock_timestamp() - interval '5 hours');
+  v_other_org constant uuid := '21000000-0000-0000-0000-000000000711';
+  v_other_session constant uuid := '21000000-0000-0000-0000-000000000743';
+  v_employee uuid;
+  v_other_employee uuid;
+  v_previous_capture_write text := coalesce(current_setting('app.time_capture_write', true), '');
+begin
+  select id into v_employee from public.employee_records
+  where organization_id = v_org and user_id = v_user;
+  select id into v_other_employee from public.employee_records
+  where organization_id = v_other_org and user_id = v_user;
+  perform set_config('app.time_capture_write', 'true', true);
+  insert into public.time_operations (
+    id, organization_id, employee_record_id, actor_id, operation_kind, request_hash, result_payload
+  ) values (v_operation, v_org, v_employee, v_user, 'end', repeat('c', 64), '{}');
+  insert into public.time_sessions (
+    id, organization_id, employee_record_id, user_id, status, started_at, ended_at, created_by, ended_by
+  ) values
+    (v_long, v_org, v_employee, v_user, 'closed', v_base, v_base + interval '1 hour', v_user, v_user),
+    (v_short, v_org, v_employee, v_user, 'closed', v_base, v_base, v_user, v_user);
+  insert into public.time_segment_events (
+    organization_id, session_id, operation_id, event_type, source, actor_id, occurred_at
+  ) values
+    (v_org, v_long, v_operation, 'session_started', 'employee', v_user, v_base),
+    (v_org, v_long, v_operation, 'session_ended', 'employee', v_user, v_base + interval '1 hour'),
+    (v_org, v_short, v_operation, 'session_started', 'employee', v_user, v_base),
+    (v_org, v_short, v_operation, 'session_ended', 'employee', v_user, v_base);
+  -- Later the same day the person worked two hours in the other organization.
+  insert into public.time_operations (
+    id, organization_id, employee_record_id, actor_id, operation_kind, request_hash, result_payload
+  ) values (
+    '21000000-0000-0000-0000-000000000744', v_other_org, v_other_employee, v_user, 'end',
+    repeat('e', 64), '{}'
+  );
+  insert into public.time_sessions (
+    id, organization_id, employee_record_id, user_id, status, started_at, ended_at, created_by, ended_by
+  ) values (
+    v_other_session, v_other_org, v_other_employee, v_user, 'closed',
+    v_base + interval '2 hours', v_base + interval '4 hours', v_user, v_user
+  );
+  insert into public.time_segment_events (
+    organization_id, session_id, operation_id, event_type, source, actor_id, occurred_at
+  ) values
+    (v_other_org, v_other_session, '21000000-0000-0000-0000-000000000744', 'session_started',
+      'employee', v_user, v_base + interval '2 hours'),
+    (v_other_org, v_other_session, '21000000-0000-0000-0000-000000000744', 'session_ended',
+      'employee', v_user, v_base + interval '4 hours');
+  perform set_config('app.time_capture_write', v_previous_capture_write, true);
+end;
+$$;
+set local role service_role;
+do $$
+begin
+  perform public.transition_time_activity(
+    p_organization_id => '21000000-0000-0000-0000-000000000710',
+    p_actor_id => '21000000-0000-0000-0000-000000000704',
+    p_operation_id => '21000000-0000-0000-0000-000000000742',
+    p_request_hash => repeat('d', 64), p_action => 'start',
+    p_segment_kind => 'work', p_allocation_kind => 'unallocated',
+    p_captured_at => (
+      select started_at + interval '30 minutes' from public.time_sessions
+      where id = '21000000-0000-0000-0000-000000000741'
+    ),
+    p_sent_at => clock_timestamp()
+  );
+  raise exception 'an offline start inside an equally started longer session was accepted';
+exception when others then
+  if sqlerrm <> 'time_transition_captured_out_of_order' then raise; end if;
+end;
+$$;
+do $$
+begin
+  perform public.transition_time_activity(
+    p_organization_id => '21000000-0000-0000-0000-000000000710',
+    p_actor_id => '21000000-0000-0000-0000-000000000704',
+    p_operation_id => '21000000-0000-0000-0000-000000000745',
+    p_request_hash => repeat('f', 64), p_action => 'start',
+    p_segment_kind => 'work', p_allocation_kind => 'unallocated',
+    p_captured_at => (
+      select started_at + interval '1 hour' from public.time_sessions
+      where id = '21000000-0000-0000-0000-000000000743'
+    ),
+    p_sent_at => clock_timestamp()
+  );
+  raise exception 'an offline start inside time recorded in another organization was accepted';
+exception when others then
+  if sqlerrm <> 'time_transition_captured_out_of_order' then raise; end if;
+end;
+$$;
+do $$
+begin
+  if exists (
+    select 1 from public.time_operations
+    where id in ('21000000-0000-0000-0000-000000000742', '21000000-0000-0000-0000-000000000745')
+  ) or exists (
+    select 1 from public.time_sessions session
+    join public.employee_records employee on employee.id = session.employee_record_id
+    where employee.user_id = '21000000-0000-0000-0000-000000000704'
+      and session.id not in (
+        '21000000-0000-0000-0000-000000000741', '21000000-0000-0000-0000-000000000749',
+        '21000000-0000-0000-0000-000000000743'
+      )
+  ) then raise exception 'a refused out-of-order start wrote time'; end if;
+end;
+$$;
+
+-- An offline transition captured on a day of a closed period is refused with
+-- the closed-period error, before any window rule. Only an ended month
+-- closes, so the captured time lies in last month.
+do $$
+declare
+  v_org constant uuid := '21000000-0000-0000-0000-000000000710';
+  v_admin constant uuid := '21000000-0000-0000-0000-000000000701';
+  v_month_start constant date :=
+    (date_trunc('month', (now() at time zone 'Europe/Berlin')) - interval '1 month')::date;
+  v_month_end constant date := (v_month_start + interval '1 month - 1 day')::date;
+  v_captured_at constant timestamptz := (v_month_end + time '12:00') at time zone 'Europe/Berlin';
+  v_calculation uuid;
+begin
+  v_calculation := public.prepare_time_period(
+    v_admin, v_org, v_month_start, v_month_end,
+    app_private.compute_p1_23_source_fingerprint(v_org, v_month_start, v_month_end),
+    (
+      select coalesce(jsonb_agg(jsonb_build_object(
+        'id', gen_random_uuid(), 'employee_record_id', employee.id,
+        'policy_version_id', null, 'previous_balance_minutes', 0, 'target_minutes', 0,
+        'source_seconds', 0, 'source_minutes', 0, 'credited_minutes', 0, 'vacation_minutes', 0,
+        'sickness_minutes', 0, 'account_event_minutes', 0, 'period_delta_minutes', 0,
+        'overtime_candidate_minutes', 0, 'closing_balance_minutes', 0, 'authoritative_targets', false)), '[]')
+      from public.employee_records employee
+      where employee.organization_id = v_org
+        and coalesce(employee.entry_date, v_month_start) <= v_month_end
+        and coalesce(employee.exit_date, v_month_end) >= v_month_start
+    ), '[]', '[]', '[]', '21000000-0000-0000-0000-000000000730', repeat('9', 64));
+  perform public.close_time_period(
+    v_admin, v_org, (select period_id from public.time_period_calculations where id = v_calculation),
+    '21000000-0000-0000-0000-000000000731', repeat('a', 64));
+  begin
+    perform public.transition_time_activity(
+      p_organization_id => v_org, p_actor_id => '21000000-0000-0000-0000-000000000702',
+      p_operation_id => '21000000-0000-0000-0000-000000000732',
+      p_request_hash => repeat('b', 64), p_action => 'start',
+      p_segment_kind => 'work', p_allocation_kind => 'unallocated',
+      p_captured_at => v_captured_at, p_sent_at => clock_timestamp()
+    );
+    raise exception 'an offline transition into a closed period was accepted';
+  exception when sqlstate 'WFP01' then
+    null;
+  end;
 end;
 $$;
 
