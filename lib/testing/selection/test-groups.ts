@@ -293,6 +293,8 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   // Rendered acceptance captures of the open sets (tests/audit/support/acceptance-sets.ts).
   ['visual:acceptance', 'visual/acceptance.spec.ts', ['*']],
   ['security:account', 'security/account.spec.ts', ['*']],
+  // The report screenshot redraw on a seeded customer and job (docs/technical/problem-report-scrubbing.md).
+  ['problem-reports:redraw', 'problem-reports/screenshot-redraw.spec.ts', ['customers', 'work']],
   ['list-pagination', 'pagination/list-pagination.spec.ts', ['inventory', 'documents', 'work']],
   // Measured navigation and view switches against the typical data profile (Step 2).
   [
@@ -376,6 +378,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['rate-limits', ['rate_limits.sql'], ['*']],
   ['organization-deletion', ['organization_deletion.sql'], ['*']],
   ['storage-purge', ['storage_purge.sql'], ['documents']],
+  ['problem-reports', ['problem_reports.sql'], ['*']],
   ['organization-export', ['organization_export.sql'], ['*']],
   ['record-numbers', ['record_numbers.sql'], ['work', 'customers', 'personnel', 'service']],
   [
