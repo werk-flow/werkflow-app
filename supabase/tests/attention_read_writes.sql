@@ -296,7 +296,7 @@ select pg_temp.expect_refusal('a mark all whose events are refused', $sql$
     'mark_all')
 $sql$, 'history refused');
 reset role;
-drop trigger "ZZ_test_refuse_attention_event" on public.attention_events;
+alter table public.attention_events disable trigger "ZZ_test_refuse_attention_event";
 
 do $$
 begin

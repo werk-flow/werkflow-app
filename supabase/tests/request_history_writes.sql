@@ -220,7 +220,7 @@ select pg_temp.expect_refusal('reopening whose history row is refused', $sql$
 $sql$, 'history refused');
 reset role;
 
-drop trigger refuse_request_event on public.client_request_events;
+alter table public.client_request_events disable trigger refuse_request_event;
 
 do $$
 begin

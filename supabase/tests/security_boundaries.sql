@@ -172,6 +172,7 @@ end;
 $$;
 
 -- Probe: a table with only a SELECT policy and an INSERT grant must be reported.
+savepoint policy_probe;
 create table public.werkflow_policy_probe (id bigint primary key);
 alter table public.werkflow_policy_probe enable row level security;
 create policy "probe reads" on public.werkflow_policy_probe for select to authenticated using (true);
@@ -183,7 +184,7 @@ begin
   end if;
 end;
 $$;
-drop table public.werkflow_policy_probe;
+rollback to savepoint policy_probe;
 
 -- The reverse: a permissive write policy for a command that no client role
 -- holds a grant for never applies. It reads like a permission a reviewer must
@@ -218,6 +219,7 @@ end;
 $$;
 
 -- Probe: a write policy on a table without a client write grant must be reported.
+savepoint policy_probe;
 create table public.werkflow_inert_policy_probe (id bigint primary key);
 alter table public.werkflow_inert_policy_probe enable row level security;
 create policy "probe writes" on public.werkflow_inert_policy_probe for insert to authenticated with check (true);
@@ -228,7 +230,7 @@ begin
   end if;
 end;
 $$;
-drop table public.werkflow_inert_policy_probe;
+rollback to savepoint policy_probe;
 
 -- RLS consults effective personnel access, not only the membership, the
 -- assignment or the employee record link: suspension and access end keep all
@@ -289,6 +291,7 @@ end;
 $$;
 
 -- Probe: a policy and a helper that read membership directly must be reported.
+savepoint policy_probe;
 create table public.werkflow_access_probe (id bigint primary key, organization_id uuid);
 alter table public.werkflow_access_probe enable row level security;
 create function app_private.werkflow_access_probe(p_organization_id uuid) returns boolean
@@ -310,8 +313,7 @@ begin
   end if;
 end;
 $$;
-drop table public.werkflow_access_probe;
-drop function app_private.werkflow_access_probe(uuid);
+rollback to savepoint policy_probe;
 
 -- Client roles write no public table directly (migration 20261015100100).
 -- Every client write privilege is in this reviewed inventory with its caller;
