@@ -509,6 +509,7 @@ function problemReportCaptures(): AcceptanceSet {
   return {
     id: 'problem-reports-2026-11-09',
     captures: [
+      { id: 'admin-dashboard', role: 'admin', route: '/dashboard', view: page, ...both },
       ...(['admin', 'buero', 'employee'] as const).map(
         (role): CaptureSpec => ({ id: `${role}-meldungen`, role, route: '/meldungen', view: page, ...both }),
       ),
