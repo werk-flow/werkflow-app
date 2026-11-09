@@ -132,21 +132,26 @@ export function boatClient(key: string, fetchImpl: Fetch = fetch) {
     async stop(id: string, processId: number): Promise<void> {
       await call('DELETE', `/sandboxes/${id}/commands/${processId}`, z.unknown());
     },
-    /** Writes `bytes` to `path` on the machine through a signed URL. */
-    async upload(id: string, path: string, bytes: Uint8Array): Promise<void> {
+    /** Writes `bytes` to `path` on the machine through a fresh signed URL; `signal` ends the write. */
+    async upload(
+      id: string,
+      path: string,
+      bytes: Uint8Array,
+      signal: AbortSignal = AbortSignal.timeout(600_000),
+    ): Promise<void> {
       const { url } = await call('POST', `/sandboxes/${id}/files/upload-url`, fileUrlSchema, { path });
-      const response = await fetchImpl(url, {
-        method: 'PUT',
-        body: new Blob([bytes.slice()]),
-        signal: AbortSignal.timeout(600_000),
-      });
+      const response = await fetchImpl(url, { method: 'PUT', body: new Blob([bytes.slice()]), signal });
       if (!response.ok)
         throw new BoatError(response.status, 'upload_failed', `upload of ${path}: ${response.status}`);
     },
-    /** Reads `path` from the machine through a signed URL. */
-    async download(id: string, path: string): Promise<Uint8Array> {
+    /** Reads `path` from the machine through a fresh signed URL; `signal` ends the read. */
+    async download(
+      id: string,
+      path: string,
+      signal: AbortSignal = AbortSignal.timeout(600_000),
+    ): Promise<Uint8Array> {
       const { url } = await call('POST', `/sandboxes/${id}/files/download-url`, fileUrlSchema, { path });
-      const response = await fetchImpl(url, { signal: AbortSignal.timeout(600_000) });
+      const response = await fetchImpl(url, { signal });
       if (!response.ok)
         throw new BoatError(response.status, 'download_failed', `download of ${path}: ${response.status}`);
       return new Uint8Array(await response.arrayBuffer());

@@ -28,6 +28,7 @@ import { withWorkspaceTestLock } from '../runner/workspace-test-lock';
 import { pruneRunArchive } from '../runs/run-retention';
 import { BoatError, boatClient } from './boat-api';
 import { RENEW_ADVICE, readBoatKey } from './boat-key';
+import { type TransferContext, type TransferPolicy, transfer } from './boat-transfer';
 import {
   createMachine,
   deleteMachine,
@@ -72,6 +73,20 @@ const REPORT_FILES = ['report.json', 'diagnoses.json'];
  */
 const RUN_FILE = /^(?:manifest\.json|latency-summary\.json|[\w.-]+\.ndjson)$/;
 const runTargetSchema = z.object({ target: z.string().optional() });
+/**
+ * The results download, after the run finished on a machine that is still alive: a dropped
+ * connection gets three fresh attempts over about 40 s before the run falls back.
+ */
+const RESULTS_DOWNLOAD: TransferPolicy = { waits: [2_000, 10_000, 30_000], attemptMs: 300_000 };
+
+/**
+ * One upload's deadline and retry. A machine's file host accepts between 0.07 and 12 MB/s, so a
+ * stalled attempt gives way to one fresh request after 30 s plus 1 s per 256 kB, instead of
+ * holding a billed machine for minutes (werk-flow/werkflow-planning#294).
+ */
+function uploadPolicy(bytes: number): TransferPolicy {
+  return { waits: [2_000], attemptMs: 1_000 * Math.ceil(30 + bytes / 256_000) };
+}
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -214,6 +229,14 @@ export function changedSinceHead(repository: string): string[] {
 }
 
 /**
+ * The files the machine's checkout of HEAD lacks: those that differ from HEAD and still exist.
+ * Only they travel; the rest come from the checkout, which costs a slow upload nothing.
+ */
+export function treeFiles(repository: string): string[] {
+  return changedSinceHead(repository).filter((file) => existsSync(resolve(repository, file)));
+}
+
+/**
  * Why the machine's rebuilt checkout differs from the workstation's, naming the first paths each
  * side alone reads as changed; undefined when both read the same paths as changed.
  */
@@ -244,7 +267,7 @@ export function tarPackArguments(version: string, archive: string, list: string)
   return ['-czf', archive, ...metadata, '--null', '-T', list];
 }
 
-/** Packs the local commits, the working tree and the evidence history into `folder`. */
+/** Packs the local commits, the working tree's changes since HEAD and the evidence history into `folder`. */
 function packRun(
   repository: string,
   folder: string,
@@ -273,7 +296,6 @@ function packRun(
     pushed = false;
   }
   if (!pushed) git(repository, ['bundle', 'create', join(folder, 'head.bundle'), 'HEAD', '^origin/main']);
-  const tracked = list(['ls-files', '-z']);
   const exists = (file: string) => existsSync(resolve(repository, file));
   const version = execFileSync('tar', ['--version'], { encoding: 'utf8' });
   const tar = (name: string, files: readonly string[]) => {
@@ -286,7 +308,7 @@ function packRun(
       },
     );
   };
-  tar('tree', [...tracked, ...untracked].filter(exists));
+  tar('tree', treeFiles(repository));
   // Against HEAD's tree, so a staged deletion or rename removes the old path on the machine too.
   const committed = list(['ls-tree', '-r', '-z', '--name-only', 'HEAD']);
   writeFileSync(join(folder, 'deleted.txt'), committed.filter((file) => !exists(file)).join('\n'));
@@ -409,18 +431,28 @@ export async function prepareAndRun(
 /** Uploads the packed run and the script that runs it to the machine's home folder. */
 async function uploadRun(
   machine: Machine,
-  repository: string,
-  folder: string,
-  bundle: boolean,
+  run: { repository: string; folder: string; bundle: boolean },
+  context: TransferContext,
 ): Promise<void> {
+  const { repository, folder, bundle } = run;
   const files: [string, string][] = [
     ...['tree.tgz', 'evidence.tgz', 'deleted.txt', 'changed.json', 'proof-environment', 'backend-values.json']
       .concat(bundle ? ['head.bundle'] : [])
       .map((name): [string, string] => [name, join(folder, name)]),
     ['remote-verify.sh', resolve(repository, 'scripts/boat/remote-verify.sh')],
   ];
-  for (const [name, source] of files)
-    await machine.client.upload(machine.id, `${HOME}/${name}`, readFileSync(source));
+  const started = Date.now();
+  let total = 0;
+  for (const [name, source] of files) {
+    const bytes = readFileSync(source);
+    total += bytes.byteLength;
+    await transfer(`The upload of ${name}`, uploadPolicy(bytes.byteLength), context, (signal) =>
+      machine.client.upload(machine.id, `${HOME}/${name}`, bytes, signal),
+    );
+  }
+  say(
+    `Uploaded the run (${(total / 1e6).toFixed(1)} MB) in ${((Date.now() - started) / 1000).toFixed(1)} s.`,
+  );
 }
 
 /** The longest file name, and the longest path (the platform's PATH_MAX less one), a copy may write. */
@@ -550,10 +582,21 @@ export function unpackResults(archive: string, staging: string, repository: stri
   }
 }
 
-/** Downloads the run's results and unpacks them through a fresh folder outside the checkout. */
-async function importResults(machine: Machine, folder: string, repository: string): Promise<void> {
+/**
+ * Downloads the run's results, retrying a failed download on a fresh request, and unpacks them
+ * through a fresh folder outside the checkout.
+ */
+export async function importResults(
+  machine: Machine,
+  run: { folder: string; repository: string },
+  context: TransferContext,
+): Promise<void> {
+  const { folder, repository } = run;
   const archive = join(folder, 'results.tgz');
-  writeFileSync(archive, await machine.client.download(machine.id, `${HOME}/results.tgz`));
+  const bytes = await transfer('The results download', RESULTS_DOWNLOAD, context, (signal) =>
+    machine.client.download(machine.id, `${HOME}/results.tgz`, signal),
+  );
+  writeFileSync(archive, bytes);
   const staging = mkdtempSync(join(folder, 'results-'));
   try {
     unpackResults(archive, staging, repository);
@@ -628,7 +671,7 @@ export async function runOnBoat(input: {
     let code: number | undefined;
     try {
       signal.throwIfAborted();
-      await uploadRun(machine, repository, folder, packed.bundle);
+      await uploadRun(machine, { repository, folder, bundle: packed.bundle }, { signal, log: say });
       signal.throwIfAborted();
       const form = lstatSync(join(repository, '.git')).isFile() ? 'linked' : 'main';
       const command = ['bash', '~/remote-verify.sh', repository, packed.head, form, ...args].map(
@@ -646,7 +689,7 @@ export async function runOnBoat(input: {
         );
         return undefined;
       }
-      await importResults(machine, folder, repository);
+      await importResults(machine, { folder, repository }, { signal, log: say });
       // The machine pruned only its copy of the archive; the workstation's shrinks as after a local run.
       console.info(pruneRunArchive('prune'));
       code = result.exitCode;
