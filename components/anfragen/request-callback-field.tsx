@@ -49,7 +49,7 @@ export function RequestCallbackField({
           ))}
           {value && (
             <Button type="button" variant="ghost" size="sm" onClick={() => onChange('')} disabled={disabled}>
-              Kein Rückruf
+              Rückruf entfernen
             </Button>
           )}
         </div>
