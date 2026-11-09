@@ -1,4 +1,4 @@
--- Problem reports (20261128090000_store_problem_reports_privately.sql,
+-- Problem reports (20261128090002_store_problem_reports_privately.sql,
 -- werk-flow/werkflow-planning#331). Client roles read and write no report
 -- table and execute none of its functions. The history refuses UPDATE and
 -- DELETE, also for the service role, and leaves only with its report. A
