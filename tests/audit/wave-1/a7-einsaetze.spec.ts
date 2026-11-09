@@ -16,8 +16,6 @@ import {
   createPlannedCalendarEntry,
   editPlannedCalendarOccurrence,
   openOccurrenceEditDialogByDate,
-  planningWarningReason,
-  planningWarningSave,
   saveOccurrenceEditWithOverride,
 } from '../../golden/support/steps/calendar';
 import {
@@ -91,6 +89,8 @@ import {
   testData,
   typeIntoDatePickerById,
   typeIntoTimeInput,
+  planningWarningReason,
+  planningWarningSave,
 } from '../../golden/support/steps/shared';
 import { createJob, parkWork } from '../../golden/support/steps/work';
 import { berlinDateAtOffset, dispatchOverviewBerlinDateAtOffset } from '../../golden/support/date-ownership';

@@ -35,9 +35,7 @@ import {
   plannedCalendarEvent,
   planningField,
   planningTeamSearch,
-  planningWarningReason,
   planningWarningRevert,
-  planningWarningSave,
   showPlanningMonth,
 } from '../../golden/support/steps/calendar';
 import {
@@ -83,6 +81,8 @@ import {
   testData,
   textInDom,
   visibleText,
+  planningWarningReason,
+  planningWarningSave,
 } from '../../golden/support/steps/shared';
 import {
   approvePendingTimeEntry,
@@ -772,6 +772,13 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
         `A5 Änderung im Bearbeitungsdialog begründet ${world.runId}`,
       );
       await assignDespiteWarningButton(editWarning).click();
+      // The person added in the edit dialog joins the job's dated visit: its
+      // capacity check asks on a weekday without a target, as above.
+      await confirmPlanningWarningIfAsked(
+        adminPage,
+        `A5 Bearbeitung ist abgestimmt ${world.runId}`,
+        editWarning,
+      );
       await expect(editWarning).toHaveCount(0);
       expect((await getJobAssignmentUserIds(world.orgId, jobNumber)).sort()).toEqual(
         [world.users.buero.id, world.users.employee.id].sort(),

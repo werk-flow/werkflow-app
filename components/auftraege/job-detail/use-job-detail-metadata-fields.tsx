@@ -15,7 +15,10 @@ import { type JobWithDetails, JOB_PRIORITY_LABELS, normalizeJobPlannedTime } fro
 import { jobFormEditsSchedule } from '@/lib/jobs/visit-schedule';
 import { Constants } from '@/lib/supabase/database.types';
 import { constrainedValue } from '@/lib/validation/constrained-value';
+import type { AssignmentApproval } from '@/lib/qualifications/types';
 import { useQualificationWarningConfirmation } from '../shared/qualification-warning-dialog';
+import { isPlanningWarning } from '../forms/planning-warning-result';
+import { usePlanningApprovalRetry } from '../forms/use-planning-approval-retry';
 import { getJobStatusClass, getJobStatusLabel } from '../status-classes';
 import { PRIORITY_CLASSES, formatDurationOrDash, formatPlannedTime } from './job-detail-format';
 import { formatGermanDate, formatBerlinDateTime } from '@/lib/utils';
@@ -27,9 +30,7 @@ type JobDetailFieldContext = {
   /** False on a job with several visits: its schedule is planned on the Plantafel. */
   scheduleEditable: boolean;
   applyLiveJobPatch: (updatedJob: Partial<JobWithDetails>) => void;
-  updateJobWithQualificationApproval: (
-    input: Parameters<typeof updateJob>[1],
-  ) => ReturnType<typeof updateJob>;
+  updateJobWithApprovals: (input: Parameters<typeof updateJob>[1]) => ReturnType<typeof updateJob>;
 };
 
 function buildJobDetailIdentityFields({
@@ -157,7 +158,7 @@ function buildJobDetailScheduleFields({
   isAdminOrManager,
   scheduleEditable,
   applyLiveJobPatch,
-  updateJobWithQualificationApproval,
+  updateJobWithApprovals,
 }: JobDetailFieldContext): MetadataField[] {
   const editsSchedule = isAdminOrManager && scheduleEditable;
   return [
@@ -183,9 +184,11 @@ function buildJobDetailScheduleFields({
               loadingLabel: 'Wird gespeichert…',
             },
             onSave: async (v) => {
-              const result = await updateJobWithQualificationApproval({
+              const result = await updateJobWithApprovals({
                 plannedDate: v || null,
               });
+              // Taken back in the planning dialog: the job keeps its date.
+              if (isPlanningWarning(result)) return;
               if (!result.success) {
                 throw new Error('Failed to update planned date');
               }
@@ -203,9 +206,11 @@ function buildJobDetailScheduleFields({
             type: 'time',
             currentValue: normalizeJobPlannedTime(liveJob.plannedTime) ?? '',
             onSave: async (v) => {
-              const result = await updateJob(liveJob.id, {
+              const result = await updateJobWithApprovals({
                 plannedTime: v || null,
               });
+              // Taken back in the planning dialog: the job keeps its time.
+              if (isPlanningWarning(result)) return;
               if (!result.success) {
                 throw new Error('Failed to update planned time');
               }
@@ -225,6 +230,7 @@ function buildJobDetailEffortFields({
   isAdminOrManager,
   scheduleEditable,
   applyLiveJobPatch,
+  updateJobWithApprovals,
 }: JobDetailFieldContext): MetadataField[] {
   const editsSchedule = isAdminOrManager && scheduleEditable;
   return [
@@ -241,10 +247,12 @@ function buildJobDetailEffortFields({
                 estimatedDurationMinutes,
                 liveJob.assignments.length,
               );
-              const result = await updateJob(liveJob.id, {
+              const result = await updateJobWithApprovals({
                 estimatedDurationMinutes,
                 plannedWorkingMinutes,
               });
+              // Taken back in the planning dialog: the job keeps its duration.
+              if (isPlanningWarning(result)) return;
               if (!result.success) {
                 throw new Error('Failed to update estimated duration');
               }
@@ -363,12 +371,12 @@ function buildJobDetailSiteFields(job: JobWithDetails, liveJob: JobWithDetails):
 
 type JobDetailMetadataFieldsInput = Omit<
   JobDetailFieldContext,
-  'updateJobWithQualificationApproval' | 'scheduleEditable'
+  'updateJobWithApprovals' | 'scheduleEditable'
 > & {
   job: JobWithDetails;
 };
 
-/** The inline-editable "Details" fields of a job and the qualification warning their saves can raise. */
+/** The inline-editable "Details" fields of a job and the qualification and planning warnings their saves can raise. */
 export function useJobDetailMetadataFields({
   job,
   liveJob,
@@ -379,28 +387,36 @@ export function useJobDetailMetadataFields({
   metadataFields: MetadataField[];
   inlineEditWarningDialog: ReactNode;
 } {
-  const { requestApproval: requestInlineEditApproval, warningDialog: inlineEditWarningDialog } =
+  const { requestApproval: requestInlineEditApproval, warningDialog: qualificationWarningDialog } =
     useQualificationWarningConfirmation();
+  const { retryWithPlanningApproval, planningWarningDialog } = usePlanningApprovalRetry();
 
-  const updateJobWithQualificationApproval = useCallback(
+  // A schedule edit moves the job's visit: a qualification gap and a planning
+  // conflict each need their confirmation before the edit saves.
+  const updateJobWithApprovals = useCallback(
     async (input: Parameters<typeof updateJob>[1]) => {
-      let result = await updateJob(liveJob.id, input);
+      const save = (assignmentApproval: AssignmentApproval | null) =>
+        retryWithPlanningApproval((planningApproval) =>
+          updateJob(liveJob.id, { ...input, assignmentApproval, planningApproval }),
+        );
+      const result = await save(null);
       if (
         !result.success &&
         (result.error === 'qualification_warning' || result.error === 'stale_evaluation') &&
         'evaluation' in result
       ) {
         const approval = await requestInlineEditApproval(result.evaluation);
-        if (approval) {
-          result = await updateJob(liveJob.id, {
-            ...input,
-            assignmentApproval: approval,
-          });
-        }
+        if (approval) return save(approval);
       }
       return result;
     },
-    [liveJob.id, requestInlineEditApproval],
+    [liveJob.id, requestInlineEditApproval, retryWithPlanningApproval],
+  );
+  const inlineEditWarningDialog = (
+    <>
+      {qualificationWarningDialog}
+      {planningWarningDialog}
+    </>
   );
 
   const fieldContext: JobDetailFieldContext = {
@@ -409,7 +425,7 @@ export function useJobDetailMetadataFields({
     isAdminOrManager,
     scheduleEditable: jobFormEditsSchedule(job.scheduledVisitCount ?? 0),
     applyLiveJobPatch,
-    updateJobWithQualificationApproval,
+    updateJobWithApprovals,
   };
   const metadataFields: MetadataField[] = [
     ...buildJobDetailIdentityFields(fieldContext),

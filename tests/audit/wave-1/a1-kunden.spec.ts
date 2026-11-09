@@ -50,6 +50,7 @@ import {
   workCreateDialog,
   workCreateHeading,
   workCreateJobNumberField,
+  confirmJobCreatePlanningIfAsked,
   workCreateSubmit,
   workCreateTab,
   workTransitionReasonField,
@@ -213,6 +214,11 @@ test.describe('A1 Kunden und Auftragsdaten @AUDIT-W1-A1', () => {
     await workCreateHeading(createDialog).click();
     await workCreateSubmit(createDialog, 'job').click();
     await expect(createDialog).toHaveCount(0);
+    await confirmJobCreatePlanningIfAsked(adminPage, {
+      orgId: world.orgId,
+      jobNumber,
+      reason: 'A1 Einsatz ist mit beiden abgestimmt.',
+    });
 
     await expect.poll(() => getJobCountByNumber(world.orgId, jobNumber)).toBe(1);
     await adminPage.goto(`/auftraege/${jobNumber}`);

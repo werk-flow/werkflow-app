@@ -145,6 +145,7 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
       siteName,
       assignEmployeeName: employeeName,
       plannedDateDigits: digits(ownedBerlinDateAtOffset('p1-15', 80)),
+      planningOverride: { orgId: world.orgId, reason: 'P115 Einsatz ist abgestimmt.' },
     });
     await createProject(adminPage, {
       projectNumber,

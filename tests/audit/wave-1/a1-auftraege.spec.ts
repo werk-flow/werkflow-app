@@ -6,7 +6,7 @@ import { WORK_EXECUTION_LABELS } from '../../../lib/work-lifecycle/types';
 import { createCustomer } from '../../golden/support/steps/customers';
 import { getPlanningState } from '../../golden/support/db/calendar';
 import { getJobAssignmentUserIds, seedJob, seedJobAssignment } from '../../golden/support/db/work';
-import { confirmPlanningWarning, planningWarningRevert } from '../../golden/support/steps/calendar';
+import { planningWarningRevert } from '../../golden/support/steps/calendar';
 import {
   detailActionsButton,
   employeeAssignmentHeading,
@@ -19,6 +19,7 @@ import {
   textInDom,
   visibleMatchingText,
   visibleText,
+  confirmPlanningWarning,
 } from '../../golden/support/steps/shared';
 import {
   addJobInstruction,
@@ -253,6 +254,7 @@ test.describe('A1 Aufträge, Lebenszyklus und Auftragsliste @AUDIT-W1-A1', () =>
       clientName: listCustomer,
       assignEmployeeName: 'Emil',
       plannedDateDigits: listDateDigits,
+      planningOverride: { orgId: world.orgId, reason: 'A1 Listenauftrag ist mit Emil abgestimmt.' },
     });
     await createJob(adminPage, {
       jobNumber: otherJobNumber,
@@ -272,6 +274,7 @@ test.describe('A1 Aufträge, Lebenszyklus und Auftragsliste @AUDIT-W1-A1', () =>
       projectNumber: listProjectNumber,
       assignEmployeeName: 'Emil',
       plannedDateDigits: dateDigits(ownedBerlinDateAtOffset('a1-auftraege', 21)),
+      planningOverride: { orgId: world.orgId, reason: 'A1 Projektauftrag ist mit Emil abgestimmt.' },
     });
     const parkingJobNumber = `A1-PARK-LIST-${world.runId}`;
     await createJob(adminPage, {

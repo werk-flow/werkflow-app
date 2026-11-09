@@ -1,12 +1,19 @@
 'use server';
 
-import type { ActionResult } from '@/lib/action-result';
+import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { updateTag, revalidatePath } from 'next/cache';
 import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
-import { assessJobTeamChange, type JobVisitAssessment } from '@/lib/planning/job-team-assessment';
-import type { PlanningConflictApproval } from '@/lib/planning/conflict-acknowledgement';
+import {
+  assessJobPlan,
+  assessJobTeamChange,
+  type JobVisitAssessment,
+} from '@/lib/planning/job-team-assessment';
+import type {
+  ConflictAcknowledgement,
+  PlanningConflictApproval,
+} from '@/lib/planning/conflict-acknowledgement';
 import { authenticateAndAuthorize } from './auth';
 import { readJobAssignmentOfUser } from './job-access-reads';
 import {
@@ -29,6 +36,7 @@ import {
   toJob,
   toClient,
   toJobAssignment,
+  normalizeJobPlannedTime,
 } from './types';
 import type { AssignmentApproval } from '@/lib/qualifications/types';
 import {
@@ -76,6 +84,8 @@ export type CreateJobInput = {
   assignmentApproval?: AssignmentApproval | null;
   assignmentTeamSourceId?: string | null;
   templateVersionId?: string;
+  /** The reason for the planning conflicts of the visit the save plans, for the assessment the manager saw. */
+  planningApproval?: PlanningConflictApproval | null;
 };
 
 export type UpdateJobInput = Omit<
@@ -98,6 +108,28 @@ const JOB_UPDATE_REFUSALS = [
   'job_number_taken',
   ...CUSTOMER_REFERENCE_REFUSALS,
 ];
+
+/** The reason a job save sends for the planning conflicts of the visit it plans. */
+function planningAcknowledgement(
+  approval: PlanningConflictApproval | null | undefined,
+): ConflictAcknowledgement {
+  return { overrideReason: approval?.reason ?? null, assessmentFingerprint: approval?.fingerprint ?? null };
+}
+
+/**
+ * The failure of a job create or edit. The visit the save left is not the one
+ * the server assessed, because the team, the visit or the people's records
+ * changed meanwhile: save again on the new state.
+ */
+function jobSaveFailure(
+  label: string,
+  error: { message: string },
+  refusals: readonly string[],
+  fallback: string,
+): ActionFailure {
+  if (error.message === 'stale_planning_occurrence') return { success: false, error: 'stale_occurrence' };
+  return workWriteFailure(label, error, refusals, fallback);
+}
 
 /**
  * Replaces the job team with its qualification assessment and, when the
@@ -186,17 +218,33 @@ export async function createJob(rawInput: CreateJobInput): Promise<CreateJobResu
       input.jobNumber ?? '',
     );
     if (!prepared.success) return prepared;
+    // The calendar's capacity check of the visit the new job plans with its people.
+    const plan = await assessJobPlan({
+      admin,
+      orgId,
+      jobId: null,
+      storedSchedule: null,
+      schedule: {
+        plannedDate: input.plannedDate || null,
+        plannedTime: normalizeJobPlannedTime(input.plannedTime),
+        estimatedDurationMinutes: input.estimatedDurationMinutes ?? null,
+      },
+      nextUserIds: input.selectedUserIds ?? [],
+      acknowledgement: planningAcknowledgement(input.planningApproval),
+    });
+    if (!plan.success) return plan;
 
-    // One transaction: the job, its assignments and its work template, or nothing.
+    // One transaction: the job, its assignments, its work template and its visit's assessment, or nothing.
     const { data, error } = await admin.rpc(
-      'create_job_with_assignments',
-      rpcArgs('create_job_with_assignments', {
+      'create_job_with_visit_assessment',
+      rpcArgs('create_job_with_visit_assessment', {
         ...prepared.arguments,
         p_organization_id: orgId,
         p_actor_id: userId,
+        p_visit_assessment: plan.planAssessment,
       }),
     );
-    if (error) return workWriteFailure('Error creating job:', error, JOB_CREATION_REFUSALS, 'create_failed');
+    if (error) return jobSaveFailure('Error creating job:', error, JOB_CREATION_REFUSALS, 'create_failed');
 
     updateTag(CACHE_TAGS.workTemplates(orgId));
 
@@ -225,11 +273,26 @@ export async function updateJob(rawJobId: string, rawInput: UpdateJobInput): Pro
     if (scheduleRefusal) return scheduleRefusal;
     const prepared = await prepareJobUpdate({ admin, orgId, actorId: auth.context.userId, jobId, input });
     if (!prepared.success) return prepared;
+    // The calendar's capacity check of the visit the edit moves or adds people to.
+    const plan = await assessJobPlan({
+      admin,
+      orgId,
+      jobId,
+      ...prepared.plan,
+      acknowledgement: planningAcknowledgement(input.planningApproval),
+    });
+    if (!plan.success) return plan;
     // tenant-scope: built-from-context — prepareJobUpdate sets p_organization_id from the orgId passed above, which authenticateAndAuthorize resolved.
-    const { data, error } = await admin.rpc('update_job_with_assignments', prepared.arguments);
+    const { data, error } = await admin.rpc(
+      'update_job_with_visit_assessment',
+      rpcArgs('update_job_with_visit_assessment', {
+        ...prepared.arguments,
+        p_visit_assessment: plan.planAssessment,
+      }),
+    );
 
     if (error) {
-      return workWriteFailure('Error updating job:', error, JOB_UPDATE_REFUSALS, 'update_failed');
+      return jobSaveFailure('Error updating job:', error, JOB_UPDATE_REFUSALS, 'update_failed');
     }
 
     revalidatePath('/auftraege', 'layout');

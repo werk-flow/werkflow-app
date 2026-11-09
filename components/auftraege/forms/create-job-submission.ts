@@ -3,6 +3,7 @@ import type { JobPriority } from '@/lib/jobs/types';
 import { parseHoursInputToMinutes } from '@/lib/jobs/planned-working';
 import type { AssignmentApproval } from '@/lib/qualifications/types';
 import { toLocalDateString } from '@/lib/utils';
+import { PLANNING_CHANGED_MESSAGE } from './planning-warning-result';
 
 export const CREATE_JOB_ERROR_MESSAGES = {
   not_authorized: 'Du bist nicht berechtigt, Aufträge zu verwalten.',
@@ -16,6 +17,7 @@ export const CREATE_JOB_ERROR_MESSAGES = {
   work_template_version_unavailable: 'Die gewählte Arbeitsvorlage ist nicht mehr verfügbar.',
   work_template_reference_unavailable: 'Die Arbeitsvorlage verweist auf nicht mehr aktive Stammdaten.',
   template_apply_failed: 'Die Arbeitsvorlage konnte nicht übernommen werden.',
+  stale_occurrence: PLANNING_CHANGED_MESSAGE,
 } satisfies Record<string, string>;
 
 /** A validated create request the landing list runs itself (deferred submit). */

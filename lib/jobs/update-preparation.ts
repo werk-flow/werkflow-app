@@ -9,6 +9,7 @@ import type { Database } from '@/lib/supabase/database.types';
 import { toJson } from '@/lib/supabase/json';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import type { z } from '@/lib/zod';
+import type { JobSchedule } from '@/lib/planning/legacy-visit-window';
 import type { updateJobArgumentsSchema } from './action-schemas';
 import {
   assessAssignmentSelection,
@@ -34,6 +35,8 @@ type StoredJob = Pick<
   | 'title'
   | 'description'
   | 'planned_date'
+  | 'planned_time'
+  | 'estimated_duration_minutes'
 >;
 
 /** The stored job the edit is checked against; null when it is missing or the read failed. */
@@ -41,7 +44,7 @@ async function readStoredJob(admin: AdminClient, orgId: string, jobId: string): 
   const { data: existing, error: fetchError } = await admin
     .from('jobs')
     .select(
-      'id, project_id, client_id, site_id, contact_id, status, execution_state, title, description, planned_date',
+      'id, project_id, client_id, site_id, contact_id, status, execution_state, title, description, planned_date, planned_time, estimated_duration_minutes',
     )
     .eq('id', jobId)
     .eq('organization_id', orgId)
@@ -269,11 +272,79 @@ function jobUpdateArguments({
   });
 }
 
+/** The job columns the edit changes, after its references and customer were checked. */
+async function checkedJobChanges(
+  admin: AdminClient,
+  orgId: string,
+  { jobId, input, existing }: { jobId: string; input: JobUpdateChanges; existing: StoredJob },
+): Promise<{ success: true; updateData: Record<string, unknown> } | ActionFailure> {
+  const references = await checkJobReferences(admin, orgId, { jobId, input, existing });
+  if (!references.success) return references;
+  const { resultingProjectId, inheritedProjectClientId } = references;
+
+  const customer = await resolveJobCustomer(admin, orgId, {
+    input,
+    existing,
+    resultingProjectId,
+    inheritedProjectClientId,
+  });
+  if (!customer.success) return customer;
+
+  return {
+    success: true,
+    updateData: jobChangeColumns({
+      input,
+      existing,
+      resultingProjectId,
+      inheritedProjectClientId,
+      clientChanged: customer.clientChanged,
+      resultingSiteId: customer.resultingSiteId,
+      resultingContactId: customer.resultingContactId,
+    }),
+  };
+}
+
+/** The schedule the job has and the one the edit leaves, as the legacy visit takes them. */
+function jobSchedules(
+  input: JobUpdateChanges,
+  existing: StoredJob,
+): { storedSchedule: JobSchedule; schedule: JobSchedule } {
+  const storedSchedule = {
+    plannedDate: existing.planned_date,
+    plannedTime: existing.planned_time,
+    estimatedDurationMinutes: existing.estimated_duration_minutes,
+  };
+  return {
+    storedSchedule,
+    schedule: {
+      plannedDate: input.plannedDate !== undefined ? input.plannedDate || null : storedSchedule.plannedDate,
+      // A sent time is written as normalizeJobPlannedTime leaves it; a stored one keeps its seconds.
+      plannedTime:
+        input.plannedTime !== undefined
+          ? normalizeJobPlannedTime(input.plannedTime)
+          : storedSchedule.plannedTime,
+      estimatedDurationMinutes:
+        input.estimatedDurationMinutes !== undefined
+          ? (input.estimatedDurationMinutes ?? null)
+          : storedSchedule.estimatedDurationMinutes,
+    },
+  };
+}
+
+/** What the edit does to the job's legacy visit: its schedule before and after, and the team it leaves. */
+export type JobUpdatePlan = {
+  storedSchedule: JobSchedule;
+  schedule: JobSchedule;
+  /** Null when the edit keeps the team. */
+  nextUserIds: string[] | null;
+};
+
 /**
  * Checks a job edit against the stored job and assesses its assignments, and
- * returns the arguments of `update_job_with_assignments`. It writes nothing:
- * a refusal or a qualification warning leaves the job as it was. The caller
- * has established the actor's right to edit jobs of the organization.
+ * returns the arguments of `update_job_with_assignments` with what the edit
+ * does to the job's legacy visit. It writes nothing: a refusal or a
+ * qualification warning leaves the job as it was. The caller has established
+ * the actor's right to edit jobs of the organization.
  */
 export async function prepareJobUpdate({
   admin,
@@ -287,34 +358,19 @@ export async function prepareJobUpdate({
   actorId: string;
   jobId: string;
   input: JobUpdateChanges;
-}): Promise<{ success: true; arguments: JobUpdateArguments } | QualificationWarningResult | ActionFailure> {
+}): Promise<
+  | { success: true; arguments: JobUpdateArguments; plan: JobUpdatePlan }
+  | QualificationWarningResult
+  | ActionFailure
+> {
   const existing = await readStoredJob(admin, orgId, jobId);
   if (!existing) {
     return { success: false, error: 'job_not_found' };
   }
 
-  const references = await checkJobReferences(admin, orgId, { jobId, input, existing });
-  if (!references.success) return references;
-  const { resultingProjectId, inheritedProjectClientId } = references;
-
-  const customer = await resolveJobCustomer(admin, orgId, {
-    input,
-    existing,
-    resultingProjectId,
-    inheritedProjectClientId,
-  });
-  if (!customer.success) return customer;
-  const { clientChanged, resultingSiteId, resultingContactId } = customer;
-
-  const updateData = jobChangeColumns({
-    input,
-    existing,
-    resultingProjectId,
-    inheritedProjectClientId,
-    clientChanged,
-    resultingSiteId,
-    resultingContactId,
-  });
+  const changes = await checkedJobChanges(admin, orgId, { jobId, input, existing });
+  if (!changes.success) return changes;
+  const { updateData } = changes;
 
   const shouldAssessAssignments = input.selectedUserIds !== undefined || input.plannedDate !== undefined;
   let assignmentAssessment: AssignmentEvaluation | null = null;
@@ -359,5 +415,6 @@ export async function prepareJobUpdate({
       assignmentAssessment,
       finalSelectedUserIds,
     }),
+    plan: { ...jobSchedules(input, existing), nextUserIds: input.selectedUserIds ?? null },
   };
 }
