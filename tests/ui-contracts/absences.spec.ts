@@ -5,7 +5,8 @@ import { openContractFixture } from './open-fixture';
 // person away from, with each visit's dispatch state and a link to its day on
 // the Plantafel; a failed read says so and retries. A person picker marks who
 // is away on the chosen day from the calendar's capacity days, and says when
-// the day lies outside the window it holds (walkthrough finding 43).
+// the day lies outside the window it holds (walkthrough finding 43); so does
+// „Einplanen am …“ for a parked job.
 
 test('the saved sickness lists the affected visits with their dispatch state and Plantafel links', async ({
   page,
@@ -84,4 +85,39 @@ test('the person picker marks who is away on the day, and names a day outside th
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Anderen Tag wählen' }).click();
   await expect(form.getByText('Für diesen Tag sind keine Abwesenheiten geladen.')).toBeVisible();
+});
+
+test('„Einplanen am …“ marks who is away on the chosen day, and names a day outside the window', async ({
+  page,
+}) => {
+  await openContractFixture(page, 'schedule-parked-picker');
+  await page.getByRole('button', { name: 'Einplanen am …' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Auftrag einplanen' });
+  const date = dialog.getByRole('group', { name: 'Datum' });
+  const person = dialog.getByRole('combobox', { name: 'Mitarbeiter' });
+  const notLoaded = dialog.getByText('Für diesen Tag sind keine Abwesenheiten geladen.');
+  const chooseDate = async (digits: string) => {
+    await date.click();
+    await date.press('ArrowLeft');
+    await date.press('ArrowLeft');
+    await date.pressSequentially(digits);
+  };
+
+  // Without a date the picker marks nobody and says nothing.
+  await person.click();
+  await expect(page.getByRole('option', { name: /Daniel Krüger/ })).not.toContainText('Abwesend');
+  await page.keyboard.press('Escape');
+  await expect(notLoaded).toHaveCount(0);
+
+  await chooseDate('30102026');
+  await person.click();
+  await expect(page.getByRole('option', { name: /Daniel Krüger/ })).toContainText('Abwesend');
+  await expect(page.getByRole('option', { name: /Lena Brandt/ })).not.toContainText('Abwesend');
+  await page.keyboard.press('Escape');
+  await expect(notLoaded).toHaveCount(0);
+
+  await chooseDate('20112026');
+  await expect(notLoaded).toBeVisible();
+  await person.click();
+  await expect(page.getByRole('option', { name: /Daniel Krüger/ })).not.toContainText('Abwesend');
 });
