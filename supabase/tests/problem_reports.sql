@@ -2,9 +2,9 @@
 -- werk-flow/werkflow-planning#331, and 20261128090003_report_problems_from_the_app.sql,
 -- #334). Client roles read and write no report table and execute none of its
 -- functions. Each organization numbers its reports from 1, and a number never
--- changes. A file registers only for the report's filer while its originals
--- exist. The history refuses UPDATE and
--- DELETE, also for the service role, and leaves only with its report. A
+-- changes. A report saves once under its device's id. A file registers only
+-- for the report's filer while its originals exist. The history refuses UPDATE
+-- and DELETE, also for the service role, and leaves only with its report. A
 -- report leaves only through the retention run or a cascade, and its
 -- originals change only there. The retention run deletes only due originals,
 -- keeps the scrubbed copy, and queues every file path; 24 months after
@@ -120,6 +120,7 @@ begin
       or has_function_privilege(v_role,
         'public.register_problem_report_file(uuid, uuid, uuid, uuid, text, text, text, text, bigint, integer)',
         'EXECUTE')
+      or has_function_privilege(v_role, 'public.submit_problem_report(uuid, uuid, uuid, text, jsonb)', 'EXECUTE')
       or has_function_privilege(v_role,
         'app_private.problem_report_retention_step(timestamptz, timestamptz, timestamptz)', 'EXECUTE')
     then raise exception '% executes a report function', v_role; end if;
@@ -254,6 +255,35 @@ begin
     raise exception 'a report number change was accepted';
   exception when raise_exception then
     if sqlerrm <> 'problem_report_identity_immutable' then raise; end if;
+  end;
+end;
+$$;
+
+-- A report saves once under its device's id: a retry gets the same number,
+-- and an id of another person's or another organization's report conflicts.
+do $$
+declare
+  v_org constant uuid := '33100000-0000-0000-0000-000000000010';
+  v_worker constant uuid := '33100000-0000-0000-0000-000000000002';
+  v_report constant uuid := '33100000-0000-0000-0000-000000000029';
+  v_first integer;
+begin
+  v_first := public.submit_problem_report(v_report, v_org, v_worker, 'Einmal', '{}');
+  if public.submit_problem_report(v_report, v_org, v_worker, 'Noch einmal', '{}') <> v_first
+    or (select count(*) from public.problem_reports where id = v_report) <> 1
+    or (select description from public.problem_reports where id = v_report) <> 'Einmal'
+  then raise exception 'a retried report save did not find its own report'; end if;
+  begin
+    perform public.submit_problem_report(v_report, v_org, '33100000-0000-0000-0000-000000000001', 'Fremd', '{}');
+    raise exception 'another person reached a report through its id';
+  exception when raise_exception then
+    if sqlerrm <> 'report_conflict' then raise; end if;
+  end;
+  begin
+    perform public.submit_problem_report(v_report, '33100000-0000-0000-0000-000000000011', v_worker, 'Fremd', '{}');
+    raise exception 'a report id reached another organization';
+  exception when raise_exception then
+    if sqlerrm <> 'report_conflict' then raise; end if;
   end;
 end;
 $$;

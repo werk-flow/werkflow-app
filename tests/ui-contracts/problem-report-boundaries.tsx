@@ -17,7 +17,6 @@ type ReportActions = typeof import('@/lib/problem-reports/actions');
 type FileActions = typeof import('@/lib/problem-reports/file-actions');
 
 export const PROBLEM_REPORT_CONTRACT_ORGANIZATION = '33400000-0000-4000-8000-000000000001';
-const REPORT_ID = '33400000-0000-4000-8000-000000000020';
 /** The width and height of the stub screenshot: white, so a burned box shows as black. */
 export const STUB_SCREENSHOT_SIZE = { width: 400, height: 300 } as const;
 
@@ -30,8 +29,8 @@ type ProblemReportBoundaryState = {
   /** Resolves the held submission; null while none is held or holding is off. */
   releaseSubmission: (() => void) | null;
   holdSubmission: boolean;
-  /** The next submission throws, as a lost connection does. */
-  throwSubmissionOnce: boolean;
+  /** The next submission saves the report, but its answer never reaches the browser. */
+  loseSubmissionAnswerOnce: boolean;
   /** File kinds whose next finalize registers the file, but whose answer never reaches the browser. */
   loseFinalizeAnswer: string[];
 };
@@ -49,24 +48,29 @@ export function initializeProblemReportBoundary(): void {
     registered: [],
     releaseSubmission: null,
     holdSubmission: false,
-    throwSubmissionOnce: false,
+    loseSubmissionAnswerOnce: false,
     loseFinalizeAnswer: [],
   };
 }
 
+const savedReportIds = new Map<string, number>();
+
 // `@/lib/problem-reports/actions`
 export const submitProblemReport: ReportActions['submitProblemReport'] = async (input) => {
+  // Saves each report id once, like `submit_problem_report`: a retry gets the same number.
   const state = window.uiContractProblemReport;
-  if (state.throwSubmissionOnce) {
-    state.throwSubmissionOnce = false;
+  state.submissions.push(input);
+  if (!savedReportIds.has(input.reportId)) savedReportIds.set(input.reportId, 6 + savedReportIds.size + 1);
+  const number = savedReportIds.get(input.reportId) ?? 0;
+  if (state.loseSubmissionAnswerOnce) {
+    state.loseSubmissionAnswerOnce = false;
     throw new TypeError('Failed to fetch');
   }
-  state.submissions.push(input);
   if (state.holdSubmission)
     await new Promise<void>((resolve) => {
       state.releaseSubmission = resolve;
     });
-  return { success: true, reportId: REPORT_ID, number: 7 };
+  return { success: true, reportId: input.reportId, number };
 };
 
 // `./file-actions` of the upload client

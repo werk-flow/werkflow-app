@@ -62,6 +62,8 @@ export type ProblemReportContext = z.infer<typeof problemReportContextSchema>;
 
 export const submitProblemReportInputSchema = z.strictObject({
   organizationId: uuidSchema,
+  /** Chosen by the device once per report, so a retry after a lost answer saves nothing twice. */
+  reportId: uuidSchema,
   description: z.string().trim().min(1).max(PROBLEM_REPORT_DESCRIPTION_MAX_LENGTH),
   context: problemReportContextSchema,
 });

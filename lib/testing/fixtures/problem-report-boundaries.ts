@@ -13,7 +13,6 @@ import {
   ORGANIZATION_B,
   installActionWorld,
   signInAs,
-  tableRows,
 } from './action-boundary-world';
 
 const colleagueId = '33100000-0000-4000-8000-000000000002';
@@ -45,30 +44,18 @@ const report = (id: string, organizationId: string, reporterId: string, number: 
   originals_deleted_at: null,
 });
 
-const world = installActionWorld(
-  {
-    problem_reports: [
-      report(ownReportId, ORGANIZATION_A, CALLER_ID, 1),
-      report(colleagueReportId, ORGANIZATION_A, colleagueId, 2),
-      report(foreignReportId, ORGANIZATION_B, colleagueId, 1),
-    ],
-    problem_report_files: [],
-    problem_report_events: [],
-  },
-  {
-    problem_reports: () => ({
-      number: 3,
-      created_at: '2026-11-09T09:00:00.000Z',
-      status: 'eingegangen',
-      closed_at: null,
-      response: null,
-      originals_deleted_at: null,
-    }),
-  },
-);
+const world = installActionWorld({
+  problem_reports: [
+    report(ownReportId, ORGANIZATION_A, CALLER_ID, 1),
+    report(colleagueReportId, ORGANIZATION_A, colleagueId, 2),
+    report(foreignReportId, ORGANIZATION_B, colleagueId, 1),
+  ],
+  problem_report_files: [],
+  problem_report_events: [],
+});
 world.rpc = ({ name }) => {
-  assert.equal(name, 'register_problem_report_file');
-  return { data: null, error: null };
+  assert.ok(name === 'submit_problem_report' || name === 'register_problem_report_file', name);
+  return { data: name === 'submit_problem_report' ? 3 : null, error: null };
 };
 const storageCalls: string[] = [];
 mock.module('@/lib/storage/r2', () => ({
@@ -90,9 +77,11 @@ mock.module('@/lib/storage/r2', () => ({
 const actions = await import('@/lib/problem-reports/actions');
 const fileActions = await import('@/lib/problem-reports/file-actions');
 
-const reportCount = (): number => tableRows(world, 'problem_reports').length;
+const newReportId = '33100000-0000-4000-8000-000000000025';
+const submitCalls = () => world.rpcCalls.filter((call) => call.name === 'submit_problem_report');
 const submission = (organizationId: string) => ({
   organizationId,
+  reportId: newReportId,
   description: 'Die Liste bleibt leer.',
   context,
 });
@@ -125,21 +114,25 @@ assert.deepEqual(
 );
 
 // Submitting into an organization the caller is not a member of is refused and stores nothing.
-const before = reportCount();
 assert.deepEqual(await actions.submitProblemReport(submission(ORGANIZATION_B)), {
   success: false,
   error: 'not_a_member',
 });
-assert.equal(reportCount(), before);
+assert.equal(submitCalls().length, 0);
 
-// A member's report lands in their organization, filed and reported by them.
+// A member's report saves in their organization under the device's id, with the
+// caller as reporter and filer.
 const submitted = await actions.submitProblemReport(submission(ORGANIZATION_A));
 assert.ok(submitted.success);
 assert.equal(submitted.number, 3);
-const stored = tableRows(world, 'problem_reports').find((row) => row.id === submitted.reportId);
-assert.equal(stored?.organization_id, ORGANIZATION_A);
-assert.equal(stored?.reporter_id, CALLER_ID);
-assert.equal(stored?.filed_by_id, CALLER_ID);
+assert.equal(submitted.reportId, newReportId);
+assert.deepEqual(submitCalls().at(-1)?.args, {
+  p_report_id: newReportId,
+  p_organization_id: ORGANIZATION_A,
+  p_actor_id: CALLER_ID,
+  p_description: 'Die Liste bleibt leer.',
+  p_context: context,
+});
 
 // No role of the same organization lists a colleague's report, and the file
 // actions answer `report_not_found` for it; each lists their own.
@@ -227,7 +220,7 @@ assert.deepEqual(
     error: 'report_not_found',
   },
 );
-assert.equal(world.rpcCalls.length, 0);
+assert.equal(world.rpcCalls.filter((call) => call.name === 'register_problem_report_file').length, 0);
 assert.ok(storageCalls.every((call) => !call.startsWith('promote')));
 
 assert.deepEqual(await fileActions.finalizeProblemReportFileUpload(finalize(ORGANIZATION_A, ownReportId)), {

@@ -1,10 +1,11 @@
 -- Reporting a problem from the app (werk-flow/werkflow-planning#334, part of
 -- #21). The reporter's receipt names a report by its number, never by its id:
 -- each organization numbers its reports from 1, and a number never changes.
--- The screenshot and attachments register through one function call, which
--- repeats the report's checks under its row lock.
+-- A report saves once under the id its device chose, so a retry after a lost
+-- answer finds it. The screenshot and attachments register through one
+-- function call, which repeats the report's checks under its row lock.
 --
--- Prevention: Tier 1 (the numbering trigger, the registration checks),
+-- Prevention: Tier 1 (the numbering trigger, the idempotent save, the registration checks),
 -- Tier 2 supabase/tests/problem_reports.sql.
 
 -- The trigger below always assigns the number; the default only lets an
@@ -52,6 +53,42 @@ revoke all on function app_private.number_problem_report() from public, anon, au
 create trigger problem_reports_number
   before insert or update of number on public.problem_reports
   for each row execute function app_private.number_problem_report();
+
+-- Saves a report under the id the reporter's device chose for it, once: a
+-- retry whose answer got lost finds its own report and gets the same number.
+-- The server resolved actor and organization. An id that names another
+-- person's report, or a report of another organization, is a conflict.
+create function public.submit_problem_report(
+  p_report_id uuid,
+  p_organization_id uuid,
+  p_actor_id uuid,
+  p_description text,
+  p_context jsonb
+)
+returns integer
+language plpgsql
+security invoker
+set search_path to ''
+as $$
+declare
+  v_report record;
+begin
+  insert into public.problem_reports (id, organization_id, reporter_id, filed_by_id, description, context)
+  values (p_report_id, p_organization_id, p_actor_id, p_actor_id, p_description, p_context)
+  on conflict (id) do nothing;
+  select report.number, report.organization_id, report.reporter_id, report.filed_by_id into v_report
+  from public.problem_reports report
+  where report.id = p_report_id;
+  if v_report.organization_id is distinct from p_organization_id
+    or v_report.reporter_id is distinct from p_actor_id
+    or v_report.filed_by_id is distinct from p_actor_id
+  then raise exception 'report_conflict'; end if;
+  return v_report.number;
+end;
+$$;
+
+revoke all on function public.submit_problem_report(uuid, uuid, uuid, text, jsonb) from public, anon, authenticated;
+grant execute on function public.submit_problem_report(uuid, uuid, uuid, text, jsonb) to service_role;
 
 -- Registers one stored file of a report. Only the person who filed the
 -- report adds files, and only while it keeps its originals: one screenshot,

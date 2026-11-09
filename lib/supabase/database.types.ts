@@ -17662,6 +17662,16 @@ export type Database = {
         };
         Returns: string;
       };
+      submit_problem_report: {
+        Args: {
+          p_actor_id: string;
+          p_context: Json;
+          p_description: string;
+          p_organization_id: string;
+          p_report_id: string;
+        };
+        Returns: number;
+      };
       submit_time_account_adjustment: {
         Args: {
           p_account_id: string;

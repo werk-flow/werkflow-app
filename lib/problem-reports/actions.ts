@@ -1,6 +1,8 @@
 'use server';
 
 import { logError } from '@/lib/logging';
+import { rpcArgs } from '@/lib/supabase/rpc-args';
+import { writeRefusalFor } from '@/lib/supabase/write-refusal';
 import { resolveActionContext, resolveActionContextFor } from '@/lib/org/action-context';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
@@ -13,12 +15,14 @@ import type { OwnProblemReportsResult, SubmitProblemReportResult } from './types
 // role reads another person's report, `admin` included.
 
 const INVALID_INPUT = { success: false, error: 'invalid_input' } as const;
+const refusal = writeRefusalFor(new Set(['report_conflict']));
 
 /**
  * Stores a report in the organization the caller reported from, with the
  * original description and the captured context. The caller must be a
  * current member there; the report starts as `eingegangen` with its scrubbed
- * copy pending, and takes the next number of the organization.
+ * copy pending, and takes the next number of the organization. It saves once
+ * under the id the device chose: a retry gets the same report back.
  */
 export async function submitProblemReport(
   rawInput: SubmitProblemReportInput,
@@ -29,22 +33,18 @@ export async function submitProblemReport(
   const auth = await resolveActionContextFor(input.organizationId);
   if (!auth.success) return auth;
 
-  const { data, error } = await createSupabaseAdminClient()
-    .from('problem_reports')
-    .insert({
-      organization_id: auth.context.orgId,
-      reporter_id: auth.context.userId,
-      filed_by_id: auth.context.userId,
-      description: input.description,
-      context: input.context,
-    })
-    .select('id, number')
-    .single();
-  if (error) {
-    logError('submitProblemReport: insert failed', error);
-    return { success: false, error: 'submit_failed' };
-  }
-  return { success: true, reportId: data.id, number: data.number };
+  const { data, error } = await createSupabaseAdminClient().rpc(
+    'submit_problem_report',
+    rpcArgs('submit_problem_report', {
+      p_report_id: input.reportId,
+      p_organization_id: auth.context.orgId,
+      p_actor_id: auth.context.userId,
+      p_description: input.description,
+      p_context: input.context,
+    }),
+  );
+  if (error) return refusal(error, 'submit_failed', 'submitProblemReport: save failed');
+  return { success: true, reportId: input.reportId, number: data };
 }
 
 /** The caller's own reports in the active organization, newest first. */

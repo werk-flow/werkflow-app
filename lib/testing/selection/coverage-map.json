@@ -3060,10 +3060,10 @@
             "a redaction box is burned into the uploaded image",
             "the context keeps a control label only when the app names it, and routes only as templates",
             "F2 opens the report dialog from the keyboard, and Escape returns to where the person was",
-            "the send shows its pending state in the first frame, and neither cancel nor the list link leaves the dialog until the answer",
             "a failed attachment keeps the saved report and its sent screenshot, and the retry sends only the attachment",
             "a registration whose answer got lost counts once on the retry, under the same file",
-            "a send that throws shows its failure in the dialog, and the retry saves the report once"
+            "the send shows its pending state in the first frame, and neither cancel, the list link nor the attachments change until the answer",
+            "a report whose answer got lost is saved once: the retry finds it under the same id and number"
           ]
         },
         {
@@ -3077,12 +3077,13 @@
         {
           "file": "supabase/tests/problem_reports.sql",
           "kind": "sql",
-          "description": "Each organization numbers its reports from 1 and a number never changes; a file registers only for the report's filer while its originals exist.",
+          "description": "Each organization numbers its reports from 1 and a number never changes; a file registers only for the report's filer while its originals exist. A report saves once under its device's id.",
           "titles": [
             "a new report did not take the next number of its organization",
             "a report number change was accepted",
             "another member registered a file",
-            "a file registered under a foreign organization"
+            "a file registered under a foreign organization",
+            "a retried report save did not find its own report"
           ]
         }
       ],

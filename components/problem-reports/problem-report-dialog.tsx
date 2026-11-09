@@ -111,6 +111,7 @@ export function ProblemReportDialog({ open, onOpenChange, capture }: ProblemRepo
               attachments={attachments}
               onAttachmentsChange={setAttachments}
               frozenFiles={report.frozenFiles}
+              disabled={report.isPending}
             />
             <ErrorText>{report.error}</ErrorText>
           </DialogBody>
@@ -165,9 +166,16 @@ type AttachmentsFieldProps = {
   attachments: ChosenAttachment[];
   onAttachmentsChange: (update: (current: ChosenAttachment[]) => ChosenAttachment[]) => void;
   frozenFiles: ReadonlySet<string>;
+  /** While a send runs, the list it sends stays as it is. */
+  disabled: boolean;
 };
 
-function AttachmentsField({ attachments, onAttachmentsChange, frozenFiles }: AttachmentsFieldProps) {
+function AttachmentsField({
+  attachments,
+  onAttachmentsChange,
+  frozenFiles,
+  disabled,
+}: AttachmentsFieldProps) {
   const [problem, setProblem] = useState<string | null>(null);
   const nextKey = useRef(1);
   return (
@@ -182,8 +190,11 @@ function AttachmentsField({ attachments, onAttachmentsChange, frozenFiles }: Att
           buttonLabel="Foto oder PDF anhängen"
           fileName={null}
           accept={PROBLEM_REPORT_FILE_RULES.anhang.mimeTypes.join(',')}
+          disabled={disabled}
           onSelect={(file) => {
             if (!file) return;
+            // A chooser opened before the send can close after it started; that file joins no send.
+            if (disabled) return setProblem('Die Meldung wird gerade gesendet. Hänge die Datei danach an.');
             const refusal = attachmentProblem(file, attachments.length);
             setProblem(refusal);
             if (refusal) return;
@@ -203,7 +214,7 @@ function AttachmentsField({ attachments, onAttachmentsChange, frozenFiles }: Att
                 variant="ghost"
                 size="icon"
                 aria-label={`„${file.name}“ entfernen`}
-                disabled={frozenFiles.has(`anhang-${key}`)}
+                disabled={disabled || frozenFiles.has(`anhang-${key}`)}
                 onClick={() => onAttachmentsChange((current) => current.filter((entry) => entry.key !== key))}
               >
                 <X className="size-4" />

@@ -141,7 +141,7 @@ test('the context keeps a control label only when the app names it, and routes o
   expect(JSON.stringify(submission?.context)).not.toContain('Musterbau');
 });
 
-test('the send shows its pending state in the first frame, and neither cancel nor the list link leaves the dialog until the answer', async ({
+test('the send shows its pending state in the first frame, and neither cancel, the list link nor the attachments change until the answer', async ({
   page,
 }) => {
   await openReportFixture(page);
@@ -154,8 +154,9 @@ test('the send shows its pending state in the first frame, and neither cancel no
   const send = dialog.getByRole('button', { name: 'Senden', exact: true });
   await send.click();
   await expect(send).toHaveAttribute('aria-busy', 'true');
-  // Neither control leaves the dialog while its answer is out.
+  // Neither control leaves the dialog while its answer is out, and the attachments it sends stay as they are.
   await expect(dialog.getByRole('button', { name: 'Abbrechen', exact: true })).toBeDisabled();
+  await expect(dialog.getByRole('button', { name: 'Anhänge' })).toBeDisabled();
   await dialog.getByRole('link', { name: 'Meine Meldungen' }).click();
   await expect(dialog).toBeVisible();
   await page.evaluate(() => window.uiContractProblemReport.releaseSubmission?.());
@@ -269,12 +270,12 @@ test('a registration whose answer got lost counts once on the retry, under the s
   expect(state.registered).toEqual(['screenshot']);
 });
 
-test('a send that throws shows its failure in the dialog, and the retry saves the report once', async ({
+test('a report whose answer got lost is saved once: the retry finds it under the same id and number', async ({
   page,
 }) => {
   await openReportFixture(page);
   await page.evaluate(() => {
-    window.uiContractProblemReport.throwSubmissionOnce = true;
+    window.uiContractProblemReport.loseSubmissionAnswerOnce = true;
   });
   const dialog = await openDialog(page);
   await dialog.getByRole('checkbox', { name: 'Screenshot mitsenden' }).click();
@@ -287,5 +288,7 @@ test('a send that throws shows its failure in the dialog, and the retry saves th
   await expect(
     page.getByRole('alert').getByText('Danke! Deine Meldung Nr. 7 ist eingegangen.'),
   ).toBeVisible();
-  expect((await boundary(page)).submissions).toHaveLength(1);
+  const { submissions } = await boundary(page);
+  expect(submissions).toHaveLength(2);
+  expect(new Set(submissions.map((submission) => submission.reportId)).size).toBe(1);
 });

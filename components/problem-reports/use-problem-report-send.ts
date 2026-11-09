@@ -56,6 +56,8 @@ export function useProblemReportSend(capture: ProblemReportCapture, close: () =>
   const { run, isPending } = usePendingTask();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<SavedReport | null>(null);
+  // Chosen once per dialog: a retry after a lost answer saves the same report.
+  const [reportId] = useState(() => crypto.randomUUID());
   // The files that reached the saved report, so a retry sends only the rest,
   // and the stored bytes of each file whose registration has not answered yet.
   const [sentFiles, setSentFiles] = useState<ReadonlySet<string>>(new Set());
@@ -65,6 +67,7 @@ export function useProblemReportSend(capture: ProblemReportCapture, close: () =>
     if (saved) return saved;
     const result = await submitProblemReport({
       organizationId,
+      reportId,
       description,
       context: buildProblemReportContext(capture.activity, loadUiStringCatalog(), capture.device),
     });

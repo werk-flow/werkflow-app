@@ -40,6 +40,7 @@ test('the context names device families, the build and the offline state, and pa
   expect(context.appVersion).toBe('a1b2c3d4e5f6');
   const parsed = submitProblemReportInputSchema.safeParse({
     organizationId: '33100000-0000-4000-8000-000000000001',
+    reportId: '33100000-0000-4000-8000-000000000002',
     description: 'Die Liste bleibt leer.',
     context,
   });
