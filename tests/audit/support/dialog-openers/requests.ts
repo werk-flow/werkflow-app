@@ -4,6 +4,8 @@ import { seedRequest } from '../../../golden/support/db/requests';
 import { seedPublishedWorkTemplate } from '../../../golden/support/db/work';
 import { dismissDialog } from '../../../golden/support/steps/interaction';
 import {
+  requestAttachToWorkButton,
+  requestAttachToWorkDialog,
   requestCaptureButton,
   requestCaptureDialog,
   requestCloseButton,
@@ -95,6 +97,11 @@ export const REQUESTS_OPENERS = {
     // The layout request has a customer and a site, so the takeover is offered.
     trigger: async ({ page }) => requestConvertToServiceButton(page),
     layer: requestConvertToServiceDialog,
+  },
+  'requests.attach-to-work': {
+    // The layout request has a customer, so adding it to that customer's work is offered.
+    trigger: async ({ page }) => requestAttachToWorkButton(page),
+    layer: requestAttachToWorkDialog,
   },
   'requests.assign-customer': {
     // Only a request without a customer offers the match, so the opener opens its own.

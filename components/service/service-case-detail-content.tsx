@@ -6,6 +6,7 @@ import { ArrowLeft, Pencil } from 'lucide-react';
 
 import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
 import { useOrganization } from '@/components/organization/organization-context';
+import { WorkRequestEntriesSection } from '@/components/auftraege/shared/work-request-entries-section';
 import { DetailColumns } from '@/components/shared/detail-columns';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { Badge } from '@/components/ui/badge';
@@ -165,6 +166,7 @@ export function ServiceCaseDetailContent({
       <DetailColumns layout="main-and-aside">
         <div className="min-w-0 space-y-6">
           <ServiceCaseOriginSection item={item} />
+          <WorkRequestEntriesSection kind="service_case" id={item.id} />
           <ServiceCaseTriageSection item={item} />
           <ServiceCaseDocuments item={item} documents={documents} documentsLoadFailed={documentsLoadFailed} />
           <ServiceCaseEvidenceLink

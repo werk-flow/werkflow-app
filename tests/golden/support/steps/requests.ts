@@ -49,6 +49,8 @@ const REQUEST_COPY = {
   editTitle: 'Anfrage bearbeiten',
   convertToService: 'Als Servicefall übernehmen',
   convertToServiceTitle: 'Anfrage als Servicefall übernehmen?',
+  attachToWork: 'Zu Arbeit hinzufügen',
+  attachToWorkTitle: 'Zu bestehender Arbeit hinzufügen',
 } as const;
 
 /** The row actions of the request's contextual „Dokumente & Bilder“ frame. */
@@ -224,6 +226,16 @@ export function requestConvertToServiceButton(page: Page): Locator {
 /** The confirmation of the service-case takeover, named by its title. */
 export function requestConvertToServiceDialog(page: Page): Locator {
   return page.getByRole('dialog', { name: REQUEST_COPY.convertToServiceTitle, exact: true });
+}
+
+/** The detail header's action that adds a request with a customer to that customer's open work. */
+export function requestAttachToWorkButton(page: Page): Locator {
+  return page.getByRole('button', { name: REQUEST_COPY.attachToWork, exact: true });
+}
+
+/** The dialog that lists the customer's open work, named by its title. */
+export function requestAttachToWorkDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: REQUEST_COPY.attachToWorkTitle, exact: true });
 }
 
 /** The customer card's action that matches an unknown caller to an existing customer. */

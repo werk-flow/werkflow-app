@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowRightLeft, Pencil, RotateCcw, XCircle } from 'lucide-react';
+import { ArrowRightLeft, Link2, Pencil, RotateCcw, XCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { InlinePending } from '@/components/ui/inline-pending';
@@ -15,6 +15,7 @@ interface RequestHeaderActionsProps {
   isPending: boolean;
   isSettling: boolean;
   onConvert: () => void;
+  onAttach: () => void;
   onEdit: () => void;
   onStatusToggle: () => void;
   onClose: () => void;
@@ -28,6 +29,7 @@ export function RequestHeaderActions({
   isPending,
   isSettling,
   onConvert,
+  onAttach,
   onEdit,
   onStatusToggle,
   onClose,
@@ -46,6 +48,13 @@ export function RequestHeaderActions({
             requestId={request.id}
             enabled={Boolean(request.clientId && request.siteId)}
           />
+          {/* Only a request with a customer has that customer's work to join. */}
+          {request.clientId && (
+            <Button size="sm" variant="outline" onClick={onAttach} disabled={isPending}>
+              <Link2 className="size-4" />
+              Zu Arbeit hinzufügen
+            </Button>
+          )}
           <Button size="sm" variant="outline" onClick={onEdit} disabled={isPending}>
             <Pencil className="size-4" />
             Bearbeiten

@@ -9,8 +9,11 @@ import {
   isCallbackOverdue,
   toClientRequest,
   toClientRequestEvent,
+  WORK_TARGET_KIND_LABELS,
+  workTargetHref,
   type ClientRequest,
   type ClientRequestEvent,
+  type WorkTargetKind,
 } from '@/lib/requests/types';
 import { getRequestDocuments } from '@/lib/documents/actions';
 import { getCallerMatches } from '@/lib/requests/actions';
@@ -142,6 +145,34 @@ function convertedLinkOf(
         : null;
 }
 
+type AttachedEntryRow = {
+  job_id: string | null;
+  project_id: string | null;
+  service_case_id: string | null;
+  jobs: { job_number: string | null; title: string } | null;
+  projects: { project_number: string | null; name: string } | null;
+  service_cases: { case_number: string } | null;
+};
+
+/** The work the request was attached to, linked by its number. */
+function attachedLinkOf(entry: AttachedEntryRow | null): RequestDetailData['attachedLink'] {
+  if (!entry) return null;
+  const work: { kind: WorkTargetKind; id: string; number: string | null } | null = entry.job_id
+    ? { kind: 'job', id: entry.job_id, number: entry.jobs?.job_number ?? null }
+    : entry.project_id
+      ? { kind: 'project', id: entry.project_id, number: entry.projects?.project_number ?? null }
+      : entry.service_case_id
+        ? {
+            kind: 'service_case',
+            id: entry.service_case_id,
+            number: entry.service_cases?.case_number ?? null,
+          }
+        : null;
+  if (!work) return null;
+  const name = work.number ?? entry.jobs?.title ?? entry.projects?.name ?? '';
+  return { label: `${WORK_TARGET_KIND_LABELS[work.kind]} ${name}`.trim(), href: workTargetHref(work) };
+}
+
 /** The page's props from both waves; the events are null when their read or the actor read failed. */
 function requestDetailData({
   request,
@@ -150,6 +181,7 @@ function requestDetailData({
   assignees,
   documents,
   convertedServiceCase,
+  attachedEntry,
   callerMatches,
   labelWave: [
     clientResult,
@@ -168,6 +200,7 @@ function requestDetailData({
   assignees: RequestDetailData['assignees'];
   documents: RequestDetailData['documents'];
   convertedServiceCase: { case_number: string } | null;
+  attachedEntry: AttachedEntryRow | null;
   callerMatches: RequestDetailData['callerMatches'];
   labelWave: LabelWave;
 }): RequestDetailData {
@@ -212,11 +245,49 @@ function requestDetailData({
       convertedProjectResult.data,
       convertedServiceCase,
     ),
+    attachedLink: attachedLinkOf(attachedEntry),
     documents,
     callerMatches,
     events: eventsFailed || actorsResult.error ? null : eventEntries,
     assignees,
   };
+}
+
+/** The first wave: every read keyed by the request id and the authorized organization. */
+function readRequestWave(admin: AdminClient, activeOrgId: string, requestId: string) {
+  return Promise.all([
+    admin
+      .from('client_requests')
+      .select('*')
+      .eq('id', requestId)
+      .eq('organization_id', activeOrgId)
+      .maybeSingle(),
+    admin
+      .from('client_request_events')
+      .select('*')
+      .eq('request_id', requestId)
+      .eq('organization_id', activeOrgId)
+      .order('created_at', { ascending: false }),
+    getManagerAssigneeOptions(admin, activeOrgId),
+    getRequestDocuments(requestId),
+    admin
+      .from('service_cases')
+      .select('id, case_number, summary')
+      .eq('organization_id', activeOrgId)
+      .eq('source_request_id', requestId)
+      .maybeSingle(),
+    // The work an attach made the request part of; a request has one at most.
+    admin
+      .from('work_request_entries')
+      .select(
+        'job_id, project_id, service_case_id, jobs(job_number, title), projects(project_number, name), service_cases(case_number)',
+      )
+      .eq('organization_id', activeOrgId)
+      .eq('request_id', requestId)
+      .maybeSingle(),
+    // Empty for a matched or finished request.
+    getCallerMatches(requestId),
+  ]);
 }
 
 export default async function AnfrageDetailPage({ params }: { params: Promise<{ requestId: string }> }) {
@@ -244,31 +315,9 @@ export default async function AnfrageDetailPage({ params }: { params: Promise<{ 
     assignees,
     documentsResult,
     convertedServiceCaseResult,
+    attachedEntryResult,
     callerMatchesResult,
-  ] = await Promise.all([
-    admin
-      .from('client_requests')
-      .select('*')
-      .eq('id', requestId)
-      .eq('organization_id', activeOrgId)
-      .maybeSingle(),
-    admin
-      .from('client_request_events')
-      .select('*')
-      .eq('request_id', requestId)
-      .eq('organization_id', activeOrgId)
-      .order('created_at', { ascending: false }),
-    getManagerAssigneeOptions(admin, activeOrgId),
-    getRequestDocuments(requestId),
-    admin
-      .from('service_cases')
-      .select('id, case_number, summary')
-      .eq('organization_id', activeOrgId)
-      .eq('source_request_id', requestId)
-      .maybeSingle(),
-    // Empty for a matched or finished request.
-    getCallerMatches(requestId),
-  ]);
+  ] = await readRequestWave(admin, activeOrgId, requestId);
 
   if (requestError) {
     return (
@@ -286,7 +335,11 @@ export default async function AnfrageDetailPage({ params }: { params: Promise<{ 
   );
 
   const labelWave = await readLabelWave(admin, activeOrgId, request, actorIds);
-  if (!assignees.success || anyLabelReadFailed(labelWave, convertedServiceCaseResult)) {
+  if (
+    !assignees.success ||
+    anyLabelReadFailed(labelWave, convertedServiceCaseResult) ||
+    attachedEntryResult.error
+  ) {
     return (
       <RegionLoadError title="Die Anfrage konnte nicht geladen werden">
         Kunde, Einsatzort, Ansprechpartner, Zuständige, Anlage oder Umwandlung sind gerade nicht erreichbar.
@@ -304,6 +357,7 @@ export default async function AnfrageDetailPage({ params }: { params: Promise<{ 
         assignees: assignees.options,
         documents: documentsResult.success ? documentsResult.documents : null,
         convertedServiceCase: convertedServiceCaseResult.data,
+        attachedEntry: attachedEntryResult.data,
         callerMatches: callerMatchesResult.success
           ? { matches: callerMatchesResult.matches, moreMatches: callerMatchesResult.moreMatches }
           : null,
