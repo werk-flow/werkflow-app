@@ -2610,7 +2610,7 @@
         },
         "script": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 8941, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 8186, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         }
@@ -2717,6 +2717,24 @@
           "to": { "reference": 471, "tolerance": 9 },
           "runKeys": ["2026-11-08T150801926Z-0e181a"],
           "reason": null
+        },
+        {
+          "kind": "floor-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 8941, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 8186, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-09T122231468Z-966927"],
+          "reason": "The customer picker loads its create dialog through lazyDialog (werk-flow/werkflow-app#312), so the settings page's script chunk no longer carries modules it shared with the dialog; CI measured 8184 (run 42617438000), this run 8186; requests and renders unchanged"
         }
       ]
     }
