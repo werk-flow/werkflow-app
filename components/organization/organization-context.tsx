@@ -17,7 +17,7 @@ import { useBanner } from '@/components/ui/banner';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import type { ActionResult } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
-import { clearServiceWorkerCaches } from '@/lib/offline/service-worker-caches';
+import { clearServiceWorkerCaches, restoreOfflineShell } from '@/lib/offline/service-worker-caches';
 import { setActiveOrgCookie } from '@/lib/org/actions';
 import type { UserOrg } from '@/lib/org/types';
 import type { OrgRole } from '@/lib/roles';
@@ -300,6 +300,8 @@ export function OrganizationProvider({
         await setActiveOrgCookie(orgId).then(rejectRefusal);
         // Nothing the previous organization's views cached stays on the device.
         await clearServiceWorkerCaches();
+        // The switch navigates on the client, which never refills the offline shell.
+        void restoreOfflineShell();
         // GET readers authorize against this cookie. Publish the new scope only
         // after its response commits, otherwise their first read is denied.
         setActiveOrgId(orgId);

@@ -1,11 +1,19 @@
 import { expect, test } from '../support/fixtures';
-import { signOutViaUi } from '../../golden/support/steps/organization';
+import { goldenTestOrganizationName } from '../../golden/support/seed';
+import {
+  createAdditionalOrganization,
+  organizationSwitcher,
+  signOutViaUi,
+} from '../../golden/support/steps/organization';
+import { selectFromSearchable } from '../../golden/support/steps/shared';
 import { jobListReady } from '../support/lab-journeys';
 import {
   offlineFallback,
   offlineRetryButton,
   expectNoServiceWorkerCaches,
   expectOnlyShellFilesCached,
+  expectOwnedCacheDeleted,
+  plantOwnedCache,
   setNetwork,
   waitForOfflineShell,
 } from '../support/offline-shell';
@@ -49,5 +57,35 @@ test('the app shell opens without signal and keeps nothing of the person @AUDIT-
     await page.setViewportSize({ width: 1280, height: 800 });
     await signOutViaUi(page);
     await expectNoServiceWorkerCaches(page);
+  });
+});
+
+test('an organization switch deletes what the worker cached and keeps the offline fallback @AUDIT-SECURITY-OFFLINE-SHELL', async ({
+  adminPage: page,
+  world,
+}) => {
+  const secondOrganization = goldenTestOrganizationName('Offline Zweitorg', world.runId);
+
+  await test.step('the admin works in a second organization with a filled shell', async () => {
+    await page.goto('/dashboard');
+    await createAdditionalOrganization(page, secondOrganization);
+    await waitForOfflineShell(page);
+    await plantOwnedCache(page, world.users.admin.email);
+  });
+
+  await test.step('the switch back deletes the worker caches and the shell comes back', async () => {
+    await selectFromSearchable(page, organizationSwitcher(page, secondOrganization), world.orgName, {
+      searchFirst: false,
+    });
+    await expect(organizationSwitcher(page, world.orgName)).toBeEnabled();
+    await expectOwnedCacheDeleted(page);
+    await waitForOfflineShell(page);
+  });
+
+  await test.step('a reload without network shows the fallback', async () => {
+    await setNetwork(page, 'offline');
+    await page.reload();
+    await expect(offlineFallback(page)).toBeVisible();
+    await setNetwork(page, 'online');
   });
 });

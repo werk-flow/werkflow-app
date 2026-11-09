@@ -76,3 +76,22 @@ export async function expectNoServiceWorkerCaches(page: Page): Promise<void> {
   );
   expect(names).toEqual([]);
 }
+
+/** A cache under the worker's prefix with one entry: the stand-in for a later data cache. */
+const PROBE_CACHE = `${CACHE_PREFIX}probe`;
+
+/** Puts one personal entry into a cache the service worker owns. */
+export async function plantOwnedCache(page: Page, personalText: string): Promise<void> {
+  await page.evaluate(
+    async ({ name, text }) => {
+      const cache = await caches.open(name);
+      await cache.put('/probe', new Response(text));
+    },
+    { name: PROBE_CACHE, text: personalText },
+  );
+}
+
+/** Asserts that the cache `plantOwnedCache` filled is deleted. */
+export async function expectOwnedCacheDeleted(page: Page): Promise<void> {
+  expect(await page.evaluate((name) => caches.has(name), PROBE_CACHE)).toBe(false);
+}

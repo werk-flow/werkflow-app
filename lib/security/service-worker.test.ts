@@ -17,3 +17,13 @@ test('every cache the service worker opens carries the prefix the page clears', 
   expect(opened).toEqual(['SHELL_CACHE']);
   expect(worker).toMatch(/const SHELL_CACHE = `\$\{CACHE_PREFIX\}/);
 });
+
+// Rule test: an organization switch deletes the shell and navigates on the
+// client, so the page asks the worker to refill it. A message the worker does
+// not know would leave the device without the offline fallback.
+test('the shell refill message the page sends is the one the worker answers', () => {
+  const pageMessage = pageSide.match(/const SHELL_REFILL_MESSAGE = '([^']+)';/)?.[1];
+  expect(pageMessage).toBeDefined();
+  expect(worker).toContain(`const REFILL_MESSAGE = '${pageMessage}';`);
+  expect(worker).toMatch(/event\.data === REFILL_MESSAGE\) event\.waitUntil\(ensureShell\(\)\)/);
+});

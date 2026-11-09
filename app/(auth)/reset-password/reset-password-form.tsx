@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { clearEmailChangeChallengeQuietly } from '@/hooks/use-sign-out';
 import { logError } from '@/lib/logging';
+import { clearServiceWorkerCaches } from '@/lib/offline/service-worker-caches';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
 import {
@@ -158,6 +159,7 @@ async function resetPasswordAndLeave({
 
     await clearEmailChangeChallengeQuietly();
     clearManualEntryBridge();
+    await clearServiceWorkerCaches();
 
     // Immediately sign out the user for security — global on purpose: a
     // password reset must end every existing session.

@@ -15,6 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useOrganization } from '@/components/organization/organization-context';
+import { restoreOfflineShell } from '@/lib/offline/service-worker-caches';
 import { SidebarProfileCard } from '@/components/sidebar/sidebar-profile-card';
 import { usePageBodyKeyboardScroll } from '@/components/shared/page-body-keyboard-scroll';
 import { AttentionCountProvider, useAttentionCounts } from '@/components/realtime/attention-count-provider';
@@ -366,6 +367,10 @@ export function AppShell({
   const [isOpen, setIsOpen] = useState(false);
   const { isSwitchingOrg, activeOrg } = useOrganization();
   const showIosInstallHint = useSyncExternalStore(subscribeNever, needsIosInstallHint, onServer);
+  // Signing in navigates on the client, so a shell a sign-out deleted comes back here.
+  useEffect(() => {
+    void restoreOfflineShell();
+  }, []);
   const mainRef = useRef<HTMLElement>(null);
   usePageBodyKeyboardScroll(mainRef);
 

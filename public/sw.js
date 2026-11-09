@@ -13,7 +13,9 @@
 // The page clears every cache whose name starts with CACHE_PREFIX on sign-out
 // and on an organization switch (lib/offline/service-worker-caches.ts owns the
 // same prefix; lib/security/service-worker.test.ts pins both). The next
-// navigation fills the shell again.
+// navigation fills the shell again. A signed-in page that navigates on the
+// client sends REFILL_MESSAGE instead, so the fallback is back before the
+// signal goes.
 //
 // Bump SHELL_VERSION when this file changes what the shell holds.
 
@@ -21,6 +23,7 @@ const CACHE_PREFIX = 'werkflow-';
 const SHELL_VERSION = 1;
 const SHELL_CACHE = `${CACHE_PREFIX}shell-v${SHELL_VERSION}`;
 const OFFLINE_PATH = '/offline';
+const REFILL_MESSAGE = 'werkflow:refill-shell';
 // Same-origin files the fallback page references: the build's hashed files
 // and the logos and icons under public/. Escaped quotes inside the streamed
 // RSC payload end a match the same way plain quotes do.
@@ -45,6 +48,10 @@ async function ensureShell() {
   // A failed fill leaves the browser's own offline page; the next navigation tries again.
   await fillShell().catch(() => undefined);
 }
+
+self.addEventListener('message', (event) => {
+  if (event.data === REFILL_MESSAGE) event.waitUntil(ensureShell());
+});
 
 self.addEventListener('install', (event) => {
   event.waitUntil(fillShell().then(() => self.skipWaiting()));

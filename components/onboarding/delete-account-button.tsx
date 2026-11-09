@@ -19,6 +19,7 @@ import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import { deleteAccount } from '@/lib/auth/actions';
 import { loadDocument } from '@/lib/navigation/document-load';
+import { clearServiceWorkerCaches } from '@/lib/offline/service-worker-caches';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
 
@@ -46,6 +47,7 @@ export function DeleteAccountButton() {
         }
 
         clearManualEntryBridge();
+        await clearServiceWorkerCaches();
         // Sign out locally and load the login page fresh — the deleted account's
         // other sessions are already gone server-side.
         await supabase.auth.signOut({ scope: 'local' });
