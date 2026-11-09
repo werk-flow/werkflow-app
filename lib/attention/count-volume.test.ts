@@ -521,7 +521,7 @@ function handoverCandidates(organizationId: unknown): Row[] {
   return [...new Set(ids)].map((projectId) => ({ project_id: projectId }));
 }
 
-/** `list_open_request_attention` as migration 20261126090001 defines it, without a promised callback. */
+/** `list_open_request_attention` as migration 20261128090002 defines it, without a promised callback. */
 function openRequests(organizationId: unknown): Row[] {
   return (world.get('client_requests') ?? [])
     .filter(
