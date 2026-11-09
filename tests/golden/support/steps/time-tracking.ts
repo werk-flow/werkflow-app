@@ -24,7 +24,7 @@ import {
   selectFromSearchable,
   SHARED_COPY,
   typeIntoDatePicker,
-  typeIntoDateTimeField,
+  typeIntoDatePickerById,
   typeIntoTimeInput,
 } from './shared';
 
@@ -92,8 +92,6 @@ export const TIME_ENTRY_COPY = {
   /** The manual entry action and dialog for every role. */
   manualEntryAnyRole: /^(Manuelle Eintragung|Zeit nachtragen)$/,
   date: SHARED_COPY.field.date,
-  noJob: 'Kein Auftrag',
-  clockOutBeforeClockIn: 'Die Einstempelzeit muss vor der Ausstempelzeit liegen.',
   overlap: /überschneidet|Überlappung/i,
   submittedForApproval: 'Antrag wurde zur Genehmigung eingereicht.',
   createdOrSubmitted: /Antrag wurde zur Genehmigung eingereicht\.|Eintrag erfolgreich erstellt!/,
@@ -154,6 +152,10 @@ export const TIME_CORRECTION_COPY = {
   approveSelection: 'Auswahl freigeben',
   noEntryBefore: 'Kein Eintrag',
   withdraw: 'Zurückziehen',
+  /** The timeline of added time, activity by activity. */
+  timeline: 'Ablauf des Tages',
+  endBeforeStart:
+    'Das Ende liegt vor dem Beginn. Geht die Tätigkeit über Mitternacht, wähl „Endet am nächsten Tag“.',
 } as const;
 
 /** The banner after a batch review of corrections. */
@@ -484,7 +486,7 @@ export function manualEntryDialog(page: Page): Locator {
 }
 
 /** Types the date, the clock-in and the clock-out time of an open manual entry dialog. */
-export async function fillManualEntryInterval(
+async function fillManualEntryInterval(
   dialog: Locator,
   interval: { dateDigits: string; clockInDigits: string; clockOutDigits: string },
 ): Promise<void> {
@@ -504,13 +506,6 @@ export async function fillManualEntryTimes(
 ): Promise<void> {
   await typeIntoTimeInput(dialog, 'clockInTime', times.clockInDigits);
   await typeIntoTimeInput(dialog, 'clockOutTime', times.clockOutDigits);
-}
-
-/** Picks the job of an open manual entry dialog by its number. */
-export async function selectManualEntryJob(page: Page, dialog: Locator, jobNumber: string): Promise<void> {
-  await dialog.getByRole('combobox').filter({ hasText: TIME_ENTRY_COPY.noJob }).click();
-  await page.getByPlaceholder(SHARED_COPY.picker.searchJob).fill(jobNumber);
-  await page.getByRole('listbox').getByRole('option').filter({ hasText: jobNumber }).click();
 }
 
 export async function createOwnManualTimeEntry(
@@ -728,20 +723,56 @@ export async function openOwnTimeDialog(page: Page, observation: string): Promis
 }
 
 /**
+ * The timeline of added time once the planned visits of its day have
+ * answered; until then they may still replace its activities.
+ */
+async function settledTimeline(dialog: Locator): Promise<Locator> {
+  const timeline = dialog.getByRole('region', { name: TIME_CORRECTION_COPY.timeline });
+  await expect(timeline).toHaveAttribute('aria-busy', 'false', { timeout: 10_000 });
+  return timeline;
+}
+
+/** Types the times (`HH:MM`) of the timeline's first activity. */
+async function fillFirstTimelineActivity(
+  dialog: Locator,
+  times: { from: string; to: string },
+): Promise<void> {
+  const timeline = await settledTimeline(dialog);
+  const bounded = { timeout: 5_000 };
+  for (const [suffix, time] of [
+    ['start', times.from],
+    ['end', times.to],
+  ] as const) {
+    const id = await timeline
+      .locator(`[id^="correction-timeline-"][id$="-${suffix}"]`)
+      .first()
+      .getAttribute('id');
+    if (!id) throw new Error(`the first timeline activity has no ${suffix} time`);
+    await typeIntoTimeInput(timeline, id, time.replace(':', ''), bounded);
+  }
+}
+
+/** Picks the job of the timeline's first activity by its number. */
+export async function selectFirstTimelineJob(page: Page, dialog: Locator, jobNumber: string): Promise<void> {
+  const timeline = await settledTimeline(dialog);
+  await selectFromSearchable(
+    page,
+    timeline.getByRole('combobox', { name: 'Auftrag der Tätigkeit 1' }),
+    jobNumber,
+  );
+}
+
+/**
  * Fills an employee's own time of an earlier day (Berlin `YYYY-MM-DD`,
- * `HH:MM`): the day asks for the reason, and the time goes in as a correction.
+ * `HH:MM`): the day asks for the reason, and its timeline goes in as a correction.
  */
 export async function fillOwnPastTime(
   dialog: Locator,
   input: { date: string; from: string; to: string; reason: string },
 ): Promise<void> {
-  const bounded = { timeout: 5_000 };
-  await fillManualEntryInterval(dialog, {
-    dateDigits: input.date.split('-').reverse().join(''),
-    clockInDigits: input.from.replace(':', ''),
-    clockOutDigits: input.to.replace(':', ''),
-  });
-  await dialog.getByLabel(SHARED_COPY.field.reason).fill(input.reason, bounded);
+  await typeIntoDatePicker(dialog, TIME_ENTRY_COPY.date, input.date.split('-').reverse().join(''));
+  await fillFirstTimelineActivity(dialog, input);
+  await dialog.getByLabel(SHARED_COPY.field.reason).fill(input.reason, { timeout: 5_000 });
 }
 
 /** Fills an open missed-time correction; a person is chosen only for someone else's time. */
@@ -758,8 +789,8 @@ export async function fillMissedTime(
       input.personName,
     );
   }
-  await typeIntoDateTimeField(dialog, 'time-correction-start', `${input.date}T${input.from}`, bounded);
-  await typeIntoDateTimeField(dialog, 'time-correction-end', `${input.date}T${input.to}`, bounded);
+  await typeIntoDatePickerById(dialog, 'time-correction-date', input.date, bounded);
+  await fillFirstTimelineActivity(dialog, input);
   await dialog.getByLabel(SHARED_COPY.field.reason).fill(input.reason, bounded);
 }
 

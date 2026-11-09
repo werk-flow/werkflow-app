@@ -17,13 +17,41 @@ import {
 } from '@/lib/time-corrections/types';
 import { formatBerlinDateTime } from '@/lib/utils';
 
+function snapshotFacts(request: TimeCorrectionRequest, state: 'before' | 'proposed') {
+  return state === 'before' ? request.revision.beforeSnapshot.facts : request.revision.proposedSnapshot.facts;
+}
+
 function summarizeSnapshot(request: TimeCorrectionRequest, state: 'before' | 'proposed'): string {
-  const facts =
-    state === 'before' ? request.revision.beforeSnapshot.facts : request.revision.proposedSnapshot.facts;
-  const [firstTimestamp, ...laterTimestamps] = facts.map((fact) => formatBerlinDateTime(fact.timestamp));
+  const [firstTimestamp, ...laterTimestamps] = snapshotFacts(request, state).map((fact) =>
+    formatBerlinDateTime(fact.timestamp),
+  );
   if (firstTimestamp === undefined) return state === 'before' ? 'Kein Eintrag' : 'Eintrag entfällt';
   const lastTimestamp = laterTimestamps.at(-1);
   return lastTimestamp === undefined ? firstTimestamp : `${firstTimestamp} bis ${lastTimestamp}`;
+}
+
+/** The span of a snapshot, then each of its activities with its times and job: the break and the job a reviewer approves. */
+function SnapshotSummary({
+  request,
+  state,
+}: {
+  request: TimeCorrectionRequest;
+  state: 'before' | 'proposed';
+}) {
+  return (
+    <>
+      <p className="mt-1">{summarizeSnapshot(request, state)}</p>
+      <ul className="mt-2 space-y-1">
+        {request.activities[state].map((activity) => (
+          <li key={activity.times} className="flex flex-wrap gap-x-2">
+            <span className="tabular-nums">{activity.times}</span>
+            <span className="font-medium">{activity.kind}</span>
+            <span className="min-w-0 break-words text-muted-foreground">{activity.job}</span>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
 }
 
 function statusClass(status: TimeCorrectionRequest['status']): string {
@@ -199,11 +227,11 @@ export function TimeCorrectionRequestCard({
         <div className="grid gap-2 text-sm sm:grid-cols-2">
           <div className="rounded-md border p-3">
             <p className="text-xs font-medium text-muted-foreground">Bisher wirksam</p>
-            <p className="mt-1">{summarizeSnapshot(request, 'before')}</p>
+            <SnapshotSummary request={request} state="before" />
           </div>
           <div className="rounded-md border border-warning/30 bg-warning-soft p-3">
             <p className="text-xs font-medium text-muted-foreground">Vorgeschlagen</p>
-            <p className="mt-1">{summarizeSnapshot(request, 'proposed')}</p>
+            <SnapshotSummary request={request} state="proposed" />
           </div>
         </div>
         <div className="rounded-md bg-muted/50 p-3 text-sm">

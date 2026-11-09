@@ -3,6 +3,7 @@ import { isDateInClosedPeriod, type ClosedTimePeriod } from '@/lib/time-tracking
 import type { ManualEntryInput } from '@/lib/time-tracking/types';
 import { describeTimeValidationFailure } from '@/lib/time-tracking/validation-messages';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
+import { isClockTime } from '@/lib/time-corrections/types';
 import { toLocalDateString } from '@/lib/utils';
 import type { ManualEntryMode } from '@/components/use-manual-entry-form-draft';
 
@@ -55,10 +56,6 @@ export type ManualEntrySubmission =
 
 const MISSING_TIME = 'Bitte gib eine Uhrzeit an.';
 
-function isClockTime(value: string): boolean {
-  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
-}
-
 function needsClockIn(mode: ManualEntryMode): boolean {
   return mode === 'clock_in' || mode === 'both';
 }
@@ -104,23 +101,30 @@ function manualEntryFieldErrors(
       : isDateInClosedPeriod(dateIso, values.closedPeriods)
         ? SHARED_FAILURE_MESSAGES.period_closed
         : undefined,
-    clockIn: needsClockIn(entryMode) && !isClockTime(clockInTime) ? MISSING_TIME : undefined,
-    clockOut: !needsClockOut(entryMode)
-      ? undefined
-      : !isClockTime(clockOutTime)
-        ? MISSING_TIME
-        : entryMode === 'both' && isClockTime(clockInTime) && clockOutTime <= clockInTime
-          ? describeTimeValidationFailure({ error: 'pair_clock_in_not_before_clock_out' })
-          : undefined,
+    // Own time of an earlier day carries a timeline instead (manual-entry-past-day.ts).
+    clockIn:
+      !values.needsReason && needsClockIn(entryMode) && !isClockTime(clockInTime) ? MISSING_TIME : undefined,
+    clockOut:
+      values.needsReason || !needsClockOut(entryMode)
+        ? undefined
+        : !isClockTime(clockOutTime)
+          ? MISSING_TIME
+          : entryMode === 'both' && isClockTime(clockInTime) && clockOutTime <= clockInTime
+            ? describeTimeValidationFailure({ error: 'pair_clock_in_not_before_clock_out' })
+            : undefined,
     reason: values.needsReason && !values.reason.trim() ? 'Bitte gib einen Grund an.' : undefined,
   };
 }
 
-/** The field ids in form order, for focusFirstInvalidField. */
-export function manualEntryFieldIds(errors: ManualEntryFieldErrors): Record<string, string | undefined> {
+/** The field ids in form order, for focusFirstInvalidField; an earlier day's timeline follows the date. */
+export function manualEntryFieldIds(
+  errors: ManualEntryFieldErrors,
+  timelineErrors: Readonly<Record<string, string | undefined>> = {},
+): Record<string, string | undefined> {
   return {
     'manual-entry-member': errors.member,
     'manual-entry-date': errors.date,
+    ...timelineErrors,
     clockInTime: errors.clockIn,
     clockOutTime: errors.clockOut,
     'manual-entry-reason': errors.reason,

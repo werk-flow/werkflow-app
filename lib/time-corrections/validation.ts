@@ -1,4 +1,5 @@
 import { z } from '@/lib/zod';
+import { timeActivitySelectionSchema } from '@/lib/time-tracking/activity-selection-schema';
 import { uuidSchema } from '@/lib/validation/uuid';
 
 import type { TimeCorrectionKind } from './types';
@@ -11,17 +12,27 @@ const timeCorrectionSourceInputSchema = z.object({
   id: uuidSchema,
 });
 
-const timeCorrectionFactInputSchema = z.object({
-  factId: z.string().min(1).max(100),
-  employeeRecordId: uuidSchema,
-  entryType: timeEntryTypeSchema,
-  timestamp: z.iso.datetime({ offset: true }),
-  jobId: uuidSchema.nullable().optional(),
-  activityKind: z
-    .enum(['work', 'travel', 'break', 'standby', 'callout', 'internal_activity'])
-    .nullable()
-    .optional(),
-});
+const timeCorrectionFactInputSchema = z
+  .object({
+    factId: z.string().min(1).max(100),
+    employeeRecordId: uuidSchema,
+    entryType: timeEntryTypeSchema,
+    timestamp: z.iso.datetime({ offset: true }),
+    jobId: uuidSchema.nullable().optional(),
+    activityKind: z
+      .enum(['work', 'travel', 'break', 'standby', 'callout', 'internal_activity'])
+      .nullable()
+      .optional(),
+    /** The activity with its details, as a timeline of a forgotten day records it. */
+    activity: timeActivitySelectionSchema.optional(),
+  })
+  // An activity names the fact's kind and job; it never contradicts them.
+  .refine(
+    (fact) =>
+      !fact.activity ||
+      (fact.activity.kind === fact.activityKind &&
+        ('jobId' in fact.activity ? fact.activity.jobId : null) === (fact.jobId ?? null)),
+  );
 
 const calendarBoundarySchema = z.object({
   source: timeCorrectionSourceInputSchema.extend({ version: z.string().min(1).max(200) }),

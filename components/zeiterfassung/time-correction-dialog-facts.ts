@@ -23,9 +23,9 @@ type TimeCorrectionProposedFact = {
   activityKind: TimeSegmentKind;
 };
 
-// The clock facts a correction proposes: a start/end pair for added time, two
-// adjoining pairs for a split, one changed fact for an edit of an existing
-// entry, and none for a deletion.
+// The clock facts a correction of an entry proposes: two adjoining pairs for
+// a split, one changed fact for any other change, and none for a deletion.
+// Added time carries a timeline instead (lib/time-corrections/timeline.ts).
 export function buildTimeCorrectionProposedFacts({
   kind,
   entry,
@@ -49,9 +49,7 @@ export function buildTimeCorrectionProposedFacts({
     activityKind,
   });
   let proposedFacts: TimeCorrectionProposedFact[] = [];
-  if (kind === 'add' || kind === 'missed_clock') {
-    proposedFacts = [makeFact('start', 'clock_in', startAt), makeFact('end', 'clock_out', endAt)];
-  } else if (kind === 'split') {
+  if (kind === 'split') {
     proposedFacts = [
       makeFact('first-start', 'clock_in', startAt),
       makeFact('first-end', 'clock_out', splitAt),

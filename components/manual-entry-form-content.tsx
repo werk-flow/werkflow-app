@@ -2,7 +2,8 @@
 
 import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
 import { useReportPending } from '@/hooks/use-report-pending';
-import { useState } from 'react';
+import dynamic from 'next/dynamic';
+import { useCallback, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import { SectionError } from '@/components/ui/section-error';
@@ -22,6 +23,9 @@ import { isBeforeToday } from '@/components/manual-entry-submission';
 import { useManualEntryMembers } from '@/components/use-manual-entry-form-members';
 import { useManualEntrySubmit } from '@/components/use-manual-entry-form-submit';
 import { useClosedTimePeriods } from '@/components/zeiterfassung/use-closed-time-periods';
+import { Skeleton } from '@/components/ui/skeleton';
+import type { CorrectionTimelineHandle } from '@/components/zeiterfassung/time-correction-dialog-timeline-section';
+import { toLocalDateString } from '@/lib/utils';
 
 type OrgMember = CalendarEntryDialogMember;
 type JobOption = CalendarEntryDialogJobOption;
@@ -73,7 +77,8 @@ function useManualEntryFormState({
   // entering earlier days directly.
   const needsReason = activeOrg?.role === 'employee' && isBeforeToday(selectedDate);
   const entryMode: ManualEntryMode = needsReason ? 'both' : chosenEntryMode;
-  const canAssignJob = entryMode === 'clock_in' || entryMode === 'both';
+  // An earlier day's timeline names a job per activity.
+  const canAssignJob = !needsReason && (entryMode === 'clock_in' || entryMode === 'both');
 
   function changeEntryMode(mode: ManualEntryMode) {
     setEntryMode(mode);
@@ -126,6 +131,10 @@ function useManualEntryForm({
     preselectedClockOutTime,
   });
   const closedPeriods = useClosedTimePeriods(form.activeOrgId, isActive);
+  // The earlier day's timeline section, once loaded, and the span it reports for the calendar draft.
+  const timelineRef = useRef<CorrectionTimelineHandle | null>(null);
+  const [timelineSpan, setTimelineSpan] = useState({ start: '', end: '' });
+  const reportTimelineSpan = useCallback((start: string, end: string) => setTimelineSpan({ start, end }), []);
 
   const submit = useManualEntrySubmit({
     activeOrgId: form.activeOrgId,
@@ -142,6 +151,7 @@ function useManualEntryForm({
     needsReason: form.needsReason,
     reason: form.reason,
     closedPeriods,
+    timelineRef,
     onSuccess,
   });
   useReportPending(submit.isPending, onPendingChange);
@@ -160,8 +170,9 @@ function useManualEntryForm({
     currentUserId: form.currentUserId,
     entryMode: form.entryMode,
     selectedDate: form.selectedDate,
-    clockInTime: form.clockInTime,
-    clockOutTime: form.clockOutTime,
+    // An earlier day's draft spans its timeline.
+    clockInTime: form.needsReason ? timelineSpan.start : form.clockInTime,
+    clockOutTime: form.needsReason ? timelineSpan.end : form.clockOutTime,
   });
 
   const jobSearch = useJobEntityOptions(
@@ -174,7 +185,50 @@ function useManualEntryForm({
     })),
   );
   const isOwnBueroEntry = form.activeOrg?.role === 'buero' && form.selectedUserId === form.currentUserId;
-  return { ...form, ...submit, ...members, jobSearch, isOwnBueroEntry };
+  const timeline = {
+    ref: timelineRef,
+    reportSpan: reportTimelineSpan,
+    initialTimes:
+      preselectedClockInTime && preselectedClockOutTime
+        ? { start: preselectedClockInTime, end: preselectedClockOutTime }
+        : undefined,
+    enabled: isActive,
+  };
+  return { ...form, ...submit, ...members, jobSearch, isOwnBueroEntry, timeline };
+}
+
+// Only an earlier day shows the timeline, so it loads when it does, not with
+// every page that offers „Zeit nachtragen“.
+const CorrectionTimelineSection = dynamic(
+  () =>
+    import('@/components/zeiterfassung/time-correction-dialog-timeline-section').then(
+      (mod) => mod.CorrectionTimelineSection,
+    ),
+  // The box of one activity while the section loads.
+  { loading: () => <Skeleton className="h-72 w-full rounded-lg" /> },
+);
+
+/** Own time of an earlier day: its timeline and the reason an approver reads. */
+function EarlierDayFields({ form }: { form: ReturnType<typeof useManualEntryForm> }) {
+  if (!form.activeOrgId) return null;
+  return (
+    <>
+      <CorrectionTimelineSection
+        handleRef={form.timeline.ref}
+        organizationId={form.activeOrgId}
+        dateIso={form.selectedDate ? toLocalDateString(form.selectedDate) : null}
+        enabled={form.timeline.enabled}
+        initialTimes={form.timeline.initialTimes}
+        showErrors={form.showTimelineErrors}
+        onSpanChange={form.timeline.reportSpan}
+      />
+      <ManualEntryReasonField
+        reason={form.reason}
+        setReason={form.setReason}
+        error={form.fieldErrors.reason}
+      />
+    </>
+  );
 }
 
 export function ManualEntryFormContent({
@@ -227,6 +281,7 @@ export function ManualEntryFormContent({
         />
 
         <ManualEntryTimeFields
+          dateOnly={form.needsReason}
           entryMode={form.entryMode}
           fieldErrors={form.fieldErrors}
           selectedDate={form.selectedDate}
@@ -237,13 +292,7 @@ export function ManualEntryFormContent({
           setClockOutTime={form.setClockOutTime}
         />
 
-        {form.needsReason ? (
-          <ManualEntryReasonField
-            reason={form.reason}
-            setReason={form.setReason}
-            error={form.fieldErrors.reason}
-          />
-        ) : null}
+        {form.needsReason ? <EarlierDayFields form={form} /> : null}
 
         <ErrorText>{form.error}</ErrorText>
 

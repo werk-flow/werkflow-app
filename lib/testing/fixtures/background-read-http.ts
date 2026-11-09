@@ -149,6 +149,9 @@ mock.module('@/lib/time-corrections/read-actions', () => ({
   getTimeCorrectionHistoryPage: seam('time-correction-history'),
   getTimeCorrectionFormOptions: seam('time-correction-form-options'),
 }));
+mock.module('@/lib/time-corrections/planned-visit-reads', () => ({
+  getPlannedCorrectionVisits: seam('time-correction-planned-visits'),
+}));
 mock.module('@/lib/time-tracking/closed-period-reads', () => ({
   getClosedTimePeriods: seam('closed-time-periods'),
 }));
@@ -404,6 +407,7 @@ const inputs: Record<string, unknown> = {
   'time-correction-requests': { organizationId, scope: 'approvals' },
   'time-correction-history': { organizationId, page: 2 },
   'time-correction-form-options': { organizationId },
+  'time-correction-planned-visits': { organizationId, localDate: '2026-10-26', employeeRecordId: jobId },
   'closed-time-periods': { organizationId },
   'time-approval-holder': { organizationId },
   'time-entries-for-job': { jobId },
@@ -554,6 +558,7 @@ for (const kind of [
   'responsibility-substitute-absences',
   'vacation-days-preview',
   'work-predecessor-search',
+  'time-correction-planned-visits',
 ]) {
   assert.ok(organizationNamingKinds.includes(kind), `${kind} names its organization`);
 }

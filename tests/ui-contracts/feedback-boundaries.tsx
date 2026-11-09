@@ -15,6 +15,8 @@ import { Button } from '@/components/ui/button';
 import { PendingApprovals } from '@/components/zeiterfassung/pending-approvals';
 import { OpeningDateCorrections } from '@/components/zeiterfassung/time-account-opening-corrections';
 import { TimeCorrectionRequests } from '@/components/zeiterfassung/time-correction-requests';
+import { CorrectionTimelineFields } from '@/components/zeiterfassung/time-correction-dialog-timeline';
+import { useCorrectionTimeline } from '@/components/zeiterfassung/time-correction-dialog-timeline-state';
 import {
   parseRequestListQuery,
   type RequestListEntry,
@@ -40,6 +42,7 @@ const FEEDBACK_FIXTURES = [
   'service-evidence-link',
   'time-account-opening',
   'work-artifact-report',
+  'correction-timeline',
 ] as const;
 export type FeedbackFixtureName = (typeof FEEDBACK_FIXTURES)[number];
 
@@ -245,6 +248,36 @@ function ServiceEvidenceHost(): React.JSX.Element {
   );
 }
 
+/** A forgotten day's timeline whose person can change, with a check of what a save would send. */
+function CorrectionTimelineHost(): React.JSX.Element {
+  const [employeeRecordId, setEmployeeRecordId] = useState('contract-person-a');
+  const [checked, setChecked] = useState('');
+  const timeline = useCorrectionTimeline({
+    organizationId: 'contract-organization',
+    employeeRecordId,
+    dateIso: '2026-10-26',
+    enabled: true,
+  });
+  return (
+    <>
+      <Button type="button" onClick={() => setEmployeeRecordId('contract-person-b')}>
+        Andere Person
+      </Button>
+      <Button
+        type="button"
+        onClick={() => {
+          const { resolved } = timeline.validate();
+          setChecked(resolved.valid ? `${resolved.segments.length} Tätigkeiten` : 'unvollständig');
+        }}
+      >
+        Prüfen
+      </Button>
+      <output aria-label="Prüfergebnis">{checked}</output>
+      <CorrectionTimelineFields timeline={timeline} showErrors={false} />
+    </>
+  );
+}
+
 function FeedbackSurface({ name }: { name: FeedbackFixtureName }): React.JSX.Element {
   switch (name) {
     case 'time-approvals':
@@ -273,6 +306,8 @@ function FeedbackSurface({ name }: { name: FeedbackFixtureName }): React.JSX.Ele
       return <ServiceEvidenceHost />;
     case 'time-account-opening':
       return <TimeAccountOpeningHost />;
+    case 'correction-timeline':
+      return <CorrectionTimelineHost />;
     case 'work-artifact-report':
       // A worker's job work pack with the visit window the page read from today's time records.
       return (
