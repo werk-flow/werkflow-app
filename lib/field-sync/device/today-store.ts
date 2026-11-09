@@ -69,13 +69,22 @@ async function withStore<T>(
  * Throws when IndexedDB itself fails: the caller shows that, never an empty day.
  */
 export async function readTodayOnDevice(now: Date = new Date()): Promise<StoredToday | null> {
-  const value: unknown = await withStore('readonly', (store) => store.get(CURRENT));
-  if (value === undefined) return null;
+  const value: unknown = await withStore('readwrite', (store) => {
+    const request = store.get(CURRENT);
+    // Checked and deleted in the read's own transaction: a new day another tab saves meanwhile is
+    // never the record deleted. Only the record goes: an ended day is no sign-out, so no refresh or
+    // other tab needs to start over.
+    request.addEventListener('success', () => {
+      if (request.result !== undefined && !currentDay(request.result, now)) store.delete(CURRENT);
+    });
+    return request;
+  });
+  return currentDay(value, now);
+}
+
+function currentDay(value: unknown, now: Date): StoredToday | null {
   const stored = storedTodaySchema.safeParse(value);
-  if (stored.success && now.getTime() < Date.parse(stored.data.snapshot.validUntil)) return stored.data;
-  // Only the record goes: an ended day is no sign-out, so no refresh or other tab needs to start over.
-  await withStore('readwrite', (store) => store.delete(CURRENT));
-  return null;
+  return stored.success && now.getTime() < Date.parse(stored.data.snapshot.validUntil) ? stored.data : null;
 }
 
 /** Replaces whatever the device held with this snapshot. A full disk rejects (`QuotaExceededError`). */

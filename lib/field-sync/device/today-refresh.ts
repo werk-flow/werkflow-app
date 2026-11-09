@@ -46,9 +46,6 @@ function refreshNow(): void {
   }
   running = true;
   void refreshTodayOnDevice(current)
-    // A wipe while it ran, such as an organization switch finishing after the new start page rendered,
-    // leaves the device empty: one more refresh fills it for the latest holder.
-    .then((outcome) => (outcome === 'superseded' ? refreshTodayOnDevice(holder ?? current) : outcome))
     .then(async (outcome) => {
       if (outcome === 'saved' || outcome === 'confirmed') await askForPersistence(new Date());
     })

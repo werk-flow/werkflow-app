@@ -61,11 +61,14 @@ export function claimToday(holder: TodayHolder): void {
   }
 }
 
-/** Whether a start page in some tab registered another holder since this one: then this tab is stale. */
+/**
+ * Whether this holder no longer owns the device: a start page in some tab registered another one,
+ * or a wipe removed the registration. A sign-out wipes before the session ends, so a refresh that
+ * runs on after it must not save a day with the session that is about to end.
+ */
 function superseded(holder: TodayHolder): boolean {
   try {
-    const current = localStorage.getItem(TODAY_HOLDER_KEY);
-    return current !== null && current !== todayHolderKey(holder);
+    return localStorage.getItem(TODAY_HOLDER_KEY) !== todayHolderKey(holder);
   } catch {
     // best-effort: without localStorage only this tab's start page names the holder.
     return false;

@@ -14,7 +14,8 @@ export const TODAY_WIPE_KEY = 'werkflow:today-wiped';
 
 /**
  * The person and organization (`userId:organizationId`) the latest start page in any tab
- * refreshes for. A tab left open on an older one refreshes nothing. A wipe removes it.
+ * refreshes for. A tab left open on an older one refreshes nothing. A wipe removes it, so no
+ * refresh saves again until a start page claims the device anew.
  */
 export const TODAY_HOLDER_KEY = 'werkflow:today-holder';
 

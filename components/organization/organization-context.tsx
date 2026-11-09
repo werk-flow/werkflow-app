@@ -162,8 +162,9 @@ async function refreshOwnMemberships({
       if (generation !== refreshGenerationRef.current) return;
       const newActiveId = newMemberships[0]?.orgId ?? null;
       if (newActiveId) {
-        await setActiveOrgCookie(newActiveId).then(rejectRefusal);
+        // Before the cookie: the next start page's refresh must come after this wipe, never before it.
         await clearTodayOnDevice();
+        await setActiveOrgCookie(newActiveId).then(rejectRefusal);
       }
       if (generation !== refreshGenerationRef.current) return;
       setActiveOrgId(newActiveId);
@@ -312,10 +313,12 @@ export function OrganizationProvider({
       refreshGenerationRef.current += 1;
 
       try {
+        // Nothing the previous organization's day held stays on the device. Before the cookie: the
+        // new organization's start page can render from the cookie action's response, and its
+        // refresh must come after this wipe, never before it.
+        await clearTodayOnDevice();
         // The cookie call stays in this handler, where the double-render check sees it.
         await clearCachesAfterSwitch(setActiveOrgCookie(orgId));
-        // Nothing the previous organization's day held stays on the device.
-        await clearTodayOnDevice();
         // GET readers authorize against this cookie. Publish the new scope only
         // after its response commits, otherwise their first read is denied.
         setActiveOrgId(orgId);

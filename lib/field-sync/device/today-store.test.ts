@@ -1,10 +1,10 @@
 import 'fake-indexeddb/auto';
 
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 
 import type { FieldSyncToday } from '@/lib/field-sync/today-snapshot';
 import { keepTodayFresh } from './today-refresh';
-import { refreshTodayOnDevice, type TodayHolder } from './today-sync';
+import { claimToday, refreshTodayOnDevice, type TodayHolder } from './today-sync';
 import { readTodayOnDevice, saveTodayOnDevice } from './today-store';
 import { TODAY_DATABASE, TODAY_HOLDER_KEY, TODAY_WIPE_KEY, clearTodayOnDevice } from './today-wipe';
 
@@ -50,6 +50,11 @@ async function until(condition: () => Promise<boolean> | boolean): Promise<void>
     await new Promise((resolve) => setImmediate(resolve));
   }
   throw new Error('The condition never held.');
+}
+
+/** Lets every queued task and IndexedDB event run; no clock is involved. */
+async function letQueuedWorkRun(): Promise<void> {
+  for (let turn = 0; turn < 50; turn += 1) await new Promise((resolve) => setImmediate(resolve));
 }
 
 /** A 200 whose body arrives only after `beforeBody` ran: a wipe that lands while the answer streams in. */
@@ -151,6 +156,17 @@ describe('the today snapshot on the device', () => {
     expect(await readTodayOnDevice(MORNING)).toBeNull();
   });
 
+  test("the day's rollover in one tab never deletes the new day another tab saves at the same time", async () => {
+    await saveTodayOnDevice(snapshot(), MORNING);
+    const nextDay = snapshot({ berlinDate: '2026-11-10', validUntil: '2026-11-10T23:00:00.000Z' });
+    const [rolledOver] = await Promise.all([
+      readTodayOnDevice(NEXT_DAY),
+      saveTodayOnDevice(nextDay, NEXT_DAY),
+    ]);
+    expect(rolledOver).toBeNull();
+    expect((await readTodayOnDevice(NEXT_DAY))?.snapshot.berlinDate).toBe('2026-11-10');
+  });
+
   test('a record this version cannot read is dropped, never shown', async () => {
     await saveTodayOnDevice({ ...snapshot(), assignments: [] }, MORNING);
     const request = indexedDB.open(TODAY_DATABASE, 1);
@@ -168,6 +184,11 @@ describe('the today snapshot on the device', () => {
 });
 
 describe('refreshing the today snapshot', () => {
+  // The start page claims the device before it refreshes (keepTodayFresh).
+  beforeEach(() => {
+    claimToday(holder);
+  });
+
   test('a new snapshot is saved; the request names the organization and passes the same-origin guard', async () => {
     const { send, requests } = answer(Response.json(snapshot()));
     expect(await refreshTodayOnDevice(holder, { fetch: send, now: () => MORNING })).toBe('saved');
@@ -252,6 +273,7 @@ describe('refreshing the today snapshot', () => {
     expect(await refreshTodayOnDevice(holder, { fetch: send, now: () => MORNING })).toBe('superseded');
     expect(await readTodayOnDevice(MORNING)).toBeNull();
     await saveTodayOnDevice(snapshot(), MORNING);
+    claimToday(holder);
     const confirm = async (): Promise<Response> => {
       await wipeFromAnotherTab();
       return new Response(null, { status: 304 });
@@ -315,21 +337,23 @@ describe('keeping the day fresh while the app is open', () => {
     expect(failures).toEqual([]);
   });
 
-  test("a switch's wipe that lands after the new start page started its refresh is followed by one more refresh", async () => {
-    let first = true;
+  test('a sign-out during a refresh leaves no day, even though the session still answered', async () => {
+    let releaseFirst = (): void => undefined;
+    const held = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
     installBrowser(async (organizationId) => {
-      if (first) {
-        first = false;
-        await clearTodayOnDevice();
-      }
+      await held;
       return Response.json(snapshot({ organizationId }));
     });
-    keepTodayFresh(otherOrganization, () => undefined);
-    await until(
-      async () =>
-        (await readTodayOnDevice(MORNING))?.snapshot.organizationId === otherOrganization.organizationId,
-    );
-    expect(requested).toEqual([otherOrganization.organizationId, otherOrganization.organizationId]);
+    keepTodayFresh(holder, () => undefined);
+    await until(() => requested.length === 1);
+    // The sign-out wipes first and ends the session afterwards: the held answer still arrives.
+    await clearTodayOnDevice();
+    releaseFirst();
+    await letQueuedWorkRun();
+    expect(await readTodayOnDevice(MORNING)).toBeNull();
+    expect(requested).toEqual([holder.organizationId]);
   });
 
   test('a day the device cannot store reaches the person with a retry, not only the log', async () => {
