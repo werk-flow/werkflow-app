@@ -68,8 +68,8 @@
         },
         "route:/auftraege": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 9861, "tolerance": { "relative": 0.9589, "absolute": 512 } },
-          "decodedBytes": { "reference": 27705, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 7517, "tolerance": { "relative": 0.9589, "absolute": 512 } },
+          "decodedBytes": { "reference": 27113, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "script": {
@@ -298,6 +298,24 @@
           },
           "runKeys": ["2026-11-09T090629248Z-6a09fe"],
           "reason": "werk-flow/werkflow-planning#314: the job detail route, which the /auftraege list prefetches into the field cold start, loads EditJobDialog on its actions menu's intent (lazyDialog) instead of importing it statically; #280 had moved only the list's edit dialog. The job form left the detail route's entry chunks: gzip of the /auftraege plus /auftraege/[jobNumber] entry chunks on a production build of 9e1eb5b6 falls from 684,601 to 677,960 (-6,641). This run (Boat, the PC's verification machine) reads 686,629 against 693,153 for main at 9e1eb5b6 (run 2026-11-09T085633435Z-4ccd37) and 693,150 on CI main; script requests unchanged at 43. Below the owner's 691,787 target of 2026-11-08."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "route:/auftraege",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 9861, "tolerance": { "relative": 0.9589, "absolute": 512 } },
+            "decodedBytes": { "reference": 27705, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 7517, "tolerance": { "relative": 0.9589, "absolute": 512 } },
+            "decodedBytes": { "reference": 27113, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-09T191958859Z-6ffc80"],
+          "reason": "The route payload names one script chunk fewer (cold-start script requests 43 to 42): the app shell now imports lazyDialog for the report dialog, so /auftraege no longer references it as a chunk of its own. Rows and route renders are unchanged; nothing is missing."
         }
       ]
     },
