@@ -222,6 +222,28 @@ describe('refreshing the today snapshot', () => {
     }
   });
 
+  test('an answer that is not a readable day, such as a captive portal or a cut-off body, keeps the stored day', async () => {
+    await saveTodayOnDevice(snapshot(), MORNING);
+    const cutOff = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('{"version":"v2","assign'));
+          controller.error(new TypeError('network connection was lost'));
+        },
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+    const portal = new Response('<html><body>WLAN-Anmeldung</body></html>', {
+      status: 200,
+      headers: { 'content-type': 'text/html' },
+    });
+    for (const response of [portal, cutOff]) {
+      const { send } = answer(response);
+      expect(await refreshTodayOnDevice(holder, { fetch: send, now: () => MORNING })).toBe('kept');
+      expect((await readTodayOnDevice(MORNING))?.snapshot).toEqual(snapshot());
+    }
+  });
+
   test('a refused person or organization leaves nothing on the device', async () => {
     await saveTodayOnDevice(snapshot(), MORNING);
     const { send } = answer(Response.json({ outcome: 'rejected', code: 'forbidden' }, { status: 403 }));
@@ -442,6 +464,21 @@ describe('keeping the day fresh while the app is open', () => {
     await letQueuedWorkRun();
     expect(await readTodayOnDevice(MORNING)).toBeNull();
     expect(requested).toEqual([holder.organizationId]);
+  });
+
+  test('a captive portal answering the refresh shows no storage failure: the banner is for the device alone', async () => {
+    installBrowser(
+      async () =>
+        new Response('<html><body>WLAN-Anmeldung</body></html>', {
+          status: 200,
+          headers: { 'content-type': 'text/html' },
+        }),
+    );
+    const failures: unknown[] = [];
+    keepTodayFresh(holder, (retry) => failures.push(retry), todayWipeGeneration());
+    await until(() => requested.length === 1);
+    await letQueuedWorkRun();
+    expect(failures).toEqual([]);
   });
 
   test('a day the device cannot store reaches the person with a retry, not only the log', async () => {

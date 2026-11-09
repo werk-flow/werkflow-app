@@ -19,6 +19,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { ListRow } from '@/components/ui/list-row';
 import { SectionError } from '@/components/ui/section-error';
 import { useClientRead } from '@/hooks/use-client-read';
+import { offlineViewAt } from '@/lib/field-sync/device/today-address';
 import { readTodayOnDevice, type StoredToday } from '@/lib/field-sync/device/today-store';
 import { TODAY_WIPE_KEY } from '@/lib/field-sync/device/today-wipe';
 import type { FieldSyncTodayAssignment } from '@/lib/field-sync/today-snapshot';
@@ -30,21 +31,9 @@ import { formatBerlinTime } from '@/lib/utils';
 // What a phone shows without signal (decision record 0010, "Device data"):
 // today's assignments and each one's work pack, read from the snapshot the
 // device keeps, with when the server last confirmed it. It reads the device
-// only; the server never sees this view. A job page's address shows that
-// job's pack, any other address the day's list. Links are plain document
-// links, so each one opens without signal the same way.
-
-/** The job number a job page's address names: `/auftraege/<nummer>` or `/auftraege/projekt/<projekt>/<nummer>`. */
-function jobNumberOf(pathname: string): string | null {
-  const match = /^\/auftraege\/(?:projekt\/[^/]+\/)?([^/]+)\/?$/.exec(pathname);
-  if (!match?.[1] || match[1] === 'projekt' || match[1] === 'uebergaben') return null;
-  try {
-    return decodeURIComponent(match[1]);
-  } catch {
-    // A malformed address names no job; the day's list shows instead.
-    return null;
-  }
-}
+// only; the server never sees this view. Which part an address shows is
+// today-address.ts's rule. Links are plain document links, so each one opens
+// without signal the same way.
 
 function hrefOf(assignment: FieldSyncTodayAssignment): string {
   return jobDetailHref(
@@ -253,8 +242,7 @@ function PackView({ assignment }: { assignment: FieldSyncTodayAssignment }): Rea
 }
 
 function OfflineDayView({ stored, pathname }: { stored: StoredToday; pathname: string }): ReactElement {
-  const jobNumber = jobNumberOf(pathname);
-  const assignment = stored.snapshot.assignments.find((entry) => entry.jobNumber === jobNumber);
+  const { jobNumber, assignment } = offlineViewAt(pathname, stored.snapshot.assignments);
   return (
     <div className="w-full max-w-2xl space-y-4 text-left" data-testid="offline-today">
       <FreshnessLine confirmedAt={stored.confirmedAt} />

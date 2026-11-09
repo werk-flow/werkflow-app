@@ -125,7 +125,14 @@ export async function refreshTodayOnDevice(
       ? 'confirmed'
       : 'superseded';
   if (response.status !== 200) return 'kept';
-  const snapshot = fieldSyncTodaySchema.safeParse(await response.json());
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    // best-effort: a captive portal's page or a body cut off by lost signal is no day; the stored one stays.
+    return 'kept';
+  }
+  const snapshot = fieldSyncTodaySchema.safeParse(body);
   if (!snapshot.success || !belongsTo(snapshot.data, holder)) {
     logError('refreshTodayOnDevice: unexpected snapshot', { readable: snapshot.success });
     return 'kept';

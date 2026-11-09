@@ -161,11 +161,12 @@ async function refreshOwnMemberships({
       // A selection the user makes meanwhile invalidates this fallback (see setActiveOrg).
       if (generation !== refreshGenerationRef.current) return;
       const newActiveId = newMemberships[0]?.orgId ?? null;
-      if (newActiveId) {
-        // Before the cookie: the next start page's refresh must come after this wipe, never before it.
-        await clearTodayOnDevice();
-        await setActiveOrgCookie(newActiveId).then(rejectRefusal);
-      }
+      // Nothing the former organization's day held stays, even when no organization remains. Before
+      // the cookie: the next start page's refresh must come after this wipe, never before it.
+      await clearTodayOnDevice();
+      // A selection made during the wipe owns the cookie now; this fallback must not write over it.
+      if (generation !== refreshGenerationRef.current) return;
+      if (newActiveId) await setActiveOrgCookie(newActiveId).then(rejectRefusal);
       if (generation !== refreshGenerationRef.current) return;
       setActiveOrgId(newActiveId);
     }
