@@ -5,7 +5,8 @@ import { expect, test } from 'bun:test';
 
 import { BoatError, boatClient } from './boat-api';
 import { createMachine } from './boat-machine';
-import { heldBackHere, retryingStart, unavailable, unavailableNotice, verifyOnBoat } from './verify-on-boat';
+import { retryingStart, unavailableNotice } from './boat-unavailable';
+import { heldBackHere, unavailable, verifyOnBoat } from './verify-on-boat';
 
 /** Bun's fetch error for a refused or unroutable connection, as the 2026-11-09 run logged it. */
 const refused = () =>

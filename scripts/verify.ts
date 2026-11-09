@@ -96,7 +96,8 @@ import {
   type BackendHealth,
 } from '../lib/testing/runner/backend-health';
 import { acquireHeavySlot } from '../lib/testing/runner/heavy-slot';
-import { heldBackHere, unavailableNotice, verifyOnBoat } from '../lib/testing/boat/verify-on-boat';
+import { unavailableNotice } from '../lib/testing/boat/boat-unavailable';
+import { heldBackHere, verifyOnBoat } from '../lib/testing/boat/verify-on-boat';
 
 // A run goes to a Boat machine when this workstation has a Boat key (lib/testing/boat/verify-on-boat.ts).
 // When Boat is unavailable, only the cheap groups run here and the heavy ones are recorded blocked.

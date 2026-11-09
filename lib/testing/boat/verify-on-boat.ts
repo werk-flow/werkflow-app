@@ -27,9 +27,10 @@ import {
 } from '../evidence/proof-environment';
 import { withWorkspaceTestLock } from '../runner/workspace-test-lock';
 import { pruneRunArchive } from '../runs/run-retention';
-import { BoatError, type BoatClient, boatClient } from './boat-api';
+import { BoatError, boatClient } from './boat-api';
 import { type BoatKeyReading, RENEW_ADVICE, readBoatKey } from './boat-key';
-import { type TransferContext, type TransferPolicy, transfer, transportFailure } from './boat-transfer';
+import { type BoatUnavailable, retryingStart } from './boat-unavailable';
+import { type TransferContext, type TransferPolicy, transfer } from './boat-transfer';
 import {
   createMachine,
   deleteMachine,
@@ -89,17 +90,6 @@ const runTargetSchema = z.object({ target: z.string().optional() });
  * connection gets three fresh attempts over about 40 s before the run falls back.
  */
 const RESULTS_DOWNLOAD: TransferPolicy = { waits: [2_000, 10_000, 30_000], attemptMs: 300_000 };
-/**
- * The machine's creation, before any machine exists: a connection that fails on the way to Boat
- * gets two fresh attempts over 30 s with the same idempotency key, so Boat starts one machine at
- * most. Boat's own refusal (a 401, 403, 429 or 503 with its code) gets none. Each request ends after
- * 60 s by itself (boat-api.ts), well inside the attempt's deadline.
- */
-const MACHINE_START: TransferPolicy = {
-  waits: [10_000, 20_000],
-  attemptMs: 90_000,
-  retryable: transportFailure,
-};
 
 /**
  * One upload's deadline and retry. A machine's file host accepts between 0.07 and 12 MB/s, so a
@@ -112,8 +102,6 @@ function uploadPolicy(bytes: number): TransferPolicy {
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
-/** Boat was wanted but cannot run the plan; the heavy groups then stay blocked here (heldBackHere). */
-export type BoatUnavailable = { unavailable: string };
 /**
  * A Boat attempt's outcome: Boat's exit code, undefined when the plan belongs on this workstation
  * (CI, an explicit local run, a cheap or wall-clock plan), or Boat's unavailability.
@@ -171,35 +159,6 @@ export function cheapPlanReason(plan: string): string | undefined {
  */
 export function heldBackHere(id: string): boolean {
   return !CHEAP_HERE.test(id) && !WALL_CLOCK_GROUP.test(id);
-}
-
-/** What a held-back group usually costs this workstation (lib/testing/runner/heavy-slot.ts). */
-function localCost(id: string): string {
-  if (id === 'static:lint') return 'type-aware lint, 170 to 370 s at up to 4.1 GiB on an idle PC';
-  return 'a production build at up to 2.9 GiB, then the stack and a browser';
-}
-
-/**
- * The notice a local run prints when Boat is unavailable: why, which heavy groups it leaves blocked
- * with their usual cost, and how to run them here deliberately with `args`.
- */
-export function unavailableNotice(
-  reason: string,
-  heldBack: readonly string[],
-  args: readonly string[],
-): string[] {
-  if (!heldBack.length) return [`Boat is unavailable: ${reason} The plan runs only cheap groups, here.`];
-  const rule = '='.repeat(72);
-  return [
-    rule,
-    `BOAT IS UNAVAILABLE: ${reason}`,
-    `${heldBack.length} heavy groups do NOT run here and are recorded as blocked:`,
-    ...heldBack.map((id) => `  ${id}: ${localCost(id)}`),
-    'Only the cheap groups run. This run cannot pass: it exits 1 and its report reads failed.',
-    'Run again later to use Boat, or run the heavy groups here deliberately:',
-    `  WERKFLOW_VERIFY_LOCAL=1 bun run test:verify${args.length ? ` ${args.map(shellQuote).join(' ')}` : ''}`,
-    rule,
-  ];
 }
 
 /** The first untracked file that may hold a credential or a local setting, which Boat never gets. */
@@ -747,21 +706,6 @@ export async function withMachine<T>(
   }
   signal.throwIfAborted();
   return result;
-}
-
-/**
- * The client whose machine creation retries a failed connection (MACHINE_START). Every attempt
- * sends the same idempotency key, so a request that reached Boat before its connection failed
- * starts no second machine. `wait` is a test's stand-in.
- */
-export function retryingStart(client: BoatClient, context: TransferContext): BoatClient {
-  return {
-    ...client,
-    create: (request, idempotencyKey) =>
-      transfer('Starting a Boat machine', MACHINE_START, context, () =>
-        client.create(request, idempotencyKey),
-      ),
-  };
 }
 
 export async function runOnBoat(input: {
