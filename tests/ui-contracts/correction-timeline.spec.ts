@@ -40,6 +40,11 @@ test('the planned visit prefills the timeline, and another person never inherits
   await answerPlannedVisits(page, visitOfPersonA);
   await expect(timeline).toHaveAttribute('aria-busy', 'false');
   await expect(timeline.getByText('Tätigkeit 1')).toBeVisible();
+  // Person A's visit, 07:00 to 15:30 Berlin, stands in the first row.
+  const from = timeline.getByRole('group', { name: 'Von' });
+  const to = timeline.getByRole('group', { name: 'Bis' });
+  await expect(from).toContainText('07');
+  await expect(to).toContainText('15');
   await check.click();
   await expect(result).toHaveText('1 Tätigkeiten');
 
@@ -48,12 +53,18 @@ test('the planned visit prefills the timeline, and another person never inherits
   // The read shows at the timeline, not only to assistive tech.
   const loading = timeline.getByText('Geplante Einsätze werden geladen …');
   await expect(loading).toBeVisible();
+  // Person B never sees person A's times while B's visits load.
+  await expect(from).not.toContainText('07');
+  await expect(to).not.toContainText('15');
   await check.click();
   await expect(result).toHaveText('unvollständig');
 
   await answerPlannedVisits(page, { success: false, error: 'load_failed' });
   await expect(timeline).toHaveAttribute('aria-busy', 'false');
   await expect(loading).toHaveCount(0);
+  // Nor after B's read failed.
+  await expect(from).not.toContainText('07');
+  await expect(to).not.toContainText('15');
   await expect(timeline.getByText('Die geplanten Einsätze konnten nicht geladen werden.')).toBeVisible();
   await check.click();
   await expect(result).toHaveText('unvollständig');
