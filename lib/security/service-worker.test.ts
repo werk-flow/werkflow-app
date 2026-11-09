@@ -28,3 +28,26 @@ test('the shell refill message the page sends is the one the worker answers', ()
   expect(worker).toContain(`const REFILL_MESSAGE = '${pageMessage}';`);
   expect(worker).toMatch(/event\.data === REFILL_MESSAGE\) event\.waitUntil\(ensureShell\(\)\)/);
 });
+
+// Rule test: the worker caches every path SHELL_ASSET finds in the offline page,
+// and one unfetchable path fails the whole install. A path inside another
+// host's URL (a custom Supabase domain such as api.png.example.com, a CDN
+// image) is not the app's file and must never match.
+test('the shell asset pattern finds only root-relative paths of this origin', () => {
+  const source = worker.match(/const SHELL_ASSET = \/(.+)\/g;/)?.[1];
+  expect(source).toBeDefined();
+  const shellAsset = new RegExp(source ?? '', 'g');
+  const html = [
+    '<link rel="preconnect" href="https://api.png.example.com">',
+    '<img src="https://cdn.example.com/brand.svg">',
+    '<script src="/_next/static/chunks/app-1a2b.js"></script>',
+    '<img src="/logo-icon-light.svg" srcset="/icons/icon-192.png 1x">',
+    'self.__next_f.push([1,"\\"/_next/static/css/app-3c4d.css\\""])',
+  ].join('\n');
+  expect([...new Set(html.match(shellAsset) ?? [])]).toEqual([
+    '/_next/static/chunks/app-1a2b.js',
+    '/logo-icon-light.svg',
+    '/icons/icon-192.png',
+    '/_next/static/css/app-3c4d.css',
+  ]);
+});

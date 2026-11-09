@@ -25,9 +25,12 @@ const SHELL_CACHE = `${CACHE_PREFIX}shell-v${SHELL_VERSION}`;
 const OFFLINE_PATH = '/offline';
 const REFILL_MESSAGE = 'werkflow:refill-shell';
 // Same-origin files the fallback page references: the build's hashed files
-// and the logos and icons under public/. Escaped quotes inside the streamed
-// RSC payload end a match the same way plain quotes do.
-const SHELL_ASSET = /\/(?:_next\/static\/[^"'\s\\)]+|[\w-]+\.(?:svg|png))/g;
+// and the logos and icons under public/, folders included. Escaped quotes inside the streamed
+// RSC payload end a match the same way plain quotes do. A match starts only
+// where a root-relative path can: never after a host name or another path
+// segment, so `https://api.png.example.com` or `https://cdn.example.com/a.svg`
+// yields nothing (an unfetchable path would fail the whole install).
+const SHELL_ASSET = /(?<![\w.:/-])\/(?:_next\/static\/[^"'\s\\)]+|(?:[\w-]+\/)*[\w-]+\.(?:svg|png))/g;
 
 /** Clients that were answered with the fallback; their files come from the shell. */
 const fallbackClients = new Set();
