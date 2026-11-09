@@ -328,6 +328,43 @@ test('a coworker reads that a signature exists without its image or signer', asy
   await expect(dialog.getByRole('button', { name: 'Kundenentscheidung und Unterschrift' })).toHaveCount(0);
 });
 
+test('a signature saved alone by an earlier release still leaves the decision to record, without a second signature', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    window.uiContractLegacySignature = true;
+  });
+  const dialog = await openReport(page);
+  await openDecisionForm(dialog);
+  await expect(
+    dialog.getByText('Die Unterschrift ist schon erfasst. Speichere jetzt die Entscheidung dazu.'),
+  ).toBeVisible();
+  await expect(dialog.getByLabel('Unterschrift zeichnen')).toHaveCount(0);
+  await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('Erika Beispiel');
+  await chooseDecision(page, dialog, 'Bestätigt');
+
+  await saveButton(dialog).click();
+
+  await expect(dialog.getByRole('region', { name: 'Kundenentscheidung' })).toContainText('Bestätigt');
+  const [sent] = await decisions(page);
+  expect(sent?.signature).toBeUndefined();
+});
+
+test('the signer and reason fields stop at the lengths the server accepts', async ({ page }) => {
+  const dialog = await openReport(page);
+  await openDecisionForm(dialog);
+  for (const name of ['Name', 'Rolle/Funktion'])
+    await expect(dialog.getByRole('textbox', { name, exact: true })).toHaveAttribute('maxlength', '200');
+  await expect(dialog.getByRole('textbox', { name: /^Bezug zum Kunden/ })).toHaveAttribute(
+    'maxlength',
+    '200',
+  );
+  await chooseDecision(page, dialog, 'Abgelehnt');
+  await expect(
+    dialog.getByRole('textbox', { name: 'Begründung der Kundin oder des Kunden' }),
+  ).toHaveAttribute('maxlength', '2000');
+});
+
 test('an Admin keeps the reason field for voiding', async ({ page }) => {
   const dialog = await openReport(page, 'admin');
   await expect(dialog.getByRole('textbox', { name: 'Begründung für Ungültigkeit' })).toBeVisible();

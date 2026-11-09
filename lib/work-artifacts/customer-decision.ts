@@ -33,8 +33,9 @@ export type RecordedCustomerDecision = {
 /**
  * What the customer recorded on the revision, or null while nothing is
  * recorded. A recorded decision or signature closes the revision to a second
- * one (`work_artifact_customer_decision_recorded`), so the dialog shows it
- * instead of the form.
+ * one (`work_artifact_customer_decision_recorded`). The dialog shows a
+ * recorded decision instead of the form; a signature an earlier release saved
+ * alone still leaves the decision to record.
  */
 export function recordedCustomerDecision(
   detail: Pick<WorkArtifactDetail, 'actions'>,

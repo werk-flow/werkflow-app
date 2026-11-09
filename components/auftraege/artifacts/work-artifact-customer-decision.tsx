@@ -43,7 +43,7 @@ export function WorkArtifactCustomerDecision({
   editor: WorkArtifactEditor;
   customer: WorkArtifactCustomerActions;
 }) {
-  if (customer.recorded) return <RecordedCustomerDecisionView recorded={customer.recorded} />;
+  if (customer.recorded?.decision) return <RecordedCustomerDecisionView recorded={customer.recorded} />;
   return (
     <FormDisclosure label="Kundenentscheidung und Unterschrift">
       <CustomerDecisionForm editor={editor} customer={customer} />
@@ -101,29 +101,50 @@ function CustomerDecisionForm({
         >
           <Textarea
             disabled={outcomeUnknown}
+            maxLength={2000}
             value={customer.decisionReason}
             onChange={(event) => customer.setDecisionReason(event.target.value)}
           />
         </Field>
       )}
-      <div className="space-y-2">
-        <p className="text-sm font-medium">Unterschrift</p>
-        <SignaturePad
-          disabled={anyBusy || outcomeUnknown || Boolean(pendingSignatureDocumentId)}
-          onChange={customer.setSignatureFile}
-        />
-        {pendingSignatureDocumentId && (
-          <p className="text-xs text-muted-foreground">
-            Die Unterschrift ist hochgeladen. Du kannst das Speichern erneut versuchen.
-          </p>
-        )}
-      </div>
+      <CustomerSignatureField
+        customer={customer}
+        disabled={anyBusy || outcomeUnknown || Boolean(pendingSignatureDocumentId)}
+      />
       <div className="flex justify-end">
         <Button pending={isBusy('customer-decision')} type="submit" disabled={anyBusy}>
           Speichern
         </Button>
       </div>
     </form>
+  );
+}
+
+/** The pad, or the note that an earlier release already saved the signature alone. */
+function CustomerSignatureField({
+  customer,
+  disabled,
+}: {
+  customer: WorkArtifactCustomerActions;
+  disabled: boolean;
+}) {
+  // An earlier release saved the signature alone: it stays, and only the decision is left to record.
+  if (customer.recorded?.signature)
+    return (
+      <p className="text-sm text-muted-foreground">
+        Die Unterschrift ist schon erfasst. Speichere jetzt die Entscheidung dazu.
+      </p>
+    );
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-medium">Unterschrift</p>
+      <SignaturePad disabled={disabled} onChange={customer.setSignatureFile} />
+      {customer.pendingSignatureDocumentId && (
+        <p className="text-xs text-muted-foreground">
+          Die Unterschrift ist hochgeladen. Du kannst das Speichern erneut versuchen.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -134,6 +155,7 @@ function CustomerSignerFields({ customer }: { customer: WorkArtifactCustomerActi
         <Field label="Name" htmlFor={FIELD_IDS.name} required error={customer.errors.name}>
           <Input
             disabled={customer.outcomeUnknown}
+            maxLength={200}
             value={customer.customerName}
             onChange={(event) => customer.setCustomerName(event.target.value)}
           />
@@ -141,6 +163,7 @@ function CustomerSignerFields({ customer }: { customer: WorkArtifactCustomerActi
         <Field label="Rolle/Funktion" htmlFor={FIELD_IDS.role}>
           <Input
             disabled={customer.outcomeUnknown}
+            maxLength={200}
             value={customer.customerRole}
             onChange={(event) => customer.setCustomerRole(event.target.value)}
           />
@@ -154,6 +177,7 @@ function CustomerSignerFields({ customer }: { customer: WorkArtifactCustomerActi
       >
         <Input
           disabled={customer.outcomeUnknown}
+          maxLength={200}
           value={customer.customerRelationship}
           onChange={(event) => customer.setCustomerRelationship(event.target.value)}
         />

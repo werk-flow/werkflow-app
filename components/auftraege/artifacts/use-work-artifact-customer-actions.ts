@@ -209,7 +209,7 @@ export function useWorkArtifactCustomerActions({
     setError(null);
     void runArtifactTask('customer-decision', async () => {
       let signatureDocumentId = pendingSignatureDocumentId;
-      if (draft.signatureFile && !signatureDocumentId) {
+      if (draft.signatureFile && !signatureDocumentId && !recorded?.signature) {
         signatureDocumentId = await uploadSignature(draft.signatureFile, detail.id, { targetType, targetId });
         if (signatureDocumentId === null) {
           setError('Die Unterschrift konnte nicht hochgeladen werden. Bitte versuche es erneut.');

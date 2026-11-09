@@ -39,6 +39,8 @@ declare global {
     uiContractRecordedVisit?: RecordedVisitWindow;
     /** Set by a spec's init script: a coworker recorded the decision and signature, redacted for this viewer. */
     uiContractRedactedDecision?: boolean;
+    /** Set by a spec's init script: an earlier release saved the customer's signature alone, without a decision. */
+    uiContractLegacySignature?: boolean;
     /** Set by a spec's init script: who opens the customer-decision fixture; the field worker by default. */
     uiContractWorkArtifactViewer?: 'employee' | 'admin';
   }
@@ -183,13 +185,14 @@ export function approvedCustomerReport(): WorkArtifactDetail {
     window.uiContractRedactedDecision &&
     redacted('00000000-0000-4000-8000-000000004157', 'customer_acknowledged');
   const signature =
-    window.uiContractRedactedDecision &&
+    (window.uiContractRedactedDecision || window.uiContractLegacySignature) &&
     redacted('00000000-0000-4000-8000-000000005157', 'signature_captured');
+  const recorded = [signature, decision].filter((action) => action !== undefined && action !== false);
   return {
     ...submitted,
     status: 'approved',
-    version: decision && signature ? 4 : 2,
-    actions: decision && signature ? [signature, decision, ...reviewed] : reviewed,
+    version: 2 + recorded.length,
+    actions: [...recorded, ...reviewed],
   };
 }
 
