@@ -220,15 +220,17 @@ async function redirectToPasswordReset(
   supabase: ReturnType<typeof createSupabaseBrowserClient>,
   setFormError: (error: string | null) => void,
 ): Promise<void> {
-  await clearEmailChangeChallengeQuietly();
-  // The address reaches the reset form in a cookie the server sets from the
-  // session, so this must run before the sign-out below.
-  const knownAddress = await rememberResetAddress();
-
-  // Global on purpose: a password change ends every existing session.
-  clearManualEntryBridge();
+  let knownAddress: boolean;
   try {
+    // Loaded first, so a failed load leaves the challenge and the queued entries untouched.
     const { clearServiceWorkerCaches } = await import('@/lib/offline/service-worker-caches');
+    await clearEmailChangeChallengeQuietly();
+    // The address reaches the reset form in a cookie the server sets from the
+    // session, so this must run before the sign-out below.
+    knownAddress = await rememberResetAddress();
+
+    // Global on purpose: a password change ends every existing session.
+    clearManualEntryBridge();
     await clearServiceWorkerCaches();
     const { error } = await supabase.auth.signOut({ scope: 'global' });
     if (error) throw error;

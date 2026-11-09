@@ -31,9 +31,10 @@ export function SignOutAndRedirectButton({ inviteCode }: SignOutAndRedirectButto
 
     await runSignOut(async () => {
       try {
+        // Loaded first, so a failed load leaves the challenge and the queued entries untouched.
+        const { clearServiceWorkerCaches } = await import('@/lib/offline/service-worker-caches');
         await clearEmailChangeChallengeQuietly();
         clearManualEntryBridge();
-        const { clearServiceWorkerCaches } = await import('@/lib/offline/service-worker-caches');
         await clearServiceWorkerCaches();
 
         // Sign out the current user (explicit global preserves the pre-existing
