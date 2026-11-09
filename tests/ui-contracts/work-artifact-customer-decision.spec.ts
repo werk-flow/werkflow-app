@@ -177,7 +177,7 @@ test('a chosen signature image survives a tap on the pad and a resize, and is sa
   ]);
 });
 
-test('after a lost answer the entries lock, and the retry sends the same ids and shows the recorded decision', async ({
+test('after a lost answer the entries stay locked through a refused retry, and the replay shows the recorded decision', async ({
   page,
 }) => {
   const dialog = await openReport(page);
@@ -200,6 +200,17 @@ test('after a lost answer the entries lock, and the retry sends the same ids and
   await expect(dialog.getByRole('textbox', { name: /^Bezug zum Kunden/ })).toBeDisabled();
   await expect(dialog.getByRole('combobox', { name: 'Entscheidung' })).toBeDisabled();
   await expect(saveButton(dialog)).toBeEnabled();
+  // A refused retry settles nothing: the sign-in check runs before the ids are compared.
+  await page.evaluate(() => {
+    window.uiContractWorkArtifacts.refuseDecision = 'unauthenticated';
+  });
+  await saveButton(dialog).click();
+  await expect.poll(async () => (await decisions(page)).length).toBe(2);
+  await expect(saveButton(dialog)).toBeEnabled();
+  await expect(dialog.getByRole('textbox', { name: 'Name', exact: true })).toBeDisabled();
+  await page.evaluate(() => {
+    delete window.uiContractWorkArtifacts.refuseDecision;
+  });
   await saveButton(dialog).click();
 
   const recorded = dialog.getByRole('region', { name: 'Kundenentscheidung' });
@@ -207,7 +218,7 @@ test('after a lost answer the entries lock, and the retry sends the same ids and
   await expect(
     dialog.getByText('Für diese Version ist bereits eine Kundenentscheidung erfasst.'),
   ).toHaveCount(0);
-  const [first, retry] = await decisions(page);
+  const [first, , retry] = await decisions(page);
   expect(retry?.decisionActionId).toBe(first?.decisionActionId);
   expect(retry?.signature?.actionId).toBe(first?.signature?.actionId);
   // The upload from the first attempt is reused, not sent again.

@@ -196,7 +196,8 @@ export function useWorkArtifactCustomerActions({
   );
   // A save whose answer was lost may have been recorded. The replay of its ids
   // returns the first entries without comparing, so the form locks its entries
-  // until a retry or a refusal settles what was recorded.
+  // until a save succeeds or the dialog closes. A refusal settles nothing: a
+  // sign-in or input check can refuse before the server compares the ids.
   const [outcomeUnknown, setOutcomeUnknown] = useState(false);
   const recorded = detail && currentRevision ? recordedCustomerDecision(detail, currentRevision.id) : null;
 
@@ -234,7 +235,6 @@ export function useWorkArtifactCustomerActions({
         );
         return;
       }
-      setOutcomeUnknown(false);
       if (!result.success && result.error === 'work_artifact_customer_decision_recorded') {
         // Someone recorded the decision meanwhile: the reload shows it in place of the form.
         await load(detail.id);
@@ -245,6 +245,7 @@ export function useWorkArtifactCustomerActions({
         return;
       await load(detail.id);
       draft.reset();
+      setOutcomeUnknown(false);
       setPendingSignatureDocumentId(null);
       setPendingActionIds(null);
       showBanner({ variant: 'success', message: 'Kundenentscheidung wurde gespeichert.' });
