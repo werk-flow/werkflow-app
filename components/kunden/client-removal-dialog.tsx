@@ -20,10 +20,17 @@ import type { ClientLinkKind, ClientLinks } from '@/lib/clients/types';
 /** How a customer leaves the list: archived with its history, or deleted as a mistaken entry. */
 export type ClientRemoval = 'archive' | 'delete';
 
-export const CLIENT_REMOVAL_ERROR_MESSAGES = {
+const CLIENT_REMOVAL_ERROR_MESSAGES = {
   not_authorized: 'Du darfst Kunden nicht archivieren oder löschen.',
   client_not_found: 'Der Kunde wurde nicht gefunden.',
   client_already_archived: 'Der Kunde ist bereits archiviert.',
+} satisfies Record<string, string>;
+
+/** A restore's refusals; it is neither an archive nor a delete. */
+export const CLIENT_RESTORE_ERROR_MESSAGES = {
+  ...CLIENT_REMOVAL_ERROR_MESSAGES,
+  not_authorized: 'Du darfst Kunden nicht wiederherstellen.',
+  client_not_archived: 'Der Kunde ist nicht archiviert.',
 } satisfies Record<string, string>;
 
 const REMOVAL_FAILED_MESSAGE: Record<ClientRemoval, string> = {

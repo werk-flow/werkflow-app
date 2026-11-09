@@ -8,12 +8,7 @@ import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { restoreClient } from '@/lib/clients/actions';
 import { loadDocument } from '@/lib/navigation/document-load';
-import { CLIENT_REMOVAL_ERROR_MESSAGES, type ClientRemoval } from './client-removal-dialog';
-
-const RESTORE_ERROR_MESSAGES = {
-  ...CLIENT_REMOVAL_ERROR_MESSAGES,
-  client_not_archived: 'Der Kunde ist nicht archiviert.',
-} satisfies Record<string, string>;
+import { CLIENT_RESTORE_ERROR_MESSAGES, type ClientRemoval } from './client-removal-dialog';
 
 /**
  * The customer detail page's archive, delete and restore: the dialog state,
@@ -49,7 +44,7 @@ export function useClientRemoval(client: { id: string; name: string }) {
       const result = await restoreClient(client.id).catch(() => null);
       if (!result?.success) {
         const reason = result
-          ? describeFailure(result.error, RESTORE_ERROR_MESSAGES, 'Bitte versuche es erneut.')
+          ? describeFailure(result.error, CLIENT_RESTORE_ERROR_MESSAGES, 'Bitte versuche es erneut.')
           : 'Bitte versuche es erneut.';
         showBanner({
           variant: 'error',

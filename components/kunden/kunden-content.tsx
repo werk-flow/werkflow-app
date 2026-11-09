@@ -12,7 +12,7 @@ import { ClientsTable } from './clients-table';
 import { clientCreations } from './create-client-dialog';
 import type { ClientRowActions } from './client-actions-menu';
 import {
-  CLIENT_REMOVAL_ERROR_MESSAGES,
+  CLIENT_RESTORE_ERROR_MESSAGES,
   ClientRemovalDialog,
   type ClientRemoval,
 } from './client-removal-dialog';
@@ -246,7 +246,7 @@ function useKundenRowActions(
         rollback(client.id);
         const retryHint = 'Bitte versuche es erneut.';
         const reason = result
-          ? describeFailure(result.error, CLIENT_REMOVAL_ERROR_MESSAGES, retryHint)
+          ? describeFailure(result.error, CLIENT_RESTORE_ERROR_MESSAGES, retryHint)
           : retryHint;
         showBanner({
           variant: 'error',
