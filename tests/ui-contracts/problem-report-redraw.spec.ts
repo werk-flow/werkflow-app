@@ -85,7 +85,11 @@ body{font-family:sans-serif;margin:0;padding:16px} .block{width:40px;height:30px
 // A build asset keeps its CSS verbatim; a sheet outside the build gets the style rule.
 const SERVED: Record<string, { contentType: string; body: string }> = {
   '/redraw-page': { contentType: 'text/html', body: PAGE },
-  '/_next/static/css/app.css': { contentType: 'text/css', body: '.brand{font-family:"Geist Probe"}' },
+  '/_next/static/css/app.css': {
+    contentType: 'text/css',
+    body: '@import url("/_next/static/css/print.css") print;\n.brand{font-family:"Geist Probe"}',
+  },
+  '/_next/static/css/print.css': { contentType: 'text/css', body: '.imported-print{color:rgb(6, 5, 4)}' },
   '/dynamic/record.css': {
     contentType: 'text/css',
     body: `.linked-record::after{content:"${SEEDED.company}"}`,
@@ -274,6 +278,7 @@ test('style rule: a disabled sheet and a sheet for other media stay out of the i
   });
   expect(svg, 'a print sheet does not style the screenshot').not.toContain('rgb(9, 8, 7)');
   expect(svg, 'a disabled sheet does not style the screenshot').not.toContain('rgb(7, 6, 5)');
+  expect(svg, 'a build sheet imported for print does not style the screenshot').not.toContain('rgb(6, 5, 4)');
   expect(svg, 'an applying sheet still does').toContain('font-family: sans-serif');
 });
 

@@ -72,10 +72,11 @@ async function collectPageCss(document: Document): Promise<string> {
   const origin = document.location.origin;
   const parts: string[] = [];
   const view = document.defaultView;
+  const appliesNow = (media: MediaList): boolean =>
+    media.length === 0 || !view || view.matchMedia(media.mediaText).matches;
   const visit = async (sheet: CSSStyleSheet): Promise<void> => {
     // A sheet that does not style the live page, disabled or for other media (print), stays out.
-    if (sheet.disabled) return;
-    if (sheet.media.length > 0 && view && !view.matchMedia(sheet.media.mediaText).matches) return;
+    if (sheet.disabled || !appliesNow(sheet.media)) return;
     let rules: CSSRule[];
     try {
       rules = Array.from(sheet.cssRules);
@@ -88,8 +89,10 @@ async function collectPageCss(document: Document): Promise<string> {
       return;
     }
     for (const rule of rules) {
-      if (rule instanceof CSSImportRule && rule.styleSheet) await visit(rule.styleSheet);
-      else if (rule instanceof CSSFontFaceRule)
+      // An import's media sits on the rule; Chromium leaves the imported sheet's own list empty.
+      if (rule instanceof CSSImportRule) {
+        if (rule.styleSheet && appliesNow(rule.media)) await visit(rule.styleSheet);
+      } else if (rule instanceof CSSFontFaceRule)
         parts.push(await inlineFontFace(rule, sheet.href ?? document.baseURI, origin));
       else parts.push(rule.cssText);
     }
