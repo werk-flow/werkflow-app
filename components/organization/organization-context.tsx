@@ -40,14 +40,17 @@ function rejectRefusal(result: ActionResult): void {
 
 /**
  * Sets the active organization cookie, then deletes every cache the service worker owns, so
- * nothing the previous organization's views cached stays on the device; the app shell asks for
- * the offline shell again once the new organization is active. Offline code loads lazily; it
- * loads before the cookie changes, so a failed load keeps the old organization.
+ * nothing the previous organization's views cached stays on the device, and only then asks for
+ * the offline shell again: the switch navigates on the client, which never refills it, and the
+ * cookie action's response can render the new organization before the clear has finished.
+ * Offline code loads lazily; it loads before the cookie changes, so a failed load keeps the old
+ * organization.
  */
 async function switchOrgCookieAndCaches(orgId: string): Promise<void> {
-  const { clearServiceWorkerCaches } = await import('@/lib/offline/service-worker-caches');
+  const offline = await import('@/lib/offline/service-worker-caches');
   await setActiveOrgCookie(orgId).then(rejectRefusal);
-  await clearServiceWorkerCaches();
+  await offline.clearServiceWorkerCaches();
+  await offline.restoreOfflineShell();
 }
 
 type MembershipRow = {

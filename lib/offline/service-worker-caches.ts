@@ -1,6 +1,7 @@
 'use client';
 
 import { logError } from '@/lib/logging';
+import { SHELL_REFILL_MESSAGE } from '@/lib/service-worker-message';
 
 /** Every cache the service worker (public/sw.js) owns starts with this. */
 const SERVICE_WORKER_CACHE_PREFIX = 'werkflow-';
@@ -20,5 +21,21 @@ export async function clearServiceWorkerCaches(): Promise<void> {
   } catch (error) {
     // best-effort: the shell cache holds only the offline page and build files, nothing personal, so the sign-out or switch goes on.
     logError('clearServiceWorkerCaches: cache deletion failed', error);
+  }
+}
+
+/**
+ * Asks the active service worker to fill the offline shell again. The
+ * organization switch calls it after its cache clear has finished: the switch
+ * navigates on the client, which never refills the shell otherwise.
+ */
+export async function restoreOfflineShell(): Promise<void> {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+  try {
+    const registration = await navigator.serviceWorker.getRegistration();
+    registration?.active?.postMessage(SHELL_REFILL_MESSAGE);
+  } catch (error) {
+    // best-effort: without the shell the device shows the browser's own offline page until the next full load.
+    logError('restoreOfflineShell: refill request failed', error);
   }
 }

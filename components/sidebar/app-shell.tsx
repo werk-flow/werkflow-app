@@ -14,6 +14,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { logError } from '@/lib/logging';
+import { SHELL_REFILL_MESSAGE } from '@/lib/service-worker-message';
 import { cn } from '@/lib/utils';
 import { useOrganization } from '@/components/organization/organization-context';
 import { SidebarProfileCard } from '@/components/sidebar/sidebar-profile-card';
@@ -36,9 +37,6 @@ const IosInstallHint = dynamic(
   { ssr: false },
 );
 
-/** The message public/sw.js answers by filling its offline shell again when it is missing. */
-const SHELL_REFILL_MESSAGE = 'werkflow:refill-shell';
-
 const subscribeNever = (): (() => void) => () => {};
 const onServer = (): boolean => false;
 
@@ -56,15 +54,15 @@ function needsIosInstallHint(): boolean {
 
 /**
  * The installable app shell's page side, run after the load event so it adds
- * nothing to the first paint. It registers the service worker
- * (production only: development files change on every edit) and asks it to
- * refill its cookie-free shell. Signing in and switching the organization
- * navigate on the client after a sign-out or the switch deleted the shell, so
- * it runs again for each organization. Every cold start needs this much; code
- * that runs only sometimes (the iOS hint, the cache clear) loads lazily, since
- * a chunk loaded after the load event still costs the cold start a request.
+ * nothing to the first paint. It registers the service worker (production
+ * only: development files change on every edit) and asks it to refill its
+ * cookie-free shell: signing in navigates on the client, so a shell a sign-out
+ * deleted comes back here. Every cold start needs this much; code that runs
+ * only sometimes (the iOS hint, the cache clear and the switch's refill) loads
+ * lazily, since a chunk loaded after the load event still costs the cold start
+ * a request.
  */
-function useOfflineShell(organizationId: string | undefined): void {
+function useOfflineShell(): void {
   useEffect(() => {
     if (process.env.NODE_ENV !== 'production' || !('serviceWorker' in navigator)) return;
     const start = () => {
@@ -76,7 +74,7 @@ function useOfflineShell(organizationId: string | undefined): void {
     if (document.readyState === 'complete') start();
     else window.addEventListener('load', start, { once: true });
     return () => window.removeEventListener('load', start);
-  }, [organizationId]);
+  }, []);
 }
 
 // Context for sidebar state
@@ -395,7 +393,7 @@ export function AppShell({
   const [isOpen, setIsOpen] = useState(false);
   const { isSwitchingOrg, activeOrg } = useOrganization();
   const showIosInstallHint = useSyncExternalStore(subscribeNever, needsIosInstallHint, onServer);
-  useOfflineShell(activeOrg?.orgId);
+  useOfflineShell();
   const mainRef = useRef<HTMLElement>(null);
   usePageBodyKeyboardScroll(mainRef);
 
