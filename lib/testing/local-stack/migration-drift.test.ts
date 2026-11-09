@@ -55,6 +55,20 @@ test('a change inside a literal, an identifier or a function body changes the sh
   expect(sqlShape("select 'it''s -- here'")).toBe("select 'it''s -- here'");
 });
 
+test('statement boundaries and escape modes count, so different SQL never shares a shape', () => {
+  // Without the semicolon CHECKPOINT is a column alias, not a second statement.
+  expect(sqlShape('select 1; checkpoint;')).toBe('select 1;checkpoint');
+  expect(sqlShape('select 1 checkpoint;')).not.toBe(sqlShape('select 1; checkpoint;'));
+  // Empty statements and trailing semicolons are no statement.
+  expect(sqlShape(';select 1;;\n-- end\n;')).toBe(sqlShape('select 1'));
+  // A segment that continues an E'…' string across a newline keeps its escape mode.
+  const continued = (end: string) => `select E'a'\n  -- note\n'it\\'s -- ${end}';`;
+  expect(sqlShape(continued('one'))).not.toBe(sqlShape(continued('two')));
+  expect(sqlShape(continued('one'))).toBe("select E'a' 'it\\'s -- one'");
+  // Without a newline between them they are two tokens, and the second reads no escapes.
+  expect(sqlShape("select E'a' 'b''c'")).toBe("select E'a' 'b''c'");
+});
+
 test('drift compares by name and statements, never by version', () => {
   const tree = [
     { name: 'close_period', sql: FILE },

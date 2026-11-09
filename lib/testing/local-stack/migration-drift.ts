@@ -40,10 +40,11 @@ export function readsSharedStack(groupIds: readonly string[]): boolean {
   return groupIds.some((id) => SHARED_STACK_GROUP.test(id));
 }
 
-const SEPARATOR = /[\s;]/;
 const IDENTIFIER = /[A-Za-z0-9_]/;
 const DOLLAR_TAG = /\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/y;
 const PLAIN = /[^\s;'"$/-]+/y;
+/** What may part two quoted segments that Postgres reads as one string: whitespace with a newline. */
+const CONTINUATION = /^(?:[ \t\f\n]|--[^\n]*)*$/;
 
 /** The end of the quoted literal or identifier that opens at `start`. */
 function quoteEnd(text: string, start: number, quote: string, escapes: boolean): number {
@@ -75,9 +76,25 @@ function blockCommentEnd(text: string, start: number): number {
 }
 
 /**
- * The SQL as Postgres tokenizes it: comments dropped, every run of whitespace and statement
- * semicolons outside a literal turned into one space, and every quoted literal, quoted identifier
- * and dollar-quoted body kept byte for byte. Line endings count as `\n`.
+ * Whether the single-quoted segment that opens at `at` reads backslash escapes: an E'…' literal,
+ * or a segment that continues one across a newline, which keeps its escape mode.
+ */
+function readsEscapes(
+  text: string,
+  at: number,
+  last: { end: number; escapes: boolean } | undefined,
+): boolean {
+  if (/[eE]/.test(text[at - 1] ?? '') && !IDENTIFIER.test(text[at - 2] ?? '')) return true;
+  if (!last) return false;
+  const between = text.slice(last.end, at);
+  return last.escapes && between.includes('\n') && CONTINUATION.test(between);
+}
+
+/**
+ * The SQL as Postgres tokenizes it: comments dropped, every run of whitespace outside a literal
+ * turned into one space and every run holding a statement semicolon into one `;`, with none at
+ * either end, and every quoted literal, quoted identifier and dollar-quoted body kept byte for
+ * byte. Line endings count as `\n`.
  *
  * The Supabase CLI records a migration as the statements it cut at each top-level semicolon, each
  * trimmed of surrounding whitespace, so those statements joined by newline and semicolon have the
@@ -87,36 +104,34 @@ function blockCommentEnd(text: string, start: number): number {
 export function sqlShape(sql: string): string {
   const text = sql.replace(/\r\n/g, '\n');
   const pieces: string[] = [];
-  let gap = false;
+  let gap: '' | ' ' | ';' = '';
+  let last: { end: number; escapes: boolean } | undefined;
   let at = 0;
   const emit = (end: number) => {
-    if (gap && pieces.length) pieces.push(' ');
-    gap = false;
+    if (gap && pieces.length) pieces.push(gap);
+    gap = '';
     pieces.push(text.slice(at, end));
     at = end;
   };
   while (at < text.length) {
     const char = text[at] ?? '';
-    const before = text[at - 1] ?? '';
-    if (SEPARATOR.test(char)) {
-      gap = true;
+    if (char === ';' || /\s/.test(char)) {
+      gap = char === ';' || gap === ';' ? ';' : ' ';
       at++;
-    } else if (text.startsWith('--', at)) {
-      const end = text.indexOf('\n', at);
+    } else if (text.startsWith('--', at) || text.startsWith('/*', at)) {
+      const end = char === '-' ? text.indexOf('\n', at) : blockCommentEnd(text, at);
       at = end < 0 ? text.length : end;
-      gap = true;
-    } else if (text.startsWith('/*', at)) {
-      at = blockCommentEnd(text, at);
-      gap = true;
+      gap = gap || ' ';
     } else if (char === "'") {
-      // An E'…' literal reads backslash escapes; a plain one does not.
-      const escapes = /[eE]/.test(before) && !IDENTIFIER.test(text[at - 2] ?? '');
+      const escapes = readsEscapes(text, at, last);
       emit(quoteEnd(text, at, "'", escapes));
+      last = { end: at, escapes };
     } else if (char === '"') {
       emit(quoteEnd(text, at, '"', false));
     } else {
       DOLLAR_TAG.lastIndex = at;
-      const tag = char === '$' && !IDENTIFIER.test(before) ? DOLLAR_TAG.exec(text)?.[0] : undefined;
+      const free = !IDENTIFIER.test(text[at - 1] ?? '');
+      const tag = char === '$' && free ? DOLLAR_TAG.exec(text)?.[0] : undefined;
       if (tag) {
         const close = text.indexOf(tag, at + tag.length);
         emit(close < 0 ? text.length : close + tag.length);
