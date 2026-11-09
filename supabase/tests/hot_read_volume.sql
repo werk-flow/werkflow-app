@@ -193,11 +193,12 @@ begin
   end loop;
   -- The counters see the index entries an index returns, not the ones it walks past. Without an
   -- index that leads with organization_id, the planner walks one that holds it further back, such
-  -- as the (id, organization_id) replica identity, and the walk stays invisible here.
+  -- as the (id, organization_id) replica identity, and the walk stays invisible here. A partial
+  -- index serves only reads that imply its predicate, so only a whole one counts.
   for label, table_name in select key, unnest((value->>0)::text[]) from jsonb_each(reads) loop
     if not exists(select 1 from pg_index i join pg_attribute a on a.attrelid = i.indrelid and a.attnum = i.indkey[0]
-        where i.indrelid = ('public.'||table_name)::regclass and i.indisvalid and a.attname = 'organization_id') then
-      raise exception 'hot read % bounds % by organization, but no index of % leads with organization_id', label, table_name, table_name;
+        where i.indrelid = ('public.'||table_name)::regclass and i.indisvalid and i.indpred is null and a.attname = 'organization_id') then
+      raise exception 'hot read % bounds % by organization, but no whole index of % leads with organization_id', label, table_name, table_name;
     end if;
   end loop;
   raise notice 'hot read costs %', costs;
