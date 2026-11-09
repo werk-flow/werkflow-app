@@ -45,6 +45,7 @@ declare global {
       | 'customer'
       | 'sickness-record'
       | 'absence-picker'
+      | 'schedule-parked-picker'
       | AuthUrlFixtureName
       | FeedbackFixtureName;
     uiContractLifecycle: LifecycleBoundaryState;
