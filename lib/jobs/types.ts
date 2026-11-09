@@ -254,9 +254,17 @@ export type QualificationWarningResult = ActionFailure<'qualification_warning' |
   evaluation: AssignmentEvaluation;
 };
 
-export type CreateJobResult = { success: true; job: Job } | QualificationWarningResult | ActionFailure;
+export type CreateJobResult =
+  | { success: true; job: Job }
+  | QualificationWarningResult
+  | PlanningWarningFailure
+  | ActionFailure;
 
-export type UpdateJobResult = { success: true; job: Job } | QualificationWarningResult | ActionFailure;
+export type UpdateJobResult =
+  | { success: true; job: Job }
+  | QualificationWarningResult
+  | PlanningWarningFailure
+  | ActionFailure;
 
 export type DeleteJobResult = ActionResult;
 

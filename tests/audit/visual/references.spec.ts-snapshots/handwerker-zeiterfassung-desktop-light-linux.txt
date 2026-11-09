@@ -10,7 +10,7 @@ KS
 Kevin Schmid
 kevin.schmid@haustechnik-kraemer.de
 Zeiterfassung
-Manuelle Eintragung
+Zeit nachtragen
 Zeiterfassung
 Zeitkonto
 Übersicht

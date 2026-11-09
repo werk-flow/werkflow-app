@@ -148,6 +148,17 @@ const SECTION_SKELETONS = {
     </SettingsCardSkeleton>
   ),
   kunden: PLACEHOLDER_SECTION,
+  datenexport: (
+    <>
+      <SettingsCardSkeleton columns={1}>
+        <TextLinesSkeleton lines={3} />
+        <Skeleton className="h-9 w-36" />
+      </SettingsCardSkeleton>
+      <SettingsCardSkeleton columns={1}>
+        <Skeleton className="h-28 w-full rounded-lg" />
+      </SettingsCardSkeleton>
+    </>
+  ),
   kalender: PLACEHOLDER_SECTION,
   dashboard: PLACEHOLDER_SECTION,
   zeiterfassung: (

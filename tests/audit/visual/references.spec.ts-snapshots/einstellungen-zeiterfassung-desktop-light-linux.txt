@@ -41,6 +41,8 @@ Mitarbeiter
 Freigaben und Vertretungen
 Kunden
 Kundenverwaltung und Defaults
+Datenexport
+Alle Daten herunterladen
 Zeiterfassung
 Definiert Regeln für Zeitbuchungen, Pausen und Freigabeprozesse.
 Gilt für Haustechnik Krämer GmbH

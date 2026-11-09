@@ -88,6 +88,7 @@ export function useCalendarMutations(options: UseCalendarMutationsOptions) {
     jobsRef,
     showBanner,
     requestApproval,
+    requestPlanningApproval,
     silentRefresh,
     feedback,
     run,

@@ -193,6 +193,57 @@ export function evidenceFiles(repository: string): string[] {
   return [...reports, ...runs].filter((file) => existsSync(resolve(repository, file)));
 }
 
+/**
+ * The paths git reads as changed since HEAD in `repository`: modified, deleted and untracked, each
+ * side of a rename by its own name. Planning without a baseline report selects from them, so the
+ * rebuilt checkout on the machine must give the same list (scripts/boat/check-tree.ts).
+ */
+export function changedSinceHead(repository: string): string[] {
+  const list = (args: string[]) => git(repository, args).split('\0').filter(Boolean);
+  const changed = list([
+    '-c',
+    'core.safecrlf=false',
+    'diff',
+    '--no-renames',
+    '--name-only',
+    '-z',
+    'HEAD',
+    '--',
+  ]);
+  return [...new Set([...changed, ...list(['ls-files', '--others', '--exclude-standard', '-z'])])].sort();
+}
+
+/**
+ * Why the machine's rebuilt checkout differs from the workstation's, naming the first paths each
+ * side alone reads as changed; undefined when both read the same paths as changed.
+ */
+export function rebuiltTreeProblem(
+  workstation: readonly string[],
+  machine: readonly string[],
+): string | undefined {
+  const absent = (paths: readonly string[], from: readonly string[]) => {
+    const present = new Set(from);
+    return paths.filter((path) => !present.has(path));
+  };
+  const machineOnly = absent(machine, workstation);
+  const workstationOnly = absent(workstation, machine);
+  if (!machineOnly.length && !workstationOnly.length) return undefined;
+  const named = (paths: readonly string[]) =>
+    paths.length ? `${paths.length} (${paths.slice(0, 5).join(', ')}${paths.length > 5 ? ', …' : ''})` : '0';
+  return `git reads the rebuilt checkout as changed elsewhere than the workstation's: ${named(machineOnly)} paths only on the machine, ${named(workstationOnly)} only on the workstation.`;
+}
+
+/**
+ * The arguments that pack the files named in `list` into `archive`, for the tar whose `--version`
+ * printed `version`. macOS bsdtar adds each extended attribute as a pax keyword, which GNU tar on
+ * the machine warns about, and an AppleDouble `._` member, which it unpacks as an untracked file.
+ * GNU tar packs no extended attribute unless asked.
+ */
+export function tarPackArguments(version: string, archive: string, list: string): string[] {
+  const metadata = version.startsWith('bsdtar ') ? ['--no-xattrs', '--no-mac-metadata'] : [];
+  return ['-czf', archive, ...metadata, '--null', '-T', list];
+}
+
 /** Packs the local commits, the working tree and the evidence history into `folder`. */
 function packRun(
   repository: string,
@@ -224,16 +275,22 @@ function packRun(
   if (!pushed) git(repository, ['bundle', 'create', join(folder, 'head.bundle'), 'HEAD', '^origin/main']);
   const tracked = list(['ls-files', '-z']);
   const exists = (file: string) => existsSync(resolve(repository, file));
+  const version = execFileSync('tar', ['--version'], { encoding: 'utf8' });
   const tar = (name: string, files: readonly string[]) => {
     writeFileSync(join(folder, `${name}.list`), files.join('\0'));
-    execFileSync('tar', ['-czf', join(folder, `${name}.tgz`), '--null', '-T', join(folder, `${name}.list`)], {
-      cwd: repository,
-    });
+    execFileSync(
+      'tar',
+      tarPackArguments(version, join(folder, `${name}.tgz`), join(folder, `${name}.list`)),
+      {
+        cwd: repository,
+      },
+    );
   };
   tar('tree', [...tracked, ...untracked].filter(exists));
   // Against HEAD's tree, so a staged deletion or rename removes the old path on the machine too.
   const committed = list(['ls-tree', '-r', '-z', '--name-only', 'HEAD']);
   writeFileSync(join(folder, 'deleted.txt'), committed.filter((file) => !exists(file)).join('\n'));
+  writeFileSync(join(folder, 'changed.json'), JSON.stringify(changedSinceHead(repository)));
   tar('evidence', evidenceFiles(repository));
   return { head, bundle: !pushed };
 }
@@ -357,7 +414,7 @@ async function uploadRun(
   bundle: boolean,
 ): Promise<void> {
   const files: [string, string][] = [
-    ...['tree.tgz', 'evidence.tgz', 'deleted.txt', 'proof-environment', 'backend-values.json']
+    ...['tree.tgz', 'evidence.tgz', 'deleted.txt', 'changed.json', 'proof-environment', 'backend-values.json']
       .concat(bundle ? ['head.bundle'] : [])
       .map((name): [string, string] => [name, join(folder, name)]),
     ['remote-verify.sh', resolve(repository, 'scripts/boat/remote-verify.sh')],

@@ -1,6 +1,6 @@
 Menü öffnen
 Zeiterfassung
-Manuelle Eintragung
+Zeit nachtragen
 Zeiterfassung
 Zeitkonto
 Übersicht

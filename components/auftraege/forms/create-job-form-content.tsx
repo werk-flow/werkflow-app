@@ -87,6 +87,7 @@ export function CreateJobFormContent({
         onCancel={() => form.setQualificationWarning(null)}
         onConfirm={form.submitJob}
       />
+      {form.planningWarningDialog}
     </>
   );
 }

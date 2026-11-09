@@ -5,9 +5,16 @@ import type { TimeCorrectionFact, TimeCorrectionRequest, TimeCorrectionSnapshot 
 /** Consecutive Berlin days (`YYYY-MM-DD`), both ends inclusive. */
 type ChangedDayRun = { first: string; last: string };
 
-/** The pending corrections of one person in sum: how many, their minutes before and after, and their days. */
+/**
+ * The time of one person that waits for a decision, in sum: the pending
+ * corrections and the pending manual submissions, their minutes before and
+ * after, and their days.
+ */
 export type ProvisionalTimeSummary = {
+  /** Pending corrections. */
   count: number;
+  /** Pending manual submissions („Nachträge“). */
+  submissionCount: number;
   beforeMinutes: number;
   proposedMinutes: number;
   /** The Berlin days the pending corrections change, in order; a longer run than a week as one run. */
@@ -80,26 +87,68 @@ function changedDays(runs: readonly ChangedDayRun[]): (string | ChangedDayRun)[]
   return [...listed, ...longRuns].sort((left, right) => firstDay(left).localeCompare(firstDay(right)));
 }
 
-/** The sum of one person's pending corrections, each counted by its current revision and only by that person's facts. */
+/** One clock fact of a pending manual submission. */
+export type PendingSubmissionFact = Pick<TimeCorrectionFact, 'entryType' | 'timestamp'>;
+
+/** Clock facts as one timeline in time order, without a person: the caller reads one person's facts only. */
+function asTimeline(facts: readonly PendingSubmissionFact[]): TimeCorrectionFact[] {
+  return [...facts]
+    .sort((left, right) => left.timestamp.localeCompare(right.timestamp))
+    .map((fact, index) => ({
+      ...fact,
+      factId: `${index}-${fact.timestamp}`,
+      employeeRecordId: '',
+      userId: '',
+      jobId: null,
+      activityKind: null,
+      isManual: true,
+    }));
+}
+
+/**
+ * The sum of one person's pending time: each correction counted by its
+ * current revision and only by that person's facts, and the pending manual
+ * submissions as the change they make to the accepted time of their days. A
+ * submission may close or open time that accepted facts or another
+ * submission hold, so the days are counted before and after as a whole.
+ */
 export function summarizePendingCorrections(
   pending: readonly Pick<TimeCorrectionRequest, 'revision'>[],
   subjectUserId: string,
+  submissions: {
+    pending: readonly (readonly PendingSubmissionFact[])[];
+    /** The person's accepted facts on the days of the pending submissions. */
+    acceptedOnTheirDays: readonly PendingSubmissionFact[];
+  } = { pending: [], acceptedOnTheirDays: [] },
 ): ProvisionalTimeSummary {
-  const runs = pending.flatMap(({ revision }) => [
-    ...ownerRuns(subjectFacts(revision.beforeSnapshot, subjectUserId)),
-    ...ownerRuns(subjectFacts(revision.proposedSnapshot, subjectUserId)),
-  ]);
+  const submittedFacts = submissions.pending.flat();
+  const acceptedBefore = ownerMinutes(asTimeline(submissions.acceptedOnTheirDays));
+  const acceptedAfter =
+    submittedFacts.length === 0
+      ? acceptedBefore
+      : ownerMinutes(asTimeline([...submissions.acceptedOnTheirDays, ...submittedFacts]));
+  const runs = [
+    ...pending.flatMap(({ revision }) => [
+      ...ownerRuns(subjectFacts(revision.beforeSnapshot, subjectUserId)),
+      ...ownerRuns(subjectFacts(revision.proposedSnapshot, subjectUserId)),
+    ]),
+    ...ownerRuns(asTimeline(submittedFacts)),
+  ];
   return {
     count: pending.length,
-    beforeMinutes: pending.reduce(
-      (total, request) => total + ownerMinutes(subjectFacts(request.revision.beforeSnapshot, subjectUserId)),
-      0,
-    ),
-    proposedMinutes: pending.reduce(
-      (total, request) =>
-        total + ownerMinutes(subjectFacts(request.revision.proposedSnapshot, subjectUserId)),
-      0,
-    ),
+    submissionCount: submissions.pending.length,
+    beforeMinutes:
+      pending.reduce(
+        (total, request) =>
+          total + ownerMinutes(subjectFacts(request.revision.beforeSnapshot, subjectUserId)),
+        0,
+      ) + acceptedBefore,
+    proposedMinutes:
+      pending.reduce(
+        (total, request) =>
+          total + ownerMinutes(subjectFacts(request.revision.proposedSnapshot, subjectUserId)),
+        0,
+      ) + acceptedAfter,
     days: changedDays(runs),
   };
 }

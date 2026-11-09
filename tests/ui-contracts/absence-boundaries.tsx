@@ -1,9 +1,10 @@
 // The absence surfaces under contract: the office's sickness dialog with its
-// affected visits, and a person picker inside the calendar's window of
+// affected visits, and the person pickers inside the calendar's window of
 // capacity days. Their reads and the save answer from absence-service-boundaries.ts.
 import { useState } from 'react';
 import { BoardAbsencesContext } from '@/components/kalender/board-absences-context';
 import { PlanningEntryAssignmentFields } from '@/components/kalender/planning-entry-fields';
+import { ScheduleParkedDialog } from '@/components/kalender/schedule-parked-dialog';
 import { RecordSicknessDialog } from '@/components/mitarbeiter/sickness-report-record-dialog';
 import { BannerProvider } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
@@ -11,7 +12,7 @@ import { usePlanningOptions } from '@/hooks/use-planning-options';
 import { indexBoardAbsences } from '@/lib/calendar/absence-marks';
 import type { CalendarBoardDay, CalendarBoardRow } from '@/lib/calendar/board';
 import { ABSENT_RECORD_ID, PRESENT_RECORD_ID } from './absence-service-boundaries';
-import { CalendarOrganizationContext } from './calendar-service-boundaries';
+import { CalendarOrganizationContext, contractJob } from './calendar-service-boundaries';
 
 /** The member page's opener and the office's record dialog. */
 export function SicknessRecordContractFixture(): React.JSX.Element {
@@ -64,10 +65,12 @@ function boardRow(employeeRecordId: string, displayName: string): CalendarBoardR
   };
 }
 
+const WINDOW_ROWS = [boardRow(ABSENT_RECORD_ID, 'Daniel Krüger'), boardRow(PRESENT_RECORD_ID, 'Lena Brandt')];
+
 /** The window holds 30.10.2026 only: Daniel is sick there, Lena works. */
 const WINDOW_ABSENCES = indexBoardAbsences(
   [boardDay(ABSENT_RECORD_ID, '2026-10-30', true), boardDay(PRESENT_RECORD_ID, '2026-10-30', false)],
-  [boardRow(ABSENT_RECORD_ID, 'Daniel Krüger'), boardRow(PRESENT_RECORD_ID, 'Lena Brandt')],
+  WINDOW_ROWS,
 );
 
 function AbsencePicker(): React.JSX.Element {
@@ -105,5 +108,28 @@ export function AbsencePickerContractFixture(): React.JSX.Element {
         </main>
       </BoardAbsencesContext>
     </CalendarOrganizationContext.Provider>
+  );
+}
+
+/** „Einplanen am …“ for a parked job, inside the same window. */
+export function ScheduleParkedPickerContractFixture(): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  return (
+    <BoardAbsencesContext value={WINDOW_ABSENCES}>
+      <main>
+        <h1>Komponentenverträge</h1>
+        <Button type="button" onClick={() => setOpen(true)}>
+          Einplanen am …
+        </Button>
+        {open && (
+          <ScheduleParkedDialog
+            job={contractJob('Heizungswartung Familie Berger')}
+            rows={WINDOW_ROWS}
+            onClose={() => setOpen(false)}
+            onSchedule={() => setOpen(false)}
+          />
+        )}
+      </main>
+    </BoardAbsencesContext>
   );
 }

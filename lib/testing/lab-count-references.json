@@ -1348,7 +1348,7 @@
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 3, "tolerance": 0 },
         "backendRequests": { "reference": 87, "tolerance": 1 },
-        "componentRenders": { "reference": 1634, "tolerance": 31 }
+        "componentRenders": { "reference": 1583, "tolerance": 31 }
       },
       "payloads": {
         "background:job-dispatch-cards": {
@@ -1522,6 +1522,14 @@
           },
           "runKeys": ["2026-11-07T155436013Z-7a1b47"],
           "reason": "The job page's lifecycle snapshot carries the readiness picture's new unplannedReason and the assessed visit's conflict details (werk-flow/werkflow-planning#50, #69)."
+        },
+        {
+          "kind": "ratchet",
+          "target": "componentRenders",
+          "from": { "reference": 1634, "tolerance": 31 },
+          "to": { "reference": 1583, "tolerance": 31 },
+          "runKeys": ["2026-11-08T162433969Z-6e6e07"],
+          "reason": null
         }
       ]
     },
@@ -2337,7 +2345,7 @@
         },
         "script": {
           "requests": { "reference": 4, "tolerance": 0 },
-          "encodedBytes": { "reference": 35153, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 37609, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         }
@@ -2531,6 +2539,24 @@
           },
           "runKeys": ["2026-11-08T112625699Z-098a70"],
           "reason": "Owner decision of 2026-11-08 via the CI lead (werk-flow/werkflow-planning#222): accept. TimeInput (components/ui/time-input) left every page's shared chunk, where the Auftraege edit form held it through the app shell's table skeleton, and now arrives with the /zeiterfassung chunks that Aufgaben prefetches: 33,652 to 35,153 (main read 33,645 here), script requests unchanged at 4. No new code; every cold start drops the module instead."
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 4, "tolerance": 0 },
+            "encodedBytes": { "reference": 35153, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 4, "tolerance": 0 },
+            "encodedBytes": { "reference": 37609, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-08T142527257Z-73e286"],
+          "reason": "werk-flow/werkflow-app#276 adds the employee's „Zeit nachtragen“ flow to /zeiterfassung (earlier-day Zeitkorrektur, withdrawal confirmation, extended „Vorgemerkte Zeit“). The Aufgaben step prefetches that route from the sidebar, so its script grew by about 2.5 kB over main's 35153; the Aufgaben route and its reads are unchanged."
         }
       ]
     },

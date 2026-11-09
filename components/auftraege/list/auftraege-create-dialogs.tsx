@@ -3,6 +3,7 @@
 import { CreateAuftragProjectDialog } from '../forms/create-auftrag-project-dialog';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
 import { QualificationWarningDialog } from '../shared/qualification-warning-dialog';
+import { usePlanningApprovalRetry } from '../forms/use-planning-approval-retry';
 import type { useAuftraegeOptimisticList } from './use-auftraege-optimistic-list';
 
 type AuftraegeCreateDialogsProps = {
@@ -21,9 +22,10 @@ type AuftraegeCreateDialogsProps = {
   >;
 };
 
-/** The deferred create dialog and the qualification confirm step a job create can end in. */
+/** The deferred create dialog and the qualification and planning confirm steps a job create can end in. */
 export function AuftraegeCreateDialogs({ members, open, onOpenChange, list }: AuftraegeCreateDialogsProps) {
   const { jobCreateAwaitingApproval, runJobCreate } = list;
+  const { retryWithPlanningApproval, planningWarningDialog } = usePlanningApprovalRetry();
 
   return (
     <>
@@ -32,7 +34,7 @@ export function AuftraegeCreateDialogs({ members, open, onOpenChange, list }: Au
         jobs={list.dialogJobs}
         open={open}
         onOpenChange={onOpenChange}
-        onJobSubmit={list.handleJobSubmit}
+        onJobSubmit={(submission) => list.handleJobSubmit(submission, retryWithPlanningApproval)}
         onProjectSubmit={list.handleProjectSubmit}
       />
       <QualificationWarningDialog
@@ -40,9 +42,12 @@ export function AuftraegeCreateDialogs({ members, open, onOpenChange, list }: Au
         isSubmitting={list.isCreatingJob}
         onCancel={list.handleJobCreateCancel}
         onConfirm={(approval) =>
-          jobCreateAwaitingApproval ? runJobCreate(jobCreateAwaitingApproval, approval) : undefined
+          jobCreateAwaitingApproval
+            ? runJobCreate(jobCreateAwaitingApproval, approval, retryWithPlanningApproval)
+            : undefined
         }
       />
+      {planningWarningDialog}
     </>
   );
 }

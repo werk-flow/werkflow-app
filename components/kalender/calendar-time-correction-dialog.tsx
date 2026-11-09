@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
-import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
+import { SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import { isEntryInClosedPeriod } from '@/lib/time-tracking/closed-period-dates';
 import { useClosedTimePeriods } from '@/components/zeiterfassung/use-closed-time-periods';
 import type { CalendarBoardRow } from '@/lib/calendar/board';
@@ -25,22 +25,10 @@ import {
   calendarCorrectionBoundaries,
   type CalendarTimeCorrectionDraft,
 } from '@/lib/time-corrections/calendar-draft';
-import { TIME_CORRECTION_FAILURE_MESSAGES } from '@/lib/time-corrections/messages';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { formatBerlin } from '@/lib/utils';
-
-// The correction sentences every surface shares, plus the ones that name the
-// calendar; the shared codes (`invalid_input`, `period_closed`, ...) take their
-// sentence from lib/action-messages.ts.
-const errors: Readonly<Partial<Record<string, string>>> = {
-  ...TIME_CORRECTION_FAILURE_MESSAGES,
-  calendar_incomplete_source:
-    'Dieser Block ist noch aktiv oder zeigt nur einen Teil der ursprünglichen Buchung. Bitte korrigiere ihn in der Zeiterfassung.',
-  time_correction_stale_source:
-    'Die Buchung wurde inzwischen geändert. Bitte lade den Kalender neu und prüfe die Änderung.',
-  time_correction_multiple_application_sources:
-    'Dieser Block enthält mehrere frühere Korrekturen. Bitte bearbeite sie einzeln in der Zeiterfassung.',
-};
+import type { CorrectionOperation } from '@/components/correction-operation';
+import { sendCalendarTimeCorrection } from './calendar-time-correction-send';
 
 /** Whether a boundary's old or new time falls into a closed period. */
 function correctionTouchesClosedPeriod(
@@ -83,7 +71,10 @@ function useTimeCorrectionSubmit({
   const [reasonError, setReasonError] = useState<string | null>(null);
   const { run: runSubmit, isPending: submitting } = useServerAction(submitTimeCorrection);
   const [uncertain, setUncertain] = useState(false);
-  const [operationId] = useState(() => crypto.randomUUID());
+  // One operation per draft, with the reason that may have been saved under
+  // it: a retry after a lost response replays the saved request, and a reason
+  // edited since then must not pass as saved.
+  const operationRef = useRef<CorrectionOperation | null>(null);
   const first = draft.sourceEntries[0];
   const subject = people.find((person) => person.userId === first?.userId);
   const targetUserId = draft.updates.find((update) => update.newUserId)?.newUserId ?? first?.userId;
@@ -107,35 +98,31 @@ function useTimeCorrectionSubmit({
     }
     setError(null);
     try {
-      const result = await runSubmit({
-        organizationId,
-        subjectEmployeeRecordId: subject.employeeRecordId,
-        kind: targetUserId === first?.userId ? 'edit' : 'reassign',
-        reason,
-        source: null,
-        proposedFacts: [],
-        calendarAdjustment: boundaries,
-        operationId,
-      });
+      const answer = await sendCalendarTimeCorrection(
+        operationRef,
+        {
+          organizationId,
+          subjectEmployeeRecordId: subject.employeeRecordId,
+          kind: targetUserId === first?.userId ? 'edit' : 'reassign',
+          reason,
+          source: null,
+          proposedFacts: [],
+          calendarAdjustment: boundaries,
+        },
+        runSubmit,
+      );
       setUncertain(false);
-      if (!result.success) {
-        setError(
-          describeFailure(
-            result.error,
-            errors,
-            'Die Korrektur konnte nicht gespeichert werden. Bitte prüfe die Buchung in der Zeiterfassung.',
-          ),
-        );
+      if (answer.kind === 'failed') {
+        setError(answer.message);
         return;
       }
-      showBanner({
-        variant: 'success',
-        message:
-          result.status === 'approved'
-            ? 'Die Zeit wurde korrigiert.'
-            : 'Die Korrektur wurde zur Prüfung eingereicht.',
-      });
+      // The move is saved either way; the board shows it.
       onSubmitted();
+      if (answer.kind === 'earlier-version-saved') {
+        setError(answer.message);
+        return;
+      }
+      showBanner({ variant: 'success', message: answer.message });
       onClose();
     } catch {
       setUncertain(true);

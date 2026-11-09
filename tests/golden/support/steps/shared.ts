@@ -186,6 +186,33 @@ export function planningWarningDialog(page: Page): Locator {
   });
 }
 
+/** The reason field of the separate planning warning dialog. */
+export function planningWarningReason(warning: Locator): Locator {
+  return warning.locator('#planning-warning-reason');
+}
+
+export function planningWarningSave(warning: Locator): Locator {
+  return warning.getByRole('button', { name: SHARED_COPY.planningWarning.saveWithReason });
+}
+
+/**
+ * Confirms the planning warning dialog with a reason and waits until it
+ * closed. When the warning is not required, a change without warnings passes.
+ */
+export async function confirmPlanningWarning(page: Page, reason: string, required = true): Promise<void> {
+  const warning = planningWarningDialog(page);
+  if (required) {
+    await expect(warning).toBeVisible();
+  } else {
+    // isVisible ignores its timeout; the warning opens after the planning check answers.
+    const appeared = await settledBeforeTimeout(warning.waitFor({ state: 'visible', timeout: 2_000 }));
+    if (!appeared) return;
+  }
+  await planningWarningReason(warning).fill(reason);
+  await planningWarningSave(warning).click();
+  await expect(warning).toHaveCount(0);
+}
+
 /** The customer picker of a work or request form while it shows no customer. */
 export function customerPicker(scope: Page | Locator): Locator {
   return scope.getByRole('combobox').filter({ hasText: SHARED_COPY.picker.noCustomer });

@@ -79,6 +79,7 @@ const MANAGER_GROUPS: Readonly<Record<InventoriedRoute, Exclude<SurfaceGroup, Fi
   '/einstellungen/profil': 'settings',
   '/einstellungen/zeiterfassung': 'settings',
   '/einstellungen/kunden': 'settings',
+  '/einstellungen/datenexport': 'settings',
   '/einstellungen/dashboard': 'settings',
   '/einstellungen/kalender': 'settings',
   '/einstellungen/konto-sicherheit': 'settings',

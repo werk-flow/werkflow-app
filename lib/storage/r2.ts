@@ -219,7 +219,8 @@ export async function createSignedDownloadUrl({
   return getSignedUrl(getR2Client(), command, { expiresIn: clampExpiry(expiresInSeconds) });
 }
 
-async function headStorageObject({
+/** Whether an object of the organization is stored at the key, and its size. */
+export async function headStorageObject({
   organizationId,
   path,
 }: OrganizationScope & { path: string }): Promise<StorageObjectHead> {
@@ -328,25 +329,69 @@ export async function promoteUploadedObject({
   return { ...head, path: attemptPath };
 }
 
+function isPreconditionFailed(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  if ('name' in error && error.name === 'PreconditionFailed') return true;
+  return '$metadata' in error && isJsonRecord(error.$metadata) && error.$metadata.httpStatusCode === 412;
+}
+
+/**
+ * What a write did: stored the bytes, or, with `ifAbsent`, found the key
+ * taken and kept the object there, whose size it reports.
+ */
+export type StoredObject = { created: true } | { created: false; sizeBytes: number | null };
+
 export async function putStorageObject({
   organizationId,
   path,
   body,
   contentType,
+  ifAbsent = false,
 }: OrganizationScope & {
   path: string;
   body: Uint8Array | Buffer;
   contentType: string;
-}): Promise<void> {
+  /** Write only when no object has the key; the first object stored there never changes. */
+  ifAbsent?: boolean;
+}): Promise<StoredObject> {
   assertOrganizationStorageKey(organizationId, path);
-  await getR2Client().send(
-    new PutObjectCommand({
-      Bucket: getR2BucketName(),
-      Key: path,
-      Body: body,
-      ContentType: contentType,
-    }),
-  );
+  try {
+    await getR2Client().send(
+      new PutObjectCommand({
+        Bucket: getR2BucketName(),
+        Key: path,
+        Body: body,
+        ContentType: contentType,
+        ...(ifAbsent ? { IfNoneMatch: '*' } : {}),
+      }),
+    );
+    return { created: true };
+  } catch (error) {
+    if (!ifAbsent || !isPreconditionFailed(error)) throw error;
+    const head = await headStorageObject({ organizationId, path });
+    return { created: false, sizeBytes: head.sizeBytes };
+  }
+}
+
+/**
+ * The bytes of one object of the organization, read on the server: only the
+ * organization export (lib/org-export/) packs stored originals into its
+ * archive. A missing object throws `storage_object_missing`.
+ */
+export async function readStorageObject({
+  organizationId,
+  path,
+}: OrganizationScope & { path: string }): Promise<Uint8Array> {
+  assertOrganizationStorageKey(organizationId, path);
+  try {
+    const result = await getR2Client().send(new GetObjectCommand({ Bucket: getR2BucketName(), Key: path }));
+    if (!result.Body) throw new Error('storage_object_missing');
+    return await result.Body.transformToByteArray();
+  } catch (error) {
+    if (isNotFoundError(error) || (isJsonRecord(error) && error.name === 'NoSuchKey'))
+      throw new Error('storage_object_missing');
+    throw error;
+  }
 }
 
 export async function deleteStorageObjects({

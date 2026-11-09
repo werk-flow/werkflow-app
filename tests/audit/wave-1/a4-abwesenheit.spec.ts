@@ -433,12 +433,14 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
       title: inRangeJobTitle,
       assignEmployeeName: 'Emil',
       plannedDateDigits: toDatePickerDigits(requestDate),
+      planningOverride: { orgId: world.orgId, reason: 'A4 Einsatz im Zeitraum ist abgestimmt.' },
     });
     await createJob(adminPage, {
       jobNumber: `A4-OUT-${world.runId}`,
       title: outsideJobTitle,
       assignEmployeeName: 'Emil',
       plannedDateDigits: toDatePickerDigits(outsideDate),
+      planningOverride: { orgId: world.orgId, reason: 'A4 Einsatz außerhalb ist abgestimmt.' },
     });
     await reportOwnSicknessViaDialog(employeePage, {
       startDigits: dateDigits,

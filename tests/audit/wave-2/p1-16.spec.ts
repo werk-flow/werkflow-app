@@ -138,6 +138,7 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
       siteName,
       contactName,
       assignEmployeeName: employeeName,
+      planningOverride: { orgId: world.orgId, reason: 'P116 Einsatz ist abgestimmt.' },
       plannedDateDigits: dateDigits(visitDate),
     });
     await createJob(adminPage, {
@@ -243,6 +244,7 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
         jobNumber: job.number,
         title: job.title,
         assignEmployeeName: employeeName,
+        planningOverride: { orgId: world.orgId, reason: 'P116 Einsatz ist abgestimmt.' },
         plannedDateDigits: dateDigits(visitDate),
       });
     }
@@ -341,6 +343,7 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
       jobNumber,
       title: `P116 Ausführung ${world.runId}`,
       assignEmployeeName: employeeName,
+      planningOverride: { orgId: world.orgId, reason: 'P116 Einsatz ist abgestimmt.' },
       plannedDateDigits: dateDigits(ownedBerlinDateAtOffset('p1-16', 87)),
       workTemplateName: templateName,
     });
@@ -400,6 +403,7 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
         jobNumber: job.number,
         title: job.title,
         assignEmployeeName: employeeName,
+        planningOverride: { orgId: world.orgId, reason: 'P116 Einsatz ist abgestimmt.' },
         plannedDateDigits: dateDigits(ownedBerlinDateAtOffset('p1-16', 88)),
       });
     }
@@ -487,6 +491,7 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
       jobNumber,
       title: `P116 Blocker und Entzug ${world.runId}`,
       assignEmployeeName: employeeName,
+      planningOverride: { orgId: world.orgId, reason: 'P116 Einsatz ist abgestimmt.' },
       plannedDateDigits: dateDigits(ownedBerlinDateAtOffset('p1-16', 89)),
     });
     const pack = await openFieldWorkPack(employeePage, jobNumber);

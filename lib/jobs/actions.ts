@@ -5,8 +5,16 @@ import { uuidSchema } from '@/lib/validation/uuid';
 import { updateTag, revalidatePath } from 'next/cache';
 import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
-import { assessJobTeamChange, type JobVisitAssessment } from '@/lib/planning/job-team-assessment';
-import type { PlanningConflictApproval } from '@/lib/planning/conflict-acknowledgement';
+import {
+  assessJobPlan,
+  assessJobTeamChange,
+  assessNewJobPlan,
+  type JobVisitAssessment,
+} from '@/lib/planning/job-team-assessment';
+import {
+  planningAcknowledgement,
+  type PlanningConflictApproval,
+} from '@/lib/planning/conflict-acknowledgement';
 import { authenticateAndAuthorize } from './auth';
 import { readJobAssignmentOfUser } from './job-access-reads';
 import {
@@ -43,7 +51,7 @@ import { projectFieldJobDetails } from './field-work-pack';
 import type { JobVisitPlan } from './visit-schedule';
 import { logError } from '@/lib/logging';
 import { timeWriteFailure } from '@/lib/time-tracking/closed-periods';
-import { CUSTOMER_REFERENCE_REFUSALS, workWriteFailure } from './write-refusals';
+import { CUSTOMER_REFERENCE_REFUSALS, jobPlanWriteFailure } from './write-refusals';
 import { prepareJobUpdate } from './update-preparation';
 import { JOB_CREATION_REFUSALS, prepareJobCreation } from './creation';
 import {
@@ -76,6 +84,8 @@ export type CreateJobInput = {
   assignmentApproval?: AssignmentApproval | null;
   assignmentTeamSourceId?: string | null;
   templateVersionId?: string;
+  /** The reason for the planning conflicts of the visit the save plans, for the assessment the manager saw. */
+  planningApproval?: PlanningConflictApproval | null;
 };
 
 export type UpdateJobInput = Omit<
@@ -186,17 +196,22 @@ export async function createJob(rawInput: CreateJobInput): Promise<CreateJobResu
       input.jobNumber ?? '',
     );
     if (!prepared.success) return prepared;
+    // The calendar's capacity check of the visit the new job plans with its people.
+    const plan = await assessNewJobPlan({ admin, orgId, job: input });
+    if (!plan.success) return plan;
 
-    // One transaction: the job, its assignments and its work template, or nothing.
+    // One transaction: the job, its assignments, its work template and its visit's assessment, or nothing.
     const { data, error } = await admin.rpc(
-      'create_job_with_assignments',
-      rpcArgs('create_job_with_assignments', {
+      'create_job_with_visit_assessment',
+      rpcArgs('create_job_with_visit_assessment', {
         ...prepared.arguments,
         p_organization_id: orgId,
         p_actor_id: userId,
+        p_visit_assessment: plan.planAssessment,
       }),
     );
-    if (error) return workWriteFailure('Error creating job:', error, JOB_CREATION_REFUSALS, 'create_failed');
+    if (error)
+      return jobPlanWriteFailure('Error creating job:', error, JOB_CREATION_REFUSALS, 'create_failed');
 
     updateTag(CACHE_TAGS.workTemplates(orgId));
 
@@ -225,11 +240,26 @@ export async function updateJob(rawJobId: string, rawInput: UpdateJobInput): Pro
     if (scheduleRefusal) return scheduleRefusal;
     const prepared = await prepareJobUpdate({ admin, orgId, actorId: auth.context.userId, jobId, input });
     if (!prepared.success) return prepared;
+    // The calendar's capacity check of the visit the edit moves or adds people to.
+    const plan = await assessJobPlan({
+      admin,
+      orgId,
+      jobId,
+      ...prepared.plan,
+      acknowledgement: planningAcknowledgement(input.planningApproval),
+    });
+    if (!plan.success) return plan;
     // tenant-scope: built-from-context — prepareJobUpdate sets p_organization_id from the orgId passed above, which authenticateAndAuthorize resolved.
-    const { data, error } = await admin.rpc('update_job_with_assignments', prepared.arguments);
+    const { data, error } = await admin.rpc(
+      'update_job_with_visit_assessment',
+      rpcArgs('update_job_with_visit_assessment', {
+        ...prepared.arguments,
+        p_visit_assessment: plan.planAssessment,
+      }),
+    );
 
     if (error) {
-      return workWriteFailure('Error updating job:', error, JOB_UPDATE_REFUSALS, 'update_failed');
+      return jobPlanWriteFailure('Error updating job:', error, JOB_UPDATE_REFUSALS, 'update_failed');
     }
 
     revalidatePath('/auftraege', 'layout');

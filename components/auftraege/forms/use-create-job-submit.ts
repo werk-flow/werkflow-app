@@ -15,6 +15,8 @@ import {
   buildCreateJobInput,
   type CreateJobFormValues,
 } from './create-job-submission';
+import { isPlanningWarning } from './planning-warning-result';
+import { usePlanningApprovalRetry } from './use-planning-approval-retry';
 
 type CreateJobSubmitOptions = {
   values: CreateJobFormValues;
@@ -73,6 +75,7 @@ export function useCreateJobSubmit({
   const [jobNumberError, setJobNumberError] = useState<string | null>(null);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
   const { showBanner } = useBanner();
+  const { retryWithPlanningApproval, planningWarningDialog } = usePlanningApprovalRetry();
 
   const submitJob = async (approval?: AssignmentApproval) => {
     if (isBlocked) return;
@@ -95,7 +98,11 @@ export function useCreateJobSubmit({
 
     await runSubmit(async () => {
       try {
-        const result = await ownWrites.track(createJob(input));
+        const result = await retryWithPlanningApproval((planningApproval) =>
+          ownWrites.track(createJob({ ...input, planningApproval })),
+        );
+        // Taken back in the planning dialog: the form stays open for a change.
+        if (isPlanningWarning(result)) return;
 
         if (!result.success) {
           if (
@@ -130,6 +137,7 @@ export function useCreateJobSubmit({
   const showJobNumberError = hasAttemptedSubmit && jobNumberError;
 
   return {
+    planningWarningDialog,
     qualificationWarning,
     setQualificationWarning,
     isLoading,

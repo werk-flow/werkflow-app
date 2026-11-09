@@ -78,8 +78,9 @@ const config: KnipConfig = {
   // util-linux's flock holds the machine-wide heavy slots (lib/testing/runner/heavy-slot.ts);
   // T3 Code's CLI wakes the thread of a notified run (lib/testing/notified-run.ts);
   // POSIX mkfifo lets its test wait on the wake itself (lib/testing/notified-run.test.ts);
-  // the runner's openssl reads its agent's certificate expiry (scripts/date-lookahead-plan.ts).
-  ignoreBinaries: ['flock', 'mkfifo', 'openssl', 't3'],
+  // the runner's openssl reads its agent's certificate expiry (scripts/date-lookahead-plan.ts);
+  // macOS xattr marks a file the Boat pack must strip (lib/testing/boat/verify-on-boat.test.ts).
+  ignoreBinaries: ['flock', 'mkfifo', 'openssl', 't3', 'xattr'],
 };
 
 export default config;

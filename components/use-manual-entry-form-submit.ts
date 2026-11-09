@@ -1,13 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { usePendingTask } from '@/hooks/use-server-action';
 import { useBanner } from '@/components/ui/banner';
 import { describeFailure, SHARED_FAILURE_MESSAGES, type FailureSentence } from '@/lib/action-messages';
 import { getTimeEntries } from '@/lib/time-tracking/entry-read-actions';
 import { addManualEntry } from '@/lib/time-tracking/entry-write-actions';
-import { isDateInClosedPeriod, type ClosedTimePeriod } from '@/lib/time-tracking/closed-period-dates';
 import { validateManualEntries } from '@/lib/time-tracking/validation';
 import {
   describeTimeValidationFailure,
@@ -15,8 +14,15 @@ import {
 } from '@/lib/time-tracking/validation-messages';
 import type { AddManualEntryResult, ManualEntryInput, TimeEntry } from '@/lib/time-tracking/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
-import { toLocalDateString } from '@/lib/utils';
-import type { ManualEntryMode } from '@/components/use-manual-entry-form-draft';
+import { PAST_DAY_EARLIER_VERSION_SAVED, submitPastDayTime } from '@/components/manual-entry-past-day';
+import { sendUnderOperation, type CorrectionOperation } from '@/components/correction-operation';
+import {
+  manualEntryFieldIds,
+  NO_MANUAL_ENTRY_FIELD_ERRORS,
+  planManualEntrySubmission,
+  type ManualEntryFieldErrors,
+  type ManualEntryFormValues,
+} from '@/components/manual-entry-submission';
 
 const MANUAL_ENTRY_ERROR_MESSAGES: Readonly<Partial<Record<string, string | FailureSentence>>> = {
   ...TIME_VALIDATION_MESSAGES,
@@ -27,50 +33,18 @@ const MANUAL_ENTRY_ERROR_MESSAGES: Readonly<Partial<Record<string, string | Fail
     'Der Auftrag wurde in dieser Organisation nicht gefunden. Wähle einen anderen Auftrag oder trage die Zeit ohne Auftrag ein.',
   job_not_assigned:
     'Die ausgewählte Person ist diesem Auftrag nicht zugewiesen. Wähle einen ihrer Aufträge oder trage die Zeit ohne Auftrag ein.',
+  past_day_needs_reason:
+    'Für einen vergangenen Tag braucht die Freigabe einen Grund. Gib ihn an und speichere erneut.',
 };
 
-type ManualEntryFieldErrors = { member: string | undefined; date: string | undefined };
-
-const NO_MANUAL_ENTRY_FIELD_ERRORS: ManualEntryFieldErrors = { member: undefined, date: undefined };
-
-type ManualEntrySubmitInput = {
+type ManualEntrySubmitInput = ManualEntryFormValues & {
   activeOrgId: string | null;
   isAdmin: boolean;
-  isAdminOrManager: boolean;
   currentUserId: string | null;
-  entryMode: ManualEntryMode;
-  selectedDate: Date | undefined;
-  clockInTime: string;
-  clockOutTime: string;
-  selectedUserId: string;
   canAssignJob: boolean;
   selectedJobId: string;
-  /** A date in a closed period is refused with `period_closed`; the form marks it first. */
-  closedPeriods: readonly ClosedTimePeriod[];
   onSuccess: ((entries: TimeEntry[]) => void | Promise<void>) | undefined;
 };
-
-/** The clock-in and clock-out entries the form's mode asks for, on the chosen day. */
-function buildManualEntries(
-  entryMode: ManualEntryMode,
-  dateIso: string,
-  clockInTime: string,
-  clockOutTime: string,
-): ManualEntryInput[] {
-  const entries: ManualEntryInput[] = [];
-
-  if (entryMode === 'clock_in' || entryMode === 'both') {
-    const clockInTimestamp = new Date(`${dateIso}T${clockInTime}:00`).toISOString();
-    entries.push({ entryType: 'clock_in', timestamp: clockInTimestamp });
-  }
-
-  if (entryMode === 'clock_out' || entryMode === 'both') {
-    const clockOutTimestamp = new Date(`${dateIso}T${clockOutTime}:00`).toISOString();
-    entries.push({ entryType: 'clock_out', timestamp: clockOutTimestamp });
-  }
-
-  return entries;
-}
 
 /**
  * The sentence for a refused save. A session open in another organization
@@ -175,31 +149,68 @@ async function saveManualEntries({
   }
 }
 
-/** Validates the manual entry form, saves the entries and reports the outcome. */
-export function useManualEntrySubmit({
-  activeOrgId,
-  isAdmin,
-  isAdminOrManager,
-  currentUserId,
-  entryMode,
-  selectedDate,
-  clockInTime,
-  clockOutTime,
-  selectedUserId,
-  canAssignJob,
+/** Own time of an earlier day goes in as a correction with its reason; a refusal stays in the form. */
+async function savePastDayTime({
+  organizationId,
+  dateIso,
+  values,
   selectedJobId,
-  closedPeriods,
+  operationRef,
+  setError,
+  showBanner,
   onSuccess,
-}: ManualEntrySubmitInput): {
+}: {
+  organizationId: string;
+  dateIso: string;
+  values: Pick<ManualEntryFormValues, 'clockInTime' | 'clockOutTime' | 'reason'>;
+  selectedJobId: string;
+  operationRef: { current: CorrectionOperation | null };
+  setError: (error: string | null) => void;
+  showBanner: ReturnType<typeof useBanner>['showBanner'];
+  onSuccess: ManualEntrySubmitInput['onSuccess'];
+}): Promise<void> {
+  const reason = values.reason.trim();
+  const content = JSON.stringify([dateIso, values.clockInTime, values.clockOutTime, selectedJobId, reason]);
+  const outcome = await sendUnderOperation(operationRef, content, (operationId) =>
+    submitPastDayTime({
+      organizationId,
+      dateIso,
+      clockInTime: values.clockInTime,
+      clockOutTime: values.clockOutTime,
+      jobId: selectedJobId,
+      reason,
+      operationId,
+    }),
+  );
+  if (outcome.kind === 'failed') {
+    setError(outcome.message);
+    return;
+  }
+  if (outcome.kind === 'earlier-version-saved') {
+    setError(PAST_DAY_EARLIER_VERSION_SAVED);
+    return;
+  }
+  showBanner({ variant: 'success', message: 'Die Korrektur wurde zur Prüfung eingereicht.' });
+  await onSuccess?.([]);
+}
+
+/** Validates the manual entry form, saves the entries and reports the outcome. */
+export function useManualEntrySubmit(input: ManualEntrySubmitInput): {
   handleSubmit: (e: React.FormEvent) => Promise<void>;
   isPending: boolean;
   error: string | null;
   fieldErrors: ManualEntryFieldErrors;
 } {
+  const { activeOrgId, isAdmin, isAdminOrManager, currentUserId, selectedUserId, canAssignJob } = input;
+  const { selectedJobId, onSuccess } = input;
   const { run: runPendingTask, isPending } = usePendingTask();
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<ManualEntryFieldErrors>(NO_MANUAL_ENTRY_FIELD_ERRORS);
   const { showBanner } = useBanner();
+  // One operation id per form, with the content that may have been saved
+  // under it: a retry after a lost response replays the saved correction, and
+  // an edit since then must not pass as saved.
+  const operationRef = useRef<CorrectionOperation | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -211,17 +222,13 @@ export function useManualEntrySubmit({
       return;
     }
 
-    const memberError =
-      isAdminOrManager && !selectedUserId ? 'Bitte wähle einen Mitarbeiter aus.' : undefined;
-    const dateIso = selectedDate ? toLocalDateString(selectedDate) : null;
-    const dateError = !dateIso
-      ? 'Bitte wähle ein gültiges Datum.'
-      : isDateInClosedPeriod(dateIso, closedPeriods)
-        ? SHARED_FAILURE_MESSAGES.period_closed
-        : undefined;
-    setFieldErrors({ member: memberError, date: dateError });
-    const errorsById = { 'manual-entry-member': memberError, 'manual-entry-date': dateError };
-    if (focusFirstInvalidField(errorsById) || !dateIso) return;
+    // An untouched or incomplete form sends nothing: it marks the fields instead.
+    const plan = planManualEntrySubmission(input);
+    if (plan.kind === 'invalid') {
+      setFieldErrors(plan.fieldErrors);
+      focusFirstInvalidField(manualEntryFieldIds(plan.fieldErrors));
+      return;
+    }
 
     const targetUserId = isAdminOrManager ? selectedUserId : currentUserId;
     if (!targetUserId) {
@@ -229,16 +236,27 @@ export function useManualEntrySubmit({
       return;
     }
 
-    const entries = buildManualEntries(entryMode, dateIso, clockInTime, clockOutTime);
-
     void runPendingTask(async () => {
       try {
+        if (plan.kind === 'past-day') {
+          await savePastDayTime({
+            organizationId: activeOrgId,
+            dateIso: plan.dateIso,
+            values: input,
+            selectedJobId,
+            operationRef,
+            setError,
+            showBanner,
+            onSuccess,
+          });
+          return;
+        }
         await saveManualEntries({
           organizationId: activeOrgId,
           targetUserId,
           currentUserId,
-          dateIso,
-          entries,
+          dateIso: plan.dateIso,
+          entries: plan.entries,
           isAdmin,
           canAssignJob,
           selectedJobId,

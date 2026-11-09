@@ -74,6 +74,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
       title: `Audit Arbeitsstand ${world.runId}`,
       plannedDateDigits: digits(ownedBerlinDateAtOffset('p1-14', 75)),
       assignEmployeeName: `${world.users.employee.firstName} ${world.users.employee.lastName}`,
+      planningOverride: { orgId: world.orgId, reason: 'P114 Einsatz ist abgestimmt.' },
     });
     await adminPage.goto(`/auftraege/${jobNumber}`);
     await expect(lifecycleState(adminPage, 'not_started')).toBeVisible();
@@ -307,6 +308,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
       workTemplateName: templateName,
       plannedDateDigits: digits(ownedBerlinDateAtOffset('p1-14', 77)),
       assignEmployeeName: `${world.users.employee.firstName} ${world.users.employee.lastName}`,
+      planningOverride: { orgId: world.orgId, reason: 'P114 Einsatz ist abgestimmt.' },
     });
     await adminPage.goto(`/auftraege/${jobNumber}`);
     await expect(lifecycleReadinessTitle(adminPage)).toBeVisible();
@@ -407,6 +409,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
       projectNumber,
       plannedDateDigits: digits(ownedBerlinDateAtOffset('p1-14', 78)),
       assignEmployeeName: `${world.users.employee.firstName} ${world.users.employee.lastName}`,
+      planningOverride: { orgId: world.orgId, reason: 'P114 Einsatz ist abgestimmt.' },
     });
     await adminPage.goto(`/auftraege/projekt/${projectNumber}`);
     await expect(lifecycleBadge(adminPage, 'derived')).toBeVisible();

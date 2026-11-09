@@ -88,3 +88,16 @@ test('an or filter of and-groups keeps a row when every comparison of one group 
     expect.objectContaining({ id: 'all-day-inside' }),
   ]);
 });
+
+test('a limit keeps the first selected rows in table order, and a limit on an embed keeps every row', async () => {
+  const tables = { exports: [{ id: 'first' }, { id: 'second' }, { id: 'third' }] };
+  const ids = (data: unknown) => (Array.isArray(data) ? data.map((row: { id: string }) => row.id) : data);
+  const limited = await createInMemoryAdmin(tables).from('exports').select('id').limit(2);
+  const embedLimited = await createInMemoryAdmin(tables)
+    .from('exports')
+    .select('id')
+    .limit(1, { referencedTable: 'parts' });
+
+  expect(ids(limited.data)).toEqual(['first', 'second']);
+  expect(ids(embedLimited.data)).toEqual(['first', 'second', 'third']);
+});

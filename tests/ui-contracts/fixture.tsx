@@ -3,7 +3,11 @@ import { RouteRefreshFixture } from './route-refresh-boundaries';
 import { PresentationFixture } from './presentation-fixture';
 import { CustomerContractFixture } from './customer-boundaries';
 import { VacationApprovals } from '@/components/zeiterfassung/vacation-approvals';
-import { AbsencePickerContractFixture, SicknessRecordContractFixture } from './absence-boundaries';
+import {
+  AbsencePickerContractFixture,
+  ScheduleParkedPickerContractFixture,
+  SicknessRecordContractFixture,
+} from './absence-boundaries';
 import { ClockContractFixture } from './clock-boundaries';
 import { SidebarContractFixture } from './sidebar-boundaries';
 import { initializeLazyDialogBoundary, LazyDialogContractFixture } from './lazy-dialog-boundaries';
@@ -23,6 +27,7 @@ import {
   DocumentVersionUploadContractFixture,
 } from './document-upload-boundaries';
 import { OrganizationContractFixture } from './organization-boundaries';
+import { OrganizationExportContractFixture } from './organization-export-boundaries';
 import { CalendarContractFixture } from './calendar-boundaries';
 import { FeedbackContractFixture, isFeedbackFixture } from './feedback-boundaries';
 import { mountHydrationFixture } from './hydration-boundaries';
@@ -558,6 +563,8 @@ createRoot(root).render(
     <SicknessRecordContractFixture />
   ) : window.uiContractFixture === 'absence-picker' ? (
     <AbsencePickerContractFixture />
+  ) : window.uiContractFixture === 'schedule-parked-picker' ? (
+    <ScheduleParkedPickerContractFixture />
   ) : window.uiContractFixture === 'route-refresh' ? (
     <RouteRefreshFixture />
   ) : window.uiContractFixture === 'live-view' ? (
@@ -573,6 +580,8 @@ createRoot(root).render(
     <LazyDialogContractFixture />
   ) : window.uiContractFixture === 'organization' ? (
     <OrganizationContractFixture />
+  ) : window.uiContractFixture === 'organization-export' ? (
+    <OrganizationExportContractFixture />
   ) : window.uiContractFixture === 'calendar-board' ? (
     <CalendarBoardContractFixture />
   ) : window.uiContractFixture === 'calendar-day' ? (
