@@ -66,7 +66,8 @@ export function ProblemReportDialog({ open, onOpenChange, capture }: ProblemRepo
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} pending={report.isPending}>
-      <DialogContent size="lg">
+      {/* The dialog renders outside the shell's main region, so it carries the field worker's touch targets itself. */}
+      <DialogContent size="lg" data-field-worker={activeOrg?.role === 'employee' ? '' : undefined}>
         <form onSubmit={submit} className="contents" noValidate>
           <DialogHeader>
             <DialogTitle>Problem melden</DialogTitle>
