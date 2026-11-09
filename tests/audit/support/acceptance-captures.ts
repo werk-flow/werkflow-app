@@ -102,8 +102,7 @@ export function settleAcceptanceEntries(testInfo: TestInfo): void {
 /** The report button of the phone header and of the sidebar; at every width one of them shows. */
 const PROBLEM_REPORT_BUTTONS = 'button[aria-label="Problem melden"], button[aria-keyshortcuts="F2"]';
 
-/** The screen is ready to be judged: requested page, title, settled, fonts, clock button, no failed region. */
-
+/** The screen is ready to be judged: requested page, title, settled, fonts, clock and report buttons, no failed region. */
 async function expectReady(page: Page, scope: Locator, view: CaptureSpec['view']['kind']): Promise<void> {
   await expect(page, 'a capture of a sign-in or onboarding screen is missing evidence').not.toHaveURL(
     /\/(login|signup|onboarding)(\/|$)/,
