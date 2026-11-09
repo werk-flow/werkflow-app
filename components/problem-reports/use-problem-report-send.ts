@@ -29,6 +29,17 @@ export type ProblemReportDraft = {
 };
 
 type SavedReport = { reportId: string; number: number };
+
+/** Refusals the action answers before it writes anything: nothing was stored. */
+const REFUSED_BEFORE_SAVING: ReadonlySet<string> = new Set([
+  'invalid_input',
+  'not_authenticated',
+  'no_active_org',
+  'not_a_member',
+]);
+
+const MAYBE_SAVED =
+  'Deine Meldung kam vielleicht nicht an. Prüfe deine Verbindung und tippe noch einmal auf „Senden“. Die Beschreibung bleibt dafür, wie sie ist.';
 type KeyedFile = { key: string; file: ProblemReportFile };
 
 /** The screenshot with its boxes burned in, then the attachments, each with its retry key. */
@@ -93,23 +104,25 @@ export function useProblemReportSend(capture: ProblemReportCapture, close: () =>
   const [saved, setSaved] = useState<SavedReport | null>(null);
   // Chosen once per dialog: a retry after a lost answer saves the same report.
   const [reportId] = useState(() => crypto.randomUUID());
-  // A save whose answer got lost may have stored the description: until a
-  // retry answers, the description stays as that save sent it.
-  const [saveUnanswered, setSaveUnanswered] = useState(false);
+  // A save that reached the server may have stored the description, whatever
+  // its answer: until a save is confirmed, the description stays as sent.
+  const [saveMayHaveStored, setSaveMayHaveStored] = useState(false);
   const files = useReportFiles(setError);
 
   const saveReport = async (organizationId: string, description: string): Promise<SavedReport | null> => {
     if (saved) return saved;
-    setSaveUnanswered(true);
+    const earlierSaveMayHaveStored = saveMayHaveStored;
+    setSaveMayHaveStored(true);
     const result = await submitProblemReport({
       organizationId,
       reportId,
       description,
       context: buildProblemReportContext(capture.activity, loadUiStringCatalog(), capture.device),
     });
-    setSaveUnanswered(false);
     if (!result.success) {
-      setError(problemReportFailureMessage(result.error));
+      const storedNothing = REFUSED_BEFORE_SAVING.has(result.error);
+      if (storedNothing) setSaveMayHaveStored(earlierSaveMayHaveStored);
+      setError(storedNothing ? problemReportFailureMessage(result.error) : MAYBE_SAVED);
       return null;
     }
     const report = { reportId: result.reportId, number: result.number };
@@ -130,11 +143,7 @@ export function useProblemReportSend(capture: ProblemReportCapture, close: () =>
         // A lost connection or a device that cannot encode the image: the
         // dialog stays open with what is saved, and „Senden“ tries again.
         logError('useProblemReportSend: send failed', thrown);
-        setError(
-          report
-            ? problemReportFailureMessage('send_interrupted')
-            : 'Deine Meldung kam vielleicht nicht an. Prüfe deine Verbindung und tippe noch einmal auf „Senden“. Die Beschreibung bleibt dafür, wie sie ist.',
-        );
+        setError(report ? problemReportFailureMessage('send_interrupted') : MAYBE_SAVED);
       }
     });
   };
@@ -152,6 +161,6 @@ export function useProblemReportSend(capture: ProblemReportCapture, close: () =>
   };
 
   /** The description no longer changes once a save may have stored it. */
-  const descriptionFrozen = saved !== null || saveUnanswered;
+  const descriptionFrozen = saved !== null || saveMayHaveStored;
   return { send, isPending, error, setError, descriptionFrozen, frozenFiles: files.frozen };
 }

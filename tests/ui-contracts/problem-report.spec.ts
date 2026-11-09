@@ -267,34 +267,33 @@ test('a registration whose answer got lost counts once on the retry, under the s
   expect(state.registered).toEqual(['screenshot']);
 });
 
-test('a report whose answer got lost is saved once: its description freezes, and the retry finds it under the same id and number', async ({
+test('a save whose outcome is unknown keeps the description frozen through a failed retry, and the report saves once', async ({
   page,
 }) => {
   await openReportFixture(page);
   await page.evaluate(() => {
-    window.uiContractProblemReport.loseSubmissionAnswerOnce = true;
+    window.uiContractProblemReport.submitAnswers = ['lost', 'refused'];
   });
   const dialog = await openDialog(page);
   await dialog.getByRole('checkbox', { name: 'Screenshot mitsenden' }).click();
-  await dialog.getByRole('textbox', { name: 'Was ist passiert?', exact: true }).fill('Keine Verbindung.');
+  const description = dialog.getByRole('textbox', { name: 'Was ist passiert?', exact: true });
+  await description.fill('Keine Verbindung.');
   const send = dialog.getByRole('button', { name: 'Senden', exact: true });
-  await send.click();
-  await expect(
-    dialog.getByText(
-      'Deine Meldung kam vielleicht nicht an. Prüfe deine Verbindung und tippe noch einmal auf „Senden“. Die Beschreibung bleibt dafür, wie sie ist.',
-    ),
-  ).toBeVisible();
-  // The lost save may have stored the description, so it no longer changes.
-  await expect(dialog.getByRole('textbox', { name: 'Was ist passiert?', exact: true })).toHaveAttribute(
-    'readonly',
-    '',
+  const maybeSaved = dialog.getByText(
+    'Deine Meldung kam vielleicht nicht an. Prüfe deine Verbindung und tippe noch einmal auf „Senden“. Die Beschreibung bleibt dafür, wie sie ist.',
   );
-  await expect(send).toBeEnabled();
+  // A lost answer, then a server failure: either save may have stored the description.
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    await send.click();
+    await expect(maybeSaved).toBeVisible();
+    await expect(description).toHaveAttribute('readonly', '');
+    await expect(send).toBeEnabled();
+  }
   await send.click();
   await expect(
     page.getByRole('alert').getByText('Danke! Deine Meldung Nr. 7 ist eingegangen.'),
   ).toBeVisible();
   const { submissions } = await boundary(page);
-  expect(submissions).toHaveLength(2);
+  expect(submissions).toHaveLength(3);
   expect(new Set(submissions.map((submission) => submission.reportId)).size).toBe(1);
 });

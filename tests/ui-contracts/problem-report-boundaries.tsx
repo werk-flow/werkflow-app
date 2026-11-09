@@ -29,8 +29,12 @@ type ProblemReportBoundaryState = {
   /** Resolves the held submission; null while none is held or holding is off. */
   releaseSubmission: (() => void) | null;
   holdSubmission: boolean;
-  /** The next submission saves the report, but its answer never reaches the browser. */
-  loseSubmissionAnswerOnce: boolean;
+  /**
+   * How the next submissions answer after they saved the report: `lost` never
+   * reaches the browser, `refused` answers `submit_failed`, as a database
+   * answer lost on the server does.
+   */
+  submitAnswers: ('lost' | 'refused')[];
   /** File kinds whose next finalize registers the file, but whose answer never reaches the browser. */
   loseFinalizeAnswer: string[];
 };
@@ -48,7 +52,7 @@ export function initializeProblemReportBoundary(): void {
     registered: [],
     releaseSubmission: null,
     holdSubmission: false,
-    loseSubmissionAnswerOnce: false,
+    submitAnswers: [],
     loseFinalizeAnswer: [],
   };
 }
@@ -62,10 +66,9 @@ export const submitProblemReport: ReportActions['submitProblemReport'] = async (
   state.submissions.push(input);
   if (!savedReportIds.has(input.reportId)) savedReportIds.set(input.reportId, 6 + savedReportIds.size + 1);
   const number = savedReportIds.get(input.reportId) ?? 0;
-  if (state.loseSubmissionAnswerOnce) {
-    state.loseSubmissionAnswerOnce = false;
-    throw new TypeError('Failed to fetch');
-  }
+  const answer = state.submitAnswers.shift();
+  if (answer === 'lost') throw new TypeError('Failed to fetch');
+  if (answer === 'refused') return { success: false, error: 'submit_failed' };
   if (state.holdSubmission)
     await new Promise<void>((resolve) => {
       state.releaseSubmission = resolve;
