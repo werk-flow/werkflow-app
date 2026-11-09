@@ -28,6 +28,8 @@ declare global {
       discards: string[];
       /** Set by a spec: the code the next decision save is refused with. */
       refuseDecision?: string;
+      /** Set by a spec: the next decision save is recorded, but its answer is lost. */
+      loseDecisionAnswer?: boolean;
       /** Set by a spec: the signature image's view URL cannot be read. */
       failSignatureView?: boolean;
       /** Set by a spec: the view URL reads, but the image behind it does not load. */
@@ -267,12 +269,20 @@ export const recordWorkArtifactCustomerDecision: CustomerDecisionActions['record
     const detail = state.detail;
     if (!detail) return { success: false, error: 'work_artifact_not_found' };
     if (state.refuseDecision) return { success: false, error: state.refuseDecision };
+    // The action ids are idempotency keys, as in record_work_artifact_customer_decision:
+    // a repeated save returns what was recorded.
+    if (detail.actions.some((action) => action.id === input.decisionActionId))
+      return { success: true, artifactId: detail.id, version: detail.version, status: detail.status };
     const decision = customerAction(input, input.decisionActionId, input.decision, null);
     const signature = input.signature
       ? [customerAction(input, input.signature.actionId, 'signature_captured', input.signature.documentId)]
       : [];
     const version = detail.version + 1 + signature.length;
     state.detail = { ...detail, version, actions: [...signature, decision, ...detail.actions] };
+    if (state.loseDecisionAnswer) {
+      state.loseDecisionAnswer = false;
+      throw new Error('The answer was lost.');
+    }
     return { success: true, artifactId: detail.id, version, status: detail.status };
   };
 

@@ -68,16 +68,20 @@ async function discardPendingSignature(documentId: string, showBanner: ShowBanne
   }
 }
 
-type CustomerDecisionErrors = Record<'name' | 'decision' | 'reason', string | undefined>;
+type CustomerDecisionErrors = Record<'name' | 'relationship' | 'decision' | 'reason', string | undefined>;
 
 /** Each field's message for the entries as they are; undefined where a field is fine. */
 function customerDecisionErrors(
   customerName: string,
+  customerRelationship: string,
   decision: CustomerDecisionType | null,
   decisionReason: string,
 ): CustomerDecisionErrors {
   return {
     name: customerName.trim().length >= 2 ? undefined : 'Bitte gib den Namen der Kundin oder des Kunden an.',
+    relationship: customerRelationship.trim()
+      ? undefined
+      : 'Bitte gib an, in welchem Bezug die Person zum Kunden steht.',
     decision: decision ? undefined : 'Bitte wähle die Entscheidung der Kundin oder des Kunden.',
     reason:
       decision && customerDecisionNeedsReason(decision) && decisionReason.trim().length < 3
@@ -95,7 +99,7 @@ function useCustomerDecisionDraft() {
   const [decisionReason, setDecisionReason] = useState('');
   const [signatureFile, setSignatureFile] = useState<File | null>(null);
   const [attemptedSave, setAttemptedSave] = useState(false);
-  const current = customerDecisionErrors(customerName, decision, decisionReason);
+  const current = customerDecisionErrors(customerName, customerRelationship, decision, decisionReason);
   const errors: Partial<CustomerDecisionErrors> = attemptedSave ? current : {};
 
   /** Marks the broken fields and focuses the first; true when the form can be saved. */
@@ -103,6 +107,7 @@ function useCustomerDecisionDraft() {
     setAttemptedSave(true);
     return !focusFirstInvalidField({
       [CUSTOMER_DECISION_FIELD_IDS.name]: current.name,
+      [CUSTOMER_DECISION_FIELD_IDS.relationship]: current.relationship,
       [CUSTOMER_DECISION_FIELD_IDS.decision]: current.decision,
       [CUSTOMER_DECISION_FIELD_IDS.reason]: current.reason,
     });
@@ -152,11 +157,19 @@ export function useWorkArtifactCustomerActions({
   const { showBanner } = useBanner();
   const draft = useCustomerDecisionDraft();
   const [pendingSignatureDocumentId, setPendingSignatureDocumentId] = useState<string | null>(null);
+  // The action ids of the save under way: a retry after a lost answer sends
+  // them again, so the server returns what it recorded instead of refusing a
+  // second decision. A save or a close starts the next attempt fresh.
+  const [pendingActionIds, setPendingActionIds] = useState<{ decision: string; signature: string } | null>(
+    null,
+  );
   const recorded = detail && currentRevision ? recordedCustomerDecision(detail, currentRevision.id) : null;
 
   function saveDecision() {
     if (!detail || !currentRevision || !draft.validate() || !draft.decision) return;
     const decision = draft.decision;
+    const actionIds = pendingActionIds ?? { decision: crypto.randomUUID(), signature: crypto.randomUUID() };
+    setPendingActionIds(actionIds);
     setError(null);
     void runArtifactTask('customer-decision', async () => {
       let signatureDocumentId = pendingSignatureDocumentId;
@@ -172,7 +185,7 @@ export function useWorkArtifactCustomerActions({
         artifactId: detail.id,
         revisionId: currentRevision.id,
         expectedVersion: detail.version,
-        decisionActionId: crypto.randomUUID(),
+        decisionActionId: actionIds.decision,
         decision,
         ...(customerDecisionNeedsReason(decision) ? { reason: draft.decisionReason } : {}),
         signer: {
@@ -181,7 +194,7 @@ export function useWorkArtifactCustomerActions({
           relationship: draft.customerRelationship,
         },
         ...(signatureDocumentId
-          ? { signature: { actionId: crypto.randomUUID(), documentId: signatureDocumentId } }
+          ? { signature: { actionId: actionIds.signature, documentId: signatureDocumentId } }
           : {}),
       });
       if (!result.success && result.error === 'work_artifact_customer_decision_recorded') {
@@ -195,6 +208,7 @@ export function useWorkArtifactCustomerActions({
       await load(detail.id);
       draft.reset();
       setPendingSignatureDocumentId(null);
+      setPendingActionIds(null);
       showBanner({ variant: 'success', message: 'Kundenentscheidung wurde gespeichert.' });
     });
   }
@@ -207,6 +221,7 @@ export function useWorkArtifactCustomerActions({
       await discardPendingSignature(pendingSignatureDocumentId, showBanner);
     }
     setPendingSignatureDocumentId(null);
+    setPendingActionIds(null);
     onClose();
   }
 

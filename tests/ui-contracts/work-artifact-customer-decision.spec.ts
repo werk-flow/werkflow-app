@@ -129,6 +129,85 @@ test('a refusal with an image signature needs the reason, and the image control 
   ]);
 });
 
+async function chooseSignatureImage(dialog: Locator): Promise<void> {
+  await dialog.locator('input[type="file"]').setInputFiles({
+    name: 'unterschrift-scan.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from('89504e470d0a1a0a', 'hex'),
+  });
+  await expect(dialog.getByText('unterschrift-scan.png')).toBeVisible();
+}
+
+test('a cleared „Bezug zum Kunden“ is marked and focused, and nothing is sent', async ({ page }) => {
+  const dialog = await openReport(page);
+  await openDecisionForm(dialog);
+  await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('Erika Beispiel');
+  const relationship = dialog.getByRole('textbox', { name: /^Bezug zum Kunden/ });
+  await relationship.fill('');
+  await chooseDecision(page, dialog, 'Bestätigt');
+
+  await saveButton(dialog).click();
+
+  await expect(relationship).toBeFocused();
+  await expect(relationship).toHaveAccessibleDescription(
+    /Bitte gib an, in welchem Bezug die Person zum Kunden steht\./,
+  );
+  expect(await decisions(page)).toEqual([]);
+});
+
+test('a chosen signature image survives a tap on the pad and a resize, and is saved', async ({ page }) => {
+  const dialog = await openReport(page);
+  await openDecisionForm(dialog);
+  await chooseSignatureImage(dialog);
+  // A tap draws nothing, and a narrower screen resizes the pad: neither drops the image.
+  const pad = dialog.getByLabel('Unterschrift zeichnen');
+  await pad.scrollIntoViewIfNeeded();
+  await pad.click();
+  await page.setViewportSize({ width: 375, height: 800 });
+  await expect(dialog.getByText('unterschrift-scan.png')).toBeVisible();
+  await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('Erika Beispiel');
+  await chooseDecision(page, dialog, 'Bestätigt');
+
+  await saveButton(dialog).click();
+
+  await expect(dialog.getByRole('region', { name: 'Kundenentscheidung' })).toContainText('Bestätigt');
+  expect(await decisions(page)).toMatchObject([{ signature: { documentId: expect.any(String) } }]);
+  expect(await page.evaluate(() => window.uiContractWorkArtifacts.signatureUploads)).toEqual([
+    'unterschrift-scan.png',
+  ]);
+});
+
+test('a retry after a lost answer sends the same action ids and shows the recorded decision', async ({
+  page,
+}) => {
+  const dialog = await openReport(page);
+  await openDecisionForm(dialog);
+  await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('Erika Beispiel');
+  await chooseDecision(page, dialog, 'Bestätigt');
+  await drawSignature(page, dialog);
+  await page.evaluate(() => {
+    window.uiContractWorkArtifacts.loseDecisionAnswer = true;
+  });
+
+  await saveButton(dialog).click();
+  await expect.poll(async () => (await decisions(page)).length).toBe(1);
+  await expect(saveButton(dialog)).toBeEnabled();
+  await saveButton(dialog).click();
+
+  const recorded = dialog.getByRole('region', { name: 'Kundenentscheidung' });
+  await expect(recorded).toContainText('Bestätigt');
+  await expect(
+    dialog.getByText('Für diese Version ist bereits eine Kundenentscheidung erfasst.'),
+  ).toHaveCount(0);
+  const [first, retry] = await decisions(page);
+  expect(retry?.decisionActionId).toBe(first?.decisionActionId);
+  expect(retry?.signature?.actionId).toBe(first?.signature?.actionId);
+  // The upload from the first attempt is reused, not sent again.
+  expect(await page.evaluate(() => window.uiContractWorkArtifacts.signatureUploads)).toEqual([
+    'Unterschrift.png',
+  ]);
+});
+
 test('a decision recorded meanwhile is shown instead, and closing discards the unused signature', async ({
   page,
 }) => {

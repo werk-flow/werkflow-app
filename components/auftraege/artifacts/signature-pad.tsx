@@ -112,12 +112,13 @@ function useSignatureDrawing(disabled: boolean | undefined, onChange: (file: Fil
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    // A resize keeps a drawn mark (the snapshot) and resets only an empty pad,
+    // so a chosen image stays the signature.
     return observeSignatureCanvasSize(canvas, hasMarkRef, () => {
       hasMarkRef.current = false;
       setHasMark(false);
-      onChange(null);
     });
-  }, [onChange]);
+  }, []);
 
   function handlePointerDown(event: PointerEvent<HTMLCanvasElement>) {
     if (disabled) return;
@@ -135,10 +136,8 @@ function useSignatureDrawing(disabled: boolean | undefined, onChange: (file: Fil
     if (!drawingRef.current) return;
     drawingRef.current = false;
     event.currentTarget.releasePointerCapture(event.pointerId);
-    if (!hasMarkRef.current) {
-      onChange(null);
-      return;
-    }
+    // A tap that drew nothing leaves the signature as it was, a chosen image included.
+    if (!hasMarkRef.current) return;
     signatureImage(event.currentTarget).toBlob((blob) => {
       onChange(blob ? new File([blob], 'Unterschrift.png', { type: 'image/png' }) : null);
     }, 'image/png');

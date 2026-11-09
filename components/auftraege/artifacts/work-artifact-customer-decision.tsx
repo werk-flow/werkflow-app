@@ -142,7 +142,12 @@ function CustomerSignerFields({ customer }: { customer: WorkArtifactCustomerActi
           />
         </Field>
       </div>
-      <Field label="Bezug zum Kunden" htmlFor={FIELD_IDS.relationship}>
+      <Field
+        label="Bezug zum Kunden"
+        htmlFor={FIELD_IDS.relationship}
+        required
+        error={customer.errors.relationship}
+      >
         <Input
           value={customer.customerRelationship}
           onChange={(event) => customer.setCustomerRelationship(event.target.value)}
