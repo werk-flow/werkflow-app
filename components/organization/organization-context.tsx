@@ -298,10 +298,9 @@ export function OrganizationProvider({
 
       try {
         await setActiveOrgCookie(orgId).then(rejectRefusal);
-        // Nothing the previous organization's views cached stays on the device.
-        await clearServiceWorkerCaches();
-        // The switch navigates on the client, which never refills the offline shell.
-        void restoreOfflineShell();
+        // Nothing the previous organization's views cached stays on the device. The
+        // switch navigates on the client, which never refills the offline shell.
+        await clearServiceWorkerCaches().then(restoreOfflineShell);
         // GET readers authorize against this cookie. Publish the new scope only
         // after its response commits, otherwise their first read is denied.
         setActiveOrgId(orgId);
