@@ -1,4 +1,4 @@
-import { OwnProblemReportListSkeleton } from '@/components/problem-reports/own-problem-report-list';
+import { OwnProblemReportListSkeleton } from '@/components/problem-reports/own-problem-report-columns';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 

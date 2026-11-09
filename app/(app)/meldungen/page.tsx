@@ -1,10 +1,8 @@
 import { Suspense } from 'react';
 
 import { MELDUNGEN_SUBTITLE, MELDUNGEN_TITLE } from '@/components/loading-states/meldungen-page-skeleton';
-import {
-  OwnProblemReportList,
-  OwnProblemReportListSkeleton,
-} from '@/components/problem-reports/own-problem-report-list';
+import { OwnProblemReportListSkeleton } from '@/components/problem-reports/own-problem-report-columns';
+import { OwnProblemReportList } from '@/components/problem-reports/own-problem-report-list';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { RegionLoadError } from '@/components/shared/region-load-error';

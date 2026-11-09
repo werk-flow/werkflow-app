@@ -3,17 +3,12 @@ import { MessageSquareWarning } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ListRow } from '@/components/ui/list-row';
-import { Skeleton } from '@/components/ui/skeleton';
-import {
-  ColumnsTableHeader,
-  SkeletonList,
-  SkeletonRows,
-  type SkeletonColumn,
-} from '@/components/ui/skeleton-table';
+import { ColumnsTableHeader } from '@/components/ui/skeleton-table';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { PROBLEM_REPORT_STATUS_LABELS } from '@/lib/problem-reports/messages';
 import type { OwnProblemReport, ProblemReportStatus } from '@/lib/problem-reports/types';
 import { formatBerlinDateTime } from '@/lib/utils';
+import { REPORT_COLUMNS } from './own-problem-report-columns';
 
 // „Meine Meldungen“: the caller's own reports with their status and
 // support's answer. A report opens nothing, so no row hovers.
@@ -27,19 +22,6 @@ const STATUS_BADGE: Record<ProblemReportStatus, 'secondary' | 'success' | 'outli
 
 const DELETED_DESCRIPTION = 'Die Beschreibung ist nach ihrer Frist gelöscht.';
 const NO_RESPONSE = 'Noch keine Antwort';
-
-const REPORT_COLUMNS: readonly SkeletonColumn[] = [
-  { id: 'number', header: 'Nr.', className: 'w-[72px]', skeleton: <Skeleton className="h-5 w-8" /> },
-  { id: 'sent', header: 'Gesendet', className: 'w-[150px]', skeleton: <Skeleton className="h-5 w-28" /> },
-  {
-    id: 'status',
-    header: 'Status',
-    className: 'w-[140px]',
-    skeleton: <Skeleton className="h-[22px] w-24 rounded-full" />,
-  },
-  { id: 'description', header: 'Beschreibung', skeleton: <Skeleton className="h-5 w-56" /> },
-  { id: 'response', header: 'Antwort vom Support', skeleton: <Skeleton className="h-5 w-40" /> },
-];
 
 function ReportStatusBadge({ status }: { status: ProblemReportStatus }) {
   return <Badge variant={STATUS_BADGE[status]}>{PROBLEM_REPORT_STATUS_LABELS[status]}</Badge>;
@@ -100,33 +82,6 @@ export function OwnProblemReportList({ reports }: { reports: readonly OwnProblem
                 </TableCell>
               </TableRow>
             ))}
-          </TableBody>
-        </Table>
-      </div>
-    </>
-  );
-}
-
-/** The same frame as the loaded list, for the route's skeleton. */
-export function OwnProblemReportListSkeleton() {
-  return (
-    <>
-      <SkeletonList count={4} className="md:hidden">
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <div className="flex items-center gap-2">
-            <Skeleton className="h-5 w-12" />
-            <Skeleton className="h-[22px] w-24 rounded-full" />
-            <Skeleton className="h-4 w-28" />
-          </div>
-          <Skeleton className="h-5 w-full" />
-          <Skeleton className="h-5 w-40" />
-        </div>
-      </SkeletonList>
-      <div className="hidden md:block">
-        <Table>
-          <ColumnsTableHeader columns={REPORT_COLUMNS} />
-          <TableBody>
-            <SkeletonRows columns={REPORT_COLUMNS} rows={4} />
           </TableBody>
         </Table>
       </div>
