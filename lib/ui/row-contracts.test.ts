@@ -30,6 +30,7 @@ const PAIRS = [
   ['components/inventar/inventory-content.tsx', 'components/loading-states/inventar-page-skeleton.tsx'],
   ['components/kunden/clients-table.tsx'],
   ['components/mitarbeiter/members-table.tsx'],
+  ['components/problem-reports/own-problem-report-list.tsx'],
   ['components/service/equipment-list-content.tsx', 'components/loading-states/equipment-page-skeleton.tsx'],
   [
     'components/service/service-case-list-content.tsx',

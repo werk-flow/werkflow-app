@@ -40,6 +40,12 @@ export const DIALOG_INVENTORY = {
   "components/clock-fab.tsx#ClockFAB|{isClockedIn ? 'Laufende Zeiterfassung' : 'Zeiterfassung starten'}": {
     audits: [{ route: '/dashboard', role: 'employee', opener: 'field.clock' }],
   },
+  'components/problem-reports/problem-report-dialog.tsx#ProblemReportDialog|Problem melden': {
+    audits: [
+      { route: '/dashboard', role: 'employee', opener: 'field.problem-report' },
+      { route: '/auftraege', role: 'admin', opener: 'shell.problem-report' },
+    ],
+  },
   'components/job-picker-modal.tsx#JobPickerModal|{title}': {
     audits: [{ route: '/dashboard', role: 'employee', opener: 'field.job-picker' }],
   },

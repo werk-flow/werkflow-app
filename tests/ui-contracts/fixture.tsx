@@ -31,6 +31,7 @@ import { OrganizationExportContractFixture } from './organization-export-boundar
 import { CalendarContractFixture } from './calendar-boundaries';
 import { FeedbackContractFixture, isFeedbackFixture } from './feedback-boundaries';
 import { mountHydrationFixture } from './hydration-boundaries';
+import { initializeProblemReportBoundary, ProblemReportContractFixture } from './problem-report-boundaries';
 import { AuthUrlContractFixture } from './auth-url-boundaries';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -82,6 +83,7 @@ initializeServiceBoundaries();
 initializeLifecycleBoundary();
 initializeDocumentArchiveBoundary();
 initializeLazyDialogBoundary();
+initializeProblemReportBoundary();
 const personnelInitialData = initializePersonnelBoundary();
 
 function LifecycleRouteFixture(): React.JSX.Element {
@@ -548,6 +550,8 @@ createRoot(root).render(
       <h1>Komponentenverträge</h1>
       <PendingDialogFixture />
     </main>
+  ) : window.uiContractFixture === 'problem-report' ? (
+    <ProblemReportContractFixture />
   ) : window.uiContractFixture === 'presentation' ? (
     <PresentationFixture />
   ) : window.uiContractFixture === 'customer' ? (

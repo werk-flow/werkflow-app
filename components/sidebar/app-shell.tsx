@@ -18,6 +18,8 @@ import { useOrganization } from '@/components/organization/organization-context'
 import { SidebarProfileCard } from '@/components/sidebar/sidebar-profile-card';
 import { usePageBodyKeyboardScroll } from '@/components/shared/page-body-keyboard-scroll';
 import { AttentionCountProvider, useAttentionCounts } from '@/components/realtime/attention-count-provider';
+import { ProblemReportButton } from '@/components/problem-reports/problem-report-button';
+import { ProblemReportLauncher } from '@/components/problem-reports/problem-report-launcher';
 import type { AttentionCounts } from '@/lib/attention/types';
 import { OrgSwitchOverlay } from './org-switch-overlay';
 import { isNavItemActive, navItemsFor } from './sidebar-nav-items';
@@ -203,6 +205,10 @@ function SidebarContent({ onNavigate }: { onNavigate?: (() => void) | undefined 
         </ul>
       </nav>
 
+      <div className="px-4 pb-2">
+        <ProblemReportButton placement="sidebar" />
+      </div>
+
       {/* Profile card */}
       <div className="mt-auto border-t">
         <SidebarProfileCard />
@@ -327,8 +333,7 @@ function MobileHeader() {
         />
       </Link>
 
-      {/* Spacer to center logo */}
-      <div className="size-11" />
+      <ProblemReportButton placement="header" />
     </header>
   );
 }
@@ -354,23 +359,25 @@ export function AppShell({
         initialCounts={initialAttentionCounts}
         initialOrganizationId={initialOrganizationId}
       >
-        <div className="flex h-dvh w-full flex-col overflow-hidden overscroll-none bg-background md:flex-row">
-          <MobileHeader />
-          <DesktopSidebar />
-          <MobileDrawer isOpen={isOpen} onClose={() => setIsOpen(false)} />
-          <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-            <main
-              ref={mainRef}
-              aria-hidden={isSwitchingOrg}
-              // The field worker's phone gets 44 px touch targets (components/ui/field-worker-targets.ts).
-              data-field-worker={activeOrg?.role === 'employee' ? '' : undefined}
-              className={cn('h-full overflow-hidden', isSwitchingOrg && 'pointer-events-none opacity-0')}
-            >
-              {children}
-            </main>
-            <OrgSwitchOverlay />
+        <ProblemReportLauncher>
+          <div className="flex h-dvh w-full flex-col overflow-hidden overscroll-none bg-background md:flex-row">
+            <MobileHeader />
+            <DesktopSidebar />
+            <MobileDrawer isOpen={isOpen} onClose={() => setIsOpen(false)} />
+            <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+              <main
+                ref={mainRef}
+                aria-hidden={isSwitchingOrg}
+                // The field worker's phone gets 44 px touch targets (components/ui/field-worker-targets.ts).
+                data-field-worker={activeOrg?.role === 'employee' ? '' : undefined}
+                className={cn('h-full overflow-hidden', isSwitchingOrg && 'pointer-events-none opacity-0')}
+              >
+                {children}
+              </main>
+              <OrgSwitchOverlay />
+            </div>
           </div>
-        </div>
+        </ProblemReportLauncher>
       </AttentionCountProvider>
     </SidebarContext.Provider>
   );

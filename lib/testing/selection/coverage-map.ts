@@ -5,7 +5,7 @@ import { z } from 'zod';
 import type { TestGroup } from './test-groups';
 import { declaredTitles, resolveTitleReference, type DeclaredTitle } from './test-titles';
 
-const flowId = z.string().regex(/^(?:BASE-[A-Z]+|P1-\d{2}[A-Za-z]?)-F\d{2,3}$/);
+const flowId = z.string().regex(/^(?:BASE-[A-Z]+|P1-\d{2}[A-Za-z]?|E\d{1,2})-F\d{2,3}$/);
 // Version 2 binds every executable reference to the test titles that prove it.
 // A version 1 map named files only; it fails here instead of passing silently.
 const COVERAGE_MAP_VERSION = 2;
@@ -57,7 +57,7 @@ function hashCatalogBullet(bullet: string): string {
 export function parseCatalogFlows(content: string): CatalogFlow[] {
   const flows: CatalogFlow[] = [];
   const matches = content.matchAll(
-    /^- `((?:BASE-[A-Z]+|P1-\d{2}[A-Za-z]?)-F\d{2,3})`[^\n]*(?:\n(?!\s*\n|[-#|])[^\n]+)*/gm,
+    /^- `((?:BASE-[A-Z]+|P1-\d{2}[A-Za-z]?|E\d{1,2})-F\d{2,3})`[^\n]*(?:\n(?!\s*\n|[-#|])[^\n]+)*/gm,
   );
   for (const match of matches) {
     const [whole, id] = match;

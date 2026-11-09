@@ -1,6 +1,9 @@
 -- Problem reports (20261128090002_store_problem_reports_privately.sql,
--- werk-flow/werkflow-planning#331). Client roles read and write no report
--- table and execute none of its functions. The history refuses UPDATE and
+-- werk-flow/werkflow-planning#331, and 20261128090003_report_problems_from_the_app.sql,
+-- #334). Client roles read and write no report table and execute none of its
+-- functions. Each organization numbers its reports from 1, and a number never
+-- changes. A file registers only for the report's filer while its originals
+-- exist. The history refuses UPDATE and
 -- DELETE, also for the service role, and leaves only with its report. A
 -- report leaves only through the retention run or a cascade, and its
 -- originals change only there. The retention run deletes only due originals,
@@ -115,6 +118,9 @@ begin
     if has_function_privilege(v_role, 'public.apply_problem_report_retention(uuid, uuid)', 'EXECUTE')
       or has_function_privilege(v_role, 'public.list_problem_reports_due_for_retention(integer, uuid)', 'EXECUTE')
       or has_function_privilege(v_role,
+        'public.register_problem_report_file(uuid, uuid, uuid, uuid, text, text, text, text, bigint, integer)',
+        'EXECUTE')
+      or has_function_privilege(v_role,
         'app_private.problem_report_retention_step(timestamptz, timestamptz, timestamptz)', 'EXECUTE')
     then raise exception '% executes a report function', v_role; end if;
   end loop;
@@ -217,6 +223,97 @@ begin
   where id = '33100000-0000-0000-0000-000000000023';
   update public.problem_reports set status = 'in_bearbeitung', closed_at = null, response = null
   where id = '33100000-0000-0000-0000-000000000023';
+end;
+$$;
+
+-- Each organization numbers its reports from 1 in sending order, and a
+-- number never changes.
+do $$
+declare
+  v_org constant uuid := '33100000-0000-0000-0000-000000000010';
+  v_next integer;
+begin
+  if (select number from public.problem_reports where id = '33100000-0000-0000-0000-000000000025') <> 1 then
+    raise exception 'an organization does not number its reports from 1';
+  end if;
+  v_next := (select max(number) + 1 from public.problem_reports where organization_id = v_org);
+  insert into public.problem_reports (id, organization_id, reporter_id, filed_by_id, description, context)
+  values ('33100000-0000-0000-0000-000000000027', v_org, '33100000-0000-0000-0000-000000000002',
+    '33100000-0000-0000-0000-000000000002', 'Neu', '{}');
+  if (select number from public.problem_reports where id = '33100000-0000-0000-0000-000000000027') <> v_next then
+    raise exception 'a new report did not take the next number of its organization';
+  end if;
+  insert into public.problem_reports (id, organization_id, reporter_id, filed_by_id, description, context, number)
+  values ('33100000-0000-0000-0000-000000000028', v_org, '33100000-0000-0000-0000-000000000002',
+    '33100000-0000-0000-0000-000000000002', 'Eigene Nummer', '{}', 1);
+  if (select number from public.problem_reports where id = '33100000-0000-0000-0000-000000000028') <> v_next + 1 then
+    raise exception 'a report kept a number the writer chose';
+  end if;
+  begin
+    update public.problem_reports set number = 999 where id = '33100000-0000-0000-0000-000000000027';
+    raise exception 'a report number change was accepted';
+  exception when raise_exception then
+    if sqlerrm <> 'problem_report_identity_immutable' then raise; end if;
+  end;
+end;
+$$;
+
+-- A file registers only for the report's own filer while its originals
+-- exist: one screenshot, and attachments up to the given limit.
+do $$
+declare
+  v_org constant uuid := '33100000-0000-0000-0000-000000000010';
+  v_report constant uuid := '33100000-0000-0000-0000-000000000023';
+  v_worker constant uuid := '33100000-0000-0000-0000-000000000002';
+  v_prefix constant text := '33100000-0000-0000-0000-000000000010/problem-reports/33100000-0000-0000-0000-000000000023/';
+begin
+  begin
+    perform public.register_problem_report_file('33100000-0000-0000-0000-000000000001', v_org, v_report,
+      gen_random_uuid(), 'anhang', v_prefix || 'a/anhang', 'x.pdf', 'application/pdf', 1, 2);
+    raise exception 'another member registered a file';
+  exception when raise_exception then
+    if sqlerrm <> 'report_not_found' then raise; end if;
+  end;
+  begin
+    perform public.register_problem_report_file(v_worker, '33100000-0000-0000-0000-000000000011', v_report,
+      gen_random_uuid(), 'anhang', v_prefix || 'b/anhang', 'x.pdf', 'application/pdf', 1, 2);
+    raise exception 'a file registered under a foreign organization';
+  exception when raise_exception then
+    if sqlerrm <> 'report_not_found' then raise; end if;
+  end;
+  perform public.register_problem_report_file(v_worker, v_org, v_report,
+    '33100000-0000-0000-0000-000000000034', 'screenshot', v_prefix || 'f34/screenshot', 'bild.png', 'image/png', 1, 2);
+  begin
+    perform public.register_problem_report_file(v_worker, v_org, v_report,
+      gen_random_uuid(), 'screenshot', v_prefix || 'c/screenshot', 'bild.png', 'image/png', 1, 2);
+    raise exception 'a second screenshot registered';
+  exception when raise_exception then
+    if sqlerrm <> 'screenshot_exists' then raise; end if;
+  end;
+  begin
+    perform public.register_problem_report_file(v_worker, v_org, v_report,
+      '33100000-0000-0000-0000-000000000034', 'anhang', v_prefix || 'd/anhang', 'x.pdf', 'application/pdf', 1, 2);
+    raise exception 'a finalized file registered again';
+  exception when raise_exception then
+    if sqlerrm <> 'already_finalized' then raise; end if;
+  end;
+  perform public.register_problem_report_file(v_worker, v_org, v_report,
+    gen_random_uuid(), 'anhang', v_prefix || 'e/anhang', 'x.pdf', 'application/pdf', 1, 1);
+  begin
+    perform public.register_problem_report_file(v_worker, v_org, v_report,
+      gen_random_uuid(), 'anhang', v_prefix || 'g/anhang', 'y.pdf', 'application/pdf', 1, 1);
+    raise exception 'an attachment beyond the limit registered';
+  exception when raise_exception then
+    if sqlerrm <> 'too_many_attachments' then raise; end if;
+  end;
+  begin
+    perform public.register_problem_report_file(v_worker, v_org, '33100000-0000-0000-0000-000000000024',
+      gen_random_uuid(), 'anhang', v_org || '/problem-reports/33100000-0000-0000-0000-000000000024/h/anhang',
+      'x.pdf', 'application/pdf', 1, 2);
+    raise exception 'a file registered after the originals were deleted';
+  exception when raise_exception then
+    if sqlerrm <> 'report_originals_deleted' then raise; end if;
+  end;
 end;
 $$;
 
