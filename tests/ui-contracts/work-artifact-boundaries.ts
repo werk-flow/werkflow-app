@@ -30,9 +30,13 @@ declare global {
       refuseDecision?: string;
       /** Set by a spec: the signature image's view URL cannot be read. */
       failSignatureView?: boolean;
+      /** Set by a spec: the view URL reads, but the image behind it does not load. */
+      brokenSignatureImage?: boolean;
     };
     /** Set by a spec's init script: the visit window the page read from today's time records. */
     uiContractRecordedVisit?: RecordedVisitWindow;
+    /** Set by a spec's init script: a coworker recorded the decision and signature, redacted for this viewer. */
+    uiContractRedactedDecision?: boolean;
     /** Set by a spec's init script: who opens the customer-decision fixture; the field worker by default. */
     uiContractWorkArtifactViewer?: 'employee' | 'admin';
   }
@@ -169,11 +173,21 @@ export function approvedCustomerReport(): WorkArtifactDetail {
     action_type: 'internal_approved' as const,
     created_by: CONTRACT_REPORT.approver,
   };
+  const reviewed = approval ? [approval, submit] : submitted.actions;
+  // A coworker's recorded decision as the field projection hands it out: signer and signature document hidden.
+  const redacted = (id: string, actionType: WorkArtifactActionRow['action_type']) =>
+    approval && { ...approval, id, action_type: actionType, created_by: 'contract-coworker' };
+  const decision =
+    window.uiContractRedactedDecision &&
+    redacted('00000000-0000-4000-8000-000000004157', 'customer_acknowledged');
+  const signature =
+    window.uiContractRedactedDecision &&
+    redacted('00000000-0000-4000-8000-000000005157', 'signature_captured');
   return {
     ...submitted,
     status: 'approved',
-    version: 2,
-    actions: approval ? [approval, submit] : submitted.actions,
+    version: decision && signature ? 4 : 2,
+    actions: decision && signature ? [signature, decision, ...reviewed] : reviewed,
   };
 }
 
@@ -196,9 +210,12 @@ const SIGNATURE_IMAGE = `data:image/svg+xml,${encodeURIComponent(
 export async function readSignatureViewContract(): Promise<
   { success: true; signedUrl: string } | { success: false; error: string }
 > {
-  return window.uiContractWorkArtifacts.failSignatureView
-    ? { success: false, error: 'signed_url_failed' }
-    : { success: true, signedUrl: SIGNATURE_IMAGE };
+  const state = window.uiContractWorkArtifacts;
+  if (state.failSignatureView) return { success: false, error: 'signed_url_failed' };
+  return {
+    success: true,
+    signedUrl: state.brokenSignatureImage ? 'data:image/png;base64,kaputt' : SIGNATURE_IMAGE,
+  };
 }
 
 export const saveWorkArtifact: WorkArtifactActions['saveWorkArtifact'] = async (input) => {

@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+
 import { useOrganization } from '@/components/organization/organization-context';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
@@ -26,6 +28,8 @@ import {
   type WorkArtifactCustomerActions,
 } from './use-work-artifact-customer-actions';
 import type { WorkArtifactEditor } from './use-work-artifact-editor';
+
+const SIGNATURE_LOAD_FAILED = 'Die Unterschrift konnte nicht geladen werden.';
 
 /**
  * The customer's decision on the current customer-facing revision: the form
@@ -176,7 +180,8 @@ function RecordedCustomerDecisionView({ recorded }: { recorded: RecordedCustomer
             signerName={signature.signer_name ?? 'der Kundin oder des Kunden'}
           />
         ) : (
-          <p className="text-sm">Ohne Unterschrift erfasst</p>
+          // A coworker reads that a signature exists, never its image or signer (redactWorkArtifactActionForField).
+          <p className="text-sm">{signature ? 'Unterschrift erfasst' : 'Ohne Unterschrift erfasst'}</p>
         )}
       </div>
     </section>
@@ -192,7 +197,10 @@ function RecordedFact({ label, children }: { label: string; children: React.Reac
   );
 }
 
-/** The recorded signature image, read through a short-lived view URL, with its loading and retry. */
+/**
+ * The recorded signature image, read through a short-lived view URL, with its
+ * loading state and a retry for a failed URL read or a failed image load.
+ */
 function RecordedSignatureImage({ documentId, signerName }: { documentId: string; signerName: string }) {
   const { activeOrgId } = useOrganization();
   const view = useClientRead({
@@ -200,9 +208,18 @@ function RecordedSignatureImage({ documentId, signerName }: { documentId: string
       readInBackground('document-view-url', { organizationId: activeOrgId ?? '', documentId }, signal),
     deps: [activeOrgId, documentId],
     enabled: Boolean(activeOrgId),
-    failureMessage: 'Die Unterschrift konnte nicht geladen werden.',
+    failureMessage: SIGNATURE_LOAD_FAILED,
   });
+  // The URL whose image failed to load; a retry reads a fresh URL.
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
   if (view.failure) return <SectionError failure={view.failure} />;
+  if (view.data && view.data.signedUrl === failedUrl) {
+    return (
+      <SectionError onRetry={view.reload} retryPending={view.loading}>
+        {SIGNATURE_LOAD_FAILED}
+      </SectionError>
+    );
+  }
   if (!view.data) {
     return (
       <div role="status" aria-busy="true">
@@ -211,12 +228,14 @@ function RecordedSignatureImage({ documentId, signerName }: { documentId: string
       </div>
     );
   }
+  const signedUrl = view.data.signedUrl;
   return (
     // eslint-disable-next-line @next/next/no-img-element -- short-lived signed private URL; next/image optimization cannot cache it
     <img
-      src={view.data.signedUrl}
+      src={signedUrl}
       alt={`Unterschrift von ${signerName}`}
       className="h-24 w-full max-w-xs rounded-md border object-contain"
+      onError={() => setFailedUrl(signedUrl)}
     />
   );
 }

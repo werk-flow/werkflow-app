@@ -196,6 +196,40 @@ test('a failed signature read offers its retry', async ({ page }) => {
   await expect(recorded.getByRole('img', { name: 'Unterschrift von Erika Beispiel' })).toBeVisible();
 });
 
+test('an image that fails to load after its URL read offers a retry with a fresh URL', async ({ page }) => {
+  const dialog = await openReport(page);
+  await openDecisionForm(dialog);
+  await page.evaluate(() => {
+    window.uiContractWorkArtifacts.brokenSignatureImage = true;
+  });
+  await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('Erika Beispiel');
+  await chooseDecision(page, dialog, 'Bestätigt');
+  await drawSignature(page, dialog);
+  await saveButton(dialog).click();
+
+  const recorded = dialog.getByRole('region', { name: 'Kundenentscheidung' });
+  await expect(recorded).toContainText('Die Unterschrift konnte nicht geladen werden.');
+  await page.evaluate(() => {
+    window.uiContractWorkArtifacts.brokenSignatureImage = false;
+  });
+  await recorded.getByRole('button', { name: 'Erneut laden' }).click();
+  await expect(recorded.getByRole('img', { name: 'Unterschrift von Erika Beispiel' })).toBeVisible();
+});
+
+test('a coworker reads that a signature exists without its image or signer', async ({ page }) => {
+  // The detail as the server hands it to a coworker: signer and document redacted.
+  await page.addInitScript(() => {
+    window.uiContractRedactedDecision = true;
+  });
+  const dialog = await openReport(page);
+  const recorded = dialog.getByRole('region', { name: 'Kundenentscheidung' });
+  await expect(recorded).toContainText('Bestätigt');
+  await expect(recorded).toContainText('Unterschrift erfasst');
+  await expect(recorded).not.toContainText('Ohne Unterschrift erfasst');
+  await expect(recorded.getByRole('img')).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: 'Kundenentscheidung und Unterschrift' })).toHaveCount(0);
+});
+
 test('an Admin keeps the reason field for voiding', async ({ page }) => {
   const dialog = await openReport(page, 'admin');
   await expect(dialog.getByRole('textbox', { name: 'Begründung für Ungültigkeit' })).toBeVisible();
