@@ -1,7 +1,7 @@
 // Rule test: an attention count reads rows in proportion to the pending work, never to the organization's history.
 import { describe, expect, mock, setSystemTime, test } from 'bun:test';
 import { addLocalDays } from '@/lib/date-time/berlin';
-import { compare, parseOperand, termFilter, type Filter } from './filter-fake';
+import { compare, parseOperand, termFilter, type Filter } from '@/lib/testing/postgrest-filter-fake';
 
 // Tier 2 for "attention count reads" (docs/technical/realtime-and-caching.md),
 // beside count-reads.test.ts, which pins the queries of the steady state. The

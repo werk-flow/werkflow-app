@@ -1,5 +1,5 @@
 // The PostgREST filter semantics the attention count fakes apply to a seeded
-// world (count-volume.test.ts): comparisons, `not` and nested `or`/`and` terms.
+// world (lib/attention/count-volume.test.ts): comparisons, `not` and nested `or`/`and` terms.
 
 type Row = Record<string, unknown>;
 export type Filter = (row: Row) => boolean;
