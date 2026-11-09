@@ -3,7 +3,7 @@ import type { ProfileReference } from '@/lib/profile-reference';
 import type { Database } from '@/lib/supabase/database.types';
 import type { AssignmentEvaluation } from '@/lib/qualifications/types';
 import type { PlanningWarningFailure } from '@/lib/planning/conflict-acknowledgement';
-import type { ClientContact, ClientSite } from '@/lib/clients/types';
+import type { ClientContact, ClientDuplicatesFailure, ClientSite } from '@/lib/clients/types';
 import { constrainedValue } from '@/lib/validation/constrained-value';
 
 // ============================================
@@ -243,7 +243,7 @@ export type CalendarEntryDialogJobOption = {
 // Result Types
 // ============================================
 
-export type CreateClientResult = ActionResult<{ client: Client }>;
+export type CreateClientResult = { success: true; client: Client } | ClientDuplicatesFailure | ActionFailure;
 
 export type UpdateClientResult = ActionResult<{ client: Client }>;
 

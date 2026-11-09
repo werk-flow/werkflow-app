@@ -15282,6 +15282,22 @@ export type Database = {
         };
         Returns: Json;
       };
+      find_client_duplicates: {
+        Args: {
+          p_address: string;
+          p_customer_number: string;
+          p_email: string;
+          p_limit: number;
+          p_name: string;
+          p_organization_id: string;
+          p_phone: string;
+        };
+        Returns: {
+          client_id: string;
+          client_name: string;
+          matched_on: string[];
+        }[];
+      };
       find_client_request_caller_matches: {
         Args: {
           p_limit: number;

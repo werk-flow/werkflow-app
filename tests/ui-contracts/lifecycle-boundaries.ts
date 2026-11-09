@@ -43,6 +43,7 @@ declare global {
       | 'live-view'
       | 'route-refresh'
       | 'customer'
+      | 'customer-create'
       | 'sickness-record'
       | 'absence-picker'
       | 'schedule-parked-picker'
