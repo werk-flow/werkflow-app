@@ -524,6 +524,18 @@ const dayLeaverJobs = [
     ['r-erik', 'r2'],
     ['worker-erik', 'worker-2'],
   ),
+  // A minimum-width card: the warning must stay visible and reachable beside the resize handle.
+  {
+    ...visit(
+      'Kurz zu zweit',
+      'o-day-short',
+      '2026-09-08',
+      '14:00',
+      ['r-erik', 'r2'],
+      ['worker-erik', 'worker-2'],
+    ),
+    estimatedDurationMinutes: 2,
+  },
 ];
 
 function dayBoard(withLeaver: boolean): CalendarBoardContext {

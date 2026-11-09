@@ -231,8 +231,22 @@ test('every day card names a person who left, on the timeline, in the all-day tr
   // The timed card shows the warning; the compact all-day card says it in its name.
   await expect(card(page, 'Heizung zu zweit am Tag')).toContainText(left);
   await expect(card(page, 'Baustelle zu zweit ganztägig')).toHaveAccessibleName(new RegExp(`${left}$`));
-  // A short timeline card may clip its chip; its title line always carries the warning icon.
-  await expect(card(page, 'Heizung zu zweit am Tag').locator('svg title', { hasText: left })).toHaveCount(1);
+  // A minimum-width card may clip its chip; its title line carries the warning icon, clear of the end
+  // resize handle that covers the card's last 16 px, so the icon itself takes the pointer.
+  const short = card(page, 'Kurz zu zweit');
+  // The icon's <title> is its only text.
+  const icon = short.locator('svg').filter({ hasText: left });
+  await expect(icon).toBeVisible();
+  const [cardBox, iconBox] = await Promise.all([short.boundingBox(), icon.boundingBox()]);
+  if (!cardBox || !iconBox) throw new Error('The short card or its warning icon has no box.');
+  expect(iconBox.x + iconBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width - 16);
+  expect(
+    await icon.evaluate((svg) => {
+      const box = svg.getBoundingClientRect();
+      const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+      return hit === svg || svg.contains(hit);
+    }),
+  ).toBe(true);
 
   await page.getByRole('button', { name: 'Telefonansicht', exact: true }).click();
   await expect(card(page, 'Heizung zu zweit am Tag')).toContainText(left);
