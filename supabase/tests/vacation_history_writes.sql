@@ -220,7 +220,7 @@ select pg_temp.expect_refusal('cancellation whose history row is refused', $sql$
 $sql$, 'history refused');
 reset role;
 
-drop trigger refuse_vacation_event on public.vacation_request_events;
+alter table public.vacation_request_events disable trigger refuse_vacation_event;
 
 do $$
 begin

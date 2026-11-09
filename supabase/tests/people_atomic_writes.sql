@@ -68,7 +68,7 @@ $$;
 grant execute on function pg_temp.expect_refusal(text, text, text) to service_role;
 
 -- A refusal of the organization settings insert, the step after the
--- organization insert. Owned by postgres; dropped before the success path.
+-- organization insert. Owned by postgres; disabled before the success path.
 create function public.atomic_people_refuse_settings() returns trigger
 language plpgsql as $$ begin raise exception 'settings_refused'; end; $$;
 create trigger atomic_people_refuse_settings before insert on public.organization_settings
@@ -153,8 +153,7 @@ end;
 $$;
 
 reset role;
-drop trigger atomic_people_refuse_settings on public.organization_settings;
-drop function public.atomic_people_refuse_settings();
+alter table public.organization_settings disable trigger atomic_people_refuse_settings;
 set local role service_role;
 
 -- The owner's name is taken whatever its case and outer spaces.
@@ -365,7 +364,7 @@ select pg_temp.expect_refusal('redemption of an invite cancelled meanwhile', $sq
   select * from app_private.redeem_organization_invite_for_user(
     '41004000-0000-0000-0000-0000000000c2', '41004000-0000-0000-0000-000000000005')
 $sql$, 'invite_already_used');
-drop trigger test_cancel_invite_during_redemption on public.organization_members;
+alter table public.organization_members disable trigger test_cancel_invite_during_redemption;
 do $$
 begin
   if exists (select 1 from public.organization_members
