@@ -19,7 +19,6 @@ import {
   breakModeSelect,
   calendarTimeCorrectionDialog,
   createOwnManualTimeEntry,
-  fillManualEntryInterval,
   fillOwnPastTime,
   manualEntryDialog,
   manualEntryHeaderButton,
@@ -27,7 +26,7 @@ import {
   provisionalTimeSummary,
   refreshTimeHistoryButton,
   saveAutomaticBreakRule,
-  selectManualEntryJob,
+  selectFirstTimelineJob,
   selectTimeHistoryStatus,
   setTimeHistoryDay,
   submitCalendarTimeCorrection,
@@ -72,7 +71,6 @@ test.describe('A1 Zeiterfassung @AUDIT-W1-A1', () => {
     world,
   }) => {
     const previousBusinessDate = berlinDateAtOffset(-1);
-    const digits = dateDigits(previousBusinessDate);
     const manualTimeJobNumber = `A1-MANUAL-${world.runId}`;
     const manualTimeJobTitle = `A1 Manueller Zeitauftrag ${world.runId}`;
     await ensureEmployedSince({
@@ -89,21 +87,23 @@ test.describe('A1 Zeiterfassung @AUDIT-W1-A1', () => {
     // The page's primary action sits in the page header beside the title. An
     // earlier day asks for the reason, and the time goes in as a correction.
     await manualEntryHeaderButton(employeePage).click();
+    // The earlier day's timeline refuses an end before its start unless it ends on the next day.
     const invalidOrderDialog = manualEntryDialog(employeePage);
-    await fillManualEntryInterval(invalidOrderDialog, {
-      dateDigits: digits,
-      clockInDigits: '0900',
-      clockOutDigits: '0800',
+    await fillOwnPastTime(invalidOrderDialog, {
+      date: previousBusinessDate,
+      from: '09:00',
+      to: '08:00',
+      reason: `A1 falsche Reihenfolge ${world.runId}`,
     });
     await invalidOrderDialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
-    await expect(invalidOrderDialog.getByText(TIME_ENTRY_COPY.clockOutBeforeClockIn)).toBeVisible();
+    await expect(invalidOrderDialog.getByText(TIME_CORRECTION_COPY.endBeforeStart)).toBeVisible();
     await invalidOrderDialog.getByRole('button', { name: SHARED_COPY.action.close }).click();
 
     const reason = `A1 vergessene Zeit ${world.runId}`;
     await manualEntryHeaderButton(employeePage).click();
     const validDialog = manualEntryDialog(employeePage);
-    await selectManualEntryJob(employeePage, validDialog, manualTimeJobNumber);
     await fillOwnPastTime(validDialog, { date: previousBusinessDate, from: '00:00', to: '00:05', reason });
+    await selectFirstTimelineJob(employeePage, validDialog, manualTimeJobNumber);
     await validDialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
     // Close-then-banner (M5): the dialog closes and the global banner confirms.
     await expect(visibleText(employeePage, TIME_CORRECTION_COPY.submittedForReview)).toBeVisible();

@@ -141,9 +141,14 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve({ filter: /^@\/lib\/jobs\/instruction-items-actions$/ }, () => ({
               path: join(import.meta.dir, 'instruction-service-boundaries.ts'),
             }));
-            builder.onResolve({ filter: /^@\/lib\/work-artifacts\/actions$/ }, () => ({
+            builder.onResolve({ filter: /^@\/lib\/work-artifacts\/(?:customer-decision-)?actions$/ }, () => ({
               path: join(import.meta.dir, 'work-artifact-boundaries.ts'),
             }));
+            // The customer decision's signature upload records the file instead of storing it.
+            builder.onResolve({ filter: /^@\/lib\/documents\/upload-client$/ }, (args) => {
+              if (args.importer.endsWith('use-work-artifact-customer-actions.ts'))
+                return { path: join(import.meta.dir, 'work-artifact-boundaries.ts') };
+            });
             builder.onResolve({ filter: /^@\/lib\/qualifications\/actions$/ }, () => ({
               path: join(import.meta.dir, 'qualification-service-boundaries.ts'),
             }));
@@ -176,6 +181,7 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               },
               (args) => {
                 if (
+                  args.importer.endsWith('work-artifact-customer-decision.tsx') ||
                   args.importer.endsWith('realtime-provider.tsx') ||
                   args.importer.endsWith('use-calendar-range-data.ts') ||
                   args.importer.endsWith('use-job-entity-options.ts') ||

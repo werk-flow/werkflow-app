@@ -9,6 +9,8 @@ import { readTimeApprovalContract } from './time-approval-boundaries';
 import { readMaterialLinesContract, readMaterialPickerContract } from './material-boundaries';
 import { getOwnPersonnelActions, getPersonnelLifecycle } from './personnel-boundaries';
 import { readAffectedVisitsContract } from './absence-service-boundaries';
+import { readPlannedVisitsContract } from './correction-timeline-boundaries';
+import { readSignatureViewContract, readWorkArtifactDetailContract } from './work-artifact-boundaries';
 import { absenceAffectedVisitsInputSchema } from '@/lib/calendar/absence-visits-types';
 
 export async function readInBackground(kind: string, input: unknown, signal?: AbortSignal): Promise<unknown> {
@@ -24,11 +26,14 @@ export async function readInBackground(kind: string, input: unknown, signal?: Ab
     kind === 'time-correction-requests'
   )
     return readTimeApprovalContract(kind);
+  if (kind === 'time-correction-planned-visits') return readPlannedVisitsContract(input);
   if (kind === 'job-material-lines') return readMaterialLinesContract();
   if (kind === 'inventory-picker-page' || kind === 'job-inventory-picker-options')
     return readMaterialPickerContract();
   if (kind === 'absence-affected-visits')
     return readAffectedVisitsContract(absenceAffectedVisitsInputSchema.parse(input));
+  if (kind === 'work-artifact-detail') return readWorkArtifactDetailContract();
+  if (kind === 'document-view-url') return readSignatureViewContract();
   if (kind === 'own-personnel-actions') return getOwnPersonnelActions();
   if (kind === 'personnel-lifecycle' && input && typeof input === 'object' && 'employeeRecordId' in input)
     return getPersonnelLifecycle(String(input.employeeRecordId));

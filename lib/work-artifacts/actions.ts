@@ -287,9 +287,9 @@ export async function saveWorkArtifact(input: SaveWorkArtifactInput): Promise<Wo
 export async function recordWorkArtifactAction(
   input: WorkArtifactActionInput,
 ): Promise<WorkArtifactMutationResult> {
+  // Customer decisions and signatures go through recordWorkArtifactCustomerDecision, voiding through voidWorkArtifact.
   const parsed = workArtifactActionSchema.safeParse(input);
-  if (!parsed.success || parsed.data.actionType === 'voided')
-    return { success: false, error: 'invalid_input' };
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
   const admin = createSupabaseAdminClient();
@@ -344,8 +344,8 @@ export async function recordWorkArtifactAction(
       p_reason: parsed.data.reason ?? null,
       p_comment: parsed.data.comment ?? null,
       p_responsibility_snapshot: responsibilitySnapshot,
-      p_customer_context: toJson(parsed.data.customerContext ?? null),
-      p_signature_document_id: parsed.data.signatureDocumentId ?? null,
+      p_customer_context: null,
+      p_signature_document_id: null,
     }),
   );
   const status = mutationStatus(data);

@@ -5,8 +5,10 @@
 // caller's organization and the caller, so the function's org-scoped lookup
 // refuses an artifact, requirement or fulfillment of organization B with one
 // call. A signature upload ticket names an artifact of the caller's
-// organization, and a signature discard names the caller. A refused call
-// writes nothing.
+// organization, and a signature discard names the caller. A customer decision
+// with its signature is one call in the caller's organization. An employee's rejection or
+// correction request is refused before any write, so the reviewer's reason
+// field is a server rule, not only a hidden one. A refused call writes nothing.
 import assert from 'node:assert/strict';
 import {
   CALLER_ID,
@@ -30,6 +32,9 @@ const foreignFulfillmentId = '8b000000-0000-4000-8000-000000000006';
 const newId = '8b000000-0000-4000-8000-000000000007';
 const documentId = '8b000000-0000-4000-8000-000000000008';
 const timeEntryId = '8b000000-0000-4000-8000-000000000009';
+const ownArtifactId = '8b000000-0000-4000-8000-00000000000a';
+const ownRevisionId = '8b000000-0000-4000-8000-00000000000b';
+const coworkerId = '8b000000-0000-4000-8000-00000000000c';
 
 const world = installActionWorld({
   jobs: [
@@ -48,12 +53,30 @@ const world = installActionWorld({
   job_instruction_item_evidence_requirements: [{ id: foreignRequirementId, organization_id: ORGANIZATION_B }],
   job_instruction_item_evidence_fulfillments: [{ id: foreignFulfillmentId, organization_id: ORGANIZATION_B }],
   work_artifact_signature_uploads: [],
+  // A coworker's submitted revision in the caller's organization, and the state the
+  // approval responsibility reads: no configuration, so only the defaults hold it.
+  organization_members: [
+    { organization_id: ORGANIZATION_A, user_id: CALLER_ID, role: 'employee' },
+    { organization_id: ORGANIZATION_A, user_id: coworkerId, role: 'employee' },
+  ],
+  organization_responsibility_configurations: [],
+  organization_responsibility_assignments: [],
+  organization_responsibility_delegations: [],
+  employee_records: [],
+  profiles: [],
+});
+world.tables.work_artifact_revisions?.push({
+  id: ownRevisionId,
+  organization_id: ORGANIZATION_A,
+  artifact_id: ownArtifactId,
+  created_by: coworkerId,
 });
 // The artifact functions load their target inside the organization they are
 // given (supabase/tests/p1_15_*.sql); here only that lookup and its code.
 const artifact = { table: 'work_artifacts', idArgument: 'p_artifact_id', refusal: 'work_artifact_not_found' };
 installScopedFunctions(world, {
   record_work_artifact_action: artifact,
+  record_work_artifact_customer_decision: artifact,
   void_work_artifact: artifact,
   link_work_artifact_document: artifact,
   link_work_artifact_source: artifact,
@@ -86,6 +109,7 @@ const {
 const { createWorkArtifactSignatureUploadTicket } = await import(
   '@/lib/work-artifacts/signature-upload-actions'
 );
+const { recordWorkArtifactCustomerDecision } = await import('@/lib/work-artifacts/customer-decision-actions');
 
 const initialDatabase = databaseSnapshot(world);
 const notAuthorized = { success: false, error: 'not_authorized' };
@@ -117,6 +141,23 @@ signInAs(world, 'employee');
 assert.deepEqual(await save(ownJobId), notAuthorized);
 assert.equal(world.rpcCalls.length, 0);
 
+// An employee sends no rejection or correction request: the reviewer's reason is refused before any write.
+for (const actionType of ['internal_rejected', 'correction_requested'] as const) {
+  assert.deepEqual(
+    await recordWorkArtifactAction({
+      artifactId: ownArtifactId,
+      revisionId: ownRevisionId,
+      actionId: newId,
+      expectedVersion: 2,
+      actionType,
+      reason: 'Seriennummer fehlt',
+    }),
+    { success: false, error: 'not_responsible' },
+    actionType,
+  );
+}
+assert.equal(world.rpcCalls.length, 0);
+
 // An Admin of organization A saves nothing on a job of organization B and approves no foreign revision.
 signInAs(world, 'admin');
 assert.deepEqual(await save(foreignJobId), notAuthorized);
@@ -126,6 +167,16 @@ assert.equal(world.rpcCalls.length, 0);
 // Every other write names the caller's organization and is refused by its one call.
 const writes = [
   () => action('review_requested'),
+  () =>
+    recordWorkArtifactCustomerDecision({
+      artifactId: foreignArtifactId,
+      revisionId: foreignRevisionId,
+      expectedVersion: 1,
+      decisionActionId: newId,
+      decision: 'customer_acknowledged',
+      signer: { name: 'Erika Beispiel', relationship: 'Ansprechperson vor Ort' },
+      signature: { actionId: timeEntryId, documentId },
+    }),
   () =>
     voidWorkArtifact({
       artifactId: foreignArtifactId,

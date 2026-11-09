@@ -2,7 +2,7 @@ import { describeFailure } from '@/lib/action-messages';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { submitTimeCorrection } from '@/lib/time-corrections/actions';
 import { TIME_CORRECTION_FAILURE_MESSAGES } from '@/lib/time-corrections/messages';
-import { buildTimeCorrectionProposedFacts } from '@/components/zeiterfassung/time-correction-dialog-facts';
+import type { TimelineFact } from '@/lib/time-corrections/timeline';
 import type { CorrectionSendResult } from '@/components/correction-operation';
 
 // The other half of „Zeit nachtragen“: own time of an earlier day waits for an
@@ -16,16 +16,13 @@ export const PAST_DAY_EARLIER_VERSION_SAVED =
   'Dein Nachtrag war schon mit den vorherigen Angaben eingereicht. Deine Änderungen sind nicht gespeichert. Prüfe ihn im Verlauf und zieh ihn bei Bedarf zurück.';
 
 /**
- * Proposes the caller's own work from the clock-in to the clock-out of an
- * earlier day, with the reason.
+ * Proposes the caller's own timeline of an earlier day, activity by
+ * activity, with the reason.
  */
 export async function submitPastDayTime(input: {
   organizationId: string;
-  dateIso: string;
-  clockInTime: string;
-  clockOutTime: string;
-  /** The job, or '' for time without one. */
-  jobId: string;
+  /** The timeline's facts for the subject the server checks again. */
+  facts: (employeeRecordId: string) => TimelineFact[];
   reason: string;
   operationId: string;
 }): Promise<CorrectionSendResult> {
@@ -41,16 +38,7 @@ export async function submitPastDayTime(input: {
     kind: 'add',
     reason: input.reason,
     source: null,
-    proposedFacts: buildTimeCorrectionProposedFacts({
-      kind: 'add',
-      entry: undefined,
-      baseEmployeeRecordId,
-      jobId: input.jobId || 'none',
-      activityKind: 'work',
-      startAt: `${input.dateIso}T${input.clockInTime}`,
-      splitAt: `${input.dateIso}T${input.clockInTime}`,
-      endAt: `${input.dateIso}T${input.clockOutTime}`,
-    }),
+    proposedFacts: input.facts(baseEmployeeRecordId),
     operationId: input.operationId,
   });
   return result.success

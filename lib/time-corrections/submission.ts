@@ -21,8 +21,7 @@ import { validateCorrectionShape, type SubmitTimeCorrectionInput } from './valid
 // The rules `submitTimeCorrection` applies between its authorization and the
 // database call: the shape, the responsibility, the sources and the proposal.
 
-type ProposedFactInput = SubmitTimeCorrectionInput['proposedFacts'][number] &
-  Pick<TimeCorrectionFact, 'activity'>;
+type ProposedFactInput = SubmitTimeCorrectionInput['proposedFacts'][number];
 
 type SourceInputs = Array<SubmitTimeCorrectionInput['source']>;
 
@@ -82,6 +81,20 @@ export function submissionShapeError(input: SubmitTimeCorrectionInput): string |
     input.proposedFacts.some((fact) => fact.employeeRecordId !== input.subjectEmployeeRecordId)
   ) {
     return 'invalid_shape';
+  }
+  // Added travel, standby or internal time without its details would count
+  // with no credit rule; a forgotten day's timeline carries them.
+  if (
+    (input.kind === 'add' || input.kind === 'missed_clock') &&
+    input.proposedFacts.some(
+      (fact) =>
+        !fact.activity &&
+        (fact.activityKind === 'travel' ||
+          fact.activityKind === 'standby' ||
+          fact.activityKind === 'internal_activity'),
+    )
+  ) {
+    return 'activity_context_required';
   }
   if (
     input.calendarAdjustment &&

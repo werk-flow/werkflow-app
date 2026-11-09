@@ -16,6 +16,8 @@ import type { AddManualEntryResult, ManualEntryInput, TimeEntry } from '@/lib/ti
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { PAST_DAY_EARLIER_VERSION_SAVED, submitPastDayTime } from '@/components/manual-entry-past-day';
 import { sendUnderOperation, type CorrectionOperation } from '@/components/correction-operation';
+import type { TimelineFact } from '@/lib/time-corrections/timeline';
+import type { CorrectionTimelineHandle } from '@/components/zeiterfassung/time-correction-dialog-timeline-section';
 import {
   manualEntryFieldIds,
   NO_MANUAL_ENTRY_FIELD_ERRORS,
@@ -43,6 +45,8 @@ type ManualEntrySubmitInput = ManualEntryFormValues & {
   currentUserId: string | null;
   canAssignJob: boolean;
   selectedJobId: string;
+  /** The timeline own time of an earlier day carries; null until its section loaded. */
+  timelineRef: { current: CorrectionTimelineHandle | null };
   onSuccess: ((entries: TimeEntry[]) => void | Promise<void>) | undefined;
 };
 
@@ -149,12 +153,12 @@ async function saveManualEntries({
   }
 }
 
-/** Own time of an earlier day goes in as a correction with its reason; a refusal stays in the form. */
+/** Own time of an earlier day goes in as a correction with its timeline and reason; a refusal stays in the form. */
 async function savePastDayTime({
   organizationId,
   dateIso,
-  values,
-  selectedJobId,
+  facts,
+  reason,
   operationRef,
   setError,
   showBanner,
@@ -162,25 +166,17 @@ async function savePastDayTime({
 }: {
   organizationId: string;
   dateIso: string;
-  values: Pick<ManualEntryFormValues, 'clockInTime' | 'clockOutTime' | 'reason'>;
-  selectedJobId: string;
+  facts: (employeeRecordId: string) => TimelineFact[];
+  reason: string;
   operationRef: { current: CorrectionOperation | null };
   setError: (error: string | null) => void;
   showBanner: ReturnType<typeof useBanner>['showBanner'];
   onSuccess: ManualEntrySubmitInput['onSuccess'];
 }): Promise<void> {
-  const reason = values.reason.trim();
-  const content = JSON.stringify([dateIso, values.clockInTime, values.clockOutTime, selectedJobId, reason]);
+  // The content a retry compares: the day, every activity with its details, and the reason.
+  const content = JSON.stringify([dateIso, facts(''), reason]);
   const outcome = await sendUnderOperation(operationRef, content, (operationId) =>
-    submitPastDayTime({
-      organizationId,
-      dateIso,
-      clockInTime: values.clockInTime,
-      clockOutTime: values.clockOutTime,
-      jobId: selectedJobId,
-      reason,
-      operationId,
-    }),
+    submitPastDayTime({ organizationId, facts, reason, operationId }),
   );
   if (outcome.kind === 'failed') {
     setError(outcome.message);
@@ -200,12 +196,15 @@ export function useManualEntrySubmit(input: ManualEntrySubmitInput): {
   isPending: boolean;
   error: string | null;
   fieldErrors: ManualEntryFieldErrors;
+  showTimelineErrors: boolean;
 } {
   const { activeOrgId, isAdmin, isAdminOrManager, currentUserId, selectedUserId, canAssignJob } = input;
   const { selectedJobId, onSuccess } = input;
   const { run: runPendingTask, isPending } = usePendingTask();
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<ManualEntryFieldErrors>(NO_MANUAL_ENTRY_FIELD_ERRORS);
+  // An earlier day's timeline shows its rows' errors after the first press of „Speichern“.
+  const [attempted, setAttempted] = useState(false);
   const { showBanner } = useBanner();
   // One operation id per form, with the content that may have been saved
   // under it: a retry after a lost response replays the saved correction, and
@@ -224,9 +223,20 @@ export function useManualEntrySubmit(input: ManualEntrySubmitInput): {
 
     // An untouched or incomplete form sends nothing: it marks the fields instead.
     const plan = planManualEntrySubmission(input);
-    if (plan.kind === 'invalid') {
-      setFieldErrors(plan.fieldErrors);
-      focusFirstInvalidField(manualEntryFieldIds(plan.fieldErrors));
+    if (input.needsReason) setAttempted(true);
+    // A timeline still loading sends nothing, and says so at the button.
+    if (input.needsReason && !input.timelineRef.current) {
+      setError('Die Zeitleiste lädt noch. Bitte speichere gleich noch einmal.');
+      return;
+    }
+    const timelineCheck = input.needsReason ? (input.timelineRef.current?.check() ?? null) : null;
+    if (plan.kind === 'invalid' || (timelineCheck && !timelineCheck.valid)) {
+      const errors = plan.kind === 'invalid' ? plan.fieldErrors : NO_MANUAL_ENTRY_FIELD_ERRORS;
+      setFieldErrors(errors);
+      if (timelineCheck && !timelineCheck.valid && timelineCheck.message) setError(timelineCheck.message);
+      focusFirstInvalidField(
+        manualEntryFieldIds(errors, timelineCheck && !timelineCheck.valid ? timelineCheck.fieldErrors : {}),
+      );
       return;
     }
 
@@ -239,11 +249,13 @@ export function useManualEntrySubmit(input: ManualEntrySubmitInput): {
     void runPendingTask(async () => {
       try {
         if (plan.kind === 'past-day') {
+          // An earlier day always carries its checked timeline (needsReason above).
+          if (!timelineCheck?.valid) return;
           await savePastDayTime({
             organizationId: activeOrgId,
             dateIso: plan.dateIso,
-            values: input,
-            selectedJobId,
+            facts: timelineCheck.facts,
+            reason: plan.reason,
             operationRef,
             setError,
             showBanner,
@@ -270,5 +282,5 @@ export function useManualEntrySubmit(input: ManualEntrySubmitInput): {
     });
   };
 
-  return { handleSubmit, isPending, error, fieldErrors };
+  return { handleSubmit, isPending, error, fieldErrors, showTimelineErrors: attempted };
 }

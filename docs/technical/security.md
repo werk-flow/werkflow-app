@@ -60,7 +60,7 @@ A customer's export stays on the owner's machine, outside every repository. The 
 - **Auth links.** No browser client reads a URL session (`auth-url-session.spec.ts`). A GET redeems an invite only after a code exchange in that request; a reset hash waits in an httpOnly cookie for the reset page's click (`lib/auth/recovery-link.ts`).
 - **Email in URLs.** No URL carries a provider message or an email address. The next step reads the address from an httpOnly cookie scoped to its page (`lib/auth/address-cookies.ts`), the invite row, or the session.
 - **Page routing.** `proxy.ts` sends a visitor without a session away from every authenticated area; a new authenticated area is routed there. `app/(app)/layout.tsx` checks the session again and is the authority.
-- **Identity failure.** An identity check that cannot complete is a failure, never a signed-out caller and never access: a page shows the error page, a route handler a private 500 or 503, the auth callback `/auth/unavailable`. The proxy lets the request through to the layout. `lib/auth/identity-errors.ts` classifies Auth failures for both.
+- **Identity failure.** An identity check that cannot complete is a failure, never a signed-out caller and never access: a page shows the error page, a route handler a private 500 or 503, the auth callback `/auth/unavailable`. The proxy passes the request to the layout. `lib/auth/identity-errors.ts` classifies Auth failures for both.
 - **Redirects.** A return destination from a query string goes through `resolveSafeReturnPath` and is a same-origin path. An invite code is a UUID before the app echoes it.
 - **Organization cookie.** The cookie is a hint. The server accepts it only for a current member and refuses to set it for a non-member.
 - **Joining.** Join codes come from the cryptographic random source. A code creates a join request, never a membership. Only an Admin or Büro approval in that organization creates the membership, in one database function. A signed-in user gets limited join attempts per hour.
@@ -98,6 +98,8 @@ The edge functions accept only the project's secret keys and escape every interp
 
 Responses carry the hardening headers and the enforced Content-Security-Policy from `buildSecurityHeaders` in `next.config.ts`. The script policy allows the app's own origin and inline scripts. Violations go to `POST /api/csp-report`, which is unauthenticated by design, stores nothing and logs a redacted summary. An `eval` report, or one that names another origin, is a finding. Product code has no HTML string sink and no `eval`, and imports Zod through `lib/zod.ts`; `lib/zod-members.ts` turns off its `eval` probe.
 
+A phone's offline data is wiped on sign-out and organization switch; the server never trusts it ([decision 0010](../decisions/0010-offline-field-sync-contract.md#device-data)).
+
 ### Server caches
 
 A reader cached across requests throws `CachedReadError` on a failed read, so the cache never keeps a failure. No permission fact is cached across requests, and no authenticated response is cached at the CDN.
@@ -133,9 +135,9 @@ An exception that matches no finding on an unchanged tree means the registry nar
 
 ## Known residual exposure
 
-List each owner-accepted residual exposure here until it closes.
+List each owner-accepted residual exposure until it closes.
 
-- Injected inline scripts are not blocked. The script policy allows `'unsafe-inline'`, so it stops foreign scripts but not an injected inline one. A per-request nonce needs every page rendered per request, which `cacheComponents` rules out. The `htmlSinkSelectors` lint set keeps product code from creating an injection point.
+- Injected inline scripts are not blocked. The script policy allows `'unsafe-inline'`. A per-request nonce needs every page rendered per request, which `cacheComponents` rules out. The `htmlSinkSelectors` lint set keeps product code from creating an injection point.
 - No edge rate limit covers every request. The app limits operations that send mail, redeem a capability or activate billing; Supabase Auth limits its own endpoints. Edge limiting is the owner's Vercel plan decision.
 - The deletion transport lets current members receive a deleted row's identity, never its content.
 - `simulatePayment` in `lib/subscription/actions.ts` lets a signed-in user without an organization activate their own subscription once: the beta activation path, closing with werk-flow/werkflow-planning#248.
@@ -145,7 +147,7 @@ List each owner-accepted residual exposure here until it closes.
 - Organization deletion removes stored files after the rows. If storage fails, or a lost delete response cannot be rechecked, they stay under its prefix, logged, unreachable through the app.
 - The lint toolchain's minimatch (GHSA-g3hv-75wg-m249) is a reviewed dependency exception in `lib/security/dependency-exceptions.json`.
 - A coworker's Arbeitsnachweis detail hides the customer signer's name; an exported report, a job or project document, shows it to all its readers (owner decision, werk-flow/werkflow-planning#241).
-- Two provider facts are unverified, each needing a stronger read token: the R2 buckets' CORS rules (`GetBucketCors` refuses runtime tokens) and the Vercel environment scopes.
+- Two provider facts need a stronger read token to verify: the R2 buckets' CORS rules (`GetBucketCors` refuses runtime tokens) and the Vercel environment scopes.
 
 ## Revocation boundaries
 
@@ -154,7 +156,7 @@ List each owner-accepted residual exposure here until it closes.
 | Privileged server reads and actions | Identity, membership, role, object and lifecycle rules load again on each request and render. Scheduled restrictions apply at read time. |
 | Direct database clients | RLS consults current membership and effective personnel access. A valid JWT alone grants no organization access. |
 | Realtime | INSERT and UPDATE use the table's current RLS. Deletion notices use the protected transport. Freshness inside one organization is no evidence of tenant denial. |
-| Signed file URLs already issued | A URL is a bearer capability. Revocation prevents new signing; an issued URL stays valid until it expires, and a downloaded file cannot be recalled. |
+| Signed file URLs already issued | A URL is a bearer capability. Revocation prevents new signing; an issued URL lives until expiry, and a download cannot be recalled. |
 | Auth sessions | [Supabase sign-out](https://supabase.com/docs/guides/auth/signout) lets an issued access token stay valid until it expires. During an incident, suspend operational access and follow the [runbook](recovery-and-incidents.md). |
 
 ## Sensitive data and owner decisions

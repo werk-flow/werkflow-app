@@ -130,6 +130,7 @@ export function TimeActivityQualifierFields({
   onTravelRoleChange,
   standbyContext,
   onStandbyContextChange,
+  idPrefix = 'time-',
 }: {
   kind: TimeSegmentKind;
   internalType: TimeInternalActivity;
@@ -140,15 +141,22 @@ export function TimeActivityQualifierFields({
   onTravelRoleChange: (travelRole: TimeTravelRole) => void;
   standbyContext: TimeStandbyContext;
   onStandbyContextChange: (standbyContext: TimeStandbyContext) => void;
+  /** Starts the control ids, so several activities in one form keep their ids apart. */
+  idPrefix?: string;
 }): ReactElement {
   return (
     <>
       {kind === 'internal_activity' && (
-        <TimeInternalActivityField internalType={internalType} onInternalTypeChange={onInternalTypeChange} />
+        <TimeInternalActivityField
+          idPrefix={idPrefix}
+          internalType={internalType}
+          onInternalTypeChange={onInternalTypeChange}
+        />
       )}
 
       {kind === 'travel' && (
         <TimeTravelFields
+          idPrefix={idPrefix}
           travelRoute={travelRoute}
           onTravelRouteChange={onTravelRouteChange}
           travelRole={travelRole}
@@ -158,6 +166,7 @@ export function TimeActivityQualifierFields({
 
       {kind === 'standby' && (
         <TimeStandbyContextField
+          idPrefix={idPrefix}
           standbyContext={standbyContext}
           onStandbyContextChange={onStandbyContextChange}
         />
@@ -167,14 +176,16 @@ export function TimeActivityQualifierFields({
 }
 
 function TimeInternalActivityField({
+  idPrefix,
   internalType,
   onInternalTypeChange,
 }: {
+  idPrefix: string;
   internalType: TimeInternalActivity;
   onInternalTypeChange: (internalType: TimeInternalActivity) => void;
 }): ReactElement {
   return (
-    <Field label="Interne Tätigkeit" htmlFor="time-internal-type">
+    <Field label="Interne Tätigkeit" htmlFor={`${idPrefix}internal-type`}>
       <Select
         value={internalType}
         onValueChange={(value) => {
@@ -197,11 +208,13 @@ function TimeInternalActivityField({
 }
 
 function TimeTravelFields({
+  idPrefix,
   travelRoute,
   onTravelRouteChange,
   travelRole,
   onTravelRoleChange,
 }: {
+  idPrefix: string;
   travelRoute: TimeTravelRoute;
   onTravelRouteChange: (travelRoute: TimeTravelRoute) => void;
   travelRole: TimeTravelRole;
@@ -209,7 +222,7 @@ function TimeTravelFields({
 }): ReactElement {
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      <Field label="Strecke" htmlFor="time-travel-route">
+      <Field label="Strecke" htmlFor={`${idPrefix}travel-route`}>
         <Select
           value={travelRoute}
           onValueChange={(value) => {
@@ -230,7 +243,7 @@ function TimeTravelFields({
           </SelectContent>
         </Select>
       </Field>
-      <Field label="Rolle" htmlFor="time-travel-role">
+      <Field label="Rolle" htmlFor={`${idPrefix}travel-role`}>
         <Select
           value={travelRole}
           onValueChange={(value) => {
@@ -253,14 +266,16 @@ function TimeTravelFields({
 }
 
 function TimeStandbyContextField({
+  idPrefix,
   standbyContext,
   onStandbyContextChange,
 }: {
+  idPrefix: string;
   standbyContext: TimeStandbyContext;
   onStandbyContextChange: (standbyContext: TimeStandbyContext) => void;
 }): ReactElement {
   return (
-    <Field label="Bereitschaft" htmlFor="time-standby-context">
+    <Field label="Bereitschaft" htmlFor={`${idPrefix}standby-context`}>
       <Select
         value={standbyContext}
         onValueChange={(value) => {

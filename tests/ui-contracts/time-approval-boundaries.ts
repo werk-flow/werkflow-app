@@ -109,6 +109,7 @@ const correctionRequest: TimeCorrectionRequest = {
   canReview: true,
   canWithdraw: false,
   canResubmit: false,
+  activities: { before: [], proposed: [] },
 };
 
 declare global {

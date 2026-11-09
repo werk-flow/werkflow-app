@@ -312,7 +312,11 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
 // One row per SQL group: id, its assertion files under supabase/tests/, and its scopes.
 const sqlDefinitions: readonly (readonly [string, readonly string[], readonly string[]])[] = [
   ['p1-13', ['p1_13_work_templates.sql'], ['work', 'inventory', 'personnel']],
-  ['work-execution', ['work_execution_boundaries.sql'], ['work', 'time', 'documents', 'inventory']],
+  [
+    'work-execution',
+    ['work_execution_boundaries.sql', 'work_artifact_customer_decisions.sql'],
+    ['work', 'time', 'documents', 'inventory'],
+  ],
   ['p1-21', ['p1_21_time_segments.sql'], ['time', 'personnel', 'work']],
   ['p1-22', ['p1_22_time_corrections.sql'], ['time', 'personnel', 'work']],
   ['a1-time-history', ['a1_time_history.sql'], ['time', 'personnel']],
