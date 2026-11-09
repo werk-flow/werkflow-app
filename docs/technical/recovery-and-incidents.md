@@ -16,7 +16,7 @@ Until the point-in-time upgrade below, the owner accepts at most one day of data
 
 ## Planned provider upgrades
 
-The Vercel Pro checklist is open in werk-flow/werkflow-planning#216. The owner deferred point-in-time recovery until the first customer who pays about $1000 a month, after Willert; Supabase gets no further spend before Willert pays ([decision 0008](../decisions/0008-development-workflow.md#amendment-2026-11-07-point-in-time-recovery-waits-for-a-larger-customer)). Whoever completes a checklist updates this page.
+The Vercel Pro checklist is open in werk-flow/werkflow-planning#216. The owner deferred point-in-time recovery until a larger customer after Willert ([decision 0008](../decisions/0008-development-workflow.md#amendment-2026-11-07-point-in-time-recovery-waits-for-a-larger-customer)). Whoever completes a checklist updates this page.
 
 | Upgrade | Why | Checklist after enabling |
 | --- | --- | --- |
@@ -25,7 +25,7 @@ The Vercel Pro checklist is open in werk-flow/werkflow-planning#216. The owner d
 
 ## Recovery rehearsal
 
-`bun scripts/rehearse-recovery.ts` restores a representative organization with every file link in disposable local databases and buckets. It needs healthy local containers, Docker on the machine's own socket (Linux, or Colima's default profile on a Mac) and `.env.local-stack-backup`. It takes the workspace test lock and journals each operation and stage duration to `.agent-logs/recovery/<run-id>/journal.json`; the `restore` stage's duration is the measured restore time. Its stages:
+`bun scripts/rehearse-recovery.ts` restores a representative organization with every file link in disposable local databases and buckets. It needs healthy local containers, Docker on the machine's own socket (Linux, or Colima's default profile on a Mac) and `.env.local-stack-backup`. It takes the workspace test lock and journals each operation and stage duration, the `restore` stage's being the restore time, to `.agent-logs/recovery/<run-id>/journal.json`. Its stages:
 
 1. `seed` copies the stack's migrated schema, never a row, into a new database. It fails when the stack lacks a migration of the revision. It writes a made-up SHK company through the app's database functions: every role, assigned jobs, document versions, filed, trashed and personnel documents, and a second organization.
 2. `backup` takes a full `pg_dump` as the superuser, as the provider's daily backup does, and copies the bytes to a backup bucket, with one upload made after the dump.
@@ -35,7 +35,7 @@ The Vercel Pro checklist is open in werk-flow/werkflow-planning#216. The owner d
 
 The journal names missing documents and orphan objects by id, never a path, file name or content.
 
-`ops/recovery-rehearsal.py` in `werk-flow/werkflow-planning` runs it on [the PC](environments.md#background-jobs): at 04:00 Berlin on the first Monday of January, April, July and October, in a checkout of its own at `origin/main`. After a backup or storage change, run that script with `--revision <branch>`. It adds two databases and three buckets to the shared stack for seconds, restarts nothing and takes no heavy slot; an unhealthy stack fails it. A failure opens or updates `CI alert: recovery rehearsal`, the next pass closes it, and `ops/ci-alert.py` hands it to a thread and reports a quarter without a run. It assigns nobody: no production data is at stake.
+`ops/recovery-rehearsal.py` in `werk-flow/werkflow-planning` runs it on [the PC](environments.md#background-jobs): at 04:00 Berlin on the first Monday of January, April, July and October, in a checkout of its own at `origin/main`. After a backup or storage change, run that script with `--revision <branch>`. It adds two databases and three buckets to the shared stack for seconds, restarts nothing and takes no heavy slot; an unhealthy stack fails it. A failure opens or updates `CI alert: recovery rehearsal`, the next pass closes it, and `ops/ci-alert.py` hands it to a thread and reports a quarter without a run. It assigns nobody.
 
 - A cleanup or journal failure prevents acceptance. After a killed run, reconcile the journal's exact resource names before you run again.
 - Never drop a resource by prefix search, remove a shared bucket or database, reset the shared stack, or load a production or DEV dump into it.
@@ -45,10 +45,10 @@ The journal names missing documents and orphan objects by id, never a path, file
 
 1. Record source, target, backup timestamp, application revision, expected loss and rollback limits. Get the owner's authorization. Never load production material into DEV or the local stack.
 2. Stop writes through enforced maintenance or provider controls, and notify the customer; staff work on paper and by phone until writes reopen. A notice alone stops no direct client, job or session. Pause the storage purge until step 5 is done: remove `CRON_SECRET` from Vercel Production and redeploy production, since a variable change reaches only a new deployment. Before the restore, confirm that `/api/storage-purge` answers 503 and that no purge request is still running; a run that has not started yet never will. The paused route deletes nothing and raises the production-watcher alert. After step 5, set a new value and redeploy again.
-3. Follow the provider's current restore procedure. Run only the authorized operation and keep its result. A partial load or a nonzero exit is a failed restore. Restore in place (Backups, Scheduled backups); PROD is offline meanwhile. A new project keeps the damaged database but needs its own password, never PROD's, Auth settings, API keys, secrets and network settings, and production repointed. An IPv4 machine reaches it only through its session pooler, with `sslmode=require`.
+3. Follow the provider's current restore procedure. Run only the authorized operation and keep its result. A partial load or a nonzero exit is a failed restore. Restore in place (Backups, Scheduled backups); PROD is offline meanwhile. A new project keeps the damaged database but is a cutover: pause releases; give it its own password, never PROD's, Auth settings, API keys, secrets and network settings; deploy and check its Edge Functions; retarget every PROD reference (Vercel env, `PROD_DATABASE_URL`, the project ref in `release.yml`) before writes or releases resume. An IPv4 machine reaches it only through its session pooler, with `sslmode=require`.
 4. Compare `supabase_migrations.schema_migrations` on the target with the intended revision, and check that `cron.job` holds the scheduled jobs. `bun run migrations:check` checks DEV only. For a missing migration, follow [the migration rule](environments.md#the-migration-rule) without relinking the CLI to production.
 5. Reconcile current and historical document and version paths against the correct bucket, with the rehearsal's path query and comparison (`lib/testing/runs/recovery-rehearsal.ts`). Metadata without an object means missing bytes. An object uploaded after the backup, or one whose deletion was queued after it, can survive without metadata or queue entry. Keep orphan objects for review; never purge them automatically.
-6. Check tenant and role access, protected documents and session revocation. A database restore revokes no token.
+6. Check tenant and role access, protected documents and session revocation.
 7. Run the provider canary on cloud DEV; it does not prove production recovery. On production, use metadata and configuration checks and the customer verification the owner agreed before you resume writes. Record unresolved evidence and every loss.
 
 ## Restore procedure (files)
