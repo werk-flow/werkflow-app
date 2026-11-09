@@ -246,6 +246,48 @@ for (const [error, expected] of [
   assert.deepEqual(await replayBoth(refused), { operationId: refused.operationId, ...expected });
 }
 
+// A start or switch onto a job the office blocked while the phone was offline is a
+// conflict the office resolves, never a retry: the rest of the batch still runs.
+world.rpcCalls.length = 0;
+const answers = [
+  { data: null, error: { message: 'work_transition_start_blocked' } },
+  { data: ended, error: null },
+];
+world.rpc = ({ name }) => {
+  assert.equal(name, 'transition_time_activity');
+  const answer = answers.shift();
+  assert.ok(answer, 'the batch called the database function more often than it holds operations');
+  return answer;
+};
+// A switch, because the fixture's vacation would refuse a start before the database function.
+const blockedSwitch = operation({
+  payload: {
+    action: 'switch',
+    expectedSessionId: ownSessionId,
+    expectedVersion: 2,
+    selection: { kind: 'work', allocationKind: 'job', jobId },
+    acknowledgeLong: false,
+  },
+});
+const afterBlocked = operation();
+const blockedBatch = await POST(cookieRequest({ operations: [blockedSwitch, afterBlocked] }));
+assert.deepEqual(await blockedBatch.json(), {
+  results: [
+    { operationId: blockedSwitch.operationId, outcome: 'conflict', code: 'office_changed' },
+    {
+      operationId: afterBlocked.operationId,
+      outcome: 'accepted',
+      code: 'accepted',
+      state: { sessionId: ownSessionId, segmentId: null, version: 3 },
+    },
+  ],
+});
+assert.equal(world.rpcCalls.length, 2, 'a blocked job halted the batch');
+world.rpc = ({ name }) => {
+  assert.equal(name, 'transition_time_activity');
+  return transitionAnswer;
+};
+
 // A resend answers `replayed`; a stored recovery answer stays a conflict.
 transitionAnswer = { data: { ...ended, replayed: true }, error: null };
 const resent = operation();
@@ -396,4 +438,18 @@ assert.deepEqual(Object.keys(onlineCall.args).sort(), [
 assert.equal(
   onlineCall.args.p_request_hash,
   'a4517c54c26d53287737dc18019b88871cb21fd9b4b22ce83d44a7ba03575fe4',
+);
+// The online action's answer to a blocked job is unchanged too.
+transitionAnswer = { data: null, error: { message: 'work_transition_start_blocked' } };
+assert.deepEqual(
+  await transitionTimeActivity({
+    organizationId: ORGANIZATION_A,
+    operationId: '8d000000-0000-4000-8000-000000000031',
+    action: 'switch',
+    expectedSessionId: ownSessionId,
+    expectedVersion: 3,
+    selection: { kind: 'work', allocationKind: 'job', jobId },
+    acknowledgeLong: false,
+  }),
+  { success: false, error: 'time_transition_failed' },
 );

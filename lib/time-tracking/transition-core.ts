@@ -42,21 +42,26 @@ export type TimeTransitionCommand = {
 export type OfflineCapture = { capturedAt: string; sentAt: string };
 
 /**
- * The database's refusals of an offline-captured time (migration
- * 20261127090000). An online transition never meets them.
+ * The database's refusals that only an offline transition names: those of an
+ * offline-captured time (migration 20261128090001), and the start gate of a
+ * job the office blocked while the phone was offline (an open blocker or start
+ * dependency, raised by `transition_work_execution` when a work segment starts
+ * the job). An online transition keeps answering `time_transition_failed` for
+ * the start gate, so its result is unchanged.
  */
-const OFFLINE_CAPTURE_REFUSALS = [
+const OFFLINE_REFUSALS = [
   'time_transition_captured_in_future',
   'time_transition_captured_out_of_order',
   'time_transition_correction_required',
   'time_transition_outside_recording_window',
+  'work_transition_start_blocked',
 ] as const;
 
-export type OfflineCaptureRefusal = (typeof OFFLINE_CAPTURE_REFUSALS)[number];
+export type OfflineRefusal = (typeof OFFLINE_REFUSALS)[number];
 
 export type OfflineTransitionResult =
   | Extract<TimeTransitionResult, { success: true }>
-  | ActionFailure<TimeTransitionError | OfflineCaptureRefusal>;
+  | ActionFailure<TimeTransitionError | OfflineRefusal>;
 
 /** The JSON object `transition_time_activity` returns. */
 const transitionPayloadSchema = z.object({
@@ -72,11 +77,11 @@ const transitionPayloadSchema = z.object({
 function mapTransitionError(
   error: { code?: string; message: string },
   offline: boolean,
-): TimeTransitionError | OfflineCaptureRefusal {
+): TimeTransitionError | OfflineRefusal {
   if (isPeriodClosedError(error)) return 'period_closed';
   const { message } = error;
   if (offline) {
-    const refusal = OFFLINE_CAPTURE_REFUSALS.find((code) => message.includes(code));
+    const refusal = OFFLINE_REFUSALS.find((code) => message.includes(code));
     if (refusal) return refusal;
   }
   if (message.includes('time_sessions_open_user_unique')) {

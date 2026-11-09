@@ -7,7 +7,7 @@ import { timeActivitySelectionSchema } from '@/lib/time-tracking/activity-select
 import {
   recordTimeTransition,
   type OfflineCapture,
-  type OfflineCaptureRefusal,
+  type OfflineRefusal,
   type OfflineTransitionResult,
 } from '@/lib/time-tracking/transition-core';
 import type { TimeTransitionError } from '@/lib/time-tracking/types';
@@ -42,7 +42,7 @@ const STATE_MOVED: FieldSyncVerdict = { outcome: 'conflict', code: 'version_conf
 const OFFICE_CHANGED: FieldSyncVerdict = { outcome: 'conflict', code: 'office_changed' };
 
 /** Every refusal the transition core can answer, with its outcome. TypeScript fails on an unmapped code. */
-const REFUSAL_VERDICTS: Record<TimeTransitionError | OfflineCaptureRefusal, FieldSyncVerdict> = {
+const REFUSAL_VERDICTS: Record<TimeTransitionError | OfflineRefusal, FieldSyncVerdict> = {
   invalid_input: INVALID,
   time_transition_invalid_input: INVALID,
   time_transition_action_invalid: INVALID,
@@ -73,6 +73,7 @@ const REFUSAL_VERDICTS: Record<TimeTransitionError | OfflineCaptureRefusal, Fiel
   time_transition_recovery_state_changed: STATE_MOVED,
   time_transition_working_other_org: STATE_MOVED,
   time_transition_job_terminal: OFFICE_CHANGED,
+  work_transition_start_blocked: OFFICE_CHANGED,
   on_approved_vacation: OFFICE_CHANGED,
   time_transition_failed: UNAVAILABLE,
 };

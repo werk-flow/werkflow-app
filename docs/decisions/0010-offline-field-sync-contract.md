@@ -119,3 +119,10 @@ Decided by the E7 lead for werk-flow/werkflow-planning#317. The accepted text ab
 - **Why.** That path establishes its caller from the cookie session, so a bearer request cannot reach it unchanged. A correction also proposes clock-in and clock-out pairs, and one late transition is half a pair.
 - **Unchanged.** After 7 days the server refuses the event with `outside_recording_window`. A field sync kind for correction requests, which the native client needs, waits for V2.
 - **Values fixed by #317.** The caller's organization is the active one, chosen as for every request: the organization cookie among the current memberships, otherwise the first. An operation naming another organization is `rejected` with `organization_mismatch`; a caller without a current membership gets `forbidden` for the whole request. The clock-skew tolerance is 5 minutes: a `capturedAt` later than that after receipt is `rejected` with `invalid`. A captured time before the person's last recorded event is `conflict` with `version_conflict`. A transition whose session needs the recovery decision answers `conflict` with `recovery_required`, also on every resend. The operation stores `capturedAt` and `sentAt`; its creation time is the receipt time. The three limits are named constants in the database function `transition_time_activity`.
+
+## Amendment 2026-11-09: an offline time event is never recorded after its receipt
+
+Decided by the E7 lead on the review of werk-flow/werkflow-planning#317.
+
+- **Recorded time.** A `capturedAt` up to 5 minutes after receipt is recorded at the receipt time, because nothing happens after the server receives it. A later transition then never ends a segment before it started. The operation keeps the device's `capturedAt` and `sentAt`, and the window, the closed period and the order rule still check that `capturedAt`.
+- **Blocked job.** A start or switch onto a job the office blocked meanwhile, by an open blocker or start dependency, answers `conflict` with `office_changed`, never `retry`.

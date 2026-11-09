@@ -8,13 +8,17 @@
 -- the transition is an offline-captured event:
 --
 -- - Only start, switch and end can be captured offline.
--- - The session, segment and event times are the captured time; updated_at,
---   created_at and system events keep the server's clock. The operation row
---   stores captured_at and sent_at; its created_at is the receipt time. An
---   event is offline-captured exactly when its operation has a captured_at.
+-- - The session, segment and event times are the captured time, but never
+--   after the receipt: a device clock that runs ahead records the event at the
+--   receipt time, because nothing happened after the server received it.
+--   updated_at, created_at and system events keep the server's clock. The
+--   operation row stores the device's captured_at and sent_at; its created_at
+--   is the receipt time. An event is offline-captured exactly when its
+--   operation has a captured_at.
 -- - A replay of a stored operation returns its first result before any of the
 --   checks below, so a resend days later still answers `replayed`.
--- - Refusals, in this order, each without a write:
+-- - Refusals, in this order, each without a write, each on the device's
+--   captured time:
 --   1. on a day of a closed period: period_closed (SQLSTATE WFP01, the
 --      closed-period trigger's error; the trigger still guards every row)
 --   2. more than 5 minutes after the receipt: time_transition_captured_in_future
@@ -81,8 +85,11 @@ declare
   c_automatic_window constant interval := interval '24 hours';
   c_recording_deadline constant interval := interval '7 days';
   v_now timestamptz := clock_timestamp();
-  -- The time of the user's act: the server clock online, the captured time offline.
-  v_at timestamptz := coalesce(p_captured_at, v_now);
+  -- The recorded time of the user's act: the server clock online; offline the
+  -- captured time, capped at the receipt (least ignores a null), so a later
+  -- online transition never ends a segment before it started. Every check on
+  -- the captured time (closed period, window, order) reads p_captured_at.
+  v_at timestamptz := least(p_captured_at, v_now);
   v_captured_date date;
   v_last_recorded_at timestamptz;
   v_role public.org_role;

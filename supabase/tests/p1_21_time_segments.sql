@@ -697,6 +697,17 @@ insert into public.jobs (id, organization_id, title, job_number, created_by)
 values (
   '21000000-0000-0000-0000-000000000712', '21000000-0000-0000-0000-000000000710',
   'Offline unassigned job', 'OFFLINE-JOB', '21000000-0000-0000-0000-000000000701'
+), (
+  '21000000-0000-0000-0000-000000000713', '21000000-0000-0000-0000-000000000710',
+  'Offline blocked job', 'OFFLINE-BLOCKED', '21000000-0000-0000-0000-000000000701'
+);
+-- The office blocked an assigned job while the phone was offline.
+insert into public.job_assignments (organization_id, job_id, user_id, assigned_by) values (
+  '21000000-0000-0000-0000-000000000710', '21000000-0000-0000-0000-000000000713',
+  '21000000-0000-0000-0000-000000000702', '21000000-0000-0000-0000-000000000701'
+);
+insert into public.work_blockers (organization_id, job_id, is_legacy) values (
+  '21000000-0000-0000-0000-000000000710', '21000000-0000-0000-0000-000000000713', true
 );
 set local role service_role;
 
@@ -872,6 +883,84 @@ begin
     p_expected_session_id => (v_result->>'sessionId')::uuid,
     p_expected_version => (v_result->>'version')::bigint
   );
+end;
+$$;
+
+-- An offline start onto a job the office blocked meanwhile is refused with
+-- the start gate's own error, which field sync answers as a conflict, and
+-- writes nothing.
+do $$
+begin
+  perform public.transition_time_activity(
+    p_organization_id => '21000000-0000-0000-0000-000000000710',
+    p_actor_id => '21000000-0000-0000-0000-000000000702',
+    p_operation_id => '21000000-0000-0000-0000-000000000728',
+    p_request_hash => repeat('1', 64), p_action => 'start',
+    p_segment_kind => 'work', p_allocation_kind => 'job',
+    p_job_id => '21000000-0000-0000-0000-000000000713',
+    p_captured_at => clock_timestamp(), p_sent_at => clock_timestamp()
+  );
+  raise exception 'an offline start onto a blocked job was accepted';
+exception when others then
+  if sqlerrm <> 'work_transition_start_blocked' then raise; end if;
+end;
+$$;
+do $$
+begin
+  if exists (select 1 from public.time_operations where id = '21000000-0000-0000-0000-000000000728')
+    or exists (
+      select 1 from public.time_sessions
+      where user_id = '21000000-0000-0000-0000-000000000702' and ended_at is null
+    )
+  then raise exception 'a refused start onto a blocked job wrote time'; end if;
+end;
+$$;
+
+-- A device clock that runs ahead, inside the 5 minutes tolerance, records the
+-- event at its receipt, never later: an online end right after it still ends
+-- the segment after it started. The operation keeps the device's times.
+do $$
+declare
+  v_org constant uuid := '21000000-0000-0000-0000-000000000710';
+  v_field constant uuid := '21000000-0000-0000-0000-000000000702';
+  v_captured_at constant timestamptz := clock_timestamp() + interval '3 minutes';
+  v_sent_at constant timestamptz := clock_timestamp() + interval '3 minutes';
+  v_received_after timestamptz := clock_timestamp();
+  v_result jsonb;
+  v_session public.time_sessions%rowtype;
+begin
+  v_result := public.transition_time_activity(
+    p_organization_id => v_org, p_actor_id => v_field,
+    p_operation_id => '21000000-0000-0000-0000-000000000729',
+    p_request_hash => repeat('2', 64), p_action => 'start',
+    p_segment_kind => 'work', p_allocation_kind => 'unallocated',
+    p_captured_at => v_captured_at, p_sent_at => v_sent_at
+  );
+  select * into v_session from public.time_sessions where id = (v_result->>'sessionId')::uuid;
+  if v_session.started_at < v_received_after or v_session.started_at > clock_timestamp()
+    or exists (
+      select 1 from public.time_segment_events
+      where operation_id = '21000000-0000-0000-0000-000000000729'
+        and occurred_at <> v_session.started_at
+    )
+    or (select started_at from public.time_segments where session_id = v_session.id) <> v_session.started_at
+  then raise exception 'an offline event captured ahead of the receipt was not recorded at the receipt'; end if;
+  if (select captured_at from public.time_operations where id = '21000000-0000-0000-0000-000000000729')
+      <> v_captured_at
+    or (select sent_at from public.time_operations where id = '21000000-0000-0000-0000-000000000729')
+      <> v_sent_at
+  then raise exception 'an offline operation captured ahead did not keep the device times'; end if;
+
+  v_result := public.transition_time_activity(
+    p_organization_id => v_org, p_actor_id => v_field,
+    p_operation_id => '21000000-0000-0000-0000-000000000730',
+    p_request_hash => repeat('3', 64), p_action => 'end',
+    p_expected_session_id => v_session.id,
+    p_expected_version => v_session.version
+  );
+  if v_result->>'outcome' <> 'ended'
+    or (select ended_at from public.time_sessions where id = v_session.id) < v_session.started_at
+  then raise exception 'an online end after an offline start captured ahead failed'; end if;
 end;
 $$;
 
