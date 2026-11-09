@@ -6,7 +6,7 @@ import {
   type FieldSyncToday,
 } from '@/lib/field-sync/today-snapshot';
 import { logError } from '@/lib/logging';
-import { readTodayOnDevice, saveTodayOnDevice } from './today-store';
+import { dropOthersTodayOnDevice, readTodayOnDevice, saveTodayOnDevice } from './today-store';
 import { TODAY_HOLDER_KEY, clearTodayOnDevice, todayWipeGeneration } from './today-wipe';
 
 // One refresh of the today snapshot on a phone (decision record 0010, "Device
@@ -85,16 +85,15 @@ export async function refreshTodayOnDevice(
   { fetch: send = (url, init) => fetch(url, init), now = () => new Date() }: RefreshOptions = {},
 ): Promise<TodayRefreshOutcome> {
   // Taken before the first read: a wipe while the device reads makes this refresh stale too.
-  let generation = todayWipeGeneration();
+  const generation = todayWipeGeneration();
   if (superseded(holder)) return 'superseded';
   let stored = await readTodayOnDevice(now());
   if (todayWipeGeneration() !== generation) return 'superseded';
   // Another person's or organization's day never stays beside this one. This holder is the latest
-  // start page's, which the server rendered for the session the device has now.
+  // start page's, which the server rendered for the session the device has now. Only that record
+  // goes, and the generation stays: a sign-out that wipes meanwhile still ends this refresh.
   if (stored && !belongsTo(stored.snapshot, holder)) {
-    await clearTodayOnDevice();
-    claimToday(holder);
-    generation = todayWipeGeneration();
+    await dropOthersTodayOnDevice((snapshot) => belongsTo(snapshot, holder));
     stored = null;
   }
   let response: Response;

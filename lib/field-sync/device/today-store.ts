@@ -108,6 +108,22 @@ export async function saveTodayOnDevice(
   return written;
 }
 
+/**
+ * Deletes the stored day if it belongs to someone else, checked in the delete's own transaction:
+ * a day saved meanwhile for the holder stays. No wipe is signalled, so a sign-out that wipes
+ * meanwhile still ends the refresh that called this.
+ */
+export async function dropOthersTodayOnDevice(isOwn: (snapshot: FieldSyncToday) => boolean): Promise<void> {
+  await withStore('readwrite', (store) => {
+    const request = store.get(CURRENT);
+    request.addEventListener('success', () => {
+      const stored = storedTodaySchema.safeParse(request.result);
+      if (stored.success && !isOwn(stored.data.snapshot)) store.delete(CURRENT);
+    });
+    return request;
+  });
+}
+
 /** Whether the browser already granted persistent storage when this device last asked. */
 export async function readPersistenceOnDevice(): Promise<boolean> {
   const value: unknown = await withStore('readonly', (store) => store.get(PERSISTENCE));

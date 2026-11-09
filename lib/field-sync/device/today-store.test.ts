@@ -262,6 +262,43 @@ describe('refreshing the today snapshot', () => {
     expect((await readTodayOnDevice(MORNING))?.snapshot.organizationId).toBe(newer.organizationId);
   });
 
+  test("a sign-out while the refresh removes another person's day ends the refresh: nothing is saved", async () => {
+    const otherPerson = { ...holder, userId: '9a000000-0000-4000-8000-000000000002' };
+    await saveTodayOnDevice(snapshot(otherPerson), MORNING);
+    const realDeleteDatabase = indexedDB.deleteDatabase.bind(indexedDB);
+    const realDelete = IDBObjectStore.prototype.delete;
+    let signedOut: Promise<void> | null = null;
+    // Whichever way the refresh removes the other day, the sign-out's wipe lands during that cleanup.
+    const signOutOnce = (): void => {
+      signedOut ??= clearTodayOnDevice();
+    };
+    indexedDB.deleteDatabase = (name: string) => {
+      const request = realDeleteDatabase(name);
+      signOutOnce();
+      return request;
+    };
+    IDBObjectStore.prototype.delete = function remove(
+      this: IDBObjectStore,
+      query: IDBValidKey | IDBKeyRange,
+    ) {
+      const request = realDelete.call(this, query);
+      signOutOnce();
+      return request;
+    };
+    let outcome: string;
+    try {
+      const { send } = answer(Response.json(snapshot()));
+      outcome = await refreshTodayOnDevice(holder, { fetch: send, now: () => MORNING });
+      await signedOut;
+      await letQueuedWorkRun();
+    } finally {
+      indexedDB.deleteDatabase = realDeleteDatabase;
+      IDBObjectStore.prototype.delete = realDelete;
+    }
+    expect(outcome).toBe('superseded');
+    expect(await readTodayOnDevice(MORNING)).toBeNull();
+  });
+
   test("a stale save deletes nothing of its own: only the other tab's wipe deletes, and that tab's newer day stays", async () => {
     const newer = { ...holder, organizationId: '9a000000-0000-4000-8000-0000000000b1' };
     const realPut = IDBObjectStore.prototype.put;
