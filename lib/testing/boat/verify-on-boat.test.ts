@@ -29,7 +29,6 @@ import {
   copyResults,
   evidenceFiles,
   localReason,
-  machineBoundGroup,
   placeFiles,
   prepareAndRun,
   rebuiltTreeProblem,
@@ -38,6 +37,7 @@ import {
   unpackResults,
   withMachine,
   linkedDestination,
+  wallClockGroup,
   withheldFile,
 } from './verify-on-boat';
 
@@ -47,13 +47,15 @@ test('change plans and ordinary groups may run on Boat', () => {
   expect(localReason(['--mode', 'change'], {})).toBeUndefined();
   // Lab counts repeat on any machine; every product change selects both lab groups.
   expect(localReason(['--group', 'audit:lab:office,audit:lab:field'], {})).toBeUndefined();
+  // Layout checks computed boxes; visual groups render in the pinned image, whatever the machine.
+  for (const group of ['audit:visual', 'audit:visual:acceptance', 'audit:layout:field'])
+    expect(localReason(['--group', group], {}), group).toBeUndefined();
 });
 
 test('runs that measure this machine, reach DEV or are asked local stay local', () => {
   expect(localReason(['--mode', 'release'], {})).toContain('release mode');
   expect(localReason(['--target', 'cloud'], {})).toContain('DEV');
-  for (const group of ['audit:performance:calendar', 'audit:visual', 'audit:layout-field'])
-    expect(localReason(['--group', `sql:security,${group}`], {}), group).toContain('references');
+  expect(localReason(['--group', 'sql:security,audit:performance:calendar'], {})).toContain('wall clock');
   expect(localReason([], { WERKFLOW_VERIFY_LOCAL: '1' })).toContain('WERKFLOW_VERIFY_LOCAL');
   // CI and the Boat machine itself run locally without a line.
   expect(localReason([], { CI: 'true' })).toBe('');
@@ -193,15 +195,18 @@ test('an untracked credential or local setting stays on the workstation', () => 
   ).toBeUndefined();
 });
 
-test('a plan that runs a measuring or capturing group stays local, whatever selected it', () => {
+test('a plan that runs a wall-clock group stays local, whatever selected it', () => {
   const plan = [
     'RUN   static:lint | Static gate | 12 proof inputs | missing or changed proof',
-    'REUSE audit:lab:office | Changed spec | 30 proof inputs | passed 2026-11-07',
     'RUN   audit:visual | Changed spec | 30 proof inputs | no pass since selection',
+    'REUSE audit:performance:office | Changed spec | 30 proof inputs | passed 2026-11-07',
+    'RUN   audit:performance:calendar | Release | 30 proof inputs | no pass since selection',
   ].join('\n');
-  expect(machineBoundGroup(plan)).toBe('audit:visual');
+  expect(wallClockGroup(plan)).toBe('audit:performance:calendar');
   expect(
-    machineBoundGroup('RUN   golden:gg-00 | Critical journey | 9 proof inputs | no pass'),
+    wallClockGroup(
+      'RUN   audit:visual | Changed spec | 30 proof inputs | no pass\nRUN   audit:layout:job | Changed spec | 9 proof inputs | no pass',
+    ),
   ).toBeUndefined();
 });
 
