@@ -1,0 +1,31 @@
+name: PR screenshots
+
+# A pull request embeds its images as `pr<number>-*` assets of the `pr-screenshots`
+# prerelease, because `gh` cannot attach an image to a PR (the file-pr skill). A
+# release holds at most 1000 assets, so a closed or merged PR's images are deleted.
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+
+permissions:
+  contents: write # delete release assets
+
+jobs:
+  delete:
+    name: Delete the closed PR's screenshots
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Delete pr${{ github.event.pull_request.number }}-* from the pr-screenshots release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PREFIX: pr${{ github.event.pull_request.number }}-
+        run: |
+          gh release view pr-screenshots --json assets \
+            --jq '.assets[].name | select(startswith(env.PREFIX))' > "$RUNNER_TEMP/assets"
+          while read -r name; do
+            gh release delete-asset pr-screenshots "$name" --yes
+            echo "Deleted ${name}"
+          done < "$RUNNER_TEMP/assets"
