@@ -17,7 +17,6 @@ import { useBanner } from '@/components/ui/banner';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import type { ActionResult } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
-import { clearServiceWorkerCaches, restoreOfflineShell } from '@/lib/offline/service-worker-caches';
 import { setActiveOrgCookie } from '@/lib/org/actions';
 import type { UserOrg } from '@/lib/org/types';
 import type { OrgRole } from '@/lib/roles';
@@ -37,6 +36,18 @@ export type OrgContextValue = {
 /** A refused cookie write rejects, so it takes the same failure path as a transport error. */
 function rejectRefusal(result: ActionResult): void {
   if (!result.success) throw new Error(result.error);
+}
+
+/**
+ * Sets the active organization cookie, then deletes every cache the service worker owns, so
+ * nothing the previous organization's views cached stays on the device; the app shell asks for
+ * the offline shell again once the new organization is active. Offline code loads lazily; it
+ * loads before the cookie changes, so a failed load keeps the old organization.
+ */
+async function switchOrgCookieAndCaches(orgId: string): Promise<void> {
+  const { clearServiceWorkerCaches } = await import('@/lib/offline/service-worker-caches');
+  await setActiveOrgCookie(orgId).then(rejectRefusal);
+  await clearServiceWorkerCaches();
 }
 
 type MembershipRow = {
@@ -297,10 +308,7 @@ export function OrganizationProvider({
       refreshGenerationRef.current += 1;
 
       try {
-        await setActiveOrgCookie(orgId).then(rejectRefusal);
-        // Nothing the previous organization's views cached stays on the device. The
-        // switch navigates on the client, which never refills the offline shell.
-        await clearServiceWorkerCaches().then(restoreOfflineShell);
+        await switchOrgCookieAndCaches(orgId);
         // GET readers authorize against this cookie. Publish the new scope only
         // after its response commits, otherwise their first read is denied.
         setActiveOrgId(orgId);
