@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useBanner } from '@/components/ui/banner';
 import { focusFirstInvalidField, REASON_MIN_3_MESSAGE } from '@/lib/ui/field-validation';
 import { recordWorkArtifactAction, voidWorkArtifact } from '@/lib/work-artifacts/actions';
-import type { WorkArtifactActionType } from '@/lib/work-artifacts/types';
+import type { WorkArtifactReviewActionType } from '@/lib/work-artifacts/types';
 import type { WorkArtifactEditor } from './use-work-artifact-editor';
 
 /** The shared action reason and the review transitions and voiding that require it. */
@@ -15,9 +15,8 @@ export function useWorkArtifactReviewActions(editor: WorkArtifactEditor) {
   const [actionReason, setActionReason] = useState('');
   const [actionReasonError, setActionReasonError] = useState<string | null>(null);
 
-  // The reason and the customer name feed several actions below; an action
-  // that needs one marks the field and takes focus there instead of sitting
-  // disabled without a hint.
+  // The reason feeds several actions below; an action that needs it marks the
+  // field and takes focus there instead of sitting disabled without a hint.
   /** Marks the reason field and returns its message, or undefined when the reason is valid. */
   function checkActionReason(): string | undefined {
     const message = actionReason.trim().length >= 3 ? undefined : REASON_MIN_3_MESSAGE;
@@ -29,7 +28,7 @@ export function useWorkArtifactReviewActions(editor: WorkArtifactEditor) {
     return !focusFirstInvalidField({ 'artifact-action-reason': checkActionReason() });
   }
 
-  function act(actionType: WorkArtifactActionType, reason?: string) {
+  function act(actionType: WorkArtifactReviewActionType, reason?: string) {
     if (!detail || !currentRevision) return;
     if (reason !== undefined && !hasActionReason()) return;
     setError(null);

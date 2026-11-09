@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 
-import { saveWorkArtifactSchema, workArtifactActionSchema } from './validation';
+import {
+  saveWorkArtifactSchema,
+  workArtifactActionSchema,
+  workArtifactCustomerDecisionSchema,
+} from './validation';
 
 const id = '00000000-0000-4000-8000-000000000001';
 const base = {
@@ -171,61 +175,69 @@ describe('saveWorkArtifactSchema', () => {
 });
 
 describe('workArtifactActionSchema', () => {
-  test('accepts exact customer context for a refusal', () => {
+  const action = {
+    artifactId: id,
+    revisionId: base.revisionId,
+    actionId: '00000000-0000-4000-8000-000000000004',
+    expectedVersion: 2,
+  };
+
+  test("requires the reviewer's reason for a correction request", () => {
+    const result = workArtifactActionSchema.safeParse({ ...action, actionType: 'correction_requested' });
+    expect(result.success).toBe(false);
+    if (!result.success)
+      expect(result.error.issues.map((issue) => issue.message)).toContain('reason_required');
+  });
+
+  test.each(['customer_acknowledged', 'signature_captured', 'exported', 'voided'])(
+    'refuses %s, which has its own action',
+    (actionType) => {
+      expect(workArtifactActionSchema.safeParse({ ...action, actionType }).success).toBe(false);
+    },
+  );
+});
+
+describe('workArtifactCustomerDecisionSchema', () => {
+  const decision = {
+    artifactId: id,
+    revisionId: base.revisionId,
+    expectedVersion: 2,
+    decisionActionId: '00000000-0000-4000-8000-000000000004',
+    signer: { name: 'Erika Mustermann', relationship: 'Auftraggeberin' },
+  };
+
+  test('accepts an acknowledgement with its signature', () => {
     expect(
-      workArtifactActionSchema.safeParse({
-        artifactId: id,
-        revisionId: base.revisionId,
-        actionId: '00000000-0000-4000-8000-000000000004',
-        expectedVersion: 2,
-        actionType: 'customer_refused',
-        reason: 'Leistung nicht vollständig',
-        customerContext: {
-          signerName: 'Erika Mustermann',
-          signerRelationship: 'Auftraggeberin',
-          captureMethod: 'Persönlich vor Ort',
-          wordingSnapshot: 'Bestätigung für diese Version.',
+      workArtifactCustomerDecisionSchema.safeParse({
+        ...decision,
+        decision: 'customer_acknowledged',
+        signature: {
+          actionId: '00000000-0000-4000-8000-000000000005',
+          documentId: '00000000-0000-4000-8000-000000000006',
         },
       }).success,
     ).toBe(true);
   });
 
-  test.each([
-    ['customer_refused', { reason: 'Nicht vollständig' }, 'customer_context_required'],
-    [
-      'customer_reserved',
-      {
-        customerContext: {
-          signerName: 'Erika Mustermann',
-          signerRelationship: 'Auftraggeberin',
-          captureMethod: 'Vor Ort',
-          wordingSnapshot: 'Version bestätigt.',
-        },
-      },
-      'reason_required',
-    ],
-    [
-      'signature_captured',
-      {
-        customerContext: {
-          signerName: 'Erika Mustermann',
-          signerRelationship: 'Auftraggeberin',
-          captureMethod: 'Vor Ort',
-          wordingSnapshot: 'Version unterschrieben.',
-        },
-      },
-      'signature_document_required',
-    ],
-  ])('rejects incomplete %s action context', (actionType, extra, expectedMessage) => {
-    const result = workArtifactActionSchema.safeParse({
-      artifactId: id,
-      revisionId: base.revisionId,
-      actionId: '00000000-0000-4000-8000-000000000004',
-      expectedVersion: 2,
-      actionType,
-      ...extra,
+  test.each(['customer_refused', 'customer_reserved'])('requires the reason of %s', (type) => {
+    const result = workArtifactCustomerDecisionSchema.safeParse({ ...decision, decision: type });
+    expect(result.success).toBe(false);
+    if (!result.success)
+      expect(result.error.issues.map((issue) => issue.message)).toContain('reason_required');
+  });
+
+  test("refuses a signature recorded under the decision's own action id", () => {
+    const result = workArtifactCustomerDecisionSchema.safeParse({
+      ...decision,
+      decision: 'customer_acknowledged',
+      signature: { actionId: decision.decisionActionId, documentId: '00000000-0000-4000-8000-000000000006' },
     });
     expect(result.success).toBe(false);
-    if (!result.success) expect(result.error.issues.map((issue) => issue.message)).toContain(expectedMessage);
+  });
+
+  test('refuses a review step as the customer decision', () => {
+    expect(
+      workArtifactCustomerDecisionSchema.safeParse({ ...decision, decision: 'internal_approved' }).success,
+    ).toBe(false);
   });
 });

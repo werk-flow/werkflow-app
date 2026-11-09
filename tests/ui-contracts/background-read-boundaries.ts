@@ -10,6 +10,7 @@ import { readMaterialLinesContract, readMaterialPickerContract } from './materia
 import { getOwnPersonnelActions, getPersonnelLifecycle } from './personnel-boundaries';
 import { readAffectedVisitsContract } from './absence-service-boundaries';
 import { readPlannedVisitsContract } from './correction-timeline-boundaries';
+import { readSignatureViewContract, readWorkArtifactDetailContract } from './work-artifact-boundaries';
 import { absenceAffectedVisitsInputSchema } from '@/lib/calendar/absence-visits-types';
 
 export async function readInBackground(kind: string, input: unknown, signal?: AbortSignal): Promise<unknown> {
@@ -31,6 +32,8 @@ export async function readInBackground(kind: string, input: unknown, signal?: Ab
     return readMaterialPickerContract();
   if (kind === 'absence-affected-visits')
     return readAffectedVisitsContract(absenceAffectedVisitsInputSchema.parse(input));
+  if (kind === 'work-artifact-detail') return readWorkArtifactDetailContract();
+  if (kind === 'document-view-url') return readSignatureViewContract();
   if (kind === 'own-personnel-actions') return getOwnPersonnelActions();
   if (kind === 'personnel-lifecycle' && input && typeof input === 'object' && 'employeeRecordId' in input)
     return getPersonnelLifecycle(String(input.employeeRecordId));

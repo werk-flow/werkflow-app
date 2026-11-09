@@ -16,6 +16,8 @@ import {
   submitWorkArtifactAndClose,
   workArtifactAction,
   workArtifactCustomerDecisionPanel,
+  recordedWithoutSignature,
+  selectCustomerDecision,
   workArtifactDialog,
   workArtifactEntry,
   workArtifactField,
@@ -280,10 +282,12 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
       dialog = workArtifactDialog(employeePage);
       await workArtifactCustomerDecisionPanel(dialog).click();
       await workArtifactInput(dialog, 'customerName').fill('Erika Beispiel');
-      await workArtifactInput(dialog, 'actionReason').fill(
+      await selectCustomerDecision(employeePage, dialog, 'customer_refused');
+      await workArtifactInput(dialog, 'customerReason').fill(
         'Kundin bestätigt die Arbeiten, lehnt eine digitale Unterschrift jedoch ab.',
       );
-      await workArtifactAction(dialog, 'recordRefusal').click();
+      await workArtifactAction(dialog, 'saveCustomerDecision').click();
+      await expect(recordedWithoutSignature(dialog)).toBeVisible();
       await closeWorkArtifactDialog(dialog);
 
       const artifacts = await getWorkArtifactState(world.orgId, { jobNumber });

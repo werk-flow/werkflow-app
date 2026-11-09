@@ -108,20 +108,16 @@ export type WorkArtifactActionInput = {
   revisionId: string;
   actionId: string;
   expectedVersion: number;
-  actionType: WorkArtifactActionType;
+  actionType: WorkArtifactReviewActionType;
   reason?: string;
   comment?: string;
-  customerContext?: {
-    signerName: string;
-    signerRole?: string;
-    signerRelationship: string;
-    companyContext?: string;
-    captureMethod: string;
-    wordingSnapshot: string;
-    witnessContext?: string;
-  };
-  signatureDocumentId?: string;
 };
+
+/** A review step of the current revision; customer decisions, exports and voiding have their own actions. */
+export type WorkArtifactReviewActionType = Extract<
+  WorkArtifactActionType,
+  'review_requested' | 'review_withdrawn' | 'internal_approved' | 'internal_rejected' | 'correction_requested'
+>;
 
 export type WorkArtifactMutationResult =
   | { success: true; artifactId: string; version: number; status: WorkArtifactStatus; data?: Json }

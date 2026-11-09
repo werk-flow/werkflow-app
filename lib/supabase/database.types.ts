@@ -16168,6 +16168,22 @@ export type Database = {
         };
         Returns: Json;
       };
+      record_work_artifact_customer_decision: {
+        Args: {
+          p_actor_id: string;
+          p_artifact_id: string;
+          p_customer_context: Json;
+          p_decision: Database["public"]["Enums"]["work_artifact_action_type"];
+          p_decision_action_id: string;
+          p_expected_version: number;
+          p_organization_id: string;
+          p_reason: string;
+          p_revision_id: string;
+          p_signature_action_id: string;
+          p_signature_document_id: string;
+        };
+        Returns: Json;
+      };
       redeem_organization_invite_for_user: {
         Args: { p_invite_code: string; p_user_id: string };
         Returns: {
