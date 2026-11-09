@@ -39,7 +39,8 @@ export async function convertedWorkOf(
     .select('event_payload')
     .eq('organization_id', request.organizationId)
     .eq('request_id', request.id)
-    .eq('event_type', 'converted');
+    .eq('event_type', 'converted')
+    .limit(1);
   if (error) {
     logReadFailure('convertedWorkOf: conversion history read failed', error);
     return { success: false, error: 'load_failed' };

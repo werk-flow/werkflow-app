@@ -19,6 +19,7 @@
 
 alter table public.client_requests add column attempt_key uuid;
 
+-- @destructive: after release 34f34e62: that build never writes attempt_key, and null keys never collide
 alter table public.client_requests
   add constraint client_requests_org_attempt_key_unique unique (organization_id, attempt_key);
 
@@ -119,9 +120,16 @@ declare
 begin
   if p_actor_id is null or p_organization_id is null then raise exception 'invalid_input'; end if;
   perform app_private.lock_request_manager(p_organization_id, p_actor_id);
-  select * into v_request from public.client_requests request
-  where request.organization_id = p_organization_id and request.attempt_key = p_attempt_key;
-  if found then return v_request; end if;
+  -- Captures under one key run in turn, so a concurrent retry finds the
+  -- first request here instead of colliding with its number.
+  if p_attempt_key is not null then
+    perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+      p_organization_id::text || ':client_request_capture:' || p_attempt_key::text, 0
+    ));
+    select * into v_request from public.client_requests request
+    where request.organization_id = p_organization_id and request.attempt_key = p_attempt_key;
+    if found then return v_request; end if;
+  end if;
 
   if coalesce(btrim(p_summary), '') = '' then raise exception 'summary_required'; end if;
   perform app_private.assert_work_customer_references(p_organization_id, p_client_id, p_site_id, p_contact_id);
@@ -143,12 +151,6 @@ begin
   exception when unique_violation then
     get stacked diagnostics v_constraint = constraint_name;
     if v_constraint = 'client_requests_org_number_unique' then raise exception 'request_number_taken'; end if;
-    -- A concurrent capture under the same key committed first: answer with it.
-    if v_constraint = 'client_requests_org_attempt_key_unique' then
-      select * into strict v_request from public.client_requests request
-      where request.organization_id = p_organization_id and request.attempt_key = p_attempt_key;
-      return v_request;
-    end if;
     raise;
   end;
 
