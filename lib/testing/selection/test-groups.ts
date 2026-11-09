@@ -293,6 +293,8 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   // Rendered acceptance captures of the open sets (tests/audit/support/acceptance-sets.ts).
   ['visual:acceptance', 'visual/acceptance.spec.ts', ['*']],
   ['security:account', 'security/account.spec.ts', ['*']],
+  // The report screenshot redraw on a seeded customer and job (docs/technical/problem-report-scrubbing.md).
+  ['problem-reports:redraw', 'problem-reports/screenshot-redraw.spec.ts', ['customers', 'work']],
   ['list-pagination', 'pagination/list-pagination.spec.ts', ['inventory', 'documents', 'work']],
   // Measured navigation and view switches against the typical data profile (Step 2).
   [

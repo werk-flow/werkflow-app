@@ -6,6 +6,7 @@ const buildId = process.env.WERKFLOW_BUILD_ID;
 // browser to object storage via signed URLs (docs/decisions/0001-infrastructure-stack.md),
 // so the default Server Action body-size limit stays in place.
 import { buildContentSecurityPolicy, buildReportOnlyContentSecurityPolicy } from './lib/security/csp-report';
+import { collectUiStringCatalog } from './lib/problem-reports/screenshot/extract-ui-strings';
 
 type HeaderEnvironment = Readonly<Record<string, string | undefined>>;
 
@@ -36,6 +37,10 @@ export function buildSecurityHeaders(env: HeaderEnvironment): Array<{ key: strin
 }
 
 const nextConfig: NextConfig = {
+  // The screenshot redraw's UI string catalog, extracted from the source at every
+  // dev and build start and inlined only into the redraw's lazy chunk
+  // (docs/technical/problem-report-scrubbing.md).
+  env: { WERKFLOW_UI_STRING_CATALOG: JSON.stringify(collectUiStringCatalog(__dirname)) },
   cacheComponents: true,
   // Keeps the prefetch behaviour the lab references measured (Next 16.4 warns
   // while this is unset). Partial Prefetching changes what every <Link> and
