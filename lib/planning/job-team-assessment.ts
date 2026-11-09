@@ -298,7 +298,11 @@ export async function assessJobPlan(input: {
   schedule: JobSchedule;
   /** The team after the save; null when the save keeps it. */
   nextUserIds: string[] | null;
-  /** The save puts every person of the next team on the visit, as unpark_job_into_schedule does. */
+  /**
+   * The save puts every person of the next team on the visit, also when it
+   * started, as unpark_job_into_schedule does. A started visit then keeps the
+   * people the save removes from the team.
+   */
   wholeTeamJoinsVisit?: boolean;
   acknowledgement: ConflictAcknowledgement;
 }): Promise<JobPlanAssessmentResult> {
@@ -325,8 +329,13 @@ export async function assessJobPlan(input: {
   // An unchanged schedule leaves the visit where and as it is.
   if (!scheduleChanged && legacyVisit?.status !== 'scheduled') return nothing;
   const visitWindow = scheduleChanged || !legacyVisit ? window : windowOf(legacyVisit);
-  if (hasWindowStarted(visitWindow)) return nothing;
-  const crew = crewAfterChange(legacyVisit?.assignments ?? [], change);
+  // The team triggers leave a started visit as it is; only the unpark still puts the team on it.
+  const started = hasWindowStarted(visitWindow);
+  if (started && !input.wholeTeamJoinsVisit) return nothing;
+  const crew = crewAfterChange(
+    legacyVisit?.assignments ?? [],
+    started ? { ...change, removedRecordIds: [] } : change,
+  );
   if (crew.length === 0 || (!scheduleChanged && change.addedRecordIds.length === 0)) return nothing;
 
   const assessed = await assessVisit({

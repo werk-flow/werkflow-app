@@ -867,7 +867,8 @@ $$;
 -- 14. Turning an Anfrage into an Auftrag and planning a parked job from the
 -- calendar plan the legacy visit with its people too (20261125090000). The
 -- unpark puts the whole team on the visit, also a person a calendar move took
--- off it. Without the assessment of exactly that visit, neither writes
+-- off it, and also on a visit planned for today, which the team triggers
+-- leave alone. Without the assessment of exactly that visit, neither writes
 -- anything: the request stays open, the job stays parked.
 reset role;
 insert into public.clients (id, organization_id, name) values
@@ -905,6 +906,7 @@ declare
   v_job public.jobs;
   v_visit uuid;
   v_written bigint[];
+  v_blocker_version bigint;
 begin
   -- A conversion that plans people without the visit's assessment, or with
   -- the assessment of other people, converts nothing.
@@ -1007,6 +1009,40 @@ begin
      )
   then raise exception 'a confirmed unpark did not plan the whole team or record the visit''s assessment'; end if;
   perform pg_temp.assert_bridge('an unpark with a visit assessment');
+
+  -- Planned again for today, all day, for Anna alone: the visit has started,
+  -- so it keeps Bea, and the unpark still needs the assessment of that visit.
+  perform public.park_work_target('b1d9e000-0000-4000-8000-000000000010', v_anna, 'job', v_job.id,
+    (select execution_version from public.jobs where id = v_job.id),
+    'material', null, pg_temp.record_of(v_anna), pg_temp.day(25));
+  select blocker.version into v_blocker_version from public.work_blockers blocker
+  where blocker.job_id = v_job.id and blocker.kind = 'parking' and blocker.state = 'open';
+  v_written := pg_temp.assessment_counts();
+  begin
+    perform public.unpark_job_into_schedule_with_visit_assessment(
+      'b1d9e000-0000-4000-8000-000000000010', v_anna, v_job.id, v_blocker_version, 'Heute eingeplant',
+      jsonb_build_object('planned_date', pg_temp.day(0), 'planned_time', null), true,
+      pg_temp.users(v_anna::text), pg_temp.day(0), '{}', '[]', '{}', 'fingerprint', null, null, false, null);
+    raise exception 'a parked job was planned for today with people without the visit''s assessment';
+  exception when others then
+    if sqlerrm <> 'stale_planning_occurrence' then raise; end if;
+  end;
+  if pg_temp.assessment_counts() <> v_written
+     or (select status from public.jobs where id = v_job.id) <> 'geparkt'
+  then raise exception 'a refused unpark for today planned the job or wrote history'; end if;
+  perform public.unpark_job_into_schedule_with_visit_assessment(
+    'b1d9e000-0000-4000-8000-000000000010', v_anna, v_job.id, v_blocker_version, 'Heute eingeplant',
+    jsonb_build_object('planned_date', pg_temp.day(0), 'planned_time', null), true,
+    pg_temp.users(v_anna::text), pg_temp.day(0), '{}', '[]', '{}', 'fingerprint', null, null, false,
+    pg_temp.visit_assessment(pg_temp.day(0), '00:00', 0, v_crew, 'Heute dringend')
+      || jsonb_build_object('start_at', null, 'end_at', null,
+        'start_date', pg_temp.day(0), 'end_date_exclusive', pg_temp.day(1)));
+  if pg_temp.crew(v_visit) <> v_crew
+     or not exists (
+       select 1 from public.planning_occurrence_assessments
+       where occurrence_id = v_visit and override_reason = 'Heute dringend'
+     )
+  then raise exception 'a confirmed unpark for today did not record the started visit''s assessment'; end if;
 end;
 $$;
 
@@ -1057,7 +1093,8 @@ begin
     'public.update_job_with_visit_assessment(uuid, uuid, uuid, jsonb, boolean, uuid[], date, uuid[], jsonb, jsonb, text, text, uuid, boolean, jsonb)',
     'public.convert_client_request_to_job_with_visit_assessment(uuid, uuid, uuid, jsonb, uuid[], date, uuid[], jsonb, jsonb, text, text, uuid, boolean, uuid, boolean, jsonb)',
     'public.unpark_job_into_schedule_with_visit_assessment(uuid, uuid, uuid, bigint, text, jsonb, boolean, uuid[], date, uuid[], jsonb, jsonb, text, text, uuid, boolean, jsonb)',
-    'app_private.record_job_visit_assessment(uuid, uuid, uuid, integer, uuid[], jsonb)'
+    'app_private.record_job_visit_assessment(uuid, uuid, uuid, integer, uuid[], jsonb)',
+    'app_private.record_job_visit_assessment(uuid, uuid, uuid, integer, uuid[], jsonb, boolean)'
   ] loop
     if not has_function_privilege('service_role', v_function, 'execute') then
       raise exception '% lost its service_role grant', v_function;

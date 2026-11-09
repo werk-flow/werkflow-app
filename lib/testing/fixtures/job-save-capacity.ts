@@ -8,6 +8,7 @@
 // and the holiday calendar stand in.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { EMPTY_HOLIDAY_CALENDAR } from '@/lib/personnel/targets';
 import { isJsonRecord } from '@/lib/supabase/json';
 import {
@@ -28,6 +29,8 @@ const foreignRequestId = '66000000-0000-4000-8000-000000000102';
 const clientId = '67000000-0000-4000-8000-000000000101';
 const erikUserId = '30000000-0000-4000-8000-000000000031';
 const erikRecordId = '62000000-0000-4000-8000-000000000031';
+const leaUserId = '30000000-0000-4000-8000-000000000033';
+const leaRecordId = '62000000-0000-4000-8000-000000000033';
 const mehmetUserId = '30000000-0000-4000-8000-000000000032';
 const mehmetRecordId = '62000000-0000-4000-8000-000000000032';
 const callerRecordId = '62000000-0000-4000-8000-000000000001';
@@ -144,6 +147,8 @@ const world = installActionWorld({
   employee_records: [
     record(callerRecordId, CALLER_ID, null),
     record(erikRecordId, erikUserId, '2099-10-29'),
+    // Left long ago: planning her is a conflict on any run day.
+    record(leaRecordId, leaUserId, '2020-06-30'),
     record(mehmetRecordId, mehmetUserId, null),
   ],
   // Everyone works eight hours on weekdays, so no missing-schedule warning joins the conflicts.
@@ -177,6 +182,7 @@ const world = installActionWorld({
   ],
   profiles: [
     { id: erikUserId, first_name: 'Erik', last_name: 'Lindner' },
+    { id: leaUserId, first_name: 'Lea', last_name: 'Brandt' },
     { id: mehmetUserId, first_name: 'Mehmet', last_name: 'Aydın' },
   ],
 });
@@ -476,6 +482,40 @@ assert.deepEqual(
   },
 );
 world.rpc = () => ({ data: storedJob, error: null });
+
+// Planned for today: the visit has started, and the unpark still puts the team
+// on it, so a person who left needs the reason too.
+world.rpcCalls = [];
+const today = getBusinessTodayIso();
+const todayUnpark = {
+  ...unpark,
+  schedule: { plannedDate: today, plannedTime: '', selectedUserIds: [CALLER_ID, leaUserId] },
+};
+const todayRefused = await unparkJobIntoSchedule(todayUnpark);
+assert.ok(!todayRefused.success && 'conflicts' in todayRefused);
+assert.ok(
+  todayRefused.conflicts.some(
+    (conflict) =>
+      conflict.kind === 'outside_employment' &&
+      conflict.employeeName === 'Lea Brandt' &&
+      conflict.localDate === today,
+  ),
+  'an unpark for today checks the people it plans',
+);
+assert.equal(world.rpcCalls.length, 0);
+const todayUnparked = await unparkJobIntoSchedule({
+  ...todayUnpark,
+  planningApproval: { fingerprint: todayRefused.fingerprint, reason },
+});
+assert.equal(todayUnparked.success, true);
+const todayAssessment = sentVisitAssessment('unpark_job_into_schedule_with_visit_assessment');
+assert.ok(isJsonRecord(todayAssessment));
+const todayCrew = todayAssessment.employee_record_ids;
+assert.ok(Array.isArray(todayCrew));
+assert.deepEqual(
+  [todayCrew.toSorted(), todayAssessment.start_date, todayAssessment.override_reason],
+  [[callerRecordId, leaRecordId], today, reason],
+);
 
 // A foreign organization's job is not found.
 world.rpcCalls = [];
