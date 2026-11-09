@@ -2,6 +2,8 @@
 // changes, deletes and opens no customer and lists none of its contacts and
 // sites before any database access, even for the customer of an own assigned
 // job; a customer or contact of another organization is not found, and its row stays as it was.
+// Creating a customer lists only likely duplicates of the caller's own
+// organization and saves nothing while one matches, unless confirmed.
 import assert from 'node:assert/strict';
 import {
   CALLER_ID,
@@ -9,6 +11,7 @@ import {
   ORGANIZATION_B,
   installActionWorld,
   signInAs,
+  tableRows,
 } from './action-boundary-world';
 import { assertRefused } from './operations-boundary-refusals';
 
@@ -18,7 +21,10 @@ const ownClientId = '8d000000-0000-4000-8000-000000000003';
 const ownJobId = '8d000000-0000-4000-8000-000000000004';
 
 const world = installActionWorld({
-  clients: [{ id: foreignClientId, organization_id: ORGANIZATION_B, name: 'Fremder Kunde' }],
+  clients: [
+    { id: foreignClientId, organization_id: ORGANIZATION_B, name: 'Fremder Kunde', phone: '030 4440123' },
+    { id: ownClientId, organization_id: ORGANIZATION_A, name: 'Eigener Kunde', phone: '040 5550123' },
+  ],
   client_contacts: [
     { id: foreignContactId, organization_id: ORGANIZATION_B, client_id: foreignClientId, name: 'Frau Fremd' },
   ],
@@ -68,3 +74,78 @@ await assertRefused(world, [managerCalls[4]], { success: false, error: 'contact_
 await assertRefused(world, [managerCalls[3]], { success: false, error: 'not_found' }, 'reads');
 // Another organization's customer lists none of its contacts or sites.
 assert.deepEqual(await getClientRelations(foreignClientId), { success: true, contacts: [], sites: [] });
+
+// find_client_duplicates as supabase/tests/client_duplicates.sql proves it,
+// reduced to an equal phone: only the passed organization's customers compare.
+world.rpc = ({ name, args }) =>
+  name === 'find_client_duplicates'
+    ? {
+        data: tableRows(world, 'clients')
+          .filter(
+            (client) => client.organization_id === args.p_organization_id && client.phone === args.p_phone,
+          )
+          .map((client) => ({ client_id: client.id, client_name: client.name, matched_on: ['phone'] })),
+        error: null,
+      }
+    : { data: null, error: { message: 'unexpected call' } };
+const clientCount = (): number => tableRows(world, 'clients').length;
+
+// The other organization's customer with the same phone is no duplicate: the
+// lookup asks with the session's organization only, and the customer saves.
+world.rpcCalls.length = 0;
+const beforeForeignTwin = clientCount();
+const foreignTwin = await createClient({ name: 'Neukundin', clientType: 'privat', phone: '030 4440123' });
+assert.ok(foreignTwin.success, JSON.stringify(foreignTwin));
+assert.equal(foreignTwin.client.organizationId, ORGANIZATION_A);
+assert.equal(clientCount(), beforeForeignTwin + 1);
+assert.deepEqual(
+  world.rpcCalls.map((call) => [call.name, call.args.p_organization_id]),
+  [['find_client_duplicates', ORGANIZATION_A]],
+);
+
+// A customer of the own organization with the same phone holds the first save
+// and is listed with its reason; nothing is written.
+const beforeOwnTwin = clientCount();
+assert.deepEqual(await createClient({ name: 'Neukundin', clientType: 'privat', phone: '040 5550123' }), {
+  success: false,
+  error: 'possible_duplicates',
+  matches: [{ clientId: ownClientId, clientName: 'Eigener Kunde', matchedOn: ['phone'] }],
+  moreMatches: false,
+});
+assert.equal(clientCount(), beforeOwnTwin);
+
+// The confirmed save creates the customer without asking again.
+world.rpcCalls.length = 0;
+const confirmed = await createClient({ name: 'Neukundin', clientType: 'privat', phone: '040 5550123' }, true);
+assert.ok(confirmed.success, JSON.stringify(confirmed));
+assert.equal(clientCount(), beforeOwnTwin + 1);
+assert.deepEqual(world.rpcCalls, []);
+
+// A failed lookup is no empty one: the save refuses and writes nothing.
+world.rpc = () => ({ data: null, error: { message: 'connection failure' } });
+const beforeFailedLookup = clientCount();
+assert.deepEqual(await createClient({ name: 'Neukundin', clientType: 'privat' }), {
+  success: false,
+  error: 'load_failed',
+});
+assert.equal(clientCount(), beforeFailedLookup);
+
+// The other organization's manager sees the twin in its own organization only.
+signInAs(world, 'buero', ORGANIZATION_B);
+world.rpc = ({ name, args }) =>
+  name === 'find_client_duplicates'
+    ? {
+        data: tableRows(world, 'clients')
+          .filter(
+            (client) => client.organization_id === args.p_organization_id && client.phone === args.p_phone,
+          )
+          .map((client) => ({ client_id: client.id, client_name: client.name, matched_on: ['phone'] })),
+        error: null,
+      }
+    : { data: null, error: { message: 'unexpected call' } };
+assert.deepEqual(await createClient({ name: 'Neukundin', clientType: 'privat', phone: '030 4440123' }), {
+  success: false,
+  error: 'possible_duplicates',
+  matches: [{ clientId: foreignClientId, clientName: 'Fremder Kunde', matchedOn: ['phone'] }],
+  moreMatches: false,
+});

@@ -294,6 +294,8 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['visual:acceptance', 'visual/acceptance.spec.ts', ['*']],
   ['security:account', 'security/account.spec.ts', ['*']],
   ['security:offline-shell', 'security/offline-shell.spec.ts', ['standalone', 'work']],
+  // The report screenshot redraw on a seeded customer and job (docs/technical/problem-report-scrubbing.md).
+  ['problem-reports:redraw', 'problem-reports/screenshot-redraw.spec.ts', ['customers', 'work']],
   ['list-pagination', 'pagination/list-pagination.spec.ts', ['inventory', 'documents', 'work']],
   // Measured navigation and view switches against the typical data profile (Step 2).
   [
@@ -341,6 +343,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['customer-atomic-writes', ['customer_atomic_writes.sql'], ['customers']],
   ['request-history-writes', ['request_history_writes.sql'], ['customers']],
   ['request-caller-matches', ['request_caller_matches.sql'], ['customers']],
+  ['client-duplicates', ['client_duplicates.sql'], ['customers']],
   ['sickness-report-writes', ['sickness_report_writes.sql'], ['personnel']],
   ['vacation-history-writes', ['vacation_history_writes.sql'], ['personnel']],
   [

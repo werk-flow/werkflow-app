@@ -1,12 +1,20 @@
 'use client';
 
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
 import { SelectWithCreate } from '@/components/ui/select-with-create';
 import type { SearchableSelectOption } from '@/components/ui/searchable-select';
-import { CreateClientDialog } from '@/components/kunden/create-client-dialog';
+import { lazyDialog } from '@/components/shared/lazy-dialog';
 import type { Client } from '@/lib/jobs/types';
+
+// The create dialog with its duplicate review downloads when a form shows this
+// picker, so a page that only lists work never carries it (`lab.office.cold-start`).
+const lazyCreateClientDialog = lazyDialog<{
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onClientCreated: (client: Client) => void;
+}>(() => import('@/components/kunden/create-client-dialog').then((mod) => mod.CreateClientDialog));
 
 /** A customer the page already knows: identity and display fields only. */
 export type ClientSelectItem = Pick<Client, 'id' | 'name'> & Partial<Pick<Client, 'email'>>;
@@ -52,6 +60,10 @@ export function ClientSelectWithCreate({
   // A customer created in the dialog is chosen before any search returns it.
   const createdRef = useRef<SearchableSelectOption | null>(null);
 
+  useEffect(() => {
+    if (!readOnly) lazyCreateClientDialog.preload();
+  }, [readOnly]);
+
   const handleValueChange = (nextValue: string) => {
     const option =
       search.options.find((entry) => entry.value === nextValue) ??
@@ -80,7 +92,7 @@ export function ClientSelectWithCreate({
       readOnlyLabel={readOnlyLabel}
       createLabel="Neuen Kunden erstellen"
       renderCreateDialog={({ open, onOpenChange, onCreated }) => (
-        <CreateClientDialog
+        <lazyCreateClientDialog.Dialog
           open={open}
           onOpenChange={onOpenChange}
           onClientCreated={(client) => {

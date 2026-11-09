@@ -4,7 +4,7 @@ import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import { boardRowRecordId, boardSlotAtPoint, boardSlotRect } from '@/lib/calendar/board-slots';
 import type { CalendarBoardDay } from '@/lib/calendar/board';
 import type { BoardColumn } from '@/lib/calendar/board-layout';
-import type { BoardRowModel } from '@/lib/calendar/board-model';
+import type { BoardPeople, BoardRowModel } from '@/lib/calendar/board-model';
 import type { CalendarJob } from '@/lib/jobs/types';
 import { useCalendarAnnounce } from '../surface/live-region';
 import type { DragSurface } from '../drag-engine/drag-engine';
@@ -49,6 +49,8 @@ export type BoardSurfaceInput = {
   onParkedContextMissing: () => void;
   /** Focus the moved card after the drop settles in the DOM. */
   focusCard: (occurrenceId: string, employeeRecordId: string | null) => void;
+  /** Who can work a visit by its date, so a card from „Ohne Zuweisung" replaces its leaver. */
+  people: BoardPeople;
 };
 
 /** Reads the row and column edges once at drag start; the resolver then only reads scroll offsets. */

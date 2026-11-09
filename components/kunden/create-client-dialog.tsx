@@ -20,14 +20,17 @@ import { createOptimisticChannel } from '@/hooks/use-optimistic-channel';
 import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { createClient, type CreateClientInput } from '@/lib/clients/actions';
-import type { Client, ClientType } from '@/lib/jobs/types';
+import type { ClientMatchList } from '@/lib/clients/types';
+import type { Client, ClientType, CreateClientResult } from '@/lib/jobs/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
+import { ClientDuplicateMatches } from './client-duplicate-matches';
 import { ClientFormFields, type ClientFormValues } from './client-form-fields';
 
 const ERROR_MESSAGES: Record<string, string> = {
   not_authorized: 'Du bist nicht berechtigt, Kunden zu verwalten.',
   name_required: 'Bitte gib einen Namen ein.',
   create_failed: 'Fehler beim Erstellen des Kunden.',
+  load_failed: 'Die Prüfung auf vorhandene Kunden ist fehlgeschlagen. Bitte versuche es erneut.',
 };
 
 function describeCreateFailure(error: string): string {
@@ -71,15 +74,16 @@ function createClientInput(values: ClientFormValues): CreateClientInput {
 }
 
 /**
- * List page: the dialog has closed and the list shows the draft as a pending
- * row; the server's answer commits or rolls it back (feedback canon).
+ * List page, confirmed despite matches: the dialog has closed and the list
+ * shows the draft as a pending row; the server's answer commits or rolls it
+ * back (feedback canon).
  */
 async function settleClientCreation(
   tempId: string,
   input: CreateClientInput,
   showBanner: ReturnType<typeof useBanner>['showBanner'],
 ): Promise<void> {
-  const result = await createClient(input).catch(() => null);
+  const result = await createClient(input, true).catch(() => null);
   if (!result || !result.success) {
     clientCreations.publish({ kind: 'rollback', tempId });
     const reason = describeCreateFailure(result?.error ?? 'unexpected_error');
@@ -102,17 +106,56 @@ interface CreateClientDialogProps {
   onClientCreated?: (client: Client) => void;
 }
 
-/** The create form's state and its submit; `setOpen` closes the dialog. */
-function useCreateClientForm(
-  setOpen: (open: boolean) => void,
-  onClientCreated: ((client: Client) => void) | undefined,
-) {
+/**
+ * The draft's fields and the existing customers it was last found to match.
+ * While matches show, the next press creates the customer anyway; changing an
+ * identifying field makes another draft, which is checked again.
+ */
+function useClientDraft() {
   const [name, setName] = useState('');
   const [clientType, setClientType] = useState<ClientType>('privat');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
+  const [duplicates, setDuplicates] = useState<ClientMatchList | null>(null);
+  const identifying =
+    (set: (value: string) => void) =>
+    (value: string): void => {
+      set(value);
+      setDuplicates(null);
+    };
+  const resetDraft = () => {
+    setName('');
+    setClientType('privat');
+    setEmail('');
+    setPhone('');
+    setAddress('');
+    setNotes('');
+    setDuplicates(null);
+  };
+  return {
+    values: { name, clientType, email, phone, address, notes },
+    setters: {
+      setName: identifying(setName),
+      setClientType,
+      setEmail: identifying(setEmail),
+      setPhone: identifying(setPhone),
+      setAddress: identifying(setAddress),
+      setNotes,
+    },
+    duplicates,
+    setDuplicates,
+    resetDraft,
+  };
+}
+
+/** The create form's state and its submit; `setOpen` closes the dialog. */
+function useCreateClientForm(
+  setOpen: (open: boolean) => void,
+  onClientCreated: ((client: Client) => void) | undefined,
+) {
+  const { values, setters, duplicates, setDuplicates, resetDraft } = useClientDraft();
   const { run: runCreate, isPending: isLoading } = useServerAction(createClient);
   const [error, setError] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
@@ -124,34 +167,45 @@ function useCreateClientForm(
     e.preventDefault();
     setHasAttemptedSubmit(true);
     setError(null);
-    const nextNameError = name.trim() ? undefined : 'Bitte gib einen Namen ein.';
+    const nextNameError = values.name.trim() ? undefined : 'Bitte gib einen Namen ein.';
     setNameError(nextNameError ?? null);
     if (focusFirstInvalidField({ 'client-name': nextNameError })) return;
 
-    const input = createClientInput({ name, clientType, email, phone, address, notes });
+    const input = createClientInput(values);
+    const createDespiteMatches = duplicates !== null;
 
-    if (onClientCreated) {
-      // Select-with-create: the caller needs the confirmed record to select
-      // it, so the button spins until the server answers.
+    if (onClientCreated || !createDespiteMatches) {
+      // The first press learns whether the draft matches existing customers,
+      // and select-with-create needs the confirmed record to select it, so
+      // the button spins until the server answers.
+      let result: CreateClientResult;
       try {
-        const result = await runCreate(input);
-        if (!result.success) {
-          setError(describeCreateFailure(result.error));
-          return;
-        }
-        onClientCreated(result.client);
-        resetForm();
-        setOpen(false);
-        showBanner({ variant: 'success', message: 'Kunde erfolgreich erstellt!' });
-        router.refresh();
+        result = await runCreate(input, createDespiteMatches);
       } catch {
         setError('Ein unerwarteter Fehler ist aufgetreten.');
+        return;
       }
+      if (!result.success) {
+        if ('matches' in result) setDuplicates({ matches: result.matches, moreMatches: result.moreMatches });
+        else setError(describeCreateFailure(result.error));
+        return;
+      }
+      if (onClientCreated) onClientCreated(result.client);
+      else {
+        // The list adds the confirmed row; its post-save read reconciles it.
+        const tempId = crypto.randomUUID();
+        clientCreations.publish({ kind: 'insert', tempId, draft: result.client });
+        clientCreations.publish({ kind: 'commit', tempId, confirmed: result.client });
+      }
+      resetForm();
+      setOpen(false);
+      showBanner({ variant: 'success', message: 'Kunde erfolgreich erstellt!' });
+      if (onClientCreated) router.refresh();
       return;
     }
 
-    // List page: the dialog closes at once and the list shows the draft as a
-    // pending row until the server confirms (feedback canon).
+    // List page, confirmed despite matches: the dialog closes at once and the
+    // list shows the draft as a pending row until the server confirms.
     const tempId = crypto.randomUUID();
     clientCreations.publish({ kind: 'insert', tempId, draft: draftClient(tempId, input) });
     resetForm();
@@ -160,19 +214,15 @@ function useCreateClientForm(
   };
 
   const resetForm = () => {
-    setName('');
-    setClientType('privat');
-    setEmail('');
-    setPhone('');
-    setAddress('');
-    setNotes('');
+    resetDraft();
     setHasAttemptedSubmit(false);
     setNameError(null);
   };
 
   return {
-    values: { name, clientType, email, phone, address, notes },
-    setters: { setName, setClientType, setEmail, setPhone, setAddress, setNotes },
+    values,
+    setters,
+    duplicates,
     isLoading,
     error,
     setError,
@@ -195,7 +245,7 @@ export function CreateClientDialog({
   const setOpen = isControlled ? (v: boolean) => controlledOnOpenChange?.(v) : setInternalOpen;
 
   const form = useCreateClientForm(setOpen, onClientCreated);
-  const { values, setters, isLoading, error, nameError } = form;
+  const { values, setters, duplicates, isLoading, error, nameError } = form;
 
   const handleOpenChange = (newOpen: boolean) => {
     setOpen(newOpen);
@@ -247,11 +297,12 @@ export function CreateClientDialog({
               onAddressChange={setters.setAddress}
               onNotesChange={setters.setNotes}
             />
+            {duplicates && <ClientDuplicateMatches matches={duplicates} />}
             <ErrorText>{error}</ErrorText>
           </div>
           <DialogFooter>
             <Button pending={isLoading} type="submit" disabled={isLoading}>
-              {isLoading ? 'Wird erstellt…' : 'Kunde erstellen'}
+              {isLoading ? 'Wird erstellt…' : duplicates ? 'Trotzdem neu anlegen' : 'Kunde erstellen'}
             </Button>
           </DialogFooter>
         </form>

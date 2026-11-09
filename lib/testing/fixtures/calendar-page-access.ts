@@ -80,7 +80,12 @@ function visit(id: string, organizationId: string, title: string, recordIds: str
 }
 
 const world = await installPageWorld({
-  employee_records: people.map((person) => ({ ...person, entry_date: null, exit_date: null })),
+  employee_records: people.map((person) => ({
+    ...person,
+    entry_date: null,
+    exit_date: null,
+    personnel_access_lifecycles: [],
+  })),
   profiles: people.flatMap((person) =>
     person.user_id === colleagueId
       ? [{ id: colleagueId, first_name: person.first_name, last_name: person.last_name }]

@@ -2,7 +2,7 @@
 
 import type { ActionResult } from '@/lib/action-result';
 import { readCompleteRows, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import { logReadFailure } from '@/lib/data/read-request-cache';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { contactEmailSchema } from '@/lib/clients/contact-email';
@@ -17,9 +17,11 @@ import {
 } from '@/lib/jobs/types';
 import {
   type ClientContactResult,
+  type ClientMatchList,
   type ClientRelationsResult,
   type ClientSiteResult,
   toClientContact,
+  toClientMatch,
   toClientSite,
 } from '@/lib/clients/types';
 import { logError } from '@/lib/logging';
@@ -55,6 +57,11 @@ const clientFieldsSchema = z.object({
   phone: nullableClientText(100),
   address: nullableClientText(1000),
   notes: nullableClientText(10000),
+});
+
+const createClientArgumentsSchema = z.object({
+  input: clientFieldsSchema,
+  createDespiteMatches: z.boolean().optional(),
 });
 
 const updateClientArgumentsSchema = z.object({ clientId: uuidSchema, input: clientFieldsSchema.partial() });
@@ -98,10 +105,50 @@ const clientRelationsArgumentsSchema = z.object({
 // Actions
 // ============================================
 
-export async function createClient(rawInput: CreateClientInput): Promise<CreateClientResult> {
-  const parsed = clientFieldsSchema.safeParse(rawInput);
+// The strongest likely duplicates the create dialog lists; it says when more exist.
+const DUPLICATE_MATCH_LIMIT = 5;
+
+// The organization's customers a draft customer may already be, by
+// find_client_duplicates (supabase/tests/client_duplicates.sql owns the reasons).
+async function readClientDuplicates(
+  admin: AdminClient,
+  orgId: string,
+  draft: z.infer<typeof clientFieldsSchema>,
+): Promise<ActionResult<ClientMatchList>> {
+  // One row past the shown matches tells whether more exist.
+  const { data, error } = await admin.rpc('find_client_duplicates', {
+    p_organization_id: orgId,
+    p_customer_number: draft.customerNumber ?? '',
+    p_name: draft.name,
+    p_phone: draft.phone ?? '',
+    p_email: draft.email ?? '',
+    p_address: draft.address ?? '',
+    p_limit: DUPLICATE_MATCH_LIMIT + 1,
+  });
+  if (error) {
+    logError('readClientDuplicates: duplicate lookup failed', error);
+    return { success: false, error: 'load_failed' };
+  }
+  return {
+    success: true,
+    matches: data.slice(0, DUPLICATE_MATCH_LIMIT).map(toClientMatch),
+    moreMatches: data.length > DUPLICATE_MATCH_LIMIT,
+  };
+}
+
+// Creates a customer. While the draft matches existing customers, only a
+// creation the user confirmed saves; an unconfirmed one saves nothing and
+// returns the matches with their reasons.
+export async function createClient(
+  rawInput: CreateClientInput,
+  rawCreateDespiteMatches?: boolean,
+): Promise<CreateClientResult> {
+  const parsed = createClientArgumentsSchema.safeParse({
+    input: rawInput,
+    createDespiteMatches: rawCreateDespiteMatches,
+  });
   if (!parsed.success) return { success: false, error: 'invalid_input' };
-  const input = parsed.data;
+  const { input, createDespiteMatches } = parsed.data;
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -116,6 +163,19 @@ export async function createClient(rawInput: CreateClientInput): Promise<CreateC
     }
 
     const admin = createSupabaseAdminClient();
+
+    if (!createDespiteMatches) {
+      const lookup = await readClientDuplicates(admin, orgId, input);
+      if (!lookup.success) return lookup;
+      if (lookup.matches.length > 0) {
+        return {
+          success: false,
+          error: 'possible_duplicates',
+          matches: lookup.matches,
+          moreMatches: lookup.moreMatches,
+        };
+      }
+    }
 
     const { data, error } = await admin
       .from('clients')
