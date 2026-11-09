@@ -15,22 +15,10 @@ const WORK_TABLE: Readonly<Record<WorkTargetKind, RealtimeTable>> = {
   service_case: 'service_cases',
 };
 
-/**
- * The requests attached to one job, project or Servicefall, oldest first:
- * what the customer said, when and by whom it was added, and the request it
- * came from. For managers; nothing shows while the work has none.
- */
-export function WorkRequestEntriesSection({
-  kind,
-  id,
-  className = '',
-}: {
-  kind: WorkTargetKind;
-  id: string;
-  className?: string;
-}) {
+/** The live entries of one work; the view reads its `isStale`. */
+function useWorkRequestEntries(kind: WorkTargetKind, id: string) {
   const { activeOrgId } = useOrganization();
-  const view = useLiveView<WorkRequestEntry[]>({
+  return useLiveView<WorkRequestEntry[]>({
     tables: [WORK_TABLE[kind]],
     read: async ({ signal }): Promise<LiveViewResult<WorkRequestEntry[]>> => {
       const result = await readInBackground(
@@ -45,6 +33,22 @@ export function WorkRequestEntriesSection({
     enabled: Boolean(activeOrgId),
     resetKey: `${kind}:${id}`,
   });
+}
 
+/**
+ * The requests attached to one job, project or Servicefall, oldest first:
+ * what the customer said, when and by whom it was added, and the request it
+ * came from. For managers; nothing shows while the work has none.
+ */
+export function WorkRequestEntriesSection({
+  kind,
+  id,
+  className = '',
+}: {
+  kind: WorkTargetKind;
+  id: string;
+  className?: string;
+}) {
+  const view = useWorkRequestEntries(kind, id);
   return <WorkRequestEntriesView view={view} id={id} className={className} />;
 }
