@@ -25,7 +25,7 @@ import { useReportPending } from '@/hooks/use-report-pending';
 import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { attachRequestToWork } from '@/lib/requests/attach-actions';
-import { WORK_TARGET_KIND_LABELS, workTargetHref, type RequestWorkTarget } from '@/lib/requests/types';
+import { WORK_TARGET_KIND_LABELS, requestWorkHref, type RequestWorkTarget } from '@/lib/requests/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { cn } from '@/lib/utils';
 import { useAttemptKey } from './use-attempt-key';
@@ -210,7 +210,7 @@ function AttachRequestForm({
       );
       return;
     }
-    const href = workTargetHref(target);
+    const href = requestWorkHref(target);
     const label = targetLine({ ...target, siteLabel: null });
     onClose();
     showBanner({

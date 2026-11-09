@@ -10,7 +10,7 @@ import {
   toClientRequest,
   toClientRequestEvent,
   WORK_TARGET_KIND_LABELS,
-  workTargetHref,
+  requestWorkHref,
   type ClientRequest,
   type ClientRequestEvent,
   type WorkTargetKind,
@@ -170,7 +170,7 @@ function attachedLinkOf(entry: AttachedEntryRow | null): RequestDetailData['atta
         : null;
   if (!work) return null;
   const name = work.number ?? entry.jobs?.title ?? entry.projects?.name ?? '';
-  return { label: `${WORK_TARGET_KIND_LABELS[work.kind]} ${name}`.trim(), href: workTargetHref(work) };
+  return { label: `${WORK_TARGET_KIND_LABELS[work.kind]} ${name}`.trim(), href: requestWorkHref(work) };
 }
 
 /** The page's props from both waves; the events are null when their read or the actor read failed. */
@@ -253,7 +253,7 @@ function requestDetailData({
   };
 }
 
-/** The first wave: every read keyed by the request id and the authorized organization. */
+/** The first wave beside the history: every read keyed by the request id and the authorized organization. */
 function readRequestWave(admin: AdminClient, activeOrgId: string, requestId: string) {
   return Promise.all([
     admin
@@ -262,12 +262,6 @@ function readRequestWave(admin: AdminClient, activeOrgId: string, requestId: str
       .eq('id', requestId)
       .eq('organization_id', activeOrgId)
       .maybeSingle(),
-    admin
-      .from('client_request_events')
-      .select('*')
-      .eq('request_id', requestId)
-      .eq('organization_id', activeOrgId)
-      .order('created_at', { ascending: false }),
     getManagerAssigneeOptions(admin, activeOrgId),
     getRequestDocuments(requestId),
     admin
@@ -310,14 +304,24 @@ export default async function AnfrageDetailPage({ params }: { params: Promise<{ 
   // authorized organization starts with the request row; the reads that need a
   // value from that row, and the event actors, follow together.
   const [
-    { data: requestRow, error: requestError },
     eventsResult,
-    assignees,
-    documentsResult,
-    convertedServiceCaseResult,
-    attachedEntryResult,
-    callerMatchesResult,
-  ] = await readRequestWave(admin, activeOrgId, requestId);
+    [
+      { data: requestRow, error: requestError },
+      assignees,
+      documentsResult,
+      convertedServiceCaseResult,
+      attachedEntryResult,
+      callerMatchesResult,
+    ],
+  ] = await Promise.all([
+    admin
+      .from('client_request_events')
+      .select('*')
+      .eq('request_id', requestId)
+      .eq('organization_id', activeOrgId)
+      .order('created_at', { ascending: false }),
+    readRequestWave(admin, activeOrgId, requestId),
+  ]);
 
   if (requestError) {
     return (

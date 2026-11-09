@@ -261,7 +261,7 @@ export type WorkRequestEntry = {
 export type WorkRequestEntriesResult = ActionResult<{ entries: WorkRequestEntry[] }>;
 
 /** The detail page of a job, project or Servicefall. */
-export function workTargetHref(work: { kind: WorkTargetKind; id: string; number: string | null }): string {
+export function requestWorkHref(work: { kind: WorkTargetKind; id: string; number: string | null }): string {
   switch (work.kind) {
     case 'job':
       return jobDetailHref({ id: work.id, jobNumber: work.number });
