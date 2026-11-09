@@ -1,0 +1,202 @@
+import { expect, test, type Locator, type Page } from '@playwright/test';
+import { openContractFixture } from './open-fixture';
+
+// The customer's decision on a customer-facing Arbeitsbericht is one step:
+// name, role, decision and signature, then one „Speichern“ that sends the
+// decision with its signature in one save. Afterwards the dialog shows what
+// was recorded instead of the form, so nobody records it twice. The field
+// worker sees no reviewer reason, and the image fallback speaks German
+// (werk-flow/werkflow-planning#68).
+
+async function openReport(page: Page, viewer: 'employee' | 'admin' = 'employee'): Promise<Locator> {
+  await page.addInitScript((who) => {
+    window.uiContractWorkArtifactViewer = who;
+  }, viewer);
+  await openContractFixture(page, 'work-artifact-customer-decision');
+  await page.getByRole('button', { name: /Wartung Heizung/ }).click();
+  const dialog = page.getByRole('dialog', { name: 'Wartung Heizung', exact: true });
+  await expect(dialog.getByText('Brenner gereinigt und Abgaswerte gemessen.')).toBeVisible();
+  return dialog;
+}
+
+async function openDecisionForm(dialog: Locator): Promise<void> {
+  await dialog.getByRole('button', { name: 'Kundenentscheidung und Unterschrift' }).click();
+}
+
+async function chooseDecision(page: Page, dialog: Locator, decision: string): Promise<void> {
+  await dialog.getByRole('combobox', { name: 'Entscheidung' }).click();
+  await page.getByRole('option', { name: decision, exact: true }).click();
+}
+
+async function drawSignature(page: Page, dialog: Locator): Promise<void> {
+  const pad = dialog.getByLabel('Unterschrift zeichnen');
+  await pad.scrollIntoViewIfNeeded();
+  const box = await pad.boundingBox();
+  if (!box) throw new Error('The signature pad has no box.');
+  await page.mouse.move(box.x + 20, box.y + 40);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 140, box.y + 80, { steps: 8 });
+  await page.mouse.up();
+}
+
+const saveButton = (dialog: Locator) => dialog.getByRole('button', { name: 'Speichern', exact: true });
+const decisions = (page: Page) => page.evaluate(() => window.uiContractWorkArtifacts.decisions);
+
+test('the field worker sees no reviewer reason; a save without name and decision marks both', async ({
+  page,
+}) => {
+  const dialog = await openReport(page);
+  await expect(dialog.getByRole('textbox', { name: /^Begründung für/ })).toHaveCount(0);
+  await openDecisionForm(dialog);
+  await expect(dialog.getByRole('button', { name: 'Bestätigung erfassen' })).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: 'Unterschrift speichern' })).toHaveCount(0);
+
+  await saveButton(dialog).click();
+
+  const name = dialog.getByRole('textbox', { name: 'Name', exact: true });
+  await expect(name).toBeFocused();
+  await expect(name).toHaveAccessibleDescription(/Bitte gib den Namen der Kundin oder des Kunden an\./);
+  await expect(dialog.getByRole('combobox', { name: 'Entscheidung' })).toHaveAccessibleDescription(
+    /Bitte wähle die Entscheidung der Kundin oder des Kunden\./,
+  );
+  await expect(saveButton(dialog)).toBeEnabled();
+  expect(await decisions(page)).toEqual([]);
+  // The marks follow the entries: a filled name loses its mark at once.
+  await name.fill('Erika Beispiel');
+  await expect(name).not.toHaveAttribute('aria-invalid', 'true');
+});
+
+test('one save records the decision with the drawn signature and shows both in place', async ({ page }) => {
+  const dialog = await openReport(page);
+  await openDecisionForm(dialog);
+  await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('Erika Beispiel');
+  await dialog.getByRole('textbox', { name: 'Rolle/Funktion' }).fill('Objektleitung');
+  await chooseDecision(page, dialog, 'Bestätigt');
+  await drawSignature(page, dialog);
+
+  await saveButton(dialog).click();
+
+  const recorded = dialog.getByRole('region', { name: 'Kundenentscheidung' });
+  await expect(recorded).toContainText('Bestätigt');
+  await expect(recorded).toContainText('Erika Beispiel · Objektleitung · Ansprechperson vor Ort');
+  await expect(recorded.getByRole('img', { name: 'Unterschrift von Erika Beispiel' })).toBeVisible();
+  // The form is gone, so the decision cannot be recorded a second time.
+  await expect(dialog.getByRole('button', { name: 'Kundenentscheidung und Unterschrift' })).toHaveCount(0);
+  await expect(saveButton(dialog)).toHaveCount(0);
+
+  const sent = await decisions(page);
+  expect(sent).toHaveLength(1);
+  expect(sent[0]).toMatchObject({
+    decision: 'customer_acknowledged',
+    signer: { name: 'Erika Beispiel', role: 'Objektleitung', relationship: 'Ansprechperson vor Ort' },
+    signature: { documentId: expect.any(String) },
+  });
+  expect(sent[0]?.signature?.actionId).not.toBe(sent[0]?.decisionActionId);
+  expect(await page.evaluate(() => window.uiContractWorkArtifacts.signatureUploads)).toEqual([
+    'Unterschrift.png',
+  ]);
+});
+
+test('a refusal with an image signature needs the reason, and the image control speaks German', async ({
+  page,
+}) => {
+  const dialog = await openReport(page);
+  await openDecisionForm(dialog);
+  const imageChoice = dialog.getByRole('button', { name: 'Oder Unterschrift als Bild auswählen' });
+  await expect(imageChoice).toHaveText('Bild auswählen');
+  await dialog.locator('input[type="file"]').setInputFiles({
+    name: 'unterschrift-scan.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from('89504e470d0a1a0a', 'hex'),
+  });
+  await expect(dialog.getByText('unterschrift-scan.png')).toBeVisible();
+  await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('Erika Beispiel');
+  await chooseDecision(page, dialog, 'Abgelehnt');
+
+  await saveButton(dialog).click();
+
+  const reason = dialog.getByRole('textbox', { name: 'Begründung der Kundin oder des Kunden' });
+  await expect(reason).toBeFocused();
+  expect(await decisions(page)).toEqual([]);
+  await reason.fill('Kundin prüft die Anlage erst selbst.');
+  await saveButton(dialog).click();
+
+  const recorded = dialog.getByRole('region', { name: 'Kundenentscheidung' });
+  await expect(recorded).toContainText('Abgelehnt');
+  await expect(recorded).toContainText('Kundin prüft die Anlage erst selbst.');
+  expect(await decisions(page)).toMatchObject([
+    { decision: 'customer_refused', reason: 'Kundin prüft die Anlage erst selbst.', signature: {} },
+  ]);
+});
+
+test('a decision recorded meanwhile is shown instead, and closing discards the unused signature', async ({
+  page,
+}) => {
+  const dialog = await openReport(page);
+  await openDecisionForm(dialog);
+  await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('Erika Beispiel');
+  await chooseDecision(page, dialog, 'Bestätigt');
+  await drawSignature(page, dialog);
+  // A colleague recorded the decision without a signature a moment earlier.
+  await page.evaluate(() => {
+    const state = window.uiContractWorkArtifacts;
+    const detail = state.detail;
+    const [action] = detail?.actions ?? [];
+    if (!detail || !action) throw new Error('The fixture report is missing.');
+    state.detail = {
+      ...detail,
+      version: detail.version + 1,
+      actions: [
+        {
+          ...action,
+          id: 'colleague-decision',
+          action_type: 'customer_reserved',
+          reason: 'Seriennummer fehlt.',
+          signer_name: 'Max Muster',
+        },
+        ...detail.actions,
+      ],
+    };
+    state.refuseDecision = 'work_artifact_customer_decision_recorded';
+  });
+
+  await saveButton(dialog).click();
+
+  await expect(
+    dialog.getByText('Für diese Version ist bereits eine Kundenentscheidung erfasst.', { exact: false }),
+  ).toBeVisible();
+  const recorded = dialog.getByRole('region', { name: 'Kundenentscheidung' });
+  await expect(recorded).toContainText('Mit Vorbehalt bestätigt');
+  await expect(recorded).toContainText('Ohne Unterschrift erfasst');
+
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  const state = await page.evaluate(() => window.uiContractWorkArtifacts);
+  expect(state.discards).toHaveLength(1);
+  expect(state.discards[0]).toBe(state.decisions[0]?.signature?.documentId);
+});
+
+test('a failed signature read offers its retry', async ({ page }) => {
+  const dialog = await openReport(page);
+  await openDecisionForm(dialog);
+  await page.evaluate(() => {
+    window.uiContractWorkArtifacts.failSignatureView = true;
+  });
+  await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('Erika Beispiel');
+  await chooseDecision(page, dialog, 'Bestätigt');
+  await drawSignature(page, dialog);
+  await saveButton(dialog).click();
+
+  const recorded = dialog.getByRole('region', { name: 'Kundenentscheidung' });
+  await expect(recorded).toContainText('Die Unterschrift konnte nicht geladen werden.');
+  await page.evaluate(() => {
+    window.uiContractWorkArtifacts.failSignatureView = false;
+  });
+  await recorded.getByRole('button', { name: 'Erneut laden' }).click();
+  await expect(recorded.getByRole('img', { name: 'Unterschrift von Erika Beispiel' })).toBeVisible();
+});
+
+test('an Admin keeps the reason field for voiding', async ({ page }) => {
+  const dialog = await openReport(page, 'admin');
+  await expect(dialog.getByRole('textbox', { name: 'Begründung für Ungültigkeit' })).toBeVisible();
+});

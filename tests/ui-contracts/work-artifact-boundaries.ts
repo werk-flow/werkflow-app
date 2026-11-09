@@ -4,21 +4,47 @@
 import type {
   RecordedVisitWindow,
   SaveWorkArtifactInput,
+  WorkArtifactActionRow,
   WorkArtifactDetail,
 } from '@/lib/work-artifacts/types';
+import { contractDocument } from './document-upload-boundaries';
 import { unexpectedWrite } from './held-write-boundary';
 
 type WorkArtifactActions = typeof import('@/lib/work-artifacts/actions');
+type CustomerDecisionActions = typeof import('@/lib/work-artifacts/customer-decision-actions');
+type CustomerDecisionInput = Parameters<CustomerDecisionActions['recordWorkArtifactCustomerDecision']>[0];
+type UploadClient = typeof import('@/lib/documents/upload-client');
 
 declare global {
   interface Window {
-    uiContractWorkArtifacts: { saves: SaveWorkArtifactInput[] };
+    uiContractWorkArtifacts: {
+      saves: SaveWorkArtifactInput[];
+      detail: WorkArtifactDetail | null;
+      /** Each customer-decision save, as the server action received it. */
+      decisions: CustomerDecisionInput[];
+      /** The file names of the signature uploads. */
+      signatureUploads: string[];
+      /** The signature uploads a close discarded. */
+      discards: string[];
+      /** Set by a spec: the code the next decision save is refused with. */
+      refuseDecision?: string;
+      /** Set by a spec: the signature image's view URL cannot be read. */
+      failSignatureView?: boolean;
+    };
     /** Set by a spec's init script: the visit window the page read from today's time records. */
     uiContractRecordedVisit?: RecordedVisitWindow;
+    /** Set by a spec's init script: who opens the customer-decision fixture; the field worker by default. */
+    uiContractWorkArtifactViewer?: 'employee' | 'admin';
   }
 }
 
-window.uiContractWorkArtifacts = { saves: [] };
+window.uiContractWorkArtifacts = {
+  saves: [],
+  detail: null,
+  decisions: [],
+  signatureUploads: [],
+  discards: [],
+};
 
 const actor = 'contract-worker';
 
@@ -112,6 +138,69 @@ function savedDetail(input: SaveWorkArtifactInput): WorkArtifactDetail {
   };
 }
 
+/** The fixture's report id, the job it documents and the office member who approved it. */
+export const CONTRACT_REPORT = {
+  artifactId: '00000000-0000-4000-8000-000000000157',
+  revisionId: '00000000-0000-4000-8000-000000001157',
+  jobId: '00000000-0000-4000-8000-000000000151',
+  approver: 'contract-office',
+} as const;
+
+/** An approved, customer-facing Arbeitsbericht that waits for the customer's decision. */
+export function approvedCustomerReport(): WorkArtifactDetail {
+  const submitted = savedDetail({
+    artifactId: CONTRACT_REPORT.artifactId,
+    revisionId: CONTRACT_REPORT.revisionId,
+    expectedVersion: null,
+    targetType: 'job',
+    targetId: CONTRACT_REPORT.jobId,
+    kind: 'work_report',
+    visibility: 'customer_facing',
+    capturedAt: '2026-11-09T08:00:00.000Z',
+    title: 'Wartung Heizung',
+    content: { performedWork: 'Brenner gereinigt und Abgaswerte gemessen.' },
+    submit: true,
+    submitActionId: '00000000-0000-4000-8000-000000002157',
+  });
+  const [submit] = submitted.actions;
+  const approval = submit && {
+    ...submit,
+    id: '00000000-0000-4000-8000-000000003157',
+    action_type: 'internal_approved' as const,
+    created_by: CONTRACT_REPORT.approver,
+  };
+  return {
+    ...submitted,
+    status: 'approved',
+    version: 2,
+    actions: approval ? [approval, submit] : submitted.actions,
+  };
+}
+
+/** The detail read of the fixture's report, as `getWorkArtifactDetail` answers it. */
+export async function readWorkArtifactDetailContract(): Promise<
+  { success: true; artifact: WorkArtifactDetail } | { success: false; error: string }
+> {
+  const detail = window.uiContractWorkArtifacts.detail;
+  return detail
+    ? { success: true, artifact: structuredClone(detail) }
+    : { success: false, error: 'work_artifact_not_found' };
+}
+
+// A drawn signature as the view URL serves it: a stroke on the pad's background.
+const SIGNATURE_IMAGE = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 96"><rect width="240" height="96" fill="white"/><path d="M14 66c18-40 30-44 34-20s10 30 24 2 22-36 30-6 12 26 30 0 26-20 40 4 22 10 52-14" fill="none" stroke="black" stroke-width="3" stroke-linecap="round"/></svg>',
+)}`;
+
+/** The signature document's short-lived view URL, as the `document-view-url` read answers it. */
+export async function readSignatureViewContract(): Promise<
+  { success: true; signedUrl: string } | { success: false; error: string }
+> {
+  return window.uiContractWorkArtifacts.failSignatureView
+    ? { success: false, error: 'signed_url_failed' }
+    : { success: true, signedUrl: SIGNATURE_IMAGE };
+}
+
 export const saveWorkArtifact: WorkArtifactActions['saveWorkArtifact'] = async (input) => {
   window.uiContractWorkArtifacts.saves.push(structuredClone(input));
   const artifact = savedDetail(input);
@@ -124,9 +213,75 @@ export const saveWorkArtifact: WorkArtifactActions['saveWorkArtifact'] = async (
   };
 };
 
+/** One customer action row of the fixture's report, as the database writes it. */
+function customerAction(
+  input: CustomerDecisionInput,
+  id: string,
+  actionType: WorkArtifactActionRow['action_type'],
+  signatureDocumentId: string | null,
+): WorkArtifactActionRow {
+  return {
+    id,
+    artifact_id: input.artifactId,
+    revision_id: input.revisionId,
+    organization_id: 'contract-organization',
+    action_type: actionType,
+    created_at: new Date().toISOString(),
+    created_by: 'contract-worker',
+    reason: actionType === 'signature_captured' ? null : (input.reason ?? null),
+    comment: null,
+    capture_method: signatureDocumentId ? 'Unterschrift auf dem Gerät' : 'Persönlich vor Ort',
+    responsibility_snapshot: null,
+    signature_document_id: signatureDocumentId,
+    signer_company_context: null,
+    signer_name: input.signer.name,
+    signer_relationship: input.signer.relationship,
+    signer_role: input.signer.role ?? null,
+    witness_context: null,
+    wording_snapshot: 'Wortlaut',
+  };
+}
+
+/** Records the decision and its signature on the fixture's report in one save, or refuses as the spec set. */
+export const recordWorkArtifactCustomerDecision: CustomerDecisionActions['recordWorkArtifactCustomerDecision'] =
+  async (input) => {
+    const state = window.uiContractWorkArtifacts;
+    state.decisions.push(structuredClone(input));
+    const detail = state.detail;
+    if (!detail) return { success: false, error: 'work_artifact_not_found' };
+    if (state.refuseDecision) return { success: false, error: state.refuseDecision };
+    const decision = customerAction(input, input.decisionActionId, input.decision, null);
+    const signature = input.signature
+      ? [customerAction(input, input.signature.actionId, 'signature_captured', input.signature.documentId)]
+      : [];
+    const version = detail.version + 1 + signature.length;
+    state.detail = { ...detail, version, actions: [...signature, decision, ...detail.actions] };
+    return { success: true, artifactId: detail.id, version, status: detail.status };
+  };
+
+/** The signature upload: the server would reserve and store it; here it records the file name. */
+export const uploadWorkArtifactSignatureDirect: UploadClient['uploadWorkArtifactSignatureDirect'] = async ({
+  file,
+}) => {
+  const uploads = window.uiContractWorkArtifacts.signatureUploads;
+  uploads.push(file.name);
+  return {
+    success: true,
+    document: contractDocument(
+      `00000000-0000-4000-8000-${String(uploads.length).padStart(12, '0')}`,
+      file.name,
+    ),
+  };
+};
+
+export const discardUnlinkedWorkArtifactSignature: WorkArtifactActions['discardUnlinkedWorkArtifactSignature'] =
+  async (documentId) => {
+    window.uiContractWorkArtifacts.discards.push(documentId);
+    return { success: true };
+  };
+
 export const recordWorkArtifactAction = unexpectedWrite;
 export const voidWorkArtifact = unexpectedWrite;
-export const discardUnlinkedWorkArtifactSignature = unexpectedWrite;
 export const exportWorkArtifact = unexpectedWrite;
 export const fulfillInstructionEvidence = unexpectedWrite;
 export const linkWorkArtifactDocument = unexpectedWrite;

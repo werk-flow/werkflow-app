@@ -29,6 +29,7 @@ import { ROUTE_REFRESH_EVENT } from './lifecycle-boundaries';
 import { useSearchParams } from './list-navigation-service-boundaries';
 import { materialContractItem, materialContractLocation } from './material-boundaries';
 import { readServiceEvidenceContract, serviceEvidenceOptions } from './service-evidence-boundaries';
+import { approvedCustomerReport, CONTRACT_REPORT } from './work-artifact-boundaries';
 
 const FEEDBACK_FIXTURES = [
   'time-approvals',
@@ -40,6 +41,7 @@ const FEEDBACK_FIXTURES = [
   'service-evidence-link',
   'time-account-opening',
   'work-artifact-report',
+  'work-artifact-customer-decision',
 ] as const;
 export type FeedbackFixtureName = (typeof FEEDBACK_FIXTURES)[number];
 
@@ -287,7 +289,35 @@ function FeedbackSurface({ name }: { name: FeedbackFixtureName }): React.JSX.Ele
           recordedVisit={window.uiContractRecordedVisit ?? NO_RECORDED_VISIT}
         />
       );
+    case 'work-artifact-customer-decision':
+      return <CustomerDecisionHost />;
   }
+}
+
+/**
+ * A job's approved, customer-facing Arbeitsbericht as the assigned field worker
+ * opens it, or as an Admin who reviews when the spec sets the viewer.
+ */
+function CustomerDecisionHost(): React.JSX.Element {
+  const [report] = useState(() => {
+    const detail = window.uiContractWorkArtifacts.detail ?? approvedCustomerReport();
+    window.uiContractWorkArtifacts.detail = detail;
+    return detail;
+  });
+  const revision = report.revisions[0];
+  const manager = window.uiContractWorkArtifactViewer === 'admin';
+  return (
+    <WorkArtifactsSection
+      targetType="job"
+      targetId={CONTRACT_REPORT.jobId}
+      initialArtifacts={revision ? [{ ...report, currentRevision: revision }] : []}
+      isManager={manager}
+      canApprove={manager}
+      currentUserId={manager ? 'contract-admin' : 'contract-worker'}
+      documents={[]}
+      recordedVisit={NO_RECORDED_VISIT}
+    />
+  );
 }
 
 export function FeedbackContractFixture({ name }: { name: FeedbackFixtureName }): React.JSX.Element {

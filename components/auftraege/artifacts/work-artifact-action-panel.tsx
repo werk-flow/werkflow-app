@@ -6,23 +6,18 @@ import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { FormDisclosure } from '@/components/ui/form-disclosure';
 import { InlinePending } from '@/components/ui/inline-pending';
-import { Input } from '@/components/ui/input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import { isExportableRevision } from '@/lib/work-artifacts/field-visibility';
-import {
-  WORK_ARTIFACT_LEGAL_NOTICE,
-  type WorkArtifactDetail,
-  type WorkArtifactTimeSourceOption,
-} from '@/lib/work-artifacts/types';
-import { SignaturePad } from './signature-pad';
+import type { WorkArtifactDetail, WorkArtifactTimeSourceOption } from '@/lib/work-artifacts/types';
 import type { WorkArtifactCustomerActions } from './use-work-artifact-customer-actions';
 import type { WorkArtifactEditor } from './use-work-artifact-editor';
 import type { WorkArtifactLinks } from './use-work-artifact-links';
 import type { WorkArtifactReviewActions } from './use-work-artifact-review-actions';
 import type { WorkArtifactEvidenceRequirement } from './work-artifact-content';
+import { WorkArtifactCustomerDecision } from './work-artifact-customer-decision';
 
 type WorkArtifactActionPanelProps = {
   detail: WorkArtifactDetail;
@@ -38,84 +33,6 @@ type WorkArtifactActionPanelProps = {
   timeEntryOptions: WorkArtifactTimeSourceOption[];
   evidenceRequirements: WorkArtifactEvidenceRequirement[];
 };
-
-function WorkArtifactCustomerDecision({
-  editor,
-  customer,
-}: Pick<WorkArtifactActionPanelProps, 'editor' | 'customer'>) {
-  const { anyBusy, isBusy } = editor;
-  const {
-    customerName,
-    setCustomerName,
-    customerNameError,
-    customerRole,
-    setCustomerRole,
-    customerRelationship,
-    setCustomerRelationship,
-    setSignatureFile,
-    pendingSignatureDocumentId,
-    customerAction,
-    captureSignature,
-  } = customer;
-  return (
-    <FormDisclosure label="Kundenentscheidung und Unterschrift">
-      <div className="space-y-4 rounded-md border p-4">
-        <p className="text-xs text-muted-foreground">{WORK_ARTIFACT_LEGAL_NOTICE}</p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Name" htmlFor="artifact-customer-name" error={customerNameError}>
-            <Input value={customerName} onChange={(event) => setCustomerName(event.target.value)} />
-          </Field>
-          <Field label="Rolle/Funktion" htmlFor="artifact-customer-role">
-            <Input value={customerRole} onChange={(event) => setCustomerRole(event.target.value)} />
-          </Field>
-        </div>
-        <Field label="Bezug zum Kunden" htmlFor="artifact-customer-relationship">
-          <Input
-            value={customerRelationship}
-            onChange={(event) => setCustomerRelationship(event.target.value)}
-          />
-        </Field>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            pending={isBusy('customer_acknowledged')}
-            type="button"
-            onClick={() => customerAction('customer_acknowledged')}
-            disabled={anyBusy}
-          >
-            Bestätigung erfassen
-          </Button>
-          <Button
-            pending={isBusy('customer_reserved')}
-            type="button"
-            variant="outline"
-            onClick={() => customerAction('customer_reserved')}
-            disabled={anyBusy}
-          >
-            Vorbehalt erfassen
-          </Button>
-          <Button
-            pending={isBusy('customer_refused')}
-            type="button"
-            variant="outline"
-            onClick={() => customerAction('customer_refused')}
-            disabled={anyBusy}
-          >
-            Ablehnung erfassen
-          </Button>
-        </div>
-        <SignaturePad disabled={anyBusy || Boolean(pendingSignatureDocumentId)} onChange={setSignatureFile} />
-        {pendingSignatureDocumentId && (
-          <p className="text-xs text-muted-foreground">
-            Der Upload ist bereit. Du kannst das Speichern erneut versuchen.
-          </p>
-        )}
-        <Button pending={isBusy('signature')} type="button" onClick={captureSignature} disabled={anyBusy}>
-          Unterschrift speichern
-        </Button>
-      </div>
-    </FormDisclosure>
-  );
-}
 
 type WorkArtifactLinkDisclosureProps = Pick<WorkArtifactActionPanelProps, 'editor' | 'links'>;
 
@@ -304,12 +221,11 @@ export function WorkArtifactActionPanel({
   evidenceRequirements,
 }: WorkArtifactActionPanelProps) {
   const { anyBusy, isBusy } = editor;
-  const { actionReason, setActionReason, actionReasonError, act, setVoid } = review;
-  const canVoid = Boolean(
-    detail &&
-      (isManager ||
-        (detail.status === 'draft' && detail.created_by === currentUserId && detail.actions.length === 0)),
-  );
+  const canVoid =
+    isManager ||
+    (detail.status === 'draft' && detail.created_by === currentUserId && detail.actions.length === 0);
+  const canReview =
+    detail.status === 'submitted' && canApprove && currentRevision.created_by !== currentUserId;
   return (
     <div className="space-y-4 border-t pt-4">
       <WorkArtifactReviewButtons
@@ -319,27 +235,10 @@ export function WorkArtifactActionPanel({
         review={review}
         links={links}
         isManager={isManager}
-        canApprove={canApprove}
+        canReview={canReview}
         currentUserId={currentUserId}
       />
-      <Field
-        label="Begründung für Ablehnung, Korrektur, Vorbehalt oder Ungültigkeit"
-        htmlFor="artifact-action-reason"
-        error={actionReasonError}
-      >
-        <Textarea value={actionReason} onChange={(event) => setActionReason(event.target.value)} />
-      </Field>
-      {detail.status === 'submitted' && canApprove && currentRevision.created_by !== currentUserId && (
-        <Button
-          pending={isBusy('internal_rejected')}
-          type="button"
-          variant="destructive"
-          onClick={() => act('internal_rejected', actionReason)}
-          disabled={anyBusy}
-        >
-          Ablehnen
-        </Button>
-      )}
+      <WorkArtifactReviewReason editor={editor} review={review} canReview={canReview} canVoid={canVoid} />
       {currentRevision.visibility === 'customer_facing' && (
         <WorkArtifactCustomerDecision editor={editor} customer={customer} />
       )}
@@ -358,7 +257,7 @@ export function WorkArtifactActionPanel({
             type="button"
             variant="ghost"
             className="text-destructive"
-            onClick={setVoid}
+            onClick={review.setVoid}
             disabled={anyBusy}
           >
             <Trash2 className="size-4" />
@@ -370,6 +269,47 @@ export function WorkArtifactActionPanel({
   );
 }
 
+/**
+ * The reason of a rejection, a correction request or a voiding, and the
+ * rejection itself. Only the reviewer of a submitted revision and whoever may
+ * void it see it: nobody else can use it, and the server refuses their review
+ * actions.
+ */
+function WorkArtifactReviewReason({
+  editor,
+  review,
+  canReview,
+  canVoid,
+}: Pick<WorkArtifactActionPanelProps, 'editor' | 'review'> & { canReview: boolean; canVoid: boolean }) {
+  const { anyBusy, isBusy } = editor;
+  const { actionReason, setActionReason, actionReasonError, act } = review;
+  if (!canReview && !canVoid) return null;
+  return (
+    <>
+      <Field
+        label={
+          canReview ? 'Begründung für Ablehnung, Korrektur oder Ungültigkeit' : 'Begründung für Ungültigkeit'
+        }
+        htmlFor="artifact-action-reason"
+        error={actionReasonError}
+      >
+        <Textarea value={actionReason} onChange={(event) => setActionReason(event.target.value)} />
+      </Field>
+      {canReview && (
+        <Button
+          pending={isBusy('internal_rejected')}
+          type="button"
+          variant="destructive"
+          onClick={() => act('internal_rejected', actionReason)}
+          disabled={anyBusy}
+        >
+          Ablehnen
+        </Button>
+      )}
+    </>
+  );
+}
+
 /** The status transitions and the export of the current revision. */
 function WorkArtifactReviewButtons({
   detail,
@@ -378,12 +318,12 @@ function WorkArtifactReviewButtons({
   review,
   links,
   isManager,
-  canApprove,
+  canReview,
   currentUserId,
 }: Pick<
   WorkArtifactActionPanelProps,
-  'detail' | 'currentRevision' | 'editor' | 'review' | 'links' | 'isManager' | 'canApprove' | 'currentUserId'
->) {
+  'detail' | 'currentRevision' | 'editor' | 'review' | 'links' | 'isManager' | 'currentUserId'
+> & { canReview: boolean }) {
   const { anyBusy, isBusy, setEditing } = editor;
   const { act } = review;
   const { exportArtifact } = links;
@@ -402,9 +342,7 @@ function WorkArtifactReviewButtons({
           Zur Prüfung einreichen
         </Button>
       )}
-      {detail.status === 'submitted' && canApprove && currentRevision.created_by !== currentUserId && (
-        <WorkArtifactApprovalButtons editor={editor} review={review} />
-      )}
+      {canReview && <WorkArtifactApprovalButtons editor={editor} review={review} />}
       {detail.status === 'submitted' &&
         (isManager ||
           detail.actions.some(

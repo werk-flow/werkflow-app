@@ -5,6 +5,10 @@ import {
   DEFECT_SEVERITY_LABELS,
 } from '../../../../components/auftraege/artifacts/work-artifact-content';
 import {
+  CUSTOMER_DECISION_LABELS,
+  type CustomerDecisionType,
+} from '../../../../lib/work-artifacts/customer-decision';
+import {
   WORK_ARTIFACT_KIND_LABELS,
   WORK_ARTIFACT_STATUS_LABELS,
   WORK_ARTIFACT_UNIT_LABELS,
@@ -32,6 +36,7 @@ const ARTIFACT_COPY = {
     instruction: 'Zugehörige Aufgabe oder Checkliste',
     document: 'Dokument auswählen',
     timeEntry: 'Zeiteintrag auswählen',
+    customerDecision: 'Entscheidung',
   },
   customerFacing: 'Für Kundendokumentation',
   action: {
@@ -39,16 +44,13 @@ const ARTIFACT_COPY = {
     saveDraft: 'Als Entwurf speichern',
     approveInternally: 'Intern freigeben',
     addMeasurementLine: 'Position ergänzen',
-    recordRefusal: 'Ablehnung erfassen',
     newVersion: 'Neue Version',
     void: 'Ungültig setzen',
     requestCorrection: 'Korrektur anfordern',
     reject: 'Ablehnen',
     withdrawReview: 'Prüfung zurückziehen',
-    recordAcknowledgement: 'Bestätigung erfassen',
-    recordReservation: 'Vorbehalt erfassen',
     resetSignature: 'Zurücksetzen',
-    saveSignature: 'Unterschrift speichern',
+    saveCustomerDecision: 'Speichern',
     export: 'Export',
     link: SHARED_COPY.action.link,
   },
@@ -90,6 +92,7 @@ const ARTIFACT_COPY = {
     signatureRequired: 'Unterschrift erforderlich',
   },
   customerDecisionPanel: 'Kundenentscheidung und Unterschrift',
+  recordedDecision: 'Kundenentscheidung',
   linkDisclosure: { document: 'Dokument verknüpfen', timeEntry: 'Zeiteintrag verknüpfen' },
   fulfilEvidence: 'Nachweiserwartung erfüllen',
   message: {
@@ -97,12 +100,19 @@ const ARTIFACT_COPY = {
     missingMeasurementDate: 'Bitte wähle das Aufmaßdatum.',
     changedMeanwhile: 'Der Arbeitsnachweis wurde zwischenzeitlich geändert. Deine Eingaben bleiben erhalten.',
     legalNotice: 'keine besondere Rechtswirksamkeit',
+    noSignature: 'Ohne Unterschrift erfasst',
   },
 } as const;
 
 /** Fields whose label is unique only as an exact match. */
 const EXACT_FIELDS = new Set<WorkArtifactField>(['location', 'reason', 'title']);
-const EXACT_ACTIONS = new Set<WorkArtifactAction>(['submitForReview', 'saveDraft', 'export', 'link']);
+const EXACT_ACTIONS = new Set<WorkArtifactAction>([
+  'submitForReview',
+  'saveDraft',
+  'export',
+  'link',
+  'saveCustomerDecision',
+]);
 
 type WorkArtifactPicker = keyof typeof ARTIFACT_COPY.picker;
 type WorkArtifactAction = keyof typeof ARTIFACT_COPY.action;
@@ -208,6 +218,7 @@ const ARTIFACT_INPUT_IDS = {
   customerName: 'artifact-customer-name',
   customerRole: 'artifact-customer-role',
   customerRelationship: 'artifact-customer-relationship',
+  customerReason: 'artifact-customer-reason',
   firstMeasurementQuantity: 'artifact-measurement-quantity-0',
   measurementDate: 'artifact-measurement-date',
 } as const;
@@ -313,6 +324,29 @@ async function selectWorkArtifactOption(page: Page, trigger: Locator, name: stri
 
 async function selectWorkArtifactKind(page: Page, dialog: Locator, kind: WorkArtifactKind): Promise<void> {
   await selectWorkArtifactOption(page, workArtifactPicker(dialog, 'kind'), WORK_ARTIFACT_KIND_LABELS[kind]);
+}
+
+/** Chooses the customer's decision in the decision form: „Bestätigt“, „Mit Vorbehalt bestätigt“ or „Abgelehnt“. */
+export async function selectCustomerDecision(
+  page: Page,
+  dialog: Locator,
+  decision: CustomerDecisionType,
+): Promise<void> {
+  await selectWorkArtifactOption(
+    page,
+    workArtifactPicker(dialog, 'customerDecision'),
+    CUSTOMER_DECISION_LABELS[decision],
+  );
+}
+
+/** The recorded customer decision that replaces the form once saved. */
+export function recordedCustomerDecision(dialog: Locator): Locator {
+  return dialog.getByRole('region', { name: ARTIFACT_COPY.recordedDecision });
+}
+
+/** The recorded decision's note that the customer gave no signature. */
+export function recordedWithoutSignature(dialog: Locator): Locator {
+  return recordedCustomerDecision(dialog).getByText(ARTIFACT_COPY.message.noSignature);
 }
 
 export async function selectWorkArtifactUnit(

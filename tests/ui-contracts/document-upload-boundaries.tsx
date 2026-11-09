@@ -64,7 +64,7 @@ function unexpectedDocumentAction(): never {
   throw new Error('This document action is outside the upload dialog contract.');
 }
 
-function contractDocument(documentId: string, fileName: string): OrganizationDocument {
+export function contractDocument(documentId: string, fileName: string): OrganizationDocument {
   return {
     id: documentId,
     organizationId: 'contract-organization',

@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState, type PointerEvent, type RefObject } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Field } from '@/components/ui/field';
+import { FileInput } from '@/components/ui/file-input';
 
 /**
  * Sizes the canvas to its box at the device pixel ratio and keeps it sized. A resize keeps the
@@ -77,17 +77,37 @@ function extendStroke(event: PointerEvent<HTMLCanvasElement>): boolean {
   return true;
 }
 
+/**
+ * The drawn mark on the pad's own background. The stroke takes the theme's
+ * text color, so a transparent image drawn in dark mode would vanish on a
+ * light page; with its background it reads in both themes.
+ */
+function signatureImage(canvas: HTMLCanvasElement): HTMLCanvasElement {
+  const image = document.createElement('canvas');
+  image.width = canvas.width;
+  image.height = canvas.height;
+  const context = image.getContext('2d');
+  if (!context) return canvas;
+  context.fillStyle = getComputedStyle(canvas).backgroundColor;
+  context.fillRect(0, 0, image.width, image.height);
+  context.drawImage(canvas, 0, 0);
+  return image;
+}
+
 type SignaturePadProps = {
   disabled?: boolean;
   onChange: (file: File | null) => void;
 };
 
-export function SignaturePad({ disabled, onChange }: SignaturePadProps) {
+/**
+ * The drawing on the pad: pointer strokes, the mark state, the sized canvas,
+ * and the drawn image handed to `onChange` when a stroke ends.
+ */
+function useSignatureDrawing(disabled: boolean | undefined, onChange: (file: File | null) => void) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawingRef = useRef(false);
   const hasMarkRef = useRef(false);
   const [hasMark, setHasMark] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -119,30 +139,48 @@ export function SignaturePad({ disabled, onChange }: SignaturePadProps) {
       onChange(null);
       return;
     }
-    event.currentTarget.toBlob((blob) => {
+    signatureImage(event.currentTarget).toBlob((blob) => {
       onChange(blob ? new File([blob], 'Unterschrift.png', { type: 'image/png' }) : null);
     }, 'image/png');
   }
 
-  function clear() {
+  /** Erases the drawn mark. */
+  function eraseMark() {
     const canvas = canvasRef.current;
     const context = canvas?.getContext('2d');
     if (canvas && context) context.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
     hasMarkRef.current = false;
     setHasMark(false);
-    setUploadError(null);
+  }
+
+  const canvasProps = {
+    ref: canvasRef,
+    onPointerDown: handlePointerDown,
+    onPointerMove: handlePointerMove,
+    onPointerUp: finish,
+    onPointerCancel: finish,
+  };
+  return { canvasProps, hasMark, eraseMark };
+}
+
+export function SignaturePad({ disabled, onChange }: SignaturePadProps) {
+  const { canvasProps, hasMark, eraseMark } = useSignatureDrawing(disabled, onChange);
+  // The chosen image, until a drawn mark or a reset replaces it.
+  const [imageName, setImageName] = useState<string | null>(null);
+  // A drawn mark replaces the chosen image.
+  if (hasMark && imageName) setImageName(null);
+
+  function clear() {
+    eraseMark();
+    setImageName(null);
     onChange(null);
   }
 
   return (
     <div className="space-y-2">
       <canvas
-        ref={canvasRef}
+        {...canvasProps}
         className="h-36 w-full touch-none rounded-md border bg-background text-foreground"
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={finish}
-        onPointerCancel={finish}
         aria-label="Unterschrift zeichnen"
         aria-describedby="artifact-signature-hint"
       />
@@ -150,53 +188,56 @@ export function SignaturePad({ disabled, onChange }: SignaturePadProps) {
         Ohne Zeigegerät kannst du unten stattdessen ein Bild der Unterschrift auswählen.
       </p>
       <div className="flex justify-end">
-        {/* eslint-disable-next-line ui/action-disabled-only-while-pending -- availability: an empty pad has nothing to reset */}
-        <Button type="button" variant="ghost" size="sm" onClick={clear} disabled={disabled || !hasMark}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={clear}
+          disabled={disabled || !(hasMark || imageName)}
+        >
           Zurücksetzen
         </Button>
       </div>
       <SignatureImageField
         disabled={disabled}
-        uploadError={uploadError}
-        setUploadError={setUploadError}
-        onChange={onChange}
+        imageName={imageName}
+        onImage={(file) => {
+          // The chosen image replaces a drawn mark, so the pad shows what is saved.
+          eraseMark();
+          setImageName(file.name);
+          onChange(file);
+        }}
       />
     </div>
   );
 }
 
-/** The file alternative to drawing; only an image file becomes the signature. */
+/** The file alternative to drawing; only an image file becomes the signature, a cancelled choice changes nothing. */
 function SignatureImageField({
   disabled,
-  uploadError,
-  setUploadError,
-  onChange,
+  imageName,
+  onImage,
 }: {
   disabled: boolean | undefined;
-  uploadError: string | null;
-  setUploadError: (message: string | null) => void;
-  onChange: (file: File | null) => void;
+  imageName: string | null;
+  onImage: (file: File) => void;
 }) {
+  const [error, setError] = useState<string | null>(null);
   return (
-    <Field
-      label="Oder Unterschrift als Bild auswählen"
-      htmlFor="artifact-signature-upload"
-      error={uploadError}
-    >
-      <Input
-        type="file"
+    <Field label="Oder Unterschrift als Bild auswählen" htmlFor="artifact-signature-upload" error={error}>
+      <FileInput
+        buttonLabel="Bild auswählen"
+        fileName={imageName}
         accept="image/*"
         disabled={disabled}
-        onChange={(event) => {
-          const file = event.target.files?.[0] ?? null;
-          if (file && !file.type.startsWith('image/')) {
-            setUploadError('Bitte wähle eine Bilddatei aus.');
-            event.target.value = '';
-            onChange(null);
+        onSelect={(file) => {
+          if (!file) return;
+          if (!file.type.startsWith('image/')) {
+            setError('Bitte wähle eine Bilddatei aus.');
             return;
           }
-          setUploadError(null);
-          onChange(file);
+          setError(null);
+          onImage(file);
         }}
       />
     </Field>

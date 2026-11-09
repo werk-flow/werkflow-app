@@ -43,6 +43,7 @@ First ask of every choice: entities or a fixed enum? A raw `Select` holds a fixe
 | Date, month, time, date with time | `DatePicker`, `MonthPicker`, `TimeInput`, `DateTimeField` |
 | Hours, quantity, other number | `DurationHoursInput`, `QuantityStepper`, `Input inputMode="decimal"` with `lib/ui/decimal` |
 | Yes or no, long text, password, one-time code | `Checkbox`, `Textarea`, `PasswordInput`, `InputOTP` |
+| File choice in a form | `FileInput` inside `Field`, its button naming what to choose („Bild auswählen“); it shows the chosen file in German |
 | Optional form block („Weitere Angaben“) | `FormDisclosure` |
 | Clock actions | `ClockActionList` over `deriveClockActions`, `TimeActivityDialog`, `JobPickerModal` |
 | Document linking | `DocumentLinkDialog`, `AttachDocumentDialog` (`components/dokumente/`) |

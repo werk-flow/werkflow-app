@@ -5,18 +5,30 @@ import { useState } from 'react';
 import { useBanner } from '@/components/ui/banner';
 import type { DocumentUploadTarget } from '@/lib/documents/types';
 import { uploadWorkArtifactSignatureDirect } from '@/lib/documents/upload-client';
-import { focusFirstInvalidField } from '@/lib/ui/field-validation';
-import { discardUnlinkedWorkArtifactSignature, recordWorkArtifactAction } from '@/lib/work-artifacts/actions';
-import { WORK_ARTIFACT_LEGAL_NOTICE, type WorkArtifactActionInput } from '@/lib/work-artifacts/types';
-import type { WorkArtifactEditor } from './use-work-artifact-editor';
-import type { WorkArtifactReviewActions } from './use-work-artifact-review-actions';
+import { focusFirstInvalidField, REASON_MIN_3_MESSAGE } from '@/lib/ui/field-validation';
+import { discardUnlinkedWorkArtifactSignature } from '@/lib/work-artifacts/actions';
+import { recordWorkArtifactCustomerDecision } from '@/lib/work-artifacts/customer-decision-actions';
+import {
+  customerDecisionNeedsReason,
+  recordedCustomerDecision,
+  type CustomerDecisionType,
+} from '@/lib/work-artifacts/customer-decision';
 import type { WorkArtifactTarget } from '@/lib/work-artifacts/types';
+import type { WorkArtifactEditor } from './use-work-artifact-editor';
 
-const CUSTOMER_NAME_REQUIRED = 'Bitte gib den Namen der unterzeichnenden Person an.';
+/** The control ids of the decision form, in their order on the screen. */
+export const CUSTOMER_DECISION_FIELD_IDS = {
+  name: 'artifact-customer-name',
+  role: 'artifact-customer-role',
+  relationship: 'artifact-customer-relationship',
+  decision: 'artifact-customer-decision',
+  reason: 'artifact-customer-reason',
+} as const;
+
+const DEFAULT_RELATIONSHIP = 'Ansprechperson vor Ort';
 
 type WorkArtifactCustomerActionsOptions = WorkArtifactTarget & {
   editor: WorkArtifactEditor;
-  review: WorkArtifactReviewActions;
   onClose: () => void;
 };
 
@@ -25,22 +37,6 @@ function signatureUploadTarget({ targetType, targetId }: WorkArtifactTarget): Do
 }
 
 type ShowBanner = ReturnType<typeof useBanner>['showBanner'];
-
-type CustomerSigner = { customerName: string; customerRole: string; customerRelationship: string };
-
-/** The signer facts every customer action records, with the wording the customer saw. */
-function signerContext(
-  { customerName, customerRole, customerRelationship }: CustomerSigner,
-  captureMethod: string,
-): NonNullable<WorkArtifactActionInput['customerContext']> {
-  return {
-    signerName: customerName,
-    ...(customerRole ? { signerRole: customerRole } : {}),
-    signerRelationship: customerRelationship,
-    captureMethod,
-    wordingSnapshot: WORK_ARTIFACT_LEGAL_NOTICE,
-  };
-}
 
 /** Uploads the signature image and returns its document id, or null when the upload failed. */
 async function uploadSignature(
@@ -72,134 +68,151 @@ async function discardPendingSignature(documentId: string, showBanner: ShowBanne
   }
 }
 
-type CustomerDecisionType = 'customer_acknowledged' | 'customer_refused' | 'customer_reserved';
+type CustomerDecisionErrors = Record<'name' | 'decision' | 'reason', string | undefined>;
 
-type CustomerDecisionContext = {
-  editor: WorkArtifactEditor;
-  review: WorkArtifactReviewActions;
-  signer: CustomerSigner;
-  showBanner: ShowBanner;
-  checkCustomerName: () => string | undefined;
-};
-
-/** Records the customer's acknowledgement, refusal or reservation of the current revision. */
-function recordCustomerDecision(
-  { editor, review, signer, showBanner, checkCustomerName }: CustomerDecisionContext,
-  actionType: CustomerDecisionType,
-) {
-  const { detail, currentRevision, load, handleMutationFailure, runArtifactTask, setError } = editor;
-  const { actionReason, setActionReason, checkActionReason } = review;
-  if (!detail || !currentRevision) return;
-  // Refusal and reservation also need the reason, which sits above the name.
-  const reasonError = actionType === 'customer_acknowledged' ? undefined : checkActionReason();
-  const errors = { 'artifact-action-reason': reasonError, 'artifact-customer-name': checkCustomerName() };
-  if (focusFirstInvalidField(errors)) return;
-  setError(null);
-  void runArtifactTask(actionType, async () => {
-    const result = await recordWorkArtifactAction({
-      artifactId: detail.id,
-      revisionId: currentRevision.id,
-      actionId: crypto.randomUUID(),
-      expectedVersion: detail.version,
-      actionType,
-      ...(actionType === 'customer_acknowledged' ? {} : { reason: actionReason }),
-      customerContext: signerContext(signer, 'Persönlich vor Ort'),
-    });
-    if (await handleMutationFailure(result, 'Die Kundenentscheidung konnte nicht gespeichert werden.'))
-      return;
-    await load(detail.id);
-    setActionReason('');
-    showBanner({ variant: 'success', message: 'Kundenentscheidung wurde dokumentiert.' });
-  });
+/** Each field's message for the entries as they are; undefined where a field is fine. */
+function customerDecisionErrors(
+  customerName: string,
+  decision: CustomerDecisionType | null,
+  decisionReason: string,
+): CustomerDecisionErrors {
+  return {
+    name: customerName.trim().length >= 2 ? undefined : 'Bitte gib den Namen der Kundin oder des Kunden an.',
+    decision: decision ? undefined : 'Bitte wähle die Entscheidung der Kundin oder des Kunden.',
+    reason:
+      decision && customerDecisionNeedsReason(decision) && decisionReason.trim().length < 3
+        ? REASON_MIN_3_MESSAGE
+        : undefined,
+  };
 }
 
-/** Customer decision, signature capture, and the close flow that discards an unlinked signature upload. */
+/** The form's entries and, after a save attempt, their field errors as the user edits. */
+function useCustomerDecisionDraft() {
+  const [customerName, setCustomerName] = useState('');
+  const [customerRole, setCustomerRole] = useState('');
+  const [customerRelationship, setCustomerRelationship] = useState(DEFAULT_RELATIONSHIP);
+  const [decision, setDecision] = useState<CustomerDecisionType | null>(null);
+  const [decisionReason, setDecisionReason] = useState('');
+  const [signatureFile, setSignatureFile] = useState<File | null>(null);
+  const [attemptedSave, setAttemptedSave] = useState(false);
+  const current = customerDecisionErrors(customerName, decision, decisionReason);
+  const errors: Partial<CustomerDecisionErrors> = attemptedSave ? current : {};
+
+  /** Marks the broken fields and focuses the first; true when the form can be saved. */
+  function validate(): boolean {
+    setAttemptedSave(true);
+    return !focusFirstInvalidField({
+      [CUSTOMER_DECISION_FIELD_IDS.name]: current.name,
+      [CUSTOMER_DECISION_FIELD_IDS.decision]: current.decision,
+      [CUSTOMER_DECISION_FIELD_IDS.reason]: current.reason,
+    });
+  }
+
+  function reset() {
+    setCustomerName('');
+    setCustomerRole('');
+    setCustomerRelationship(DEFAULT_RELATIONSHIP);
+    setDecision(null);
+    setDecisionReason('');
+    setSignatureFile(null);
+    setAttemptedSave(false);
+  }
+
+  return {
+    customerName,
+    setCustomerName,
+    customerRole,
+    setCustomerRole,
+    customerRelationship,
+    setCustomerRelationship,
+    decision,
+    setDecision,
+    decisionReason,
+    setDecisionReason,
+    signatureFile,
+    setSignatureFile,
+    errors,
+    validate,
+    reset,
+  };
+}
+
+/**
+ * The customer's decision with its optional signature in one save, the
+ * recorded decision of the current revision, and the close flow that discards
+ * a signature upload no save used.
+ */
 export function useWorkArtifactCustomerActions({
   targetType,
   targetId,
   editor,
-  review,
   onClose,
 }: WorkArtifactCustomerActionsOptions) {
   const { detail, currentRevision, load, handleMutationFailure, runArtifactTask, setError } = editor;
   const { showBanner } = useBanner();
-  const [customerName, setCustomerName] = useState('');
-  const [customerRole, setCustomerRole] = useState('');
-  const [customerRelationship, setCustomerRelationship] = useState('Ansprechperson vor Ort');
-  const [signatureFile, setSignatureFile] = useState<File | null>(null);
+  const draft = useCustomerDecisionDraft();
   const [pendingSignatureDocumentId, setPendingSignatureDocumentId] = useState<string | null>(null);
-  const [customerNameError, setCustomerNameError] = useState<string | null>(null);
-  const signer = { customerName, customerRole, customerRelationship };
+  const recorded = detail && currentRevision ? recordedCustomerDecision(detail, currentRevision.id) : null;
 
-  /** Marks the name field and returns its message, or undefined when the name is valid. */
-  function checkCustomerName(): string | undefined {
-    const message = customerName.trim().length >= 2 ? undefined : CUSTOMER_NAME_REQUIRED;
-    setCustomerNameError(message ?? null);
-    return message;
-  }
-
-  const customerAction = (actionType: CustomerDecisionType) =>
-    recordCustomerDecision({ editor, review, signer, showBanner, checkCustomerName }, actionType);
-
-  function captureSignature() {
-    if (!detail || !currentRevision) return;
-    if (focusFirstInvalidField({ 'artifact-customer-name': checkCustomerName() })) return;
-    if (!signatureFile) {
-      setError('Bitte erfasse zuerst die Unterschrift im Feld oben.');
-      return;
-    }
+  function saveDecision() {
+    if (!detail || !currentRevision || !draft.validate() || !draft.decision) return;
+    const decision = draft.decision;
     setError(null);
-    void runArtifactTask('signature', async () => {
+    void runArtifactTask('customer-decision', async () => {
       let signatureDocumentId = pendingSignatureDocumentId;
-      if (!signatureDocumentId) {
-        signatureDocumentId = await uploadSignature(signatureFile, detail.id, { targetType, targetId });
+      if (draft.signatureFile && !signatureDocumentId) {
+        signatureDocumentId = await uploadSignature(draft.signatureFile, detail.id, { targetType, targetId });
         if (signatureDocumentId === null) {
-          setError('Die Unterschrift konnte nicht hochgeladen werden.');
+          setError('Die Unterschrift konnte nicht hochgeladen werden. Bitte versuche es erneut.');
           return;
         }
         setPendingSignatureDocumentId(signatureDocumentId);
       }
-      const result = await recordWorkArtifactAction({
+      const result = await recordWorkArtifactCustomerDecision({
         artifactId: detail.id,
         revisionId: currentRevision.id,
-        actionId: crypto.randomUUID(),
         expectedVersion: detail.version,
-        actionType: 'signature_captured',
-        customerContext: signerContext(signer, 'Unterschrift auf dem Gerät'),
-        signatureDocumentId,
+        decisionActionId: crypto.randomUUID(),
+        decision,
+        ...(customerDecisionNeedsReason(decision) ? { reason: draft.decisionReason } : {}),
+        signer: {
+          name: draft.customerName,
+          ...(draft.customerRole.trim() ? { role: draft.customerRole } : {}),
+          relationship: draft.customerRelationship,
+        },
+        ...(signatureDocumentId
+          ? { signature: { actionId: crypto.randomUUID(), documentId: signatureDocumentId } }
+          : {}),
       });
-      if (await handleMutationFailure(result, 'Die Unterschrift konnte nicht abgeschlossen werden.')) return;
+      if (!result.success && result.error === 'work_artifact_customer_decision_recorded') {
+        // Someone recorded the decision meanwhile: the reload shows it in place of the form.
+        await load(detail.id);
+        setError('Für diese Version ist bereits eine Kundenentscheidung erfasst. Sie wird jetzt angezeigt.');
+        return;
+      }
+      if (await handleMutationFailure(result, 'Die Kundenentscheidung konnte nicht gespeichert werden.'))
+        return;
       await load(detail.id);
-      setSignatureFile(null);
+      draft.reset();
       setPendingSignatureDocumentId(null);
-      showBanner({ variant: 'success', message: 'Unterschrift wurde zur aktuellen Version gespeichert.' });
+      showBanner({ variant: 'success', message: 'Kundenentscheidung wurde gespeichert.' });
     });
   }
 
   async function closeDialog() {
-    if (pendingSignatureDocumentId) {
+    const signatureInUse = detail?.actions.some(
+      (action) => action.signature_document_id === pendingSignatureDocumentId,
+    );
+    if (pendingSignatureDocumentId && !signatureInUse) {
       await discardPendingSignature(pendingSignatureDocumentId, showBanner);
-      setPendingSignatureDocumentId(null);
     }
+    setPendingSignatureDocumentId(null);
     onClose();
   }
 
   const requestClose = () => void runArtifactTask('close', closeDialog);
 
-  return {
-    customerName,
-    setCustomerName,
-    customerNameError,
-    customerRole,
-    setCustomerRole,
-    customerRelationship,
-    setCustomerRelationship,
-    setSignatureFile,
-    pendingSignatureDocumentId,
-    customerAction,
-    captureSignature,
-    requestClose,
-  };
+  return { ...draft, recorded, pendingSignatureDocumentId, saveDecision, requestClose };
 }
 
 export type WorkArtifactCustomerActions = ReturnType<typeof useWorkArtifactCustomerActions>;
