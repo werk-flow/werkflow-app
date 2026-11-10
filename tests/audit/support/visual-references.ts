@@ -4,7 +4,7 @@ import { clockInLauncher } from '../../golden/support/steps/time-tracking';
 
 // Capture rules for the visual reference group (docs/technical/standards-audit.md,
 // "Rendered design acceptance"). A reference is a viewport screenshot of a
-// settled page: no skeleton, fonts loaded, the clock launcher ready, and every
+// settled page: every live read landed, no skeleton, fonts loaded, the clock launcher ready, and every
 // text the app derives from the wall clock replaced by a constant stand-in.
 // Replacing text keeps the layout of the stand-in constant, where a mask would
 // still let a longer weekday or month name move its neighbours. The calendar
