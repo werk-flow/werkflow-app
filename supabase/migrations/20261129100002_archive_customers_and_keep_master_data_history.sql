@@ -43,8 +43,9 @@ create table public.client_master_events (
   event_type text not null,
   -- A change: {"field": <column>, "old": <text or null>, "new": <text or null>}.
   event_payload jsonb not null default '{}'::jsonb,
-  -- Null for a write outside the write functions below.
-  actor_id uuid references auth.users (id),
+  -- Null for a write outside the write functions below, and once the actor's
+  -- account is deleted: the change stays, the person does not.
+  actor_id uuid references auth.users (id) on delete set null,
   created_at timestamptz not null default now(),
   constraint client_master_events_client_fk foreign key (client_id, organization_id)
     references public.clients (id, organization_id) on delete cascade,

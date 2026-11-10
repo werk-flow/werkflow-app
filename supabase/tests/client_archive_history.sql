@@ -395,6 +395,34 @@ begin
 end;
 $$;
 
+-- A former Büro user's account can be deleted after their customer edits: the
+-- history keeps the change and forgets the actor.
+insert into auth.users (
+  id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
+  raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+) values
+('44000000-0000-0000-0000-000000000007', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'client-history-leaver@example.test', '', now(), '{}',
+ '{"first_name":"Ehemals","last_name":"Büro"}', now(), now());
+insert into public.organization_members (organization_id, user_id, role) values
+('44000000-0000-0000-0000-000000000010', '44000000-0000-0000-0000-000000000007', 'buero');
+select public.update_client_master(
+  '44000000-0000-0000-0000-000000000007', '44000000-0000-0000-0000-000000000010',
+  '44000000-0000-0000-0000-000000000020', '{"phone": "030 7777777"}');
+delete from public.organization_members
+where organization_id = '44000000-0000-0000-0000-000000000010'
+  and user_id = '44000000-0000-0000-0000-000000000007';
+delete from auth.users where id = '44000000-0000-0000-0000-000000000007';
+do $$
+begin
+  if not exists (select 1 from public.client_master_events event
+    where event.client_id = '44000000-0000-0000-0000-000000000020'
+      and event.actor_id is null
+      and event.event_payload ->> 'new' = '030 7777777')
+  then raise exception 'deleting a former member''s account did not keep the change without its actor'; end if;
+end;
+$$;
+
 -- Organization teardown still removes linked customers and their history.
 delete from public.organizations where id = '44000000-0000-0000-0000-000000000011';
 delete from public.organizations where id = '44000000-0000-0000-0000-000000000010';
