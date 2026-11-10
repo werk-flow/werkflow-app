@@ -182,7 +182,7 @@ A preflight failure that creates no run, or a heavy group held back [without Boa
 
 Check these before classifying.
 
-- **Another worktree's migration.** The shared stack can hold other branches' migrations. `test:verify` names the drift and [sends a cheap plan to Boat](boat-verification.md#how-a-run-picks-boat). A local failure on an object the branch does not define is `environment`.
+- **Another worktree's migration.** The shared stack can hold other branches' migrations. `test:verify` names the drift and [sends a cheap plan to Boat](boat-verification.md#how-a-run-picks-boat). A local failure on an object the branch lacks is `environment`.
 - **Stale fakes.** When a read changes its `select` shape, update every unit-test fake of that table. Embedded relations come back as arrays.
 - **The agent's tool killed the run.** A background limit or session end (SIGTERM, exit 137) is `environment`; [start it notified](#wait-for-a-long-run) next time.
 - **Host network.** `net::ERR_NETWORK_CHANGED`, or a Realtime socket that reconnects every few seconds, is `environment`. Run no heavy load beside a browser or measured group.
