@@ -270,6 +270,10 @@ export const DIALOG_INVENTORY = {
     {
       audits: [{ route: '/mitarbeiter/[userId]', role: 'admin', opener: 'people.onboarding-requirement' }],
     },
+  'components/mitarbeiter/personnel-lifecycle-handover.tsx#PersonnelLifecycleHandoverDialog|Offene Arbeit übergeben':
+    {
+      audits: [{ route: '/mitarbeiter/[userId]', role: 'admin', opener: 'people.lifecycle-handover' }],
+    },
   'components/mitarbeiter/personnel-lifecycle-section.tsx#PersonnelLifecycleSection|Organisationszugang steuern':
     {
       audits: [{ route: '/mitarbeiter/[userId]', role: 'admin', opener: 'people.lifecycle-access' }],

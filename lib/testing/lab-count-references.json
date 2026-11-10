@@ -80,8 +80,8 @@
         },
         "stylesheet": {
           "requests": { "reference": 2, "tolerance": 0 },
-          "encodedBytes": { "reference": 22697, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 122894, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 21862, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 117895, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         }
       },
@@ -298,6 +298,24 @@
           },
           "runKeys": ["2026-11-09T090629248Z-6a09fe"],
           "reason": "werk-flow/werkflow-planning#314: the job detail route, which the /auftraege list prefetches into the field cold start, loads EditJobDialog on its actions menu's intent (lazyDialog) instead of importing it statically; #280 had moved only the list's edit dialog. The job form left the detail route's entry chunks: gzip of the /auftraege plus /auftraege/[jobNumber] entry chunks on a production build of 9e1eb5b6 falls from 684,601 to 677,960 (-6,641). This run (Boat, the PC's verification machine) reads 686,629 against 693,153 for main at 9e1eb5b6 (run 2026-11-09T085633435Z-4ccd37) and 693,150 on CI main; script requests unchanged at 43. Below the owner's 691,787 target of 2026-11-08."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "stylesheet",
+          "from": {
+            "requests": { "reference": 2, "tolerance": 0 },
+            "encodedBytes": { "reference": 22697, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 122894, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 2, "tolerance": 0 },
+            "encodedBytes": { "reference": 21862, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 117895, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-09T215315624Z-b68a0c"],
+          "reason": "Tailwind no longer scans tests and test support (lint examples became shipped utilities), and the unused .hide-time-picker block and duplicate ::selection rules are gone; every dropped utility appears only in an excluded test file, and audit:visual, audit:layout and audit:layout:viewports pass on the same tree"
         }
       ]
     },
@@ -927,8 +945,7 @@
         "echoRenders": { "reference": 0, "tolerance": 0 },
         "actionRoundTrips": { "reference": 1, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
-        "backendRequests": { "reference": 18, "tolerance": 1 },
-        "componentRenders": { "reference": 696, "tolerance": 13 }
+        "backendRequests": { "reference": 18, "tolerance": 1 }
       },
       "payloads": {
         "action:/dashboard": {
@@ -1064,6 +1081,14 @@
           },
           "runKeys": ["2026-11-08T112625699Z-6f644d"],
           "reason": "The dashboard's clock action response lists fewer client chunks now that the app shell no longer imports the Auftraege table, its row menus and their edit forms (AuftraegeTableSkeleton has its own module): about 617 decoded bytes less, rows unchanged."
+        },
+        {
+          "kind": "ungate",
+          "target": "componentRenders",
+          "from": { "reference": 696, "tolerance": 13 },
+          "to": null,
+          "runKeys": ["2026-11-09T222647863Z-a2e761"],
+          "reason": "CI read this count as 623 twice (runs 42494386179 on 2026-11-08 and 42706161239 on 2026-11-09, the second on PR #330, which changes no app code, ten minutes after run 42704658540 read 694 on its base 636f5d44) and as 694 to 696 in the 170 other CI readings since 2026-11-05, with requests, routeRenders, actionRoundTrips and backendRequests equal in every run. A fall of 71 renders with identical requests is React batching on a busy runner, beyond the tolerance of 13, so the count does not repeat on this step (performance.md). Boat run 2026-11-09T222647863Z-a2e761 read 694."
         }
       ]
     },
@@ -1141,8 +1166,8 @@
         },
         "stylesheet": {
           "requests": { "reference": 2, "tolerance": 0 },
-          "encodedBytes": { "reference": 22697, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 122894, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 21862, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 117895, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         }
       },
@@ -1342,6 +1367,24 @@
           },
           "runKeys": ["2026-11-08T112625699Z-098a70"],
           "reason": "Manager-only create and edit dialogs load on intent (lazyDialog) instead of in the cold start, and the app shell no longer imports the Auftraege table through its skeleton: 597,427 to 575,135 on this PC (main read 600,972 here), with requests 54 to 53 against main. The create dialog downloads on the hover, focus or press of „Neu“, the edit dialogs when a row menu opens."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "stylesheet",
+          "from": {
+            "requests": { "reference": 2, "tolerance": 0 },
+            "encodedBytes": { "reference": 22697, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 122894, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 2, "tolerance": 0 },
+            "encodedBytes": { "reference": 21862, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 117895, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-09T215315624Z-23af99"],
+          "reason": "Tailwind no longer scans tests and test support (lint examples became shipped utilities), and the unused .hide-time-picker block and duplicate ::selection rules are gone; every dropped utility appears only in an excluded test file, and audit:visual, audit:layout and audit:layout:viewports pass on the same tree"
         }
       ]
     },

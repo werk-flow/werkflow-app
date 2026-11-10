@@ -83,6 +83,8 @@ export function usePersonnelLifecycleView(initialData: PersonnelLifecycleView) {
       'documents',
       'jobs',
       'job_assignments',
+      'planning_occurrences',
+      'planning_occurrence_assignments',
       'organization_responsibility_configurations',
       'organization_responsibility_assignments',
       'organization_responsibility_delegations',

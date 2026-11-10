@@ -2,10 +2,11 @@ import { randomUUID } from 'node:crypto';
 
 import { type BoatClient, type BoatUsage, BoatError, FAILED_STATES, READY_STATES } from './boat-api';
 
-// One short-lived Boat machine: created, used and always deleted, with its deletion confirmed.
+// One short-lived Boat machine: created, used and deleted with its deletion confirmed, or wiped and
+// kept for the next run in its checkout (machine-reuse.ts).
 
 const POLL_MS = 2_000;
-/** A deletion is asynchronous; Boat usually completes it in seconds. */
+/** A deletion is asynchronous; Boat usually completes it in seconds, rarely in minutes. */
 const DELETION_WAIT_MS = 120_000;
 
 const sleep = (milliseconds: number) => new Promise((done) => setTimeout(done, milliseconds));
@@ -20,6 +21,8 @@ export type MachineOptions = {
    * command output after it. Only the machine that becomes the saved snapshot keeps both.
    */
   purpose: 'run' | 'snapshot';
+  /** Labels beside `purpose`, by which a later run finds the machine again. */
+  labels?: Record<string, string>;
   log: (line: string) => void;
   /** An interruption stops the wait for readiness; the machine is then deleted. */
   signal?: AbortSignal;
@@ -44,7 +47,7 @@ export async function createMachine(client: BoatClient, options: MachineOptions)
       failFast: true,
       ttlSeconds: options.ttlSeconds,
       name: options.name,
-      labels: { purpose: 'werkflow-verify' },
+      labels: { ...options.labels, purpose: 'werkflow-verify' },
       ...(options.from ? { from: options.from } : {}),
     },
     randomUUID(),
@@ -54,7 +57,7 @@ export async function createMachine(client: BoatClient, options: MachineOptions)
     const deadline = Date.now() + 300_000;
     for (;;) {
       options.signal?.throwIfAborted();
-      const state = await client.state(id);
+      const { state } = await client.sandbox(id);
       if (READY_STATES.has(state)) return machine;
       if (FAILED_STATES.has(state) || Date.now() > deadline)
         throw new Error(`Boat machine ${id} did not become ready (state ${state}).`);
@@ -115,20 +118,24 @@ export async function machineUsage(machine: Machine): Promise<BoatUsage | undefi
 }
 
 /**
- * Deletes the machine and waits until Boat no longer knows it; a failure is logged, never thrown.
+ * Deletes the machine and waits up to `confirmMs` until Boat no longer knows it; a failure is
+ * logged, never thrown. Boat's 202 already accepts the deletion as irreversible, so a run that
+ * waits for its user confirms only briefly.
  * An organization key may not read the deletion operation (403 api_key_org_forbidden), so a 404
  * on the sandbox confirms the deletion: Boat removes it from every read once the operation exists.
  */
-export async function deleteMachine(machine: Machine): Promise<void> {
+export async function deleteMachine(machine: Machine, confirmMs = DELETION_WAIT_MS): Promise<void> {
   const { client, id, log } = machine;
   try {
     await client.delete(id);
-    const deadline = Date.now() + DELETION_WAIT_MS;
+    const deadline = Date.now() + confirmMs;
     for (;;) {
       try {
-        const state = await client.state(id);
+        const { state } = await client.sandbox(id);
         if (Date.now() > deadline) {
-          log(`Boat machine ${id} is still listed (${state}); its auto-stop erases it at the latest.`);
+          log(
+            `Boat accepted the deletion of machine ${id}, still listed (${state}), and purges it in the background.`,
+          );
           return;
         }
       } catch (error) {

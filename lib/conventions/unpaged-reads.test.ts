@@ -89,7 +89,6 @@ const ONE_JOB = 'the rows of one job: its assigned people';
 const ONE_OCCURRENCE = 'the people assigned to one calendar visit';
 const ONE_EMPLOYEE =
   'the history of one employee record: conditions, schedules, absences or onboarding items';
-const ONE_USER_ACTIVE_JOBS = 'the active job assignments of one person';
 const ONE_ARTIFACT = 'the revisions and lines of one Arbeitsnachweis';
 const ONE_USER_DAY = "one person's time rows of one day or one open session";
 const REVIEWED_UNPAGED_READS: Readonly<Record<string, string>> = {
@@ -111,8 +110,6 @@ const REVIEWED_UNPAGED_READS: Readonly<Record<string, string>> = {
   'lib/personnel/lifecycle-actions.ts::getPersonnelLifecycle::personnel_onboarding_plans': ONE_EMPLOYEE,
   'lib/personnel/lifecycle-actions.ts::getPersonnelLifecycle::personnel_onboarding_requirements':
     ONE_EMPLOYEE,
-  'lib/personnel/lifecycle-actions.ts::getPersonnelLifecycle::job_assignments': ONE_USER_ACTIVE_JOBS,
-  'lib/personnel/lifecycle-actions.ts::loadTransitionInventory::job_assignments': ONE_USER_ACTIVE_JOBS,
   'lib/personnel/lifecycle-actions.ts::getOwnPersonnelActions::personnel_onboarding_requirements':
     ONE_EMPLOYEE,
   'lib/personnel/lifecycle-actions.ts::getOwnPersonnelActions::personnel_documents': ONE_EMPLOYEE,
