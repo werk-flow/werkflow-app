@@ -73,6 +73,25 @@ const world = installActionWorld(
     client_sites: () => ({ is_active: true, created_at: now, updated_at: now }),
   },
 );
+// update_client_contact and update_client_site as
+// supabase/tests/client_archive_history.sql proves them, reduced to the
+// organization scope: a row of another organization is not found and stays.
+world.rpc = ({ name, args }) => {
+  const target =
+    name === 'update_client_contact'
+      ? { table: 'client_contacts', id: args.p_contact_id, missing: 'contact_not_found' }
+      : name === 'update_client_site'
+        ? { table: 'client_sites', id: args.p_site_id, missing: 'site_not_found' }
+        : null;
+  if (!target) return { data: null, error: { message: 'unexpected call' } };
+  const row = tableRows(world, target.table).find(
+    (candidate) => candidate.id === target.id && candidate.organization_id === args.p_organization_id,
+  );
+  if (!row) return { data: null, error: { code: 'P0001', message: target.missing } };
+  const changes = args.p_changes;
+  if (typeof changes === 'object' && changes !== null) Object.assign(row, changes);
+  return { data: row, error: null };
+};
 const actions = await import('@/lib/clients/actions');
 
 const databaseSnapshot = (): string => JSON.stringify(world.tables);

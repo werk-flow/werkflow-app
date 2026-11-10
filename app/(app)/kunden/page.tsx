@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { parseListPage } from '@/lib/ui/list-pagination';
 import { type ListSearchParams } from '@/lib/jobs/list-page';
 import { readCustomerPage } from '@/lib/clients/list-page-server';
+import { customerListViewSchema } from '@/lib/clients/list-page';
 import { resolvePageMembership } from '@/lib/org/page-context';
 import { isManagerRole } from '@/lib/roles';
 import { CreateClientDialog } from '@/components/kunden/create-client-dialog';
@@ -26,7 +27,8 @@ async function KundenData({
   const params = await searchParams;
   const search = typeof params.q === 'string' ? params.q.trim().slice(0, 250) : '';
   const page = parseListPage(typeof params.page === 'string' ? params.page : undefined);
-  const data = await readCustomerPage({ organizationId: activeOrgId, page, search }).catch(() => null);
+  const view = customerListViewSchema.catch('aktiv').parse(params.ansicht);
+  const data = await readCustomerPage({ organizationId: activeOrgId, page, search, view }).catch(() => null);
   if (!data)
     return (
       <RegionLoadError title="Kunden konnten nicht geladen werden">
@@ -43,6 +45,7 @@ async function KundenData({
       page={page}
       total={data.total}
       searchQuery={search}
+      view={view}
     />
   );
 }

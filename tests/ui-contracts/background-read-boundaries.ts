@@ -16,6 +16,7 @@ import { absenceAffectedVisitsInputSchema } from '@/lib/calendar/absence-visits-
 export async function readInBackground(kind: string, input: unknown, signal?: AbortSignal): Promise<unknown> {
   if (kind === 'planning-options') return readPlanningOptionContract(input, signal);
   if (kind === 'entity-options') return readEntityOptionContract(input);
+  if (kind === 'next-request-number') return { success: true, requestNumber: 'ANF-2026-0001' };
   if (kind === 'time-correction-form-options') return readTimeCorrectionFormOptionsContract();
   if (kind === 'work-lifecycle-snapshot') return getWorkLifecycleSnapshot();
   if (kind === 'pending-vacation-for-approver' || kind === 'decidable-approved-vacation')

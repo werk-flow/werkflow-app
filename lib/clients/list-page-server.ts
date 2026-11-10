@@ -8,6 +8,7 @@ export async function readCustomerPage({
   organizationId,
   page,
   search,
+  view,
 }: CustomerPageInput): Promise<CustomerPage> {
   const admin = createSupabaseAdminClient();
   const result = await admin.rpc('list_customer_page', {
@@ -15,6 +16,7 @@ export async function readCustomerPage({
     p_search: search,
     p_page: page,
     p_page_size: LIST_PAGE_SIZE,
+    p_archived: view === 'archiviert',
   });
   const parsed = customerPageSchema.safeParse(result.data);
   if (result.error || !parsed.success) throw new Error('customer_page_read_failed');
