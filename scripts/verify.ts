@@ -98,6 +98,7 @@ import {
 import { acquireHeavySlot } from '../lib/testing/runner/heavy-slot';
 import { unavailableNotice } from '../lib/testing/boat/boat-unavailable';
 import { heldBackHere, verifyOnBoat } from '../lib/testing/boat/verify-on-boat';
+import { localDriftNotice } from '../lib/testing/local-stack/migration-drift';
 
 // A run goes to a Boat machine when this workstation has a Boat key (lib/testing/boat/verify-on-boat.ts).
 // When Boat is unavailable, only the cheap groups run here and the heavy ones are recorded blocked.
@@ -439,6 +440,12 @@ async function main(): Promise<void> {
       `${entry.reusable ? 'REUSE' : 'RUN  '} ${entry.group.id} | ${automatic ? (selections.get(entry.group.id)?.reason ?? 'Explicit selection') : 'Explicit selection'} | ${entry.inputs.length} proof inputs | ${proof}`,
     );
   }
+  // Every worktree shares one local stack; a local plan that reads it names any migration drift first.
+  const fresh = planning
+    .filter((entry) => !entry.reusable && !heldBack.has(entry.group.id))
+    .map((entry) => entry.group.id);
+  const drift = options.target === 'local' ? localDriftNotice(repository, fresh) : undefined;
+  if (drift) console.log(`[verify] ${drift}`);
   if (automatic) {
     // One line per reason, so a large selection names the change that caused it.
     const causes = new Map<string, { groups: number; file: string | undefined }>();

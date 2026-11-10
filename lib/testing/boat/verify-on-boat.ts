@@ -25,6 +25,12 @@ import {
   parseEnvironmentFile,
   proofEnvironmentDigest,
 } from '../evidence/proof-environment';
+import {
+  type MigrationDrift,
+  driftLine,
+  readMigrationDrift,
+  readsSharedStack,
+} from '../local-stack/migration-drift';
 import { withWorkspaceTestLock } from '../runner/workspace-test-lock';
 import { pruneRunArchive } from '../runs/run-retention';
 import { type BoatClient, BoatError, boatClient } from './boat-api';
@@ -150,6 +156,23 @@ export function cheapPlanReason(plan: string): string | undefined {
 }
 
 /**
+ * Why a cheap plan runs here, or undefined when Boat may run it. A cheap plan that reads the shared
+ * stack goes to Boat while that stack's migrations drift from this tree's, with one line naming the
+ * drift: Boat starts a fresh stack at this tree's migrations, so the plan tests this tree's schema.
+ */
+export function cheapLocalReason(
+  plan: string,
+  readDrift: () => MigrationDrift | undefined,
+): string | undefined {
+  const cheap = cheapPlanReason(plan);
+  if (!cheap || !readsSharedStack(plannedRuns(plan))) return cheap;
+  const drift = driftLine(readDrift());
+  if (!drift) return cheap;
+  say(`${drift} Boat runs the plan on a fresh stack at this tree's migrations.`);
+  return undefined;
+}
+
+/**
  * Whether a group stays blocked on this workstation when Boat is unavailable: every group but the
  * cheap ones and the timed wall-clock groups, which run here by design. Type-aware lint,
  * `ui:contracts` and every other browser group, an untimed wall-clock group among them: run here
@@ -178,7 +201,7 @@ function planReason(repository: string, args: readonly string[]): string | undef
   if (plan.status !== 0) return 'the plan could not be read here; the local run reports why.';
   const measured = args.includes('--untimed') ? undefined : wallClockGroup(plan.stdout);
   if (measured) return `the plan runs ${measured}, which measures this machine's wall clock.`;
-  return cheapPlanReason(plan.stdout);
+  return cheapLocalReason(plan.stdout, () => readMigrationDrift(repository));
 }
 
 /**
