@@ -22,16 +22,17 @@ const ACCESS_STEP_EFFECTS: Record<PersonnelAccessTransitionKind, string> = {
 /** One sentence per employment step: what changes for the person when you save it. */
 const EMPLOYMENT_STEP_EFFECTS: Record<PersonnelEmploymentTransitionKind, string> = {
   plan_start: 'Die Beschäftigung beginnt am gewählten Datum, bis dahin gilt „Eintritt geplant“.',
-  start: 'Die Beschäftigung gilt ab dem gewählten Datum als aktiv.',
+  start: 'Die Beschäftigung gilt sofort als aktiv, das gewählte Datum wird das Eintrittsdatum.',
   record_notice:
     'Die Kündigung liegt vor, das Austrittsdatum steht aber noch nicht fest; die Person bleibt beschäftigt.',
   plan_exit: 'Die Person bleibt bis dahin beschäftigt und ist ab dem gewählten Datum ausgeschieden.',
-  mark_inactive: 'Die Beschäftigung ruht ab dem gewählten Datum, etwa bei einer Freistellung, ohne Austritt.',
+  mark_inactive: 'Die Beschäftigung ruht sofort, etwa bei einer Freistellung, ohne Austritt.',
   exit: 'Für einen Austritt, der schon wirksam ist: Die Person gilt sofort als ausgeschieden.',
   cancel_scheduled: 'Der geplante Übergang tritt nicht automatisch ein, der Status bleibt, wie er jetzt ist.',
   reverse:
     'Korrigiert einen irrtümlich erfassten Übergang: Die Person ist wieder aktiv beschäftigt, ohne Austrittsdatum.',
-  reactivate: 'Die Person kehrt zurück und ist ab dem gewählten Datum wieder aktiv beschäftigt.',
+  reactivate:
+    'Die Person kehrt zurück und ist sofort wieder aktiv beschäftigt, ein Austrittsdatum wird gelöscht.',
 };
 
 export type LifecycleStepOption<Kind extends string> = { value: Kind; label: string; description: string };

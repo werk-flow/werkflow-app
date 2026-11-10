@@ -22,14 +22,19 @@ type ScheduledLifecycle<State> = {
 /**
  * Where a person's access stands for choosing a step. `uncontrolled` is a
  * member without an access lifecycle: the database treats their access as
- * active, and „Jetzt aktivieren“ puts it under the lifecycle.
+ * active, and „Jetzt aktivieren“ puts it under the lifecycle. `held` is a due
+ * activation an open blocker holds back: the database applies the due
+ * activation before any step, so a new planned activation would open access
+ * at once; only activating (refused while the blocker is open), ending or
+ * withdrawing fits.
  */
-type AccessPosition = PersonnelAccessState | 'uncontrolled';
+type AccessPosition = PersonnelAccessState | 'uncontrolled' | 'held';
 
 const ACCESS_STEPS: Record<AccessPosition, readonly PersonnelAccessTransitionKind[]> = {
   not_configured: ['schedule_activation', 'activate_now'],
   uncontrolled: ['suspend_now', 'schedule_suspension', 'end_access', 'activate_now'],
   scheduled: ['activate_now', 'schedule_activation', 'end_access'],
+  held: ['activate_now', 'end_access'],
   active: ['suspend_now', 'schedule_suspension', 'end_access'],
   suspended: ['reactivate', 'schedule_activation', 'end_access'],
   ended: ['reactivate', 'schedule_activation'],
@@ -76,8 +81,7 @@ function accessPosition(input: {
   if (!scheduledState || !scheduledFor) return { position: lifecycle.state, canWithdraw: false };
   if (Date.parse(scheduledFor) > input.now) return { position: lifecycle.state, canWithdraw: true };
   // A due activation that an open blocker holds back stays planned and can still be withdrawn.
-  if (scheduledState === 'active' && input.hasAccessBlocker)
-    return { position: 'scheduled', canWithdraw: true };
+  if (scheduledState === 'active' && input.hasAccessBlocker) return { position: 'held', canWithdraw: true };
   return { position: scheduledState, canWithdraw: false };
 }
 

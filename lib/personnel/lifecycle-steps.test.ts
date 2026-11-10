@@ -107,12 +107,18 @@ describe('access steps follow the current access', () => {
     ]);
   });
 
-  test('a due activation held back by an open blocker stays planned and can be withdrawn', () => {
-    expect(
-      accessSteps(access('scheduled', { scheduledState: 'active', scheduledFor: earlier }), {
-        hasAccessBlocker: true,
-      }),
-    ).toEqual(['activate_now', 'schedule_activation', 'end_access', 'cancel_scheduled']);
+  test('a due activation held back by an open blocker can be withdrawn but never planned again', () => {
+    // The database applies the due activation before any step, so a new planned activation would open access at once.
+    const held = access('scheduled', { scheduledState: 'active', scheduledFor: earlier });
+    expect(accessSteps(held, { hasAccessBlocker: true })).toEqual([
+      'activate_now',
+      'end_access',
+      'cancel_scheduled',
+    ]);
+    expect(accessSteps(held, { hasAccessBlocker: true, isMember: false })).toEqual([
+      'end_access',
+      'cancel_scheduled',
+    ]);
   });
 
   test('every access state offers at least one step, with or without a membership', () => {

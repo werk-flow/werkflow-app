@@ -92,6 +92,33 @@ describe('a Verlauf entry of a lifecycle transition says what changed and why', 
     ).toEqual([]);
   });
 
+  test('a malformed date is left out and the other facts stay', () => {
+    expect(
+      lifecycleTransitionLines({
+        eventType: 'employment_transition',
+        eventPayload: {
+          transitionKind: 'exit',
+          toState: 'exited',
+          effectiveOn: 'not-a-date',
+          reason: 'Austritt',
+        },
+      }),
+    ).toEqual([
+      { label: 'Übergang', text: 'Austritt festhalten' },
+      { label: 'Beschäftigung', text: 'Ausgeschieden' },
+      { label: 'Grund', text: 'Austritt' },
+    ]);
+    expect(
+      lifecycleTransitionLines({
+        eventType: 'access_transition',
+        eventPayload: { transitionKind: 'schedule_suspension', toState: 'suspended', effectiveAt: 'später' },
+      }),
+    ).toEqual([
+      { label: 'Übergang', text: 'Sperre planen' },
+      { label: 'Zugang', text: 'Gesperrt' },
+    ]);
+  });
+
   test('other events get no transition lines', () => {
     expect(
       lifecycleTransitionLines({ eventType: 'master_data_updated', eventPayload: { reason: 'x' } }),

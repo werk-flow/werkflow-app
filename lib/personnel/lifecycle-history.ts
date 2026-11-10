@@ -31,13 +31,19 @@ function textOf(value: unknown): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
 }
 
+/** A date or instant from the payload that parses; a malformed one is left out, never formatted. */
+function parsableDate(value: unknown): string | null {
+  const text = textOf(value);
+  return text && !Number.isNaN(Date.parse(text)) ? text : null;
+}
+
 function effectiveText(eventType: string, payload: Readonly<Record<string, unknown>>): string | null {
   if (payload.transitionKind === 'cancel_scheduled') return null;
   if (eventType === 'employment_transition') {
-    const day = textOf(payload.effectiveOn);
+    const day = parsableDate(payload.effectiveOn);
     return day ? formatBerlin(day, 'numericDate') : null;
   }
-  const instant = textOf(payload.effectiveAt);
+  const instant = parsableDate(payload.effectiveAt);
   return instant && SCHEDULED_ACCESS_STEPS.has(String(payload.transitionKind))
     ? formatBerlinDateTime(instant)
     : null;

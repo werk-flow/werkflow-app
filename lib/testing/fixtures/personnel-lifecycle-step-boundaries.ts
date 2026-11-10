@@ -12,6 +12,8 @@ const noLoginRecordId = '84000000-0000-4000-8000-000000000002';
 const activeRecordId = '84000000-0000-4000-8000-000000000003';
 const exitedRecordId = '84000000-0000-4000-8000-000000000004';
 const foreignRecordId = '84000000-0000-4000-8000-000000000005';
+const heldRecordId = '84000000-0000-4000-8000-000000000006';
+const heldUserId = '84000000-0000-4000-8000-000000000016';
 const memberUserId = '84000000-0000-4000-8000-000000000011';
 const activeUserId = '84000000-0000-4000-8000-000000000012';
 const foreignUserId = '84000000-0000-4000-8000-000000000015';
@@ -53,15 +55,33 @@ const world = installActionWorld({
     record(activeRecordId, ORGANIZATION_A, activeUserId),
     record(exitedRecordId, ORGANIZATION_A, null, '2026-10-31'),
     record(foreignRecordId, ORGANIZATION_B, foreignUserId),
+    record(heldRecordId, ORGANIZATION_A, heldUserId),
   ],
   organization_members: [
     member(ORGANIZATION_A, memberUserId),
     member(ORGANIZATION_A, activeUserId),
+    member(ORGANIZATION_A, heldUserId),
     member(ORGANIZATION_B, foreignUserId),
   ],
-  personnel_access_lifecycles: [lifecycle(activeRecordId, 'active', 2)],
+  personnel_access_lifecycles: [
+    lifecycle(activeRecordId, 'active', 2),
+    // A due activation an open blocking requirement holds back.
+    {
+      ...lifecycle(heldRecordId, 'scheduled', 1),
+      scheduled_state: 'active',
+      scheduled_for: '2026-01-05T07:00:00.000Z',
+    },
+  ],
   personnel_employment_lifecycles: [lifecycle(exitedRecordId, 'exited', 4)],
-  personnel_onboarding_requirements: [],
+  personnel_onboarding_requirements: [
+    {
+      id: '84000000-0000-4000-8000-000000000041',
+      organization_id: ORGANIZATION_A,
+      employee_record_id: heldRecordId,
+      blocks_access: true,
+      state: 'missing',
+    },
+  ],
 });
 world.rpc = ({ name }) =>
   name === 'set_personnel_access_transition' || name === 'set_personnel_employment_transition'
@@ -114,6 +134,11 @@ assert.deepEqual(
   'active access is not activated again',
 );
 assert.deepEqual(await access(activeRecordId, 'schedule_activation', 2), notAllowed);
+assert.deepEqual(
+  await access(heldRecordId, 'schedule_activation', 1),
+  notAllowed,
+  'a held activation is not planned again, which would open access at once',
+);
 // Employment steps that do not fit are refused too.
 assert.deepEqual(
   await employment(exitedRecordId, 'record_notice', 4),
@@ -173,9 +198,11 @@ assert.deepEqual(await access(noLoginRecordId, 'schedule_activation'), {
   data: { lifecycleId },
 });
 assert.deepEqual(await access(activeRecordId, 'end_access', 2), { success: true, data: { lifecycleId } });
+assert.deepEqual(await access(heldRecordId, 'cancel_scheduled', 1), { success: true, data: { lifecycleId } });
 assert.deepEqual(await employment(exitedRecordId, 'reactivate', 4), { success: true, data: { lifecycleId } });
 assert.deepEqual(await employment(memberRecordId, 'record_notice'), { success: true, data: { lifecycleId } });
 assert.deepEqual(transitionCalls(), [
+  'set_personnel_access_transition',
   'set_personnel_access_transition',
   'set_personnel_access_transition',
   'set_personnel_access_transition',
