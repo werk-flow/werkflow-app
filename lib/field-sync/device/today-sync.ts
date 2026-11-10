@@ -6,7 +6,7 @@ import {
   type FieldSyncToday,
 } from '@/lib/field-sync/today-snapshot';
 import { logError } from '@/lib/logging';
-import { dropOthersTodayOnDevice, readTodayOnDevice, saveTodayOnDevice } from './today-store';
+import { dropOthersTodayOnDevice, readTodayOnDevice, saveTodayOnDevice, todayHolderKey } from './today-store';
 import { TODAY_HOLDER_KEY, clearTodayOnDevice, todayWipeGeneration } from './today-wipe';
 
 // One refresh of the today snapshot on a phone (decision record 0010, "Device
@@ -46,10 +46,6 @@ function saveUnlessWiped(
     confirmedAt,
     () => todayWipeGeneration() === owner.generation && !superseded(owner.holder),
   );
-}
-
-function todayHolderKey(holder: TodayHolder): string {
-  return `${holder.userId}:${holder.organizationId}`;
 }
 
 /** Registers the holder of the latest start page under `TODAY_HOLDER_KEY`, for every tab to see. */

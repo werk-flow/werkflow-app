@@ -20,7 +20,11 @@ import { ListRow } from '@/components/ui/list-row';
 import { SectionError } from '@/components/ui/section-error';
 import { useClientRead } from '@/hooks/use-client-read';
 import { offlineViewAt } from '@/lib/field-sync/device/today-address';
-import { readTodayOnDevice, type StoredToday } from '@/lib/field-sync/device/today-store';
+import {
+  readTodayOnDevice,
+  sharedWipeGeneration,
+  type StoredToday,
+} from '@/lib/field-sync/device/today-store';
 import { TODAY_WIPE_KEY } from '@/lib/field-sync/device/today-wipe';
 import type { FieldSyncTodayAssignment } from '@/lib/field-sync/today-snapshot';
 import { jobDetailHref } from '@/lib/jobs/routes';
@@ -267,16 +271,6 @@ function OfflineDayView({ stored, pathname }: { stored: StoredToday; pathname: s
 /** The longest delay `setTimeout` keeps; a longer one fires at once. */
 const MAX_TIMER_MS = 2_147_483_647;
 
-/** The wipe signal any tab gave last, or null when localStorage cannot be read. */
-function wipeSignal(): string | null {
-  try {
-    return localStorage.getItem(TODAY_WIPE_KEY) ?? '';
-  } catch {
-    // Fails closed: the store shows no day then either (today-store.ts).
-    return null;
-  }
-}
-
 /**
  * Ends the shown day when it can no longer stand. A sign-out or organization switch in another
  * tab, from mount on, and a return from the back-forward cache, where no storage event arrives,
@@ -317,11 +311,11 @@ export function OfflineToday({ withoutDay }: { withoutDay: ReactNode }): ReactNo
   const dropAndReadAgain = useCallback(() => setWipes((count) => count + 1), []);
   const day = useClientRead({
     read: async () => {
-      const signal = wipeSignal();
+      const signal = sharedWipeGeneration();
       try {
         const stored = await readTodayOnDevice();
         // A wipe signalled while the device read: its answer is the former day, never shown.
-        const current = signal !== null && wipeSignal() === signal;
+        const current = signal !== null && sharedWipeGeneration() === signal;
         return {
           success: true as const,
           stored: current ? stored : null,

@@ -2,13 +2,14 @@
 
 import { fieldSyncTodaySchema, type FieldSyncToday } from '@/lib/field-sync/today-snapshot';
 import { z } from '@/lib/zod';
-import { TODAY_DATABASE, TODAY_WIPE_KEY } from './today-wipe';
+import { TODAY_DATABASE, TODAY_HOLDER_KEY, TODAY_WIPE_KEY } from './today-wipe';
 
 // The web half of the today snapshot on a phone (decision record 0010,
 // "Device data"): one IndexedDB record with the latest snapshot of the
 // signed-in person and organization, and when the server last confirmed it.
 // It holds the current Berlin day only: once the day the server named has
-// ended, or a wipe came after it was saved, the record is deleted the first time anything reads it. A native client replaces this module and
+// ended, a wipe came after it was saved, or the device is no longer claimed
+// for its person and organization, the record is deleted the first time anything reads it. A native client replaces this module and
 // keeps the same rules.
 
 const STORE = 'today';
@@ -89,7 +90,7 @@ export async function readTodayOnDevice(now: Date = new Date()): Promise<StoredT
  * The latest wipe signal any tab of the origin gave (today-wipe.ts), or null when localStorage
  * cannot be read: then no stored day can be shown to be from after the latest wipe.
  */
-function sharedWipeGeneration(): string | null {
+export function sharedWipeGeneration(): string | null {
   try {
     return localStorage.getItem(TODAY_WIPE_KEY) ?? '';
   } catch {
@@ -98,10 +99,31 @@ function sharedWipeGeneration(): string | null {
   }
 }
 
+/** The `TODAY_HOLDER_KEY` value of a person and organization. */
+export function todayHolderKey(holder: { userId: string; organizationId: string }): string {
+  return `${holder.userId}:${holder.organizationId}`;
+}
+
+/** Who the latest start page claimed the device for, or null after a wipe or without localStorage. */
+function deviceHolder(): string | null {
+  try {
+    return localStorage.getItem(TODAY_HOLDER_KEY);
+  } catch {
+    // Fails closed, as for the wipe signal.
+    return null;
+  }
+}
+
+/**
+ * The stored day if it may still show: of the current Berlin day, saved under the latest wipe
+ * signal, and of the person and organization the device is claimed for. A wipe removes the claim
+ * before it writes the signal, so a wipe whose signal and delete both fail still hides the day.
+ */
 function currentDay(value: unknown, now: Date): StoredToday | null {
   const stored = storedTodaySchema.safeParse(value);
   return stored.success &&
     stored.data.wipeGeneration === sharedWipeGeneration() &&
+    todayHolderKey(stored.data.snapshot) === deviceHolder() &&
     now.getTime() < Date.parse(stored.data.snapshot.validUntil)
     ? stored.data
     : null;
@@ -120,12 +142,14 @@ export async function saveTodayOnDevice(
 ): Promise<boolean> {
   let written = false;
   await withStore('readwrite', (store) => {
+    // Read before the check: a wipe signalled after it never stamps an answer from before it.
+    const signal = sharedWipeGeneration();
     written = stillCurrent();
     const entry: StoredToday = {
       snapshot,
       confirmedAt: confirmedAt.toISOString(),
       // A day saved without a readable signal is never shown: no reader can match it.
-      wipeGeneration: sharedWipeGeneration() ?? 'unreadable',
+      wipeGeneration: signal ?? 'unreadable',
     };
     // A skipped write still needs one request for the transaction to settle on.
     return written ? store.put(entry, CURRENT) : store.get(CURRENT);

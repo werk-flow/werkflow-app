@@ -45,8 +45,9 @@ export function todayWipeGeneration(): string {
 export function clearTodayOnDevice(): Promise<void> {
   wipes += 1;
   try {
-    localStorage.setItem(TODAY_WIPE_KEY, `${Date.now()}-${wipes}`);
+    // The claim goes first: a signal that cannot be written (a full quota) still leaves no reader a day.
     localStorage.removeItem(TODAY_HOLDER_KEY);
+    localStorage.setItem(TODAY_WIPE_KEY, `${Date.now()}-${wipes}`);
   } catch {
     // best-effort: other tabs then learn of the wipe only from their next read, which finds no day.
   }

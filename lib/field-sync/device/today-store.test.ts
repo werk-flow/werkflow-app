@@ -134,6 +134,11 @@ function answer(response: Response | Error) {
   return { send, requests };
 }
 
+// A start page claimed the device for this person and organization (keepTodayFresh).
+beforeEach(() => {
+  claimToday(holder);
+});
+
 afterEach(async () => {
   await clearTodayOnDevice();
   localStorage.clear();
@@ -196,6 +201,35 @@ describe('the today snapshot on the device', () => {
     expect(await databaseNames()).toContain(TODAY_DATABASE);
     expect(await readTodayOnDevice(MORNING)).toBeNull();
     blocker.close();
+  });
+
+  test('a wipe that lands right after a save passed its check leaves a day the store refuses', async () => {
+    const saved = await saveTodayOnDevice(snapshot(), MORNING, () => {
+      // The check passes; another tab's wipe signal lands before the record is stamped.
+      localStorage.setItem(TODAY_WIPE_KEY, 'another-tab-sign-out');
+      return true;
+    });
+    expect(saved).toBe(true);
+    expect(await readTodayOnDevice(MORNING)).toBeNull();
+  });
+
+  test('a sign-out whose signal cannot be written and whose delete fails leaves no day to show', async () => {
+    await saveTodayOnDevice(snapshot(), MORNING);
+    const writeSignal = localStorage.setItem.bind(localStorage);
+    const realDelete = indexedDB.deleteDatabase.bind(indexedDB);
+    localStorage.setItem = () => {
+      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    };
+    indexedDB.deleteDatabase = () => {
+      throw new DOMException('The browser refused the deletion.', 'UnknownError');
+    };
+    try {
+      await clearTodayOnDevice();
+    } finally {
+      localStorage.setItem = writeSignal;
+      indexedDB.deleteDatabase = realDelete;
+    }
+    expect(await readTodayOnDevice(MORNING)).toBeNull();
   });
 
   test('a device whose wipe signal cannot be read shows no stored day', async () => {

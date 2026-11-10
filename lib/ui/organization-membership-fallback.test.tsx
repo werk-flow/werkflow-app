@@ -19,7 +19,7 @@ const CHOSEN = '9a000000-0000-4000-8000-0000000000c1';
 const MORNING = new Date('2026-11-09T06:42:00.000Z');
 
 async function runFixture(): Promise<void> {
-  const { TODAY_WIPE_KEY } = await import('@/lib/field-sync/device/today-wipe');
+  const { TODAY_HOLDER_KEY, TODAY_WIPE_KEY } = await import('@/lib/field-sync/device/today-wipe');
 
   /** localStorage, whose wipe signal can run a person's click while the wipe is under way. */
   let duringWipe: (() => void) | null = null;
@@ -86,6 +86,8 @@ async function runFixture(): Promise<void> {
   /** The provider of a person whose active organization is FORMER, with the former day on the device. */
   async function providerOfFormerOrganization(): Promise<OrgContextValue> {
     localStorage.clear();
+    // The former organization's start page claimed the device, so its day would show.
+    localStorage.setItem(TODAY_HOLDER_KEY, `${USER}:${FORMER}`);
     cookieWrites.length = 0;
     await saveTodayOnDevice(
       {
@@ -137,6 +139,7 @@ async function runFixture(): Promise<void> {
         </BannerProvider>
       </AppRouterContext.Provider>,
     );
+    assert.ok(await readTodayOnDevice(MORNING), 'the former organization’s day shows before the refresh');
     assert.ok(captured.value, 'the provider rendered its context');
     return captured.value;
   }
