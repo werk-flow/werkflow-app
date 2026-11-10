@@ -1721,7 +1721,7 @@
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 3, "tolerance": 0 },
-        "componentRenders": { "reference": 5713, "tolerance": 114 }
+        "componentRenders": { "reference": 4822, "tolerance": 114 }
       },
       "payloads": {
         "route:/kunden": {
@@ -1801,6 +1801,14 @@
           "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
           "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
           "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
+        },
+        {
+          "kind": "ratchet",
+          "target": "componentRenders",
+          "from": { "reference": 5713, "tolerance": 114 },
+          "to": { "reference": 4822, "tolerance": 114 },
+          "runKeys": ["2026-11-09T194256952Z-696650"],
+          "reason": null
         }
       ]
     },

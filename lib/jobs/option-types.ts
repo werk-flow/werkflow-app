@@ -30,6 +30,8 @@ export const jobOptionRequestSchema = z.object({
       'time-correction',
       // Work at one customer's site: the equipment page and a service case.
       'equipment-work',
+      // Customers new work may name: active ones; an archived one stays only as a selection.
+      'customer-work',
     ])
     .default('filter'),
 });
