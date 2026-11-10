@@ -63,9 +63,16 @@ test('an unreadable diff and a tooling change run every browser group except the
     expect(ids(ciPlan({ groups, changedFiles: [tooling], fullRun: undefined, runnerModules }))).toEqual(
       EVERY_BROWSER_GROUP,
     );
-  const nightly = ciPlan({ groups, changedFiles: [], fullRun: 'Nightly run', runnerModules });
-  expect(nightly.fullReason).toBe('Nightly run');
-  expect(ids(nightly)).toEqual(EVERY_BROWSER_GROUP);
+});
+
+test("the nightly run and the release gate add each wall-clock group's steps, untimed", () => {
+  for (const fullRun of ['Nightly run', 'Release 0123abc']) {
+    const plan = ciPlan({ groups, changedFiles: [], fullRun, runnerModules });
+    expect(plan.fullReason).toBe(fullRun);
+    expect(ids(plan)).toEqual([...EVERY_BROWSER_GROUP, 'audit:performance:calendar']);
+    expect(plan.browser.at(-1)?.reason).toBe(`${fullRun}: its steps, untimed`);
+    expect(plan.shards.flatMap((shard) => shard.groups.split(','))).toContain('audit:performance:calendar');
+  }
 });
 
 test('a pull request or a push to main runs the critical journeys and the groups its changed files select', () => {
@@ -158,6 +165,7 @@ test('visual and layout groups run in a pull request only when their own test co
     ...EVERY_BROWSER_GROUP,
     'audit:layout:work',
     'audit:lab:office',
+    'audit:performance:calendar',
   ]);
 });
 

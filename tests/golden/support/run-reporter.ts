@@ -19,12 +19,24 @@ import {
 } from './run-state';
 import { testIdentity } from './test-identity';
 import { validateExecutedSelection } from '../../../lib/testing/evidence/test-evidence';
+import { failedStepPath } from '../../../lib/testing/runner/failed-step-path';
 
 function failureFromError(title: string, file: string | null, error?: TestError): RunFailure {
   return {
     title,
     file,
     message: error?.message ?? 'Playwright reported an unexpected result without an error message.',
+  };
+}
+
+/** A failed test's record. A wrapper such as a measured scenario's `MeasurementFailure` hides the action that broke; the failed step path still names it. */
+function testFailure(test: TestCase, result: TestResult): RunFailure {
+  const failure = failureFromError(test.titlePath().join(' > '), test.location.file, result.error);
+  const path = failedStepPath(result.steps);
+  return {
+    ...failure,
+    message: path.length ? `${failure.message}\nFailed step: ${path.join(' > ')}` : failure.message,
+    testId: testIdentity(test),
   };
 }
 
@@ -64,8 +76,7 @@ export default class RunReporter implements Reporter {
 
     let failure: RunFailure | null = null;
     if (unexpected) {
-      failure = failureFromError(test.titlePath().join(' > '), test.location.file, result.error);
-      failure.testId = testIdentity(test);
+      failure = testFailure(test, result);
       markRunFailed(failure);
     }
     updateRunManifest(currentRunKey(), (current) => ({
