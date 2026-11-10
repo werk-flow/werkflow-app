@@ -11,4 +11,7 @@ test('Tailwind scans only class-bearing application sources', () => {
   expect(globalsCss).toContain("@source '../hooks';");
   expect(globalsCss).toContain("@source '../lib';");
   expect(globalsCss).toContain("@source '../proxy.ts';");
+  // A lint test's forbidden-class example would otherwise ship in the start-up stylesheet.
+  expect(globalsCss).toContain("@source not '../lib/testing';");
+  expect(globalsCss).toContain("@source not '../**/*.test.{ts,tsx,mjs}';");
 });
