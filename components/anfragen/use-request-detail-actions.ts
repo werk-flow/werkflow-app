@@ -9,6 +9,7 @@ import { promoteCallerToClient, reopenClientRequest, updateClientRequest } from 
 import type { CallerMatch, ClientRequest } from '@/lib/requests/types';
 import { describeFailure } from '@/lib/action-messages';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
+import { useAttemptKey } from './use-attempt-key';
 
 const PROMOTE_ERROR_MESSAGES = {
   caller_name_required: 'Zum Anlegen wird mindestens der Name der Anruferin / des Anrufers benötigt.',
@@ -212,6 +213,8 @@ function useCustomerCardActions(
 ): Pick<RequestDetailActions, 'customerError' | 'promoteArmed' | 'handleAssignMatch' | 'handlePromote'> {
   const [customerError, setCustomerError] = useState<string | null>(null);
   const [promoteArmed, setPromoteArmed] = useState(false);
+  // One promotion until it succeeds: a retry after a lost answer returns its customer.
+  const promotion = useAttemptKey();
 
   function handleAssignMatch(match: CallerMatch): void {
     setCustomerError(null);
@@ -238,7 +241,11 @@ function useCustomerCardActions(
       return;
     }
     void runPendingTask(async () => {
-      const result = await promoteCallerToClient(request.id, { createDespiteMatches: promoteArmed });
+      const result = await promoteCallerToClient(
+        request.id,
+        { createDespiteMatches: promoteArmed },
+        promotion.attemptKey,
+      );
       if (!result.success) {
         if (result.error === 'caller_matches_customer') {
           setPromoteArmed(true);
@@ -249,6 +256,7 @@ function useCustomerCardActions(
         );
         return;
       }
+      promotion.renewAttemptKey();
       showBanner({
         variant: 'success',
         message: 'Kunde wurde angelegt und der Anfrage zugeordnet.',
