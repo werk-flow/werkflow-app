@@ -33,35 +33,30 @@ export function AvatarStack({
 
   const visible = userIds.slice(0, max);
   const overflow = userIds.length - max;
+  const nameOf = (uid: string): string => {
+    const member = memberLookup.get(uid);
+    return member ? `${member.firstName} ${member.lastName}` : 'Unbekannt';
+  };
 
+  // Each initial pair sits in its own circle; the ring in the card's color keeps
+  // overlapping circles apart, so two pairs never read as one word. Plain
+  // elements, not a component per person: every list row renders the stack,
+  // and lab counts count components.
   return (
-    <div className="flex -space-x-1.5">
+    <div className="flex shrink-0 -space-x-1">
       {visible.map((uid) => {
         const member = memberLookup.get(uid);
-        const initials = member ? getInitials(member.firstName, member.lastName) : '?';
-        const fullName = member ? `${member.firstName} ${member.lastName}` : 'Unbekannt';
         return (
-          <span
-            key={uid}
-            title={fullName}
-            aria-label={fullName}
-            className="inline-flex size-6 items-center justify-center rounded-full border-2 border-background bg-muted text-xs font-medium text-muted-foreground"
-          >
-            {initials}
+          <span key={uid} title={nameOf(uid)} aria-label={nameOf(uid)} className={STACK_AVATAR_CLASS}>
+            {member ? getInitials(member.firstName, member.lastName) : '?'}
           </span>
         );
       })}
       {overflow > 0 && (
         <span
-          title={userIds
-            .slice(max)
-            .map((uid) => {
-              const member = memberLookup.get(uid);
-              return member ? `${member.firstName} ${member.lastName}` : 'Unbekannt';
-            })
-            .join(', ')}
+          title={userIds.slice(max).map(nameOf).join(', ')}
           aria-label={`${overflow} weitere Mitarbeitende`}
-          className="inline-flex size-6 items-center justify-center rounded-full border-2 border-background bg-muted text-xs font-medium text-muted-foreground"
+          className={STACK_AVATAR_CLASS}
         >
           +{overflow}
         </span>
@@ -69,6 +64,10 @@ export function AvatarStack({
     </div>
   );
 }
+
+/** One circle of the stack, sized for two initials. */
+const STACK_AVATAR_CLASS =
+  'inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground ring-2 ring-card';
 
 export const SETTLING_LABEL = 'Wird aktualisiert';
 

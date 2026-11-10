@@ -26,9 +26,15 @@ const errorSchema = z.object({
   error: z.object({ code: z.string().optional(), message: z.string().optional() }).optional(),
 });
 
-const sandboxSchema = z.object({ id: z.string(), state: z.string() });
+const sandboxSchema = z.object({
+  id: z.string(),
+  state: z.string(),
+  /** When Boat stops the machine by itself; a machine without snapshots is then erased. */
+  archiveAfter: z.string().nullable().optional(),
+});
 const createdSchema = z.object({ sandbox: sandboxSchema });
 const sandboxInfoSchema = z.object({ sandbox: sandboxSchema });
+const sandboxListSchema = z.object({ sandboxes: z.array(sandboxSchema) });
 const fileUrlSchema = z.object({ url: z.string() });
 const startedSchema = z.object({ processId: z.number().int() });
 const statusSchema = z.object({
@@ -47,6 +53,7 @@ const deletionSchema = z.object({ operation: z.object({ id: z.string(), status: 
 const savedSnapshotSchema = z.object({ snapshot: z.object({ status: z.string().optional() }).passthrough() });
 
 export type CommandStatus = z.infer<typeof statusSchema>;
+export type Sandbox = z.infer<typeof sandboxSchema>;
 export type BoatUsage = z.infer<typeof usageSchema>;
 
 export type BoatClient = ReturnType<typeof boatClient>;
@@ -134,8 +141,14 @@ export function boatClient(key: string, fetchImpl: Fetch = fetch) {
       });
       return created.sandbox.id;
     },
-    async state(id: string): Promise<string> {
-      return (await call('GET', `/sandboxes/${id}`, sandboxInfoSchema)).sandbox.state;
+    async sandbox(id: string): Promise<Sandbox> {
+      return (await call('GET', `/sandboxes/${id}`, sandboxInfoSchema)).sandbox;
+    },
+    /** The organization's machines that are not stopped and carry every label in `labels`. */
+    async list(labels: Record<string, string>): Promise<Sandbox[]> {
+      const query = new URLSearchParams({ state: [...STARTED_STATES].join(','), limit: '100' });
+      for (const [name, value] of Object.entries(labels)) query.append('label', `${name}=${value}`);
+      return (await call('GET', `/sandboxes?${query}`, sandboxListSchema)).sandboxes;
     },
     /** Starts a command in the background; Boat keeps its output in log files on the machine. */
     async start(id: string, command: string): Promise<number> {
@@ -195,5 +208,7 @@ export function boatClient(key: string, fetchImpl: Fetch = fetch) {
 
 /** Sandbox states in which the machine accepts commands. */
 export const READY_STATES = new Set(['ready', 'idle', 'running']);
+/** Sandbox states of a machine that is starting or started, and so holds or bills something. */
+const STARTED_STATES = new Set(['init', 'provisioning', 'provisioned', 'cloning', ...READY_STATES]);
 /** Sandbox states a machine never leaves. */
 export const FAILED_STATES = new Set(['error', 'cancelled', 'archived']);

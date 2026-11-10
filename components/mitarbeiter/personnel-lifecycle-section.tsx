@@ -9,6 +9,7 @@ import {
   PersonnelLifecycleUploadBody,
 } from './personnel-lifecycle-dialog-parts';
 import { PersonnelLifecycleDocumentsList } from './personnel-lifecycle-documents-list';
+import { PersonnelLifecycleHandoverDialog } from './personnel-lifecycle-handover';
 import {
   PersonnelLifecyclePlanDialog,
   PersonnelLifecycleRequirementDialog,
@@ -20,6 +21,7 @@ import {
   usePersonnelLifecyclePlan,
   usePersonnelLifecycleRequirements,
 } from './use-personnel-lifecycle-onboarding';
+import { usePersonnelLifecycleHandover } from './use-personnel-lifecycle-handover';
 import { usePersonnelLifecycleTransitions } from './use-personnel-lifecycle-transitions';
 import { usePersonnelLifecycleView } from './use-personnel-lifecycle-view';
 
@@ -35,16 +37,14 @@ export function PersonnelLifecycleSection({
   canAdministerAccess,
 }: PersonnelLifecycleSectionProps) {
   const lifecycle = usePersonnelLifecycleView(initialData);
-  const transitions = usePersonnelLifecycleTransitions(lifecycle);
   const plan = usePersonnelLifecyclePlan(lifecycle);
   const requirements = usePersonnelLifecycleRequirements(lifecycle);
   const documents = usePersonnelLifecycleDocuments(lifecycle);
-  const { data, isPending } = lifecycle;
+  const handover = usePersonnelLifecycleHandover(lifecycle);
+  const transitions = usePersonnelLifecycleTransitions(lifecycle, handover.openHandover);
+  const { isPending } = lifecycle;
   const { accessOpen, setAccessOpen, employmentOpen, setEmploymentOpen } = transitions;
   const { uploadOpen, setUploadOpen } = documents;
-  const hasUnresolvedWork =
-    data.transitionInventory.activeJobs.length > 0 ||
-    data.transitionInventory.strandedResponsibilities.length > 0;
 
   return (
     <section
@@ -58,7 +58,7 @@ export function PersonnelLifecycleSection({
         lifecycle={lifecycle}
         transitions={transitions}
         canAdministerAccess={canAdministerAccess}
-        hasUnresolvedWork={hasUnresolvedWork}
+        canManage={canManage}
       />
 
       <PersonnelLifecycleOnboardingList
@@ -87,16 +87,14 @@ export function PersonnelLifecycleSection({
           <DialogHeader>
             <DialogTitle>Beschäftigungsübergang erfassen</DialogTitle>
             <DialogDescription>
-              Historische Zuordnungen bleiben erhalten. Vollständiges Offboarding folgt separat.
+              Historische Zuordnungen bleiben erhalten. Offene Arbeit übergibst du über „Arbeit übergeben“.
             </DialogDescription>
           </DialogHeader>
-          <PersonnelLifecycleEmploymentBody
-            lifecycle={lifecycle}
-            transitions={transitions}
-            hasUnresolvedWork={hasUnresolvedWork}
-          />
+          <PersonnelLifecycleEmploymentBody lifecycle={lifecycle} transitions={transitions} />
         </DialogContent>
       </Dialog>
+
+      <PersonnelLifecycleHandoverDialog lifecycle={lifecycle} handover={handover} />
 
       <PersonnelLifecyclePlanDialog lifecycle={lifecycle} plan={plan} />
 

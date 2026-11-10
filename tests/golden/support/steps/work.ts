@@ -913,7 +913,7 @@ export function instructionEvidenceFulfilled(item: Locator): Locator {
 const WORK_LIST_COPY = {
   section: 'Aktuelle Aufträge und Projekte',
   pager: 'Aktuelle Aufträge',
-  search: 'Suche nach Titel, Nummer, Kunde, Ort…',
+  search: 'Titel, Nr., Kunde, Ort …',
   allTypes: 'Alle',
   filter: 'Filter',
   customerFilter: 'Alle Kunden',

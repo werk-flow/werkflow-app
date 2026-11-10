@@ -345,6 +345,11 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['request-history-writes', ['request_history_writes.sql'], ['customers']],
   ['request-caller-matches', ['request_caller_matches.sql'], ['customers']],
   ['client-duplicates', ['client_duplicates.sql'], ['customers']],
+  [
+    'request-callback-and-equipment',
+    ['request_callback_and_equipment.sql'],
+    ['customers', 'service', 'attention'],
+  ],
   ['sickness-report-writes', ['sickness_report_writes.sql'], ['personnel']],
   ['vacation-history-writes', ['vacation_history_writes.sql'], ['personnel']],
   [
@@ -375,6 +380,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['rate-limits', ['rate_limits.sql'], ['*']],
   ['organization-deletion', ['organization_deletion.sql'], ['*']],
   ['storage-purge', ['storage_purge.sql'], ['documents']],
+  ['problem-reports', ['problem_reports.sql'], ['*']],
   ['organization-export', ['organization_export.sql'], ['*']],
   ['record-numbers', ['record_numbers.sql'], ['work', 'customers', 'personnel', 'service']],
   [

@@ -11,6 +11,7 @@ import { ErrorText } from '@/components/ui/error-text';
 import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
+import type { RealtimeTable } from '@/lib/realtime/tables';
 import {
   REQUEST_CATEGORY_LABELS,
   REQUEST_SOURCE_LABELS,
@@ -46,6 +47,10 @@ export type RequestDetailData = {
   contactLabel: string | null;
   contactPhone: string | null;
   assigneeName: string | null;
+  /** The promised callback had passed when the page was read. */
+  callbackOverdue: boolean;
+  /** The request's Anlage with the number of its detail page. */
+  equipment: { label: string; equipmentNumber: string } | null;
   convertedLink: { label: string; href: string | null } | null;
   /** Null when the read failed, so the region shows the failure instead of "none". */
   documents: OrganizationDocument[] | null;
@@ -89,7 +94,12 @@ function RequestDetailSections({ data, isEditable, ...customerProps }: RequestDe
         <RequestCustomerCard request={request} data={data} isEditable={isEditable} {...customerProps} />
 
         {/* Request facts */}
-        <RequestFactsCard request={request} assigneeName={data.assigneeName} />
+        <RequestFactsCard
+          request={request}
+          assigneeName={data.assigneeName}
+          callbackOverdue={data.callbackOverdue}
+          equipment={data.equipment}
+        />
       </DetailColumns>
 
       {data.documents ? (
@@ -171,16 +181,16 @@ function RequestDetailDialogs({
 }
 
 /**
- * Refreshes the page when the request, its documents or, while the caller is
- * unmatched, the customers and contacts its caller matches against change.
+ * Refreshes the page when the request, its documents, its Anlage or, while
+ * the caller is unmatched, the customers and contacts its caller matches
+ * against change.
  */
-function useRequestLiveUpdates(callerUnmatched: boolean): void {
+function useRequestLiveUpdates(callerUnmatched: boolean, namesEquipment: boolean): void {
+  const tables: RealtimeTable[] = ['client_requests', 'documents', 'document_links'];
+  if (namesEquipment) tables.push('installed_equipment');
+  if (callerUnmatched) tables.push('clients', 'client_contacts');
   // One hook, so one burst across these tables refreshes the route once.
-  useRealtimeRouterRefresh({
-    tables: callerUnmatched
-      ? ['client_requests', 'documents', 'document_links', 'clients', 'client_contacts']
-      : ['client_requests', 'documents', 'document_links'],
-  });
+  useRealtimeRouterRefresh({ tables });
 }
 
 export function RequestDetailContent({ data }: { data: RequestDetailData }) {
@@ -192,7 +202,7 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
   const [editOpen, setEditOpen] = useState(false);
 
   const isEditable = request.status === 'offen' || request.status === 'in_klaerung';
-  useRequestLiveUpdates(isEditable && !request.clientId);
+  useRequestLiveUpdates(isEditable && !request.clientId, request.equipmentId !== null);
 
   return (
     <PageShell>

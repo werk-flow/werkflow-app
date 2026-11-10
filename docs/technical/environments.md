@@ -21,7 +21,8 @@ Both run Micro compute, whose latency rises steeply with concurrency. The owner 
 
 - Every variable exists twice: one row for Production (PROD project, production bucket, production domain), one for all pre-production environments (DEV project, dev bucket, staging URL as `NEXT_PUBLIC_SITE_URL`).
 - The staging URL is the branch alias of `main`, `https://werkflow-app-git-main-werkflows-projects.vercel.app`, behind Vercel Authentication. DEV's auth redirect list must allow it, or invite and password links break on staging.
-- `production` is the only branch Vercel deploys from Git (`vercel.json`): PR branches never deploy, and `.github/workflows/staging.yml` deploys staging after DEV's migrations.
+- The project builds production and staging only: the Git integration builds the `production` push of [release](#release-and-rollback); `.github/workflows/staging.yml` deploys `main` through the REST API after DEV's migrations.
+- The project's Ignored Build Step skips every other build, even on a branch without `vercel.json`, the second layer (`git.deploymentEnabled`). A skipped push ends Canceled, without failure mail. Change the setting and `.github/vercel/ignored-build-step.sh` together; the weekly `health` run fails while they differ.
 - `SUPABASE_ACCESS_TOKEN` is never on Vercel. Recheck the scopes when deployment configuration changes.
 
 ### Provider configuration
@@ -37,7 +38,7 @@ No migration carries auth settings, mail templates, SMTP or rate limits. Both pr
 
 This table is the one home of every credential the deployments and workflows use. No check copies a secret elsewhere to test it.
 
-- `.github/workflows/health.yml` checks every row in GitHub's reach each Monday with a read-only call where the value lives. A failed run fails the step named after the credential (a 404 from a health endpoint names a token mismatch, a 401 from staging the bypass secret) and opens or updates the issue "Weekly health check failed". Only a failed check marked `prod` assigns the owner ([monitoring](recovery-and-incidents.md#monitoring)); a run off `main` or with `break_check` reports on "… (proof)".
+- `.github/workflows/health.yml` checks every row in GitHub's reach each Monday with a read-only call where the value lives. A failed run fails the step named after the credential and opens or updates the issue "Weekly health check failed". Only a failed check marked `prod` assigns the owner ([monitoring](recovery-and-incidents.md#monitoring)); a run off `main` or with `break_check` reports on "… (proof)".
 - The app checks its runtime credentials at `GET /api/health`, each Supabase project at its `health` function. Both answer only a request with the header `x-health-check-token`. The answer names each check `ok` or `failed`, never a value.
 
 | Credential | Lives in | Used by | Expires | Rotate |
@@ -55,7 +56,7 @@ This table is the one home of every credential the deployments and workflows use
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Vercel | Supabase clients | Never | Supabase API keys: create one, set it in Vercel, redeploy, delete the old one. |
 | `SUPABASE_SECRET_KEY` | Vercel | Admin client, edge-function calls | Never | As above. The functions accept every secret key of their project. |
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | Vercel | Document storage | As set on the token | Cloudflare R2, Manage API tokens: one token scoped to the bucket; set both, redeploy, delete the old token. |
-| `CRON_SECRET` | Vercel, Production | Vercel Cron's call of the [storage purge](document-storage-and-access.md#storage-cleanup) | Never | `openssl rand -hex 32`, then redeploy. |
+| `CRON_SECRET` | Vercel, Production | Vercel Cron: [storage purge](document-storage-and-access.md#storage-cleanup) and [report deletion](../features/problem-reports.md#current-product-baseline) | Never | `openssl rand -hex 32`, then redeploy. |
 | `EMAIL_OTP_HASH_SECRET` | Vercel | Email-change code hashes and rate-limit subjects | Never | Only after a leak: a new value voids pending email-change codes and restarts every rate-limit window. |
 | `RESEND_API_KEY` | Supabase secrets, one key per project | The mail functions | Never | Resend, API keys: a sending key for the project, `supabase secrets set --project-ref <ref> RESEND_API_KEY`, delete the old key. |
 | `FROM_EMAIL` | Supabase secrets | The mail functions' sender | Never | `supabase secrets set`. |
@@ -159,7 +160,7 @@ A lease is the ref `refs/leases/<job>` (`ops/lease.py`): its holder renews it ev
 
 [Decision 0009](../decisions/0009-pull-requests-and-ci.md) owns why. `main` is staging. The `production` branch is what Vercel serves on `app.werk-flow.app`.
 
-1. `.github/workflows/release.yml` ships a `main` commit to PROD only after a green full run ([release gate](testing.md#ci)). PROD is live weekdays by 05:00 Berlin: GitHub starts cron runs up to 10 hours late, so a run fires at 17:00 and holds until 03:30. A scheduled run ships its starting commit only when `main` moved since `production` and its newest full run, or its own, passed. A manual run queues behind a held one: `gh run cancel` it first. By hand, when a green `main` should not wait ("release main"): `gh workflow run release`, then `gh run watch`; `-f dry_run=true` prints a scheduled run's decision and, with a candidate, checks the serving build (step 3). `production` has no approval step (owner's decision). When it fails, repair `main` by PR and release again; a rerun is safe.
+1. `.github/workflows/release.yml` ships a `main` commit to PROD only after a green full run ([release gate](testing.md#ci)). PROD is live weekdays by 05:00 Berlin: a run fires at 17:00 and holds until 03:30. A scheduled run ships its starting commit only when `main` moved since `production` and its newest full run, or its own, passed. A manual run queues behind a held one: `gh run cancel` it first. By hand, when a green `main` should not wait ("release main"): `gh workflow run release`, then `gh run watch`; `-f dry_run=true` prints a scheduled run's decision and, with a candidate, checks the serving build (step 3). `production` has no approval step (owner's decision). When it fails, repair `main` by PR and release again; a rerun is safe.
 2. Rollback: Vercel Instant Rollback switches the domain to the previous build within seconds. It changes code only; rule 6 of the migration rule names the limit for data.
-3. The last job checks production without reading data: the build serves, the login page renders, `health` answers, and five minutes later Vercel counts no server error from the build. If it fails, the coordinator thread, else the owner, rolls back (step 2) and reports.
+3. The last job checks production without reading data (`.github/scripts/release-smoke.sh`). If it fails, the coordinator thread, else the owner, rolls back (step 2) and reports.
 4. Never roll back the database. Fix forward with a new migration. Point-in-time restore is a last resort that loses every write since the restore point ([recovery](recovery-and-incidents.md)).

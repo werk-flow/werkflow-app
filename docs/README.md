@@ -15,11 +15,11 @@ Start with `AGENTS.md`, then read only the entries whose condition applies. A ta
 - [document-storage-and-access.md](technical/document-storage-and-access.md): document bytes, signed URLs, storage paths, access classes, trash, versions.
 - [code-quality.md](technical/code-quality.md): writing or reviewing code.
 - [testing.md](technical/testing.md): verifying a change, a failed test, a release.
-- [boat-verification.md](technical/boat-verification.md): `test:verify` on Boat machines, the Boat key, the verification snapshot.
+- [boat-verification.md](technical/boat-verification.md): `test:verify` on Boat, its key and snapshot.
 - [integrated-test-state.md](technical/integrated-test-state.md): seeding test state, fixture dates, stable browser steps.
 - [coderabbit.md](technical/coderabbit.md): review levels, babysitting and merging a PR, review findings.
 - [recovery-and-incidents.md](technical/recovery-and-incidents.md): something lost, leaked or down.
-- [problem-report-scrubbing.md](technical/problem-report-scrubbing.md): what a problem report may carry out of WerkFlow.
+- [problem-report-scrubbing.md](technical/problem-report-scrubbing.md): what may leave WerkFlow in a report.
 - [standards-audit.md](technical/standards-audit.md): rendered design acceptance, wave audits.
 - [enforcement-ladder-backlog.md](technical/enforcement-ladder-backlog.md): planned Tier 1 and 2 conversions.
 
@@ -37,6 +37,7 @@ Read the spec you change and the specs it touches. Planned scope lives in `werk-
 - [service-and-maintenance.md](features/service-and-maintenance.md): Anlagen, Servicefälle, Wartungspläne.
 - [commercial-and-finance.md](features/commercial-and-finance.md): prices, billable quantities, handover readiness.
 - [ai-automations.md](features/ai-automations.md): the AI direction and its foundations.
+- [problem-reports.md](features/problem-reports.md): reports to WerkFlow support, access, deletion.
 
 ### Product (`docs/product/`)
 

@@ -6,6 +6,7 @@ import { resolvePageMembership } from '@/lib/org/page-context';
 import { isManagerRole } from '@/lib/roles';
 import { formatSiteAddress } from '@/lib/clients/types';
 import {
+  isCallbackOverdue,
   toClientRequest,
   toClientRequestEvent,
   type ClientRequest,
@@ -55,6 +56,14 @@ function readLabelWave(admin: AdminClient, activeOrgId: string, request: ClientR
           .eq('id', request.assignedTo)
           .maybeSingle()
       : Promise.resolve({ data: null }),
+    request.equipmentId
+      ? admin
+          .from('installed_equipment')
+          .select('id, equipment_number, name')
+          .eq('id', request.equipmentId)
+          .eq('organization_id', activeOrgId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
     request.convertedJobId
       ? admin
           .from('jobs')
@@ -81,8 +90,8 @@ function readLabelWave(admin: AdminClient, activeOrgId: string, request: ClientR
 type LabelWave = Awaited<ReturnType<typeof readLabelWave>>;
 
 /**
- * A failed label read would show a missing customer, site, contact, assignee
- * or conversion as if there were none, so it fails the page instead.
+ * A failed label read would show a missing customer, site, contact, assignee,
+ * Anlage or conversion as if there were none, so it fails the page instead.
  */
 function anyLabelReadFailed(labelWave: LabelWave, convertedServiceCaseResult: object): boolean {
   const [
@@ -90,6 +99,7 @@ function anyLabelReadFailed(labelWave: LabelWave, convertedServiceCaseResult: ob
     siteResult,
     contactResult,
     assigneeResult,
+    equipmentResult,
     convertedJobResult,
     convertedProjectResult,
   ] = labelWave;
@@ -98,6 +108,7 @@ function anyLabelReadFailed(labelWave: LabelWave, convertedServiceCaseResult: ob
     siteResult,
     contactResult,
     assigneeResult,
+    equipmentResult,
     convertedJobResult,
     convertedProjectResult,
     convertedServiceCaseResult,
@@ -107,8 +118,8 @@ function anyLabelReadFailed(labelWave: LabelWave, convertedServiceCaseResult: ob
 
 /** Detail routes are keyed by number; without one, show plain text instead of a broken link. */
 function convertedLinkOf(
-  convertedJob: LabelWave[4]['data'],
-  convertedProject: LabelWave[5]['data'],
+  convertedJob: LabelWave[5]['data'],
+  convertedProject: LabelWave[6]['data'],
   convertedServiceCase: { case_number: string } | null,
 ): RequestDetailData['convertedLink'] {
   return convertedJob
@@ -145,6 +156,7 @@ function requestDetailData({
     siteResult,
     contactResult,
     assigneeResult,
+    equipmentResult,
     convertedJobResult,
     convertedProjectResult,
     actorsResult,
@@ -173,6 +185,7 @@ function requestDetailData({
 
   const site = siteResult.data;
   const contact = contactResult.data;
+  const equipment = equipmentResult.data;
   const siteAddress = site
     ? formatSiteAddress({ street: site.street, postalCode: site.postal_code, city: site.city })
     : '';
@@ -187,6 +200,13 @@ function requestDetailData({
       : null,
     contactPhone: contact?.phone ?? null,
     assigneeName: assigneeResult.data ? formatProfileName(assigneeResult.data) : null,
+    callbackOverdue: isCallbackOverdue(request, new Date()),
+    equipment: equipment
+      ? {
+          label: `${equipment.equipment_number} · ${equipment.name}`,
+          equipmentNumber: equipment.equipment_number,
+        }
+      : null,
     convertedLink: convertedLinkOf(
       convertedJobResult.data,
       convertedProjectResult.data,
@@ -269,8 +289,8 @@ export default async function AnfrageDetailPage({ params }: { params: Promise<{ 
   if (!assignees.success || anyLabelReadFailed(labelWave, convertedServiceCaseResult)) {
     return (
       <RegionLoadError title="Die Anfrage konnte nicht geladen werden">
-        Kunde, Einsatzort, Ansprechpartner, Zuständige oder Umwandlung sind gerade nicht erreichbar. Versuche
-        es in einem Moment erneut.
+        Kunde, Einsatzort, Ansprechpartner, Zuständige, Anlage oder Umwandlung sind gerade nicht erreichbar.
+        Versuche es in einem Moment erneut.
       </RegionLoadError>
     );
   }

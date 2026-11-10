@@ -31,14 +31,18 @@ const END_ACTION: ClockAction = {
   icon: 'end',
 };
 
-function jobLabel(job: ClockJobInfo | null): string {
-  return job ? job.title : 'Auftrag';
+/**
+ * A running or remembered job, told apart from same-titled ones:
+ * „Heizkörper austauschen · AUF-2026-089 · Ingrid Becker“.
+ */
+export function clockJobLabel(job: ClockJobInfo | null): string {
+  return job ? [job.title, job.jobNumber, job.clientName].filter(Boolean).join(' · ') : 'Auftrag';
 }
 
-/** "Arbeit · Heizungswartung Müller" for pills, headers and resume buttons. */
+/** "Arbeit · Heizungswartung · AUF-2026-1 · Müller" for pills, headers and resume buttons. */
 export function describeActivity(selection: TimeActivitySelection, job: ClockJobInfo | null): string {
   const kindLabel = TIME_ACTIVITY_LABELS[selection.kind];
-  return selection.allocationKind === 'job' ? `${kindLabel} · ${jobLabel(job)}` : kindLabel;
+  return selection.allocationKind === 'job' ? `${kindLabel} · ${clockJobLabel(job)}` : kindLabel;
 }
 
 function breakAction(state: LiveClockState): ClockAction[] {
@@ -145,7 +149,7 @@ function travelActions(state: LiveClockState): ClockAction[] {
       ? {
           id: 'arrive',
           kind: 'transition',
-          label: `Arbeit an ${jobLabel(state.activeJobInfo)}`,
+          label: `Arbeit an ${clockJobLabel(state.activeJobInfo)}`,
           icon: 'work',
           selection: createActivitySelection('work', activeJobId),
         }
@@ -240,6 +244,8 @@ const TRANSITION_ERROR_MESSAGES: Partial<Record<TimeTransitionError, string>> = 
   on_approved_vacation:
     'Heute ist Urlaub genehmigt: Einstempeln ist deshalb nicht möglich. Falls du doch arbeitest, kann eine verantwortliche Person den Urlaub stornieren.',
   time_transition_break_mode_automatic: 'Pausen werden in dieser Organisation automatisch abgezogen.',
+  time_transition_job_unavailable:
+    'Dieser Auftrag ist geparkt oder abgeschlossen. Wähle einen anderen Auftrag.',
   period_closed:
     'Der Monat dieser Erfassung ist bereits abgeschlossen. Ein Admin muss die Periode zuerst wieder öffnen.',
 };

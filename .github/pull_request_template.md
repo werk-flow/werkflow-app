@@ -20,8 +20,9 @@ a manual check. State what you could not check. "Tests pass" alone is not enough
 
 ## Screenshots
 
-<!-- UI changes only: before and after, both themes, 375 px and desktop. Upload them to GitHub
-and embed them here; never commit PR-only images. Delete this section otherwise. -->
+<!-- UI changes only: before and after, both themes, 375 px and desktop, synthetic data only.
+Upload them as pr<number>-*.png assets of the pr-screenshots prerelease and embed them here
+(file-pr skill); never commit them or push a branch for them. Delete this section otherwise. -->
 
 ## Review
 

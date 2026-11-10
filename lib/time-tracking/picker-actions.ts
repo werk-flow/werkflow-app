@@ -9,7 +9,7 @@ import { logError } from '@/lib/logging';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { z } from '@/lib/zod';
-import { jobPickerRequestSchema, type PickerJob } from './picker-types';
+import { jobPickerRequestSchema, PICKER_GROUPS, type PickerJob } from './picker-types';
 
 const pickerRowSchema = z.object({
   id: uuidSchema,
@@ -19,7 +19,8 @@ const pickerRowSchema = z.object({
   status: z.string(),
   projectName: z.string().nullable(),
   clientName: z.string().nullable(),
-  plannedToday: z.boolean(),
+  group: z.enum(PICKER_GROUPS),
+  nextVisitDate: z.string().nullable(),
 });
 const pickerPageSchema = z.object({
   options: z.array(pickerRowSchema).max(1_000),
@@ -35,14 +36,16 @@ function toPickerJob(row: z.output<typeof pickerRowSchema>): PickerJob {
     status: row.status,
     projectName: row.projectName,
     clientName: row.clientName,
-    plannedToday: row.plannedToday,
+    group: row.group,
+    nextVisitDate: row.nextVisitDate,
   };
 }
 
 /**
  * The jobs of the clock-in and job-switch picker. The database searches the
- * caller's scope (managers: every open job, others: their assigned open jobs)
- * and ranks the caller's own visits of today's Berlin date first, then title.
+ * caller's scope (managers: every open job, others: their assigned open jobs),
+ * never a parked or finished job, and ranks each into its `PickerGroup` before
+ * it cuts the page: next visits by date, every other group by title.
  * The live picker re-reads the rows it shows, so the request names a limit,
  * not an offset; `selected` is the running job of a switch.
  */

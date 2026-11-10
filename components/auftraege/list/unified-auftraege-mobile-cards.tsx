@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useState } from 'react';
+import { memo, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
@@ -27,13 +27,40 @@ import {
 import { UnifiedAuftraegeChildPagination } from './unified-auftraege-desktop-rows';
 import { ActiveWorkIndicator, SETTLING_LABEL, SettlingIndicator } from './unified-auftraege-display';
 import type { AuftraegeRowFeedback, UnifiedAuftraegeEntryListProps } from './unified-auftraege-entry-list';
-import { MarqueeText } from './unified-auftraege-marquee-text';
 import type {
   UnifiedAuftraegeJobMenuProps,
   UnifiedAuftraegeProjectMenuProps,
 } from './unified-auftraege-row-cells';
 import { JOB_ROW_CONTENT_CHECKS, PROJECT_ROW_CONTENT_CHECKS } from './unified-auftraege-row-memo';
 import { useUnifiedAuftraegeProjectEntry } from './use-unified-auftraege-project-entry';
+
+/** A card title's link; its click opens the record and never reaches the card. */
+const CARD_TITLE_LINK_CLASS =
+  'rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+
+/**
+ * A card's title: up to two lines, then an ellipsis; the full text stays in
+ * its tooltip. The dot for running work sits beside the title, so the
+ * ellipsis never hides it.
+ */
+function RecordCardTitle({
+  title,
+  active,
+  children,
+}: {
+  title: string;
+  active: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <>
+      <p className="line-clamp-2 min-w-0 flex-1 break-words text-sm font-medium" title={title}>
+        {children}
+      </p>
+      {active && <ActiveWorkIndicator />}
+    </>
+  );
+}
 
 type JobCardProps = UnifiedAuftraegeJobMenuProps & {
   job: Job;
@@ -79,7 +106,7 @@ const JobCard = memo(function JobCard({
       onClick={isPending ? undefined : () => router.push(detailHref)}
     >
       <div className="min-w-0 flex-1 space-y-1.5">
-        <div className="flex items-center gap-2">
+        <div className="flex items-baseline gap-2">
           <InlinePending
             active={isPending || isSettling}
             label={isPending ? 'Wird gespeichert' : SETTLING_LABEL}
@@ -89,20 +116,19 @@ const JobCard = memo(function JobCard({
               {job.jobNumber}
             </span>
           )}
-          <MarqueeText className="flex-1 text-sm font-medium">
+          <RecordCardTitle title={getJobDisplayTitle(job)} active={Boolean(isActive)}>
             {isPending ? (
-              <span>{getJobDisplayTitle(job)}</span>
+              getJobDisplayTitle(job)
             ) : (
               <Link
                 href={detailHref}
-                className="inline-flex items-center rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className={CARD_TITLE_LINK_CLASS}
                 onClick={(event) => event.stopPropagation()}
               >
                 {getJobDisplayTitle(job)}
-                {isActive && <ActiveWorkIndicator />}
               </Link>
             )}
-          </MarqueeText>
+          </RecordCardTitle>
         </div>
         <UnifiedAuftraegeJobCardSummary
           job={job}
@@ -194,27 +220,26 @@ function ProjectCardBody({
 }: ProjectCardBodyProps) {
   return (
     <div className="min-w-0 flex-1 space-y-1.5">
-      <div className="flex items-center gap-2">
+      <div className="flex items-baseline gap-2">
         <SettlingIndicator active={isSettling} />
         {project.projectNumber && (
           <span className="max-w-[55%] shrink-0 truncate font-mono text-xs text-muted-foreground">
             {project.projectNumber}
           </span>
         )}
-        <MarqueeText className="flex-1 text-sm font-medium">
+        <RecordCardTitle title={getProjectDisplayTitle(project)} active={entry.hasActiveWork}>
           {isPending ? (
-            <span>{getProjectDisplayTitle(project)}</span>
+            getProjectDisplayTitle(project)
           ) : (
             <Link
               href={projectHref}
-              className="inline-flex items-center rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className={CARD_TITLE_LINK_CLASS}
               onClick={(event) => event.stopPropagation()}
             >
               {getProjectDisplayTitle(project)}
-              {entry.hasActiveWork && <ActiveWorkIndicator />}
             </Link>
           )}
-        </MarqueeText>
+        </RecordCardTitle>
       </div>
       <UnifiedAuftraegeProjectCardSummary
         project={project}

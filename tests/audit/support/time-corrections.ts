@@ -12,6 +12,7 @@ import {
   timeCorrectionDialog,
   timeCorrectionReasonField,
   timeCorrectionSaveButton,
+  timeHistoryTab,
 } from '../../golden/support/steps/time-tracking';
 
 /** The office's „Zeit nachtragen“ on the history: a correction, for another person when named. */
@@ -58,12 +59,15 @@ export async function submitMissedTime(
 /**
  * An employee's own time of an earlier day through the one „Zeit nachtragen“
  * in the page header: the form asks for the reason and submits a correction.
+ * The page stays on Verlauf, where the submitted correction's card and its
+ * „Zurückziehen“ appear.
  */
 export async function submitOwnPastTime(
   page: Page,
   input: { date: string; reason: string; beforeSubmit?: () => Promise<void> },
 ): Promise<void> {
-  await page.goto('/zeiterfassung');
+  await page.goto('/zeiterfassung?tab=history');
+  await expect(timeHistoryTab(page)).toHaveAttribute('data-state', 'active');
   const dialog = manualEntryDialog(page);
   await retryDialogTransaction({
     dialog,

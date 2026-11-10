@@ -14,31 +14,69 @@ import {
 } from './balance';
 import { toVacationDayPortion, toVacationRequest, type VacationRequest } from './types';
 import { logError } from '@/lib/logging';
+import type { Tables } from '@/lib/supabase/database.types';
+import { z } from '@/lib/zod';
 
 // Server-only shared loaders for the vacation domain. Server actions and the
 // target loaders consume these; nothing here performs authorization — callers
 // resolve their own authority first.
 
+const vacationRowSchema = z.object({
+  approved_days_by_year: z.json().nullable(),
+  cancellation_reason: z.string().nullable(),
+  cancelled_at: z.string().nullable(),
+  cancelled_by: z.string().nullable(),
+  comment: z.string().nullable(),
+  created_at: z.string(),
+  day_portion: z.string(),
+  decided_at: z.string().nullable(),
+  decided_by: z.string().nullable(),
+  decision_comment: z.string().nullable(),
+  employee_record_id: z.string(),
+  end_date: z.string(),
+  id: z.string(),
+  organization_id: z.string(),
+  requested_by: z.string().nullable(),
+  start_date: z.string(),
+  status: z.string(),
+  updated_at: z.string(),
+}) satisfies z.ZodType<Tables<'vacation_requests'>>;
+const openAbsencesSchema = z.object({
+  vacations: z.array(vacationRowSchema),
+  /** Each person who left with a visit still ahead, from the day after their exit. */
+  leaverWindows: z.array(z.object({ employeeRecordId: z.string(), from: z.string() })),
+});
+export type OpenAbsences = z.infer<typeof openAbsencesSchema>;
+
 /**
- * The organization's open vacation requests, read once per request: the
- * pending ones the approvers decide, and the approved ones ending on `today`
- * or later, whose planned visits the planners replan. By start date. Outside
- * a GET read scope every call reads fresh, so an action sees its own writes.
+ * The organization's open absences, read once per request in one call
+ * (public.read_open_absences): the pending vacation requests the approvers
+ * decide and the approved ones ending on `today` or later, by start date,
+ * and the people who left with a visit still ahead, whose planned visits the
+ * planners replan. Outside a GET read scope every call reads fresh, so an
+ * action sees its own writes. More open requests than a list may hold fail
+ * the read, as a paged list's overflow does.
  */
-export const readOpenVacationRequests = memoizeRequestRead(
-  async (organizationId: string, today: string) =>
-    readCompleteRows(
-      (from, to) =>
-        createSupabaseAdminClient()
-          .from('vacation_requests')
-          .select('*')
-          .eq('organization_id', organizationId)
-          .or(`status.eq.pending,and(status.eq.approved,end_date.gte.${today})`)
-          .order('start_date', { ascending: true })
-          .order('id')
-          .range(from, to),
-      LIST_ROW_CAP,
-    ),
+export const readOpenAbsences = memoizeRequestRead(
+  async (
+    organizationId: string,
+    today: string,
+  ): Promise<
+    { data: OpenAbsences; error: null } | { data: null; error: { code?: string; message: string } }
+  > => {
+    const { data, error } = await createSupabaseAdminClient().rpc('read_open_absences', {
+      p_organization_id: organizationId,
+      p_today: today,
+    });
+    if (error) return { data: null, error };
+    const parsed = openAbsencesSchema.safeParse(data);
+    if (!parsed.success)
+      return { data: null, error: { code: 'unexpected_shape', message: 'unexpected_shape' } };
+    if (parsed.data.vacations.length > LIST_ROW_CAP) {
+      return { data: null, error: { code: 'row_overflow', message: 'row_overflow' } };
+    }
+    return { data: parsed.data, error: null };
+  },
   { outsideRequest: 'fresh' },
 );
 

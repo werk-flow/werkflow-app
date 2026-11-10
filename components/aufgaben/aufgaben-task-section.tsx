@@ -5,6 +5,7 @@ import {
   CalendarClock,
   CalendarX,
   ClipboardCheck,
+  PhoneCall,
   Clock,
   Inbox,
   MessageSquare,
@@ -33,6 +34,11 @@ const SECTION_PRESENTATION: Record<
   AttentionTaskSectionKey,
   { icon: React.ReactNode; title: string; testId: string; previewRows?: number }
 > = {
+  callback: {
+    icon: <PhoneCall className="size-4" />,
+    title: 'Rückruf überfällig',
+    testId: 'attention-callback-tasks',
+  },
   time: { icon: <Clock className="size-4" />, title: 'Zeitfreigaben', testId: 'attention-time-tasks' },
   vacation: {
     icon: <Palmtree className="size-4" />,

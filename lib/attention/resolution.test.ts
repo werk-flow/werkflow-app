@@ -9,6 +9,7 @@ import {
   resolveSicknessReportFacts,
   resolveVacationDecisionFacts,
   selectFollowUpAttentionRows,
+  showsOverdueCallback,
   sortNotificationsNewestFirst,
 } from './resolution';
 import { attentionItemKey } from './types';
@@ -87,6 +88,18 @@ describe('selectFollowUpAttentionRows (P1-10)', () => {
     );
     expect(result.capacityExceeded).toBe(false);
     expect(result.rows.map((row) => row.id)).toEqual(['own']);
+  });
+});
+
+describe('showsOverdueCallback', () => {
+  test("an overdue callback is its owner's task while the owner is a manager", () => {
+    const owned = { assignedTo: 'owner', ownerIsManager: true };
+    expect(showsOverdueCallback(owned, 'owner')).toBe(true);
+    expect(showsOverdueCallback(owned, 'colleague')).toBe(false);
+  });
+  test('every manager sees an overdue callback whose owner left or lost the role, or that has none', () => {
+    expect(showsOverdueCallback({ assignedTo: 'former', ownerIsManager: false }, 'colleague')).toBe(true);
+    expect(showsOverdueCallback({ assignedTo: null, ownerIsManager: false }, 'colleague')).toBe(true);
   });
 });
 

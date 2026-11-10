@@ -50,7 +50,6 @@ export const employmentTransitionInputSchema = operationSchema.extend({
   ]),
   effectiveOn: z.iso.date(),
   reason: reasonSchema,
-  acceptUnresolvedWork: z.boolean().default(false),
 });
 
 export const createOnboardingPlanInputSchema = operationSchema.extend({

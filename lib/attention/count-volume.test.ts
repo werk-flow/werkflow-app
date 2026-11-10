@@ -1,18 +1,16 @@
 // Rule test: an attention count reads rows in proportion to the pending work, never to the organization's history.
 import { describe, expect, mock, setSystemTime, test } from 'bun:test';
 import { addLocalDays } from '@/lib/date-time/berlin';
+import { compare, parseOperand, termFilter, type Filter } from '@/lib/testing/postgrest-filter-fake';
 
-// Tier 2 for "attention count reads" (docs/technical/realtime-and-caching.md),
-// beside count-reads.test.ts, which pins the queries of the steady state. The
-// counts run on every debounced Realtime event of every signed-in session, so
-// the rows one derivation reads are a budget too. This test drives the real
-// derivation against a fake client that applies the query filters (eq, neq,
-// in, is, gt/gte/lt/lte, not, or, range) to a seeded world: pending work in
-// every collection the counts derive from, and a large closed history (decided
-// requests, approved entries, resolved defects, handed-over work, acknowledged
-// dispatches, ended sickness reports). The rows read may grow with the pending work only: the closed
-// history adds no row except the reviewed HISTORY_READS below, each of which
-// names the change that removes it.
+// Tier 2 for "attention count reads" (docs/technical/realtime-and-caching.md), beside count-reads.test.ts,
+// which pins the queries of the steady state. The counts run on every debounced Realtime event of every
+// signed-in session, so the rows one derivation reads are a budget too. This test drives the real derivation
+// against a fake client that applies the query filters (eq, neq, in, is, gt/gte/lt/lte, not, or, range) to a
+// seeded world: pending work in every collection the counts derive from, and a large closed history (decided
+// requests, approved entries, resolved defects, handed-over work, acknowledged dispatches, ended sickness
+// reports). The rows read may grow with the pending work only: the closed history adds no row except the
+// reviewed HISTORY_READS below, each of which names the change that removes it.
 
 const ORG = '6b0c3f8e-1d2a-4c5b-9e7f-0a1b2c3d4e5f';
 const USER = '7c1d4a9f-2e3b-4d6c-8f0a-1b2c3d4e5f60';
@@ -408,80 +406,6 @@ function buildWorld(size: { pending: number; history: number }): World {
 
 // ---- The filtering fake client ----
 
-type Filter = (row: Row) => boolean;
-
-/** SQL semantics: a null column fails every comparison but `is null`. */
-function compare(operator: string, value: unknown, operand: unknown): boolean {
-  if (operator === 'is') return operand === null ? value === null || value === undefined : value === operand;
-  if (value === null || value === undefined) return false;
-  const ordered = (test: (left: string | number, right: string | number) => boolean): boolean =>
-    (typeof value === 'number' || typeof value === 'string') &&
-    (typeof operand === 'number' || typeof operand === 'string') &&
-    test(value, operand);
-  switch (operator) {
-    case 'eq':
-      return value === operand;
-    case 'neq':
-      return value !== operand;
-    case 'in':
-      return Array.isArray(operand) && operand.includes(value);
-    case 'gt':
-      return ordered((left, right) => left > right);
-    case 'gte':
-      return ordered((left, right) => left >= right);
-    case 'lt':
-      return ordered((left, right) => left < right);
-    case 'lte':
-      return ordered((left, right) => left <= right);
-    default:
-      throw new Error(
-        `The fake client cannot apply the operator ${operator}; teach it before you rely on it.`,
-      );
-  }
-}
-
-/** A PostgREST filter value: `null`, a boolean, a `(a,b)` list, or the text itself. */
-function parseOperand(operator: string, raw: string): unknown {
-  if (operator === 'in') return raw.replace(/^\(|\)$/g, '').split(',');
-  return raw === 'null' ? null : raw === 'true' ? true : raw === 'false' ? false : raw;
-}
-
-/** Splits `a,and(b,c),d` at its top-level commas. */
-function topLevelTerms(text: string): string[] {
-  const terms: string[] = [];
-  let depth = 0;
-  let start = 0;
-  for (let at = 0; at < text.length; at += 1) {
-    if (text[at] === '(') depth += 1;
-    else if (text[at] === ')') depth -= 1;
-    else if (text[at] === ',' && depth === 0) {
-      terms.push(text.slice(start, at));
-      start = at + 1;
-    }
-  }
-  return [...terms, text.slice(start)];
-}
-
-/** One term of an `or(...)` string: `col.op.value`, `col.not.op.value`, `and(...)` or `or(...)`. */
-function termFilter(term: string): Filter {
-  const group = /^(and|or)\((.*)\)$/.exec(term);
-  if (group) {
-    const parts = topLevelTerms(group[2] ?? '').map(termFilter);
-    return group[1] === 'and'
-      ? (row) => parts.every((part) => part(row))
-      : (row) => parts.some((part) => part(row));
-  }
-  const [column = '', operator = '', ...rest] = term.split('.');
-  if (operator === 'not') {
-    const [inner = '', ...value] = rest;
-    const operand = parseOperand(inner, value.join('.'));
-    return (row) =>
-      row[column] !== null && row[column] !== undefined && !compare(inner, row[column], operand);
-  }
-  const operand = parseOperand(operator, rest.join('.'));
-  return (row) => compare(operator, row[column], operand);
-}
-
 /** A query against the seeded world that applies its filters and records the rows it returns. */
 function query(table: string) {
   const filters: Filter[] = [];
@@ -594,23 +518,43 @@ function handoverCandidates(organizationId: unknown): Row[] {
   return [...new Set(ids)].map((projectId) => ({ project_id: projectId }));
 }
 
-/** The two read functions the derivations call, answered from the seeded world. */
+/** `list_open_request_attention` as migration 20261129100001 defines it, without a promised callback. */
+function openRequests(organizationId: unknown): Row[] {
+  return (world.get('client_requests') ?? [])
+    .filter(
+      (row) =>
+        row.organization_id === organizationId && (row.status === 'offen' || row.status === 'in_klaerung'),
+    )
+    .map((row) => ({ ...row, callback_due_at: null, callback_overdue: false, owner_is_manager: true }));
+}
+
+/** The derivations' read functions, from the seeded world: whole vacation rows, and nobody has left. */
 function rpc(name: string, args: unknown) {
+  if (name === 'read_open_absences') {
+    const today = String(field(args, 'p_today'));
+    const open = termFilter(`or(status.eq.pending,and(status.eq.approved,end_date.gte.${today}))`);
+    const vacations = (world.get('vacation_requests') ?? [])
+      .filter((row) => row.organization_id === field(args, 'p_organization_id') && open(row))
+      .map((row): Row => ({ approved_days_by_year: null, cancelled_by: null, comment: null, ...row }))
+      .map((row) => ({ decided_by: null, requested_by: null, updated_at: row.created_at, ...row }));
+    reads.push({ table: 'vacation_requests', rows: vacations.length });
+    return Promise.resolve({ data: { vacations, leaverWindows: [] }, error: null });
+  }
   const rows =
     name === 'list_pending_dispatch_recipients'
       ? pendingRecipients(field(args, 'p_organization_id'), field(args, 'p_employee_record_id'))
       : name === 'list_handover_candidate_projects'
         ? handoverCandidates(field(args, 'p_organization_id'))
-        : [];
+        : name === 'list_open_request_attention'
+          ? openRequests(field(args, 'p_organization_id'))
+          : [];
   // The readers page a function's result like a table read: .range(from, to).
-  const page = (from: number, to: number) => ({
-    then: (resolve: (result: unknown) => unknown) => {
-      const slice = rows.slice(from, to + 1);
-      reads.push({ table: `rpc ${name}`, rows: slice.length });
-      return Promise.resolve(resolve({ data: slice, error: null }));
+  return {
+    range: (from: number, to: number) => {
+      reads.push({ table: `rpc ${name}`, rows: rows.slice(from, to + 1).length });
+      return Promise.resolve({ data: rows.slice(from, to + 1), error: null });
     },
-  });
-  return { range: page };
+  };
 }
 
 const client = {
@@ -652,12 +596,10 @@ function historyGrowth(base: Map<string, number>, withHistory: Map<string, numbe
 }
 
 /**
- * table -> the closed-history rows each role still reads, in units of
- * HISTORY, and why. Shrink-only: more growth fails, and less fails until the
- * entry is lowered or removed. Empty: the counts read no history. The
- * viewer's own dispatches (list_pending_dispatch_recipients) and
- * the handover candidates (list_handover_candidate_projects) are pending
- * sets of the database since migration 20261016100000.
+ * table -> the closed-history rows each role still reads, in units of HISTORY, and why. Shrink-only: more
+ * growth fails, and less fails until the entry is lowered or removed. Empty: the counts read no history. The
+ * viewer's own dispatches (list_pending_dispatch_recipients) and the handover candidates
+ * (list_handover_candidate_projects) are pending sets of the database since migration 20261016100000.
  */
 const HISTORY_READS: Readonly<
   Record<string, { rows: Readonly<Record<Role, number>>; pagesOnly?: readonly Role[]; reason: string }>
@@ -676,9 +618,8 @@ function historyProblems(nextRole: Role, growth: Record<string, number>): string
 }
 
 /**
- * Rows read with `pending` open items in every collection and no history:
- * at most `fixed + perPendingItem * pending`, in at most `requests` requests.
- * Measured at 3 and 6 pending items; a new read raises the count and fails.
+ * Rows read with `pending` open items in every collection and no history: at most `fixed + perPendingItem *
+ * pending`, in at most `requests` requests. Measured at 3 and 6 pending items; a new read raises it and fails.
  */
 // werk-flow/werkflow-planning#267 added the approved vacations ahead with their visits: the office reads
 // their visits once per 15 vacations plus dispatches and names, and own approvals add a marker read.

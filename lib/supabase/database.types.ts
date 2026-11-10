@@ -580,6 +580,7 @@ export type Database = {
       client_requests: {
         Row: {
           assigned_to: string | null;
+          callback_due_at: string | null;
           caller_address: string | null;
           caller_email: string | null;
           caller_name: string | null;
@@ -600,6 +601,7 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           details: string | null;
+          equipment_id: string | null;
           id: string;
           organization_id: string;
           received_at: string;
@@ -613,6 +615,7 @@ export type Database = {
         };
         Insert: {
           assigned_to?: string | null;
+          callback_due_at?: string | null;
           caller_address?: string | null;
           caller_email?: string | null;
           caller_name?: string | null;
@@ -633,6 +636,7 @@ export type Database = {
           created_at?: string;
           created_by?: string | null;
           details?: string | null;
+          equipment_id?: string | null;
           id?: string;
           organization_id: string;
           received_at?: string;
@@ -646,6 +650,7 @@ export type Database = {
         };
         Update: {
           assigned_to?: string | null;
+          callback_due_at?: string | null;
           caller_address?: string | null;
           caller_email?: string | null;
           caller_name?: string | null;
@@ -666,6 +671,7 @@ export type Database = {
           created_at?: string;
           created_by?: string | null;
           details?: string | null;
+          equipment_id?: string | null;
           id?: string;
           organization_id?: string;
           received_at?: string;
@@ -733,6 +739,13 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "profiles";
             referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "client_requests_equipment_fk";
+            columns: ["equipment_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "installed_equipment";
+            referencedColumns: ["id", "organization_id"];
           },
           {
             foreignKeyName: "client_requests_organization_id_fkey";
@@ -7664,6 +7677,161 @@ export type Database = {
           },
         ];
       };
+      problem_report_events: {
+        Row: {
+          actor_id: string;
+          created_at: string;
+          event_type: string;
+          id: string;
+          organization_id: string;
+          payload: Json;
+          report_id: string;
+        };
+        Insert: {
+          actor_id: string;
+          created_at?: string;
+          event_type: string;
+          id?: string;
+          organization_id: string;
+          payload?: Json;
+          report_id: string;
+        };
+        Update: {
+          actor_id?: string;
+          created_at?: string;
+          event_type?: string;
+          id?: string;
+          organization_id?: string;
+          payload?: Json;
+          report_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "problem_report_events_report_id_organization_id_fkey";
+            columns: ["report_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "problem_reports";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      problem_report_files: {
+        Row: {
+          created_at: string;
+          file_name: string;
+          id: string;
+          kind: string;
+          mime_type: string;
+          organization_id: string;
+          report_id: string;
+          size_bytes: number;
+          storage_path: string;
+        };
+        Insert: {
+          created_at?: string;
+          file_name: string;
+          id: string;
+          kind: string;
+          mime_type: string;
+          organization_id: string;
+          report_id: string;
+          size_bytes: number;
+          storage_path: string;
+        };
+        Update: {
+          created_at?: string;
+          file_name?: string;
+          id?: string;
+          kind?: string;
+          mime_type?: string;
+          organization_id?: string;
+          report_id?: string;
+          size_bytes?: number;
+          storage_path?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "problem_report_files_report_id_organization_id_fkey";
+            columns: ["report_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "problem_reports";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      problem_reports: {
+        Row: {
+          bucket: string | null;
+          closed_at: string | null;
+          context: Json | null;
+          created_at: string;
+          description: string | null;
+          filed_by_id: string | null;
+          id: string;
+          organization_id: string;
+          originals_deleted_at: string | null;
+          reporter_id: string;
+          response: string | null;
+          scrub_state: string;
+          scrubbed_description: string | null;
+          status: string;
+        };
+        Insert: {
+          bucket?: string | null;
+          closed_at?: string | null;
+          context?: Json | null;
+          created_at?: string;
+          description?: string | null;
+          filed_by_id?: string | null;
+          id?: string;
+          organization_id: string;
+          originals_deleted_at?: string | null;
+          reporter_id: string;
+          response?: string | null;
+          scrub_state?: string;
+          scrubbed_description?: string | null;
+          status?: string;
+        };
+        Update: {
+          bucket?: string | null;
+          closed_at?: string | null;
+          context?: Json | null;
+          created_at?: string;
+          description?: string | null;
+          filed_by_id?: string | null;
+          id?: string;
+          organization_id?: string;
+          originals_deleted_at?: string | null;
+          reporter_id?: string;
+          response?: string | null;
+          scrub_state?: string;
+          scrubbed_description?: string | null;
+          status?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "problem_reports_filed_by_id_fkey";
+            columns: ["filed_by_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "problem_reports_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "problem_reports_reporter_id_fkey";
+            columns: ["reporter_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       profiles: {
         Row: {
           avatar_path: string | null;
@@ -13348,6 +13516,10 @@ export type Database = {
         };
         Returns: string;
       };
+      apply_problem_report_retention: {
+        Args: { p_organization_id: string; p_report_id: string };
+        Returns: string;
+      };
       apply_responsibility_configuration: {
         Args: {
           p_actor_id: string;
@@ -13564,6 +13736,7 @@ export type Database = {
         };
         Returns: {
           assigned_to: string | null;
+          callback_due_at: string | null;
           caller_address: string | null;
           caller_email: string | null;
           caller_name: string | null;
@@ -13584,6 +13757,7 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           details: string | null;
+          equipment_id: string | null;
           id: string;
           organization_id: string;
           received_at: string;
@@ -14062,6 +14236,7 @@ export type Database = {
         Args: {
           p_actor_id: string;
           p_assigned_to: string;
+          p_callback_due_at?: string;
           p_caller_address: string;
           p_caller_email: string;
           p_caller_name: string;
@@ -14070,6 +14245,7 @@ export type Database = {
           p_client_id: string;
           p_contact_id: string;
           p_details: string;
+          p_equipment_id?: string;
           p_organization_id: string;
           p_received_at: string;
           p_request_number: string;
@@ -14080,6 +14256,7 @@ export type Database = {
         };
         Returns: {
           assigned_to: string | null;
+          callback_due_at: string | null;
           caller_address: string | null;
           caller_email: string | null;
           caller_name: string | null;
@@ -14100,6 +14277,7 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           details: string | null;
+          equipment_id: string | null;
           id: string;
           organization_id: string;
           received_at: string;
@@ -15453,6 +15631,18 @@ export type Database = {
         };
         Returns: Json;
       };
+      hand_over_personnel_work: {
+        Args: {
+          p_actor_id: string;
+          p_assessments: Json;
+          p_employee_record_id: string;
+          p_handover_from: string;
+          p_organization_id: string;
+          p_override_reason: string;
+          p_rows: Json;
+        };
+        Returns: number;
+      };
       import_inventory_row: {
         Args: {
           p_actor_id: string;
@@ -15796,11 +15986,33 @@ export type Database = {
         };
         Returns: Json;
       };
+      list_open_request_attention: {
+        Args: { p_organization_id: string };
+        Returns: {
+          assigned_to: string;
+          callback_due_at: string;
+          callback_overdue: boolean;
+          id: string;
+          owner_is_manager: boolean;
+          received_at: string;
+          request_number: string;
+          status: Database["public"]["Enums"]["request_status"];
+          summary: string;
+          urgency: Database["public"]["Enums"]["request_urgency"];
+        }[];
+      };
       list_pending_dispatch_recipients: {
         Args: { p_employee_record_id: string; p_organization_id: string };
         Returns: {
           dispatch_id: string;
           revision_id: string;
+        }[];
+      };
+      list_problem_reports_due_for_retention: {
+        Args: { p_after?: string; p_limit: number };
+        Returns: {
+          id: string;
+          organization_id: string;
         }[];
       };
       list_profile_references: {
@@ -15987,6 +16199,7 @@ export type Database = {
         };
         Returns: {
           assigned_to: string | null;
+          callback_due_at: string | null;
           caller_address: string | null;
           caller_email: string | null;
           caller_name: string | null;
@@ -16007,6 +16220,7 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           details: string | null;
+          equipment_id: string | null;
           id: string;
           organization_id: string;
           received_at: string;
@@ -16064,6 +16278,10 @@ export type Database = {
       queue_storage_purge: {
         Args: { p_organization_id: string; p_paths: string[] };
         Returns: undefined;
+      };
+      read_open_absences: {
+        Args: { p_organization_id: string; p_today: string };
+        Returns: Json;
       };
       read_organization_export_page: {
         Args: {
@@ -16389,6 +16607,7 @@ export type Database = {
         };
         Returns: {
           assigned_to: string | null;
+          callback_due_at: string | null;
           caller_address: string | null;
           caller_email: string | null;
           caller_name: string | null;
@@ -16409,6 +16628,7 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           details: string | null;
+          equipment_id: string | null;
           id: string;
           organization_id: string;
           received_at: string;
@@ -17946,6 +18166,7 @@ export type Database = {
         };
         Returns: {
           assigned_to: string | null;
+          callback_due_at: string | null;
           caller_address: string | null;
           caller_email: string | null;
           caller_name: string | null;
@@ -17966,6 +18187,7 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           details: string | null;
+          equipment_id: string | null;
           id: string;
           organization_id: string;
           received_at: string;

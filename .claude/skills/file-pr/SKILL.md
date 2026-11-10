@@ -18,6 +18,7 @@ Adapted for WerkFlow from t3dotgg/tstack (MIT, [license](../LICENSE-tstack)).
 5. Check the title, body and attachments for secrets and personal data.
 6. Open a real PR, never a draft: `gh pr create --base main --title <title> --body-file <file>`. If GraphQL is used up: `gh api repos/<owner>/<repo>/pulls -f title=<title> -f head=<branch> -f base=main -F body=@<file>`.
 7. Call `link_pull_request` with the PR URL.
+8. Screenshots: `gh` cannot attach an image to a PR, so each image is an asset of the `pr-screenshots` prerelease. Name it `pr<number>-<what>.png`, upload it with `gh release upload pr-screenshots <file>`, embed `https://github.com/werk-flow/werkflow-app/releases/download/pr-screenshots/<name>` in the body, and update the PR with `gh pr edit <number> --body-file <file>`. The repository is public: synthetic data only. Never commit a PR-only image or push a branch for one. `.github/workflows/pr-screenshots.yml` deletes a PR's assets when it closes.
 
 Bad problem line:
 
