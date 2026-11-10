@@ -18,6 +18,7 @@ export const metadata: Metadata = {
   description: 'WerkFlow Dashboard-Zugriff',
   icons: {
     icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
+    apple: [{ url: '/icons/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
   },
 };
 

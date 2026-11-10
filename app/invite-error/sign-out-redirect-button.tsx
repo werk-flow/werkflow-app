@@ -8,6 +8,7 @@ import { ErrorText } from '@/components/ui/error-text';
 import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { clearEmailChangeChallengeQuietly } from '@/hooks/use-sign-out';
 import { loadDocument } from '@/lib/navigation/document-load';
+import { clearServiceWorkerCaches } from '@/lib/offline/service-worker-caches';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
 
@@ -33,6 +34,7 @@ export function SignOutAndRedirectButton({ inviteCode }: SignOutAndRedirectButto
       try {
         await clearEmailChangeChallengeQuietly();
         clearManualEntryBridge();
+        await clearServiceWorkerCaches();
 
         // Sign out the current user (explicit global preserves the pre-existing
         // default behavior of this flow).
