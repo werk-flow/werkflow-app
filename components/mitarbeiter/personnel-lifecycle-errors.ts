@@ -8,7 +8,16 @@ export const ERROR_MESSAGES = {
   organization_owner_protected:
     'Der Organisationsinhaber kann hier nicht gesperrt oder inaktiv gesetzt werden.',
   last_responsibility_holder: 'Mindestens eine Verantwortung hätte danach keine wirksame Vertretung.',
-  unresolved_work: 'Offene Zuständigkeiten oder Aufträge müssen zuerst geprüft werden.',
+  invalid_handover_date: 'Das Übergabedatum darf nicht vor heute liegen.',
+  target_not_found: 'Die gewählte Person gehört nicht zu dieser Organisation.',
+  invalid_target: 'Die Person kann ihre Arbeit nicht an sich selbst übergeben.',
+  target_not_available: 'Die gewählte Person ist zum Übergabedatum schon ausgetreten.',
+  target_without_login:
+    'Ein Auftrag ohne Einsatz ab dem Übergabedatum braucht eine Person mit App-Zugang. Wähle jemand anderen.',
+  stale_handover: 'Ein Auftrag ist nicht mehr bei dieser Person. Die Ansicht wird aktualisiert.',
+  stale_planning_occurrence:
+    'Ein Einsatz wurde inzwischen geändert. Bitte prüfe die Auswahl und übergib erneut.',
+  job_not_found: 'Ein Auftrag ist nicht mehr offen. Die Ansicht wird aktualisiert.',
   future_effective_at_required: 'Wähle für eine Planung einen Zeitpunkt in der Zukunft.',
   immediate_effective_at_required:
     'Für diese Aktion gilt der aktuelle Zeitpunkt. Wähle für eine spätere Sperre den geplanten Übergang.',
