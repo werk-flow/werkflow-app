@@ -13,12 +13,15 @@ import { PROBLEM_REPORT_SHORTCUT, useProblemReportLauncher } from './problem-rep
  * React owns its events, so the server HTML of every page stays as it was
  * (lab.field.cold-start): the header keeps the box of the icon, and the row
  * appears in the free space above the profile card. A navigation re-renders
- * the sidebar, never this button.
+ * the sidebar, never this button. The phone menu passes `onPress`, which
+ * closes the menu before the report starts.
  */
 export const ProblemReportButton = memo(function ProblemReportButton({
   placement,
+  onPress,
 }: {
   placement: 'header' | 'sidebar';
+  onPress?: (() => void) | undefined;
 }) {
   const { start, preparing } = useProblemReportLauncher();
   const hydrated = useHydrated();
@@ -45,7 +48,7 @@ export const ProblemReportButton = memo(function ProblemReportButton({
         className="w-full justify-start gap-3 px-3 font-normal text-muted-foreground"
         aria-keyshortcuts={PROBLEM_REPORT_SHORTCUT}
         pending={preparing}
-        onClick={start}
+        onClick={onPress ?? start}
       >
         <MessageSquareWarning className="size-4" />
         <span className="flex-1 text-left">Problem melden</span>

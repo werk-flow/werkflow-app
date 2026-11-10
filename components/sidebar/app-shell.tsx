@@ -1,14 +1,20 @@
 'use client';
 
-import { useState, useEffect, useRef, createContext, useContext, useMemo, useSyncExternalStore } from 'react';
+import {
+  useState,
+  useEffect,
+  useRef,
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useSyncExternalStore,
+} from 'react';
 import { SidebarLink as Link } from './sidebar-link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
-// The drawer needs enter and exit animations only: `m` with the DOM animation
-// features keeps the full `motion` component out of every route's bundle.
-import { AnimatePresence, LazyMotion, domAnimation, m } from 'framer-motion';
-import { Menu, X } from 'lucide-react';
+import { Menu } from 'lucide-react';
 
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -23,6 +29,7 @@ import { AttentionCountProvider, useAttentionCounts } from '@/components/realtim
 import { ProblemReportButton } from '@/components/problem-reports/problem-report-button';
 import { ProblemReportLauncher } from '@/components/problem-reports/problem-report-launcher';
 import type { AttentionCounts } from '@/lib/attention/types';
+import { MobileDrawer } from './mobile-drawer';
 import { OrgSwitchOverlay } from './org-switch-overlay';
 import { isNavItemActive, navItemsFor } from './sidebar-nav-items';
 
@@ -172,8 +179,11 @@ function SidebarLogo({ onClick }: { onClick: () => void }) {
   );
 }
 
+/** What the phone menu does on a navigation and on its report row. */
+type SidebarPresses = { onNavigate?: (() => void) | undefined; onReport?: (() => void) | undefined };
+
 // Sidebar content component (shared between desktop and mobile)
-function SidebarContent({ onNavigate }: { onNavigate?: (() => void) | undefined }) {
+function SidebarContent({ onNavigate, onReport }: SidebarPresses) {
   const pathname = usePathname();
   const { activeOrg } = useOrganization();
   const { actionableCount, approvalsCount, unreadNotificationCount } = useAttentionCounts();
@@ -252,7 +262,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: (() => void) | undefined 
         </ul>
       </nav>
 
-      <ProblemReportButton placement="sidebar" />
+      <ProblemReportButton placement="sidebar" onPress={onReport} />
 
       {/* Profile card */}
       <div className="mt-auto border-t">
@@ -263,14 +273,14 @@ function SidebarContent({ onNavigate }: { onNavigate?: (() => void) | undefined 
 }
 
 // Wraps SidebarContent with a loading check for provider hydration
-function DynamicSidebarContent({ onNavigate }: { onNavigate?: (() => void) | undefined }) {
+function DynamicSidebarContent({ onNavigate, onReport }: SidebarPresses) {
   const { isLoading } = useOrganization();
 
   if (isLoading) {
     return <SidebarSkeleton />;
   }
 
-  return <SidebarContent onNavigate={onNavigate} />;
+  return <SidebarContent onNavigate={onNavigate} onReport={onReport} />;
 }
 
 // Desktop sidebar
@@ -282,67 +292,6 @@ function DesktopSidebar() {
     >
       <DynamicSidebarContent />
     </aside>
-  );
-}
-
-// Mobile drawer overlay
-function MobileDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
-  // Close on escape key, unless a menu inside the drawer (the profile card's)
-  // already consumed it to close itself.
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !e.defaultPrevented) onClose();
-    };
-
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-      // Prevent body scroll when drawer is open
-      document.body.style.overflow = 'hidden';
-    }
-
-    return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = '';
-    };
-  }, [isOpen, onClose]);
-
-  return (
-    <LazyMotion features={domAnimation} strict>
-      <AnimatePresence>
-        {isOpen && (
-          <>
-            {/* Backdrop */}
-            <m.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="fixed inset-0 z-40 bg-black/50 md:hidden"
-              onClick={onClose}
-            />
-
-            {/* Drawer */}
-            <m.aside
-              initial={{ x: '-100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '-100%' }}
-              transition={{ type: 'tween', duration: 0.25, ease: 'easeOut' }}
-              className="fixed left-0 top-0 z-50 h-full w-72 flex-col border-r bg-card shadow-xl md:hidden flex"
-            >
-              {/* Close button */}
-              <div className="absolute right-2 top-2 z-10">
-                <Button variant="ghost" size="icon" onClick={onClose} className="size-11">
-                  <X className="h-4 w-4" />
-                  <span className="sr-only">Menü schließen</span>
-                </Button>
-              </div>
-
-              <DynamicSidebarContent onNavigate={onClose} />
-            </m.aside>
-          </>
-        )}
-      </AnimatePresence>
-    </LazyMotion>
   );
 }
 
@@ -394,6 +343,7 @@ export function AppShell({
   initialOrganizationId?: string | null;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const closeDrawer = useCallback(() => setIsOpen(false), []);
   const { isSwitchingOrg, activeOrg } = useOrganization();
   const showIosInstallHint = useSyncExternalStore(subscribeNever, needsIosInstallHint, onServer);
   useOfflineShell();
@@ -410,7 +360,9 @@ export function AppShell({
           <div className="flex h-dvh w-full flex-col overflow-hidden overscroll-none bg-background md:flex-row">
             <MobileHeader />
             <DesktopSidebar />
-            <MobileDrawer isOpen={isOpen} onClose={() => setIsOpen(false)} />
+            <MobileDrawer isOpen={isOpen} onClose={closeDrawer}>
+              {(report) => <DynamicSidebarContent onNavigate={closeDrawer} onReport={report} />}
+            </MobileDrawer>
             <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
               <main
                 ref={mainRef}

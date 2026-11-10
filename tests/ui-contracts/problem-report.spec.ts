@@ -37,6 +37,31 @@ async function expectDialogReady(page: Page) {
   return dialog;
 }
 
+/** The colour of the stored screenshot at each point, given as fractions of its width and height. */
+async function storedScreenshotPixels(
+  page: Page,
+  puts: StoredPut[],
+  points: [number, number][],
+): Promise<number[][]> {
+  const screenshot = puts.find((put) => put.kind === 'screenshot');
+  if (!screenshot) throw new Error('No screenshot reached storage.');
+  return page.evaluate(
+    async ({ bytes, points }) => {
+      const image = await createImageBitmap(new Blob([new Uint8Array(bytes)], { type: 'image/png' }));
+      const canvas = document.createElement('canvas');
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('No 2D context.');
+      context.drawImage(image, 0, 0);
+      return points.map(([x, y]) => [
+        ...context.getImageData(image.width * x, image.height * y, 1, 1).data.slice(0, 3),
+      ]);
+    },
+    { bytes: [...screenshot.body], points },
+  );
+}
+
 function boundary(page: Page) {
   return page.evaluate(() => ({
     submissions: window.uiContractProblemReport.submissions,
@@ -97,27 +122,33 @@ test('a redaction box is burned into the uploaded image', async ({ page }) => {
   ).toBeVisible();
 
   expect((await boundary(page)).registered).toEqual(['screenshot']);
-  const screenshot = puts.find((put) => put.kind === 'screenshot');
-  if (!screenshot) throw new Error('No screenshot reached storage.');
-  const pixels = await page.evaluate(
-    async (bytes) => {
-      const image = await createImageBitmap(new Blob([new Uint8Array(bytes)], { type: 'image/png' }));
-      const canvas = document.createElement('canvas');
-      canvas.width = image.width;
-      canvas.height = image.height;
-      const context = canvas.getContext('2d');
-      if (!context) throw new Error('No 2D context.');
-      context.drawImage(image, 0, 0);
-      const at = (x: number, y: number) => [...context.getImageData(x, y, 1, 1).data.slice(0, 3)];
-      return {
-        inside: at(image.width * 0.5, image.height * 0.375),
-        outside: at(image.width * 0.5, image.height * 0.75),
-      };
-    },
-    [...screenshot.body],
-  );
-  expect(pixels.inside).toEqual([0, 0, 0]);
-  expect(pixels.outside).toEqual([255, 255, 255]);
+  const [inside, outside] = await storedScreenshotPixels(page, puts, [
+    [0.5, 0.375],
+    [0.5, 0.75],
+  ]);
+  expect(inside).toEqual([0, 0, 0]);
+  expect(outside).toEqual([255, 255, 255]);
+});
+
+test('the report row in the phone menu closes the menu first, so the screenshot shows the page', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  const puts = await openReportFixture(page);
+  await page.getByRole('button', { name: 'Menü öffnen', exact: true }).click();
+  const menu = page.getByRole('complementary');
+  await menu.getByRole('button', { name: 'Problem melden', exact: true }).click();
+  const dialog = await expectDialogReady(page);
+  await dialog.getByRole('textbox', { name: 'Was ist passiert?', exact: true }).fill('Das Menü hängt.');
+  await dialog.getByRole('button', { name: 'Senden', exact: true }).click();
+  await expect(
+    page.getByRole('alert').getByText('Danke! Deine Meldung Nr. 7 ist eingegangen.'),
+  ).toBeVisible();
+  // Read once the dialog is gone: while it is open, it hides the rest of the page from roles.
+  await expect(menu).toHaveCount(0);
+  // The stub redraw draws an open menu as a black box over the page's left side.
+  const [underMenu] = await storedScreenshotPixels(page, puts, [[0.25, 0.5]]);
+  expect(underMenu).toEqual([255, 255, 255]);
 });
 
 test('the context keeps a control label only when the app names it, and routes only as templates', async ({

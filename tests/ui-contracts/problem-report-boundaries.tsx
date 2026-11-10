@@ -1,7 +1,8 @@
-import type { ReactElement, ReactNode } from 'react';
+import { useCallback, useState, type ReactElement, type ReactNode } from 'react';
 
 import { ProblemReportButton } from '@/components/problem-reports/problem-report-button';
 import { ProblemReportLauncher } from '@/components/problem-reports/problem-report-launcher';
+import { MobileDrawer } from '@/components/sidebar/mobile-drawer';
 import { BannerProvider } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { OpenDialogProvider } from '@/components/ui/open-dialog-context';
@@ -124,7 +125,11 @@ export const finalizeProblemReportFileUpload: FileActions['finalizeProblemReport
   return { success: true };
 };
 
-// `@/lib/problem-reports/screenshot/redraw-screenshot`: a white page, so the test reads burned boxes exactly.
+/**
+ * `@/lib/problem-reports/screenshot/redraw-screenshot`: a white page, so the
+ * test reads burned boxes exactly. Like the real redraw, it draws the page as
+ * it is at the call: each `aside` on the page shows as a black box.
+ */
 export async function redrawScreenshot(): Promise<Blob> {
   const canvas = document.createElement('canvas');
   canvas.width = STUB_SCREENSHOT_SIZE.width;
@@ -133,6 +138,11 @@ export async function redrawScreenshot(): Promise<Blob> {
   if (!context) throw new Error('The contract browser cannot draw.');
   context.fillStyle = 'white';
   context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = 'black';
+  for (const aside of document.querySelectorAll('aside')) {
+    const box = aside.getBoundingClientRect();
+    context.fillRect(box.x, box.y, box.width, box.height);
+  }
   return new Promise<Blob>((resolve, reject) =>
     canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('No PNG.'))), 'image/png'),
   );
@@ -192,6 +202,20 @@ export default function Link({
   );
 }
 
+/** The phone menu of the app shell, with its report row. */
+function PhoneMenu(): ReactElement {
+  const [isOpen, setIsOpen] = useState(false);
+  const close = useCallback(() => setIsOpen(false), []);
+  return (
+    <>
+      <Button onClick={() => setIsOpen(true)}>Menü öffnen</Button>
+      <MobileDrawer isOpen={isOpen} onClose={close}>
+        {(report) => <ProblemReportButton placement="sidebar" onPress={report} />}
+      </MobileDrawer>
+    </>
+  );
+}
+
 /** The app shell's report button beside two controls: one the app names, one a record names. */
 export function ProblemReportContractFixture(): ReactElement {
   return (
@@ -203,6 +227,7 @@ export function ProblemReportContractFixture(): ReactElement {
             <Button>Speichern</Button>
             <Button>Musterbau Nord GmbH</Button>
             <ProblemReportButton placement="sidebar" />
+            <PhoneMenu />
           </main>
         </ProblemReportLauncher>
       </OpenDialogProvider>
