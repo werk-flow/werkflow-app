@@ -15,7 +15,7 @@ import { logReadFailure } from '@/lib/data/read-request-cache';
 import { formatBerlinLocalDateTime, getBusinessTodayIso } from '@/lib/date-time/berlin';
 import type { AdminClient } from '@/lib/supabase/admin';
 import type { Json } from '@/lib/supabase/database.types';
-import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
+import { LIST_ROW_CAP, mapInWindows, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import {
   rejectUnacknowledgedConflicts,
   type ConflictAcknowledgement,
@@ -152,6 +152,55 @@ function assessVisits(
 
 type Crews = ReadonlyMap<string, PlanningAssignmentDraft[]>;
 
+type Assessment = NonNullable<Awaited<ReturnType<typeof assessVisits>>>;
+
+/**
+ * The conflicts one reason confirms: capacity over the whole handover and
+ * each job's qualification gaps, as a calendar reassignment needs, bound to
+ * one hash of exactly these assessments.
+ */
+function handoverConflicts(capacity: Assessment, jobQualifications: readonly Assessment[]) {
+  return {
+    conflicts: [
+      ...capacity.conflicts.filter((conflict) => conflict.kind !== 'qualification'),
+      ...jobQualifications.flatMap((job) =>
+        job.conflicts.filter((conflict) => conflict.kind === 'qualification'),
+      ),
+    ],
+    assessmentFingerprint: createHash('sha256')
+      .update(
+        [capacity.capacityFingerprint, ...jobQualifications.map((job) => job.qualificationFingerprint)].join(
+          '\n',
+        ),
+      )
+      .digest('hex'),
+  };
+}
+
+/** What the handover function compares and stores for one job's moved visits. */
+function jobRecord(
+  jobId: string,
+  capacity: Assessment,
+  qualification: Assessment,
+  visits: readonly MovedVisit[],
+  crews: Crews,
+): JobHandoverAssessment {
+  return {
+    jobId,
+    capacitySnapshot: capacity.capacitySnapshot,
+    capacityFingerprint: capacity.capacityFingerprint,
+    qualificationSnapshot: qualification.qualificationSnapshot,
+    qualificationFingerprint: qualification.qualificationFingerprint,
+    visits: visits
+      .filter((visit) => visit.job_id === jobId)
+      .map((visit) => ({
+        occurrenceId: visit.id,
+        version: visit.version,
+        employeeRecordIds: (crews.get(visit.id) ?? []).map((member) => member.employeeRecordId),
+      })),
+  };
+}
+
 /**
  * The assessment of every visit a handover moves. Capacity is assessed over
  * the whole handover at once, so two jobs that go to one person on one day
@@ -181,62 +230,39 @@ export async function assessHandover(input: {
     ]),
   );
   const jobIds = [...new Set(visits.map((visit) => visit.job_id))].toSorted();
-  const [capacity, ...qualifications] = await Promise.all([
+  // The per-job assessments run in bounded windows, as every batched read does.
+  const [capacity, qualifications] = await Promise.all([
     assessVisits(input.organizationId, null, visits, crews),
-    ...jobIds.map((jobId) =>
-      assessVisits(
-        input.organizationId,
-        jobId,
-        visits.filter((visit) => visit.job_id === jobId),
-        crews,
-      ),
+    mapInWindows(
+      jobIds,
+      (jobId) =>
+        assessVisits(
+          input.organizationId,
+          jobId,
+          visits.filter((visit) => visit.job_id === jobId),
+          crews,
+        ),
+      (assessment) => assessment === null,
     ),
   ]);
-  if (!capacity || qualifications.some((assessment) => !assessment)) {
+  if (
+    !capacity ||
+    qualifications.length !== jobIds.length ||
+    qualifications.some((assessment) => !assessment)
+  ) {
     return { success: false, error: 'load_failed' };
   }
-  // Capacity over the whole handover, qualification gaps per job: one reason
-  // confirms exactly these assessments, as a calendar reassignment needs one.
-  const jobQualifications = qualifications.flatMap((assessment) => (assessment ? [assessment] : []));
   const refusal = rejectUnacknowledgedConflicts(
-    {
-      conflicts: [
-        ...capacity.conflicts.filter((conflict) => conflict.kind !== 'qualification'),
-        ...jobQualifications.flatMap((job) =>
-          job.conflicts.filter((conflict) => conflict.kind === 'qualification'),
-        ),
-      ],
-      assessmentFingerprint: createHash('sha256')
-        .update(
-          [
-            capacity.capacityFingerprint,
-            ...jobQualifications.map((job) => job.qualificationFingerprint),
-          ].join('\n'),
-        )
-        .digest('hex'),
-    },
+    handoverConflicts(
+      capacity,
+      qualifications.flatMap((assessment) => (assessment ? [assessment] : [])),
+    ),
     input.acknowledgement,
   );
   if (refusal) return refusal;
   const assessments = jobIds.flatMap((jobId, index): JobHandoverAssessment[] => {
     const qualification = qualifications[index];
-    if (!qualification) return [];
-    return [
-      {
-        jobId,
-        capacitySnapshot: capacity.capacitySnapshot,
-        capacityFingerprint: capacity.capacityFingerprint,
-        qualificationSnapshot: qualification.qualificationSnapshot,
-        qualificationFingerprint: qualification.qualificationFingerprint,
-        visits: visits
-          .filter((visit) => visit.job_id === jobId)
-          .map((visit) => ({
-            occurrenceId: visit.id,
-            version: visit.version,
-            employeeRecordIds: (crews.get(visit.id) ?? []).map((member) => member.employeeRecordId),
-          })),
-      },
-    ];
+    return qualification ? [jobRecord(jobId, capacity, qualification, visits, crews)] : [];
   });
   return { success: true, assessments };
 }

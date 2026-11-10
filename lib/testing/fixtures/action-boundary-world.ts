@@ -118,7 +118,14 @@ const VACATION_ROW_DEFAULTS = {
  * exit. `supabase/tests/job_plan_bridge.sql` proves the function itself.
  */
 function readOpenAbsencesInWorld(world: ActionWorld, args: FixtureRow): RpcOutcome {
-  if (world.failingTables.has('vacation_requests')) {
+  // The function reads these tables; a failing one fails the whole call.
+  const readTables = [
+    'vacation_requests',
+    'employee_records',
+    'planning_occurrences',
+    'planning_occurrence_assignments',
+  ];
+  if (readTables.some((table) => world.failingTables.has(table))) {
     return { data: null, error: { code: '08006', message: 'connection failure' } };
   }
   const organizationId = args.p_organization_id;
