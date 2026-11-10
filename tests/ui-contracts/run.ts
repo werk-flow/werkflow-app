@@ -108,7 +108,8 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
                 args.importer.endsWith('reset-password-form.tsx') ||
                 args.importer.endsWith('aufgaben-task-row.tsx') ||
                 args.importer.endsWith('text-link.tsx') ||
-                args.importer.endsWith('client-duplicate-matches.tsx')
+                args.importer.endsWith('client-duplicate-matches.tsx') ||
+                args.importer.endsWith('standalone-screen.tsx')
               )
                 return { path: join(import.meta.dir, 'day-view-link-boundary.tsx') };
             });
@@ -158,6 +159,15 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve({ filter: /^next\/navigation$/ }, (args) => {
               if (args.importer.endsWith('use-export-builder.ts'))
                 return { path: join(import.meta.dir, 'organization-export-service-boundaries.ts') };
+            });
+            builder.onResolve({ filter: /^next\/image$/ }, (args) => {
+              if (args.importer.endsWith('standalone-screen.tsx'))
+                return { path: join(import.meta.dir, 'standalone-image-boundary.tsx') };
+            });
+            // The offline view's device read, held until the spec answers it.
+            builder.onResolve({ filter: /^@\/lib\/field-sync\/device\/today-store$/ }, (args) => {
+              if (args.importer.endsWith('offline-today.tsx'))
+                return { path: join(import.meta.dir, 'offline-today-service-boundaries.ts') };
             });
             // The start page's refresh code, as a chunk that is gone after a deployment.
             builder.onResolve({ filter: /^@\/lib\/field-sync\/device\/today-refresh$/ }, (args) => {

@@ -10,7 +10,7 @@ import {
   WifiOff,
   type LucideIcon,
 } from 'lucide-react';
-import { useEffect, type ReactElement, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactElement, type ReactNode } from 'react';
 
 import { StandaloneTitle } from '@/components/shared/standalone-screen';
 import { Badge } from '@/components/ui/badge';
@@ -267,24 +267,37 @@ function OfflineDayView({ stored, pathname }: { stored: StoredToday; pathname: s
 /** The longest delay `setTimeout` keeps; a longer one fires at once. */
 const MAX_TIMER_MS = 2_147_483_647;
 
+/** The wipe signal any tab gave last, or null when localStorage cannot be read. */
+function wipeSignal(): string | null {
+  try {
+    return localStorage.getItem(TODAY_WIPE_KEY) ?? '';
+  } catch {
+    // Fails closed: the store shows no day then either (today-store.ts).
+    return null;
+  }
+}
+
 /**
- * Reads the device again when the shown day can no longer stand: a sign-out
- * or organization switch in another tab wiped it, from mount on, so a read in
- * flight is superseded too; or Berlin midnight passed (`validUntil`), also
- * while the page was in the back-forward cache.
+ * Ends the shown day when it can no longer stand. A sign-out or organization switch in another
+ * tab, from mount on, and a return from the back-forward cache, where no storage event arrives,
+ * drop it at once and read again; the former person's day never stays on screen while the next
+ * read runs. Berlin midnight (`validUntil`) reads again, and the read drops the ended day.
  */
-function useDayEnds(stored: StoredToday | null, readAgain: () => void): void {
+function useDayEnds(stored: StoredToday | null, readAgain: () => void, dropAndReadAgain: () => void): void {
   useEffect(() => {
     const onStorage = (event: StorageEvent): void => {
-      if (event.key === TODAY_WIPE_KEY) readAgain();
+      if (event.key === TODAY_WIPE_KEY) dropAndReadAgain();
+    };
+    const onPageShow = (event: PageTransitionEvent): void => {
+      if (event.persisted) dropAndReadAgain();
     };
     window.addEventListener('storage', onStorage);
-    window.addEventListener('pageshow', readAgain);
+    window.addEventListener('pageshow', onPageShow);
     return () => {
       window.removeEventListener('storage', onStorage);
-      window.removeEventListener('pageshow', readAgain);
+      window.removeEventListener('pageshow', onPageShow);
     };
-  }, [readAgain]);
+  }, [dropAndReadAgain]);
   useEffect(() => {
     if (!stored) return;
     const remaining = Date.parse(stored.snapshot.validUntil) - Date.now();
@@ -299,20 +312,30 @@ function useDayEnds(stored: StoredToday | null, readAgain: () => void): void {
  * shows `withoutDay`, the plain no-signal page.
  */
 export function OfflineToday({ withoutDay }: { withoutDay: ReactNode }): ReactNode {
+  // Each wipe signal starts a fresh read and drops the shown day with it (useClientRead's deps).
+  const [wipes, setWipes] = useState(0);
+  const dropAndReadAgain = useCallback(() => setWipes((count) => count + 1), []);
   const day = useClientRead({
     read: async () => {
+      const signal = wipeSignal();
       try {
         const stored = await readTodayOnDevice();
-        return { success: true as const, stored, pathname: window.location.pathname };
+        // A wipe signalled while the device read: its answer is the former day, never shown.
+        const current = signal !== null && wipeSignal() === signal;
+        return {
+          success: true as const,
+          stored: current ? stored : null,
+          pathname: window.location.pathname,
+        };
       } catch (error) {
         logError('OfflineToday: device storage failed', error);
         return { success: false as const, error: 'load_failed' };
       }
     },
-    deps: [],
+    deps: [wipes],
     failureMessage: 'Der Speicher deines Geräts hat nicht geantwortet.',
   });
-  useDayEnds(day.data?.stored ?? null, day.reload);
+  useDayEnds(day.data?.stored ?? null, day.reload, dropAndReadAgain);
 
   if (day.failure)
     return (

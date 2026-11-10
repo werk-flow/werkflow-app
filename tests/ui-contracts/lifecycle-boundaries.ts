@@ -38,6 +38,7 @@ declare global {
       | 'organization'
       | 'organization-export'
       | 'today-refresh'
+      | 'offline-today'
       | 'sidebar'
       | 'lazy-dialog'
       | 'clock'
