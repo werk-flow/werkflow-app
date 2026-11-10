@@ -16,6 +16,8 @@ export type RequestListEntry = {
   clientName: string | null;
   assigneeName: string | null;
   convertedLabel: string | null;
+  /** The promised callback had passed when the page was read. */
+  callbackOverdue: boolean;
 };
 
 export type RequestListQuery = {

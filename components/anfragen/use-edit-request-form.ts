@@ -7,12 +7,13 @@ import { useBanner } from '@/components/ui/banner';
 import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { formatBerlinDateTimeInput } from '@/lib/date-time/berlin';
-import { updateClientRequest } from '@/lib/requests/actions';
+import { updateClientRequest, type UpdateClientRequestInput } from '@/lib/requests/actions';
 import type { ClientRequest, RequestCategory, RequestSource, RequestUrgency } from '@/lib/requests/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import {
   checkRequestFields,
   INVALID_RECEIVED_AT_MESSAGE,
+  REQUEST_EQUIPMENT_ERROR_MESSAGES,
   SUMMARY_REQUIRED_MESSAGE,
 } from './use-create-request-form';
 
@@ -26,6 +27,7 @@ const ERROR_MESSAGES = {
   invalid_received_at: INVALID_RECEIVED_AT_MESSAGE,
   update_failed: 'Die Änderungen konnten nicht gespeichert werden.',
   no_changes: 'Es gibt keine Änderungen zu speichern.',
+  ...REQUEST_EQUIPMENT_ERROR_MESSAGES,
 } satisfies Record<string, string>;
 
 export interface EditRequestForm {
@@ -51,11 +53,17 @@ export interface EditRequestForm {
   setSource: (source: RequestSource) => void;
   receivedAt: string;
   setReceivedAt: (receivedAt: string) => void;
+  /** „Rückruf bis“ as `YYYY-MM-DDTHH:mm` in Berlin time; empty without a promise. */
+  callbackDueAt: string;
+  setCallbackDueAt: (callbackDueAt: string) => void;
+  equipmentId: string;
+  setEquipmentId: (equipmentId: string) => void;
   assignedTo: string;
   setAssignedTo: (assignedTo: string) => void;
   isLoading: boolean;
   summaryError: string | null;
   receivedAtError: string | null;
+  callbackDueAtError: string | null;
   formError: string | null;
   handleSubmit: (event: React.FormEvent) => Promise<void>;
 }
@@ -63,8 +71,12 @@ export interface EditRequestForm {
 /** The fields the edit dialog changes, with their setters. */
 type EditableRequestFields = Omit<
   EditRequestForm,
-  'isLoading' | 'summaryError' | 'receivedAtError' | 'formError' | 'handleSubmit'
+  'isLoading' | 'summaryError' | 'receivedAtError' | 'callbackDueAtError' | 'formError' | 'handleSubmit'
 >;
+
+function callbackInput(request: ClientRequest): string {
+  return request.callbackDueAt ? formatBerlinDateTimeInput(request.callbackDueAt) : '';
+}
 
 /** The edit fields, starting from the request; `prefill` refills them from it. */
 function useEditableRequestFields(request: ClientRequest): {
@@ -82,6 +94,8 @@ function useEditableRequestFields(request: ClientRequest): {
   const [urgency, setUrgency] = useState<RequestUrgency>(request.urgency);
   const [source, setSource] = useState<RequestSource>(request.source);
   const [receivedAt, setReceivedAt] = useState(formatBerlinDateTimeInput(request.receivedAt));
+  const [callbackDueAt, setCallbackDueAt] = useState(callbackInput(request));
+  const [equipmentId, setEquipmentId] = useState(request.equipmentId ?? '');
   const [assignedTo, setAssignedTo] = useState(request.assignedTo ?? '');
 
   const prefill = () => {
@@ -96,6 +110,8 @@ function useEditableRequestFields(request: ClientRequest): {
     setUrgency(request.urgency);
     setSource(request.source);
     setReceivedAt(formatBerlinDateTimeInput(request.receivedAt));
+    setCallbackDueAt(callbackInput(request));
+    setEquipmentId(request.equipmentId ?? '');
     setAssignedTo(request.assignedTo ?? '');
   };
 
@@ -123,10 +139,48 @@ function useEditableRequestFields(request: ClientRequest): {
       setSource,
       receivedAt,
       setReceivedAt,
+      callbackDueAt,
+      setCallbackDueAt,
+      equipmentId,
+      setEquipmentId,
       assignedTo,
       setAssignedTo,
     },
     prefill,
+  };
+}
+
+/** The action input: every edit field, and the Anlage only for a request with a site. */
+function editRequestInput(
+  request: ClientRequest,
+  fields: EditableRequestFields,
+  { receivedAtDate, callbackDueAtDate }: { receivedAtDate: Date | null; callbackDueAtDate: Date | null },
+): UpdateClientRequestInput {
+  const { summary, details, requestNumber, callerName, callerPhone, callerEmail, callerAddress } = fields;
+  const { category, urgency, source, assignedTo, equipmentId } = fields;
+  return {
+    summary: summary.trim(),
+    details,
+    requestNumber,
+    callerName,
+    callerPhone,
+    callerEmail,
+    callerAddress,
+    category,
+    urgency,
+    source,
+    ...(receivedAtDate ? { receivedAt: receivedAtDate.toISOString() } : {}),
+    // An untouched field keeps the saved instant: its Berlin wall-clock text
+    // names two instants in the hour the clocks go back.
+    callbackDueAt:
+      fields.callbackDueAt === callbackInput(request)
+        ? request.callbackDueAt
+        : callbackDueAtDate
+          ? callbackDueAtDate.toISOString()
+          : null,
+    // The Anlage hangs off the request's site; without one there is none to name.
+    ...(request.siteId ? { equipmentId: equipmentId || null } : {}),
+    assignedTo,
   };
 }
 
@@ -162,10 +216,11 @@ export function useEditRequestForm({
     }
   }
 
-  const { errors, summaryError, receivedAtError, formError, receivedAtDate } = checkRequestFields({
+  const checks = checkRequestFields({
     idPrefix: 'edit-request',
     summary: fields.summary,
     receivedAt: fields.receivedAt,
+    callbackDueAt: fields.callbackDueAt,
     attempted,
     error,
   });
@@ -174,25 +229,10 @@ export function useEditRequestForm({
     event.preventDefault();
     setAttempted(true);
     setError(null);
-    if (focusFirstInvalidField(errors)) return;
+    if (focusFirstInvalidField(checks.errors)) return;
 
-    const { summary, details, requestNumber, callerName, callerPhone, callerEmail, callerAddress } = fields;
-    const { category, urgency, source, assignedTo } = fields;
     try {
-      const result = await runUpdate(request.id, {
-        summary: summary.trim(),
-        details,
-        requestNumber,
-        callerName,
-        callerPhone,
-        callerEmail,
-        callerAddress,
-        category,
-        urgency,
-        source,
-        ...(receivedAtDate ? { receivedAt: receivedAtDate.toISOString() } : {}),
-        assignedTo,
-      });
+      const result = await runUpdate(request.id, editRequestInput(request, fields, checks));
 
       if (!result.success && result.error !== 'no_changes') {
         setError(describeFailure(result.error, ERROR_MESSAGES, 'Unbekannter Fehler'));
@@ -211,9 +251,10 @@ export function useEditRequestForm({
   return {
     ...fields,
     isLoading,
-    summaryError,
-    receivedAtError,
-    formError,
+    summaryError: checks.summaryError,
+    receivedAtError: checks.receivedAtError,
+    callbackDueAtError: checks.callbackDueAtError,
+    formError: checks.formError,
     handleSubmit,
   };
 }

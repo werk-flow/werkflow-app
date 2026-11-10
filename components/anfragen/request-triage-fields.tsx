@@ -87,6 +87,12 @@ export function RequestTriageFields({ idPrefix, form }: RequestTriageFieldsProps
         </Field>
       </div>
 
+      {urgency === 'notfall' && (
+        <p role="note" className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm">
+          Notfall: Folge jetzt dem Notfallablauf deines Betriebs.
+        </p>
+      )}
+
       <Field label="Eingangszeit" htmlFor={`${idPrefix}-received-at-date`} error={receivedAtError}>
         <DateTimeField
           idPrefix={`${idPrefix}-received-at`}

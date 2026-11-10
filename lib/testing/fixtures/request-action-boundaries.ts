@@ -24,6 +24,7 @@ const matchingClientId = '70000000-0000-4000-8000-000000000003';
 const foreignTwinClientId = '70000000-0000-4000-8000-000000000008';
 const matchingRequestId = '60000000-0000-4000-8000-000000000009';
 const siteId = '80000000-0000-4000-8000-000000000001';
+const foreignEquipmentId = '81000000-0000-4000-8000-000000000009';
 const now = '2026-10-01T08:00:00.000Z';
 
 const requestRow = (
@@ -37,6 +38,7 @@ const requestRow = (
   client_id: null,
   contact_id: null,
   site_id: null,
+  equipment_id: null,
   caller_name: 'Erika Muster',
   caller_phone: '0301234567',
   caller_email: 'erika@example.test',
@@ -49,6 +51,7 @@ const requestRow = (
   status: 'offen',
   assigned_to: null,
   received_at: now,
+  callback_due_at: null,
   closed_reason: null,
   closed_note: null,
   closed_by: null,
@@ -99,6 +102,8 @@ const world = installActionWorld(
       },
     ],
     client_contacts: [],
+    // The boiler of the other organization's customer.
+    installed_equipment: [{ id: foreignEquipmentId, organization_id: ORGANIZATION_B, site_id: siteId }],
     organization_members: [{ organization_id: ORGANIZATION_A, user_id: CALLER_ID, role: 'buero' }],
     projects: [],
     jobs: [],
@@ -351,6 +356,8 @@ assert.deepEqual(world.rpcCalls, [
       p_source: 'telefon',
       p_assigned_to: CALLER_ID,
       p_received_at: null,
+      p_callback_due_at: null,
+      p_equipment_id: null,
     },
   },
   {
@@ -425,6 +432,77 @@ assert.equal(
   initialDatabase,
   'the request writes reach the database only through their functions',
 );
+
+// A capture with the Anlage of another organization reaches
+// create_client_request with the caller's organization and the Anlage id as
+// sent; the stub refuses it as assert_request_equipment does
+// (supabase/tests/request_callback_and_equipment.sql). A field worker never
+// reaches the database.
+const callbackDueAt = '2026-10-01T12:00:00.000Z';
+const foreignAnlageCapture = {
+  summary: 'Kessel stört',
+  clientId,
+  siteId,
+  equipmentId: foreignEquipmentId,
+  callbackDueAt,
+};
+world.rpcCalls.length = 0;
+world.rpc = ({ name, args }) => {
+  assert.equal(name, 'create_client_request');
+  const equipment = tableRows(world, 'installed_equipment').find(
+    (row) => row.id === args.p_equipment_id && row.organization_id === args.p_organization_id,
+  );
+  return equipment
+    ? { data: { ...savedRequest }, error: null }
+    : { data: null, error: { message: 'equipment_not_found' } };
+};
+assert.deepEqual(await actions.createClientRequest(foreignAnlageCapture), {
+  success: false,
+  error: 'equipment_not_found',
+});
+assert.deepEqual(world.rpcCalls, [
+  {
+    name: 'create_client_request',
+    args: {
+      ...writeArgs,
+      p_summary: 'Kessel stört',
+      p_details: null,
+      p_request_number: null,
+      p_client_id: clientId,
+      p_site_id: siteId,
+      p_contact_id: null,
+      p_caller_name: null,
+      p_caller_phone: null,
+      p_caller_email: null,
+      p_caller_address: null,
+      p_category: 'sonstiges',
+      p_urgency: 'normal',
+      p_source: 'telefon',
+      p_assigned_to: null,
+      p_received_at: null,
+      p_callback_due_at: callbackDueAt,
+      p_equipment_id: foreignEquipmentId,
+    },
+  },
+]);
+assert.deepEqual(await actions.updateClientRequest(openRequestId, { callbackDueAt: 'morgen' }), {
+  success: false,
+  error: 'invalid_callback_due_at',
+});
+assert.deepEqual(await actions.createClientRequest({ summary: 'Anfrage', callbackDueAt: 'morgen' }), {
+  success: false,
+  error: 'invalid_callback_due_at',
+});
+signInAs(world, 'employee');
+world.rpcCalls.length = 0;
+assert.deepEqual(await actions.createClientRequest(foreignAnlageCapture), {
+  success: false,
+  error: 'not_authorized',
+});
+assert.deepEqual(world.rpcCalls, []);
+signInAs(world, 'buero');
+world.rpc = rpcBeforeRequestWrites;
+assert.equal(databaseSnapshot(), initialDatabase, 'a refused Anlage writes nothing');
 
 // Promoting an unknown caller is one call of promote_client_request_caller with
 // server-resolved values only; the stub applies it as the SQL test proves it.
