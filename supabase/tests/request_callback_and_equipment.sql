@@ -288,6 +288,27 @@ begin
 end;
 $$;
 
+-- A suspended owner keeps the membership row but cannot act: their overdue
+-- callback reaches every manager, as an owner who left does.
+reset role;
+insert into public.personnel_access_lifecycles (organization_id, employee_record_id, state, state_effective_at)
+select record.organization_id, record.id, 'suspended', now() from public.employee_records record
+where record.organization_id = '41909000-0000-0000-0000-000000000010'
+  and record.user_id = '41909000-0000-0000-0000-000000000002';
+set local role service_role;
+do $$
+begin
+  if exists (
+    select 1 from public.list_open_request_attention('41909000-0000-0000-0000-000000000010') open_request
+    where open_request.id = '41909000-0000-0000-0000-000000000060' and open_request.owner_is_manager
+  ) then raise exception 'a suspended owner still counted as a manager who handles the overdue callback'; end if;
+end;
+$$;
+reset role;
+delete from public.personnel_access_lifecycles
+where organization_id = '41909000-0000-0000-0000-000000000010';
+set local role service_role;
+
 -- A Servicefall conversion links the request's Anlage beside the named ones.
 do $$
 declare

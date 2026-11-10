@@ -287,6 +287,8 @@ as $$
       where member.organization_id = p_organization_id
         and member.user_id = request.assigned_to
         and member.role in ('admin', 'buero')
+        -- A suspended or ended manager keeps the membership row but cannot act.
+        and app_private.p1_24_has_effective_access(member.organization_id, member.user_id)
     )
   from public.client_requests request
   where request.organization_id = p_organization_id
@@ -451,6 +453,8 @@ $$;
 -- The attention identity union in lib/attention/types.ts and these checks stay
 -- in step: an open request whose promised callback has passed
 -- (client_request_callback_overdue). Expand-only: every earlier value stays allowed.
+-- not valid: every existing row holds an earlier value, so no table scan runs
+-- under the lock; new writes are checked as before.
 -- @destructive: after release 34f34e62: the constraint returns below with every earlier source type and one new one
 alter table public.attention_read_states
   drop constraint attention_read_states_source_type_check;
@@ -468,7 +472,7 @@ alter table public.attention_read_states
       'organization_join_request', 'planning_visit_replan',
       'client_request_callback_overdue'
     ])
-  );
+  ) not valid;
 -- @destructive: after release 34f34e62: the constraint returns below with every earlier source type and one new one
 alter table public.attention_events
   drop constraint attention_events_source_type_check;
@@ -486,7 +490,7 @@ alter table public.attention_events
       'organization_join_request', 'planning_visit_replan',
       'client_request_callback_overdue'
     ])
-  );
+  ) not valid;
 
 revoke all on function app_private.assert_request_equipment(uuid, uuid, uuid, uuid, boolean)
   from public, anon, authenticated, service_role;
