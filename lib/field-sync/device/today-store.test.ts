@@ -145,6 +145,7 @@ describe('the today snapshot on the device', () => {
     expect(await readTodayOnDevice(MORNING)).toEqual({
       snapshot: snapshot(),
       confirmedAt: MORNING.toISOString(),
+      wipeGeneration: '',
     });
   });
 
@@ -152,6 +153,44 @@ describe('the today snapshot on the device', () => {
     await saveTodayOnDevice(snapshot(), MORNING);
     await clearTodayOnDevice();
     expect(await databaseNames()).not.toContain(TODAY_DATABASE);
+    expect(await readTodayOnDevice(MORNING)).toBeNull();
+  });
+
+  test('a sign-out whose delete fails leaves no day to show, and the sign-out goes on', async () => {
+    await saveTodayOnDevice(snapshot(), MORNING);
+    const realDelete = indexedDB.deleteDatabase.bind(indexedDB);
+    indexedDB.deleteDatabase = () => {
+      throw new DOMException('The browser refused the deletion.', 'UnknownError');
+    };
+    try {
+      await clearTodayOnDevice();
+    } finally {
+      indexedDB.deleteDatabase = realDelete;
+    }
+    expect(await readTodayOnDevice(MORNING)).toBeNull();
+  });
+
+  test('a wipe in another tab whose delete failed leaves a day this tab refuses to show', async () => {
+    await saveTodayOnDevice(snapshot(), MORNING);
+    // The other tab signalled its wipe, and its delete never ran.
+    localStorage.setItem(TODAY_WIPE_KEY, 'another-tab-failed-delete');
+    expect(await readTodayOnDevice(MORNING)).toBeNull();
+  });
+
+  test('a sign-out whose delete stays blocked by an open connection leaves no day, and the sign-out goes on', async () => {
+    await saveTodayOnDevice(snapshot(), MORNING);
+    // Another tab holds the database open and never lets the delete through.
+    const opened = indexedDB.open(TODAY_DATABASE);
+    const blocker = await new Promise<IDBDatabase>((resolve) => {
+      opened.onsuccess = () => resolve(opened.result);
+    });
+    await clearTodayOnDevice();
+    const kept = blocker.transaction('today', 'readonly').objectStore('today').get('current');
+    const left = await new Promise<unknown>((resolve) => {
+      kept.onsuccess = () => resolve(kept.result);
+    });
+    blocker.close();
+    expect(left).toBeUndefined();
     expect(await readTodayOnDevice(MORNING)).toBeNull();
   });
 

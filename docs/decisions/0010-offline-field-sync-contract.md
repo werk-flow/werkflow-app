@@ -135,3 +135,9 @@ Decided for werk-flow/werkflow-planning#318.
 - **Freshness.** The snapshot names its Berlin day and `validUntil`, the next Berlin midnight, so a device drops it by comparing instants and never computes a Berlin date. It carries a content `version`, also its `ETag`. A request whose `If-None-Match` names it gets `304`, and the device moves its „Stand“ to that time.
 - **Organization.** An optional `organizationId` query value is a hint, refused with `organization_mismatch` when it is not the active organization, as for an operation.
 - **Device.** A `rejected` answer deletes the device's day. A `retry` answer keeps it. The web device refreshes on the field worker's start page, where the app opens, and on `online`; a return to the visible app is the Realtime provider's catch-up for the page on screen, so the stored day can be older than that page. The „Stand“ says how old.
+
+## Amendment 2026-11-10: a wipe that cannot finish
+
+Decided for werk-flow/werkflow-planning#318.
+
+- A wipe (sign-out, organization switch, a lost membership) empties the stored record, deletes the database and signals every tab. The stored day names the wipe signal it was saved under, and a device refuses a day saved before the latest one, so a deletion that fails or waits for another tab exposes nothing. A sign-out never waits for the deletion.

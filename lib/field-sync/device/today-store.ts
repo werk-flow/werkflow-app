@@ -2,16 +2,15 @@
 
 import { fieldSyncTodaySchema, type FieldSyncToday } from '@/lib/field-sync/today-snapshot';
 import { z } from '@/lib/zod';
-import { TODAY_DATABASE } from './today-wipe';
+import { TODAY_DATABASE, TODAY_STORE, TODAY_WIPE_KEY } from './today-wipe';
 
 // The web half of the today snapshot on a phone (decision record 0010,
 // "Device data"): one IndexedDB record with the latest snapshot of the
 // signed-in person and organization, and when the server last confirmed it.
 // It holds the current Berlin day only: once the day the server named has
-// ended, the record is deleted the first time anything reads it. A native client replaces this module and
+// ended, or a wipe came after it was saved, the record is deleted the first time anything reads it. A native client replaces this module and
 // keeps the same rules.
 
-const STORE = 'today';
 const CURRENT = 'current';
 const PERSISTENCE = 'persistence';
 
@@ -19,6 +18,8 @@ const storedTodaySchema = z.strictObject({
   snapshot: fieldSyncTodaySchema,
   /** When the server last confirmed the snapshot: the „Stand“ the device shows. */
   confirmedAt: z.iso.datetime({ offset: true }),
+  /** The wipe signal when the day was saved: after a later wipe it is refused, even if its delete failed. */
+  wipeGeneration: z.string(),
 });
 
 export type StoredToday = z.infer<typeof storedTodaySchema>;
@@ -35,7 +36,7 @@ function requestResult<T>(request: IDBRequest<T>): Promise<T> {
 function openDatabase(): Promise<IDBDatabase> {
   const request = indexedDB.open(TODAY_DATABASE, 1);
   request.onupgradeneeded = () => {
-    request.result.createObjectStore(STORE);
+    request.result.createObjectStore(TODAY_STORE);
   };
   return requestResult(request).then((database) => {
     // A wipe from this or another tab deletes the database: let it, at once.
@@ -51,12 +52,12 @@ async function withStore<T>(
 ): Promise<T> {
   const database = await openDatabase();
   try {
-    const transaction = database.transaction(STORE, mode);
+    const transaction = database.transaction(TODAY_STORE, mode);
     const committed = new Promise<void>((resolve, reject) => {
       transaction.oncomplete = () => resolve();
       transaction.onabort = () => reject(transaction.error ?? new Error('IndexedDB transaction aborted'));
     });
-    const [result] = await Promise.all([requestResult(run(transaction.objectStore(STORE))), committed]);
+    const [result] = await Promise.all([requestResult(run(transaction.objectStore(TODAY_STORE))), committed]);
     return result;
   } finally {
     database.close();
@@ -65,7 +66,8 @@ async function withStore<T>(
 
 /**
  * The stored snapshot of the current Berlin day, or null. A record whose day
- * has ended, or one this version cannot read, is deleted before null returns.
+ * has ended, one saved before the latest wipe, or one this version cannot
+ * read, is deleted before null returns.
  * Throws when IndexedDB itself fails: the caller shows that, never an empty day.
  */
 export async function readTodayOnDevice(now: Date = new Date()): Promise<StoredToday | null> {
@@ -82,9 +84,23 @@ export async function readTodayOnDevice(now: Date = new Date()): Promise<StoredT
   return currentDay(value, now);
 }
 
+/** The latest wipe signal any tab of the origin gave (today-wipe.ts). */
+function sharedWipeGeneration(): string {
+  try {
+    return localStorage.getItem(TODAY_WIPE_KEY) ?? '';
+  } catch {
+    // best-effort: without localStorage the wipe's emptied record and delete keep the day from showing.
+    return '';
+  }
+}
+
 function currentDay(value: unknown, now: Date): StoredToday | null {
   const stored = storedTodaySchema.safeParse(value);
-  return stored.success && now.getTime() < Date.parse(stored.data.snapshot.validUntil) ? stored.data : null;
+  return stored.success &&
+    stored.data.wipeGeneration === sharedWipeGeneration() &&
+    now.getTime() < Date.parse(stored.data.snapshot.validUntil)
+    ? stored.data
+    : null;
 }
 
 /**
@@ -98,10 +114,14 @@ export async function saveTodayOnDevice(
   confirmedAt: Date,
   stillCurrent: () => boolean = () => true,
 ): Promise<boolean> {
-  const entry: StoredToday = { snapshot, confirmedAt: confirmedAt.toISOString() };
   let written = false;
   await withStore('readwrite', (store) => {
     written = stillCurrent();
+    const entry: StoredToday = {
+      snapshot,
+      confirmedAt: confirmedAt.toISOString(),
+      wipeGeneration: sharedWipeGeneration(),
+    };
     // A skipped write still needs one request for the transaction to settle on.
     return written ? store.put(entry, CURRENT) : store.get(CURRENT);
   });
