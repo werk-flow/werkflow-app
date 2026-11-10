@@ -11,7 +11,7 @@ import { resolveSelfServiceContext } from '@/lib/org/self-service-context';
 import { getResponsibilitiesStrandedByMemberRemoval } from '@/lib/responsibilities/server';
 import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
-import type { Database, Json } from '@/lib/supabase/database.types';
+import type { Json } from '@/lib/supabase/database.types';
 import { createSignedUploadUrl } from '@/lib/storage/r2';
 import {
   acceptPersonnelUpload,
@@ -44,7 +44,6 @@ import {
 import {
   documentFileSchema,
   toAccessView,
-  toActiveJobOptions,
   toEmploymentView,
   toManagerDocuments,
   toPlanViews,
@@ -58,19 +57,15 @@ import {
   type ProtectedPersonnelDocument,
 } from './lifecycle-rows';
 import { createUploadCleanupToken, isValidUploadCleanupToken } from './upload-cleanup-token';
+import { defaultHandoverFrom, type OpenWorkJob } from './open-work';
+import { readOpenWork } from './open-work-reads';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
+import { accessEndDatesByRecord } from '@/lib/planning/availability';
 
 type TransitionInventory = {
-  activeJobs: Array<{ id: string; label: string }>;
+  openWork: OpenWorkJob[];
   strandedResponsibilities: string[];
 };
-
-type EmploymentTransitionResult =
-  | { success: true; data: { lifecycleId: string } }
-  | (ActionFailure & { data?: TransitionInventory });
-
-const ACTIVE_JOB_STATUSES = ['nicht_bearbeitet', 'in_bearbeitung', 'geparkt'] satisfies Array<
-  Database['public']['Enums']['job_status']
->;
 
 export type PersonnelLifecycleView = {
   employeeRecordId: string;
@@ -80,10 +75,9 @@ export type PersonnelLifecycleView = {
   plans: PersonnelOnboardingPlanView[];
   templates: PersonnelOnboardingTemplateSummary[];
   documents: ProtectedPersonnelDocument[];
-  transitionInventory: {
-    activeJobs: Array<{ id: string; label: string }>;
-    strandedResponsibilities: string[];
-  };
+  transitionInventory: TransitionInventory;
+  /** The first Berlin date a handover moves visits from, by the exit and the access end. */
+  handoverFrom: string;
 };
 
 function readAccessLifecycle(admin: AdminClient, organizationId: string, employeeRecordId: string) {
@@ -121,6 +115,7 @@ async function requireManagerRecord(employeeRecordId: string): Promise<
       organizationId: string;
       actorId: string;
       userId: string | null;
+      exitDate: string | null;
       role: 'admin' | 'buero';
     }
   | ActionFailure
@@ -136,7 +131,7 @@ async function requireManagerRecord(employeeRecordId: string): Promise<
     'requireManagerRecord: employee_records read failed',
     admin
       .from('employee_records')
-      .select('id, user_id')
+      .select('id, user_id, exit_date')
       .eq('id', employeeRecordId)
       .eq('organization_id', auth.context.orgId)
       .maybeSingle(),
@@ -149,6 +144,7 @@ async function requireManagerRecord(employeeRecordId: string): Promise<
     organizationId: auth.context.orgId,
     actorId: auth.context.userId,
     userId: employee.user_id,
+    exitDate: employee.exit_date,
     role,
   };
 }
@@ -208,7 +204,7 @@ export async function getPersonnelLifecycle(
     .order('updated_at', { ascending: false });
   const authorizedDocumentsQuery =
     role === 'admin' ? documentsQuery : documentsQuery.eq('access_class', 'personnel_standard');
-  const [access, employment, plans, requirements, documents, jobs, templates] = await Promise.all([
+  const [access, employment, plans, requirements, documents, templates, inventory] = await Promise.all([
     readAccessLifecycle(admin, organizationId, employeeRecordId),
     readEmploymentLifecycle(admin, organizationId, employeeRecordId),
     admin
@@ -224,28 +220,17 @@ export async function getPersonnelLifecycle(
       .eq('organization_id', organizationId)
       .order('sort_order'),
     authorizedDocumentsQuery,
-    userId
-      ? admin
-          .from('job_assignments')
-          .select('job_id, jobs!inner(id, title, job_number, status)')
-          .eq('user_id', userId)
-          .eq('organization_id', organizationId)
-          .in('jobs.status', ACTIVE_JOB_STATUSES)
-      : Promise.resolve({ data: [], error: null }),
     readPublishedTemplates(admin, organizationId),
+    loadTransitionInventory({ ...context, employeeRecordId }),
   ]);
-  const failed = [access, employment, plans, requirements, documents, jobs, templates].find(
+  const failed = [access, employment, plans, requirements, documents, templates].find(
     (result) => result.error,
   );
   if (failed?.error) {
     logError('Failed to load personnel lifecycle', failed.error);
     return { success: false, error: 'load_failed' };
   }
-
-  const strandedResponsibilities = userId
-    ? await getResponsibilitiesStrandedByMemberRemoval({ organizationId, userId })
-    : [];
-  if (!strandedResponsibilities) return { success: false, error: 'load_failed' };
+  if (!inventory) return { success: false, error: 'load_failed' };
 
   return {
     success: true,
@@ -257,7 +242,15 @@ export async function getPersonnelLifecycle(
       plans: toPlanViews(plans.data ?? [], (requirements.data ?? []).map(toRequirement)),
       templates: toTemplateSummaries(templates.data ?? []),
       documents: toManagerDocuments(documents.data ?? [], role),
-      transitionInventory: { activeJobs: toActiveJobOptions(jobs.data ?? []), strandedResponsibilities },
+      transitionInventory: inventory,
+      handoverFrom: defaultHandoverFrom({
+        exitDate: context.exitDate,
+        accessEndDate:
+          accessEndDatesByRecord([
+            { id: employeeRecordId, personnel_access_lifecycles: access.data ? [access.data] : [] },
+          ]).get(employeeRecordId) ?? null,
+        today: getBusinessTodayIso(),
+      }),
     },
   };
 }
@@ -287,53 +280,41 @@ export async function setPersonnelAccessTransition(
   return { success: true, data: { lifecycleId: data } };
 }
 
+/** The person's open work and the responsibilities only they hold; null when a read fails. */
 async function loadTransitionInventory(context: {
   admin: AdminClient;
   organizationId: string;
+  employeeRecordId: string;
   userId: string | null;
 }): Promise<TransitionInventory | null> {
-  if (!context.userId) return { activeJobs: [], strandedResponsibilities: [] };
-  const [jobsResult, strandedResponsibilities] = await Promise.all([
-    context.admin
-      .from('job_assignments')
-      .select('jobs!inner(id, title, job_number, status)')
-      .eq('organization_id', context.organizationId)
-      .eq('user_id', context.userId)
-      .in('jobs.status', ACTIVE_JOB_STATUSES),
-    getResponsibilitiesStrandedByMemberRemoval({
-      organizationId: context.organizationId,
-      userId: context.userId,
+  const { userId } = context;
+  const [openWork, strandedResponsibilities] = await Promise.all([
+    readOpenWork(context.admin, context.organizationId, {
+      employeeRecordId: context.employeeRecordId,
+      userId,
     }),
+    userId
+      ? getResponsibilitiesStrandedByMemberRemoval({ organizationId: context.organizationId, userId })
+      : [],
   ]);
-  if (jobsResult.error) {
-    logError('Failed to load active job assignments for the transition', jobsResult.error);
-    return null;
-  }
-  if (!strandedResponsibilities) return null;
-  const activeJobs = toActiveJobOptions(jobsResult.data);
-  return { activeJobs, strandedResponsibilities };
+  if (!openWork || !strandedResponsibilities) return null;
+  return { openWork, strandedResponsibilities };
 }
 
-export async function setPersonnelEmploymentTransition(input: unknown): Promise<EmploymentTransitionResult> {
+export async function setPersonnelEmploymentTransition(
+  input: unknown,
+): Promise<LifecycleResult<{ lifecycleId: string }>> {
   const parsed = employmentTransitionInputSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const context = await requireManagerRecord(parsed.data.employeeRecordId);
   if (!context.success) return context;
   if (context.role !== 'admin') return { success: false, error: 'not_authorized' };
-  const inventory = await loadTransitionInventory(context);
+  const request = parsed.data;
+  // What stays open is recorded with the transition; it becomes the planners' task, never a block.
+  const inventory = await loadTransitionInventory({ ...context, employeeRecordId: request.employeeRecordId });
   if (!inventory) return { success: false, error: 'load_failed' };
-  const needsResolution = ['mark_inactive', 'exit'].includes(parsed.data.transitionKind);
-  if (
-    needsResolution &&
-    !parsed.data.acceptUnresolvedWork &&
-    (inventory.activeJobs.length > 0 || inventory.strandedResponsibilities.length > 0)
-  ) {
-    return { success: false, error: 'unresolved_work', data: inventory };
-  }
-  const { acceptUnresolvedWork, ...request } = parsed.data;
-  void acceptUnresolvedWork;
   const unresolvedWork: Json = [
-    ...inventory.activeJobs.map((job) => ({ kind: 'job_assignment', id: job.id, label: job.label })),
+    ...inventory.openWork.map((job) => ({ kind: 'job_assignment', id: job.jobId, label: job.label })),
     ...inventory.strandedResponsibilities.map((responsibility) => ({
       kind: 'responsibility',
       id: responsibility,

@@ -15631,6 +15631,18 @@ export type Database = {
         };
         Returns: Json;
       };
+      hand_over_personnel_work: {
+        Args: {
+          p_actor_id: string;
+          p_assessments: Json;
+          p_employee_record_id: string;
+          p_handover_from: string;
+          p_organization_id: string;
+          p_override_reason: string;
+          p_rows: Json;
+        };
+        Returns: number;
+      };
       import_inventory_row: {
         Args: {
           p_actor_id: string;
@@ -16266,6 +16278,10 @@ export type Database = {
       queue_storage_purge: {
         Args: { p_organization_id: string; p_paths: string[] };
         Returns: undefined;
+      };
+      read_open_absences: {
+        Args: { p_organization_id: string; p_today: string };
+        Returns: Json;
       };
       read_organization_export_page: {
         Args: {

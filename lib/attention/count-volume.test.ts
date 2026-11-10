@@ -3,17 +3,14 @@ import { describe, expect, mock, setSystemTime, test } from 'bun:test';
 import { addLocalDays } from '@/lib/date-time/berlin';
 import { compare, parseOperand, termFilter, type Filter } from '@/lib/testing/postgrest-filter-fake';
 
-// Tier 2 for "attention count reads" (docs/technical/realtime-and-caching.md),
-// beside count-reads.test.ts, which pins the queries of the steady state. The
-// counts run on every debounced Realtime event of every signed-in session, so
-// the rows one derivation reads are a budget too. This test drives the real
-// derivation against a fake client that applies the query filters (eq, neq,
-// in, is, gt/gte/lt/lte, not, or, range) to a seeded world: pending work in
-// every collection the counts derive from, and a large closed history (decided
-// requests, approved entries, resolved defects, handed-over work, acknowledged
-// dispatches, ended sickness reports). The rows read may grow with the pending work only: the closed
-// history adds no row except the reviewed HISTORY_READS below, each of which
-// names the change that removes it.
+// Tier 2 for "attention count reads" (docs/technical/realtime-and-caching.md), beside count-reads.test.ts,
+// which pins the queries of the steady state. The counts run on every debounced Realtime event of every
+// signed-in session, so the rows one derivation reads are a budget too. This test drives the real derivation
+// against a fake client that applies the query filters (eq, neq, in, is, gt/gte/lt/lte, not, or, range) to a
+// seeded world: pending work in every collection the counts derive from, and a large closed history (decided
+// requests, approved entries, resolved defects, handed-over work, acknowledged dispatches, ended sickness
+// reports). The rows read may grow with the pending work only: the closed history adds no row except the
+// reviewed HISTORY_READS below, each of which names the change that removes it.
 
 const ORG = '6b0c3f8e-1d2a-4c5b-9e7f-0a1b2c3d4e5f';
 const USER = '7c1d4a9f-2e3b-4d6c-8f0a-1b2c3d4e5f60';
@@ -521,7 +518,7 @@ function handoverCandidates(organizationId: unknown): Row[] {
   return [...new Set(ids)].map((projectId) => ({ project_id: projectId }));
 }
 
-/** `list_open_request_attention` as migration 20261128090003 defines it, without a promised callback. */
+/** `list_open_request_attention` as migration 20261129100001 defines it, without a promised callback. */
 function openRequests(organizationId: unknown): Row[] {
   return (world.get('client_requests') ?? [])
     .filter(
@@ -531,8 +528,18 @@ function openRequests(organizationId: unknown): Row[] {
     .map((row) => ({ ...row, callback_due_at: null, callback_overdue: false, owner_is_manager: true }));
 }
 
-/** The read functions the derivations call, answered from the seeded world. */
+/** The derivations' read functions, from the seeded world: whole vacation rows, and nobody has left. */
 function rpc(name: string, args: unknown) {
+  if (name === 'read_open_absences') {
+    const today = String(field(args, 'p_today'));
+    const open = termFilter(`or(status.eq.pending,and(status.eq.approved,end_date.gte.${today}))`);
+    const vacations = (world.get('vacation_requests') ?? [])
+      .filter((row) => row.organization_id === field(args, 'p_organization_id') && open(row))
+      .map((row): Row => ({ approved_days_by_year: null, cancelled_by: null, comment: null, ...row }))
+      .map((row) => ({ decided_by: null, requested_by: null, updated_at: row.created_at, ...row }));
+    reads.push({ table: 'vacation_requests', rows: vacations.length });
+    return Promise.resolve({ data: { vacations, leaverWindows: [] }, error: null });
+  }
   const rows =
     name === 'list_pending_dispatch_recipients'
       ? pendingRecipients(field(args, 'p_organization_id'), field(args, 'p_employee_record_id'))
@@ -542,14 +549,12 @@ function rpc(name: string, args: unknown) {
           ? openRequests(field(args, 'p_organization_id'))
           : [];
   // The readers page a function's result like a table read: .range(from, to).
-  const page = (from: number, to: number) => ({
-    then: (resolve: (result: unknown) => unknown) => {
-      const slice = rows.slice(from, to + 1);
-      reads.push({ table: `rpc ${name}`, rows: slice.length });
-      return Promise.resolve(resolve({ data: slice, error: null }));
+  return {
+    range: (from: number, to: number) => {
+      reads.push({ table: `rpc ${name}`, rows: rows.slice(from, to + 1).length });
+      return Promise.resolve({ data: rows.slice(from, to + 1), error: null });
     },
-  });
-  return { range: page };
+  };
 }
 
 const client = {
@@ -591,12 +596,10 @@ function historyGrowth(base: Map<string, number>, withHistory: Map<string, numbe
 }
 
 /**
- * table -> the closed-history rows each role still reads, in units of
- * HISTORY, and why. Shrink-only: more growth fails, and less fails until the
- * entry is lowered or removed. Empty: the counts read no history. The
- * viewer's own dispatches (list_pending_dispatch_recipients) and
- * the handover candidates (list_handover_candidate_projects) are pending
- * sets of the database since migration 20261016100000.
+ * table -> the closed-history rows each role still reads, in units of HISTORY, and why. Shrink-only: more
+ * growth fails, and less fails until the entry is lowered or removed. Empty: the counts read no history. The
+ * viewer's own dispatches (list_pending_dispatch_recipients) and the handover candidates
+ * (list_handover_candidate_projects) are pending sets of the database since migration 20261016100000.
  */
 const HISTORY_READS: Readonly<
   Record<string, { rows: Readonly<Record<Role, number>>; pagesOnly?: readonly Role[]; reason: string }>
@@ -615,9 +618,8 @@ function historyProblems(nextRole: Role, growth: Record<string, number>): string
 }
 
 /**
- * Rows read with `pending` open items in every collection and no history:
- * at most `fixed + perPendingItem * pending`, in at most `requests` requests.
- * Measured at 3 and 6 pending items; a new read raises the count and fails.
+ * Rows read with `pending` open items in every collection and no history: at most `fixed + perPendingItem *
+ * pending`, in at most `requests` requests. Measured at 3 and 6 pending items; a new read raises it and fails.
  */
 // werk-flow/werkflow-planning#267 added the approved vacations ahead with their visits: the office reads
 // their visits once per 15 vacations plus dispatches and names, and own approvals add a marker read.

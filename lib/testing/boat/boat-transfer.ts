@@ -9,6 +9,8 @@ export type TransferPolicy = {
   waits: readonly number[];
   /** How long one attempt may take before it is abandoned. */
   attemptMs: number;
+  /** Which failures a fresh attempt may cure; every one but a refusal of Boat's API by default. */
+  retryable?: (error: unknown) => boolean;
 };
 
 export type TransferContext = {
@@ -49,6 +51,34 @@ function permanent(error: unknown): boolean {
   );
 }
 
+/**
+ * Connection-level failures, before or while a request reached Boat: refused, reset, unreachable,
+ * a failed name lookup, or a request that timed out. Boat itself never answered, so it refused
+ * nothing; Bun's fetch names a refused or unroutable connection `ECONNREFUSED: Unable to connect`.
+ */
+const TRANSPORT_CODES = new Set([
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ECONNABORTED',
+  'ETIMEDOUT',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'ENETDOWN',
+  'EPIPE',
+  'ConnectionRefused',
+  'ConnectionClosed',
+  'FailedToOpenSocket',
+]);
+
+/** A failure of the network path to Boat, never an answer of Boat's: a fresh request may succeed. */
+export function transportFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if (error.name === 'TimeoutError') return true;
+  return 'code' in error && typeof error.code === 'string' && TRANSPORT_CODES.has(error.code);
+}
+
 /** A failure in a few words: a network error by its code, everything else by its message. */
 function briefly(error: unknown): string {
   if (error instanceof Error && 'code' in error && typeof error.code === 'string') return error.code;
@@ -77,7 +107,8 @@ export async function transfer<T>(
       const stalled = `${what} took longer than ${policy.attemptMs / 1000} s`;
       const failure = deadline.aborted ? new Error(`${stalled}.`) : error;
       const next = policy.waits[index];
-      if (next === undefined || permanent(failure)) throw failure;
+      const retryable = policy.retryable ? policy.retryable(failure) : !permanent(failure);
+      if (next === undefined || !retryable) throw failure;
       const why = deadline.aborted ? stalled : `${what} failed (${briefly(failure)})`;
       context.log(`${why}; attempt ${index + 2} of ${policy.waits.length + 1} in ${next / 1000} s.`);
       await wait(next, context.signal);

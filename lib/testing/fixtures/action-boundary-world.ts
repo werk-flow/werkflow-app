@@ -4,6 +4,7 @@
 // another test file. Import the action under test only after `installActionWorld`.
 import { mock } from 'bun:test';
 import { AuthApiError } from '@supabase/supabase-js';
+import { addLocalDays, formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import { getAuftraegePreferencesFromJson } from '@/lib/jobs/auftraege-table-columns';
 import { createInMemoryAdmin, type BeforeWrite, type InMemoryTables } from './in-memory-admin';
 
@@ -66,6 +67,8 @@ function createAdminStandIn(world: ActionWorld, database: () => { from: (table: 
   return {
     from: (table: string) => database().from(table),
     rpc: async (name: string, args: FixtureRow = {}) => {
+      // A read function answers from the tables like a table read and is no recorded call.
+      if (name === 'read_open_absences') return readOpenAbsencesInWorld(world, args);
       world.rpcCalls.push({ name, args });
       return world.rpc({ name, args });
     },
@@ -90,6 +93,79 @@ function createAdminStandIn(world: ActionWorld, database: () => { from: (table: 
       },
     },
   };
+}
+
+/** The columns of a vacation request a fixture leaves out, as the table defaults them. */
+const VACATION_ROW_DEFAULTS = {
+  approved_days_by_year: null,
+  cancellation_reason: null,
+  cancelled_at: null,
+  cancelled_by: null,
+  comment: null,
+  created_at: '2026-01-01T00:00:00.000Z',
+  day_portion: 'full',
+  decided_at: null,
+  decided_by: null,
+  decision_comment: null,
+  requested_by: null,
+  updated_at: '2026-01-01T00:00:00.000Z',
+};
+
+/**
+ * The database function `read_open_absences`, answered from the world's tables:
+ * the open vacation requests by start date, and each person who left with a
+ * scheduled visit after the exit that has not started, from the day after the
+ * exit. `supabase/tests/job_plan_bridge.sql` proves the function itself.
+ */
+function readOpenAbsencesInWorld(world: ActionWorld, args: FixtureRow): RpcOutcome {
+  // The function reads these tables; a failing one fails the whole call.
+  const readTables = [
+    'vacation_requests',
+    'employee_records',
+    'planning_occurrences',
+    'planning_occurrence_assignments',
+  ];
+  if (readTables.some((table) => world.failingTables.has(table))) {
+    return { data: null, error: { code: '08006', message: 'connection failure' } };
+  }
+  const organizationId = args.p_organization_id;
+  const today = String(args.p_today);
+  const inOrganization = (table: string) =>
+    tableRows(world, table).filter((row) => row.organization_id === organizationId);
+  // The function returns whole rows; a fixture row names only the columns its test needs.
+  const vacations = inOrganization('vacation_requests')
+    .filter((row) => row.status === 'pending' || (row.status === 'approved' && String(row.end_date) >= today))
+    .map((row): FixtureRow => ({ ...VACATION_ROW_DEFAULTS, ...row }))
+    .toSorted((left, right) =>
+      `${String(left.start_date)} ${String(left.id)}`.localeCompare(
+        `${String(right.start_date)} ${String(right.id)}`,
+      ),
+    );
+  const occurrences = new Map(inOrganization('planning_occurrences').map((row) => [row.id, row]));
+  const startDateOf = (occurrence: FixtureRow) =>
+    typeof occurrence.start_at === 'string'
+      ? formatBerlinLocalDate(occurrence.start_at)
+      : String(occurrence.start_date);
+  const hasStarted = (occurrence: FixtureRow) =>
+    typeof occurrence.start_at === 'string'
+      ? Date.parse(occurrence.start_at) <= Date.now()
+      : String(occurrence.start_date) <= today;
+  const leaverWindows = inOrganization('employee_records').flatMap((record) => {
+    const exitDate = record.exit_date;
+    if (typeof exitDate !== 'string') return [];
+    const holdsLaterVisit = inOrganization('planning_occurrence_assignments').some((assignment) => {
+      const occurrence = occurrences.get(assignment.occurrence_id);
+      return (
+        assignment.employee_record_id === record.id &&
+        occurrence?.status === 'scheduled' &&
+        !hasStarted(occurrence) &&
+        startDateOf(occurrence) > exitDate
+      );
+    });
+    const from = addLocalDays(exitDate, 1);
+    return holdsLaterVisit ? [{ employeeRecordId: record.id, from: from > today ? from : today }] : [];
+  });
+  return { data: structuredClone({ vacations, leaverWindows }), error: null };
 }
 
 /** A read the fixtures never reach; calling it fails the fixture. */

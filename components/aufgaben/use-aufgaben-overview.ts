@@ -37,6 +37,8 @@ const AUFGABEN_OVERVIEW_TABLES = [
   // A replanned visit or a changed team resolves an „Einsatz umplanen“ task.
   'planning_occurrences',
   'planning_occurrence_assignments',
+  // An exit date moves a person's later visits into „Einsatz umplanen“.
+  'employee_records',
   'planning_dispatches',
   'planning_dispatch_recipients',
   'planning_dispatch_acknowledgements',

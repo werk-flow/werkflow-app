@@ -210,6 +210,26 @@ function addTimedProposalOverlaps(
   }
 }
 
+/** Adds the minutes in which one person's proposed visits of a write overlap each other. */
+function addProposalSelfOverlaps(
+  proposedTimedByEmployee: Map<string, TimedInterval[]>,
+  overlaps: Map<string, number>,
+): void {
+  for (const [employeeRecordId, proposedIntervals] of proposedTimedByEmployee) {
+    const ordered = proposedIntervals.toSorted((left, right) => left.start - right.start);
+    ordered.forEach((proposed, index) => {
+      for (const later of ordered.slice(index + 1)) {
+        if (later.start >= proposed.end) break;
+        const overlapEnd = new Date(Math.min(proposed.end, later.end));
+        for (const allocation of splitTimedIntervalByBerlinDate(new Date(later.start), overlapEnd)) {
+          const key = `${employeeRecordId}:${allocation.localDate}`;
+          overlaps.set(key, (overlaps.get(key) ?? 0) + allocation.minutes);
+        }
+      }
+    });
+  }
+}
+
 function buildCapacityDayContexts(input: {
   employeeRecordIds: string[];
   uniqueDates: string[];
@@ -338,6 +358,7 @@ export function evaluateProposedCapacity(input: {
     overlaps,
   });
   addTimedProposalOverlaps(existingTimedByEmployee, proposedTimedByEmployee, overlaps);
+  addProposalSelfOverlaps(proposedTimedByEmployee, overlaps);
 
   const proposed = occurrences.flatMap((occurrence) =>
     enumerateOccurrenceAllocations(
