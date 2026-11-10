@@ -1,6 +1,15 @@
 import { afterEach, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -24,7 +33,14 @@ type Mirror = {
 function run(
   mode: 'find' | 'install',
   options: { missing?: string[]; cached?: boolean; mirror?: Mirror } = {},
-): { status: number | null; output: string; apt: string[]; installed: boolean; outputs: string; debs: string[] } {
+): {
+  status: number | null;
+  output: string;
+  apt: string[];
+  installed: boolean;
+  outputs: string;
+  debs: string[];
+} {
   const root = mkdtempSync(join(tmpdir(), 'werkflow-playwright-packages-'));
   directories.push(root);
   const bin = join(root, 'bin');
@@ -57,7 +73,9 @@ function run(
     'apt-get',
     [
       `echo "$*" >> '${aptLog}'`,
-      options.mirror?.fails === undefined ? '' : `echo "E: the mirror refused" >&2; exit ${options.mirror.fails}`,
+      options.mirror?.fails === undefined
+        ? ''
+        : `echo "E: the mirror refused" >&2; exit ${options.mirror.fails}`,
       'if test "$1" = install; then',
       '  dir=""; for arg in "$@"; do case "$arg" in Dir::Cache::Archives=*) dir="${arg#*=}" ;; esac; done',
       `  for name in ${missing.join(' ')}; do touch "$dir/$name.deb"; done`,
@@ -124,7 +142,7 @@ test('a mirror that stalls every time ends the step after two bounded attempts, 
   expect(apt).toEqual(['stalled: apt-get update', 'stalled: apt-get update']);
   expect(installed).toBe(false);
   expect(output).toContain('attempt 1 of 2');
-  expect(output).toContain('apt-get update stalled on the runner\'s package mirror in all 2 attempts');
+  expect(output).toContain("apt-get update stalled on the runner's package mirror in all 2 attempts");
   expect(output).toContain('The mirror failed, not a test');
 });
 
