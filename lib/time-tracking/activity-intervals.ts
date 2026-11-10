@@ -22,11 +22,12 @@ type IntervalFacts = {
 /**
  * One activity of one person. `running`: today's start, still open.
  * `unclosed`: a start whose end is missing, on an earlier day or before
- * another start. `unopened`: an end without a start.
+ * another start (`supersededBy`). `unopened`: an end without a start.
  */
 export type ActivityInterval =
   | (IntervalFacts & { state: 'closed'; start: TimeEntry; end: TimeEntry })
-  | (IntervalFacts & { state: 'running' | 'unclosed'; start: TimeEntry; end: null })
+  | (IntervalFacts & { state: 'running'; start: TimeEntry; end: null })
+  | (IntervalFacts & { state: 'unclosed'; start: TimeEntry; end: null; supersededBy: TimeEntry | null })
   | (IntervalFacts & { state: 'unopened'; start: null; end: TimeEntry });
 
 const ONE_MINUTE_MS = 60_000;
@@ -60,9 +61,14 @@ function pairStatus(
 function pairPersonEntries(entries: TimeEntry[], status: TimeEntryStatus, now: Date): ActivityInterval[] {
   const intervals: ActivityInterval[] = [];
   let open: TimeEntry | null = null;
-  const leaveOpen = (start: TimeEntry, superseded: boolean) => {
-    const state = !superseded && isSameLocalDay(new Date(start.timestamp), now) ? 'running' : 'unclosed';
-    intervals.push({ ...facts(start, 'open', pairStatus(status, start, null)), state, start, end: null });
+  /** A start without its end: running while it is today's last, else superseded by the next start or the day. */
+  const leaveOpen = (start: TimeEntry, supersededBy: TimeEntry | null, dayEnded = false) => {
+    const base = { ...facts(start, 'open', pairStatus(status, start, null)), start, end: null };
+    if (!supersededBy && !dayEnded && isSameLocalDay(new Date(start.timestamp), now)) {
+      intervals.push({ ...base, state: 'running' });
+    } else {
+      intervals.push({ ...base, state: 'unclosed', supersededBy });
+    }
   };
   const close = (start: TimeEntry, end: TimeEntry) => {
     intervals.push({ ...facts(start, end.id, pairStatus(status, start, end)), state: 'closed', start, end });
@@ -70,7 +76,7 @@ function pairPersonEntries(entries: TimeEntry[], status: TimeEntryStatus, now: D
 
   for (const [index, entry] of entries.entries()) {
     if (open && !isSameLocalDay(new Date(open.timestamp), new Date(entry.timestamp))) {
-      leaveOpen(open, true);
+      leaveOpen(open, null, true);
       open = null;
     }
     const onBreak = open?.entryType === 'break_start';
@@ -78,17 +84,17 @@ function pairPersonEntries(entries: TimeEntry[], status: TimeEntryStatus, now: D
       case 'clock_in':
         // Only an end event ends time, as the work sessions behind the totals
         // pair it: a start before another start lacks its end.
-        if (open) leaveOpen(open, true);
+        if (open) leaveOpen(open, entry);
         open = entry;
         break;
       case 'break_start':
         if (open && !onBreak) close(open, entry);
-        else if (open) leaveOpen(open, true);
+        else if (open) leaveOpen(open, entry);
         open = entry;
         break;
       case 'break_end':
         if (open && onBreak) close(open, entry);
-        else if (open) leaveOpen(open, true);
+        else if (open) leaveOpen(open, entry);
         // A break end that a clock-in follows hands over to that clock-in.
         open = isBreakEndFollowedByClockIn(entries, index) ? null : entry;
         break;
@@ -110,7 +116,7 @@ function pairPersonEntries(entries: TimeEntry[], status: TimeEntryStatus, now: D
         break;
     }
   }
-  if (open) leaveOpen(open, false);
+  if (open) leaveOpen(open, null);
   return intervals;
 }
 
@@ -187,10 +193,11 @@ function isCountedJobTime(interval: ActivityInterval, jobId: string): boolean {
 
 /**
  * One job's entries in one person's day: each start of the job with the event
- * that ends it, whatever job that event names, and the end of a break that
- * interrupts the job's time. A clock-out or break start that names no job (as
- * the legacy clock wrote them) still ends the job's time, and a clock-out
- * during the break still ends its day.
+ * that ends it, whatever job that event names; the end of a break that
+ * interrupts the job's time; and the start that left the job's time without
+ * an end. A clock-out or break start that names no job (as the legacy clock
+ * wrote them) still ends the job's time, and a clock-out during the break
+ * still ends its day.
  */
 export function jobIntervalEntries(dayEntries: readonly TimeEntry[], jobId: string, now: Date): TimeEntry[] {
   // A break's end that resumes the job also starts its next stretch: keep it once.
@@ -198,7 +205,10 @@ export function jobIntervalEntries(dayEntries: readonly TimeEntry[], jobId: stri
   let jobTimeEndId: string | null = null;
   for (const interval of pairActivityIntervals(dayEntries, now)) {
     if (isCountedJobTime(interval, jobId)) {
-      for (const entry of [interval.start, interval.end]) if (entry) entries.set(entry.id, entry);
+      // The start that superseded the job's open time keeps it unclosed when the job's entries pair again.
+      const supersededBy = interval.state === 'unclosed' ? interval.supersededBy : null;
+      for (const entry of [interval.start, interval.end, supersededBy])
+        if (entry) entries.set(entry.id, entry);
       jobTimeEndId = interval.end?.id ?? null;
     } else if (interval.kind === 'break' && interval.start?.id === jobTimeEndId && interval.end) {
       entries.set(interval.end.id, interval.end);

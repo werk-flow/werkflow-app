@@ -282,3 +282,14 @@ test('a start that another start follows lacks its end, as the work sessions beh
   ]);
   expect(calculateWorkSessions(day).map((session) => session.durationMinutes)).toEqual([null, 120]);
 });
+
+test("today's job time that another job's start superseded reads „Ende fehlt“ in the job's own view, never „läuft“", () => {
+  const today = [
+    entry('x-in', 'clock_in', '2026-09-18T08:00', jobX),
+    entry('y-in', 'clock_in', '2026-09-18T10:00', jobY),
+    entry('y-out', 'clock_out', '2026-09-18T11:00', null),
+  ];
+  const jobEntries = jobIntervalEntries(today, jobX, NOW);
+  expect(jobEntries.map((jobEntry) => jobEntry.id)).toEqual(['x-in', 'y-in']);
+  expect(jobActivityIntervals(jobEntries, jobX, NOW).map((interval) => interval.state)).toEqual(['unclosed']);
+});
