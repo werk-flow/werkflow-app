@@ -103,14 +103,34 @@ export function lifecycleSteps(input: {
   };
 }
 
+/**
+ * Whether the organization already recorded this operation. A retry of a
+ * recorded transition goes straight to the database function, which answers
+ * with the stored result or refuses a changed request (`operation_id_conflict`);
+ * the state has moved on since, so the step checks would wrongly refuse it.
+ */
+async function readRecordedOperation(
+  admin: AdminClient,
+  organizationId: string,
+  operationId: string,
+): Promise<ReadResult<{ operation_id: string }>> {
+  return admin
+    .from('personnel_lifecycle_operations')
+    .select('operation_id')
+    .eq('organization_id', organizationId)
+    .eq('operation_id', operationId)
+    .maybeSingle();
+}
+
 const loadFailed: ActionFailure = { success: false, error: 'load_failed' };
 const staleVersion: ActionFailure = { success: false, error: 'stale_version' };
 const notAllowed: ActionFailure = { success: false, error: 'transition_not_allowed' };
 
 /**
- * Refuses an access step that does not fit the person's access at the
+ * Refuses a new access step that does not fit the person's access at the
  * version the caller saw. The database function locks the lifecycle and
  * checks that version again, so the state read here is the one it changes.
+ * A recorded operation passes to the function's replay check.
  */
 export async function refuseUnfitAccessStep(
   record: StepRecord,
@@ -118,10 +138,15 @@ export async function refuseUnfitAccessStep(
     employeeRecordId: string;
     expectedVersion: number;
     transitionKind: PersonnelAccessTransitionKind;
+    operationId: string;
   },
 ): Promise<ActionFailure | null> {
   const { admin, organizationId } = record;
-  const [lifecycle, membership, blocker] = await Promise.all([
+  const [recorded, lifecycle, membership, blocker] = await Promise.all([
+    loggedRead(
+      'refuseUnfitAccessStep: operation read failed',
+      readRecordedOperation(admin, organizationId, request.operationId),
+    ),
     loggedRead(
       'refuseUnfitAccessStep: access lifecycle read failed',
       readAccessLifecycle(admin, organizationId, request.employeeRecordId),
@@ -142,7 +167,8 @@ export async function refuseUnfitAccessStep(
         .limit(1),
     ),
   ]);
-  if (lifecycle.error || membership.error || blocker.error) return loadFailed;
+  if (recorded.error || lifecycle.error || membership.error || blocker.error) return loadFailed;
+  if (recorded.data) return null;
   if ((lifecycle.data?.version ?? 0) !== request.expectedVersion) return staleVersion;
   const steps = allowedAccessSteps({
     lifecycle: toScheduled(lifecycle.data),
@@ -153,20 +179,32 @@ export async function refuseUnfitAccessStep(
   return steps.includes(request.transitionKind) ? null : notAllowed;
 }
 
-/** Refuses an employment step that does not fit the person's employment at the version the caller saw. */
+/**
+ * Refuses a new employment step that does not fit the person's employment at
+ * the version the caller saw. A recorded operation passes to the function's
+ * replay check.
+ */
 export async function refuseUnfitEmploymentStep(
   record: StepRecord,
   request: {
     employeeRecordId: string;
     expectedVersion: number;
     transitionKind: PersonnelEmploymentTransitionKind;
+    operationId: string;
   },
 ): Promise<ActionFailure | null> {
-  const lifecycle = await loggedRead(
-    'refuseUnfitEmploymentStep: employment lifecycle read failed',
-    readEmploymentLifecycle(record.admin, record.organizationId, request.employeeRecordId),
-  );
-  if (lifecycle.error) return loadFailed;
+  const [recorded, lifecycle] = await Promise.all([
+    loggedRead(
+      'refuseUnfitEmploymentStep: operation read failed',
+      readRecordedOperation(record.admin, record.organizationId, request.operationId),
+    ),
+    loggedRead(
+      'refuseUnfitEmploymentStep: employment lifecycle read failed',
+      readEmploymentLifecycle(record.admin, record.organizationId, request.employeeRecordId),
+    ),
+  ]);
+  if (recorded.error || lifecycle.error) return loadFailed;
+  if (recorded.data) return null;
   if ((lifecycle.data?.version ?? 0) !== request.expectedVersion) return staleVersion;
   const steps = allowedEmploymentSteps({
     lifecycle: toScheduled(lifecycle.data),

@@ -14,6 +14,8 @@ const exitedRecordId = '84000000-0000-4000-8000-000000000004';
 const foreignRecordId = '84000000-0000-4000-8000-000000000005';
 const heldRecordId = '84000000-0000-4000-8000-000000000006';
 const heldUserId = '84000000-0000-4000-8000-000000000016';
+const recordedAccessOperationId = '84000000-0000-4000-8000-000000000022';
+const recordedEmploymentOperationId = '84000000-0000-4000-8000-000000000023';
 const memberUserId = '84000000-0000-4000-8000-000000000011';
 const activeUserId = '84000000-0000-4000-8000-000000000012';
 const foreignUserId = '84000000-0000-4000-8000-000000000015';
@@ -73,6 +75,11 @@ const world = installActionWorld({
     },
   ],
   personnel_employment_lifecycles: [lifecycle(exitedRecordId, 'exited', 4)],
+  // Two transitions that already succeeded: their retries must reach the function's replay check.
+  personnel_lifecycle_operations: [
+    { organization_id: ORGANIZATION_A, operation_id: recordedAccessOperationId, request_hash: 'stored' },
+    { organization_id: ORGANIZATION_A, operation_id: recordedEmploymentOperationId, request_hash: 'stored' },
+  ],
   personnel_onboarding_requirements: [
     {
       id: '84000000-0000-4000-8000-000000000041',
@@ -201,6 +208,31 @@ assert.deepEqual(await access(activeRecordId, 'end_access', 2), { success: true,
 assert.deepEqual(await access(heldRecordId, 'cancel_scheduled', 1), { success: true, data: { lifecycleId } });
 assert.deepEqual(await employment(exitedRecordId, 'reactivate', 4), { success: true, data: { lifecycleId } });
 assert.deepEqual(await employment(memberRecordId, 'record_notice'), { success: true, data: { lifecycleId } });
+// A retry of a recorded transition reaches the function's replay check, which answers with the
+// stored result or refuses a changed request, although the state has moved on since: the old
+// version and a step that no longer fits are not refused here.
+assert.deepEqual(
+  await setPersonnelAccessTransition({
+    employeeRecordId: activeRecordId,
+    expectedVersion: 1,
+    transitionKind: 'activate_now',
+    effectiveAt: now,
+    reason: 'Schritt erfassen',
+    operationId: recordedAccessOperationId,
+  }),
+  { success: true, data: { lifecycleId } },
+);
+assert.deepEqual(
+  await setPersonnelEmploymentTransition({
+    employeeRecordId: exitedRecordId,
+    expectedVersion: 3,
+    transitionKind: 'exit',
+    effectiveOn: '2026-10-31',
+    reason: 'Schritt erfassen',
+    operationId: recordedEmploymentOperationId,
+  }),
+  { success: true, data: { lifecycleId } },
+);
 assert.deepEqual(transitionCalls(), [
   'set_personnel_access_transition',
   'set_personnel_access_transition',
@@ -208,6 +240,8 @@ assert.deepEqual(transitionCalls(), [
   'set_personnel_access_transition',
   'set_personnel_access_transition',
   'set_personnel_employment_transition',
+  'set_personnel_employment_transition',
+  'set_personnel_access_transition',
   'set_personnel_employment_transition',
 ]);
 for (const call of world.rpcCalls.filter((entry) => entry.name.startsWith('set_personnel_'))) {
