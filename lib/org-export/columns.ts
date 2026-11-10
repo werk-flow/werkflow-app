@@ -58,6 +58,7 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   client_communication_settings: 'Kunden_Kommunikationseinstellungen',
   client_contacts: 'Kunden_Ansprechpartner',
   client_follow_up_events: 'Kunden_Wiedervorlagen_Ereignisse',
+  client_master_events: 'Kunden_Stammdaten_Ereignisse',
   client_follow_ups: 'Kunden_Wiedervorlagen',
   client_request_events: 'Anfragen_Ereignisse',
   client_requests: 'Anfragen',

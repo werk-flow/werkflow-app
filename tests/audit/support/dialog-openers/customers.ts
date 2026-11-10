@@ -14,6 +14,8 @@ import {
   contactWarningDialog,
   createFollowUpButton,
   customerContactDialog,
+  customerArchiveConfirmation,
+  customerArchiveMenuItem,
   customerContactLink,
   customerCreateDialog,
   customerDeleteConfirmation,
@@ -22,6 +24,7 @@ import {
   customerDetailsRegion,
   customerEditDialog,
   customerRowActionsButton,
+  customerRowArchiveItem,
   customerRowDeleteItem,
   customerRowEditItem,
   customerSiteDialog,
@@ -61,6 +64,11 @@ export const CUSTOMERS_OPENERS = {
     layer: customerDeleteConfirmation,
     returnFocus: ({ page, world }) => customerRowActionsButton(page, layoutNames(world).client),
   },
+  'customers.list-archive': {
+    trigger: (context) => customerListMenuItem(context, customerRowArchiveItem(context.page)),
+    layer: customerArchiveConfirmation,
+    returnFocus: ({ page, world }) => customerRowActionsButton(page, layoutNames(world).client),
+  },
   // The edit dialog lives in the list's row menu only; the detail page has no edit action.
   'customers.edit': {
     trigger: (context) => customerListMenuItem(context, customerRowEditItem(context.page)),
@@ -73,6 +81,14 @@ export const CUSTOMERS_OPENERS = {
       return customerDeleteMenuItem(page);
     },
     layer: customerDeleteConfirmation,
+    returnFocus: ({ page }) => detailActionsButton(page),
+  },
+  'customers.archive': {
+    trigger: async ({ page }) => {
+      await detailActionsButton(page).click();
+      return customerArchiveMenuItem(page);
+    },
+    layer: customerArchiveConfirmation,
     returnFocus: ({ page }) => detailActionsButton(page),
   },
   'customers.contact': {

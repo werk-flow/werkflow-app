@@ -89,7 +89,10 @@ test("a connection reset while the results come back retries on a fresh request 
   // Each attempt asks Boat for its own signed URL.
   expect(signedUrls).toHaveLength(2);
   expect(waits).toEqual([2_000]);
-  expect(lines).toEqual(['The results download failed (ECONNRESET); attempt 2 of 4 in 2 s.']);
+  expect(lines[0]).toBe('The results download failed (ECONNRESET); attempt 2 of 4 in 2 s.');
+  // The download's size and time follow, as the upload's do.
+  expect(lines[1]).toMatch(/^Downloaded the results \(0\.0 MB\) in \d+\.\d s\.$/);
+  expect(lines).toHaveLength(2);
 });
 
 test('a results download that fails on every attempt falls back after four fresh requests and writes nothing', async () => {

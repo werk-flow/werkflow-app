@@ -2,8 +2,8 @@ import { VERIFY_ADDRESS_COOKIE } from '@/lib/auth/address-cookies';
 
 /**
  * The screens outside the app shell (`StandaloneScreen`): sign-in and sign-up,
- * onboarding, the upgrade offer, the invitation error, the unavailable sign-in
- * and the root not-found page. Each entry names the session the screen needs
+ * onboarding, the upgrade offer, the invitation error, the unavailable sign-in,
+ * the offline fallback and the root not-found page. Each entry names the session the screen needs
  * and the address the audit opens, because these screens refuse or redirect
  * every other visitor.
  * `standalone-route-inventory.test.ts` fails when a page under `app/` outside
@@ -42,6 +42,7 @@ export const STANDALONE_SCREENS = [
   },
   { route: '/invite-error', session: 'anonymous', path: '/invite-error?error=invite_expired' },
   { route: '/auth/unavailable', session: 'anonymous', path: '/auth/unavailable' },
+  { route: '/offline', session: 'anonymous', path: '/offline' },
   { route: 'not-found', session: 'anonymous', path: '/diese-seite-gibt-es-nicht' },
   { route: '/onboarding/start', session: 'newcomer', path: '/onboarding/start' },
   { route: '/onboarding/join-organization', session: 'newcomer', path: '/onboarding/join-organization' },

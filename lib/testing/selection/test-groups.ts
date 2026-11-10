@@ -293,6 +293,7 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   // Rendered acceptance captures of the open sets (tests/audit/support/acceptance-sets.ts).
   ['visual:acceptance', 'visual/acceptance.spec.ts', ['*']],
   ['security:account', 'security/account.spec.ts', ['*']],
+  ['security:offline-shell', 'security/offline-shell.spec.ts', ['standalone', 'work']],
   // The report screenshot redraw on a seeded customer and job (docs/technical/problem-report-scrubbing.md).
   ['problem-reports:redraw', 'problem-reports/screenshot-redraw.spec.ts', ['customers', 'work']],
   ['list-pagination', 'pagination/list-pagination.spec.ts', ['inventory', 'documents', 'work']],
@@ -344,6 +345,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['request-caller-matches', ['request_caller_matches.sql'], ['customers']],
   ['request-retry-results', ['request_retry_results.sql'], ['customers', 'work', 'service']],
   ['client-duplicates', ['client_duplicates.sql'], ['customers']],
+  ['client-archive-history', ['client_archive_history.sql'], ['customers']],
   [
     'request-callback-and-equipment',
     ['request_callback_and_equipment.sql'],

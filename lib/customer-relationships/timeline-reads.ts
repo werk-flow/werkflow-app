@@ -4,6 +4,7 @@ import type { ActionResult } from '@/lib/action-result';
 import type { ClientManagerContext } from '@/lib/clients/manager-access';
 import { logError } from '@/lib/logging';
 import { readInBatches } from '@/lib/supabase/query-batches';
+import { describeMasterDataEvent } from './master-data-events';
 import { customerJobHref, firstRelation, profileName } from './relationship-labels';
 import { buildTimelinePage, decodeTimelineCursor, isTimelineCursorSafe, timelineItemKey } from './resolution';
 import { TIMELINE_PAGE_SIZE, type CustomerRelationshipBundle, type TimelineItem } from './types';
@@ -266,7 +267,7 @@ async function readTimelineDocumentLinkSources(
   };
 }
 
-/** The follow-up and communication-preference event logs of one timeline page, cursor applied. */
+/** The follow-up, communication-preference and master-data event logs of one timeline page, cursor applied. */
 async function readTimelineEventLogSources(
   context: ClientManagerContext,
   clientId: string,
@@ -290,7 +291,17 @@ async function readTimelineEventLogSources(
     .order('created_at', { ascending: false })
     .order('id', { ascending: false })
     .limit(sourceLimit);
-  const [followUpEventsResult, preferenceEventsResult] = await Promise.all([
+  const masterDataEventsQuery = admin
+    .from('client_master_events')
+    .select(
+      'id,event_type,event_payload,created_at,actor_id,contact_id,site_id,client_contacts(name),client_sites(name)',
+    )
+    .eq('organization_id', orgId)
+    .eq('client_id', clientId)
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(sourceLimit);
+  const [followUpEventsResult, preferenceEventsResult, masterDataEventsResult] = await Promise.all([
     applyTimelineCursorWhenPaged(followUpEventsQuery, cursor, 'follow_up_event', 'created_at'),
     applyTimelineCursorWhenPaged(
       preferenceEventsQuery,
@@ -298,8 +309,9 @@ async function readTimelineEventLogSources(
       'communication_preference_event',
       'created_at',
     ),
+    applyTimelineCursorWhenPaged(masterDataEventsQuery, cursor, 'master_data_event', 'created_at'),
   ]);
-  return { followUpEventsResult, preferenceEventsResult };
+  return { followUpEventsResult, preferenceEventsResult, masterDataEventsResult };
 }
 
 /** Runs every timeline source of one page in parallel; null after logging when any read fails. */
@@ -335,6 +347,7 @@ async function readTimelineSources(context: ClientManagerContext, clientId: stri
     sources.requestDocumentLinksResult,
     sources.followUpEventsResult,
     sources.preferenceEventsResult,
+    sources.masterDataEventsResult,
   ];
   if (results.some((result) => result.error)) {
     logError('Failed to load complete customer timeline:', results.find((result) => result.error)?.error);
@@ -596,6 +609,36 @@ function addEventLogItems(add: AddTimelineItem, clientId: string, sources: Timel
   }
 }
 
+/** Identity changes and archiving of the customer, its contacts and its sites. */
+function addMasterDataItems(add: AddTimelineItem, clientId: string, sources: TimelineSources): void {
+  for (const event of sources.masterDataEventsResult.data ?? []) {
+    const { reference, detail } = describeMasterDataEvent({
+      eventType: event.event_type,
+      payload: event.event_payload,
+      contactName: firstRelation(event.client_contacts)?.name ?? null,
+      siteName: firstRelation(event.client_sites)?.name ?? null,
+      isContact: event.contact_id !== null,
+      isSite: event.site_id !== null,
+    });
+    add({
+      kind: 'master_data_event',
+      category: 'internal',
+      sourceId: event.id,
+      occurredAt: event.created_at,
+      actorId: event.actor_id,
+      actorName: null,
+      reference,
+      detail,
+      sourceHref: `/kunden/${clientId}${
+        event.contact_id ? '#ansprechpartner' : event.site_id ? '#einsatzorte' : ''
+      }`,
+      sourceAvailable: true,
+      currentStateOnly: false,
+      metadata: { eventType: event.event_type, payload: event.event_payload },
+    });
+  }
+}
+
 /** One page of the customer timeline with its actors named. The caller has established the manager context. */
 export async function loadTimeline(
   context: ClientManagerContext,
@@ -623,6 +666,7 @@ export async function loadTimeline(
   addWorkItems(add, sources);
   addDocumentLinkItems(add, sources);
   addEventLogItems(add, clientId, sources);
+  addMasterDataItems(add, clientId, sources);
 
   const profilesResult = await readInBatches([...actorIds], (batch) =>
     admin

@@ -30,6 +30,7 @@ const TIMELINE_KINDS: readonly TimelineKind[] = [
   'document_linked',
   'follow_up_event',
   'communication_preference_event',
+  'master_data_event',
 ];
 
 function isTimelineKind(value: string): value is TimelineKind {
