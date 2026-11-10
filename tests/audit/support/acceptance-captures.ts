@@ -24,6 +24,7 @@ import { withState } from './acceptance-states';
 import { DIALOG_OPENERS } from './dialog-openers';
 import { openLayerAt } from './open-layer';
 import { DESKTOP, VIEWPORT_HEIGHT } from './open-layer-plan';
+import { settleLiveShell } from './performance-steps';
 import { openStandaloneScreen } from './standalone-sessions';
 import { layoutNames, prepareLayoutDetails } from './layout-fixtures';
 import { openSurface, surfaceDestination } from './surface-routes';
@@ -31,7 +32,7 @@ import { openSurface, surfaceDestination } from './surface-routes';
 // The capture fixture of rendered acceptance (docs/technical/standards-audit.md,
 // "Rendered design acceptance"). It refuses to write a capture of a screen that
 // is not ready: the URL must be the requested page (never the login), the page
-// title visible, every busy signal settled, the fonts loaded, the clock button
+// title visible, every live read and busy signal settled, the fonts loaded, the clock button
 // ready and no failed region on screen. A capture that declares a `state`
 // asks for its loading or error state instead, which the fixture produces and
 // proves (captureState below). Each image lands under
@@ -112,6 +113,8 @@ async function expectReady(page: Page, scope: Locator, view: CaptureSpec['view']
     .poll(() => page.locator('h1').count(), { message: 'the page title is rendered' })
     .toBeGreaterThan(0);
   await expect(scope).toBeVisible();
+  // The shell's live reads land after the page body, some without a skeleton (the nav's badge counts).
+  await settleLiveShell(page);
   // A dialog may belong to a save the page holds open (the planning warning of a
   // move), so a dialog capture settles its layer, as the layout audit does; the
   // page behind it settled before its trigger was pressed.

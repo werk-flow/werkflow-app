@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, createContext, useContext, useMemo } from 'react';
+import { useState, useEffect, useRef, createContext, useContext, useMemo, useSyncExternalStore } from 'react';
 import { SidebarLink as Link } from './sidebar-link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
@@ -13,6 +13,8 @@ import { Menu, X } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { logError } from '@/lib/logging';
+import { restoreOfflineShell } from '@/lib/offline/service-worker-caches';
 import { cn } from '@/lib/utils';
 import { useOrganization } from '@/components/organization/organization-context';
 import { SidebarProfileCard } from '@/components/sidebar/sidebar-profile-card';
@@ -31,6 +33,51 @@ const OrganizationSwitcher = dynamic(
     loading: () => <Skeleton className="h-9 w-full rounded-md border border-input" />,
   },
 );
+
+const IosInstallHint = dynamic(
+  () => import('@/components/shared/ios-install-hint').then((mod) => mod.IosInstallHint),
+  { ssr: false },
+);
+
+const subscribeNever = (): (() => void) => () => {};
+const onServer = (): boolean => false;
+
+/**
+ * iOS browsers have no install prompt, so the field role gets a hint there,
+ * outside the installed app. iPadOS reports a Mac with touch. Every other
+ * browser never downloads the hint's module.
+ */
+function needsIosInstallHint(): boolean {
+  const ios =
+    /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+    (navigator.userAgent.includes('Macintosh') && navigator.maxTouchPoints > 1);
+  return ios && !window.matchMedia('(display-mode: standalone)').matches;
+}
+
+/**
+ * The installable app shell's page side, run after the load event so it adds
+ * nothing to the first paint. It registers the service worker (production
+ * only: development files change on every edit) and asks it to refill its
+ * cookie-free shell: signing in navigates on the client, so a shell a sign-out
+ * deleted comes back here. Every cold start needs this much; the iOS hint runs
+ * only sometimes and loads lazily, since a chunk loaded after the load event
+ * still costs the cold start a request. The cache clear is the exception: a
+ * sign-out must never wait for a chunk, so it is a small static import.
+ */
+function useOfflineShell(): void {
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'production' || !('serviceWorker' in navigator)) return;
+    const start = () => {
+      navigator.serviceWorker
+        .register('/sw.js')
+        .then(restoreOfflineShell)
+        .catch((error: unknown) => logError('AppShell: service worker registration failed', error));
+    };
+    if (document.readyState === 'complete') start();
+    else window.addEventListener('load', start, { once: true });
+    return () => window.removeEventListener('load', start);
+  }, []);
+}
 
 // Context for sidebar state
 type SidebarContextType = {
@@ -348,6 +395,8 @@ export function AppShell({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const { isSwitchingOrg, activeOrg } = useOrganization();
+  const showIosInstallHint = useSyncExternalStore(subscribeNever, needsIosInstallHint, onServer);
+  useOfflineShell();
   const mainRef = useRef<HTMLElement>(null);
   usePageBodyKeyboardScroll(mainRef);
 
@@ -373,6 +422,7 @@ export function AppShell({
                 {children}
               </main>
               <OrgSwitchOverlay />
+              {activeOrg?.role === 'employee' && showIosInstallHint && <IosInstallHint />}
             </div>
           </div>
         </ProblemReportLauncher>

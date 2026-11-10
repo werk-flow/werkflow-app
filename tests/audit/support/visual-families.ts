@@ -361,6 +361,7 @@ export const STANDALONE_FAMILIES: readonly StandaloneFamily[] = [
     screen: '/auth/unavailable',
     heading: 'Anmeldung gerade nicht erreichbar',
   },
+  { id: 'kein-netz', screen: '/offline', heading: 'Gerade kein Netz' },
   { id: 'nicht-gefunden', screen: 'not-found', heading: 'Seite nicht gefunden' },
   { id: 'onboarding-start', screen: '/onboarding/start', heading: 'Willkommen bei WerkFlow' },
   { id: 'onboarding-beitreten', screen: '/onboarding/join-organization', heading: 'Organisation beitreten' },
