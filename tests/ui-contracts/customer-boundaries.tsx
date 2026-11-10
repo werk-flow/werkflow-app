@@ -89,6 +89,7 @@ export function CustomerContractFixture(): React.JSX.Element {
           page={2}
           total={61}
           searchQuery="Kontakt"
+          view="aktiv"
         />
       </RealtimeProvider>
     </BannerProvider>

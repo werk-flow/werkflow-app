@@ -100,6 +100,24 @@ export type ClientRelationsResult = ActionResult<{ contacts: ClientContact[]; si
 /** The first save of a new customer that matches existing ones saves nothing and lists them. */
 export type ClientDuplicatesFailure = ActionFailure<'possible_duplicates'> & ClientMatchList;
 
+/**
+ * The records that keep a customer from deletion, counted per kind as
+ * `app_private.client_links` counts them. A kind without records is absent.
+ */
+export type ClientLinkKind =
+  | 'jobs'
+  | 'projects'
+  | 'requests'
+  | 'service_cases'
+  | 'equipment'
+  | 'maintenance'
+  | 'documents'
+  | 'follow_ups';
+export type ClientLinks = { [Kind in ClientLinkKind]?: number | undefined };
+
+/** Archiving or restoring answers the customer's archive mark: null while it is active. */
+export type ClientArchiveResult = ActionResult<{ archivedAt: string | null }>;
+
 // ============================================
 // Converters And Helpers
 // ============================================

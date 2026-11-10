@@ -83,7 +83,7 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
     );
   }
 
-  const { client } = clientResult;
+  const { client, archivedAt } = clientResult;
 
   const members: OrgMemberOption[] = membersResult.members.map((m) => ({
     userId: m.user_id,
@@ -95,6 +95,7 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
   return (
     <KundenDetailContent
       client={client}
+      archivedAt={archivedAt}
       relations={
         relationsResult.success ? { contacts: relationsResult.contacts, sites: relationsResult.sites } : null
       }
