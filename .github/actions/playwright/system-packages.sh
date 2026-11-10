@@ -72,16 +72,20 @@ find_missing() {
   } >> "$GITHUB_OUTPUT"
 }
 
-# Installs every .deb in a folder; succeeds when Playwright then reports nothing missing.
+# Installs every .deb in a folder; succeeds when every package named after it is then installed.
+# It asks dpkg, not Playwright: after an `apt-get update` Playwright also lists libraries that have
+# a newer version, and Chromium does not need those.
 install_folder() {
+  local folder=$1 remaining
   local -a files
-  local remaining
+  shift
   shopt -s nullglob
-  files=("$1"/*.deb)
+  files=("$folder"/*.deb)
   shopt -u nullglob
   test "${#files[@]}" -gt 0 || return 1
   sudo dpkg --install "${files[@]}" > /dev/null || return 1
-  remaining="$(missing_packages)" || return 1
+  remaining="$(dpkg-query --show --showformat '${db:Status-Status} ${Package}\n' "$@" 2>&1 \
+    | grep --invert-match '^installed ')"
   test -z "$remaining" || { echo "Still missing after the install: $remaining" >&2; return 1; }
 }
 
@@ -89,7 +93,7 @@ install_missing() {
   local -a packages
   local target="$DEBS"
   read -r -a packages <<< "$MISSING"
-  if install_folder "$DEBS"; then
+  if install_folder "$DEBS" "${packages[@]}"; then
     echo "Installed Chromium's packages from the cache, without the package mirror."
     return 0
   fi
@@ -104,7 +108,7 @@ install_missing() {
     --download-only -o "Dir::Cache::Archives=$target" "${packages[@]}" || exit 1
   # apt wrote them as root; the cache step reads them as the runner user.
   sudo chown --recursive "$(id -u):$(id -g)" "$target"
-  if ! install_folder "$target"; then
+  if ! install_folder "$target" "${packages[@]}"; then
     echo "::error::Chromium's packages ($MISSING) did not install from the files the mirror sent."
     exit 1
   fi

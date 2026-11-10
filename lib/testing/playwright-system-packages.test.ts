@@ -28,6 +28,8 @@ type Mirror = {
   stalls?: number;
   /** An apt-get exit code that is not a stall, returned by every call. */
   fails?: number;
+  /** A library with a newer version on the mirror, which Playwright then also reports missing. */
+  upgrade?: string;
 };
 
 function run(
@@ -84,8 +86,18 @@ function run(
   );
   stub('dpkg', `touch '${installed}'`);
   stub(
+    'dpkg-query',
+    [
+      'shift 3',
+      `for name in "$@"; do if test -e '${installed}'; then echo "installed $name"; else echo "not-installed $name"; fi; done`,
+    ].join('\n'),
+  );
+  stub(
     'bunx',
     [
+      options.mirror?.upgrade === undefined
+        ? ''
+        : `if test -e '${installed}'; then printf 'Missing system dependencies (1):\\n  ${options.mirror.upgrade}\\n'; exit 1; fi`,
       `if test -e '${installed}' || test -z '${missing.join(' ')}'; then echo "All system dependencies are installed."; exit 0; fi`,
       `echo "Missing system dependencies (${missing.length}):"`,
       ...missing.map((name) => `echo "  ${name}"`),
@@ -155,6 +167,13 @@ test('one stall gets a fresh attempt, and the download fills the cache folder', 
   expect(apt).toHaveLength(3);
   expect(installed).toBe(true);
   expect(debs.sort()).toEqual(['fonts-freefont-ttf.deb', 'xfonts-utils.deb']);
+});
+
+test('a library the mirror offers in a newer version does not fail the install', () => {
+  const { status, installed, output } = run('install', { mirror: { upgrade: 'libnss3' } });
+  expect(status).toBe(0);
+  expect(installed).toBe(true);
+  expect(output).toContain("Installed Chromium's packages from the package mirror.");
 });
 
 test('an apt failure that is not a stall ends the step at once', () => {
