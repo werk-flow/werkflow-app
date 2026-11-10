@@ -59,7 +59,8 @@ export function initializeServiceBoundaries(): void {
       }
       // The start page refresh contract answers the day's GET at Playwright's network boundary.
       if (
-        window.uiContractFixture === 'today-refresh-switch' &&
+        (window.uiContractFixture === 'today-refresh-switch' ||
+          window.uiContractFixture === 'today-refresh-profile') &&
         typeof input === 'string' &&
         input.startsWith(`${FIELD_SYNC_TODAY_PATH}?`) &&
         (init?.method ?? 'GET') === 'GET'

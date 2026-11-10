@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { useOrganization } from '@/components/organization/organization-context';
 import { useBanner } from '@/components/ui/banner';
@@ -25,12 +25,21 @@ export function TodayRefreshOnStart(): null {
   const { activeOrg } = useOrganization();
   const userId = useUserProfile().profile?.id ?? null;
   const organizationId = activeOrg?.role === 'employee' ? activeOrg.orgId : null;
+  // The wipe generation this page may claim under. Taken when the page mounts, so a sign-out that
+  // wipes meanwhile keeps it from claiming, even when the person's id arrives only later (a profile
+  // the browser reads itself). Renewed only for a new organization: a switch wipes on purpose
+  // before it publishes the new one.
+  const claimBase = useRef<{ organizationId: string | null; generation: string } | null>(null);
   useEffect(() => {
+    const base =
+      claimBase.current?.organizationId === organizationId
+        ? claimBase.current
+        : { organizationId, generation: todayWipeGeneration() };
+    claimBase.current = base;
     // No person or no field worker's organization yet: nothing to claim or refresh.
     if (!userId || !organizationId) return;
     let current = true;
-    // Taken before the code loads: a sign-out that wipes meanwhile keeps this page from refreshing.
-    const generationAtStart = todayWipeGeneration();
+    const generationAtStart = base.generation;
     let retried = false;
     const retryOnline = (): void => void start();
     const start = async (): Promise<void> => {

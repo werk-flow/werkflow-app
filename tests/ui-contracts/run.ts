@@ -169,6 +169,11 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               if (args.importer.endsWith('offline-today.tsx'))
                 return { path: join(import.meta.dir, 'offline-today-service-boundaries.ts') };
             });
+            // The profile the start page refresh waits for, read in the browser and held by the spec.
+            builder.onResolve({ filter: /^@\/lib\/supabase\/client$/ }, (args) => {
+              if (args.importer.endsWith('user-profile-context.tsx'))
+                return { path: join(import.meta.dir, 'today-refresh-profile-boundaries.ts') };
+            });
             // The start page's refresh code, as a chunk that is gone after a deployment.
             builder.onResolve({ filter: /^@\/lib\/field-sync\/device\/today-refresh$/ }, (args) => {
               if (args.importer.endsWith('today-refresh-on-start.tsx'))

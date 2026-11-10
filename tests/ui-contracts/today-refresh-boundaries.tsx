@@ -10,6 +10,7 @@ import { BannerProvider } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { UserProfileProvider } from '@/components/user/user-profile-context';
 import { readTodayOnDevice } from '@/lib/field-sync/device/today-store';
+import { clearTodayOnDevice } from '@/lib/field-sync/device/today-wipe';
 import type { UserProfile } from '@/lib/profile-reference';
 import './organization-service-boundaries';
 import { TODAY_CONTRACT_ORGANIZATIONS, TODAY_CONTRACT_USER } from './today-refresh-world';
@@ -42,7 +43,13 @@ const profile: UserProfile = {
 };
 
 /** The app's client contexts around a field worker's start page, as the app layout provides them. */
-function FieldWorkerStartPage({ children }: { children: ReactNode }): React.JSX.Element {
+function FieldWorkerStartPage({
+  children,
+  serverProfile = profile,
+}: {
+  children: ReactNode;
+  serverProfile?: UserProfile | null;
+}): React.JSX.Element {
   return (
     <BannerProvider>
       <OrganizationProvider
@@ -50,7 +57,7 @@ function FieldWorkerStartPage({ children }: { children: ReactNode }): React.JSX.
         initialActiveOrgId={TODAY_CONTRACT_ORGANIZATIONS[0]}
         initialActiveOrgCookieNeedsSync={false}
       >
-        <UserProfileProvider initialProfile={profile}>
+        <UserProfileProvider initialProfile={serverProfile}>
           <main>
             <h1>Komponentenverträge</h1>
             <TodayRefreshOnStart />
@@ -79,6 +86,18 @@ export function TodayRefreshSwitchContractFixture(): React.JSX.Element {
   return (
     <FieldWorkerStartPage>
       <SwitchToSecondOrganization />
+    </FieldWorkerStartPage>
+  );
+}
+
+/**
+ * A start page whose profile the server could not read: the person's id arrives only from the
+ * browser's own read. „Abmelden“ runs the device wipe every sign-out starts with.
+ */
+export function TodayRefreshProfileContractFixture(): React.JSX.Element {
+  return (
+    <FieldWorkerStartPage serverProfile={null}>
+      <Button onClick={() => void clearTodayOnDevice()}>Abmelden</Button>
     </FieldWorkerStartPage>
   );
 }

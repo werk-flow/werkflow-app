@@ -77,3 +77,33 @@ test('after an organization switch the refresh claims the new organization and n
   expect(await claim()).toBe(`${TODAY_CONTRACT_USER}:${second}`);
   expect(requested).toEqual([first, second]);
 });
+
+// A sign-out wipes the device before it ends the session. When the person's profile arrives
+// only after that wipe, from a read the browser makes itself, the page must not claim the device
+// again while the ending session still answers: no claim and no day survive the sign-out.
+test('a profile that arrives after a sign-out wiped the device never claims it or stores a day', async ({
+  page,
+}) => {
+  const requested: string[] = [];
+  await page.route(
+    (url) => url.pathname === FIELD_SYNC_TODAY_PATH,
+    (route) => {
+      requested.push(route.request().url());
+      return route.abort();
+    },
+  );
+  await openContractFixture(page, 'today-refresh-profile');
+  await expect.poll(() => page.evaluate(() => window.todayRefreshProfile.reads)).toBe(1);
+
+  await page.getByRole('button', { name: 'Abmelden', exact: true }).click();
+  await expect
+    .poll(() => page.evaluate(async () => (await indexedDB.databases()).map((database) => database.name)))
+    .toEqual([]);
+  await page.evaluate(() => window.todayRefreshProfile.release());
+
+  // The page handed the refresh its person and organization; a claim would be in place by now.
+  await expect.poll(() => page.evaluate(() => window.todayRefreshStarts)).toBe(1);
+  expect(await page.evaluate((key) => localStorage.getItem(key), TODAY_HOLDER_KEY)).toBeNull();
+  expect(await page.evaluate(() => window.todayRefreshContract.storedOrganization())).toBeNull();
+  expect(requested).toEqual([]);
+});

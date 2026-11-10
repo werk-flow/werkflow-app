@@ -39,6 +39,7 @@ declare global {
       | 'organization-export'
       | 'today-refresh'
       | 'today-refresh-switch'
+      | 'today-refresh-profile'
       | 'offline-today'
       | 'sidebar'
       | 'lazy-dialog'
