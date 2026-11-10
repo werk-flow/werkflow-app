@@ -22,8 +22,9 @@ temporary=(/tmp /var/tmp /dev/shm)
 # Boat's own log of each command's output; every log but the snapshot's and this command's goes.
 processes="$HOME/.ascii/processes"
 # Folders inside the snapshot's own that a run writes, kept whole as recorded and put back: the
-# Supabase CLI's traces hold the SQL a run sent, and the heavy-command slots hold its locks.
-restored=(.supabase .cache/werkflow-heavy)
+# Supabase CLI's traces hold the SQL a run sent, the heavy-command slots hold its locks, and Next.js
+# makes its telemetry folder with every build, an empty one even with NEXT_TELEMETRY_DISABLED.
+restored=(.supabase .cache/werkflow-heavy .config/nextjs-nodejs)
 # Coding-agent CLI folders: Boat's machine agent writes a skill and a small config into each when it
 # hands out a machine, the snapshot's base image included. They hold no login (no credential file by
 # any CLI's name), and no run uses an agent, but a machine keeps none of them (decision 15).
