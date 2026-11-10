@@ -9,9 +9,9 @@ import {
   isMomentary,
   jobActivityIntervals,
   jobIntervalEntries,
-  pairActivityIntervals,
 } from './activity-intervals';
 import { projectTimeSegmentsToLegacyTransitions, type TimeSegmentFact } from './segments';
+import { calculateWorkSessions } from './work-sessions';
 import type { TimeEntry, TimeEntryStatus, TimeEntryType, TimeSegmentKind } from './types';
 
 const organizationId = '10000000-0000-4000-8000-000000000001';
@@ -51,6 +51,13 @@ function entry(
     updatedAt: timestamp,
     activityKind: extra.activityKind,
   };
+}
+
+/** Every activity of the entries, oldest first, as the Verlauf pairs them. */
+function activities(entries: TimeEntry[]) {
+  return activityDays(entries, NOW)
+    .toReversed()
+    .flatMap((day) => day.intervals);
 }
 
 /** The legacy clock's day: the job rides on clock-in and break end, never on the break start or clock-out. */
@@ -94,13 +101,10 @@ test("a clock-out during the job's break ends the job's day", () => {
 });
 
 test('only an open start of today runs; an open start of an earlier day lacks its end', () => {
-  const intervals = pairActivityIntervals(
-    [
-      entry('yesterday', 'clock_in', '2026-09-17T06:57', jobX),
-      entry('today', 'clock_in', '2026-09-18T07:30', jobX),
-    ],
-    NOW,
-  );
+  const intervals = activities([
+    entry('yesterday', 'clock_in', '2026-09-17T06:57', jobX),
+    entry('today', 'clock_in', '2026-09-18T07:30', jobX),
+  ]);
   expect(intervals.map((interval) => [interval.id, interval.state, intervalMinutes(interval, NOW)])).toEqual([
     ['yesterday:open', 'unclosed', null],
     ['today:open', 'running', 270],
@@ -108,20 +112,17 @@ test('only an open start of today runs; an open start of an earlier day lacks it
 });
 
 test('an end without a start stays visible as an end whose start is missing', () => {
-  const [interval] = pairActivityIntervals([entry('out', 'clock_out', '2026-09-17T15:49', jobX)], NOW);
+  const [interval] = activities([entry('out', 'clock_out', '2026-09-17T15:49', jobX)]);
   expect(interval?.state).toBe('unopened');
   expect(interval && intervalMinutes(interval, NOW)).toBeNull();
 });
 
 test('a rejected entry never closes counted time', () => {
-  const intervals = pairActivityIntervals(
-    [
-      entry('in', 'clock_in', '2026-09-17T08:00', jobX),
-      entry('rejected-out', 'clock_out', '2026-09-17T09:00', null, { status: 'rejected' }),
-      entry('out', 'clock_out', '2026-09-17T16:00', null),
-    ],
-    NOW,
-  );
+  const intervals = activities([
+    entry('in', 'clock_in', '2026-09-17T08:00', jobX),
+    entry('rejected-out', 'clock_out', '2026-09-17T09:00', null, { status: 'rejected' }),
+    entry('out', 'clock_out', '2026-09-17T16:00', null),
+  ]);
   expect(intervals.map((interval) => [interval.id, interval.status])).toEqual([
     ['in:out', 'approved'],
     ['none:rejected-out', 'rejected'],
@@ -129,13 +130,10 @@ test('a rejected entry never closes counted time', () => {
 });
 
 test('time with a pending event reads as pending', () => {
-  const [interval] = pairActivityIntervals(
-    [
-      entry('in', 'clock_in', '2026-09-17T08:00', jobX),
-      entry('out', 'clock_out', '2026-09-17T09:00', null, { status: 'pending' }),
-    ],
-    NOW,
-  );
+  const [interval] = activities([
+    entry('in', 'clock_in', '2026-09-17T08:00', jobX),
+    entry('out', 'clock_out', '2026-09-17T09:00', null, { status: 'pending' }),
+  ]);
   expect(interval?.status).toBe('pending');
 });
 
@@ -270,4 +268,17 @@ test('a status filter keeps whole activities: an approved start with a pending e
     );
   expect(ids('pending')).toEqual(['in:out']);
   expect(ids('approved')).toEqual([]);
+});
+
+test('a start that another start follows lacks its end, as the work sessions behind the totals leave it unpaired', () => {
+  const day = [
+    entry('x-in', 'clock_in', '2026-09-17T08:00', jobX),
+    entry('y-in', 'clock_in', '2026-09-17T10:00', jobY),
+    entry('y-out', 'clock_out', '2026-09-17T12:00', null),
+  ];
+  expect(activities(day).map((interval) => [interval.id, interval.state])).toEqual([
+    ['x-in:open', 'unclosed'],
+    ['y-in:y-out', 'closed'],
+  ]);
+  expect(calculateWorkSessions(day).map((session) => session.durationMinutes)).toEqual([null, 120]);
 });

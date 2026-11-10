@@ -4,7 +4,8 @@ import { isBreakEndFollowedByClockIn } from './transition-pairs';
 import type { TimeEntry, TimeEntryStatus, TimeSegmentKind } from './types';
 
 // Recorded time as activity intervals: each start paired with the next event
-// that ends it on its Berlin day, whatever job that event names. The job time
+// that ends it on its Berlin day (a clock-out, a break start for work, a break
+// end for a break), whatever job that event names. The job time
 // reader, the Verlauf and the work pack's „Meine Zeit“ read time through it, and
 // the calendar's day hides what `isMomentary` names.
 
@@ -75,9 +76,9 @@ function pairPersonEntries(entries: TimeEntry[], status: TimeEntryStatus, now: D
     const onBreak = open?.entryType === 'break_start';
     switch (entry.entryType) {
       case 'clock_in':
-        // A new start ends a break; a work start before it lacks its end.
-        if (open && onBreak) close(open, entry);
-        else if (open) leaveOpen(open, true);
+        // Only an end event ends time, as the work sessions behind the totals
+        // pair it: a start before another start lacks its end.
+        if (open) leaveOpen(open, true);
         open = entry;
         break;
       case 'break_start':
@@ -119,14 +120,11 @@ export function intervalAnchor(interval: ActivityInterval): TimeEntry {
 }
 
 /**
- * @internal Exported for its unit test, which pins the pairing rules without
- * the day grouping; views read `activityDays` and `jobActivityIntervals`.
- *
  * Each person's entries as activity intervals in time order. Approved and
  * pending entries pair together, as they count; rejected entries and pending
  * deletions each pair among themselves, so they never close counted time.
  */
-export function pairActivityIntervals(entries: readonly TimeEntry[], now = new Date()): ActivityInterval[] {
+function pairActivityIntervals(entries: readonly TimeEntry[], now = new Date()): ActivityInterval[] {
   const groups = new Map<string, { status: TimeEntryStatus; entries: TimeEntry[] }>();
   for (const entry of entries) {
     const status =

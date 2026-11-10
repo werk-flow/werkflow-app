@@ -376,7 +376,14 @@ function useEntryHistoryView(query: EntryHistoryQuery, hasRange: boolean): LiveV
   const knownNames = useRef<ProfileNames>(new Map());
   const { layout, organizationId, statusFilter, memberFilter, dateFrom, dateTo } = query;
   return useLiveView<EntryHistoryData>({
-    tables: ['time_entries', 'time_sessions', 'time_segments', 'time_correction_requests'],
+    // The activities show their jobs' titles, so a renamed job reads again too.
+    tables: [
+      'time_entries',
+      'time_sessions',
+      'time_segments',
+      'time_correction_requests',
+      ...(layout === 'activities' ? (['jobs'] as const) : []),
+    ],
     read: ({ signal }) => readEntryHistory(query, knownNames.current, signal),
     enabled: hasRange,
     // A filter change is a new view of the data: discard and read fresh.

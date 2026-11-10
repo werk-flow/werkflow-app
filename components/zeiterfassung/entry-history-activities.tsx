@@ -36,11 +36,6 @@ function actionEntry(interval: ActivityInterval): TimeEntry {
   );
 }
 
-/** The record a correction of the entry changes: its segment, its applied correction, or the entry itself. */
-function correctionSource(entry: TimeEntry): string {
-  return entry.canonicalSegmentId ?? entry.correctionApplicationId ?? entry.id;
-}
-
 /**
  * The end, when a correction of the start leaves it as it is: a legacy
  * clock-out or break start is its own record, so the row corrects it on its
@@ -56,7 +51,9 @@ function separatelyCorrectedEnd(
   if (!start || !end || primary !== start) return null;
   if (end.status !== 'approved' || end.pendingCorrectionRequestId) return null;
   if (isEntryInClosedPeriod(end, closedPeriods)) return null;
-  return correctionSource(end) === correctionSource(start) ? null : end;
+  // The record a correction changes: the segment, the applied correction, or the entry.
+  const source = (edge: TimeEntry) => edge.canonicalSegmentId ?? edge.correctionApplicationId ?? edge.id;
+  return source(end) === source(start) ? null : end;
 }
 
 function ActivityRow({
