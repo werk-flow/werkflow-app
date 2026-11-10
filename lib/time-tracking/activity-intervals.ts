@@ -25,7 +25,13 @@ type IntervalFacts = {
  * another start (`supersededBy`). `unopened`: an end without a start.
  */
 export type ActivityInterval =
-  | (IntervalFacts & { state: 'closed'; start: TimeEntry; end: TimeEntry })
+  | (IntervalFacts & {
+      state: 'closed';
+      start: TimeEntry;
+      end: TimeEntry;
+      /** The clock-in a break end hands over to, so the break end starts no work of its own. */
+      handedOverTo: TimeEntry | null;
+    })
   | (IntervalFacts & { state: 'running'; start: TimeEntry; end: null })
   | (IntervalFacts & { state: 'unclosed'; start: TimeEntry; end: null; supersededBy: TimeEntry | null })
   | (IntervalFacts & { state: 'unopened'; start: null; end: TimeEntry });
@@ -70,8 +76,14 @@ function pairPersonEntries(entries: TimeEntry[], status: TimeEntryStatus, now: D
       intervals.push({ ...base, state: 'unclosed', supersededBy });
     }
   };
-  const close = (start: TimeEntry, end: TimeEntry) => {
-    intervals.push({ ...facts(start, end.id, pairStatus(status, start, end)), state: 'closed', start, end });
+  const close = (start: TimeEntry, end: TimeEntry, handedOverTo: TimeEntry | null = null) => {
+    intervals.push({
+      ...facts(start, end.id, pairStatus(status, start, end)),
+      state: 'closed',
+      start,
+      end,
+      handedOverTo,
+    });
   };
 
   for (const [index, entry] of entries.entries()) {
@@ -92,12 +104,16 @@ function pairPersonEntries(entries: TimeEntry[], status: TimeEntryStatus, now: D
         else if (open) leaveOpen(open, entry);
         open = entry;
         break;
-      case 'break_end':
-        if (open && onBreak) close(open, entry);
-        else if (open) leaveOpen(open, entry);
+      case 'break_end': {
         // A break end that a clock-in follows hands over to that clock-in.
-        open = isBreakEndFollowedByClockIn(entries, index) ? null : entry;
+        const handedOverTo = isBreakEndFollowedByClockIn(entries, index)
+          ? (entries[index + 1] ?? null)
+          : null;
+        if (open && onBreak) close(open, entry, handedOverTo);
+        else if (open) leaveOpen(open, entry);
+        open = handedOverTo ? null : entry;
         break;
+      }
       case 'clock_out':
         if (open) close(open, entry);
         else {
@@ -210,8 +226,13 @@ export function jobIntervalEntries(dayEntries: readonly TimeEntry[], jobId: stri
       for (const entry of [interval.start, interval.end, supersededBy])
         if (entry) entries.set(entry.id, entry);
       jobTimeEndId = interval.end?.id ?? null;
-    } else if (interval.kind === 'break' && interval.start?.id === jobTimeEndId && interval.end) {
-      entries.set(interval.end.id, interval.end);
+    } else if (
+      interval.kind === 'break' &&
+      interval.start?.id === jobTimeEndId &&
+      interval.state === 'closed'
+    ) {
+      // With the clock-in a break end hands over to, the break end starts no work when paired again.
+      for (const entry of [interval.end, interval.handedOverTo]) if (entry) entries.set(entry.id, entry);
     }
   }
   return [...entries.values()];

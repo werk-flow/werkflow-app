@@ -293,3 +293,53 @@ test("today's job time that another job's start superseded reads â€žEnde fehltâ€
   expect(jobEntries.map((jobEntry) => jobEntry.id)).toEqual(['x-in', 'y-in']);
   expect(jobActivityIntervals(jobEntries, jobX, NOW).map((interval) => interval.state)).toEqual(['unclosed']);
 });
+
+test("a break end that hands over to another job's clock-in starts no job time when the job's entries pair again", () => {
+  const today = [
+    entry('x-in', 'clock_in', '2026-09-18T07:00', jobX),
+    entry('pause', 'break_start', '2026-09-18T09:00', null),
+    entry('resume', 'break_end', '2026-09-18T09:30', jobX),
+    entry('y-in', 'clock_in', '2026-09-18T09:30', jobY),
+    entry('y-out', 'clock_out', '2026-09-18T11:00', null),
+  ];
+  const whole = activities(today).filter((interval) => interval.jobId === jobX);
+  const jobOnly = jobActivityIntervals(jobIntervalEntries(today, jobX, NOW), jobX, NOW);
+  expect(jobOnly.map((interval) => [interval.id, interval.state])).toEqual(
+    whole.map((interval) => [interval.id, interval.state]),
+  );
+  expect(jobOnly.map((interval) => interval.state)).toEqual(['closed']);
+});
+
+test("the job's own view pairs the job's entries as the whole day pairs them", () => {
+  const days: Record<string, TimeEntry[]> = {
+    'legacy day': legacyDay,
+    'superseded start': [
+      entry('x-in', 'clock_in', '2026-09-18T08:00', jobX),
+      entry('y-in', 'clock_in', '2026-09-18T10:00', jobY),
+    ],
+    'clock-in during a break': [
+      entry('x-in', 'clock_in', '2026-09-18T07:00', jobX),
+      entry('pause', 'break_start', '2026-09-18T09:00', null),
+      entry('y-in', 'clock_in', '2026-09-18T09:30', jobY),
+    ],
+    'jobless resume': [
+      entry('x-in', 'clock_in', '2026-09-18T07:00', jobX),
+      entry('pause', 'break_start', '2026-09-18T09:00', null),
+      entry('resume', 'break_end', '2026-09-18T09:30', null),
+      entry('out', 'clock_out', '2026-09-18T11:00', null),
+    ],
+    'clock-out during a break': [
+      entry('x-in', 'clock_in', '2026-09-18T07:00', jobX),
+      entry('pause', 'break_start', '2026-09-18T09:00', null),
+      entry('out', 'clock_out', '2026-09-18T09:30', null),
+    ],
+  };
+  for (const [name, day] of Object.entries(days)) {
+    const whole = activities(day).filter((interval) => interval.kind !== 'break' && interval.jobId === jobX);
+    const jobOnly = jobActivityIntervals(jobIntervalEntries(day, jobX, NOW), jobX, NOW);
+    expect(
+      jobOnly.map((interval) => [interval.id, interval.state]),
+      name,
+    ).toEqual(whole.map((interval) => [interval.id, interval.state]));
+  }
+});
