@@ -75,7 +75,7 @@ export async function expectOnlyShellFilesCached(
     return found;
   }, CACHE_PREFIX);
   const isShellFile = (path: string): boolean =>
-    path === '/offline' || path.startsWith('/_next/static/') || /^\/[\w-]+\.(?:svg|png)$/.test(path);
+    path === '/offline' || path.startsWith('/_next/static/') || /^\/(?:[\w-]+\/)*[\w-]+\.(?:svg|png)$/.test(path);
   expect(entries.map((entry) => entry.path).filter((path) => !isShellFile(path))).toEqual([]);
   const offlinePage = entries.find((entry) => entry.path === '/offline');
   expect(offlinePage?.body).toContain(OFFLINE_COPY.title);
