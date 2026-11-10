@@ -1,7 +1,5 @@
 'use client';
 
-import { z } from 'zod';
-
 import {
   FIELD_SYNC_TODAY_PATH,
   fieldSyncTodaySchema,
@@ -73,13 +71,12 @@ function superseded(holder: TodayHolder): boolean {
   }
 }
 
-const refusalSchema = z.object({ outcome: z.string(), code: z.string() });
-
 /**
  * Whether a refusal says the person lost access to the organization's day (decision record 0010,
  * "the today snapshot"): only then must the stored customer data go. The answer's outcome decides,
  * never its status. A `retry`, a `rejected` `invalid` (a fault of this client, not an access
- * change) and a body that is not a refusal keep the day.
+ * change) and a body that is no refusal keep the day. Checked by hand, not with a zod schema: a
+ * schema here grew the shared zod chunk that every page loads at start.
  */
 async function losesAccess(response: Response): Promise<boolean> {
   let body: unknown;
@@ -89,11 +86,13 @@ async function losesAccess(response: Response): Promise<boolean> {
     // best-effort: a proxy's or a cut-off page says nothing about access; the stored day stays.
     return false;
   }
-  const refusal = refusalSchema.safeParse(body);
   return (
-    refusal.success &&
-    refusal.data.outcome === 'rejected' &&
-    (refusal.data.code === 'forbidden' || refusal.data.code === 'organization_mismatch')
+    typeof body === 'object' &&
+    body !== null &&
+    'outcome' in body &&
+    'code' in body &&
+    body.outcome === 'rejected' &&
+    (body.code === 'forbidden' || body.code === 'organization_mismatch')
   );
 }
 
