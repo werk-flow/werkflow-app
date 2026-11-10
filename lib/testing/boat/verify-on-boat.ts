@@ -131,6 +131,14 @@ function plannedRuns(plan: string): string[] {
   return [...plan.matchAll(/^RUN +(\S+)/gm)].map((match) => match[1] ?? '');
 }
 
+/**
+ * The first refusal a printed plan reports from the evidence history, such as an unclassified
+ * failed run. `test:verify` refuses it on a Boat machine as here, so no machine starts for it.
+ */
+export function refusedPlan(plan: string): string | undefined {
+  return /^\[verify\] refused: (.+)$/m.exec(plan)?.[1];
+}
+
 /** The first group a printed plan runs that measures this workstation's wall clock. */
 export function wallClockGroup(plan: string): string | undefined {
   return plannedRuns(plan).find((id) => WALL_CLOCK_GROUP.test(id));
@@ -194,6 +202,9 @@ function planReason(repository: string, args: readonly string[]): string | undef
     maxBuffer: 64 * 1024 * 1024,
   });
   if (plan.status !== 0) return 'the plan could not be read here; the local run reports why.';
+  const refused = refusedPlan(plan.stdout);
+  if (refused)
+    return `test:verify refuses this plan on Boat as here, so it refuses it here at once: ${refused}`;
   const measured = wallClockGroup(plan.stdout);
   if (measured) return `the plan runs ${measured}, which measures this machine's wall clock.`;
   return cheapLocalReason(plan.stdout, () => readMigrationDrift(repository));
