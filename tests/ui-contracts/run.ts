@@ -57,7 +57,7 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               )
                 return { path: join(repository, 'lib/supabase/client.ts') };
             });
-            builder.onResolve({ filter: /^@\/lib\/clients\/actions$/ }, () => ({
+            builder.onResolve({ filter: /^@\/lib\/clients\/(site-role-)?actions$/ }, () => ({
               path: join(import.meta.dir, 'customer-service-boundaries.ts'),
             }));
             builder.onResolve({ filter: /^next\/navigation$/ }, (args) => {

@@ -68,3 +68,7 @@ export const updateClientContact = updateClientContactContract;
 export const updateClientSite = updateClientSiteContract;
 export const createClientContact = unexpectedWrite;
 export const createClientSite = unexpectedWrite;
+
+// The contracts open no Einsatzort role editor.
+export const assignClientSiteRole = unexpectedWrite;
+export const endClientSiteRole = unexpectedWrite;

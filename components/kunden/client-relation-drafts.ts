@@ -7,6 +7,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   contact_not_found: 'Der Ansprechpartner wurde nicht gefunden.',
   site_not_found: 'Der Einsatzort wurde nicht gefunden.',
   no_changes: 'Keine Änderungen zum Speichern.',
+  source_number_taken: 'Diese Objektnummer hat schon ein anderer Einsatzort.',
 };
 
 export function clientRelationErrorMessage(error: string): string {
@@ -41,6 +42,8 @@ export const EMPTY_CONTACT: ContactDraft = {
   email: '',
   phone: '',
   notes: '',
+  siteId: null,
+  siteRole: null,
   isPrimary: false,
 };
 
@@ -49,6 +52,7 @@ export const EMPTY_SITE: SiteDraft = {
   street: '',
   postalCode: '',
   city: '',
+  sourceNumber: '',
   accessNotes: '',
   notes: '',
   primaryContactId: null,

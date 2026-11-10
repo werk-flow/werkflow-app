@@ -1,20 +1,46 @@
 'use client';
 
 import Link from 'next/link';
-import { Archive, ArchiveRestore, KeyRound, MapPin, Pencil, Plus, Star, Users, Wrench } from 'lucide-react';
+import {
+  Archive,
+  ArchiveRestore,
+  Hash,
+  KeyRound,
+  MapPin,
+  Pencil,
+  Plus,
+  Star,
+  Users,
+  Wrench,
+} from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { formatSiteAddress, type ClientContact, type ClientSite } from '@/lib/clients/types';
+import {
+  SITE_CONTACT_ROLE_LABELS,
+  SITE_ROLE_KINDS,
+  SITE_ROLE_LABELS,
+  berlinToday,
+  siteRoleState,
+  type ClientSiteRole,
+} from '@/lib/clients/site-roles';
+import { TextLink } from '@/components/ui/text-link';
 import { EQUIPMENT_STATE_LABELS, type EquipmentListItem } from '@/lib/installed-equipment/types';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { SectionTitle } from '@/components/shared/section-title';
 
 interface ClientSiteRowProps {
+  clientId: string;
   site: ClientSite;
   contactNameById: ReadonlyMap<string, string>;
+  /** The active contacts linked to this Objekt as Mieter or Zugangskontakt. */
+  siteContacts: ClientContact[];
+  /** Every role on this Objekt; null when the roles could not be read. */
+  siteRoles: ClientSiteRole[] | null;
+  onOpenRoles: (site: ClientSite) => void;
   equipment: EquipmentListItem[];
   equipmentLoadFailed: boolean;
   isAdminOrManager: boolean;
@@ -50,9 +76,101 @@ function ClientSiteEquipmentLinks({ siteId, equipment }: { siteId: string; equip
   );
 }
 
+/** The current owner, Hausverwaltung and Rechnungsempfänger of an Objekt, or that none is recorded. */
+function ClientSiteRoleSummary({
+  clientId,
+  site,
+  siteRoles,
+  isAdminOrManager,
+  onOpenRoles,
+}: Pick<ClientSiteRowProps, 'clientId' | 'site' | 'siteRoles' | 'isAdminOrManager' | 'onOpenRoles'>) {
+  if (siteRoles === null) return null;
+  const today = berlinToday();
+  const current = SITE_ROLE_KINDS.flatMap((kind) =>
+    siteRoles.filter((role) => role.role === kind && siteRoleState(role, today) === 'current'),
+  );
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+      {current.length === 0 ? (
+        <span className="text-muted-foreground">Rollen nicht eingetragen</span>
+      ) : (
+        current.map((role) => (
+          <span key={role.id} className="text-muted-foreground">
+            {SITE_ROLE_LABELS[role.role]}:{' '}
+            {role.holderClientId === clientId ? (
+              <span className="text-foreground">{role.holderName}</span>
+            ) : (
+              <TextLink href={`/kunden/${role.holderClientId}`}>{role.holderName}</TextLink>
+            )}
+          </span>
+        ))
+      )}
+      {isAdminOrManager && (
+        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => onOpenRoles(site)}>
+          Rollen verwalten
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/** The Mieter and Zugangskontakte of an Objekt with a phone to call. */
+function ClientSiteContacts({ siteContacts }: { siteContacts: ClientContact[] }) {
+  if (siteContacts.length === 0) return null;
+  return (
+    <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+      {siteContacts.map((contact) => (
+        <li key={contact.id} className="flex flex-wrap gap-x-2">
+          <span>
+            {contact.siteRole ? `${SITE_CONTACT_ROLE_LABELS[contact.siteRole]}: ` : ''}
+            <span className="text-foreground">{contact.name}</span>
+          </span>
+          {contact.phone && <span>{contact.phone}</span>}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** The on-site contact, access notes and source number of an Einsatzort. */
+function ClientSiteMeta({
+  site,
+  primaryContactName,
+}: {
+  site: ClientSite;
+  primaryContactName: string | null;
+}) {
+  return (
+    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
+      {primaryContactName && (
+        <span className="inline-flex items-center gap-1">
+          <Users className="size-3" />
+          {primaryContactName}
+        </span>
+      )}
+      {site.accessNotes && (
+        <span className="inline-flex items-center gap-1">
+          <KeyRound className="size-3" />
+          {site.accessNotes}
+        </span>
+      )}
+      {site.sourceNumber && (
+        <span className="inline-flex items-center gap-1">
+          <Hash className="size-3" />
+          Objektnr. {site.sourceNumber}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function ClientSiteRow({
+  clientId,
   site,
   contactNameById,
+  siteContacts,
+  siteRoles,
+  onOpenRoles,
   equipment,
   equipmentLoadFailed,
   isAdminOrManager,
@@ -77,21 +195,16 @@ function ClientSiteRow({
             )}
           </div>
           {address && <p className="mt-1 text-sm text-muted-foreground">{address}</p>}
-          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
-            {primaryContactName && (
-              <span className="inline-flex items-center gap-1">
-                <Users className="size-3" />
-                {primaryContactName}
-              </span>
-            )}
-            {site.accessNotes && (
-              <span className="inline-flex items-center gap-1">
-                <KeyRound className="size-3" />
-                {site.accessNotes}
-              </span>
-            )}
-          </div>
+          <ClientSiteMeta site={site} primaryContactName={primaryContactName ?? null} />
           {site.notes && <p className="mt-1 text-xs text-muted-foreground">{site.notes}</p>}
+          <ClientSiteContacts siteContacts={siteContacts} />
+          <ClientSiteRoleSummary
+            clientId={clientId}
+            site={site}
+            siteRoles={siteRoles}
+            isAdminOrManager={isAdminOrManager}
+            onOpenRoles={onOpenRoles}
+          />
           {!equipmentLoadFailed && <ClientSiteEquipmentLinks siteId={site.id} equipment={equipment} />}
         </div>
         {isAdminOrManager && (
@@ -125,8 +238,11 @@ function ClientSiteRow({
   );
 }
 
-interface ClientSitesCardProps extends Omit<ClientSiteRowProps, 'site' | 'contactNameById'> {
+interface ClientSitesCardProps
+  extends Omit<ClientSiteRowProps, 'site' | 'contactNameById' | 'siteContacts' | 'siteRoles'> {
   clientAddress: string | null;
+  /** The roles on the customer's Objekte; null when they could not be read. */
+  roles: ClientSiteRole[] | null;
   contacts: ClientContact[];
   activeSites: ClientSite[];
   inactiveSites: ClientSite[];
@@ -179,8 +295,11 @@ function ClientSiteArchivedList({
 }
 
 export function ClientSitesCard({
+  clientId,
   clientAddress,
   contacts,
+  roles,
+  onOpenRoles,
   activeSites,
   inactiveSites,
   equipment,
@@ -209,6 +328,11 @@ export function ClientSitesCard({
       {equipmentLoadFailed && (
         <RegionLoadError className="mb-3">Anlagen und Geräte konnten nicht geladen werden.</RegionLoadError>
       )}
+      {roles === null && (
+        <RegionLoadError className="mb-3">
+          Die Rollen der Einsatzorte konnten nicht geladen werden.
+        </RegionLoadError>
+      )}
 
       {activeSites.length === 0 ? (
         <div className="space-y-2">
@@ -224,8 +348,12 @@ export function ClientSitesCard({
           {activeSites.map((site) => (
             <ClientSiteRow
               key={site.id}
+              clientId={clientId}
               site={site}
               contactNameById={contactNameById}
+              siteContacts={contacts.filter((contact) => contact.isActive && contact.siteId === site.id)}
+              siteRoles={roles?.filter((role) => role.siteId === site.id) ?? null}
+              onOpenRoles={onOpenRoles}
               equipment={equipment}
               equipmentLoadFailed={equipmentLoadFailed}
               isAdminOrManager={isAdminOrManager}

@@ -54,6 +54,7 @@ function siteEditorDialogState(site: ClientSite): SiteDialogState {
       street: site.street ?? '',
       postalCode: site.postalCode ?? '',
       city: site.city ?? '',
+      sourceNumber: site.sourceNumber ?? '',
       accessNotes: site.accessNotes ?? '',
       notes: site.notes ?? '',
       primaryContactId: site.primaryContactId,

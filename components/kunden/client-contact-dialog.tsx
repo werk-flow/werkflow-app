@@ -13,12 +13,22 @@ import {
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { SearchableSelect } from '@/components/ui/searchable-select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  SITE_CONTACT_ROLES,
+  SITE_CONTACT_ROLE_LABELS,
+  siteContactRoleSchema,
+} from '@/lib/clients/site-roles';
+import { formatSiteAddress, type ClientSite } from '@/lib/clients/types';
 
 import type { ContactDialogState } from './client-relation-drafts';
 import { ContactRoleField } from './contact-role-field';
 
 interface ClientContactDialogProps {
+  /** The customer's active Einsatzorte a contact can live at or open. */
+  sites: ClientSite[];
   /** Null while the dialog is closed; the parent keeps the draft. */
   contactDialog: ContactDialogState | null;
   onContactDialogChange: (next: ContactDialogState | null) => void;
@@ -98,7 +108,74 @@ function ClientContactDetailFields({
   );
 }
 
+/** The Einsatzort a Mieter or Zugangskontakt belongs to, and that role. */
+function ClientContactSiteFields({
+  sites,
+  contactDialog,
+  onContactDialogChange,
+}: {
+  sites: ClientSite[];
+  contactDialog: ContactDialogState;
+  onContactDialogChange: (next: ContactDialogState | null) => void;
+}) {
+  const { draft } = contactDialog;
+  if (sites.length === 0 && !draft.siteId) return null;
+  return (
+    <div className="grid items-start gap-4 sm:grid-cols-2">
+      <Field label="Einsatzort" htmlFor="contact-site" description="Für Mieter und Zugangskontakte.">
+        <SearchableSelect
+          options={sites.map((site) => ({
+            value: site.id,
+            label: site.name,
+            description: formatSiteAddress(site) || undefined,
+          }))}
+          value={draft.siteId ?? ''}
+          onChange={(value) =>
+            onContactDialogChange({
+              ...contactDialog,
+              draft: {
+                ...draft,
+                siteId: value || null,
+                siteRole: value ? (draft.siteRole ?? 'mieter') : null,
+              },
+            })
+          }
+          placeholder="Keiner"
+          searchPlaceholder="Einsatzort suchen…"
+          emptyMessage="Kein Einsatzort gefunden"
+          allowNone
+          noneLabel="Keiner"
+        />
+      </Field>
+      {draft.siteId && (
+        <Field label="Rolle am Einsatzort" htmlFor="contact-site-role">
+          <Select
+            value={draft.siteRole ?? 'mieter'}
+            onValueChange={(value) => {
+              const siteRole = siteContactRoleSchema.safeParse(value);
+              if (siteRole.success)
+                onContactDialogChange({ ...contactDialog, draft: { ...draft, siteRole: siteRole.data } });
+            }}
+          >
+            <SelectTrigger id="contact-site-role">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SITE_CONTACT_ROLES.map((role) => (
+                <SelectItem key={role} value={role}>
+                  {SITE_CONTACT_ROLE_LABELS[role]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+      )}
+    </div>
+  );
+}
+
 export function ClientContactDialog({
+  sites,
   contactDialog,
   onContactDialogChange,
   onSave,
@@ -142,6 +219,11 @@ export function ClientContactDialog({
               onRoleChange={(role) =>
                 onContactDialogChange({ ...contactDialog, draft: { ...contactDialog.draft, role } })
               }
+            />
+            <ClientContactSiteFields
+              sites={sites}
+              contactDialog={contactDialog}
+              onContactDialogChange={onContactDialogChange}
             />
             <ClientContactDetailFields
               contactDialog={contactDialog}

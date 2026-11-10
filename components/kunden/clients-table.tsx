@@ -4,6 +4,7 @@ import { rowIntentPrefetch } from '@/lib/ui/row-intent';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { Fragment } from 'react';
 import { Building2 } from 'lucide-react';
 
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
@@ -20,12 +21,14 @@ import {
 } from '@/components/ui/skeleton-table';
 import type { OptimisticListItem } from '@/hooks/use-optimistic-list';
 import { ClientActionsMenu, type ClientRowActions } from './client-actions-menu';
+import { CustomerMatchedSites } from './customer-matched-sites';
+import type { CustomerListItem } from '@/lib/clients/list-page';
 import { CLIENT_TYPE_LABELS, type Client } from '@/lib/jobs/types';
 
 interface ClientsTableProps {
   /** A search is active, so an empty list means "no match", not "nothing yet". */
   isFiltered: boolean;
-  rows: OptimisticListItem<Client>[];
+  rows: OptimisticListItem<CustomerListItem>[];
   isBusy: (clientId: string) => boolean;
   actions: ClientRowActions;
 }
@@ -144,7 +147,7 @@ function ClientCard({
   isBusy,
   actions,
 }: {
-  client: Client;
+  client: CustomerListItem;
   isBusy: boolean;
   actions: ClientRowActions;
 }) {
@@ -165,6 +168,11 @@ function ClientCard({
           <InlinePending active={isBusy} />
         </div>
         <ClientContactLine client={client} />
+        {client.matchedSites && client.matchedSites.length > 0 && (
+          <div className="pt-1">
+            <CustomerMatchedSites client={client} />
+          </div>
+        )}
       </div>
       <ListRowActions>
         <ClientActionsMenu client={client} isBusy={isBusy} actions={actions} />
@@ -277,12 +285,16 @@ export function ClientsTable({ rows, isBusy, actions, isFiltered }: ClientsTable
                   }}
                 />
               ) : (
-                <ClientTableRow
-                  key={client.id}
-                  client={client}
-                  isBusy={isBusy(client.id)}
-                  actions={actions}
-                />
+                <Fragment key={client.id}>
+                  <ClientTableRow client={client} isBusy={isBusy(client.id)} actions={actions} />
+                  {client.matchedSites && client.matchedSites.length > 0 && (
+                    <TableRow>
+                      <TableCell colSpan={CLIENT_COLUMNS.length} className="pt-0 pl-8">
+                        <CustomerMatchedSites client={client} />
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </Fragment>
               ),
             )}
           </TableBody>

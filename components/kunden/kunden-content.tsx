@@ -20,7 +20,12 @@ import { useBusyIds } from '@/hooks/use-busy-id';
 import { useOptimisticChannel } from '@/hooks/use-optimistic-channel';
 import { useOptimisticList } from '@/hooks/use-optimistic-list';
 import { useLiveView, type LiveViewState } from '@/hooks/use-live-view';
-import { customerListViewSchema, fetchCustomerPage, type CustomerListView } from '@/lib/clients/list-page';
+import {
+  customerListViewSchema,
+  fetchCustomerPage,
+  type CustomerListItem,
+  type CustomerListView,
+} from '@/lib/clients/list-page';
 import { UsableContent } from '@/components/shared/usable-content';
 import { describeFailure } from '@/lib/action-messages';
 import { restoreClient } from '@/lib/clients/actions';
@@ -30,7 +35,7 @@ interface KundenContentProps {
   organizationId: string;
   /** Organization, caller and role identity of the rendered scope. */
   scopeKey: string;
-  clients: Client[];
+  clients: CustomerListItem[];
   page: number;
   total: number;
   searchQuery: string;
@@ -47,9 +52,9 @@ type SearchControl = {
   focusedRef: RefObject<boolean>;
 };
 
-const getClientId = (client: Client) => client.id;
+const getClientId = (client: CustomerListItem) => client.id;
 // The server orders by name; the optimistic row lands where the real one will.
-const compareClients = (a: Client, b: Client) => a.name.localeCompare(b.name, 'de');
+const compareClients = (a: CustomerListItem, b: CustomerListItem) => a.name.localeCompare(b.name, 'de');
 
 /**
  * Search text, the pending URL navigation and the input's focus outlive the
@@ -91,7 +96,7 @@ type KundenListProps = KundenContentProps & {
 };
 
 /** The live page read plus the creations a read started after their save has settled. */
-type KundenLivePage = { clients: Client[]; total: number; settledCreations: string[] };
+type KundenLivePage = { clients: CustomerListItem[]; total: number; settledCreations: string[] };
 
 /** The live page read, refreshed by a same-page route snapshot. */
 function useKundenLivePage({
@@ -104,7 +109,7 @@ function useKundenLivePage({
 }: KundenContentProps) {
   const confirmedCreations = useRef(new Set<string>());
   const live = useLiveView<KundenLivePage>({
-    tables: ['clients', 'client_contacts', 'client_sites'],
+    tables: ['clients', 'client_contacts', 'client_sites', 'client_site_roles'],
     coalesceWhileReading: true,
     initialData: { clients: initialClients, total: initialTotal, settledCreations: [] },
     read: async ({ signal }) => {
@@ -130,7 +135,7 @@ function useKundenOptimisticClients(
   organizationId: string,
   /** A new customer is active: the archived view never shows it. */
   showsCreations: boolean,
-  clients: Client[],
+  clients: CustomerListItem[],
   live: LiveViewState<KundenLivePage>,
   confirmedCreations: RefObject<Set<string>>,
 ) {
@@ -214,7 +219,7 @@ type RemovalTarget = { client: Client; removal: ClientRemoval };
  * with the error on failure.
  */
 function useKundenRowActions(
-  list: ReturnType<typeof useOptimisticList<Client>>,
+  list: ReturnType<typeof useOptimisticList<CustomerListItem>>,
   view: CustomerListView,
   live: Pick<LiveViewState<KundenLivePage>, 'invalidate' | 'refresh'>,
   onSaved: (clientId: string) => void,

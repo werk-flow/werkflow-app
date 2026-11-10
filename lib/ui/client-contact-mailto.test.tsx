@@ -16,6 +16,8 @@ function contactWithEmail(email: string): ClientContact {
     email,
     phone: null,
     notes: null,
+    siteId: null,
+    siteRole: null,
     isPrimary: true,
     isActive: true,
     createdBy: null,
@@ -28,6 +30,7 @@ function contactWithEmail(email: string): ClientContact {
 function renderedCard(email: string): string {
   return renderToStaticMarkup(
     <ClientContactsCard
+      sites={[]}
       activeContacts={[contactWithEmail(email)]}
       inactiveContacts={[]}
       isAdminOrManager

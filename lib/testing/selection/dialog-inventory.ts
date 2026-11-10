@@ -216,6 +216,9 @@ export const DIALOG_INVENTORY = {
     {
       audits: [{ route: '/kunden/[clientId]', role: 'admin', opener: 'customers.site' }],
     },
+  'components/kunden/client-site-roles-dialog.tsx#ClientSiteRolesDialog|Rollen am Einsatzort': {
+    audits: [{ route: '/kunden/[clientId]', role: 'admin', opener: 'customers.site-roles' }],
+  },
   'components/kunden/communication-preference-dialog.tsx#CommunicationPreferenceDialog|Kontaktpräferenz festhalten':
     {
       audits: [{ route: '/kunden/[clientId]', role: 'admin', opener: 'customers.preference' }],

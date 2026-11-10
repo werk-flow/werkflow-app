@@ -236,6 +236,7 @@ function ClientRelationsHost(): React.JSX.Element {
       clientAddress={null}
       contacts={relations.contacts}
       sites={relations.sites}
+      siteRoles={[]}
       isAdminOrManager
       equipment={[]}
       equipmentLoadFailed={false}

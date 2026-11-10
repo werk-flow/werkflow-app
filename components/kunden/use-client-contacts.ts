@@ -55,6 +55,8 @@ function contactEditorDialogState(contact: ClientContact): ContactDialogState {
       email: contact.email ?? '',
       phone: contact.phone ?? '',
       notes: contact.notes ?? '',
+      siteId: contact.siteId,
+      siteRole: contact.siteRole,
       isPrimary: contact.isPrimary,
     },
     error: null,

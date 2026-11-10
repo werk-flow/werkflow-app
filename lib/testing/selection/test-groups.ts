@@ -346,6 +346,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['request-retry-results', ['request_retry_results.sql'], ['customers', 'work', 'service']],
   ['client-duplicates', ['client_duplicates.sql'], ['customers']],
   ['client-archive-history', ['client_archive_history.sql'], ['customers']],
+  ['client-site-roles', ['client_site_roles.sql'], ['customers', 'service']],
   [
     'request-callback-and-equipment',
     ['request_callback_and_equipment.sql'],

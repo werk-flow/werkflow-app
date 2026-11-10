@@ -1,4 +1,5 @@
 import type { ActionFailure, ActionResult } from '@/lib/action-result';
+import { siteContactRoleSchema, type SiteContactRole } from '@/lib/clients/site-roles';
 import type { Database } from '@/lib/supabase/database.types';
 
 // ============================================
@@ -21,6 +22,9 @@ export type ClientContact = {
   email: string | null;
   phone: string | null;
   notes: string | null;
+  /** The Objekt of the customer the contact lives at or opens, with that role. */
+  siteId: string | null;
+  siteRole: SiteContactRole | null;
   isPrimary: boolean;
   isActive: boolean;
   createdBy: string | null;
@@ -36,6 +40,8 @@ export type ClientSite = {
   street: string | null;
   postalCode: string | null;
   city: string | null;
+  /** The number the previous system gave the Objekt. */
+  sourceNumber: string | null;
   accessNotes: string | null;
   notes: string | null;
   primaryContactId: string | null;
@@ -112,7 +118,8 @@ export type ClientLinkKind =
   | 'equipment'
   | 'maintenance'
   | 'documents'
-  | 'follow_ups';
+  | 'follow_ups'
+  | 'site_roles';
 export type ClientLinks = { [Kind in ClientLinkKind]?: number | undefined };
 
 /** Archiving or restoring answers the customer's archive mark: null while it is active. */
@@ -136,6 +143,14 @@ export function toClientMatch(row: ClientMatchRow): ClientMatch {
   };
 }
 
+function siteLink(
+  siteId: string | null,
+  siteRole: string | null,
+): Pick<ClientContact, 'siteId' | 'siteRole'> {
+  const role = siteContactRoleSchema.safeParse(siteRole);
+  return siteId && role.success ? { siteId, siteRole: role.data } : { siteId: null, siteRole: null };
+}
+
 export function toClientContact(row: ClientContactRow): ClientContact {
   return {
     id: row.id,
@@ -146,6 +161,8 @@ export function toClientContact(row: ClientContactRow): ClientContact {
     email: row.email,
     phone: row.phone,
     notes: row.notes,
+    // A role a later release adds shows as no role at the Objekt.
+    ...siteLink(row.site_id, row.site_role),
     isPrimary: row.is_primary,
     isActive: row.is_active,
     createdBy: row.created_by,
@@ -163,6 +180,7 @@ export function toClientSite(row: ClientSiteRow): ClientSite {
     street: row.street,
     postalCode: row.postal_code,
     city: row.city,
+    sourceNumber: row.source_number,
     accessNotes: row.access_notes,
     notes: row.notes,
     primaryContactId: row.primary_contact_id,
