@@ -1,6 +1,6 @@
 -- A customer with history is archived, not deleted, and every identity change
 -- of a customer, contact or site keeps its history
--- (migration 20261129100002_archive_customers_and_keep_master_data_history.sql).
+-- (migration 20261130090001_archive_customers_and_keep_master_data_history.sql).
 begin;
 
 insert into auth.users (

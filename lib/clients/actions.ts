@@ -121,7 +121,7 @@ const clientDeletionSchema = z.object({
 });
 
 // The refusals the customer write functions raise under their lock
-// (supabase/migrations/20261129100002_archive_customers_and_keep_master_data_history.sql).
+// (supabase/migrations/20261130090001_archive_customers_and_keep_master_data_history.sql).
 const masterWriteRefusal = writeRefusalFor(
   new Set([
     'client_not_found',
