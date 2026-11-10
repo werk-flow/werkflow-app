@@ -580,6 +580,7 @@ export type Database = {
       client_requests: {
         Row: {
           assigned_to: string | null;
+          callback_due_at: string | null;
           caller_address: string | null;
           caller_email: string | null;
           caller_name: string | null;
@@ -600,6 +601,7 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           details: string | null;
+          equipment_id: string | null;
           id: string;
           organization_id: string;
           received_at: string;
@@ -613,6 +615,7 @@ export type Database = {
         };
         Insert: {
           assigned_to?: string | null;
+          callback_due_at?: string | null;
           caller_address?: string | null;
           caller_email?: string | null;
           caller_name?: string | null;
@@ -633,6 +636,7 @@ export type Database = {
           created_at?: string;
           created_by?: string | null;
           details?: string | null;
+          equipment_id?: string | null;
           id?: string;
           organization_id: string;
           received_at?: string;
@@ -646,6 +650,7 @@ export type Database = {
         };
         Update: {
           assigned_to?: string | null;
+          callback_due_at?: string | null;
           caller_address?: string | null;
           caller_email?: string | null;
           caller_name?: string | null;
@@ -666,6 +671,7 @@ export type Database = {
           created_at?: string;
           created_by?: string | null;
           details?: string | null;
+          equipment_id?: string | null;
           id?: string;
           organization_id?: string;
           received_at?: string;
@@ -733,6 +739,13 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "profiles";
             referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "client_requests_equipment_fk";
+            columns: ["equipment_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "installed_equipment";
+            referencedColumns: ["id", "organization_id"];
           },
           {
             foreignKeyName: "client_requests_organization_id_fkey";
@@ -13723,6 +13736,7 @@ export type Database = {
         };
         Returns: {
           assigned_to: string | null;
+          callback_due_at: string | null;
           caller_address: string | null;
           caller_email: string | null;
           caller_name: string | null;
@@ -13743,6 +13757,7 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           details: string | null;
+          equipment_id: string | null;
           id: string;
           organization_id: string;
           received_at: string;
@@ -14221,6 +14236,7 @@ export type Database = {
         Args: {
           p_actor_id: string;
           p_assigned_to: string;
+          p_callback_due_at?: string;
           p_caller_address: string;
           p_caller_email: string;
           p_caller_name: string;
@@ -14229,6 +14245,7 @@ export type Database = {
           p_client_id: string;
           p_contact_id: string;
           p_details: string;
+          p_equipment_id?: string;
           p_organization_id: string;
           p_received_at: string;
           p_request_number: string;
@@ -14239,6 +14256,7 @@ export type Database = {
         };
         Returns: {
           assigned_to: string | null;
+          callback_due_at: string | null;
           caller_address: string | null;
           caller_email: string | null;
           caller_name: string | null;
@@ -14259,6 +14277,7 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           details: string | null;
+          equipment_id: string | null;
           id: string;
           organization_id: string;
           received_at: string;
@@ -15967,6 +15986,21 @@ export type Database = {
         };
         Returns: Json;
       };
+      list_open_request_attention: {
+        Args: { p_organization_id: string };
+        Returns: {
+          assigned_to: string;
+          callback_due_at: string;
+          callback_overdue: boolean;
+          id: string;
+          owner_is_manager: boolean;
+          received_at: string;
+          request_number: string;
+          status: Database["public"]["Enums"]["request_status"];
+          summary: string;
+          urgency: Database["public"]["Enums"]["request_urgency"];
+        }[];
+      };
       list_pending_dispatch_recipients: {
         Args: { p_employee_record_id: string; p_organization_id: string };
         Returns: {
@@ -16165,6 +16199,7 @@ export type Database = {
         };
         Returns: {
           assigned_to: string | null;
+          callback_due_at: string | null;
           caller_address: string | null;
           caller_email: string | null;
           caller_name: string | null;
@@ -16185,6 +16220,7 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           details: string | null;
+          equipment_id: string | null;
           id: string;
           organization_id: string;
           received_at: string;
@@ -16571,6 +16607,7 @@ export type Database = {
         };
         Returns: {
           assigned_to: string | null;
+          callback_due_at: string | null;
           caller_address: string | null;
           caller_email: string | null;
           caller_name: string | null;
@@ -16591,6 +16628,7 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           details: string | null;
+          equipment_id: string | null;
           id: string;
           organization_id: string;
           received_at: string;
@@ -18128,6 +18166,7 @@ export type Database = {
         };
         Returns: {
           assigned_to: string | null;
+          callback_due_at: string | null;
           caller_address: string | null;
           caller_email: string | null;
           caller_name: string | null;
@@ -18148,6 +18187,7 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           details: string | null;
+          equipment_id: string | null;
           id: string;
           organization_id: string;
           received_at: string;

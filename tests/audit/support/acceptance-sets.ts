@@ -21,7 +21,12 @@ type CaptureView =
   | { kind: 'dialog'; opener: DialogOpenerId };
 
 /** A seeded record a capture opens instead of its route's layout record (acceptance-records.ts). */
-export type AcceptanceRecord = 'caller-match-request' | 'promoted-caller-request' | 'office-task-backlog';
+export type AcceptanceRecord =
+  | 'caller-match-request'
+  | 'promoted-caller-request'
+  | 'office-task-backlog'
+  | 'callback-overdue-request'
+  | 'callback-overdue-tasks';
 
 export type CaptureSpec = {
   /** Unique within its set; part of the image name and the citation token. */
@@ -543,6 +548,54 @@ function offlineShellCaptures(): AcceptanceSet {
   };
 }
 
+/**
+ * werk-flow/werkflow-planning#322 of 2026-11-09: capture with „Rückruf bis“,
+ * an emergency request whose callback is overdue with the Notfall notice and a
+ * site without Anlagen, and the overdue callback in the Büro's Aufgaben.
+ */
+function requestCallbackCaptures(): AcceptanceSet {
+  const both = { widths: [1280, 375], schemes: ['light', 'dark'] } as const;
+  return {
+    id: 'request-callback-2026-11-09',
+    captures: [
+      {
+        id: 'buero-anfrage-erfassen',
+        role: 'buero',
+        route: '/anfragen',
+        view: { kind: 'dialog', opener: 'requests.create' },
+        reveal: 'Rückruf bis',
+        ...both,
+      },
+      {
+        id: 'buero-anfrage-rueckruf',
+        role: 'buero',
+        route: '/anfragen/[requestId]',
+        view: { kind: 'page' },
+        record: 'callback-overdue-request',
+        ...both,
+      },
+      {
+        id: 'buero-anfrage-bearbeiten',
+        role: 'buero',
+        route: '/anfragen/[requestId]',
+        view: { kind: 'dialog', opener: 'requests.edit' },
+        record: 'callback-overdue-request',
+        reveal: 'An diesem Einsatzort ist keine Anlage erfasst.',
+        ...both,
+      },
+      {
+        id: 'buero-aufgaben-rueckruf',
+        role: 'buero',
+        route: '/aufgaben',
+        view: { kind: 'page' },
+        record: 'callback-overdue-tasks',
+        ...both,
+      },
+    ],
+    standalone: [],
+  };
+}
+
 export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   uiRoundCaptures(),
   fieldTargetCaptures(),
@@ -561,5 +614,6 @@ export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   addTimeCaptures(),
   organizationExportCaptures(),
   offlineShellCaptures(),
+  requestCallbackCaptures(),
   leaverHandoverCaptures(),
 ];

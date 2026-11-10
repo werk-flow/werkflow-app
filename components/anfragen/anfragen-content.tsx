@@ -30,7 +30,8 @@ import type {
   RequestStatusFilter,
 } from '@/lib/requests/list-page';
 import { REQUEST_CATEGORY_LABELS } from '@/lib/requests/types';
-import { RequestStatusBadge, RequestUrgencyBadge } from './request-badges';
+import { CallbackOverdueBadge, RequestStatusBadge, RequestUrgencyBadge } from './request-badges';
+import { useCallbackOverdue } from './use-callback-overdue';
 
 type AnfragenContentProps = RequestPage & { query: RequestListQuery };
 
@@ -162,7 +163,13 @@ function AnfragenToolbar({ shownStatus, shownSearch, onStatusChange, onSearchCha
 }
 
 /** Phone cards; each is a real link for keyboard and middle-click. */
-function AnfragenCards({ entries }: { entries: RequestListEntry[] }) {
+function AnfragenCards({
+  entries,
+  isOverdue,
+}: {
+  entries: RequestListEntry[];
+  isOverdue: (entry: RequestListEntry) => boolean;
+}) {
   return (
     <div className="space-y-2 md:hidden">
       {entries.map((entry) => (
@@ -183,8 +190,9 @@ function AnfragenCards({ entries }: { entries: RequestListEntry[] }) {
                 <span className="text-muted-foreground">&middot;</span>
                 <span>{formatReceivedAt(entry.request.receivedAt)}</span>
               </div>
-              <div className="mt-1.5 flex items-center gap-2">
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
                 <RequestUrgencyBadge urgency={entry.request.urgency} />
+                {isOverdue(entry) && <CallbackOverdueBadge />}
                 {entry.convertedLabel && (
                   <span className="text-xs text-muted-foreground">→ {entry.convertedLabel}</span>
                 )}
@@ -198,7 +206,13 @@ function AnfragenCards({ entries }: { entries: RequestListEntry[] }) {
 }
 
 /** Desktop table; a row navigates on click and prefetches on intent. */
-function AnfragenTable({ entries }: { entries: RequestListEntry[] }) {
+function AnfragenTable({
+  entries,
+  isOverdue,
+}: {
+  entries: RequestListEntry[];
+  isOverdue: (entry: RequestListEntry) => boolean;
+}) {
   const router = useRouter();
   return (
     <div className="hidden md:block">
@@ -237,7 +251,10 @@ function AnfragenTable({ entries }: { entries: RequestListEntry[] }) {
                 <RequestUrgencyBadge urgency={entry.request.urgency} />
               </TableCell>
               <TableCell>
-                <RequestStatusBadge status={entry.request.status} />
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <RequestStatusBadge status={entry.request.status} />
+                  {isOverdue(entry) && <CallbackOverdueBadge />}
+                </div>
               </TableCell>
               <TableCell className="text-muted-foreground">
                 {formatReceivedAt(entry.request.receivedAt)}
@@ -270,6 +287,8 @@ export function AnfragenContent({ entries, total, hasAnyRequest, query }: Anfrag
   useRealtimeRouterRefresh({
     tables: ['client_requests', 'clients'],
   });
+  const callbackOverdue = useCallbackOverdue(entries.map((entry) => entry.request));
+  const isOverdue = (entry: RequestListEntry) => callbackOverdue(entry.request, entry.callbackOverdue);
 
   return (
     <>
@@ -310,8 +329,8 @@ export function AnfragenContent({ entries, total, hasAnyRequest, query }: Anfrag
         )
       ) : (
         <>
-          <AnfragenCards entries={entries} />
-          <AnfragenTable entries={entries} />
+          <AnfragenCards entries={entries} isOverdue={isOverdue} />
+          <AnfragenTable entries={entries} isOverdue={isOverdue} />
         </>
       )}
       <ListPagination
