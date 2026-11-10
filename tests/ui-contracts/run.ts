@@ -159,6 +159,11 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               if (args.importer.endsWith('use-export-builder.ts'))
                 return { path: join(import.meta.dir, 'organization-export-service-boundaries.ts') };
             });
+            // The start page's refresh code, as a chunk that is gone after a deployment.
+            builder.onResolve({ filter: /^@\/lib\/field-sync\/device\/today-refresh$/ }, (args) => {
+              if (args.importer.endsWith('today-refresh-on-start.tsx'))
+                return { path: join(import.meta.dir, 'today-refresh-service-boundaries.ts') };
+            });
             builder.onResolve({ filter: /^@\/lib\/time-accounts\/actions$/ }, () => ({
               path: join(import.meta.dir, 'time-account-boundaries.ts'),
             }));

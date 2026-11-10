@@ -28,6 +28,7 @@ import {
 } from './document-upload-boundaries';
 import { OrganizationContractFixture } from './organization-boundaries';
 import { OrganizationExportContractFixture } from './organization-export-boundaries';
+import { TodayRefreshContractFixture } from './today-refresh-boundaries';
 import { CalendarContractFixture } from './calendar-boundaries';
 import { FeedbackContractFixture, isFeedbackFixture } from './feedback-boundaries';
 import { mountHydrationFixture } from './hydration-boundaries';
@@ -584,6 +585,8 @@ createRoot(root).render(
     <OrganizationContractFixture />
   ) : window.uiContractFixture === 'organization-export' ? (
     <OrganizationExportContractFixture />
+  ) : window.uiContractFixture === 'today-refresh' ? (
+    <TodayRefreshContractFixture />
   ) : window.uiContractFixture === 'calendar-board' ? (
     <CalendarBoardContractFixture />
   ) : window.uiContractFixture === 'calendar-day' ? (
