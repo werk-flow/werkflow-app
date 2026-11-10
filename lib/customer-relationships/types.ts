@@ -21,7 +21,8 @@ export type TimelineKind =
   | 'project_created'
   | 'document_linked'
   | 'follow_up_event'
-  | 'communication_preference_event';
+  | 'communication_preference_event'
+  | 'master_data_event';
 
 export type TimelineItem = {
   stableKey: string;

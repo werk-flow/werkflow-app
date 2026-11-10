@@ -16,7 +16,9 @@ import {
   toClient,
 } from '@/lib/jobs/types';
 import {
+  type ClientArchiveResult,
   type ClientContactResult,
+  type ClientLinks,
   type ClientMatchList,
   type ClientRelationsResult,
   type ClientSiteResult,
@@ -25,7 +27,8 @@ import {
   toClientSite,
 } from '@/lib/clients/types';
 import { logError } from '@/lib/logging';
-import { Constants } from '@/lib/supabase/database.types';
+import { Constants, type Json } from '@/lib/supabase/database.types';
+import { writeRefusalFor } from '@/lib/supabase/write-refusal';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 
@@ -100,6 +103,35 @@ const clientRelationsArgumentsSchema = z.object({
   clientId: uuidSchema,
   options: z.object({ includeInactive: z.boolean().optional() }).optional(),
 });
+
+const linkCount = z.number().int().positive().optional();
+/** What `delete_unlinked_client` answers: deleted, or kept with what links to it. */
+const clientDeletionSchema = z.object({
+  deleted: z.boolean(),
+  links: z.object({
+    jobs: linkCount,
+    projects: linkCount,
+    requests: linkCount,
+    service_cases: linkCount,
+    equipment: linkCount,
+    maintenance: linkCount,
+    documents: linkCount,
+    follow_ups: linkCount,
+  }),
+});
+
+// The refusals the customer write functions raise under their lock
+// (supabase/migrations/20261130090001_archive_customers_and_keep_master_data_history.sql).
+const masterWriteRefusal = writeRefusalFor(
+  new Set([
+    'client_not_found',
+    'contact_not_found',
+    'site_not_found',
+    'not_authorized',
+    'client_already_archived',
+    'client_not_archived',
+  ]),
+);
 
 // ============================================
 // Actions
@@ -215,57 +247,32 @@ export async function updateClient(
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const { clientId, input } = parsed.data;
   try {
-    const auth = await authenticateAndAuthorize();
+    const auth = await requireManagerAndClient(clientId);
     if (!auth.success) return auth;
-    const { orgId, isManagerOrAbove } = auth.context;
+    const { orgId, userId, admin } = auth.context;
 
-    if (!isManagerOrAbove) {
-      return { success: false, error: 'not_authorized' };
-    }
+    const changes: Record<string, string | null> = {};
+    if (input.name !== undefined) changes.name = input.name.trim();
+    if (input.clientType !== undefined) changes.client_type = input.clientType;
+    if (input.customerNumber !== undefined) changes.customer_number = input.customerNumber?.trim() || null;
+    if (input.email !== undefined) changes.email = input.email?.trim() || null;
+    if (input.phone !== undefined) changes.phone = input.phone?.trim() || null;
+    if (input.address !== undefined) changes.address = input.address?.trim() || null;
+    if (input.notes !== undefined) changes.notes = input.notes?.trim() || null;
 
-    const admin = createSupabaseAdminClient();
-
-    const { data: existing, error: fetchError } = await admin
-      .from('clients')
-      .select('id')
-      .eq('id', clientId)
-      .eq('organization_id', orgId)
-      .single();
-
-    if (fetchError && fetchError.code !== 'PGRST116')
-      logReadFailure('updateClient: client read failed', fetchError);
-    if (fetchError || !existing) {
-      return { success: false, error: 'client_not_found' };
-    }
-
-    const updateData: Record<string, unknown> = {};
-    if (input.name !== undefined) updateData.name = input.name.trim();
-    if (input.clientType !== undefined) updateData.client_type = input.clientType;
-    if (input.customerNumber !== undefined) updateData.customer_number = input.customerNumber?.trim() || null;
-    if (input.email !== undefined) updateData.email = input.email?.trim() || null;
-    if (input.phone !== undefined) updateData.phone = input.phone?.trim() || null;
-    if (input.address !== undefined) updateData.address = input.address?.trim() || null;
-    if (input.notes !== undefined) updateData.notes = input.notes?.trim() || null;
-
-    if (Object.keys(updateData).length === 0) {
+    if (Object.keys(changes).length === 0) {
       return { success: false, error: 'no_changes' };
     }
 
-    const { data, error } = await admin
-      .from('clients')
-      .update(updateData)
-      .eq('id', clientId)
-      .eq('organization_id', orgId)
-      .select()
-      .single();
-
-    if (error || !data) {
-      logError('Error updating client:', error);
-      if (error?.code === '23505') {
-        return { success: false, error: 'customer_number_taken' };
-      }
-      return { success: false, error: 'update_failed' };
-    }
+    // The function writes one history entry per changed identity field.
+    const { data, error } = await admin.rpc('update_client_master', {
+      p_actor_id: userId,
+      p_organization_id: orgId,
+      p_client_id: clientId,
+      p_changes: changes,
+    });
+    if (error?.code === '23505') return { success: false, error: 'customer_number_taken' };
+    if (error || !data) return masterWriteRefusal(error, 'update_failed', 'updateClient: save failed');
 
     return { success: true, client: toClient(data) };
   } catch (error) {
@@ -274,41 +281,36 @@ export async function updateClient(
   }
 }
 
-export async function deleteClient(rawClientId: string): Promise<DeleteClientResult> {
+/**
+ * Deletes a customer nothing links to, a mistaken entry. A customer with
+ * work, requests, service records, documents or follow-ups is kept, and the
+ * refusal names what links to it so the dialog can offer archiving.
+ */
+export async function deleteClient(
+  rawClientId: string,
+): Promise<DeleteClientResult & { links?: ClientLinks }> {
   const parsedClientId = uuidSchema.safeParse(rawClientId);
   if (!parsedClientId.success) return { success: false, error: 'invalid_input' };
   const clientId = parsedClientId.data;
   try {
-    const auth = await authenticateAndAuthorize();
+    const auth = await requireManagerAndClient(clientId);
     if (!auth.success) return auth;
-    const { orgId, isManagerOrAbove } = auth.context;
+    const { orgId, userId, admin } = auth.context;
 
-    if (!isManagerOrAbove) {
-      return { success: false, error: 'not_authorized' };
-    }
-
-    const admin = createSupabaseAdminClient();
-
-    const { data: existing, error: fetchError } = await admin
-      .from('clients')
-      .select('id')
-      .eq('id', clientId)
-      .eq('organization_id', orgId)
-      .single();
-
-    if (fetchError && fetchError.code !== 'PGRST116')
-      logReadFailure('deleteClient: client read failed', fetchError);
-    if (fetchError || !existing) {
-      return { success: false, error: 'client_not_found' };
-    }
-
-    const { error } = await admin.from('clients').delete().eq('id', clientId).eq('organization_id', orgId);
-
-    if (error) {
-      logError('Error deleting client:', error);
+    const { data, error } = await admin.rpc('delete_unlinked_client', {
+      p_actor_id: userId,
+      p_organization_id: orgId,
+      p_client_id: clientId,
+    });
+    if (error) return masterWriteRefusal(error, 'delete_failed', 'deleteClient: delete failed');
+    const outcome = clientDeletionSchema.safeParse(data);
+    if (!outcome.success) {
+      logError('deleteClient: unexpected deletion outcome', outcome.error);
       return { success: false, error: 'delete_failed' };
     }
-
+    if (!outcome.data.deleted) {
+      return { success: false, error: 'client_has_history', links: outcome.data.links };
+    }
     return { success: true };
   } catch (error) {
     logError('Unexpected error in deleteClient:', error);
@@ -316,7 +318,45 @@ export async function deleteClient(rawClientId: string): Promise<DeleteClientRes
   }
 }
 
-export async function getClientDetail(rawClientId: string): Promise<ActionResult<{ client: Client }>> {
+/** Archives or restores a customer; its work, requests and history stay. */
+async function setClientArchived(clientId: string, archived: boolean): Promise<ClientArchiveResult> {
+  try {
+    const auth = await requireManagerAndClient(clientId);
+    if (!auth.success) return auth;
+    const { orgId, userId, admin } = auth.context;
+
+    const { data, error } = await admin.rpc('set_client_archived', {
+      p_actor_id: userId,
+      p_organization_id: orgId,
+      p_client_id: clientId,
+      p_archived: archived,
+    });
+    if (error || !data) {
+      return masterWriteRefusal(error, 'archive_failed', 'setClientArchived: save failed');
+    }
+    return { success: true, archivedAt: data.archived_at };
+  } catch (error) {
+    logError('Unexpected error in setClientArchived:', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
+export async function archiveClient(rawClientId: string): Promise<ClientArchiveResult> {
+  const clientId = uuidSchema.safeParse(rawClientId);
+  if (!clientId.success) return { success: false, error: 'invalid_input' };
+  return setClientArchived(clientId.data, true);
+}
+
+export async function restoreClient(rawClientId: string): Promise<ClientArchiveResult> {
+  const clientId = uuidSchema.safeParse(rawClientId);
+  if (!clientId.success) return { success: false, error: 'invalid_input' };
+  return setClientArchived(clientId.data, false);
+}
+
+/** The customer and its archive mark: null while it is active. */
+export async function getClientDetail(
+  rawClientId: string,
+): Promise<ActionResult<{ client: Client; archivedAt: string | null }>> {
   const parsedClientId = uuidSchema.safeParse(rawClientId);
   if (!parsedClientId.success) return { success: false, error: 'not_found' };
   const clientId = parsedClientId.data;
@@ -345,7 +385,7 @@ export async function getClientDetail(rawClientId: string): Promise<ActionResult
     }
     if (!data) return { success: false, error: 'not_found' };
 
-    return { success: true, client: toClient(data) };
+    return { success: true, client: toClient(data), archivedAt: data.archived_at };
   } catch (error) {
     logError('Unexpected error in getClientDetail:', error);
     return { success: false, error: 'unexpected_error' };
@@ -433,54 +473,38 @@ export async function updateClientContact(
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
-    const { orgId, isManagerOrAbove } = auth.context;
+    const { orgId, userId, isManagerOrAbove } = auth.context;
 
     if (!isManagerOrAbove) {
       return { success: false, error: 'not_authorized' };
     }
 
-    const admin = createSupabaseAdminClient();
-    const { data: existing, error: fetchError } = await admin
-      .from('client_contacts')
-      .select('id, client_id')
-      .eq('id', contactId)
-      .eq('organization_id', orgId)
-      .single();
-
-    if (fetchError && fetchError.code !== 'PGRST116')
-      logReadFailure('updateClientContact: contact read failed', fetchError);
-    if (fetchError || !existing) {
-      return { success: false, error: 'contact_not_found' };
-    }
-
-    const updateData: Record<string, unknown> = {};
+    const changes: Record<string, Json> = {};
     if (input.name !== undefined) {
       if (!input.name.trim()) return { success: false, error: 'name_required' };
-      updateData.name = input.name.trim();
+      changes.name = input.name.trim();
     }
-    if (input.role !== undefined) updateData.role = input.role?.trim() || null;
-    if (input.email !== undefined) updateData.email = input.email;
-    if (input.phone !== undefined) updateData.phone = input.phone?.trim() || null;
-    if (input.notes !== undefined) updateData.notes = input.notes?.trim() || null;
-    if (input.isPrimary !== undefined) updateData.is_primary = input.isPrimary;
-    if (input.isActive !== undefined) updateData.is_active = input.isActive;
+    if (input.role !== undefined) changes.role = input.role?.trim() || null;
+    if (input.email !== undefined) changes.email = input.email;
+    if (input.phone !== undefined) changes.phone = input.phone?.trim() || null;
+    if (input.notes !== undefined) changes.notes = input.notes?.trim() || null;
+    if (input.isPrimary !== undefined) changes.is_primary = input.isPrimary;
+    if (input.isActive !== undefined) changes.is_active = input.isActive;
 
-    if (Object.keys(updateData).length === 0) {
+    if (Object.keys(changes).length === 0) {
       return { success: false, error: 'no_changes' };
     }
 
-    const { data, error } = await admin
-      .from('client_contacts')
-      .update(updateData)
-      .eq('id', contactId)
-      .eq('organization_id', orgId)
-      .select()
-      .single();
-
-    if (error || !data) {
-      logError('Error updating client contact:', error);
-      return { success: false, error: 'update_failed' };
-    }
+    // The function finds the contact in the caller's organization and writes
+    // one history entry per changed identity field and for archiving.
+    const admin = createSupabaseAdminClient();
+    const { data, error } = await admin.rpc('update_client_contact', {
+      p_actor_id: userId,
+      p_organization_id: orgId,
+      p_contact_id: contactId,
+      p_changes: changes,
+    });
+    if (error || !data) return masterWriteRefusal(error, 'update_failed', 'updateClientContact: save failed');
 
     return { success: true, contact: toClientContact(data) };
   } catch (error) {
@@ -546,56 +570,40 @@ export async function updateClientSite(
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
-    const { orgId, isManagerOrAbove } = auth.context;
+    const { orgId, userId, isManagerOrAbove } = auth.context;
 
     if (!isManagerOrAbove) {
       return { success: false, error: 'not_authorized' };
     }
 
-    const admin = createSupabaseAdminClient();
-    const { data: existing, error: fetchError } = await admin
-      .from('client_sites')
-      .select('id, client_id')
-      .eq('id', siteId)
-      .eq('organization_id', orgId)
-      .single();
-
-    if (fetchError && fetchError.code !== 'PGRST116')
-      logReadFailure('updateClientSite: site read failed', fetchError);
-    if (fetchError || !existing) {
-      return { success: false, error: 'site_not_found' };
-    }
-
-    const updateData: Record<string, unknown> = {};
+    const changes: Record<string, Json> = {};
     if (input.name !== undefined) {
       if (!input.name.trim()) return { success: false, error: 'name_required' };
-      updateData.name = input.name.trim();
+      changes.name = input.name.trim();
     }
-    if (input.street !== undefined) updateData.street = input.street?.trim() || null;
-    if (input.postalCode !== undefined) updateData.postal_code = input.postalCode?.trim() || null;
-    if (input.city !== undefined) updateData.city = input.city?.trim() || null;
-    if (input.accessNotes !== undefined) updateData.access_notes = input.accessNotes?.trim() || null;
-    if (input.notes !== undefined) updateData.notes = input.notes?.trim() || null;
-    if (input.primaryContactId !== undefined) updateData.primary_contact_id = input.primaryContactId || null;
-    if (input.isPrimary !== undefined) updateData.is_primary = input.isPrimary;
-    if (input.isActive !== undefined) updateData.is_active = input.isActive;
+    if (input.street !== undefined) changes.street = input.street?.trim() || null;
+    if (input.postalCode !== undefined) changes.postal_code = input.postalCode?.trim() || null;
+    if (input.city !== undefined) changes.city = input.city?.trim() || null;
+    if (input.accessNotes !== undefined) changes.access_notes = input.accessNotes?.trim() || null;
+    if (input.notes !== undefined) changes.notes = input.notes?.trim() || null;
+    if (input.primaryContactId !== undefined) changes.primary_contact_id = input.primaryContactId || null;
+    if (input.isPrimary !== undefined) changes.is_primary = input.isPrimary;
+    if (input.isActive !== undefined) changes.is_active = input.isActive;
 
-    if (Object.keys(updateData).length === 0) {
+    if (Object.keys(changes).length === 0) {
       return { success: false, error: 'no_changes' };
     }
 
-    const { data, error } = await admin
-      .from('client_sites')
-      .update(updateData)
-      .eq('id', siteId)
-      .eq('organization_id', orgId)
-      .select()
-      .single();
-
-    if (error || !data) {
-      logError('Error updating client site:', error);
-      return { success: false, error: 'update_failed' };
-    }
+    // The function finds the site in the caller's organization and writes
+    // one history entry per changed identity field and for archiving.
+    const admin = createSupabaseAdminClient();
+    const { data, error } = await admin.rpc('update_client_site', {
+      p_actor_id: userId,
+      p_organization_id: orgId,
+      p_site_id: siteId,
+      p_changes: changes,
+    });
+    if (error || !data) return masterWriteRefusal(error, 'update_failed', 'updateClientSite: save failed');
 
     return { success: true, site: toClientSite(data) };
   } catch (error) {

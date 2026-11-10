@@ -4,20 +4,26 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObje
 
 import { useBanner } from '@/components/ui/banner';
 import { SearchInput } from '@/components/ui/search-input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { ListPagination } from '@/components/shared/list-pagination';
 import { useListNavigation } from '@/hooks/use-list-navigation';
 import { ClientsTable } from './clients-table';
 import { clientCreations } from './create-client-dialog';
-import { CLIENT_DELETE_ERROR_MESSAGES } from './use-client-deletion';
+import type { ClientRowActions } from './client-actions-menu';
+import {
+  CLIENT_RESTORE_ERROR_MESSAGES,
+  ClientRemovalDialog,
+  type ClientRemoval,
+} from './client-removal-dialog';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useOptimisticChannel } from '@/hooks/use-optimistic-channel';
 import { useOptimisticList } from '@/hooks/use-optimistic-list';
 import { useLiveView, type LiveViewState } from '@/hooks/use-live-view';
-import { fetchCustomerPage } from '@/lib/clients/list-page';
+import { customerListViewSchema, fetchCustomerPage, type CustomerListView } from '@/lib/clients/list-page';
 import { UsableContent } from '@/components/shared/usable-content';
 import { describeFailure } from '@/lib/action-messages';
-import { deleteClient } from '@/lib/clients/actions';
+import { restoreClient } from '@/lib/clients/actions';
 import type { Client } from '@/lib/jobs/types';
 
 interface KundenContentProps {
@@ -28,7 +34,11 @@ interface KundenContentProps {
   page: number;
   total: number;
   searchQuery: string;
+  /** Active customers, or only the archived ones. */
+  view: CustomerListView;
 }
+
+type ViewControl = { value: CustomerListView; onChange: (value: CustomerListView) => void };
 
 type SearchControl = {
   value: string;
@@ -48,20 +58,28 @@ const compareClients = (a: Client, b: Client) => a.name.localeCompare(b.name, 'd
  * keystroke typed during the round trip or the 250 ms navigation timer.
  */
 export function KundenContent(props: KundenContentProps) {
-  const { scopeKey, page, searchQuery } = props;
+  const { scopeKey, page, searchQuery, view } = props;
   const navigation = useListNavigation();
   const [search, setSearch] = useState(searchQuery);
+  const [shownView, setShownView] = useState(view);
   const focusedRef = useRef(false);
   const onChange = (value: string) => {
+    setShownView(navigation.busy ? shownView : view);
     setSearch(value);
     navigation.navigate({ q: value, page: 1 }, 250);
   };
+  const onViewChange = (value: CustomerListView) => {
+    setSearch(navigation.busy ? search : searchQuery);
+    setShownView(value);
+    navigation.navigate({ ansicht: value === 'aktiv' ? null : value, page: 1 });
+  };
   return (
     <KundenList
-      key={`${scopeKey}:${page}:${searchQuery}`}
+      key={`${scopeKey}:${view}:${page}:${searchQuery}`}
       {...props}
       navigation={navigation}
       search={{ value: navigation.busy ? search : searchQuery, onChange, focusedRef }}
+      viewControl={{ value: navigation.busy ? shownView : view, onChange: onViewChange }}
     />
   );
 }
@@ -69,6 +87,7 @@ export function KundenContent(props: KundenContentProps) {
 type KundenListProps = KundenContentProps & {
   navigation: ReturnType<typeof useListNavigation>;
   search: SearchControl;
+  viewControl: ViewControl;
 };
 
 /** The live page read plus the creations a read started after their save has settled. */
@@ -81,6 +100,7 @@ function useKundenLivePage({
   page,
   total: initialTotal,
   searchQuery,
+  view,
 }: KundenContentProps) {
   const confirmedCreations = useRef(new Set<string>());
   const live = useLiveView<KundenLivePage>({
@@ -89,7 +109,7 @@ function useKundenLivePage({
     initialData: { clients: initialClients, total: initialTotal, settledCreations: [] },
     read: async ({ signal }) => {
       const settledCreations = [...confirmedCreations.current];
-      const data = await fetchCustomerPage({ organizationId, page, search: searchQuery }, signal);
+      const data = await fetchCustomerPage({ organizationId, page, search: searchQuery, view }, signal);
       return { ok: true, data: { ...data, settledCreations } };
     },
   });
@@ -108,6 +128,8 @@ function useKundenLivePage({
 /** The optimistic list with the creations the header dialog publishes. */
 function useKundenOptimisticClients(
   organizationId: string,
+  /** A new customer is active: the archived view never shows it. */
+  showsCreations: boolean,
   clients: Client[],
   live: LiveViewState<KundenLivePage>,
   confirmedCreations: RefObject<Set<string>>,
@@ -123,9 +145,9 @@ function useKundenOptimisticClients(
   const insertCreation = useCallback(
     (tempId: string, draft: Client) => {
       invalidate();
-      insert(tempId, draft);
+      if (showsCreations) insert(tempId, draft);
     },
-    [invalidate, insert],
+    [invalidate, insert, showsCreations],
   );
   const commitCreation = useCallback(
     (tempId: string, client: Client) => {
@@ -134,11 +156,16 @@ function useKundenOptimisticClients(
         rollback(tempId);
         return;
       }
+      // The archived view never inserted the new, active customer.
+      if (!showsCreations) {
+        void refresh();
+        return;
+      }
       confirmedCreations.current.add(client.id);
       commit(tempId, client);
       void refresh();
     },
-    [commit, refresh, organizationId, rollback, confirmedCreations],
+    [commit, refresh, organizationId, rollback, confirmedCreations, showsCreations],
   );
   const rollbackCreation = useCallback(
     (tempId: string) => {
@@ -176,40 +203,69 @@ function useRestoredSearchFocus(focusedRef: RefObject<boolean>) {
   return searchInput;
 }
 
-/** Delete: the row leaves at once and comes back with the error on failure. */
-function useKundenClientDelete(
+const REMOVAL_DONE: Record<ClientRemoval, string> = { archive: 'archiviert', delete: 'gelöscht' };
+
+type RemovalTarget = { client: Client; removal: ClientRemoval };
+
+/**
+ * The row actions of the list and its one archive or delete dialog: an
+ * archived or deleted customer leaves the list once the dialog's save is
+ * confirmed; a restored one leaves the archived view at once and comes back
+ * with the error on failure.
+ */
+function useKundenRowActions(
   list: ReturnType<typeof useOptimisticList<Client>>,
-  invalidate: () => void,
-  refresh: () => Promise<void>,
+  view: CustomerListView,
+  live: Pick<LiveViewState<KundenLivePage>, 'invalidate' | 'refresh'>,
+  onSaved: (clientId: string) => void,
   showBanner: ReturnType<typeof useBanner>['showBanner'],
 ) {
   const { remove, rollback } = list;
-  return useCallback(
+  const { invalidate, refresh } = live;
+  const [removalTarget, setRemovalTarget] = useState<RemovalTarget | null>(null);
+  const onRemoved = useCallback(
+    async (client: Client, removal: ClientRemoval) => {
+      invalidate();
+      remove(client.id);
+      showBanner({ variant: 'success', message: `Kunde „${client.name}“ wurde ${REMOVAL_DONE[removal]}.` });
+      setRemovalTarget(null);
+      await refresh();
+    },
+    [invalidate, remove, refresh, showBanner],
+  );
+  const onRequestRemoval = useCallback(
+    (client: Client, removal: ClientRemoval) => setRemovalTarget({ client, removal }),
+    [],
+  );
+  const onRestore = useCallback(
     async (client: Client) => {
       invalidate();
       remove(client.id);
-      const result = await deleteClient(client.id).catch(() => null);
-      if (!result || !result.success) {
+      const result = await restoreClient(client.id).catch(() => null);
+      if (!result?.success) {
         rollback(client.id);
         const retryHint = 'Bitte versuche es erneut.';
         const reason = result
-          ? describeFailure(result.error, CLIENT_DELETE_ERROR_MESSAGES, retryHint)
+          ? describeFailure(result.error, CLIENT_RESTORE_ERROR_MESSAGES, retryHint)
           : retryHint;
         showBanner({
           variant: 'error',
-          message: `Kunde „${client.name}“ konnte nicht gelöscht werden: ${reason}`,
+          message: `Kunde „${client.name}“ konnte nicht wiederhergestellt werden: ${reason}`,
         });
-        await refresh();
-        return;
+      } else {
+        showBanner({ variant: 'success', message: `Kunde „${client.name}“ wurde wiederhergestellt.` });
       }
-      showBanner({
-        variant: 'success',
-        message: `Kunde „${client.name}“ wurde gelöscht.`,
-      });
       await refresh();
     },
-    [remove, rollback, refresh, invalidate, showBanner],
+    [invalidate, remove, rollback, refresh, showBanner],
   );
+  const actions: ClientRowActions = {
+    isArchivedView: view === 'archiviert',
+    onSaved,
+    onRequestRemoval,
+    onRestore,
+  };
+  return { actions, removalTarget, closeRemoval: () => setRemovalTarget(null), onRemoved };
 }
 
 /** The count, the search that keeps its focus across remounts, and the refresh. */
@@ -217,23 +273,42 @@ function KundenListToolbar({
   total,
   search,
   searchInput,
+  viewControl,
   onRefresh,
 }: {
   total: number;
   search: SearchControl;
   searchInput: RefObject<HTMLInputElement | null>;
+  viewControl: ViewControl;
   onRefresh: () => Promise<void>;
 }) {
   const { focusedRef } = search;
   return (
-    <div className="mb-4 flex items-center justify-between gap-3">
-      <p className="shrink-0 text-sm text-muted-foreground">
-        {total} {total === 1 ? 'Kunde' : 'Kunden'}
-      </p>
-      <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="flex items-center gap-3">
+        <Select
+          value={viewControl.value}
+          onValueChange={(value) => {
+            const parsed = customerListViewSchema.safeParse(value);
+            if (parsed.success) viewControl.onChange(parsed.data);
+          }}
+        >
+          <SelectTrigger className="h-8 w-44" aria-label="Kunden anzeigen">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="aktiv">Aktive Kunden</SelectItem>
+            <SelectItem value="archiviert">Archivierte</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="shrink-0 text-sm text-muted-foreground">
+          {total} {total === 1 ? 'Kunde' : 'Kunden'}
+        </p>
+      </div>
+      <div className="flex min-w-0 flex-1 basis-full items-center justify-end gap-2 sm:basis-auto">
         <SearchInput
           ref={searchInput}
-          wrapperClassName="w-full max-w-xs"
+          wrapperClassName="w-full sm:max-w-xs"
           value={search.value}
           onValueChange={search.onChange}
           onFocus={() => {
@@ -253,15 +328,20 @@ function KundenListToolbar({
 }
 
 function KundenList(props: KundenListProps) {
-  const { organizationId, clients: initialClients, page, total: initialTotal, searchQuery } = props;
-  const { navigation, search } = props;
+  const { organizationId, clients: initialClients, page, total: initialTotal, searchQuery, view } = props;
+  const { navigation, search, viewControl } = props;
   const { showBanner } = useBanner();
   const { live, confirmedCreations } = useKundenLivePage(props);
   const { refresh } = live;
   const clients = live.data?.clients ?? initialClients;
   const total = live.data?.total ?? initialTotal;
-  const list = useKundenOptimisticClients(organizationId, clients, live, confirmedCreations);
-  const { invalidate } = live;
+  const list = useKundenOptimisticClients(
+    organizationId,
+    view === 'aktiv',
+    clients,
+    live,
+    confirmedCreations,
+  );
   const { run: runBusy, isBusy } = useBusyIds();
   const filteredRows = list.items;
   const searchInput = useRestoredSearchFocus(search.focusedRef);
@@ -272,7 +352,8 @@ function KundenList(props: KundenListProps) {
     },
     [runBusy, refresh],
   );
-  const handleDeleteClient = useKundenClientDelete(list, invalidate, refresh, showBanner);
+  const rowActions = useKundenRowActions(list, view, live, handleClientSaved, showBanner);
+  const { removalTarget } = rowActions;
 
   return (
     <UsableContent name="kunden" count={filteredRows.length}>
@@ -281,17 +362,32 @@ function KundenList(props: KundenListProps) {
           Die Kundenliste konnte nicht aktualisiert werden. Bitte versuche es erneut.
         </p>
       )}
-      <KundenListToolbar total={total} search={search} searchInput={searchInput} onRefresh={refresh} />
+      <KundenListToolbar
+        total={total}
+        search={search}
+        searchInput={searchInput}
+        viewControl={viewControl}
+        onRefresh={refresh}
+      />
 
       <div inert={live.isStale || undefined}>
         <ClientsTable
           rows={filteredRows}
           isBusy={isBusy}
-          onSaved={handleClientSaved}
-          onDelete={handleDeleteClient}
+          actions={rowActions.actions}
           isFiltered={searchQuery.trim() !== ''}
         />
       </div>
+      {removalTarget && (
+        <ClientRemovalDialog
+          key={removalTarget.client.id}
+          client={removalTarget.client}
+          isArchived={view === 'archiviert'}
+          removal={removalTarget.removal}
+          onClose={rowActions.closeRemoval}
+          onRemoved={(done) => rowActions.onRemoved(removalTarget.client, done)}
+        />
+      )}
       <ListPagination
         label="Kunden"
         page={page}

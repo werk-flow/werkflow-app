@@ -171,7 +171,7 @@
           ]
         }
       ],
-      "clauses": "Kunde löschen — Aufträge/Projekte bleiben, verlieren nur die Zuordnung\nRealtime-Selbst-Rennen beim Löschen behoben; Auftrag/Projekt bleiben ohne Kunde erhalten (`A1-10/A1-14`).",
+      "clauses": "Kunde mit Aufträgen/Projekten löschen — abgelehnt, der Dialog bietet Archivieren an; archiviert verlässt er die Kundenliste, bleibt unter „Archivierte“ und seine Arbeit bleibt (`A1-10/A1-14`).",
       "review": {
         "kind": "assertions-reviewed",
         "rationale": "Reviewed as row A1-10 of the retired Wave 1 audit ledger; the ledger file is in Git history."
