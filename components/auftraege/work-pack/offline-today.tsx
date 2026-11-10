@@ -25,7 +25,7 @@ import {
   sharedWipeGeneration,
   type StoredToday,
 } from '@/lib/field-sync/device/today-store';
-import { TODAY_WIPE_KEY } from '@/lib/field-sync/device/today-wipe';
+import { TODAY_HOLDER_KEY, TODAY_WIPE_KEY } from '@/lib/field-sync/device/today-wipe';
 import type { FieldSyncTodayAssignment } from '@/lib/field-sync/today-snapshot';
 import { jobDetailHref } from '@/lib/jobs/routes';
 import { logError } from '@/lib/logging';
@@ -273,14 +273,15 @@ const MAX_TIMER_MS = 2_147_483_647;
 
 /**
  * Ends the shown day when it can no longer stand. A sign-out or organization switch in another
- * tab, from mount on, and a return from the back-forward cache, where no storage event arrives,
- * drop it at once and read again; the former person's day never stays on screen while the next
- * read runs. Berlin midnight (`validUntil`) reads again, and the read drops the ended day.
+ * tab (its wipe signal or a change of the device claim), from mount on, and a return from the
+ * back-forward cache, where no storage event arrives, drop it at once and read again; the former
+ * person's day never stays on screen while the next read runs. Berlin midnight (`validUntil`) reads again, and the read drops the ended day.
  */
 function useDayEnds(stored: StoredToday | null, readAgain: () => void, dropAndReadAgain: () => void): void {
   useEffect(() => {
     const onStorage = (event: StorageEvent): void => {
-      if (event.key === TODAY_WIPE_KEY) dropAndReadAgain();
+      // A wipe removes the claim first, so a claim change ends the day even when the signal write failed.
+      if (event.key === TODAY_WIPE_KEY || event.key === TODAY_HOLDER_KEY) dropAndReadAgain();
     };
     const onPageShow = (event: PageTransitionEvent): void => {
       if (event.persisted) dropAndReadAgain();

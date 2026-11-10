@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, jest, test } from 'bun:test';
 
 import type { FieldSyncToday } from '@/lib/field-sync/today-snapshot';
 import { keepTodayFresh } from './today-refresh';
@@ -37,6 +37,9 @@ class MemoryStorage implements Storage {
   }
 }
 globalThis.localStorage = new MemoryStorage();
+
+/** How long a wipe waits for a delete that reports nothing (today-wipe.ts). */
+const WIPE_WAIT_MS = 1_500;
 
 /** What a sign-out in another tab does to this device: the shared signal and the deleted database. */
 let otherTabWipes = 0;
@@ -201,6 +204,37 @@ describe('the today snapshot on the device', () => {
     expect(await databaseNames()).toContain(TODAY_DATABASE);
     expect(await readTodayOnDevice(MORNING)).toBeNull();
     blocker.close();
+  });
+
+  test('a second sign-out whose delete queues behind a blocked one and reports nothing still goes on', async () => {
+    await saveTodayOnDevice(snapshot(), MORNING);
+    // Both deletes aim at a held stand-in database. The first is blocked by a connection another tab
+    // never closes; the second queues behind it and gets no event of its own until the first ends.
+    const held = `${TODAY_DATABASE}-held`;
+    const opened = indexedDB.open(held);
+    const blocker = await new Promise<IDBDatabase>((resolve) => {
+      opened.onsuccess = () => resolve(opened.result);
+    });
+    const realDelete = indexedDB.deleteDatabase.bind(indexedDB);
+    indexedDB.deleteDatabase = () => realDelete(held);
+    try {
+      await clearTodayOnDevice();
+      jest.useFakeTimers();
+      let signedOut = false;
+      void clearTodayOnDevice().then(() => {
+        signedOut = true;
+      });
+      jest.advanceTimersByTime(WIPE_WAIT_MS - 1);
+      await until(() => true);
+      expect(signedOut).toBe(false);
+      jest.advanceTimersByTime(1);
+      await until(() => signedOut);
+    } finally {
+      jest.useRealTimers();
+      indexedDB.deleteDatabase = realDelete;
+      blocker.close();
+    }
+    expect(await readTodayOnDevice(MORNING)).toBeNull();
   });
 
   test('a wipe that lands right after a save passed its check leaves a day the store refuses', async () => {

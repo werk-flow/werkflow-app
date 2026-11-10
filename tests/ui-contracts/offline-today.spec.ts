@@ -8,6 +8,8 @@ import { assertWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-loc
 
 /** The cross-tab wipe signal of lib/field-sync/device/today-wipe.ts. */
 const TODAY_WIPE_KEY = 'werkflow:today-wiped';
+/** The device claim of lib/field-sync/device/today-wipe.ts, which every wipe removes first. */
+const TODAY_HOLDER_KEY = 'werkflow:today-holder';
 const JOB_TITLE = 'Heizung tauschen bei Familie Muster';
 
 test.beforeEach(async ({ page }) => {
@@ -40,6 +42,22 @@ test('a shown day vanishes at another tab’s wipe signal, before the next read 
     localStorage.setItem(key, 'another-tab-sign-out');
     window.dispatchEvent(new StorageEvent('storage', { key }));
   }, TODAY_WIPE_KEY);
+  await expect(page.getByRole('main').getByText('Gerade kein Netz')).toBeVisible();
+  await expect(page.getByRole('main').getByText(JOB_TITLE)).toHaveCount(0);
+  await answerRead(page, 2, false);
+  await expect(page.getByRole('main').getByText('Gerade kein Netz')).toBeVisible();
+});
+
+test('a shown day vanishes when another tab’s wipe removes the claim but cannot write its signal', async ({
+  page,
+}) => {
+  await answerRead(page, 1, true);
+  await expect(page.getByRole('main').getByText(JOB_TITLE)).toBeVisible();
+  // Another tab signs out with a full quota: only the claim's removal reaches this tab.
+  await page.evaluate((key) => {
+    localStorage.removeItem(key);
+    window.dispatchEvent(new StorageEvent('storage', { key }));
+  }, TODAY_HOLDER_KEY);
   await expect(page.getByRole('main').getByText('Gerade kein Netz')).toBeVisible();
   await expect(page.getByRole('main').getByText(JOB_TITLE)).toHaveCount(0);
   await answerRead(page, 2, false);

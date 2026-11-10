@@ -21,6 +21,9 @@ export const TODAY_HOLDER_KEY = 'werkflow:today-holder';
 
 let wipes = 0;
 
+/** A delete queued behind one another tab blocks reports nothing until that one ends; a sign-out never waits on it. */
+const WIPE_WAIT_MS = 1_500;
+
 /**
  * Which wipe the device is at, across this tab and every other tab of the
  * origin: a refresh whose answer arrives after another wipe must not keep it.
@@ -37,10 +40,11 @@ export function todayWipeGeneration(): string {
 /**
  * Deletes the today snapshot. It resolves once the browser deleted it, or
  * queued the deletion behind a connection still open in another tab, which
- * closes itself on the version change. It never rejects: a browser without
- * IndexedDB holds no snapshot, and a sign-out must go on. A delete that fails
- * or stays blocked exposes nothing: the store refuses a day saved before the
- * latest wipe signal (today-store.ts).
+ * closes itself on the version change, and after `WIPE_WAIT_MS` at the
+ * latest. It never rejects: a browser without IndexedDB holds no snapshot,
+ * and a sign-out must go on. A delete that fails or stays blocked exposes
+ * nothing: the store refuses a day saved before the latest wipe signal
+ * (today-store.ts).
  */
 export function clearTodayOnDevice(): Promise<void> {
   wipes += 1;
@@ -52,6 +56,7 @@ export function clearTodayOnDevice(): Promise<void> {
     // best-effort: other tabs then learn of the wipe only from their next read, which finds no day.
   }
   return new Promise((resolve) => {
+    setTimeout(resolve, WIPE_WAIT_MS);
     try {
       const request = indexedDB.deleteDatabase(TODAY_DATABASE);
       request.onsuccess = () => resolve();
