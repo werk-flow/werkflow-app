@@ -328,6 +328,19 @@ test("the job's own view pairs the job's entries as the whole day pairs them", (
       entry('resume', 'break_end', '2026-09-18T09:30', null),
       entry('out', 'clock_out', '2026-09-18T11:00', null),
     ],
+    'break end without a break start, handed over': [
+      entry('x-in', 'clock_in', '2026-09-18T07:00', jobX),
+      entry('resume', 'break_end', '2026-09-18T09:00', jobX),
+      entry('y-in', 'clock_in', '2026-09-18T09:30', jobY),
+      entry('y-out', 'clock_out', '2026-09-18T11:00', null),
+    ],
+    'break handed over to another job': [
+      entry('x-in', 'clock_in', '2026-09-18T07:00', jobX),
+      entry('pause', 'break_start', '2026-09-18T09:00', null),
+      entry('resume', 'break_end', '2026-09-18T09:30', jobX),
+      entry('y-in', 'clock_in', '2026-09-18T09:30', jobY),
+      entry('y-out', 'clock_out', '2026-09-18T11:00', null),
+    ],
     'clock-out during a break': [
       entry('x-in', 'clock_in', '2026-09-18T07:00', jobX),
       entry('pause', 'break_start', '2026-09-18T09:00', null),
