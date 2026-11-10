@@ -163,8 +163,8 @@ async function refreshOwnMemberships({
       // the cookie: the next start page's refresh must come after this wipe, never before it.
       await clearTodayOnDevice();
       // A selection the user made meanwhile (see setActiveOrg) owns the cookie; this fallback must not write over it.
-      if (generation !== refreshGenerationRef.current) return;
-      if (newActiveId) await setActiveOrgCookie(newActiveId).then(rejectRefusal);
+      if (newActiveId && generation === refreshGenerationRef.current)
+        await setActiveOrgCookie(newActiveId).then(rejectRefusal);
       if (generation !== refreshGenerationRef.current) return;
       setActiveOrgId(newActiveId);
     }
