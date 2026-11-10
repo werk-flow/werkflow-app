@@ -143,6 +143,8 @@ export async function refreshTodayOnDevice(
       : 'superseded';
   if (response.status !== 200) {
     if (!(await losesAccess(response))) return 'kept';
+    // The refusal's body streamed in meanwhile: a wipe or a newer start page since then owns the device.
+    if (todayWipeGeneration() !== generation || superseded(holder)) return 'superseded';
     await clearTodayOnDevice();
     return 'cleared';
   }

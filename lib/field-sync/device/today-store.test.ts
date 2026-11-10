@@ -66,8 +66,8 @@ async function letQueuedWorkRun(): Promise<void> {
   for (let turn = 0; turn < 50; turn += 1) await new Promise((resolve) => setImmediate(resolve));
 }
 
-/** A 200 whose body arrives only after `beforeBody` ran: a wipe that lands while the answer streams in. */
-function slowBody(body: unknown, beforeBody: () => Promise<void>): Response {
+/** An answer whose body arrives only after `beforeBody` ran: a wipe that lands while it streams in. */
+function slowBody(body: unknown, beforeBody: () => Promise<void>, status = 200): Response {
   const stream = new ReadableStream<Uint8Array>(
     {
       async pull(controller) {
@@ -78,7 +78,7 @@ function slowBody(body: unknown, beforeBody: () => Promise<void>): Response {
     },
     { highWaterMark: 0 },
   );
-  return new Response(stream, { status: 200, headers: { 'content-type': 'application/json' } });
+  return new Response(stream, { status, headers: { 'content-type': 'application/json' } });
 }
 
 // The phone keeps one snapshot of the current Berlin day for the signed-in
@@ -469,6 +469,24 @@ describe('refreshing the today snapshot', () => {
     }
     expect(outcome).toBe('superseded');
     expect(await readTodayOnDevice(MORNING)).toBeNull();
+  });
+
+  test("a refusal whose body streams in while another tab switches and saves deletes nothing of that tab's newer day", async () => {
+    const newer = { ...holder, organizationId: '9a000000-0000-4000-8000-0000000000b1' };
+    await saveTodayOnDevice(snapshot(), MORNING);
+    const refusal = slowBody(
+      { outcome: 'rejected', code: 'forbidden' },
+      async () => {
+        // While the refusal streams in, another tab switches the organization and saves its day.
+        await wipeFromAnotherTab();
+        claimToday(newer);
+        await saveTodayOnDevice(snapshot(newer), MORNING);
+      },
+      403,
+    );
+    const { send } = answer(refusal);
+    expect(await refreshTodayOnDevice(holder, { fetch: send, now: () => MORNING })).toBe('superseded');
+    expect((await readTodayOnDevice(MORNING))?.snapshot.organizationId).toBe(newer.organizationId);
   });
 
   test("a stale save deletes nothing of its own: only the other tab's wipe deletes, and that tab's newer day stays", async () => {
