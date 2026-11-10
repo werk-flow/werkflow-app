@@ -4,34 +4,59 @@ import type {
   PersonnelEmploymentTransitionKind,
   PersonnelRequirementType,
 } from '@/lib/personnel/lifecycle';
+import { ACCESS_STEP_LABELS, EMPLOYMENT_STEP_LABELS } from '@/lib/personnel/lifecycle-steps';
 
-export const ACCESS_TRANSITIONS: Array<{
-  value: PersonnelAccessTransitionKind;
-  label: string;
-}> = [
-  { value: 'schedule_activation', label: 'Zugang planen' },
-  { value: 'activate_now', label: 'Jetzt aktivieren' },
-  { value: 'suspend_now', label: 'Sofort sperren' },
-  { value: 'schedule_suspension', label: 'Sperre planen' },
-  { value: 'cancel_scheduled', label: 'Planung zurücknehmen' },
-  { value: 'reactivate', label: 'Reaktivieren' },
-  { value: 'end_access', label: 'Zugang beenden' },
-];
+/** One sentence per access step: what changes for the person when you save it. */
+const ACCESS_STEP_EFFECTS: Record<PersonnelAccessTransitionKind, string> = {
+  schedule_activation: 'Die Person kann sich ab dem gewählten Zeitpunkt in dieser Organisation anmelden.',
+  activate_now: 'Die Person kann sich ab sofort in dieser Organisation anmelden.',
+  suspend_now:
+    'Vorübergehend: Die Person kann sich ab sofort nicht mehr anmelden, bis du den Zugang reaktivierst.',
+  schedule_suspension: 'Der Zugang bleibt bis zum gewählten Zeitpunkt bestehen und wird dann gesperrt.',
+  cancel_scheduled: 'Die geplante Änderung entfällt, der Zugang bleibt, wie er jetzt ist.',
+  reactivate: 'Die Person kann sich ab sofort wieder in dieser Organisation anmelden.',
+  end_access:
+    'Zum Austritt: Die Person kann sich ab sofort nicht mehr anmelden, Personalakte und Verlauf bleiben erhalten.',
+};
 
-export const EMPLOYMENT_TRANSITIONS: Array<{
-  value: PersonnelEmploymentTransitionKind;
-  label: string;
-}> = [
-  { value: 'plan_start', label: 'Eintritt planen' },
-  { value: 'start', label: 'Beschäftigung starten' },
-  { value: 'record_notice', label: 'Austritt vormerken' },
-  { value: 'plan_exit', label: 'Austritt planen' },
-  { value: 'mark_inactive', label: 'Inaktiv setzen' },
-  { value: 'exit', label: 'Austritt festhalten' },
-  { value: 'cancel_scheduled', label: 'Planung zurücknehmen' },
-  { value: 'reverse', label: 'Übergang rückgängig machen' },
-  { value: 'reactivate', label: 'Beschäftigung reaktivieren' },
-];
+/** One sentence per employment step: what changes for the person when you save it. */
+const EMPLOYMENT_STEP_EFFECTS: Record<PersonnelEmploymentTransitionKind, string> = {
+  plan_start: 'Die Beschäftigung beginnt am gewählten Datum, bis dahin gilt „Eintritt geplant“.',
+  start: 'Die Beschäftigung gilt ab dem gewählten Datum als aktiv.',
+  record_notice:
+    'Die Kündigung liegt vor, das Austrittsdatum steht aber noch nicht fest; die Person bleibt beschäftigt.',
+  plan_exit: 'Die Person bleibt bis dahin beschäftigt und ist ab dem gewählten Datum ausgeschieden.',
+  mark_inactive: 'Die Beschäftigung ruht ab dem gewählten Datum, etwa bei einer Freistellung, ohne Austritt.',
+  exit: 'Für einen Austritt, der schon wirksam ist: Die Person gilt sofort als ausgeschieden.',
+  cancel_scheduled: 'Der geplante Übergang tritt nicht automatisch ein, der Status bleibt, wie er jetzt ist.',
+  reverse:
+    'Korrigiert einen irrtümlich erfassten Übergang: Die Person ist wieder aktiv beschäftigt, ohne Austrittsdatum.',
+  reactivate: 'Die Person kehrt zurück und ist ab dem gewählten Datum wieder aktiv beschäftigt.',
+};
+
+export type LifecycleStepOption<Kind extends string> = { value: Kind; label: string; description: string };
+
+/** The dialog options of the access steps that fit, in their order. */
+export function accessStepOptions(
+  steps: readonly PersonnelAccessTransitionKind[],
+): LifecycleStepOption<PersonnelAccessTransitionKind>[] {
+  return steps.map((value) => ({
+    value,
+    label: ACCESS_STEP_LABELS[value],
+    description: ACCESS_STEP_EFFECTS[value],
+  }));
+}
+
+/** The dialog options of the employment steps that fit, in their order. */
+export function employmentStepOptions(
+  steps: readonly PersonnelEmploymentTransitionKind[],
+): LifecycleStepOption<PersonnelEmploymentTransitionKind>[] {
+  return steps.map((value) => ({
+    value,
+    label: EMPLOYMENT_STEP_LABELS[value],
+    description: EMPLOYMENT_STEP_EFFECTS[value],
+  }));
+}
 
 export const REQUIREMENT_TYPES: Array<{
   value: PersonnelRequirementType;

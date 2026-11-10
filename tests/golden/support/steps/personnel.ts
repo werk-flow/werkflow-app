@@ -1,10 +1,9 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import {
   ACCESS_CLASS_OPTIONS,
-  ACCESS_TRANSITIONS,
-  EMPLOYMENT_TRANSITIONS,
   REQUIREMENT_TYPES,
 } from '../../../../components/mitarbeiter/personnel-lifecycle-options';
+import { ACCESS_STEP_LABELS, EMPLOYMENT_STEP_LABELS } from '../../../../lib/personnel/lifecycle-steps';
 import type {
   PersonnelAccessTransitionKind,
   PersonnelDocumentAccessClass,
@@ -874,6 +873,7 @@ const LIFECYCLE_CONTROLS = {
   recordTransition: 'Übergang erfassen',
   transitionDialog: 'Beschäftigungsübergang erfassen',
   effectiveOn: 'Wirksam am',
+  transitionKind: 'Übergang',
   exportState: 'Arbeitsstand exportieren',
 } as const;
 
@@ -1044,8 +1044,8 @@ export async function changeOrganizationAccess(
   const dialog = page.getByRole('dialog', { name: LIFECYCLE_CONTROLS.accessDialog });
   await selectFromSearchable(
     page,
-    dialog.getByRole('combobox'),
-    lifecycleLabel(ACCESS_TRANSITIONS, transition),
+    dialog.getByRole('combobox', { name: LIFECYCLE_CONTROLS.transitionKind }),
+    ACCESS_STEP_LABELS[transition],
   );
   await dialog.getByLabel(SHARED_COPY.field.reason).fill(reason);
   await dialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
@@ -1059,10 +1059,11 @@ export async function recordEmploymentTransition(
 ): Promise<void> {
   await personnelLifecycle(page).getByRole('button', { name: LIFECYCLE_CONTROLS.recordTransition }).click();
   const dialog = page.getByRole('dialog', { name: LIFECYCLE_CONTROLS.transitionDialog });
+  // The dialog preselects the first step that fits the person's state, so the select is found by its label.
   await selectFromSearchable(
     page,
-    dialog.getByRole('combobox').filter({ hasText: lifecycleLabel(EMPLOYMENT_TRANSITIONS, 'record_notice') }),
-    lifecycleLabel(EMPLOYMENT_TRANSITIONS, input.transition),
+    dialog.getByRole('combobox', { name: LIFECYCLE_CONTROLS.transitionKind }),
+    EMPLOYMENT_STEP_LABELS[input.transition],
   );
   await typeIntoDatePicker(dialog, LIFECYCLE_CONTROLS.effectiveOn, datePickerDigits(input.effectiveOn));
   await dialog.getByLabel(SHARED_COPY.field.reason).fill(input.reason);

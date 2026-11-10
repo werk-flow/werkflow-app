@@ -44,6 +44,11 @@ export function initializePersonnelBoundary(): PersonnelLifecycleView {
     templates: [],
     documents: [],
     transitionInventory: { openWork: [], strandedResponsibilities: [] },
+    // A member without an access lifecycle, employed and without a planned step.
+    steps: {
+      access: ['suspend_now', 'schedule_suspension', 'end_access', 'activate_now'],
+      employment: ['record_notice', 'plan_exit', 'exit', 'mark_inactive'],
+    },
     handoverFrom: '2026-10-01',
   };
   window.uiContractPersonnel = {

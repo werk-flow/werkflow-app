@@ -814,6 +814,45 @@ test(
 );
 
 test(
+  'personnel transition dialogs offer only the steps that fit, preselect the first and say what each does',
+  {
+    annotation: { type: 'fixture', description: 'personnel' },
+  },
+  async ({ page }) => {
+    const section = page.getByRole('main').getByTestId('personnel-lifecycle');
+    const dialogs = [
+      {
+        opener: 'Zugang steuern',
+        title: 'Organisationszugang steuern',
+        steps: ['Sofort sperren', 'Sperre planen', 'Zugang beenden', 'Jetzt aktivieren'],
+        effect: 'Vorübergehend: Die Person kann sich ab sofort nicht mehr anmelden',
+      },
+      {
+        opener: 'Übergang erfassen',
+        title: 'Beschäftigungsübergang erfassen',
+        steps: ['Austritt vormerken', 'Austritt planen', 'Austritt festhalten', 'Inaktiv setzen'],
+        effect: 'Die Kündigung liegt vor, das Austrittsdatum steht aber noch nicht fest',
+      },
+    ];
+    for (const { opener, title, steps, effect } of dialogs) {
+      await section.getByRole('button', { name: opener, exact: true }).click();
+      const dialog = page.getByRole('dialog', { name: title, exact: true });
+      const stepSelect = dialog.getByRole('combobox', { name: 'Übergang' });
+      await expect(stepSelect).toContainText(expectDefined(steps[0], 'the first step'));
+      await expect(dialog.getByText(effect)).toBeVisible();
+      await stepSelect.click();
+      const options = page.getByRole('listbox').getByRole('option');
+      // Each option names its step and its effect sentence in full, in the order the state allows.
+      await expect(options).toHaveText(steps.map((step) => new RegExp(`^${step}\\S.{20,}$`)));
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('listbox')).toHaveCount(0);
+      await dialog.getByRole('button', { name: 'Abbrechen', exact: true }).click();
+      await expect(dialog).toHaveCount(0);
+    }
+  },
+);
+
+test(
   'personnel upload rejection keeps the dialog open without a successful save or reconciliation read',
   {
     annotation: { type: 'fixture', description: 'personnel' },
