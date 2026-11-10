@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
+  clockJobLabel,
+  describeActivity,
   deriveClockActions,
   isSameActivitySelection,
   selectClockHotKeys,
@@ -11,11 +13,11 @@ import type { ClockJobInfo, LiveClockState, TimeActivitySelection } from './type
 
 const job: ClockJobInfo = {
   id: 'job-1',
-  title: 'Heizungswartung Müller',
-  jobNumber: 'A-1',
+  title: 'Heizungswartung',
+  jobNumber: 'AUF-2026-1',
   status: 'in_bearbeitung',
   projectName: null,
-  clientName: null,
+  clientName: 'Müller',
 };
 
 function state(overrides: Partial<LiveClockState>): LiveClockState {
@@ -53,6 +55,21 @@ function state(overrides: Partial<LiveClockState>): LiveClockState {
     ...overrides,
   };
 }
+
+describe('running job label', () => {
+  test('same-titled jobs differ by number and customer', () => {
+    const other = { ...job, id: 'job-2', jobNumber: 'AUF-2026-2', clientName: 'Becker' };
+    expect(describeActivity(createActivitySelection('work', 'job-1'), job)).toBe(
+      'Arbeit · Heizungswartung · AUF-2026-1 · Müller',
+    );
+    expect(clockJobLabel(other)).toBe('Heizungswartung · AUF-2026-2 · Becker');
+  });
+
+  test('a job without number or customer keeps its title, an unknown job reads „Auftrag“', () => {
+    expect(clockJobLabel({ ...job, jobNumber: null, clientName: null })).toBe('Heizungswartung');
+    expect(clockJobLabel(null)).toBe('Auftrag');
+  });
+});
 
 describe('clock actions per state', () => {
   test('clocked out offers a plain start, a job start and a drive', () => {
@@ -108,7 +125,7 @@ describe('clock actions per state', () => {
       }),
     );
     expect(actions.map((action) => action.label)).toEqual([
-      'Weiter: Arbeit · Heizungswartung Müller',
+      'Weiter: Arbeit · Heizungswartung · AUF-2026-1 · Müller',
       'Weiter ohne Auftrag',
       'Anderer Auftrag …',
       'Erfassung beenden',
@@ -149,7 +166,7 @@ describe('clock actions per state', () => {
       }),
     );
     expect(actions.map((action) => action.label)).toEqual([
-      'Arbeit an Heizungswartung Müller',
+      'Arbeit an Heizungswartung · AUF-2026-1 · Müller',
       'Arbeit an anderem Auftrag …',
       'Pause',
       'Erfassung beenden',

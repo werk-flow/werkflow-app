@@ -27,17 +27,27 @@ const ids = (value: string | string[] | undefined): string[] =>
     .split(',')
     .filter((id) => uuidSchema.safeParse(id).success);
 
+/**
+ * The sort direction a list opens with: an employee reads the earliest date
+ * first (overdue and running work, then the next visits, undated last), the
+ * office the newest first.
+ */
+export function defaultJobListDirection(isAdminOrManager: boolean): 'asc' | 'desc' {
+  return isAdminOrManager ? 'desc' : 'asc';
+}
+
 export function parseJobListQuery(
   params: ListSearchParams,
   section: JobListSection,
   visibleColumns?: AuftraegeColumnId[],
+  defaultDirection: 'asc' | 'desc' = 'desc',
 ): JobListQuery {
   const read = (key: string): string => single(params[`${section}_${key}`]);
   const sort = z
     .enum(['nr', 'bezeichnung', 'kunde', 'status', 'prioritaet', 'datum'])
     .catch('datum')
     .parse(read('sort'));
-  const direction = z.enum(['asc', 'desc']).catch('desc').parse(read('direction'));
+  const direction = z.enum(['asc', 'desc']).catch(defaultDirection).parse(read('direction'));
   const entryType = z.enum(['alle', 'jobs', 'projekte']).catch('alle').parse(read('type'));
   const status = z
     .enum(['alle', 'not_started', 'in_progress', 'interrupted'])
