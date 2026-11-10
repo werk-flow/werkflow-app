@@ -1128,6 +1128,133 @@ begin
 end;
 $$;
 
+-- The clock never runs on a parked job: a clock-in, a switch and the resume
+-- after a break onto a parked job are refused and write nothing.
+reset role;
+insert into auth.users (
+  id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
+  raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+) values (
+  '21000000-0000-0000-0000-000000000068',
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated', 'authenticated', 'p1-21-parked@example.test', '', now(),
+  '{}'::jsonb, '{"first_name":"Parked","last_name":"Worker"}'::jsonb, now(), now()
+);
+insert into public.organizations (id, name, admin_id, unique_code)
+values (
+  '21000000-0000-0000-0000-000000000060', 'P1-21 Parked',
+  '21000000-0000-0000-0000-000000000001', 'P121PRK'
+);
+insert into public.jobs (id, organization_id, title, job_number, status, created_by)
+values
+(
+  '21000000-0000-0000-0000-000000000061', '21000000-0000-0000-0000-000000000060',
+  'P1-21 Geparkt', 'P121-PARK', 'geparkt', '21000000-0000-0000-0000-000000000001'
+),
+(
+  '21000000-0000-0000-0000-000000000062', '21000000-0000-0000-0000-000000000060',
+  'P1-21 Offen', 'P121-OPEN', 'nicht_bearbeitet', '21000000-0000-0000-0000-000000000001'
+);
+insert into public.organization_members (organization_id, user_id, role)
+values ('21000000-0000-0000-0000-000000000060', '21000000-0000-0000-0000-000000000068', 'employee');
+insert into public.job_assignments (organization_id, job_id, user_id, assigned_by)
+select '21000000-0000-0000-0000-000000000060', job_id, '21000000-0000-0000-0000-000000000068',
+  '21000000-0000-0000-0000-000000000001'
+from unnest(array[
+  '21000000-0000-0000-0000-000000000061', '21000000-0000-0000-0000-000000000062'
+]::uuid[]) job_id;
+set local role service_role;
+do $$
+declare
+  v_result jsonb;
+  v_session_id uuid;
+  v_version bigint;
+begin
+  begin
+    perform public.transition_time_activity(
+      p_organization_id => '21000000-0000-0000-0000-000000000060',
+      p_actor_id => '21000000-0000-0000-0000-000000000068',
+      p_operation_id => '21000000-0000-0000-0000-000000000063',
+      p_request_hash => repeat('a', 64), p_action => 'start',
+      p_segment_kind => 'work', p_allocation_kind => 'job',
+      p_job_id => '21000000-0000-0000-0000-000000000061'
+    );
+    raise exception 'clock-in on a parked job was accepted';
+  exception when others then
+    if sqlerrm not like '%time_transition_job_unavailable%' then raise; end if;
+  end;
+  if exists (
+    select 1 from public.time_sessions where organization_id = '21000000-0000-0000-0000-000000000060'
+  ) then raise exception 'refused clock-in on a parked job left a session'; end if;
+
+  v_result := public.transition_time_activity(
+    p_organization_id => '21000000-0000-0000-0000-000000000060',
+    p_actor_id => '21000000-0000-0000-0000-000000000068',
+    p_operation_id => '21000000-0000-0000-0000-000000000064',
+    p_request_hash => repeat('b', 64), p_action => 'start',
+    p_segment_kind => 'work', p_allocation_kind => 'job',
+    p_job_id => '21000000-0000-0000-0000-000000000062'
+  );
+  v_session_id := (v_result->>'sessionId')::uuid;
+  v_version := (v_result->>'version')::bigint;
+  begin
+    perform public.transition_time_activity(
+      p_organization_id => '21000000-0000-0000-0000-000000000060',
+      p_actor_id => '21000000-0000-0000-0000-000000000068',
+      p_operation_id => '21000000-0000-0000-0000-000000000065',
+      p_request_hash => repeat('c', 64), p_action => 'switch',
+      p_expected_session_id => v_session_id, p_expected_version => v_version,
+      p_segment_kind => 'work', p_allocation_kind => 'job',
+      p_job_id => '21000000-0000-0000-0000-000000000061'
+    );
+    raise exception 'switch to a parked job was accepted';
+  exception when others then
+    if sqlerrm not like '%time_transition_job_unavailable%' then raise; end if;
+  end;
+  perform public.transition_time_activity(
+    p_organization_id => '21000000-0000-0000-0000-000000000060',
+    p_actor_id => '21000000-0000-0000-0000-000000000068',
+    p_operation_id => '21000000-0000-0000-0000-000000000066',
+    p_request_hash => repeat('d', 64), p_action => 'switch',
+    p_expected_session_id => v_session_id, p_expected_version => v_version,
+    p_segment_kind => 'break', p_allocation_kind => 'none'
+  );
+end;
+$$;
+-- The office parks the job while its worker is on a break.
+reset role;
+set local session_replication_role = replica;
+update public.jobs set status = 'geparkt', execution_state = 'not_started'
+where id = '21000000-0000-0000-0000-000000000062';
+set local session_replication_role = origin;
+set local role service_role;
+do $$
+declare
+  v_session public.time_sessions%rowtype;
+begin
+  select * into v_session from public.time_sessions
+  where organization_id = '21000000-0000-0000-0000-000000000060' and ended_at is null;
+  begin
+    perform public.transition_time_activity(
+      p_organization_id => '21000000-0000-0000-0000-000000000060',
+      p_actor_id => '21000000-0000-0000-0000-000000000068',
+      p_operation_id => '21000000-0000-0000-0000-000000000067',
+      p_request_hash => repeat('e', 64), p_action => 'switch',
+      p_expected_session_id => v_session.id, p_expected_version => v_session.version,
+      p_segment_kind => 'work', p_allocation_kind => 'job',
+      p_job_id => '21000000-0000-0000-0000-000000000062'
+    );
+    raise exception 'resume onto a parked job was accepted';
+  exception when others then
+    if sqlerrm not like '%time_transition_job_unavailable%' then raise; end if;
+  end;
+  if not exists (
+    select 1 from public.time_segments
+    where session_id = v_session.id and kind = 'break' and ended_at is null
+  ) then raise exception 'refused resume onto a parked job ended the break'; end if;
+end;
+$$;
+
 -- P1-21-F48/F50: members read their organization's canonical time rows;
 -- a person outside the organization reads none of them.
 set local role authenticated;
