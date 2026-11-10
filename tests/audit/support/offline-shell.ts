@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+
 import { expect, type Locator, type Page } from '@playwright/test';
 
 // Locators and cache reads of the installable app shell (public/sw.js). The
@@ -7,6 +10,9 @@ const OFFLINE_COPY = {
   title: 'Gerade kein Netz',
   retry: 'Erneut versuchen',
 } as const;
+
+/** Where the app serves its static files from: a cached image is a shell file only if it exists here. */
+const PUBLIC_ROOT = resolve(__dirname, '../../../public');
 
 /** The prefix of every cache the service worker owns (lib/offline/service-worker-caches.ts). */
 const CACHE_PREFIX = 'werkflow-';
@@ -77,7 +83,8 @@ export async function expectOnlyShellFilesCached(
   const isShellFile = (path: string): boolean =>
     path === '/offline' ||
     path.startsWith('/_next/static/') ||
-    /^\/(?:[\w-]+\/)*[\w-]+\.(?:svg|png)$/.test(path);
+    // An image counts only as a file of public/, so a cached API or page path under an image name still fails.
+    (/^\/(?:[\w-]+\/)*[\w-]+\.(?:svg|png)$/.test(path) && existsSync(join(PUBLIC_ROOT, path)));
   expect(entries.map((entry) => entry.path).filter((path) => !isShellFile(path))).toEqual([]);
   const offlinePage = entries.find((entry) => entry.path === '/offline');
   expect(offlinePage?.body).toContain(OFFLINE_COPY.title);
