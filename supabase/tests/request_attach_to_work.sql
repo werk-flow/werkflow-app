@@ -4,7 +4,7 @@
 -- the attempt key returns the first entry and writes nothing; work of another
 -- customer or organization, closed work and a second attach are refused
 -- before anything is written (migration
--- 20261129090002_attach_a_request_to_existing_work.sql).
+-- 20261130090003_attach_a_request_to_existing_work.sql).
 begin;
 
 insert into auth.users (
