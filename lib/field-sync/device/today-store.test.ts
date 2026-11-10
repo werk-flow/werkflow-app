@@ -369,10 +369,30 @@ describe('refreshing the today snapshot', () => {
   });
 
   test('a refused person or organization leaves nothing on the device', async () => {
+    for (const code of ['forbidden', 'organization_mismatch']) {
+      await saveTodayOnDevice(snapshot(), MORNING);
+      claimToday(holder);
+      const { send } = answer(Response.json({ outcome: 'rejected', code }, { status: 403 }));
+      expect(await refreshTodayOnDevice(holder, { fetch: send, now: () => MORNING }), code).toBe('cleared');
+      expect(await readTodayOnDevice(MORNING), code).toBeNull();
+    }
+  });
+
+  test('the answer’s outcome decides, not its status: a retry, an invalid request or an unreadable refusal keeps the day', async () => {
     await saveTodayOnDevice(snapshot(), MORNING);
-    const { send } = answer(Response.json({ outcome: 'rejected', code: 'forbidden' }, { status: 403 }));
-    expect(await refreshTodayOnDevice(holder, { fetch: send, now: () => MORNING })).toBe('cleared');
-    expect(await readTodayOnDevice(MORNING)).toBeNull();
+    for (const response of [
+      Response.json({ outcome: 'retry', code: 'unavailable' }, { status: 403 }),
+      Response.json({ outcome: 'retry', code: 'unauthenticated' }, { status: 401 }),
+      Response.json({ outcome: 'rejected', code: 'invalid' }, { status: 400 }),
+      new Response('<html><body>Forbidden</body></html>', { status: 403 }),
+    ]) {
+      const { send } = answer(response);
+      expect(
+        await refreshTodayOnDevice(holder, { fetch: send, now: () => MORNING }),
+        String(response.status),
+      ).toBe('kept');
+      expect((await readTodayOnDevice(MORNING))?.snapshot, String(response.status)).toEqual(snapshot());
+    }
   });
 
   test("another person's day is deleted before this person's is fetched, and a snapshot for someone else is not saved", async () => {

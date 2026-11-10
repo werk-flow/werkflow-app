@@ -1,5 +1,7 @@
 'use client';
 
+import { z } from 'zod';
+
 import {
   FIELD_SYNC_TODAY_PATH,
   fieldSyncTodaySchema,
@@ -71,6 +73,30 @@ function superseded(holder: TodayHolder): boolean {
   }
 }
 
+const refusalSchema = z.object({ outcome: z.string(), code: z.string() });
+
+/**
+ * Whether a refusal says the person lost access to the organization's day (decision record 0010,
+ * "the today snapshot"): only then must the stored customer data go. The answer's outcome decides,
+ * never its status. A `retry`, a `rejected` `invalid` (a fault of this client, not an access
+ * change) and a body that is not a refusal keep the day.
+ */
+async function losesAccess(response: Response): Promise<boolean> {
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    // best-effort: a proxy's or a cut-off page says nothing about access; the stored day stays.
+    return false;
+  }
+  const refusal = refusalSchema.safeParse(body);
+  return (
+    refusal.success &&
+    refusal.data.outcome === 'rejected' &&
+    (refusal.data.code === 'forbidden' || refusal.data.code === 'organization_mismatch')
+  );
+}
+
 function belongsTo(snapshot: { userId: string; organizationId: string }, holder: TodayHolder): boolean {
   return snapshot.userId === holder.userId && snapshot.organizationId === holder.organizationId;
 }
@@ -112,15 +138,15 @@ export async function refreshTodayOnDevice(
   }
   // Only the refresh that still owns the device acts on the answer; an older one would delete a newer day.
   if (todayWipeGeneration() !== generation || superseded(holder)) return 'superseded';
-  if (response.status === 403) {
-    await clearTodayOnDevice();
-    return 'cleared';
-  }
   if (response.status === 304 && stored)
     return (await saveUnlessWiped(stored.snapshot, now(), { holder, generation }))
       ? 'confirmed'
       : 'superseded';
-  if (response.status !== 200) return 'kept';
+  if (response.status !== 200) {
+    if (!(await losesAccess(response))) return 'kept';
+    await clearTodayOnDevice();
+    return 'cleared';
+  }
   let body: unknown;
   try {
     body = await response.json();
