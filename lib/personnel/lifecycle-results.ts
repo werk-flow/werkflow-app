@@ -9,7 +9,7 @@ import { logError } from '@/lib/logging';
 // by the personnel lifecycle Server Actions (lifecycle-actions.ts,
 // onboarding-actions.ts).
 
-// A lifecycle success nests its payload under `data`; a rejected transition may return the blocking inventory there.
+// A lifecycle success nests its payload under `data`; a failure may carry facts of the same shape there.
 export type LifecycleResult<T = undefined> =
   | ({ success: true } & (T extends undefined ? object : { data: T }))
   | (ActionFailure & { data?: T });

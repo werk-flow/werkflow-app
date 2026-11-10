@@ -30,19 +30,6 @@ export const documentFileSchema = z.object({
   deleted_at: z.string().nullable(),
 });
 const templateVersionsSchema = z.array(z.object({ id: z.string(), version_number: z.number() }));
-const assignedJobSchema = z.object({ id: z.string(), title: z.string(), job_number: z.string().nullable() });
-
-export function toActiveJobOptions(
-  assignments: ReadonlyArray<{ jobs: unknown }>,
-): Array<{ id: string; label: string }> {
-  return assignments.flatMap((assignment) => {
-    const job = assignedJobSchema.safeParse(assignment.jobs);
-    if (!job.success) return [];
-    const { id, title, job_number: jobNumber } = job.data;
-    return [{ id, label: jobNumber ? `${jobNumber} · ${title}` : title }];
-  });
-}
-
 export type PersonnelLifecycleRequirement = {
   id: string;
   planId: string;

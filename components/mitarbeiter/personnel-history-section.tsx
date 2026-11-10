@@ -23,6 +23,7 @@ const EVENT_LABELS: Record<string, string> = {
   membership_removed: 'Aus der Organisation entfernt',
   access_transition: 'Zugang geändert',
   employment_transition: 'Beschäftigungsstatus geändert',
+  work_handed_over: 'Offene Arbeit übergeben',
   onboarding_plan_created: 'Einarbeitungsplan angelegt',
   onboarding_requirement_saved: 'Einarbeitungspunkt aktualisiert',
   personnel_document_classified: 'Personaldokument eingeordnet',

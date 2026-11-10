@@ -1,7 +1,7 @@
 // The planner's „Einsatz umplanen“ tasks through the real derivation and the
 // real affected-visits reader over the in-memory database. An approved
-// vacation over a scheduled visit gives the office exactly one task per visit
-// and person; a past or started visit, a parked job and a pending request give none;
+// vacation over a scheduled visit, and a visit after a person's exit, gives
+// the office exactly one task per visit and person; a past or started visit, a parked job and a pending request give none;
 // a second vacation over the same visit adds none; replanning the visit or
 // withdrawing the vacation resolves it. Another organization's vacation,
 // visit or forged assignment never reaches the caller, and a field worker
@@ -92,6 +92,7 @@ const world = installActionWorld({
       user_id: jonasUserId,
       first_name: 'M',
       last_name: 'A',
+      exit_date: null,
     },
     {
       id: lenaRecordId,
@@ -99,6 +100,7 @@ const world = installActionWorld({
       user_id: null,
       first_name: 'Lena',
       last_name: 'Hartmann',
+      exit_date: null,
     },
     {
       id: foreignRecordId,
@@ -106,6 +108,7 @@ const world = installActionWorld({
       user_id: null,
       first_name: 'Frida',
       last_name: 'Fremd',
+      exit_date: null,
     },
   ],
   profiles: [{ id: jonasUserId, first_name: 'Jonas', last_name: 'Becker', email: 'jonas@example.test' }],
@@ -187,6 +190,7 @@ const world = installActionWorld({
     }),
   ],
   planning_dispatches: [],
+  planning_occurrence_assignments: [],
 });
 
 const { resolveActionContext } = await import('@/lib/org/action-context');
@@ -287,6 +291,58 @@ signInAs(world, 'employee');
 const requestsBefore = world.adminClientRequests;
 assert.deepEqual(await tasksOfCaller(), []);
 assert.equal(world.adminClientRequests, requestsBefore, 'a field worker reaches no service-role client');
+
+// A person who left: each visit after the exit date is a task until someone takes it
+// over; the last working day is not. It counts from today, not from the exit.
+const leaverRecordId = '86000000-0000-4000-8000-000000000005';
+const leaverOnExitDay = '86000000-0000-4000-8000-000000000043';
+const leaverAfterExit = '86000000-0000-4000-8000-000000000041';
+tableRows(world, 'employee_records').push({
+  id: leaverRecordId,
+  organization_id: ORGANIZATION_A,
+  user_id: null,
+  first_name: 'Tim',
+  last_name: 'Austritt',
+  exit_date: '2026-11-10',
+});
+const leaverVisits = [
+  // Tue 10.11.2026, the exit date itself: still Tim's day.
+  {
+    id: '86000000-0000-4000-8000-000000000028',
+    assignmentId: leaverOnExitDay,
+    startAt: '2026-11-10T07:00:00.000Z',
+  },
+  // Thu 12.11.2026 08:00 Berlin: after Tim's exit.
+  {
+    id: '86000000-0000-4000-8000-000000000029',
+    assignmentId: leaverAfterExit,
+    startAt: '2026-11-12T07:00:00.000Z',
+  },
+];
+for (const leaverVisit of leaverVisits) {
+  const endAt = leaverVisit.startAt.replace('T07:', 'T09:');
+  tableRows(world, 'planning_occurrences').push(
+    visit({
+      id: leaverVisit.id,
+      startAt: leaverVisit.startAt,
+      endAt,
+      absent: [assignment(leaverVisit.assignmentId, leaverRecordId)],
+      job: job('Nach dem Austritt', 'AUF-2026-141'),
+    }),
+  );
+  tableRows(world, 'planning_occurrence_assignments').push({
+    id: leaverVisit.assignmentId,
+    organization_id: ORGANIZATION_A,
+    occurrence_id: leaverVisit.id,
+    employee_record_id: leaverRecordId,
+  });
+}
+signInAs(world, 'buero');
+const leaverTasks = (await tasksOfCaller()).filter((task) => task.sourceId !== jonasOnLongVisit);
+assert.deepEqual(
+  leaverTasks.map((task) => [task.sourceId, 'personName' in task ? task.personName : null]),
+  [[leaverAfterExit, 'Tim Austritt']],
+);
 
 // A failed read fails the derivation instead of reporting no task.
 signInAs(world, 'buero');
