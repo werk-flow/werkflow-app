@@ -258,3 +258,16 @@ test('days read newest first', () => {
     ['2026-09-16', ['work']],
   ]);
 });
+
+test('a status filter keeps whole activities: an approved start with a pending end reads as one pending activity', () => {
+  const day = [
+    entry('in', 'clock_in', '2026-09-17T08:00', jobX),
+    entry('out', 'clock_out', '2026-09-17T09:00', null, { status: 'pending' }),
+  ];
+  const ids = (status: TimeEntryStatus) =>
+    activityDays(day, NOW, status).flatMap((activityDay) =>
+      activityDay.intervals.map((interval) => interval.id),
+    );
+  expect(ids('pending')).toEqual(['in:out']);
+  expect(ids('approved')).toEqual([]);
+});

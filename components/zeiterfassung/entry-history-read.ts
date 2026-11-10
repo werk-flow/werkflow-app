@@ -33,14 +33,12 @@ export type EntryHistoryData = {
   jobLabels: Record<string, string>;
 };
 
-type ProfileNames = Map<string, { firstName: string | null; lastName: string | null }>;
-
 /**
- * What this view already read: a live refresh after an approval reads the
- * entries only, and names or job labels follow in a second request only for
- * what the view has not shown yet.
+ * The names this view already read: a live refresh after an approval reads
+ * the entries only, and names follow in a second request only for people the
+ * view has not shown yet.
  */
-export type KnownLabels = { names: ProfileNames; jobLabels: Map<string, string> };
+export type ProfileNames = Map<string, { firstName: string | null; lastName: string | null }>;
 
 /** The entries with their people's names; null when the names could not be read. */
 export async function withProfileNames(
@@ -67,29 +65,27 @@ export async function withProfileNames(
   }));
 }
 
-// The job labels of the activities: read once per job and kept across live refreshes.
+// The job labels of the activities: read with every read, so a renamed job shows its new title.
 
 /** Ids per label read, so the read's address stays short. */
 const LABEL_READ_IDS = 100;
 
 /**
- * Adds the labels of the days' jobs that `knownLabels` lacks; false when a
- * read failed. A time correction may name these jobs, so its picker purpose
- * resolves them for every member, a finished job of the person's own time
- * included.
+ * Number and title of the days' jobs, by id; null when a read failed. A time
+ * correction may name these jobs, so its picker purpose resolves them for
+ * every member, a finished job of the person's own time included.
  */
 export async function readActivityJobLabels(
   organizationId: string,
   days: readonly ActivityDay[],
-  knownLabels: Map<string, string>,
   signal: AbortSignal,
-): Promise<boolean> {
-  const unknownIds = [
+): Promise<Record<string, string> | null> {
+  const jobIds = [
     ...new Set(days.flatMap((day) => day.intervals.flatMap((interval) => interval.jobId ?? []))),
-  ].filter((jobId) => !knownLabels.has(jobId));
+  ];
   const batches: string[][] = [];
-  for (let index = 0; index < unknownIds.length; index += LABEL_READ_IDS) {
-    batches.push(unknownIds.slice(index, index + LABEL_READ_IDS));
+  for (let index = 0; index < jobIds.length; index += LABEL_READ_IDS) {
+    batches.push(jobIds.slice(index, index + LABEL_READ_IDS));
   }
   const results = await Promise.all(
     batches.map((selectedIds) =>
@@ -100,9 +96,10 @@ export async function readActivityJobLabels(
       ),
     ),
   );
+  const labels: Record<string, string> = {};
   for (const result of results) {
-    if (!result.success) return false;
-    for (const option of result.selected) knownLabels.set(option.value, option.label);
+    if (!result.success) return null;
+    for (const option of result.selected) labels[option.value] = option.label;
   }
-  return true;
+  return labels;
 }

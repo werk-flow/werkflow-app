@@ -8,6 +8,7 @@ import {
 } from '@/lib/time-tracking/activity-intervals';
 import { intervalDurationLabel, intervalSpanLabel } from '@/lib/time-tracking/activity-interval-labels';
 import { TIME_ACTIVITY_LABELS, type TimeEntry } from '@/lib/time-tracking/types';
+import { isEntryInClosedPeriod } from '@/lib/time-tracking/closed-period-dates';
 import { cn, formatBerlin } from '@/lib/utils';
 import { STATUS_LABELS } from './entry-history-labels';
 import { EntryHistoryRowAction, type EntryHistoryRowActionProps } from './entry-history-row-action';
@@ -35,12 +36,36 @@ function actionEntry(interval: ActivityInterval): TimeEntry {
   );
 }
 
+/** The record a correction of the entry changes: its segment, its applied correction, or the entry itself. */
+function correctionSource(entry: TimeEntry): string {
+  return entry.canonicalSegmentId ?? entry.correctionApplicationId ?? entry.id;
+}
+
+/**
+ * The end, when a correction of the start leaves it as it is: a legacy
+ * clock-out or break start is its own record, so the row corrects it on its
+ * own. A segment's end changes with the segment; a pending or closed-month
+ * end shows its state through the row's first action.
+ */
+function separatelyCorrectedEnd(
+  interval: ActivityInterval,
+  primary: TimeEntry,
+  closedPeriods: EntryHistoryActivitiesProps['closedPeriods'],
+): TimeEntry | null {
+  const { start, end } = interval;
+  if (!start || !end || primary !== start) return null;
+  if (end.status !== 'approved' || end.pendingCorrectionRequestId) return null;
+  if (isEntryInClosedPeriod(end, closedPeriods)) return null;
+  return correctionSource(end) === correctionSource(start) ? null : end;
+}
+
 function ActivityRow({
   interval,
   jobLabels,
   ...actionProps
 }: Omit<EntryHistoryActivitiesProps, 'days'> & { interval: ActivityInterval }) {
   const entry = actionEntry(interval);
+  const end = separatelyCorrectedEnd(interval, entry, actionProps.closedPeriods);
   const jobLabel = interval.jobId ? jobLabels[interval.jobId] : undefined;
   const isManual = interval.start?.isManual === true || interval.end?.isManual === true;
   return (
@@ -69,7 +94,10 @@ function ActivityRow({
           </p>
         ) : null}
       </div>
-      <EntryHistoryRowAction entry={entry} {...actionProps} />
+      <div className="flex flex-wrap items-center gap-1">
+        <EntryHistoryRowAction entry={entry} {...actionProps} />
+        {end ? <EntryHistoryRowAction entry={end} correctLabel="Ende korrigieren" {...actionProps} /> : null}
+      </div>
     </ListRow>
   );
 }

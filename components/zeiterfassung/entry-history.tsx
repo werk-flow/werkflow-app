@@ -37,7 +37,7 @@ import {
   type EntryHistoryQuery,
   type EntryWithProfile,
   type HistoryLayout,
-  type KnownLabels,
+  type ProfileNames,
 } from './entry-history-read';
 import { activityDays, intervalAnchor } from '@/lib/time-tracking/activity-intervals';
 import { useWithdrawSubmission } from './use-withdraw-submission';
@@ -89,7 +89,7 @@ function getEntryHistoryDisplayName(entry: EntryWithProfile): string {
 
 async function readEntryHistory(
   { layout, organizationId, dateFrom, dateTo, statusFilter, memberFilter, withOwnChanges }: EntryHistoryQuery,
-  known: KnownLabels,
+  knownNames: ProfileNames,
   signal: AbortSignal,
 ): Promise<LiveViewResult<EntryHistoryData>> {
   // The view reads only with a complete date range (its `enabled`).
@@ -97,23 +97,19 @@ async function readEntryHistory(
   try {
     const range = historyRange(dateFrom, dateTo);
     const member = memberFilter !== 'all' ? { userId: memberFilter } : {};
+    const status =
+      statusFilter === 'all'
+        ? undefined
+        : constrainedValue(
+            Constants.public.Enums.time_entry_status,
+            statusFilter,
+            'time entry status filter',
+          );
     const [result, ownChanges] = await Promise.all([
       readInBackground(
         'time-entries',
-        {
-          organizationId,
-          ...range,
-          ...(statusFilter !== 'all'
-            ? {
-                status: constrainedValue(
-                  Constants.public.Enums.time_entry_status,
-                  statusFilter,
-                  'time entry status filter',
-                ),
-              }
-            : {}),
-          ...member,
-        },
+        // The activities pair every event first, then keep the activities of the status.
+        { organizationId, ...range, ...(status && layout === 'entries' ? { status } : {}), ...member },
         signal,
       ),
       withOwnChanges
@@ -125,13 +121,13 @@ async function readEntryHistory(
 
     if (layout === 'activities') {
       // The pairing reads the clock once: a start of today runs, an earlier one lacks its end.
-      const days = activityDays(result.entries, new Date());
-      if (!(await readActivityJobLabels(organizationId, days, known.jobLabels, signal))) return { ok: false };
-      const jobLabels = Object.fromEntries(known.jobLabels);
+      const days = activityDays(result.entries, new Date(), status);
+      const jobLabels = await readActivityJobLabels(organizationId, days, signal);
+      if (!jobLabels) return { ok: false };
       return { ok: true, data: { entries: [], ownChanges: ownChanges.events, days, jobLabels } };
     }
 
-    const entriesWithProfiles = await withProfileNames(result.entries, known.names, signal);
+    const entriesWithProfiles = await withProfileNames(result.entries, knownNames, signal);
     if (!entriesWithProfiles) return { ok: false };
     // Sort by reviewedAt descending (most recent first), fallback to createdAt
     return {
@@ -377,11 +373,11 @@ function useHistoryViewer(): { currentUserId: string | null; addsTimeHere: boole
 
 /** The live read of the history for the chosen filters. */
 function useEntryHistoryView(query: EntryHistoryQuery, hasRange: boolean): LiveViewState<EntryHistoryData> {
-  const known = useRef<KnownLabels>({ names: new Map(), jobLabels: new Map() });
+  const knownNames = useRef<ProfileNames>(new Map());
   const { layout, organizationId, statusFilter, memberFilter, dateFrom, dateTo } = query;
   return useLiveView<EntryHistoryData>({
     tables: ['time_entries', 'time_sessions', 'time_segments', 'time_correction_requests'],
-    read: ({ signal }) => readEntryHistory(query, known.current, signal),
+    read: ({ signal }) => readEntryHistory(query, knownNames.current, signal),
     enabled: hasRange,
     // A filter change is a new view of the data: discard and read fresh.
     resetKey: [

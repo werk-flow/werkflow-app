@@ -119,6 +119,9 @@ export function intervalAnchor(interval: ActivityInterval): TimeEntry {
 }
 
 /**
+ * @internal Exported for its unit test, which pins the pairing rules without
+ * the day grouping; views read `activityDays` and `jobActivityIntervals`.
+ *
  * Each person's entries as activity intervals in time order. Approved and
  * pending entries pair together, as they count; rejected entries and pending
  * deletions each pair among themselves, so they never close counted time.
@@ -220,11 +223,20 @@ export function jobActivityIntervals(
 /** One Berlin day of a person's history: its activities in time order. */
 export type ActivityDay = { date: string; intervals: ActivityInterval[] };
 
-/** A person's history as days, newest first, each with its activities in time order, momentary taps left out. */
-export function activityDays(entries: readonly TimeEntry[], now = new Date()): ActivityDay[] {
+/**
+ * A person's history as days, newest first, each with its activities in time
+ * order, momentary taps left out. A status keeps only the activities of that
+ * status, so an approved start with a pending end reads as one pending
+ * activity, never as two halves.
+ */
+export function activityDays(
+  entries: readonly TimeEntry[],
+  now = new Date(),
+  status?: TimeEntryStatus,
+): ActivityDay[] {
   const days = new Map<string, ActivityInterval[]>();
   for (const interval of pairActivityIntervals(entries, now)) {
-    if (isMomentaryInterval(interval)) continue;
+    if (isMomentaryInterval(interval) || (status && interval.status !== status)) continue;
     const date = formatBerlinLocalDate(intervalAnchor(interval).timestamp);
     const day = days.get(date);
     if (day) day.push(interval);
