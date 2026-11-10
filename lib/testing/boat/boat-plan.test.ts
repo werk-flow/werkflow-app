@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { cheapPlanReason, prepareAndRun } from './verify-on-boat';
+import { cheapLocalReason, cheapPlanReason, prepareAndRun } from './verify-on-boat';
 
 const plan = (...runs: string[]) =>
   [
@@ -32,6 +32,44 @@ test('SQL groups with at most one other cheap group stay local, and a plan that 
   // Two groups that each take a minute, or any group that is not cheap, go to Boat.
   expect(cheapPlanReason(plan('unit:all', 'static:format'))).toBeUndefined();
   expect(cheapPlanReason(plan('sql:security', 'static:lint'))).toBeUndefined();
+});
+
+test('a cheap plan that reads the drifted shared stack goes to Boat with one line naming the drift', () => {
+  const drift = { stackOnly: ['another_branch'], treeOnly: ['only_here'], changed: [] };
+  const lines: unknown[] = [];
+  const info = spyOn(console, 'info').mockImplementation((line: unknown) => {
+    lines.push(line);
+  });
+  let reads = 0;
+  const readDrift = (found: typeof drift | undefined) => () => {
+    reads++;
+    return found;
+  };
+  try {
+    expect(cheapLocalReason(plan('sql:security'), readDrift(drift))).toBeUndefined();
+    expect(cheapLocalReason(plan('sql:security', 'unit:all'), readDrift(drift))).toBeUndefined();
+    expect(reads).toBe(2);
+    // No drift, or a stack that cannot be read, keeps the cheap plan here as before.
+    expect(cheapLocalReason(plan('sql:security'), readDrift(undefined))).toBe(
+      'a single sql:security is cheaper here.',
+    );
+    expect(
+      cheapLocalReason(plan('sql:security'), readDrift({ stackOnly: [], treeOnly: [], changed: [] })),
+    ).toBe('a single sql:security is cheaper here.');
+    expect(reads).toBe(4);
+    // A plan that never reads the stack, or one that goes to Boat anyway, never reads the ledger.
+    expect(cheapLocalReason(plan('unit:all'), readDrift(drift))).toBe('a single unit:all is cheaper here.');
+    expect(cheapLocalReason(plan('static:typecheck'), readDrift(drift))).toBe(
+      'a single static:typecheck is cheaper here.',
+    );
+    expect(cheapLocalReason(plan('golden:p1-01'), readDrift(drift))).toBeUndefined();
+    expect(reads).toBe(4);
+  } finally {
+    info.mockRestore();
+  }
+  const line =
+    "[verify] The shared stack's migrations drift from this tree's: 1 migrations only on the shared stack (another_branch), 1 only in this tree (only_here). Boat runs the plan on a fresh stack at this tree's migrations.";
+  expect(lines).toEqual([line, line]);
 });
 
 test('a cheap plan prints its reason and runs locally before anything is packed or a machine starts', async () => {
