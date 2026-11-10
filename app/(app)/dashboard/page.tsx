@@ -36,11 +36,12 @@ export default async function DashboardPage() {
     getCachedMemberships(user.id),
   ]);
   // The start page of every role: a field worker's phone refreshes the day it keeps for signal loss here.
+  // Only the gate is rendered here; the refresh takes person and organization from the client contexts.
   const keepsToday = memberships.some((entry) => entry.orgId === activeOrgId && entry.role === 'employee');
 
   return (
     <PageShell>
-      {keepsToday && activeOrgId && <TodayRefreshOnStart userId={user.id} organizationId={activeOrgId} />}
+      {keepsToday && <TodayRefreshOnStart />}
       <PageHeader title="Dashboard" />
 
       <Suspense fallback={null}>

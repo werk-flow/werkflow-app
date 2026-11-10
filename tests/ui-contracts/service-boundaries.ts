@@ -8,6 +8,7 @@ import {
 } from './time-approval-boundaries';
 import { createJobMaterialLineContract } from './material-boundaries';
 import { CONTRACT_SUPABASE_URL } from './supabase-contract-env';
+import { FIELD_SYNC_TODAY_PATH } from '@/lib/field-sync/today-snapshot';
 import type { InventoryLocation, InventoryLocationType } from '@/lib/inventory/types';
 // Keep framework redirect/error classification real; only navigation and
 // external services are substituted by this fixture.
@@ -52,6 +53,15 @@ export function initializeServiceBoundaries(): void {
         window.uiContractFixture === 'clock' &&
         typeof input === 'string' &&
         input.startsWith('/api/time-tracking-state?') &&
+        (init?.method ?? 'GET') === 'GET'
+      ) {
+        return browserFetch(input, init);
+      }
+      // The start page refresh contract answers the day's GET at Playwright's network boundary.
+      if (
+        window.uiContractFixture === 'today-refresh-switch' &&
+        typeof input === 'string' &&
+        input.startsWith(`${FIELD_SYNC_TODAY_PATH}?`) &&
         (init?.method ?? 'GET') === 'GET'
       ) {
         return browserFetch(input, init);

@@ -2,7 +2,9 @@
 
 import { useEffect } from 'react';
 
+import { useOrganization } from '@/components/organization/organization-context';
 import { useBanner } from '@/components/ui/banner';
+import { useUserProfile } from '@/components/user/user-profile-context';
 import { todayWipeGeneration } from '@/lib/field-sync/device/today-wipe';
 import { logError } from '@/lib/logging';
 
@@ -15,15 +17,17 @@ import { logError } from '@/lib/logging';
  * connection), the worker learns it before the signal goes, and the next
  * `online` tries the load once more.
  */
-export function TodayRefreshOnStart({
-  userId,
-  organizationId,
-}: {
-  userId: string;
-  organizationId: string;
-}): null {
+export function TodayRefreshOnStart(): null {
   const { showBanner } = useBanner();
+  // From the app's client contexts, not props: every clock action re-renders the start page, and
+  // props would add the ids to each of those responses. An organization switch changes the
+  // context before the server renders the new start page, so the claim follows it at once.
+  const { activeOrg } = useOrganization();
+  const userId = useUserProfile().profile?.id ?? null;
+  const organizationId = activeOrg?.role === 'employee' ? activeOrg.orgId : null;
   useEffect(() => {
+    // No person or no field worker's organization yet: nothing to claim or refresh.
+    if (!userId || !organizationId) return;
     let current = true;
     // Taken before the code loads: a sign-out that wipes meanwhile keeps this page from refreshing.
     const generationAtStart = todayWipeGeneration();

@@ -38,6 +38,7 @@ declare global {
       | 'organization'
       | 'organization-export'
       | 'today-refresh'
+      | 'today-refresh-switch'
       | 'offline-today'
       | 'sidebar'
       | 'lazy-dialog'
