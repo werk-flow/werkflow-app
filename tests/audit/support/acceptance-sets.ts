@@ -539,6 +539,17 @@ function organizationExportCaptures(): AcceptanceSet {
   };
 }
 
+/** werk-flow/werkflow-planning#316 of 2026-11-09: the offline fallback the service worker serves without network. */
+function offlineShellCaptures(): AcceptanceSet {
+  return {
+    id: 'offline-shell-2026-11-09',
+    captures: [],
+    standalone: [
+      { id: 'standalone-offline', screen: '/offline', widths: [1280, 375], schemes: ['light', 'dark'] },
+    ],
+  };
+}
+
 /**
  * werk-flow/werkflow-planning#325 of 2026-11-09: the list's view select, the
  * archive and delete dialogs, the archived customer list, and an archived
@@ -655,6 +666,7 @@ export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   addTimeCaptures(),
   organizationExportCaptures(),
   customerArchiveCaptures(),
+  offlineShellCaptures(),
   requestCallbackCaptures(),
   leaverHandoverCaptures(),
 ];

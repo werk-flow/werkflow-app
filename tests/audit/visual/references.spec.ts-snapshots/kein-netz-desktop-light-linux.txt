@@ -1,0 +1,3 @@
+Gerade kein Netz
+Dein Gerät hat gerade keine Verbindung. Ohne Netz kannst du WerkFlow noch nicht nutzen. Sobald du wieder Empfang hast, tippe auf „Erneut versuchen“.
+Erneut versuchen

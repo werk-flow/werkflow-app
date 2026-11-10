@@ -11,9 +11,11 @@
 //   schema exists, so its `Function("")` probe never runs and no `eval`
 //   violation is expected (lib/conventions/zod-entry.test.ts).
 // - default-src 'self': every fetch directive the app uses is declared below.
-//   The remaining fallbacks have no cross-origin user: no <video>/<audio>, no
-//   web manifest under app/, no Worker or service worker, and the Realtime
-//   client in lib/supabase/client.ts runs without its worker option.
+//   The remaining fallbacks have no cross-origin user: no <video>/<audio>, and
+//   the Realtime client in lib/supabase/client.ts runs without its worker option.
+// - worker-src 'self', manifest-src 'self': the one worker is the service
+//   worker public/sw.js, which components/sidebar/app-shell.tsx registers
+//   from this origin, and the web manifest is app/manifest.ts.
 // - style-src 'self' 'unsafe-inline': the Tailwind CSS is a same-origin
 //   stylesheet; next/font and Radix write inline style tags and attributes.
 // - img-src 'self' data: blob: Supabase storage: public avatar URLs
@@ -99,6 +101,8 @@ export function buildContentSecurityPolicy(env: CspEnvironment): string {
     "font-src 'self'",
     `connect-src ${sourceList("'self'", supabase, supabase ? socketOrigin(supabase) : null, storage)}`,
     `frame-src ${storage ?? "'none'"}`,
+    "worker-src 'self'",
+    "manifest-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -119,8 +123,6 @@ export function buildReportOnlyContentSecurityPolicy(env: CspEnvironment): strin
   const { supabase, storage } = policyOrigins(env);
   return [
     `img-src ${sourceList("'self'", supabase, storage)}`,
-    "worker-src 'none'",
-    "manifest-src 'none'",
     "media-src 'none'",
     `report-uri ${CSP_REPORT_PATH}`,
   ].join('; ');
