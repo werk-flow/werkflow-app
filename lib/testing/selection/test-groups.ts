@@ -344,6 +344,11 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['request-caller-matches', ['request_caller_matches.sql'], ['customers']],
   ['client-duplicates', ['client_duplicates.sql'], ['customers']],
   ['client-archive-history', ['client_archive_history.sql'], ['customers']],
+  [
+    'request-callback-and-equipment',
+    ['request_callback_and_equipment.sql'],
+    ['customers', 'service', 'attention'],
+  ],
   ['sickness-report-writes', ['sickness_report_writes.sql'], ['personnel']],
   ['vacation-history-writes', ['vacation_history_writes.sql'], ['personnel']],
   [

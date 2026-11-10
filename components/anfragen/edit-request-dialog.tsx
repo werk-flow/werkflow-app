@@ -16,6 +16,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { ErrorText } from '@/components/ui/error-text';
 import type { ClientRequest } from '@/lib/requests/types';
 import { EditRequestCallerFields } from './edit-request-caller-fields';
+import { RequestCallbackField } from './request-callback-field';
+import { RequestEquipmentField } from './request-equipment-field';
 import { RequestTriageFields } from './request-triage-fields';
 import { EditRequestRoutingFields } from './edit-request-routing-fields';
 import { useEditRequestForm } from './use-edit-request-form';
@@ -54,11 +56,30 @@ export function EditRequestDialog({
 
             <RequestTriageFields idPrefix="edit-request" form={form} />
 
+            <RequestCallbackField
+              idPrefix="edit-request"
+              value={form.callbackDueAt}
+              onChange={form.setCallbackDueAt}
+              error={form.callbackDueAtError}
+              disabled={isLoading}
+            />
+
             <Field label="Details" htmlFor="edit-request-details">
               <Textarea value={details} onChange={(e) => setDetails(e.target.value)} disabled={isLoading} />
             </Field>
 
             {!request.clientId && <EditRequestCallerFields form={form} />}
+
+            {request.clientId && request.siteId && (
+              <RequestEquipmentField
+                idPrefix="edit-request"
+                clientId={request.clientId}
+                siteId={request.siteId}
+                value={form.equipmentId}
+                onChange={form.setEquipmentId}
+                disabled={isLoading}
+              />
+            )}
 
             <EditRequestRoutingFields assignees={assignees} form={form} />
 

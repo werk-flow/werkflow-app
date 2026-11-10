@@ -14,6 +14,22 @@ import { getBusinessTodayIso } from '@/lib/date-time/berlin';
  * the Realtime provider's coalesced catch-up already triggers every
  * subscribed surface's refetch on tab return.
  */
+/**
+ * Fires `refresh` on each shared minute tick once the wall clock passed
+ * `deadline` (epoch milliseconds): a deadline that passes writes no row, so no
+ * Realtime event reports it. A browser clock ahead of the database's can
+ * refresh before the server agrees the deadline passed; the next tick asks
+ * again. It ends when the refreshed data names another deadline or none.
+ */
+export function useDeadlineRefresh(deadline: number | null, refresh: () => void): void {
+  useEffect(() => {
+    if (deadline === null) return;
+    return startWallClockInterval(() => {
+      if (Date.now() >= deadline) refresh();
+    }, 60_000);
+  }, [deadline, refresh]);
+}
+
 export function useBusinessDayRefresh(refresh: () => void): void {
   useEffect(() => {
     let businessDate = getBusinessTodayIso();

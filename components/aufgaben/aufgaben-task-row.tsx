@@ -34,7 +34,10 @@ type AttentionWorkTask = Extract<
       | 'work_handover_review';
   }
 >;
-type AttentionClientTask = Extract<AttentionTask, { sourceType: 'client_follow_up' | 'client_request_open' }>;
+type AttentionClientTask = Extract<
+  AttentionTask,
+  { sourceType: 'client_follow_up' | 'client_request_open' | 'client_request_callback_overdue' }
+>;
 
 export function TaskRow({ task }: { task: AttentionTask }) {
   switch (task.sourceType) {
@@ -66,6 +69,7 @@ export function TaskRow({ task }: { task: AttentionTask }) {
       );
     case 'client_follow_up':
     case 'client_request_open':
+    case 'client_request_callback_overdue':
       return <AttentionClientTaskRow task={task} />;
     // The visit's day on the Plantafel, where the office plans someone else.
     case 'planning_visit_replan':
@@ -271,6 +275,30 @@ function AttentionClientTaskRow({ task }: { task: AttentionClientTask }) {
         <p className="text-xs text-muted-foreground">
           {task.clientName} · fällig {formatBerlinDateTime(task.dueAt)}
           {task.ownerUnavailable ? ` · Zuständig: ${task.ownerName} (nicht mehr verfügbar)` : ''}
+        </p>
+      </TaskLink>
+    );
+  }
+
+  if (task.sourceType === 'client_request_callback_overdue') {
+    return (
+      <TaskLink
+        href={`/anfragen/${task.sourceId}`}
+        ariaLabel={`Rückruf zur Anfrage ${task.requestNumber ?? task.summary} öffnen`}
+        sourceId={task.sourceId}
+      >
+        <p className="truncate text-sm font-medium">
+          {task.requestNumber ? `${task.requestNumber} · ` : ''}
+          {task.summary}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Rückruf bis {formatBerlinDateTime(task.callbackDueAt)}
+          {` · ${REQUEST_URGENCY_LABELS[task.urgency]}`}
+          {task.ownerName === null
+            ? ' · Nicht zugewiesen'
+            : task.ownerUnavailable
+              ? ` · Zuständig: ${task.ownerName} (nicht mehr verfügbar)`
+              : ''}
         </p>
       </TaskLink>
     );

@@ -3,6 +3,7 @@
 // route refresh re-reads that state as new props, as a server render would.
 import { useEffect, useState } from 'react';
 import { AnfragenContent } from '@/components/anfragen/anfragen-content';
+import { RequestFactsCard } from '@/components/anfragen/request-facts-card';
 import { WorkArtifactsSection } from '@/components/auftraege/artifacts/work-artifacts-section';
 import { JobMaterialsSection } from '@/components/inventar/job-materials-section';
 import { EntryDetailsDialog } from '@/components/kalender/entry-details-dialog';
@@ -132,7 +133,12 @@ function MaterialPlanHost(): React.JSX.Element {
   );
 }
 
-function contractRequest(id: string, summary: string, status: ClientRequest['status']): RequestListEntry {
+function contractRequest(
+  id: string,
+  summary: string,
+  status: ClientRequest['status'],
+  callback: { dueAt: string; overdue: boolean } = { dueAt: '2026-10-01T10:00:00.000Z', overdue: false },
+): RequestListEntry {
   return {
     request: {
       id,
@@ -141,6 +147,7 @@ function contractRequest(id: string, summary: string, status: ClientRequest['sta
       clientId: null,
       contactId: null,
       siteId: null,
+      equipmentId: null,
       callerName: 'Ines Imhof',
       callerPhone: null,
       callerEmail: null,
@@ -153,6 +160,7 @@ function contractRequest(id: string, summary: string, status: ClientRequest['sta
       status,
       assignedTo: null,
       receivedAt: '2026-10-01T08:00:00.000Z',
+      callbackDueAt: callback.dueAt,
       closedReason: null,
       closedNote: null,
       closedBy: null,
@@ -168,11 +176,21 @@ function contractRequest(id: string, summary: string, status: ClientRequest['sta
     clientName: null,
     assigneeName: null,
     convertedLabel: null,
+    callbackOverdue: callback.overdue,
   };
 }
 
+// The first open request's promised callback had passed when the page was
+// read; the second one's passes at noon, with no database event.
 const REQUESTS = [
-  contractRequest('contract-request-open', 'Heizung fällt aus', 'offen'),
+  contractRequest('contract-request-open', 'Heizung fällt aus', 'offen', {
+    dueAt: '2026-10-01T10:00:00.000Z',
+    overdue: true,
+  }),
+  contractRequest('contract-request-due', 'Wartung bestätigen', 'offen', {
+    dueAt: '2026-10-01T12:00:00.000Z',
+    overdue: false,
+  }),
   contractRequest('contract-request-closed', 'Rückruf zur Abrechnung', 'geschlossen'),
 ];
 const STATUSES_BY_FILTER: Record<RequestStatusFilter, readonly ClientRequest['status'][]> = {
@@ -192,7 +210,22 @@ function RequestListHost(): React.JSX.Element {
       STATUSES_BY_FILTER[query.status].includes(entry.request.status) &&
       entry.request.summary.toLocaleLowerCase('de').includes(search),
   );
-  return <AnfragenContent entries={entries} total={entries.length} hasAnyRequest query={query} />;
+  const due = REQUESTS[1];
+  return (
+    <>
+      <AnfragenContent entries={entries} total={entries.length} hasAnyRequest query={query} />
+      {due && (
+        <section aria-label="Anfragedetails">
+          <RequestFactsCard
+            request={due.request}
+            assigneeName="Erika Musterfrau"
+            callbackOverdue={due.callbackOverdue}
+            equipment={null}
+          />
+        </section>
+      )}
+    </>
+  );
 }
 
 function ClientRelationsHost(): React.JSX.Element {

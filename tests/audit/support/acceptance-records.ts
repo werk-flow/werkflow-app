@@ -183,6 +183,52 @@ async function officeTaskBacklog(world: TestWorld): Promise<SurfaceDestination> 
   return { route: '/aufgaben', heading: 'Zeitfreigaben' };
 }
 
+/**
+ * An open emergency request at a site without a recorded Anlage, owned by the
+ * Büro, whose promised callback passed two hours ago. One seed serves the
+ * request detail and the Büro's Aufgaben.
+ */
+async function seedCallbackOverdueRequest(world: TestWorld): Promise<{ requestId: string; summary: string }> {
+  const summary = worldName('Kein Warmwasser im Haus 3', world.runId);
+  const requestId = await surfaceFixture(world, 'acceptance.callback-overdue-request', async () => {
+    const customer = await seedCustomer({
+      orgId: world.orgId,
+      actorId: world.users.admin.id,
+      name: worldName('Hausverwaltung Lindenhof GmbH', world.runId),
+      sites: [{ name: 'Lindenhof 3', street: 'Lindenhof 3', postalCode: '10115', city: 'Berlin' }],
+    });
+    const siteId = customer.siteIds.get('Lindenhof 3');
+    if (!siteId) throw new Error('seedCallbackOverdueRequest: the site was not seeded');
+    const id = await seedRequest({
+      orgId: world.orgId,
+      actorId: world.users.admin.id,
+      summary,
+      requestNumber: `ANF-${world.runId}-CALL`,
+      clientId: customer.clientId,
+      siteId,
+      urgency: 'notfall',
+      assignedTo: world.users.buero.id,
+    });
+    await createAdminClient()
+      .from('client_requests')
+      .update({ callback_due_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() })
+      .eq('id', id)
+      .throwOnError();
+    return id;
+  });
+  return { requestId, summary };
+}
+
+async function callbackOverdueRequest(world: TestWorld): Promise<SurfaceDestination> {
+  const { requestId, summary } = await seedCallbackOverdueRequest(world);
+  return { route: `/anfragen/${requestId}`, heading: summary };
+}
+
+async function callbackOverdueTasks(world: TestWorld): Promise<SurfaceDestination> {
+  await seedCallbackOverdueRequest(world);
+  return { route: '/aufgaben', heading: 'Rückruf überfällig' };
+}
+
 /** Each record an acceptance capture opens instead of its route's layout record, seeded once per world. */
 export const ACCEPTANCE_RECORDS: Record<AcceptanceRecord, (world: TestWorld) => Promise<SurfaceDestination>> =
   {
@@ -191,4 +237,6 @@ export const ACCEPTANCE_RECORDS: Record<AcceptanceRecord, (world: TestWorld) => 
     'office-task-backlog': officeTaskBacklog,
     'archived-customer': archivedCustomer,
     'archived-customer-list': archivedCustomerList,
+    'callback-overdue-request': callbackOverdueRequest,
+    'callback-overdue-tasks': callbackOverdueTasks,
   };
