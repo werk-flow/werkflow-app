@@ -1,6 +1,6 @@
 'use client';
 
-import { MoreVertical, Trash2, Briefcase } from 'lucide-react';
+import { Archive, ArchiveRestore, Briefcase, MoreVertical, Trash2 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { RegionLoadError } from '@/components/shared/region-load-error';
@@ -22,8 +23,8 @@ import { ClientFinancePlaceholder } from '@/components/kunden/client-finance-pla
 import { buildClientMetadataFields } from '@/components/kunden/client-metadata-fields';
 import { ClientRelationsSection } from '@/components/kunden/client-relations-section';
 import { CustomerRelationshipWorkspace } from '@/components/kunden/customer-relationship-workspace';
-import { DeleteClientDialog } from '@/components/kunden/delete-client-dialog';
-import { useClientDeletion } from '@/components/kunden/use-client-deletion';
+import { ClientRemovalDialog, type ClientRemoval } from '@/components/kunden/client-removal-dialog';
+import { useClientRemoval } from '@/components/kunden/use-client-deletion';
 import { useCommunicationContactGuard } from '@/components/kunden/use-communication-contact-guard';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 
@@ -35,10 +36,13 @@ import type { OrgMemberOption } from '@/components/auftraege/shared/employee-mul
 import type { CustomerRelationshipBundle } from '@/lib/customer-relationships/types';
 import type { EquipmentListItem } from '@/lib/installed-equipment/types';
 import { SectionTitle } from '@/components/shared/section-title';
+import { formatBerlinDateTime } from '@/lib/utils';
 
 /** Null for a failed read, so the region shows the failure instead of "none". */
 interface KundenDetailContentProps {
   client: Client;
+  /** When the customer was archived; null while it is active. */
+  archivedAt: string | null;
   relations: { contacts: ClientContact[]; sites: ClientSite[] } | null;
   documents: OrganizationDocument[] | null;
   linkedWork: {
@@ -58,6 +62,7 @@ interface KundenDetailContentProps {
 
 export function KundenDetailContent({
   client,
+  archivedAt,
   relations,
   documents,
   linkedWork,
@@ -69,13 +74,12 @@ export function KundenDetailContent({
   equipment,
   equipmentLoadFailed,
 }: KundenDetailContentProps) {
-  const { showDeleteDialog, setShowDeleteDialog, isDeleting, isDeletingRef, deleteError, handleDelete } =
-    useClientDeletion(client);
+  const removal = useClientRemoval(client);
   const contactGuard = useCommunicationContactGuard({
     clientId: client.id,
   });
 
-  useKundenDetailRealtime(client.id, isDeleting, isDeletingRef);
+  useKundenDetailRealtime(client.id, removal.isLeaving, removal.isLeavingRef);
 
   const metadataFields = buildClientMetadataFields(client);
 
@@ -83,11 +87,21 @@ export function KundenDetailContent({
     <PageShell>
       <KundenDetailHeader
         client={client}
+        archivedAt={archivedAt}
         isAdminOrManager={isAdminOrManager}
-        onDelete={() => setShowDeleteDialog(true)}
+        onRemove={removal.openRemoval}
+        onRestore={removal.restore}
       />
 
       <PageBody>
+        {archivedAt && (
+          <ArchivedClientNotice
+            archivedAt={archivedAt}
+            canRestore={isAdminOrManager}
+            isRestoring={removal.isRestoring}
+            onRestore={removal.restore}
+          />
+        )}
         <DetailColumns layout="cards-and-table">
           {/* Left Column: Metadata + Financial Placeholders */}
           <KundenDetailOverviewColumn
@@ -101,44 +115,76 @@ export function KundenDetailContent({
             contactGuard={contactGuard}
           />
 
-          {/* Right Column: relationship priorities, history, and linked work */}
-          <div className="min-w-0 space-y-8">
-            {relationshipBundle ? (
-              <CustomerRelationshipWorkspace
-                clientId={client.id}
-                currentUserId={currentUserId}
-                contacts={relations?.contacts ?? []}
-                initialBundle={relationshipBundle}
-              />
-            ) : (
-              <RegionLoadError>
-                Kundenhistorie, Nachfassaktionen und Kontaktvorgaben konnten nicht geladen werden.
-              </RegionLoadError>
-            )}
-
-            <KundenLinkedWorkSection
-              client={client}
-              linkedWork={linkedWork}
-              members={members}
-              isAdminOrManager={isAdminOrManager}
-              visibleColumns={visibleColumns}
-            />
-          </div>
+          <KundenDetailActivityColumn
+            client={client}
+            relations={relations}
+            linkedWork={linkedWork}
+            members={members}
+            isAdminOrManager={isAdminOrManager}
+            visibleColumns={visibleColumns}
+            currentUserId={currentUserId}
+            relationshipBundle={relationshipBundle}
+          />
         </DetailColumns>
       </PageBody>
 
       {contactGuard.dialog}
 
-      {/* Delete Dialog */}
-      <DeleteClientDialog
-        clientName={client.name}
-        open={showDeleteDialog}
-        onOpenChange={setShowDeleteDialog}
-        isDeleting={isDeleting}
-        deleteError={deleteError}
-        onConfirm={handleDelete}
+      <ClientRemovalDialog
+        client={client}
+        isArchived={archivedAt !== null}
+        removal={removal.removal}
+        onClose={removal.closeRemoval}
+        onRemoved={removal.onRemoved}
       />
     </PageShell>
+  );
+}
+
+/** Right column: relationship priorities, history and linked work. */
+function KundenDetailActivityColumn({
+  client,
+  relations,
+  linkedWork,
+  members,
+  isAdminOrManager,
+  visibleColumns,
+  currentUserId,
+  relationshipBundle,
+}: Pick<
+  KundenDetailContentProps,
+  | 'client'
+  | 'relations'
+  | 'linkedWork'
+  | 'members'
+  | 'isAdminOrManager'
+  | 'visibleColumns'
+  | 'currentUserId'
+  | 'relationshipBundle'
+>) {
+  return (
+    <div className="min-w-0 space-y-8">
+      {relationshipBundle ? (
+        <CustomerRelationshipWorkspace
+          clientId={client.id}
+          currentUserId={currentUserId}
+          contacts={relations?.contacts ?? []}
+          initialBundle={relationshipBundle}
+        />
+      ) : (
+        <RegionLoadError>
+          Kundenhistorie, Nachfassaktionen und Kontaktvorgaben konnten nicht geladen werden.
+        </RegionLoadError>
+      )}
+
+      <KundenLinkedWorkSection
+        client={client}
+        linkedWork={linkedWork}
+        members={members}
+        isAdminOrManager={isAdminOrManager}
+        visibleColumns={visibleColumns}
+      />
+    </div>
   );
 }
 
@@ -188,11 +234,11 @@ function KundenDetailOverviewColumn({
 /** Colleagues' contact/site/master-data changes appear without a reload. */
 function useKundenDetailRealtime(
   clientId: string,
-  isDeleting: boolean,
-  isDeletingRef: React.RefObject<boolean>,
+  isLeaving: boolean,
+  isLeavingRef: React.RefObject<boolean>,
 ): void {
   useRealtimeRouterRefresh({
-    enabled: !isDeleting,
+    enabled: !isLeaving,
     tables: [
       'clients',
       'client_contacts',
@@ -207,7 +253,7 @@ function useKundenDetailRealtime(
       'installed_equipment',
     ],
     eventFilter: (event) => {
-      if (isDeletingRef.current) return false;
+      if (isLeavingRef.current) return false;
       const row = event.new ?? event.old;
       if (!row) return false;
       if (event.table === 'clients') return row.id === clientId;
@@ -219,9 +265,14 @@ function useKundenDetailRealtime(
 
 function KundenDetailHeader({
   client,
+  archivedAt,
   isAdminOrManager,
-  onDelete,
-}: Pick<KundenDetailContentProps, 'client' | 'isAdminOrManager'> & { onDelete: () => void }) {
+  onRemove,
+  onRestore,
+}: Pick<KundenDetailContentProps, 'client' | 'archivedAt' | 'isAdminOrManager'> & {
+  onRemove: (removal: ClientRemoval) => void;
+  onRestore: () => void;
+}) {
   const breadcrumbs = [{ label: 'Kunden', href: '/kunden' }, { label: client.name }];
 
   return (
@@ -230,16 +281,39 @@ function KundenDetailHeader({
       title={client.name}
       subtitle={client.email ?? undefined}
       badges={
-        <Badge variant="secondary" className="text-xs">
-          {CLIENT_TYPE_LABELS[client.clientType]}
-        </Badge>
+        <>
+          <Badge variant="secondary" className="text-xs">
+            {CLIENT_TYPE_LABELS[client.clientType]}
+          </Badge>
+          {archivedAt && (
+            <Badge variant="outline" className="text-xs">
+              Archiviert
+            </Badge>
+          )}
+        </>
       }
-      actions={isAdminOrManager ? <KundenDetailActionsMenu onDelete={onDelete} /> : undefined}
+      actions={
+        isAdminOrManager ? (
+          <KundenDetailActionsMenu
+            isArchived={archivedAt !== null}
+            onRemove={onRemove}
+            onRestore={onRestore}
+          />
+        ) : undefined
+      }
     />
   );
 }
 
-function KundenDetailActionsMenu({ onDelete }: { onDelete: () => void }) {
+function KundenDetailActionsMenu({
+  isArchived,
+  onRemove,
+  onRestore,
+}: {
+  isArchived: boolean;
+  onRemove: (removal: ClientRemoval) => void;
+  onRestore: () => void;
+}) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -248,12 +322,58 @@ function KundenDetailActionsMenu({ onDelete }: { onDelete: () => void }) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={onDelete}>
+        {isArchived ? (
+          <DropdownMenuItem onClick={onRestore}>
+            <ArchiveRestore className="size-4" />
+            Kunde wiederherstellen
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem onClick={() => onRemove('archive')}>
+            <Archive className="size-4" />
+            Kunde archivieren
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          className="text-destructive focus:text-destructive"
+          onClick={() => onRemove('delete')}
+        >
           <Trash2 className="size-4" />
           Kunde löschen
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/** An archived customer says so above its details and offers to restore it. */
+function ArchivedClientNotice({
+  archivedAt,
+  canRestore,
+  isRestoring,
+  onRestore,
+}: {
+  archivedAt: string;
+  canRestore: boolean;
+  isRestoring: boolean;
+  onRestore: () => void;
+}) {
+  return (
+    <div
+      role="status"
+      className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted px-4 py-3"
+    >
+      <p className="text-sm text-muted-foreground">
+        Archiviert am {formatBerlinDateTime(archivedAt)}. Der Kunde fehlt in der Kundenliste und in der
+        Kundenauswahl für neue Arbeit. Seine Aufträge und sein Verlauf bleiben erhalten.
+      </p>
+      {canRestore && (
+        <Button variant="outline" size="sm" pending={isRestoring} onClick={onRestore}>
+          <ArchiveRestore className="size-4" />
+          Wiederherstellen
+        </Button>
+      )}
+    </div>
   );
 }
 

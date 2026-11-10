@@ -45,6 +45,14 @@ const CUSTOMER_COPY = {
   openActions: 'Aktionen öffnen',
   rowDelete: 'Löschen',
   deleteConfirmTitle: 'Kunde löschen?',
+  archiveCustomer: 'Kunde archivieren',
+  rowArchive: 'Archivieren',
+  archiveConfirmTitle: 'Kunde archivieren?',
+  archiveInsteadTitle: 'Archivieren statt löschen?',
+  archive: 'Archivieren',
+  archivedNotice: /^Archiviert am /,
+  listView: 'Kunden anzeigen',
+  archivedView: 'Archivierte',
   addContact: 'Ansprechpartner hinzufügen',
   addPreference: 'Präferenz',
   communicationPreferences: 'Kontaktvorgaben',
@@ -196,6 +204,45 @@ export function customerDeleteConfirmation(page: Page): Locator {
 
 export function customerDeleteMenuItem(page: Page): Locator {
   return page.getByRole('menuitem', { name: CUSTOMER_COPY.deleteCustomer });
+}
+
+/** „Kunde archivieren“ in the detail page's actions menu. */
+export function customerArchiveMenuItem(page: Page): Locator {
+  return page.getByRole('menuitem', { name: CUSTOMER_COPY.archiveCustomer });
+}
+
+/** „Archivieren“ in the list's row menu (opened by `customerRowActionsButton`). */
+export function customerRowArchiveItem(page: Page): Locator {
+  return page.getByRole('menuitem', { name: CUSTOMER_COPY.rowArchive, exact: true });
+}
+
+/** The archive confirmation of a customer, opened from the list's row menu or the detail. */
+export function customerArchiveConfirmation(page: Page): Locator {
+  return page.getByRole('alertdialog', { name: CUSTOMER_COPY.archiveConfirmTitle });
+}
+
+/** The offer to archive that a refused deletion of a customer with history shows. */
+export function customerArchiveInsteadDialog(page: Page): Locator {
+  return page.getByRole('alertdialog', { name: CUSTOMER_COPY.archiveInsteadTitle });
+}
+
+/** Archives from the offer a refused deletion shows, and waits until the dialog closed. */
+export async function archiveInsteadOfDeleting(page: Page): Promise<void> {
+  const dialog = customerArchiveInsteadDialog(page);
+  await dialog.getByRole('button', { name: CUSTOMER_COPY.archive, exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+}
+
+/** The notice an archived customer's detail page shows above its details. */
+export function archivedCustomerNotice(page: Page): Locator {
+  return page.getByRole('status').filter({ hasText: CUSTOMER_COPY.archivedNotice });
+}
+
+/** Switches the customer list to the archived customers and waits for the URL. */
+export async function showArchivedCustomers(page: Page): Promise<void> {
+  await page.getByRole('combobox', { name: CUSTOMER_COPY.listView }).click();
+  await page.getByRole('option', { name: CUSTOMER_COPY.archivedView }).click();
+  await expect(page).toHaveURL(/ansicht=archiviert/);
 }
 
 export function addContactButton(page: Page): Locator {

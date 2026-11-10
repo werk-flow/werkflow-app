@@ -171,7 +171,7 @@ function useEquipmentFormOptions(
   initial: EquipmentDetail | null | undefined,
 ): Pick<EquipmentFormController, 'clientSearch' | 'clientOption' | 'siteOptions' | 'parentOptions'> {
   const clientSearch = useJobEntityOptions(
-    { kind: 'clients' },
+    { kind: 'clients', purpose: 'customer-work' },
     form.clientId ? [form.clientId] : [],
     initial ? [{ value: initial.clientId, label: initial.clientName }] : [],
   );
