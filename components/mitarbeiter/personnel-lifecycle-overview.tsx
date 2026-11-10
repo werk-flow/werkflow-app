@@ -11,6 +11,7 @@ import { ACCESS_STATE_LABELS, EMPLOYMENT_LIFECYCLE_LABELS } from '@/lib/personne
 import type { PersonnelLifecycleView } from '@/lib/personnel/lifecycle-actions';
 
 import { formatLifecycleDate } from './personnel-lifecycle-dates';
+import { PersonnelLifecycleOpenWork } from './personnel-lifecycle-handover';
 import type { PersonnelLifecycleTransitions } from './use-personnel-lifecycle-transitions';
 import type { PersonnelLifecycleController } from './use-personnel-lifecycle-view';
 import { SectionTitle } from '@/components/shared/section-title';
@@ -61,14 +62,41 @@ function personnelEmploymentStatusText(employment: PersonnelLifecycleView['emplo
       : 'Eintritts- und Austrittsdaten bleiben bis zum ersten kontrollierten Übergang maßgeblich.';
 }
 
-function PersonnelLifecycleUnresolvedWork({ data }: { data: PersonnelLifecycleView }) {
+/** The employment state, and for Admin the action that records a transition. */
+function EmploymentStatusCard({
+  lifecycle,
+  canAdministerAccess,
+  onOpen,
+}: {
+  lifecycle: PersonnelLifecycleController;
+  canAdministerAccess: boolean;
+  onOpen: () => void;
+}) {
+  const { data, mutationDisabled, setError, setFieldErrors } = lifecycle;
   return (
-    <div className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm">
-      <p className="font-medium">Vor einem Austritt prüfen</p>
-      <p className="mt-1 text-xs text-muted-foreground">
-        {data.transitionInventory.activeJobs.length} aktive Auftragszuweisungen,{' '}
-        {data.transitionInventory.strandedResponsibilities.length} nicht ersetzte Verantwortungen.
-      </p>
+    <div className="rounded-md border p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-sm font-medium">Beschäftigung</span>
+        <Badge variant="secondary">
+          {data.employment.state ? EMPLOYMENT_LIFECYCLE_LABELS[data.employment.state] : 'Nicht eingerichtet'}
+        </Badge>
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">{personnelEmploymentStatusText(data.employment)}</p>
+      {canAdministerAccess ? (
+        <Button
+          className="mt-3"
+          size="sm"
+          variant="outline"
+          disabled={mutationDisabled}
+          onClick={() => {
+            setError(null);
+            setFieldErrors({});
+            onOpen();
+          }}
+        >
+          Übergang erfassen
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -77,14 +105,14 @@ type PersonnelLifecycleStatusCardsProps = {
   lifecycle: PersonnelLifecycleController;
   transitions: PersonnelLifecycleTransitions;
   canAdministerAccess: boolean;
-  hasUnresolvedWork: boolean;
+  canManage: boolean;
 };
 
 export function PersonnelLifecycleStatusCards({
   lifecycle,
   transitions,
   canAdministerAccess,
-  hasUnresolvedWork,
+  canManage,
 }: PersonnelLifecycleStatusCardsProps) {
   const { data, mutationDisabled, setError, setFieldErrors } = lifecycle;
   const { setAccessOpen, setEmploymentOpen } = transitions;
@@ -129,37 +157,19 @@ export function PersonnelLifecycleStatusCards({
           ) : null}
         </div>
 
-        <div className="rounded-md border p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-sm font-medium">Beschäftigung</span>
-            <Badge variant="secondary">
-              {data.employment.state
-                ? EMPLOYMENT_LIFECYCLE_LABELS[data.employment.state]
-                : 'Nicht eingerichtet'}
-            </Badge>
-          </div>
-          <p className="mt-2 text-xs text-muted-foreground">
-            {personnelEmploymentStatusText(data.employment)}
-          </p>
-          {canAdministerAccess ? (
-            <Button
-              className="mt-3"
-              size="sm"
-              variant="outline"
-              disabled={mutationDisabled}
-              onClick={() => {
-                setError(null);
-                setFieldErrors({});
-                setEmploymentOpen(true);
-              }}
-            >
-              Übergang erfassen
-            </Button>
-          ) : null}
-        </div>
+        <EmploymentStatusCard
+          lifecycle={lifecycle}
+          canAdministerAccess={canAdministerAccess}
+          onOpen={() => setEmploymentOpen(true)}
+        />
       </div>
 
-      {hasUnresolvedWork ? <PersonnelLifecycleUnresolvedWork data={data} /> : null}
+      <PersonnelLifecycleOpenWork
+        data={data}
+        canManage={canManage}
+        disabled={mutationDisabled}
+        onHandover={() => transitions.openHandover()}
+      />
     </>
   );
 }

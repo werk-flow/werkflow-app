@@ -27,24 +27,19 @@ import {
 } from '../evidence/proof-environment';
 import { withWorkspaceTestLock } from '../runner/workspace-test-lock';
 import { pruneRunArchive } from '../runs/run-retention';
-import { BoatError, boatClient } from './boat-api';
+import { type BoatClient, BoatError, boatClient } from './boat-api';
 import { type BoatKeyReading, RENEW_ADVICE, readBoatKey, withBoatKey } from './boat-key';
 import { type BoatUnavailable, retryingStart } from './boat-unavailable';
 import { type TransferContext, type TransferPolicy, transfer } from './boat-transfer';
-import {
-  createMachine,
-  deleteMachine,
-  machineUsage,
-  runScript,
-  shellQuote,
-  type Machine,
-} from './boat-machine';
+import { runScript, shellQuote, type Machine } from './boat-machine';
+import { acquireMachine, keepMachine, withMachine } from './machine-reuse';
 
 // `bun run test:verify` runs on a short-lived Boat machine when this workstation has a Boat key
 // (docs/technical/boat-verification.md). The machine plans and runs the same command on the same
 // tree and evidence, at the same absolute path, so selection, proofs, reports and .agent-logs/
 // come back as a local run writes them. When Boat is unavailable, only the cheap groups run here:
-// the heavy ones are recorded blocked unless WERKFLOW_VERIFY_LOCAL=1 asks for them.
+// the heavy ones are recorded blocked unless WERKFLOW_VERIFY_LOCAL=1 asks for them. A wiped machine
+// serves the checkout's next run (machine-reuse.ts).
 
 /** The saved snapshot every verification machine starts from (scripts/boat/build-snapshot.ts). */
 export const SNAPSHOT_NAME = 'werkflow-verify';
@@ -52,8 +47,6 @@ export const SNAPSHOT_NAME = 'werkflow-verify';
 const HOME = '/home/user';
 /** remote-verify.sh's exit code when setup failed before test:verify started. */
 const SETUP_FAILED = 90;
-/** A hard stop for a machine whose run or deletion went wrong; without snapshots it is then erased. */
-const MACHINE_TTL_SECONDS = 3 * 3_600;
 /**
  * Groups whose medians measure this workstation's wall clock. Every other group may run on Boat:
  * lab groups count requests, payloads and renders, which repeat on any machine (CI gates on them),
@@ -676,27 +669,28 @@ export async function importResults(
   }
 }
 
-/**
- * Runs `work` on a started machine, then reports its cost and deletes it, whatever `work` did. A
- * Ctrl-C during that cleanup still stops the run: no fallback to a local run follows an interruption.
- */
-export async function withMachine<T>(
-  machine: Machine,
+/** This checkout's kept machine or a new one, announced, or Boat's unavailability. */
+async function startMachine(
+  client: BoatClient,
+  repository: string,
   signal: AbortSignal,
-  work: () => Promise<T>,
-): Promise<T> {
-  let result: T;
+): Promise<Machine | BoatUnavailable> {
+  const started = Date.now();
   try {
-    result = await work();
-  } finally {
-    const usage = await machineUsage(machine);
-    await deleteMachine(machine);
+    const { machine, reused } = await acquireMachine(client, {
+      repository,
+      from: SNAPSHOT_NAME,
+      name: `verify-${repository.split('/').at(-1) ?? 'checkout'}`,
+      log: say,
+      signal,
+    });
     say(
-      `Boat machine ${machine.id} deleted${usage ? `: ${Math.round(usage.seconds / 2)} s of large, $${usage.dollars.toFixed(4)}` : ''}.`,
+      `Running on Boat machine ${machine.id} (large), ${reused ? "kept from this checkout's last run" : `ready in ${((Date.now() - started) / 1000).toFixed(1)} s`}.`,
     );
+    return machine;
+  } catch (error) {
+    return unavailable(error, signal);
   }
-  signal.throwIfAborted();
-  return result;
 }
 
 export async function runOnBoat(input: {
@@ -716,55 +710,49 @@ export async function runOnBoat(input: {
   }
   await honorInterrupt(signal);
   if ('refused' in packed) return { unavailable: packed.refused };
+  // packRun read the repository with git, so its .git entry exists.
+  const form = lstatSync(join(repository, '.git')).isFile() ? 'linked' : 'main';
   const client = retryingStart(boatClient(input.key), { signal, log: say });
-  const started = Date.now();
-  let machine: Machine;
-  try {
-    machine = await createMachine(client, {
-      from: SNAPSHOT_NAME,
-      name: `verify-${repository.split('/').at(-1) ?? 'checkout'}`,
-      ttlSeconds: MACHINE_TTL_SECONDS,
-      purpose: 'run',
-      log: say,
-      signal,
-    });
-  } catch (error) {
-    return unavailable(error, signal);
-  }
-  say(
-    `Running on Boat machine ${machine.id} (large), ready in ${((Date.now() - started) / 1000).toFixed(1)} s.`,
-  );
-  return withMachine(machine, signal, async (): Promise<BoatOutcome> => {
-    let code: number;
-    try {
-      signal.throwIfAborted();
-      await uploadRun(machine, { repository, folder, bundle: packed.bundle }, { signal, log: say });
-      signal.throwIfAborted();
-      const form = lstatSync(join(repository, '.git')).isFile() ? 'linked' : 'main';
-      const command = ['bash', '~/remote-verify.sh', repository, packed.head, form, ...args].map(
-        (word, index) => (index === 1 ? word : shellQuote(word)),
-      );
-      const result = await runScript(
-        machine,
-        command.join(' '),
-        { stdout: (text) => process.stdout.write(text), stderr: (text) => process.stderr.write(text) },
-        signal,
-      );
-      if (result.exitCode === SETUP_FAILED || result.oomKilled)
-        return {
-          unavailable: `the Boat machine ${result.oomKilled ? 'ran out of memory' : 'failed to set up'}.`,
-        };
-      await importResults(machine, { folder, repository }, { signal, log: say });
-      // The machine pruned only its copy of the archive; the workstation's shrinks as after a local run.
-      console.info(pruneRunArchive('prune'));
-      code = result.exitCode;
-      if (changedInputs(before, captureInputSnapshot(repository)).length) {
-        console.error('Inputs changed during verification; this report cannot qualify acceptance.');
-        code = 1;
+  const machine = await startMachine(client, repository, signal);
+  if ('unavailable' in machine) return machine;
+  // Only a run that returned its exit code leaves a machine worth wiping and keeping.
+  const keep = async (outcome: BoatOutcome) =>
+    typeof outcome === 'number' && keepMachine(machine, { repository, form, signal });
+  return withMachine(
+    machine,
+    signal,
+    async (): Promise<BoatOutcome> => {
+      let code: number;
+      try {
+        signal.throwIfAborted();
+        await uploadRun(machine, { repository, folder, bundle: packed.bundle }, { signal, log: say });
+        signal.throwIfAborted();
+        const command = ['bash', '~/remote-verify.sh', repository, packed.head, form, ...args].map(
+          (word, index) => (index === 1 ? word : shellQuote(word)),
+        );
+        const result = await runScript(
+          machine,
+          command.join(' '),
+          { stdout: (text) => process.stdout.write(text), stderr: (text) => process.stderr.write(text) },
+          signal,
+        );
+        if (result.exitCode === SETUP_FAILED || result.oomKilled)
+          return {
+            unavailable: `the Boat machine ${result.oomKilled ? 'ran out of memory' : 'failed to set up'}.`,
+          };
+        await importResults(machine, { folder, repository }, { signal, log: say });
+        // The machine pruned only its copy of the archive; the workstation's shrinks as after a local run.
+        console.info(pruneRunArchive('prune'));
+        code = result.exitCode;
+        if (changedInputs(before, captureInputSnapshot(repository)).length) {
+          console.error('Inputs changed during verification; this report cannot qualify acceptance.');
+          code = 1;
+        }
+        return code;
+      } catch (error) {
+        return unavailable(error, signal);
       }
-      return code;
-    } catch (error) {
-      return unavailable(error, signal);
-    }
-  });
+    },
+    keep,
+  );
 }
