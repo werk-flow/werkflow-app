@@ -33,7 +33,7 @@ test('read-request scopes stay confined to the reviewed GET handlers and identit
             : path === 'lib/jobs/job-access-reads.ts'
               ? ['readOrganizationJob', 'readJobAssignmentOfUser']
               : path === 'lib/vacation/server.ts'
-                ? ['readOpenVacationRequests']
+                ? ['readOpenAbsences']
                 : ['loadResponsibilityRuntimeState'],
         );
         if (path === 'lib/responsibilities/server.ts' || path === 'lib/vacation/server.ts')

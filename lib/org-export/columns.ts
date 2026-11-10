@@ -23,6 +23,11 @@ type ExcludedTable =
   | 'realtime_deletions'
   // Storage keys of files already deleted from WerkFlow.
   | 'storage_purge_queue'
+  // A person's problem reports to WerkFlow support: no admin reads another
+  // person's report (werk-flow/werkflow-planning#331).
+  | 'problem_reports'
+  | 'problem_report_events'
+  | 'problem_report_files'
   // The paying account's billing state, not the organization's records.
   | 'subscriptions'
   // The file plan and part state of earlier exports, whose archives are gone

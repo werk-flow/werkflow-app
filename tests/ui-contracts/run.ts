@@ -193,7 +193,7 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             );
             builder.onResolve(
               {
-                filter: /^@\/lib\/personnel\/(?:lifecycle|onboarding|document-download)-actions$/,
+                filter: /^@\/lib\/personnel\/(?:lifecycle|onboarding|document-download|handover)-actions$/,
               },
               (args) => ({
                 path: join(

@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { formatBerlinLocalDate } from '../../date-time/berlin';
+import type { BoatUnavailable } from './boat-unavailable';
 
 // The workstation's Boat API key: one line in a mode-600 file in a mode-700 folder, with its expiry
 // date beside it (docs/technical/boat-verification.md). Only the process that calls Boat reads it;
@@ -67,3 +68,37 @@ export function readBoatKey(folder = BOAT_KEY_FOLDER, now = new Date()): BoatKey
 
 /** The renewal advice for a key Boat refused. */
 export const RENEW_ADVICE = RENEW;
+
+/**
+ * Hands the key to `run`, unless `reason` keeps the run on this workstation (printed when not empty)
+ * or the key is absent or unusable, which makes Boat unavailable. From the key on, a Ctrl-C stops
+ * the run; it never falls back to a local one. `readKey` is a test's stand-in.
+ */
+export async function withBoatKey<T>(
+  reason: string | undefined,
+  readKey: () => BoatKeyReading,
+  run: (key: string, signal: AbortSignal) => Promise<T | BoatUnavailable | undefined>,
+): Promise<T | BoatUnavailable | undefined> {
+  if (reason !== undefined) {
+    if (reason) console.info(`[verify] Running locally: ${reason}`);
+    return undefined;
+  }
+  const key = readKey();
+  if (key.kind === 'absent')
+    return {
+      unavailable:
+        'this workstation has no Boat key (docs/technical/boat-verification.md, "Set up a workstation").',
+    };
+  if (key.kind === 'unusable') return { unavailable: key.reason };
+  if (key.reminder) console.info(`[verify] ${key.reminder}`);
+  const interrupt = new AbortController();
+  const stop = () => interrupt.abort();
+  process.once('SIGINT', stop);
+  process.once('SIGTERM', stop);
+  try {
+    return await run(key.key, interrupt.signal);
+  } finally {
+    process.off('SIGINT', stop);
+    process.off('SIGTERM', stop);
+  }
+}
