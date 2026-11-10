@@ -28,7 +28,9 @@ export type AcceptanceRecord =
   | 'archived-customer'
   | 'archived-customer-list'
   | 'callback-overdue-request'
-  | 'callback-overdue-tasks';
+  | 'callback-overdue-tasks'
+  | 'employee-activity-history'
+  | 'employee-activity-job';
 
 export type CaptureSpec = {
   /** Unique within its set; part of the image name and the citation token. */
@@ -648,6 +650,41 @@ function requestCallbackCaptures(): AcceptanceSet {
   };
 }
 
+/**
+ * werk-flow/werkflow-planning#158 of 2026-11-10: recorded time as activities.
+ * The employee's Verlauf as days with one row per activity, and the work
+ * pack's „Meine Zeit“ with each time's span and duration, from a legacy day
+ * whose clock-out names no job, a tap shorter than a minute and a clock-in
+ * without its clock-out.
+ */
+function activityHistoryCaptures(): AcceptanceSet {
+  const phone = { role: 'employee', widths: [375], schemes: ['light', 'dark'] } as const;
+  return {
+    id: 'activity-history-2026-11-10',
+    captures: [
+      {
+        id: 'employee-zeiterfassung-tab-history',
+        route: '/zeiterfassung',
+        view: { kind: 'tab', value: 'history' },
+        record: 'employee-activity-history',
+        reveal: 'Ende fehlt',
+        role: 'employee',
+        widths: [375, 1280],
+        schemes: ['light', 'dark'],
+      },
+      {
+        id: 'employee-auftraege-jobNumber',
+        route: '/auftraege/[jobNumber]',
+        view: { kind: 'page' },
+        record: 'employee-activity-job',
+        reveal: 'Aktivität wählen',
+        ...phone,
+      },
+    ],
+    standalone: [],
+  };
+}
+
 export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   uiRoundCaptures(),
   fieldTargetCaptures(),
@@ -669,4 +706,5 @@ export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   offlineShellCaptures(),
   requestCallbackCaptures(),
   leaverHandoverCaptures(),
+  activityHistoryCaptures(),
 ];

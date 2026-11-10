@@ -17,7 +17,7 @@ import { readInBackground } from '@/lib/data/background-read-client';
 import { Constants } from '@/lib/supabase/database.types';
 import { constrainedValue } from '@/lib/validation/constrained-value';
 import { isEntryInClosedPeriod } from '@/lib/time-tracking/closed-period-dates';
-import type { TimeEntry, TimeEntryAuditEvent } from '@/lib/time-tracking/types';
+import type { TimeEntry } from '@/lib/time-tracking/types';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useHydrated } from '@/hooks/use-hydrated';
 import { useLiveView, type LiveViewResult, type LiveViewState } from '@/hooks/use-live-view';
@@ -29,6 +29,17 @@ import { OwnEntryChanges } from './own-entry-changes';
 import { STATUS_LABELS, getEntryTypeLabel } from './entry-history-labels';
 import { historyRange, useHistoryDates } from './entry-history-range';
 import { EntryHistoryRowAction, type EntryHistoryRowActionProps } from './entry-history-row-action';
+import { EntryHistoryActivities } from './entry-history-activities';
+import {
+  readActivityJobLabels,
+  withProfileNames,
+  type EntryHistoryData,
+  type EntryHistoryQuery,
+  type EntryWithProfile,
+  type HistoryLayout,
+  type KnownLabels,
+} from './entry-history-read';
+import { activityDays, intervalAnchor } from '@/lib/time-tracking/activity-intervals';
 import { useWithdrawSubmission } from './use-withdraw-submission';
 
 // Settle key for a correction that adds time (no row yet); entry ids are UUIDs.
@@ -39,11 +50,6 @@ interface EntryHistoryProps {
   members?: MemberListEntry[];
   /** Admin and Büro also see the Admins' own direct changes in the window. */
   showOwnEntryChanges?: boolean;
-}
-
-interface EntryWithProfile extends TimeEntry {
-  firstName?: string | null;
-  lastName?: string | null;
 }
 
 // Entry rows do nothing on click, so neither they nor their skeletons hover.
@@ -81,31 +87,12 @@ function getEntryHistoryDisplayName(entry: EntryWithProfile): string {
   return 'Unbekannt';
 }
 
-type EntryHistoryQuery = {
-  organizationId: string;
-  dateFrom: Date | undefined;
-  dateTo: Date | undefined;
-  statusFilter: string;
-  memberFilter: string;
-  /** Also read the Admins' own direct changes of the window (Admin and Büro). */
-  withOwnChanges: boolean;
-};
-
-type EntryHistoryData = { entries: EntryWithProfile[]; ownChanges: TimeEntryAuditEvent[] };
-
-type ProfileNames = Map<string, { firstName: string | null; lastName: string | null }>;
-
-/**
- * `knownNames` keeps the names this view already read: a live refresh after
- * an approval reads the entries only, and names follow in a second request
- * only for people the view has not shown yet.
- */
 async function readEntryHistory(
-  { organizationId, dateFrom, dateTo, statusFilter, memberFilter, withOwnChanges }: EntryHistoryQuery,
-  knownNames: ProfileNames,
+  { layout, organizationId, dateFrom, dateTo, statusFilter, memberFilter, withOwnChanges }: EntryHistoryQuery,
+  known: KnownLabels,
   signal: AbortSignal,
 ): Promise<LiveViewResult<EntryHistoryData>> {
-  // The view reads only with a complete date range (`enabled` below).
+  // The view reads only with a complete date range (its `enabled`).
   if (!dateFrom || !dateTo) return { ok: false };
   try {
     const range = historyRange(dateFrom, dateTo);
@@ -136,26 +123,16 @@ async function readEntryHistory(
 
     if (!result.success || !ownChanges.success) return { ok: false };
 
-    const unknownUserIds = [...new Set(result.entries.map((e) => e.userId))].filter(
-      (userId) => !knownNames.has(userId),
-    );
-    if (unknownUserIds.length > 0) {
-      const profiles = await readInBackground('profiles-by-ids', { userIds: unknownUserIds }, signal);
-      if (!profiles.success) return { ok: false };
-      // A name the server did not return is asked for again on the next read.
-      for (const userId of unknownUserIds) {
-        const profile = profiles.profiles[userId];
-        if (profile) knownNames.set(userId, profile);
-      }
+    if (layout === 'activities') {
+      // The pairing reads the clock once: a start of today runs, an earlier one lacks its end.
+      const days = activityDays(result.entries, new Date());
+      if (!(await readActivityJobLabels(organizationId, days, known.jobLabels, signal))) return { ok: false };
+      const jobLabels = Object.fromEntries(known.jobLabels);
+      return { ok: true, data: { entries: [], ownChanges: ownChanges.events, days, jobLabels } };
     }
 
-    // Merge profile data with entries
-    const entriesWithProfiles: EntryWithProfile[] = result.entries.map((entry) => ({
-      ...entry,
-      firstName: knownNames.get(entry.userId)?.firstName ?? null,
-      lastName: knownNames.get(entry.userId)?.lastName ?? null,
-    }));
-
+    const entriesWithProfiles = await withProfileNames(result.entries, known.names, signal);
+    if (!entriesWithProfiles) return { ok: false };
     // Sort by reviewedAt descending (most recent first), fallback to createdAt
     return {
       ok: true,
@@ -166,6 +143,8 @@ async function readEntryHistory(
           return dateB - dateA;
         }),
         ownChanges: ownChanges.events,
+        days: [],
+        jobLabels: {},
       },
     };
   } catch {
@@ -174,10 +153,11 @@ async function readEntryHistory(
   }
 }
 
-function EntryHistorySkeleton() {
+/** The activities layout shows its rows as cards at every width, so its skeleton does too. */
+function EntryHistorySkeleton({ layout }: { layout: HistoryLayout }) {
   return (
     <>
-      <SkeletonList count={5} className="md:hidden">
+      <SkeletonList count={5} className={layout === 'entries' ? 'md:hidden' : ''}>
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex items-center justify-between">
             <Skeleton className="h-4 w-24" />
@@ -187,16 +167,18 @@ function EntryHistorySkeleton() {
           <Skeleton className="h-4 w-40" />
         </div>
       </SkeletonList>
-      <div className="hidden md:block">
-        <Table>
-          <TableHeader>
-            <EntryHistoryHeaderRow />
-          </TableHeader>
-          <TableBody>
-            <SkeletonRows columns={ENTRY_HISTORY_COLUMNS} rows={5} />
-          </TableBody>
-        </Table>
-      </div>
+      {layout === 'entries' ? (
+        <div className="hidden md:block">
+          <Table>
+            <TableHeader>
+              <EntryHistoryHeaderRow />
+            </TableHeader>
+            <TableBody>
+              <SkeletonRows columns={ENTRY_HISTORY_COLUMNS} rows={5} />
+            </TableBody>
+          </Table>
+        </div>
+      ) : null}
     </>
   );
 }
@@ -278,6 +260,16 @@ function EntryHistoryTable({ entries, ...actionProps }: EntryHistoryRowsProps) {
   );
 }
 
+/** Why „Korrigieren“ is missing on the rows of a closed month. */
+function ClosedMonthNote() {
+  return (
+    <p className="text-sm text-muted-foreground">
+      Einträge in abgeschlossenen Monaten lassen sich nicht korrigieren. Ein Admin muss die Periode zuerst
+      wieder öffnen.
+    </p>
+  );
+}
+
 /** The found entries: their count, the closed-month note, and the cards or the table. */
 function EntryHistoryResults(props: EntryHistoryRowsProps) {
   return (
@@ -286,10 +278,7 @@ function EntryHistoryResults(props: EntryHistoryRowsProps) {
         {props.entries.length} {props.entries.length === 1 ? 'Eintrag' : 'Einträge'} gefunden
       </p>
       {props.entries.some((entry) => isEntryInClosedPeriod(entry, props.closedPeriods)) && (
-        <p className="text-sm text-muted-foreground">
-          Einträge in abgeschlossenen Monaten lassen sich nicht korrigieren. Ein Admin muss die Periode zuerst
-          wieder öffnen.
-        </p>
+        <ClosedMonthNote />
       )}
       <EntryHistoryCards {...props} />
       <EntryHistoryTable {...props} />
@@ -297,7 +286,38 @@ function EntryHistoryResults(props: EntryHistoryRowsProps) {
   );
 }
 
+type EntryHistoryFoundProps = Omit<EntryHistoryRowsProps, 'entries'> & {
+  layout: HistoryLayout;
+  data: EntryHistoryData;
+};
+
+/** The found time in the viewer's layout, or that the range holds none. */
+function EntryHistoryFound({ layout, data, ...actionProps }: EntryHistoryFoundProps) {
+  if (layout === 'entries' ? data.entries.length === 0 : data.days.length === 0) {
+    return (
+      <EmptyState
+        icon={Clock}
+        title="Keine Einträge gefunden"
+        description="Für den ausgewählten Zeitraum gibt es keine Einträge. Wähle einen anderen Zeitraum."
+      />
+    );
+  }
+  if (layout === 'entries') return <EntryHistoryResults entries={data.entries} {...actionProps} />;
+  const inClosedMonth = data.days.some((day) =>
+    day.intervals.some((interval) =>
+      isEntryInClosedPeriod(intervalAnchor(interval), actionProps.closedPeriods),
+    ),
+  );
+  return (
+    <>
+      {inClosedMonth && <ClosedMonthNote />}
+      <EntryHistoryActivities days={data.days} jobLabels={data.jobLabels} {...actionProps} />
+    </>
+  );
+}
+
 type EntryHistoryRegionProps = Omit<EntryHistoryRowsProps, 'entries'> & {
+  layout: HistoryLayout;
   hasRange: boolean;
   view: LiveViewState<EntryHistoryData>;
   /** The last read failed: the rows stay, marked stale and inert below its retry. */
@@ -306,8 +326,14 @@ type EntryHistoryRegionProps = Omit<EntryHistoryRowsProps, 'entries'> & {
 };
 
 /** Results: a failed refresh keeps the last rows, marked stale and inert below its retry. */
-function EntryHistoryRegion({ hasRange, view, isStale, members, ...actionProps }: EntryHistoryRegionProps) {
-  const entries = view.data?.entries ?? [];
+function EntryHistoryRegion({
+  layout,
+  hasRange,
+  view,
+  isStale,
+  members,
+  ...actionProps
+}: EntryHistoryRegionProps) {
   const loadError = (
     <SectionError onRetry={() => void view.refresh()} retryPending={view.isRefreshing}>
       Die Einträge konnten nicht geladen werden.
@@ -321,20 +347,12 @@ function EntryHistoryRegion({ hasRange, view, isStale, members, ...actionProps }
       description="Wähle ein Von- und ein Bis-Datum, um die Einträge zu sehen."
     />
   ) : view.isLoading ? (
-    <EntryHistorySkeleton />
+    <EntryHistorySkeleton layout={layout} />
   ) : view.data === undefined ? (
     loadError
   ) : (
     <StaleRegion stale={isStale} onRetry={view.refresh} className="space-y-4">
-      {entries.length === 0 ? (
-        <EmptyState
-          icon={Clock}
-          title="Keine Einträge gefunden"
-          description="Für den ausgewählten Zeitraum gibt es keine Einträge. Wähle einen anderen Zeitraum."
-        />
-      ) : (
-        <EntryHistoryResults entries={entries} {...actionProps} />
-      )}
+      <EntryHistoryFound layout={layout} data={view.data} {...actionProps} />
       <OwnEntryChanges events={view.data.ownChanges} members={members} />
     </StaleRegion>
   );
@@ -345,26 +363,29 @@ function EntryHistoryRegion({ hasRange, view, isStale, members, ...actionProps }
  * time through the page header's one „Zeit nachtragen“; the office adds time
  * for anyone through a correction here.
  */
-function useHistoryViewer(): { currentUserId: string | null; addsTimeHere: boolean } {
+function useHistoryViewer(): { currentUserId: string | null; addsTimeHere: boolean; layout: HistoryLayout } {
   const { profile } = useUserProfile();
   const { activeOrg } = useOrganization();
   // Fail closed until the organization loaded: only Admin and Büro add time here.
   return {
     currentUserId: profile?.id ?? null,
     addsTimeHere: activeOrg ? activeOrg.role !== 'employee' : false,
+    // The server reads an employee's own time only; the office keeps every entry's detail.
+    layout: activeOrg?.role === 'employee' ? 'activities' : 'entries',
   };
 }
 
 /** The live read of the history for the chosen filters. */
 function useEntryHistoryView(query: EntryHistoryQuery, hasRange: boolean): LiveViewState<EntryHistoryData> {
-  const knownNames = useRef<ProfileNames>(new Map());
-  const { organizationId, statusFilter, memberFilter, dateFrom, dateTo } = query;
+  const known = useRef<KnownLabels>({ names: new Map(), jobLabels: new Map() });
+  const { layout, organizationId, statusFilter, memberFilter, dateFrom, dateTo } = query;
   return useLiveView<EntryHistoryData>({
     tables: ['time_entries', 'time_sessions', 'time_segments', 'time_correction_requests'],
-    read: ({ signal }) => readEntryHistory(query, knownNames.current, signal),
+    read: ({ signal }) => readEntryHistory(query, known.current, signal),
     enabled: hasRange,
     // A filter change is a new view of the data: discard and read fresh.
     resetKey: [
+      layout,
       organizationId,
       statusFilter,
       memberFilter,
@@ -390,9 +411,17 @@ export function EntryHistory({
   // spinner from the dialog's close until the live read carries the change.
   const settling = useBusyIds();
   const closedPeriods = useClosedTimePeriods(organizationId);
-  const { currentUserId, addsTimeHere } = useHistoryViewer();
+  const { currentUserId, addsTimeHere, layout } = useHistoryViewer();
   const view = useEntryHistoryView(
-    { organizationId, dateFrom, dateTo, statusFilter, memberFilter, withOwnChanges: showOwnEntryChanges },
+    {
+      layout,
+      organizationId,
+      dateFrom,
+      dateTo,
+      statusFilter,
+      memberFilter,
+      withOwnChanges: showOwnEntryChanges,
+    },
     hasRange,
   );
 
@@ -421,6 +450,7 @@ export function EntryHistory({
       />
 
       <EntryHistoryRegion
+        layout={layout}
         hasRange={hasRange}
         view={view}
         isStale={view.isStale}
