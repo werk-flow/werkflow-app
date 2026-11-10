@@ -144,7 +144,6 @@ if (ISOLATED) {
   // responsibility and own-record reads appear once per request.
   const MANAGER_COUNT_QUERIES = [
     'client_follow_ups',
-    'client_requests',
     'employee_capabilities',
     'employee_records',
     'employee_records (one row)',
@@ -160,6 +159,7 @@ if (ISOLATED) {
     'profiles',
     'projects',
     'rpc list_handover_candidate_projects',
+    'rpc list_open_request_attention',
     'rpc list_pending_dispatch_recipients',
     'rpc read_open_absences',
     'sickness_reports',

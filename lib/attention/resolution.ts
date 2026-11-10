@@ -52,6 +52,18 @@ export function selectFollowUpAttentionRows(
 }
 
 /**
+ * Whether a manager sees an open request's overdue callback as their own
+ * task: its owner does, and every manager does while the request has no owner
+ * who is still a manager, as with follow-ups.
+ */
+export function showsOverdueCallback(
+  request: { assignedTo: string | null; ownerIsManager: boolean },
+  userId: string,
+): boolean {
+  return request.assignedTo === userId || !request.ownerIsManager;
+}
+
+/**
  * One attention item per source record, regardless of how many derivation or
  * authorization paths produced it (e.g. a substitute who is also role-eligible
  * must never see a request twice). First occurrence wins; order is preserved.

@@ -46,6 +46,8 @@ const BOUNDED_PICKER_SITES: Readonly<Record<string, string>> = {
   'components/service/service-case-form-sections.tsx::Ansprechpartner suchen…': ONE_CUSTOMER,
   'components/service/equipment-form-dialog.tsx::Anlage suchen…':
     'the parent units at the one site of the edited equipment',
+  'components/anfragen/request-equipment-field.tsx::Anlage suchen…':
+    'the active Anlagen at the one site the request names, read for that customer',
   'components/service/service-case-list-content.tsx::Servicefälle nach Status filtern':
     'the fixed case statuses, not cases',
 };

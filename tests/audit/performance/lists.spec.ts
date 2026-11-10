@@ -100,7 +100,7 @@ test.describe('Performance profile lists @AUDIT-PERFORMANCE', () => {
           // of the user's sort preference and the first page's identities.
           await page
             .getByRole('main')
-            .getByPlaceholder('Suche nach Titel, Nummer, Kunde, Ort…')
+            .getByPlaceholder('Titel, Nr., Kunde, Ort …')
             .filter({ visible: true })
             .fill(seeded);
           await expect(

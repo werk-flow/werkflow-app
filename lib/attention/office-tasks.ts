@@ -15,11 +15,15 @@ import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/qu
 import { logReadFailure } from '@/lib/data/read-request-cache';
 import { logError } from '@/lib/logging';
 import { getPendingVacationRequestsForApprover } from '@/lib/vacation/actions';
+import { Constants } from '@/lib/supabase/database.types';
+import { uuidSchema } from '@/lib/validation/uuid';
+import { z } from '@/lib/zod';
 import { readPendingJoinRequests } from '@/lib/org/join-requests';
 import {
   FOLLOW_UP_ATTENTION_CAPACITY,
   openSinceDaysAt,
   selectFollowUpAttentionRows,
+  showsOverdueCallback,
   type FollowUpAttentionCandidate,
 } from './resolution';
 import type { AttentionTask } from './types';
@@ -114,6 +118,23 @@ export async function deriveApprovalTasks(
   return { tasks, failed };
 }
 
+// list_open_request_attention declares every column non-null; the number,
+// the owner and the callback may be null.
+const openRequestRowsSchema = z.array(
+  z.object({
+    id: uuidSchema,
+    request_number: z.string().nullable(),
+    summary: z.string(),
+    status: z.enum(Constants.public.Enums.request_status),
+    urgency: z.enum(Constants.public.Enums.request_urgency),
+    assigned_to: uuidSchema.nullable(),
+    received_at: z.string(),
+    callback_due_at: z.string().nullable(),
+    callback_overdue: z.boolean(),
+    owner_is_manager: z.boolean(),
+  }),
+);
+
 export async function deriveOpenRequestTasks(
   context: ActionContext,
 ): Promise<{ tasks: AttentionTask[]; failed: boolean }> {
@@ -123,25 +144,20 @@ export async function deriveOpenRequestTasks(
   }
 
   const admin = createSupabaseAdminClient();
-  const { data: rows, error } = await readCompleteRows(
+  const { data, error } = await readCompleteRows(
     (from, to) =>
-      admin
-        .from('client_requests')
-        .select('id, request_number, summary, status, urgency, assigned_to, received_at')
-        .eq('organization_id', context.orgId)
-        .in('status', ['offen', 'in_klaerung'])
-        .order('received_at', { ascending: true })
-        .order('id')
-        .range(from, to),
+      admin.rpc('list_open_request_attention', { p_organization_id: context.orgId }).range(from, to),
     LIST_ROW_CAP,
   );
-  if (error) {
-    logError('Failed to load open client requests', error);
+  const parsed = openRequestRowsSchema.safeParse(data);
+  if (error || !parsed.success) {
+    logError('Failed to load open client requests', error ?? parsed.error);
     return { tasks: [], failed: true };
   }
+  const rows = parsed.data;
 
   const assigneeIds = [
-    ...new Set((rows ?? []).map((row) => row.assigned_to).filter((id): id is string => Boolean(id))),
+    ...new Set(rows.map((row) => row.assigned_to).filter((id): id is string => Boolean(id))),
   ];
   const profilesResult = await readInBatches(assigneeIds, (batch) =>
     admin
@@ -154,22 +170,47 @@ export async function deriveOpenRequestTasks(
     return { tasks: [], failed: true };
   }
   const profileById = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile]));
+  const profileName = (userId: string | null): string | null => {
+    const profile = userId ? profileById.get(userId) : undefined;
+    return profile ? formatProfileName(profile) : null;
+  };
 
+  // For the viewer whose task it is, an overdue callback replaces the
+  // request's open task. An open task names the deadline at which it would.
   const businessToday = getBusinessTodayIso();
-  const tasks: AttentionTask[] = (rows ?? []).map((row) => {
-    const assignee = row.assigned_to ? (profileById.get(row.assigned_to) ?? null) : null;
-    return {
-      sourceType: 'client_request_open',
-      sourceId: row.id,
-      requestNumber: row.request_number,
-      summary: row.summary,
-      status: row.status,
-      urgency: row.urgency,
-      receivedAt: row.received_at,
-      openSinceDays: openSinceDaysAt(row.received_at, businessToday),
-      assigneeName: assignee ? formatProfileName(assignee) : null,
-      assignedToMe: row.assigned_to === context.userId,
-    };
+  const tasks: AttentionTask[] = rows.map((row) => {
+    const viewersCallback =
+      row.callback_due_at !== null &&
+      showsOverdueCallback(
+        { assignedTo: row.assigned_to, ownerIsManager: row.owner_is_manager },
+        context.userId,
+      )
+        ? row.callback_due_at
+        : null;
+    return row.callback_overdue && viewersCallback !== null
+      ? {
+          sourceType: 'client_request_callback_overdue',
+          sourceId: row.id,
+          requestNumber: row.request_number,
+          summary: row.summary,
+          urgency: row.urgency,
+          callbackDueAt: viewersCallback,
+          ownerName: row.assigned_to ? (profileName(row.assigned_to) ?? 'Nicht verfügbar') : null,
+          ownerUnavailable: row.assigned_to !== null && !row.owner_is_manager,
+        }
+      : {
+          sourceType: 'client_request_open',
+          sourceId: row.id,
+          requestNumber: row.request_number,
+          summary: row.summary,
+          status: row.status,
+          urgency: row.urgency,
+          receivedAt: row.received_at,
+          openSinceDays: openSinceDaysAt(row.received_at, businessToday),
+          assigneeName: profileName(row.assigned_to),
+          assignedToMe: row.assigned_to === context.userId,
+          callbackDueAt: viewersCallback,
+        };
   });
 
   return { tasks, failed: false };

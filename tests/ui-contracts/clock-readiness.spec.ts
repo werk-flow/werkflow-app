@@ -83,7 +83,7 @@ test('a break resumes its job from the hot key and the sheet, and hot keys wait 
   await expect(page.getByRole('button', { name: /^Weiter: Arbeit/ })).toHaveCount(0);
   releaseRead();
   const resumeHotKey = page.getByRole('button', {
-    name: 'Weiter: Arbeit · Heizungswartung Müller',
+    name: 'Weiter: Arbeit · Heizungswartung Müller · A-2026-0142 · Familie Müller',
     exact: true,
   });
   await expect(resumeHotKey).toBeEnabled();
@@ -95,7 +95,10 @@ test('a break resumes its job from the hot key and the sheet, and hot keys wait 
     .getByRole('dialog')
     .filter({ has: page.getByRole('heading', { name: 'Laufende Zeiterfassung' }) });
   await expect(
-    sheet.getByRole('button', { name: 'Weiter: Arbeit · Heizungswartung Müller', exact: true }),
+    sheet.getByRole('button', {
+      name: 'Weiter: Arbeit · Heizungswartung Müller · A-2026-0142 · Familie Müller',
+      exact: true,
+    }),
   ).toBeVisible();
   await expect(sheet.getByRole('button', { name: 'Anderer Auftrag …', exact: true })).toBeVisible();
   await expect(sheet.getByRole('button', { name: 'Erfassung beenden', exact: true })).toBeVisible();
@@ -116,7 +119,9 @@ test('a break resumes its job from the hot key and the sheet, and hot keys wait 
   await page.evaluate(() => {
     window.clockContract.resolveTransition?.();
   });
-  await expect(clockStatus(page)).toHaveText('Arbeit · Heizungswartung Müller');
+  await expect(clockStatus(page)).toHaveText(
+    'Arbeit · Heizungswartung Müller · A-2026-0142 · Familie Müller',
+  );
   await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeEnabled();
 });
 
@@ -163,10 +168,11 @@ test('the clock dock publishes its height for the layout reserve, keeps its butt
   expect(box.bottom).toBe(812);
   expect(box.width).toBe(375);
   const keyTops = await Promise.all(
-    ['Weiter: Arbeit · Heizungswartung Müller', 'Weiter ohne Auftrag'].map(async (name) =>
-      dock
-        .getByRole('button', { name, exact: true })
-        .evaluate((element) => Math.round(element.getBoundingClientRect().top)),
+    ['Weiter: Arbeit · Heizungswartung Müller · A-2026-0142 · Familie Müller', 'Weiter ohne Auftrag'].map(
+      async (name) =>
+        dock
+          .getByRole('button', { name, exact: true })
+          .evaluate((element) => Math.round(element.getBoundingClientRect().top)),
     ),
   );
   // Both hot keys sit in one row below the status line, never stacked over the page.
@@ -181,7 +187,10 @@ test('with the app stylesheet at phone width every clock action is a 44 px targe
     route.fulfill({ json: { success: true, state: BREAK_CLOCK_STATE } }),
   );
   await mountClock(page, { withStyles: true });
-  const hotKey = page.getByRole('button', { name: 'Weiter: Arbeit · Heizungswartung Müller', exact: true });
+  const hotKey = page.getByRole('button', {
+    name: 'Weiter: Arbeit · Heizungswartung Müller · A-2026-0142 · Familie Müller',
+    exact: true,
+  });
   await expect(hotKey).toBeEnabled();
   const hotKeyHeight = await hotKey.evaluate((element) => element.getBoundingClientRect().height);
   expect(hotKeyHeight).toBeGreaterThanOrEqual(44);

@@ -22,6 +22,7 @@ import {
   JobPickerOptionList,
   type PickerJob,
 } from '@/components/job-picker-modal-options';
+import { withRunningJob } from '@/lib/time-tracking/picker-labels';
 import { PICKER_PAGE_SIZE } from '@/lib/time-tracking/picker-types';
 
 const NO_JOBS: PickerJob[] = [];
@@ -129,17 +130,12 @@ function useJobPickerState({
     requestAnimationFrame(() => searchInputRef.current?.focus());
   }, [open, mode, currentJobId]);
 
-  // Today's dispatched jobs first (P1-11 occurrences on the Berlin date), then
-  // the rest in title order, as the database ranked them. The running job of a
-  // switch stays listed while no search hides it.
+  // The jobs in the database's order (`PickerGroup`). The running job of a
+  // switch stays listed in its group while no search hides it.
   const filteredJobs = useMemo(() => {
     const jobs = page?.jobs ?? NO_JOBS;
-    const selected = page?.selected;
-    return selected && !request.query && !jobs.some((job) => job.id === selected.id)
-      ? [...jobs, { ...selected, plannedToday: false }]
-      : jobs;
+    return page?.selected && !request.query ? withRunningJob(jobs, page.selected) : jobs;
   }, [page, request.query]);
-  const plannedTodayCount = filteredJobs.filter((job) => job.plannedToday).length;
   const onLoadMore = page?.hasMore
     ? () => setRequest((current) => ({ ...current, limit: current.limit + PICKER_PAGE_SIZE }))
     : undefined;
@@ -156,7 +152,6 @@ function useJobPickerState({
     isLoading,
     searchPending,
     filteredJobs,
-    plannedTodayCount,
   };
 }
 
@@ -231,7 +226,6 @@ export function JobPickerModal({
             onRefresh={picker.view.refresh}
             loadFailed={picker.view.data === undefined}
             filteredJobs={picker.filteredJobs}
-            plannedTodayCount={picker.plannedTodayCount}
             selectedJobId={picker.selectedJobId}
             setSelectedJobId={picker.setSelectedJobId}
             searchQuery={picker.request.query}
@@ -260,7 +254,6 @@ function JobPickerResults({
   onRefresh,
   loadFailed,
   filteredJobs,
-  plannedTodayCount,
   selectedJobId,
   setSelectedJobId,
   searchQuery,
@@ -271,8 +264,7 @@ function JobPickerResults({
   stale: boolean;
   onRefresh: () => Promise<void>;
   loadFailed: boolean;
-  filteredJobs: PickerJob[];
-  plannedTodayCount: number;
+  filteredJobs: readonly PickerJob[];
   selectedJobId: string | null;
   setSelectedJobId: (jobId: string | null) => void;
   searchQuery: string;
@@ -286,7 +278,6 @@ function JobPickerResults({
         <StaleRegion stale={stale} onRetry={onRefresh}>
           <JobPickerOptionList
             filteredJobs={filteredJobs}
-            plannedTodayCount={plannedTodayCount}
             selectedJobId={selectedJobId}
             setSelectedJobId={setSelectedJobId}
             isLoading={isLoading}

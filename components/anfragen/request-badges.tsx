@@ -36,6 +36,16 @@ export function RequestStatusBadge({ status }: { status: RequestStatus }) {
   return <RequestPill tone={STATUS_CLASSES[status]} label={REQUEST_STATUS_LABELS[status]} />;
 }
 
+/** An open request whose promised callback has passed. */
+export function CallbackOverdueBadge() {
+  return (
+    <RequestPill
+      tone="bg-destructive/10 text-destructive dark:bg-destructive/20"
+      label="Rückruf überfällig"
+    />
+  );
+}
+
 export function RequestUrgencyBadge({ urgency }: { urgency: RequestUrgency }) {
   return <RequestPill tone={URGENCY_CLASSES[urgency]} label={REQUEST_URGENCY_LABELS[urgency]} />;
 }
