@@ -9,7 +9,7 @@ const organizationId = '00000000-0000-4000-8000-000000000001';
 const foreignOrganizationId = '00000000-0000-4000-8000-000000000002';
 const foreignRecordId = '00000000-0000-4000-8000-0000000000ff';
 
-type Call = { table: string; method: string; args: unknown[] };
+type Call = { table: string; method: string; args: unknown[]; query: number };
 const pagedJob = {
   id: '00000000-0000-4000-8000-000000000031',
   title: 'Heizung warten',
@@ -18,18 +18,21 @@ const pagedJob = {
   client_id: null,
   project_id: null,
   status: 'nicht_bearbeitet',
+  job_assignments: [{ user_id: 'worker' }],
 };
 const calls: Call[] = [];
+let queryCount = 0;
 const rpcs: Array<{ name: string; args: Record<string, unknown> }> = [];
 
 function recordingClient() {
   return {
     from(table: string) {
       const builder: Record<string, unknown> = {};
+      const query = ++queryCount;
       let paged = false;
       for (const method of ['select', 'eq', 'in', 'or', 'neq', 'is', 'order', 'range', 'limit'])
         builder[method] = (...args: unknown[]) => {
-          calls.push({ table, method, args });
+          calls.push({ table, method, args, query });
           if (method === 'range') paged = true;
           return builder;
         };
@@ -106,6 +109,18 @@ test('a job option leads with its number, as the trigger and the field steps nam
   ]);
 });
 
+test('a time correction marks the jobs the caller is assigned to, and only those', async () => {
+  const marks = async () => {
+    const result = await readEntityOptions({ organizationId, kind: 'jobs', purpose: 'time-correction' });
+    return result.success && result.options.map((option) => option.description);
+  };
+  expect(await marks()).toEqual([undefined]);
+  caller = { userId: 'worker', orgId: organizationId, role: 'employee', isManagerOrAbove: false };
+  expect(await marks()).toEqual(['Dir zugewiesen']);
+  const result = await readEntityOptions({ organizationId, kind: 'jobs', purpose: 'manual-entry' });
+  expect(result.success && result.options.map((option) => option.description)).toEqual([undefined]);
+});
+
 test("an employee cannot reach a manager's kind or purpose, and no read starts", async () => {
   caller = { userId: 'worker', orgId: organizationId, role: 'employee', isManagerOrAbove: false };
   for (const request of [
@@ -124,4 +139,32 @@ test("an employee cannot reach a manager's kind or purpose, and no read starts",
     expect(calls).toEqual([]);
     expect(rpcs).toEqual([]);
   }
+});
+
+test('a work picker leaves archived customers out of its pages, a filter and a selection keep them', async () => {
+  caller = { userId: 'manager', orgId: organizationId, role: 'admin', isManagerOrAbove: true };
+  const archiveFilters = async (purpose: 'customer-work' | 'filter') => {
+    calls.length = 0;
+    await readEntityOptions({ organizationId, kind: 'clients', purpose, selectedIds: [foreignRecordId] });
+    const clientCalls = calls.filter((call) => call.table === 'clients');
+    const queryWith = (method: string) => clientCalls.find((call) => call.method === method)?.query;
+    const dropsArchived = (query: number | undefined) =>
+      clientCalls.some(
+        (call) =>
+          call.query === query &&
+          call.method === 'is' &&
+          call.args[0] === 'archived_at' &&
+          call.args[1] === null,
+      );
+    // The page query ends in a range; the read of the selected ids filters by id.
+    const page = queryWith('range');
+    const selected = queryWith('in');
+    // Both reads ran: a reader that returned early would otherwise pass as filtering nothing.
+    expect(page).toBeDefined();
+    expect(selected).toBeDefined();
+    expect(page).not.toBe(selected);
+    return { page: dropsArchived(page), selected: dropsArchived(selected) };
+  };
+  expect(await archiveFilters('customer-work')).toEqual({ page: true, selected: false });
+  expect(await archiveFilters('filter')).toEqual({ page: false, selected: false });
 });

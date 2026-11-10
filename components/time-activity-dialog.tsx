@@ -25,7 +25,11 @@ import {
 } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
 import { useServerAction } from '@/hooks/use-server-action';
-import { getTransitionErrorMessage, isSameActivitySelection } from '@/lib/time-tracking/clock-actions';
+import {
+  clockJobLabel,
+  getTransitionErrorMessage,
+  isSameActivitySelection,
+} from '@/lib/time-tracking/clock-actions';
 import type {
   LiveClockState,
   TimeActivitySelection,
@@ -327,7 +331,11 @@ function TimeActivityDialogFields({
   );
   const canLinkJob = draft.kind === 'work' || draft.kind === 'travel' || draft.kind === 'callout';
   const knownJob = [state?.activeJobInfo, state?.resumeJobInfo].find((job) => job && job.id === draft.jobId);
-  const selectedJobLabel = knownJob ? knownJob.title : draft.jobId ? 'Auftrag ausgewählt' : 'Ohne Auftrag';
+  const selectedJobLabel = knownJob
+    ? clockJobLabel(knownJob)
+    : draft.jobId
+      ? 'Auftrag ausgewählt'
+      : 'Ohne Auftrag';
   return (
     <DialogBody className="space-y-5">
       {recovery && <TimeActivityRecoveryNotice />}

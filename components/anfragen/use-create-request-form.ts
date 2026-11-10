@@ -11,9 +11,21 @@ import { formatBerlinDateTimeInput, parseBerlinDateTimeInput } from '@/lib/date-
 import { createClientRequest, type CreateClientRequestInput } from '@/lib/requests/actions';
 import type { RequestCategory, RequestSource, RequestUrgency } from '@/lib/requests/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
+import { useAttemptKey } from './use-attempt-key';
 
 export const SUMMARY_REQUIRED_MESSAGE = 'Bitte beschreibe kurz das Anliegen.';
 export const INVALID_RECEIVED_AT_MESSAGE = 'Bitte gib eine gültige Eingangszeit ein.';
+const INVALID_CALLBACK_DUE_AT_MESSAGE = 'Bitte gib eine gültige Rückrufzeit ein.';
+
+/** The Anlage refusals of capture and edit, shared by both dialogs. */
+export const REQUEST_EQUIPMENT_ERROR_MESSAGES = {
+  invalid_callback_due_at: INVALID_CALLBACK_DUE_AT_MESSAGE,
+  equipment_not_found: 'Die Anlage wurde nicht gefunden.',
+  equipment_requires_site: 'Wähle zuerst den Einsatzort der Anlage.',
+  equipment_client_mismatch: 'Die Anlage gehört zu einem anderen Kunden.',
+  equipment_site_mismatch: 'Die Anlage gehört zu einem anderen Einsatzort.',
+  equipment_not_active: 'Die Anlage ist archiviert. Wähle eine aktive Anlage.',
+} satisfies Record<string, string>;
 
 const ERROR_MESSAGES = {
   not_authorized: 'Du bist nicht berechtigt, Anfragen zu verwalten.',
@@ -22,6 +34,7 @@ const ERROR_MESSAGES = {
   invalid_received_at: INVALID_RECEIVED_AT_MESSAGE,
   client_not_found: 'Der Kunde wurde nicht gefunden.',
   create_failed: 'Fehler beim Speichern der Anfrage.',
+  ...REQUEST_EQUIPMENT_ERROR_MESSAGES,
 } satisfies Record<string, string>;
 
 type RequestFieldChecks = {
@@ -29,44 +42,58 @@ type RequestFieldChecks = {
   errors: Record<string, string | undefined>;
   summaryError: string | null;
   receivedAtError: string | null;
+  callbackDueAtError: string | null;
   /** The submit-level message: `error` unless a field shows it. */
   formError: string | null;
   receivedAtDate: Date | null;
+  callbackDueAtDate: Date | null;
 };
 
 /**
- * The summary and received-at checks of the create and edit dialogs. A field
- * shows its own check after a submit attempt, else a server refusal with the
- * same message. A date without a time is the only unparsable received-at
- * value, so its error focuses the time control.
+ * The summary, received-at and callback checks of the create and edit
+ * dialogs. A field shows its own check after a submit attempt, else a server
+ * refusal with the same message. A date without a time is the only
+ * unparsable time value, so its error focuses the time control.
  */
 export function checkRequestFields({
   idPrefix,
   summary,
   receivedAt,
+  callbackDueAt,
   attempted,
   error,
 }: {
   idPrefix: 'request' | 'edit-request';
   summary: string;
   receivedAt: string;
+  callbackDueAt: string;
   attempted: boolean;
   error: string | null;
 }): RequestFieldChecks {
   const summaryMessage = summary.trim() ? undefined : SUMMARY_REQUIRED_MESSAGE;
   const receivedAtDate = receivedAt ? parseBerlinDateTimeInput(receivedAt) : null;
   const receivedAtMessage = receivedAt && !receivedAtDate ? INVALID_RECEIVED_AT_MESSAGE : undefined;
-  const isFieldMessage = error === SUMMARY_REQUIRED_MESSAGE || error === INVALID_RECEIVED_AT_MESSAGE;
+  const callbackDueAtDate = callbackDueAt ? parseBerlinDateTimeInput(callbackDueAt) : null;
+  const callbackDueAtMessage =
+    callbackDueAt && !callbackDueAtDate ? INVALID_CALLBACK_DUE_AT_MESSAGE : undefined;
+  const fieldError = (message: string | undefined, fieldMessage: string): string | null =>
+    (attempted && message) || (error === fieldMessage ? error : null);
+  const isFieldMessage =
+    error === SUMMARY_REQUIRED_MESSAGE ||
+    error === INVALID_RECEIVED_AT_MESSAGE ||
+    error === INVALID_CALLBACK_DUE_AT_MESSAGE;
   return {
     errors: {
       [`${idPrefix}-summary`]: summaryMessage,
       [`${idPrefix}-received-at-time`]: receivedAtMessage,
+      [`${idPrefix}-callback-time`]: callbackDueAtMessage,
     },
-    summaryError: (attempted && summaryMessage) || (error === SUMMARY_REQUIRED_MESSAGE ? error : null),
-    receivedAtError:
-      (attempted && receivedAtMessage) || (error === INVALID_RECEIVED_AT_MESSAGE ? error : null),
+    summaryError: fieldError(summaryMessage, SUMMARY_REQUIRED_MESSAGE),
+    receivedAtError: fieldError(receivedAtMessage, INVALID_RECEIVED_AT_MESSAGE),
+    callbackDueAtError: fieldError(callbackDueAtMessage, INVALID_CALLBACK_DUE_AT_MESSAGE),
     formError: isFieldMessage ? null : error,
     receivedAtDate,
+    callbackDueAtDate,
   };
 }
 
@@ -83,7 +110,10 @@ export interface CreateRequestForm {
   clientId: string;
   handleClientChange: (nextClientId: string) => void;
   siteId: string;
-  setSiteId: (siteId: string) => void;
+  /** A new site drops the Anlage of the previous one. */
+  handleSiteChange: (siteId: string) => void;
+  equipmentId: string;
+  setEquipmentId: (equipmentId: string) => void;
   contactId: string;
   setContactId: (contactId: string) => void;
   callerName: string;
@@ -102,11 +132,15 @@ export interface CreateRequestForm {
   setSource: (source: RequestSource) => void;
   receivedAt: string;
   setReceivedAt: (receivedAt: string) => void;
+  /** „Rückruf bis“ as `YYYY-MM-DDTHH:mm` in Berlin time; empty without a promise. */
+  callbackDueAt: string;
+  setCallbackDueAt: (callbackDueAt: string) => void;
   assignedTo: string;
   setAssignedTo: (assignedTo: string) => void;
   isLoading: boolean;
   summaryError: string | null;
   receivedAtError: string | null;
+  callbackDueAtError: string | null;
   formError: string | null;
   handleSubmit: (event: React.FormEvent) => Promise<void>;
 }
@@ -119,6 +153,7 @@ type IntakeFields = Omit<
   | 'isLoading'
   | 'summaryError'
   | 'receivedAtError'
+  | 'callbackDueAtError'
   | 'formError'
   | 'handleSubmit'
 >;
@@ -128,7 +163,9 @@ type IntakeCustomerFields = Pick<
   | 'clientId'
   | 'handleClientChange'
   | 'siteId'
-  | 'setSiteId'
+  | 'handleSiteChange'
+  | 'equipmentId'
+  | 'setEquipmentId'
   | 'contactId'
   | 'setContactId'
   | 'callerName'
@@ -145,6 +182,7 @@ type IntakeCustomerFields = Pick<
 function useCreateRequestCustomerFields(): { fields: IntakeCustomerFields; resetFields: () => void } {
   const [clientId, setClientId] = useState('');
   const [siteId, setSiteId] = useState('');
+  const [equipmentId, setEquipmentId] = useState('');
   const [contactId, setContactId] = useState('');
   const [callerName, setCallerName] = useState('');
   const [callerPhone, setCallerPhone] = useState('');
@@ -154,6 +192,7 @@ function useCreateRequestCustomerFields(): { fields: IntakeCustomerFields; reset
   const resetFields = () => {
     setClientId('');
     setSiteId('');
+    setEquipmentId('');
     setContactId('');
     setCallerName('');
     setCallerPhone('');
@@ -164,7 +203,14 @@ function useCreateRequestCustomerFields(): { fields: IntakeCustomerFields; reset
   const handleClientChange = (nextClientId: string) => {
     setClientId(nextClientId);
     setSiteId('');
+    setEquipmentId('');
     setContactId('');
+  };
+
+  // Picking the chosen site again keeps its Anlage.
+  const handleSiteChange = (nextSiteId: string) => {
+    if (nextSiteId !== siteId) setEquipmentId('');
+    setSiteId(nextSiteId);
   };
 
   return {
@@ -172,7 +218,9 @@ function useCreateRequestCustomerFields(): { fields: IntakeCustomerFields; reset
       clientId,
       handleClientChange,
       siteId,
-      setSiteId,
+      handleSiteChange,
+      equipmentId,
+      setEquipmentId,
       contactId,
       setContactId,
       callerName,
@@ -188,8 +236,11 @@ function useCreateRequestCustomerFields(): { fields: IntakeCustomerFields; reset
   };
 }
 
-/** The intake fields; `applySuggestedNumber` never overwrites a number the user typed. */
-function useCreateRequestFields(): {
+/**
+ * The intake fields; `applySuggestedNumber` never overwrites a number the user
+ * typed. The capturing user owns the next step until someone else is chosen.
+ */
+function useCreateRequestFields(currentUserId: string): {
   fields: IntakeFields;
   resetFields: () => void;
   applySuggestedNumber: (suggestion: string) => void;
@@ -203,7 +254,8 @@ function useCreateRequestFields(): {
   const [urgency, setUrgency] = useState<RequestUrgency>('normal');
   const [source, setSource] = useState<RequestSource>('telefon');
   const [receivedAt, setReceivedAt] = useState(() => formatBerlinDateTimeInput(new Date()));
-  const [assignedTo, setAssignedTo] = useState('');
+  const [callbackDueAt, setCallbackDueAt] = useState('');
+  const [assignedTo, setAssignedTo] = useState(currentUserId);
 
   const resetFields = () => {
     requestNumberEditedRef.current = false;
@@ -215,7 +267,8 @@ function useCreateRequestFields(): {
     setUrgency('normal');
     setSource('telefon');
     setReceivedAt(formatBerlinDateTimeInput(new Date()));
-    setAssignedTo('');
+    setCallbackDueAt('');
+    setAssignedTo(currentUserId);
   };
 
   const handleRequestNumberChange = (nextRequestNumber: string) => {
@@ -244,6 +297,8 @@ function useCreateRequestFields(): {
       setSource,
       receivedAt,
       setReceivedAt,
+      callbackDueAt,
+      setCallbackDueAt,
       assignedTo,
       setAssignedTo,
     },
@@ -253,8 +308,12 @@ function useCreateRequestFields(): {
 }
 
 /** The action input: trimmed text, and only the optional values the user gave. */
-function createRequestInput(fields: IntakeFields, receivedAtDate: Date | null): CreateClientRequestInput {
-  const { summary, details, requestNumber, clientId, siteId, contactId, assignedTo } = fields;
+function createRequestInput(
+  fields: IntakeFields,
+  receivedAtDate: Date | null,
+  callbackDueAtDate: Date | null,
+): CreateClientRequestInput {
+  const { summary, details, requestNumber, clientId, siteId, equipmentId, contactId, assignedTo } = fields;
   const { callerName, callerPhone, callerEmail, callerAddress, category, urgency, source } = fields;
   return {
     summary: summary.trim(),
@@ -262,6 +321,7 @@ function createRequestInput(fields: IntakeFields, receivedAtDate: Date | null): 
     ...(requestNumber.trim() ? { requestNumber: requestNumber.trim() } : {}),
     ...(clientId ? { clientId } : {}),
     ...(siteId ? { siteId } : {}),
+    ...(siteId && equipmentId ? { equipmentId } : {}),
     ...(contactId ? { contactId } : {}),
     ...(callerName.trim() ? { callerName: callerName.trim() } : {}),
     ...(callerPhone.trim() ? { callerPhone: callerPhone.trim() } : {}),
@@ -271,20 +331,23 @@ function createRequestInput(fields: IntakeFields, receivedAtDate: Date | null): 
     urgency,
     source,
     ...(receivedAtDate ? { receivedAt: receivedAtDate.toISOString() } : {}),
+    ...(callbackDueAtDate ? { callbackDueAt: callbackDueAtDate.toISOString() } : {}),
     ...(assignedTo ? { assignedTo } : {}),
   };
 }
 
 /** Form state of the intake dialog: number suggestion, reset on close, validation and save. */
-export function useCreateRequestForm(): CreateRequestForm {
+export function useCreateRequestForm(currentUserId: string): CreateRequestForm {
   const router = useRouter();
   const { showBanner } = useBanner();
   const [open, setOpen] = useState(false);
 
-  const { fields, resetFields, applySuggestedNumber } = useCreateRequestFields();
+  const { fields, resetFields, applySuggestedNumber } = useCreateRequestFields(currentUserId);
   const { run: runCreate, isPending: isLoading } = useServerAction(createClientRequest);
   const [error, setError] = useState<string | null>(null);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
+  // One capture per opening: a retry after a lost answer returns its request.
+  const { attemptKey, renewAttemptKey } = useAttemptKey();
 
   // Suggest the next free number when the dialog opens; the field stays
   // editable. The suggestion must never overwrite a number the user has
@@ -295,6 +358,7 @@ export function useCreateRequestForm(): CreateRequestForm {
     resetFields();
     setHasAttemptedSubmit(false);
     setError(null);
+    renewAttemptKey();
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -306,10 +370,11 @@ export function useCreateRequestForm(): CreateRequestForm {
     }
   };
 
-  const { errors, summaryError, receivedAtError, formError, receivedAtDate } = checkRequestFields({
+  const checks = checkRequestFields({
     idPrefix: 'request',
     summary: fields.summary,
     receivedAt: fields.receivedAt,
+    callbackDueAt: fields.callbackDueAt,
     attempted: hasAttemptedSubmit,
     error,
   });
@@ -318,12 +383,12 @@ export function useCreateRequestForm(): CreateRequestForm {
     event.preventDefault();
     setHasAttemptedSubmit(true);
     setError(null);
-    if (focusFirstInvalidField(errors)) return;
+    if (focusFirstInvalidField(checks.errors)) return;
 
     try {
-      const input = createRequestInput(fields, receivedAtDate);
+      const input = createRequestInput(fields, checks.receivedAtDate, checks.callbackDueAtDate);
 
-      const result = await runCreate(input);
+      const result = await runCreate(input, attemptKey);
       if (!result.success) {
         setError(describeFailure(result.error, ERROR_MESSAGES, 'Unbekannter Fehler'));
         return;
@@ -343,9 +408,10 @@ export function useCreateRequestForm(): CreateRequestForm {
     handleOpenChange,
     ...fields,
     isLoading,
-    summaryError,
-    receivedAtError,
-    formError,
+    summaryError: checks.summaryError,
+    receivedAtError: checks.receivedAtError,
+    callbackDueAtError: checks.callbackDueAtError,
+    formError: checks.formError,
     handleSubmit,
   };
 }

@@ -17,6 +17,7 @@ import { useBanner } from '@/components/ui/banner';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import type { ActionResult } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
+import { clearServiceWorkerCaches, restoreOfflineShell } from '@/lib/offline/service-worker-caches';
 import { setActiveOrgCookie } from '@/lib/org/actions';
 import type { UserOrg } from '@/lib/org/types';
 import type { OrgRole } from '@/lib/roles';
@@ -36,6 +37,19 @@ export type OrgContextValue = {
 /** A refused cookie write rejects, so it takes the same failure path as a transport error. */
 function rejectRefusal(result: ActionResult): void {
   if (!result.success) throw new Error(result.error);
+}
+
+/**
+ * Waits for the active organization cookie to change, then deletes every cache the service
+ * worker owns, so nothing the previous organization's views cached stays on the device, and
+ * only then asks for the offline shell again: the switch navigates on the client, which never
+ * refills it, and the cookie action's response can render the new organization before the
+ * clear has finished.
+ */
+async function clearCachesAfterSwitch(cookieChange: Promise<ActionResult>): Promise<void> {
+  rejectRefusal(await cookieChange);
+  await clearServiceWorkerCaches();
+  await restoreOfflineShell();
 }
 
 type MembershipRow = {
@@ -296,7 +310,8 @@ export function OrganizationProvider({
       refreshGenerationRef.current += 1;
 
       try {
-        await setActiveOrgCookie(orgId).then(rejectRefusal);
+        // The cookie call stays in this handler, where the double-render check sees it.
+        await clearCachesAfterSwitch(setActiveOrgCookie(orgId));
         // GET readers authorize against this cookie. Publish the new scope only
         // after its response commits, otherwise their first read is denied.
         setActiveOrgId(orgId);

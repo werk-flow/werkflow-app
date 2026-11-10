@@ -525,6 +525,71 @@ export type Database = {
           },
         ];
       };
+      client_master_events: {
+        Row: {
+          actor_id: string | null;
+          client_id: string;
+          contact_id: string | null;
+          created_at: string;
+          event_payload: Json;
+          event_type: string;
+          id: string;
+          organization_id: string;
+          site_id: string | null;
+        };
+        Insert: {
+          actor_id?: string | null;
+          client_id: string;
+          contact_id?: string | null;
+          created_at?: string;
+          event_payload?: Json;
+          event_type: string;
+          id?: string;
+          organization_id: string;
+          site_id?: string | null;
+        };
+        Update: {
+          actor_id?: string | null;
+          client_id?: string;
+          contact_id?: string | null;
+          created_at?: string;
+          event_payload?: Json;
+          event_type?: string;
+          id?: string;
+          organization_id?: string;
+          site_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "client_master_events_client_fk";
+            columns: ["client_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "client_master_events_contact_id_fkey";
+            columns: ["contact_id"];
+            isOneToOne: false;
+            referencedRelation: "client_contacts";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "client_master_events_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "client_master_events_site_id_fkey";
+            columns: ["site_id"];
+            isOneToOne: false;
+            referencedRelation: "client_sites";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       client_request_events: {
         Row: {
           created_at: string;
@@ -580,6 +645,8 @@ export type Database = {
       client_requests: {
         Row: {
           assigned_to: string | null;
+          attempt_key: string | null;
+          callback_due_at: string | null;
           caller_address: string | null;
           caller_email: string | null;
           caller_name: string | null;
@@ -600,6 +667,7 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           details: string | null;
+          equipment_id: string | null;
           id: string;
           organization_id: string;
           received_at: string;
@@ -613,6 +681,8 @@ export type Database = {
         };
         Insert: {
           assigned_to?: string | null;
+          attempt_key?: string | null;
+          callback_due_at?: string | null;
           caller_address?: string | null;
           caller_email?: string | null;
           caller_name?: string | null;
@@ -633,6 +703,7 @@ export type Database = {
           created_at?: string;
           created_by?: string | null;
           details?: string | null;
+          equipment_id?: string | null;
           id?: string;
           organization_id: string;
           received_at?: string;
@@ -646,6 +717,8 @@ export type Database = {
         };
         Update: {
           assigned_to?: string | null;
+          attempt_key?: string | null;
+          callback_due_at?: string | null;
           caller_address?: string | null;
           caller_email?: string | null;
           caller_name?: string | null;
@@ -666,6 +739,7 @@ export type Database = {
           created_at?: string;
           created_by?: string | null;
           details?: string | null;
+          equipment_id?: string | null;
           id?: string;
           organization_id?: string;
           received_at?: string;
@@ -733,6 +807,13 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "profiles";
             referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "client_requests_equipment_fk";
+            columns: ["equipment_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "installed_equipment";
+            referencedColumns: ["id", "organization_id"];
           },
           {
             foreignKeyName: "client_requests_organization_id_fkey";
@@ -836,6 +917,7 @@ export type Database = {
       clients: {
         Row: {
           address: string | null;
+          archived_at: string | null;
           client_type: Database["public"]["Enums"]["client_type"];
           created_at: string;
           customer_number: string | null;
@@ -849,6 +931,7 @@ export type Database = {
         };
         Insert: {
           address?: string | null;
+          archived_at?: string | null;
           client_type?: Database["public"]["Enums"]["client_type"];
           created_at?: string;
           customer_number?: string | null;
@@ -862,6 +945,7 @@ export type Database = {
         };
         Update: {
           address?: string | null;
+          archived_at?: string | null;
           client_type?: Database["public"]["Enums"]["client_type"];
           created_at?: string;
           customer_number?: string | null;
@@ -13723,6 +13807,8 @@ export type Database = {
         };
         Returns: {
           assigned_to: string | null;
+          attempt_key: string | null;
+          callback_due_at: string | null;
           caller_address: string | null;
           caller_email: string | null;
           caller_name: string | null;
@@ -13743,6 +13829,7 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           details: string | null;
+          equipment_id: string | null;
           id: string;
           organization_id: string;
           received_at: string;
@@ -13856,6 +13943,7 @@ export type Database = {
         Args: {
           p_actor_id: string;
           p_assessed_for_date: string;
+          p_attempt_key?: string;
           p_coverage_fingerprint: string;
           p_coverage_snapshot: Json;
           p_job: Json;
@@ -13907,6 +13995,7 @@ export type Database = {
         Args: {
           p_actor_id: string;
           p_assessed_for_date: string;
+          p_attempt_key?: string;
           p_coverage_fingerprint: string;
           p_coverage_snapshot: Json;
           p_job: Json;
@@ -13958,6 +14047,7 @@ export type Database = {
       convert_client_request_to_project: {
         Args: {
           p_actor_id: string;
+          p_attempt_key?: string;
           p_organization_id: string;
           p_project: Json;
           p_request_id: string;
@@ -14221,6 +14311,8 @@ export type Database = {
         Args: {
           p_actor_id: string;
           p_assigned_to: string;
+          p_attempt_key?: string;
+          p_callback_due_at?: string;
           p_caller_address: string;
           p_caller_email: string;
           p_caller_name: string;
@@ -14229,6 +14321,7 @@ export type Database = {
           p_client_id: string;
           p_contact_id: string;
           p_details: string;
+          p_equipment_id?: string;
           p_organization_id: string;
           p_received_at: string;
           p_request_number: string;
@@ -14239,6 +14332,8 @@ export type Database = {
         };
         Returns: {
           assigned_to: string | null;
+          attempt_key: string | null;
+          callback_due_at: string | null;
           caller_address: string | null;
           caller_email: string | null;
           caller_name: string | null;
@@ -14259,6 +14354,7 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           details: string | null;
+          equipment_id: string | null;
           id: string;
           organization_id: string;
           received_at: string;
@@ -15083,6 +15179,14 @@ export type Database = {
           p_organization_id: string;
         };
         Returns: number;
+      };
+      delete_unlinked_client: {
+        Args: {
+          p_actor_id: string;
+          p_client_id: string;
+          p_organization_id: string;
+        };
+        Returns: Json;
       };
       delete_work_schedule: {
         Args: {
@@ -15912,15 +16016,26 @@ export type Database = {
           isSetofReturn: false;
         };
       };
-      list_customer_page: {
-        Args: {
-          p_organization_id: string;
-          p_page?: number;
-          p_page_size?: number;
-          p_search?: string;
-        };
-        Returns: Json;
-      };
+      list_customer_page:
+        | {
+            Args: {
+              p_organization_id: string;
+              p_page?: number;
+              p_page_size?: number;
+              p_search?: string;
+            };
+            Returns: Json;
+          }
+        | {
+            Args: {
+              p_archived: boolean;
+              p_organization_id: string;
+              p_page: number;
+              p_page_size: number;
+              p_search: string;
+            };
+            Returns: Json;
+          };
       list_document_page: {
         Args: { p_filters: Json; p_organization_id: string };
         Returns: Json;
@@ -15966,6 +16081,21 @@ export type Database = {
           p_search?: string;
         };
         Returns: Json;
+      };
+      list_open_request_attention: {
+        Args: { p_organization_id: string };
+        Returns: {
+          assigned_to: string;
+          callback_due_at: string;
+          callback_overdue: boolean;
+          id: string;
+          owner_is_manager: boolean;
+          received_at: string;
+          request_number: string;
+          status: Database["public"]["Enums"]["request_status"];
+          summary: string;
+          urgency: Database["public"]["Enums"]["request_urgency"];
+        }[];
       };
       list_pending_dispatch_recipients: {
         Args: { p_employee_record_id: string; p_organization_id: string };
@@ -16158,6 +16288,7 @@ export type Database = {
       promote_client_request_caller: {
         Args: {
           p_actor_id: string;
+          p_attempt_key?: string;
           p_client_type: Database["public"]["Enums"]["client_type"];
           p_name: string;
           p_organization_id: string;
@@ -16165,6 +16296,8 @@ export type Database = {
         };
         Returns: {
           assigned_to: string | null;
+          attempt_key: string | null;
+          callback_due_at: string | null;
           caller_address: string | null;
           caller_email: string | null;
           caller_name: string | null;
@@ -16185,6 +16318,7 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           details: string | null;
+          equipment_id: string | null;
           id: string;
           organization_id: string;
           received_at: string;
@@ -16571,6 +16705,8 @@ export type Database = {
         };
         Returns: {
           assigned_to: string | null;
+          attempt_key: string | null;
+          callback_due_at: string | null;
           caller_address: string | null;
           caller_email: string | null;
           caller_name: string | null;
@@ -16591,6 +16727,7 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           details: string | null;
+          equipment_id: string | null;
           id: string;
           organization_id: string;
           received_at: string;
@@ -17197,6 +17334,34 @@ export type Database = {
           p_organization_id: string;
         };
         Returns: undefined;
+      };
+      set_client_archived: {
+        Args: {
+          p_actor_id: string;
+          p_archived: boolean;
+          p_client_id: string;
+          p_organization_id: string;
+        };
+        Returns: {
+          address: string | null;
+          archived_at: string | null;
+          client_type: Database["public"]["Enums"]["client_type"];
+          created_at: string;
+          customer_number: string | null;
+          email: string | null;
+          id: string;
+          name: string;
+          notes: string | null;
+          organization_id: string;
+          phone: string | null;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "clients";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       set_client_communication_preference: {
         Args: {
@@ -18078,6 +18243,35 @@ export type Database = {
         };
         Returns: number;
       };
+      update_client_contact: {
+        Args: {
+          p_actor_id: string;
+          p_changes: Json;
+          p_contact_id: string;
+          p_organization_id: string;
+        };
+        Returns: {
+          client_id: string;
+          created_at: string;
+          created_by: string | null;
+          email: string | null;
+          id: string;
+          is_active: boolean;
+          is_primary: boolean;
+          name: string;
+          notes: string | null;
+          organization_id: string;
+          phone: string | null;
+          role: string | null;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "client_contacts";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       update_client_follow_up: {
         Args: {
           p_actor_id: string;
@@ -18119,6 +18313,34 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      update_client_master: {
+        Args: {
+          p_actor_id: string;
+          p_changes: Json;
+          p_client_id: string;
+          p_organization_id: string;
+        };
+        Returns: {
+          address: string | null;
+          archived_at: string | null;
+          client_type: Database["public"]["Enums"]["client_type"];
+          created_at: string;
+          customer_number: string | null;
+          email: string | null;
+          id: string;
+          name: string;
+          notes: string | null;
+          organization_id: string;
+          phone: string | null;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "clients";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       update_client_request: {
         Args: {
           p_actor_id: string;
@@ -18128,6 +18350,8 @@ export type Database = {
         };
         Returns: {
           assigned_to: string | null;
+          attempt_key: string | null;
+          callback_due_at: string | null;
           caller_address: string | null;
           caller_email: string | null;
           caller_name: string | null;
@@ -18148,6 +18372,7 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           details: string | null;
+          equipment_id: string | null;
           id: string;
           organization_id: string;
           received_at: string;
@@ -18162,6 +18387,37 @@ export type Database = {
         SetofOptions: {
           from: "*";
           to: "client_requests";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      update_client_site: {
+        Args: {
+          p_actor_id: string;
+          p_changes: Json;
+          p_organization_id: string;
+          p_site_id: string;
+        };
+        Returns: {
+          access_notes: string | null;
+          city: string | null;
+          client_id: string;
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          is_active: boolean;
+          is_primary: boolean;
+          name: string;
+          notes: string | null;
+          organization_id: string;
+          postal_code: string | null;
+          primary_contact_id: string | null;
+          street: string | null;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "client_sites";
           isOneToOne: true;
           isSetofReturn: false;
         };

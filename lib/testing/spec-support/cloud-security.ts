@@ -20,6 +20,7 @@ or has_column_privilege('authenticated','public.profiles','id','UPDATE')
 union all
 select routine || ': list reader grant drift' from unnest(array[
  'public.list_customer_page(uuid,text,integer,integer)',
+ 'public.list_customer_page(uuid,text,integer,integer,boolean)',
  'public.list_job_entries_page(uuid,uuid,boolean,jsonb)',
  'public.list_project_job_page(uuid,uuid,boolean,uuid,integer,integer)',
  'public.list_document_page(uuid,jsonb)',

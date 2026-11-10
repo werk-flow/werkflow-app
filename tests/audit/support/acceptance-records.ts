@@ -61,6 +61,49 @@ async function promotedCallerRequest(world: TestWorld): Promise<SurfaceDestinati
   return { route: `/anfragen/${requestId}`, heading: summary };
 }
 
+/**
+ * An archived customer whose name, phone and contact email changed through
+ * the write functions, so the chronology lists master-data entries.
+ */
+async function archivedCustomerId(world: TestWorld): Promise<string> {
+  return surfaceFixture(world, 'acceptance.archived-customer', async () => {
+    const actor = world.users.buero.id;
+    const customer = await seedCustomer({
+      orgId: world.orgId,
+      actorId: actor,
+      name: worldName('Hausverwaltung Lindenhof GmbH', world.runId),
+      contacts: [{ name: 'Erika Musterfrau', phone: '030 1111111', isPrimary: true }],
+    });
+    const admin = createAdminClient();
+    await admin
+      .rpc('update_client_master', {
+        p_actor_id: actor,
+        p_organization_id: world.orgId,
+        p_client_id: customer.clientId,
+        p_changes: { phone: '030 2222222', client_type: 'gewerblich' },
+      })
+      .throwOnError();
+    await admin
+      .rpc('set_client_archived', {
+        p_actor_id: actor,
+        p_organization_id: world.orgId,
+        p_client_id: customer.clientId,
+        p_archived: true,
+      })
+      .throwOnError();
+    return customer.clientId;
+  });
+}
+
+async function archivedCustomer(world: TestWorld): Promise<SurfaceDestination> {
+  return { route: `/kunden/${await archivedCustomerId(world)}` };
+}
+
+async function archivedCustomerList(world: TestWorld): Promise<SurfaceDestination> {
+  await archivedCustomerId(world);
+  return { route: '/kunden?ansicht=archiviert' };
+}
+
 /** An instant `days` business days ago, in the Berlin morning. */
 function daysAgo(days: number): string {
   return `${berlinDateAtOffset(-days)}T07:00:00.000Z`;
@@ -140,10 +183,60 @@ async function officeTaskBacklog(world: TestWorld): Promise<SurfaceDestination> 
   return { route: '/aufgaben', heading: 'Zeitfreigaben' };
 }
 
+/**
+ * An open emergency request at a site without a recorded Anlage, owned by the
+ * Büro, whose promised callback passed two hours ago. One seed serves the
+ * request detail and the Büro's Aufgaben.
+ */
+async function seedCallbackOverdueRequest(world: TestWorld): Promise<{ requestId: string; summary: string }> {
+  const summary = worldName('Kein Warmwasser im Haus 3', world.runId);
+  const requestId = await surfaceFixture(world, 'acceptance.callback-overdue-request', async () => {
+    const customer = await seedCustomer({
+      orgId: world.orgId,
+      actorId: world.users.admin.id,
+      name: worldName('Hausverwaltung Lindenhof GmbH', world.runId),
+      sites: [{ name: 'Lindenhof 3', street: 'Lindenhof 3', postalCode: '10115', city: 'Berlin' }],
+    });
+    const siteId = customer.siteIds.get('Lindenhof 3');
+    if (!siteId) throw new Error('seedCallbackOverdueRequest: the site was not seeded');
+    const id = await seedRequest({
+      orgId: world.orgId,
+      actorId: world.users.admin.id,
+      summary,
+      requestNumber: `ANF-${world.runId}-CALL`,
+      clientId: customer.clientId,
+      siteId,
+      urgency: 'notfall',
+      assignedTo: world.users.buero.id,
+    });
+    await createAdminClient()
+      .from('client_requests')
+      .update({ callback_due_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() })
+      .eq('id', id)
+      .throwOnError();
+    return id;
+  });
+  return { requestId, summary };
+}
+
+async function callbackOverdueRequest(world: TestWorld): Promise<SurfaceDestination> {
+  const { requestId, summary } = await seedCallbackOverdueRequest(world);
+  return { route: `/anfragen/${requestId}`, heading: summary };
+}
+
+async function callbackOverdueTasks(world: TestWorld): Promise<SurfaceDestination> {
+  await seedCallbackOverdueRequest(world);
+  return { route: '/aufgaben', heading: 'Rückruf überfällig' };
+}
+
 /** Each record an acceptance capture opens instead of its route's layout record, seeded once per world. */
 export const ACCEPTANCE_RECORDS: Record<AcceptanceRecord, (world: TestWorld) => Promise<SurfaceDestination>> =
   {
     'caller-match-request': callerMatchRequest,
     'promoted-caller-request': promotedCallerRequest,
     'office-task-backlog': officeTaskBacklog,
+    'archived-customer': archivedCustomer,
+    'archived-customer-list': archivedCustomerList,
+    'callback-overdue-request': callbackOverdueRequest,
+    'callback-overdue-tasks': callbackOverdueTasks,
   };

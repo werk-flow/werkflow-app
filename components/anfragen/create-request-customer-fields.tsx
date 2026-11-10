@@ -5,6 +5,7 @@ import { SiteContactFields } from '@/components/auftraege/shared/site-contact-fi
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
+import { RequestEquipmentField } from './request-equipment-field';
 import type { CreateRequestForm } from './use-create-request-form';
 
 interface CreateRequestCustomerFieldsProps {
@@ -73,7 +74,17 @@ function CreateRequestCallerFields({ form }: CreateRequestCustomerFieldsProps) {
 
 /** The customer with site and contact, or the caller data while no customer is chosen. */
 export function CreateRequestCustomerFields({ form }: CreateRequestCustomerFieldsProps) {
-  const { clientId, handleClientChange, siteId, setSiteId, contactId, setContactId, isLoading } = form;
+  const {
+    clientId,
+    handleClientChange,
+    siteId,
+    handleSiteChange,
+    equipmentId,
+    setEquipmentId,
+    contactId,
+    setContactId,
+    isLoading,
+  } = form;
 
   return (
     <>
@@ -93,15 +104,25 @@ export function CreateRequestCustomerFields({ form }: CreateRequestCustomerField
       </Field>
 
       {clientId ? (
-        <SiteContactFields
-          clientId={clientId}
-          siteId={siteId}
-          contactId={contactId}
-          onSiteChange={(nextSiteId) => setSiteId(nextSiteId)}
-          onContactChange={setContactId}
-          disabled={isLoading}
-          idPrefix="request"
-        />
+        <>
+          <SiteContactFields
+            clientId={clientId}
+            siteId={siteId}
+            contactId={contactId}
+            onSiteChange={(nextSiteId) => handleSiteChange(nextSiteId)}
+            onContactChange={setContactId}
+            disabled={isLoading}
+            idPrefix="request"
+          />
+          <RequestEquipmentField
+            idPrefix="request"
+            clientId={clientId}
+            siteId={siteId}
+            value={equipmentId}
+            onChange={setEquipmentId}
+            disabled={isLoading}
+          />
+        </>
       ) : (
         <CreateRequestCallerFields form={form} />
       )}

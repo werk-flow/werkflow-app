@@ -91,6 +91,8 @@ test('the enforced policy allows exactly the configured Supabase and object-stor
       "font-src 'self'",
       "connect-src 'self' https://project.supabase.co wss://project.supabase.co https://account.eu.r2.cloudflarestorage.com",
       'frame-src https://account.eu.r2.cloudflarestorage.com',
+      "worker-src 'self'",
+      "manifest-src 'self'",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
@@ -133,8 +135,6 @@ test('the report-only policy probes the unproven tightening on the same endpoint
   expect(buildReportOnlyContentSecurityPolicy(cloud)).toBe(
     [
       "img-src 'self' https://project.supabase.co https://account.eu.r2.cloudflarestorage.com",
-      "worker-src 'none'",
-      "manifest-src 'none'",
       "media-src 'none'",
       'report-uri /api/csp-report',
     ].join('; '),

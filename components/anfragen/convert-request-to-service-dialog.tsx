@@ -17,10 +17,13 @@ import { ErrorText } from '@/components/ui/error-text';
 import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { createServiceCase } from '@/lib/service-cases/actions';
+import { useAttemptKey } from './use-attempt-key';
 
 const CONVERT_TO_SERVICE_ERROR_MESSAGES = {
   service_case_request_customer_site_required: 'Ordne der Anfrage zuerst einen Kunden und Einsatzort zu.',
   service_case_request_already_converted: 'Diese Anfrage wurde bereits umgewandelt.',
+  service_case_equipment_mismatch:
+    'Die Anlage der Anfrage ist nicht mehr aktiv. Entferne sie in der Anfrage und übernimm sie dann.',
 } satisfies Record<string, string>;
 
 export function ConvertRequestToServiceDialog({
@@ -36,11 +39,14 @@ export function ConvertRequestToServiceDialog({
   // Stays true while the navigation to the new case is in flight, so a second
   // click cannot start a second conversion.
   const [hasConverted, setHasConverted] = useState(false);
+  // One case under one key per opening: a retry after a lost answer returns that case.
+  const serviceCase = useAttemptKey();
+  const attempt = useAttemptKey();
   const { run, isPending } = useServerAction(async () => {
     setError(null);
     const result = await createServiceCase({
-      serviceCaseId: crypto.randomUUID(),
-      idempotencyKey: crypto.randomUUID(),
+      serviceCaseId: serviceCase.attemptKey,
+      idempotencyKey: attempt.attemptKey,
       sourceRequestId: requestId,
       chargeContext: 'unknown',
       equipmentIds: [],
@@ -59,10 +65,16 @@ export function ConvertRequestToServiceDialog({
     router.push(`/service/faelle/${result.serviceCase.case_number}`);
   });
   const isBusy = isPending || hasConverted;
+  const openDialog = () => {
+    serviceCase.renewAttemptKey();
+    attempt.renewAttemptKey();
+    setError(null);
+    setOpen(true);
+  };
   if (!enabled) return null;
   return (
     <>
-      <Button type="button" size="sm" onClick={() => setOpen(true)}>
+      <Button type="button" size="sm" onClick={openDialog}>
         <Wrench className="size-4" />
         Als Servicefall übernehmen
       </Button>
@@ -71,8 +83,8 @@ export function ConvertRequestToServiceDialog({
           <DialogHeader>
             <DialogTitle>Anfrage als Servicefall übernehmen?</DialogTitle>
             <DialogDescription>
-              Die ursprüngliche Kundenaussage, Dringlichkeit sowie Kunde, Ansprechpartner und Einsatzort
-              bleiben erhalten. Die Anfrage kann danach nicht nochmals umgewandelt werden.
+              Die ursprüngliche Kundenaussage, Dringlichkeit sowie Kunde, Ansprechpartner, Einsatzort und
+              Anlage bleiben erhalten. Die Anfrage kann danach nicht nochmals umgewandelt werden.
             </DialogDescription>
           </DialogHeader>
           <ErrorText>{error}</ErrorText>

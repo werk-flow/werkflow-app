@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { parseJobListQuery } from './list-page';
+import { defaultJobListDirection, parseJobListQuery } from './list-page';
 
 describe('server list selection', () => {
   test('the default includes every active status and keeps the archive independently closed', () => {
@@ -34,6 +34,17 @@ describe('server list selection', () => {
       search: 'Finished',
       page: 1,
     });
+  });
+  test('an employee opens the list earliest date first, the office newest first, and a chosen direction wins', () => {
+    const employee = defaultJobListDirection(false);
+    expect(parseJobListQuery({}, 'active', undefined, employee)).toMatchObject({
+      sort: 'datum',
+      direction: 'asc',
+    });
+    expect(parseJobListQuery({}, 'active', undefined, defaultJobListDirection(true)).direction).toBe('desc');
+    expect(parseJobListQuery({ active_direction: 'desc' }, 'active', undefined, employee).direction).toBe(
+      'desc',
+    );
   });
   test('server selection resolves hidden sort columns before the page boundary in every section', () => {
     for (const section of ['active', 'parked', 'archived'] as const) {

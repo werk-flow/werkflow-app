@@ -6,6 +6,7 @@ import {
   type ClientMatch,
   type ClientMatchList,
 } from '@/lib/clients/types';
+import type { ServiceCaseEquipment } from '@/lib/service-cases/types';
 import type { PlanningWarningFailure } from '@/lib/planning/conflict-acknowledgement';
 import type { Database } from '@/lib/supabase/database.types';
 import { jsonRecordOrEmpty } from '@/lib/supabase/json';
@@ -34,6 +35,8 @@ export type ClientRequest = {
   clientId: string | null;
   contactId: string | null;
   siteId: string | null;
+  /** The Anlage of the request's site the caller named. */
+  equipmentId: string | null;
   callerName: string | null;
   callerPhone: string | null;
   callerEmail: string | null;
@@ -46,6 +49,8 @@ export type ClientRequest = {
   status: RequestStatus;
   assignedTo: string | null;
   receivedAt: string;
+  /** The promised callback („Rückruf bis“). */
+  callbackDueAt: string | null;
   closedReason: RequestCloseReason | null;
   closedNote: string | null;
   closedBy: string | null;
@@ -136,6 +141,42 @@ export const REQUEST_CLOSE_REASON_ORDER: RequestCloseReason[] = [
   'sonstiges',
 ];
 
+/**
+ * An open request whose promised callback has passed. The overdue read of
+ * `Aufgaben` (list_overdue_request_callbacks) applies the same rule.
+ */
+export function isCallbackOverdue(
+  request: Pick<ClientRequest, 'status' | 'callbackDueAt'>,
+  now: Date,
+): boolean {
+  return (
+    (request.status === 'offen' || request.status === 'in_klaerung') &&
+    request.callbackDueAt !== null &&
+    Date.parse(request.callbackDueAt) < now.getTime()
+  );
+}
+
+/**
+ * The Anlagen a request form offers: the site's active ones, and a saved
+ * Anlage that is no longer active, so the form can still clear it.
+ */
+export function requestEquipmentOptions(
+  activeEquipment: readonly ServiceCaseEquipment[],
+  savedEquipmentId: string,
+): Array<{ value: string; label: string; description?: string }> {
+  const options = activeEquipment.map((item) => {
+    const description = [item.manufacturer, item.model, item.locationDetail].filter(Boolean).join(' · ');
+    return {
+      value: item.id,
+      label: `${item.equipmentNumber} · ${item.name}`,
+      ...(description ? { description } : {}),
+    };
+  });
+  return savedEquipmentId && !activeEquipment.some((item) => item.id === savedEquipmentId)
+    ? [...options, { value: savedEquipmentId, label: 'Bisherige Anlage (nicht mehr aktiv)' }]
+    : options;
+}
+
 // Conversion maps the request urgency onto the existing job priority
 // vocabulary; "notfall" has no job equivalent and becomes "hoch".
 export function requestUrgencyToJobPriority(
@@ -189,6 +230,7 @@ export function toClientRequest(row: ClientRequestRow): ClientRequest {
     clientId: row.client_id,
     contactId: row.contact_id,
     siteId: row.site_id,
+    equipmentId: row.equipment_id,
     callerName: row.caller_name,
     callerPhone: row.caller_phone,
     callerEmail: row.caller_email,
@@ -201,6 +243,7 @@ export function toClientRequest(row: ClientRequestRow): ClientRequest {
     status: row.status,
     assignedTo: row.assigned_to,
     receivedAt: row.received_at,
+    callbackDueAt: row.callback_due_at,
     closedReason: row.closed_reason,
     closedNote: row.closed_note,
     closedBy: row.closed_by,

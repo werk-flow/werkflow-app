@@ -109,7 +109,7 @@ async function loadClientOptions(
 ): Promise<JobOptionResult> {
   const base = () => database.from('clients').select('id,name,email').eq('organization_id', context.orgId);
   const search = filterText(input.query);
-  let query = base();
+  let query = input.purpose === 'customer-work' ? base().is('archived_at', null) : base();
   if (search) query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%`);
   const [page, selected] = await Promise.all([
     query
@@ -282,6 +282,46 @@ async function descriptionsOfUntitledJobs(
   return new Map(descriptions.data.map((row) => [row.id, row.description]));
 }
 
+/** The columns a job option is built from. */
+type JobOptionRow = {
+  id: string;
+  title: string;
+  job_number: string | null;
+  client_id: string | null;
+  project_id: string | null;
+  status: string;
+  job_assignments: { user_id: string }[];
+};
+
+/**
+ * One job as a picker choice. The number leads, as people name a job by it. A
+ * manager sees a job without a title by its description; an employee by its
+ * number alone. A correction lists the whole organization's jobs, so the
+ * caller's own stand out.
+ */
+function jobOption(
+  row: JobOptionRow,
+  context: AuthContext,
+  input: Request,
+  descriptions: Map<string, string | null>,
+): JobEntityOption {
+  const title = context.isManagerOrAbove
+    ? getJobDisplayTitle({ title: row.title, description: descriptions.get(row.id) ?? null })
+    : row.title.trim();
+  const ownCorrectionJob =
+    input.purpose === 'time-correction' &&
+    row.job_assignments.some((assignment) => assignment.user_id === context.userId);
+  return {
+    value: row.id,
+    label: [row.job_number, title].filter(Boolean).join(' · ') || '—',
+    ...(ownCorrectionJob ? { description: 'Dir zugewiesen' } : {}),
+    number: row.job_number,
+    clientId: row.client_id,
+    projectId: row.project_id,
+    status: row.status,
+  };
+}
+
 async function loadJobOptions(
   database: Database,
   context: AuthContext,
@@ -342,24 +382,7 @@ async function loadJobOptions(
     ? await descriptionsOfUntitledJobs(database, context, [...page.data, ...selected.data])
     : new Map<string, string | null>();
   if (!descriptions) return { success: false, error: 'options_failed' };
-  const map = (row: (typeof page.data)[number]): JobEntityOption => ({
-    value: row.id,
-    // The number leads, as people name a job by it. A manager sees a job
-    // without a title by its description; an employee by its number alone.
-    label:
-      [
-        row.job_number,
-        context.isManagerOrAbove
-          ? getJobDisplayTitle({ title: row.title, description: descriptions.get(row.id) ?? null })
-          : row.title.trim(),
-      ]
-        .filter(Boolean)
-        .join(' · ') || '—',
-    number: row.job_number,
-    clientId: row.client_id,
-    projectId: row.project_id,
-    status: row.status,
-  });
+  const map = (row: JobOptionRow): JobEntityOption => jobOption(row, context, input, descriptions);
   return {
     success: true,
     options: page.data.slice(0, PAGE_SIZE).map(map),

@@ -36,7 +36,13 @@ async function AnfragenData({
   return <AnfragenContent {...page} query={query} />;
 }
 
-async function CreateRequestDialogData({ activeOrgId }: { activeOrgId: string }) {
+async function CreateRequestDialogData({
+  activeOrgId,
+  currentUserId,
+}: {
+  activeOrgId: string;
+  currentUserId: string;
+}) {
   const admin = createSupabaseAdminClient();
 
   const assignees = await getManagerAssigneeOptions(admin, activeOrgId);
@@ -44,7 +50,7 @@ async function CreateRequestDialogData({ activeOrgId }: { activeOrgId: string })
   if (!assignees.success) {
     return <RegionLoadError>Die Zuständigen für neue Anfragen konnten nicht geladen werden.</RegionLoadError>;
   }
-  return <CreateRequestDialog assignees={assignees.options} />;
+  return <CreateRequestDialog assignees={assignees.options} currentUserId={currentUserId} />;
 }
 
 export default async function AnfragenPage({
@@ -52,7 +58,7 @@ export default async function AnfragenPage({
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { membership } = await resolvePageMembership();
+  const { user, membership } = await resolvePageMembership();
 
   if (!membership) {
     return (
@@ -76,7 +82,7 @@ export default async function AnfragenPage({
         title="Anfragen"
         actions={
           <Suspense fallback={<Skeleton className="h-9 w-32" />}>
-            <CreateRequestDialogData activeOrgId={activeOrgId} />
+            <CreateRequestDialogData activeOrgId={activeOrgId} currentUserId={user.id} />
           </Suspense>
         }
       />

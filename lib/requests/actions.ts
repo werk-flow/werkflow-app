@@ -27,6 +27,7 @@ import {
   toClientRequest,
 } from '@/lib/requests/types';
 import { logError } from '@/lib/logging';
+import { convertedWorkOf } from '@/lib/requests/conversion-replay';
 import { rowWriteResultFor } from '@/lib/supabase/write-refusal';
 import { blankableUuidSchema, createJobInputSchema } from '@/lib/jobs/action-schemas';
 import { createProjectInputSchema } from '@/lib/projects/action-schemas';
@@ -46,6 +47,8 @@ export type CreateClientRequestInput = {
   clientId?: string;
   contactId?: string;
   siteId?: string;
+  /** An active Anlage of the chosen site. */
+  equipmentId?: string;
   callerName?: string;
   callerPhone?: string;
   callerEmail?: string;
@@ -55,15 +58,20 @@ export type CreateClientRequestInput = {
   source?: RequestSource;
   assignedTo?: string;
   receivedAt?: string;
+  /** The promised callback („Rückruf bis“), an ISO timestamp. */
+  callbackDueAt?: string;
 };
 
 export type UpdateClientRequestInput = Partial<
-  Omit<CreateClientRequestInput, 'clientId' | 'contactId' | 'siteId'>
+  Omit<CreateClientRequestInput, 'clientId' | 'contactId' | 'siteId' | 'equipmentId' | 'callbackDueAt'>
 > & {
   // Explicit null clears the reference (e.g. undoing a wrong customer match).
   clientId?: string | null;
   contactId?: string | null;
   siteId?: string | null;
+  // A new customer or site without a named Anlage drops the old one.
+  equipmentId?: string | null;
+  callbackDueAt?: string | null;
   status?: 'offen' | 'in_klaerung';
 };
 
@@ -95,11 +103,13 @@ const requestFieldsSchema = z.object({
   // Not a uuid schema: an unknown assignee keeps its own code, assignee_not_found.
   assignedTo: z.string().max(100).nullish(),
   receivedAt: z.string().max(64).nullish(),
+  callbackDueAt: z.string().max(64).nullish(),
 });
 const createRequestInputSchema = requestFieldsSchema.extend({
   clientId: blankableUuidSchema.optional(),
   contactId: blankableUuidSchema.optional(),
   siteId: blankableUuidSchema.optional(),
+  equipmentId: blankableUuidSchema.optional(),
 });
 const updateRequestArgumentsSchema = z.object({
   requestId: uuidSchema,
@@ -107,11 +117,20 @@ const updateRequestArgumentsSchema = z.object({
     clientId: blankableUuidSchema.nullish(),
     contactId: blankableUuidSchema.nullish(),
     siteId: blankableUuidSchema.nullish(),
+    equipmentId: blankableUuidSchema.nullish(),
     status: z.enum(EDITABLE_STATUSES).optional(),
   }),
 });
+// The key a dialog sends with every press of one opening: a retry under it
+// answers with what the first press wrote.
+const attemptKeySchema = uuidSchema.optional();
+const createRequestArgumentsSchema = z.object({
+  input: createRequestInputSchema,
+  attemptKey: attemptKeySchema,
+});
 const promoteCallerArgumentsSchema = z.object({
   requestId: uuidSchema,
+  attemptKey: attemptKeySchema,
   input: z
     .object({
       name: z.string().max(300).optional(),
@@ -131,10 +150,12 @@ const closeRequestArgumentsSchema = z.object({
 // standalone_job_only.
 const convertToJobArgumentsSchema = z.object({
   requestId: uuidSchema,
+  attemptKey: attemptKeySchema,
   input: createJobInputSchema.extend({ projectId: z.string().max(100).nullish() }),
 });
 const convertToProjectArgumentsSchema = z.object({
   requestId: uuidSchema,
+  attemptKey: attemptKeySchema,
   input: createProjectInputSchema,
 });
 
@@ -196,6 +217,11 @@ const REQUEST_WRITE_REFUSALS: ReadonlySet<string> = new Set([
   'contact_requires_client',
   'contact_not_found',
   'contact_client_mismatch',
+  'equipment_not_found',
+  'equipment_requires_site',
+  'equipment_client_mismatch',
+  'equipment_site_mismatch',
+  'equipment_not_active',
   'assignee_not_found',
 ]);
 
@@ -209,10 +235,17 @@ const requestWriteResult = rowWriteResultFor(REQUEST_WRITE_REFUSALS, (row: Clien
 // Capture And Maintain
 // ============================================
 
-export async function createClientRequest(rawInput: CreateClientRequestInput): Promise<ClientRequestResult> {
-  const parsedInput = createRequestInputSchema.safeParse(rawInput);
-  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
-  const input = parsedInput.data;
+/** Captures a request; a retry under `attemptKey` answers with the request the first capture made. */
+export async function createClientRequest(
+  rawInput: CreateClientRequestInput,
+  rawAttemptKey?: string,
+): Promise<ClientRequestResult> {
+  const parsedArguments = createRequestArgumentsSchema.safeParse({
+    input: rawInput,
+    attemptKey: rawAttemptKey,
+  });
+  if (!parsedArguments.success) return { success: false, error: 'invalid_input' };
+  const { input, attemptKey } = parsedArguments.data;
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
@@ -235,10 +268,14 @@ export async function createClientRequest(rawInput: CreateClientRequestInput): P
     if (input.receivedAt && !isValidTimestamp(input.receivedAt)) {
       return { success: false, error: 'invalid_received_at' };
     }
+    if (input.callbackDueAt && !isValidTimestamp(input.callbackDueAt)) {
+      return { success: false, error: 'invalid_callback_due_at' };
+    }
 
-    // One call checks the customer references, the assignee and the number
+    // One call checks the customer references, the Anlage, the assignee and the number
     // under lock, stores the request and records its 'created' history row, or
-    // refuses with one of REQUEST_WRITE_REFUSALS and changes nothing.
+    // refuses with one of REQUEST_WRITE_REFUSALS and changes nothing. Under a
+    // key it already stored, it returns that request.
     const admin = createSupabaseAdminClient();
     const outcome = await admin.rpc(
       'create_client_request',
@@ -260,6 +297,9 @@ export async function createClientRequest(rawInput: CreateClientRequestInput): P
         p_source: input.source ?? 'telefon',
         p_assigned_to: assignedTo,
         p_received_at: input.receivedAt || null,
+        p_callback_due_at: input.callbackDueAt || null,
+        p_equipment_id: input.equipmentId?.trim() || null,
+        p_attempt_key: attemptKey ?? null,
       }),
     );
     return requestWriteResult(outcome, 'create_failed', 'Error creating client request:');
@@ -312,6 +352,12 @@ export async function updateClientRequest(
       }
       changes.received_at = input.receivedAt;
     }
+    if (input.callbackDueAt !== undefined) {
+      if (input.callbackDueAt && !isValidTimestamp(input.callbackDueAt)) {
+        return { success: false, error: 'invalid_callback_due_at' };
+      }
+      changes.callback_due_at = input.callbackDueAt || null;
+    }
     if (input.status !== undefined) changes.status = input.status;
     if (input.requestNumber !== undefined) changes.request_number = input.requestNumber?.trim() || null;
 
@@ -332,12 +378,13 @@ export async function updateClientRequest(
     }
     if (input.siteId !== undefined) changes.site_id = input.siteId || null;
     if (input.contactId !== undefined) changes.contact_id = input.contactId || null;
+    if (input.equipmentId !== undefined) changes.equipment_id = input.equipmentId || null;
 
     if (Object.keys(changes).length === 0) {
       return { success: false, error: 'no_changes' };
     }
 
-    // One call checks the references, the assignee and the number under lock,
+    // One call checks the references, the Anlage, the assignee and the number under lock,
     // saves the columns and records the 'matched', 'status_changed' or
     // 'updated' history row, or refuses and changes nothing.
     const outcome = await admin.rpc(
@@ -414,27 +461,35 @@ const PROMOTE_REFUSALS: ReadonlySet<string> = new Set([
 // Promote an unknown caller into a customer record without retyping: the new
 // customer, its first work site and its contact are created from the captured
 // caller fields and linked immediately. While the caller matches a customer,
-// only a promotion the user confirmed creates another one.
+// only a promotion the user confirmed creates another one. A retry under
+// `attemptKey` answers with the request linked to the customer the first
+// promotion made.
 export async function promoteCallerToClient(
   rawRequestId: string,
   rawInput?: { name?: string; clientType?: ClientType; createDespiteMatches?: boolean },
+  rawAttemptKey?: string,
 ): Promise<ClientRequestResult> {
   const parsedArguments = promoteCallerArgumentsSchema.safeParse({
     requestId: rawRequestId,
     input: rawInput,
+    attemptKey: rawAttemptKey,
   });
   if (!parsedArguments.success) return { success: false, error: 'invalid_input' };
-  const { requestId, input } = parsedArguments.data;
+  const { requestId, input, attemptKey } = parsedArguments.data;
   try {
     const auth = await requireManagerAndRequest(requestId);
     if (!auth.success) return auth;
     const { orgId, userId, admin } = auth.context;
     const { request } = auth;
 
-    if (!isEditableStatus(request.status)) {
+    // A matched request under an attempt key may be a retry of the promotion
+    // that matched it: promote_client_request_caller answers that with the
+    // request and refuses any other press as below.
+    const mayRetryPromotion = attemptKey !== undefined && request.clientId !== null;
+    if (!mayRetryPromotion && !isEditableStatus(request.status)) {
       return { success: false, error: 'request_not_editable' };
     }
-    if (request.clientId) {
+    if (!mayRetryPromotion && request.clientId) {
       return { success: false, error: 'already_matched' };
     }
 
@@ -443,7 +498,7 @@ export async function promoteCallerToClient(
       return { success: false, error: 'caller_name_required' };
     }
 
-    if (!input?.createDespiteMatches) {
+    if (!mayRetryPromotion && !input?.createDespiteMatches) {
       const lookup = await readCallerMatches(admin, orgId, requestId);
       if (!lookup.success) return lookup;
       if (lookup.matches.length > 0) return { success: false, error: 'caller_matches_customer' };
@@ -459,6 +514,7 @@ export async function promoteCallerToClient(
         p_request_id: requestId,
         p_name: name,
         p_client_type: input?.clientType ?? 'privat',
+        p_attempt_key: attemptKey ?? null,
       }),
     );
 
@@ -559,14 +615,21 @@ const CONVERSION_REFUSALS = [
 // One call creates the work, marks the request converted under its lock,
 // carries the request's documents into the work as second links (same bytes,
 // no copies) with their audit events and records the history row, or
-// changes nothing; a concurrent conversion waits and refuses.
+// changes nothing; a concurrent conversion waits and refuses. A retry under
+// `attemptKey` answers with the work the first conversion made; another
+// target or key is refused.
 export async function convertRequestToJob(
   rawRequestId: string,
   rawInput: CreateJobInput,
+  rawAttemptKey?: string,
 ): Promise<ConvertRequestResult> {
-  const parsedArguments = convertToJobArgumentsSchema.safeParse({ requestId: rawRequestId, input: rawInput });
+  const parsedArguments = convertToJobArgumentsSchema.safeParse({
+    requestId: rawRequestId,
+    input: rawInput,
+    attemptKey: rawAttemptKey,
+  });
   if (!parsedArguments.success) return { success: false, error: 'invalid_input' };
-  const { requestId, input } = parsedArguments.data;
+  const { requestId, input, attemptKey } = parsedArguments.data;
   try {
     const auth = await requireManagerAndRequest(requestId);
     if (!auth.success) return auth;
@@ -574,7 +637,7 @@ export async function convertRequestToJob(
     const { request } = auth;
 
     if (!isEditableStatus(request.status)) {
-      return { success: false, error: 'already_converted' };
+      return await convertedWorkOf(admin, request, 'job', attemptKey);
     }
 
     // Attaching a request to existing work is a later triage capability
@@ -608,6 +671,7 @@ export async function convertRequestToJob(
         p_actor_id: userId,
         p_request_id: requestId,
         p_visit_assessment: plan.planAssessment,
+        p_attempt_key: attemptKey ?? null,
       }),
     );
     if (error) {
@@ -631,13 +695,15 @@ export async function convertRequestToJob(
 export async function convertRequestToProject(
   rawRequestId: string,
   rawInput: CreateProjectInput,
+  rawAttemptKey?: string,
 ): Promise<ConvertRequestResult> {
   const parsedArguments = convertToProjectArgumentsSchema.safeParse({
     requestId: rawRequestId,
     input: rawInput,
+    attemptKey: rawAttemptKey,
   });
   if (!parsedArguments.success) return { success: false, error: 'invalid_input' };
-  const { requestId, input } = parsedArguments.data;
+  const { requestId, input, attemptKey } = parsedArguments.data;
   try {
     const auth = await requireManagerAndRequest(requestId);
     if (!auth.success) return auth;
@@ -645,7 +711,7 @@ export async function convertRequestToProject(
     const { request } = auth;
 
     if (!isEditableStatus(request.status)) {
-      return { success: false, error: 'already_converted' };
+      return await convertedWorkOf(admin, request, 'project', attemptKey);
     }
 
     if (!input.clientId) {
@@ -660,6 +726,7 @@ export async function convertRequestToProject(
         p_request_id: requestId,
         p_project: projectCreationColumns(input),
         p_template_version_id: input.templateVersionId || null,
+        p_attempt_key: attemptKey ?? null,
       }),
     );
     if (error) {

@@ -2,6 +2,7 @@ Menü öffnen
 Kunden
 Kunde hinzufügen
 Hinzufügen
+Aktive Kunden
 4
 Kunden
 Bäckerei Sommer GmbH

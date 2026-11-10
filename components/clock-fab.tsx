@@ -169,10 +169,11 @@ export function ClockFAB() {
           ) : (
             // What runs now, or that nobody is clocked in; empty while the state loads. Inline, not a
             // component: the dock renders with every clock change, and lab counts count components.
+            // Two lines keep a job's number and customer readable on a phone.
             <p
               data-clock-status=""
               className={cn(
-                'min-h-5 min-w-0 truncate text-sm sm:max-w-80',
+                'line-clamp-2 min-h-5 min-w-0 break-words text-sm sm:max-w-md',
                 isClockedIn ? 'font-medium text-foreground' : 'text-muted-foreground',
               )}
             >

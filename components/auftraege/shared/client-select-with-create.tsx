@@ -53,7 +53,7 @@ export function ClientSelectWithCreate({
   readOnlyLabel,
 }: ClientSelectWithCreateProps) {
   const search = useJobEntityOptions(
-    { kind: 'clients' },
+    { kind: 'clients', purpose: 'customer-work' },
     value ? [value] : [],
     selectedClient && selectedClient.id === value ? [clientOption(selectedClient)] : undefined,
   );

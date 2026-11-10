@@ -101,16 +101,15 @@ async function measurePage(page: Page): Promise<PageReport> {
       (table) => table.getClientRects().length > 0 && getComputedStyle(table).visibility !== 'hidden',
     );
     const nativeDateTypes = new Set(['date', 'time', 'datetime-local', 'month', 'week', 'number', 'range']);
-    // Content belongs to its own region inside a named scroll region, inside a
-    // text shortened with an ellipsis (a truncated title is not cut-off
-    // content), or inside the scrolling title (`data-marquee`). A region that
-    // clips or scrolls without a name does not excuse what it cuts off.
+    // Content belongs to its own region inside a named scroll region, or inside
+    // a text shortened with an ellipsis (a truncated title is not cut-off
+    // content). A region that clips or scrolls without a name does not excuse
+    // what it cuts off.
     const insideOwnRegion = (element: Element): boolean => {
       for (let parent = element.parentElement; parent && parent !== body; parent = parent.parentElement) {
         if (parent.hasAttribute('data-scroll-region')) return true;
         const style = getComputedStyle(parent);
         if (style.overflowX !== 'visible' && style.textOverflow === 'ellipsis') return true;
-        if (parent.hasAttribute('data-marquee')) return true;
       }
       return false;
     };

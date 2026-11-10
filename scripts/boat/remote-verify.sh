@@ -154,5 +154,11 @@ grep '^\.agent-logs/playwright-runs/' "$HOME/evidence-new.txt" | while read -r r
   fi
 done
 [ -d .agent-logs/test-server ] && echo .agent-logs/test-server >> "$HOME/evidence-new.txt"
-tar --create --gzip --file "$HOME/results.tgz" --files-from "$HOME/evidence-new.txt"
+# Only what the workstation reads comes back (lib/testing/boat/result-files.ts). If that choice
+# fails, every new folder comes back whole.
+if ! bun scripts/boat/result-files.ts "$HOME/evidence-new.txt" "$HOME/results.list"; then
+  printf '[boat] choosing the result files failed; every new evidence folder comes back whole.\n'
+  tr '\n' '\0' < "$HOME/evidence-new.txt" > "$HOME/results.list"
+fi
+tar --create --gzip --file "$HOME/results.tgz" --null --files-from "$HOME/results.list"
 exit "$code"

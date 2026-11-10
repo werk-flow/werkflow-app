@@ -685,8 +685,12 @@ export async function importResults(
 ): Promise<void> {
   const { folder, repository } = run;
   const archive = join(folder, 'results.tgz');
+  const started = Date.now();
   const bytes = await transfer('The results download', RESULTS_DOWNLOAD, context, (signal) =>
     machine.client.download(machine.id, `${HOME}/results.tgz`, signal),
+  );
+  context.log(
+    `Downloaded the results (${(bytes.byteLength / 1e6).toFixed(1)} MB) in ${((Date.now() - started) / 1000).toFixed(1)} s.`,
   );
   writeFileSync(archive, bytes);
   const staging = mkdtempSync(join(folder, 'results-'));
