@@ -177,21 +177,38 @@ describe('the today snapshot on the device', () => {
     expect(await readTodayOnDevice(MORNING)).toBeNull();
   });
 
-  test('a sign-out whose delete stays blocked by an open connection leaves no day, and the sign-out goes on', async () => {
+  test('a sign-out whose delete stays blocked leaves a day the store refuses, and the sign-out goes on', async () => {
     await saveTodayOnDevice(snapshot(), MORNING);
-    // Another tab holds the database open and never lets the delete through.
-    const opened = indexedDB.open(TODAY_DATABASE);
+    // The delete waits forever behind a connection another tab never closes: it is aimed at a held
+    // stand-in database, so the snapshot's database stays exactly as a blocked delete leaves it.
+    const held = `${TODAY_DATABASE}-held`;
+    const opened = indexedDB.open(held);
     const blocker = await new Promise<IDBDatabase>((resolve) => {
       opened.onsuccess = () => resolve(opened.result);
     });
-    await clearTodayOnDevice();
-    const kept = blocker.transaction('today', 'readonly').objectStore('today').get('current');
-    const left = await new Promise<unknown>((resolve) => {
-      kept.onsuccess = () => resolve(kept.result);
-    });
-    blocker.close();
-    expect(left).toBeUndefined();
+    const realDelete = indexedDB.deleteDatabase.bind(indexedDB);
+    indexedDB.deleteDatabase = () => realDelete(held);
+    try {
+      await clearTodayOnDevice();
+    } finally {
+      indexedDB.deleteDatabase = realDelete;
+    }
+    expect(await databaseNames()).toContain(TODAY_DATABASE);
     expect(await readTodayOnDevice(MORNING)).toBeNull();
+    blocker.close();
+  });
+
+  test('a device whose wipe signal cannot be read shows no stored day', async () => {
+    await saveTodayOnDevice(snapshot(), MORNING);
+    const readSignal = localStorage.getItem.bind(localStorage);
+    localStorage.getItem = () => {
+      throw new DOMException('The storage is not available.', 'SecurityError');
+    };
+    try {
+      expect(await readTodayOnDevice(MORNING)).toBeNull();
+    } finally {
+      localStorage.getItem = readSignal;
+    }
   });
 
   test('a day that has ended is dropped at its first read after Berlin midnight, not shown', async () => {

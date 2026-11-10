@@ -2,7 +2,7 @@
 
 import { fieldSyncTodaySchema, type FieldSyncToday } from '@/lib/field-sync/today-snapshot';
 import { z } from '@/lib/zod';
-import { TODAY_DATABASE, TODAY_STORE, TODAY_WIPE_KEY } from './today-wipe';
+import { TODAY_DATABASE, TODAY_WIPE_KEY } from './today-wipe';
 
 // The web half of the today snapshot on a phone (decision record 0010,
 // "Device data"): one IndexedDB record with the latest snapshot of the
@@ -11,6 +11,7 @@ import { TODAY_DATABASE, TODAY_STORE, TODAY_WIPE_KEY } from './today-wipe';
 // ended, or a wipe came after it was saved, the record is deleted the first time anything reads it. A native client replaces this module and
 // keeps the same rules.
 
+const STORE = 'today';
 const CURRENT = 'current';
 const PERSISTENCE = 'persistence';
 
@@ -36,7 +37,7 @@ function requestResult<T>(request: IDBRequest<T>): Promise<T> {
 function openDatabase(): Promise<IDBDatabase> {
   const request = indexedDB.open(TODAY_DATABASE, 1);
   request.onupgradeneeded = () => {
-    request.result.createObjectStore(TODAY_STORE);
+    request.result.createObjectStore(STORE);
   };
   return requestResult(request).then((database) => {
     // A wipe from this or another tab deletes the database: let it, at once.
@@ -52,12 +53,12 @@ async function withStore<T>(
 ): Promise<T> {
   const database = await openDatabase();
   try {
-    const transaction = database.transaction(TODAY_STORE, mode);
+    const transaction = database.transaction(STORE, mode);
     const committed = new Promise<void>((resolve, reject) => {
       transaction.oncomplete = () => resolve();
       transaction.onabort = () => reject(transaction.error ?? new Error('IndexedDB transaction aborted'));
     });
-    const [result] = await Promise.all([requestResult(run(transaction.objectStore(TODAY_STORE))), committed]);
+    const [result] = await Promise.all([requestResult(run(transaction.objectStore(STORE))), committed]);
     return result;
   } finally {
     database.close();
@@ -84,13 +85,16 @@ export async function readTodayOnDevice(now: Date = new Date()): Promise<StoredT
   return currentDay(value, now);
 }
 
-/** The latest wipe signal any tab of the origin gave (today-wipe.ts). */
-function sharedWipeGeneration(): string {
+/**
+ * The latest wipe signal any tab of the origin gave (today-wipe.ts), or null when localStorage
+ * cannot be read: then no stored day can be shown to be from after the latest wipe.
+ */
+function sharedWipeGeneration(): string | null {
   try {
     return localStorage.getItem(TODAY_WIPE_KEY) ?? '';
   } catch {
-    // best-effort: without localStorage the wipe's emptied record and delete keep the day from showing.
-    return '';
+    // Fails closed: the reader shows no stored day, and the page stays „Gerade kein Netz“.
+    return null;
   }
 }
 
@@ -120,7 +124,8 @@ export async function saveTodayOnDevice(
     const entry: StoredToday = {
       snapshot,
       confirmedAt: confirmedAt.toISOString(),
-      wipeGeneration: sharedWipeGeneration(),
+      // A day saved without a readable signal is never shown: no reader can match it.
+      wipeGeneration: sharedWipeGeneration() ?? 'unreadable',
     };
     // A skipped write still needs one request for the transaction to settle on.
     return written ? store.put(entry, CURRENT) : store.get(CURRENT);

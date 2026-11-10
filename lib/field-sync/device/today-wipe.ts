@@ -9,9 +9,6 @@
 /** The IndexedDB database that holds the today snapshot, and nothing else. */
 export const TODAY_DATABASE = 'werkflow-today';
 
-/** The object store in `TODAY_DATABASE` that holds the snapshot record. */
-export const TODAY_STORE = 'today';
-
 /** The localStorage key every tab of the origin sees change on a wipe (its `storage` event included). */
 export const TODAY_WIPE_KEY = 'werkflow:today-wiped';
 
@@ -38,31 +35,12 @@ export function todayWipeGeneration(): string {
 }
 
 /**
- * Empties the store in the transaction where the database opens, queued before the delete, so a
- * delete that fails or waits for another tab leaves no record. A device without the database gets
- * none: the open's upgrade is aborted.
- */
-function emptyTodayStore(): void {
-  const request = indexedDB.open(TODAY_DATABASE);
-  request.onupgradeneeded = () => request.transaction?.abort();
-  request.onsuccess = () => {
-    const database = request.result;
-    try {
-      database.transaction(TODAY_STORE, 'readwrite').objectStore(TODAY_STORE).clear();
-    } catch {
-      // best-effort: the delete queued next, and the readers' wipe check, still keep the day from showing.
-    }
-    database.close();
-  };
-}
-
-/**
  * Deletes the today snapshot. It resolves once the browser deleted it, or
  * queued the deletion behind a connection still open in another tab, which
  * closes itself on the version change. It never rejects: a browser without
  * IndexedDB holds no snapshot, and a sign-out must go on. A delete that fails
- * or stays blocked exposes nothing: the record is emptied first, and a reader
- * refuses a day saved before the latest wipe signal (today-store.ts).
+ * or stays blocked exposes nothing: the store refuses a day saved before the
+ * latest wipe signal (today-store.ts).
  */
 export function clearTodayOnDevice(): Promise<void> {
   wipes += 1;
@@ -74,7 +52,6 @@ export function clearTodayOnDevice(): Promise<void> {
   }
   return new Promise((resolve) => {
     try {
-      emptyTodayStore();
       const request = indexedDB.deleteDatabase(TODAY_DATABASE);
       request.onsuccess = () => resolve();
       request.onerror = () => resolve();

@@ -140,4 +140,6 @@ Decided for werk-flow/werkflow-planning#318.
 
 Decided for werk-flow/werkflow-planning#318.
 
-- A wipe (sign-out, organization switch, a lost membership) empties the stored record, deletes the database and signals every tab. The stored day names the wipe signal it was saved under, and a device refuses a day saved before the latest one, so a deletion that fails or waits for another tab exposes nothing. A sign-out never waits for the deletion.
+- A wipe (sign-out, organization switch, a lost membership) deletes the database and signals every tab. The stored day names the wipe signal it was saved under, and every reader refuses a day saved before the latest one, so a deletion that fails or waits for another tab exposes nothing. A sign-out never waits for the deletion.
+- Readers fail closed: a device that cannot read the wipe signal shows no stored day, and the page stays „Gerade kein Netz“.
+- The wipe does not also empty the record before the delete. That second layer would protect only a browser without localStorage, which now shows nothing anyway, and it cost about 100 B of every cold start, because the wipe sits in a startup chunk.
