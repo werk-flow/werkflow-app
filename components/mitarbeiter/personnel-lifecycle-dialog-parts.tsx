@@ -1,7 +1,6 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { DatePicker } from '@/components/ui/date-picker';
 import { DateTimeField } from '@/components/ui/date-time-field';
 import { DialogBody, DialogFooter } from '@/components/ui/dialog';
@@ -10,6 +9,8 @@ import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
+import { addLocalDays, getBusinessTodayIso } from '@/lib/date-time/berlin';
+import { toLocalDateString } from '@/lib/utils';
 
 import {
   ACCESS_CLASS_OPTIONS,
@@ -17,6 +18,7 @@ import {
   EMPLOYMENT_TRANSITIONS,
   isScheduledAccessTransition,
 } from './personnel-lifecycle-options';
+import { PersonnelLifecycleOpenWorkNote } from './personnel-lifecycle-handover';
 import type { PersonnelLifecycleDocuments } from './use-personnel-lifecycle-documents';
 import type { PersonnelLifecycleTransitions } from './use-personnel-lifecycle-transitions';
 import type { PersonnelLifecycleController } from './use-personnel-lifecycle-view';
@@ -33,7 +35,7 @@ export function PersonnelLifecycleAccessBody({
   lifecycle,
   transitions,
 }: PersonnelLifecycleTransitionFieldsProps) {
-  const { isPending, error, fieldErrors } = lifecycle;
+  const { data, isPending, error, fieldErrors } = lifecycle;
   const { accessKind, setAccessKind, accessAt, setAccessAt, reason, setReason, setAccessOpen, submitAccess } =
     transitions;
 
@@ -69,6 +71,16 @@ export function PersonnelLifecycleAccessBody({
         <Field label="Grund" htmlFor="access-reason" required error={fieldErrors['access-reason']}>
           <Textarea value={reason} onChange={(event) => setReason(event.target.value)} disabled={isPending} />
         </Field>
+        {accessKind === 'end_access' ? (
+          <PersonnelLifecycleOpenWorkNote
+            openWork={data.transitionInventory.openWork}
+            onHandover={() => {
+              // The dialog closes for the handover; its typed reason stays.
+              setAccessOpen(false);
+              transitions.openHandover(getBusinessTodayIso());
+            }}
+          />
+        ) : null}
         <ErrorText>{error}</ErrorText>
       </DialogBody>
       <PersonnelLifecycleDialogFooter
@@ -81,12 +93,28 @@ export function PersonnelLifecycleAccessBody({
   );
 }
 
+/**
+ * Whether an employment transition leads away from the work, and the first
+ * day it takes the person away: after the exit date, or the inactive date.
+ * Recorded notice has no such day yet; the handover then starts from the
+ * stored exit, or today.
+ */
+function transitionAway(
+  kind: PersonnelLifecycleTransitions['employmentKind'],
+  date: Date | undefined,
+): { from: string | undefined } | null {
+  const day = date ? toLocalDateString(date) : undefined;
+  if (kind === 'exit' || kind === 'plan_exit') return { from: day ? addLocalDays(day, 1) : undefined };
+  if (kind === 'mark_inactive') return { from: day };
+  if (kind === 'record_notice') return { from: undefined };
+  return null;
+}
+
 export function PersonnelLifecycleEmploymentBody({
   lifecycle,
   transitions,
-  hasUnresolvedWork,
-}: PersonnelLifecycleTransitionFieldsProps & { hasUnresolvedWork: boolean }) {
-  const { isPending, error, fieldErrors } = lifecycle;
+}: PersonnelLifecycleTransitionFieldsProps) {
+  const { data, isPending, error, fieldErrors } = lifecycle;
   const {
     employmentKind,
     setEmploymentKind,
@@ -94,11 +122,10 @@ export function PersonnelLifecycleEmploymentBody({
     setEmploymentDate,
     reason,
     setReason,
-    acceptUnresolved,
-    setAcceptUnresolved,
     setEmploymentOpen,
     submitEmployment,
   } = transitions;
+  const away = transitionAway(employmentKind, employmentDate);
 
   return (
     <>
@@ -125,17 +152,14 @@ export function PersonnelLifecycleEmploymentBody({
         <Field label="Grund" htmlFor="employment-reason" required error={fieldErrors['employment-reason']}>
           <Textarea value={reason} onChange={(event) => setReason(event.target.value)} disabled={isPending} />
         </Field>
-        {hasUnresolvedWork ? (
-          <label className="flex items-start gap-2 rounded-md border p-3 text-sm">
-            <Checkbox
-              checked={acceptUnresolved}
-              onCheckedChange={(value) => setAcceptUnresolved(value === true)}
-            />
-            <span>
-              Offene Zuordnungen wurden geprüft und sollen sichtbar im Übergang erhalten bleiben. Es wird
-              nichts still gelöscht.
-            </span>
-          </label>
+        {away ? (
+          <PersonnelLifecycleOpenWorkNote
+            openWork={data.transitionInventory.openWork}
+            onHandover={() => {
+              setEmploymentOpen(false);
+              transitions.openHandover(away.from);
+            }}
+          />
         ) : null}
         <ErrorText>{error}</ErrorText>
       </DialogBody>

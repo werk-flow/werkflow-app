@@ -18,6 +18,7 @@ const pagedJob = {
   client_id: null,
   project_id: null,
   status: 'nicht_bearbeitet',
+  job_assignments: [{ user_id: 'worker' }],
 };
 const calls: Call[] = [];
 const rpcs: Array<{ name: string; args: Record<string, unknown> }> = [];
@@ -104,6 +105,18 @@ test('a job option leads with its number, as the trigger and the field steps nam
   expect(result.success && result.options.map((option) => option.label)).toEqual([
     'AUF-2026-7 · Heizung warten',
   ]);
+});
+
+test('a time correction marks the jobs the caller is assigned to, and only those', async () => {
+  const marks = async () => {
+    const result = await readEntityOptions({ organizationId, kind: 'jobs', purpose: 'time-correction' });
+    return result.success && result.options.map((option) => option.description);
+  };
+  expect(await marks()).toEqual([undefined]);
+  caller = { userId: 'worker', orgId: organizationId, role: 'employee', isManagerOrAbove: false };
+  expect(await marks()).toEqual(['Dir zugewiesen']);
+  const result = await readEntityOptions({ organizationId, kind: 'jobs', purpose: 'manual-entry' });
+  expect(result.success && result.options.map((option) => option.description)).toEqual([undefined]);
 });
 
 test("an employee cannot reach a manager's kind or purpose, and no read starts", async () => {

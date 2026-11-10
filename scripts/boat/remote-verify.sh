@@ -1,17 +1,25 @@
 #!/usr/bin/env bash
 # Runs on a Boat machine started from the verification snapshot, for lib/testing/boat/verify-on-boat.ts.
 # Usage: remote-verify.sh <repository path> <HEAD commit> <main|linked> <test:verify arguments...>
+#    or: remote-verify.sh <repository path> <HEAD commit> <main|linked> test:audit:focused <arguments...>
 #
 # It rebuilds the workstation's checkout at the same absolute path, so every path in a report or a
 # run manifest is the workstation's, starts the stack and, when the plan runs a browser group, the
-# test server, as CI does, then runs `bun run test:verify` with the same arguments. It packs the
-# evidence the run wrote into ~/results.tgz. Exit 90 means setup failed before the run started.
+# test server, as CI does, then runs `bun run test:verify` with the same arguments. A leading
+# `test:audit:focused` runs that focused capture instead (lib/testing/boat/capture-on-boat.ts),
+# always with the test server. It packs the evidence the run wrote into ~/results.tgz. Exit 90
+# means setup failed before the run started.
 set -uo pipefail
 
 repo="$1"
 head="$2"
 form="$3"
 shift 3
+script=test:verify
+if [ "${1:-}" = test:audit:focused ]; then
+  script=test:audit:focused
+  shift
+fi
 export PATH="$HOME/.bun/bin:$PATH"
 export PLAYWRIGHT_BROWSERS_PATH="$HOME/.local/share/ms-playwright"
 # Marks this machine as Boat's, so test:verify here never asks Boat again.
@@ -100,9 +108,14 @@ WERKFLOW_BOAT_PROOF_ENVIRONMENT="$(cat "$HOME/proof-environment")"
 export WERKFLOW_BOAT_PROOF_ENVIRONMENT
 bash .github/actions/local-stack/wait-for-edge-runtime.sh > "$HOME/edge.log" 2>&1 || { cat "$HOME/edge.log"; setup_failed "edge runtime"; }
 
-# The whole plan first: grep -q on a pipe would stop the writer, and pipefail would hide the match.
-bun run test:plan "$@" > "$HOME/plan.txt" 2> /dev/null || setup_failed "test:plan"
-if grep -qE '^RUN +(golden|audit|canary):' "$HOME/plan.txt"; then
+# A focused capture has no plan and always needs the server. A plan is read whole first: grep -q on
+# a pipe would stop the writer, and pipefail would hide the match.
+serve=1
+if [ "$script" = test:verify ]; then
+  bun run test:plan "$@" > "$HOME/plan.txt" 2> /dev/null || setup_failed "test:plan"
+  grep -qE '^RUN +(golden|audit|canary):' "$HOME/plan.txt" || serve=0
+fi
+if [ "$serve" = 1 ]; then
   phase "building and serving the app"
   origin="$(sed -n 's/^NEXT_PUBLIC_SITE_URL=//p' .env.local)"
   nohup bun run test:server local > "$HOME/test-server.log" 2>&1 &
@@ -118,14 +131,14 @@ if grep -qE '^RUN +(golden|audit|canary):' "$HOME/plan.txt"; then
   done
 fi
 
-phase "running test:verify $*"
+phase "running $script $*"
 # The machine's peak memory use, so the run's size can be judged against its 16 GB.
 while :; do free -m | awk '/^Mem:/ { print $3 }'; sleep 5; done > "$HOME/memory.log" &
 sampler=$!
-bun run test:verify "$@"
+bun run "$script" "$@"
 code=$?
 kill "$sampler" 2> /dev/null
-phase "test:verify exited $code; peak memory in use $(sort -n "$HOME/memory.log" | tail -n 1) MiB"
+phase "$script exited $code; peak memory in use $(sort -n "$HOME/memory.log" | tail -n 1) MiB"
 
 # The run's own evidence: every report and run folder that did not exist before, and the server log.
 find .agent-logs -mindepth 2 -maxdepth 2 -type d | sort > "$HOME/evidence-after.txt"

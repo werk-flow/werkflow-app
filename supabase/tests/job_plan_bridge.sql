@@ -15,7 +15,9 @@
 -- 20261006100100). A job-page team change records the assessment of the
 -- visit it reaches (20261108120000), and so does a job created or edited
 -- with a date and people (20261124100000), a request converted into a job
--- and a parked job planned from the calendar (20261125090000).
+-- and a parked job planned from the calendar (20261125090000). A leaver's
+-- open work handed over moves visits and team together, and the open
+-- absences are read in one call (20261129100000).
 begin;
 
 insert into auth.users (
@@ -1046,6 +1048,294 @@ begin
 end;
 $$;
 
+-- 15. A leaver's open work goes to the people the office picks
+-- (20261129100000). Per job, the leaver's visits from the handover date on
+-- go to the target and the target joins the team; a visit before that date
+-- keeps the leaver on it and on the team. Work without a visit leaves the
+-- team to the target. A foreign organization, a target outside it, the
+-- leaver as target, a field worker, a past date, an unassessed or changed
+-- visit and a person without a login for team-only work change nothing.
+create function pg_temp.handover_state() returns text language sql as $$
+  select concat_ws(' | ',
+    (select string_agg(format('%s:%s', assignment.job_id, assignment.user_id), ',' order by assignment.job_id, assignment.user_id)
+     from public.job_assignments assignment
+     where assignment.job_id in (pg_temp.bridge_id('handover job'), pg_temp.bridge_id('handover parked job'))),
+    (select string_agg(format('%s:%s:%s', occurrence.id, occurrence.version, assignment.employee_record_id), ','
+       order by occurrence.id, assignment.employee_record_id)
+     from public.planning_occurrences occurrence
+     join public.planning_occurrence_assignments assignment on assignment.occurrence_id = occurrence.id
+     where occurrence.job_id = pg_temp.bridge_id('handover job')),
+    (select count(*)::text from public.planning_events where event_type = 'reassigned'),
+    (select count(*)::text from public.employee_record_events where event_type = 'work_handed_over'),
+    array_to_string(pg_temp.assessment_counts(), ',')
+  );
+$$;
+grant execute on function pg_temp.handover_state() to service_role;
+
+do $$
+declare
+  v_job uuid := gen_random_uuid();
+  v_parked uuid := gen_random_uuid();
+  v_foreign_job uuid := gen_random_uuid();
+  v_foreign_record uuid := gen_random_uuid();
+  v_gone uuid := gen_random_uuid();
+  v_early jsonb := pg_temp.timed_item(v_job, pg_temp.day(2), '08:00', 60);
+  v_late jsonb := pg_temp.timed_item(v_job, pg_temp.day(10), '08:00', 60);
+  v_ids uuid[];
+  v_late_id uuid;
+  v_bea uuid := pg_temp.record_of('b1d9e000-0000-4000-8000-000000000002');
+  v_cem uuid := pg_temp.record_of('b1d9e000-0000-4000-8000-000000000003');
+  v_nora uuid := 'b1d9e000-0000-4000-8000-000000000029';
+  v_assessed jsonb;
+  v_before text;
+  v_handed integer;
+begin
+  insert into public.jobs (id, organization_id, job_number, title, status, created_by) values
+    (v_job, 'b1d9e000-0000-4000-8000-000000000010', 'BRIDGE-H1', 'Übergabe Wartung', 'nicht_bearbeitet',
+     'b1d9e000-0000-4000-8000-000000000001'),
+    (v_parked, 'b1d9e000-0000-4000-8000-000000000010', 'BRIDGE-H2', 'Übergabe Parkplatz', 'geparkt',
+     'b1d9e000-0000-4000-8000-000000000001'),
+    (v_foreign_job, 'b1d9e000-0000-4000-8000-000000000011', 'BRIDGE-HF', 'Fremde Übergabe', 'nicht_bearbeitet',
+     'b1d9e000-0000-4000-8000-000000000004');
+  insert into public.employee_records (id, organization_id, first_name, last_name) values
+    (v_foreign_record, 'b1d9e000-0000-4000-8000-000000000011', 'Fremd', 'Ziel');
+  insert into bridge_ids values ('handover job', v_job), ('handover parked job', v_parked);
+  insert into public.job_assignments (job_id, user_id, assigned_by) values
+    (v_parked, 'b1d9e000-0000-4000-8000-000000000002', 'b1d9e000-0000-4000-8000-000000000001');
+  v_ids := public.create_planning_entry_materialized(
+    'b1d9e000-0000-4000-8000-000000000010', 'b1d9e000-0000-4000-8000-000000000001', null,
+    jsonb_build_array(v_early), jsonb_build_array(pg_temp.assignment(v_early, 'b1d9e000-0000-4000-8000-000000000002')),
+    gen_random_uuid(), '{}', 'capacity', '{}', 'qualification');
+  insert into bridge_ids values ('handover early visit', v_ids[1]);
+  v_ids := public.create_planning_entry_materialized(
+    'b1d9e000-0000-4000-8000-000000000010', 'b1d9e000-0000-4000-8000-000000000001', null,
+    jsonb_build_array(v_late), jsonb_build_array(pg_temp.assignment(v_late, 'b1d9e000-0000-4000-8000-000000000002')),
+    gen_random_uuid(), '{}', 'capacity', '{}', 'qualification');
+  v_late_id := v_ids[1];
+  -- What the server assessed: the late visit, at its version, with Cem instead of Bea.
+  v_assessed := jsonb_build_array(jsonb_build_object(
+    'jobId', v_job, 'capacitySnapshot', '{}'::jsonb, 'capacityFingerprint', 'capacity',
+    'qualificationSnapshot', '{}'::jsonb, 'qualificationFingerprint', 'qualification',
+    'visits', jsonb_build_array(jsonb_build_object(
+      'occurrenceId', v_late_id, 'version', pg_temp.version_of(v_late_id), 'employeeRecordIds', jsonb_build_array(v_cem)))));
+  v_before := pg_temp.handover_state();
+
+  -- Each refusal leaves every row as it was.
+  begin
+    perform public.hand_over_personnel_work('b1d9e000-0000-4000-8000-000000000011',
+      'b1d9e000-0000-4000-8000-000000000001', v_bea, pg_temp.day(5),
+      jsonb_build_array(jsonb_build_object('jobId', v_job, 'targetEmployeeRecordId', v_cem)), v_assessed, null);
+    raise exception 'a handover in a foreign organization was accepted';
+  exception when raise_exception then
+    if sqlerrm <> 'forbidden' then raise; end if;
+  end;
+  begin
+    perform public.hand_over_personnel_work('b1d9e000-0000-4000-8000-000000000010',
+      'b1d9e000-0000-4000-8000-000000000003', v_bea, pg_temp.day(5),
+      jsonb_build_array(jsonb_build_object('jobId', v_job, 'targetEmployeeRecordId', v_cem)), v_assessed, null);
+    raise exception 'a field worker handed over a colleague''s work';
+  exception when raise_exception then
+    if sqlerrm <> 'forbidden' then raise; end if;
+  end;
+  begin
+    perform public.hand_over_personnel_work('b1d9e000-0000-4000-8000-000000000010',
+      'b1d9e000-0000-4000-8000-000000000001', v_bea, pg_temp.day(5),
+      jsonb_build_array(jsonb_build_object('jobId', v_job, 'targetEmployeeRecordId', v_foreign_record)), v_assessed, null);
+    raise exception 'a target outside the organization took over work';
+  exception when raise_exception then
+    if sqlerrm <> 'target_not_found' then raise; end if;
+  end;
+  begin
+    perform public.hand_over_personnel_work('b1d9e000-0000-4000-8000-000000000010',
+      'b1d9e000-0000-4000-8000-000000000001', v_bea, pg_temp.day(5),
+      jsonb_build_array(jsonb_build_object('jobId', v_foreign_job, 'targetEmployeeRecordId', v_cem)), '[]', null);
+    raise exception 'a foreign organization''s job was handed over';
+  exception when raise_exception then
+    if sqlerrm <> 'job_not_found' then raise; end if;
+  end;
+  begin
+    perform public.hand_over_personnel_work('b1d9e000-0000-4000-8000-000000000010',
+      'b1d9e000-0000-4000-8000-000000000001', v_foreign_record, pg_temp.day(5),
+      jsonb_build_array(jsonb_build_object('jobId', v_job, 'targetEmployeeRecordId', v_cem)), v_assessed, null);
+    raise exception 'a foreign organization''s person had their work handed over';
+  exception when raise_exception then
+    if sqlerrm <> 'employee_record_not_found' then raise; end if;
+  end;
+  begin
+    perform public.hand_over_personnel_work('b1d9e000-0000-4000-8000-000000000010',
+      'b1d9e000-0000-4000-8000-000000000001', v_bea, pg_temp.day(5),
+      jsonb_build_array(jsonb_build_object('jobId', v_job, 'targetEmployeeRecordId', v_bea)), v_assessed, null);
+    raise exception 'the leaver took over their own work';
+  exception when raise_exception then
+    if sqlerrm <> 'invalid_target' then raise; end if;
+  end;
+  begin
+    perform public.hand_over_personnel_work('b1d9e000-0000-4000-8000-000000000010',
+      'b1d9e000-0000-4000-8000-000000000001', v_bea, pg_temp.day(-1),
+      jsonb_build_array(jsonb_build_object('jobId', v_job, 'targetEmployeeRecordId', v_cem)), v_assessed, null);
+    raise exception 'a handover from yesterday was accepted';
+  exception when raise_exception then
+    if sqlerrm <> 'invalid_handover_date' then raise; end if;
+  end;
+  begin
+    perform public.hand_over_personnel_work('b1d9e000-0000-4000-8000-000000000010',
+      'b1d9e000-0000-4000-8000-000000000001', v_bea, pg_temp.day(5), '[]', '[]', null);
+    raise exception 'a handover without a job was accepted';
+  exception when raise_exception then
+    if sqlerrm <> 'invalid_handover' then raise; end if;
+  end;
+  insert into public.employee_records (id, organization_id, first_name, last_name, exit_date) values
+    (v_gone, 'b1d9e000-0000-4000-8000-000000000010', 'Gerd', 'Gegangen', pg_temp.day(3));
+  begin
+    perform public.hand_over_personnel_work('b1d9e000-0000-4000-8000-000000000010',
+      'b1d9e000-0000-4000-8000-000000000001', v_bea, pg_temp.day(5),
+      jsonb_build_array(jsonb_build_object('jobId', v_job, 'targetEmployeeRecordId', v_gone)), v_assessed, null);
+    raise exception 'a target who leaves before the handover date took over work';
+  exception when raise_exception then
+    if sqlerrm <> 'target_not_available' then raise; end if;
+  end;
+  -- Without the assessment of the visit it moves, or for an older version of it.
+  begin
+    perform public.hand_over_personnel_work('b1d9e000-0000-4000-8000-000000000010',
+      'b1d9e000-0000-4000-8000-000000000001', v_bea, pg_temp.day(5),
+      jsonb_build_array(jsonb_build_object('jobId', v_job, 'targetEmployeeRecordId', v_cem)), '[]', null);
+    raise exception 'an unassessed visit was handed over';
+  exception when raise_exception then
+    if sqlerrm <> 'stale_planning_occurrence' then raise; end if;
+  end;
+  begin
+    perform public.hand_over_personnel_work('b1d9e000-0000-4000-8000-000000000010',
+      'b1d9e000-0000-4000-8000-000000000001', v_bea, pg_temp.day(5),
+      jsonb_build_array(jsonb_build_object('jobId', v_job, 'targetEmployeeRecordId', v_cem)),
+      jsonb_set(v_assessed, '{0,visits,0,version}', to_jsonb(pg_temp.version_of(v_late_id) - 1)), null);
+    raise exception 'a visit changed since its assessment was handed over';
+  exception when raise_exception then
+    if sqlerrm <> 'stale_planning_occurrence' then raise; end if;
+  end;
+  -- A refused later row rolls back the earlier one: Nora has no login for the parked job's team.
+  begin
+    perform public.hand_over_personnel_work('b1d9e000-0000-4000-8000-000000000010',
+      'b1d9e000-0000-4000-8000-000000000001', v_bea, pg_temp.day(5),
+      jsonb_build_array(
+        jsonb_build_object('jobId', v_job, 'targetEmployeeRecordId', v_cem),
+        jsonb_build_object('jobId', v_parked, 'targetEmployeeRecordId', v_nora)),
+      v_assessed, null);
+    raise exception 'team-only work went to a person without a login';
+  exception when raise_exception then
+    if sqlerrm <> 'target_without_login' then raise; end if;
+  end;
+  if pg_temp.handover_state() <> v_before then
+    raise exception 'a refused handover changed rows: % became %', v_before, pg_temp.handover_state();
+  end if;
+
+  v_handed := public.hand_over_personnel_work('b1d9e000-0000-4000-8000-000000000010',
+    'b1d9e000-0000-4000-8000-000000000001', v_bea, pg_temp.day(5),
+    jsonb_build_array(
+      jsonb_build_object('jobId', v_job, 'targetEmployeeRecordId', v_cem),
+      jsonb_build_object('jobId', v_parked, 'targetEmployeeRecordId', v_cem)),
+    v_assessed, 'Übergabe vor dem Austritt');
+  if v_handed <> 2 then raise exception 'the handover reported % jobs, not 2', v_handed; end if;
+  if pg_temp.crew(v_late_id) <> pg_temp.users('b1d9e000-0000-4000-8000-000000000003') then
+    raise exception 'the visit after the handover date did not go to Cem';
+  end if;
+  if pg_temp.crew(pg_temp.bridge_id('handover early visit')) <> pg_temp.users('b1d9e000-0000-4000-8000-000000000002') then
+    raise exception 'the visit before the handover date left Bea';
+  end if;
+  if pg_temp.team(v_job) <> pg_temp.users('b1d9e000-0000-4000-8000-000000000002', 'b1d9e000-0000-4000-8000-000000000003') then
+    raise exception 'the job''s team is not Bea, who keeps an earlier visit, and Cem';
+  end if;
+  if pg_temp.team(v_parked) <> pg_temp.users('b1d9e000-0000-4000-8000-000000000003') then
+    raise exception 'the parked job''s team did not go from Bea to Cem';
+  end if;
+  if not exists (
+    select 1 from public.planning_events
+    where occurrence_id = v_late_id and event_type = 'reassigned' and reason = 'Übergabe vor dem Austritt'
+  ) or not exists (
+    select 1 from public.planning_occurrence_assessments
+    where occurrence_id = v_late_id and override_reason = 'Übergabe vor dem Austritt'
+      and selected_employee_record_ids = array[v_cem]
+  ) then raise exception 'the moved visit has no reassignment event or assessment with the reason'; end if;
+  if not exists (
+    select 1 from public.employee_record_events
+    where employee_record_id = v_bea and event_type = 'work_handed_over'
+      and jsonb_array_length(event_payload->'jobs') = 2
+  ) then raise exception 'Bea''s personnel history does not record the handover'; end if;
+  perform pg_temp.assert_bridge('a handover');
+
+  -- The same handover again finds nothing of Bea's on the parked job.
+  begin
+    perform public.hand_over_personnel_work('b1d9e000-0000-4000-8000-000000000010',
+      'b1d9e000-0000-4000-8000-000000000001', v_bea, pg_temp.day(5),
+      jsonb_build_array(jsonb_build_object('jobId', v_parked, 'targetEmployeeRecordId', v_cem)), '[]', null);
+    raise exception 'a job Bea no longer holds was handed over again';
+  exception when raise_exception then
+    if sqlerrm <> 'stale_handover' then raise; end if;
+  end;
+end;
+$$;
+
+-- 16. The open absences the attention tasks read in one call (20261129100000):
+-- the vacation requests the old table read returned (pending, or approved and
+-- ending today or later, by start date), and each person who left with an
+-- unstarted visit after the exit, from the day after it. Another
+-- organization's rows never come back.
+do $$
+declare
+  v_anna uuid := pg_temp.record_of('b1d9e000-0000-4000-8000-000000000001');
+  v_bea uuid := pg_temp.record_of('b1d9e000-0000-4000-8000-000000000002');
+  v_cem uuid := pg_temp.record_of('b1d9e000-0000-4000-8000-000000000003');
+  v_foreign_record uuid := gen_random_uuid();
+  v_result jsonb;
+  v_expected jsonb;
+begin
+  insert into public.employee_records (id, organization_id, first_name, last_name) values
+    (v_foreign_record, 'b1d9e000-0000-4000-8000-000000000011', 'Fremd', 'Urlaub');
+  insert into public.vacation_requests (id, organization_id, employee_record_id, start_date, end_date, status) values
+    ('b1d9e000-0000-4000-8000-0000000000a1', 'b1d9e000-0000-4000-8000-000000000010', v_anna,
+     pg_temp.day(20), pg_temp.day(21), 'pending'),
+    ('b1d9e000-0000-4000-8000-0000000000a2', 'b1d9e000-0000-4000-8000-000000000010', v_bea,
+     pg_temp.day(-3), pg_temp.day(0), 'approved'),
+    ('b1d9e000-0000-4000-8000-0000000000a3', 'b1d9e000-0000-4000-8000-000000000010', v_cem,
+     pg_temp.day(-10), pg_temp.day(-5), 'approved'),
+    ('b1d9e000-0000-4000-8000-0000000000a4', 'b1d9e000-0000-4000-8000-000000000010', v_anna,
+     pg_temp.day(30), pg_temp.day(30), 'rejected'),
+    ('b1d9e000-0000-4000-8000-0000000000a5', 'b1d9e000-0000-4000-8000-000000000011', v_foreign_record,
+     pg_temp.day(20), pg_temp.day(21), 'pending');
+  -- Cem holds the handed-over visit ten days ahead and leaves before it; Bea
+  -- leaves after all her visits, which stay her work.
+  update public.employee_records set exit_date = pg_temp.day(4) where id = v_cem;
+  update public.employee_records set exit_date = pg_temp.day(2000) where id = v_bea;
+
+  v_result := public.read_open_absences('b1d9e000-0000-4000-8000-000000000010', pg_temp.day(0));
+  select coalesce(jsonb_agg(to_jsonb(request) order by request.start_date, request.id), '[]'::jsonb)
+  into v_expected
+  from public.vacation_requests request
+  where request.organization_id = 'b1d9e000-0000-4000-8000-000000000010'
+    and (request.status = 'pending' or (request.status = 'approved' and request.end_date >= pg_temp.day(0)));
+  if v_result->'vacations' <> v_expected
+     or (select array_agg(value->>'id') from jsonb_array_elements(v_result->'vacations'))
+       <> array['b1d9e000-0000-4000-8000-0000000000a2', 'b1d9e000-0000-4000-8000-0000000000a1'] then
+    raise exception 'the open vacations differ from the rows the table read returned: %', v_result->'vacations';
+  end if;
+  if v_result->'leaverWindows'
+     <> jsonb_build_array(jsonb_build_object('employeeRecordId', v_cem, 'from', pg_temp.day(5))) then
+    raise exception 'the leaver windows are not Cem from the day after the exit: %', v_result->'leaverWindows';
+  end if;
+  -- An exit long past still counts from today.
+  update public.employee_records set entry_date = pg_temp.day(-60), exit_date = pg_temp.day(-30) where id = v_cem;
+  if public.read_open_absences('b1d9e000-0000-4000-8000-000000000010', pg_temp.day(0))->'leaverWindows'
+     <> jsonb_build_array(jsonb_build_object('employeeRecordId', v_cem, 'from', pg_temp.day(0))) then
+    raise exception 'a past exit did not count from today';
+  end if;
+  v_result := public.read_open_absences('b1d9e000-0000-4000-8000-000000000011', pg_temp.day(0));
+  if (select array_agg(value->>'id') from jsonb_array_elements(v_result->'vacations'))
+       <> array['b1d9e000-0000-4000-8000-0000000000a5']
+     or v_result->'leaverWindows' <> '[]'::jsonb then
+    raise exception 'another organization''s absences came back: %', v_result;
+  end if;
+end;
+$$;
+
 reset role;
 
 -- One owner sets the marker and every job-to-plan trigger reads it. A second
@@ -1094,7 +1384,9 @@ begin
     'public.convert_client_request_to_job_with_visit_assessment(uuid, uuid, uuid, jsonb, uuid[], date, uuid[], jsonb, jsonb, text, text, uuid, boolean, uuid, boolean, jsonb)',
     'public.unpark_job_into_schedule_with_visit_assessment(uuid, uuid, uuid, bigint, text, jsonb, boolean, uuid[], date, uuid[], jsonb, jsonb, text, text, uuid, boolean, jsonb)',
     'app_private.record_job_visit_assessment(uuid, uuid, uuid, integer, uuid[], jsonb)',
-    'app_private.record_job_visit_assessment(uuid, uuid, uuid, integer, uuid[], jsonb, boolean)'
+    'app_private.record_job_visit_assessment(uuid, uuid, uuid, integer, uuid[], jsonb, boolean)',
+    'public.hand_over_personnel_work(uuid, uuid, uuid, date, jsonb, jsonb, text)',
+    'public.read_open_absences(uuid, date)'
   ] loop
     if not has_function_privilege('service_role', v_function, 'execute') then
       raise exception '% lost its service_role grant', v_function;

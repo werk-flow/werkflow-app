@@ -96,6 +96,7 @@ A job's team and the people on its visits are two records of one plan. A job sch
 - The job create and edit saves, the request conversion into a job, the calendar's unpark into the schedule and the job-page team change record the capacity assessment of the legacy visit they plan, move or add people to, in the same call, and refuse the write when that visit is not the one the server assessed. The unpark puts the job's whole team on the visit, also on a visit planned for today that the team triggers leave alone, so its assessment covers the whole team and that visit.
 - Parking cancels scheduled visits and empties the schedule; visits keep their people, the job its team. Unparking revives the legacy visit.
 - A series change sets the people of every occurrence it rewrites; the replaced people stay on the team.
+- A handover of a leaver's work moves their unstarted visits of the job from the handover date to the target and puts the target on the team through the projection, so no other visit gains them. The leaver leaves the team once no unstarted visit keeps them on the job.
 
 `app_private.project_plan_onto_job` is the only writer of the plan onto the job. It sets the transaction-local marker `app.planning_projection_write` for its own writes, then restores the earlier value. A marker that outlives its write disconnects every later job edit in the transaction from its visit. `sql:job-plan-bridge` drives every write path.
 

@@ -1,6 +1,24 @@
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 
+/**
+ * Where a job stands for the caller, in the picker's order: the caller's job
+ * in progress, a visit of the caller's today, the caller's next visit, the
+ * caller's other jobs, then (office roles only) everyone else's. The database
+ * ranks by it before it cuts the page (`search_clock_job_options`).
+ */
+export const PICKER_GROUPS = ['in_progress', 'today', 'upcoming', 'own', 'other'] as const;
+export type PickerGroup = (typeof PICKER_GROUPS)[number];
+
+/** The heading above each group of the picker list. */
+export const PICKER_GROUP_LABELS: Record<PickerGroup, string> = {
+  in_progress: 'In Ausführung',
+  today: 'Heute geplant',
+  upcoming: 'Demnächst geplant',
+  own: 'Deine weiteren Aufträge',
+  other: 'Weitere Aufträge',
+};
+
 /** A job of the clock-in and job-switch picker. */
 export type PickerJob = {
   id: string;
@@ -9,8 +27,9 @@ export type PickerJob = {
   status: string;
   projectName: string | null;
   clientName: string | null;
-  /** The caller is assigned to a scheduled visit of this job on today's Berlin date. */
-  plannedToday: boolean;
+  group: PickerGroup;
+  /** The Berlin date (`YYYY-MM-DD`) of the caller's next visit after today, if any. */
+  nextVisitDate: string | null;
 };
 
 export const PICKER_PAGE_SIZE = 50;

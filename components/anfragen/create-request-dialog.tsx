@@ -18,6 +18,7 @@ import { Field } from '@/components/ui/field';
 import { ErrorText } from '@/components/ui/error-text';
 import { CreateRequestCustomerFields } from './create-request-customer-fields';
 import { CreateRequestFurtherFields } from './create-request-further-fields';
+import { RequestCallbackField } from './request-callback-field';
 import { RequestTriageFields } from './request-triage-fields';
 import { useCreateRequestForm } from './use-create-request-form';
 
@@ -28,10 +29,12 @@ type RequestAssigneeOption = {
 
 interface CreateRequestDialogProps {
   assignees: RequestAssigneeOption[];
+  /** The capturing user, who owns the next step unless someone else is chosen. */
+  currentUserId: string;
 }
 
-export function CreateRequestDialog({ assignees }: CreateRequestDialogProps) {
-  const form = useCreateRequestForm();
+export function CreateRequestDialog({ assignees, currentUserId }: CreateRequestDialogProps) {
+  const form = useCreateRequestForm(currentUserId);
   const { open, handleOpenChange, summary, setSummary, isLoading, summaryError, formError, handleSubmit } =
     form;
 
@@ -74,6 +77,14 @@ export function CreateRequestDialog({ assignees }: CreateRequestDialogProps) {
             </Field>
 
             <RequestTriageFields idPrefix="request" form={form} />
+
+            <RequestCallbackField
+              idPrefix="request"
+              value={form.callbackDueAt}
+              onChange={form.setCallbackDueAt}
+              error={form.callbackDueAtError}
+              disabled={isLoading}
+            />
 
             <CreateRequestCustomerFields form={form} />
 

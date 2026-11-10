@@ -58,6 +58,19 @@ insert into public.jobs(id,organization_id,title,job_number,status,created_by) v
 insert into public.job_assignments(organization_id,job_id,user_id,assigned_by) values
 ('78000000-0000-4000-8000-000000000010',md5('opt-job-1')::uuid,'78000000-0000-4000-8000-000000000002','78000000-0000-4000-8000-000000000001'),
 ('78000000-0000-4000-8000-000000000010',md5('opt-job-2')::uuid,'78000000-0000-4000-8000-000000000002','78000000-0000-4000-8000-000000000001');
+-- Clock order: five jobs titled alike. 2001 is the worker's job in progress,
+-- 2002 and 2003 have the worker's next visits (12.10. timed, 11.10. all day),
+-- 2004 is parked with a visit today, 2005 is in progress but not the worker's.
+insert into public.jobs(id,organization_id,title,job_number,client_id,status,execution_state,created_by)
+select md5('opt-order-'||n)::uuid,'78000000-0000-4000-8000-000000000010','Heizkörper austauschen','AUF-2026-'||(2000+n),
+  '78000000-0000-4000-8000-000000000020',
+  (case when n in (1,5) then 'in_bearbeitung' when n=4 then 'geparkt' else 'nicht_bearbeitet' end)::public.job_status,
+  (case when n in (1,5) then 'in_progress' else 'not_started' end)::public.work_execution_state,
+  '78000000-0000-4000-8000-000000000001'
+from generate_series(1,5) n;
+insert into public.job_assignments(organization_id,job_id,user_id,assigned_by)
+select '78000000-0000-4000-8000-000000000010',md5('opt-order-'||n)::uuid,'78000000-0000-4000-8000-000000000002','78000000-0000-4000-8000-000000000001'
+from generate_series(1,4) n;
 -- The membership created the worker's employee record; 0061 is a record without a login.
 insert into public.employee_records(id,organization_id,user_id) values
 ('78000000-0000-4000-8000-000000000061','78000000-0000-4000-8000-000000000010',null);
@@ -67,11 +80,19 @@ insert into public.planning_occurrences(id,organization_id,job_id,entry_kind,tim
 ('78000000-0000-4000-8000-000000000072','78000000-0000-4000-8000-000000000010',md5('opt-job-4')::uuid,'job_visit','timed','scheduled','2026-10-09T08:00:00Z','2026-10-09T10:00:00Z');
 insert into public.planning_occurrences(id,organization_id,job_id,entry_kind,time_kind,status,start_date,end_date_exclusive) values
 ('78000000-0000-4000-8000-000000000073','78000000-0000-4000-8000-000000000010',md5('opt-job-5')::uuid,'job_visit','all_day','scheduled','2026-10-08','2026-10-10');
+insert into public.planning_occurrences(id,organization_id,job_id,entry_kind,time_kind,status,start_at,end_at) values
+('78000000-0000-4000-8000-000000000074','78000000-0000-4000-8000-000000000010',md5('opt-order-2')::uuid,'job_visit','timed','scheduled','2026-10-12T06:00:00Z','2026-10-12T08:00:00Z'),
+('78000000-0000-4000-8000-000000000076','78000000-0000-4000-8000-000000000010',md5('opt-order-4')::uuid,'job_visit','timed','scheduled','2026-10-09T06:00:00Z','2026-10-09T08:00:00Z');
+insert into public.planning_occurrences(id,organization_id,job_id,entry_kind,time_kind,status,start_date,end_date_exclusive) values
+('78000000-0000-4000-8000-000000000075','78000000-0000-4000-8000-000000000010',md5('opt-order-3')::uuid,'job_visit','all_day','scheduled','2026-10-11','2026-10-12');
 insert into public.planning_occurrence_assignments(organization_id,occurrence_id,employee_record_id) values
 ('78000000-0000-4000-8000-000000000010','78000000-0000-4000-8000-000000000070',(select id from public.employee_records where organization_id='78000000-0000-4000-8000-000000000010' and user_id='78000000-0000-4000-8000-000000000002')),
 ('78000000-0000-4000-8000-000000000010','78000000-0000-4000-8000-000000000071',(select id from public.employee_records where organization_id='78000000-0000-4000-8000-000000000010' and user_id='78000000-0000-4000-8000-000000000002')),
 ('78000000-0000-4000-8000-000000000010','78000000-0000-4000-8000-000000000072','78000000-0000-4000-8000-000000000061'),
-('78000000-0000-4000-8000-000000000010','78000000-0000-4000-8000-000000000073',(select id from public.employee_records where organization_id='78000000-0000-4000-8000-000000000010' and user_id='78000000-0000-4000-8000-000000000002'));
+('78000000-0000-4000-8000-000000000010','78000000-0000-4000-8000-000000000073',(select id from public.employee_records where organization_id='78000000-0000-4000-8000-000000000010' and user_id='78000000-0000-4000-8000-000000000002')),
+('78000000-0000-4000-8000-000000000010','78000000-0000-4000-8000-000000000074',(select id from public.employee_records where organization_id='78000000-0000-4000-8000-000000000010' and user_id='78000000-0000-4000-8000-000000000002')),
+('78000000-0000-4000-8000-000000000010','78000000-0000-4000-8000-000000000075',(select id from public.employee_records where organization_id='78000000-0000-4000-8000-000000000010' and user_id='78000000-0000-4000-8000-000000000002')),
+('78000000-0000-4000-8000-000000000010','78000000-0000-4000-8000-000000000076',(select id from public.employee_records where organization_id='78000000-0000-4000-8000-000000000010' and user_id='78000000-0000-4000-8000-000000000002'));
 
 -- Inventory: 1,105 active items, one inactive, one with a literal `50%_`
 -- name, one found only by its barcode; one foreign item.
@@ -159,17 +180,34 @@ begin
   result := public.search_project_options(org,'9999',null,false,0);
   if jsonb_array_length(result->'options')<>0 then raise exception 'project search leaked a foreign project'; end if;
 
-  -- Clock jobs: the worker sees the assigned jobs, today's own visit first.
+  -- Clock jobs: the worker sees the assigned open jobs, never a parked one: own job in
+  -- progress, today's own visit, the next own visits by date, then the other own jobs.
   result := public.search_clock_job_options(org,worker,false,'2026-10-09','2026-10-08T22:00:00Z','2026-10-09T22:00:00Z','',50,null);
-  if jsonb_array_length(result->'options')<>2 or result#>>'{options,0,jobNumber}'<>'AUF-2026-2'
-    or not (result#>>'{options,0,plannedToday}')::boolean or (result#>>'{options,1,plannedToday}')::boolean then
-    raise exception 'worker clock jobs wrong: %',result->'options';
+  if (select array_agg(item.value->>'jobNumber' order by item.position) from jsonb_array_elements(result->'options') with ordinality item(value,position))
+    <> array['AUF-2026-2001','AUF-2026-2','AUF-2026-2003','AUF-2026-2002','AUF-2026-1']
+    or (select array_agg(item.value->>'group' order by item.position) from jsonb_array_elements(result->'options') with ordinality item(value,position))
+    <> array['in_progress','today','upcoming','upcoming','own']
+    or result#>>'{options,2,nextVisitDate}'<>'2026-10-11' or result#>>'{options,3,nextVisitDate}'<>'2026-10-12'
+    or not (result#>>'{options,1,plannedToday}')::boolean then
+    raise exception 'worker clock order wrong: %',result->'options';
   end if;
-  -- A manager sees every open job; own all-day and timed visits rank first, another worker's visit and another day do not.
+  result := public.search_clock_job_options(org,worker,false,'2026-10-09','2026-10-08T22:00:00Z','2026-10-09T22:00:00Z','Heizkörper',2,null);
+  if (select array_agg(item.value->>'jobNumber' order by item.position) from jsonb_array_elements(result->'options') with ordinality item(value,position))
+    <> array['AUF-2026-2001','AUF-2026-2003'] or not (result->>'hasMore')::boolean then
+    raise exception 'clock order not applied before the page boundary: %',result->'options';
+  end if;
+  -- An office role gets the same own groups first (another worker's visit and
+  -- another job in progress do not count), then everyone else's jobs by title.
   result := public.search_clock_job_options(org,worker,true,'2026-10-09','2026-10-08T22:00:00Z','2026-10-09T22:00:00Z','',50,null);
-  if result#>>'{options,0,jobNumber}'<>'AUF-2026-2' or result#>>'{options,1,jobNumber}'<>'AUF-2026-5'
-    or (result#>>'{options,2,plannedToday}')::boolean or not (result->>'hasMore')::boolean then
-    raise exception 'manager clock ranking wrong: %',result->'options'->0;
+  if (select array_agg(item.value->>'jobNumber' order by item.position) from jsonb_array_elements(result->'options') with ordinality item(value,position))[1:8]
+    <> array['AUF-2026-2001','AUF-2026-2','AUF-2026-5','AUF-2026-3','AUF-2026-2003','AUF-2026-2002','AUF-2026-1','AUF-2026-4']
+    or result#>>'{options,7,group}'<>'other' or not (result->>'hasMore')::boolean then
+    raise exception 'manager clock ranking wrong: %',result->'options';
+  end if;
+  result := public.search_clock_job_options(org,worker,true,'2026-10-09','2026-10-08T22:00:00Z','2026-10-09T22:00:00Z','Heizkörper',50,null);
+  if (select array_agg(item.value->>'jobNumber' order by item.position) from jsonb_array_elements(result->'options') with ordinality item(value,position))
+    <> array['AUF-2026-2001','AUF-2026-2003','AUF-2026-2002','AUF-2026-2005'] then
+    raise exception 'manager clock search lists a parked job or misorders: %',result->'options';
   end if;
   result := public.search_clock_job_options(org,worker,true,'2026-10-09','2026-10-08T22:00:00Z','2026-10-09T22:00:00Z','',1000,null);
   if jsonb_array_length(result->'options')<>1000 or not (result->>'hasMore')::boolean then raise exception 'clock limit wrong'; end if;

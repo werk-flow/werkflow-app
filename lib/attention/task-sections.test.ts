@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { formatOpenSince, groupAttentionTasks } from './task-sections';
+import { formatOpenSince, groupAttentionTasks, nextCallbackDeadline } from './task-sections';
 import type { AttentionTask } from './types';
 
 const href = '/auftraege/A-1';
@@ -108,6 +108,17 @@ const TASK_OF_EVERY_KIND: AttentionTask[] = [
     openSinceDays: 37,
     assigneeName: null,
     assignedToMe: false,
+    callbackDueAt: null,
+  },
+  {
+    sourceType: 'client_request_callback_overdue',
+    sourceId: 'request-2',
+    requestNumber: 'AN-2',
+    summary: 'Kein Warmwasser',
+    urgency: 'notfall',
+    callbackDueAt: '2026-11-07T08:00:00.000Z',
+    ownerName: null,
+    ownerUnavailable: false,
   },
   {
     sourceType: 'vacation_request_approval',
@@ -145,8 +156,9 @@ const TASK_OF_EVERY_KIND: AttentionTask[] = [
 ];
 
 describe('groupAttentionTasks', () => {
-  test('time-bound decisions lead: time approvals, vacation requests, visits to replan and open Anfragen come first, handovers last', () => {
+  test('overdue callbacks lead; time approvals, vacation requests, visits to replan and open Anfragen follow, handovers last', () => {
     expect(groupAttentionTasks(TASK_OF_EVERY_KIND).map((section) => section.key)).toEqual([
+      'callback',
       'time',
       'vacation',
       'visitReplan',
@@ -173,6 +185,37 @@ describe('groupAttentionTasks', () => {
 
   test('a section without tasks is left out', () => {
     expect(groupAttentionTasks([])).toEqual([]);
+  });
+});
+
+describe('nextCallbackDeadline', () => {
+  const openRequest = (sourceId: string, callbackDueAt: string | null): AttentionTask => ({
+    sourceType: 'client_request_open',
+    sourceId,
+    requestNumber: null,
+    summary: 'Anfrage',
+    status: 'offen',
+    urgency: 'normal',
+    receivedAt: '2026-11-07T07:00:00.000Z',
+    openSinceDays: 0,
+    assigneeName: null,
+    assignedToMe: true,
+    callbackDueAt,
+  });
+
+  test("the earliest callback that would make an open Anfrage the viewer's overdue task", () => {
+    expect(
+      nextCallbackDeadline([
+        openRequest('later', '2026-11-07T12:00:00.000Z'),
+        openRequest('sooner', '2026-11-07T10:00:00.000Z'),
+        openRequest('none', null),
+      ]),
+    ).toBe(Date.parse('2026-11-07T10:00:00.000Z'));
+  });
+
+  test('no open Anfrage with a callback of the viewer sets no deadline; an overdue one is already shown', () => {
+    expect(nextCallbackDeadline([openRequest('none', null)])).toBeNull();
+    expect(nextCallbackDeadline(TASK_OF_EVERY_KIND)).toBeNull();
   });
 });
 

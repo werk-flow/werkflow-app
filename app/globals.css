@@ -5,6 +5,11 @@
 @source '../hooks';
 @source '../lib';
 @source '../proxy.ts';
+/* Tests and test support never render: a class string in a lint
+   test's example or a fixture would otherwise ship in every page's start-up
+   stylesheet. */
+@source not '../lib/testing';
+@source not '../**/*.test.{ts,tsx,mjs}';
 
 :root {
   --background: #fafafb;
@@ -316,28 +321,9 @@ body {
   min-height: 100dvh;
 }
 
-/* Text selection styles */
+/* Text selection styles. `::selection` matches every element, text fields
+   included, and every supported browser reads it unprefixed. */
 ::selection {
-  background-color: var(--selection);
-  color: var(--selection-foreground);
-}
-
-::-moz-selection {
-  background-color: var(--selection);
-  color: var(--selection-foreground);
-}
-
-/* Input field text selection */
-input::selection,
-textarea::selection,
-[contenteditable]::selection {
-  background-color: var(--selection);
-  color: var(--selection-foreground);
-}
-
-input::-moz-selection,
-textarea::-moz-selection,
-[contenteditable]::-moz-selection {
   background-color: var(--selection);
   color: var(--selection-foreground);
 }
@@ -397,22 +383,6 @@ textarea::-moz-selection,
   animation: row-highlight 1.5s ease-out forwards;
 }
 
-/* Marquee animation for overflowing text in mobile cards */
-@keyframes marquee-scroll {
-  0%,
-  10% {
-    transform: translateX(0);
-  }
-  90%,
-  100% {
-    transform: translateX(var(--marquee-distance));
-  }
-}
-
-.animate-marquee {
-  animation: marquee-scroll var(--marquee-duration, 8s) linear infinite;
-}
-
 /* Green glow pulsation for active work ring */
 @keyframes green-glow {
   0%,
@@ -465,32 +435,6 @@ body.is-dragging * {
       var(--calendar-grid) 0 1px,
       transparent 1px var(--calendar-subline-width)
     );
-}
-
-/* Hide native time picker indicators for all browsers */
-input[type='time'].hide-time-picker::-webkit-calendar-picker-indicator,
-input[type='time'].hide-time-picker::-webkit-inner-spin-button,
-input[type='time'].hide-time-picker::-webkit-clear-button {
-  display: none !important;
-  -webkit-appearance: none !important;
-  appearance: none !important;
-  opacity: 0 !important;
-  width: 0 !important;
-  height: 0 !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  background: transparent !important;
-}
-
-/* Safari specific fix */
-input[type='time'].hide-time-picker {
-  -webkit-appearance: none;
-  appearance: none;
-}
-
-/* Firefox */
-input[type='time'].hide-time-picker::-moz-focus-inner {
-  border: 0;
 }
 
 /* Accessibility canon (werkflow-design skill): respect prefers-reduced-motion

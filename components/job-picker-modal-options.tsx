@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { PlainButton } from '@/components/ui/plain-button';
 import { SectionError } from '@/components/ui/section-error';
 import { Skeleton } from '@/components/ui/skeleton';
+import { pickerGroupHeading, pickerJobDetails } from '@/lib/time-tracking/picker-labels';
 import type { PickerJob } from '@/lib/time-tracking/picker-types';
 import { cn } from '@/lib/utils';
 
@@ -39,9 +40,8 @@ function JobPickerEmptyState({ searchQuery }: { searchQuery: string }) {
 }
 
 type JobPickerOptionListProps = {
-  /** The server's matches in its order: today's planned jobs first. */
-  filteredJobs: PickerJob[];
-  plannedTodayCount: number;
+  /** The server's matches in its order, grouped by `PickerGroup`. */
+  filteredJobs: readonly PickerJob[];
   selectedJobId: string | null;
   setSelectedJobId: (jobId: string | null) => void;
   isLoading: boolean;
@@ -55,7 +55,6 @@ type JobPickerOptionListProps = {
 /** The always-visible radio list of the clock flows: "Ohne Auftrag" first, then the jobs. */
 export function JobPickerOptionList({
   filteredJobs,
-  plannedTodayCount,
   selectedJobId,
   setSelectedJobId,
   isLoading,
@@ -80,37 +79,32 @@ export function JobPickerOptionList({
         <span className="text-muted-foreground">Ohne Auftrag</span>
       </PlainButton>
 
-      {filteredJobs.map((job, index) => (
-        <Fragment key={job.id}>
-          {plannedTodayCount > 0 &&
-            plannedTodayCount < filteredJobs.length &&
-            (index === 0 || index === plannedTodayCount) && (
-              <p className="px-3 pb-1 pt-3 text-xs font-medium text-muted-foreground">
-                {index === 0 ? 'Heute geplant' : 'Weitere Aufträge'}
-              </p>
-            )}
-          <PlainButton
-            type="button"
-            role="radio"
-            aria-checked={selectedJobId === job.id}
-            onClick={() => setSelectedJobId(job.id)}
-            className={cn(
-              'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors',
-              selectedJobId === job.id ? 'bg-primary/10 ring-1 ring-primary/20' : 'hover:bg-accent',
-            )}
-          >
-            <JobPickerRadioMark checked={selectedJobId === job.id} />
-            <div className="min-w-0 flex-1">
-              <p className="line-clamp-2 break-words font-medium" title={job.title}>
-                {job.title}
-              </p>
-              <p className="truncate text-xs text-muted-foreground">
-                {[job.jobNumber, job.clientName, job.projectName].filter(Boolean).join(' · ')}
-              </p>
-            </div>
-          </PlainButton>
-        </Fragment>
-      ))}
+      {filteredJobs.map((job, index) => {
+        const heading = pickerGroupHeading(filteredJobs, index);
+        return (
+          <Fragment key={job.id}>
+            {heading && <p className="px-3 pb-1 pt-3 text-xs font-medium text-muted-foreground">{heading}</p>}
+            <PlainButton
+              type="button"
+              role="radio"
+              aria-checked={selectedJobId === job.id}
+              onClick={() => setSelectedJobId(job.id)}
+              className={cn(
+                'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors',
+                selectedJobId === job.id ? 'bg-primary/10 ring-1 ring-primary/20' : 'hover:bg-accent',
+              )}
+            >
+              <JobPickerRadioMark checked={selectedJobId === job.id} />
+              <div className="min-w-0 flex-1">
+                <p className="line-clamp-2 break-words font-medium" title={job.title}>
+                  {job.title}
+                </p>
+                <p className="truncate text-xs text-muted-foreground">{pickerJobDetails(job)}</p>
+              </div>
+            </PlainButton>
+          </Fragment>
+        );
+      })}
 
       <JobPickerListStatus
         filteredJobs={filteredJobs}

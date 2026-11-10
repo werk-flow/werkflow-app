@@ -8,7 +8,7 @@ import { readInBatches } from '@/lib/supabase/query-batches';
 import { LIST_PAGE_SIZE } from '@/lib/ui/list-pagination';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { requestCategoriesMatching, type RequestListQuery, type RequestPage } from './list-page';
-import { toClientRequest } from './types';
+import { isCallbackOverdue, toClientRequest } from './types';
 
 const text = z.string().nullable();
 const requestPageRowsSchema = z.object({
@@ -57,6 +57,7 @@ export async function readRequestPage(organizationId: string, query: RequestList
   );
   if (error) throw new Error('request_page_read_failed');
   const requestById = new Map(requestRows.map((row) => [row.id, toClientRequest(row)]));
+  const readAt = new Date();
 
   return {
     total: parsed.data.total,
@@ -84,6 +85,7 @@ export async function readRequestPage(organizationId: string, query: RequestList
               })
             : null,
           convertedLabel,
+          callbackOverdue: isCallbackOverdue(request, readAt),
         },
       ];
     }),

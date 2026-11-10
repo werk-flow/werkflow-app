@@ -6,7 +6,8 @@ import { markAllAttentionNotificationsRead, markAttentionNotificationRead } from
 import type { ActionResult } from '@/lib/action-result';
 import type { AttentionNotification, AttentionOverview } from '@/lib/attention/types';
 import { readInBackground } from '@/lib/data/background-read-client';
-import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
+import { useBusinessDayRefresh, useDeadlineRefresh } from '@/hooks/use-business-day-refresh';
+import { nextCallbackDeadline } from '@/lib/attention/task-sections';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 
@@ -30,9 +31,14 @@ const AUFGABEN_OVERVIEW_TABLES = [
   'client_requests',
   'client_follow_ups',
   'organization_join_requests',
+  // An owner who leaves or loses the role hands their overdue callbacks and
+  // follow-ups to every manager.
+  'organization_members',
   // A replanned visit or a changed team resolves an „Einsatz umplanen“ task.
   'planning_occurrences',
   'planning_occurrence_assignments',
+  // An exit date moves a person's later visits into „Einsatz umplanen“.
+  'employee_records',
   'planning_dispatches',
   'planning_dispatch_recipients',
   'planning_dispatch_acknowledgements',
@@ -92,6 +98,8 @@ export function useAufgabenOverview() {
     },
   });
   useBusinessDayRefresh(view.refresh);
+  // A promised callback that passes moves its request into „Rückruf überfällig“.
+  useDeadlineRefresh(nextCallbackDeadline(view.data?.tasks ?? []), view.refresh);
 
   const overview = view.data ?? null;
   // The badges count this overview while the page is open: one derivation

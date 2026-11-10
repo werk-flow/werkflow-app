@@ -25,26 +25,27 @@ import {
   parseEnvironmentFile,
   proofEnvironmentDigest,
 } from '../evidence/proof-environment';
+import {
+  type MigrationDrift,
+  driftLine,
+  readMigrationDrift,
+  readsSharedStack,
+} from '../local-stack/migration-drift';
 import { withWorkspaceTestLock } from '../runner/workspace-test-lock';
 import { pruneRunArchive } from '../runs/run-retention';
-import { BoatError, boatClient } from './boat-api';
-import { type BoatKeyReading, RENEW_ADVICE, readBoatKey } from './boat-key';
+import { type BoatClient, BoatError, boatClient } from './boat-api';
+import { type BoatKeyReading, RENEW_ADVICE, readBoatKey, withBoatKey } from './boat-key';
 import { type BoatUnavailable, retryingStart } from './boat-unavailable';
 import { type TransferContext, type TransferPolicy, transfer } from './boat-transfer';
-import {
-  createMachine,
-  deleteMachine,
-  machineUsage,
-  runScript,
-  shellQuote,
-  type Machine,
-} from './boat-machine';
+import { runScript, shellQuote, type Machine } from './boat-machine';
+import { acquireMachine, keepMachine, withMachine } from './machine-reuse';
 
 // `bun run test:verify` runs on a short-lived Boat machine when this workstation has a Boat key
 // (docs/technical/boat-verification.md). The machine plans and runs the same command on the same
 // tree and evidence, at the same absolute path, so selection, proofs, reports and .agent-logs/
 // come back as a local run writes them. When Boat is unavailable, only the cheap groups run here:
-// the heavy ones are recorded blocked unless WERKFLOW_VERIFY_LOCAL=1 asks for them.
+// the heavy ones are recorded blocked unless WERKFLOW_VERIFY_LOCAL=1 asks for them. A wiped machine
+// serves the checkout's next run (machine-reuse.ts).
 
 /** The saved snapshot every verification machine starts from (scripts/boat/build-snapshot.ts). */
 export const SNAPSHOT_NAME = 'werkflow-verify';
@@ -52,8 +53,6 @@ export const SNAPSHOT_NAME = 'werkflow-verify';
 const HOME = '/home/user';
 /** remote-verify.sh's exit code when setup failed before test:verify started. */
 const SETUP_FAILED = 90;
-/** A hard stop for a machine whose run or deletion went wrong; without snapshots it is then erased. */
-const MACHINE_TTL_SECONDS = 3 * 3_600;
 /**
  * Groups whose medians measure this workstation's wall clock. Every other group may run on Boat:
  * lab groups count requests, payloads and renders, which repeat on any machine (CI gates on them),
@@ -153,6 +152,23 @@ export function cheapPlanReason(plan: string): string | undefined {
 }
 
 /**
+ * Why a cheap plan runs here, or undefined when Boat may run it. A cheap plan that reads the shared
+ * stack goes to Boat while that stack's migrations drift from this tree's, with one line naming the
+ * drift: Boat starts a fresh stack at this tree's migrations, so the plan tests this tree's schema.
+ */
+export function cheapLocalReason(
+  plan: string,
+  readDrift: () => MigrationDrift | undefined,
+): string | undefined {
+  const cheap = cheapPlanReason(plan);
+  if (!cheap || !readsSharedStack(plannedRuns(plan))) return cheap;
+  const drift = driftLine(readDrift());
+  if (!drift) return cheap;
+  say(`${drift} Boat runs the plan on a fresh stack at this tree's migrations.`);
+  return undefined;
+}
+
+/**
  * Whether a group stays blocked on this workstation when Boat is unavailable: every group but the
  * cheap ones and the wall-clock groups, which run here by design. Type-aware lint, `ui:contracts`
  * and every browser group: run here together, they overloaded the shared PC for hours.
@@ -180,7 +196,7 @@ function planReason(repository: string, args: readonly string[]): string | undef
   if (plan.status !== 0) return 'the plan could not be read here; the local run reports why.';
   const measured = wallClockGroup(plan.stdout);
   if (measured) return `the plan runs ${measured}, which measures this machine's wall clock.`;
-  return cheapPlanReason(plan.stdout);
+  return cheapLocalReason(plan.stdout, () => readMigrationDrift(repository));
 }
 
 /**
@@ -453,30 +469,9 @@ export async function verifyOnBoat(
   env: Environment = process.env,
   readKey: () => BoatKeyReading = readBoatKey,
 ): Promise<BoatOutcome> {
-  const reason = localReason(args, env);
-  if (reason !== undefined) {
-    if (reason) say(`Running locally: ${reason}`);
-    return undefined;
-  }
-  const key = readKey();
-  if (key.kind === 'absent')
-    return {
-      unavailable:
-        'this workstation has no Boat key (docs/technical/boat-verification.md, "Set up a workstation").',
-    };
-  if (key.kind === 'unusable') return { unavailable: key.reason };
-  if (key.reminder) say(key.reminder);
-  // From here a Ctrl-C stops the run; it never falls back to a local one.
-  const interrupt = new AbortController();
-  const stop = () => interrupt.abort();
-  process.once('SIGINT', stop);
-  process.once('SIGTERM', stop);
-  try {
-    return await prepareAndRun(args, repository, key.key, interrupt.signal);
-  } finally {
-    process.off('SIGINT', stop);
-    process.off('SIGTERM', stop);
-  }
+  return withBoatKey(localReason(args, env), readKey, (key, signal) =>
+    prepareAndRun(args, repository, key, signal),
+  );
 }
 
 export async function prepareAndRun(
@@ -491,6 +486,21 @@ export async function prepareAndRun(
     say(`Running locally: ${planned}`);
     return undefined;
   }
+  return withRunFolder(repository, signal, 'verification on Boat', (folder) =>
+    runOnBoat({ args, repository, folder, key, signal }),
+  );
+}
+
+/**
+ * Runs `work` with a fresh folder for the packed run and its results, under the workspace test
+ * lock, so the edit guard works as during a local run. The folder is removed afterwards.
+ */
+export async function withRunFolder(
+  repository: string,
+  signal: AbortSignal,
+  operation: string,
+  work: (folder: string) => Promise<BoatOutcome>,
+): Promise<BoatOutcome> {
   let folder: string;
   try {
     mkdirSync(join(homedir(), '.cache'), { recursive: true });
@@ -499,10 +509,7 @@ export async function prepareAndRun(
     return unavailable(error, signal);
   }
   try {
-    return await withWorkspaceTestLock(
-      { operation: 'verification on Boat', repositoryRoot: repository },
-      () => runOnBoat({ args, repository, folder, key, signal }),
-    );
+    return await withWorkspaceTestLock({ operation, repositoryRoot: repository }, () => work(folder));
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
@@ -685,27 +692,28 @@ export async function importResults(
   }
 }
 
-/**
- * Runs `work` on a started machine, then reports its cost and deletes it, whatever `work` did. A
- * Ctrl-C during that cleanup still stops the run: no fallback to a local run follows an interruption.
- */
-export async function withMachine<T>(
-  machine: Machine,
+/** This checkout's kept machine or a new one, announced, or Boat's unavailability. */
+async function startMachine(
+  client: BoatClient,
+  repository: string,
   signal: AbortSignal,
-  work: () => Promise<T>,
-): Promise<T> {
-  let result: T;
+): Promise<Machine | BoatUnavailable> {
+  const started = Date.now();
   try {
-    result = await work();
-  } finally {
-    const usage = await machineUsage(machine);
-    await deleteMachine(machine);
+    const { machine, reused } = await acquireMachine(client, {
+      repository,
+      from: SNAPSHOT_NAME,
+      name: `verify-${repository.split('/').at(-1) ?? 'checkout'}`,
+      log: say,
+      signal,
+    });
     say(
-      `Boat machine ${machine.id} deleted${usage ? `: ${Math.round(usage.seconds / 2)} s of large, $${usage.dollars.toFixed(4)}` : ''}.`,
+      `Running on Boat machine ${machine.id} (large), ${reused ? "kept from this checkout's last run" : `ready in ${((Date.now() - started) / 1000).toFixed(1)} s`}.`,
     );
+    return machine;
+  } catch (error) {
+    return unavailable(error, signal);
   }
-  signal.throwIfAborted();
-  return result;
 }
 
 export async function runOnBoat(input: {
@@ -725,55 +733,49 @@ export async function runOnBoat(input: {
   }
   await honorInterrupt(signal);
   if ('refused' in packed) return { unavailable: packed.refused };
+  // packRun read the repository with git, so its .git entry exists.
+  const form = lstatSync(join(repository, '.git')).isFile() ? 'linked' : 'main';
   const client = retryingStart(boatClient(input.key), { signal, log: say });
-  const started = Date.now();
-  let machine: Machine;
-  try {
-    machine = await createMachine(client, {
-      from: SNAPSHOT_NAME,
-      name: `verify-${repository.split('/').at(-1) ?? 'checkout'}`,
-      ttlSeconds: MACHINE_TTL_SECONDS,
-      purpose: 'run',
-      log: say,
-      signal,
-    });
-  } catch (error) {
-    return unavailable(error, signal);
-  }
-  say(
-    `Running on Boat machine ${machine.id} (large), ready in ${((Date.now() - started) / 1000).toFixed(1)} s.`,
-  );
-  return withMachine(machine, signal, async (): Promise<BoatOutcome> => {
-    let code: number;
-    try {
-      signal.throwIfAborted();
-      await uploadRun(machine, { repository, folder, bundle: packed.bundle }, { signal, log: say });
-      signal.throwIfAborted();
-      const form = lstatSync(join(repository, '.git')).isFile() ? 'linked' : 'main';
-      const command = ['bash', '~/remote-verify.sh', repository, packed.head, form, ...args].map(
-        (word, index) => (index === 1 ? word : shellQuote(word)),
-      );
-      const result = await runScript(
-        machine,
-        command.join(' '),
-        { stdout: (text) => process.stdout.write(text), stderr: (text) => process.stderr.write(text) },
-        signal,
-      );
-      if (result.exitCode === SETUP_FAILED || result.oomKilled)
-        return {
-          unavailable: `the Boat machine ${result.oomKilled ? 'ran out of memory' : 'failed to set up'}.`,
-        };
-      await importResults(machine, { folder, repository }, { signal, log: say });
-      // The machine pruned only its copy of the archive; the workstation's shrinks as after a local run.
-      console.info(pruneRunArchive('prune'));
-      code = result.exitCode;
-      if (changedInputs(before, captureInputSnapshot(repository)).length) {
-        console.error('Inputs changed during verification; this report cannot qualify acceptance.');
-        code = 1;
+  const machine = await startMachine(client, repository, signal);
+  if ('unavailable' in machine) return machine;
+  // Only a run that returned its exit code leaves a machine worth wiping and keeping.
+  const keep = async (outcome: BoatOutcome) =>
+    typeof outcome === 'number' && keepMachine(machine, { repository, form, signal });
+  return withMachine(
+    machine,
+    signal,
+    async (): Promise<BoatOutcome> => {
+      let code: number;
+      try {
+        signal.throwIfAborted();
+        await uploadRun(machine, { repository, folder, bundle: packed.bundle }, { signal, log: say });
+        signal.throwIfAborted();
+        const command = ['bash', '~/remote-verify.sh', repository, packed.head, form, ...args].map(
+          (word, index) => (index === 1 ? word : shellQuote(word)),
+        );
+        const result = await runScript(
+          machine,
+          command.join(' '),
+          { stdout: (text) => process.stdout.write(text), stderr: (text) => process.stderr.write(text) },
+          signal,
+        );
+        if (result.exitCode === SETUP_FAILED || result.oomKilled)
+          return {
+            unavailable: `the Boat machine ${result.oomKilled ? 'ran out of memory' : 'failed to set up'}.`,
+          };
+        await importResults(machine, { folder, repository }, { signal, log: say });
+        // The machine pruned only its copy of the archive; the workstation's shrinks as after a local run.
+        console.info(pruneRunArchive('prune'));
+        code = result.exitCode;
+        if (changedInputs(before, captureInputSnapshot(repository)).length) {
+          console.error('Inputs changed during verification; this report cannot qualify acceptance.');
+          code = 1;
+        }
+        return code;
+      } catch (error) {
+        return unavailable(error, signal);
       }
-      return code;
-    } catch (error) {
-      return unavailable(error, signal);
-    }
-  });
+    },
+    keep,
+  );
 }

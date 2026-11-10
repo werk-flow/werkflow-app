@@ -21,6 +21,8 @@ import { createServiceCase } from '@/lib/service-cases/actions';
 const CONVERT_TO_SERVICE_ERROR_MESSAGES = {
   service_case_request_customer_site_required: 'Ordne der Anfrage zuerst einen Kunden und Einsatzort zu.',
   service_case_request_already_converted: 'Diese Anfrage wurde bereits umgewandelt.',
+  service_case_equipment_mismatch:
+    'Die Anlage der Anfrage ist nicht mehr aktiv. Entferne sie in der Anfrage und übernimm sie dann.',
 } satisfies Record<string, string>;
 
 export function ConvertRequestToServiceDialog({
@@ -71,8 +73,8 @@ export function ConvertRequestToServiceDialog({
           <DialogHeader>
             <DialogTitle>Anfrage als Servicefall übernehmen?</DialogTitle>
             <DialogDescription>
-              Die ursprüngliche Kundenaussage, Dringlichkeit sowie Kunde, Ansprechpartner und Einsatzort
-              bleiben erhalten. Die Anfrage kann danach nicht nochmals umgewandelt werden.
+              Die ursprüngliche Kundenaussage, Dringlichkeit sowie Kunde, Ansprechpartner, Einsatzort und
+              Anlage bleiben erhalten. Die Anfrage kann danach nicht nochmals umgewandelt werden.
             </DialogDescription>
           </DialogHeader>
           <ErrorText>{error}</ErrorText>

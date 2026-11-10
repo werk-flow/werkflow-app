@@ -9,6 +9,8 @@ import {
   seedWorkSchedule,
 } from '../../../golden/support/db/personnel';
 import { seedTeam } from '../../../golden/support/db/qualifications';
+import { createAdminClient } from '../../../golden/support/db/shared';
+import { seedJob } from '../../../golden/support/db/work';
 import { seedSicknessReport } from '../../../golden/support/db/sickness';
 import {
   memberMenuItem,
@@ -28,6 +30,7 @@ import {
   versionActionsButton,
   versionMenuItem,
 } from '../../../golden/support/steps/personnel';
+import { handoverDialog, handoverTrigger } from '../../../golden/support/steps/personnel-handover';
 import { teamDissolveButton, teamDissolveConfirmation } from '../../../golden/support/steps/qualifications';
 import { inPageTab, openMenuItem } from '../../../golden/support/steps/shared';
 import {
@@ -148,6 +151,35 @@ async function openNoLoginRecord(
     return id;
   });
   await openSurface(page, { route: `/mitarbeiter/${recordId}` });
+}
+
+/** A job planned on the date, whose visit the personnel record holds alone. */
+async function seedJobVisitForRecord(input: {
+  orgId: string;
+  actorId: string;
+  jobNumber: string;
+  title: string;
+  plannedDate: string;
+  employeeRecordId: string;
+}): Promise<void> {
+  const admin = createAdminClient();
+  const jobId = await seedJob(input);
+  const { data: visit } = await admin
+    .from('planning_occurrences')
+    .select('id')
+    .eq('organization_id', input.orgId)
+    .eq('legacy_source_job_id', jobId)
+    .single()
+    .throwOnError();
+  await admin
+    .from('planning_occurrence_assignments')
+    .insert({
+      organization_id: input.orgId,
+      occurrence_id: visit.id,
+      employee_record_id: input.employeeRecordId,
+      assigned_by: input.actorId,
+    })
+    .throwOnError();
 }
 
 async function sicknessMenuItem(
@@ -307,6 +339,25 @@ export const PEOPLE_OPENERS = {
   'people.lifecycle-transition': {
     trigger: async ({ page }) => lifecycleDialogTrigger(page, 'transition'),
     layer: (page) => lifecycleDialog(page, 'transition'),
+  },
+  'people.lifecycle-handover': {
+    // The handover lists open work: a record without a login holds a visit
+    // years ahead, so no other surface of the world shows it.
+    trigger: async (context) => {
+      const { world, businessDate } = context;
+      await openNoLoginRecord(context, 'people.lifecycle-handover', 'Übergabe', async (recordId) => {
+        await seedJobVisitForRecord({
+          orgId: world.orgId,
+          actorId: world.users.admin.id,
+          jobNumber: `LAYOUT-UEB-${world.runId}`,
+          title: worldName('Layout Übergabe', world.runId),
+          plannedDate: `${yearsAhead(businessDate, 5)}-03-02`,
+          employeeRecordId: recordId,
+        });
+      });
+      return handoverTrigger(context.page);
+    },
+    layer: (page) => handoverDialog(page),
   },
   'people.lifecycle-document': {
     trigger: async ({ page }) => lifecycleDialogTrigger(page, 'document'),

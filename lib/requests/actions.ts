@@ -46,6 +46,8 @@ export type CreateClientRequestInput = {
   clientId?: string;
   contactId?: string;
   siteId?: string;
+  /** An active Anlage of the chosen site. */
+  equipmentId?: string;
   callerName?: string;
   callerPhone?: string;
   callerEmail?: string;
@@ -55,15 +57,20 @@ export type CreateClientRequestInput = {
   source?: RequestSource;
   assignedTo?: string;
   receivedAt?: string;
+  /** The promised callback („Rückruf bis“), an ISO timestamp. */
+  callbackDueAt?: string;
 };
 
 export type UpdateClientRequestInput = Partial<
-  Omit<CreateClientRequestInput, 'clientId' | 'contactId' | 'siteId'>
+  Omit<CreateClientRequestInput, 'clientId' | 'contactId' | 'siteId' | 'equipmentId' | 'callbackDueAt'>
 > & {
   // Explicit null clears the reference (e.g. undoing a wrong customer match).
   clientId?: string | null;
   contactId?: string | null;
   siteId?: string | null;
+  // A new customer or site without a named Anlage drops the old one.
+  equipmentId?: string | null;
+  callbackDueAt?: string | null;
   status?: 'offen' | 'in_klaerung';
 };
 
@@ -95,11 +102,13 @@ const requestFieldsSchema = z.object({
   // Not a uuid schema: an unknown assignee keeps its own code, assignee_not_found.
   assignedTo: z.string().max(100).nullish(),
   receivedAt: z.string().max(64).nullish(),
+  callbackDueAt: z.string().max(64).nullish(),
 });
 const createRequestInputSchema = requestFieldsSchema.extend({
   clientId: blankableUuidSchema.optional(),
   contactId: blankableUuidSchema.optional(),
   siteId: blankableUuidSchema.optional(),
+  equipmentId: blankableUuidSchema.optional(),
 });
 const updateRequestArgumentsSchema = z.object({
   requestId: uuidSchema,
@@ -107,6 +116,7 @@ const updateRequestArgumentsSchema = z.object({
     clientId: blankableUuidSchema.nullish(),
     contactId: blankableUuidSchema.nullish(),
     siteId: blankableUuidSchema.nullish(),
+    equipmentId: blankableUuidSchema.nullish(),
     status: z.enum(EDITABLE_STATUSES).optional(),
   }),
 });
@@ -196,6 +206,11 @@ const REQUEST_WRITE_REFUSALS: ReadonlySet<string> = new Set([
   'contact_requires_client',
   'contact_not_found',
   'contact_client_mismatch',
+  'equipment_not_found',
+  'equipment_requires_site',
+  'equipment_client_mismatch',
+  'equipment_site_mismatch',
+  'equipment_not_active',
   'assignee_not_found',
 ]);
 
@@ -235,8 +250,11 @@ export async function createClientRequest(rawInput: CreateClientRequestInput): P
     if (input.receivedAt && !isValidTimestamp(input.receivedAt)) {
       return { success: false, error: 'invalid_received_at' };
     }
+    if (input.callbackDueAt && !isValidTimestamp(input.callbackDueAt)) {
+      return { success: false, error: 'invalid_callback_due_at' };
+    }
 
-    // One call checks the customer references, the assignee and the number
+    // One call checks the customer references, the Anlage, the assignee and the number
     // under lock, stores the request and records its 'created' history row, or
     // refuses with one of REQUEST_WRITE_REFUSALS and changes nothing.
     const admin = createSupabaseAdminClient();
@@ -260,6 +278,8 @@ export async function createClientRequest(rawInput: CreateClientRequestInput): P
         p_source: input.source ?? 'telefon',
         p_assigned_to: assignedTo,
         p_received_at: input.receivedAt || null,
+        p_callback_due_at: input.callbackDueAt || null,
+        p_equipment_id: input.equipmentId?.trim() || null,
       }),
     );
     return requestWriteResult(outcome, 'create_failed', 'Error creating client request:');
@@ -312,6 +332,12 @@ export async function updateClientRequest(
       }
       changes.received_at = input.receivedAt;
     }
+    if (input.callbackDueAt !== undefined) {
+      if (input.callbackDueAt && !isValidTimestamp(input.callbackDueAt)) {
+        return { success: false, error: 'invalid_callback_due_at' };
+      }
+      changes.callback_due_at = input.callbackDueAt || null;
+    }
     if (input.status !== undefined) changes.status = input.status;
     if (input.requestNumber !== undefined) changes.request_number = input.requestNumber?.trim() || null;
 
@@ -332,12 +358,13 @@ export async function updateClientRequest(
     }
     if (input.siteId !== undefined) changes.site_id = input.siteId || null;
     if (input.contactId !== undefined) changes.contact_id = input.contactId || null;
+    if (input.equipmentId !== undefined) changes.equipment_id = input.equipmentId || null;
 
     if (Object.keys(changes).length === 0) {
       return { success: false, error: 'no_changes' };
     }
 
-    // One call checks the references, the assignee and the number under lock,
+    // One call checks the references, the Anlage, the assignee and the number under lock,
     // saves the columns and records the 'matched', 'status_changed' or
     // 'updated' history row, or refuses and changes nothing.
     const outcome = await admin.rpc(

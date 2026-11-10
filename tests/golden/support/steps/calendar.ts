@@ -554,7 +554,9 @@ export async function showPlanningMonth(page: Page, targetDate?: string): Promis
     page.locator('[data-calendar-scroll-container][data-calendar-state="ready"][data-calendar-view="month"]'),
   ).toBeVisible();
   if (targetDate)
-    await expect(page.locator(`[data-month-cell="${targetDate}"][data-in-month="true"]`)).toBeVisible();
+    await expect(
+      page.getByRole('main').locator(`[data-month-cell="${targetDate}"][data-in-month="true"]`),
+    ).toBeVisible();
 }
 
 /** The card popover's edit action; pass the popover to scope it, or the page for an absence check. */
