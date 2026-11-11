@@ -15,6 +15,10 @@ declare global {
       reads: number;
       rejectAcknowledgement: boolean;
       acknowledgements: number;
+      /** Each employment step the dialog sent, in order. */
+      employmentSteps: string[];
+      /** The next employment save is refused: someone else recorded the exit in between. */
+      refuseEmploymentStep: boolean;
     };
   }
 }
@@ -44,6 +48,11 @@ export function initializePersonnelBoundary(): PersonnelLifecycleView {
     templates: [],
     documents: [],
     transitionInventory: { openWork: [], strandedResponsibilities: [] },
+    // A member without an access lifecycle, employed and without a planned step.
+    steps: {
+      access: ['suspend_now', 'schedule_suspension', 'end_access', 'activate_now'],
+      employment: ['record_notice', 'plan_exit', 'exit', 'mark_inactive'],
+    },
     handoverFrom: '2026-10-01',
   };
   window.uiContractPersonnel = {
@@ -56,6 +65,8 @@ export function initializePersonnelBoundary(): PersonnelLifecycleView {
     reads: 0,
     rejectAcknowledgement: false,
     acknowledgements: 0,
+    employmentSteps: [],
+    refuseEmploymentStep: false,
   };
   // This independent initial route value never receives refreshed server props.
   return structuredClone(snapshot);
@@ -113,6 +124,33 @@ export async function uploadPersonnelDocumentDirect(
   return { success: true, data: { documentId } };
 }
 
+/**
+ * Records the employment step. A refused save moves the person to „Ausgeschieden“ first, as a
+ * concurrent exit would, so the reload offers other steps.
+ */
+export async function setPersonnelEmploymentTransition(
+  input: Parameters<PersonnelActions['setPersonnelEmploymentTransition']>[0],
+): ReturnType<PersonnelActions['setPersonnelEmploymentTransition']> {
+  const state = window.uiContractPersonnel;
+  if (typeof input !== 'object' || input === null || !('transitionKind' in input))
+    throw new Error('Unexpected employment transition input');
+  state.employmentSteps.push(String(input.transitionKind));
+  if (state.refuseEmploymentStep) {
+    state.refuseEmploymentStep = false;
+    state.snapshot = {
+      ...state.snapshot,
+      employment: {
+        ...state.snapshot.employment,
+        state: 'exited',
+        version: state.snapshot.employment.version + 1,
+      },
+      steps: { ...state.snapshot.steps, employment: ['reactivate', 'reverse', 'plan_start'] },
+    };
+    return { success: false, error: 'transition_not_allowed' };
+  }
+  return { success: true, data: { lifecycleId: 'contract-employment-lifecycle' } };
+}
+
 async function unexpectedPersonnelAction(): Promise<never> {
   throw new Error('Unexpected personnel operation in isolated UI contracts.');
 }
@@ -164,5 +202,4 @@ export const handOverPersonnelWork = unexpectedPersonnelAction;
 export const savePersonnelOnboardingRequirement = unexpectedPersonnelAction;
 export const setPersonnelAccessTransition = unexpectedPersonnelAction;
 export const setPersonnelDocumentRelease = unexpectedPersonnelAction;
-export const setPersonnelEmploymentTransition = unexpectedPersonnelAction;
 export const uploadDocumentDirect = unexpectedPersonnelAction;

@@ -59,6 +59,16 @@ import {
 import { createUploadCleanupToken, isValidUploadCleanupToken } from './upload-cleanup-token';
 import { defaultHandoverFrom, type OpenWorkJob } from './open-work';
 import { readOpenWork } from './open-work-reads';
+import {
+  lifecycleSteps,
+  readAccessLifecycle,
+  readEmploymentLifecycle,
+  readMembership,
+  refuseUnfitAccessStep,
+  refuseUnfitEmploymentStep,
+  type PersonnelLifecycleSteps,
+} from './lifecycle-step-reads';
+import { hasOpenAccessBlocker } from './lifecycle-steps';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { accessEndDatesByRecord } from '@/lib/planning/availability';
 
@@ -76,27 +86,11 @@ export type PersonnelLifecycleView = {
   templates: PersonnelOnboardingTemplateSummary[];
   documents: ProtectedPersonnelDocument[];
   transitionInventory: TransitionInventory;
+  /** The access and employment steps that fit the person's current state, preselected step first. */
+  steps: PersonnelLifecycleSteps;
   /** The first Berlin date a handover moves visits from, by the exit and the access end. */
   handoverFrom: string;
 };
-
-function readAccessLifecycle(admin: AdminClient, organizationId: string, employeeRecordId: string) {
-  return admin
-    .from('personnel_access_lifecycles')
-    .select('*')
-    .eq('employee_record_id', employeeRecordId)
-    .eq('organization_id', organizationId)
-    .maybeSingle();
-}
-
-function readEmploymentLifecycle(admin: AdminClient, organizationId: string, employeeRecordId: string) {
-  return admin
-    .from('personnel_employment_lifecycles')
-    .select('*')
-    .eq('employee_record_id', employeeRecordId)
-    .eq('organization_id', organizationId)
-    .maybeSingle();
-}
 
 function readPublishedTemplates(admin: AdminClient, organizationId: string) {
   return admin
@@ -115,6 +109,7 @@ async function requireManagerRecord(employeeRecordId: string): Promise<
       organizationId: string;
       actorId: string;
       userId: string | null;
+      entryDate: string | null;
       exitDate: string | null;
       role: 'admin' | 'buero';
     }
@@ -131,7 +126,7 @@ async function requireManagerRecord(employeeRecordId: string): Promise<
     'requireManagerRecord: employee_records read failed',
     admin
       .from('employee_records')
-      .select('id, user_id, exit_date')
+      .select('id, user_id, entry_date, exit_date')
       .eq('id', employeeRecordId)
       .eq('organization_id', auth.context.orgId)
       .maybeSingle(),
@@ -144,6 +139,7 @@ async function requireManagerRecord(employeeRecordId: string): Promise<
     organizationId: auth.context.orgId,
     actorId: auth.context.userId,
     userId: employee.user_id,
+    entryDate: employee.entry_date,
     exitDate: employee.exit_date,
     role,
   };
@@ -204,26 +200,28 @@ export async function getPersonnelLifecycle(
     .order('updated_at', { ascending: false });
   const authorizedDocumentsQuery =
     role === 'admin' ? documentsQuery : documentsQuery.eq('access_class', 'personnel_standard');
-  const [access, employment, plans, requirements, documents, templates, inventory] = await Promise.all([
-    readAccessLifecycle(admin, organizationId, employeeRecordId),
-    readEmploymentLifecycle(admin, organizationId, employeeRecordId),
-    admin
-      .from('personnel_onboarding_plans')
-      .select('*')
-      .eq('employee_record_id', employeeRecordId)
-      .eq('organization_id', organizationId)
-      .order('created_at', { ascending: false }),
-    admin
-      .from('personnel_onboarding_requirements')
-      .select('*')
-      .eq('employee_record_id', employeeRecordId)
-      .eq('organization_id', organizationId)
-      .order('sort_order'),
-    authorizedDocumentsQuery,
-    readPublishedTemplates(admin, organizationId),
-    loadTransitionInventory({ ...context, employeeRecordId }),
-  ]);
-  const failed = [access, employment, plans, requirements, documents, templates].find(
+  const [access, employment, membership, plans, requirements, documents, templates, inventory] =
+    await Promise.all([
+      readAccessLifecycle(admin, organizationId, employeeRecordId),
+      readEmploymentLifecycle(admin, organizationId, employeeRecordId),
+      readMembership(admin, organizationId, userId),
+      admin
+        .from('personnel_onboarding_plans')
+        .select('*')
+        .eq('employee_record_id', employeeRecordId)
+        .eq('organization_id', organizationId)
+        .order('created_at', { ascending: false }),
+      admin
+        .from('personnel_onboarding_requirements')
+        .select('*')
+        .eq('employee_record_id', employeeRecordId)
+        .eq('organization_id', organizationId)
+        .order('sort_order'),
+      authorizedDocumentsQuery,
+      readPublishedTemplates(admin, organizationId),
+      loadTransitionInventory({ ...context, employeeRecordId }),
+    ]);
+  const failed = [access, employment, membership, plans, requirements, documents, templates].find(
     (result) => result.error,
   );
   if (failed?.error) {
@@ -231,6 +229,7 @@ export async function getPersonnelLifecycle(
     return { success: false, error: 'load_failed' };
   }
   if (!inventory) return { success: false, error: 'load_failed' };
+  const requirementViews = (requirements.data ?? []).map(toRequirement);
 
   return {
     success: true,
@@ -239,10 +238,18 @@ export async function getPersonnelLifecycle(
       userId,
       access: toAccessView(access.data),
       employment: toEmploymentView(employment.data),
-      plans: toPlanViews(plans.data ?? [], (requirements.data ?? []).map(toRequirement)),
+      plans: toPlanViews(plans.data ?? [], requirementViews),
       templates: toTemplateSummaries(templates.data ?? []),
       documents: toManagerDocuments(documents.data ?? [], role),
       transitionInventory: inventory,
+      steps: lifecycleSteps({
+        access: access.data,
+        employment: employment.data,
+        isMember: membership.data !== null,
+        hasAccessBlocker: hasOpenAccessBlocker(requirementViews),
+        entryDate: context.entryDate,
+        exitDate: context.exitDate,
+      }),
       handoverFrom: defaultHandoverFrom({
         exitDate: context.exitDate,
         accessEndDate:
@@ -264,6 +271,8 @@ export async function setPersonnelAccessTransition(
   if (!context.success) return context;
   if (context.role !== 'admin') return { success: false, error: 'not_authorized' };
   const request = parsed.data;
+  const unfit = await refuseUnfitAccessStep(context, request);
+  if (unfit) return unfit;
   const { data, error } = await context.admin.rpc('set_personnel_access_transition', {
     p_actor_id: context.actorId,
     p_organization_id: context.organizationId,
@@ -310,6 +319,8 @@ export async function setPersonnelEmploymentTransition(
   if (!context.success) return context;
   if (context.role !== 'admin') return { success: false, error: 'not_authorized' };
   const request = parsed.data;
+  const unfit = await refuseUnfitEmploymentStep(context, request);
+  if (unfit) return unfit;
   // What stays open is recorded with the transition; it becomes the planners' task, never a block.
   const inventory = await loadTransitionInventory({ ...context, employeeRecordId: request.employeeRecordId });
   if (!inventory) return { success: false, error: 'load_failed' };
