@@ -16363,6 +16363,17 @@ export type Database = {
         };
         Returns: string;
       };
+      open_time_accounts: {
+        Args: {
+          p_actor_id: string;
+          p_opened_on: string;
+          p_openings: Json;
+          p_organization_id: string;
+          p_reason: string;
+          p_request_hash: string;
+        };
+        Returns: number;
+      };
       park_work_target: {
         Args: {
           p_actor_id: string;
