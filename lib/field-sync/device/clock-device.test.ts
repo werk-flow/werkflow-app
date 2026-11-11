@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
 import type { LiveClockState } from '@/lib/time-tracking/types';
 import type { ClockDeviceView } from './time-outbox';
-import { TIME_OUTBOX_DATABASE, readTimeOutbox, type OutboxHolder } from './time-outbox-store';
+import { readTimeOutbox, type OutboxHolder } from './time-outbox-store';
 import { TODAY_WIPE_KEY } from './today-wipe';
 
 // This tab's hold on the time outbox (werk-flow/werkflow-planning#319): the
@@ -143,7 +143,7 @@ async function isolatedTests(): Promise<void> {
     sent.length = 0;
     sessionUserId = WORKER.userId;
     await new Promise<void>((resolve, reject) => {
-      const request = indexedDB.deleteDatabase(TIME_OUTBOX_DATABASE);
+      const request = indexedDB.deleteDatabase('werkflow-time-outbox');
       request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error ?? new Error('delete failed'));
     });

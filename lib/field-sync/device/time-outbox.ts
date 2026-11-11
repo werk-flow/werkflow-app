@@ -23,9 +23,8 @@ import {
  * recording deadline (owner queue OQ-4 of werk-flow/werkflow-planning#22).
  * After it the phone shows the event as not transferred, and the person may
  * delete it.
- * @internal Exported for the test of the limit's two sides.
  */
-export const UNSENT_TIME_EVENT_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
+const UNSENT_TIME_EVENT_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** The clock call a phone can keep without signal; every other action needs the server's answer first. */
 type OfflineClockCommand = {

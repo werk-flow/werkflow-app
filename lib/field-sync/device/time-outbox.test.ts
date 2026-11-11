@@ -6,7 +6,6 @@ import { createActivitySelection } from '@/lib/time-tracking/segments';
 import type { LiveClockState } from '@/lib/time-tracking/types';
 import { z } from '@/lib/zod';
 import {
-  UNSENT_TIME_EVENT_KEEP_MS,
   captureTimeEvent,
   clockDeviceView,
   discardTimeEvents,
@@ -14,12 +13,7 @@ import {
   retryFirstTimeEvent,
 } from './time-outbox';
 import { sendTimeOutbox, type TimeOutboxSendOptions } from './time-outbox-send';
-import {
-  TIME_OUTBOX_DATABASE,
-  readTimeOutbox,
-  readWholeTimeOutbox,
-  type OutboxHolder,
-} from './time-outbox-store';
+import { readTimeOutbox, readWholeTimeOutbox, type OutboxHolder } from './time-outbox-store';
 import { TODAY_DATABASE } from './today-wipe';
 
 // The time outbox of werk-flow/werkflow-planning#319 (decision record 0010,
@@ -40,6 +34,10 @@ globalThis.localStorage = {
   removeItem: (key) => void storage.delete(key),
   setItem: (key, value) => void storage.set(key, value),
 };
+
+/** The database of time-outbox-store.ts, and the 7 days an unsent event counts as waiting (time-outbox.ts). */
+const TIME_OUTBOX_DATABASE = 'werkflow-time-outbox';
+const UNSENT_TIME_EVENT_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
 
 const WORKER: OutboxHolder = {
   userId: '10000000-0000-4000-8000-00000000000a',
