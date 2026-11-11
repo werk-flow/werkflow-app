@@ -256,7 +256,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.plan.outputs.shards) }}
+        # DIAGNOSTIC (never merged): every shard repeats the four groups that hit the teardown error.
+        include: ${{ fromJSON('[{"shard":1,"groups":"golden:gg-00,golden:p1-12,golden:p1-04,audit:wave-1:a2-anfragen"},{"shard":2,"groups":"golden:gg-00,golden:p1-12,golden:p1-04,audit:wave-1:a2-anfragen"},{"shard":3,"groups":"golden:gg-00,golden:p1-12,golden:p1-04,audit:wave-1:a2-anfragen"},{"shard":4,"groups":"golden:gg-00,golden:p1-12,golden:p1-04,audit:wave-1:a2-anfragen"},{"shard":5,"groups":"golden:gg-00,golden:p1-12,golden:p1-04,audit:wave-1:a2-anfragen"},{"shard":6,"groups":"golden:gg-00,golden:p1-12,golden:p1-04,audit:wave-1:a2-anfragen"},{"shard":7,"groups":"golden:gg-00,golden:p1-12,golden:p1-04,audit:wave-1:a2-anfragen"},{"shard":8,"groups":"golden:gg-00,golden:p1-12,golden:p1-04,audit:wave-1:a2-anfragen"},{"shard":9,"groups":"golden:gg-00,golden:p1-12,golden:p1-04,audit:wave-1:a2-anfragen"},{"shard":10,"groups":"golden:gg-00,golden:p1-12,golden:p1-04,audit:wave-1:a2-anfragen"}]') }}
     steps:
       # The stack's images, the pinned Playwright image, the build and a capture group's screenshots
       # filled a runner's disk (2026-10-31: 98 MB left, then Chromium crashed). The image's unused
