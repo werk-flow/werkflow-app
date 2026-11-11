@@ -1,5 +1,7 @@
+import { resolve } from 'node:path';
 import { unresolvableDeleteRefusal } from '../../lib/testing/runner/unresolvable-delete';
 import { shellCommand } from '../../lib/testing/runner/edit-guard';
+import { currentAgentTool, stampHookRun } from '../../lib/testing/runner/hook-stamp';
 
 /**
  * PreToolUse hook for Bash calls, wired in .claude/settings.json (pinned by
@@ -8,6 +10,7 @@ import { shellCommand } from '../../lib/testing/runner/edit-guard';
  * (lib/testing/runner/unresolvable-delete.ts). A call it cannot read passes, as
  * in the edit guard.
  */
+stampHookRun(import.meta.path, resolve(import.meta.dir, '../..'), currentAgentTool());
 let call: unknown;
 try {
   call = JSON.parse(await Bun.stdin.text());

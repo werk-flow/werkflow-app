@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { CHANGED_CHECK_BASE, changedCheckPlan } from '../lib/testing/runner/changed-check';
 import { acquireHeavySlot } from '../lib/testing/runner/heavy-slot';
+import { currentAgentTool, untrustedHooksRefusal } from '../lib/testing/runner/hook-stamp';
 
 // `bun run check:changed`: the fast check an agent runs before it pushes
 // (docs/technical/testing.md, "Run checks while you work"). It formats and
@@ -11,8 +12,14 @@ import { acquireHeavySlot } from '../lib/testing/runner/heavy-slot';
 // after main's newest, and runs the unit tests beside the changed files.
 // Committed, uncommitted and untracked changes all count.
 // It holds one of the machine's heavy slots until it exits (lib/testing/runner/heavy-slot.ts).
-await acquireHeavySlot('check:changed');
+// Under an agent tool that has not run this checkout's guards it fails at once (lib/testing/runner/hook-stamp.ts).
 const repositoryRoot = resolve(import.meta.dir, '..');
+const untrusted = untrustedHooksRefusal(repositoryRoot, currentAgentTool());
+if (untrusted) {
+  console.error(untrusted);
+  process.exit(1);
+}
+await acquireHeavySlot('check:changed');
 
 function git(...args: string[]): string[] {
   return execFileSync('git', args, { cwd: repositoryRoot, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 })

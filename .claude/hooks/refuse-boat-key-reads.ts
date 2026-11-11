@@ -1,7 +1,9 @@
+import { resolve } from 'node:path';
 import { homedir } from 'node:os';
 
 import { boatKeyCommandRefusal, boatKeyToolRefusal, shellFolder } from '../../lib/security/boat-key-access';
 import { shellCommand } from '../../lib/testing/runner/edit-guard';
+import { currentAgentTool, stampHookRun } from '../../lib/testing/runner/hook-stamp';
 
 /**
  * PreToolUse hook for shell, Read and Grep calls, wired in .claude/settings.json
@@ -9,6 +11,7 @@ import { shellCommand } from '../../lib/testing/runner/edit-guard';
  * exits 2 with the reason when the call would read a Boat API key
  * (lib/security/boat-key-access.ts). A call it cannot read is refused.
  */
+stampHookRun(import.meta.path, resolve(import.meta.dir, '../..'), currentAgentTool());
 let call: unknown;
 try {
   call = JSON.parse(await Bun.stdin.text());

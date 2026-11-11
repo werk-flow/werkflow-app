@@ -12,6 +12,7 @@ import {
   type GuardedToolCall,
 } from '../lib/testing/runner/edit-guard';
 import { isJsonRecord } from '../lib/supabase/json';
+import { currentAgentTool, stampHookRun } from '../lib/testing/runner/hook-stamp';
 
 /**
  * Pre-edit hook of the agent tools (.claude/settings.json, .codex/hooks.json).
@@ -22,6 +23,7 @@ import { isJsonRecord } from '../lib/supabase/json';
  * including a guard that cannot decide: the runner's own drift check still
  * voids a run whose inputs changed.
  */
+stampHookRun(import.meta.path, resolve(import.meta.dir, '..'), currentAgentTool());
 const repositoryRoot = resolve(import.meta.dir, '..');
 const lockPath = resolve(repositoryRoot, '.agent-logs/workspace-test-operation.lock');
 

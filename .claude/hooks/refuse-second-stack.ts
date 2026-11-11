@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { secondStackRefusal, stackProjectId } from '../../lib/testing/runner/second-stack';
 import { shellCommand } from '../../lib/testing/runner/edit-guard';
+import { currentAgentTool, stampHookRun } from '../../lib/testing/runner/hook-stamp';
 
 /**
  * PreToolUse hook for shell calls, wired in .claude/settings.json and
@@ -13,6 +14,7 @@ import { shellCommand } from '../../lib/testing/runner/edit-guard';
  * read passes, as in the heavy command guard: it guards the machine's memory,
  * not a secret.
  */
+stampHookRun(import.meta.path, resolve(import.meta.dir, '../..'), currentAgentTool());
 const repositoryRoot = resolve(import.meta.dir, '../..');
 
 /** The main checkout, whose stack every worktree shares; this checkout when git does not answer. */
