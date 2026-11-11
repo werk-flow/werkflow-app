@@ -23,6 +23,10 @@ test("personnel lifecycle actions refuse a lower role and a foreign organization
   await runFixture('personnel-lifecycle-action-boundaries');
 });
 
+test("a lifecycle transition is refused unless its step fits the person's state, and for a foreign organization's record", async () => {
+  await runFixture('personnel-lifecycle-step-boundaries');
+});
+
 test("the work handover refuses a field worker, a foreign organization's person or job and a target outside the organization", async () => {
   await runFixture('personnel-work-handover-boundaries');
 });

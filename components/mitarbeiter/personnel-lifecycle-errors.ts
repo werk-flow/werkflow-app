@@ -3,6 +3,8 @@ import { describeFailure } from '@/lib/action-messages';
 /** Lifecycle-owned failure sentences; shared codes come from `describeFailure`. */
 export const ERROR_MESSAGES = {
   stale_version: 'Der Stand hat sich geändert. Die Ansicht wird aktualisiert.',
+  transition_not_allowed:
+    'Dieser Übergang passt nicht mehr zum aktuellen Stand. Die Ansicht wird aktualisiert, wähle dann erneut.',
   membership_required: 'Vor der Aktivierung muss ein eingelöster Zugang bestehen.',
   last_admin_protected: 'Der letzte aktive Admin kann nicht gesperrt werden.',
   organization_owner_protected:

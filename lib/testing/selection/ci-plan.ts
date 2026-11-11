@@ -86,7 +86,9 @@ const isBrowser = (group: CiGroup): boolean => group.kind === 'golden' || group.
  * nightly run, the release gate, an unreadable diff or a tooling change)
  * takes every browser group except the wall-clock `audit:performance:*`
  * groups, whose medians follow a shared runner's load
- * (docs/technical/performance.md). A pull request and a push to `main` take
+ * (docs/technical/performance.md). Only the nightly run and the release gate
+ * add them, and every shard runs `--untimed`, so they prove their steps and
+ * judge no timing. A pull request and a push to `main` take
  * the change-mode selection of `groupSelections` for their diff against the
  * base (a push's previous `main` commit): the critical journeys, the lab
  * groups, the permission groups by scope, and the other groups only when their
@@ -104,6 +106,12 @@ export function ciPlan(input: {
   const browserGroups = input.groups.filter(
     (group) => isBrowser(group) && !group.files.some(isPerformanceSpec),
   );
+  const wallClockSteps =
+    input.fullRun === undefined
+      ? []
+      : input.groups
+          .filter((group) => isBrowser(group) && group.files.some(isPerformanceSpec))
+          .map((group) => ({ id: group.id, reason: `${input.fullRun}: its steps, untimed` }));
   const runner = new Set(input.runnerModules);
   const tooling = input.changedFiles?.find((file) => TOOLING_INPUTS.test(file) || runner.has(file));
   const fullReason =
@@ -115,7 +123,10 @@ export function ciPlan(input: {
         : undefined);
   const browser =
     fullReason !== undefined || input.changedFiles === undefined
-      ? browserGroups.map((group) => ({ id: group.id, reason: fullReason ?? 'Full run' }))
+      ? [
+          ...browserGroups.map((group) => ({ id: group.id, reason: fullReason ?? 'Full run' })),
+          ...wallClockSteps,
+        ]
       : // Every browser group's support counts as shared; the plan then never runs a wall-clock group.
         changeSelection(input.groups.filter(isBrowser), input.changedFiles).filter((entry) =>
           browserGroups.some((group) => group.id === entry.id),

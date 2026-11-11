@@ -121,7 +121,11 @@ export function localReason(args: readonly string[], env: Environment): string |
     return 'the cloud canary reaches DEV, whose secrets stay on this workstation.';
   if (value('--mode') === 'release')
     return "release mode measures wall-clock groups against this machine's references.";
-  if ((value('--group') ?? '').split(',').some((id) => WALL_CLOCK_GROUP.test(id)))
+  // `--untimed` judges no timing, so a wall-clock group's steps run on Boat like any browser group.
+  if (
+    !args.includes('--untimed') &&
+    (value('--group') ?? '').split(',').some((id) => WALL_CLOCK_GROUP.test(id))
+  )
     return "the group measures this machine's wall clock.";
   return undefined;
 }
@@ -170,11 +174,12 @@ export function cheapLocalReason(
 
 /**
  * Whether a group stays blocked on this workstation when Boat is unavailable: every group but the
- * cheap ones and the wall-clock groups, which run here by design. Type-aware lint, `ui:contracts`
- * and every browser group: run here together, they overloaded the shared PC for hours.
+ * cheap ones and the timed wall-clock groups, which run here by design. Type-aware lint,
+ * `ui:contracts` and every other browser group, an untimed wall-clock group among them: run here
+ * together, they overloaded the shared PC for hours.
  */
-export function heldBackHere(id: string): boolean {
-  return !CHEAP_HERE.test(id) && !WALL_CLOCK_GROUP.test(id);
+export function heldBackHere(id: string, untimed: boolean): boolean {
+  return !CHEAP_HERE.test(id) && (untimed || !WALL_CLOCK_GROUP.test(id));
 }
 
 /** The first untracked file that may hold a credential or a local setting, which Boat never gets. */
@@ -194,7 +199,7 @@ function planReason(repository: string, args: readonly string[]): string | undef
     maxBuffer: 64 * 1024 * 1024,
   });
   if (plan.status !== 0) return 'the plan could not be read here; the local run reports why.';
-  const measured = wallClockGroup(plan.stdout);
+  const measured = args.includes('--untimed') ? undefined : wallClockGroup(plan.stdout);
   if (measured) return `the plan runs ${measured}, which measures this machine's wall clock.`;
   return cheapLocalReason(plan.stdout, () => readMigrationDrift(repository));
 }

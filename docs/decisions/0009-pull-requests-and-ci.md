@@ -146,3 +146,7 @@ GitHub secret scanning runs on this repository in alert mode. Push protection st
 ## Amendment 2026-11-07: live by 05:00
 
 The owner decided on 2026-11-07 that a new version is live on PROD by 05:00 Berlin every weekday, because field workers clock in early. This replaces the 07:00 of the amendments of 2026-10-29 and 2026-11-06. The cron lines of `release.yml` and `nightly.yml` fire at 17:00 Berlin the evening before, and the release holds until 03:30, so a run that GitHub starts 10 hours late still ends its own full run before 05:00, even behind a nightly full run on the same commit. Every gate stays: a scheduled run ships only a commit with a green full run, and it decides as before.
+
+## Amendment 2026-11-10: full runs prove the wall-clock steps, untimed
+
+Rule 3 kept the wall-clock groups off shared runners, so nothing ran their steps between releases. A test helper change broke `audit:performance:calendar-live` on `main` for days (werk-flow/werkflow-app#338). The CI lead decided on werk-flow/werkflow-planning#29: the nightly run and the release gate run every `audit:performance:*` group with `--untimed`. A missing step or an unconfirmed sample fails the run. No deadline, budget or reference comparison fails it, so rule 3's reason stands: a shared runner judges no median. A pull request never runs these groups. The release gate reuses the nightly's `Full run / Check`, so a broken wall-clock step also stops the release, as a broken daily journey should. [testing.md](../technical/testing.md#ci) owns the rule.
