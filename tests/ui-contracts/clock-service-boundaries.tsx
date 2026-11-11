@@ -35,7 +35,7 @@ export async function transitionTimeActivity(input: TimeTransitionInput): Promis
   window.clockContract.resolveTransition = null;
   return {
     success: true,
-    outcome: 'active',
+    outcome: input.action === 'end' ? 'ended' : 'active',
     sessionId: RUNNING_CLOCK_STATE.sessionId,
     segmentId: RUNNING_CLOCK_STATE.currentSegmentId,
     version: 8,

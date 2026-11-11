@@ -56,6 +56,7 @@ type WorkLifecycleCardSectionsProps = {
   ownOwnerId: string | null;
   rowBusy: { isBusy: (id: string) => boolean };
   setDialog: (dialog: WorkLifecycleDialogState | null) => void;
+  completeExecution: () => Promise<string | null>;
 };
 
 /** The card's actions, readiness, open items and history, marked stale while the snapshot is behind. */
@@ -76,6 +77,7 @@ export function WorkLifecycleCardSections({
   ownOwnerId,
   rowBusy,
   setDialog,
+  completeExecution,
 }: WorkLifecycleCardSectionsProps): ReactElement {
   return (
     <StaleRegion stale={view.isStale} onRetry={refresh} className="flex flex-col gap-4">
@@ -90,6 +92,7 @@ export function WorkLifecycleCardSections({
         parking={parking}
         pendingState={pendingState}
         setDialog={setDialog}
+        completeExecution={completeExecution}
       />
       <WorkLifecycleReadinessSection
         snapshot={snapshot}
