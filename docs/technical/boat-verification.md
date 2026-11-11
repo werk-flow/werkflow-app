@@ -10,7 +10,7 @@ On a workstation with a Boat key, `bun run test:verify` and each [rendered accep
 - `WERKFLOW_VERIFY_LOCAL=1`.
 - `--mode release`, or a group under `audit:performance` without `--untimed`: their medians measure the workstation's wall clock. Every other audit group runs on Boat. Lab counts repeat on any machine, and layout groups check computed boxes. Visual groups render in the pinned Playwright image on `linux/amd64` ([visual references](standards-audit.md#keep-accepted-screens-as-visual-references)), so a Boat machine compares with the same references as the workstation and CI. A new machine pulls the image once, in about 30 s.
 - `--target cloud`: the canary needs DEV's secrets.
-- The plan prints `[verify] refused:`, as for an unclassified failed run: Boat would refuse it too, so it refuses here at once.
+- The plan prints `[verify] refused:` (an unclassified failed run): the run ends there, exit 1, nothing run.
 - The plan runs no group, or only cheap groups, at most one of them not a SQL group. A Boat run's upload and setup cost about 95 s of machine time; here a SQL group takes about 1 s against the shared stack, `unit:all` 60 to 90 s and a static gate up to 35 s. `static:lint` takes 170 to 370 s and 3 to 4 GB, so it goes to Boat even alone, as do `ui:contracts` and the browser groups. A SQL group goes to Boat while the shared stack [drifts](testing.md#recurring-traps).
 
 The whole plan runs there, static gates included: type-aware lint is the largest local load. A Boat run takes no heavy slot, and holds the workspace lock while the machine runs, so the edit guard works as during a local run.

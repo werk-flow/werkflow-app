@@ -38,7 +38,6 @@ import {
   unpackResults,
   linkedDestination,
   wallClockGroup,
-  refusedPlan,
   withheldFile,
 } from './verify-on-boat';
 
@@ -211,23 +210,6 @@ test('a plan that runs a wall-clock group stays local, whatever selected it', ()
       'RUN   audit:visual | Changed spec | 30 proof inputs | no pass\nRUN   audit:layout:job | Changed spec | 9 proof inputs | no pass',
     ),
   ).toBeUndefined();
-});
-
-test('a plan the evidence history refuses stays local, but a full disk here never keeps it off Boat', () => {
-  const classify =
-    'Classify the latest failed run of golden:gg-00 (2026-11-10T07-01-02-003Z-abc) first: bun run test:runs classify <run-key> <class> "<cause>" "<prevention>".';
-  const plan = [
-    'RUN   golden:gg-00 | Explicit selection | 58 proof inputs | no pass since selection',
-    `[verify] refused: ${classify}`,
-  ].join('\n');
-  expect(refusedPlan(plan)).toBe(classify);
-  // Free disk space is the workstation's own; a Boat machine has its own disk.
-  expect(
-    refusedPlan(
-      'RUN   golden:gg-00 | Explicit selection | 58 proof inputs | no pass\n[verify] refused on this machine: Only 2.0 GB is available for browser evidence; keep at least 20 GB free.',
-    ),
-  ).toBeUndefined();
-  expect(refusedPlan('RUN   static:lint | Static gate | 12 proof inputs | missing proof')).toBeUndefined();
 });
 
 test('the backend comparison covers every source the proof digest reads, but no workstation credential', () => {

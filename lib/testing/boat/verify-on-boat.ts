@@ -102,8 +102,9 @@ function uploadPolicy(bytes: number): TransferPolicy {
 type Environment = Readonly<Record<string, string | undefined>>;
 
 /**
- * A Boat attempt's outcome: Boat's exit code, undefined when the plan belongs on this workstation
- * (CI, an explicit local run, a cheap or wall-clock plan), or Boat's unavailability.
+ * A Boat attempt's outcome: the run's exit code (Boat's, or 1 for a plan refused before it), undefined
+ * when the plan belongs on this workstation (CI, a local run asked for, a cheap or wall-clock plan),
+ * or Boat's unavailability.
  */
 export type BoatOutcome = number | undefined | BoatUnavailable;
 
@@ -133,14 +134,6 @@ export function localReason(args: readonly string[], env: Environment): string |
 /** The groups a printed plan runs. */
 function plannedRuns(plan: string): string[] {
   return [...plan.matchAll(/^RUN +(\S+)/gm)].map((match) => match[1] ?? '');
-}
-
-/**
- * The first refusal a printed plan reports from the evidence history, such as an unclassified
- * failed run. `test:verify` refuses it on a Boat machine as here, so no machine starts for it.
- */
-export function refusedPlan(plan: string): string | undefined {
-  return /^\[verify\] refused: (.+)$/m.exec(plan)?.[1];
 }
 
 /** The first group a printed plan runs that measures this workstation's wall clock. */
@@ -196,19 +189,19 @@ export function withheldFile(untracked: readonly string[]): string | undefined {
 }
 
 /**
- * Why the plan these arguments select runs locally, from `test:plan` itself: a group that measures
- * this workstation's wall clock, a plan cheaper here than a Boat machine's setup, or a plan that
- * cannot be read. Undefined when Boat may run it.
+ * From `test:plan` itself: why the plan runs locally (a wall-clock group, cheaper here, unreadable),
+ * the refusal it ends with, decided once: a second plan could lose the refusal and run all here.
  */
-function planReason(repository: string, args: readonly string[]): string | undefined {
+function planReason(repository: string, args: readonly string[]): string | { refused: string } | undefined {
   const plan = spawnSync(process.execPath, ['scripts/verify.ts', 'plan', ...args], {
     cwd: repository,
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
   });
   if (plan.status !== 0) return 'the plan could not be read here; the local run reports why.';
-  const refused = refusedPlan(plan.stdout);
-  if (refused) return `test:verify refuses the plan, on Boat as here: ${refused}`;
+  // The evidence history's refusal, which Boat would print too; free disk space here is no refusal there.
+  const refused = /^\[verify\] refused: (.+)$/m.exec(plan.stdout)?.[1];
+  if (refused) return { refused };
   const measured = args.includes('--untimed') ? undefined : wallClockGroup(plan.stdout);
   if (measured) return `the plan runs ${measured}, which measures this machine's wall clock.`;
   return cheapLocalReason(plan.stdout, () => readMigrationDrift(repository));
@@ -497,6 +490,11 @@ export async function prepareAndRun(
 ): Promise<BoatOutcome> {
   const planned = planReason(repository, args);
   await honorInterrupt(signal);
+  if (typeof planned === 'object') {
+    console.info(`[verify] refused: ${planned.refused}`);
+    say('Nothing ran: test:verify refuses this plan, here as on Boat. This is not a pass.');
+    return 1;
+  }
   if (planned) {
     say(`Running locally: ${planned}`);
     return undefined;
