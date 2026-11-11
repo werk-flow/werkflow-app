@@ -159,8 +159,9 @@ function WorkTargetPicker({
 }) {
   const { search, setSearch, searchedQuery, targets, hasMore, loading, failure } =
     useRequestWorkTargets(requestId);
-  const pinned =
-    selected && targets && !targets.some((target) => target.id === selected.id) ? selected : null;
+  // A failed read shows no list, so a selection then stays pinned above the error.
+  const shown = failure ? [] : targets;
+  const pinned = selected && !shown?.some((target) => target.id === selected.id) ? selected : null;
   return (
     <div className="space-y-3">
       <SearchInput
@@ -171,7 +172,18 @@ function WorkTargetPicker({
         aria-label="Offene Arbeit durchsuchen"
       />
       {failure ? (
-        <SectionError failure={failure} />
+        <>
+          {pinned && (
+            <WorkTargetList
+              targets={[]}
+              pinned={pinned}
+              selectedId={pinned.id}
+              onSelect={onSelect}
+              invalid={invalid}
+            />
+          )}
+          <SectionError failure={failure} />
+        </>
       ) : targets === undefined ? (
         <WorkTargetLoadingRows />
       ) : (

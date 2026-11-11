@@ -27,15 +27,15 @@ const targets: RequestWorkTarget[] = [
   },
 ];
 
-export function readRequestWorkTargetsContract(input: unknown): {
-  success: true;
-  targets: RequestWorkTarget[];
-  hasMore: boolean;
-} {
+/** The search „Störung“ fails, as a lost connection does. */
+export function readRequestWorkTargetsContract(
+  input: unknown,
+): { success: true; targets: RequestWorkTarget[]; hasMore: boolean } | { success: false; error: string } {
   const query =
     input && typeof input === 'object' && 'query' in input && typeof input.query === 'string'
       ? input.query.toLowerCase()
       : '';
+  if (query === 'störung') return { success: false, error: 'load_failed' };
   return {
     success: true,
     targets: targets.filter((target) =>

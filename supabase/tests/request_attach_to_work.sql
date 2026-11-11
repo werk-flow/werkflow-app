@@ -426,6 +426,29 @@ select pg_temp.expect_refusal('deleting an entry', $sql$
   delete from public.work_request_entries where request_id = '32800000-0000-0000-0000-000000000040'
 $sql$, 'event_ledger_history_immutable');
 
+-- The ledger guard lets the cascade of a deleted parent pass: a Servicefall
+-- deleted under the write switch its functions open, and a deleted request,
+-- take their entries with them.
+do $$
+begin
+  perform set_config('app.service_case_write', 'true', true);
+  delete from public.service_cases where id = '32800000-0000-0000-0000-000000000070';
+  perform set_config('app.service_case_write', 'false', true);
+  if exists (select 1 from public.work_request_entries
+    where request_id = '32800000-0000-0000-0000-000000000042')
+  then
+    raise exception 'a deleted Servicefall kept its request entry';
+  end if;
+
+  delete from public.client_requests where id = '32800000-0000-0000-0000-000000000041';
+  if exists (select 1 from public.work_request_entries
+    where request_id = '32800000-0000-0000-0000-000000000041')
+  then
+    raise exception 'a deleted request kept its entry';
+  end if;
+end;
+$$;
+
 -- The permitted cleanup still works: the owner's deletion of the
 -- organization removes its entries through the cascade the ledger guard and
 -- the work history guard let pass.

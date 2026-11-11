@@ -3,7 +3,8 @@ import { answerHeldWrite, expectHeldWrite, openContractFixture } from './open-fi
 
 // „Hinzufügen“ attaches the request for good, so it only ever submits work
 // the user can see: a selection the search hides stays pinned on top of the
-// list as „Deine Auswahl“ (werk-flow/werkflow-planning#328).
+// list as „Deine Auswahl“, also when the search finds nothing or fails
+// (werk-flow/werkflow-planning#328).
 test('a selection the search hides stays visible and is the work that is attached', async ({ page }) => {
   await openContractFixture(page, 'request-attach');
   await page.getByRole('button', { name: 'Zu Arbeit hinzufügen', exact: true }).click();
@@ -29,6 +30,15 @@ test('a selection the search hides stays visible and is the work that is attache
   await expect(dialog.getByText('Keine offene Arbeit gefunden')).toBeVisible();
   await expect(bathroom).toHaveCount(0);
   await expect(heating).toBeVisible();
+  await expect(heating).toHaveAttribute('aria-checked', 'true');
+
+  // A failed search shows its error and retry, and the selection still above it.
+  await search.fill('Störung');
+  await expect(dialog.getByRole('alert')).toContainText(
+    'Die offene Arbeit des Kunden konnte nicht geladen werden.',
+  );
+  await expect(dialog.getByRole('button', { name: 'Erneut laden', exact: true })).toBeVisible();
+  await expect(pinnedLabel).toBeVisible();
   await expect(heating).toHaveAttribute('aria-checked', 'true');
 
   await dialog.getByRole('button', { name: 'Hinzufügen', exact: true }).click();
