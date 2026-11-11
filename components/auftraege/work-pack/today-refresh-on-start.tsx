@@ -22,19 +22,20 @@ export function TodayRefreshOnStart(): null {
   // From the app's client contexts, not props: every clock action re-renders the start page, and
   // props would add the ids to each of those responses. An organization switch changes the
   // context before the server renders the new start page, so the claim follows it at once.
-  const { activeOrg } = useOrganization();
+  const { activeOrg, switchSequence } = useOrganization();
   const userId = useUserProfile().profile?.id ?? null;
   const organizationId = activeOrg?.role === 'employee' ? activeOrg.orgId : null;
   // The wipe generation this page may claim under. Taken when the page mounts, so a sign-out that
-  // wipes meanwhile keeps it from claiming, even when the person's id arrives only later (a profile
-  // the browser reads itself). Renewed only for a new organization: a switch wipes on purpose
-  // before it publishes the new one.
-  const claimBase = useRef<{ organizationId: string | null; generation: string } | null>(null);
+  // wipes meanwhile keeps it from claiming: also when the person's id arrives only later (a
+  // profile the browser reads itself), and when a membership fallback changes the organization.
+  // Renewed only for an explicit switch in this tab, which wipes before it publishes the new
+  // organization. Any other wipe since the mount blocks the claim until the next start page.
+  const claimBase = useRef<{ switchSequence: number; generation: string } | null>(null);
   useEffect(() => {
     const base =
-      claimBase.current?.organizationId === organizationId
+      claimBase.current?.switchSequence === switchSequence
         ? claimBase.current
-        : { organizationId, generation: todayWipeGeneration() };
+        : { switchSequence, generation: todayWipeGeneration() };
     claimBase.current = base;
     // No person or no field worker's organization yet: nothing to claim or refresh.
     if (!userId || !organizationId) return;
@@ -77,6 +78,6 @@ export function TodayRefreshOnStart(): null {
       current = false;
       window.removeEventListener('online', retryOnline);
     };
-  }, [userId, organizationId, showBanner]);
+  }, [userId, organizationId, switchSequence, showBanner]);
   return null;
 }

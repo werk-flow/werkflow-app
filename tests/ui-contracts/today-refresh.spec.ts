@@ -107,3 +107,47 @@ test('a profile that arrives after a sign-out wiped the device never claims it o
   expect(await page.evaluate(() => window.todayRefreshContract.storedOrganization())).toBeNull();
   expect(requested).toEqual([]);
 });
+
+// A sign-out wipes the device before it ends the session. A membership refresh that lands then and
+// falls back to another organization changes the active organization without an explicit switch:
+// the page keeps the wipe generation it loaded with, so nothing is claimed or stored.
+test('a membership fallback that lands during a sign-out never claims the device or stores a day', async ({
+  page,
+}) => {
+  const [first] = TODAY_CONTRACT_ORGANIZATIONS;
+  const requested: string[] = [];
+  await page.route(
+    (url) => url.pathname === FIELD_SYNC_TODAY_PATH,
+    (route) => {
+      const organizationId = new URL(route.request().url()).searchParams.get('organizationId') ?? '';
+      requested.push(organizationId);
+      return route.fulfill({
+        json: {
+          version: `day-of-${organizationId}`,
+          berlinDate: '2026-11-09',
+          validUntil: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+          userId: TODAY_CONTRACT_USER,
+          organizationId,
+          assignments: [],
+        },
+      });
+    },
+  );
+  await openContractFixture(page, 'today-refresh-fallback');
+  await expect.poll(() => page.evaluate(() => window.todayRefreshContract.storedOrganization())).toBe(first);
+
+  await page.getByRole('button', { name: 'Abmelden', exact: true }).click();
+  await expect
+    .poll(() => page.evaluate(async () => (await indexedDB.databases()).map((database) => database.name)))
+    .toEqual([]);
+  await page.getByRole('button', { name: 'Mitgliedschaften neu laden', exact: true }).click();
+  // The fallback wipes, then writes the remaining organization's cookie; answered once pending.
+  await expect.poll(() => page.evaluate(() => window.organizationContract.writes.length)).toBe(1);
+  await page.evaluate(() => window.organizationContract.finishCookie(true));
+
+  // The page handed the refresh the remaining organization; a claim would be in place by now.
+  await expect.poll(() => page.evaluate(() => window.todayRefreshStarts)).toBe(2);
+  expect(await page.evaluate((key) => localStorage.getItem(key), TODAY_HOLDER_KEY)).toBeNull();
+  expect(await page.evaluate(() => window.todayRefreshContract.storedOrganization())).toBeNull();
+  expect(requested).toEqual([first]);
+});

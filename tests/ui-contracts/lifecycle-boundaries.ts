@@ -40,6 +40,7 @@ declare global {
       | 'today-refresh'
       | 'today-refresh-switch'
       | 'today-refresh-profile'
+      | 'today-refresh-fallback'
       | 'offline-today'
       | 'sidebar'
       | 'lazy-dialog'

@@ -76,7 +76,8 @@ function superseded(holder: TodayHolder): boolean {
  * "the today snapshot"): only then must the stored customer data go. The answer's outcome decides,
  * never its status. A `retry`, a `rejected` `invalid` (a fault of this client, not an access
  * change) and a body that is no refusal keep the day. Checked by hand, not with a zod schema: a
- * schema here grew the shared zod chunk that every page loads at start.
+ * schema here grew the shared zod chunk that every page loads at start. It reads the response's
+ * body, so no caller may read that body afterwards.
  */
 async function losesAccess(response: Response): Promise<boolean> {
   let body: unknown;

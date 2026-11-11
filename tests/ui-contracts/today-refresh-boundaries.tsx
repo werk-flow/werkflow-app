@@ -101,3 +101,25 @@ export function TodayRefreshProfileContractFixture(): React.JSX.Element {
     </FieldWorkerStartPage>
   );
 }
+
+function FallbackControls(): React.JSX.Element {
+  const { refreshMemberships } = useOrganization();
+  return (
+    <>
+      <Button onClick={() => void clearTodayOnDevice()}>Abmelden</Button>
+      <Button onClick={() => void refreshMemberships()}>Mitgliedschaften neu laden</Button>
+    </>
+  );
+}
+
+/**
+ * A start page during a sign-out: „Abmelden“ runs the device wipe every sign-out starts with, and
+ * „Mitgliedschaften neu laden“ a membership refresh that finds the first organization gone.
+ */
+export function TodayRefreshFallbackContractFixture(): React.JSX.Element {
+  return (
+    <FieldWorkerStartPage>
+      <FallbackControls />
+    </FieldWorkerStartPage>
+  );
+}

@@ -33,6 +33,12 @@ export type OrgContextValue = {
   refreshMemberships: () => Promise<void>;
   isLoading: boolean;
   isSwitchingOrg: boolean;
+  /**
+   * Counts this tab's explicit switches (`setActiveOrg`), each of which wiped the device's day
+   * before it published the new organization. A membership fallback changes the active
+   * organization without counting: the start page's day refresh tells the two apart.
+   */
+  switchSequence: number;
 };
 
 /** A refused cookie write rejects, so it takes the same failure path as a transport error. */
@@ -264,43 +270,27 @@ type OrganizationProviderProps = {
   initialActiveOrgCookieNeedsSync: boolean;
 };
 
-export function OrganizationProvider({
-  children,
-  initialMemberships,
+/**
+ * The explicit organization switch: its handler, its lock, and `switchSequence`, which counts the
+ * switches that committed in this tab (see `OrgContextValue`).
+ */
+function useOrganizationSwitch({
+  activeOrgId,
+  setActiveOrgId,
+  refreshGenerationRef,
   initialActiveOrgId,
-  initialActiveOrgCookieNeedsSync,
-}: OrganizationProviderProps) {
+}: {
+  activeOrgId: string | null;
+  setActiveOrgId: (orgId: string | null) => void;
+  refreshGenerationRef: RefObject<number>;
+  initialActiveOrgId: string | null;
+}): Pick<OrgContextValue, 'setActiveOrg' | 'isSwitchingOrg' | 'switchSequence'> {
   const router = useRouter();
   const pathname = usePathname();
   const { showBanner } = useBanner();
-  const [memberships, setMemberships] = useState<UserOrg[]>(initialMemberships);
-  const [activeOrgId, setActiveOrgId] = useState<string | null>(initialActiveOrgId);
   const [isSwitchingOrg, setIsSwitchingOrg] = useState(false);
+  const [switchSequence, setSwitchSequence] = useState(0);
   const pendingOrgIdRef = useRef<string | null>(null);
-  // Background membership reconciliation keeps the last-known sidebar in
-  // place. Replacing it with a skeleton would unmount an open organization
-  // picker; actual organization switches have their own explicit lock.
-  const isLoading = false;
-
-  useAdoptedServerProps({ initialMemberships, initialActiveOrgId, setMemberships, setActiveOrgId });
-
-  useFallbackOrgCookieSync({ initialActiveOrgCookieNeedsSync, initialActiveOrgId, showBanner });
-
-  const activeOrg = memberships.find((m) => m.orgId === activeOrgId) ?? null;
-
-  // Overlapping refreshes must not interleave: only the newest call commits.
-  const refreshGenerationRef = useRef(0);
-  const refreshMemberships = useCallback(
-    () =>
-      refreshOwnMemberships({
-        refreshGenerationRef,
-        activeOrgId,
-        showBanner,
-        setMemberships,
-        setActiveOrgId,
-      }),
-    [activeOrgId, showBanner],
-  );
 
   const setActiveOrg = useCallback(
     async (orgId: string) => {
@@ -321,6 +311,7 @@ export function OrganizationProvider({
         // GET readers authorize against this cookie. Publish the new scope only
         // after its response commits, otherwise their first read is denied.
         setActiveOrgId(orgId);
+        setSwitchSequence((sequence) => sequence + 1);
 
         const parentPath = getParentListPath(pathname);
 
@@ -348,7 +339,7 @@ export function OrganizationProvider({
         });
       }
     },
-    [activeOrgId, router, pathname, showBanner],
+    [activeOrgId, setActiveOrgId, refreshGenerationRef, router, pathname, showBanner],
   );
 
   // Reset switching state when server data arrives for the target org
@@ -359,6 +350,50 @@ export function OrganizationProvider({
       setIsSwitchingOrg(false);
     }
   }, [initialActiveOrgId]);
+
+  return { setActiveOrg, isSwitchingOrg, switchSequence };
+}
+
+export function OrganizationProvider({
+  children,
+  initialMemberships,
+  initialActiveOrgId,
+  initialActiveOrgCookieNeedsSync,
+}: OrganizationProviderProps) {
+  const { showBanner } = useBanner();
+  const [memberships, setMemberships] = useState<UserOrg[]>(initialMemberships);
+  const [activeOrgId, setActiveOrgId] = useState<string | null>(initialActiveOrgId);
+  // Background membership reconciliation keeps the last-known sidebar in
+  // place. Replacing it with a skeleton would unmount an open organization
+  // picker; actual organization switches have their own explicit lock.
+  const isLoading = false;
+
+  useAdoptedServerProps({ initialMemberships, initialActiveOrgId, setMemberships, setActiveOrgId });
+
+  useFallbackOrgCookieSync({ initialActiveOrgCookieNeedsSync, initialActiveOrgId, showBanner });
+
+  const activeOrg = memberships.find((m) => m.orgId === activeOrgId) ?? null;
+
+  // Overlapping refreshes must not interleave: only the newest call commits.
+  const refreshGenerationRef = useRef(0);
+  const refreshMemberships = useCallback(
+    () =>
+      refreshOwnMemberships({
+        refreshGenerationRef,
+        activeOrgId,
+        showBanner,
+        setMemberships,
+        setActiveOrgId,
+      }),
+    [activeOrgId, showBanner],
+  );
+
+  const { setActiveOrg, isSwitchingOrg, switchSequence } = useOrganizationSwitch({
+    activeOrgId,
+    setActiveOrgId,
+    refreshGenerationRef,
+    initialActiveOrgId,
+  });
 
   // Membership freshness (member added/removed/role changed, tab return) is
   // handled by OrganizationRealtimeBridge, mounted below the Realtime
@@ -373,8 +408,18 @@ export function OrganizationProvider({
       refreshMemberships,
       isLoading,
       isSwitchingOrg,
+      switchSequence,
     }),
-    [memberships, activeOrgId, activeOrg, setActiveOrg, refreshMemberships, isLoading, isSwitchingOrg],
+    [
+      memberships,
+      activeOrgId,
+      activeOrg,
+      setActiveOrg,
+      refreshMemberships,
+      isLoading,
+      isSwitchingOrg,
+      switchSequence,
+    ],
   );
 
   return <OrganizationContext.Provider value={value}>{children}</OrganizationContext.Provider>;
@@ -404,6 +449,7 @@ export function RequestedOrganizationScope({
       refreshMemberships: noOrganizationSwitch,
       isLoading: false,
       isSwitchingOrg: false,
+      switchSequence: 0,
     }),
     [organizationId],
   );

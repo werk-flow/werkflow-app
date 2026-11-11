@@ -150,3 +150,10 @@ Decided for werk-flow/werkflow-planning#318.
 
 - A sign-out waits at most 1.5 seconds for the deletion, because a deletion queued behind one another tab blocks reports nothing until that one ends. Readers already refuse the day by then.
 - The wipe removes the device claim before it writes the signal, and a tab drops its shown day at either change. A signal that cannot be written, such as on a full quota, still ends the day in every tab.
+
+## Amendment 2026-11-11: when a start page may claim the device
+
+Decided for werk-flow/werkflow-planning#318.
+
+- The start page takes the person and the active organization from the app's client state, not from its server props, so the clock actions' responses carry no ids.
+- It claims the device only under the wipe signal it loaded with. Only an explicit organization switch in the same tab renews that signal, because the switch wipes before it shows the new organization. A person known only later, or an organization a membership fallback chose, keeps it. Any other wipe since the page loaded, a sign-out's included, blocks the claim until the next start page.

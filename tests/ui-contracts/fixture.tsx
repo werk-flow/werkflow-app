@@ -30,6 +30,7 @@ import { OrganizationContractFixture } from './organization-boundaries';
 import { OrganizationExportContractFixture } from './organization-export-boundaries';
 import {
   TodayRefreshContractFixture,
+  TodayRefreshFallbackContractFixture,
   TodayRefreshProfileContractFixture,
   TodayRefreshSwitchContractFixture,
 } from './today-refresh-boundaries';
@@ -596,6 +597,8 @@ createRoot(root).render(
     <TodayRefreshSwitchContractFixture />
   ) : window.uiContractFixture === 'today-refresh-profile' ? (
     <TodayRefreshProfileContractFixture />
+  ) : window.uiContractFixture === 'today-refresh-fallback' ? (
+    <TodayRefreshFallbackContractFixture />
   ) : window.uiContractFixture === 'offline-today' ? (
     <OfflineTodayContractFixture />
   ) : window.uiContractFixture === 'calendar-board' ? (
