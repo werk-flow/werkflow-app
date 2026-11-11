@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { assertWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-lock';
 import { FIELD_SYNC_TODAY_PATH } from '@/lib/field-sync/today-snapshot';
-import { TODAY_HOLDER_KEY } from '@/lib/field-sync/device/today-wipe';
+import { TODAY_DATABASE, TODAY_HOLDER_KEY, TODAY_WIPE_KEY } from '@/lib/field-sync/device/today-wipe';
 import { openContractFixture } from './open-fixture';
 import { TODAY_CONTRACT_ORGANIZATIONS, TODAY_CONTRACT_USER } from './today-refresh-world';
 
@@ -146,6 +146,57 @@ test('a membership fallback that lands during a sign-out never claims the device
   await page.evaluate(() => window.organizationContract.finishCookie(true));
 
   // The page handed the refresh the remaining organization; a claim would be in place by now.
+  await expect.poll(() => page.evaluate(() => window.todayRefreshStarts)).toBe(2);
+  expect(await page.evaluate((key) => localStorage.getItem(key), TODAY_HOLDER_KEY)).toBeNull();
+  expect(await page.evaluate(() => window.todayRefreshContract.storedOrganization())).toBeNull();
+  expect(requested).toEqual([first]);
+});
+
+// A sign-out in another tab while this tab's switch waits for its cookie wipes after the switch's
+// own wipe. The switch may claim only under the generation its own wipe produced, so the sign-out's
+// later wipe still blocks the claim: nothing is claimed or stored for the new organization.
+test('a sign-out in another tab during a switch keeps the switched page from claiming or storing a day', async ({
+  page,
+}) => {
+  const [first] = TODAY_CONTRACT_ORGANIZATIONS;
+  const requested: string[] = [];
+  await page.route(
+    (url) => url.pathname === FIELD_SYNC_TODAY_PATH,
+    (route) => {
+      const organizationId = new URL(route.request().url()).searchParams.get('organizationId') ?? '';
+      requested.push(organizationId);
+      return route.fulfill({
+        json: {
+          version: `day-of-${organizationId}`,
+          berlinDate: '2026-11-09',
+          validUntil: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+          userId: TODAY_CONTRACT_USER,
+          organizationId,
+          assignments: [],
+        },
+      });
+    },
+  );
+  await openContractFixture(page, 'today-refresh-switch');
+  await expect.poll(() => page.evaluate(() => window.todayRefreshContract.storedOrganization())).toBe(first);
+
+  await page.getByRole('button', { name: 'Organisation wechseln', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.organizationContract.writes.length)).toBe(1);
+  // Another tab signs out while the switch's cookie write is pending: it wipes the device.
+  await page.evaluate(
+    async ({ holderKey, wipeKey, database }) => {
+      localStorage.removeItem(holderKey);
+      localStorage.setItem(wipeKey, 'sign-out-in-another-tab');
+      await new Promise<void>((resolve) => {
+        const request = indexedDB.deleteDatabase(database);
+        request.onsuccess = () => resolve();
+      });
+    },
+    { holderKey: TODAY_HOLDER_KEY, wipeKey: TODAY_WIPE_KEY, database: TODAY_DATABASE },
+  );
+  await page.evaluate(() => window.organizationContract.finishCookie(true));
+
+  // The page handed the refresh the new organization; a claim would be in place by now.
   await expect.poll(() => page.evaluate(() => window.todayRefreshStarts)).toBe(2);
   expect(await page.evaluate((key) => localStorage.getItem(key), TODAY_HOLDER_KEY)).toBeNull();
   expect(await page.evaluate(() => window.todayRefreshContract.storedOrganization())).toBeNull();

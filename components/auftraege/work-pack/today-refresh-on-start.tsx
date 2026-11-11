@@ -28,12 +28,25 @@ export function TodayRefreshOnStart(): null {
   // The wipe generation this page may claim under. Taken when the page first renders, so a
   // sign-out that wipes meanwhile keeps it from claiming: also when the person's id arrives only
   // later (a profile the browser reads itself), and when a membership fallback changes the
-  // organization. Renewed only when the organization changes during an explicit switch in this
-  // tab (`isSwitchingOrg`), which wipes before it publishes the new organization. Any other wipe
-  // since then blocks the claim until the next start page.
-  const [claim, setClaim] = useState(() => ({ organizationId, generation: todayWipeGeneration() }));
-  if (claim.organizationId !== organizationId)
-    setClaim({ organizationId, generation: isSwitchingOrg ? todayWipeGeneration() : claim.generation });
+  // organization. Only an explicit switch in this tab renews it, to the generation of the switch's
+  // own wipe: `setActiveOrg` wipes synchronously before this page renders `isSwitchingOrg`, so
+  // that render reads it. A wipe after it, such as another tab's sign-out while the switch waits
+  // for its cookie, still blocks the claim until the next start page.
+  const [claim, setClaim] = useState<{
+    organizationId: string | null;
+    generation: string;
+    switchGeneration: string | null;
+  }>(() => ({ organizationId, generation: todayWipeGeneration(), switchGeneration: null }));
+  const switchGeneration = isSwitchingOrg ? (claim.switchGeneration ?? todayWipeGeneration()) : null;
+  if (claim.organizationId !== organizationId || claim.switchGeneration !== switchGeneration)
+    setClaim({
+      organizationId,
+      generation:
+        claim.organizationId !== organizationId && switchGeneration !== null
+          ? switchGeneration
+          : claim.generation,
+      switchGeneration,
+    });
   const generationAtStart = claim.generation;
   useEffect(() => {
     // No person or no field worker's organization yet: nothing to claim or refresh.

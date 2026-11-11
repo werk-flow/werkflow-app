@@ -156,4 +156,4 @@ Decided for werk-flow/werkflow-planning#318.
 Decided for werk-flow/werkflow-planning#318.
 
 - The start page takes the person and the active organization from the app's client state, not from its server props, so the clock actions' responses carry no ids.
-- It claims the device only under the wipe signal it loaded with. Only an explicit organization switch in the same tab renews that signal, because the switch wipes before it shows the new organization. A person known only later, or an organization a membership fallback chose, keeps it. Any other wipe since the page loaded, a sign-out's included, blocks the claim until the next start page.
+- It claims the device only under the wipe signal it loaded with. Only an explicit organization switch in the same tab renews that signal, to the one its own wipe wrote before it shows the new organization. A person known only later, or an organization a membership fallback chose, keeps the old signal. Any other wipe since then, a sign-out's in another tab during the switch included, blocks the claim until the next start page.
