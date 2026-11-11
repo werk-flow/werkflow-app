@@ -12,7 +12,6 @@ import {
   discardTimeEvents,
   isOfflineClockAction,
   retryFirstTimeEvent,
-  type OfflineClockCommand,
 } from './time-outbox';
 import { sendTimeOutbox, type TimeOutboxSendOptions } from './time-outbox-send';
 import {
@@ -104,6 +103,10 @@ const WORKING: LiveClockState = {
   sessionVersion: 3,
   currentActivity: createActivitySelection('work', JOB_ID),
   resumeActivity: createActivitySelection('work', JOB_ID),
+};
+
+type OfflineClockCommand = Omit<Parameters<typeof captureTimeEvent>[1]['command'], 'action'> & {
+  action: string;
 };
 
 let operations = 0;

@@ -136,8 +136,8 @@ function useClockOutbox(
 /**
  * Keeps a clock action on the phone and echoes it as the accepted action would show. Only a start,
  * a switch and an end can wait for signal: a recovery or legacy action needs the server's answer
- * first. The first kept action stands on `base`, the clock the server confirmed; one after it
- * passes null and stands on the action before it.
+ * first. The first kept action stands on `base`, the clock the server confirmed, kept without the
+ * job's, customer's and project's names; one after it passes null and stands on the action before it.
  */
 function useKeepOnPhone({
   userId,
@@ -155,7 +155,8 @@ function useKeepOnPhone({
       const { organizationId, operationId, action, expectedSessionId, expectedVersion, selection } = input;
       const command = { operationId, action, expectedSessionId, expectedVersion, selection };
       const offline = action === 'start' || action === 'switch' || action === 'end';
-      if (!offline || !userId || !keep({ ...command, userId, organizationId, triedOnline, base }))
+      const clock = base && { ...base, activeJobInfo: null, resumeJobInfo: null };
+      if (!offline || !userId || !keep({ ...command, userId, organizationId, triedOnline, base: clock }))
         return FAILED;
       const result: TimeTransitionResult = {
         success: true,
@@ -205,8 +206,8 @@ function useClockTransitionExecute({
   const keepOnPhone = useKeepOnPhone({ userId, keep: outbox.keep, invalidate, setData });
   // Unsent actions go first: one captured after them must never reach the server before them.
   const standsOnUnsent = outbox.kept > 0 || outbox.view?.status === 'pending';
-  // The first kept action stands on the clock the server confirmed; the ones after it stand on it.
-  const base = standsOnUnsent || outbox.view ? null : serverState;
+  // Events that wait for the person's decision carry nothing new: an action kept behind them would never be sent.
+  const stopped = outbox.view?.status === 'stopped';
   return useCallback(
     async (
       action: TimeTransitionInput['action'],
@@ -225,14 +226,17 @@ function useClockTransitionExecute({
         selection,
         acknowledgeLong,
       };
+      // The first kept action stands on the clock the server confirmed; the ones after it stand on it.
+      const keepIt = (triedOnline: boolean): TimeTransitionResult =>
+        stopped ? FAILED : keepOnPhone(input, standsOnUnsent ? null : serverState, triedOnline);
       // A phone that reports no network asks no server.
-      if (standsOnUnsent || !navigator.onLine) return keepOnPhone(input, base, false);
+      if (standsOnUnsent || !navigator.onLine) return keepIt(false);
       let result: TimeTransitionResult;
       try {
         result = await run(input);
       } catch {
         // The call may have reached the server: the phone keeps the action under the same operation id, so it is recorded once.
-        return keepOnPhone(input, base, true);
+        return keepIt(true);
       }
       if (result.success) {
         // Echo first so no in-flight read overwrites it, then read fresh.
@@ -244,7 +248,18 @@ function useClockTransitionExecute({
       }
       return result;
     },
-    [activeOrgId, base, invalidate, isReady, keepOnPhone, refresh, run, serverState, setData, standsOnUnsent],
+    [
+      activeOrgId,
+      invalidate,
+      isReady,
+      keepOnPhone,
+      refresh,
+      run,
+      serverState,
+      setData,
+      standsOnUnsent,
+      stopped,
+    ],
   );
 }
 

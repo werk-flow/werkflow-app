@@ -266,6 +266,69 @@ test('a refused event shows „Nicht übertragen“ with its reason, is sent aga
   expect(server.sent).toHaveLength(2);
 });
 
+test('while refused events wait for the person, a clock action without network is refused instead of kept behind them', async ({
+  page,
+}) => {
+  const server = await mountClock(page, CLOCKED_OUT_STATE);
+  server.verdict = { outcome: 'rejected', code: 'forbidden' };
+  await startWithoutNetwork(page, server);
+  await setNetwork(page, server, true);
+  await expect(unsentBadge(clockDock(page))).toHaveText('Nicht übertragen');
+
+  await setNetwork(page, server, false);
+  await page.getByRole('button', { name: 'Zeiterfassung starten', exact: true }).click();
+  const sheet = page.getByRole('dialog');
+  await sheet.getByRole('button', { name: 'Fahrt starten', exact: true }).click();
+
+  await expect(sheet).toContainText(
+    'Die Aktivität konnte nicht gespeichert werden. Bitte versuche es erneut.',
+  );
+  await expect(clockStatus(page)).toHaveText('Nicht eingestempelt');
+  expect((await unsentOnDevice(page)).map((event) => event.action)).toEqual(['start']);
+});
+
+test('the clock a page keeps for its first unsent action names no job, customer or project', async ({
+  page,
+}) => {
+  const job = {
+    id: '40000000-0000-4000-8000-000000000001',
+    title: 'Heizungswartung Müller',
+    jobNumber: 'A-2026-0142',
+    status: 'in_bearbeitung',
+    projectName: 'Neubau Musterweg',
+    clientName: 'Familie Müller',
+  };
+  const server = await mountClock(page, {
+    ...RUNNING_CLOCK_STATE,
+    activeJobId: job.id,
+    activeJobInfo: job,
+    resumeJobInfo: job,
+    currentActivity: { kind: 'work', allocationKind: 'job', jobId: job.id },
+    resumeActivity: { kind: 'work', allocationKind: 'job', jobId: job.id },
+  });
+  await setNetwork(page, server, false);
+  // As on a page whose signal is gone before the outbox code loaded: the device store is out of
+  // reach, so the action stays where the page's own static write put it.
+  await page.evaluate(() => {
+    Object.defineProperty(window, 'indexedDB', {
+      value: {
+        open: () => {
+          throw new Error('The outbox is out of reach.');
+        },
+      },
+    });
+  });
+
+  await page.getByRole('button', { name: 'Pause', exact: true }).click();
+  await expect(clockStatus(page)).toHaveText('Pause');
+  await expect(unsentBadge(clockDock(page))).toHaveText('Wartet auf Netz');
+
+  const kept = await page.evaluate(() => localStorage.getItem('werkflow:unsent:clock') ?? '');
+  expect(kept).toContain(RUNNING_CLOCK_STATE.sessionId ?? 'no session');
+  for (const name of [job.title, job.jobNumber, job.projectName, job.clientName])
+    expect(kept).not.toContain(name);
+});
+
 test('a late event shows „Korrektur nötig“, opens the correction with its captured day and start, and leaves only after the request was filed', async ({
   page,
 }) => {

@@ -13,7 +13,10 @@ import { todayHolderKey } from './today-store';
 // transaction over both stores. A native client replaces this module and
 // keeps the rules of time-outbox.ts.
 
-/** The IndexedDB database of unsent time events. The static wipe (today-wipe.ts) never names it. */
+/**
+ * The IndexedDB database of unsent time events. The static wipe (today-wipe.ts) never names it.
+ * @internal Exported for the tests that start from an empty device.
+ */
 export const TIME_OUTBOX_DATABASE = 'werkflow-time-outbox';
 
 const EVENTS = 'events';
