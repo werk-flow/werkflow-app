@@ -1,8 +1,9 @@
 // The actual attach action and its two readers over the in-memory database:
 // only managers pass, the organization and actor come from the session, a
 // Büro member who sends another organization's request or job id attaches
-// nothing, invalid input never reaches the database, and the database
-// function's refusals keep their codes.
+// nothing and reads none of its attached requests, invalid input never
+// reaches the database, and the database function's refusals keep their
+// codes.
 import assert from 'node:assert/strict';
 import {
   CALLER_ID,
@@ -28,6 +29,20 @@ const world = installActionWorld({
     { id: foreignJobId, organization_id: ORGANIZATION_B, client_id: foreignClientId },
   ],
   organization_members: [{ organization_id: ORGANIZATION_A, user_id: CALLER_ID, role: 'buero' }],
+  work_request_entries: [
+    {
+      id: entryId,
+      organization_id: ORGANIZATION_A,
+      request_id: requestId,
+      job_id: ownJobId,
+      project_id: null,
+      service_case_id: null,
+      summary: 'Heizkörper im Bad wird nicht warm',
+      details: null,
+      created_at: '2026-11-09T09:00:00.000Z',
+      created_by: null,
+    },
+  ],
 });
 const { attachRequestToWork } = await import('@/lib/requests/attach-actions');
 const { getRequestWorkTargets, getWorkRequestEntries } = await import('@/lib/requests/work-attach-server');
@@ -159,3 +174,16 @@ assert.deepEqual(await getRequestWorkTargets({ requestId, query: '' }), {
   success: false,
   error: 'request_not_found',
 });
+
+// The attached requests of a work come from the session's organization only:
+// a Büro member of the other organization who sends this organization's job
+// id reads none.
+signInAs(world, 'buero');
+const ownEntries = await getWorkRequestEntries({ kind: 'job', id: ownJobId });
+assert.ok(ownEntries.success);
+assert.deepEqual(
+  ownEntries.entries.map((entry) => entry.id),
+  [entryId],
+);
+signInAs(world, 'buero', ORGANIZATION_B);
+assert.deepEqual(await getWorkRequestEntries({ kind: 'job', id: ownJobId }), { success: true, entries: [] });

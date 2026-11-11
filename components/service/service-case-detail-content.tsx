@@ -16,6 +16,7 @@ import { InlinePending } from '@/components/ui/inline-pending';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useLiveView } from '@/hooks/use-live-view';
 import { readInBackground } from '@/lib/data/background-read-client';
+import { isEventForRow } from '@/lib/realtime/events';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import {
   SERVICE_CASE_STATUS_LABELS,
@@ -43,10 +44,7 @@ function useServiceCaseDetailLive(initial: ServiceCaseDetailWorkspace) {
     tables: ['service_cases'],
     initialData: initial,
     resetKey: initial.serviceCase.id,
-    eventFilter: (event) => {
-      const row = event.new ?? event.old;
-      return !row?.id || row.id === initial.serviceCase.id;
-    },
+    eventFilter: (event) => isEventForRow(event, initial.serviceCase.id),
     read: async ({ signal }) => {
       if (!activeOrgId) return { ok: false as const };
       const result = await readInBackground(

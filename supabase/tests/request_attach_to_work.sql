@@ -426,6 +426,26 @@ select pg_temp.expect_refusal('deleting an entry', $sql$
   delete from public.work_request_entries where request_id = '32800000-0000-0000-0000-000000000040'
 $sql$, 'event_ledger_history_immutable');
 
+-- The permitted cleanup still works: the owner's deletion of the
+-- organization removes its entries through the cascade the ledger guard and
+-- the work history guard let pass.
+do $$
+begin
+  if not exists (select 1 from public.work_request_entries
+    where organization_id = '32800000-0000-0000-0000-000000000010')
+  then
+    raise exception 'the organization had no entry to clean up';
+  end if;
+  perform public.delete_organization('32800000-0000-0000-0000-000000000010',
+    '32800000-0000-0000-0000-000000000001', 'Request attach SQL');
+  if exists (select 1 from public.work_request_entries
+    where organization_id = '32800000-0000-0000-0000-000000000010')
+  then
+    raise exception 'a deleted organization kept its request entries';
+  end if;
+end;
+$$;
+
 -- Client roles can neither read nor write the entries.
 set local role authenticated;
 select pg_temp.expect_refusal('a signed-in read of the entries', $sql$

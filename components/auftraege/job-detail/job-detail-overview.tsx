@@ -1,6 +1,7 @@
 'use client';
 
 import type { JobWithDetails, Project } from '@/lib/jobs/types';
+import type { WorkRequestEntry } from '@/lib/requests/types';
 import type { WorkLifecycleSnapshot } from '@/lib/work-lifecycle/types';
 import type { WorkHandoverWorkspace } from '@/lib/work-handover/types';
 import { WorkLifecycleCard, WorkLifecycleLoadError } from '../lifecycle/work-lifecycle-card';
@@ -18,6 +19,8 @@ type JobDetailOverviewProps = {
   // Null: the read failed. 'not_reviewer': the user does not hold the handover review.
   handoverWorkspace: WorkHandoverWorkspace | 'not_reviewer' | null;
   originRequest: OriginRequestLink | undefined;
+  // Undefined: the server read failed, and the section reads them itself.
+  requestEntries: WorkRequestEntry[] | undefined;
 };
 
 /** Origin request, work lifecycle, handover summary and attached requests: the block above the two columns. */
@@ -29,6 +32,7 @@ export function JobDetailOverview({
   lifecycleSnapshot,
   handoverWorkspace,
   originRequest,
+  requestEntries,
 }: JobDetailOverviewProps) {
   return (
     <>
@@ -61,7 +65,14 @@ export function JobDetailOverview({
           </div>
         )}
       </div>
-      {isAdminOrManager ? <WorkRequestEntriesSection kind="job" id={liveJob.id} className="mb-6" /> : null}
+      {isAdminOrManager ? (
+        <WorkRequestEntriesSection
+          kind="job"
+          id={liveJob.id}
+          initialEntries={requestEntries}
+          className="mb-6"
+        />
+      ) : null}
     </>
   );
 }

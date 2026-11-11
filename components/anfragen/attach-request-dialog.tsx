@@ -63,19 +63,58 @@ function WorkTargetLoadingRows() {
   );
 }
 
-/** The customer's open work as one radio list, the request's site first. */
+function WorkTargetRow({
+  target,
+  checked,
+  onSelect,
+}: {
+  target: RequestWorkTarget;
+  checked: boolean;
+  onSelect: (target: RequestWorkTarget) => void;
+}) {
+  return (
+    <PlainButton
+      role="radio"
+      aria-checked={checked}
+      onClick={() => onSelect(target)}
+      className={cn(
+        'flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors',
+        checked ? 'border-primary bg-primary/10' : 'border-transparent hover:bg-accent',
+      )}
+    >
+      <JobPickerRadioMark checked={checked} />
+      <span className="min-w-0 flex-1">
+        <span className="line-clamp-2 block break-words font-medium">{target.title}</span>
+        <span className="block truncate text-xs text-muted-foreground">{targetLine(target)}</span>
+      </span>
+    </PlainButton>
+  );
+}
+
+function WorkTargetGroupLabel({ children }: { children: string }) {
+  return <p className="px-3 pb-1 pt-3 text-xs font-medium text-muted-foreground">{children}</p>;
+}
+
+/**
+ * The customer's open work as one radio list, the request's site first. A
+ * selection the search hides stays pinned on top, so „Hinzufügen“ never
+ * submits work the user cannot see.
+ */
 function WorkTargetList({
   targets,
+  pinned,
   selectedId,
   onSelect,
   invalid,
 }: {
   targets: RequestWorkTarget[];
+  pinned: RequestWorkTarget | null;
   selectedId: string | null;
   onSelect: (target: RequestWorkTarget) => void;
   invalid: boolean;
 }) {
   const atSiteCount = targets.filter((target) => target.atRequestSite).length;
+  const grouped = pinned !== null || (atSiteCount > 0 && atSiteCount < targets.length);
   return (
     <div
       id={WORK_LIST_ID}
@@ -86,33 +125,22 @@ function WorkTargetList({
       aria-describedby={invalid ? `${WORK_LIST_ID}-error` : undefined}
       className="space-y-0.5 rounded-lg outline-none"
     >
-      {targets.map((target, index) => {
-        const checked = selectedId === target.id;
-        return (
-          <Fragment key={target.id}>
-            {atSiteCount > 0 && atSiteCount < targets.length && (index === 0 || index === atSiteCount) && (
-              <p className="px-3 pb-1 pt-3 text-xs font-medium text-muted-foreground">
-                {index === 0 ? 'Am Einsatzort der Anfrage' : 'Weitere offene Arbeit des Kunden'}
-              </p>
-            )}
-            <PlainButton
-              role="radio"
-              aria-checked={checked}
-              onClick={() => onSelect(target)}
-              className={cn(
-                'flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors',
-                checked ? 'border-primary bg-primary/10' : 'border-transparent hover:bg-accent',
-              )}
-            >
-              <JobPickerRadioMark checked={checked} />
-              <span className="min-w-0 flex-1">
-                <span className="line-clamp-2 block break-words font-medium">{target.title}</span>
-                <span className="block truncate text-xs text-muted-foreground">{targetLine(target)}</span>
-              </span>
-            </PlainButton>
-          </Fragment>
-        );
-      })}
+      {pinned && (
+        <>
+          <WorkTargetGroupLabel>Deine Auswahl</WorkTargetGroupLabel>
+          <WorkTargetRow target={pinned} checked onSelect={onSelect} />
+        </>
+      )}
+      {targets.map((target, index) => (
+        <Fragment key={target.id}>
+          {grouped && (index === 0 || index === atSiteCount) && (
+            <WorkTargetGroupLabel>
+              {target.atRequestSite ? 'Am Einsatzort der Anfrage' : 'Weitere offene Arbeit des Kunden'}
+            </WorkTargetGroupLabel>
+          )}
+          <WorkTargetRow target={target} checked={selectedId === target.id} onSelect={onSelect} />
+        </Fragment>
+      ))}
     </div>
   );
 }
@@ -131,6 +159,8 @@ function WorkTargetPicker({
 }) {
   const { search, setSearch, searchedQuery, targets, hasMore, loading, failure } =
     useRequestWorkTargets(requestId);
+  const pinned =
+    selected && targets && !targets.some((target) => target.id === selected.id) ? selected : null;
   return (
     <div className="space-y-3">
       <SearchInput
@@ -144,26 +174,29 @@ function WorkTargetPicker({
         <SectionError failure={failure} />
       ) : targets === undefined ? (
         <WorkTargetLoadingRows />
-      ) : targets.length === 0 ? (
-        searchedQuery ? (
-          <EmptyState
-            title="Keine offene Arbeit gefunden"
-            description="Prüf die Schreibweise oder leere die Suche."
-          />
-        ) : (
-          <EmptyState
-            title="Noch keine offene Arbeit bei diesem Kunden"
-            description="Wandle die Anfrage stattdessen in neue Arbeit um."
-          />
-        )
       ) : (
         <>
-          <WorkTargetList
-            targets={targets}
-            selectedId={selected?.id ?? null}
-            onSelect={onSelect}
-            invalid={invalid}
-          />
+          {(targets.length > 0 || pinned) && (
+            <WorkTargetList
+              targets={targets}
+              pinned={pinned}
+              selectedId={selected?.id ?? null}
+              onSelect={onSelect}
+              invalid={invalid}
+            />
+          )}
+          {targets.length === 0 &&
+            (searchedQuery ? (
+              <EmptyState
+                title="Keine offene Arbeit gefunden"
+                description="Prüf die Schreibweise oder leere die Suche."
+              />
+            ) : (
+              <EmptyState
+                title="Noch keine offene Arbeit bei diesem Kunden"
+                description="Wandle die Anfrage stattdessen in neue Arbeit um."
+              />
+            ))}
           {hasMore && (
             <p className="px-3 text-xs text-muted-foreground">
               Es gibt weitere offene Arbeit. Grenz die Suche ein, um sie zu sehen.
