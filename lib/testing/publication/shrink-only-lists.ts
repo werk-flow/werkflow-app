@@ -45,6 +45,11 @@ export const SHRINK_ONLY_LISTS: readonly ShrinkOnlyList[] = [
     extract: { kind: 'json', path: [] },
   },
   {
+    id: 'whole-page lookup ratchet',
+    file: 'eslint-rules/visible-page-lookup-ratchet.json',
+    extract: { kind: 'json', path: [] },
+  },
+  {
     id: 'missing boundary fixtures',
     file: 'lib/security/boundary-coverage-exceptions.json',
     extract: { kind: 'json', path: ['missing'] },
