@@ -196,7 +196,15 @@ test('the send shows its pending state in the first frame, and neither cancel, t
   await expect(dialog.getByRole('button', { name: 'Anhänge' })).toBeDisabled();
   await dialog.getByRole('link', { name: 'Meine Meldungen' }).click();
   await expect(dialog).toBeVisible();
-  await page.evaluate(() => window.uiContractProblemReport.releaseSubmission?.());
+  // The held submission has reached the boundary: releasing it before then would do nothing.
+  await expect
+    .poll(() => page.evaluate(() => window.uiContractProblemReport.releaseSubmission !== null))
+    .toBe(true);
+  await page.evaluate(() => {
+    const release = window.uiContractProblemReport.releaseSubmission;
+    if (!release) throw new Error('No submission is held.');
+    release();
+  });
   await expect(
     page.getByRole('alert').getByText('Danke! Deine Meldung Nr. 7 ist eingegangen.'),
   ).toBeVisible();
