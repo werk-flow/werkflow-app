@@ -22,10 +22,11 @@ export type HeavyCommandContext = {
 };
 
 /**
- * Measured on the 16 GB PC (werk-flow/werkflow-planning#94): type-aware eslint
- * loads the TypeScript program once and grows with the files it lints, from
- * about 1 GiB for one file to 3.3 to 4.1 GiB for the repository.
- * Above this many files, a lint takes a heavy slot.
+ * Type-aware eslint's peak memory on the 16 GB PC (werk-flow/werkflow-planning#94):
+ * 1.23 GiB for 1 file, 1.42 for 52, 1.80 for 148, 2.58 for 316, and 3.3 to 4.1
+ * for the repository's 2,800 (heavy-slot.ts). The lints agents run most name a
+ * few files or one feature folder (12 to 65 files). Above this many files, a
+ * lint takes a heavy slot.
  */
 export const BROAD_LINT_FILES = 150;
 const LINTED = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
