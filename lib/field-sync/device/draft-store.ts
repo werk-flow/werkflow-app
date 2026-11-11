@@ -58,8 +58,6 @@ export type StoredDraft = DraftHolder & {
   revisionId: string;
   operationId: string;
   jobId: string;
-  /** What the person sees where the draft is listed away from its job. */
-  jobLabel: string;
   kind: WorkArtifactKind;
   visibility: WorkArtifactVisibility;
   /** „Erfasst am“ as an ISO instant. */
@@ -90,7 +88,6 @@ const storedFieldsSchema = z.object({
   revisionId: z.string(),
   operationId: z.string(),
   jobId: z.string(),
-  jobLabel: z.string(),
   kind: z.enum(WORK_ARTIFACT_KINDS),
   visibility: z.enum(['internal_only', 'customer_facing']),
   capturedAt: z.string(),
@@ -175,7 +172,10 @@ function noAccessTimeOver(draft: StoredDraft, now: Date): boolean {
  * access is over is deleted, also another person's: that person may never open this phone again.
  * Throws when IndexedDB itself fails: the caller shows that, never an empty list.
  */
-export async function listDraftsOnDevice(holder: DraftHolder, now: Date = new Date()): Promise<StoredDraft[]> {
+export async function listDraftsOnDevice(
+  holder: DraftHolder,
+  now: Date = new Date(),
+): Promise<StoredDraft[]> {
   const records: unknown[] = await withStore('readwrite', (store) => {
     const request = store.getAll();
     request.addEventListener('success', () => {

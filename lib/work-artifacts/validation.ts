@@ -102,8 +102,13 @@ type WorkArtifactRuleInput = Pick<
   'kind' | 'title' | 'content' | 'visibility' | 'submit'
 >;
 
+/** Where a refinement reports a broken rule: the part of Zod's refinement context the rules use. */
+type RuleIssueSink = {
+  addIssue: (issue: { code: 'custom'; path: Array<string | number>; message: string }) => void;
+};
+
 /** The title, the kind's required fields, the visit window and the visibility rule: what the editor marks before a save. */
-function addFieldRuleIssues(value: WorkArtifactRuleInput, context: z.RefinementCtx): void {
+function addFieldRuleIssues(value: WorkArtifactRuleInput, context: RuleIssueSink): void {
   for (const issue of workArtifactFieldIssues(value)) {
     const path =
       issue.field === 'title'

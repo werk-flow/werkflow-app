@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, setSystemTime, test } from 'bun:test';
 
 import { z } from '@/lib/zod';
 import {
@@ -57,13 +57,17 @@ mock.module('@/lib/data/background-read-client', () => ({
   },
 }));
 
-const { draftUnsentSource, keepDraftOpen, sendDraft, sendDrafts, startDraftSync } = await import('./draft-sync');
+const { draftUnsentSource, keepDraftOpen, sendDraft, sendDrafts, startDraftSync } = await import(
+  './draft-sync'
+);
 
 const holder: DraftHolder = {
   userId: '9d000000-0000-4000-8000-000000000001',
   organizationId: '9d000000-0000-4000-8000-0000000000a1',
 };
 const otherPerson: DraftHolder = { ...holder, userId: '9d000000-0000-4000-8000-000000000002' };
+/** The device clock of every test: the sender reads it for the seven-day limit and the send time. */
+const NOW = new Date('2026-11-09T08:00:00.000Z');
 const DRAFT_ID = '9d000000-0000-4000-8000-000000000010';
 const JOB_ID = '9d000000-0000-4000-8000-000000000020';
 
@@ -74,7 +78,6 @@ function draft(overrides: Partial<StoredDraft> = {}): StoredDraft {
     revisionId: '9d000000-0000-4000-8000-000000000011',
     operationId: '9d000000-0000-4000-8000-000000000012',
     jobId: JOB_ID,
-    jobLabel: 'AUF-2026-20 · Heizung warten',
     kind: 'work_report',
     visibility: 'internal_only',
     capturedAt: '2026-11-09T07:00:00.000Z',
@@ -88,7 +91,7 @@ function draft(overrides: Partial<StoredDraft> = {}): StoredDraft {
       documentId: null,
     })),
     ready: true,
-    updatedAt: new Date().toISOString(),
+    updatedAt: NOW.toISOString(),
     sealed: false,
     refusal: null,
     ...overrides,
@@ -126,6 +129,7 @@ function results(outcome: string, code: string): () => Response {
 }
 
 beforeEach(() => {
+  setSystemTime(NOW);
   uploads.length = 0;
   accessReads.length = 0;
   sent.length = 0;
@@ -141,7 +145,9 @@ beforeEach(() => {
     fetch: (url: string, init: RequestInit) => {
       expect(url).toBe('/api/field-sync/v1/operations');
       expect(init.method).toBe('POST');
-      const body = z.object({ operations: z.array(sentOperationSchema) }).parse(JSON.parse(String(init.body)));
+      const body = z
+        .object({ operations: z.array(sentOperationSchema) })
+        .parse(JSON.parse(String(init.body)));
       sent.push(...body.operations);
       const answer = handlerAnswers.shift();
       if (!answer) throw new Error('Unexpected request to the sync handler');
@@ -151,6 +157,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  setSystemTime();
   globalThis.fetch = realFetch;
   for (const each of [holder, otherPerson]) await deleteDraftsOnDevice(each);
 });
@@ -181,7 +188,10 @@ describe('a report draft is sent', () => {
     await save(draft());
     uploadAnswers = [() => savedAs('doc-1'), () => savedAs('doc-2')];
     // The first answer is lost on the way back.
-    handlerAnswers = [() => Promise.reject(new TypeError('Failed to fetch')), results('replayed', 'replayed')];
+    handlerAnswers = [
+      () => Promise.reject(new TypeError('Failed to fetch')),
+      results('replayed', 'replayed'),
+    ];
 
     expect(await sendDraft(holder, DRAFT_ID)).toBe('waiting');
     const [waiting] = await stored();
@@ -244,7 +254,7 @@ describe('lost access', () => {
     expect((await stored())[0]?.refusal?.kind).toBe('no_access');
   });
 
-  test('a refused photo upload asks the server whether the job is still the person\'s: without access no photo and no draft is sent', async () => {
+  test("a refused photo upload asks the server whether the job is still the person's: without access no photo and no draft is sent", async () => {
     await save(draft());
     uploadAnswers = [() => ({ status: 'failed', reason: 'refused', transferred: null })];
     accessAnswer = { success: false, error: 'not_authorized' };
@@ -279,7 +289,8 @@ describe('what is sent by itself', () => {
       results('retry', 'unavailable'),
       () => new Response('<html>captive portal</html>', { status: 200 }),
     ];
-    for (let attempt = 0; attempt < 3; attempt += 1) expect(await sendDraft(holder, DRAFT_ID)).toBe('waiting');
+    for (let attempt = 0; attempt < 3; attempt += 1)
+      expect(await sendDraft(holder, DRAFT_ID)).toBe('waiting');
     const [kept] = await stored();
     expect(kept?.refusal).toBeNull();
     expect(kept?.sealed).toBe(true);
@@ -308,7 +319,7 @@ describe('what is sent by itself', () => {
   });
 
   test('a draft open in the editor, an incomplete one and one unchanged for more than seven days are not sent by themselves', async () => {
-    const old = new Date(Date.now() - DRAFT_UNSENT_LIMIT_MS - 60_000).toISOString();
+    const old = new Date(NOW.getTime() - DRAFT_UNSENT_LIMIT_MS - 60_000).toISOString();
     await save(draft({ photos: [] }));
     await save(draft({ id: '9d000000-0000-4000-8000-000000000040', photos: [], ready: false }));
     await save(draft({ id: '9d000000-0000-4000-8000-000000000050', photos: [], updatedAt: old }));
@@ -351,7 +362,7 @@ describe('drafts as unsent work at sign-out', () => {
       draft({
         id: '9d000000-0000-4000-8000-000000000040',
         photos: [],
-        refusal: { kind: 'no_access', at: new Date().toISOString() },
+        refusal: { kind: 'no_access', at: NOW.toISOString() },
       }),
     );
     await save(draft({ ...otherPerson, id: '9d000000-0000-4000-8000-000000000060', photos: [] }));

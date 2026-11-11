@@ -64,7 +64,10 @@ function hashDraftOperation(organizationId: string, operation: WorkArtifactDraft
 }
 
 /** Whether the caller's operation is already recorded; null when the read failed (logged). */
-async function isRecordedDraftOperation(context: ActionContext, operationId: string): Promise<boolean | null> {
+async function isRecordedDraftOperation(
+  context: ActionContext,
+  operationId: string,
+): Promise<boolean | null> {
   const { data, error } = await createSupabaseAdminClient()
     .from('work_artifact_draft_operations')
     .select('id')

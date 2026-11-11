@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useLiveView } from '@/hooks/use-live-view';
+import type { StoredDraft } from '@/lib/field-sync/device/draft-store';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import { readInBackground } from '@/lib/data/background-read-client';
 import {
@@ -29,7 +30,10 @@ import {
   type WorkArtifactSummary,
   type WorkArtifactTimeSourceOption,
 } from '@/lib/work-artifacts/types';
+import { DeviceDraftList } from './device-draft-list';
+import { useDeviceDrafts, type DraftDevice } from './use-device-drafts';
 import { useWorkArtifactCustomerActions } from './use-work-artifact-customer-actions';
+import { useWorkArtifactDeviceDraft } from './use-work-artifact-device-draft';
 import { useWorkArtifactEditor, type WorkArtifactEditor } from './use-work-artifact-editor';
 import { useWorkArtifactLinks } from './use-work-artifact-links';
 import { useWorkArtifactReviewActions } from './use-work-artifact-review-actions';
@@ -75,12 +79,9 @@ export function WorkArtifactsSection({
   defaultSiteId,
   readOnly = false,
 }: WorkArtifactsSectionProps): ReactElement {
-  const searchParams = useSearchParams();
-  const [selectedId, setSelectedId] = useState<string | null>(() => {
-    const requestedId = searchParams.get('arbeitsnachweis');
-    return initialArtifacts.some((artifact) => artifact.id === requestedId) ? requestedId : null;
-  });
-  const [creating, setCreating] = useState(false);
+  const { selectedId, creating, restoredDraft, ...open } = useOpenArtifact(initialArtifacts);
+  // Only a job keeps drafts on the device; their code loads with the dialog for a new Arbeitsnachweis.
+  const deviceDrafts = useDeviceDrafts(currentUserId, creating && targetType === 'job');
   // Newest version seen per artifact while the dialog is open. The dialog
   // compares it with its loaded version, so the user's own writes never
   // raise the remote-change hint.
@@ -103,17 +104,18 @@ export function WorkArtifactsSection({
       data-testid="work-artifacts-section"
       className="rounded-lg border bg-card p-4 shadow-xs sm:p-5"
     >
-      <WorkArtifactsSectionHeader
-        readOnly={readOnly}
-        isManager={isManager}
-        onCreate={() => setCreating(true)}
-      />
+      <WorkArtifactsSectionHeader readOnly={readOnly} isManager={isManager} onCreate={open.create} />
       <StaleRegion stale={view.isStale} onRetry={refresh}>
-        <WorkArtifactList artifacts={artifacts} onSelect={setSelectedId} />
+        <WorkArtifactList artifacts={artifacts} onSelect={open.select} />
       </StaleRegion>
       {view.isRefreshing && (
         <p className="mt-2 text-xs text-muted-foreground">Arbeitsnachweise werden aktualisiert…</p>
       )}
+      <DeviceDraftList
+        deviceDrafts={deviceDrafts}
+        jobId={targetType === 'job' ? targetId : null}
+        onOpen={open.restore}
+      />
       {(creating || selectedId) && (
         <WorkArtifactDialog
           targetType={targetType}
@@ -130,11 +132,12 @@ export function WorkArtifactsSection({
           instructionOptions={instructionOptions}
           defaultSiteId={defaultSiteId}
           readOnly={readOnly}
+          device={targetType === 'job' ? deviceDrafts.device : null}
+          restoredDraft={restoredDraft}
           remoteVersions={remoteVersions}
           onRemoteUpdateHandled={() => setRemoteVersions({})}
           onClose={() => {
-            setCreating(false);
-            setSelectedId(null);
+            open.close();
             setRemoteVersions({});
             void refresh();
           }}
@@ -142,6 +145,33 @@ export function WorkArtifactsSection({
       )}
     </section>
   );
+}
+
+/** Which Arbeitsnachweis the dialog shows: a saved one, a new one, or a draft of this job the device kept. */
+function useOpenArtifact(initialArtifacts: WorkArtifactSummary[]) {
+  const searchParams = useSearchParams();
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    const requestedId = searchParams.get('arbeitsnachweis');
+    return initialArtifacts.some((artifact) => artifact.id === requestedId) ? requestedId : null;
+  });
+  const [creating, setCreating] = useState(false);
+  const [restoredDraft, setRestoredDraft] = useState<StoredDraft | null>(null);
+  return {
+    selectedId,
+    creating,
+    restoredDraft,
+    select: setSelectedId,
+    create: () => setCreating(true),
+    restore: (draft: StoredDraft) => {
+      setRestoredDraft(draft);
+      setCreating(true);
+    },
+    close: () => {
+      setCreating(false);
+      setRestoredDraft(null);
+      setSelectedId(null);
+    },
+  };
 }
 
 type WorkArtifactsLiveViewOptions = WorkArtifactTarget & {
@@ -257,6 +287,9 @@ type WorkArtifactDialogProps = WorkArtifactTarget & {
   recordedVisit: RecordedVisitWindow;
   instructionOptions: Array<{ id: string; label: string }>;
   defaultSiteId?: string | undefined;
+  /** The loaded device code of a job's section; null for a project and until it is loaded. */
+  device: DraftDevice | null;
+  restoredDraft: StoredDraft | null;
   remoteVersions: Record<string, number>;
   onRemoteUpdateHandled: () => void;
   onClose: () => void;
@@ -266,7 +299,7 @@ type WorkArtifactDialogProps = WorkArtifactTarget & {
 function WorkArtifactDialog(props: WorkArtifactDialogProps) {
   const { readOnly } = props;
   const artifactFormId = useId();
-  const { editor, save, review, customer, links } = useWorkArtifactDialogActions(props);
+  const { editor, save, review, customer, links, deviceDraft } = useWorkArtifactDialogActions(props);
   const { detail, loading, editing, isBusy, anyBusy, currentRevision } = editor;
   const { requestClose } = customer;
 
@@ -300,7 +333,7 @@ function WorkArtifactDialog(props: WorkArtifactDialogProps) {
               }}
               noValidate
             >
-              <WorkArtifactDraftForm editor={editor} instructionOptions={props.instructionOptions} />
+              <WorkArtifactDraftForm {...props} editor={editor} deviceDraft={deviceDraft} />
             </form>
           ) : detail && currentRevision ? (
             <ArtifactDetail
@@ -353,20 +386,32 @@ function useWorkArtifactDialogActions({
   readOnly,
   timeEntryOptions,
   recordedVisit,
+  device,
+  restoredDraft,
   onClose,
 }: WorkArtifactDialogProps) {
+  // The id a new Arbeitsnachweis gets: its draft's on the device, and the server's once it is saved.
+  const [newArtifactId] = useState(() => restoredDraft?.id ?? crypto.randomUUID());
   const editor = useWorkArtifactEditor({
     artifactId,
     initialSummary,
     defaultSiteId,
     recordedVisit,
     readOnly,
+    restored: restoredDraft,
   });
-  const save = useWorkArtifactSave({ targetType, targetId, editor });
+  const deviceDraft = useWorkArtifactDeviceDraft({
+    editor,
+    device,
+    jobId: targetType === 'job' && artifactId === null && !readOnly ? targetId : null,
+    artifactId: newArtifactId,
+    restored: restoredDraft,
+  });
+  const save = useWorkArtifactSave({ targetType, targetId, editor, newArtifactId, deviceDraft, onClose });
   const review = useWorkArtifactReviewActions(editor);
   const customer = useWorkArtifactCustomerActions({ targetType, targetId, editor, onClose });
   const links = useWorkArtifactLinks({ editor, review, timeEntryOptions });
-  return { editor, save, review, customer, links };
+  return { editor, save, review, customer, links, deviceDraft };
 }
 
 function workArtifactDialogDescription(

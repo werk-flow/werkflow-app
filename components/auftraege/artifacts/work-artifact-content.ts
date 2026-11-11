@@ -81,14 +81,16 @@ export function localDateTime(value?: string | null): string {
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }
 
+/** The local date and time as an instant; undefined for an empty or half-typed value. */
 export function iso(value: string): string | undefined {
-  return value ? new Date(value).toISOString() : undefined;
+  const time = value ? new Date(value).getTime() : Number.NaN;
+  return Number.isNaN(time) ? undefined : new Date(time).toISOString();
 }
 
 /** `Value` without `undefined`: what a `!== undefined` check narrows a generic value to. */
 type Defined<Value> = Value & (NonNullable<unknown> | null);
 
-export function compact<T extends object>(value: T): { [Key in keyof T]?: Defined<T[Key]> } {
+function compact<T extends object>(value: T): { [Key in keyof T]?: Defined<T[Key]> } {
   const result: { [Key in keyof T]?: Defined<T[Key]> } = {};
   for (const key in value) {
     if (!Object.hasOwn(value, key)) continue;
@@ -97,6 +99,31 @@ export function compact<T extends object>(value: T): { [Key in keyof T]?: Define
     result[key] = entry;
   }
   return result;
+}
+
+/** The content a save sends: the kind's fields, empty ones dropped, the local times as instants. */
+export function savedContent(
+  kind: WorkArtifactKind,
+  content: WorkArtifactContentDraft,
+): WorkArtifactContentInput {
+  const draftContent = contentForKind(kind, content);
+  return compact({
+    ...draftContent,
+    visitStartedAt: iso(draftContent.visitStartedAt ?? ''),
+    visitEndedAt: iso(draftContent.visitEndedAt ?? ''),
+    nextVisitAt: iso(draftContent.nextVisitAt ?? ''),
+  });
+}
+
+/** A stored draft's content back in the editor: every field present, the instants as local times. */
+export function contentForEditor(content: WorkArtifactContentInput): WorkArtifactContentDraft {
+  return {
+    ...EMPTY_CONTENT,
+    ...content,
+    visitStartedAt: localDateTime(content.visitStartedAt),
+    visitEndedAt: localDateTime(content.visitEndedAt),
+    nextVisitAt: localDateTime(content.nextVisitAt),
+  };
 }
 
 export function contentFromDetail(detail: WorkArtifactDetail): WorkArtifactContentInput {

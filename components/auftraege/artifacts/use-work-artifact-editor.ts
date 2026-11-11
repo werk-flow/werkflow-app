@@ -6,6 +6,7 @@ import { useBusyIds } from '@/hooks/use-busy-id';
 import { useClientRead } from '@/hooks/use-client-read';
 import { describeFailure } from '@/lib/action-messages';
 import type { ActionResult } from '@/lib/action-result';
+import type { StoredDraft } from '@/lib/field-sync/device/draft-store';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { requiredWorkArtifactFields, workArtifactFieldIssues } from '@/lib/work-artifacts/field-rules';
 import type {
@@ -16,6 +17,7 @@ import type {
   WorkArtifactVisibility,
 } from '@/lib/work-artifacts/types';
 import {
+  contentForEditor,
   contentForKind,
   contentFromDetail,
   EMPTY_CONTENT,
@@ -31,6 +33,8 @@ type WorkArtifactEditorOptions = {
   /** A new work report's Beginn and Ende from today's recorded time on the job. */
   recordedVisit: RecordedVisitWindow;
   readOnly: boolean;
+  /** The draft of a new Arbeitsnachweis this device kept: the form opens with it. */
+  restored?: StoredDraft | null;
 };
 
 /** One rule field's control id, required mark and current error. */
@@ -47,18 +51,21 @@ export function useWorkArtifactEditor({
   defaultSiteId,
   recordedVisit,
   readOnly,
+  restored = null,
 }: WorkArtifactEditorOptions) {
   const [detail, setDetail] = useState<WorkArtifactDetail | null>(null);
   const [editing, setEditing] = useState(!artifactId && !readOnly);
-  const [kind, setKind] = useState<WorkArtifactKind>(initialSummary?.kind ?? 'work_report');
-  const [visibility, setVisibility] = useState<WorkArtifactVisibility>(
-    initialSummary?.currentRevision.visibility ?? 'internal_only',
+  // The form opens with the draft the device kept, else with the saved revision or the defaults.
+  const first = restored ?? initialSummary?.currentRevision;
+  const [kind, setKind] = useState<WorkArtifactKind>(first?.kind ?? 'work_report');
+  const [visibility, setVisibility] = useState<WorkArtifactVisibility>(first?.visibility ?? 'internal_only');
+  const [title, setTitle] = useState(first?.title ?? '');
+  const [capturedAt, setCapturedAt] = useState(() =>
+    initialCapturedAt(restored?.capturedAt ?? initialSummary?.currentRevision.captured_at),
   );
-  const [title, setTitle] = useState(initialSummary?.currentRevision.title ?? '');
-  const [capturedAt, setCapturedAt] = useState(
-    localDateTime(initialSummary?.currentRevision.captured_at) || localDateTime(new Date().toISOString()),
+  const [content, setContent] = useState(() =>
+    restored ? contentForEditor(restored.content) : initialContent(artifactId, defaultSiteId, recordedVisit),
   );
-  const [content, setContent] = useState(() => initialContent(artifactId, defaultSiteId, recordedVisit));
   const [correctionReason, setCorrectionReason] = useState('');
   const [correctionReasonError, setCorrectionReasonError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -128,6 +135,11 @@ export function useWorkArtifactEditor({
     patchContent,
     handleMutationFailure,
   };
+}
+
+/** „Erfasst am“ of the opened draft or revision as a local time; now for a new Arbeitsnachweis. */
+function initialCapturedAt(storedAt: string | undefined): string {
+  return localDateTime(storedAt) || localDateTime(new Date().toISOString());
 }
 
 /** A new draft's content: the job's site and, for a new report, today's recorded visit window. */

@@ -30,7 +30,6 @@ function draft(overrides: Partial<StoredDraft> = {}): StoredDraft {
     revisionId: '9c000000-0000-4000-8000-000000000011',
     operationId: '9c000000-0000-4000-8000-000000000012',
     jobId: '9c000000-0000-4000-8000-000000000020',
-    jobLabel: 'AUF-2026-20 · Heizung warten',
     kind: 'work_report',
     visibility: 'internal_only',
     capturedAt: '2026-11-09T07:00:00.000Z',

@@ -173,7 +173,10 @@ for (const jobId of [foreignJobId, missingJobId, unassignedJobId]) {
   const refused = operation({ payload: draft({ jobId }) });
   assert.deepEqual(await replayBoth(refused), { operationId: refused.operationId, ...forbidden });
 }
-const foreignOrganization = operation({ organizationId: ORGANIZATION_B, payload: draft({ jobId: foreignJobId }) });
+const foreignOrganization = operation({
+  organizationId: ORGANIZATION_B,
+  payload: draft({ jobId: foreignJobId }),
+});
 assert.deepEqual(await replayBoth(foreignOrganization), {
   operationId: foreignOrganization.operationId,
   outcome: 'rejected',
@@ -200,7 +203,12 @@ for (const payload of [
   draft({ correctsRevisionId: id(), correctionReason: 'Nachtrag' }),
   draft({ expectedVersion: 4 }),
   draft({ targetType: 'project', targetId: id() }),
-  draft({ photos: [{ linkId: id(), documentId: assignedJobId }, { linkId: id(), documentId: assignedJobId }] }),
+  draft({
+    photos: [
+      { linkId: id(), documentId: assignedJobId },
+      { linkId: id(), documentId: assignedJobId },
+    ],
+  }),
   draft({ photos: [{ linkId: id(), documentId: id(), storagePath: `${ORGANIZATION_B}/x.jpg` }] }),
   draft({ photos: Array.from({ length: 21 }, () => ({ linkId: id(), documentId: id() })) }),
 ]) {
@@ -212,7 +220,11 @@ assert.equal(world.rpcCalls.length, 0, 'a refused draft reached the database fun
 // An office role needs no assignment, but the job must be the organization's.
 signInAs(world, 'buero');
 const office = operation({ payload: draft({ jobId: unassignedJobId }) });
-assert.deepEqual(await replayBoth(office), { operationId: office.operationId, outcome: 'accepted', code: 'accepted' });
+assert.deepEqual(await replayBoth(office), {
+  operationId: office.operationId,
+  outcome: 'accepted',
+  code: 'accepted',
+});
 const officeForeign = operation({ payload: draft({ jobId: foreignJobId }) });
 assert.deepEqual(await replayBoth(officeForeign), { operationId: officeForeign.operationId, ...forbidden });
 signInAs(world, 'employee');

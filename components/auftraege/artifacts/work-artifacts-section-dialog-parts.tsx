@@ -7,12 +7,14 @@ import { Skeleton } from '@/components/ui/skeleton';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import type { WorkArtifactTimeSourceOption } from '@/lib/work-artifacts/types';
 import type { WorkArtifactCustomerActions } from './use-work-artifact-customer-actions';
+import type { WorkArtifactDeviceDraft } from './use-work-artifact-device-draft';
 import type { WorkArtifactEditor } from './use-work-artifact-editor';
 import type { WorkArtifactLinks } from './use-work-artifact-links';
 import type { WorkArtifactReviewActions } from './use-work-artifact-review-actions';
 import { WorkArtifactActionPanel } from './work-artifact-action-panel';
 import type { WorkArtifactEvidenceRequirement } from './work-artifact-content';
 import { ArtifactForm } from './work-artifact-form';
+import { WorkArtifactPhotoField } from './work-artifact-photo-field';
 
 /** The hint that someone else saved a newer version while the dialog is open. */
 export function WorkArtifactRemoteUpdateHint({
@@ -66,9 +68,11 @@ export function WorkArtifactDialogSkeleton() {
 export function WorkArtifactDraftForm({
   editor,
   instructionOptions,
+  deviceDraft,
 }: {
   editor: WorkArtifactEditor;
   instructionOptions: Array<{ id: string; label: string }>;
+  deviceDraft: WorkArtifactDeviceDraft;
 }) {
   const {
     detail,
@@ -91,28 +95,31 @@ export function WorkArtifactDraftForm({
     fieldErrors,
   } = editor;
   return (
-    <ArtifactForm
-      kind={kind}
-      setKind={setKind}
-      lockedKind={Boolean(detail)}
-      visibility={visibility}
-      setVisibility={setVisibility}
-      title={title}
-      setTitle={setTitle}
-      capturedAt={capturedAt}
-      setCapturedAt={setCapturedAt}
-      content={content}
-      patchContent={patchContent}
-      measurementLines={measurementLines}
-      setMeasurementLines={(lines) => patchContent({ measurementLines: lines })}
-      instructionOptions={instructionOptions}
-      requiresCorrectionReason={requiresCorrectionReason}
-      correctionReason={correctionReason}
-      correctionReasonError={correctionReasonError}
-      setCorrectionReason={setCorrectionReason}
-      fieldState={fieldState}
-      fieldErrors={fieldErrors}
-    />
+    <div className="space-y-5">
+      <ArtifactForm
+        kind={kind}
+        setKind={setKind}
+        lockedKind={Boolean(detail)}
+        visibility={visibility}
+        setVisibility={setVisibility}
+        title={title}
+        setTitle={setTitle}
+        capturedAt={capturedAt}
+        setCapturedAt={setCapturedAt}
+        content={content}
+        patchContent={patchContent}
+        measurementLines={measurementLines}
+        setMeasurementLines={(lines) => patchContent({ measurementLines: lines })}
+        instructionOptions={instructionOptions}
+        requiresCorrectionReason={requiresCorrectionReason}
+        correctionReason={correctionReason}
+        correctionReasonError={correctionReasonError}
+        setCorrectionReason={setCorrectionReason}
+        fieldState={fieldState}
+        fieldErrors={fieldErrors}
+      />
+      {deviceDraft.active && <WorkArtifactPhotoField deviceDraft={deviceDraft} />}
+    </div>
   );
 }
 

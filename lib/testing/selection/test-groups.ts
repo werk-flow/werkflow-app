@@ -318,7 +318,11 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['p1-13', ['p1_13_work_templates.sql'], ['work', 'inventory', 'personnel']],
   [
     'work-execution',
-    ['work_execution_boundaries.sql', 'work_artifact_customer_decisions.sql', 'work_artifact_draft_attach.sql'],
+    [
+      'work_execution_boundaries.sql',
+      'work_artifact_customer_decisions.sql',
+      'work_artifact_draft_attach.sql',
+    ],
     ['work', 'time', 'documents', 'inventory'],
   ],
   ['p1-21', ['p1_21_time_segments.sql'], ['time', 'personnel', 'work']],
