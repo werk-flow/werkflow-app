@@ -133,7 +133,7 @@ function MaterialPlanHost(): React.JSX.Element {
   );
 }
 
-function contractRequest(
+export function contractRequest(
   id: string,
   summary: string,
   status: ClientRequest['status'],

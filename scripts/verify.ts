@@ -165,6 +165,7 @@ function parseArguments(): {
   target: 'local' | 'cloud';
   jobs: number;
   fresh: boolean;
+  untimed: boolean;
   groupIds?: string[];
 } {
   const args = process.argv.slice(2);
@@ -173,10 +174,16 @@ function parseArguments(): {
     throw new Error('Use bun run test:plan or bun run test:verify.');
   const values: Record<string, string> = {};
   let fresh = false;
+  let untimed = false;
   for (let name = args.shift(); name !== undefined; name = args.shift()) {
     // `--fresh` runs the selected groups even when a proof exists: harness measurement and calibration need real executions.
     if (name === '--fresh') {
       fresh = true;
+      continue;
+    }
+    // `--untimed` runs a wall-clock group's steps on any machine: CI's full runs (lib/testing/selection/ci-plan.ts).
+    if (name === '--untimed') {
+      untimed = true;
       continue;
     }
     if (!['--mode', '--target', '--group', '--jobs'].includes(name) || values[name])
@@ -186,9 +193,12 @@ function parseArguments(): {
     values[name] = value;
   }
   if (fresh && !values['--group']) throw new Error('--fresh applies to an explicit --group selection only.');
+  if (untimed && values['--mode'] === 'release')
+    throw new Error('Release verification judges every deadline; --untimed applies to change mode only.');
   return {
     execute,
     fresh,
+    untimed,
     jobs: z.coerce
       .number()
       .int()
@@ -306,8 +316,10 @@ async function main(): Promise<void> {
       group,
       ...qualification.qualify(group),
       timing: getGroupTimingRequirements(group, repository),
-      // Deadlines fail a group in release mode and for an explicitly requested performance group; elsewhere they are recorded.
-      enforceDeadlines: options.mode === 'release' || group.files.some(isPerformanceSpec),
+      // Deadlines fail a group in release mode and for a performance group; elsewhere, and with
+      // `--untimed`, they are recorded. Missing, malformed or unconfirmed evidence fails either way.
+      enforceDeadlines:
+        !options.untimed && (options.mode === 'release' || group.files.some(isPerformanceSpec)),
     }))
     .map((entry) => ({
       ...entry,
@@ -393,7 +405,7 @@ async function main(): Promise<void> {
     boatUnavailable === undefined
       ? []
       : planning
-          .filter((entry) => !entry.reusable && heldBackHere(entry.group.id))
+          .filter((entry) => !entry.reusable && heldBackHere(entry.group.id, options.untimed))
           .map((entry) => entry.group.id),
   );
   const heldBackReason = `Boat was unavailable (${boatUnavailable ?? ''}), and a heavy group never runs on this workstation by default. Run it on Boat, or here with WERKFLOW_VERIFY_LOCAL=1.`;
@@ -408,6 +420,10 @@ async function main(): Promise<void> {
   console.log(
     `Verification ${options.mode}/${options.target}: ${changed.length} changed inputs since ${baseline ? `report ${baseline.id}` : 'HEAD'}; ${planning.length} required groups; ${freshBrowserEntries.length} browser groups to run on up to ${options.jobs} workers. Performance, freshness, SQL and setup gates run alone.`,
   );
+  if (options.untimed)
+    console.log(
+      '[verify] Untimed: every group runs its steps and records its timings; no deadline, budget or reference comparison fails it.',
+    );
   if (repairing)
     console.log(
       '[verify] Repair mode: the browser groups whose latest result failed or was blocked, and those whose own test code changed, are selected. Their pass verifies the repair.',
@@ -455,7 +471,7 @@ async function main(): Promise<void> {
       changed,
     ))
       console.log(
-        `[verify] Wall-clock group for this change, not selected: ${measured.id} (first file ${measured.changedFiles[0]}). CI never runs it (docs/technical/performance.md); before a release, on a quiet machine run: bun run test:verify --group ${measured.id}`,
+        `[verify] Wall-clock group for this change, not selected: ${measured.id} (first file ${measured.changedFiles[0]}). CI's full runs run only its steps, untimed (docs/technical/performance.md); before a release, on a quiet machine run: bun run test:verify --group ${measured.id}`,
       );
   if (boatUnavailable !== undefined)
     for (const line of unavailableNotice(boatUnavailable, [...heldBack], process.argv.slice(3)))

@@ -1381,7 +1381,7 @@ begin
     'public.update_job_with_assignments(uuid, uuid, uuid, jsonb, boolean, uuid[], date, uuid[], jsonb, jsonb, text, text, uuid, boolean)',
     'public.create_job_with_visit_assessment(uuid, uuid, jsonb, uuid[], date, uuid[], jsonb, jsonb, text, text, uuid, boolean, uuid, boolean, jsonb)',
     'public.update_job_with_visit_assessment(uuid, uuid, uuid, jsonb, boolean, uuid[], date, uuid[], jsonb, jsonb, text, text, uuid, boolean, jsonb)',
-    'public.convert_client_request_to_job_with_visit_assessment(uuid, uuid, uuid, jsonb, uuid[], date, uuid[], jsonb, jsonb, text, text, uuid, boolean, uuid, boolean, jsonb)',
+    'public.convert_client_request_to_job_with_visit_assessment(uuid, uuid, uuid, jsonb, uuid[], date, uuid[], jsonb, jsonb, text, text, uuid, boolean, uuid, boolean, jsonb, uuid)',
     'public.unpark_job_into_schedule_with_visit_assessment(uuid, uuid, uuid, bigint, text, jsonb, boolean, uuid[], date, uuid[], jsonb, jsonb, text, text, uuid, boolean, jsonb)',
     'app_private.record_job_visit_assessment(uuid, uuid, uuid, integer, uuid[], jsonb)',
     'app_private.record_job_visit_assessment(uuid, uuid, uuid, integer, uuid[], jsonb, boolean)',

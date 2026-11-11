@@ -645,6 +645,7 @@ export type Database = {
       client_requests: {
         Row: {
           assigned_to: string | null;
+          attempt_key: string | null;
           callback_due_at: string | null;
           caller_address: string | null;
           caller_email: string | null;
@@ -680,6 +681,7 @@ export type Database = {
         };
         Insert: {
           assigned_to?: string | null;
+          attempt_key?: string | null;
           callback_due_at?: string | null;
           caller_address?: string | null;
           caller_email?: string | null;
@@ -715,6 +717,7 @@ export type Database = {
         };
         Update: {
           assigned_to?: string | null;
+          attempt_key?: string | null;
           callback_due_at?: string | null;
           caller_address?: string | null;
           caller_email?: string | null;
@@ -13804,6 +13807,7 @@ export type Database = {
         };
         Returns: {
           assigned_to: string | null;
+          attempt_key: string | null;
           callback_due_at: string | null;
           caller_address: string | null;
           caller_email: string | null;
@@ -13939,6 +13943,7 @@ export type Database = {
         Args: {
           p_actor_id: string;
           p_assessed_for_date: string;
+          p_attempt_key?: string;
           p_coverage_fingerprint: string;
           p_coverage_snapshot: Json;
           p_job: Json;
@@ -13990,6 +13995,7 @@ export type Database = {
         Args: {
           p_actor_id: string;
           p_assessed_for_date: string;
+          p_attempt_key?: string;
           p_coverage_fingerprint: string;
           p_coverage_snapshot: Json;
           p_job: Json;
@@ -14041,6 +14047,7 @@ export type Database = {
       convert_client_request_to_project: {
         Args: {
           p_actor_id: string;
+          p_attempt_key?: string;
           p_organization_id: string;
           p_project: Json;
           p_request_id: string;
@@ -14304,6 +14311,7 @@ export type Database = {
         Args: {
           p_actor_id: string;
           p_assigned_to: string;
+          p_attempt_key?: string;
           p_callback_due_at?: string;
           p_caller_address: string;
           p_caller_email: string;
@@ -14324,6 +14332,7 @@ export type Database = {
         };
         Returns: {
           assigned_to: string | null;
+          attempt_key: string | null;
           callback_due_at: string | null;
           caller_address: string | null;
           caller_email: string | null;
@@ -16279,6 +16288,7 @@ export type Database = {
       promote_client_request_caller: {
         Args: {
           p_actor_id: string;
+          p_attempt_key?: string;
           p_client_type: Database["public"]["Enums"]["client_type"];
           p_name: string;
           p_organization_id: string;
@@ -16286,6 +16296,7 @@ export type Database = {
         };
         Returns: {
           assigned_to: string | null;
+          attempt_key: string | null;
           callback_due_at: string | null;
           caller_address: string | null;
           caller_email: string | null;
@@ -16694,6 +16705,7 @@ export type Database = {
         };
         Returns: {
           assigned_to: string | null;
+          attempt_key: string | null;
           callback_due_at: string | null;
           caller_address: string | null;
           caller_email: string | null;
@@ -18338,6 +18350,7 @@ export type Database = {
         };
         Returns: {
           assigned_to: string | null;
+          attempt_key: string | null;
           callback_due_at: string | null;
           caller_address: string | null;
           caller_email: string | null;
