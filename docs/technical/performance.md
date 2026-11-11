@@ -24,7 +24,7 @@ A journey is a step one role repeats many times a day, measured from the user's 
 5. **Change, rebuild, measure again.** State the result as absolute numbers before and after, for count and time. A percentage appears only beside the numbers (`bun scripts/lab-counts.ts report --runs <run keys>`).
 6. **Refuse complexity for a tiny win.** When the gain is a few milliseconds or bytes and the code grows, drop the change and record the decision.
 7. **Lower the reference.** Run `bun scripts/lab-counts.ts ratchet --run <run key>` and commit the file with the change. An unlowered win is room for the next regression.
-8. **Have a person feel it.** A user-visible change counts as accepted only after the owner tried it on staging on a phone and a laptop. Record device and verdict.
+8. **Let the owner feel it.** For a user-visible change, name the journey and where to try it on staging under "For the owner to look at" ([Decide or ask](../../AGENTS.md#decide-or-ask)). The entry blocks no merge.
 
 ### Read a lab table
 
@@ -39,7 +39,7 @@ Each lab group prints one table per step with reference, value, ceiling, floor a
 ### Change a lab reference
 
 1. A lower count needs no reason: `ratchet` lowers it.
-2. A higher count, a larger payload or a smaller one needs `accept` with a reason a reviewer can check.
+2. A higher count, a larger payload or a smaller one needs `accept` with a reason a reviewer can check. The lead decides it, or the PR's own thread outside an epic, and lists it under "For the owner to look at" ([Decide or ask](../../AGENTS.md#decide-or-ask)). The reason names the intended behavior change. A `regressed` count is never accepted to pass.
 3. A changed lab test, recorder module or workload file orphans its references: [move them to the new digest](#move-a-reference-to-a-new-digest).
 4. `gate` and `reject` move a metric in or out of the gate with its evidence. A count that takes two values on one step leaves that step with `ungate`; never widen its tolerance. `calibrate` keeps that ungate; only `gate --step <id>` with new stability evidence from that step reverses it.
 
