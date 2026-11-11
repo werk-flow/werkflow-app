@@ -2,6 +2,7 @@
 
 import { History } from 'lucide-react';
 
+import { lifecycleTransitionLines, type HistoryLine } from '@/lib/personnel/lifecycle-history';
 import { employmentTypeLabel, type EmployeeRecordEvent } from '@/lib/personnel/types';
 import { isJsonRecord } from '@/lib/supabase/json';
 import { RegionLoadError } from '@/components/shared/region-load-error';
@@ -120,6 +121,16 @@ function historyDetails(event: EmployeeRecordEvent): HistoryDetail[] {
   return [];
 }
 
+/** The lines under an entry: a transition's step, states, date and reason, or the changed fields. */
+function historyLines(event: EmployeeRecordEvent): HistoryLine[] {
+  const transitionLines = lifecycleTransitionLines(event);
+  if (transitionLines.length > 0) return transitionLines;
+  return historyDetails(event).map((detail) => ({
+    label: detail.label,
+    text: `${formatValue(detail.field, detail.before)} → ${formatValue(detail.field, detail.after)}`,
+  }));
+}
+
 interface PersonnelHistorySectionProps {
   events: EmployeeRecordEvent[];
   /** Null when the names could not be read. */
@@ -143,7 +154,7 @@ export function PersonnelHistorySection({ events, actorNames }: PersonnelHistory
         <ul className="grid gap-2">
           {events.map((event) => {
             const actor = event.createdBy ? actorNames?.[event.createdBy] : undefined;
-            const details = historyDetails(event);
+            const lines = historyLines(event);
             return (
               <li key={event.id} className="text-sm">
                 <span className="font-medium">{EVENT_LABELS[event.eventType] ?? UNKNOWN_EVENT_LABEL}</span>
@@ -151,12 +162,11 @@ export function PersonnelHistorySection({ events, actorNames }: PersonnelHistory
                   {formatBerlinDateTime(event.createdAt)}
                   {actor ? ` · ${actor}` : ''}
                 </span>
-                {details.length > 0 ? (
+                {lines.length > 0 ? (
                   <ul className="mt-1 grid gap-0.5 text-xs text-muted-foreground">
-                    {details.map((detail) => (
-                      <li key={detail.label}>
-                        <span className="font-medium text-foreground">{detail.label}:</span>{' '}
-                        {formatValue(detail.field, detail.before)} → {formatValue(detail.field, detail.after)}
+                    {lines.map((line) => (
+                      <li key={line.label}>
+                        <span className="font-medium text-foreground">{line.label}:</span> {line.text}
                       </li>
                     ))}
                   </ul>
