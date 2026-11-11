@@ -1,6 +1,6 @@
 import { isUiString, type UiStringCatalog } from '@/lib/problem-reports/screenshot/ui-string-catalog';
 import type { ProblemReportContext } from '@/lib/problem-reports/schemas';
-import { findTerms, type ScrubDictionary } from './dictionary';
+import { dictionaryKnows, findTerms, NOT_A_NAME_ALONE, type ScrubDictionary } from './dictionary';
 import { findEmails, findIbans, findPhones, type Found, type PlaceholderKind } from './patterns';
 import { wordsOf, type Word } from './words';
 
@@ -13,11 +13,30 @@ const PERSON_SALUTATIONS = new Set(['herr', 'herrn', 'frau', 'familie', 'fam']);
 const COMPANY_SALUTATIONS = new Set(['firma', 'fa']);
 const TITLES = new Set(['dr', 'prof']);
 const SALUTED_NAME_WORDS = 2;
+/**
+ * Lower-case words after a salutation that are no name: what a sentence goes
+ * on with („die Frau hat angerufen“). Function words are in NOT_A_NAME_ALONE.
+ */
+const NOT_A_NAME_AFTER_SALUTATION = new Set(
+  (
+    'hat hatte ist war wird wurde sagt sagte meint fragt will wollte kann konnte soll muss ' +
+    'moechte ruft rief kommt kam braucht wartet schreibt nicht auch noch schon sich'
+  ).split(' '),
+);
+
+/** True for a lower-case word that can be a name typed without its capital. */
+function isLowerCaseName(folded: string): boolean {
+  return (
+    /^\p{L}{2,}$/u.test(folded) && !NOT_A_NAME_ALONE.has(folded) && !NOT_A_NAME_AFTER_SALUTATION.has(folded)
+  );
+}
 
 /**
  * The name after a salutation, known or not: up to two capitalized words
  * after „Herr“, „Frau“, „Familie“, „Fam.“, „Firma“ or „Fa.“. A hyphenated
  * double name counts as one word, and a title before the name is skipped.
+ * Typed in lower case, as on a phone, the one word after the salutation is
+ * the name, unless it is a function word or an auxiliary.
  */
 function findSalutedNames(text: string, words: readonly Word[]): Found[] {
   const found: Found[] = [];
@@ -30,6 +49,7 @@ function findSalutedNames(text: string, words: readonly Word[]): Found[] {
     if (kind === null) return;
     const name: Word[] = [];
     let nameWords = 0;
+    let lowerCase = false;
     let previous = salutation;
     for (let next = index + 1, word = words[next]; word !== undefined; next += 1, word = words[next]) {
       const gap = text.slice(previous.end, word.start);
@@ -38,8 +58,14 @@ function findSalutedNames(text: string, words: readonly Word[]): Found[] {
       if (!hyphenated && !(nameWords === 0 ? /^\.?\s+$/u : /^\s+$/u).test(gap)) break;
       previous = word;
       if (nameWords === 0 && TITLES.has(word.folded)) continue;
-      if (!word.capitalized || (!hyphenated && nameWords === SALUTED_NAME_WORDS)) break;
-      if (!hyphenated) nameWords += 1;
+      if (hyphenated) {
+        if (!word.capitalized && !lowerCase) break;
+      } else if (word.capitalized && !lowerCase && nameWords < SALUTED_NAME_WORDS) {
+        nameWords += 1;
+      } else if (nameWords === 0 && isLowerCaseName(word.folded)) {
+        lowerCase = true;
+        nameWords = 1;
+      } else break;
       name.push(word);
     }
     const first = name[0];
@@ -112,16 +138,27 @@ export function scrubReportText(original: string, dictionary: ScrubDictionary): 
   return parts.join('');
 }
 
+/** The scrubbed context: the capture, with a label or a token removed where it may name a record. */
+type ScrubbedProblemReportContext = Omit<ProblemReportContext, 'appVersion' | 'clientErrors'> & {
+  appVersion: string | null;
+  clientErrors: Array<Omit<ProblemReportContext['clientErrors'][number], 'name'> & { name: string | null }>;
+};
+
 /**
- * The context without any text of a record. Its only free text is the label
- * of a pressed control, which stays when the whole label is one of the app's
- * own UI strings; the server checks that again, because the device's filter
- * is not trusted.
+ * The context without any text of a record. The label of a pressed control
+ * stays when the whole label is one of the app's own UI strings. The app
+ * version and an error's name, code and digest are tokens; one that the
+ * dictionary knows as a name or a phone number is removed. No pattern rule
+ * applies to a token, so a numeric digest stays. The server checks all of
+ * this again, because the device's filter is not trusted.
  */
 export function scrubReportContext(
   context: ProblemReportContext,
   catalog: UiStringCatalog,
-): ProblemReportContext {
+  dictionary: ScrubDictionary,
+): ScrubbedProblemReportContext {
+  const kept = (token: string | null): string | null =>
+    token !== null && dictionaryKnows(dictionary, token) ? null : token;
   return {
     ...context,
     recentActions: context.recentActions.map((action) => ({
@@ -129,5 +166,12 @@ export function scrubReportContext(
       controlLabel:
         action.controlLabel !== null && isUiString(catalog, action.controlLabel) ? action.controlLabel : null,
     })),
+    clientErrors: context.clientErrors.map((error) => ({
+      ...error,
+      name: kept(error.name),
+      code: kept(error.code),
+      digest: kept(error.digest),
+    })),
+    appVersion: kept(context.appVersion),
   };
 }

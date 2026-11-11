@@ -7,18 +7,33 @@ import { scrubReportContext, scrubReportText } from './scrub-text';
 // scrubbing"), named after the rule. The data is synthetic: the customers,
 // people, addresses and numbers of a made-up company.
 
-const dictionary = buildScrubDictionary({
-  customerNames: ['Erika Müller', 'Hausverwaltung Sonnenhang GmbH', 'Die Bad GmbH', 'Wei Li', 'Li Na'],
-  personNames: ['Jonas Weiß', 'Petra von Lindqvist'],
-  addresses: [
-    'Lindenstraße 12a, 54321 Beispielstadt',
-    'Am Mühlbach 3\n54322 Musterhausen',
-    'Hafenweg 7 54323 Neuhafen',
-  ],
-  phones: ['0171 2345678', '+43 664 1234567'],
-});
+const NO_SOURCES = { customerNames: [], personNames: [], siteNames: [], addresses: [], phones: [] };
+// A few of the app's own UI strings, as the build's catalog holds them.
+const uiStrings = new Set(['Speichern', 'Service', 'Wartung', 'Hauptstandort', 'Rückruf an Nordlicht']);
+const dictionary = buildScrubDictionary(
+  {
+    customerNames: [
+      'Erika Müller',
+      'Hausverwaltung Sonnenhang GmbH',
+      'Die Bad GmbH',
+      'Wei Li',
+      'Li Na',
+      'Kältetechnik Service Nordlicht',
+    ],
+    personNames: ['Jonas Weiß', 'Petra von Lindqvist', 'Tom Wartung'],
+    siteNames: ['Neubau Kita Regenbogen', 'Werkhalle', 'Hauptstandort'],
+    addresses: [
+      'Lindenstraße 12a, 54321 Beispielstadt',
+      'Am Mühlbach 3\n54322 Musterhausen',
+      'Hafenweg 7 54323 Neuhafen',
+      'Kirchberg 5, 54324 Altdorf',
+    ],
+    phones: ['0171 2345678', '+43 664 1234567'],
+  },
+  uiStrings,
+);
 const scrub = (text: string): string => scrubReportText(text, dictionary);
-const noDictionary = buildScrubDictionary({ customerNames: [], personNames: [], addresses: [], phones: [] });
+const noDictionary = buildScrubDictionary(NO_SOURCES, uiStrings);
 
 // --- Matching rules ---
 
@@ -101,8 +116,36 @@ test('matching rule: an address is replaced as street with number and as postcod
   );
   // An address stored in one piece still splits before its postcode.
   expect(scrub('Hafenweg 7 und 54323 Neuhafen')).toBe('[Adresse 1] und [Adresse 1]');
-  // The street without its number, and the city without its postcode, are not an address.
-  expect(scrub('In der Lindenstraße in Beispielstadt')).toBe('In der Lindenstraße in Beispielstadt');
+  // The city without its postcode is not an address.
+  expect(scrub('Der Kunde wohnt in Beispielstadt')).toBe('Der Kunde wohnt in Beispielstadt');
+});
+
+test('matching rule: a known street is replaced without its number', () => {
+  expect(scrub('In der Lindenstraße und am Hafenweg')).toBe('In der [Adresse 1] und am [Adresse 2]');
+  // A street of several words is replaced as its phrase.
+  expect(scrub('Wir stehen Am Mühlbach und warten')).toBe('Wir stehen [Adresse 1] und warten');
+  // A street of one word without a street ending is replaced only with its number.
+  expect(scrub('Kirchberg 5 liegt am Kirchberg')).toBe('[Adresse 1] liegt am Kirchberg');
+});
+
+test('matching rule: a site name is replaced as a whole phrase, never word by word', () => {
+  expect(scrub('Im Neubau Kita Regenbogen fehlt der Zähler, im Neubau nebenan und in der Kita nicht.')).toBe(
+    'Im [Adresse 1] fehlt der Zähler, im Neubau nebenan und in der Kita nicht.',
+  );
+  expect(scrub('Die Werkhalle ist zu')).toBe('Die [Adresse 1] ist zu');
+  // A site named with one of the app's own UI words is no term: every report would lose the word.
+  expect(scrub('Der Hauptstandort fehlt')).toBe('Der Hauptstandort fehlt');
+});
+
+test("matching rule: a lone word of a customer's name stays when it is one of the app's own UI words", () => {
+  expect(scrub('Der Service lädt nicht, sagt Kältetechnik Service Nordlicht. Nordlicht wartet.')).toBe(
+    'Der Service lädt nicht, sagt [Kunde 1]. [Kunde 1] wartet.',
+  );
+  // Only a whole UI string counts: „Nordlicht“ inside a longer one is still a name, as above.
+  // After a salutation the word is a name again.
+  expect(scrub('Firma Service wartet')).toBe('Firma [Kunde 1] wartet');
+  // A person's name stays strict, UI word or not.
+  expect(scrub('Die Wartung fehlt bei Tom Wartung')).toBe('Die [Person 1] fehlt bei [Person 1]');
 });
 
 // --- Pattern rules ---
@@ -168,7 +211,7 @@ test('salutation rule: a capitalized name after a salutation is replaced even wh
   expect(unknown('Frau Meier-Lüdenscheidt Sommer hat, Herr Prof. Dr. Albers auch')).toBe(
     'Frau [Person 1] hat, Herr Prof. Dr. [Person 2] auch',
   );
-  // The same name takes the same placeholder; a lower-case word is no name.
+  // The same name takes the same placeholder; a function word is no name.
   expect(unknown('Frau Berger und Frau Berger, die Frau vom Kunden')).toBe(
     'Frau [Person 1] und Frau [Person 1], die Frau vom Kunden',
   );
@@ -178,6 +221,23 @@ test('salutation rule: a capitalized name after a salutation is replaced even wh
   );
   // A known first name before an unknown surname leaves neither readable.
   expect(scrub('Frau Erika Unbekannt')).toBe('Frau [Kunde 1]');
+});
+
+test('salutation rule: a lower-case word after a salutation is the name, unless it is a function word or an auxiliary', () => {
+  const unknown = (text: string): string => scrubReportText(text, noDictionary);
+  expect(unknown('war bei frau berger, dann bei herrn okafor')).toBe(
+    'war bei frau [Person 1], dann bei herrn [Person 2]',
+  );
+  // One word only, with the parts of a hyphenated name; a title is skipped.
+  expect(unknown('frau meier-lüdenscheidt sommer, fa. rohrfrei nord, frau dr. albers')).toBe(
+    'frau [Person 1] sommer, fa. [Kunde 1] nord, frau dr. [Person 2]',
+  );
+  // The same person with and without the capital.
+  expect(unknown('Frau Berger, frau berger')).toBe('Frau [Person 1], frau [Person 1]');
+  // What a sentence goes on with is no name.
+  const kept =
+    'die frau hat angerufen, der herr vom amt ist da, die firma möchte einen termin, die familie und wir';
+  expect(unknown(kept)).toBe(kept);
 });
 
 // --- Placeholders ---
@@ -208,12 +268,10 @@ test('10,000 customers: the scrub walks the text once, whatever the size of the 
   const letters = (index: number): string =>
     Array.from(index.toString(26), (digit) => String.fromCharCode(97 + Number.parseInt(digit, 26))).join('');
   const customer = (index: number): string => `Vor${letters(index)} Nach${letters(index + 20_000)}`;
-  const large = buildScrubDictionary({
-    customerNames: Array.from({ length: 10_000 }, (_, index) => customer(index)),
-    personNames: [],
-    addresses: [],
-    phones: [],
-  });
+  const large = buildScrubDictionary(
+    { ...NO_SOURCES, customerNames: Array.from({ length: 10_000 }, (_, index) => customer(index)) },
+    uiStrings,
+  );
   const sentence = (index: number): string =>
     `Bei ${customer(index * 97)} tropft das Ventil seit gestern wieder, bitte den Termin neu planen. `;
   const text = Array.from({ length: 50 }, (_, index) => sentence(index)).join('');
@@ -241,12 +299,7 @@ test('10,000 customers: the scrub walks the text once, whatever the size of the 
 test('one pass: a name of a hundred words is replaced whole, and no word of the text starts a walk that long', () => {
   // The longest customer name the app stores: 99 times „Li“ and one more word.
   const longName = `${'Li '.repeat(99)}Xyz`;
-  const long = buildScrubDictionary({
-    customerNames: [longName],
-    personNames: [],
-    addresses: [],
-    phones: [],
-  });
+  const long = buildScrubDictionary({ ...NO_SOURCES, customerNames: [longName] }, uiStrings);
   expect(scrubReportText(`Kunde ${longName} ruft an`, long)).toBe('Kunde [Kunde 1] ruft an');
 
   const words = 1667;
@@ -276,7 +329,7 @@ const context: ProblemReportContext = {
 };
 
 test("context rule: a control label that is not one of the app's own UI strings is removed on the server", () => {
-  const scrubbed = scrubReportContext(context, new Set(['Speichern']));
+  const scrubbed = scrubReportContext(context, uiStrings, dictionary);
   expect(scrubbed.recentActions.map((action) => action.controlLabel)).toEqual([
     null,
     'Speichern',
@@ -285,4 +338,25 @@ test("context rule: a control label that is not one of the app's own UI strings 
   ]);
   expect(JSON.stringify(scrubbed)).not.toContain('Müller');
   expect({ ...scrubbed, recentActions: [] }).toEqual({ ...context, recentActions: [] });
+});
+
+test('context rule: a token that the dictionary knows as a name or a phone number is removed', () => {
+  const routeTemplate = '/kunden/[clientId]';
+  // What a crafted client could send in the fields an honest one fills from the build and from errors.
+  const crafted: ProblemReportContext = {
+    ...context,
+    appVersion: 'Erika.Mueller',
+    clientErrors: [
+      { name: 'TypeError', code: 'load_failed', digest: '0123456789', routeTemplate },
+      { name: 'Jonas_Weiss', code: '+491712345678', digest: '0171-2345678', routeTemplate },
+    ],
+  };
+  const scrubbed = scrubReportContext(crafted, uiStrings, dictionary);
+  expect(scrubbed.appVersion).toBeNull();
+  // No pattern rule applies to a token: the numeric digest has a phone number's shape and stays.
+  expect(scrubbed.clientErrors).toEqual([
+    { name: 'TypeError', code: 'load_failed', digest: '0123456789', routeTemplate },
+    { name: null, code: null, digest: null, routeTemplate },
+  ]);
+  expect(scrubReportContext(context, uiStrings, dictionary).appVersion).toBe('a1b2c3d4e5f6');
 });

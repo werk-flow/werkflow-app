@@ -44,9 +44,11 @@ The server keeps a scrubbed copy of each report's description and context beside
 ### The dictionary
 
 - The dictionary holds what the rows of the reporting organization name, and nothing of another organization. Every read filters by the organization. A scrub reads the dictionary anew and keeps nothing.
-- Customer names come from the customers and from the callers of requests. Person names come from contacts, members, employees and their emergency contacts. Addresses come from customers, sites, callers and employees. Phone numbers come from all of these.
+- Customer names come from the customers and from the callers of requests. Person names come from contacts, members, employees and their emergency contacts. Addresses come from customers, sites, callers and employees. Site names come from the sites. Phone numbers come from all of these.
 - A name is a term as a whole and word by word, so a surname alone is replaced. A word of fewer than three letters, and a function word (a salutation, a title, a legal form, an article, a preposition, a conjunction), is a term only inside its whole name. Without that, a customer called „Die Bad GmbH“ would replace every „die“.
-- An address is a term in two parts: the street with its number, and the postcode with its city.
+- A word of a customer's name that is one of the app's own UI words is a term only inside the whole name. Reports are about the app: a customer called „Kältetechnik Service Nord“ must not turn every „Service“ into a placeholder. A UI word is a [catalog](#the-ui-string-catalog) entry of one word; a word inside a longer entry is none. A person's name has no such exception.
+- A site's name is a term as its whole phrase, never word by word, with the `Adresse` placeholder. A site named with one UI word, such as „Hauptstandort“, is no term.
+- An address is a term in its parts: the street with its number, the street alone, and the postcode with its city. A street of one word counts alone only when it ends like a street: `straße`, `weg`, `platz`, `allee`, `gasse`, `ring`, `damm`, `ufer` or `chaussee`.
 - The dictionary reads no email address, because the pattern rule replaces every one.
 
 ### Rules
@@ -61,9 +63,9 @@ Each rule has a test named after it in `lib/problem-reports/scrub/scrub-text.tes
 6. **Phone numbers.** A number that stands alone, starts with `+`, `00` or `0` and has at least 7 digits is replaced. Spaces, slashes, dashes and brackets may group its digits. The find ends where the groups end, so no group stays readable, and a second number right behind it belongs to the same find. Digits that spell a number of the dictionary are replaced too, with or without the leading zero. One number in two formats takes one placeholder.
 7. **Email addresses.** Every address with a domain ending is replaced, with every character a local part may hold. A quoted local part reaches back to its opening quote.
 8. **IBANs.** Every IBAN with a valid check is replaced, in one piece or in groups. A number that fails the check is replaced when only digits follow its first four characters.
-9. **Salutations.** After „Herr“, „Herrn“, „Frau“, „Familie“ or „Fam.“, up to two capitalized words become a `[Person n]`, and after „Firma“ or „Fa.“ a `[Kunde n]`, even when the dictionary does not know them. A hyphenated double name counts as one word. „Dr.“ and „Prof.“ before the name are skipped.
+9. **Salutations.** After „Herr“, „Herrn“, „Frau“, „Familie“ or „Fam.“, up to two capitalized words become a `[Person n]`, and after „Firma“ or „Fa.“ a `[Kunde n]`, even when the dictionary does not know them. A hyphenated double name counts as one word. „Dr.“ and „Prof.“ before the name are skipped. When the next word is in lower case, as typed on a phone, that one word is the name, unless it is a function word or an auxiliary such as „hat“ or „ist“.
 10. **Overlaps.** Finds that overlap become one placeholder, so no part of either stays readable. Two known names that share a word, such as „Wei Li“ and „Li Na“ in „Wei Li Na“, are one find.
-11. **Context.** The copy of the context keeps a control label only when the whole label is in the [UI string catalog](#the-ui-string-catalog). The server checks every label again, because it does not trust the device's filter. A stored context is copied only when it is the whole capture or an empty object. The schema of the capture bounds every other field: a route is a template, and an error name, an error code and the app version are tokens without spaces.
+11. **Context.** The copy of the context keeps a control label only when the whole label is in the [UI string catalog](#the-ui-string-catalog). The server checks every label again, because it does not trust the device's filter. A stored context is copied only when it is the whole capture or an empty object. The app version and an error's name, code and digest are tokens without spaces. A token that the dictionary knows as a name or a phone number is removed. No pattern rule applies to a token, so a numeric digest stays. A route is a template and carries no value.
 12. **Fails closed.** A dictionary read that fails, a dictionary above its row cap, a missing catalog and a scrub that throws leave no copy and the state `nicht_bereinigbar`. The report stays, and the daily run tries it again. A written copy never changes.
 13. **One pass.** The terms sit in a tree keyed by word, and the scrub walks the words of the text once. No code loops over the names: the test with 10,000 customers counts the tree lookups against the words of the text. A term of more than twelve words enters the tree as every stretch of twelve words in a row, so no walk from a word goes deeper.
 
@@ -72,12 +74,13 @@ Each rule has a test named after it in `lib/problem-reports/scrub/scrub-text.tes
 Not accepted: the owner's answer on werk-flow/werkflow-planning#21 is pending. The scrubbed copy keeps what neither the dictionary nor a pattern covers:
 
 - a name the organization's data does not know and that follows no salutation, such as a neighbour, a nickname or a misspelt customer;
-- a saluted name typed in lower case;
 - a name of two letters alone;
-- a street without its number, a city without its postcode, and the name of a site;
+- a lone word of a customer's name that is one of the app's own UI words, such as „Service“ or „Lager“;
+- a word of a site's name alone, and a site named with one UI word;
+- a city without its postcode, and a street of one word without a street ending and without its number;
 - an unknown phone number without a leading `0` or `+`.
 
-The scrubber also replaces too much, which costs readability and never privacy. A name that is an ordinary word replaces that word everywhere, such as a customer called „Klein“. A date written `07-11-2026` has a phone number's shape.
+The scrubber also replaces too much, which costs readability and never privacy. A name that is an ordinary word and no UI word replaces that word everywhere, such as a customer called „Klein“. A lower-case word after „frau“ or „herr“ that is no name is replaced too, such as „sagte“. A date written `07-11-2026` has a phone number's shape.
 
 ## How to work
 

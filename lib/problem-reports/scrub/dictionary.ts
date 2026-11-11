@@ -1,5 +1,5 @@
 import { knownPhoneKeysOf, type Found, type PlaceholderKind } from './patterns';
-import { foldedWordsOf, type Word } from './words';
+import { foldedWordsOf, wordsOf, type Word } from './words';
 
 // The dictionary of one organization: what its own data knows as a name, an
 // address or a phone number (docs/technical/problem-report-scrubbing.md,
@@ -12,6 +12,8 @@ export type ScrubDictionarySources = {
   customerNames: readonly string[];
   /** Names of contacts, members, employees and emergency contacts. */
   personNames: readonly string[];
+  /** Names of sites. */
+  siteNames: readonly string[];
   /** Addresses of customers, sites, callers and employees, each as one line. */
   addresses: readonly string[];
   phones: readonly string[];
@@ -27,7 +29,7 @@ export type ScrubDictionary = { terms: TermNode; phones: ReadonlySet<string> };
  * legal forms, articles, prepositions and conjunctions. Without them a
  * customer called „Die Bad GmbH“ would replace every „die“ of a report.
  */
-const NOT_A_NAME_ALONE = new Set(
+export const NOT_A_NAME_ALONE: ReadonlySet<string> = new Set(
   (
     'herr herrn frau familie fam firma dr prof dipl ing ' +
     'gmbh mbh ag kg ug ohg gbr co ' +
@@ -38,6 +40,9 @@ const NOT_A_NAME_ALONE = new Set(
 /** A shorter word is replaced only inside its whole name: two letters match too much alone. */
 const NAME_WORD_MIN_LENGTH = 3;
 const POSTCODE = /^\d{5}$/u;
+/** A single word with one of these endings is a street: „Lindenstraße“ folds to `lindenstr`. */
+const STREET_SUFFIX = /(?:str|weg|platz|allee|gasse|ring|damm|ufer|chaussee)$/u;
+const NO_WORDS: ReadonlySet<string> = new Set();
 
 /**
  * A longer term enters the tree as every stretch of this many words in a
@@ -63,35 +68,82 @@ function addTerm(root: TermNode, words: readonly string[], term: Term): void {
   node.term ??= term;
 }
 
-/** A name is replaced as a whole and word by word, so a surname alone is caught. */
-function addName(root: TermNode, kind: PlaceholderKind, name: string): void {
+/**
+ * A name is replaced as a whole and word by word, so a surname alone is
+ * caught. A word in `notAlone` is replaced only inside the whole name.
+ */
+function addName(root: TermNode, kind: PlaceholderKind, name: string, notAlone: ReadonlySet<string>): void {
   const words = foldedWordsOf(name);
   if (words.length === 0) return;
   const term: Term = { kind, key: words.join(' ') };
   addTerm(root, words, term);
   for (const word of words) {
-    if (word.length >= NAME_WORD_MIN_LENGTH && /\p{L}/u.test(word) && !NOT_A_NAME_ALONE.has(word)) {
-      addTerm(root, [word], term);
-    }
+    const alone =
+      word.length >= NAME_WORD_MIN_LENGTH &&
+      /\p{L}/u.test(word) &&
+      !NOT_A_NAME_ALONE.has(word) &&
+      !notAlone.has(word);
+    if (alone) addTerm(root, [word], term);
   }
 }
 
-/** An address is replaced in its parts: the street with its number, and the postcode with its city. */
+/**
+ * An address is replaced in its parts: the street with its number, the
+ * street alone, and the postcode with its city. A street of one word counts
+ * alone only with a street ending, so a part such as „Hinterhaus“ is none.
+ */
 function addAddress(root: TermNode, address: string): void {
   const term: Term = { kind: 'Adresse', key: foldedWordsOf(address).join(' ') };
   for (const line of address.split(/[,;\n]/u)) {
     const words = foldedWordsOf(line);
     const postcode = words.findIndex((word, index) => index > 0 && POSTCODE.test(word));
     const parts = postcode === -1 ? [words] : [words.slice(0, postcode), words.slice(postcode)];
-    for (const part of parts) if (part.length >= 2) addTerm(root, part, term);
+    for (const part of parts) {
+      const number = part.findIndex((word) => /^\d/u.test(word));
+      const street = number === -1 ? part : part.slice(0, number);
+      for (const phrase of [part, street]) {
+        if (phrase.length >= 2 || STREET_SUFFIX.test(phrase[0] ?? '')) addTerm(root, phrase, term);
+      }
+    }
   }
 }
 
-/** The dictionary of one organization's sources. */
-export function buildScrubDictionary(sources: ScrubDictionarySources): ScrubDictionary {
+/**
+ * The app's own UI words: each catalog entry that is one word, such as
+ * „Service“. A word inside a longer entry is none. The catalog holds every
+ * string of the source, and one of them is a list of common family names.
+ */
+function uiWordsOf(uiStrings: ReadonlySet<string>): Set<string> {
+  const words = new Set<string>();
+  for (const entry of uiStrings) {
+    const [word, ...more] = foldedWordsOf(entry);
+    if (word !== undefined && more.length === 0) words.add(word);
+  }
+  return words;
+}
+
+/**
+ * The dictionary of one organization's sources. `uiStrings` is the catalog
+ * of the app's own UI strings. Reports are about the app, so a UI word that
+ * is also a word of a customer's name, such as „Service“, is replaced only
+ * inside the whole name. A person's name stays strict.
+ */
+export function buildScrubDictionary(
+  sources: ScrubDictionarySources,
+  uiStrings: ReadonlySet<string>,
+): ScrubDictionary {
+  const uiWords = uiWordsOf(uiStrings);
   const terms: TermNode = { next: new Map(), term: null };
-  for (const name of sources.customerNames) addName(terms, 'Kunde', name);
-  for (const name of sources.personNames) addName(terms, 'Person', name);
+  for (const name of sources.customerNames) addName(terms, 'Kunde', name, uiWords);
+  for (const name of sources.personNames) addName(terms, 'Person', name, NO_WORDS);
+  // A site's name is one phrase, never its words alone: „Neubau Kita …“ must not replace every „Neubau“.
+  for (const name of sources.siteNames) {
+    const words = foldedWordsOf(name);
+    const first = words[0];
+    if (first !== undefined && (words.length > 1 || !uiWords.has(first))) {
+      addTerm(terms, words, { kind: 'Adresse', key: words.join(' ') });
+    }
+  }
   for (const address of sources.addresses) addAddress(terms, address);
   return { terms, phones: new Set(sources.phones.flatMap(knownPhoneKeysOf)) };
 }
@@ -128,4 +180,13 @@ export function findTerms(text: string, words: readonly Word[], root: TermNode):
     }
   });
   return found;
+}
+
+/** True when the dictionary knows a name, an address or a phone number in the text. No pattern rule applies. */
+export function dictionaryKnows(dictionary: ScrubDictionary, original: string): boolean {
+  const text = original.normalize('NFC');
+  return (
+    findTerms(text, wordsOf(text), dictionary.terms).length > 0 ||
+    knownPhoneKeysOf(text).some((key) => dictionary.phones.has(key))
+  );
 }

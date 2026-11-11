@@ -53,7 +53,7 @@ async function readDictionaryRows(admin: Admin, organizationId: string) {
       (from, to) =>
         admin
           .from('client_sites')
-          .select('street, postal_code, city')
+          .select('name, street, postal_code, city')
           .eq('organization_id', organizationId)
           .order('id')
           .range(from, to),
@@ -125,6 +125,7 @@ async function readDictionarySources(
       ]),
       ...profiles.map((profile) => joined(' ', profile.first_name, profile.last_name)),
     ]),
+    siteNames: present(sites.map((site) => site.name)),
     addresses: present([
       ...clients.map((client) => client.address),
       ...requests.map((request) => request.caller_address),
@@ -155,9 +156,10 @@ async function buildScrubbedCopy(
     const catalog = loadUiStringCatalog();
     const sources = await readDictionarySources(admin, organizationId);
     if (sources === null) return null;
+    const dictionary = buildScrubDictionary(sources, catalog);
     return {
-      description: scrubReportText(report.description, buildScrubDictionary(sources)),
-      context: context === null ? {} : scrubReportContext(context, catalog),
+      description: scrubReportText(report.description, dictionary),
+      context: context === null ? {} : scrubReportContext(context, catalog, dictionary),
     };
   } catch (error) {
     logError('scrubStoredProblemReport: scrub failed', error);
