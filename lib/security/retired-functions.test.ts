@@ -38,6 +38,7 @@ const SQL_CALLERS: Readonly<Record<string, string>> = {
   get_user_admin_or_manager_org_ids: 'RLS policies',
   get_user_org_ids: 'RLS policies',
   link_maintenance_due_visit: 'create_maintenance_visit_job',
+  open_time_account: 'open_time_accounts',
   prepare_time_period_p1_23_base: 'prepare_time_period',
   publish_personnel_onboarding_template_base: 'publish_personnel_onboarding_template',
   record_work_artifact_action_p1_17_inner: 'record_work_artifact_action',

@@ -12,9 +12,9 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { Constants } from '@/lib/supabase/database.types';
 import { toJson } from '@/lib/supabase/json';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
-import { readCompleteRows } from '@/lib/supabase/query-batches';
 import { readTimeAccountManagement, requireAuth } from './access';
 import { failureCode, parseStrictInteger, refuseNonManager } from './action-support';
+import { parseSignedHoursMinutes } from './balance-input';
 import { DEFAULT_CREDIT_RULES, DEFAULT_SUPPLEMENT_RULES, DEFAULT_WARNING_RULES } from './defaults';
 import type { buildPayrollExportPackage } from './export';
 import { type ClosePeriodResult, isTimeAccountFailureCode, type TimeAccountActionResult } from './messages';
@@ -23,8 +23,10 @@ import {
   failReservedExportOnError,
   reservePayrollExport,
 } from './payroll-export-server';
+import { toPayrollCodeMappings } from './payroll-mapping';
+import { savePayrollMappingVersion } from './payroll-mapping-server';
 import { buildTimePeriodPreparation } from './period-preparation';
-import { getBerlinInstant, hashPayload, PERIOD_SOURCE_ROW_CAP, requirePeriodRows } from './period-sources';
+import { getBerlinInstant, hashPayload, PERIOD_SOURCE_ROW_CAP } from './period-sources';
 import { readOpenPeriodSessions } from './queries';
 import { isValidOptionalIsoDateRange } from './validation';
 import { z } from '@/lib/zod';
@@ -47,11 +49,17 @@ const assignEmployeeTimePolicyFormSchema = z.object({
   validUntil: text(10),
   reason: text(2000),
 });
-const openMissingTimeAccountsFormSchema = z.object({
-  employeeRecordId: id,
-  openingMinutes: text(12),
-  openedOn: text(10),
-  reason: text(2000),
+// The people the Admin confirmed, each with the balance as typed (`balance-input.ts`).
+const openTimeAccountsInputSchema = z.object({
+  openedOn: z.string().max(10),
+  reason: z.string().max(2000),
+  openings: z
+    .array(z.object({ employeeRecordId: uuidSchema, openingBalance: z.string().max(20) }))
+    .min(1)
+    .max(PERIOD_SOURCE_ROW_CAP),
+});
+const savePayrollMappingInputSchema = z.object({
+  codes: z.record(z.string().max(80), z.string().max(200)),
 });
 const correctTimeAccountOpeningDateFormSchema = z.object({
   accountId: id,
@@ -240,42 +248,41 @@ export async function assignEmployeeTimePolicy(
   return { success: true };
 }
 
-export async function openMissingTimeAccounts(
-  formInput: FormData,
-): Promise<TimeAccountActionResult<'openAccount'>> {
-  const formData = parseFormData(formInput, openMissingTimeAccountsFormSchema);
-  if (!formData) return { success: false, error: 'invalid_input' };
+/**
+ * Opens the accounts of the people the Admin confirmed, with one shared
+ * opening date and reason: one person from their row, or everyone listed
+ * through „Alle eröffnen“. One database call opens all of them or none, and
+ * records one account and one opening event per person with their balance.
+ */
+export async function openTimeAccounts(input: unknown): Promise<TimeAccountActionResult<'openAccount'>> {
+  const parsed = openTimeAccountsInputSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
   const context = await requireAuth();
   if (context.role !== 'admin') return { success: false, error: 'forbidden' };
-  const employeeRecordId = String(formData.get('employeeRecordId') ?? '');
-  const openingMinutes = parseStrictInteger(formData.get('openingMinutes'));
-  const openedOn = String(formData.get('openedOn') ?? '');
-  const reason = String(formData.get('reason') ?? 'Einführung des Zeitkontos');
-  if (!employeeRecordId || openingMinutes === null || !isValidIsoDate(openedOn))
-    return { success: false, error: 'invalid_input' };
+  const { openedOn, reason, openings } = parsed.data;
+  if (!isValidIsoDate(openedOn)) return { success: false, error: 'invalid_input' };
   if (!reason.trim()) return { success: false, error: 'reason_required' };
-  const admin = createSupabaseAdminClient();
-  const operationId = randomUUID();
-  const payload = { employeeRecordId, openedOn, openingMinutes, reason };
-  const { error } = await admin.rpc('open_time_account', {
-    p_organization_id: context.orgId,
-    p_employee_record_id: employeeRecordId,
-    p_opening_minutes: openingMinutes,
-    p_opened_on: openedOn,
-    p_reason: reason,
-    p_actor_id: context.userId,
-    p_operation_id: operationId,
-    p_request_hash: hashPayload(payload),
-  });
+  const minutesByPerson: Array<{ employee_record_id: string; opening_minutes: number }> = [];
+  for (const opening of openings) {
+    const minutes = parseSignedHoursMinutes(opening.openingBalance);
+    if (minutes === null) return { success: false, error: 'invalid_balance' };
+    minutesByPerson.push({ employee_record_id: opening.employeeRecordId, opening_minutes: minutes });
+  }
+  const { error } = await createSupabaseAdminClient().rpc(
+    'open_time_accounts',
+    rpcArgs('open_time_accounts', {
+      p_actor_id: context.userId,
+      p_organization_id: context.orgId,
+      p_openings: toJson(minutesByPerson),
+      p_opened_on: openedOn,
+      p_reason: reason,
+      p_request_hash: hashPayload({ openedOn, reason, openings: minutesByPerson }),
+    }),
+  );
   if (error)
     return {
       success: false,
-      error: failureCode(
-        'openAccount',
-        'open_failed',
-        'openMissingTimeAccounts: open_time_account failed',
-        error,
-      ),
+      error: failureCode('openAccount', 'open_failed', 'openTimeAccounts: open_time_accounts failed', error),
     };
   revalidatePath('/zeiterfassung/einstellungen');
   revalidatePath('/einstellungen/zeiterfassung');
@@ -540,78 +547,29 @@ export async function reopenTimePeriod(formInput: FormData): Promise<TimeAccount
   return { success: true };
 }
 
-const PAYROLL_CODE_MAPPINGS = [
-  ['target', null, 'SOLL'],
-  ['source_attendance', null, 'ANWESEND'],
-  ['effective_attendance', null, 'EFFEKTIV'],
-  ['vacation', null, 'URLAUB'],
-  ['sickness', null, 'KRANK'],
-  ['overtime', null, 'MEHRARBEIT'],
-  ['night_supplement', null, 'NACHT'],
-  ['sunday_supplement', null, 'SONNTAG'],
-  ['public_holiday_supplement', null, 'FEIERTAG'],
-  ['manual_adjustment', null, 'KORREKTUR'],
-  ['expiry', null, 'VERFALL'],
-  ['payout', null, 'AUSZAHLUNG'],
-  ['opening_balance', null, 'START'],
-  ['closing_balance', null, 'SALDO'],
-  ['credited_activity', 'work', 'ARBEIT'],
-  ['credited_activity', 'travel', 'FAHRT'],
-  ['credited_activity', 'break', 'PAUSE'],
-  ['credited_activity', 'standby', 'BEREITSCHAFT'],
-  ['credited_activity', 'callout', 'EINSATZ'],
-  ['credited_activity', 'internal_activity', 'INTERN'],
-].map(([valueKind, activityKind, outputCode]) => ({
-  value_kind: valueKind,
-  activity_kind: activityKind,
-  output_code: outputCode,
-}));
-
-export async function createDefaultPayrollMapping(): Promise<TimeAccountActionResult<'createMapping'>> {
+/**
+ * Saves the Admin's Lohnart codes as a new mapping version, with every
+ * person's current Personalnummer. An earlier version stays as it was, and
+ * every export keeps the version it was built from.
+ */
+export async function savePayrollMapping(input: unknown): Promise<TimeAccountActionResult<'createMapping'>> {
+  const parsed = savePayrollMappingInputSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
   const context = await requireAuth();
   if (context.role !== 'admin') return { success: false, error: 'forbidden' };
+  const codeMappings = toPayrollCodeMappings(parsed.data.codes);
+  if (!codeMappings) return { success: false, error: 'invalid_code' };
   try {
-    await saveDefaultPayrollMapping(context);
+    await savePayrollMappingVersion(createSupabaseAdminClient(), context, codeMappings);
   } catch (error) {
     return {
       success: false,
-      error: failureCode('createMapping', 'mapping_failed', 'createDefaultPayrollMapping failed', error),
+      error: failureCode('createMapping', 'mapping_failed', 'savePayrollMapping failed', error),
     };
   }
   revalidatePath('/zeiterfassung/einstellungen');
   revalidatePath('/einstellungen/zeiterfassung');
   return { success: true };
-}
-
-// Throws a stable code (or a provider error) on every refusal; the action maps it.
-async function saveDefaultPayrollMapping(context: { orgId: string; userId: string }): Promise<void> {
-  const admin = createSupabaseAdminClient();
-  const { data: employees } = await readCompleteRows(
-    (from, to) =>
-      admin
-        .from('employee_records')
-        .select('id, employee_number')
-        .eq('organization_id', context.orgId)
-        .order('created_at')
-        .order('id')
-        .range(from, to),
-    PERIOD_SOURCE_ROW_CAP,
-  ).then(requirePeriodRows);
-  const employeeMappings = (employees ?? []).map((employee) => {
-    if (!employee.employee_number) throw new Error('employee_number_required');
-    return { employee_record_id: employee.id, external_employee_reference: employee.employee_number };
-  });
-  const operationId = randomUUID();
-  const payload = { employeeMappings, codeMappings: PAYROLL_CODE_MAPPINGS };
-  const { error } = await admin.rpc('create_payroll_mapping_version', {
-    p_actor_id: context.userId,
-    p_organization_id: context.orgId,
-    p_employee_mappings: employeeMappings,
-    p_code_mappings: PAYROLL_CODE_MAPPINGS,
-    p_operation_id: operationId,
-    p_request_hash: hashPayload(payload),
-  });
-  if (error) throw error;
 }
 
 // Stores the package, records its document, and finalizes the export; any

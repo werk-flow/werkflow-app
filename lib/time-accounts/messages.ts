@@ -1,5 +1,7 @@
 import { describeFailure } from '@/lib/action-messages';
 import type { ActionFailure, ActionResult } from '@/lib/action-result';
+import { BALANCE_INPUT_ERROR } from './balance-input';
+import { PAYROLL_CODE_MAX_LENGTH } from './payroll-mapping';
 
 /**
  * The refusals of each time-account form action (rules, accounts, periods,
@@ -20,8 +22,12 @@ const FAILURE_CODES = {
     'invalid_input',
     'forbidden',
     'not_authorized',
+    'invalid_balance',
     'employee_not_found',
+    'account_already_open',
     'reason_required',
+    'opening_date_locked',
+    'period_closed',
     'open_failed',
   ],
   correctOpening: [
@@ -66,7 +72,7 @@ const FAILURE_CODES = {
     'stale_version',
     'withdraw_failed',
   ],
-  createMapping: ['forbidden', 'employee_number_required', 'mapping_failed'],
+  createMapping: ['invalid_input', 'forbidden', 'invalid_code', 'employee_number_required', 'mapping_failed'],
   prepare: [
     'invalid_input',
     'forbidden',
@@ -178,8 +184,13 @@ const MESSAGES: ActionMessages = {
   openAccount: {
     messages: {
       forbidden: 'Nur Administratoren können Zeitkonten eröffnen.',
+      invalid_balance: `Prüfe die Anfangssalden. ${BALANCE_INPUT_ERROR}`,
       employee_not_found: 'Diese Person gibt es nicht mehr. Lade die Seite neu.',
+      account_already_open:
+        'Für mindestens eine Person ist das Zeitkonto inzwischen eröffnet. Lade die Seite neu und prüfe die Liste.',
       reason_required: 'Gib einen Grund für die Eröffnung an.',
+      opening_date_locked:
+        'Ein abgeschlossener Monat endet an oder nach diesem Datum. Wähle ein Datum nach dem letzten abgeschlossenen Monat, oder öffne ihn zuerst wieder.',
     },
     fallback: 'Das Zeitkonto konnte nicht eröffnet werden. Versuche es erneut.',
   },
@@ -228,7 +239,8 @@ const MESSAGES: ActionMessages = {
   },
   createMapping: {
     messages: {
-      forbidden: 'Nur Administratoren können die Lohnarten-Zuordnung bestätigen.',
+      forbidden: 'Nur Administratoren können die Lohnarten-Zuordnung ändern.',
+      invalid_code: `Jede Zeile braucht einen Lohnart-Code mit höchstens ${PAYROLL_CODE_MAX_LENGTH} Zeichen.`,
       employee_number_required:
         'Für mindestens eine Person fehlt die Personalnummer. Trage sie unter „Mitarbeiter“ in den Personalien ein.',
     },

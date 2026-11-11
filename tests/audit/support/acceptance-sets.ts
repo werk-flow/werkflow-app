@@ -272,6 +272,30 @@ function timeAccountOpeningCaptures(): AcceptanceSet {
 }
 
 /**
+ * werk-flow/werkflow-planning#160 of 2026-11-11: every policy version with its
+ * span, the shared account opening with „Alle eröffnen“, and the payroll code table.
+ */
+function timeRulesCaptures(): AcceptanceSet {
+  return {
+    id: 'time-rules-2026-11-11',
+    captures: [
+      { reveal: 'Arbeitszeitregel', part: 'regel' },
+      { reveal: 'Zeitkonten', part: 'konten' },
+      { reveal: 'Lohnarten-Zuordnung', part: 'lohnarten' },
+    ].map(({ reveal, part }) => ({
+      id: `admin-zeitregeln-${part}`,
+      role: 'admin' as const,
+      route: '/zeiterfassung/einstellungen' as const,
+      view: { kind: 'page' } as const,
+      widths: [1280, 375] as const,
+      schemes: ['light', 'dark'] as const,
+      reveal,
+    })),
+    standalone: [],
+  };
+}
+
+/**
  * werk-flow/werkflow-planning#136 of 2026-11-07: a prepared month with
  * blockers, grouped per kind with their fix, for Admin and for Büro.
  */
@@ -744,6 +768,7 @@ export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   requestConversionCaptures(),
   settingsRoleCaptures(),
   timeAccountOpeningCaptures(),
+  timeRulesCaptures(),
   periodBlockerCaptures(),
   clockDockCaptures(),
   callerMatchCaptures(),
