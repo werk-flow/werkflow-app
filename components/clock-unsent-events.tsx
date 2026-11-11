@@ -162,7 +162,7 @@ function UnsentActions({
           Erneut senden
         </Button>
       )}
-      <Button type="button" className="min-h-11" disabled={busy} onClick={onCorrect}>
+      <Button type="button" variant="outline" className="min-h-11" disabled={busy} onClick={onCorrect}>
         Korrektur beantragen
       </Button>
       <Button

@@ -174,7 +174,8 @@ function UnsentWorkDialog({
             </Button>
             <Button
               type="button"
-              variant="destructive"
+              variant="ghost"
+              className="text-destructive"
               disabled={isPending}
               onClick={() => setConfirming(true)}
             >

@@ -72,6 +72,8 @@ function useClockOutbox(
   // Kept with its holder: after an organization switch the former holder's events show nowhere.
   const [watched, setWatched] = useState<{ holder: OutboxHolder; view: ClockDeviceView | null } | null>(null);
   const [kept, setKept] = useState(0);
+  // The same count for the `online` listener, which must not wait for a render to learn of a kept action.
+  const keptRef = useRef(0);
   const takeInRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (!holder) return;
@@ -84,6 +86,7 @@ function useClockOutbox(
         const outbox = await import('@/lib/field-sync/device/clock-outbox');
         const stopWatching = await outbox.watchClockOutbox(holder, (view) => {
           setWatched({ holder, view });
+          keptRef.current = 0;
           setKept(0);
           // The chain was sent or stopped: the server's state stands again, so read it.
           if (wasPending && view?.status !== 'pending') void refresh();
@@ -105,8 +108,9 @@ function useClockOutbox(
         // eslint-disable-next-line no-restricted-syntax -- no signal is the expected case here; the actions stay kept and marked, and `online` or the next start tries again
         .catch(() => undefined);
     };
+    // Also for an action this page kept and another tab took in and sent since: the outbox then says nothing waits.
     const whenOnline = (): void => {
-      if (deviceMayHoldUnsentWork()) takeIn();
+      if (keptRef.current > 0 || deviceMayHoldUnsentWork()) takeIn();
     };
     takeInRef.current = takeIn;
     whenOnline();
@@ -121,7 +125,8 @@ function useClockOutbox(
 
   const keep = useCallback((action: KeptAction): boolean => {
     if (!keepClockAction(action)) return false;
-    setKept((count) => count + 1);
+    keptRef.current += 1;
+    setKept(keptRef.current);
     takeInRef.current?.();
     return true;
   }, []);
