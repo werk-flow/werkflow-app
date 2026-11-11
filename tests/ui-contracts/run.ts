@@ -169,6 +169,11 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               if (args.importer.endsWith('offline-today.tsx'))
                 return { path: join(import.meta.dir, 'offline-today-service-boundaries.ts') };
             });
+            // The pathname of the `(auth)` layout's landing wipe, moved by the spec.
+            builder.onResolve({ filter: /^next\/navigation$/ }, (args) => {
+              if (args.importer.endsWith('today-landing-wipe.tsx'))
+                return { path: join(import.meta.dir, 'today-landing-boundaries.ts') };
+            });
             // The profile and memberships the start page refresh fixtures read in the browser.
             builder.onResolve({ filter: /^@\/lib\/supabase\/client$/ }, (args) => {
               if (

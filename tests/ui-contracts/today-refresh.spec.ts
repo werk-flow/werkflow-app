@@ -343,3 +343,27 @@ test('a day a switch saved under a foreign sign-out signal is gone once that sig
   await expect.poll(() => claimedHolder(page)).toBeNull();
   await expect.poll(() => page.evaluate(() => window.todayRefreshContract.storedOrganization())).toBeNull();
 });
+
+// The `(auth)` layout stays mounted from `/reset-password` to `/login`, where the password reset
+// lands once its session ended. The landing wipe runs on every page of the layout, so a day stored
+// in between is gone once the reset reaches `/login`.
+test('a password reset that moves from its form to the login page wipes the phone again', async ({
+  page,
+}) => {
+  const [first, second] = TODAY_CONTRACT_ORGANIZATIONS;
+  await routeTodayDays(page);
+  await openContractFixture(page, 'today-refresh-switch');
+  await expect.poll(() => page.evaluate(() => window.todayRefreshContract.storedOrganization())).toBe(first);
+  // The reset form's page mounts the layout and its wipe.
+  await page.getByRole('button', { name: 'Zur Anmeldung', exact: true }).click();
+  await expect.poll(() => claimedHolder(page)).toBeNull();
+
+  // A day another tab stores while the reset's session still answers.
+  await page.evaluate((organizationId) => window.todayRefreshContract.storeDay(organizationId), second);
+  expect(await page.evaluate(() => window.todayRefreshContract.storedOrganization())).toBe(second);
+
+  await page.evaluate(() => window.todayLanding.navigate('/login'));
+
+  await expect.poll(() => claimedHolder(page)).toBeNull();
+  await expect.poll(() => page.evaluate(() => window.todayRefreshContract.storedOrganization())).toBeNull();
+});

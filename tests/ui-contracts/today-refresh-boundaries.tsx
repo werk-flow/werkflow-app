@@ -10,7 +10,8 @@ import {
 import { BannerProvider } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { UserProfileProvider } from '@/components/user/user-profile-context';
-import { readTodayOnDevice } from '@/lib/field-sync/device/today-store';
+import { readTodayOnDevice, saveTodayOnDevice } from '@/lib/field-sync/device/today-store';
+import { claimToday } from '@/lib/field-sync/device/today-sync';
 import { clearTodayOnDevice } from '@/lib/field-sync/device/today-wipe';
 import type { UserProfile } from '@/lib/profile-reference';
 import './organization-service-boundaries';
@@ -18,12 +19,31 @@ import { TODAY_CONTRACT_ORGANIZATIONS, TODAY_CONTRACT_USER } from './today-refre
 
 declare global {
   interface Window {
-    todayRefreshContract: { storedOrganization: () => Promise<string | null> };
+    todayRefreshContract: {
+      storedOrganization: () => Promise<string | null>;
+      /** Claims and stores an empty day of the organization, as a start page in another tab would. */
+      storeDay: (organizationId: string) => Promise<void>;
+    };
   }
 }
 
 window.todayRefreshContract = {
   storedOrganization: async () => (await readTodayOnDevice())?.snapshot.organizationId ?? null,
+  storeDay: async (organizationId) => {
+    const now = new Date();
+    claimToday({ userId: TODAY_CONTRACT_USER, organizationId });
+    await saveTodayOnDevice(
+      {
+        version: `day-of-${organizationId}`,
+        berlinDate: '2026-11-09',
+        validUntil: new Date(now.getTime() + 60 * 60 * 1000).toISOString(),
+        userId: TODAY_CONTRACT_USER,
+        organizationId,
+        assignments: [],
+      },
+      now,
+    );
+  },
 };
 
 const memberships: UserOrg[] = TODAY_CONTRACT_ORGANIZATIONS.map((orgId) => ({
