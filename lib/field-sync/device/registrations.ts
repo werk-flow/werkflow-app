@@ -1,10 +1,15 @@
 'use client';
 
-// Every module that registers a sender (sync-runner.ts) or an unsent source
-// (unsent-work.ts), imported for that registration alone. Whatever starts the
-// runner or asks about unsent work loads this file first: a tab that never
-// opened the clock or a report still sends and names what an earlier visit
-// left on the phone. One line per module, in the order their work is sent:
-// time events first, because a report can depend on them.
+import { sendOwnTimeEvents, timeUnsentSource } from './clock-device';
+import { registerSender } from './sync-runner';
+import { registerUnsentSource } from './unsent-work';
 
-export {};
+// Every sender (sync-runner.ts) and unsent source (unsent-work.ts) of the
+// phone, registered in one place. Whatever starts the runner or asks about
+// unsent work imports this file first: a tab that never opened the clock or a
+// report still sends and names what an earlier visit left on the phone. In
+// the order their work is sent: time events first, because a report can
+// depend on them.
+
+registerSender(timeUnsentSource.name, sendOwnTimeEvents);
+registerUnsentSource(timeUnsentSource);

@@ -14,6 +14,7 @@ import { rememberPasswordResetAddress } from '@/lib/auth/actions';
 import { logError } from '@/lib/logging';
 import { clearServiceWorkerCaches } from '@/lib/offline/service-worker-caches';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { mayEndSession } from '@/components/shared/unsent-work-gate';
 import { clearTodayOnDevice } from '@/lib/field-sync/device/today-wipe';
 import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
 import {
@@ -223,6 +224,7 @@ async function redirectToPasswordReset(
   setFormError: (error: string | null) => void,
 ): Promise<void> {
   let knownAddress: boolean;
+  if (!(await mayEndSession(setFormError))) return;
   try {
     await clearEmailChangeChallengeQuietly();
     // The address reaches the reset form in a cookie the server sets from the

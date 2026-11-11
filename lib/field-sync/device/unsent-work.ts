@@ -36,7 +36,7 @@ export function registerUnsentSource(source: UnsentSource): void {
  * read its store: a flow that cannot tell whether work is left must not end
  * the session.
  */
-export async function summarizeUnsentWork(): Promise<UnsentWorkItem[]> {
+async function summarizeUnsentWork(): Promise<UnsentWorkItem[]> {
   const items: UnsentWorkItem[] = [];
   for (const source of [...sources])
     items.push(...(await source.summarize()).filter((item) => item.count > 0));
@@ -49,7 +49,7 @@ export async function flushUnsentWork(): Promise<UnsentWorkItem[]> {
     try {
       await source.flush();
     } catch (error) {
-      // The summary below still names this source's work, so the person decides about it.
+      // best-effort: the summary below still names this source's work, so the person decides about it.
       logError('unsent work: flush failed', { source: source.name, error });
     }
   }

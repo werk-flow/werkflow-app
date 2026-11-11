@@ -36,7 +36,7 @@ async function runSenders(): Promise<void> {
       try {
         await sender.send();
       } catch (error) {
-        // One sender's failure never keeps the next from sending; its own work stays unsent and visible.
+        // best-effort: one sender's failure never keeps the next from sending; its own work stays unsent and visible.
         logError('sync runner: sender failed', { sender: sender.name, error });
       }
     }

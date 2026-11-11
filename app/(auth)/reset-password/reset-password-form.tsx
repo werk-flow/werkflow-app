@@ -11,6 +11,7 @@ import { clearEmailChangeChallengeQuietly } from '@/hooks/use-sign-out';
 import { clearServiceWorkerCaches } from '@/lib/offline/service-worker-caches';
 import { logError } from '@/lib/logging';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { mayEndSession } from '@/components/shared/unsent-work-gate';
 import { clearTodayOnDevice } from '@/lib/field-sync/device/today-wipe';
 import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
 import {
@@ -136,6 +137,8 @@ async function resetPasswordAndLeave({
   isRedirectingRef: RefObject<boolean>;
   setFormError: (message: string | null) => void;
 }): Promise<void> {
+  // Before the password changes: this ends every session, and what the phone holds unsent could not be sent after it.
+  if (!(await mayEndSession(setFormError))) return;
   try {
     // Update the user's password
     const { error: updateError } = await supabase.auth.updateUser({

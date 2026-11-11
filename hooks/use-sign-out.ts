@@ -2,6 +2,7 @@
 
 import { useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { mayEndSession, withReload } from '@/components/shared/unsent-work-gate';
 import { useBanner } from '@/components/ui/banner';
 import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 
@@ -56,6 +57,8 @@ export function useSignOut() {
 
     await runSignOut(async () => {
       try {
+        // Before the clock-out: an unsent start must reach the server before the session it opened is ended.
+        if (!(await mayEndSession(withReload(showBanner)))) return;
         const clockedOut = await endOpenWorkBeforeSignOut();
         if (clockedOut) clockOutWarningShownRef.current = false;
         if (!clockedOut && !clockOutWarningShownRef.current) {

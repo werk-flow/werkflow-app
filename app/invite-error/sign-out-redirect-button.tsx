@@ -10,6 +10,7 @@ import { clearEmailChangeChallengeQuietly } from '@/hooks/use-sign-out';
 import { loadDocument } from '@/lib/navigation/document-load';
 import { clearServiceWorkerCaches } from '@/lib/offline/service-worker-caches';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { mayEndSession } from '@/components/shared/unsent-work-gate';
 import { clearTodayOnDevice } from '@/lib/field-sync/device/today-wipe';
 import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
 
@@ -33,6 +34,7 @@ export function SignOutAndRedirectButton({ inviteCode }: SignOutAndRedirectButto
 
     await runSignOut(async () => {
       try {
+        if (!(await mayEndSession(setError))) return;
         await clearEmailChangeChallengeQuietly();
         clearManualEntryBridge();
         await clearServiceWorkerCaches();

@@ -1,22 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  ArrowLeftRight,
-  BriefcaseBusiness,
-  Coffee,
-  Play,
-  Route,
-  SlidersHorizontal,
-  Square,
-} from 'lucide-react';
-
+import { ClockActionButtons } from '@/components/clock-action-buttons';
 import { JobPickerModal } from '@/components/job-picker-modal';
 import { useClockState } from '@/components/clock-state-provider';
 import { TimeActivityDialog } from '@/components/time-activity-dialog';
 import { TimeActivityStatusNotice } from '@/components/time-activity-fields';
 import { useBanner } from '@/components/ui/banner';
-import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import { useReportPending } from '@/hooks/use-report-pending';
 import { usePendingTask } from '@/hooks/use-server-action';
@@ -25,21 +15,10 @@ import {
   getTransitionErrorMessage,
   selectionForPickedJob,
   type ClockAction,
-  type ClockActionIcon,
   type ClockPickerMode,
 } from '@/lib/time-tracking/clock-actions';
 import type { TimeTransitionResult } from '@/lib/time-tracking/types';
 import { cn } from '@/lib/utils';
-
-const ICONS: Record<ClockActionIcon, typeof Play> = {
-  work: BriefcaseBusiness,
-  travel: Route,
-  break: Coffee,
-  resume: Play,
-  job: ArrowLeftRight,
-  end: Square,
-  more: SlidersHorizontal,
-};
 
 /** Runs one clock transition at a time and reports its answer: inline, as a banner, or by settling. */
 function useClockTransitionRunner(
@@ -221,45 +200,6 @@ function ClockRecoveryNotice() {
       <p className="mt-1">
         Prüfe den Stand. Jede Aktion unten setzt die Erfassung bewusst fort; „Erfassung beenden“ schließt sie.
       </p>
-    </div>
-  );
-}
-
-/** One button per next action; the first real action is the primary one. */
-function ClockActionButtons({
-  actions,
-  busy,
-  pendingId,
-  onActivate,
-}: {
-  actions: ClockAction[];
-  busy: boolean;
-  pendingId: string | null;
-  onActivate: (action: ClockAction) => void;
-}) {
-  return (
-    <div className="flex flex-col gap-2" role="group" aria-label="Nächste Aktion">
-      {actions.map((action, index) => {
-        const Icon = ICONS[action.icon];
-        const isPrimary = index === 0 && action.kind !== 'more';
-        return (
-          <Button
-            key={action.id}
-            type="button"
-            variant={isPrimary ? 'default' : action.kind === 'more' ? 'ghost' : 'outline'}
-            className={cn(
-              'h-auto min-h-12 w-full justify-start gap-3 px-4 text-left text-base whitespace-normal',
-              action.kind === 'more' && 'text-muted-foreground',
-            )}
-            disabled={busy}
-            pending={pendingId === action.id}
-            onClick={() => onActivate(action)}
-          >
-            <Icon className="size-5" />
-            <span className="min-w-0 flex-1 truncate">{action.label}</span>
-          </Button>
-        );
-      })}
     </div>
   );
 }

@@ -21,6 +21,7 @@ import { deleteAccount } from '@/lib/auth/actions';
 import { clearServiceWorkerCaches } from '@/lib/offline/service-worker-caches';
 import { loadDocument } from '@/lib/navigation/document-load';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { mayEndSession } from '@/components/shared/unsent-work-gate';
 import { clearTodayOnDevice } from '@/lib/field-sync/device/today-wipe';
 import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
 
@@ -40,6 +41,8 @@ export function DeleteAccountButton() {
 
     await runDelete(async () => {
       try {
+        // Before the account goes: afterwards nothing on the device could be sent any more.
+        if (!(await mayEndSession(setError))) return;
         const result = await deleteAccount();
 
         if (!result.success) {

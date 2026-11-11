@@ -17,6 +17,7 @@ import { useBanner } from '@/components/ui/banner';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import type { ActionResult } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
+import { mayEndSession, withReload } from '@/components/shared/unsent-work-gate';
 import { clearTodayOnDevice } from '@/lib/field-sync/device/today-wipe';
 import { clearServiceWorkerCaches, restoreOfflineShell } from '@/lib/offline/service-worker-caches';
 import { setActiveOrgCookie } from '@/lib/org/actions';
@@ -178,6 +179,25 @@ async function refreshOwnMemberships({
   }
 }
 
+/**
+ * Claims the switch for `orgId`, then settles the phone's unsent work: it belongs to the
+ * organization the person leaves, and the server refuses it under another one. So it is sent, or
+ * the person decides, before anything of the switch starts. False: the person stays, the claim is
+ * dropped, and the membership refresh this selection discarded runs again.
+ */
+async function switchMayStart(
+  orgId: string,
+  pendingOrgIdRef: RefObject<string | null>,
+  showBanner: ReturnType<typeof useBanner>['showBanner'],
+  refreshMemberships: () => Promise<void>,
+): Promise<boolean> {
+  pendingOrgIdRef.current = orgId;
+  if (await mayEndSession(withReload(showBanner))) return true;
+  pendingOrgIdRef.current = null;
+  void refreshMemberships();
+  return false;
+}
+
 function getParentListPath(pathname: string): string | null {
   const detailRoutePatterns = [
     { pattern: /^\/auftraege\/[^/]+$/, parent: '/auftraege' },
@@ -306,10 +326,10 @@ export function OrganizationProvider({
     async (orgId: string) => {
       if (orgId === activeOrgId || pendingOrgIdRef.current) return;
 
-      pendingOrgIdRef.current = orgId;
-      setIsSwitchingOrg(true);
       // An in-flight membership refresh must not fall back over this selection.
       refreshGenerationRef.current += 1;
+      if (!(await switchMayStart(orgId, pendingOrgIdRef, showBanner, refreshMemberships))) return;
+      setIsSwitchingOrg(true);
 
       try {
         // Nothing the previous organization's day held stays on the device. Before the cookie: the
@@ -348,7 +368,7 @@ export function OrganizationProvider({
         });
       }
     },
-    [activeOrgId, router, pathname, showBanner],
+    [activeOrgId, router, pathname, showBanner, refreshMemberships],
   );
 
   // Reset switching state when server data arrives for the target org

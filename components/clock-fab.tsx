@@ -1,7 +1,7 @@
 'use client';
 
 import { Clock3, Coffee, Play } from 'lucide-react';
-import { useState } from 'react';
+import { lazy, Suspense, useState, type ReactNode } from 'react';
 
 import { ClockActionList } from '@/components/clock-action-list';
 import { useClockState } from '@/components/clock-state-provider';
@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { SectionError } from '@/components/ui/section-error';
 import { usePendingTask } from '@/hooks/use-server-action';
+import type { ClockDeviceView } from '@/lib/field-sync/device/time-outbox';
 import {
   deriveClockActions,
   describeActivity,
@@ -18,8 +19,30 @@ import {
   type ClockAction,
   type ClockPickerMode,
 } from '@/lib/time-tracking/clock-actions';
+import type { LiveClockState } from '@/lib/time-tracking/types';
 import { useBanner } from '@/components/ui/banner';
 import { cn, formatBerlinTime } from '@/lib/utils';
+
+/** The events this phone holds unsent, as a badge in the dock and a section in the sheet; loaded only while some exist. */
+const ClockUnsentEvents = lazy(() => import('@/components/clock-unsent-events'));
+
+/**
+ * The phone's unsent clock events at one place of the clock, or nothing while it holds none. A
+ * function, not a component: the dock renders with every clock change, and lab counts count components.
+ */
+function unsentEvents(unsent: ClockDeviceView | null, place: 'dock' | 'sheet'): ReactNode {
+  return unsent ? (
+    <Suspense>
+      <ClockUnsentEvents place={place} />
+    </Suspense>
+  ) : null;
+}
+
+/** What runs now, as the dock and the sheet name it; null while nothing runs or the state is unknown. */
+function runningLabel(state: LiveClockState | null): string | null {
+  if (state?.currentActivity) return describeActivity(state.currentActivity, state.activeJobInfo);
+  return state?.legacyOpen ? 'Laufende Erfassung' : null;
+}
 
 /** The CSS variable that carries the dock's height to the app layout's bottom reserve. */
 const DOCK_HEIGHT_VARIABLE = '--clock-dock-height';
@@ -110,18 +133,17 @@ function confirmedClockState(clock: {
 
 export function ClockFAB() {
   const { activeOrgId, activeOrg } = useOrganization();
-  const { state, isLoading, isReady, isPending, statusError, refresh, transitionActivity } = useClockState();
+  const { state, unsent, isLoading, isReady, isPending, statusError, refresh, transitionActivity } =
+    useClockState();
   const controls = useClockFabControls(transitionActivity);
 
   if (!activeOrgId || !activeOrg) return null;
   const isClockedIn = state?.isClockedIn ?? false;
   const isOnBreak = state?.isOnBreak ?? false;
   const recovery = Boolean(state?.recoveryReason);
-  const currentLabel = state?.currentActivity
-    ? describeActivity(state.currentActivity, state.activeJobInfo)
-    : state?.legacyOpen
-      ? 'Laufende Erfassung'
-      : null;
+  const currentLabel = runningLabel(state);
+  // Unsent events are not the server's state yet: the clock is neither confirmed in nor out.
+  const unconfirmed = isPending || unsent !== null;
   // Hot keys act directly; a job-choice hot key opens the sheet with its picker
   // already open. Recovery hides the hot keys, so they never bypass its review.
   const hotKeys = isClockedIn && !recovery ? selectClockHotKeys(deriveClockActions(state)) : [];
@@ -143,6 +165,7 @@ export function ClockFAB() {
                 : 'Wähle, womit du startest. Alles Weitere lässt sich jederzeit wechseln.'}
             </DialogDescription>
           </DialogHeader>
+          {unsentEvents(unsent, 'sheet')}
           <ClockActionList
             organizationId={activeOrgId}
             initialPickerMode={controls.sheetPickerMode}
@@ -155,7 +178,7 @@ export function ClockFAB() {
       <div
         ref={publishDockHeight}
         data-clock-fab=""
-        data-clock-state={confirmedClockState({ isReady, isPending, isOnBreak, isClockedIn })}
+        data-clock-state={confirmedClockState({ isReady, isPending: unconfirmed, isOnBreak, isClockedIn })}
         // The dock spans the content column; the app layout reserves its height, so no page control sits under it.
         // On a phone the button keeps the bottom: a late clock read adds the hot keys' row above, not under it.
         className="fixed inset-x-0 bottom-0 z-30 flex items-end gap-3 border-t bg-card px-4 py-2 will-change-transform sm:items-center sm:px-6 md:left-64"
@@ -180,6 +203,7 @@ export function ClockFAB() {
               {!isReady ? null : isClockedIn ? currentLabel : 'Nicht eingestempelt'}
             </p>
           )}
+          {unsentEvents(unsent, 'dock')}
           <ClockHotKeys
             hotKeys={hotKeys}
             pendingHotKey={controls.pendingHotKey}
