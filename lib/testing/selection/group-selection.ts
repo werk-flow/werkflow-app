@@ -211,8 +211,8 @@ export function changedTestTier(
  * changed product file. A change plan never selects them: their medians follow
  * the machine's load, so they
  * run on a quiet machine with an explicit `--group`, which enforces their
- * deadlines. The plan names them for a run before the next release; CI never
- * runs them (docs/technical/performance.md).
+ * deadlines. The plan names them for a run before the next release; CI's full
+ * runs only run their steps, untimed (docs/technical/performance.md).
  */
 export function measuredGroupsForChange(
   groups: readonly SelectableGroup[],

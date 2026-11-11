@@ -307,7 +307,9 @@ jobs:
           tail -n 5 "$RUNNER_TEMP/test-server.log"
       - name: Run browser groups
         # One worker: the stack, the server and a second browser outran a shared runner's four cores.
-        run: bun scripts/verify.ts run --group "${{ matrix.groups }}" --jobs 1
+        # Untimed: a shared runner's load makes wall clock noise, so a wall-clock group of a full run
+        # proves its steps and judges no timing. No other group's verdict changes.
+        run: bun scripts/verify.ts run --group "${{ matrix.groups }}" --jobs 1 --untimed
       - name: Copy the server output
         if: failure()
         run: |
