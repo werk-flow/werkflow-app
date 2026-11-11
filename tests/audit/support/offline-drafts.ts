@@ -3,7 +3,13 @@ import { expect, type Locator, type Page } from '@playwright/test';
 import { createAdminClient } from '../../golden/support/db/shared';
 import { getJobIdByNumber } from '../../golden/support/db/work';
 import { confirmed } from '../../golden/support/steps/shared';
-import { workArtifactsSection } from '../../golden/support/spec-helpers/work-artifact-dialog';
+import {
+  closeWorkArtifactDialog,
+  newWorkArtifactButton,
+  workArtifactCreateDialog,
+  workArtifactField,
+  workArtifactsSection,
+} from '../../golden/support/spec-helpers/work-artifact-dialog';
 import type { TestWorld } from '../../golden/support/world';
 import { todayJobNumber } from './offline-today';
 
@@ -63,6 +69,25 @@ export function draftOnDevice(page: Page, title: string): Locator {
       .filter({ hasText: title })
       .filter({ hasText: DRAFT_COPY.onDevice }),
   );
+}
+
+/**
+ * Leaves one draft with this title on the device: typed into the dialog for a new Arbeitsnachweis
+ * and left there. A draft an earlier call left is kept, so a second call adds none.
+ */
+export async function leaveDraftOnDevice(page: Page, title: string): Promise<void> {
+  // The hint a job page reads before it loads any draft code (use-device-drafts.ts).
+  const held = await page.evaluate(() =>
+    Object.keys(localStorage).some((key) => key.startsWith('werkflow:drafts:')),
+  );
+  if (!held) {
+    await newWorkArtifactButton(page, { exact: true }).click();
+    const dialog = workArtifactCreateDialog(page);
+    await expect(photoButton(dialog)).toBeVisible();
+    await workArtifactField(dialog, 'title').fill(title);
+    await closeWorkArtifactDialog(dialog);
+  }
+  await expect(draftOnDevice(page, title)).toBeVisible();
 }
 
 /** „Löschen“ of one draft on the device. */
