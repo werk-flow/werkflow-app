@@ -24,10 +24,17 @@ export const UNSENT_COPY = {
   discardQuestion: 'Nicht Übertragenes verwerfen?',
   cancel: 'Abbrechen',
   offlineClock: 'Zeiterfassung',
+  startWork: 'Arbeit starten',
+  end: 'Erfassung beenden',
+  clockedOut: 'Nicht eingestempelt',
+  /** The dock's status line while work runs. */
+  working: /^Arbeit/,
+  /** The offline clock's status line while work runs, with its captured start. */
+  workingSince: /Arbeit · seit \d{2}:\d{2} Uhr/,
 } as const;
 
 /** The clock's section of unsent events, in the app's clock sheet. */
-export function unsentSection(scope: Page | Locator): Locator {
+function unsentSection(scope: Page | Locator): Locator {
   return scope.getByRole('region', { name: UNSENT_COPY.section, exact: true });
 }
 
@@ -61,6 +68,16 @@ export function unsentDiscardConfirmation(page: Page): Locator {
 /** The clock of the page a phone shows without signal. */
 export function offlineClock(page: Page): Locator {
   return page.getByRole('region', { name: UNSENT_COPY.offlineClock, exact: true });
+}
+
+/** One of the next actions of the clock without signal, by its label. */
+export function offlineClockAction(page: Page, name: string): Locator {
+  return offlineClock(page).getByRole('button', { name, exact: true });
+}
+
+/** „Arbeit starten“ in the app's clock sheet. */
+export function startWorkAction(sheet: Locator): Locator {
+  return sheet.getByRole('button', { name: UNSENT_COPY.startWork, exact: true });
 }
 
 type DeviceTimeEvent = { operationId: string; capturedAt: string; action: string };
@@ -110,7 +127,9 @@ export async function seedRefusedTimeEvent(page: Page, world: TestWorld): Promis
   await page.evaluate(
     async ({ name, mark, userId, organizationId }) => {
       const response = await fetch(`/api/time-tracking-state?organizationId=${organizationId}&kind=clock`);
-      const { state }: { state: unknown } = await response.json();
+      const answer: unknown = await response.json();
+      const state: unknown =
+        typeof answer === 'object' && answer !== null && 'state' in answer ? answer.state : null;
       const database = await new Promise<IDBDatabase>((resolve, reject) => {
         const request = indexedDB.open(name, 1);
         request.onupgradeneeded = () => {
@@ -191,11 +210,10 @@ export async function expectOneSessionAtCapturedTimes(
   const [start, end, ...rest] = await readTimeEventsOnDevice(page);
   expect([start?.action, end?.action, rest.length]).toEqual(['start', 'end', 0]);
   await reconnect();
+  const startedAt = Date.parse(start?.capturedAt ?? '');
   await expect
-    .poll(() => recordedSessions(world), {
+    .poll(async () => (await recordedSessions(world)).filter((session) => session.startedAt >= startedAt), {
       message: 'The server holds one session at the times the phone captured',
     })
-    .toEqual([
-      { startedAt: Date.parse(start?.capturedAt ?? ''), endedAt: Date.parse(end?.capturedAt ?? '') },
-    ]);
+    .toEqual([{ startedAt, endedAt: Date.parse(end?.capturedAt ?? '') }]);
 }

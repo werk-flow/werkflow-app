@@ -235,7 +235,7 @@ export const TIME_OPENERS = {
   'field.unsent-discard': {
     trigger: async ({ page, world }) => {
       await seedRefusedTimeEvent(page, world);
-      await (await signOutControl(page)).press('Enter');
+      await (await signOutControl(page)).click();
       await expect(unsentWorkDialog(page)).toBeVisible();
       return enabled(unsentDiscardButton(page));
     },

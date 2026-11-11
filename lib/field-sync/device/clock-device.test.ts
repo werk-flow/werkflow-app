@@ -75,7 +75,8 @@ async function isolatedTests(): Promise<void> {
   }));
 
   const { holdClock, sendOwnTimeEvents, timeUnsentSource, clockHolder } = await import('./clock-device');
-  const { captureClockAction } = await import('./clock-outbox');
+  const { takeInKeptClockAction } = await import('./clock-outbox');
+  const { keepClockAction } = await import('./unsent-mark');
 
   const WORKER: OutboxHolder = {
     userId: '10000000-0000-4000-8000-00000000000a',
@@ -118,21 +119,22 @@ async function isolatedTests(): Promise<void> {
   };
 
   let operations = 0;
-  /** One clock start a page of this holder keeps without signal; the tab holds the clock for the holder. */
-  async function keepStart(holder: OutboxHolder, views: (ClockDeviceView | null)[] = []) {
+  /** One clock start a page of this holder keeps without signal, taken into the outbox as its tab does. */
+  async function keepStart(holder: OutboxHolder, views: (ClockDeviceView | null)[] = []): Promise<void> {
     operations += 1;
     await holdClock(holder, (view) => views.push(view));
-    return captureClockAction(holder, {
-      command: {
-        operationId: `50000000-0000-4000-8000-${String(operations).padStart(12, '0')}`,
-        action: 'start',
-        expectedSessionId: null,
-        expectedVersion: null,
-        selection: { kind: 'work', allocationKind: 'unallocated', jobId: null },
-      },
+    const kept = keepClockAction({
+      ...holder,
+      operationId: `50000000-0000-4000-8000-${String(operations).padStart(12, '0')}`,
+      action: 'start',
+      expectedSessionId: null,
+      expectedVersion: null,
+      selection: { kind: 'work', allocationKind: 'unallocated', jobId: null },
       base: { ...CLOCKED_OUT, organizationId: holder.organizationId },
       triedOnline: false,
     });
+    expect(kept).toBe(true);
+    await takeInKeptClockAction();
   }
 
   beforeEach(async () => {
@@ -147,16 +149,16 @@ async function isolatedTests(): Promise<void> {
   });
 
   describe('this tab’s hold on the time outbox', () => {
-    test('a kept action answers the clock as accepted, shows as waiting, and leaves the start-up hint', async () => {
+    test('an action a page kept without signal is taken into its person’s outbox, shows as waiting, and leaves the start-up hint', async () => {
       const views: (ClockDeviceView | null)[] = [];
 
-      const result = await keepStart(WORKER, views);
+      await keepStart(WORKER, views);
 
-      expect(result).toEqual(expect.objectContaining({ success: true, outcome: 'active' }));
-      expect(views.at(-1)).toEqual(
-        expect.objectContaining({ status: 'pending', state: expect.objectContaining({ isClockedIn: true }) }),
-      );
+      expect(views.at(-1)?.status).toBe('pending');
+      expect(views.at(-1)?.state?.isClockedIn).toBe(true);
+      expect((await readTimeOutbox(WORKER)).events).toHaveLength(1);
       expect(storage.get('werkflow:unsent:time')).toBe('1');
+      expect(storage.has('werkflow:unsent:clock')).toBe(false);
     });
 
     test('nothing is sent while the browser’s session belongs to someone else, or to nobody', async () => {
@@ -174,23 +176,47 @@ async function isolatedTests(): Promise<void> {
       expect((await readTimeOutbox(WORKER)).events).toHaveLength(1);
     });
 
-    test('a page asked to keep an action for someone the tab does not hold the clock for keeps nothing', async () => {
-      await holdClock(WORKER, () => undefined);
+    test('an action kept for another person goes into that person’s outbox, never into the tab holder’s', async () => {
+      await keepStart(WORKER);
+      keepClockAction({
+        ...COLLEAGUE,
+        operationId: '50000000-0000-4000-8000-0000000000ff',
+        action: 'start',
+        expectedSessionId: null,
+        expectedVersion: null,
+        selection: { kind: 'work', allocationKind: 'unallocated', jobId: null },
+        base: CLOCKED_OUT,
+        triedOnline: false,
+      });
+      await takeInKeptClockAction();
 
-      const result = await captureClockAction(COLLEAGUE, {
-        command: {
-          operationId: '50000000-0000-4000-8000-0000000000ff',
-          action: 'start',
-          expectedSessionId: null,
-          expectedVersion: null,
-          selection: { kind: 'work', allocationKind: 'unallocated', jobId: null },
-        },
+      expect((await readTimeOutbox(WORKER)).events).toHaveLength(1);
+      expect((await readTimeOutbox(COLLEAGUE)).events).toHaveLength(1);
+      await sendOwnTimeEvents();
+      expect(sent).toHaveLength(1);
+      expect(sent[0]).not.toContain('50000000-0000-4000-8000-0000000000ff');
+    });
+
+    test('an action that is no start, switch or end, or that this version cannot read, stays kept and is never dropped', async () => {
+      await holdClock(WORKER, () => undefined);
+      const unreadable = { operationId: 'from-a-newer-version' };
+      storage.set('werkflow:unsent:clock', JSON.stringify([unreadable]));
+      keepClockAction({
+        ...WORKER,
+        operationId: '50000000-0000-4000-8000-0000000000fe',
+        action: 'recover_end',
+        expectedSessionId: null,
+        expectedVersion: null,
+        selection: null,
         base: CLOCKED_OUT,
         triedOnline: false,
       });
 
-      expect(result).toEqual({ success: false, error: 'time_transition_failed' });
-      expect((await readTimeOutbox(COLLEAGUE)).events).toEqual([]);
+      await takeInKeptClockAction();
+
+      expect((await readTimeOutbox(WORKER)).events).toEqual([]);
+      const kept: unknown = JSON.parse(storage.get('werkflow:unsent:clock') ?? '[]');
+      expect(kept).toHaveLength(2);
     });
 
     test('a sign-out is asked about the person’s own events of every organization, and discards only those', async () => {
@@ -217,7 +243,6 @@ async function isolatedTests(): Promise<void> {
 
       expect(views.at(-1)).toBeNull();
       expect(clockHolder()).toBeNull();
-      expect(await keepStart(WORKER)).toEqual({ success: false, error: 'time_transition_failed' });
       await sendOwnTimeEvents();
       expect(sent).toEqual([]);
       // The event itself stays on the phone for the person's next page.

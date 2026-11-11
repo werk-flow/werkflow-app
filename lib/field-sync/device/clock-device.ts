@@ -1,11 +1,12 @@
 'use client';
 
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { takeInKeptClockActions } from './kept-clock-actions';
 import { clockDeviceView, discardTimeEvents, type ClockDeviceView } from './time-outbox';
 import { sendTimeOutbox } from './time-outbox-send';
 import { readTimeOutbox, readWholeTimeOutbox, type OutboxHolder } from './time-outbox-store';
 import { TODAY_WIPE_KEY } from './today-wipe';
-import { markUnsentWork } from './unsent-mark';
+import { KEPT_CLOCK_ACTIONS_KEY, markUnsentWork } from './unsent-mark';
 import type { UnsentSource } from './unsent-work';
 
 // This tab's hold on the time outbox: whose unsent events it shows and sends.
@@ -39,9 +40,13 @@ async function publish(): Promise<void> {
   for (const listener of listeners) listener(view);
 }
 
-/** Tells this tab's listeners and the origin's other tabs that the outbox changed. */
-export async function outboxChanged(deviceHoldsEvents: boolean): Promise<void> {
-  markUnsentWork(UNSENT_KIND, deviceHoldsEvents);
+/**
+ * Tells this tab's listeners and the origin's other tabs that the outbox changed, and keeps the
+ * start-up hint in step with it: set while the device holds any person's event.
+ */
+export async function outboxChanged(): Promise<void> {
+  const { events } = await readWholeTimeOutbox();
+  markUnsentWork(UNSENT_KIND, events.length > 0);
   try {
     localStorage.setItem(OUTBOX_CHANGED_KEY, String(Date.now()));
   } catch {
@@ -59,6 +64,14 @@ function onStorage(event: StorageEvent): void {
   }
   // eslint-disable-next-line no-restricted-syntax -- a failed read here is shown by the next action's own read; a storage event has no caller to tell
   if (event.key === OUTBOX_CHANGED_KEY) void publish().catch(() => undefined);
+  // Another tab's page kept an action without signal: the next pass of this tab sends it too.
+  // eslint-disable-next-line no-restricted-syntax -- as above; the action stays kept and the next start takes it in
+  if (event.key === KEPT_CLOCK_ACTIONS_KEY) void takeInKept().catch(() => undefined);
+}
+
+/** Moves the clock actions pages kept without signal into the outbox and shows them. */
+export async function takeInKept(): Promise<void> {
+  if (await takeInKeptClockActions()) await outboxChanged();
 }
 
 /**
@@ -69,6 +82,7 @@ export async function holdClock(next: OutboxHolder, listener: ViewListener): Pro
   if (listeners.size === 0) window.addEventListener('storage', onStorage);
   holder = next;
   listeners.add(listener);
+  await takeInKept();
   await publish();
   return () => {
     listeners.delete(listener);
@@ -88,6 +102,7 @@ function exclusively(send: () => Promise<void>): Promise<void> {
 
 /** Sends this tab's holder's unsent events, as far as the server records them now. */
 export async function sendOwnTimeEvents(): Promise<void> {
+  await takeInKept();
   const current = clockHolder();
   if (!current) return;
   await exclusively(() =>
@@ -97,8 +112,7 @@ export async function sendOwnTimeEvents(): Promise<void> {
       sessionIsHolders: async () => clockHolder() === current && (await sessionUserId()) === current.userId,
     }),
   );
-  const { events } = await readWholeTimeOutbox();
-  await outboxChanged(events.length > 0);
+  await outboxChanged();
 }
 
 /** The person whose unsent events a sign-out or switch asks about: this tab's holder, else the session's. */
@@ -118,6 +132,7 @@ async function ownOrganizations(userId: string): Promise<string[]> {
 export const timeUnsentSource: UnsentSource = {
   name: UNSENT_KIND,
   async summarize() {
+    await takeInKept();
     const userId = await signedInUserId();
     const { events } = await readWholeTimeOutbox();
     const count = events.filter((event) => event.userId === userId).length;
@@ -127,9 +142,9 @@ export const timeUnsentSource: UnsentSource = {
   async discard() {
     const userId = await signedInUserId();
     if (!userId) return;
+    await takeInKept();
     for (const organizationId of await ownOrganizations(userId))
       await discardTimeEvents({ userId, organizationId });
-    const { events } = await readWholeTimeOutbox();
-    await outboxChanged(events.length > 0);
+    await outboxChanged();
   },
 };

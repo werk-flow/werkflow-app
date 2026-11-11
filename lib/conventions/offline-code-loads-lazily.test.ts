@@ -42,6 +42,7 @@ const UNSENT_WORK_MODULES: readonly string[] = [
   'components/shared/unsent-work-prompt.tsx',
   'lib/field-sync/device/clock-device.ts',
   'lib/field-sync/device/clock-outbox.ts',
+  'lib/field-sync/device/kept-clock-actions.ts',
   'lib/field-sync/device/registrations.ts',
   'lib/field-sync/device/sync-runner.ts',
   'lib/field-sync/device/time-outbox-send.ts',

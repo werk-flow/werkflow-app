@@ -10,6 +10,7 @@ import {
   captureTimeEvent,
   clockDeviceView,
   discardTimeEvents,
+  isOfflineClockAction,
   retryFirstTimeEvent,
   type OfflineClockCommand,
 } from './time-outbox';
@@ -127,11 +128,13 @@ async function capture(
   kept: OfflineClockCommand,
   options: { base?: LiveClockState | null; at?: string; triedOnline?: boolean } = {},
 ) {
+  if (!isOfflineClockAction(kept.action)) throw new Error(`${kept.action} cannot be captured without signal`);
   return captureTimeEvent(holder, {
-    command: kept,
+    command: { ...kept, action: kept.action },
     base: options.base === undefined ? CLOCKED_OUT : options.base,
     capturedAt: new Date(options.at ?? '2026-11-11T07:00:00.000Z'),
     triedOnline: options.triedOnline ?? false,
+    wipeGeneration: 'signal-1',
   });
 }
 
@@ -534,32 +537,42 @@ describe('capturing', () => {
     expect(events.map((event) => event.sequence)).toEqual([1, 2]);
   });
 
-  test('without a confirmed clock, in a recovery or for an action only the server can judge, nothing is captured', async () => {
-    expect(await capture(WORKER, command('start'), { base: null })).toEqual({
-      captured: false,
-      reason: 'needs_network',
-    });
+  test('only a start, a switch and an end can wait for signal', () => {
+    expect(['start', 'switch', 'end'].every(isOfflineClockAction)).toBe(true);
     expect(
-      await capture(WORKER, command('end'), { base: { ...WORKING, recoveryReason: 'unusually_long' } }),
-    ).toEqual({ captured: false, reason: 'needs_network' });
-    expect(await capture(WORKER, command('end'), { base: { ...WORKING, legacyOpen: true } })).toEqual({
-      captured: false,
-      reason: 'needs_network',
-    });
-    expect(await capture(WORKER, command('recover_end'), { base: WORKING })).toEqual({
-      captured: false,
-      reason: 'needs_network',
-    });
-    expect(await readWholeTimeOutbox()).toEqual({ clocks: [], events: [] });
+      ['continue_legacy', 'end_legacy', 'recover_continue', 'recover_end', ''].some(isOfflineClockAction),
+    ).toBe(false);
   });
 
-  test('nothing new stands on a chain that waits for the person', async () => {
+  test('an action captured behind a chain that waits for the person waits with it, and is never sent ahead of it', async () => {
     await capture(WORKER, command('start'));
-    const { options } = server((envelope) => result(envelope, { outcome: 'rejected', code: 'forbidden' }));
+    const { received, options } = server((envelope) =>
+      result(envelope, { outcome: 'rejected', code: 'forbidden' }),
+    );
     await sendTimeOutbox(WORKER, options);
 
-    expect(await capture(WORKER, command('end'))).toEqual({ captured: false, reason: 'chain_stopped' });
-    expect((await readTimeOutbox(WORKER)).events).toHaveLength(1);
+    await capture(WORKER, command('end'));
+    await sendTimeOutbox(WORKER, options);
+
+    expect(received).toHaveLength(1);
+    const view = clockDeviceView(await readTimeOutbox(WORKER), new Date('2026-11-11T09:00:00.000Z'));
+    expect(view?.events.map((event) => [event.action, event.status])).toEqual([
+      ['start', 'failed'],
+      ['end', 'held'],
+    ]);
+  });
+
+  test('a first action without a confirmed clock is still kept and sent; only the clock shows no state of its own', async () => {
+    await capture(WORKER, command('start'), { base: null });
+
+    const outbox = await readTimeOutbox(WORKER);
+    expect(outbox.clock).toBeNull();
+    expect(clockDeviceView(outbox, new Date('2026-11-11T09:00:00.000Z'))).toEqual(
+      expect.objectContaining({ status: 'pending', state: null }),
+    );
+    const { received, options } = accepting();
+    await sendTimeOutbox(WORKER, options);
+    expect(received).toHaveLength(1);
   });
 
   test('the same action captured twice is kept once', async () => {
@@ -571,21 +584,18 @@ describe('capturing', () => {
     expect((await readTimeOutbox(WORKER)).events.map((event) => event.action)).toEqual(['start', 'end']);
   });
 
-  test('the kept clock holds no customer or project name', async () => {
+  test('the kept clock holds no job, customer or project name, and the wipe signal it was captured under', async () => {
     await capture(WORKER, command('end', { expectedSessionId: SESSION_ID, expectedVersion: 3 }), {
       base: WORKING,
     });
 
     const { clock } = await readTimeOutbox(WORKER);
-    expect(clock?.base.activeJobInfo).toEqual({
-      id: JOB_ID,
-      title: 'Heizung tauschen',
-      jobNumber: 'AUF-1',
-      status: 'in_arbeit',
-      projectName: null,
-      clientName: null,
-    });
-    expect(JSON.stringify(await readWholeTimeOutbox())).not.toContain('Erika Beispiel');
+    expect(clock?.base.activeJobInfo).toBeNull();
+    expect(clock?.base.resumeJobInfo).toBeNull();
+    expect(clock?.wipeGeneration).toBe('signal-1');
+    const kept = JSON.stringify(await readWholeTimeOutbox());
+    expect(kept).not.toContain('Heizung tauschen');
+    expect(kept).not.toContain('Erika Beispiel');
   });
 });
 

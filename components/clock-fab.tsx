@@ -31,7 +31,7 @@ const ClockUnsentEvents = lazy(async () => {
   } catch (error) {
     // The events stay on the phone, and a sign-out still asks about them; a reload brings their view back.
     logError('ClockFAB: unsent events failed to load', error);
-    return { default: () => 'Nicht übertragene Zeiten: Bitte lade die Seite neu.' };
+    return { default: () => <>Nicht übertragene Zeiten: Bitte lade die Seite neu.</> };
   }
 });
 
@@ -39,13 +39,20 @@ const ClockUnsentEvents = lazy(async () => {
  * The phone's unsent clock events at one place of the clock, or nothing while it holds none. A
  * function, not a component: the dock renders with every clock change, and lab counts count components.
  */
-function unsentEvents(unsent: ClockDeviceView | null, place: 'dock' | 'sheet'): ReactNode {
+function unsentEvents(unsent: ClockDeviceView | null, place: 'dock' | 'sheet'): ReactNode | undefined {
   return unsent ? (
     <Suspense>
       <ClockUnsentEvents place={place} />
     </Suspense>
-  ) : null;
+  ) : undefined;
 }
+
+/** The dock's mark for actions this page kept while the outbox's own view cannot load: there is no signal to load it with. */
+const WAITS_FOR_NETWORK = (
+  <span className="text-xs text-muted-foreground" data-clock-unsent="pending">
+    Wartet auf Netz
+  </span>
+);
 
 /** What runs now, as the dock and the sheet name it; null while nothing runs or the state is unknown. */
 function runningLabel(state: LiveClockState | null): string | null {
@@ -142,8 +149,8 @@ function confirmedClockState(clock: {
 
 export function ClockFAB() {
   const { activeOrgId, activeOrg } = useOrganization();
-  const { state, unsent, isLoading, isReady, isPending, statusError, refresh, transitionActivity } =
-    useClockState();
+  const clock = useClockState();
+  const { state, unsent, isLoading, isReady, isPending, statusError, refresh, transitionActivity } = clock;
   const controls = useClockFabControls(transitionActivity);
 
   if (!activeOrgId || !activeOrg) return null;
@@ -152,7 +159,7 @@ export function ClockFAB() {
   const recovery = Boolean(state?.recoveryReason);
   const currentLabel = runningLabel(state);
   // Unsent events are not the server's state yet: the clock is neither confirmed in nor out.
-  const unconfirmed = isPending || unsent !== null;
+  const unconfirmed = isPending || unsent !== null || clock.waitsForNetwork;
   // Hot keys act directly; a job-choice hot key opens the sheet with its picker
   // already open. Recovery hides the hot keys, so they never bypass its review.
   const hotKeys = isClockedIn && !recovery ? selectClockHotKeys(deriveClockActions(state)) : [];
@@ -212,7 +219,7 @@ export function ClockFAB() {
               {!isReady ? null : isClockedIn ? currentLabel : 'Nicht eingestempelt'}
             </p>
           )}
-          {unsentEvents(unsent, 'dock')}
+          {unsentEvents(unsent, 'dock') ?? (clock.waitsForNetwork ? WAITS_FOR_NETWORK : null)}
           <ClockHotKeys
             hotKeys={hotKeys}
             pendingHotKey={controls.pendingHotKey}

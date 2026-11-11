@@ -1,23 +1,15 @@
 'use client';
 
-import type { LiveClockState, TimeTransitionResult } from '@/lib/time-tracking/types';
 import './registrations';
-import { clockHolder, holdClock, outboxChanged } from './clock-device';
+import { holdClock, outboxChanged, takeInKept } from './clock-device';
 import { runSync, startSyncRunner } from './sync-runner';
-import {
-  captureTimeEvent,
-  discardTimeEvents,
-  retryFirstTimeEvent,
-  type ClockDeviceView,
-  type OfflineClockCommand,
-} from './time-outbox';
+import { discardTimeEvents, retryFirstTimeEvent, type ClockDeviceView } from './time-outbox';
 import type { OutboxHolder } from './time-outbox-store';
 
 // What the clock calls on the phone's time outbox. The clock's provider loads
 // this module only when the device may hold unsent events or a clock action
-// meets no network, so no page pays for it at start.
-
-const FAILED: TimeTransitionResult = { success: false, error: 'time_transition_failed' };
+// meets no network, so no page pays for it at start. A page whose signal is already gone keeps its
+// action with the few lines of unsent-mark.ts and hands it over here later.
 
 /**
  * Shows `listener` the holder's unsent events, now and after every change, and sends what the
@@ -34,32 +26,12 @@ export async function watchClockOutbox(
 }
 
 /**
- * Keeps a clock action the server did not answer on the phone, and answers the clock as the
- * accepted action would. `base` is the clock the server last confirmed. A refusal answers as a
- * failed transition: a recovery or legacy action, a chain that waits for the person, another
- * tab's sign-out, or a device that cannot store.
+ * Takes the clock action a page just kept without the server's answer into the outbox, and sends
+ * it at once when the phone reports a network: the online call may only have failed on its way.
  */
-export async function captureClockAction(
-  holder: OutboxHolder,
-  capture: { command: OfflineClockCommand; base: LiveClockState | null; triedOnline: boolean },
-): Promise<TimeTransitionResult> {
-  if (clockHolder()?.userId !== holder.userId || clockHolder()?.organizationId !== holder.organizationId)
-    return FAILED;
-  const result = await captureTimeEvent(holder, { ...capture, capturedAt: new Date() });
-  if (!result.captured) return FAILED;
-  await outboxChanged(result.deviceHoldsEvents);
-  // A phone that reports a network sends at once; without one the next `online` does.
+export async function takeInKeptClockAction(): Promise<void> {
+  await takeInKept();
   if (navigator.onLine) void sendUnsentNow();
-  return {
-    success: true,
-    outcome: capture.command.action === 'end' ? 'ended' : 'active',
-    sessionId: null,
-    segmentId: null,
-    version: null,
-    recoveryReason: null,
-    replayed: false,
-    legacyBridged: false,
-  };
 }
 
 /** „Jetzt senden“: one pass over every sender, resolved when it ended. */
@@ -75,6 +47,6 @@ export async function resendRefusedTimeEvent(holder: OutboxHolder): Promise<void
 
 /** Deletes the holder's unsent events after the person confirmed it, or after their correction was filed. */
 export async function deleteUnsentTimeEvents(holder: OutboxHolder): Promise<void> {
-  const { deviceHoldsEvents } = await discardTimeEvents(holder);
-  await outboxChanged(deviceHoldsEvents);
+  await discardTimeEvents(holder);
+  await outboxChanged();
 }

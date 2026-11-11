@@ -2,7 +2,7 @@
 
 import { applyTransitionEcho } from '@/lib/time-tracking/clock-echo';
 import type { LiveClockState, TimeActivitySelection } from '@/lib/time-tracking/types';
-import { sharedWipeGeneration, todayHolderKey } from './today-store';
+import { todayHolderKey } from './today-store';
 import {
   changeTimeOutbox,
   type OutboxHolder,
@@ -112,85 +112,61 @@ export function clockDeviceView(outbox: TimeOutbox, now: Date): ClockDeviceView 
   };
 }
 
-/** The clock a phone keeps: without customer and project names, which no unsent event needs. */
-function clockToKeep(holder: OutboxHolder, base: LiveClockState): StoredClock {
-  const withoutNames = (job: LiveClockState['activeJobInfo']): LiveClockState['activeJobInfo'] =>
-    job ? { ...job, clientName: null, projectName: null } : null;
+/** The clock a phone keeps: without job, customer and project names, which no unsent event needs. */
+function clockToKeep(holder: OutboxHolder, base: LiveClockState, wipeGeneration: string): StoredClock {
   return {
     holder: todayHolderKey(holder),
     ...holder,
-    base: {
-      ...base,
-      activeJobInfo: withoutNames(base.activeJobInfo),
-      resumeJobInfo: withoutNames(base.resumeJobInfo),
-    },
-    // A clock saved without a readable signal is shown by no reader that knows no session.
-    wipeGeneration: sharedWipeGeneration() ?? 'unreadable',
+    base: { ...base, activeJobInfo: null, resumeJobInfo: null },
+    wipeGeneration,
   };
 }
 
-type CaptureRefusal =
-  /** The action needs the server's answer first: a recovery or a session of the older capture. */
-  | 'needs_network'
-  /** Earlier events wait for the person's decision; nothing new stands on them. */
-  | 'chain_stopped';
-
-export type CaptureResult =
-  | { captured: true; outbox: TimeOutbox; deviceHoldsEvents: boolean }
-  | { captured: false; reason: CaptureRefusal };
-
-function isOfflineAction(action: string): action is StoredTimeEvent['action'] {
+/** Whether a phone can keep the action without signal: every other one needs the server's answer first. */
+export function isOfflineClockAction(action: string): action is StoredTimeEvent['action'] {
   return action === 'start' || action === 'switch' || action === 'end';
 }
 
+/** One clock action as it was captured: when, on which confirmed clock, and under which wipe signal. */
+export type TimeEventCapture = {
+  command: OfflineClockCommand & { action: StoredTimeEvent['action'] };
+  /** The clock the server last confirmed, for the first event of a chain; null for one that stands on another. */
+  base: LiveClockState | null;
+  capturedAt: Date;
+  triedOnline: boolean;
+  /** The wipe signal when the person acted (today-store.ts): the page without signal shows the clock only under the current one. */
+  wipeGeneration: string;
+};
+
 /**
- * Keeps one clock action on the device, at `capturedAt`. The first event of a chain stands on
- * `base`, the clock the server last confirmed, and expects the session and version the command
- * names. A later event stands on the event before it and learns its expectation from that
- * event's answer. Throws when the device storage fails, a full disk included.
+ * Puts one captured clock action into the holder's outbox. The first event of a chain stands on
+ * `base` and expects the session and version the command names. A later event stands on the event
+ * before it and learns its expectation from that event's answer; behind a stopped chain it waits
+ * with it. An action the outbox already holds is kept once. Throws when the device storage fails,
+ * a full disk included.
  */
-export async function captureTimeEvent(
+export function captureTimeEvent(
   holder: OutboxHolder,
-  capture: {
-    command: OfflineClockCommand;
-    base: LiveClockState | null;
-    capturedAt: Date;
-    triedOnline: boolean;
-  },
-): Promise<CaptureResult> {
+  capture: TimeEventCapture,
+): ReturnType<typeof changeTimeOutbox> {
   const { command, base } = capture;
-  const { action } = command;
-  if (!isOfflineAction(action)) return { captured: false, reason: 'needs_network' };
-  let refusal: CaptureRefusal | null = null;
-  const changed = await changeTimeOutbox(holder, (current) => {
+  return changeTimeOutbox(holder, (current) => {
+    if (current.events.some((kept) => kept.operationId === command.operationId)) return null;
     const last = current.events.at(-1);
     const event: StoredTimeEvent = {
       operationId: command.operationId,
       ...holder,
       sequence: (last?.sequence ?? 0) + 1,
       capturedAt: capture.capturedAt.toISOString(),
-      action,
+      action: command.action,
       selection: command.selection,
       expected: last ? null : { sessionId: command.expectedSessionId, version: command.expectedVersion },
       triedOnline: capture.triedOnline,
       verdict: null,
     };
-    if (last) {
-      // The device's own answer to a resend of this action: it is kept already.
-      if (current.events.some((kept) => kept.operationId === command.operationId)) return null;
-      if (clockDeviceView(current, capture.capturedAt)?.status === 'stopped') {
-        refusal = 'chain_stopped';
-        return null;
-      }
-      return { clock: current.clock, events: [...current.events, event] };
-    }
-    if (!base || base.legacyOpen || base.recoveryReason) {
-      refusal = 'needs_network';
-      return null;
-    }
-    return { clock: clockToKeep(holder, base), events: [event] };
+    if (last) return { clock: current.clock, events: [...current.events, event] };
+    return { clock: base && clockToKeep(holder, base, capture.wipeGeneration), events: [event] };
   });
-  return refusal ? { captured: false, reason: refusal } : { captured: true, ...changed };
 }
 
 /** The server's answer to the first event of the chain, as far as the device acts on it. */

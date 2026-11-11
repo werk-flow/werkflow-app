@@ -8,7 +8,7 @@ import { ErrorText } from '@/components/ui/error-text';
 import { SectionError } from '@/components/ui/section-error';
 import { useClientRead } from '@/hooks/use-client-read';
 import { usePendingTask } from '@/hooks/use-server-action';
-import { outboxChanged } from '@/lib/field-sync/device/clock-device';
+import { outboxChanged, takeInKept } from '@/lib/field-sync/device/clock-device';
 import { captureTimeEvent, clockDeviceView, type ClockDeviceView } from '@/lib/field-sync/device/time-outbox';
 import { readWholeTimeOutbox, type OutboxHolder } from '@/lib/field-sync/device/time-outbox-store';
 import { sharedWipeGeneration } from '@/lib/field-sync/device/today-store';
@@ -24,12 +24,14 @@ import { formatBerlinTime } from '@/lib/utils';
 // switch or a visit to a login page. It only captures; the app sends, once it
 // loads with signal and knows who is signed in.
 
-type OfflineClock = { holder: OutboxHolder; view: ClockDeviceView };
+type OfflineClock = { holder: OutboxHolder; view: ClockDeviceView; generation: string };
 
 /** The one clock kept under the current wipe signal, or null: none, several, or a signal that cannot be read. */
 async function readOfflineClock(): Promise<OfflineClock | null> {
   const generation = sharedWipeGeneration();
   if (generation === null) return null;
+  // What the app's page kept when its signal went is in no outbox yet; each action goes to its own person's.
+  await takeInKept();
   const { clocks, events } = await readWholeTimeOutbox();
   const current = clocks.filter((clock) => clock.wipeGeneration === generation);
   const [clock] = current;
@@ -45,7 +47,7 @@ async function readOfflineClock(): Promise<OfflineClock | null> {
     new Date(),
   );
   // A wipe signalled while the device read: its answer is the former person's clock, never shown.
-  return view && sharedWipeGeneration() === generation ? { holder, view } : null;
+  return view && sharedWipeGeneration() === generation ? { holder, view, generation } : null;
 }
 
 /** Reads the device's clock, and again when another tab's sign-out or switch wipes, or the page returns from the back-forward cache. */
@@ -101,7 +103,7 @@ export function OfflineClock() {
       </div>
     );
   if (!clock) return null;
-  const { holder, view } = clock;
+  const { holder, view, generation } = clock;
   const { state } = view;
 
   function activate(action: ClockAction): void {
@@ -110,7 +112,7 @@ export function OfflineClock() {
     setPendingId(action.id);
     void run(async () => {
       try {
-        const result = await captureTimeEvent(holder, {
+        await captureTimeEvent(holder, {
           command: {
             operationId: crypto.randomUUID(),
             action: action.kind === 'end' ? 'end' : state?.isClockedIn ? 'switch' : 'start',
@@ -122,9 +124,9 @@ export function OfflineClock() {
           base: null,
           capturedAt: new Date(),
           triedOnline: false,
+          wipeGeneration: generation,
         });
-        if (result.captured) await outboxChanged(result.deviceHoldsEvents);
-        else setError('Das geht gerade nur mit Netz. Öffne WerkFlow, sobald du wieder Empfang hast.');
+        await outboxChanged();
       } catch (failure) {
         logError('OfflineClock: clock action not kept on the device', failure);
         setError('Dein Gerät konnte die Zeit nicht speichern. Bitte versuche es erneut.');

@@ -124,7 +124,14 @@ function useUnsentChoice(initialItems: UnsentWorkItem[], onSettled: (mayEnd: boo
       }
     });
   }
-  return { items, running, isPending, error, perform };
+  return {
+    items,
+    isSending: isPending && running === 'send',
+    isDiscarding: isPending && running === 'discard',
+    isPending,
+    error,
+    perform,
+  };
 }
 
 /** Names what is still unsent and offers to send it, to discard it, or to stay. */
@@ -136,7 +143,10 @@ function UnsentWorkDialog({
   /** True: nothing is unsent any more, the session may end. False: the person stays. */
   onSettled: (mayEnd: boolean) => void;
 }) {
-  const { items, running, isPending, error, perform } = useUnsentChoice(initialItems, onSettled);
+  const { items, isSending, isDiscarding, isPending, error, perform } = useUnsentChoice(
+    initialItems,
+    onSettled,
+  );
   const [confirming, setConfirming] = useState(false);
 
   return (
@@ -170,7 +180,7 @@ function UnsentWorkDialog({
             >
               Verwerfen
             </Button>
-            <Button type="submit" pending={running === 'send'} disabled={isPending}>
+            <Button type="submit" pending={isSending} disabled={isPending}>
               Jetzt senden
             </Button>
           </DialogFooter>
@@ -180,7 +190,7 @@ function UnsentWorkDialog({
           open={confirming}
           onOpenChange={setConfirming}
           onConfirm={() => perform('discard')}
-          pending={running === 'discard'}
+          pending={isDiscarding}
         />
       </DialogContent>
     </Dialog>
