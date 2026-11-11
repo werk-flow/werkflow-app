@@ -197,10 +197,17 @@ assert.equal(stored(id(13))?.scrub_state, 'nicht_bereinigbar');
 assert.equal(stored(id(13))?.scrubbed_description, null);
 process.env.WERKFLOW_UI_STRING_CATALOG = catalog;
 
-// A stored context of another shape is never copied.
-reports().push(report(id(14), ORGANIZATION_A, { context: { ...context, customer: ownCustomer } }));
-assert.equal(await scrubStoredProblemReport(ORGANIZATION_A, id(14)), false);
-assert.equal(stored(id(14))?.scrub_state, 'nicht_bereinigbar');
+// A stored context of another shape is never copied: not one with another
+// field, and not a part of a capture.
+reports().push(
+  report(id(14), ORGANIZATION_A, { context: { ...context, customer: ownCustomer } }),
+  report(id(18), ORGANIZATION_A, { context: { appVersion: 'Erika.Mueller' } }),
+);
+for (const reportId of [id(14), id(18)]) {
+  assert.equal(await scrubStoredProblemReport(ORGANIZATION_A, reportId), false);
+  assert.equal(stored(reportId)?.scrub_state, 'nicht_bereinigbar');
+  assert.equal(stored(reportId)?.scrubbed_context, null);
+}
 
 // A report of another organization is not found: nothing is read into a copy, nothing is written.
 reports().push(report(id(15), ORGANIZATION_B));
@@ -219,8 +226,8 @@ reports().push(
   ...Array.from({ length: 100 }, (_, index) => report(id(100 + index), ORGANIZATION_A)),
 );
 const run = await scrubPendingProblemReports();
-// Report 14 keeps its foreign shape, so it stays without a copy.
-assert.deepEqual(run, { ok: true, scrubbed: 104, notScrubbed: 1 });
+// Reports 14 and 18 keep their foreign shape, so they stay without a copy.
+assert.deepEqual(run, { ok: true, scrubbed: 104, notScrubbed: 2 });
 assert.equal(stored(id(12))?.scrubbed_description, scrubbedDescription);
 assert.equal(stored(id(13))?.scrub_state, 'bereinigt');
 assert.equal(stored(id(14))?.scrub_state, 'nicht_bereinigbar');

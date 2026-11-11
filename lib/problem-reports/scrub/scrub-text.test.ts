@@ -8,7 +8,7 @@ import { scrubReportContext, scrubReportText } from './scrub-text';
 // people, addresses and numbers of a made-up company.
 
 const dictionary = buildScrubDictionary({
-  customerNames: ['Erika Müller', 'Hausverwaltung Sonnenhang GmbH', 'Die Bad GmbH', 'Wei Li'],
+  customerNames: ['Erika Müller', 'Hausverwaltung Sonnenhang GmbH', 'Die Bad GmbH', 'Wei Li', 'Li Na'],
   personNames: ['Jonas Weiß', 'Petra von Lindqvist'],
   addresses: [
     'Lindenstraße 12a, 54321 Beispielstadt',
@@ -115,6 +115,12 @@ test('pattern rule: any phone-number shape', () => {
   );
   expect(unknown('Zimmer 12 0152 98765432')).toBe('Zimmer 12 [Telefon 1]');
   expect(unknown('0041 44 123 45 67 und +43 1 2345678')).toBe('[Telefon 1] und [Telefon 2]');
+  // Any number of spaces may group the digits.
+  expect(unknown('Ruf 0171   2345678 an')).toBe('Ruf [Telefon 1] an');
+  // A number ends where its groups end: no group of it stays readable, even
+  // one that starts with a zero, and a second number right behind it goes too.
+  expect(unknown('Ruf 0171 234 0567 an')).toBe('Ruf [Telefon 1] an');
+  expect(unknown('0171 1234567 0221 987654 221 987655')).toBe('[Telefon 1]');
   // Dates, times, amounts, postcodes and order numbers are no phone numbers.
   const kept =
     'Am 01.02.2026 um 08:30, 12 Stück zu 0,50 Euro, Auftrag 2026-0042 in 01067 Dresden, 3 von 15, DN 20';
@@ -126,6 +132,11 @@ test('pattern rule: any email address', () => {
     'Mail an [E-Mail 1] oder [E-Mail 2].',
   );
   expect(scrub('jonas+test@firma.example, Jonas+Test@Firma.example')).toBe('[E-Mail 1], [E-Mail 1]');
+  // A local part may hold an apostrophe, and in quotes a space.
+  expect(scrub("Mail an anne.o'neill@beispiel.example")).toBe('Mail an [E-Mail 1]');
+  expect(scrub('Mail an "anna meier"@beispiel.example und "sag @alle"')).toBe(
+    'Mail an [E-Mail 1] und "sag @alle"',
+  );
   expect(scrub('Preis @ 12 Euro und @home bleiben')).toBe('Preis @ 12 Euro und @home bleiben');
 });
 
@@ -183,6 +194,8 @@ test('placeholders are typed and stable within one text', () => {
 });
 
 test('overlapping finds merge, so no part of either stays readable', () => {
+  // Two known names that share a word: „Wei Li“ and „Li Na“.
+  expect(scrub('Wei Li Na war da')).toBe('[Kunde 1] war da');
   // The address inside the email, and the IBAN's digits that look like a phone number.
   expect(scrub('mueller@sonnenhang.example')).toBe('[E-Mail 1]');
   expect(scrub('DE89 3704 0044 0532 0130 00')).toBe('[IBAN 1]');
@@ -224,6 +237,27 @@ test('10,000 customers: the scrub walks the text once, whatever the size of the 
   expect(count).toBeLessThan(2 * words);
 });
 
+test('one pass: a name of a hundred words is replaced whole, and no word of the text starts a walk that long', () => {
+  // The longest customer name the app stores: 99 times „Li“ and one more word.
+  const longName = `${'Li '.repeat(99)}Xyz`;
+  const long = buildScrubDictionary({
+    customerNames: [longName],
+    personNames: [],
+    addresses: [],
+    phones: [],
+  });
+  expect(scrubReportText(`Kunde ${longName} ruft an`, long)).toBe('Kunde [Kunde 1] ruft an');
+
+  const words = 1667;
+  const text = Array.from({ length: words }, () => 'Li').join(' ');
+  const lookups = spyOn(Map.prototype, 'get');
+  scrubReportText(text, long);
+  const count = lookups.mock.calls.length;
+  lookups.mockRestore();
+  // A walk ends after the twelve words a stretch of a term has.
+  expect(count).toBeLessThan(14 * words);
+});
+
 // --- Context ---
 
 const context: ProblemReportContext = {
@@ -242,7 +276,7 @@ const context: ProblemReportContext = {
 
 test("context rule: a control label that is not one of the app's own UI strings is removed on the server", () => {
   const scrubbed = scrubReportContext(context, new Set(['Speichern']));
-  expect(scrubbed.recentActions?.map((action) => action.controlLabel)).toEqual([
+  expect(scrubbed.recentActions.map((action) => action.controlLabel)).toEqual([
     null,
     'Speichern',
     null,
@@ -250,6 +284,4 @@ test("context rule: a control label that is not one of the app's own UI strings 
   ]);
   expect(JSON.stringify(scrubbed)).not.toContain('Müller');
   expect({ ...scrubbed, recentActions: [] }).toEqual({ ...context, recentActions: [] });
-  // A report filed without a capture has an empty context, which stays empty.
-  expect(scrubReportContext({}, new Set(['Speichern']))).toEqual({});
 });

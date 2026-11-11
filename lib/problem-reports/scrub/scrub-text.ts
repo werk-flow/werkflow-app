@@ -1,5 +1,5 @@
 import { isUiString, type UiStringCatalog } from '@/lib/problem-reports/screenshot/ui-string-catalog';
-import type { StoredProblemReportContext } from '@/lib/problem-reports/schemas';
+import type { ProblemReportContext } from '@/lib/problem-reports/schemas';
 import { findTerms, type ScrubDictionary } from './dictionary';
 import { findEmails, findIbans, findPhones, type Found, type PlaceholderKind } from './patterns';
 import { wordsOf, type Word } from './words';
@@ -119,10 +119,9 @@ export function scrubReportText(original: string, dictionary: ScrubDictionary): 
  * is not trusted.
  */
 export function scrubReportContext(
-  context: StoredProblemReportContext,
+  context: ProblemReportContext,
   catalog: UiStringCatalog,
-): StoredProblemReportContext {
-  if (context.recentActions === undefined) return context;
+): ProblemReportContext {
   return {
     ...context,
     recentActions: context.recentActions.map((action) => ({

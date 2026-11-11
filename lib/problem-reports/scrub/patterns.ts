@@ -51,7 +51,7 @@ export function findIbans(text: string): Found[] {
         compact += character;
         digitsOnly &&= character >= '0' && character <= '9';
         index += 1;
-      } else if (/[  ]/u.test(character) && IBAN_CHARACTER.test(text[index + 1] ?? '')) {
+      } else if (/[ \u00a0]/u.test(character) && IBAN_CHARACTER.test(text[index + 1] ?? '')) {
         noteEnd();
         index += 1;
       } else break;
@@ -68,16 +68,29 @@ export function findIbans(text: string): Found[] {
 
 // --- Email ---
 
-const EMAIL_LOCAL_CHARACTER = /[\p{L}\p{N}._%+-]/u;
+// Every character an unquoted local part may hold (RFC 5322), so „o'neill@…“ is one address.
+const EMAIL_LOCAL_CHARACTER = /[\p{L}\p{N}.!#$%&'*+/=?^_`{|}~-]/u;
+/** The longest local part, with its two quotes. */
+const EMAIL_QUOTED_LOCAL_MAX_LENGTH = 66;
 const EMAIL_DOMAIN_CHARACTER = /[\p{L}\p{N}.-]/u;
 const EMAIL_DOMAIN = /^[^.].*\.\p{L}{2,}$/u;
 
-/** Every email address: the characters around an `@` that form a local part and a domain with an ending. */
+/**
+ * Every email address: the characters around an `@` that form a local part
+ * and a domain with an ending. A quoted local part, which may hold spaces,
+ * reaches back to its opening quote.
+ */
 export function findEmails(text: string): Found[] {
   const found: Found[] = [];
   for (let at = text.indexOf('@'); at !== -1; at = text.indexOf('@', at + 1)) {
     let start = at;
-    while (start > 0 && EMAIL_LOCAL_CHARACTER.test(text[start - 1] ?? '')) start -= 1;
+    if (text[at - 1] === '"') {
+      const from = Math.max(0, at - EMAIL_QUOTED_LOCAL_MAX_LENGTH);
+      const quote = text.slice(from, at - 1).lastIndexOf('"');
+      if (quote !== -1) start = from + quote;
+    } else {
+      while (start > 0 && EMAIL_LOCAL_CHARACTER.test(text[start - 1] ?? '')) start -= 1;
+    }
     let end = at + 1;
     while (end < text.length && EMAIL_DOMAIN_CHARACTER.test(text[end] ?? '')) end += 1;
     while (end > at + 1 && /[.-]/u.test(text[end - 1] ?? '')) end -= 1;
@@ -90,10 +103,10 @@ export function findEmails(text: string): Found[] {
 
 // --- Phone ---
 
-/** What may stand between two digit groups of one number: a space, a slash, a dash, a bracket. */
-const PHONE_GAP = /^[  \t]?[-–/()]{0,2}[  \t]?$/u;
-const PHONE_GAP_MAX_LENGTH = 4;
+/** What may stand between two digit groups of one number: spaces, a slash, a dash, a bracket. */
+const PHONE_GAP = /^[ \u00a0\t]*[-\u2013/()]{0,2}[ \u00a0\t]*$/u;
 const PHONE_MIN_DIGITS = 7;
+/** The longest phone number (E.164). Digits without a phone's shape are compared with known numbers up to here. */
 const PHONE_MAX_DIGITS = 15;
 /** A stored number with fewer digits is an extension: digits that short match anywhere. */
 const KNOWN_PHONE_MIN_DIGITS = 6;
@@ -111,9 +124,11 @@ function phoneKey(plus: boolean, digits: string): string {
 
 /**
  * Every phone number. A number has a phone's shape when it stands alone,
- * starts with `+`, `00` or `0` and has 7 to 15 digits, in groups or in one
- * piece. Digits in any grouping that spell a known number are replaced too,
- * so a stored number matches without its leading zero.
+ * starts with `+`, `00` or `0` and has at least 7 digits, in groups or in
+ * one piece. It ends where its groups end, so no group of it stays readable;
+ * a second number right behind it becomes part of the same find. Digits in
+ * any grouping that spell a known number are replaced too, so a stored
+ * number matches without its leading zero.
  */
 export function findPhones(text: string, knownPhones: ReadonlySet<string>): Found[] {
   const groups = Array.from(text.matchAll(/\d+/gu), (match) => ({
@@ -134,14 +149,9 @@ export function findPhones(text: string, knownPhones: ReadonlySet<string>): Foun
     let group: typeof head | undefined = head;
     for (let last = first; group !== undefined; last += 1, group = groups[last]) {
       const previous = last > first ? groups[last - 1] : undefined;
-      if (previous !== undefined) {
-        if (group.start - previous.end > PHONE_GAP_MAX_LENGTH) break;
-        if (!PHONE_GAP.test(text.slice(previous.end, group.start))) break;
-        // A complete number followed by a group that starts another one.
-        if (digits.length >= PHONE_MIN_DIGITS && group.digits.length >= 3 && group.digits.startsWith('0'))
-          break;
-      }
-      if (digits.length + group.digits.length > PHONE_MAX_DIGITS) break;
+      if (previous !== undefined && !PHONE_GAP.test(text.slice(previous.end, group.start))) break;
+      // Without a phone's shape only a known number matches, and none is longer than this.
+      if (!shaped && digits.length + group.digits.length > PHONE_MAX_DIGITS) break;
       digits += group.digits;
       const key = phoneKey(plus, digits);
       if ((shaped && digits.length >= PHONE_MIN_DIGITS) || knownPhones.has(key)) {

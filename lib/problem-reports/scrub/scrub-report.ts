@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { logError } from '@/lib/logging';
-import { storedProblemReportContextSchema } from '@/lib/problem-reports/schemas';
+import { parseStoredProblemReportContext } from '@/lib/problem-reports/schemas';
 import { loadUiStringCatalog } from '@/lib/problem-reports/screenshot/load-ui-string-catalog';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
@@ -151,13 +151,13 @@ async function buildScrubbedCopy(
   if (report.description === null) return null;
   try {
     // A context of any other shape is never copied.
-    const context = storedProblemReportContextSchema.parse(report.context);
+    const context = parseStoredProblemReportContext(report.context);
     const catalog = loadUiStringCatalog();
     const sources = await readDictionarySources(admin, organizationId);
     if (sources === null) return null;
     return {
       description: scrubReportText(report.description, buildScrubDictionary(sources)),
-      context: scrubReportContext(context, catalog),
+      context: context === null ? {} : scrubReportContext(context, catalog),
     };
   } catch (error) {
     logError('scrubStoredProblemReport: scrub failed', error);

@@ -39,9 +39,19 @@ const NOT_A_NAME_ALONE = new Set(
 const NAME_WORD_MIN_LENGTH = 3;
 const POSTCODE = /^\d{5}$/u;
 
+/**
+ * A longer term enters the tree as every stretch of this many words in a
+ * row. The finds of those stretches overlap and merge, so the whole term is
+ * still replaced, and no walk from a word of the text goes deeper than this.
+ */
+const TERM_MAX_WORDS = 12;
+
 function addTerm(root: TermNode, words: readonly string[], term: Term): void {
+  for (let start = 1; start + TERM_MAX_WORDS <= words.length; start += 1) {
+    addTerm(root, words.slice(start, start + TERM_MAX_WORDS), term);
+  }
   let node = root;
-  for (const word of words) {
+  for (const word of words.slice(0, TERM_MAX_WORDS)) {
     let next = node.next.get(word);
     if (next === undefined) {
       next = { next: new Map(), term: null };
@@ -95,29 +105,27 @@ function step(node: TermNode, word: string): TermNode | undefined {
 }
 
 /**
- * Every known name and address in the words of a text. At each word the tree
- * is walked as far as the following words lead, and the longest term wins.
+ * Every known name and address in the words of a text. From each word the
+ * tree is walked as far as the following words lead, and the longest term
+ * from that word is a find. Finds may overlap, as „Wei Li“ and „Li Na“ do in
+ * „Wei Li Na“; the caller merges them.
  */
 export function findTerms(text: string, words: readonly Word[], root: TermNode): Found[] {
   const found: Found[] = [];
-  let first = 0;
-  for (let head = words[first]; head !== undefined; head = words[first]) {
+  words.forEach((head, first) => {
     let node = step(root, head.folded);
-    let match: { last: number; end: number; term: Term } | null = null;
+    let match: { end: number; term: Term } | null = null;
     for (let last = first, word = head; node !== undefined; ) {
-      if (node.term !== null) match = { last, end: word.end, term: node.term };
+      if (node.term !== null) match = { end: word.end, term: node.term };
       const next = words[last + 1];
       if (next === undefined || !TERM_GAP.test(text.slice(word.end, next.start))) break;
       node = step(node, next.folded);
       last += 1;
       word = next;
     }
-    if (match === null) {
-      first += 1;
-    } else {
+    if (match !== null) {
       found.push({ start: head.start, end: match.end, kind: match.term.kind, key: match.term.key });
-      first = match.last + 1;
     }
-  }
+  });
   return found;
 }

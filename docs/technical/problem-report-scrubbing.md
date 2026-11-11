@@ -58,14 +58,14 @@ Each rule has a test named after it in `lib/problem-reports/scrub/scrub-text.tes
 3. **Case and spelling.** Case never matters. `ä`, `ö`, `ü` and `ß` equal `ae`, `oe`, `ue` and `ss`. `Lindenstraße`, `Lindenstrasse` and `Lindenstr.` are one street, and `12a` equals `12 a`.
 4. **Genitive.** A word also matches without its final `s`.
 5. **Split terms.** Spaces, a line break, a dot, a comma or a hyphen may stand between the words of one term.
-6. **Phone numbers.** A number that stands alone, starts with `+`, `00` or `0` and has 7 to 15 digits is replaced. Spaces, slashes, dashes and brackets may group its digits. Digits that spell a number of the dictionary are replaced too, with or without the leading zero. One number in two formats takes one placeholder.
-7. **Email addresses.** Every address with a domain ending is replaced.
+6. **Phone numbers.** A number that stands alone, starts with `+`, `00` or `0` and has at least 7 digits is replaced. Spaces, slashes, dashes and brackets may group its digits. The find ends where the groups end, so no group stays readable, and a second number right behind it belongs to the same find. Digits that spell a number of the dictionary are replaced too, with or without the leading zero. One number in two formats takes one placeholder.
+7. **Email addresses.** Every address with a domain ending is replaced, with every character a local part may hold. A quoted local part reaches back to its opening quote.
 8. **IBANs.** Every IBAN with a valid check is replaced, in one piece or in groups. A number that fails the check is replaced when only digits follow its first four characters.
 9. **Salutations.** After „Herr“, „Herrn“, „Frau“, „Familie“ or „Fam.“, up to two capitalized words become a `[Person n]`, and after „Firma“ or „Fa.“ a `[Kunde n]`, even when the dictionary does not know them. A hyphenated double name counts as one word. „Dr.“ and „Prof.“ before the name are skipped.
-10. **Overlaps.** Finds that overlap become one placeholder, so no part of either stays readable.
-11. **Context.** The copy of the context keeps a control label only when the whole label is in the [UI string catalog](#the-ui-string-catalog). The server checks every label again, because it does not trust the device's filter. A stored context that is not the capture's shape, or empty, is not copied.
+10. **Overlaps.** Finds that overlap become one placeholder, so no part of either stays readable. Two known names that share a word, such as „Wei Li“ and „Li Na“ in „Wei Li Na“, are one find.
+11. **Context.** The copy of the context keeps a control label only when the whole label is in the [UI string catalog](#the-ui-string-catalog). The server checks every label again, because it does not trust the device's filter. A stored context is copied only when it is the whole capture or an empty object. The schema of the capture bounds every other field: a route is a template, and an error name, an error code and the app version are tokens without spaces.
 12. **Fails closed.** A dictionary read that fails, a dictionary above its row cap, a missing catalog and a scrub that throws leave no copy and the state `nicht_bereinigbar`. The report stays, and the daily run tries it again. A written copy never changes.
-13. **One pass.** The terms sit in a tree keyed by word, and the scrub walks the words of the text once. No code loops over the names: the test with 10,000 customers counts the tree lookups against the words of the text.
+13. **One pass.** The terms sit in a tree keyed by word, and the scrub walks the words of the text once. No code loops over the names: the test with 10,000 customers counts the tree lookups against the words of the text. A term of more than twelve words enters the tree as every stretch of twelve words in a row, so no walk from a word goes deeper.
 
 ### Limits of the text scrubber
 
