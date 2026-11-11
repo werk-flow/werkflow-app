@@ -1,9 +1,11 @@
 'use client';
 
 import { ParkingCircle } from 'lucide-react';
+import { useState } from 'react';
 
 import { useClockState } from '@/components/clock-state-provider';
 import { Button } from '@/components/ui/button';
+import { ErrorText } from '@/components/ui/error-text';
 import type { LiveClockState } from '@/lib/time-tracking/types';
 import {
   isTerminalWorkExecutionState,
@@ -182,6 +184,9 @@ function FieldTransitionActions({
   refresh,
 }: Omit<WorkLifecycleTransitionActionsProps, 'fieldMode' | 'readOnly'>) {
   const { state: clock, isReady: clockKnown } = useClockState();
+  // Lives here, not in the gate row: once the time ended, the row may leave
+  // with the next snapshot while a completion refusal still needs showing.
+  const [clockStepRefusal, setClockStepRefusal] = useState<string | null>(null);
   const {
     failingGates,
     clockOwner,
@@ -236,8 +241,10 @@ function FieldTransitionActions({
           clockEndIsPrimary={clockEndCompletes && !hasPendingDispatch}
           completeExecution={completeExecution}
           refreshGates={refresh}
+          onRefusal={setClockStepRefusal}
         />
       )}
+      <ErrorText>{clockStepRefusal}</ErrorText>
     </>
   );
 }

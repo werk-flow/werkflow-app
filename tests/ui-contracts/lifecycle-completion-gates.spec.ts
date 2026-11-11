@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { assertWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-lock';
 import type { LiveClockState } from '@/lib/time-tracking/types';
 import { workTransitionActionLabel, type WorkLifecycleSnapshot } from '@/lib/work-lifecycle/types';
+import { workLifecycleErrorMessage } from '@/components/auftraege/lifecycle/work-lifecycle-messages';
 import { RUNNING_CLOCK_STATE } from './clock-state-fixture';
 
 declare global {
@@ -216,4 +217,57 @@ test('ending own time with another gate open drops the clock gate without a live
   });
   await expect(gates.getByRole('listitem')).toHaveText(['Ein Blocker ist offen.Blocker klären']);
   expect(await page.evaluate(() => window.uiContractLifecycle.transitions)).toBe(0);
+});
+
+// A refused step shows its sentence inline at the gate list, not as a page banner.
+async function expectInlineRefusal(page: Page, message: string): Promise<void> {
+  const alerts = page.getByRole('alert').filter({ hasText: message });
+  await expect(alerts).toHaveCount(1);
+  await expect(page.getByTestId('work-lifecycle-card').getByRole('alert')).toHaveText(message);
+}
+
+test('a refused clock end shows inline and the worker retries at the same button', async ({ page }) => {
+  await mountFieldCard(
+    page,
+    { ...OPEN_GATES, activeJobClocks: 1 },
+    { initial: OWN_CLOCK_ON_JOB, afterTransition: CLOCKED_OUT },
+  );
+  const endAndComplete = page.getByTestId('field-primary-next-action');
+  await page.evaluate(() => {
+    window.clockContract.refuse = true;
+  });
+  await endAndComplete.click();
+  await page.evaluate(() => window.clockContract.resolveTransition?.());
+  await expectInlineRefusal(
+    page,
+    'Deine Zeit konnte nicht beendet werden. Prüfe sie unter „Meine Zeit“ und versuche es erneut.',
+  );
+  expect(await page.evaluate(() => window.uiContractLifecycle.transitions)).toBe(0);
+  await page.evaluate(() => {
+    window.clockContract.refuse = false;
+  });
+  await endAndComplete.click();
+  // The retry clears the old sentence while it runs.
+  await expect(page.getByTestId('work-lifecycle-card').getByRole('alert')).toHaveCount(0);
+});
+
+test('a refused completion after the clock ended shows inline', async ({ page }) => {
+  await mountFieldCard(
+    page,
+    { ...OPEN_GATES, activeJobClocks: 1 },
+    { initial: OWN_CLOCK_ON_JOB, afterTransition: CLOCKED_OUT },
+  );
+  await page.evaluate(() => {
+    window.uiContractLifecycle.rejectTransition = true;
+  });
+  await page.getByTestId('field-primary-next-action').click();
+  await page.evaluate(async () => {
+    await window.markClockTransitioned();
+    window.uiContractLifecycle.snapshot = {
+      ...window.uiContractLifecycle.snapshot,
+      gates: { ...window.uiContractLifecycle.snapshot.gates, activeJobClocks: 0 },
+    };
+    window.clockContract.resolveTransition?.();
+  });
+  await expectInlineRefusal(page, workLifecycleErrorMessage('work_transition_not_authorized'));
 });

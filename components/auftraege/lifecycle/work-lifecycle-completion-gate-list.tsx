@@ -110,6 +110,7 @@ function RunningClockGate({
   isPrimary,
   completeExecution,
   refreshGates,
+  onRefusal,
 }: {
   count: number;
   owner: RunningClockOwner;
@@ -117,19 +118,19 @@ function RunningClockGate({
   isPrimary: boolean;
   completeExecution: () => Promise<string | null>;
   refreshGates: () => Promise<void>;
+  onRefusal: (message: string | null) => void;
 }): ReactElement {
   const { clockOut } = useClockState();
   const { showBanner } = useBanner();
   const { run, isPending } = usePendingTask();
 
   const endOwnTime = async (): Promise<void> => {
+    onRefusal(null);
     const result = await clockOut();
     if (!result.success) {
-      showBanner({
-        variant: 'error',
-        message:
-          'Deine Zeit konnte nicht beendet werden. Prüfe sie unter „Meine Zeit“ und versuche es erneut.',
-      });
+      onRefusal(
+        'Deine Zeit konnte nicht beendet werden. Prüfe sie unter „Meine Zeit“ und versuche es erneut.',
+      );
       return;
     }
     if (result.outcome === 'recovery_required') {
@@ -145,8 +146,7 @@ function RunningClockGate({
       showBanner({ variant: 'success', message: 'Die Arbeitszeit wurde beendet.' });
       return;
     }
-    const refusal = await completeExecution();
-    if (refusal) showBanner({ variant: 'error', message: refusal });
+    onRefusal(await completeExecution());
   };
 
   return (
@@ -191,6 +191,7 @@ export function WorkLifecycleCompletionGateList({
   clockEndIsPrimary,
   completeExecution,
   refreshGates,
+  onRefusal,
 }: {
   id: string;
   gates: FailingCompletionGate[];
@@ -201,6 +202,8 @@ export function WorkLifecycleCompletionGateList({
   completeExecution: () => Promise<string | null>;
   /** Reads the card's snapshot again after the worker's own time ended. */
   refreshGates: () => Promise<void>;
+  /** Shows why ending the time or completing failed, or clears it with null. */
+  onRefusal: (message: string | null) => void;
 }): ReactElement {
   return (
     <section id={id} aria-label="Vor dem Abschließen offen" className="space-y-2 text-sm">
@@ -217,6 +220,7 @@ export function WorkLifecycleCompletionGateList({
                 isPrimary={clockEndIsPrimary}
                 completeExecution={completeExecution}
                 refreshGates={refreshGates}
+                onRefusal={onRefusal}
               />
             );
           }
