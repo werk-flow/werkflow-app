@@ -16,6 +16,25 @@ description: Use for Supabase-related work in this WerkFlow repo: database schem
 5. Deploy an edge function from `supabase/functions/` with `bunx supabase functions deploy <slug> --project-ref <ref> --no-verify-jwt --use-api`.
 6. Verify on DEV first with MCP queries or the most direct check. Run the SQL group that owns the change (`bun run test:verify --group sql:<name>`). `lib/testing/selection/test-groups.ts` lists each group's files.
 
+## The shared local stack
+
+Every worktree of a workstation tests against one local stack. It holds `main`'s merged migrations and nothing else, so no branch applies its own migration there.
+
+- With a migration in your tree, `bun run test:verify` runs the SQL and browser groups on a fresh Boat stack, and `bun run types:generate -- --local` writes the types without changing the shared database.
+- `bun run stack:sync` applies `origin/main`'s pending migrations under the exclusive stack lock, from any worktree on any branch. The worktree setup and `check:changed` run it and never wait for a run that holds the stack.
+- A trigger on the stack's migration ledger refuses every other writer, so `supabase migration up`, `db push --local` and `migration repair --local` fail and roll back, in any shell and on any branch. A hook refuses them, a raw `supabase db reset` and `psql` with a migration file before they start.
+- `check:changed` fails while the stack holds a migration `main` lacks. Only a reset repairs that: tell your lead.
+
+### Reset the shared stack
+
+A reset deletes what every worktree on the machine keeps in the stack: retained test worlds, the lab world, storage objects, auth users and captured mail.
+
+1. Announce it on the coordination issue, with the machine and the time.
+2. Wait until no run holds the stack. The command refuses while one does and names it.
+3. Run `bun run stack:reset -- --destroy-test-data`. It rebuilds the database from `origin/main`'s migrations and installs the ledger trigger.
+4. Check that `bun run stack:sync` prints `The shared stack is at main`.
+5. Each worktree's next run seeds its own world. A run retained for diagnosis has lost its world: diagnose from its trace. Seed the owner's demo data again if you use it (`bun scripts/seed-demo-data.ts --target local`).
+
 ## Compare DEV and PROD
 
 Matching migration names and generated types miss a changed function body. Run `bun run prod:inspect` from an up-to-date `main`. It lists the versions waiting for a release, every relation, column, constraint, index, trigger, policy, function, enum and published table whose definition differs between the projects, by name only, and PROD's advisor findings. Drift is expected only for objects the pending migrations touch. To see how a named object differs, read its definition on DEV through MCP and in the migration files; never read PROD's.

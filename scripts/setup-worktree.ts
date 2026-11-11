@@ -4,8 +4,9 @@ import { dirname, join, resolve } from 'node:path';
 
 // T3 Code runs this in the background after it creates a worktree (t3.json).
 // It installs the locked dependencies, links the main checkout's env backups
-// and Supabase CLI state, and points the worktree's own .env.local at the
-// local stack. Only Node built-ins: it runs before the install.
+// and Supabase CLI state, points the worktree's own .env.local at the local
+// stack, and brings that stack to main's migrations. Only Node built-ins: it
+// runs before the install.
 // docs/technical/environments.md, "Work in a worktree", owns the rule that an
 // agent waits for `.t3/setup-done` before it runs anything.
 
@@ -49,7 +50,7 @@ const projectRoot =
 if (resolve(projectRoot) === worktree)
   throw new Error('Run this in a linked worktree, not the main checkout.');
 
-async function run(command: string, args: readonly string[]): Promise<void> {
+async function run(command: string, args: readonly string[], required = true): Promise<void> {
   const child = spawn(command, args, { cwd: worktree, stdio: ['ignore', 'pipe', 'pipe'] });
   active = child;
   let output = '';
@@ -63,7 +64,7 @@ async function run(command: string, args: readonly string[]): Promise<void> {
     });
   const code = await new Promise<number | null>((resolveExit) => child.once('close', resolveExit));
   active = undefined;
-  if (code !== 0) {
+  if (code !== 0 && required) {
     failure ||= output.trimEnd().split('\n').slice(-30).join('\n');
     process.exit(code || 1);
   }
@@ -93,3 +94,7 @@ link('supabase/.temp', 'directory');
 
 // The worktree's own .env.local: the local stack, with this worktree's test server as the site URL.
 await run(process.execPath, ['run', 'env:local']);
+
+// Every new worktree advances the shared stack to main (lib/testing/local-stack/stack-sync.ts).
+// Its finding never fails the setup: `check:changed` fails while the stack holds more than main.
+await run(process.execPath, ['scripts/local-stack.ts', 'sync', '--no-wait'], false);
