@@ -7,7 +7,6 @@ import { uuidSchema } from '@/lib/validation/uuid';
 
 import { logReadFailure, loggedRead } from '@/lib/data/read-request-cache';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
-import { readJobAssignmentOfUser, readOrganizationJob } from '@/lib/jobs/job-access-reads';
 import { authorizeResponsibilityForTarget } from '@/lib/responsibilities/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { isJsonRecord, toJson } from '@/lib/supabase/json';
@@ -28,6 +27,7 @@ import {
 } from './validation';
 import { buildWorkArtifactExport } from './export';
 import { mapArtifactError } from './errors';
+import { authorizeWorkArtifactTarget } from './target-access';
 import {
   readRenderedExport,
   refuseWorkArtifactExport,
@@ -57,55 +57,6 @@ function mutationStatus(data: Json | null): WorkArtifactStatus | null {
   return status.success ? status.data : null;
 }
 
-async function authorizeTarget(
-  context: Awaited<ReturnType<typeof authenticateAndAuthorize>> & { success: true },
-  target: WorkArtifactTarget,
-): Promise<ActionResult> {
-  const admin = createSupabaseAdminClient();
-  const allowed: ActionResult = { success: true };
-  const refused: ActionResult = { success: false, error: 'not_authorized' };
-  // A failed read is never a refusal: the caller sees that the check could not run.
-  const loadFailed: ActionResult = { success: false, error: 'load_failed' };
-  if (target.targetType === 'job') {
-    const { data: job, error: jobError } = await readOrganizationJob(context.context.orgId, target.targetId);
-    if (jobError) return loadFailed;
-    if (!job) return refused;
-    if (context.context.isManagerOrAbove) return allowed;
-    const { data: assignment, error: assignmentError } = await readJobAssignmentOfUser(
-      context.context.orgId,
-      target.targetId,
-      context.context.userId,
-    );
-    if (assignmentError) return loadFailed;
-    return assignment ? allowed : refused;
-  }
-  const { data: project, error: projectError } = await loggedRead(
-    'authorizeTarget: projects read failed',
-    admin
-      .from('projects')
-      .select('id')
-      .eq('id', target.targetId)
-      .eq('organization_id', context.context.orgId)
-      .maybeSingle(),
-  );
-  if (projectError) return loadFailed;
-  if (!project) return refused;
-  if (context.context.isManagerOrAbove) return allowed;
-  const { data: assignedJob, error: assignedJobError } = await loggedRead(
-    'authorizeTarget: jobs read failed',
-    admin
-      .from('jobs')
-      .select('job_assignments!inner(id)')
-      .eq('project_id', target.targetId)
-      .eq('organization_id', context.context.orgId)
-      .eq('job_assignments.user_id', context.context.userId)
-      .limit(1)
-      .maybeSingle(),
-  );
-  if (assignedJobError) return loadFailed;
-  return assignedJob ? allowed : refused;
-}
-
 export async function getWorkArtifacts(
   rawTarget: WorkArtifactTarget,
 ): Promise<{ success: true; artifacts: WorkArtifactSummary[] } | ActionFailure> {
@@ -114,7 +65,7 @@ export async function getWorkArtifacts(
   const target = parsedTarget.data;
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
-  const access = await authorizeTarget(auth, target);
+  const access = await authorizeWorkArtifactTarget(auth.context, target);
   if (!access.success) return access;
   const admin = createSupabaseAdminClient();
   const targetColumn = target.targetType === 'job' ? 'job_id' : 'project_id';
@@ -169,7 +120,7 @@ export async function getWorkArtifactDetail(
   const admin = createSupabaseAdminClient();
   const opened = await readArtifactForDetail(admin, auth.context.orgId, artifactId);
   if (!opened.success) return opened;
-  const access = await authorizeTarget(auth, opened.target);
+  const access = await authorizeWorkArtifactTarget(auth.context, opened.target);
   if (!access.success) return access;
   const hiddenDraft = await refuseHiddenCoworkerDraft(admin, auth.context, opened.artifact);
   if (hiddenDraft) return hiddenDraft;
@@ -238,7 +189,7 @@ export async function saveWorkArtifact(input: SaveWorkArtifactInput): Promise<Wo
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
-  const access = await authorizeTarget(auth, parsed.data);
+  const access = await authorizeWorkArtifactTarget(auth.context, parsed.data);
   if (!access.success) return access;
   const content = toJson({
     ...parsed.data.content,

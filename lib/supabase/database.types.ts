@@ -11283,6 +11283,57 @@ export type Database = {
           },
         ];
       };
+      work_artifact_draft_operations: {
+        Row: {
+          actor_id: string;
+          captured_at: string;
+          created_at: string;
+          id: string;
+          organization_id: string;
+          request_hash: string;
+          result_payload: Json;
+          revision_id: string;
+          sent_at: string;
+        };
+        Insert: {
+          actor_id: string;
+          captured_at: string;
+          created_at?: string;
+          id: string;
+          organization_id: string;
+          request_hash: string;
+          result_payload: Json;
+          revision_id: string;
+          sent_at: string;
+        };
+        Update: {
+          actor_id?: string;
+          captured_at?: string;
+          created_at?: string;
+          id?: string;
+          organization_id?: string;
+          request_hash?: string;
+          result_payload?: Json;
+          revision_id?: string;
+          sent_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "work_artifact_draft_operations_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "work_artifact_draft_operations_revision_fkey";
+            columns: ["revision_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "work_artifact_revisions";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
       work_artifact_measurement_lines: {
         Row: {
           description: string;
@@ -13592,6 +13643,26 @@ export type Database = {
           p_valid_until: string;
         };
         Returns: string;
+      };
+      attach_work_artifact_draft: {
+        Args: {
+          p_actor_id: string;
+          p_artifact_id: string;
+          p_captured_at: string;
+          p_content: Json;
+          p_job_id: string;
+          p_kind: Database["public"]["Enums"]["work_artifact_kind"];
+          p_operation_id: string;
+          p_organization_id: string;
+          p_photos: Json;
+          p_recorded_at: string;
+          p_request_hash: string;
+          p_revision_id: string;
+          p_sent_at: string;
+          p_title: string;
+          p_visibility: Database["public"]["Enums"]["work_artifact_visibility"];
+        };
+        Returns: Json;
       };
       batch_reschedule_planning_occurrences: {
         Args: {

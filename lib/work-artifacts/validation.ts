@@ -3,7 +3,12 @@ import { Constants } from '@/lib/supabase/database.types';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { workArtifactFieldIssues } from './field-rules';
 import { CUSTOMER_DECISION_TYPES, customerDecisionNeedsReason } from './customer-decision';
-import { WORK_ARTIFACT_KINDS, type WorkArtifactActionType, type WorkArtifactReviewActionType } from './types';
+import {
+  WORK_ARTIFACT_DRAFT_PHOTO_LIMIT,
+  WORK_ARTIFACT_KINDS,
+  type WorkArtifactActionType,
+  type WorkArtifactReviewActionType,
+} from './types';
 
 const artifactText = z.string().trim().max(5000).optional();
 const optionalUuid = uuidSchema.optional();
@@ -92,9 +97,13 @@ const saveWorkArtifactFields = z.object({
   submitActionId: optionalUuid,
 });
 
-export const saveWorkArtifactSchema = saveWorkArtifactFields.superRefine((value, context) => {
-  const content = value.content;
-  // The title, the kind's required fields and the visit window: the rules the editor marks before a save.
+type WorkArtifactRuleInput = Pick<
+  z.infer<typeof saveWorkArtifactFields>,
+  'kind' | 'title' | 'content' | 'visibility' | 'submit'
+>;
+
+/** The title, the kind's required fields, the visit window and the visibility rule: what the editor marks before a save. */
+function addFieldRuleIssues(value: WorkArtifactRuleInput, context: z.RefinementCtx): void {
   for (const issue of workArtifactFieldIssues(value)) {
     const path =
       issue.field === 'title'
@@ -108,10 +117,14 @@ export const saveWorkArtifactSchema = saveWorkArtifactFields.superRefine((value,
   }
   if (
     value.visibility === 'internal_only' &&
-    (content.requiresCustomerResponse || content.requiresSignature)
+    (value.content.requiresCustomerResponse || value.content.requiresSignature)
   ) {
     context.addIssue({ code: 'custom', path: ['visibility'], message: 'customer_visibility_required' });
   }
+}
+
+export const saveWorkArtifactSchema = saveWorkArtifactFields.superRefine((value, context) => {
+  addFieldRuleIssues(value, context);
   if (value.submit && !value.submitActionId) {
     context.addIssue({ code: 'custom', path: ['submitActionId'], message: 'submit_action_required' });
   }
@@ -120,6 +133,42 @@ export const saveWorkArtifactSchema = saveWorkArtifactFields.superRefine((value,
     context.addIssue({ code: 'custom', path: ['correctionReason'], message: 'correction_pair_required' });
   }
 });
+
+/**
+ * A new Arbeitsnachweis draft on a job with its photos, as a phone sends it in
+ * the field sync operation `work_artifact.draft`. It follows the draft rules
+ * of a save and is never a submit. Each photo is a job document the same
+ * person uploaded before, named by its id, with the id of its link.
+ */
+export const workArtifactDraftSchema = saveWorkArtifactFields
+  .pick({
+    artifactId: true,
+    revisionId: true,
+    kind: true,
+    visibility: true,
+    capturedAt: true,
+    title: true,
+    content: true,
+  })
+  .extend({
+    jobId: uuidSchema,
+    photos: z
+      .array(z.strictObject({ linkId: uuidSchema, documentId: uuidSchema }))
+      .max(WORK_ARTIFACT_DRAFT_PHOTO_LIMIT),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    addFieldRuleIssues({ ...value, submit: false }, context);
+    const distinct = (ids: string[]): boolean => new Set(ids).size === ids.length;
+    if (
+      !distinct(value.photos.map((photo) => photo.linkId)) ||
+      !distinct(value.photos.map((photo) => photo.documentId))
+    ) {
+      context.addIssue({ code: 'custom', path: ['photos'], message: 'photos_not_distinct' });
+    }
+  });
+
+export type WorkArtifactDraftInput = z.infer<typeof workArtifactDraftSchema>;
 
 export const voidWorkArtifactSchema = z.object({
   artifactId: uuidSchema,

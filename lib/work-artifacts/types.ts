@@ -143,6 +143,9 @@ export type WorkArtifactTimeSourceOption = {
   sourceType: 'time_entry' | 'time_segment';
 };
 
+/** The most photos one report draft carries from a phone (field sync `work_artifact.draft`). */
+export const WORK_ARTIFACT_DRAFT_PHOTO_LIMIT = 20;
+
 export const WORK_ARTIFACT_KINDS = [
   'site_diary',
   'work_report',
