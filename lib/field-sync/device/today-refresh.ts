@@ -2,8 +2,8 @@
 
 import { logError } from '@/lib/logging';
 import { readPersistenceOnDevice, savePersistenceOnDevice } from './today-store';
-import { claimToday, refreshTodayOnDevice, type TodayHolder } from './today-sync';
-import { TODAY_HOLDER_KEY, todayWipeGeneration } from './today-wipe';
+import { claimToday, dropOwnTodayClaim, refreshTodayOnDevice, type TodayHolder } from './today-sync';
+import { todayWipeGeneration } from './today-wipe';
 
 // Keeps the phone's today snapshot current while the app is open (decision
 // record 0010, "Sync triggers"): on app start and on `online`. A return to
@@ -88,14 +88,11 @@ export function keepTodayFresh(
 /**
  * Ends this tab's claim after another tab wiped the device (decision record 0010, the 2026-11-11
  * amendment). No refresh saves again until a start page claims anew, a refresh in flight no longer
- * owns the device, and no reader shows a day saved under the dropped claim. It never writes the
- * wipe signal: two tabs answering each other's signal would never stop.
+ * owns the device, and no reader shows a day saved under the dropped claim. A claim another tab
+ * made meanwhile stays. It never writes the wipe signal: two tabs answering each other's signal
+ * would never stop.
  */
 export function dropTodayClaim(): void {
   holder = null;
-  try {
-    localStorage.removeItem(TODAY_HOLDER_KEY);
-  } catch {
-    // best-effort: without localStorage no reader can confirm a claim, so none shows a day.
-  }
+  dropOwnTodayClaim();
 }

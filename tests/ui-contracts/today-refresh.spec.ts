@@ -1,9 +1,24 @@
 import { expect, test, type Page } from '@playwright/test';
 import { assertWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-lock';
+import { formatBerlinLocalDate, getLocalDayEnd } from '@/lib/date-time/berlin';
 import { FIELD_SYNC_TODAY_PATH } from '@/lib/field-sync/today-snapshot';
 import { TODAY_DATABASE, TODAY_HOLDER_KEY, TODAY_WIPE_KEY } from '@/lib/field-sync/device/today-wipe';
 import { openContractFixture } from './open-fixture';
 import { TODAY_CONTRACT_ORGANIZATIONS, TODAY_CONTRACT_USER } from './today-refresh-world';
+
+/** The Berlin business day of `now` and its end, as the server's snapshot names them (lib/field-sync/today.ts). */
+function businessDay(now: Date): { berlinDate: string; validUntil: string } {
+  return {
+    berlinDate: formatBerlinLocalDate(now),
+    validUntil: new Date(getLocalDayEnd(now).getTime() + 1).toISOString(),
+  };
+}
+
+/** The person and organization of the device claim, without the claiming tab's token. */
+async function claimedHolder(page: Page): Promise<string | null> {
+  const claim = await page.evaluate((key) => localStorage.getItem(key), TODAY_HOLDER_KEY);
+  return claim === null ? null : claim.split(':').slice(0, 2).join(':');
+}
 
 /**
  * Answers the start page's day requests with an empty day of the requested organization and
@@ -20,8 +35,7 @@ async function routeTodayDays(page: Page, held?: Promise<void>): Promise<string[
       await route.fulfill({
         json: {
           version: `day-of-${organizationId}`,
-          berlinDate: '2026-11-09',
-          validUntil: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+          ...businessDay(new Date()),
           userId: TODAY_CONTRACT_USER,
           organizationId,
           assignments: [],
@@ -91,7 +105,7 @@ test('after an organization switch the refresh claims the new organization and n
   const requested = await routeTodayDays(page);
   await openContractFixture(page, 'today-refresh-switch');
   const storedOrganization = () => page.evaluate(() => window.todayRefreshContract.storedOrganization());
-  const claim = () => page.evaluate((key) => localStorage.getItem(key), TODAY_HOLDER_KEY);
+  const claim = () => claimedHolder(page);
 
   await expect.poll(storedOrganization).toBe(first);
   expect(await claim()).toBe(`${TODAY_CONTRACT_USER}:${first}`);
@@ -228,9 +242,7 @@ test('a foreign wipe between a switch and its first render leaves no claim and n
   await expect.poll(() => page.evaluate(() => window.organizationContract.writes.length)).toBe(1);
   await page.evaluate(() => window.organizationContract.finishCookie(true));
   // The switch read the sign-out's generation, so it claims the new organization.
-  await expect
-    .poll(() => page.evaluate((key) => localStorage.getItem(key), TODAY_HOLDER_KEY))
-    .toBe(`${TODAY_CONTRACT_USER}:${second}`);
+  await expect.poll(() => claimedHolder(page)).toBe(`${TODAY_CONTRACT_USER}:${second}`);
 
   await deliverForeignWipeSignal(page);
 

@@ -104,10 +104,14 @@ export function todayHolderKey(holder: { userId: string; organizationId: string 
   return `${holder.userId}:${holder.organizationId}`;
 }
 
-/** Who the latest start page claimed the device for, or null after a wipe or without localStorage. */
+/**
+ * Who the latest start page claimed the device for (`userId:organizationId`, the claim without its
+ * tab token), or null after a wipe, without localStorage, or for a claim without a token.
+ */
 function deviceHolder(): string | null {
   try {
-    return localStorage.getItem(TODAY_HOLDER_KEY);
+    const claim = localStorage.getItem(TODAY_HOLDER_KEY)?.split(':');
+    return claim?.length === 3 ? `${claim[0]}:${claim[1]}` : null;
   } catch {
     // Fails closed, as for the wipe signal.
     return null;

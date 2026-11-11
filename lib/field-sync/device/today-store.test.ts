@@ -3,7 +3,7 @@ import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, jest, test } from 'bun:test';
 
 import type { FieldSyncToday } from '@/lib/field-sync/today-snapshot';
-import { keepTodayFresh } from './today-refresh';
+import { dropTodayClaim, keepTodayFresh } from './today-refresh';
 import { claimToday, refreshTodayOnDevice, type TodayHolder } from './today-sync';
 import { readTodayOnDevice, saveTodayOnDevice } from './today-store';
 import {
@@ -424,7 +424,7 @@ describe('refreshing the today snapshot', () => {
 
   test("a tab left on an older organization neither deletes nor replaces the newer start page's day", async () => {
     const newer = { ...holder, organizationId: '9a000000-0000-4000-8000-0000000000b1' };
-    localStorage.setItem(TODAY_HOLDER_KEY, `${newer.userId}:${newer.organizationId}`);
+    localStorage.setItem(TODAY_HOLDER_KEY, `${newer.userId}:${newer.organizationId}:another-tab`);
     await saveTodayOnDevice(snapshot(newer), MORNING);
     const { send, requests } = answer(
       Response.json({ outcome: 'rejected', code: 'organization_mismatch' }, { status: 403 }),
@@ -549,6 +549,48 @@ describe('refreshing the today snapshot', () => {
     };
     expect(await refreshTodayOnDevice(holder, { fetch: send, now: () => MORNING })).toBe('superseded');
     expect(await readTodayOnDevice(MORNING)).toBeNull();
+  });
+});
+
+describe('the device claim and its owner', () => {
+  // A claim names its person, organization and the tab that made it: `userId:organizationId:token`.
+  const otherOrganization = { ...holder, organizationId: '9a000000-0000-4000-8000-0000000000b1' };
+
+  test("a delayed wipe event in a tab whose claim another tab replaced leaves that tab's claim and day", async () => {
+    // This tab claimed; another tab wiped, claimed and saved; then this tab handles the wipe's event.
+    await wipeFromAnotherTab();
+    const newerClaim = `${otherOrganization.userId}:${otherOrganization.organizationId}:another-tab`;
+    localStorage.setItem(TODAY_HOLDER_KEY, newerClaim);
+    await saveTodayOnDevice(snapshot(otherOrganization), MORNING);
+    dropTodayClaim();
+    expect(localStorage.getItem(TODAY_HOLDER_KEY)).toBe(newerClaim);
+    expect((await readTodayOnDevice(MORNING))?.snapshot.organizationId).toBe(
+      otherOrganization.organizationId,
+    );
+  });
+
+  test("a wipe event while this tab's own claim stands removes the claim", () => {
+    dropTodayClaim();
+    expect(localStorage.getItem(TODAY_HOLDER_KEY)).toBeNull();
+  });
+
+  test("a day saved under another person's or organization's claim is refused", async () => {
+    await saveTodayOnDevice(snapshot(), MORNING);
+    for (const other of [otherOrganization, { ...holder, userId: '9a000000-0000-4000-8000-000000000002' }]) {
+      localStorage.setItem(TODAY_HOLDER_KEY, `${other.userId}:${other.organizationId}:another-tab`);
+      expect(await readTodayOnDevice(MORNING)).toBeNull();
+    }
+  });
+
+  test('a claim without a token, from a tab open across the deployment, matches no reader and no drop, and the next start page replaces it', async () => {
+    const withoutToken = `${holder.userId}:${holder.organizationId}`;
+    localStorage.setItem(TODAY_HOLDER_KEY, withoutToken);
+    await saveTodayOnDevice(snapshot(), MORNING);
+    expect(await readTodayOnDevice(MORNING)).toBeNull();
+    dropTodayClaim();
+    expect(localStorage.getItem(TODAY_HOLDER_KEY)).toBe(withoutToken);
+    claimToday(holder);
+    expect(localStorage.getItem(TODAY_HOLDER_KEY)).toStartWith(`${withoutToken}:`);
   });
 });
 

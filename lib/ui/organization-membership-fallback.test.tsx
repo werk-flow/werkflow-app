@@ -87,7 +87,7 @@ async function runFixture(): Promise<void> {
   async function providerOfFormerOrganization(): Promise<OrgContextValue> {
     localStorage.clear();
     // The former organization's start page claimed the device, so its day would show.
-    localStorage.setItem(TODAY_HOLDER_KEY, `${USER}:${FORMER}`);
+    localStorage.setItem(TODAY_HOLDER_KEY, `${USER}:${FORMER}:former-start-page`);
     cookieWrites.length = 0;
     await saveTodayOnDevice(
       {

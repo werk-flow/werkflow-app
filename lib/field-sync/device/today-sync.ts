@@ -48,10 +48,24 @@ function saveUnlessWiped(
   );
 }
 
+/**
+ * This tab's mark on the claims it makes (decision record 0010, the 2026-11-11 amendment): another
+ * tab's claim never carries it. Not `crypto.randomUUID`, which only a secure context has; the
+ * device check opens the app over plain http.
+ */
+const CLAIM_TOKEN = Array.from(crypto.getRandomValues(new Uint32Array(2)), (part) => part.toString(36)).join(
+  '',
+);
+
+/** The `TODAY_HOLDER_KEY` value of this tab's claim: `userId:organizationId:token`. */
+function claimOf(holder: TodayHolder): string {
+  return `${todayHolderKey(holder)}:${CLAIM_TOKEN}`;
+}
+
 /** Registers the holder of the latest start page under `TODAY_HOLDER_KEY`, for every tab to see. */
 export function claimToday(holder: TodayHolder): void {
   try {
-    localStorage.setItem(TODAY_HOLDER_KEY, todayHolderKey(holder));
+    localStorage.setItem(TODAY_HOLDER_KEY, claimOf(holder));
   } catch {
     // best-effort: without localStorage no other tab can tell this holder is the latest.
   }
@@ -64,10 +78,23 @@ export function claimToday(holder: TodayHolder): void {
  */
 function superseded(holder: TodayHolder): boolean {
   try {
-    return localStorage.getItem(TODAY_HOLDER_KEY) !== todayHolderKey(holder);
+    return localStorage.getItem(TODAY_HOLDER_KEY) !== claimOf(holder);
   } catch {
     // best-effort: without localStorage only this tab's start page names the holder.
     return false;
+  }
+}
+
+/**
+ * Removes the device claim if this tab made it. A claim another tab made since then stays: a late
+ * wipe event in this tab must not end that tab's day.
+ */
+export function dropOwnTodayClaim(): void {
+  try {
+    if (localStorage.getItem(TODAY_HOLDER_KEY)?.endsWith(`:${CLAIM_TOKEN}`))
+      localStorage.removeItem(TODAY_HOLDER_KEY);
+  } catch {
+    // best-effort: without localStorage no reader can confirm a claim, so none shows a day.
   }
 }
 
