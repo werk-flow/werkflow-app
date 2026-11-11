@@ -50,7 +50,16 @@ export const legacyHistoryEntrySchema = z
   })
   .strict();
 
-/** A calibration: every bound the step starts with, from five runs on one build. */
+/** A count an earlier reference of the step ungated, with the evidence of that `ungate`. */
+const keptUngateSchema = z
+  .object({ metric: metricSchema, runKeys: runKeysSchema, reason: reasonSchema })
+  .strict();
+export type KeptUngate = z.infer<typeof keptUngateSchema>;
+
+/**
+ * A calibration: every bound the step starts with, from five runs on one build,
+ * and the ungates it kept from the reference it replaced.
+ */
 const initialEntrySchema = z
   .object({
     kind: z.literal('initial'),
@@ -59,6 +68,7 @@ const initialEntrySchema = z
     context: labContextSchema,
     counts: labCountsSchema,
     payloads: labPayloadsSchema,
+    ungated: z.array(keptUngateSchema).min(1).optional(),
   })
   .strict();
 
@@ -114,6 +124,11 @@ const removalEntrySchema = z
   })
   .strict();
 
+/** New stability evidence that reverses the step's `ungate`; the next calibration measures the count again. */
+const gateEntrySchema = z
+  .object({ kind: z.literal('gate'), target: metricSchema, runKeys: runKeysSchema, reason: reasonSchema })
+  .strict();
+
 /** An accepted payload change: larger, smaller, or a shape that appeared or stopped. */
 const payloadEntrySchema = z
   .object({
@@ -147,6 +162,7 @@ export const labHistoryEntrySchema = z.discriminatedUnion('kind', [
   ratchetEntrySchema,
   raiseEntrySchema,
   removalEntrySchema,
+  gateEntrySchema,
   payloadEntrySchema,
   carryOverEntrySchema,
   workloadCarryOverEntrySchema,
@@ -166,6 +182,8 @@ function applyEntry(bounds: Bounds, entry: LabHistoryEntry, index: number): stri
     case 'initial':
     case 'migrated':
       return `${at} is a snapshot after the first entry; a recalibration replaces the whole reference`;
+    case 'gate':
+      return null;
     case 'carry-over':
       if (bounds.context.measurementDigest !== entry.fromDigest)
         return `${at} starts from digest ${entry.fromDigest}, but the history replays ${bounds.context.measurementDigest}`;
@@ -236,6 +254,21 @@ function boundDifferences(stored: Bounds, replayed: Bounds): string[] {
 }
 
 /**
+ * The counts a step's history keeps out of its gate: each `ungate` it recorded
+ * or its calibration kept, until a `gate` entry reversed it.
+ */
+export function ungatedInHistory(history: readonly LabHistoryEntry[]): KeptUngate[] {
+  const ungated = new Map<KeptUngate['metric'], KeptUngate>();
+  for (const entry of history) {
+    if (entry.kind === 'initial') for (const kept of entry.ungated ?? []) ungated.set(kept.metric, kept);
+    if (entry.kind === 'ungate')
+      ungated.set(entry.target, { metric: entry.target, runKeys: entry.runKeys, reason: entry.reason });
+    if (entry.kind === 'gate') ungated.delete(entry.target);
+  }
+  return [...ungated.values()];
+}
+
+/**
  * Replays a reference's history from its opening snapshot and names every
  * entry that does not start from the replayed bounds and every stored field
  * that differs from the result.
@@ -250,5 +283,7 @@ export function replayProblems(stored: Bounds & { history: readonly LabHistoryEn
     const problem = applyEntry(bounds, entry, index + 1);
     if (problem) problems.push(problem);
   });
+  for (const { metric } of ungatedInHistory(stored.history))
+    if (stored.counts[metric]) problems.push(`counts.${metric} is bounded, but the step keeps it ungated`);
   return [...problems, ...boundDifferences(stored, bounds)];
 }
