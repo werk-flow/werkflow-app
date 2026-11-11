@@ -1,6 +1,6 @@
 // Rule test: `types:generate -- --local` reads the stack on this machine only when that stack has
-// this tree's schema (CI, a Boat machine, or a shared stack whose ledger matches the tree), takes
-// the file from Boat otherwise, and never falls back to the shared stack when Boat is unavailable.
+// this tree's schema (CI, a Boat machine, or a shared stack whose ledger matches the tree), and
+// never falls back to the shared stack when Boat is unavailable.
 import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';

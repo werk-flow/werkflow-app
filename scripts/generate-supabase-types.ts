@@ -12,6 +12,7 @@ import {
   typesUnavailableNotice,
 } from '../lib/testing/boat/types-on-boat';
 import { readMigrationDrift } from '../lib/testing/local-stack/migration-drift';
+import { withStackCopy } from '../lib/testing/local-stack/stack-copy';
 import { getSpawnFailureDetail } from '../lib/testing/runner/spawn-result';
 
 const DEV_PROJECT_ID = 'mbkkzuqjbdvzelqvuzcn';
@@ -23,8 +24,9 @@ const CHECK_ONLY = process.argv.slice(2).includes('--check');
  * reaches DEV only when it merges, and CI checks the committed types against a stack that applied
  * every committed migration (docs/technical/environments.md, "The migration rule"). CI and a Boat
  * machine read their own fresh stack. A workstation's stack is shared and holds main's migrations,
- * so a tree that differs from it takes the file from Boat, or from CI's run of the pushed commit
- * (lib/testing/boat/types-on-boat.ts).
+ * so a tree with its own migration reads a private copy of that stack's schema with the migration
+ * applied (lib/testing/local-stack/stack-copy.ts), and where no copy can answer takes the file
+ * from Boat, or from CI's run of the pushed commit (lib/testing/boat/types-on-boat.ts).
  */
 const LOCAL = process.argv.slice(2).includes('--local');
 
@@ -47,26 +49,25 @@ function withCommittedHeader(types: string): string {
   return header ? types.replace(/(export type Database = \{)\n/, `$1${header}`) : types;
 }
 
-/** The formatted types of the database this machine reaches: DEV, or the local stack. */
-async function generatedHere(): Promise<string> {
-  const generated = spawnSync(
-    process.execPath,
-    [
-      'x',
-      'supabase',
-      'gen',
-      'types',
-      'typescript',
-      ...(LOCAL ? ['--local'] : ['--project-id', DEV_PROJECT_ID]),
-      '--schema',
-      'graphql_public,public',
-    ],
-    {
-      cwd: REPOSITORY_ROOT,
-      encoding: 'utf8',
-      maxBuffer: 64 * 1024 * 1024,
-    },
-  );
+/** The Supabase CLI in this checkout. */
+function supabase(args: readonly string[]) {
+  return spawnSync(process.execPath, ['x', 'supabase', ...args], {
+    cwd: REPOSITORY_ROOT,
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  });
+}
+
+/** The formatted types of one database: `--project-id` for DEV, `--local`, or `--db-url`. */
+async function generatedFrom(database: readonly string[]): Promise<string> {
+  const generated = supabase([
+    'gen',
+    'types',
+    'typescript',
+    ...database,
+    '--schema',
+    'graphql_public,public',
+  ]);
   if (generated.error || generated.status !== 0) {
     throw new Error(`Supabase type generation failed: ${getSpawnFailureDetail(generated, 'unknown error')}`);
   }
@@ -75,15 +76,21 @@ async function generatedHere(): Promise<string> {
 
 /** The formatted types and the stack they come from. */
 async function types(): Promise<{ formatted: string; source: string }> {
-  if (!LOCAL) return { formatted: await generatedHere(), source: 'DEV' };
-  const here = typesHereReason(process.env, () => readMigrationDrift(REPOSITORY_ROOT));
+  if (!LOCAL) return { formatted: await generatedFrom(['--project-id', DEV_PROJECT_ID]), source: 'DEV' };
+  let drift: ReturnType<typeof readMigrationDrift>;
+  const here = typesHereReason(process.env, () => (drift = readMigrationDrift(REPOSITORY_ROOT)));
   if (here !== undefined) {
     if (here) console.info(`[types] Reading the local stack: ${here}`);
-    return { formatted: await generatedHere(), source: 'local stack' };
+    return { formatted: await generatedFrom(['--local']), source: 'local stack' };
   }
-  console.info(
-    "[types] The shared stack does not hold exactly this tree's migrations; Boat generates the types on a fresh stack.",
-  );
+  const copy = drift
+    ? await withStackCopy({ repository: REPOSITORY_ROOT, drift, runCli: supabase }, (url) =>
+        generatedFrom(['--db-url', url]),
+      )
+    : { unavailable: 'the shared stack is not running or cannot be read.' };
+  if ('result' in copy) return { formatted: copy.result, source: 'stack copy' };
+  console.info(`[types] No private copy of the shared stack: ${copy.unavailable}`);
+  console.info('[types] Boat generates the types on a fresh stack.');
   const boat = await typesOnBoat(REPOSITORY_ROOT);
   if ('types' in boat) return { formatted: boat.types, source: 'Boat stack' };
   if ('failed' in boat) {
