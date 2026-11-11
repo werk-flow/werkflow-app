@@ -109,12 +109,14 @@ function RunningClockGate({
   endCompletes,
   isPrimary,
   completeExecution,
+  refreshGates,
 }: {
   count: number;
   owner: RunningClockOwner;
   endCompletes: boolean;
   isPrimary: boolean;
   completeExecution: () => Promise<string | null>;
+  refreshGates: () => Promise<void>;
 }): ReactElement {
   const { clockOut } = useClockState();
   const { showBanner } = useBanner();
@@ -138,6 +140,8 @@ function RunningClockGate({
       return;
     }
     if (!endCompletes) {
+      // The other open points stay; the clock gate leaves with this click, not with the next live event.
+      await refreshGates();
       showBanner({ variant: 'success', message: 'Die Arbeitszeit wurde beendet.' });
       return;
     }
@@ -186,6 +190,7 @@ export function WorkLifecycleCompletionGateList({
   clockEndCompletes,
   clockEndIsPrimary,
   completeExecution,
+  refreshGates,
 }: {
   id: string;
   gates: FailingCompletionGate[];
@@ -194,6 +199,8 @@ export function WorkLifecycleCompletionGateList({
   clockEndCompletes: boolean;
   clockEndIsPrimary: boolean;
   completeExecution: () => Promise<string | null>;
+  /** Reads the card's snapshot again after the worker's own time ended. */
+  refreshGates: () => Promise<void>;
 }): ReactElement {
   return (
     <section id={id} aria-label="Vor dem Abschließen offen" className="space-y-2 text-sm">
@@ -209,6 +216,7 @@ export function WorkLifecycleCompletionGateList({
                 endCompletes={clockEndCompletes}
                 isPrimary={clockEndIsPrimary}
                 completeExecution={completeExecution}
+                refreshGates={refreshGates}
               />
             );
           }

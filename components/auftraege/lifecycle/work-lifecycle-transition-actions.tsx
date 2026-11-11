@@ -30,6 +30,8 @@ type WorkLifecycleTransitionActionsProps = {
   setDialog: (dialog: WorkLifecycleDialogState | null) => void;
   /** Completes execution without the dialog; resolves with the refusal sentence or null. */
   completeExecution: () => Promise<string | null>;
+  /** Reads the card's snapshot again. */
+  refresh: () => Promise<void>;
 };
 
 const START_BLOCKED_REASON_ID = 'field-start-blocked-reason';
@@ -177,6 +179,7 @@ function FieldTransitionActions({
   pendingState,
   setDialog,
   completeExecution,
+  refresh,
 }: Omit<WorkLifecycleTransitionActionsProps, 'fieldMode' | 'readOnly'>) {
   const { state: clock, isReady: clockKnown } = useClockState();
   const {
@@ -232,6 +235,7 @@ function FieldTransitionActions({
           clockEndCompletes={clockEndCompletes}
           clockEndIsPrimary={clockEndCompletes && !hasPendingDispatch}
           completeExecution={completeExecution}
+          refreshGates={refresh}
         />
       )}
     </>

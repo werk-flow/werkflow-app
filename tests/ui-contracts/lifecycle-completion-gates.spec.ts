@@ -193,3 +193,27 @@ test('own running time as the only open point ends and completes in one click', 
   // A completed field work pack reloads read-only with the confirmation flag.
   await page.waitForURL(/field_transition=updated/);
 });
+
+test('ending own time with another gate open drops the clock gate without a live event', async ({ page }) => {
+  await mountFieldCard(
+    page,
+    { ...OPEN_GATES, activeJobClocks: 1, openBlockers: 1 },
+    { initial: OWN_CLOCK_ON_JOB, afterTransition: CLOCKED_OUT },
+  );
+  const gates = openGates(page);
+  await gates.getByRole('button', { name: 'Zeit beenden', exact: true }).click();
+  await expect
+    .poll(() => page.evaluate(() => window.clockContract.transitions.map((input) => input.action)))
+    .toEqual(['end']);
+  await page.evaluate(async () => {
+    await window.markClockTransitioned();
+    // The server's snapshot after the clock ended; no realtime event announces it.
+    window.uiContractLifecycle.snapshot = {
+      ...window.uiContractLifecycle.snapshot,
+      gates: { ...window.uiContractLifecycle.snapshot.gates, activeJobClocks: 0 },
+    };
+    window.clockContract.resolveTransition?.();
+  });
+  await expect(gates.getByRole('listitem')).toHaveText(['Ein Blocker ist offen.Blocker klären']);
+  expect(await page.evaluate(() => window.uiContractLifecycle.transitions)).toBe(0);
+});

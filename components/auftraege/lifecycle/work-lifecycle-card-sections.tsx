@@ -93,6 +93,7 @@ export function WorkLifecycleCardSections({
         pendingState={pendingState}
         setDialog={setDialog}
         completeExecution={completeExecution}
+        refresh={refresh}
       />
       <WorkLifecycleReadinessSection
         snapshot={snapshot}
