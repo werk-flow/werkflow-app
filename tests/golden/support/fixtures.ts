@@ -6,6 +6,7 @@ import { testBusinessDate } from '../../../lib/testing/runner/business-date';
 import { createRolePage, type SessionRole } from './sessions';
 import { resetPersistedPreferences } from './preferences-reset';
 import { loadWorld, type TestWorld } from './world';
+import { watch, type ProbeLog } from './teardown-probe';
 
 type GoldenFixtures = {
   world: TestWorld;
@@ -36,6 +37,8 @@ async function rolePage(
     world: loadWorld(),
     role,
   });
+  const probeLog: ProbeLog = [];
+  watch(role, browser, context, page, probeLog);
   let provideError: unknown;
   try {
     await provide(page);
@@ -44,10 +47,11 @@ async function rolePage(
   }
 
   let cleanupError: unknown;
+  probeLog.push(`${role} at close: browser.isConnected=${browser.isConnected()} page.isClosed=${page.isClosed()} serviceWorkers=${context.serviceWorkers().length}`);
   try {
     await context.close();
   } catch (error) {
-    cleanupError ??= error;
+    cleanupError ??= new Error(`${String(error)}\nPROBE ${role}: after failed close browser.isConnected=${browser.isConnected()} page.isClosed=${page.isClosed()}\n${probeLog.join('\n')}`);
   }
 
   if (provideError) {
