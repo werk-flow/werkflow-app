@@ -98,7 +98,7 @@ export function Banner({
         {/* Below `sm` the action stacks under the message, so the message
             keeps the full width instead of a one-word column beside it. */}
         <div className="flex min-w-0 flex-1 flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
-          <p className="min-w-0 break-words text-sm sm:flex-1">{banner.message}</p>
+          <p className="w-full min-w-0 break-words text-sm sm:flex-1">{banner.message}</p>
           {hasAction && (
             // A real button with an icon, not underlined text: the action (e.g.
             // „Rückgängig“) must read as a clickable control at a glance.

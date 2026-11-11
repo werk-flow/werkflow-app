@@ -98,6 +98,16 @@ for (const width of [375, 1280]) {
   });
 }
 
+test('a banner message with a long unbroken name wraps inside the banner on a phone', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.getByRole('button', { name: 'Langer Name', exact: true }).click();
+  const banner = page.getByRole('alert');
+  const messageBox = await banner.getByText('archiviert', { exact: false }).boundingBox();
+  const closeBox = await banner.getByRole('button', { name: 'Hinweis schließen' }).boundingBox();
+  if (!messageBox || !closeBox) throw new Error('Missing banner geometry');
+  expect(messageBox.x + messageBox.width).toBeLessThanOrEqual(closeBox.x);
+});
+
 for (const width of [375, 1280]) {
   test(`dialog actions stay separated at viewport width ${width}`, async ({ page }) => {
     await page.setViewportSize({ width, height: 812 });

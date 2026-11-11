@@ -170,6 +170,17 @@ function PresentationControls(): React.JSX.Element {
       >
         Langer Hinweis
       </Button>
+      <Button
+        onClick={() =>
+          showBanner({
+            variant: 'success',
+            message: 'Kunde „Sanitärgroßhandelsgesellschaftsniederlassungsverwaltung“ archiviert',
+            autoDismissMs: null,
+          })
+        }
+      >
+        Langer Name
+      </Button>
       <Field label="Bezeichnung">
         <Input />
       </Field>
