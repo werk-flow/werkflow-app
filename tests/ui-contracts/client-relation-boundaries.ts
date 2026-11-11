@@ -1,6 +1,7 @@
 // Isolated server state of a customer's contacts and work sites. Archiving a
 // row waits in the write gate; an accepted change lands in the state the next
 // route read returns.
+import type { ClientSiteRole } from '@/lib/clients/site-roles';
 import type { ClientContact, ClientSite } from '@/lib/clients/types';
 import { holdWrite } from './held-write-boundary';
 
@@ -57,6 +58,35 @@ window.uiContractClientRelations = {
 };
 
 export const clientRelationContractId = clientId;
+
+/** The current Hausverwaltung of the contract's work site; the role dialog ends it. */
+export const clientRelationContractRoles: ClientSiteRole[] = [
+  {
+    id: 'contract-role',
+    siteId: 'contract-site',
+    siteName: 'Heizungskeller Nordflügel',
+    siteAddress: 'Lindenstraße 4, 10115 Berlin',
+    siteSourceNumber: null,
+    siteIsActive: true,
+    siteClientId: clientId,
+    siteClientName: 'WEG Lindenstraße 4',
+    holderClientId: 'contract-manager',
+    holderName: 'Hausverwaltung Lindenhof GmbH',
+    holderArchived: false,
+    role: 'hausverwaltung',
+    startsOn: '2020-01-01',
+    endsOn: null,
+  },
+];
+
+/** Ending a role waits in the write gate; the spec refuses it, so the roles never change. */
+export async function endClientSiteRoleContract(input: {
+  roleId: string;
+  endsOn: string;
+}): Promise<{ success: true } | { success: false; error: string }> {
+  const refusal = await holdWrite('end-client-site-role', input);
+  return refusal ? { success: false, error: refusal } : { success: true };
+}
 
 export async function updateClientContactContract(
   contactId: string,

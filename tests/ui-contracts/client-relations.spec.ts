@@ -65,3 +65,25 @@ test('a contact email that is not one address marks the field, focuses it and se
   await save.click();
   await expectHeldWrite(page, 'update-client-contact');
 });
+
+test('the role dialog stays open while a role ends and shows the refusal in place', async ({ page }) => {
+  const main = page.getByRole('main');
+  await main.getByRole('button', { name: 'Rollen verwalten', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Rollen am Einsatzort' });
+  // The dialog's own close icon and its footer button share the name.
+  const closeButtons = dialog.getByRole('button', { name: 'Schließen', exact: true });
+  await dialog.getByRole('button', { name: 'Beenden', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expectHeldWrite(page, 'end-client-site-role');
+
+  // Neither Escape nor „Schließen“ drops the running save.
+  await expect(dialog).toHaveAttribute('data-pending', 'true');
+  for (const close of await closeButtons.all()) await expect(close).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeVisible();
+
+  await answerHeldWrite(page, 'role_ends_before_start');
+  await expect(dialog).not.toHaveAttribute('data-pending');
+  await expect(dialog.getByText('Das Ende darf nicht vor dem Beginn liegen.')).toBeVisible();
+  for (const close of await closeButtons.all()) await expect(close).toBeEnabled();
+});

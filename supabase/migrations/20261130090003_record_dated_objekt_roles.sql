@@ -55,13 +55,13 @@ create unique index client_sites_source_number_per_org
   on public.client_sites (organization_id, lower(source_number)) where source_number is not null;
 
 -- 2. Contacts at an Objekt. The Objekt belongs to the contact's own
--- customer; a later move of the Objekt to another customer takes them along.
+-- customer.
 -- @destructive: after release 2b43be8f: that build never writes site_id or site_role, so the key and the check hold for its writes
 alter table public.client_contacts
   add column site_id uuid,
   add column site_role text,
   add constraint client_contacts_site_fk foreign key (site_id, client_id, organization_id)
-    references public.client_sites (id, client_id, organization_id) on update cascade,
+    references public.client_sites (id, client_id, organization_id),
   add constraint client_contacts_site_role_check check (
     (site_id is null) = (site_role is null) and (site_role is null or site_role in ('mieter', 'zugangskontakt'))
   );
@@ -86,7 +86,7 @@ create table public.client_site_roles (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint client_site_roles_site_fk foreign key (site_id, client_id, organization_id)
-    references public.client_sites (id, client_id, organization_id) on update cascade on delete cascade,
+    references public.client_sites (id, client_id, organization_id) on delete cascade,
   -- The delete guard refuses deleting a holder of a role on another
   -- customer's Objekt, so the cascade removes only a customer's roles on its
   -- own Objekte, together with them.
@@ -128,8 +128,7 @@ create trigger emit_realtime_deletion after delete on public.client_site_roles
   for each row execute function app_private.emit_realtime_deletion();
 
 -- A role is history: only its end and who ended it are set, once. A deleted
--- account clears its actor. The move of its Objekt to another customer
--- changes client_id through the cascade and passes.
+-- account clears its actor.
 create function app_private.guard_client_site_role_history()
 returns trigger
 language plpgsql
@@ -140,6 +139,7 @@ begin
   if new.id is distinct from old.id
     or new.organization_id is distinct from old.organization_id
     or new.site_id is distinct from old.site_id
+    or new.client_id is distinct from old.client_id
     or new.holder_client_id is distinct from old.holder_client_id
     or new.role is distinct from old.role
     or new.starts_on is distinct from old.starts_on
@@ -157,8 +157,7 @@ $$;
 revoke all on function app_private.guard_client_site_role_history() from public, anon, authenticated;
 
 create trigger guard_client_site_role_history before update on public.client_site_roles
-  for each row when (new.client_id is not distinct from old.client_id)
-  execute function app_private.guard_client_site_role_history();
+  for each row execute function app_private.guard_client_site_role_history();
 
 -- 4. History. The event types for a role join the existing ones.
 -- @destructive: after release 2b43be8f: the replacement below widens the event types; that build writes only the types it keeps

@@ -1,7 +1,11 @@
 import type { CreateClientInput } from '@/lib/clients/actions';
 import type { CreateClientResult } from '@/lib/jobs/types';
 import { holdWrite, unexpectedWrite } from './held-write-boundary';
-import { updateClientContactContract, updateClientSiteContract } from './client-relation-boundaries';
+import {
+  endClientSiteRoleContract,
+  updateClientContactContract,
+  updateClientSiteContract,
+} from './client-relation-boundaries';
 
 /** The existing customer the create contract's refusal `possible_duplicates` names. */
 export const CONTRACT_DUPLICATE = {
@@ -69,6 +73,6 @@ export const updateClientSite = updateClientSiteContract;
 export const createClientContact = unexpectedWrite;
 export const createClientSite = unexpectedWrite;
 
-// The contracts open no Einsatzort role editor.
+// The Einsatzort role editor ends a role through the write gate and records none.
 export const assignClientSiteRole = unexpectedWrite;
-export const endClientSiteRole = unexpectedWrite;
+export const endClientSiteRole = endClientSiteRoleContract;

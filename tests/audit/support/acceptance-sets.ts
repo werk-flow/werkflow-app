@@ -27,6 +27,9 @@ export type AcceptanceRecord =
   | 'office-task-backlog'
   | 'archived-customer'
   | 'archived-customer-list'
+  | 'managing-customer'
+  | 'managed-building'
+  | 'managed-building-search'
   | 'callback-overdue-request'
   | 'callback-overdue-tasks';
 
@@ -677,6 +680,65 @@ function lifecycleStepCaptures(): AcceptanceSet {
   };
 }
 
+/**
+ * werk-flow/werkflow-planning#326 of 2026-11-11: a Hausverwaltung's two
+ * buildings with their roles, tenants and access contact, the owner's
+ * Einsatzort with its roles and the role dialog, the customer search by Objekt
+ * number, and a customer whose Einsatzort has no roles yet.
+ */
+function siteRoleCaptures(): AcceptanceSet {
+  const both = { role: 'buero', widths: [1280, 375], schemes: ['light', 'dark'] } as const;
+  return {
+    id: 'site-roles-2026-11-11',
+    captures: [
+      {
+        id: 'buero-hausverwaltung',
+        route: '/kunden/[clientId]',
+        view: { kind: 'page' },
+        record: 'managing-customer',
+        reveal: 'Rollen an Einsatzorten',
+        ...both,
+      },
+      {
+        id: 'buero-weg-einsatzort',
+        route: '/kunden/[clientId]',
+        view: { kind: 'page' },
+        record: 'managed-building',
+        reveal: 'Rollen verwalten',
+        ...both,
+      },
+      {
+        id: 'buero-weg-rollen',
+        route: '/kunden/[clientId]',
+        view: { kind: 'dialog', opener: 'customers.site-roles' },
+        record: 'managed-building',
+        ...both,
+      },
+      {
+        id: 'buero-kunden-suche-objekt',
+        route: '/kunden',
+        view: { kind: 'page' },
+        record: 'managed-building-search',
+        ...both,
+      },
+      {
+        id: 'buero-kunde-ohne-rollen',
+        route: '/kunden/[clientId]',
+        view: { kind: 'page' },
+        reveal: 'Rollen nicht eingetragen',
+        ...both,
+      },
+      {
+        id: 'buero-kunde-ohne-rollen-dialog',
+        route: '/kunden/[clientId]',
+        view: { kind: 'dialog', opener: 'customers.site-roles' },
+        ...both,
+      },
+    ],
+    standalone: [],
+  };
+}
+
 export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   uiRoundCaptures(),
   fieldTargetCaptures(),
@@ -699,4 +761,5 @@ export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   requestCallbackCaptures(),
   leaverHandoverCaptures(),
   lifecycleStepCaptures(),
+  siteRoleCaptures(),
 ];

@@ -258,6 +258,10 @@ begin
   perform pg_temp.expect_refusal('rewriting an ended role directly',
     format($sql$update public.client_site_roles set ends_on = '2038-06-30' where id = %L$sql$, v_owner),
     'client_site_role_history_immutable');
+  perform pg_temp.expect_refusal('moving a role to another customer''s file directly',
+    format($sql$update public.client_site_roles set client_id = '45000000-0000-0000-0000-000000000021'
+      where id = %L$sql$, v_owner),
+    'client_site_role_history_immutable');
   perform pg_temp.expect_refusal('moving a role to another holder directly',
     format($sql$update public.client_site_roles set holder_client_id = '45000000-0000-0000-0000-000000000021'
       where id = %L$sql$, v_owner),
@@ -325,7 +329,7 @@ begin
 end;
 $$;
 
--- The search finds the Objekt by street, postal code or source number under
+-- The search finds the Objekt by street, postal code, city or source number under
 -- its customer and its current Hausverwaltung, with roles and Anlagen; the
 -- former Hausverwaltung is not found by it.
 do $$
@@ -335,7 +339,7 @@ declare
   v_ids jsonb;
   v_site jsonb;
 begin
-  foreach v_search in array array['Lindenstraße 5', '10115', 'obj-77'] loop
+  foreach v_search in array array['Lindenstraße 5', '10115', 'berlin', 'obj-77'] loop
     v_page := public.list_customer_page('45000000-0000-0000-0000-000000000010', v_search, 1, 50, false);
     select jsonb_agg(client -> 'id' order by client ->> 'name') into v_ids from jsonb_array_elements(v_page -> 'clients') client;
     if v_ids <> '["45000000-0000-0000-0000-000000000022", "45000000-0000-0000-0000-000000000020"]'::jsonb
@@ -381,11 +385,15 @@ begin
   perform public.assign_client_site_role('45000000-0000-0000-0000-000000000002',
     '45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000041', 'eigentuemer',
     '45000000-0000-0000-0000-000000000024', false, null);
+  insert into public.client_contacts (organization_id, client_id, name, site_id, site_role) values
+  ('45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000024', 'Petra Zugang',
+   '45000000-0000-0000-0000-000000000041', 'zugangskontakt');
   v_result := public.delete_unlinked_client('45000000-0000-0000-0000-000000000002',
     '45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000024');
   if v_result <> '{"deleted": true, "links": {}}'::jsonb
     or exists (select 1 from public.client_site_roles where site_id = '45000000-0000-0000-0000-000000000041')
-  then raise exception 'an unlinked owner of its own Objekt was not deleted: %', v_result; end if;
+    or exists (select 1 from public.client_contacts where site_id = '45000000-0000-0000-0000-000000000041')
+  then raise exception 'an unlinked owner of its own Objekt and access contact was not deleted: %', v_result; end if;
 end;
 $$;
 

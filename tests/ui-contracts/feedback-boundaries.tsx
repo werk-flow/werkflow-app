@@ -27,7 +27,7 @@ import type { ClientRequest } from '@/lib/requests/types';
 import type { ServiceCaseDetail } from '@/lib/service-cases/types';
 import { NO_RECORDED_VISIT } from '@/lib/work-artifacts/types';
 import type { WorkSession } from '@/lib/time-tracking/types';
-import { clientRelationContractId } from './client-relation-boundaries';
+import { clientRelationContractId, clientRelationContractRoles } from './client-relation-boundaries';
 import { ROUTE_REFRESH_EVENT } from './lifecycle-boundaries';
 import { useSearchParams } from './list-navigation-service-boundaries';
 import { materialContractItem, materialContractLocation } from './material-boundaries';
@@ -236,7 +236,7 @@ function ClientRelationsHost(): React.JSX.Element {
       clientAddress={null}
       contacts={relations.contacts}
       sites={relations.sites}
-      siteRoles={[]}
+      siteRoles={clientRelationContractRoles}
       isAdminOrManager
       equipment={[]}
       equipmentLoadFailed={false}
