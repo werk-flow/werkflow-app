@@ -100,7 +100,7 @@ async function types(): Promise<{ formatted: string; source: string }> {
   const ci = typesFromCi(REPOSITORY_ROOT);
   if ('types' in ci) {
     console.info(
-      `[types] Boat is unavailable (${boat.unavailable}); CI's SQL job generated the types for HEAD.`,
+      `[types] Boat is unavailable: ${boat.unavailable} CI's SQL job generated the types for HEAD.`,
     );
     return { formatted: ci.types, source: 'CI stack' };
   }
