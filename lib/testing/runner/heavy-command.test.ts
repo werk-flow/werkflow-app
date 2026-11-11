@@ -47,6 +47,8 @@ test('a whole-repository type check is refused through every launcher, prefix an
     // TypeScript finds the root tsconfig.json from a subfolder.
     'cd lib/testing && tsc --noEmit',
     `cd ${repositoryRoot} && bunx tsc --noEmit`,
+    // A subshell's cd does not reach the commands after it.
+    '(cd /home && pwd); tsc --noEmit',
     'bash -lc "tsc --noEmit"',
     "sh -c 'bunx tsc --noEmit | head'",
     'echo "$(tsc --noEmit)"',
@@ -74,6 +76,8 @@ test('a type-aware lint of more files than the line is refused; the measured who
     'eslint "lib/**/*.{ts,tsx}"',
     "bunx eslint './components/**/*.tsx'",
     'cd components && eslint .',
+    'cd lib && eslint "../components/**/*.tsx"',
+    `eslint "${repositoryRoot}/components/**/*.tsx"`,
   ].filter((command) => !refusal(command)?.includes('bun run test:verify --group static:lint'));
   expect(passed).toEqual([]);
   expect(lintedFileCount(['components'], repositoryRoot)).toBeGreaterThan(BROAD_LINT_FILES);
@@ -142,6 +146,9 @@ test('outside a WerkFlow checkout a plain tsc and eslint pass', () => {
     expect(heavyCommandRefusal('tsc --noEmit', folder)).toBeUndefined();
     expect(heavyCommandRefusal('eslint .', folder)).toBeUndefined();
     expect(refusal(`cd ${folder} && tsc --noEmit`)).toBeUndefined();
+    expect(refusal(`bash -c "cd ${folder} && tsc --noEmit"`)).toBeUndefined();
+    // Inside a nested shell, its cd stays there.
+    expect(refusal(`bash -c "cd ${folder}" && tsc --noEmit`)).toContain('bun run typecheck');
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }

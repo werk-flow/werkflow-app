@@ -51,8 +51,11 @@ const ASSIGNMENT = /^[A-Za-z_]\w*=/;
 /** tsc flags that print and exit without building the program. */
 const TSC_INFO = new Set(['-v', '--version', '-h', '--help', '--all', '--init', '--showConfig']);
 
-/** The programs a simple command starts, through launchers and nested `sh -c` scripts. */
-function startedPrograms(words: ShellWord[], depth = 0): { name: string; args: string[] }[] {
+/** A program a simple command starts, or the script of a nested `sh -c`, which keeps its own folder. */
+type Started = { name: string; args: string[] } | { script: string };
+
+/** The programs a simple command starts, through launchers, and the scripts of nested shells. */
+function startedPrograms(words: ShellWord[]): Started[] {
   const call = program(words);
   if (!call) return [];
   let name = call.name;
@@ -61,8 +64,7 @@ function startedPrograms(words: ShellWord[], depth = 0): { name: string; args: s
     if (SHELLS.has(name)) {
       const flag = args.findIndex((arg) => SCRIPT_FLAG.test(arg));
       const script = flag === -1 ? undefined : args[flag + 1];
-      const reading = script && depth < 4 ? readShell(script) : undefined;
-      return reading ? reading.commands.flatMap((inner) => startedPrograms(inner, depth + 1)) : [];
+      return script ? [{ script }] : [];
     }
     // `bun run tsc` and `bun x tsc` start the binary. `bun run typecheck` starts a package
     // script, whose wrapper takes the slot itself, so its name passes as a program.
@@ -206,32 +208,42 @@ function programRefusal(started: { name: string; args: string[] }, cwd: string):
  * The refusal of a shell command, started in `cwd`, that runs a whole-repository
  * `tsc`, a type-aware eslint over more than {@link BROAD_LINT_FILES} files, or
  * `next build` directly, through any launcher, env prefix, chain or `sh -c`
- * script; or undefined. A `cd` moves the folder for the commands after it.
+ * script; or undefined. A `cd` moves the folder for the commands after it,
+ * unless a subshell may scope it.
  * Package scripts and `bun scripts/heavy.ts` take a heavy slot and pass.
  *
  * Threat model: the guard stops habit, an agent typing the heavy command it
  * knows. Deliberate evasion (an alias, a script file, an interpreter) is a rule
  * violation it does not claim to catch, and a command it cannot read passes.
  */
-export function heavyCommandRefusal(command: string, cwd: string): string | undefined {
+export function heavyCommandRefusal(command: string, cwd: string, depth = 0): string | undefined {
   const reading = readShell(command);
   if (!reading) return undefined;
+  // The reader does not keep a subshell's scope, so with one a `cd` might not reach the next
+  // command; then every command is judged from the starting folder, which errs toward refusing.
+  const tracksFolder = !SUBSHELL.test(command);
   let folder = cwd;
   for (const words of reading.commands) {
     const call = program(words);
     if (call?.name === 'cd') {
       const [target] = call.args;
-      if (!target) folder = homedir();
-      else if (!target.expands && target.text !== '-') folder = resolve(folder, expandHome(target.text));
+      if (!tracksFolder || target?.expands || target?.text === '-') continue;
+      folder = target ? resolve(folder, expandHome(target.text)) : homedir();
       continue;
     }
     for (const started of startedPrograms(words)) {
-      const reason = programRefusal(started, folder);
+      let reason: string | undefined;
+      // A nested shell's script starts from this folder, and its own cd stays inside it.
+      if (!('script' in started)) reason = programRefusal(started, folder);
+      else if (depth < 4) reason = heavyCommandRefusal(started.script, folder, depth + 1);
       if (reason) return reason;
     }
   }
   return undefined;
 }
+
+/** An opening parenthesis that is no `$(` substitution or `$((` arithmetic: a subshell, roughly. */
+const SUBSHELL = /(?:^|[^$(])\((?!\()/;
 
 const expandHome = (path: string): string =>
   path === '~' ? homedir() : path.startsWith('~/') ? join(homedir(), path.slice(2)) : path;
@@ -274,26 +286,28 @@ const GLOB = /[*?[{]/;
  * included; outside a repository git lists nothing, and such a lint is no WerkFlow lint.
  */
 export function lintedFileCount(targets: readonly string[], cwd: string): number {
-  const list = (pathspecs: readonly string[]): string[] => {
-    const listed = spawnSync(
-      'git',
-      ['ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', ...pathspecs],
-      {
-        cwd,
-        encoding: 'utf8',
-        maxBuffer: 64 * 1024 * 1024,
-      },
-    );
-    return listed.status === 0 ? listed.stdout.split('\0').filter((file) => LINTED.test(file)) : [];
+  const git = (args: readonly string[]): string[] => {
+    const run = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    return run.status === 0 ? run.stdout.split('\0') : [];
   };
+  const list = (pathspecs: readonly string[]): string[] =>
+    git([
+      'ls-files',
+      '--cached',
+      '--others',
+      '--exclude-standard',
+      '-z',
+      '--full-name',
+      '--',
+      ...pathspecs,
+    ]).filter((file) => LINTED.test(file));
   const paths = targets.map(expandHome);
   const plain = paths.filter((path) => !GLOB.test(path));
-  const globs = paths
-    .filter((path) => GLOB.test(path))
-    .map((glob) => new Bun.Glob(glob.replace(/^\.\//, '')));
+  // A glob may leave the working folder (`../components/**`), so it is matched as an absolute path.
+  const globs = paths.filter((path) => GLOB.test(path)).map((glob) => new Bun.Glob(resolve(cwd, glob)));
   const files = new Set(plain.length ? list(plain) : []);
-  if (globs.length)
-    for (const file of list(['.']))
-      if (globs.some((glob) => glob.match(file) || glob.match(join(cwd, file)))) files.add(file);
+  const top = git(['rev-parse', '--show-toplevel'])[0]?.trim();
+  if (globs.length && top)
+    for (const file of list([':/'])) if (globs.some((glob) => glob.match(join(top, file)))) files.add(file);
   return files.size;
 }
