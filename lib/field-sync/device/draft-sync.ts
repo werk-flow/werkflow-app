@@ -253,6 +253,9 @@ async function finishSend<T>(run: () => Promise<T>): Promise<T> {
  * Sends every draft of the holder that may go by itself: complete, not open in this tab's
  * editor, not refused and changed within the last seven days. It stops at the first draft that
  * gets no answer, so a phone without signal tries once, not once per draft.
+ *
+ * @internal The sender the sync runner registers once the clock outbox is on `main`
+ * (werk-flow/werkflow-planning#319); until then only `startDraftSync` and the tests call it.
  */
 export function sendDrafts(): Promise<void> {
   const owner = holder;
@@ -290,6 +293,9 @@ export function startDraftSync(next: DraftHolder): void {
  * The drafts as unsent work, for the sign-out and the organization switch (decision record 0010,
  * "Device data"): they name what is left, send it or delete it. It answers for the holder
  * `startDraftSync` named; a tab that never named one holds no draft it could show.
+ *
+ * @internal The source the unsent-work seam registers once the clock outbox is on `main`
+ * (werk-flow/werkflow-planning#319); until then only the tests read it.
  */
 export const draftUnsentSource = {
   name: 'report-drafts',
