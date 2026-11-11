@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 
 import { useOrganization } from '@/components/organization/organization-context';
 import { useBanner } from '@/components/ui/banner';
@@ -22,25 +22,23 @@ export function TodayRefreshOnStart(): null {
   // From the app's client contexts, not props: every clock action re-renders the start page, and
   // props would add the ids to each of those responses. An organization switch changes the
   // context before the server renders the new start page, so the claim follows it at once.
-  const { activeOrg, switchSequence } = useOrganization();
+  const { activeOrg, isSwitchingOrg } = useOrganization();
   const userId = useUserProfile().profile?.id ?? null;
   const organizationId = activeOrg?.role === 'employee' ? activeOrg.orgId : null;
-  // The wipe generation this page may claim under. Taken when the page mounts, so a sign-out that
-  // wipes meanwhile keeps it from claiming: also when the person's id arrives only later (a
-  // profile the browser reads itself), and when a membership fallback changes the organization.
-  // Renewed only for an explicit switch in this tab, which wipes before it publishes the new
-  // organization. Any other wipe since the mount blocks the claim until the next start page.
-  const claimBase = useRef<{ switchSequence: number; generation: string } | null>(null);
+  // The wipe generation this page may claim under. Taken when the page first renders, so a
+  // sign-out that wipes meanwhile keeps it from claiming: also when the person's id arrives only
+  // later (a profile the browser reads itself), and when a membership fallback changes the
+  // organization. Renewed only when the organization changes during an explicit switch in this
+  // tab (`isSwitchingOrg`), which wipes before it publishes the new organization. Any other wipe
+  // since then blocks the claim until the next start page.
+  const [claim, setClaim] = useState(() => ({ organizationId, generation: todayWipeGeneration() }));
+  if (claim.organizationId !== organizationId)
+    setClaim({ organizationId, generation: isSwitchingOrg ? todayWipeGeneration() : claim.generation });
+  const generationAtStart = claim.generation;
   useEffect(() => {
-    const base =
-      claimBase.current?.switchSequence === switchSequence
-        ? claimBase.current
-        : { switchSequence, generation: todayWipeGeneration() };
-    claimBase.current = base;
     // No person or no field worker's organization yet: nothing to claim or refresh.
     if (!userId || !organizationId) return;
     let current = true;
-    const generationAtStart = base.generation;
     let retried = false;
     const retryOnline = (): void => void start();
     const start = async (): Promise<void> => {
@@ -78,6 +76,6 @@ export function TodayRefreshOnStart(): null {
       current = false;
       window.removeEventListener('online', retryOnline);
     };
-  }, [userId, organizationId, switchSequence, showBanner]);
+  }, [userId, organizationId, generationAtStart, showBanner]);
   return null;
 }
