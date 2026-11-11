@@ -208,8 +208,8 @@ function programRefusal(started: { name: string; args: string[] }, cwd: string):
  * The refusal of a shell command, started in `cwd`, that runs a whole-repository
  * `tsc`, a type-aware eslint over more than {@link BROAD_LINT_FILES} files, or
  * `next build` directly, through any launcher, env prefix, chain or `sh -c`
- * script; or undefined. A `cd` moves the folder for the commands after it,
- * unless a subshell may scope it.
+ * script; or undefined. A `cd` moves the folder for the commands after it;
+ * with a subshell, each folder a `cd` reached counts.
  * Package scripts and `bun scripts/heavy.ts` take a heavy slot and pass.
  *
  * Threat model: the guard stops habit, an agent typing the heavy command it
@@ -219,25 +219,28 @@ function programRefusal(started: { name: string; args: string[] }, cwd: string):
 export function heavyCommandRefusal(command: string, cwd: string, depth = 0): string | undefined {
   const reading = readShell(command);
   if (!reading) return undefined;
-  // The reader does not keep a subshell's scope, so with one a `cd` might not reach the next
-  // command; then every command is judged from the starting folder, which errs toward refusing.
-  const tracksFolder = !SUBSHELL.test(command);
+  // The reader does not keep a subshell's scope, so with one a command may run in any
+  // folder a `cd` reached before it; it is judged from each of them.
+  const scoped = SUBSHELL.test(command);
   let folder = cwd;
+  const reached = [cwd];
   for (const words of reading.commands) {
     const call = program(words);
     if (call?.name === 'cd') {
       const [target] = call.args;
-      if (!tracksFolder || target?.expands || target?.text === '-') continue;
+      if (target?.expands || target?.text === '-') continue;
       folder = target ? resolve(folder, expandHome(target.text)) : homedir();
+      reached.push(folder);
       continue;
     }
-    for (const started of startedPrograms(words)) {
-      let reason: string | undefined;
-      // A nested shell's script starts from this folder, and its own cd stays inside it.
-      if (!('script' in started)) reason = programRefusal(started, folder);
-      else if (depth < 4) reason = heavyCommandRefusal(started.script, folder, depth + 1);
-      if (reason) return reason;
-    }
+    for (const started of startedPrograms(words))
+      for (const at of scoped ? reached : [folder]) {
+        let reason: string | undefined;
+        // A nested shell's script starts from this folder, and its own cd stays inside it.
+        if (!('script' in started)) reason = programRefusal(started, at);
+        else if (depth < 4) reason = heavyCommandRefusal(started.script, at, depth + 1);
+        if (reason) return reason;
+      }
   }
   return undefined;
 }
