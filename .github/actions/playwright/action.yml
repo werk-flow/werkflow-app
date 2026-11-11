@@ -1,5 +1,8 @@
 name: Playwright
-description: The host Chromium at the locked Playwright version, with its system libraries.
+description: >-
+  The host Chromium at the locked Playwright version, with its system packages. The runner image
+  holds every library Chromium links; the few fonts it lacks come from the Actions cache, so the
+  Ubuntu package mirror is reached only when that cache misses (system-packages.sh).
 runs:
   using: composite
   steps:
@@ -18,9 +21,32 @@ runs:
     - name: Install Chromium
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
-      run: bunx playwright install --with-deps chromium
+      run: bunx playwright install chromium
 
-    - name: Install Chromium's system libraries
-      if: steps.cache.outputs.cache-hit == 'true'
+    - name: Find Chromium's missing system packages
+      id: packages
       shell: bash
-      run: bunx playwright install-deps chromium
+      run: bash "$GITHUB_ACTION_PATH/system-packages.sh" find
+
+    - name: Restore Chromium's system packages
+      id: debs
+      if: steps.packages.outputs.missing != ''
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/playwright-debs
+        key: ${{ steps.packages.outputs.key }}
+
+    - name: Install Chromium's system packages
+      if: steps.packages.outputs.missing != ''
+      shell: bash
+      env:
+        DEBS: ${{ runner.temp }}/playwright-debs
+        MISSING: ${{ steps.packages.outputs.missing }}
+      run: bash "$GITHUB_ACTION_PATH/system-packages.sh" install
+
+    - name: Cache Chromium's system packages
+      if: steps.packages.outputs.missing != '' && steps.debs.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/playwright-debs
+        key: ${{ steps.packages.outputs.key }}
