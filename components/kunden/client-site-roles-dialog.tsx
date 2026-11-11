@@ -156,6 +156,8 @@ type SiteRoleEditProps = {
   edit: RoleEdit;
   /** Resolves once the refreshed roles arrived, so the list never shows the old state. */
   settle: SettleOnChange;
+  /** The dialog's save task: the dialog stays open and its close disabled while a save runs. */
+  task: ReturnType<typeof usePendingTask>;
   onDone: () => void;
   onCancel: () => void;
 };
@@ -180,7 +182,7 @@ function saveRoleEdit(
 }
 
 /** The edit's holder, day and errors, and its submit. */
-function useSiteRoleEditForm({ site, edit, settle, onDone }: SiteRoleEditProps) {
+function useSiteRoleEditForm({ site, edit, settle, task, onDone }: SiteRoleEditProps) {
   const router = useRouter();
   const [holder, setHolder] = useState<ClientSelectItem | null>(null);
   // A change and an end need their day; a first entry may stay „seit unbekannt“.
@@ -188,7 +190,7 @@ function useSiteRoleEditForm({ site, edit, settle, onDone }: SiteRoleEditProps) 
   const [holderError, setHolderError] = useState<string | null>(null);
   const [dateError, setDateError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { run, isPending } = usePendingTask();
+  const { run, isPending } = task;
   const dateRequired = edit.mode === 'end' || edit.replace;
 
   const submit = async (event: React.FormEvent) => {
@@ -301,6 +303,29 @@ function SiteRoleEditForm(props: SiteRoleEditProps) {
   );
 }
 
+/** The three role kinds of one Einsatzort, each with its holders and history. */
+function SiteRoleKindSections({
+  roles,
+  clientId,
+  onEdit,
+}: {
+  roles: ClientSiteRole[];
+  clientId: string;
+  onEdit: (edit: RoleEdit) => void;
+}) {
+  const today = berlinToday();
+  return SITE_ROLE_KINDS.map((kind) => (
+    <SiteRoleKindSection
+      key={kind}
+      kind={kind}
+      roles={roles}
+      clientId={clientId}
+      today={today}
+      onEdit={onEdit}
+    />
+  ));
+}
+
 /**
  * The dated roles of one Einsatzort: who owns it, who manages it and who gets
  * its invoices, now and before. A change ends the previous role, which stays
@@ -322,13 +347,14 @@ export function ClientSiteRolesDialog({
   const { showBanner } = useBanner();
   const [edit, setEdit] = useState<RoleEdit | null>(null);
   const settle = useSettleOnChange(roles);
-  const today = berlinToday();
+  const task = usePendingTask();
   const siteRoles = site ? roles.filter((role) => role.siteId === site.id) : [];
   const address = site ? formatSiteAddress(site) : '';
 
   return (
     <Dialog
       open={site !== null}
+      pending={task.isPending}
       onOpenChange={(open) => {
         if (open) return;
         setEdit(null);
@@ -350,6 +376,7 @@ export function ClientSiteRolesDialog({
                 site={site}
                 edit={edit}
                 settle={settle}
+                task={task}
                 onCancel={() => setEdit(null)}
                 onDone={() => {
                   setEdit(null);
@@ -357,16 +384,7 @@ export function ClientSiteRolesDialog({
                 }}
               />
             ) : (
-              SITE_ROLE_KINDS.map((kind) => (
-                <SiteRoleKindSection
-                  key={kind}
-                  kind={kind}
-                  roles={siteRoles}
-                  clientId={clientId}
-                  today={today}
-                  onEdit={setEdit}
-                />
-              ))
+              <SiteRoleKindSections roles={siteRoles} clientId={clientId} onEdit={setEdit} />
             )}
           </DialogBody>
         )}
@@ -374,6 +392,7 @@ export function ClientSiteRolesDialog({
           <Button
             type="button"
             variant="outline"
+            disabled={task.isPending}
             onClick={() => {
               setEdit(null);
               onClose();

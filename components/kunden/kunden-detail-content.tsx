@@ -31,6 +31,7 @@ import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 
 import type { ClientContact, ClientSite } from '@/lib/clients/types';
 import type { ClientSiteRole } from '@/lib/clients/site-roles';
+import { isCustomerDetailEvent, roleRelatedRecords } from '@/lib/clients/detail-refresh';
 import { CLIENT_TYPE_LABELS, type Client, type Job, type ProjectWithDetails } from '@/lib/jobs/types';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import type { AuftraegeColumnId } from '@/lib/jobs/auftraege-table-columns';
@@ -87,7 +88,7 @@ export function KundenDetailContent({
     clientId: client.id,
   });
 
-  useKundenDetailRealtime(client.id, removal.isLeaving, removal.isLeavingRef);
+  useKundenDetailRealtime(client.id, siteRoles, removal.isLeaving, removal.isLeavingRef);
 
   const metadataFields = buildClientMetadataFields(client, sourceNumber);
 
@@ -242,7 +243,11 @@ function KundenDetailOverviewColumn({
         <RegionLoadError>Ansprechpartner und Einsatzorte konnten nicht geladen werden.</RegionLoadError>
       )}
 
-      {siteRoles && <ClientHeldRolesCard clientId={client.id} roles={siteRoles} />}
+      {siteRoles ? (
+        <ClientHeldRolesCard clientId={client.id} roles={siteRoles} />
+      ) : (
+        <RegionLoadError>Die Rollen an Einsatzorten konnten nicht geladen werden.</RegionLoadError>
+      )}
 
       {/* Financial Summary Placeholder */}
       <KundenDocumentsColumn client={client} documents={documents} isAdminOrManager={isAdminOrManager} />
@@ -253,9 +258,11 @@ function KundenDetailOverviewColumn({
 /** Colleagues' contact/site/master-data changes appear without a reload. */
 function useKundenDetailRealtime(
   clientId: string,
+  siteRoles: ClientSiteRole[] | null,
   isLeaving: boolean,
   isLeavingRef: React.RefObject<boolean>,
 ): void {
+  const related = roleRelatedRecords(siteRoles);
   useRealtimeRouterRefresh({
     enabled: !isLeaving,
     tables: [
@@ -272,16 +279,7 @@ function useKundenDetailRealtime(
       'document_links',
       'installed_equipment',
     ],
-    eventFilter: (event) => {
-      if (isLeavingRef.current) return false;
-      const row = event.new ?? event.old;
-      if (!row) return false;
-      if (event.table === 'clients') return row.id === clientId;
-      // A role names the Einsatzort's customer and its holder.
-      if (event.table === 'client_site_roles' && row.holder_client_id === clientId) return true;
-      if (row.client_id === undefined) return event.eventType === 'DELETE';
-      return row.client_id === clientId;
-    },
+    eventFilter: (event) => !isLeavingRef.current && isCustomerDetailEvent(event, clientId, related),
   });
 }
 

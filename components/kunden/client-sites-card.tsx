@@ -241,7 +241,7 @@ function ClientSiteRow({
 interface ClientSitesCardProps
   extends Omit<ClientSiteRowProps, 'site' | 'contactNameById' | 'siteContacts' | 'siteRoles'> {
   clientAddress: string | null;
-  /** The roles on the customer's Objekte; null when they could not be read. */
+  /** The roles on the customer's Einsatzorte; null when they could not be read (the page shows that failure). */
   roles: ClientSiteRole[] | null;
   contacts: ClientContact[];
   activeSites: ClientSite[];
@@ -327,11 +327,6 @@ export function ClientSitesCard({
 
       {equipmentLoadFailed && (
         <RegionLoadError className="mb-3">Anlagen und Geräte konnten nicht geladen werden.</RegionLoadError>
-      )}
-      {roles === null && (
-        <RegionLoadError className="mb-3">
-          Die Rollen der Einsatzorte konnten nicht geladen werden.
-        </RegionLoadError>
       )}
 
       {activeSites.length === 0 ? (

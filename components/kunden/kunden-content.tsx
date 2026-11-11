@@ -109,7 +109,10 @@ function useKundenLivePage({
 }: KundenContentProps) {
   const confirmedCreations = useRef(new Set<string>());
   const live = useLiveView<KundenLivePage>({
-    tables: ['clients', 'client_contacts', 'client_sites', 'client_site_roles'],
+    // A search shows the Anlagen of the Einsatzorte it found.
+    tables: searchQuery
+      ? ['clients', 'client_contacts', 'client_sites', 'client_site_roles', 'installed_equipment']
+      : ['clients', 'client_contacts', 'client_sites', 'client_site_roles'],
     coalesceWhileReading: true,
     initialData: { clients: initialClients, total: initialTotal, settledCreations: [] },
     read: async ({ signal }) => {
