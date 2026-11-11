@@ -39,7 +39,7 @@ Each lab group prints one table per step with reference, value, ceiling, floor a
 ### Change a lab reference
 
 1. A lower count needs no reason: `ratchet` lowers it.
-2. A higher count, a larger payload or a smaller one needs `accept` with a reason a reviewer can check. The lead decides it, or the PR's own thread outside an epic, and lists it under "For the owner to look at" ([Decide or ask](../../AGENTS.md#decide-or-ask)).
+2. A higher count, a larger payload or a smaller one needs `accept` with a reason a reviewer can check. The lead decides it, or the PR's own thread outside an epic, and lists it under "For the owner to look at" ([Decide or ask](../../AGENTS.md#decide-or-ask)). The reason names the intended behavior change. A `regressed` count is never accepted to pass.
 3. A changed lab test, recorder module or workload file orphans its references: [move them to the new digest](#move-a-reference-to-a-new-digest).
 4. `gate` and `reject` move a metric in or out of the gate with its evidence. A count that takes two values on one step leaves that step with `ungate`; never widen its tolerance.
 

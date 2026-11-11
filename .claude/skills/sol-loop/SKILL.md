@@ -11,7 +11,7 @@ You own the change. GPT Sol reviews it in rounds until you agree or the budget e
 
 ## Budget
 
-- 3 rounds, 5 for level 2. The owner can raise either. Round 1 reviews everything. Later rounds check changed code and open findings.
+- 3 rounds, 5 for level 2. The owner can raise either. The lead may add one confirmation round ([Stop](#5-stop)). Round 1 reviews everything. Later rounds check changed code and open findings.
 - Stop early when a round returns only nits.
 - One reviewer. Sol starts no subagents.
 - Keep a ledger: finding id, severity, outcome, and the usage T3 reports per round ("not exposed" when it shows none).

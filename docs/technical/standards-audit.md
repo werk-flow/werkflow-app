@@ -13,7 +13,7 @@ Tests do not establish that a screen is clear, well composed, or fit for daily S
 5. Have an independent reviewer compare the result with the intended composition and the task. Record revision, route, role, data state, theme, viewport, artifact location and findings. A loading screen, failed capture, login page or connection error is missing evidence, never a pass. Check the affected captures again after a visual repair.
 6. Put accepted shared choices into tokens, primitives and the `werkflow-design` skill. Add a geometry, interaction or screenshot check only where it protects an accepted invariant. Never keep a baseline of an appearance the owner rejected.
 
-The lead accepts the result once steps 4 and 5 hold and the screens and copy follow the design system and the spec. Outside an epic, the PR's own thread is the lead. The lead posts the captures under "For the owner to look at" on the epic issue ([Decide or ask](../../AGENTS.md#decide-or-ask)). Outside an epic, the PR's Screenshots section shows them. The owner's look blocks no merge, and a screen the owner rejects later is a new change.
+The lead accepts the result once steps 4 and 5 hold and the screens and copy follow the design system and the spec. Outside an epic, the PR's own thread is the lead. The lead posts the captures under "For the owner to look at" on the epic issue ([Decide or ask](../../AGENTS.md#decide-or-ask)). Outside an epic, the PR's Screenshots section links them. The owner's look blocks no merge, and a screen the owner rejects later is a new change.
 
 Each visual and interaction finding needs an explicit disposition. Visual polish cannot waive security, keyboard access, data integrity or response time. A browser review that could not run leaves the design unverified.
 
@@ -25,6 +25,7 @@ Each visual and interaction finding needs an explicit disposition. Visual polish
 - Capture a changed screen before and after the change, so the reviewer judges a pair.
 - Images land under `.agent-logs/playwright-runs/<run>/acceptance/<set>/`. Only a capture whose entry in `acceptance/index.json` says `passed` is evidence. Cite it as `` `capture:<run-key>/<set>/<capture>-<width>-<scheme>` ``.
 - An image shown in a PR goes to the `pr-screenshots` prerelease ([file a PR](../../.claude/skills/file-pr/SKILL.md)), never into a branch.
+- `.github/workflows/pr-screenshots.yml` deletes a PR's images when it closes. Commit a capture for the owner to look at to `werk-flow/werkflow-planning`, which is private, and link that copy.
 
 ### Keep accepted screens as visual references
 

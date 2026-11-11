@@ -53,7 +53,7 @@ The epic issue holds three lists ([Decide or ask](../../../AGENTS.md#decide-or-a
 
 A kind-3 decision that turns up mid-build is a planning defect. Put it in the Owner queue, write on the epic what the plan missed, and read the rest of the plan for more before you start the next stage.
 
-Trap: a capture linked from the PR. `.github/workflows/pr-screenshots.yml` deletes a PR's images when it closes, so commit each image to werkflow-planning and embed that copy.
+Trap: a capture linked from the PR's own images. They are deleted when the PR closes ([captures](../../../docs/technical/standards-audit.md#captures)).
 
 ## 5. Merge in order
 
@@ -61,7 +61,7 @@ For each hand-back:
 
 1. Call `link_pull_request` and `watch_pull_request` for the PR.
 2. Read the diff against its issue. Fix small gaps yourself. Send a large one back as a new `delegate_task`.
-3. Merge a child with `gh pr merge --squash` once [the merge gate](../../../docs/technical/coderabbit.md#the-merge-gate) passes. A "full stop" child, or one that changes `AGENTS.md`, waits for the owner's merge: call `unwatch_pull_request`, post it under "Owner queue", and go on with the children that do not depend on it.
+3. Merge a child with `gh pr merge --squash` once [the merge gate](../../../docs/technical/coderabbit.md#the-merge-gate) passes. A "full stop" child, or one that changes `AGENTS.md`, waits for the owner's merge: call `unwatch_pull_request`, post it under "Owner queue", and go on with the children that do not depend on it. When nothing else can move, ask through the question tool and end your turn. Confirm the merge with `gh pr view <n> --json state` before you start the next stage.
 4. Rebase the open siblings on the new `main`. Where two children edit the same lines, keep both sides.
 5. Classify every failed job by [Failures](../../../docs/technical/testing.md#failures) before any rerun. Only an `environment` failure gets its one retry; cite its issue.
 6. Close the child issue with "Merged in <PR>."
