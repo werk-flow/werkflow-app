@@ -182,13 +182,13 @@ async function uploadPhotos(owner: DraftHolder, draft: StoredDraft): Promise<Dra
     if (reason !== null && WAITING_UPLOAD_REASONS.has(reason)) return 'waiting';
     const lost = reason === 'refused' ? await lostJobAccess(draft.jobId) : false;
     if (lost === null) return 'waiting';
-    await refuse(owner, draft.id, lost ? 'no_access' : 'failed');
+    await markRefused(owner, draft.id, lost ? 'no_access' : 'failed');
     return lost ? 'no_access' : 'refused';
   }
   return null;
 }
 
-async function refuse(owner: DraftHolder, draftId: string, kind: DraftRefusal['kind']): Promise<void> {
+async function markRefused(owner: DraftHolder, draftId: string, kind: DraftRefusal['kind']): Promise<void> {
   // A refusal is a known answer: the server holds nothing of it, so the draft may change again.
   await changeDraftOnDevice(owner, draftId, (current) =>
     current ? { ...current, sealed: false, refusal: refusedNow(kind) } : null,
@@ -227,7 +227,7 @@ async function sendOne(owner: DraftHolder, draftId: string, byPerson: boolean): 
     return 'waiting';
   }
   const lost = verdict.outcome === 'rejected' && verdict.code === 'forbidden';
-  await refuse(owner, draftId, lost ? 'no_access' : 'failed');
+  await markRefused(owner, draftId, lost ? 'no_access' : 'failed');
   return lost ? 'no_access' : 'refused';
 }
 

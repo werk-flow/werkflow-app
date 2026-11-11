@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { z } from '@/lib/zod';
 import { openContractFixture } from './open-fixture';
 
 // A new Arbeitsnachweis of a job is a draft on the device while the person
@@ -16,7 +17,12 @@ const PHOTO = Buffer.from(
   'base64',
 );
 
-type SentOperation = { operationId: string; kind: string; payload: { title: string; photos: unknown[] } };
+const sentOperationSchema = z.object({
+  operationId: z.string(),
+  kind: z.string(),
+  payload: z.object({ title: z.string(), photos: z.array(z.unknown()) }),
+});
+type SentOperation = z.infer<typeof sentOperationSchema>;
 
 /** Answers the sync handler: `offline` aborts the request, a verdict answers it. Returns what was sent. */
 async function answerSync(
@@ -25,15 +31,15 @@ async function answerSync(
 ): Promise<SentOperation[]> {
   const sent: SentOperation[] = [];
   await page.route('**/api/field-sync/v1/operations', async (route) => {
-    const body: { operations: SentOperation[] } = route.request().postDataJSON();
-    sent.push(...body.operations);
+    const { operations } = z
+      .object({ operations: z.array(sentOperationSchema) })
+      .parse(route.request().postDataJSON());
+    sent.push(...operations);
     const verdict = answer();
     if (verdict === 'offline') await route.abort('internetdisconnected');
     else
       await route.fulfill({
-        json: {
-          results: body.operations.map((operation) => ({ operationId: operation.operationId, ...verdict })),
-        },
+        json: { results: operations.map(({ operationId }) => ({ operationId, ...verdict })) },
       });
   });
   return sent;
@@ -75,7 +81,9 @@ test('a report with two photos written without signal stays on the device, survi
   await page.getByRole('button', { name: 'Als Entwurf speichern', exact: true }).click();
 
   await expect(
-    page.getByText(/Gerade kein Netz\. Der Entwurf ist auf diesem Gerät gespeichert/),
+    page
+      .getByRole('alert')
+      .filter({ hasText: /Gerade kein Netz\. Der Entwurf ist auf diesem Gerät gespeichert/ }),
   ).toBeVisible();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   const row = draftRow(page, 'Wartung Heizung');

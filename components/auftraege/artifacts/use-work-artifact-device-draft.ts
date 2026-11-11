@@ -6,11 +6,15 @@ import { DOCUMENT_MAX_FILE_SIZE_BYTES } from '@/lib/documents/types';
 import type { DraftPhoto, StoredDraft } from '@/lib/field-sync/device/draft-store';
 import type { DraftSendOutcome } from '@/lib/field-sync/device/draft-sync';
 import { logError } from '@/lib/logging';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { workArtifactFieldIssues } from '@/lib/work-artifacts/field-rules';
 import { WORK_ARTIFACT_DRAFT_PHOTO_LIMIT } from '@/lib/work-artifacts/types';
 import { noteDraftsOnDevice, type DraftDevice } from './use-device-drafts';
 import type { WorkArtifactEditor } from './use-work-artifact-editor';
 import { contentForKind, iso, savedContent } from './work-artifact-content';
+
+/** The control id of the photo button: the field's label names it, and a refused photo focuses it. */
+export const PHOTO_CONTROL_ID = 'artifact-photos';
 
 type DeviceDraftOptions = {
   editor: WorkArtifactEditor;
@@ -81,7 +85,7 @@ function textChange(
 
 /** The writes of one draft, one after the other, so the last change is the one that stays. */
 function useDraftWrites(device: DraftDevice | null, artifactId: string) {
-  const [storageError, setStorageError] = useState<string | null>(null);
+  const [deviceSaveError, setDeviceSaveError] = useState<string | null>(null);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const write: DraftWrite = (change) => {
     if (!device) return Promise.resolve('not_stored');
@@ -91,20 +95,20 @@ function useDraftWrites(device: DraftDevice | null, artifactId: string) {
       .then(() => device.change(artifactId, change))
       .then(
         (stored) => {
-          setStorageError(null);
+          setDeviceSaveError(null);
           device.changed();
           return stored;
         },
         (error: unknown) => {
           logError('useWorkArtifactDeviceDraft: device write failed', error);
-          setStorageError(storageFailureMessage(error));
+          setDeviceSaveError(storageFailureMessage(error));
           return 'not_stored' as const;
         },
       );
     queue.current = result;
     return result;
   };
-  return { write, storageError };
+  return { write, deviceSaveError };
 }
 
 /** The draft's photos: each is stored on the device the moment it is taken. */
@@ -132,7 +136,7 @@ function useDraftPhotos(write: DraftWrite, withText: DraftChange, restored: Stor
           ? `Ein Entwurf kann höchstens ${WORK_ARTIFACT_DRAFT_PHOTO_LIMIT} Fotos haben.`
           : null;
     setPhotoError(refusal);
-    if (refusal) return;
+    if (focusFirstInvalidField({ [PHOTO_CONTROL_ID]: refusal ?? undefined })) return;
     const photo: DraftPhoto = {
       id: crypto.randomUUID(),
       name: file.name || 'Foto.jpg',
@@ -163,7 +167,7 @@ export function useWorkArtifactDeviceDraft({
   restored,
 }: DeviceDraftOptions) {
   const active = device !== null && jobId !== null && editor.detail === null;
-  const { write, storageError } = useDraftWrites(active ? device : null, artifactId);
+  const { write, deviceSaveError } = useDraftWrites(active ? device : null, artifactId);
   const text = draftText(editor);
   const withText: DraftChange =
     device && jobId !== null ? textChange(device, { artifactId, jobId }, text) : (current) => current;
@@ -206,7 +210,7 @@ export function useWorkArtifactDeviceDraft({
     await write(() => null);
   }
 
-  return { active, ...photos, storageError, send, discard };
+  return { active, ...photos, deviceSaveError, send, discard };
 }
 
 export type WorkArtifactDeviceDraft = ReturnType<typeof useWorkArtifactDeviceDraft>;

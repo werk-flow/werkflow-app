@@ -43,7 +43,7 @@ function draftState(
   return { name: 'on_device' };
 }
 
-function stateLabel(state: DeviceDraftState): string {
+function draftStateLabel(state: DeviceDraftState): string {
   switch (state.name) {
     case 'on_device':
       return 'Entwurf auf dem Gerät';
@@ -88,7 +88,7 @@ type DraftRow = {
 };
 
 /** The drafts this page lists: its own job's, and those of other jobs that wait for the person's decision. */
-function draftRows(deviceDrafts: DeviceDrafts, device: DraftDevice, jobId: string | null): DraftRow[] {
+function listedDrafts(deviceDrafts: DeviceDrafts, device: DraftDevice, jobId: string | null): DraftRow[] {
   return deviceDrafts.drafts.flatMap((draft) => {
     const pastLimit = device.isPastUnsentLimit(draft);
     const state = draftState(draft, deviceDrafts.progress, pastLimit);
@@ -117,7 +117,7 @@ export function DeviceDraftList({ deviceDrafts, jobId, onOpen }: DeviceDraftList
   const [error, setError] = useState<string | null>(null);
   if (failure) return <SectionError className="mt-4" failure={failure} />;
   if (!device) return null;
-  const rows = draftRows(deviceDrafts, device, jobId);
+  const rows = listedDrafts(deviceDrafts, device, jobId);
   if (rows.length === 0) return null;
 
   function send(draft: StoredDraft) {
@@ -198,7 +198,9 @@ function DeviceDraftRow({
             {!here && ' · anderer Auftrag'}
           </p>
         </div>
-        <Badge variant={state.name === 'not_sent' ? 'destructive' : 'outline'}>{stateLabel(state)}</Badge>
+        <Badge variant={state.name === 'not_sent' ? 'destructive' : 'outline'}>
+          {draftStateLabel(state)}
+        </Badge>
       </div>
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
       {state.name !== 'sending' && (

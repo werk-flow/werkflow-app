@@ -9,6 +9,7 @@ import {
   type WorkArtifactVisibility,
 } from '@/lib/work-artifacts/types';
 import { z } from '@/lib/zod';
+import { belongsTo, requestResult, runInStore, type DeviceHolder } from './device-store';
 
 // The web half of the report drafts a phone keeps (decision record 0010, the
 // report draft amendment): one IndexedDB record per draft with its text and
@@ -34,8 +35,8 @@ export const DRAFT_UNSENT_LIMIT_MS = 7 * 24 * 60 * 60 * 1000;
  */
 export const DRAFT_NO_ACCESS_KEPT_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** The signed-in person and the active organization a page was rendered for. */
-export type DraftHolder = { userId: string; organizationId: string };
+/** The person and organization a draft belongs to. */
+export type DraftHolder = DeviceHolder;
 
 export type DraftPhoto = {
   /** The id of the photo's link on the revision, created once on the device. */
@@ -125,15 +126,8 @@ function storedDraft(record: unknown): StoredDraft | null {
   return { ...fields.data, content: fields.data.content, photos };
 }
 
-function requestResult<T>(request: IDBRequest<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed'));
-  });
-}
-
-/** Runs `run` in one transaction and closes the connection. Rejects with the browser's error: a full disk is a `QuotaExceededError`. */
-async function withStore<T>(
+/** Runs `run` in one transaction of the draft store and closes the connection, so nothing ever waits on it. */
+async function inDraftStore<T>(
   mode: IDBTransactionMode,
   run: (store: IDBObjectStore) => IDBRequest<T>,
 ): Promise<T> {
@@ -143,20 +137,10 @@ async function withStore<T>(
   };
   const database = await requestResult(opening);
   try {
-    const transaction = database.transaction(STORE, mode);
-    const committed = new Promise<void>((resolve, reject) => {
-      transaction.oncomplete = () => resolve();
-      transaction.onabort = () => reject(transaction.error ?? new Error('IndexedDB transaction aborted'));
-    });
-    const [result] = await Promise.all([requestResult(run(transaction.objectStore(STORE))), committed]);
-    return result;
+    return await runInStore(database, STORE, mode, run);
   } finally {
     database.close();
   }
-}
-
-function belongsTo(draft: DraftHolder, holder: DraftHolder): boolean {
-  return draft.userId === holder.userId && draft.organizationId === holder.organizationId;
 }
 
 /** Whether the phone no longer keeps a draft the server refused for lost access. */
@@ -176,7 +160,7 @@ export async function listDraftsOnDevice(
   holder: DraftHolder,
   now: Date = new Date(),
 ): Promise<StoredDraft[]> {
-  const records: unknown[] = await withStore('readwrite', (store) => {
+  const records: unknown[] = await inDraftStore('readwrite', (store) => {
     const request = store.getAll();
     request.addEventListener('success', () => {
       for (const record of request.result) {
@@ -209,7 +193,7 @@ export async function changeDraftOnDevice(
   let stored: StoredDraft | null = null;
   let refusedWrite: unknown = null;
   try {
-    await withStore('readwrite', (store) => {
+    await inDraftStore('readwrite', (store) => {
       const request = store.get(id);
       request.addEventListener('success', () => {
         const current = storedDraft(request.result);
@@ -241,7 +225,7 @@ export async function changeDraftOnDevice(
 
 /** Deletes every draft of the holder, after the person chose to discard their unsent work. */
 export async function deleteDraftsOnDevice(holder: DraftHolder): Promise<void> {
-  await withStore('readwrite', (store) => {
+  await inDraftStore('readwrite', (store) => {
     const request = store.getAll();
     request.addEventListener('success', () => {
       for (const record of request.result) {

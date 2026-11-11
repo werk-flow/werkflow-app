@@ -7,10 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import type { DraftPhoto } from '@/lib/field-sync/device/draft-store';
-import type { WorkArtifactDeviceDraft } from './use-work-artifact-device-draft';
-
-/** The control id of the photo button, which the label names. */
-const PHOTO_CONTROL_ID = 'artifact-photos';
+import { PHOTO_CONTROL_ID, type WorkArtifactDeviceDraft } from './use-work-artifact-device-draft';
 
 /** The photo's own bytes as an image the browser could decode, `failed` when it could not, null while it decodes. */
 function usePhotoPreview(blob: Blob): string | 'failed' | null {
@@ -74,7 +71,7 @@ function PhotoTile({
  */
 export function WorkArtifactPhotoField({ deviceDraft }: { deviceDraft: WorkArtifactDeviceDraft }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const { photos, photoError, storageError, addPhoto, removePhoto } = deviceDraft;
+  const { photos, photoError, deviceSaveError, addPhoto, removePhoto } = deviceDraft;
   return (
     <div className="space-y-2">
       <Field
@@ -124,7 +121,7 @@ export function WorkArtifactPhotoField({ deviceDraft }: { deviceDraft: WorkArtif
           />
         </div>
       </Field>
-      <ErrorText>{storageError}</ErrorText>
+      <ErrorText>{deviceSaveError}</ErrorText>
     </div>
   );
 }

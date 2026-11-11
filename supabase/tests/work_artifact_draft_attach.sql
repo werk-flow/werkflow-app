@@ -80,8 +80,8 @@ create function pg_temp.attach(
 language sql as $$
   select public.attach_work_artifact_draft(
     p_organization_id, p_actor_id, p_operation_id, p_request_hash,
-    '2026-11-09T07:00:00Z', '2026-11-09T09:00:00Z', p_artifact_id, p_revision_id, p_job_id,
-    'work_report', 'internal_only', '2026-11-09T07:00:00Z', 'Heizung gewartet',
+    '2037-11-09T07:00:00Z', '2037-11-09T09:00:00Z', p_artifact_id, p_revision_id, p_job_id,
+    'work_report', 'internal_only', '2037-11-09T07:00:00Z', 'Heizung gewartet',
     '{"performedWork":"Brenner gereinigt"}'::jsonb, p_photos)
 $$;
 grant execute on function pg_temp.attach(uuid, uuid, uuid, text, uuid, uuid, uuid, jsonb) to service_role;

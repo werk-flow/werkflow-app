@@ -13,10 +13,13 @@ import {
 } from '../../../golden/support/db/time-tracking';
 import { seedPendingVacationRequest } from '../../../golden/support/db/vacation';
 import {
+  closeWorkArtifactDialog,
   newWorkArtifactButton,
   workArtifactCreateDialog,
+  workArtifactField,
 } from '../../../golden/support/spec-helpers/work-artifact-dialog';
 import { hydratedAndSettled } from '../../../golden/support/steps/interaction';
+import { deviceDraftDeleteButton, deviceDraftDeleteConfirmation } from '../offline-drafts';
 import { ownEvidenceUploadButton, ownEvidenceUploadDialog } from '../../../golden/support/steps/personnel';
 import {
   ownSicknessCancelButton,
@@ -264,5 +267,16 @@ export const TIME_OPENERS = {
   'field.artifact': {
     trigger: async ({ page }) => newWorkArtifactButton(page, { exact: true }),
     layer: workArtifactCreateDialog,
+  },
+  'field.artifact-draft-delete': {
+    trigger: async ({ page }) => {
+      // A draft only this device holds: typed into the dialog and left there.
+      await newWorkArtifactButton(page, { exact: true }).click();
+      const dialog = workArtifactCreateDialog(page);
+      await workArtifactField(dialog, 'title').fill('Entwurf nur auf dem Gerät');
+      await closeWorkArtifactDialog(dialog);
+      return deviceDraftDeleteButton(page, 'Entwurf nur auf dem Gerät');
+    },
+    layer: deviceDraftDeleteConfirmation,
   },
 } satisfies Partial<Record<DialogOpenerId, DialogOpener>>;
