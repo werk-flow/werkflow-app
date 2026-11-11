@@ -7,10 +7,10 @@ import {
 } from '../../golden/support/spec-helpers/work-artifact-dialog';
 import { bypassHttpCache, setNetwork, waitForOfflineShell } from '../support/offline-shell';
 import {
-  countDraftsOnDevice,
   deviceDrafts,
   draftOnDevice,
-  readAttachedReports,
+  expectAttachedReports,
+  expectDraftsOnDevice,
   savedOnDeviceBanner,
   takeSyntheticPhoto,
 } from '../support/offline-drafts';
@@ -59,13 +59,13 @@ test('a report with two photos written without signal survives a reload and arri
     await workArtifactAction(dialog, 'saveDraft').click();
     await expect(savedOnDeviceBanner(page)).toBeVisible();
     await expect(draftOnDevice(page, reportTitle)).toBeVisible();
-    expect(await readAttachedReports(world, reportTitle)).toEqual([]);
+    await expectAttachedReports(world, reportTitle, []);
   });
 
   await test.step('a reload without network keeps the draft on the phone', async () => {
     await page.reload();
     await expect(offlineStand(page)).toBeVisible();
-    expect(await countDraftsOnDevice(page)).toBe(1);
+    await expectDraftsOnDevice(page, 1);
   });
 
   await test.step('after a restart with the signal back, the job page sends the draft', async () => {
@@ -74,7 +74,7 @@ test('a report with two photos written without signal survives a reload and arri
     await restarted.setViewportSize({ width: 375, height: 812 });
     await restarted.goto(`/auftraege/${jobNumber}`);
     await expect(deviceDrafts(restarted)).toBeHidden();
-    await expect.poll(() => countDraftsOnDevice(restarted)).toBe(0);
+    await expectDraftsOnDevice(restarted, 0);
     await restarted.reload();
     await expect(workArtifactEntry(restarted, reportTitle)).toBeVisible();
     await restarted.close();
@@ -82,7 +82,7 @@ test('a report with two photos written without signal survives a reload and arri
 
   await test.step('the server holds one draft revision with two photos', async () => {
     // One version for the revision and one for each photo link.
-    expect(await readAttachedReports(world, reportTitle)).toEqual([
+    await expectAttachedReports(world, reportTitle, [
       { status: 'draft', version: 3, revisions: 1, photos: 2, operations: 1 },
     ]);
   });
@@ -91,7 +91,7 @@ test('a report with two photos written without signal survives a reload and arri
     await page.goto(`/auftraege/${jobNumber}`);
     await expect(workArtifactEntry(page, reportTitle)).toBeVisible();
     await expect(deviceDrafts(page)).toBeHidden();
-    expect(await readAttachedReports(world, reportTitle)).toEqual([
+    await expectAttachedReports(world, reportTitle, [
       { status: 'draft', version: 3, revisions: 1, photos: 2, operations: 1 },
     ]);
   });

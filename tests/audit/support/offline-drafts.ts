@@ -2,6 +2,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
 
 import { createAdminClient } from '../../golden/support/db/shared';
 import { getJobIdByNumber } from '../../golden/support/db/work';
+import { confirmed } from '../../golden/support/steps/shared';
 import { workArtifactsSection } from '../../golden/support/spec-helpers/work-artifact-dialog';
 import type { TestWorld } from '../../golden/support/world';
 import { todayJobNumber } from './offline-today';
@@ -47,18 +48,22 @@ export function deviceDrafts(page: Page): Locator {
 
 /** The row of one draft on the device that shows „Entwurf auf dem Gerät“. */
 export function draftOnDevice(page: Page, title: string): Locator {
-  return deviceDrafts(page)
-    .getByRole('listitem')
-    .filter({ hasText: title })
-    .filter({ hasText: DRAFT_COPY.onDevice });
+  return confirmed(
+    deviceDrafts(page)
+      .getByRole('listitem')
+      .filter({ hasText: title })
+      .filter({ hasText: DRAFT_COPY.onDevice }),
+  );
 }
 
 /** „Löschen“ of one draft on the device. */
 export function deviceDraftDeleteButton(page: Page, title: string): Locator {
-  return deviceDrafts(page)
-    .getByRole('listitem')
-    .filter({ hasText: title })
-    .getByRole('button', { name: DRAFT_COPY.delete, exact: true });
+  return confirmed(
+    deviceDrafts(page)
+      .getByRole('listitem')
+      .filter({ hasText: title })
+      .getByRole('button', { name: DRAFT_COPY.delete, exact: true }),
+  );
 }
 
 /** The confirmation before a draft leaves the device for good. */
@@ -66,8 +71,14 @@ export function deviceDraftDeleteConfirmation(page: Page): Locator {
   return page.getByRole('alertdialog', { name: DRAFT_COPY.deleteConfirmation });
 }
 
-/** How many drafts the device store holds, whoever they belong to. */
-export async function countDraftsOnDevice(page: Page): Promise<number> {
+/** Waits until the device store holds this many drafts, whoever they belong to. */
+export async function expectDraftsOnDevice(page: Page, count: number): Promise<void> {
+  await expect
+    .poll(() => countDraftsOnPage(page), { message: `The device store holds ${count} draft(s)` })
+    .toBe(count);
+}
+
+async function countDraftsOnPage(page: Page): Promise<number> {
   return page.evaluate(async (name) => {
     const names = (await indexedDB.databases()).map((info) => info.name);
     if (!names.includes(name)) return 0;
@@ -88,13 +99,25 @@ export async function countDraftsOnDevice(page: Page): Promise<number> {
   }, DRAFT_DATABASE);
 }
 
-/** What the server holds of the job's Arbeitsnachweise with this title. */
-export async function readAttachedReports(
+/** One Arbeitsnachweis on the server: its state, and how many revisions, photo links and draft operations wrote it. */
+type AttachedReport = {
+  status: string;
+  version: number;
+  revisions: number;
+  photos: number;
+  operations: number;
+};
+
+/** Asserts what the server holds of the job's Arbeitsnachweise with this title. */
+export async function expectAttachedReports(
   world: TestWorld,
   title: string,
-): Promise<
-  Array<{ status: string; version: number; revisions: number; photos: number; operations: number }>
-> {
+  expected: readonly AttachedReport[],
+): Promise<void> {
+  expect(await readAttachedReports(world, title)).toEqual(expected);
+}
+
+async function readAttachedReports(world: TestWorld, title: string): Promise<AttachedReport[]> {
   const admin = createAdminClient();
   const jobId = await getJobIdByNumber(world.orgId, todayJobNumber(world));
   const { data: revisions } = await admin
