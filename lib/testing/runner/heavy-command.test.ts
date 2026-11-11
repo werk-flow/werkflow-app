@@ -82,10 +82,11 @@ test('a type-aware lint of more files than the line is refused; the measured who
   expect(passed).toEqual([]);
   expect(lintedFileCount(['components'], repositoryRoot)).toBeGreaterThan(BROAD_LINT_FILES);
   expect(heavyCommandRefusal('tsc --noEmit', resolve(repositoryRoot, 'lib'))).toContain('bun run typecheck');
-  // A subshell's cd may reach the repository root from a small folder.
-  expect(
-    heavyCommandRefusal('(cd ../../.. && eslint .)', resolve(repositoryRoot, 'lib/testing/runner')),
-  ).toContain('static:lint');
+  // A subshell's cd may reach the repository root from a small folder, and after a
+  // subshell a relative cd may start from the folder before it.
+  const runner = resolve(repositoryRoot, 'lib/testing/runner');
+  expect(heavyCommandRefusal('(cd ../../.. && eslint .)', runner)).toContain('static:lint');
+  expect(heavyCommandRefusal('(cd /tmp && pwd); cd ../../.. && eslint .', runner)).toContain('static:lint');
 });
 
 test('a direct Next build is refused, with the recorded build in its place', () => {
