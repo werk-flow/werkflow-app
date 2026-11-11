@@ -115,17 +115,6 @@ export function savedContent(
   });
 }
 
-/** A stored draft's content back in the editor: every field present, the instants as local times. */
-export function contentForEditor(content: WorkArtifactContentInput): WorkArtifactContentDraft {
-  return {
-    ...EMPTY_CONTENT,
-    ...content,
-    visitStartedAt: localDateTime(content.visitStartedAt),
-    visitEndedAt: localDateTime(content.visitEndedAt),
-    nextVisitAt: localDateTime(content.nextVisitAt),
-  };
-}
-
 export function contentFromDetail(detail: WorkArtifactDetail): WorkArtifactContentInput {
   const revision = detail.revisions.find((entry) => entry.id === detail.current_revision_id);
   if (!revision) return { ...EMPTY_CONTENT };

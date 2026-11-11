@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import type { DraftPhoto } from '@/lib/field-sync/device/draft-store';
-import { PHOTO_CONTROL_ID, type WorkArtifactDeviceDraft } from './use-work-artifact-device-draft';
 
 /** The photo's own bytes as an image the browser could decode, `failed` when it could not, null while it decodes. */
 function usePhotoPreview(blob: Blob): string | 'failed' | null {
@@ -65,13 +64,31 @@ function PhotoTile({
   );
 }
 
+type WorkArtifactPhotoFieldProps = {
+  photos: readonly DraftPhoto[];
+  /** Why the last photo was refused; shown at the field. */
+  photoError: string | null;
+  /** Why the device did not store the last change. */
+  deviceSaveError: string | null;
+  addPhoto: (file: File) => Promise<void>;
+  removePhoto: (photoId: string) => Promise<void>;
+};
+
+/** The control id of the photo button: the field's label names it, and a refused photo focuses it. */
+export const PHOTO_CONTROL_ID = 'artifact-photos';
+
 /**
  * The photos of a new Arbeitsnachweis. The camera input stores each photo on the device at once;
  * the photos go to the job's documents when the draft is sent.
  */
-export function WorkArtifactPhotoField({ deviceDraft }: { deviceDraft: WorkArtifactDeviceDraft }) {
+export function WorkArtifactPhotoField({
+  photos,
+  photoError,
+  deviceSaveError,
+  addPhoto,
+  removePhoto,
+}: WorkArtifactPhotoFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const { photos, photoError, deviceSaveError, addPhoto, removePhoto } = deviceDraft;
   return (
     <div className="space-y-2">
       <Field

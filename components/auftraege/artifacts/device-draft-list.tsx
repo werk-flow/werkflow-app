@@ -15,14 +15,14 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
-import { SectionError } from '@/components/ui/section-error';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import type { StoredDraft } from '@/lib/field-sync/device/draft-store';
 import type { DraftSendProgress } from '@/lib/field-sync/device/draft-sync';
 import { logError } from '@/lib/logging';
 import { formatBerlin } from '@/lib/utils';
 import { WORK_ARTIFACT_KIND_LABELS } from '@/lib/work-artifacts/types';
-import type { DeviceDrafts, DraftDevice } from './use-device-drafts';
+import type { DraftDevice, RestoredDraft } from './use-device-drafts';
+import { EMPTY_CONTENT, localDateTime } from './work-artifact-content';
 
 /** What a draft on the device shows as. */
 type DeviceDraftState =
@@ -88,10 +88,10 @@ type DraftRow = {
 };
 
 /** The drafts this page lists: its own job's, and those of other jobs that wait for the person's decision. */
-function listedDrafts(deviceDrafts: DeviceDrafts, device: DraftDevice, jobId: string | null): DraftRow[] {
-  return deviceDrafts.drafts.flatMap((draft) => {
+function listedDrafts({ device, drafts, progress, jobId }: DeviceDraftListProps): DraftRow[] {
+  return drafts.flatMap((draft) => {
     const pastLimit = device.isPastUnsentLimit(draft);
-    const state = draftState(draft, deviceDrafts.progress, pastLimit);
+    const state = draftState(draft, progress, pastLimit);
     const here = draft.jobId === jobId;
     return here || state.name === 'not_sent' || state.name === 'no_access'
       ? [{ draft, state, here, pastLimit }]
@@ -99,29 +99,49 @@ function listedDrafts(deviceDrafts: DeviceDrafts, device: DraftDevice, jobId: st
   });
 }
 
+/** A stored draft as the dialog opens it: every content field present, the instants as local times. */
+function restoredDraft(draft: StoredDraft): RestoredDraft {
+  const { content } = draft;
+  return {
+    draft,
+    form: {
+      kind: draft.kind,
+      visibility: draft.visibility,
+      title: draft.title,
+      capturedAt: localDateTime(draft.capturedAt),
+      content: {
+        ...EMPTY_CONTENT,
+        ...content,
+        visitStartedAt: localDateTime(content.visitStartedAt),
+        visitEndedAt: localDateTime(content.visitEndedAt),
+        nextVisitAt: localDateTime(content.nextVisitAt),
+      },
+    },
+  };
+}
+
 type DeviceDraftListProps = {
-  deviceDrafts: DeviceDrafts;
+  device: DraftDevice;
+  drafts: readonly StoredDraft[];
+  progress: DraftSendProgress | null;
   /** The job of this page: its drafts can be opened; drafts of other jobs show only when the person must decide. */
   jobId: string | null;
-  onOpen: (draft: StoredDraft) => void;
+  onOpen: (restored: RestoredDraft) => void;
 };
 
 /**
  * The report drafts this device keeps: what waits, what is being uploaded, what the server did
  * not take and what the person lost access to. Nothing renders while the device holds none.
  */
-export function DeviceDraftList({ deviceDrafts, jobId, onOpen }: DeviceDraftListProps) {
-  const { device, failure } = deviceDrafts;
+export function DeviceDraftList(props: DeviceDraftListProps) {
+  const { device, onOpen } = props;
   const { run, isBusy, anyBusy } = useBusyIds();
   const [deleting, setDeleting] = useState<StoredDraft | null>(null);
   const [error, setError] = useState<string | null>(null);
-  if (failure) return <SectionError className="mt-4" failure={failure} />;
-  if (!device) return null;
-  const rows = listedDrafts(deviceDrafts, device, jobId);
+  const rows = listedDrafts(props);
   if (rows.length === 0) return null;
 
   function send(draft: StoredDraft) {
-    if (!device) return;
     setError(null);
     void run(draft.id, async () => {
       try {
@@ -148,7 +168,7 @@ export function DeviceDraftList({ deviceDrafts, jobId, onOpen }: DeviceDraftList
             hint={stateHint(row, device.noAccessKeptMs)}
             sending={isBusy(row.draft.id)}
             disabled={anyBusy}
-            onOpen={() => onOpen(row.draft)}
+            onOpen={() => onOpen(restoredDraft(row.draft))}
             onSend={() => send(row.draft)}
             onDelete={() => setDeleting(row.draft)}
           />

@@ -18,6 +18,7 @@ const DRAFT_DATABASE = 'werkflow-drafts';
 const DRAFT_COPY = {
   onDevice: 'Entwurf auf dem Gerät',
   savedOnDevice: /Gerade kein Netz\. Der Entwurf ist auf diesem Gerät gespeichert/,
+  photos: 'Fotos',
   delete: 'Löschen',
   deleteConfirmation: /^Entwurf „.*“ löschen\?$/,
 } as const;
@@ -27,6 +28,14 @@ const SYNTHETIC_PHOTO = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
   'base64',
 );
+
+/**
+ * The button that opens the camera, named by its field's label. It renders once the dialog keeps
+ * its draft on the device: text typed before that is stored only if the dialog is still open then.
+ */
+export function photoButton(dialog: Locator): Locator {
+  return dialog.getByRole('button', { name: DRAFT_COPY.photos, exact: true });
+}
 
 /** Takes one synthetic photo through the dialog's camera input and waits until the device lists it. */
 export async function takeSyntheticPhoto(dialog: Locator, position: number): Promise<void> {

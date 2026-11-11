@@ -11,6 +11,7 @@ import {
   draftOnDevice,
   expectAttachedReports,
   expectDraftsOnDevice,
+  photoButton,
   savedOnDeviceBanner,
   takeSyntheticPhoto,
 } from '../support/offline-drafts';
@@ -51,6 +52,8 @@ test('a report with two photos written without signal survives a reload and arri
   });
 
   await test.step('the signal goes: the report and two photos are saved on the phone', async () => {
+    // The dialog keeps its draft on the device from here on.
+    await expect(photoButton(dialog)).toBeVisible();
     await bypassHttpCache(page);
     await setNetwork(page, 'offline');
     await workArtifactField(dialog, 'performedWork').fill('Brenner gereinigt, Druck geprüft.');

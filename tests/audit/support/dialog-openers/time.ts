@@ -19,7 +19,7 @@ import {
   workArtifactField,
 } from '../../../golden/support/spec-helpers/work-artifact-dialog';
 import { hydratedAndSettled } from '../../../golden/support/steps/interaction';
-import { deviceDraftDeleteButton, deviceDraftDeleteConfirmation } from '../offline-drafts';
+import { deviceDraftDeleteButton, deviceDraftDeleteConfirmation, photoButton } from '../offline-drafts';
 import { ownEvidenceUploadButton, ownEvidenceUploadDialog } from '../../../golden/support/steps/personnel';
 import {
   ownSicknessCancelButton,
@@ -273,6 +273,7 @@ export const TIME_OPENERS = {
       // A draft only this device holds: typed into the dialog and left there.
       await newWorkArtifactButton(page, { exact: true }).click();
       const dialog = workArtifactCreateDialog(page);
+      await expect(photoButton(dialog)).toBeVisible();
       await workArtifactField(dialog, 'title').fill('Entwurf nur auf dem Gerät');
       await closeWorkArtifactDialog(dialog);
       return deviceDraftDeleteButton(page, 'Entwurf nur auf dem Gerät');

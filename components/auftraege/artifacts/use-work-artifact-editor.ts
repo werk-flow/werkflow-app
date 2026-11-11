@@ -6,7 +6,6 @@ import { useBusyIds } from '@/hooks/use-busy-id';
 import { useClientRead } from '@/hooks/use-client-read';
 import { describeFailure } from '@/lib/action-messages';
 import type { ActionResult } from '@/lib/action-result';
-import type { StoredDraft } from '@/lib/field-sync/device/draft-store';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { requiredWorkArtifactFields, workArtifactFieldIssues } from '@/lib/work-artifacts/field-rules';
 import type {
@@ -17,13 +16,13 @@ import type {
   WorkArtifactVisibility,
 } from '@/lib/work-artifacts/types';
 import {
-  contentForEditor,
   contentForKind,
   contentFromDetail,
   EMPTY_CONTENT,
   localDateTime,
   type WorkArtifactContentDraft,
 } from './work-artifact-content';
+import type { RestoredDraft } from './use-device-drafts';
 import { WORK_ARTIFACT_CONTROL_IDS, workArtifactFieldErrors } from './work-artifact-field-errors';
 
 type WorkArtifactEditorOptions = {
@@ -33,8 +32,8 @@ type WorkArtifactEditorOptions = {
   /** A new work report's Beginn and Ende from today's recorded time on the job. */
   recordedVisit: RecordedVisitWindow;
   readOnly: boolean;
-  /** The draft of a new Arbeitsnachweis this device kept: the form opens with it. */
-  restored?: StoredDraft | null;
+  /** The draft of a new Arbeitsnachweis this device kept, as the form holds it: the form opens with it. */
+  restored?: RestoredDraft['form'] | null;
 };
 
 /** One rule field's control id, required mark and current error. */
@@ -60,11 +59,11 @@ export function useWorkArtifactEditor({
   const [kind, setKind] = useState<WorkArtifactKind>(first?.kind ?? 'work_report');
   const [visibility, setVisibility] = useState<WorkArtifactVisibility>(first?.visibility ?? 'internal_only');
   const [title, setTitle] = useState(first?.title ?? '');
-  const [capturedAt, setCapturedAt] = useState(() =>
-    initialCapturedAt(restored?.capturedAt ?? initialSummary?.currentRevision.captured_at),
+  const [capturedAt, setCapturedAt] = useState(
+    () => restored?.capturedAt ?? initialCapturedAt(initialSummary?.currentRevision.captured_at),
   );
-  const [content, setContent] = useState(() =>
-    restored ? contentForEditor(restored.content) : initialContent(artifactId, defaultSiteId, recordedVisit),
+  const [content, setContent] = useState(
+    () => restored?.content ?? initialContent(artifactId, defaultSiteId, recordedVisit),
   );
   const [correctionReason, setCorrectionReason] = useState('');
   const [correctionReasonError, setCorrectionReasonError] = useState<string | null>(null);

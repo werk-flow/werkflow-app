@@ -1,5 +1,7 @@
 'use client';
 
+import type { ReactNode } from 'react';
+
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import { SectionError } from '@/components/ui/section-error';
@@ -7,14 +9,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import type { WorkArtifactTimeSourceOption } from '@/lib/work-artifacts/types';
 import type { WorkArtifactCustomerActions } from './use-work-artifact-customer-actions';
-import type { WorkArtifactDeviceDraft } from './use-work-artifact-device-draft';
 import type { WorkArtifactEditor } from './use-work-artifact-editor';
 import type { WorkArtifactLinks } from './use-work-artifact-links';
 import type { WorkArtifactReviewActions } from './use-work-artifact-review-actions';
 import { WorkArtifactActionPanel } from './work-artifact-action-panel';
 import type { WorkArtifactEvidenceRequirement } from './work-artifact-content';
 import { ArtifactForm } from './work-artifact-form';
-import { WorkArtifactPhotoField } from './work-artifact-photo-field';
 
 /** The hint that someone else saved a newer version while the dialog is open. */
 export function WorkArtifactRemoteUpdateHint({
@@ -68,11 +68,12 @@ export function WorkArtifactDialogSkeleton() {
 export function WorkArtifactDraftForm({
   editor,
   instructionOptions,
-  deviceDraft,
+  keeper,
 }: {
   editor: WorkArtifactEditor;
   instructionOptions: Array<{ id: string; label: string }>;
-  deviceDraft: WorkArtifactDeviceDraft;
+  /** The draft keeper with the photos of a new job Arbeitsnachweis, once its code is loaded. */
+  keeper: ReactNode;
 }) {
   const {
     detail,
@@ -118,7 +119,7 @@ export function WorkArtifactDraftForm({
         fieldState={fieldState}
         fieldErrors={fieldErrors}
       />
-      {deviceDraft.active && <WorkArtifactPhotoField deviceDraft={deviceDraft} />}
+      {keeper}
     </div>
   );
 }

@@ -2,8 +2,9 @@
 
 import { StaleRegion } from '@/components/shared/stale-region';
 import { EmptyState } from '@/components/ui/empty-state';
+import { SectionError } from '@/components/ui/section-error';
 import { PlainButton } from '@/components/ui/plain-button';
-import { useId, useState, type Dispatch, type ReactElement, type SetStateAction } from 'react';
+import { useId, useRef, useState, type Dispatch, type ReactElement, type SetStateAction } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ClipboardList, Plus } from 'lucide-react';
 
@@ -19,7 +20,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useLiveView } from '@/hooks/use-live-view';
-import type { StoredDraft } from '@/lib/field-sync/device/draft-store';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import { readInBackground } from '@/lib/data/background-read-client';
 import {
@@ -30,10 +30,13 @@ import {
   type WorkArtifactSummary,
   type WorkArtifactTimeSourceOption,
 } from '@/lib/work-artifacts/types';
-import { DeviceDraftList } from './device-draft-list';
-import { useDeviceDrafts, type DraftDevice } from './use-device-drafts';
+import {
+  useDeviceDrafts,
+  type DeviceDraftHandle,
+  type DeviceDrafts,
+  type RestoredDraft,
+} from './use-device-drafts';
 import { useWorkArtifactCustomerActions } from './use-work-artifact-customer-actions';
-import { useWorkArtifactDeviceDraft } from './use-work-artifact-device-draft';
 import { useWorkArtifactEditor, type WorkArtifactEditor } from './use-work-artifact-editor';
 import { useWorkArtifactLinks } from './use-work-artifact-links';
 import { useWorkArtifactReviewActions } from './use-work-artifact-review-actions';
@@ -111,7 +114,7 @@ export function WorkArtifactsSection({
       {view.isRefreshing && (
         <p className="mt-2 text-xs text-muted-foreground">Arbeitsnachweise werden aktualisiert…</p>
       )}
-      <DeviceDraftList
+      <DeviceDraftsOfSection
         deviceDrafts={deviceDrafts}
         jobId={targetType === 'job' ? targetId : null}
         onOpen={open.restore}
@@ -132,7 +135,7 @@ export function WorkArtifactsSection({
           instructionOptions={instructionOptions}
           defaultSiteId={defaultSiteId}
           readOnly={readOnly}
-          device={targetType === 'job' ? deviceDrafts.device : null}
+          deviceDrafts={targetType === 'job' ? deviceDrafts : null}
           restoredDraft={restoredDraft}
           remoteVersions={remoteVersions}
           onRemoteUpdateHandled={() => setRemoteVersions({})}
@@ -155,14 +158,14 @@ function useOpenArtifact(initialArtifacts: WorkArtifactSummary[]) {
     return initialArtifacts.some((artifact) => artifact.id === requestedId) ? requestedId : null;
   });
   const [creating, setCreating] = useState(false);
-  const [restoredDraft, setRestoredDraft] = useState<StoredDraft | null>(null);
+  const [restoredDraft, setRestoredDraft] = useState<RestoredDraft | null>(null);
   return {
     selectedId,
     creating,
     restoredDraft,
     select: setSelectedId,
     create: () => setCreating(true),
-    restore: (draft: StoredDraft) => {
+    restore: (draft: RestoredDraft) => {
       setRestoredDraft(draft);
       setCreating(true);
     },
@@ -287,9 +290,9 @@ type WorkArtifactDialogProps = WorkArtifactTarget & {
   recordedVisit: RecordedVisitWindow;
   instructionOptions: Array<{ id: string; label: string }>;
   defaultSiteId?: string | undefined;
-  /** The loaded device code of a job's section; null for a project and until it is loaded. */
-  device: DraftDevice | null;
-  restoredDraft: StoredDraft | null;
+  /** The drafts of a job's section on this device; null for a project. */
+  deviceDrafts: DeviceDrafts | null;
+  restoredDraft: RestoredDraft | null;
   remoteVersions: Record<string, number>;
   onRemoteUpdateHandled: () => void;
   onClose: () => void;
@@ -299,7 +302,7 @@ type WorkArtifactDialogProps = WorkArtifactTarget & {
 function WorkArtifactDialog(props: WorkArtifactDialogProps) {
   const { readOnly } = props;
   const artifactFormId = useId();
-  const { editor, save, review, customer, links, deviceDraft } = useWorkArtifactDialogActions(props);
+  const { editor, save, review, customer, links, keeper } = useWorkArtifactDialogActions(props);
   const { detail, loading, editing, isBusy, anyBusy, currentRevision } = editor;
   const { requestClose } = customer;
 
@@ -333,7 +336,7 @@ function WorkArtifactDialog(props: WorkArtifactDialogProps) {
               }}
               noValidate
             >
-              <WorkArtifactDraftForm {...props} editor={editor} deviceDraft={deviceDraft} />
+              <WorkArtifactDraftForm {...props} editor={editor} keeper={keeper} />
             </form>
           ) : detail && currentRevision ? (
             <ArtifactDetail
@@ -386,32 +389,68 @@ function useWorkArtifactDialogActions({
   readOnly,
   timeEntryOptions,
   recordedVisit,
-  device,
+  deviceDrafts,
   restoredDraft,
   onClose,
 }: WorkArtifactDialogProps) {
   // The id a new Arbeitsnachweis gets: its draft's on the device, and the server's once it is saved.
-  const [newArtifactId] = useState(() => restoredDraft?.id ?? crypto.randomUUID());
+  const [newArtifactId] = useState(() => restoredDraft?.draft.id ?? crypto.randomUUID());
   const editor = useWorkArtifactEditor({
     artifactId,
     initialSummary,
     defaultSiteId,
     recordedVisit,
     readOnly,
-    restored: restoredDraft,
+    restored: restoredDraft?.form ?? null,
   });
-  const deviceDraft = useWorkArtifactDeviceDraft({
-    editor,
-    device,
-    jobId: targetType === 'job' && artifactId === null && !readOnly ? targetId : null,
-    artifactId: newArtifactId,
-    restored: restoredDraft,
+  // The keeper of the new Arbeitsnachweis as a draft on this device, while the form shows one.
+  const deviceDraft = useRef<DeviceDraftHandle | null>(null);
+  const [setDeviceDraft] = useState(() => (handle: DeviceDraftHandle | null) => {
+    deviceDraft.current = handle;
   });
-  const save = useWorkArtifactSave({ targetType, targetId, editor, newArtifactId, deviceDraft, onClose });
+  const parts = deviceDrafts?.parts;
+  const device = deviceDrafts?.device;
+  const keeper =
+    parts && device && artifactId === null && !readOnly && editor.detail === null ? (
+      <parts.DeviceDraftKeeper
+        editor={editor}
+        device={device}
+        jobId={targetId}
+        artifactId={newArtifactId}
+        restored={restoredDraft}
+        onHandle={setDeviceDraft}
+        onClose={onClose}
+      />
+    ) : null;
+  const save = useWorkArtifactSave({ targetType, targetId, editor, newArtifactId, deviceDraft });
   const review = useWorkArtifactReviewActions(editor);
   const customer = useWorkArtifactCustomerActions({ targetType, targetId, editor, onClose });
   const links = useWorkArtifactLinks({ editor, review, timeEntryOptions });
-  return { editor, save, review, customer, links, deviceDraft };
+  return { editor, save, review, customer, links, keeper };
+}
+
+/** The device's drafts below the saved Arbeitsnachweise, once their code is loaded; a failed read shows its retry. */
+function DeviceDraftsOfSection({
+  deviceDrafts,
+  jobId,
+  onOpen,
+}: {
+  deviceDrafts: DeviceDrafts;
+  jobId: string | null;
+  onOpen: (restored: RestoredDraft) => void;
+}) {
+  const { parts, device, drafts, progress, failure } = deviceDrafts;
+  if (failure) return <SectionError className="mt-4" failure={failure} />;
+  if (!parts || !device) return null;
+  return (
+    <parts.DeviceDraftList
+      device={device}
+      drafts={drafts}
+      progress={progress}
+      jobId={jobId}
+      onOpen={onOpen}
+    />
+  );
 }
 
 function workArtifactDialogDescription(

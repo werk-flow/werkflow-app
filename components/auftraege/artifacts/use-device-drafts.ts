@@ -7,12 +7,20 @@ import { useClientRead, type ReadFailure } from '@/hooks/use-client-read';
 import { useHydrated } from '@/hooks/use-hydrated';
 import type { DraftHolder, StoredDraft } from '@/lib/field-sync/device/draft-store';
 import type { DraftSendOutcome, DraftSendProgress } from '@/lib/field-sync/device/draft-sync';
+import type { WorkArtifactKind, WorkArtifactVisibility } from '@/lib/work-artifacts/types';
+import type { WorkArtifactContentDraft } from './work-artifact-content';
 
-/**
- * What the artifact screens ask of the device: the lazily loaded draft store and its sender, for
- * the signed-in person in the active organization. The static chunk of a job page holds none of
- * that code; it reaches it only through this object.
- */
+// The report drafts of a device as a job page sees them (decision record
+// 0010, the report draft amendment). This module is all of it that a job page
+// loads with its own code: every other part (the device store, the sender,
+// the list, the photo field, the dialog's draft keeper) sits behind one lazy
+// load in device-draft-parts.tsx, because a job page's code counts toward the
+// field cold start.
+
+/** The lazily loaded draft code. */
+type DraftParts = typeof import('./device-draft-parts');
+
+/** What the artifact screens ask of the device, for the signed-in person in the active organization. */
 export type DraftDevice = {
   holder: DraftHolder;
   list: () => Promise<StoredDraft[]>;
@@ -36,33 +44,36 @@ export type DraftDevice = {
   noAccessKeptMs: number;
 };
 
-/** Loads the draft code and binds it to the holder. Rejects when a chunk cannot load. */
-async function loadDraftDevice(holder: DraftHolder): Promise<DraftDevice> {
-  // The sender imports the store, so the second load answers from the first one's chunks.
-  const sync = await import('@/lib/field-sync/device/draft-sync');
-  const store = await import('@/lib/field-sync/device/draft-store');
-  return {
-    holder,
-    list: () => store.listDraftsOnDevice(holder),
-    change: (draftId, change) => store.changeDraftOnDevice(holder, draftId, change),
-    changed: sync.draftChangedOnDevice,
-    send: (draftId) => sync.sendDraft(holder, draftId),
-    keepOpen: sync.keepDraftOpen,
-    subscribe: sync.subscribeToDrafts,
-    progress: sync.draftSendProgress,
-    start: () => sync.startDraftSync(holder),
-    isPastUnsentLimit: sync.isPastUnsentLimit,
-    noAccessKeptMs: store.DRAFT_NO_ACCESS_KEPT_MS,
+/** A draft the device kept, opened to go on writing: the stored draft and its fields as the form holds them. */
+export type RestoredDraft = {
+  draft: StoredDraft;
+  form: {
+    kind: WorkArtifactKind;
+    visibility: WorkArtifactVisibility;
+    title: string;
+    /** „Erfasst am“ as the form's local date and time. */
+    capturedAt: string;
+    content: WorkArtifactContentDraft;
   };
-}
+};
+
+/** What the dialog's save asks of the draft keeper once the device keeps the new Arbeitsnachweis. */
+export type DeviceDraftHandle = {
+  photoCount: number;
+  /** Sends the draft with its photos; a submit asks for the review once the server holds it. */
+  save: (submit: boolean) => Promise<void>;
+  /** Removes the draft from the device once the server holds the Arbeitsnachweis. */
+  discard: () => Promise<void>;
+};
 
 export type DeviceDrafts = {
-  /** Null until the device code is loaded; the draft path of the dialog needs it. */
+  /** Null until the draft code is loaded. */
+  parts: DraftParts | null;
   device: DraftDevice | null;
   /** The holder's drafts on this device, oldest change first. */
   drafts: readonly StoredDraft[];
   progress: DraftSendProgress | null;
-  /** The device code or the device store could not be read; carries its retry. */
+  /** The draft code or the device store could not be read; carries its retry. */
   failure: ReadFailure | null;
 };
 
@@ -70,34 +81,24 @@ export type DeviceDrafts = {
  * The localStorage key that says this person may hold a draft on this device in this organization.
  * A job page reads it before it loads any draft code, so a page without drafts costs no request.
  */
-function hintKey(holder: DraftHolder): string {
+export function draftHintKey(holder: DraftHolder): string {
   return `werkflow:drafts:${holder.userId}:${holder.organizationId}`;
 }
 
 function mayHoldDrafts(holder: DraftHolder): boolean {
   try {
-    return localStorage.getItem(hintKey(holder)) !== null;
+    return localStorage.getItem(draftHintKey(holder)) !== null;
   } catch {
     // best-effort: without localStorage the device is asked itself.
     return true;
   }
 }
 
-/** Remembers that the holder wrote a draft on this device, or forgets it once none is left. */
-export function noteDraftsOnDevice(holder: DraftHolder, held: boolean): void {
-  try {
-    if (held) localStorage.setItem(hintKey(holder), '1');
-    else localStorage.removeItem(hintKey(holder));
-  } catch {
-    // best-effort: without localStorage every job page asks the device itself.
-  }
-}
-
 /**
- * The report drafts this device keeps for the signed-in person in the active organization
- * (decision record 0010, the report draft amendment). The draft code loads only when the device
- * may hold a draft or `wanted` is set, as when the dialog for a new Arbeitsnachweis opens; from
- * then on it also sends what waits. Without a person or an organization nothing is read.
+ * The report drafts this device keeps for the signed-in person in the active organization. The
+ * draft code loads only when the device may hold a draft or `wanted` is set, as when the dialog
+ * for a new Arbeitsnachweis opens; from then on it also sends what waits. Without a person or an
+ * organization nothing is read.
  */
 export function useDeviceDrafts(currentUserId: string, wanted: boolean): DeviceDrafts {
   const organizationId = useOrganization().activeOrg?.orgId ?? null;
@@ -110,16 +111,17 @@ export function useDeviceDrafts(currentUserId: string, wanted: boolean): DeviceD
   const [everWanted, setEverWanted] = useState(wanted);
   if (wanted && !everWanted) setEverWanted(true);
   const [hinted] = useState(() => holder !== null && mayHoldDrafts(holder));
-  // The loaded code, kept across reads: effects and the dialog depend on one object per holder.
-  const [device, setDevice] = useState<DraftDevice | null>(null);
-  if (device !== null && device.holder !== holder) setDevice(null);
+  // The loaded code and its device, kept across reads: effects and the dialog depend on one object per holder.
+  const [loaded, setLoaded] = useState<{ parts: DraftParts; device: DraftDevice } | null>(null);
+  if (loaded !== null && loaded.device.holder !== holder) setLoaded(null);
   const read = useClientRead({
     read: async () => {
       if (holder === null) return { success: true as const, drafts: [] };
-      const loaded = device ?? (await loadDraftDevice(holder));
-      const drafts = await loaded.list();
-      noteDraftsOnDevice(holder, drafts.length > 0);
-      setDevice(loaded);
+      const parts = loaded?.parts ?? (await import('./device-draft-parts'));
+      const device = loaded?.device ?? parts.createDraftDevice(holder);
+      const drafts = await device.list();
+      parts.noteDraftsOnDevice(holder, drafts.length > 0);
+      setLoaded({ parts, device });
       return { success: true as const, drafts };
     },
     deps: [currentUserId, organizationId],
@@ -127,6 +129,7 @@ export function useDeviceDrafts(currentUserId: string, wanted: boolean): DeviceD
     failureMessage: 'Die Entwürfe auf diesem Gerät konnten nicht gelesen werden.',
   });
   const reload = read.reload;
+  const device = loaded?.device ?? null;
   const [progress, setProgress] = useState<DraftSendProgress | null>(null);
   useEffect(() => {
     if (!device) return;
@@ -137,5 +140,11 @@ export function useDeviceDrafts(currentUserId: string, wanted: boolean): DeviceD
     device.start();
     return unsubscribe;
   }, [device, reload]);
-  return { device, drafts: read.data?.drafts ?? [], progress, failure: read.failure };
+  return {
+    parts: loaded?.parts ?? null,
+    device,
+    drafts: read.data?.drafts ?? [],
+    progress,
+    failure: read.failure,
+  };
 }

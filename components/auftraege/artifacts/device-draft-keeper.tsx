@@ -1,0 +1,284 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+
+import { useBanner } from '@/components/ui/banner';
+import { DOCUMENT_MAX_FILE_SIZE_BYTES } from '@/lib/documents/types';
+import type { DraftHolder, DraftPhoto, StoredDraft } from '@/lib/field-sync/device/draft-store';
+import type { DraftSendOutcome } from '@/lib/field-sync/device/draft-sync';
+import { logError } from '@/lib/logging';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
+import { recordWorkArtifactAction } from '@/lib/work-artifacts/actions';
+import { workArtifactFieldIssues } from '@/lib/work-artifacts/field-rules';
+import { WORK_ARTIFACT_DRAFT_PHOTO_LIMIT } from '@/lib/work-artifacts/types';
+import {
+  draftHintKey,
+  type DeviceDraftHandle,
+  type DraftDevice,
+  type RestoredDraft,
+} from './use-device-drafts';
+import type { WorkArtifactEditor } from './use-work-artifact-editor';
+import { contentForKind, iso, savedContent } from './work-artifact-content';
+import { PHOTO_CONTROL_ID, WorkArtifactPhotoField } from './work-artifact-photo-field';
+
+// The draft of a new Arbeitsnachweis while its dialog is open (decision
+// record 0010, the report draft amendment): the text is stored on the device
+// as the person types, each photo when it is taken, so both survive a lost
+// signal, a reload and a restart. The draft leaves the device when the server
+// holds it. This module loads with the dialog, never with the job page.
+
+/** Remembers that the holder wrote a draft on this device, or forgets it once none is left. */
+export function noteDraftsOnDevice(holder: DraftHolder, held: boolean): void {
+  try {
+    if (held) localStorage.setItem(draftHintKey(holder), '1');
+    else localStorage.removeItem(draftHintKey(holder));
+  } catch {
+    // best-effort: without localStorage every job page asks the device itself.
+  }
+}
+
+type DraftChange = (current: StoredDraft | null) => StoredDraft | null;
+/** What the device holds after a change, or `not_stored` when it refused the write. */
+type DraftWrite = (change: DraftChange) => Promise<StoredDraft | null | 'not_stored'>;
+
+/** Why a write to the device failed, in German. A full disk is the first cause on a phone with photos. */
+function storageFailureMessage(error: unknown): string {
+  return error instanceof DOMException && error.name === 'QuotaExceededError'
+    ? 'Der Speicher dieses Geräts ist voll. Deine letzte Änderung ist nicht auf dem Gerät gespeichert. Sende offene Entwürfe oder lösche Fotos, dann versuch es noch einmal.'
+    : 'Der Entwurf konnte nicht auf diesem Gerät gespeichert werden. Ohne Netz gehen deine Eingaben verloren.';
+}
+
+/** The form's text as the device stores it, and whether it meets the rules of a saved draft. */
+function draftText({ kind, visibility, title, capturedAt, content }: WorkArtifactEditor) {
+  return {
+    kind,
+    visibility,
+    capturedAt: iso(capturedAt) ?? '',
+    title,
+    content: savedContent(kind, content),
+    ready:
+      workArtifactFieldIssues({ kind, title, submit: false, content: contentForKind(kind, content) })
+        .length === 0,
+  };
+}
+
+/**
+ * The change that puts the form's text into the draft, creating it on the first change. An attach
+ * whose answer is open keeps what it sent: the server may hold exactly that.
+ */
+function textChange(
+  device: DraftDevice,
+  draft: { artifactId: string; jobId: string },
+  text: ReturnType<typeof draftText>,
+): DraftChange {
+  return (current) => {
+    if (current?.sealed) return current;
+    const now = new Date().toISOString();
+    return {
+      ...(current ?? {
+        ...device.holder,
+        id: draft.artifactId,
+        revisionId: crypto.randomUUID(),
+        operationId: crypto.randomUUID(),
+        jobId: draft.jobId,
+        photos: [],
+        sealed: false,
+        refusal: null,
+      }),
+      ...text,
+      capturedAt: text.capturedAt || now,
+      updatedAt: now,
+    };
+  };
+}
+
+/** The writes of one draft, one after the other, so the last change is the one that stays. */
+function useDraftWrites(device: DraftDevice, artifactId: string) {
+  const [deviceSaveError, setDeviceSaveError] = useState<string | null>(null);
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const write: DraftWrite = (change) => {
+    // Before the write: a tab that dies right after it still finds its draft on the next page.
+    noteDraftsOnDevice(device.holder, true);
+    const result = queue.current
+      .then(() => device.change(artifactId, change))
+      .then(
+        (stored) => {
+          setDeviceSaveError(null);
+          device.changed();
+          return stored;
+        },
+        (error: unknown) => {
+          logError('DeviceDraftKeeper: device write failed', error);
+          setDeviceSaveError(storageFailureMessage(error));
+          return 'not_stored' as const;
+        },
+      );
+    queue.current = result;
+    return result;
+  };
+  return { write, deviceSaveError };
+}
+
+/** The draft's photos: each is stored on the device the moment it is taken. */
+function useDraftPhotos(write: DraftWrite, withText: DraftChange, restored: readonly DraftPhoto[]) {
+  const [photos, setPhotos] = useState<readonly DraftPhoto[]>(restored);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+
+  async function change(next: (photos: DraftPhoto[]) => DraftPhoto[]): Promise<void> {
+    const stored = await write((current) => {
+      const draft = withText(current);
+      return draft && !draft.sealed
+        ? { ...draft, photos: next(draft.photos), updatedAt: new Date().toISOString() }
+        : draft;
+    });
+    // A photo the device could not store is not listed: the failure shows at the form.
+    if (stored !== null && stored !== 'not_stored') setPhotos(stored.photos);
+  }
+
+  async function addPhoto(file: File): Promise<void> {
+    const refusal = !file.type.startsWith('image/')
+      ? 'Das ist kein Bild. Nimm ein Foto auf oder wähle eine Bilddatei.'
+      : file.size > DOCUMENT_MAX_FILE_SIZE_BYTES
+        ? 'Das Foto ist größer als 50 MB und kann nicht angehängt werden.'
+        : photos.length >= WORK_ARTIFACT_DRAFT_PHOTO_LIMIT
+          ? `Ein Entwurf kann höchstens ${WORK_ARTIFACT_DRAFT_PHOTO_LIMIT} Fotos haben.`
+          : null;
+    setPhotoError(refusal);
+    if (focusFirstInvalidField({ [PHOTO_CONTROL_ID]: refusal ?? undefined })) return;
+    const photo: DraftPhoto = {
+      id: crypto.randomUUID(),
+      name: file.name || 'Foto.jpg',
+      blob: file,
+      transferred: null,
+      documentId: null,
+    };
+    await change((stored) => [...stored, photo]);
+  }
+
+  const removePhoto = (photoId: string): Promise<void> =>
+    change((stored) => stored.filter((entry) => entry.id !== photoId));
+
+  return { photos, photoError, addPhoto, removePhoto };
+}
+
+/** What a draft that did not reach the server says at the form; a failed device write shows its own sentence. */
+const SEND_REFUSALS: Record<Exclude<DraftSendOutcome, 'sent' | 'waiting'>, string> = {
+  no_access:
+    'Du hast keinen Zugriff mehr auf diesen Auftrag. Der Entwurf bleibt auf diesem Gerät, wird aber nicht übertragen.',
+  refused: 'Der Entwurf konnte nicht übertragen werden. Er bleibt auf diesem Gerät gespeichert.',
+  skipped: 'Der Entwurf konnte nicht übertragen werden. Er bleibt auf diesem Gerät gespeichert.',
+};
+
+/** Asks for the review of the revision a sent draft wrote. False when the request failed or got no answer. */
+async function requestReview(artifactId: string, revisionId: string, version: number): Promise<boolean> {
+  try {
+    const review = await recordWorkArtifactAction({
+      artifactId,
+      revisionId,
+      actionId: crypto.randomUUID(),
+      expectedVersion: version,
+      actionType: 'review_requested',
+    });
+    return review.success;
+  } catch {
+    return false;
+  }
+}
+
+type DeviceDraftKeeperProps = {
+  editor: WorkArtifactEditor;
+  device: DraftDevice;
+  jobId: string;
+  /** The id the new Arbeitsnachweis gets, on the device and on the server. */
+  artifactId: string;
+  /** The stored draft the dialog was opened with. */
+  restored: RestoredDraft | null;
+  /** Tells the dialog's save how to reach this keeper while it is mounted, and null when it is gone. */
+  onHandle: (handle: DeviceDraftHandle | null) => void;
+  onClose: () => void;
+};
+
+/**
+ * Sends the draft the device holds, with its photos, as one draft revision. A submit asks for the
+ * review once the server holds that revision: nothing is submitted without signal.
+ */
+function useSaveThroughDevice(
+  { editor, device, artifactId, onClose }: DeviceDraftKeeperProps,
+  write: DraftWrite,
+  withText: DraftChange,
+) {
+  const { showBanner } = useBanner();
+  return async function save(submit: boolean): Promise<void> {
+    // The last change reaches the device before anything is sent.
+    const stored = await write(withText);
+    if (stored === null || stored === 'not_stored') return;
+    const outcome = await device.send(artifactId);
+    if (outcome === 'waiting') {
+      onClose();
+      showBanner({
+        variant: 'info',
+        message: submit
+          ? 'Gerade kein Netz. Der Entwurf ist auf diesem Gerät gespeichert und wird später übertragen. Reiche ihn danach zur Prüfung ein.'
+          : 'Gerade kein Netz. Der Entwurf ist auf diesem Gerät gespeichert und wird später übertragen.',
+      });
+      return;
+    }
+    if (outcome !== 'sent') {
+      editor.setError(SEND_REFUSALS[outcome]);
+      return;
+    }
+    // One version for the revision and one for each photo link.
+    const submitted = submit
+      ? await requestReview(artifactId, stored.revisionId, 1 + stored.photos.length)
+      : true;
+    await editor.load(artifactId);
+    editor.setEditing(false);
+    editor.setAttemptedSave(null);
+    if (!submitted) {
+      editor.setError(
+        'Der Entwurf ist gespeichert, wurde aber nicht zur Prüfung eingereicht. Reiche ihn hier noch einmal ein.',
+      );
+      return;
+    }
+    showBanner({
+      variant: 'success',
+      message: submit
+        ? 'Arbeitsnachweis wurde zur Prüfung eingereicht.'
+        : 'Arbeitsnachweis wurde gespeichert.',
+    });
+  };
+}
+
+/**
+ * Keeps the new Arbeitsnachweis of an open dialog as a draft on the device and shows its photos.
+ * It renders inside the dialog's form while the form is a new job Arbeitsnachweis.
+ */
+export function DeviceDraftKeeper(props: DeviceDraftKeeperProps) {
+  const { editor, device, jobId, artifactId, restored, onHandle } = props;
+  const { write, deviceSaveError } = useDraftWrites(device, artifactId);
+  const text = draftText(editor);
+  const withText = textChange(device, { artifactId, jobId }, text);
+  const photos = useDraftPhotos(write, withText, restored?.draft.photos ?? []);
+  const save = useSaveThroughDevice(props, write, withText);
+
+  // What the device holds of the text: the restored draft's, or the untouched form's, which is no draft yet.
+  const snapshot = JSON.stringify(text);
+  const written = useRef(snapshot);
+  useEffect(() => {
+    if (snapshot === written.current) return;
+    written.current = snapshot;
+    void write(withText);
+  });
+
+  // While the dialog is open nothing sends the draft by itself.
+  useEffect(() => device.keepOpen(artifactId), [device, artifactId]);
+
+  // The dialog's save reaches the keeper of this render; without a keeper it saves on the server alone.
+  const photoCount = photos.photos.length;
+  useEffect(() => {
+    onHandle({ photoCount, save, discard: async () => void (await write(() => null)) });
+  });
+  useEffect(() => () => onHandle(null), [onHandle]);
+
+  return <WorkArtifactPhotoField {...photos} deviceSaveError={deviceSaveError} />;
+}
