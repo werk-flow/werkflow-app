@@ -158,6 +158,29 @@ function PresentationControls(): React.JSX.Element {
         Zweiter Hinweis
       </Button>
       <Button onClick={dismissBanner}>Ausblenden</Button>
+      <Button
+        onClick={() =>
+          showBanner({
+            variant: 'error',
+            message: 'Deine Einsätze von heute sind auf diesem Gerät nicht für offline gespeichert.',
+            actionLabel: 'Für offline neu laden',
+            onAction: () => {},
+          })
+        }
+      >
+        Langer Hinweis
+      </Button>
+      <Button
+        onClick={() =>
+          showBanner({
+            variant: 'success',
+            message: 'Kunde „Sanitärgroßhandelsgesellschaftsniederlassungsverwaltung“ archiviert',
+            autoDismissMs: null,
+          })
+        }
+      >
+        Langer Name
+      </Button>
       <Field label="Bezeichnung">
         <Input />
       </Field>

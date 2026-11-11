@@ -20,6 +20,7 @@ import {
 } from '@/lib/requests/types';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import { RequestStatusBadge, RequestUrgencyBadge } from './request-badges';
+import { AttachRequestDialog } from './attach-request-dialog';
 import { CloseRequestDialog } from './close-request-dialog';
 import { ConvertRequestDialog } from './convert-request-dialog';
 import { EditRequestDialog } from './edit-request-dialog';
@@ -52,6 +53,8 @@ export type RequestDetailData = {
   /** The request's Anlage with the number of its detail page. */
   equipment: { label: string; equipmentNumber: string } | null;
   convertedLink: { label: string; href: string | null } | null;
+  /** The existing work the request was attached to. */
+  attachedLink: { label: string; href: string } | null;
   /** Null when the read failed, so the region shows the failure instead of "none". */
   documents: OrganizationDocument[] | null;
   /** Customers the unmatched caller may already be; null when the lookup failed. */
@@ -105,7 +108,7 @@ function RequestDetailSections({ data, isEditable, ...customerProps }: RequestDe
       {data.documents ? (
         <ContextualDocumentsSection
           title="Dokumente & Bilder"
-          description="Fotos, Nachrichten oder Unterlagen zur Anfrage. Bei einer Umwandlung werden sie automatisch mit dem Auftrag oder Projekt verknüpft."
+          description="Fotos, Nachrichten oder Unterlagen zur Anfrage. Beim Umwandeln oder Hinzufügen zu bestehender Arbeit werden sie automatisch dort mit verknüpft."
           documents={data.documents}
           documentTarget={{ kind: 'request', requestId: request.id }}
           canUpload={isEditable}
@@ -125,29 +128,20 @@ function RequestDetailSections({ data, isEditable, ...customerProps }: RequestDe
   );
 }
 
+/** The one header dialog that is open, if any. */
+type RequestDialog = 'convert' | 'attach' | 'close' | 'edit';
+
 interface RequestDetailDialogsProps {
   data: RequestDetailData;
-  convertOpen: boolean;
-  onConvertOpenChange: (open: boolean) => void;
-  closeOpen: boolean;
-  onCloseOpenChange: (open: boolean) => void;
-  editOpen: boolean;
-  onEditOpenChange: (open: boolean) => void;
+  openDialog: RequestDialog | null;
+  onOpenDialogChange: (dialog: RequestDialog | null) => void;
   /** Fires after the server confirmed a dialog's change. */
   onSaved: () => void;
 }
 
-/** The convert, close and edit dialogs the header actions open. */
-function RequestDetailDialogs({
-  data,
-  convertOpen,
-  onConvertOpenChange,
-  closeOpen,
-  onCloseOpenChange,
-  editOpen,
-  onEditOpenChange,
-  onSaved,
-}: RequestDetailDialogsProps) {
+/** The convert, attach, close and edit dialogs the header actions open. */
+function RequestDetailDialogs({ data, openDialog, onOpenDialogChange, onSaved }: RequestDetailDialogsProps) {
+  const openChange = (dialog: RequestDialog) => (open: boolean) => onOpenDialogChange(open ? dialog : null);
   const { request } = data;
   return (
     <>
@@ -157,23 +151,30 @@ function RequestDetailDialogs({
           request.clientId && data.clientName ? { id: request.clientId, name: data.clientName } : null
         }
         requestSiteAddress={data.siteAddress}
-        open={convertOpen}
-        onOpenChange={onConvertOpenChange}
+        open={openDialog === 'convert'}
+        onOpenChange={openChange('convert')}
+        onSaved={onSaved}
+      />
+
+      <AttachRequestDialog
+        requestId={request.id}
+        open={openDialog === 'attach'}
+        onOpenChange={openChange('attach')}
         onSaved={onSaved}
       />
 
       <CloseRequestDialog
         requestId={request.id}
-        open={closeOpen}
-        onOpenChange={onCloseOpenChange}
+        open={openDialog === 'close'}
+        onOpenChange={openChange('close')}
         onSaved={onSaved}
       />
 
       <EditRequestDialog
         request={request}
         assignees={data.assignees}
-        open={editOpen}
-        onOpenChange={onEditOpenChange}
+        open={openDialog === 'edit'}
+        onOpenChange={openChange('edit')}
         onSaved={onSaved}
       />
     </>
@@ -197,9 +198,7 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
   const { request } = data;
   const actions = useRequestDetailActions(request, (data.callerMatches?.matches.length ?? 0) > 0);
   const { isPending, shownStatus, markSettling } = actions;
-  const [convertOpen, setConvertOpen] = useState(false);
-  const [closeOpen, setCloseOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
+  const [openDialog, setOpenDialog] = useState<RequestDialog | null>(null);
 
   const isEditable = request.status === 'offen' || request.status === 'in_klaerung';
   useRequestLiveUpdates(isEditable && !request.clientId, request.equipmentId !== null);
@@ -212,10 +211,11 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
         isEditable={isEditable}
         isPending={isPending}
         isSettling={actions.isSettling}
-        onConvert={() => setConvertOpen(true)}
-        onEdit={() => setEditOpen(true)}
+        onConvert={() => setOpenDialog('convert')}
+        onAttach={() => setOpenDialog('attach')}
+        onEdit={() => setOpenDialog('edit')}
         onStatusToggle={actions.handleStatusToggle}
-        onClose={() => setCloseOpen(true)}
+        onClose={() => setOpenDialog('close')}
         onReopen={actions.handleReopen}
       />
       {actions.headerError ? (
@@ -224,7 +224,11 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
 
       <PageBody maxWidth="content">
         <div className="space-y-4">
-          <RequestOutcomeNotices request={request} convertedLink={data.convertedLink} />
+          <RequestOutcomeNotices
+            request={request}
+            convertedLink={data.convertedLink}
+            attachedLink={data.attachedLink}
+          />
 
           <RequestDetailSections
             data={data}
@@ -241,12 +245,8 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
 
       <RequestDetailDialogs
         data={data}
-        convertOpen={convertOpen}
-        onConvertOpenChange={setConvertOpen}
-        closeOpen={closeOpen}
-        onCloseOpenChange={setCloseOpen}
-        editOpen={editOpen}
-        onEditOpenChange={setEditOpen}
+        openDialog={openDialog}
+        onOpenDialogChange={setOpenDialog}
         onSaved={markSettling}
       />
 

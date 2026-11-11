@@ -45,6 +45,15 @@ function isSyntheticRealtimeEvent(event: RealtimeChangeEvent): boolean {
   return event.new === null && event.old === null;
 }
 
+/**
+ * The event filter of a view of one row: that row's change, or a change
+ * that names no row (a DELETE fallback), never another row of the table.
+ */
+export function isEventForRow(event: RealtimeChangeEvent, rowId: string): boolean {
+  const row = event.new ?? event.old;
+  return !row?.id || row.id === rowId;
+}
+
 export function shouldScheduleRealtimeRefresh(
   event: RealtimeChangeEvent,
   eventFilter?: (event: RealtimeChangeEvent) => boolean,
