@@ -11,19 +11,16 @@ import {
   compareLabStep,
   findLabReference,
   formatLabTable,
-  gateLabMetric,
-  initialLabReference,
   labCarryoverSchema,
   labReferenceProblems,
   labReferencesSchema,
   legacyLabReferencesSchema,
   migrateLabReferences,
   ratchetLabReference,
-  rejectLabMetric,
-  ungateLabMetric,
   stabilityOfCounts,
   type LabReferences,
 } from '../lib/testing/lab-counts';
+import { calibrateLabStep, gateLabMetric, rejectLabMetric, ungateLabMetric } from '../lib/testing/lab-gate';
 import { type LabObservation } from '../lib/testing/lab-record';
 import { readLabObservations } from '../lib/testing/lab-evidence';
 import { getLabStep, LAB_METRICS, LAB_STEPS, type LabMetric } from '../lib/testing/lab-steps';
@@ -44,7 +41,7 @@ import { readRunManifest, runDirectory } from '../tests/golden/support/run-state
 // reads passing, cleaned group runs of one build on the current inputs.
 //
 //   bun scripts/lab-counts.ts report --runs <keys>
-//   bun scripts/lab-counts.ts gate --metric <m> --stability "<spread>" --relevance "<experiment>" --runs <keys>
+//   bun scripts/lab-counts.ts gate --metric <m> --stability "<spread>" --relevance "<experiment>" --runs <keys> [--step <id>]
 //   bun scripts/lab-counts.ts reject --metric <m> --job stability|relevance --evidence "<why>" --runs <keys>
 //   bun scripts/lab-counts.ts calibrate --runs <five keys> --reason "<basis>"
 //   bun scripts/lab-counts.ts ratchet --run <key>
@@ -261,14 +258,18 @@ await withWorkspaceTestLock({ operation: `lab counts: ${command}` }, async () =>
       const metric = metricArgument();
       const keys = runKeys('--runs');
       // Gate and reject evidence comes from passing runs of one build.
-      oneBuild(qualifiedRuns(keys));
+      const runs = qualifiedRuns(keys);
+      oneBuild(runs);
+      // `--step` reverses that step's ungate, so its stability evidence must have measured the step.
+      const stepId = values.has('--step') ? required('--step') : undefined;
+      if (stepId && runs.some((run) => !run.observations.some((entry) => entry.stepId === stepId)))
+        throw new Error(`Every evidence run must have recorded ${stepId}.`);
       await writeReferences(
-        gateLabMetric(references, {
-          metric,
-          stability: required('--stability'),
-          relevance: required('--relevance'),
-          runKeys: keys,
-        }),
+        gateLabMetric(
+          references,
+          { metric, stability: required('--stability'), relevance: required('--relevance'), runKeys: keys },
+          stepId,
+        ),
       );
       return;
     }
@@ -289,29 +290,24 @@ await withWorkspaceTestLock({ operation: `lab counts: ${command}` }, async () =>
       const runs = qualifiedRuns(keys);
       const buildId = oneBuild(runs);
       const reason = required('--reason');
-      const gated = references.gatedMetrics.map((entry) => entry.metric);
       const stepIds = [...new Set(runs.flatMap((run) => run.observations.map((entry) => entry.stepId)))];
-      let steps = references.steps;
+      let calibrated = references;
       for (const stepId of stepIds) {
-        const step = getLabStep(stepId);
-        const { reference, unstable } = initialLabReference({
-          step,
+        const result = calibrateLabStep(calibrated, {
+          step: getLabStep(stepId),
           observations: runs.flatMap((run) => run.observations.filter((entry) => entry.stepId === stepId)),
           runKeys: keys,
           buildId,
-          gated,
           reason,
         });
-        if (unstable.length) console.log(`${stepId} left ungated: ${unstable.join('; ')}`);
-        steps = [
-          ...steps.filter(
-            // A recalibration supersedes every earlier reference of the step.
-            (candidate) => candidate.stepId !== stepId,
-          ),
-          reference,
-        ];
+        if (result.unstable.length) console.log(`${stepId} left ungated: ${result.unstable.join('; ')}`);
+        if (result.ungated.length)
+          console.log(
+            `${stepId} keeps its ungate of ${result.ungated.map((entry) => entry.metric).join(', ')}; gate --step ${stepId} reverses one.`,
+          );
+        calibrated = result.references;
       }
-      await writeReferences({ ...references, steps });
+      await writeReferences(calibrated);
       return;
     }
     case 'ungate': {

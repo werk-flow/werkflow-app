@@ -41,7 +41,7 @@ Each lab group prints one table per step with reference, value, ceiling, floor a
 1. A lower count needs no reason: `ratchet` lowers it.
 2. A higher count, a larger payload or a smaller one needs `accept` with a reason a reviewer can check.
 3. A changed lab test, recorder module or workload file orphans its references: [move them to the new digest](#move-a-reference-to-a-new-digest).
-4. `gate` and `reject` move a metric in or out of the gate with its evidence. A count that takes two values on one step leaves that step with `ungate`; never widen its tolerance.
+4. `gate` and `reject` move a metric in or out of the gate with its evidence. A count that takes two values on one step leaves that step with `ungate`; never widen its tolerance. `calibrate` keeps that ungate; only `gate --step <id>` with new stability evidence from that step reverses it.
 
 ### Move a reference to a new digest
 

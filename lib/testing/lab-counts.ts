@@ -8,6 +8,7 @@ import {
   legacyHistoryEntrySchema,
   replayProblems,
   type CountReference,
+  type KeptUngate,
   type LabHistoryEntry,
   type PayloadReference,
 } from './lab-history';
@@ -486,8 +487,8 @@ export function stabilityOfCounts(observations: readonly LabObservation[]): Stab
 
 /**
  * The initial reference of one step from at least five runs on one build. A
- * metric enters only when it is gated (both jobs proven) and stable on this
- * step; a payload shape enters only when every run carried it.
+ * metric enters only when it is gated (both jobs proven), not kept ungated on
+ * this step, and stable on it; a payload shape enters only when every run carried it.
  */
 export function initialLabReference(input: {
   step: LabStep;
@@ -496,8 +497,9 @@ export function initialLabReference(input: {
   buildId: string;
   gated: readonly LabMetric[];
   reason: string;
+  ungated?: readonly KeptUngate[];
 }): { reference: LabStepReference; unstable: string[] } {
-  const { step, observations, runKeys, buildId, gated, reason } = input;
+  const { step, observations, runKeys, buildId, gated, reason, ungated = [] } = input;
   if (!reason.trim()) throw new Error(`${step.id}: a calibration needs the basis the reviewer can check.`);
   const [first] = observations;
   if (!first || observations.length < 5)
@@ -508,7 +510,7 @@ export function initialLabReference(input: {
   const counts: LabStepReference['counts'] = {};
   for (const row of stabilityOfCounts(observations)) {
     const metric = metricSchema.parse(row.target);
-    if (!gated.includes(metric)) continue;
+    if (!gated.includes(metric) || ungated.some((entry) => entry.metric === metric)) continue;
     if (row.tolerance === null) {
       unstable.push(`${metric} ${row.min}..${row.max}`);
       continue;
@@ -531,7 +533,17 @@ export function initialLabReference(input: {
       counts,
       payloads,
       source: { runKeys: [...runKeys], buildId },
-      history: [{ kind: 'initial', runKeys: [...runKeys], reason, context: first.context, counts, payloads }],
+      history: [
+        {
+          kind: 'initial',
+          runKeys: [...runKeys],
+          reason,
+          context: first.context,
+          counts,
+          payloads,
+          ...(ungated.length ? { ungated: [...ungated] } : {}),
+        },
+      ],
     },
   };
 }
@@ -578,74 +590,6 @@ function initialPayloads(
     };
   }
   return payloads;
-}
-
-/**
- * Removes one count from one step's reference when later runs showed it takes
- * two values on that step (an echo that sometimes coalesces). The metric stays
- * gated on the other steps; the reason and the runs go into the history.
- */
-export function ungateLabMetric(input: {
-  reference: LabStepReference;
-  metric: LabMetric;
-  runKeys: readonly string[];
-  reason: string;
-}): LabStepReference {
-  const { reference, metric, runKeys, reason } = input;
-  if (!reason.trim())
-    throw new Error('Ungating a lab count needs the evidence that it is unstable on this step.');
-  const bound = reference.counts[metric];
-  if (!bound) throw new Error(`${reference.stepId}: ${metric} is not gated on this step.`);
-  const counts = { ...reference.counts };
-  delete counts[metric];
-  return {
-    ...reference,
-    counts,
-    history: [
-      ...reference.history,
-      { kind: 'ungate', target: metric, from: bound, to: null, runKeys: [...runKeys], reason },
-    ],
-  };
-}
-
-/** Records a metric's stability and relevance evidence. No step bound changes: `calibrate` adds the counts. */
-export function gateLabMetric(
-  references: LabReferences,
-  evidence: z.infer<typeof metricEvidenceSchema>,
-): LabReferences {
-  return {
-    ...references,
-    gatedMetrics: [...references.gatedMetrics.filter((entry) => entry.metric !== evidence.metric), evidence],
-    rejectedMetrics: references.rejectedMetrics.filter((entry) => entry.metric !== evidence.metric),
-  };
-}
-
-/** Rejects a metric for every step: each step that gated it records the removed bound with the evidence. */
-export function rejectLabMetric(
-  references: LabReferences,
-  rejection: z.infer<typeof rejectedMetricSchema>,
-): LabReferences {
-  const { metric, evidence, runKeys } = rejection;
-  return {
-    ...references,
-    gatedMetrics: references.gatedMetrics.filter((entry) => entry.metric !== metric),
-    rejectedMetrics: [...references.rejectedMetrics.filter((entry) => entry.metric !== metric), rejection],
-    steps: references.steps.map((step) => {
-      const bound = step.counts[metric];
-      if (!bound) return step;
-      const counts = { ...step.counts };
-      delete counts[metric];
-      const entry: LabHistoryEntry = {
-        kind: 'reject',
-        target: metric,
-        from: bound,
-        to: null,
-        runKeys,
-        reason: evidence,
-      };
-      return { ...step, counts, history: [...step.history, entry] };
-    }),
-  };
 }
 
 export function acceptLabChange(input: {
