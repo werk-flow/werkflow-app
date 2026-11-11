@@ -148,10 +148,12 @@ export const EMPLOYMENT_STATE_LABELS: Record<EmploymentState, string> = {
   ausgeschieden: 'Ausgeschieden',
 };
 
+// The chip says whether a login exists, never whether access is open: an
+// exited person whose organization access ended keeps the login.
 export const ACCESS_STATE_LABELS: Record<AccessState, string> = {
-  mit_zugang: 'Mit Zugang',
+  mit_zugang: 'Mit Login',
   eingeladen: 'Eingeladen',
-  ohne_zugang: 'Ohne Zugang',
+  ohne_zugang: 'Ohne Login',
 };
 
 export const EMPLOYMENT_TYPE_LABELS: Readonly<Record<EmploymentType, string>> = {
