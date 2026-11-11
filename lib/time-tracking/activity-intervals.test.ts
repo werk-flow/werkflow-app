@@ -356,3 +356,15 @@ test("the job's own view pairs the job's entries as the whole day pairs them", (
     ).toEqual(whole.map((interval) => [interval.id, interval.state]));
   }
 });
+
+test('only counted time of today runs: a rejected or pending-deletion start of today never reads „läuft“', () => {
+  const stateOf = (status: TimeEntryStatus) =>
+    activities([entry(`in-${status}`, 'clock_in', '2026-09-18T07:30', jobX, { status })]).map(
+      (interval) => interval.state,
+    );
+  expect(stateOf('rejected')).toEqual(['unclosed']);
+  expect(stateOf('pending_delete')).toEqual(['unclosed']);
+  // A pending clock-in counts in the totals until it is decided, so it runs like an approved one.
+  expect(stateOf('pending')).toEqual(['running']);
+  expect(stateOf('approved')).toEqual(['running']);
+});

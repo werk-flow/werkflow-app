@@ -61,10 +61,13 @@ function pairStatus(
 function pairPersonEntries(entries: TimeEntry[], status: TimeEntryStatus, now: Date): ActivityInterval[] {
   const intervals: ActivityInterval[] = [];
   let open: TimeEntry | null = null;
-  /** A start without its end: running while it is today's last, else superseded by the next start or the day. */
+  // The group the totals count: approved and pending entries, as getEffectiveTimeEntries keeps them.
+  // Rejected time and time whose deletion waits never run.
+  const counted = status === 'approved';
+  /** A counted start without its end: running while it is today's last, else superseded by the next start or the day. */
   const leaveOpen = (start: TimeEntry, supersededBy: TimeEntry | null, dayEnded = false) => {
     const base = { ...facts(start, 'open', pairStatus(status, start, null)), start, end: null };
-    if (!supersededBy && !dayEnded && isSameLocalDay(new Date(start.timestamp), now)) {
+    if (counted && !supersededBy && !dayEnded && isSameLocalDay(new Date(start.timestamp), now)) {
       intervals.push({ ...base, state: 'running' });
     } else {
       intervals.push({ ...base, state: 'unclosed', supersededBy });
