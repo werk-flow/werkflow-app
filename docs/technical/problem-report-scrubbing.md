@@ -1,6 +1,6 @@
 # Problem report scrubbing
 
-Rules for what a problem report may carry once it leaves WerkFlow: the screenshot redraw on the device. The originals stay in WerkFlow's private storage; only a scrubbed copy may leave. [Security](security.md) owns the trust boundaries.
+Rules for what a problem report may carry once it leaves WerkFlow: the screenshot redraw on the device and the text scrubber on the server. The originals stay in WerkFlow's private storage; only a scrubbed copy may leave. [Security](security.md) owns the trust boundaries.
 
 ## Screenshot redraw
 
@@ -29,13 +29,66 @@ Each rule has a test that fails without it: `tests/ui-contracts/problem-report-r
 7. **Styles.** A disabled sheet and a sheet for other media (print) stay out. A style sheet the build compiled from the source (same origin, under `/_next/static/`) stays verbatim, with its fonts inlined. Every other sheet, a style element included, may be written at runtime, so a detached copy of it gets the inline-style rule and loses its fonts. The live sheets never change.
 8. **Rasterize on the device.** The clone and those styles become an SVG `foreignObject` drawn onto a canvas. An SVG drawn as an image loads nothing from the network. This needs `img-src data:` in the enforced content security policy (`lib/security/csp-report.ts`).
 
-### Accepted limits
+### Accepted limits of the redraw
 
 - A record value that alone fills a text node and exactly equals one of the app's own UI words stays readable, such as a surname `Lager`. The owner accepted this.
 - The redraw shows the visible viewport. Scrolled containers are shifted to their scroll position; the rest of a long page is not in the image. A sticky element inside a scrolled container shows where it sits unscrolled, and a fixed element inside one moves with it, so either may leave the image.
 - A Radix state that only a library sets (such as `data-state="checked"`) is faked like any other value, so that element may render in its default state.
 
+## Text scrubbing
+
+The server keeps a scrubbed copy of each report's description and context beside the originals. Only this copy may leave WerkFlow as text. Nothing hands it out yet.
+
+`lib/problem-reports/scrub/` holds the scrubber. `scrubStoredProblemReport(organizationId, reportId)` is its one entry. It reads the report inside that organization, reads the organization's dictionary, and writes the copy with its state through `record_problem_report_scrub` in one call. `submitProblemReport` runs it after its answer, so the receipt never waits for the scrub or fails with it. The daily run (`/api/problem-report-retention`) runs it for every report that has its originals and no copy, before it deletes anything: a report saved before the scrubber existed, one whose scrub never ran, and one whose last scrub failed.
+
+### The dictionary
+
+- The dictionary holds what the rows of the reporting organization name, and nothing of another organization. Every read filters by the organization. A scrub reads the dictionary anew and keeps nothing.
+- Customer names come from the customers and from the callers of requests. Person names come from contacts, members, employees and their emergency contacts. Addresses come from customers, sites, callers and employees. Phone numbers come from all of these.
+- A name is a term as a whole and word by word, so a surname alone is replaced. A word of fewer than three letters, and a function word (a salutation, a title, a legal form, an article, a preposition, a conjunction), is a term only inside its whole name. Without that, a customer called „Die Bad GmbH“ would replace every „die“.
+- An address is a term in two parts: the street with its number, and the postcode with its city.
+- The dictionary reads no email address, because the pattern rule replaces every one.
+
+### Rules
+
+Each rule has a test named after it in `lib/problem-reports/scrub/scrub-text.test.ts`, on the data of a made-up company. `lib/testing/fixtures/problem-report-scrub-boundaries.ts` drives the real submit action and the run.
+
+1. **Placeholders.** A find becomes `[Kunde 1]`, `[Person 1]`, `[Adresse 1]`, `[Telefon 1]`, `[E-Mail 1]` or `[IBAN 1]`. Each type counts from 1 in text order. The same name or number takes the same placeholder throughout the text.
+2. **Whole words.** A term matches whole words only. A name inside a longer word stays.
+3. **Case and spelling.** Case never matters. `ä`, `ö`, `ü` and `ß` equal `ae`, `oe`, `ue` and `ss`. `Lindenstraße`, `Lindenstrasse` and `Lindenstr.` are one street, and `12a` equals `12 a`.
+4. **Genitive.** A word also matches without its final `s`.
+5. **Split terms.** Spaces, a line break, a dot, a comma or a hyphen may stand between the words of one term.
+6. **Phone numbers.** A number that stands alone, starts with `+`, `00` or `0` and has 7 to 15 digits is replaced. Spaces, slashes, dashes and brackets may group its digits. Digits that spell a number of the dictionary are replaced too, with or without the leading zero. One number in two formats takes one placeholder.
+7. **Email addresses.** Every address with a domain ending is replaced.
+8. **IBANs.** Every IBAN with a valid check is replaced, in one piece or in groups. A number that fails the check is replaced when only digits follow its first four characters.
+9. **Salutations.** After „Herr“, „Herrn“, „Frau“, „Familie“ or „Fam.“, up to two capitalized words become a `[Person n]`, and after „Firma“ or „Fa.“ a `[Kunde n]`, even when the dictionary does not know them. A hyphenated double name counts as one word. „Dr.“ and „Prof.“ before the name are skipped.
+10. **Overlaps.** Finds that overlap become one placeholder, so no part of either stays readable.
+11. **Context.** The copy of the context keeps a control label only when the whole label is in the [UI string catalog](#the-ui-string-catalog). The server checks every label again, because it does not trust the device's filter. A stored context that is not the capture's shape, or empty, is not copied.
+12. **Fails closed.** A dictionary read that fails, a dictionary above its row cap, a missing catalog and a scrub that throws leave no copy and the state `nicht_bereinigbar`. The report stays, and the daily run tries it again. A written copy never changes.
+13. **One pass.** The terms sit in a tree keyed by word, and the scrub walks the words of the text once. No code loops over the names: the test with 10,000 customers counts the tree lookups against the words of the text.
+
+### Limits of the text scrubber
+
+Not accepted: the owner's answer on werk-flow/werkflow-planning#21 is pending. The scrubbed copy keeps what neither the dictionary nor a pattern covers:
+
+- a name the organization's data does not know and that follows no salutation, such as a neighbour, a nickname or a misspelt customer;
+- a saluted name typed in lower case;
+- a name of two letters alone;
+- a street without its number, a city without its postcode, and the name of a site;
+- an unknown phone number without a leading `0` or `+`.
+
+The scrubber also replaces too much, which costs readability and never privacy. A name that is an ordinary word replaces that word everywhere, such as a customer called „Klein“. A date written `07-11-2026` has a phone number's shape.
+
 ## How to work
+
+### Change the text scrubber
+
+1. Change the rule in `lib/problem-reports/scrub/` and its test in `scrub-text.test.ts` together. A new rule gets its own test, named after the rule, on made-up data.
+2. Prove the test fails with the rule removed, then passes.
+3. A new source of names is one more read in `readDictionarySources`, filtered by the organization.
+4. Run `bun run test:unit lib/problem-reports` and `bun run test:verify --group sql:problem-reports`.
+
+Wrong turn: one regular expression per name. A company with 10,000 customers would run 10,000 searches over each report.
 
 ### Change the redraw
 
@@ -53,7 +106,10 @@ Wrong turn: keeping a text because it looks harmless. A rule that keeps by patte
 - Fall back to an empty catalog, or to a plain screenshot, when the redraw fails.
 - Load an image, a font from another origin, or a frame into the clone.
 - Import the redraw or the catalog statically from a page or a shared component.
+- Store, show or hand out a text as scrubbed that the scrubber did not write.
+- Keep a dictionary across scrubs, or read it without the organization filter.
+- Log a report's text, a name or a dictionary entry.
 
 ## Verify your work
 
-Run `bun run test:unit lib/problem-reports`, `bun run test:ui problem-report-redraw` and the `audit:problem-reports:redraw` group.
+Run `bun run test:unit lib/problem-reports`. For the redraw, also run `bun run test:ui problem-report-redraw` and the `audit:problem-reports:redraw` group. For the text scrubber, also run `bun run test:verify --group sql:problem-reports`.

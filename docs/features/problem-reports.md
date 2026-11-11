@@ -4,7 +4,7 @@ A member reports a problem from the app to WerkFlow support. The report stays in
 
 ## Current Product Baseline
 
-Every member reports a problem from any page and follows their own reports in „Meine Meldungen“. Support has no screen yet, and a report's scrubbed copy stays `ausstehend`: nothing leaves WerkFlow.
+Every member reports a problem from any page and follows their own reports in „Meine Meldungen“. Support has no screen yet. The server keeps a scrubbed copy of each report, and nothing leaves WerkFlow.
 
 - **Button.** „Problem melden“ sits on every page of the app: in the phone header and at the foot of the sidebar, which the phone menu shows too. On the desktop, F2 opens it as well, unless another dialog is open. It never covers the clock dock.
 - **Capture.** Until the press, the open tab keeps in memory only the route templates and labels of the last pressed controls and the names and codes of client errors since load; nothing is stored or sent. At the press it captures the page's route template, that list, the app version, the device and browser family, the window size and the offline state. A control's label enters the report only when it is one of the app's own UI strings; a route enters only as its template, such as `/auftraege/[jobNumber]`. The server refuses a context of any other shape.
@@ -13,8 +13,10 @@ Every member reports a problem from any page and follows their own reports in �
 - **Receipt.** After sending, a banner names the report's number, which counts from 1 in each organization and never changes, and leads to „Meine Meldungen“.
 - **Meine Meldungen** (`/meldungen`, through the account menu): every role sees only the reports they sent in the active organization, newest first, with number, sending time, status and support's answer. It reads on each open; a status support sets shows on the next open.
 
+- **Scrubbed copy.** After the receipt, the server writes the [scrubbed copy](../technical/problem-report-scrubbing.md#text-scrubbing) of the description and the context: the organization's known names, addresses and phone numbers, every email address, phone number and IBAN, and a name after a salutation become placeholders such as `[Kunde 1]`, and a control label stays only when it is one of the app's own UI strings. The daily run scrubs each report that still has no copy.
+
 - **Report.** A report belongs to an organization and its reporter. It holds the original description, up to 5,000 characters, and the captured context, a JSON object. It names who filed it, which differs from the reporter only when support files it for a caller.
-- **States.** A report starts as `eingegangen`, then moves through `in_bearbeitung` to `erledigt` or `abgelehnt`; a closed report carries its closing time. Its bucket is `blocker`, `fehler`, `unklarheit` or `wunsch`. The scrubbed copy is `ausstehend` until the scrubber writes it, and `nicht_bereinigbar` when the text cannot be scrubbed; then no copy exists.
+- **States.** A report starts as `eingegangen`, then moves through `in_bearbeitung` to `erledigt` or `abgelehnt`; a closed report carries its closing time. Its bucket is `blocker`, `fehler`, `unklarheit` or `wunsch`. The scrubbed copy is `ausstehend` until the scrubber writes it, then `bereinigt`. It is `nicht_bereinigbar` when a scrub failed; then no copy exists until a later scrub succeeds.
 - **Files.** A report keeps at most one screenshot beside its attachments, and takes no file once its originals are deleted. [Report files](../technical/document-storage-and-access.md#report-files) owns the storage rules.
 - **No customer reads a report.** The report tables are server-only: no `admin`, `buero` or `employee` reads one through the Data API, and the organization export leaves them out. A member submits only into an organization they belong to, and only the person who filed a report adds files to it.
 - **History.** A report's history holds status, bucket, assignee and response changes and every opening of an original by support, with actor and time. It refuses changes and deletion, goes only with its report, and keeps the actor's id after that account is deleted.
