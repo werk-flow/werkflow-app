@@ -86,8 +86,10 @@ export function findEmails(text: string): Found[] {
     let start = at;
     if (text[at - 1] === '"') {
       const from = Math.max(0, at - EMAIL_QUOTED_LOCAL_MAX_LENGTH);
-      const quote = text.slice(from, at - 1).lastIndexOf('"');
-      if (quote !== -1) start = from + quote;
+      // The opening quote is the nearest one that no backslash escapes.
+      let quote = at - 2;
+      while (quote >= from && (text[quote] !== '"' || text[quote - 1] === '\\')) quote -= 1;
+      if (quote >= from) start = quote;
     } else {
       while (start > 0 && EMAIL_LOCAL_CHARACTER.test(text[start - 1] ?? '')) start -= 1;
     }
@@ -103,8 +105,10 @@ export function findEmails(text: string): Found[] {
 
 // --- Phone ---
 
-/** What may stand between two digit groups of one number: spaces, a slash, a dash, a bracket. */
-const PHONE_GAP = /^[ \u00a0\t]*[-\u2013/()]{0,2}[ \u00a0\t]*$/u;
+// What may stand between two digit groups of one number: spaces, a slash, a
+// dash, a bracket. The second run of spaces follows a separator only, so a
+// long run of spaces is read once and never divided between the two.
+const PHONE_GAP = /^[ \u00a0\t]*(?:[-\u2013/()]{1,2}[ \u00a0\t]*)?$/u;
 const PHONE_MIN_DIGITS = 7;
 /** The longest phone number (E.164). Digits without a phone's shape are compared with known numbers up to here. */
 const PHONE_MAX_DIGITS = 15;

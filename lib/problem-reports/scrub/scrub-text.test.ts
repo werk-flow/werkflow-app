@@ -137,6 +137,7 @@ test('pattern rule: any email address', () => {
   expect(scrub('Mail an "anna meier"@beispiel.example und "sag @alle"')).toBe(
     'Mail an [E-Mail 1] und "sag @alle"',
   );
+  expect(scrub('Mail an "anna\\"meier"@beispiel.example')).toBe('Mail an [E-Mail 1]');
   expect(scrub('Preis @ 12 Euro und @home bleiben')).toBe('Preis @ 12 Euro und @home bleiben');
 });
 
