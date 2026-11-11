@@ -4,7 +4,7 @@ import type { RefObject } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
 import { focusFirstInvalidField, REASON_MIN_3_MESSAGE } from '@/lib/ui/field-validation';
-import { saveWorkArtifact } from '@/lib/work-artifacts/actions';
+import { recordWorkArtifactAction, saveWorkArtifact } from '@/lib/work-artifacts/actions';
 import { workArtifactFieldIssues } from '@/lib/work-artifacts/field-rules';
 import type { DeviceDraftHandle } from './use-device-drafts';
 import type { WorkArtifactEditor } from './use-work-artifact-editor';
@@ -20,6 +20,35 @@ type WorkArtifactSaveOptions = WorkArtifactTarget & {
   deviceDraft: RefObject<DeviceDraftHandle | null>;
 };
 
+const SAVED_MESSAGE = 'Arbeitsnachweis wurde gespeichert.';
+const SUBMITTED_MESSAGE = 'Arbeitsnachweis wurde zur Prüfung eingereicht.';
+
+/** Shows the draft the device just sent; a submit asks for its review now that the server holds it. */
+function useSentDraft(editor: WorkArtifactEditor, newArtifactId: string) {
+  const { showBanner } = useBanner();
+  return async function showSentDraft(submit: boolean, sent: { revisionId: string; version: number }) {
+    let submitted = !submit;
+    if (submit) {
+      const review = await recordWorkArtifactAction({
+        artifactId: newArtifactId,
+        revisionId: sent.revisionId,
+        actionId: crypto.randomUUID(),
+        expectedVersion: sent.version,
+        actionType: 'review_requested',
+      });
+      submitted = review.success;
+    }
+    await editor.load(newArtifactId);
+    editor.setEditing(false);
+    editor.setAttemptedSave(null);
+    if (submitted) showBanner({ variant: 'success', message: submit ? SUBMITTED_MESSAGE : SAVED_MESSAGE });
+    else
+      editor.setError(
+        'Der Entwurf ist gespeichert, wurde aber nicht zur Prüfung eingereicht. Reiche ihn hier noch einmal ein.',
+      );
+  };
+}
+
 /**
  * Saves the draft as a new revision, optionally submitting it for review. A new Arbeitsnachweis
  * of a job with photos, or one whose save got no answer, goes through its draft on the device.
@@ -34,6 +63,7 @@ export function useWorkArtifactSave({
   const { detail, currentRevision, requiresCorrectionReason, kind, title, content, correctionReason } =
     editor;
   const { showBanner } = useBanner();
+  const showSentDraft = useSentDraft(editor, newArtifactId);
 
   /** The save over the network; `no_answer` when the request never returned and the device keeps the draft. */
   async function saveOnServer(submit: boolean, onDevice: boolean) {
@@ -67,7 +97,8 @@ export function useWorkArtifactSave({
     const result =
       onDevice && onDevice.photoCount > 0 ? 'no_answer' : await saveOnServer(submit, onDevice !== null);
     if (result === 'no_answer') {
-      await onDevice?.save(submit);
+      const sent = (await onDevice?.save(submit)) ?? null;
+      if (sent) await showSentDraft(submit, sent);
       return;
     }
     if (!result.success) {
@@ -86,12 +117,7 @@ export function useWorkArtifactSave({
     editor.setEditing(false);
     editor.setAttemptedSave(null);
     editor.setCorrectionReason('');
-    showBanner({
-      variant: 'success',
-      message: submit
-        ? 'Arbeitsnachweis wurde zur Prüfung eingereicht.'
-        : 'Arbeitsnachweis wurde gespeichert.',
-    });
+    showBanner({ variant: 'success', message: submit ? SUBMITTED_MESSAGE : SAVED_MESSAGE });
   }
 
   return function save(submit: boolean) {

@@ -1,10 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 
-import { useOrganization } from '@/components/organization/organization-context';
 import { useClientRead, type ReadFailure } from '@/hooks/use-client-read';
-import { useHydrated } from '@/hooks/use-hydrated';
 import type { DraftHolder, StoredDraft } from '@/lib/field-sync/device/draft-store';
 import type { DraftSendOutcome, DraftSendProgress } from '@/lib/field-sync/device/draft-sync';
 import type { WorkArtifactKind, WorkArtifactVisibility } from '@/lib/work-artifacts/types';
@@ -12,13 +10,14 @@ import type { WorkArtifactContentDraft } from './work-artifact-content';
 
 // The report drafts of a device as a job page sees them (decision record
 // 0010, the report draft amendment). This module is all of it that a job page
-// loads with its own code: every other part (the device store, the sender,
-// the list, the photo field, the dialog's draft keeper) sits behind one lazy
-// load in device-draft-parts.tsx, because a job page's code counts toward the
-// field cold start.
+// loads with its own code, and it imports nothing a job page did not load
+// before: the job list prefetches a job page's code, so that code counts
+// toward the field cold start. Every other part (the device store, the
+// sender, the list, the photo field, the dialog's draft keeper, the active
+// organization) sits behind the one lazy load below.
 
-/** The lazily loaded draft code. */
-type DraftParts = typeof import('./device-draft-parts');
+/** The two components of the lazily loaded draft code (device-draft-parts.tsx). */
+export type DraftParts = Pick<typeof import('./device-draft-parts'), 'DeviceDrafts' | 'DeviceDraftKeeper'>;
 
 /** What the artifact screens ask of the device, for the signed-in person in the active organization. */
 export type DraftDevice = {
@@ -60,34 +59,32 @@ export type RestoredDraft = {
 /** What the dialog's save asks of the draft keeper once the device keeps the new Arbeitsnachweis. */
 export type DeviceDraftHandle = {
   photoCount: number;
-  /** Sends the draft with its photos; a submit asks for the review once the server holds it. */
-  save: (submit: boolean) => Promise<void>;
+  /**
+   * Sends the draft with its photos and answers the revision the server wrote and the version it
+   * left the Arbeitsnachweis at, or null when the draft did not arrive; the keeper has said why.
+   */
+  save: (submit: boolean) => Promise<{ revisionId: string; version: number } | null>;
   /** Removes the draft from the device once the server holds the Arbeitsnachweis. */
   discard: () => Promise<void>;
 };
 
-export type DeviceDrafts = {
-  /** Null until the draft code is loaded. */
-  parts: DraftParts | null;
-  device: DraftDevice | null;
-  /** The holder's drafts on this device, oldest change first. */
-  drafts: readonly StoredDraft[];
-  progress: DraftSendProgress | null;
-  /** The draft code or the device store could not be read; carries its retry. */
-  failure: ReadFailure | null;
-};
-
 /**
  * The localStorage key that says this person may hold a draft on this device in this organization.
- * A job page reads it before it loads any draft code, so a page without drafts costs no request.
+ * A job page looks for one of the person's keys before it loads any draft code, so a page without
+ * drafts costs no request.
  */
 export function draftHintKey(holder: DraftHolder): string {
-  return `werkflow:drafts:${holder.userId}:${holder.organizationId}`;
+  return `${draftHintPrefix(holder.userId)}${holder.organizationId}`;
 }
 
-function mayHoldDrafts(holder: DraftHolder): boolean {
+function draftHintPrefix(userId: string): string {
+  return `werkflow:drafts:${userId}:`;
+}
+
+function mayHoldDrafts(userId: string): boolean {
   try {
-    return localStorage.getItem(draftHintKey(holder)) !== null;
+    const prefix = draftHintPrefix(userId);
+    return Object.keys(localStorage).some((key) => key.startsWith(prefix));
   } catch {
     // best-effort: without localStorage the device is asked itself.
     return true;
@@ -95,56 +92,26 @@ function mayHoldDrafts(holder: DraftHolder): boolean {
 }
 
 /**
- * The report drafts this device keeps for the signed-in person in the active organization. The
- * draft code loads only when the device may hold a draft or `wanted` is set, as when the dialog
- * for a new Arbeitsnachweis opens; from then on it also sends what waits. Without a person or an
- * organization nothing is read.
+ * The lazily loaded draft code of a job page, once this device may hold a draft of the person or
+ * `wanted` is set, as when the dialog for a new Arbeitsnachweis opens. A load that fails carries
+ * its retry.
  */
-export function useDeviceDrafts(currentUserId: string, wanted: boolean): DeviceDrafts {
-  const organizationId = useOrganization().activeOrg?.orgId ?? null;
-  const hydrated = useHydrated();
-  const holder = useMemo<DraftHolder | null>(
-    () => (organizationId === null ? null : { userId: currentUserId, organizationId }),
-    [currentUserId, organizationId],
-  );
+export function useDraftParts(
+  currentUserId: string,
+  wanted: boolean,
+): { parts: DraftParts | null; failure: ReadFailure | null } {
   // Once the dialog asked for the draft code, the section keeps it: a draft written since must show.
   const [everWanted, setEverWanted] = useState(wanted);
   if (wanted && !everWanted) setEverWanted(true);
-  const [hinted] = useState(() => holder !== null && mayHoldDrafts(holder));
-  // The loaded code and its device, kept across reads: effects and the dialog depend on one object per holder.
-  const [loaded, setLoaded] = useState<{ parts: DraftParts; device: DraftDevice } | null>(null);
-  if (loaded !== null && loaded.device.holder !== holder) setLoaded(null);
-  const read = useClientRead({
+  const [hinted] = useState(() => mayHoldDrafts(currentUserId));
+  const load = useClientRead({
     read: async () => {
-      if (holder === null) return { success: true as const, drafts: [] };
-      const parts = loaded?.parts ?? (await import('./device-draft-parts'));
-      const device = loaded?.device ?? parts.createDraftDevice(holder);
-      const drafts = await device.list();
-      parts.noteDraftsOnDevice(holder, drafts.length > 0);
-      setLoaded({ parts, device });
-      return { success: true as const, drafts };
+      const { DeviceDrafts, DeviceDraftKeeper } = await import('./device-draft-parts');
+      return { success: true as const, parts: { DeviceDrafts, DeviceDraftKeeper } };
     },
-    deps: [currentUserId, organizationId],
-    enabled: hydrated && holder !== null && (everWanted || hinted),
-    failureMessage: 'Die Entwürfe auf diesem Gerät konnten nicht gelesen werden.',
+    deps: [currentUserId],
+    enabled: everWanted || hinted,
+    failureMessage: 'Die Entwürfe auf diesem Gerät konnten nicht geladen werden.',
   });
-  const reload = read.reload;
-  const device = loaded?.device ?? null;
-  const [progress, setProgress] = useState<DraftSendProgress | null>(null);
-  useEffect(() => {
-    if (!device) return;
-    const unsubscribe = device.subscribe(() => {
-      setProgress(device.progress());
-      reload();
-    });
-    device.start();
-    return unsubscribe;
-  }, [device, reload]);
-  return {
-    parts: loaded?.parts ?? null,
-    device,
-    drafts: read.data?.drafts ?? [],
-    progress,
-    failure: read.failure,
-  };
+  return { parts: load.data?.parts ?? null, failure: load.failure };
 }

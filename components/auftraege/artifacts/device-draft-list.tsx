@@ -100,7 +100,7 @@ function listedDrafts({ device, drafts, progress, jobId }: DeviceDraftListProps)
 }
 
 /** A stored draft as the dialog opens it: every content field present, the instants as local times. */
-function restoredDraft(draft: StoredDraft): RestoredDraft {
+function openedDraft(draft: StoredDraft): RestoredDraft {
   const { content } = draft;
   return {
     draft,
@@ -168,7 +168,7 @@ export function DeviceDraftList(props: DeviceDraftListProps) {
             hint={stateHint(row, device.noAccessKeptMs)}
             sending={isBusy(row.draft.id)}
             disabled={anyBusy}
-            onOpen={() => onOpen(restoredDraft(row.draft))}
+            onOpen={() => onOpen(openedDraft(row.draft))}
             onSend={() => send(row.draft)}
             onDelete={() => setDeleting(row.draft)}
           />

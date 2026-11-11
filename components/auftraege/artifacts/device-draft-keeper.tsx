@@ -8,7 +8,6 @@ import type { DraftHolder, DraftPhoto, StoredDraft } from '@/lib/field-sync/devi
 import type { DraftSendOutcome } from '@/lib/field-sync/device/draft-sync';
 import { logError } from '@/lib/logging';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
-import { recordWorkArtifactAction } from '@/lib/work-artifacts/actions';
 import { workArtifactFieldIssues } from '@/lib/work-artifacts/field-rules';
 import { WORK_ARTIFACT_DRAFT_PHOTO_LIMIT } from '@/lib/work-artifacts/types';
 import {
@@ -169,22 +168,6 @@ const SEND_REFUSALS: Record<Exclude<DraftSendOutcome, 'sent' | 'waiting'>, strin
   skipped: 'Der Entwurf konnte nicht übertragen werden. Er bleibt auf diesem Gerät gespeichert.',
 };
 
-/** Asks for the review of the revision a sent draft wrote. False when the request failed or got no answer. */
-async function requestReview(artifactId: string, revisionId: string, version: number): Promise<boolean> {
-  try {
-    const review = await recordWorkArtifactAction({
-      artifactId,
-      revisionId,
-      actionId: crypto.randomUUID(),
-      expectedVersion: version,
-      actionType: 'review_requested',
-    });
-    return review.success;
-  } catch {
-    return false;
-  }
-}
-
 type DeviceDraftKeeperProps = {
   editor: WorkArtifactEditor;
   device: DraftDevice;
@@ -199,53 +182,37 @@ type DeviceDraftKeeperProps = {
 };
 
 /**
- * Sends the draft the device holds, with its photos, as one draft revision. A submit asks for the
- * review once the server holds that revision: nothing is submitted without signal.
+ * Sends the draft the device holds, with its photos, as one draft revision, and answers what the
+ * server wrote. A draft that did not arrive answers null: without signal the dialog closes and a
+ * banner says the draft waits on the device; a refusal shows at the form.
  */
 function useSaveThroughDevice(
   { editor, device, artifactId, onClose }: DeviceDraftKeeperProps,
   write: DraftWrite,
   withText: DraftChange,
-) {
+): DeviceDraftHandle['save'] {
   const { showBanner } = useBanner();
-  return async function save(submit: boolean): Promise<void> {
+  return async function save(submit) {
     // The last change reaches the device before anything is sent.
     const stored = await write(withText);
-    if (stored === null || stored === 'not_stored') return;
+    if (stored === null || stored === 'not_stored') return null;
     const outcome = await device.send(artifactId);
-    if (outcome === 'waiting') {
-      onClose();
-      showBanner({
-        variant: 'info',
-        message: submit
-          ? 'Gerade kein Netz. Der Entwurf ist auf diesem Gerät gespeichert und wird später übertragen. Reiche ihn danach zur Prüfung ein.'
-          : 'Gerade kein Netz. Der Entwurf ist auf diesem Gerät gespeichert und wird später übertragen.',
-      });
-      return;
+    if (outcome === 'sent') {
+      // One version for the revision and one for each photo link.
+      return { revisionId: stored.revisionId, version: 1 + stored.photos.length };
     }
-    if (outcome !== 'sent') {
+    if (outcome !== 'waiting') {
       editor.setError(SEND_REFUSALS[outcome]);
-      return;
+      return null;
     }
-    // One version for the revision and one for each photo link.
-    const submitted = submit
-      ? await requestReview(artifactId, stored.revisionId, 1 + stored.photos.length)
-      : true;
-    await editor.load(artifactId);
-    editor.setEditing(false);
-    editor.setAttemptedSave(null);
-    if (!submitted) {
-      editor.setError(
-        'Der Entwurf ist gespeichert, wurde aber nicht zur Prüfung eingereicht. Reiche ihn hier noch einmal ein.',
-      );
-      return;
-    }
+    onClose();
     showBanner({
-      variant: 'success',
+      variant: 'info',
       message: submit
-        ? 'Arbeitsnachweis wurde zur Prüfung eingereicht.'
-        : 'Arbeitsnachweis wurde gespeichert.',
+        ? 'Gerade kein Netz. Der Entwurf ist auf diesem Gerät gespeichert und wird später übertragen. Reiche ihn danach zur Prüfung ein.'
+        : 'Gerade kein Netz. Der Entwurf ist auf diesem Gerät gespeichert und wird später übertragen.',
     });
+    return null;
   };
 }
 

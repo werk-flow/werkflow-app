@@ -31,9 +31,10 @@ import {
   type WorkArtifactTimeSourceOption,
 } from '@/lib/work-artifacts/types';
 import {
-  useDeviceDrafts,
+  useDraftParts,
   type DeviceDraftHandle,
-  type DeviceDrafts,
+  type DraftDevice,
+  type DraftParts,
   type RestoredDraft,
 } from './use-device-drafts';
 import { useWorkArtifactCustomerActions } from './use-work-artifact-customer-actions';
@@ -84,7 +85,8 @@ export function WorkArtifactsSection({
 }: WorkArtifactsSectionProps): ReactElement {
   const { selectedId, creating, restoredDraft, ...open } = useOpenArtifact(initialArtifacts);
   // Only a job keeps drafts on the device; their code loads with the dialog for a new Arbeitsnachweis.
-  const deviceDrafts = useDeviceDrafts(currentUserId, creating && targetType === 'job');
+  const draftParts = useDraftParts(currentUserId, creating && targetType === 'job');
+  const [draftDevice, setDraftDevice] = useState<DraftDevice | null>(null);
   // Newest version seen per artifact while the dialog is open. The dialog
   // compares it with its loaded version, so the user's own writes never
   // raise the remote-change hint.
@@ -114,10 +116,12 @@ export function WorkArtifactsSection({
       {view.isRefreshing && (
         <p className="mt-2 text-xs text-muted-foreground">Arbeitsnachweise werden aktualisiert…</p>
       )}
-      <DeviceDraftsOfSection
-        deviceDrafts={deviceDrafts}
+      <SectionDeviceDrafts
+        draftParts={draftParts}
+        currentUserId={currentUserId}
         jobId={targetType === 'job' ? targetId : null}
         onOpen={open.restore}
+        onDevice={setDraftDevice}
       />
       {(creating || selectedId) && (
         <WorkArtifactDialog
@@ -135,7 +139,8 @@ export function WorkArtifactsSection({
           instructionOptions={instructionOptions}
           defaultSiteId={defaultSiteId}
           readOnly={readOnly}
-          deviceDrafts={targetType === 'job' ? deviceDrafts : null}
+          draftParts={targetType === 'job' ? draftParts.parts : null}
+          draftDevice={draftDevice}
           restoredDraft={restoredDraft}
           remoteVersions={remoteVersions}
           onRemoteUpdateHandled={() => setRemoteVersions({})}
@@ -148,6 +153,21 @@ export function WorkArtifactsSection({
       )}
     </section>
   );
+}
+
+/** The drafts this device keeps, once their code is loaded; code that cannot load shows its retry. */
+function SectionDeviceDrafts({
+  draftParts,
+  ...drafts
+}: {
+  draftParts: ReturnType<typeof useDraftParts>;
+  currentUserId: string;
+  jobId: string | null;
+  onOpen: (restored: RestoredDraft) => void;
+  onDevice: (device: DraftDevice | null) => void;
+}) {
+  if (draftParts.failure) return <SectionError className="mt-4" failure={draftParts.failure} />;
+  return draftParts.parts ? <draftParts.parts.DeviceDrafts {...drafts} /> : null;
 }
 
 /** Which Arbeitsnachweis the dialog shows: a saved one, a new one, or a draft of this job the device kept. */
@@ -290,8 +310,9 @@ type WorkArtifactDialogProps = WorkArtifactTarget & {
   recordedVisit: RecordedVisitWindow;
   instructionOptions: Array<{ id: string; label: string }>;
   defaultSiteId?: string | undefined;
-  /** The drafts of a job's section on this device; null for a project. */
-  deviceDrafts: DeviceDrafts | null;
+  /** The draft code and the device of a job's section, once loaded; null for a project. */
+  draftParts: DraftParts | null;
+  draftDevice: DraftDevice | null;
   restoredDraft: RestoredDraft | null;
   remoteVersions: Record<string, number>;
   onRemoteUpdateHandled: () => void;
@@ -389,7 +410,8 @@ function useWorkArtifactDialogActions({
   readOnly,
   timeEntryOptions,
   recordedVisit,
-  deviceDrafts,
+  draftParts,
+  draftDevice,
   restoredDraft,
   onClose,
 }: WorkArtifactDialogProps) {
@@ -408,13 +430,11 @@ function useWorkArtifactDialogActions({
   const [setDeviceDraft] = useState(() => (handle: DeviceDraftHandle | null) => {
     deviceDraft.current = handle;
   });
-  const parts = deviceDrafts?.parts;
-  const device = deviceDrafts?.device;
   const keeper =
-    parts && device && artifactId === null && !readOnly && editor.detail === null ? (
-      <parts.DeviceDraftKeeper
+    draftParts && draftDevice && artifactId === null && !readOnly && editor.detail === null ? (
+      <draftParts.DeviceDraftKeeper
         editor={editor}
-        device={device}
+        device={draftDevice}
         jobId={targetId}
         artifactId={newArtifactId}
         restored={restoredDraft}
@@ -427,30 +447,6 @@ function useWorkArtifactDialogActions({
   const customer = useWorkArtifactCustomerActions({ targetType, targetId, editor, onClose });
   const links = useWorkArtifactLinks({ editor, review, timeEntryOptions });
   return { editor, save, review, customer, links, keeper };
-}
-
-/** The device's drafts below the saved Arbeitsnachweise, once their code is loaded; a failed read shows its retry. */
-function DeviceDraftsOfSection({
-  deviceDrafts,
-  jobId,
-  onOpen,
-}: {
-  deviceDrafts: DeviceDrafts;
-  jobId: string | null;
-  onOpen: (restored: RestoredDraft) => void;
-}) {
-  const { parts, device, drafts, progress, failure } = deviceDrafts;
-  if (failure) return <SectionError className="mt-4" failure={failure} />;
-  if (!parts || !device) return null;
-  return (
-    <parts.DeviceDraftList
-      device={device}
-      drafts={drafts}
-      progress={progress}
-      jobId={jobId}
-      onOpen={onOpen}
-    />
-  );
 }
 
 function workArtifactDialogDescription(

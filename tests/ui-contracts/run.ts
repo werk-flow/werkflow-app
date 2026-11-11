@@ -152,7 +152,7 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               },
               (args) => {
                 if (
-                  args.importer.endsWith('use-device-drafts.ts') ||
+                  args.importer.endsWith('device-draft-parts.tsx') ||
                   args.importer.endsWith('lib/field-sync/device/draft-sync.ts')
                 )
                   return { path: join(import.meta.dir, 'device-draft-boundaries.ts') };
