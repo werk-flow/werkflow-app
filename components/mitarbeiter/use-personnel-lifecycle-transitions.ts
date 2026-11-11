@@ -22,19 +22,27 @@ import { logError } from '@/lib/logging';
 
 export type PersonnelLifecycleTransitions = ReturnType<typeof usePersonnelLifecycleTransitions>;
 
-/** The chosen step while it still fits the person's state, otherwise the first step that fits. */
+/** The chosen step while it still fits the person's state; none once a refresh took it away. */
 function fittingStep<Kind extends string>(chosen: Kind | null, steps: readonly Kind[]): Kind | undefined {
-  return chosen !== null && steps.includes(chosen) ? chosen : steps[0];
+  return chosen !== null && steps.includes(chosen) ? chosen : undefined;
+}
+
+/** The step a dialog opens with: the kept choice while it still fits, otherwise the first step that fits. */
+function openingStep<Kind extends string>(chosen: Kind | null, steps: readonly Kind[]): Kind | null {
+  return fittingStep(chosen, steps) ?? steps[0] ?? null;
 }
 
 /**
  * The open state and fields of both transition dialogs; both share one reason
- * text. A step is chosen only among the steps that fit (`data.steps`); until
- * the admin picks one, and after a save, the first of them is preselected.
+ * text. A step is chosen only among the steps that fit (`data.steps`). Opening
+ * a dialog pins its step: the kept choice, or the first step that fits. A
+ * refresh while it is open never swaps in another step: a step that no longer
+ * fits leaves none chosen, and the save asks for one. Date and reason stay, so
+ * the admin reviews them against the step they pick.
  */
 function usePersonnelTransitionFields(steps: PersonnelLifecycleController['data']['steps']) {
-  const [accessOpen, setAccessOpen] = useState(false);
-  const [employmentOpen, setEmploymentOpen] = useState(false);
+  const [accessOpen, setAccessDialogOpen] = useState(false);
+  const [employmentOpen, setEmploymentDialogOpen] = useState(false);
   const [accessChoice, setAccessKind] = useState<PersonnelAccessTransitionKind | null>(null);
   const [accessAt, setAccessAt] = useState(defaultAccessDateTime);
   const [employmentChoice, setEmploymentKind] = useState<PersonnelEmploymentTransitionKind | null>(null);
@@ -42,6 +50,15 @@ function usePersonnelTransitionFields(steps: PersonnelLifecycleController['data'
   const [reason, setReason] = useState('');
   const accessKind = fittingStep(accessChoice, steps.access);
   const employmentKind = fittingStep(employmentChoice, steps.employment);
+
+  function setAccessOpen(open: boolean): void {
+    if (open) setAccessKind(openingStep(accessChoice, steps.access));
+    setAccessDialogOpen(open);
+  }
+  function setEmploymentOpen(open: boolean): void {
+    if (open) setEmploymentKind(openingStep(employmentChoice, steps.employment));
+    setEmploymentDialogOpen(open);
+  }
 
   return {
     accessOpen,

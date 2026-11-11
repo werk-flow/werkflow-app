@@ -853,6 +853,49 @@ test(
 );
 
 test(
+  'a personnel step that a refresh took away is cleared and never saved as another step',
+  {
+    annotation: { type: 'fixture', description: 'personnel' },
+  },
+  async ({ page }) => {
+    await page.evaluate(() => {
+      window.uiContractPersonnel.refuseEmploymentStep = true;
+    });
+    const section = page.getByRole('main').getByTestId('personnel-lifecycle');
+    await section.getByRole('button', { name: 'Übergang erfassen', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Beschäftigungsübergang erfassen', exact: true });
+    const stepSelect = dialog.getByRole('combobox', { name: 'Übergang' });
+    await expect(stepSelect).toContainText('Austritt vormerken');
+    await dialog.getByLabel('Grund').fill('Kündigung liegt vor');
+    const save = dialog.getByRole('button', { name: 'Speichern', exact: true });
+    await save.click();
+    // The refusal reloads the view; the person has exited meanwhile, so „Austritt vormerken“ no longer fits.
+    await expect(dialog.getByRole('alert')).toContainText('passt nicht mehr zum aktuellen Stand');
+    await expect(stepSelect).not.toContainText('Austritt vormerken');
+    await expect(stepSelect).not.toContainText('Beschäftigung reaktivieren');
+    await expect(dialog.getByLabel('Grund')).toHaveValue('Kündigung liegt vor');
+    // A second save sends no step: it asks for one and focuses the field.
+    await save.click();
+    await expect(dialog.getByText('Bitte wähle einen Übergang.')).toBeVisible();
+    await expect(stepSelect).toBeFocused();
+    await expect(save).toBeEnabled();
+    expect(await page.evaluate(() => window.uiContractPersonnel.employmentSteps)).toEqual(['record_notice']);
+    // Only a step the admin picks again is saved.
+    await stepSelect.click();
+    await page
+      .getByRole('listbox')
+      .getByRole('option', { name: /^Beschäftigung reaktivieren/ })
+      .click();
+    await save.click();
+    await expect(dialog).toHaveCount(0);
+    expect(await page.evaluate(() => window.uiContractPersonnel.employmentSteps)).toEqual([
+      'record_notice',
+      'reactivate',
+    ]);
+  },
+);
+
+test(
   'personnel upload rejection keeps the dialog open without a successful save or reconciliation read',
   {
     annotation: { type: 'fixture', description: 'personnel' },
