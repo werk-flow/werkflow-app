@@ -80,7 +80,7 @@ test('in CI a group inside the window is blocked at once as a harness result, an
   const hold = (instant: number): Promise<string | undefined> =>
     // A live signal: a CI hold that slept would never settle within the test.
     holdOutsideMidnightWindow({
-      groupId: 'audit:visual:acceptance',
+      groupId: 'audit:visual:acceptance:sets',
       ci: true,
       signal: new AbortController().signal,
       log: () => expect.unreachable('CI logs no wait'),
