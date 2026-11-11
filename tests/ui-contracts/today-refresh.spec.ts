@@ -32,14 +32,21 @@ async function routeTodayDays(page: Page, held?: Promise<void>): Promise<string[
   return requested;
 }
 
-/** Delivers another tab's wipe signal to this page, as the browser does: a `storage` event, later than the write. */
-async function deliverForeignWipeSignal(page: Page): Promise<void> {
+/**
+ * Delivers another tab's wipe signal to this page, as the browser does: a `storage` event, later
+ * than the write. `null` is another tab's `localStorage.clear()`, which takes signal and claim alike.
+ */
+async function deliverForeignWipeSignal(page: Page, key: string | null = TODAY_WIPE_KEY): Promise<void> {
   await page.evaluate(
-    (key) =>
+    (changed) =>
       window.dispatchEvent(
-        new StorageEvent('storage', { key, newValue: localStorage.getItem(key), storageArea: localStorage }),
+        new StorageEvent('storage', {
+          key: changed,
+          newValue: changed === null ? null : localStorage.getItem(changed),
+          storageArea: localStorage,
+        }),
       ),
-    TODAY_WIPE_KEY,
+    key,
   );
 }
 
@@ -191,18 +198,18 @@ test('a sign-out in another tab during a switch keeps the switched page from cla
 });
 
 // Another tab's sign-out can write its wipe signal right after this tab's switch wiped and before
-// this page renders the switch, so the switch would read the sign-out's generation as its own. The
-// browser then delivers that write's `storage` event: this page drops its claim and claims nothing
-// more, so no claim stands and no stored day is readable.
+// this page renders the switch, so the switch reads the sign-out's generation as its own and claims.
+// The browser delivers that write's `storage` event later: the page then drops its claim, so no
+// claim stands and no stored day is readable.
 test('a foreign wipe between a switch and its first render leaves no claim and no readable day', async ({
   page,
 }) => {
   const [first, second] = TODAY_CONTRACT_ORGANIZATIONS;
-  const requested = await routeTodayDays(page);
+  await routeTodayDays(page);
   await openContractFixture(page, 'today-refresh-switch');
   await expect.poll(() => page.evaluate(() => window.todayRefreshContract.storedOrganization())).toBe(first);
   // The next wipe signal this tab writes (the switch's) is followed at once by another tab's
-  // sign-out in the shared storage; its `storage` event reaches this tab as a later task.
+  // sign-out in the shared storage.
   await page.evaluate(
     ({ holderKey, wipeKey }) => {
       const write = Storage.prototype.setItem;
@@ -212,15 +219,6 @@ test('a foreign wipe between a switch and its first render leaves no claim and n
         Storage.prototype.setItem = write;
         this.removeItem(holderKey);
         write.call(this, wipeKey, 'sign-out-in-another-tab');
-        setTimeout(() =>
-          window.dispatchEvent(
-            new StorageEvent('storage', {
-              key: wipeKey,
-              newValue: 'sign-out-in-another-tab',
-              storageArea: this,
-            }),
-          ),
-        );
       };
     },
     { holderKey: TODAY_HOLDER_KEY, wipeKey: TODAY_WIPE_KEY },
@@ -229,16 +227,15 @@ test('a foreign wipe between a switch and its first render leaves no claim and n
   await page.getByRole('button', { name: 'Organisation wechseln', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.organizationContract.writes.length)).toBe(1);
   await page.evaluate(() => window.organizationContract.finishCookie(true));
-
-  // The page handed the refresh the new organization; a claim would be in place by now.
+  // The switch read the sign-out's generation, so it claims the new organization.
   await expect
-    .poll(() =>
-      page.evaluate((organizationId) => window.todayRefreshOrganizations.includes(organizationId), second),
-    )
-    .toBe(true);
-  expect(await page.evaluate((key) => localStorage.getItem(key), TODAY_HOLDER_KEY)).toBeNull();
-  expect(await page.evaluate(() => window.todayRefreshContract.storedOrganization())).toBeNull();
-  expect(requested).toEqual([first]);
+    .poll(() => page.evaluate((key) => localStorage.getItem(key), TODAY_HOLDER_KEY))
+    .toBe(`${TODAY_CONTRACT_USER}:${second}`);
+
+  await deliverForeignWipeSignal(page);
+
+  await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), TODAY_HOLDER_KEY)).toBeNull();
+  await expect.poll(() => page.evaluate(() => window.todayRefreshContract.storedOrganization())).toBeNull();
 });
 
 // A refresh whose answer is still on its way when another tab's wipe signal arrives saves nothing a
@@ -255,6 +252,28 @@ test('a foreign wipe signal while a refresh is in flight leaves no readable day'
   await expect.poll(() => requested.length).toBe(1);
 
   await deliverForeignWipeSignal(page);
+  release();
+
+  await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), TODAY_HOLDER_KEY)).toBeNull();
+  await expect.poll(() => page.evaluate(() => window.todayRefreshContract.storedOrganization())).toBeNull();
+});
+
+// Another tab that clears all of localStorage removes the wipe signal and the claim at once; its
+// `storage` event has no key. The page treats it as a foreign wipe.
+test('another tab clearing all storage while a refresh is in flight leaves no readable day', async ({
+  page,
+}) => {
+  let release = (): void => undefined;
+  const requested = await routeTodayDays(
+    page,
+    new Promise<void>((resolve) => {
+      release = resolve;
+    }),
+  );
+  await openContractFixture(page, 'today-refresh-switch');
+  await expect.poll(() => requested.length).toBe(1);
+
+  await deliverForeignWipeSignal(page, null);
   release();
 
   await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), TODAY_HOLDER_KEY)).toBeNull();

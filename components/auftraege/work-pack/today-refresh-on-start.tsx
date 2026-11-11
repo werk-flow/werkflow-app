@@ -8,6 +8,33 @@ import { useUserProfile } from '@/components/user/user-profile-context';
 import { TODAY_WIPE_KEY, todayWipeGeneration } from '@/lib/field-sync/device/today-wipe';
 import { logError } from '@/lib/logging';
 
+type TodayRefreshModule = typeof import('@/lib/field-sync/device/today-refresh');
+
+/**
+ * Whether another tab wiped the device since this start page mounted: its `storage` event never
+ * fires for this tab's own writes. A switch may have read that wipe's generation as its own, so the
+ * page claims nothing more until the next start page, and a claim it already made is dropped.
+ * Another tab's `localStorage.clear()` (no key) took the signal and the claim alike. The ref blocks
+ * at once, also a refresh code that finishes loading before the next render; the state re-runs the
+ * refresh effect.
+ */
+function useForeignWipe() {
+  const [foreignWipe, setForeignWipe] = useState(false);
+  const foreignWipeRef = useRef(false);
+  const refreshModule = useRef<TodayRefreshModule | null>(null);
+  useEffect(() => {
+    const onStorage = (event: StorageEvent): void => {
+      if (event.key !== TODAY_WIPE_KEY && event.key !== null) return;
+      foreignWipeRef.current = true;
+      setForeignWipe(true);
+      refreshModule.current?.dropTodayClaim();
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+  return { foreignWipe, foreignWipeRef, refreshModule };
+}
+
 /**
  * Keeps the field worker's today snapshot on the phone current from app
  * start (decision record 0010, "Sync triggers"). Its code loads after the
@@ -47,20 +74,7 @@ export function TodayRefreshOnStart(): null {
           : claim.generation,
       switchGeneration,
     });
-  // Another tab wiped the device: its `storage` event never fires for this tab's own writes. A
-  // switch may have read that wipe's generation as its own, so this page claims nothing more until
-  // the next start page, and a claim it already made is dropped.
-  const [foreignWipe, setForeignWipe] = useState(false);
-  const refreshModule = useRef<typeof import('@/lib/field-sync/device/today-refresh') | null>(null);
-  useEffect(() => {
-    const onStorage = (event: StorageEvent): void => {
-      if (event.key !== TODAY_WIPE_KEY) return;
-      setForeignWipe(true);
-      refreshModule.current?.dropTodayClaim();
-    };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, []);
+  const { foreignWipe, foreignWipeRef, refreshModule } = useForeignWipe();
   // No wipe generation reads `blocked`, so `keepTodayFresh` refuses it.
   const generationAtStart = foreignWipe ? 'blocked' : claim.generation;
   useEffect(() => {
@@ -73,6 +87,11 @@ export function TodayRefreshOnStart(): null {
       try {
         const refresh = await import('@/lib/field-sync/device/today-refresh');
         refreshModule.current = refresh;
+        // A foreign wipe while the code loaded: hand nothing over, and drop a claim made before it.
+        if (foreignWipeRef.current) {
+          refresh.dropTodayClaim();
+          return;
+        }
         if (current)
           refresh.keepTodayFresh(
             { userId, organizationId },
@@ -105,6 +124,6 @@ export function TodayRefreshOnStart(): null {
       current = false;
       window.removeEventListener('online', retryOnline);
     };
-  }, [userId, organizationId, generationAtStart, showBanner]);
+  }, [userId, organizationId, generationAtStart, showBanner, foreignWipeRef, refreshModule]);
   return null;
 }
