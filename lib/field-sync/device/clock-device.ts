@@ -96,8 +96,9 @@ async function sessionUserId(): Promise<string | null> {
 }
 
 /** Runs `send` while no other tab of the origin sends; a browser without Web Locks relies on the server recording each event once. */
-function exclusively(send: () => Promise<void>): Promise<void> {
-  return typeof navigator.locks?.request === 'function' ? navigator.locks.request(SEND_LOCK, send) : send();
+async function exclusively(send: () => Promise<void>): Promise<void> {
+  if (typeof navigator.locks?.request === 'function') await navigator.locks.request(SEND_LOCK, send);
+  else await send();
 }
 
 /** Sends this tab's holder's unsent events, as far as the server records them now. */

@@ -74,8 +74,9 @@ async function isolatedTests(): Promise<void> {
     }),
   }));
 
-  const { holdClock, sendOwnTimeEvents, timeUnsentSource, clockHolder } = await import('./clock-device');
-  const { takeInKeptClockAction } = await import('./clock-outbox');
+  const { holdClock, sendOwnTimeEvents, takeInKept, timeUnsentSource, clockHolder } = await import(
+    './clock-device'
+  );
   const { keepClockAction } = await import('./unsent-mark');
 
   const WORKER: OutboxHolder = {
@@ -134,7 +135,7 @@ async function isolatedTests(): Promise<void> {
       triedOnline: false,
     });
     expect(kept).toBe(true);
-    await takeInKeptClockAction();
+    await takeInKept();
   }
 
   beforeEach(async () => {
@@ -188,7 +189,7 @@ async function isolatedTests(): Promise<void> {
         base: CLOCKED_OUT,
         triedOnline: false,
       });
-      await takeInKeptClockAction();
+      await takeInKept();
 
       expect((await readTimeOutbox(WORKER)).events).toHaveLength(1);
       expect((await readTimeOutbox(COLLEAGUE)).events).toHaveLength(1);
@@ -212,7 +213,7 @@ async function isolatedTests(): Promise<void> {
         triedOnline: false,
       });
 
-      await takeInKeptClockAction();
+      await takeInKept();
 
       expect((await readTimeOutbox(WORKER)).events).toEqual([]);
       const kept: unknown = JSON.parse(storage.get('werkflow:unsent:clock') ?? '[]');

@@ -1,6 +1,8 @@
 import type { LiveClockState } from '@/lib/time-tracking/types';
 
 export const CLOCK_ORGANIZATION_ID = '10000000-0000-4000-8000-000000000001';
+/** The signed-in person of the clock contracts, also the session of the stubbed Supabase client. */
+export const CLOCK_USER_ID = '10000000-0000-4000-8000-0000000000aa';
 export const RUNNING_CLOCK_STATE: LiveClockState = {
   organizationId: CLOCK_ORGANIZATION_ID,
   breakMode: 'manual',

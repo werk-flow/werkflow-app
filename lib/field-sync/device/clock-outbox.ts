@@ -26,12 +26,13 @@ export async function watchClockOutbox(
 }
 
 /**
- * Takes the clock action a page just kept without the server's answer into the outbox, and sends
- * it at once when the phone reports a network: the online call may only have failed on its way.
+ * Takes the clock action a page just kept without the server's answer into the outbox and tries to
+ * send it at once: the online call may only have failed on its way, and a phone can be wrong about
+ * having no network. Without one the send fails and the event waits.
  */
 export async function takeInKeptClockAction(): Promise<void> {
   await takeInKept();
-  if (navigator.onLine) void sendUnsentNow();
+  void sendUnsentNow();
 }
 
 /** „Jetzt senden“: one pass over every sender, resolved when it ended. */
