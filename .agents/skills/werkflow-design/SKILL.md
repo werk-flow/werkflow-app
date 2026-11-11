@@ -57,11 +57,11 @@ Trap: a table that scrolls sideways on a phone, or hides columns there.
 
 ### Change an accepted design
 
-1. Before you build, show the owner the rendered current screen and the proposal ([rendered design acceptance](../../../docs/technical/standards-audit.md#rendered-design-acceptance)).
+1. Before you build, render the current screen and the proposal ([rendered design acceptance](../../../docs/technical/standards-audit.md#rendered-design-acceptance)). A new design direction with real alternatives goes to the owner in the plan ([Decide or ask](../../../AGENTS.md#decide-or-ask)).
 2. Fix a shared problem in the token or the primitive. Fix a local problem at the call site.
-3. After the owner accepts the result, update the references and run `bun run test:verify --group audit:visual`.
+3. After the lead accepts the result, update the references and run `bun run test:verify --group audit:visual`.
 
-Trap: a reference rewritten because the comparison failed. A reference records what the owner accepted, not what the build produced.
+Trap: a reference rewritten because the comparison failed. A reference records an accepted design, not what the build produced.
 
 ## Color
 

@@ -29,7 +29,7 @@ You own the change. GPT Sol reviews it in rounds until you agree or the budget e
 2. Call `delegate_task` with `role: "review"`, `mode: "async"`, `isolation: "worktree"`, the Codex `providerInstanceId`, the model, and `clientRequestId: "sol-loop-<branch>-r<round>"`.
 3. End your turn and wait for the round's completion notice. Do not poll, and do not edit the scoped files while a round runs. Only a delegated round wakes you this way; a shell run never does ([wait for a long run](../../../docs/technical/testing.md#wait-for-a-long-run)).
 4. A timeout, an error or silence is not approval. Cancel with `task_cancel`, confirm with `task_status`, and restart the round.
-5. On a rate limit, or when no Sol model is listed, ask the owner through the question tool. Never substitute another model.
+5. A rate limit, or no listed Sol model, is an owner item ([Decide or ask](../../../AGENTS.md#decide-or-ask)). Never substitute another model.
 
 Round 1 brief:
 
@@ -64,7 +64,8 @@ Start one only while budget remains and a blocker or should is open or behavior 
 ## 5. Stop
 
 - **Agreed:** APPROVE on the current behavior diff, no blocker or should open.
-- **Stuck:** a finding stays disputed after two replies, or the budget ends. Ask the owner through the question tool: each side in plain sentences, your recommendation first.
+- **Disputed:** a finding stays disputed after two replies. Decide it on the evidence and write each side and your decision into the PR's Review section. It is an owner item only as kind 3 of [Decide or ask](../../../AGENTS.md#decide-or-ask).
+- **Budget ended:** when Sol has not read your last fix, the lead decides whether one confirmation round is worth its cost. Outside an epic, you decide. A child hands back with the open findings. Without the round, name the unread commits in the PR's Review section.
 
 Put this line in the PR description:
 

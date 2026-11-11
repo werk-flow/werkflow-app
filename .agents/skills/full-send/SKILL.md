@@ -43,14 +43,16 @@ If you cannot prove the change, ask.
 
 ## Ask the owner
 
-Call `unwatch_pull_request`, ask through the question tool, and end your turn. Include the PR link, what blocks you and the options, your recommendation first, in plain words for a non-developer. Ask only when:
+Ask only when the work cannot move without the owner ([Decide or ask](../../../AGENTS.md#decide-or-ask)):
 
 - you cannot prove the change
 - the gate cannot pass and you cannot fix it
-- Sol hit a rate limit or stays disputed
+- Sol hit a rate limit
 - the next step is outside the grant
-- the goal is ambiguous in a way that changes the result
+- the goal has two readings that change the result, and neither is clearly better
 - another PR makes this one obsolete
+
+Call `unwatch_pull_request`, ask through the question tool, and end your turn. Include the PR link, what blocks you and the options, your recommendation first, in plain words for a non-developer.
 
 Decide everything else yourself and list the decisions in the report. If the question gets no answer, leave the PR open and unmerged.
 
