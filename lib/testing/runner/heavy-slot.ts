@@ -2,6 +2,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { homedir, totalmem } from 'node:os';
 import { join } from 'node:path';
+import { runSessionCommand, withTestSession } from '../local-stack/test-session';
 import { errorCode } from './error-code';
 
 // One shared machine runs many worktrees' agents at once. `check:changed`,
@@ -157,30 +158,19 @@ export async function acquireHeavySlot(label: string, signal?: AbortSignal): Pro
 }
 
 /**
- * Runs one command with inherited output, inside a heavy slot when `heavy`
- * holds, and resolves with its exit code. A signal to this process reaches the
- * command; the slot frees when the command ends. The wrappers
- * `scripts/heavy.ts` and `scripts/lint.ts` use it.
+ * Runs one command inside a heavy slot when `heavy` holds, and resolves with
+ * its exit code. The command leads its own process group: Ctrl+C, a closed
+ * terminal or SIGTERM stop its whole tree before the slot frees
+ * (lib/testing/local-stack/test-session.ts). `scripts/heavy.ts` and
+ * `scripts/lint.ts` use it.
  */
-export async function runInHeavySlot(command: readonly string[], heavy = true): Promise<number> {
-  const [executable, ...args] = command;
-  if (!executable) throw new Error('runInHeavySlot needs a command.');
-  const slot = heavy ? await acquireHeavySlot(command.join(' ').slice(0, 80)) : null;
-  const child = spawn(executable, args, { stdio: 'inherit', env: process.env });
-  const forward = (signal: NodeJS.Signals): void => {
-    child.kill(signal);
-  };
-  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) process.on(signal, forward);
-  try {
-    return await new Promise<number>((resolveExit) => {
-      child.once('error', (error) => {
-        console.error(`[heavy-slot] ${executable} did not start: ${error.message}`);
-        resolveExit(127);
-      });
-      child.once('exit', (code, signal) => resolveExit(code ?? (signal ? 128 : 1)));
-    });
-  } finally {
-    for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) process.off(signal, forward);
-    slot?.release();
-  }
+export function runInHeavySlot(command: readonly string[], heavy = true): Promise<number> {
+  return withTestSession(async (signal) => {
+    const slot = heavy ? await acquireHeavySlot(command.join(' ').slice(0, 80), signal) : null;
+    try {
+      return await runSessionCommand(command, { signal, stdio: 'inherit' });
+    } finally {
+      slot?.release();
+    }
+  });
 }

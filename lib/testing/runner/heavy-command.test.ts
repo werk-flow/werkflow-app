@@ -6,11 +6,10 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { z } from 'zod';
-import { BROAD_LINT_FILES, heavyCommandContext, heavyCommandRefusal } from './heavy-command';
+import { BROAD_LINT_FILES, heavyCommandRefusal, lintedFileCount } from './heavy-command';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
-const atRoot = heavyCommandContext(repositoryRoot);
-const refusal = (command: string) => heavyCommandRefusal(command, atRoot);
+const refusal = (command: string) => heavyCommandRefusal(command, repositoryRoot);
 
 test('a whole-repository type check is refused through every launcher, prefix and chain', () => {
   const passed = [
@@ -45,6 +44,9 @@ test('a whole-repository type check is refused through every launcher, prefix an
     'bun install; tsc --noEmit 2>&1 | tail -20',
     'git diff --stat || bunx tsc --noEmit > /dev/null',
     '(cd lib && cd .. && tsc --noEmit)',
+    // TypeScript finds the root tsconfig.json from a subfolder.
+    'cd lib/testing && tsc --noEmit',
+    `cd ${repositoryRoot} && bunx tsc --noEmit`,
     'bash -lc "tsc --noEmit"',
     "sh -c 'bunx tsc --noEmit | head'",
     'echo "$(tsc --noEmit)"',
@@ -68,9 +70,14 @@ test('a type-aware lint of more files than the line is refused; the measured who
     'eslint components/auftraege lib',
     'git diff --name-only && eslint . --cache',
     'bash -c "eslint ."',
+    // eslint expands braces and `**`, which a git pathspec does not.
+    'eslint "lib/**/*.{ts,tsx}"',
+    "bunx eslint './components/**/*.tsx'",
+    'cd components && eslint .',
   ].filter((command) => !refusal(command)?.includes('bun run test:verify --group static:lint'));
   expect(passed).toEqual([]);
-  expect(atRoot.lintedFileCount(['components'])).toBeGreaterThan(BROAD_LINT_FILES);
+  expect(lintedFileCount(['components'], repositoryRoot)).toBeGreaterThan(BROAD_LINT_FILES);
+  expect(heavyCommandRefusal('tsc --noEmit', resolve(repositoryRoot, 'lib'))).toContain('bun run typecheck');
 });
 
 test('a direct Next build is refused, with the recorded build in its place', () => {
@@ -110,6 +117,8 @@ test('targeted runs, information flags and mentions as data pass', () => {
     'eslint lib/testing/runner/heavy-slot.ts',
     'eslint --max-warnings 0 --no-warn-ignored components/ui/button.tsx lib/security/shell-words.ts',
     'bunx eslint lib/testing/runner',
+    'eslint "lib/testing/runner/heavy-*.{ts,tsx}"',
+    'cd lib/testing/runner && eslint .',
     'eslint $(git diff --name-only | grep -E "\\.(ts|tsx)$")',
     'eslint --version',
     'tsc --version',
@@ -130,9 +139,9 @@ test('targeted runs, information flags and mentions as data pass', () => {
 test('outside a WerkFlow checkout a plain tsc and eslint pass', () => {
   const folder = mkdtempSync(join(tmpdir(), 'werkflow-heavy-command-'));
   try {
-    const elsewhere = heavyCommandContext(folder);
-    expect(heavyCommandRefusal('tsc --noEmit', elsewhere)).toBeUndefined();
-    expect(heavyCommandRefusal('eslint .', elsewhere)).toBeUndefined();
+    expect(heavyCommandRefusal('tsc --noEmit', folder)).toBeUndefined();
+    expect(heavyCommandRefusal('eslint .', folder)).toBeUndefined();
+    expect(refusal(`cd ${folder} && tsc --noEmit`)).toBeUndefined();
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }

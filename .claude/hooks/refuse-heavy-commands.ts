@@ -1,4 +1,4 @@
-import { heavyCommandContext, heavyCommandRefusal } from '../../lib/testing/runner/heavy-command';
+import { heavyCommandRefusal } from '../../lib/testing/runner/heavy-command';
 import { shellCommand } from '../../lib/testing/runner/edit-guard';
 
 /**
@@ -21,7 +21,7 @@ if (!call || typeof call !== 'object') process.exit(0);
 const command = shellCommand({ tool_name: Reflect.get(call, 'tool_name'), tool_input: Reflect.get(call, 'tool_input') });
 const cwd: unknown = Reflect.get(call, 'cwd');
 const reason = command
-  ? heavyCommandRefusal(command, heavyCommandContext(typeof cwd === 'string' && cwd ? cwd : process.cwd()))
+  ? heavyCommandRefusal(command, typeof cwd === 'string' && cwd ? cwd : process.cwd())
   : undefined;
 if (reason) {
   console.error(reason);

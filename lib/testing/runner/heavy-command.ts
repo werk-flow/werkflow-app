@@ -13,14 +13,6 @@ import { type ShellWord, SCRIPT_FLAG, SHELLS, program, readShell } from '../../s
  * sanctioned one; a targeted run stays allowed.
  */
 
-/** The facts about the machine the rule needs, which the hook reads and a test may stand in for. */
-export type HeavyCommandContext = {
-  /** Whether a tsconfig path (a file or its folder) sits at a WerkFlow app checkout's root. */
-  isRepositoryProject(path: string): boolean;
-  /** How many lintable files the operands name, read from the working folder. */
-  lintedFileCount(operands: readonly string[]): number;
-};
-
 /**
  * Type-aware eslint's peak memory on the 16 GB PC (werk-flow/werkflow-planning#94):
  * 1.23 GiB for 1 file, 1.42 for 52, 1.80 for 148, 2.58 for 316, and 3.3 to 4.1
@@ -173,10 +165,7 @@ const DELIBERATE =
   'For other deliberate heavy work, wrap the command: `bun scripts/heavy.ts -- <command>` waits for a slot.';
 
 /** The refusal of one started program, or undefined when it is light or sanctioned. */
-function programRefusal(
-  started: { name: string; args: string[] },
-  context: HeavyCommandContext,
-): string | undefined {
+function programRefusal(started: { name: string; args: string[] }, cwd: string): string | undefined {
   const { name, args } = started;
   const shown = [name, ...args].join(' ').slice(0, 100);
   if (name === 'tsc' || name === 'tsgo') {
@@ -184,7 +173,7 @@ function programRefusal(
     const project = tscProject(args);
     // Files named on the command line replace the project; `--incremental false` names no file.
     if (!project && operands(args, TSC_VALUE_FLAGS).some((operand) => LINTED.test(operand))) return undefined;
-    if (!context.isRepositoryProject(project ?? '.')) return undefined;
+    if (!checksCheckout(project, cwd)) return undefined;
     return [
       `Refused: \`${shown}\` type-checks the whole repository ${SLOT}.`,
       'Type-check through `bun run check:changed` while you work, `bun run typecheck` (TypeScript 7 in a heavy slot),',
@@ -196,7 +185,7 @@ function programRefusal(
     if (args.some((arg) => arg === '--version' || arg === '-v' || arg === '--help' || arg === '-h'))
       return undefined;
     if (args.includes('--stdin')) return undefined;
-    const files = context.lintedFileCount(eslintTargets(args));
+    const files = lintedFileCount(eslintTargets(args), cwd);
     if (files <= BROAD_LINT_FILES) return undefined;
     return [
       `Refused: \`${shown}\` lints ${files} files with type-aware rules ${SLOT}; above ${BROAD_LINT_FILES} files a lint takes several GiB.`,
@@ -214,60 +203,97 @@ function programRefusal(
 }
 
 /**
- * The refusal of a shell command that runs a whole-repository `tsc`, a type-aware
- * eslint over more than {@link BROAD_LINT_FILES} files, or `next build` directly,
- * through any launcher, env prefix, chain or `sh -c` script; or undefined.
+ * The refusal of a shell command, started in `cwd`, that runs a whole-repository
+ * `tsc`, a type-aware eslint over more than {@link BROAD_LINT_FILES} files, or
+ * `next build` directly, through any launcher, env prefix, chain or `sh -c`
+ * script; or undefined. A `cd` moves the folder for the commands after it.
  * Package scripts and `bun scripts/heavy.ts` take a heavy slot and pass.
  *
  * Threat model: the guard stops habit, an agent typing the heavy command it
  * knows. Deliberate evasion (an alias, a script file, an interpreter) is a rule
  * violation it does not claim to catch, and a command it cannot read passes.
  */
-export function heavyCommandRefusal(command: string, context: HeavyCommandContext): string | undefined {
+export function heavyCommandRefusal(command: string, cwd: string): string | undefined {
   const reading = readShell(command);
   if (!reading) return undefined;
-  for (const words of reading.commands)
+  let folder = cwd;
+  for (const words of reading.commands) {
+    const call = program(words);
+    if (call?.name === 'cd') {
+      const [target] = call.args;
+      if (!target) folder = homedir();
+      else if (!target.expands && target.text !== '-') folder = resolve(folder, expandHome(target.text));
+      continue;
+    }
     for (const started of startedPrograms(words)) {
-      const reason = programRefusal(started, context);
+      const reason = programRefusal(started, folder);
       if (reason) return reason;
     }
+  }
   return undefined;
 }
 
 const expandHome = (path: string): string =>
   path === '~' ? homedir() : path.startsWith('~/') ? join(homedir(), path.slice(2)) : path;
 
-/** The machine's facts for a shell call that starts in `cwd`. */
-export function heavyCommandContext(cwd: string): HeavyCommandContext {
-  return {
-    isRepositoryProject(path) {
-      const absolute = resolve(cwd, expandHome(path));
-      const folder = existsSync(absolute) && statSync(absolute).isDirectory() ? absolute : dirname(absolute);
-      // Any tsconfig at a checkout's root spans the whole repository.
-      try {
-        const manifest: unknown = JSON.parse(readFileSync(join(folder, 'package.json'), 'utf8'));
-        return (
-          typeof manifest === 'object' &&
-          manifest !== null &&
-          Reflect.get(manifest, 'name') === 'werkflow-app'
-        );
-      } catch {
-        return false;
-      }
-    },
-    lintedFileCount(targets) {
-      const listed = spawnSync(
-        'git',
-        ['ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', ...targets.map(expandHome)],
-        {
-          cwd,
-          encoding: 'utf8',
-          maxBuffer: 64 * 1024 * 1024,
-        },
-      );
-      // Outside a repository git lists nothing; such a lint is no WerkFlow lint.
-      if (listed.status !== 0) return 0;
-      return listed.stdout.split('\0').filter((file) => LINTED.test(file)).length;
-    },
+/** Whether a folder is the root of a WerkFlow app checkout, where any tsconfig spans the repository. */
+function isCheckoutRoot(folder: string): boolean {
+  try {
+    const manifest: unknown = JSON.parse(readFileSync(join(folder, 'package.json'), 'utf8'));
+    return (
+      typeof manifest === 'object' && manifest !== null && Reflect.get(manifest, 'name') === 'werkflow-app'
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether tsc, run in `cwd`, checks a checkout's root project: the named project
+ * (a tsconfig or its folder), or without one the nearest tsconfig.json at or
+ * above `cwd`, as TypeScript searches.
+ */
+function checksCheckout(project: string | undefined, cwd: string): boolean {
+  if (project !== undefined) {
+    const absolute = resolve(cwd, expandHome(project));
+    return isCheckoutRoot(
+      existsSync(absolute) && statSync(absolute).isDirectory() ? absolute : dirname(absolute),
+    );
+  }
+  for (let folder = cwd; ; folder = dirname(folder)) {
+    if (existsSync(join(folder, 'tsconfig.json'))) return isCheckoutRoot(folder);
+    if (dirname(folder) === folder) return false;
+  }
+}
+
+const GLOB = /[*?[{]/;
+
+/**
+ * How many lintable files the eslint operands name from `cwd`, read from git's
+ * tracked and unignored files. A glob is matched as eslint matches it, braces
+ * included; outside a repository git lists nothing, and such a lint is no WerkFlow lint.
+ */
+export function lintedFileCount(targets: readonly string[], cwd: string): number {
+  const list = (pathspecs: readonly string[]): string[] => {
+    const listed = spawnSync(
+      'git',
+      ['ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', ...pathspecs],
+      {
+        cwd,
+        encoding: 'utf8',
+        maxBuffer: 64 * 1024 * 1024,
+      },
+    );
+    return listed.status === 0 ? listed.stdout.split('\0').filter((file) => LINTED.test(file)) : [];
   };
+  const paths = targets.map(expandHome);
+  const plain = paths.filter((path) => !GLOB.test(path));
+  const globs = paths
+    .filter((path) => GLOB.test(path))
+    .map((glob) => new Bun.Glob(glob.replace(/^\.\//, '')));
+  const files = new Set(plain.length ? list(plain) : []);
+  if (globs.length)
+    for (const file of list(['.']))
+      if (globs.some((glob) => glob.match(file) || glob.match(join(cwd, file)))) files.add(file);
+  return files.size;
 }
