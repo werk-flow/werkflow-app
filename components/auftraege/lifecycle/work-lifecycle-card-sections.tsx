@@ -16,7 +16,7 @@ import { WorkLifecycleDependenciesSection } from './work-lifecycle-dependencies-
 import type { WorkLifecycleDialogState } from './work-lifecycle-dialog-state';
 import { WorkLifecycleGatesAndHistory } from './work-lifecycle-gates-history';
 import { WorkLifecycleReadinessSection } from './work-lifecycle-status';
-import { WorkLifecycleTransitionActions } from './work-lifecycle-transition-actions';
+import { FieldTransitionActions, WorkLifecycleTransitionActions } from './work-lifecycle-transition-actions';
 
 type WorkLifecycleView = Pick<LiveViewState<WorkLifecycleSnapshot>, 'isStale' | 'isRefreshing'>;
 
@@ -81,20 +81,29 @@ export function WorkLifecycleCardSections({
 }: WorkLifecycleCardSectionsProps): ReactElement {
   return (
     <StaleRegion stale={view.isStale} onRetry={refresh} className="flex flex-col gap-4">
-      <WorkLifecycleTransitionActions
-        snapshot={snapshot}
-        transitions={transitions}
-        isManager={isManager}
-        fieldMode={fieldMode}
-        hasPendingDispatch={hasPendingDispatch}
-        readOnly={readOnly}
-        canStart={canStart}
-        parking={parking}
-        pendingState={pendingState}
-        setDialog={setDialog}
-        completeExecution={completeExecution}
-        refresh={refresh}
-      />
+      {readOnly ? null : fieldMode ? (
+        <FieldTransitionActions
+          snapshot={snapshot}
+          transitions={transitions}
+          isManager={isManager}
+          hasPendingDispatch={hasPendingDispatch}
+          canStart={canStart}
+          parking={parking}
+          pendingState={pendingState}
+          setDialog={setDialog}
+          completeExecution={completeExecution}
+          refresh={refresh}
+        />
+      ) : (
+        <WorkLifecycleTransitionActions
+          snapshot={snapshot}
+          transitions={transitions}
+          isManager={isManager}
+          parking={parking}
+          pendingState={pendingState}
+          setDialog={setDialog}
+        />
+      )}
       <WorkLifecycleReadinessSection
         snapshot={snapshot}
         onRetry={() => void refresh()}

@@ -25,7 +25,6 @@ type WorkLifecycleTransitionActionsProps = {
   isManager: boolean;
   fieldMode: boolean;
   hasPendingDispatch: boolean;
-  readOnly: boolean;
   canStart: boolean;
   parking: WorkBlocker | undefined;
   pendingState: WorkExecutionState | null;
@@ -35,6 +34,8 @@ type WorkLifecycleTransitionActionsProps = {
   /** Reads the card's snapshot again. */
   refresh: () => Promise<void>;
 };
+
+type FieldTransitionActionsProps = Omit<WorkLifecycleTransitionActionsProps, 'fieldMode'>;
 
 const START_BLOCKED_REASON_ID = 'field-start-blocked-reason';
 const COMPLETION_BLOCKED_REASON_ID = 'field-completion-blocked-reason';
@@ -72,7 +73,11 @@ function ManagerTransitionActions({
  * is the badge in the card header. Cancelling is reversible, so it is an
  * outline action too.
  */
-function TransitionButtons({
+/*
+ * A plain function, not a component: the card re-renders on every snapshot,
+ * and one more component layer costs a render per commit (lab componentRenders).
+ */
+function transitionButtons({
   snapshot,
   transitions,
   fieldMode,
@@ -171,7 +176,7 @@ function fieldTransitionRules({
  * what a waiting step needs. A waiting completion names each failing gate
  * with the step that clears it.
  */
-function FieldTransitionActions({
+export function FieldTransitionActions({
   snapshot,
   transitions,
   isManager,
@@ -182,7 +187,7 @@ function FieldTransitionActions({
   setDialog,
   completeExecution,
   refresh,
-}: Omit<WorkLifecycleTransitionActionsProps, 'fieldMode' | 'readOnly'>) {
+}: FieldTransitionActionsProps) {
   const { state: clock, isReady: clockKnown } = useClockState();
   // Lives here, not in the gate row: once the time ended, the row may leave
   // with the next snapshot while a completion refusal still needs showing.
@@ -207,15 +212,15 @@ function FieldTransitionActions({
   return (
     <>
       <div className="flex flex-wrap gap-2">
-        <TransitionButtons
-          snapshot={snapshot}
-          transitions={transitions}
-          fieldMode
-          pendingState={pendingState}
-          setDialog={setDialog}
-          primaryTransition={primaryTransition}
-          blockedReasonId={blockedReasonId}
-        />
+        {transitionButtons({
+          snapshot,
+          transitions,
+          fieldMode: true,
+          pendingState,
+          setDialog,
+          primaryTransition,
+          blockedReasonId,
+        })}
         {showOpenPointsLink && (
           <Button asChild size="sm" className="min-h-11" data-testid="field-primary-next-action">
             <a href={completionBlocked ? `#${COMPLETION_BLOCKED_REASON_ID}` : '#offene-punkte'}>
@@ -244,27 +249,34 @@ function FieldTransitionActions({
           onRefusal={setClockStepRefusal}
         />
       )}
-      <ErrorText>{clockStepRefusal}</ErrorText>
+      {clockStepRefusal && <ErrorText>{clockStepRefusal}</ErrorText>}
     </>
   );
 }
 
-/** The state-change buttons of the card; in field mode with the worker's primary next action. */
-export function WorkLifecycleTransitionActions(props: WorkLifecycleTransitionActionsProps) {
-  const { snapshot, transitions, isManager, fieldMode, readOnly, parking, pendingState, setDialog } = props;
-  if (readOnly) return null;
-  if (fieldMode) return <FieldTransitionActions {...props} />;
+/** The manager's and office's state-change buttons of the card; the field work pack uses `FieldTransitionActions`. */
+export function WorkLifecycleTransitionActions({
+  snapshot,
+  transitions,
+  isManager,
+  parking,
+  pendingState,
+  setDialog,
+}: Pick<
+  WorkLifecycleTransitionActionsProps,
+  'snapshot' | 'transitions' | 'isManager' | 'parking' | 'pendingState' | 'setDialog'
+>) {
   return (
     <div className="flex flex-wrap gap-2">
-      <TransitionButtons
-        snapshot={snapshot}
-        transitions={transitions}
-        fieldMode={false}
-        pendingState={pendingState}
-        setDialog={setDialog}
-        primaryTransition={null}
-        blockedReasonId={() => undefined}
-      />
+      {transitionButtons({
+        snapshot,
+        transitions,
+        fieldMode: false,
+        pendingState,
+        setDialog,
+        primaryTransition: null,
+        blockedReasonId: () => undefined,
+      })}
       {isManager && <ManagerTransitionActions snapshot={snapshot} parking={parking} setDialog={setDialog} />}
     </div>
   );
