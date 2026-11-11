@@ -38,7 +38,11 @@ export type DialogInventoryEntry =
 
 export const DIALOG_INVENTORY = {
   "components/clock-fab.tsx#ClockFAB|{isClockedIn ? 'Laufende Zeiterfassung' : 'Zeiterfassung starten'}": {
-    audits: [{ route: '/dashboard', role: 'employee', opener: 'field.clock' }],
+    audits: [
+      { route: '/dashboard', role: 'employee', opener: 'field.clock' },
+      // The same sheet while the phone holds a time event the server refused.
+      { route: '/dashboard', role: 'employee', opener: 'field.clock-unsent' },
+    ],
   },
   'components/clock-unsent-events.tsx#DeleteUnsentDialog|Nicht übertragene Zeiten löschen?': {
     audits: [{ route: '/dashboard', role: 'employee', opener: 'field.unsent-delete' }],

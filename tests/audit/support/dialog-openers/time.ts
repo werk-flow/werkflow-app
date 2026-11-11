@@ -216,6 +216,13 @@ export const TIME_OPENERS = {
     trigger: async ({ page }) => enabled(clockInLauncher(page)),
     layer: clockStartSheet,
   },
+  'field.clock-unsent': {
+    trigger: async ({ page, world }) => {
+      await seedRefusedTimeEvent(page, world);
+      return enabled(clockInLauncher(page));
+    },
+    layer: clockStartSheet,
+  },
   'field.unsent-delete': {
     trigger: async ({ page, world }) => {
       await seedRefusedTimeEvent(page, world);
