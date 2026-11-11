@@ -1,10 +1,17 @@
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 import { format } from 'prettier';
 
+import {
+  typesFromCi,
+  typesHereReason,
+  typesOnBoat,
+  typesUnavailableNotice,
+} from '../lib/testing/boat/types-on-boat';
+import { readMigrationDrift } from '../lib/testing/local-stack/migration-drift';
 import { getSpawnFailureDetail } from '../lib/testing/runner/spawn-result';
 
 const DEV_PROJECT_ID = 'mbkkzuqjbdvzelqvuzcn';
@@ -12,41 +19,20 @@ const REPOSITORY_ROOT = resolve(import.meta.dir, '..');
 const OUTPUT_PATH = resolve(REPOSITORY_ROOT, 'lib', 'supabase', 'database.types.ts');
 const CHECK_ONLY = process.argv.slice(2).includes('--check');
 /**
- * From the local stack instead of DEV: a pull request's migration reaches DEV only when it
- * merges, so its types come from the stack that applied every committed migration, and CI
- * checks them there (docs/technical/environments.md, "The migration rule").
+ * The types of this tree's committed migrations instead of DEV's: a pull request's migration
+ * reaches DEV only when it merges, and CI checks the committed types against a stack that applied
+ * every committed migration (docs/technical/environments.md, "The migration rule"). CI and a Boat
+ * machine read their own fresh stack. A workstation's stack is shared and holds main's migrations,
+ * so a tree that differs from it takes the file from Boat, or from CI's run of the pushed commit
+ * (lib/testing/boat/types-on-boat.ts).
  */
 const LOCAL = process.argv.slice(2).includes('--local');
-const SOURCE = LOCAL ? 'local stack' : 'DEV';
 
 const unknownArguments = process.argv
   .slice(2)
   .filter((argument) => argument !== '--check' && argument !== '--local');
 if (unknownArguments.length > 0) {
   throw new Error(`Unknown argument: ${unknownArguments.join(', ')}`);
-}
-
-const generated = spawnSync(
-  process.execPath,
-  [
-    'x',
-    'supabase',
-    'gen',
-    'types',
-    'typescript',
-    ...(LOCAL ? ['--local'] : ['--project-id', DEV_PROJECT_ID]),
-    '--schema',
-    'graphql_public,public',
-  ],
-  {
-    cwd: REPOSITORY_ROOT,
-    encoding: 'utf8',
-    maxBuffer: 64 * 1024 * 1024,
-  },
-);
-
-if (generated.error || generated.status !== 0) {
-  throw new Error(`Supabase type generation failed: ${getSpawnFailureDetail(generated, 'unknown error')}`);
 }
 
 /**
@@ -61,9 +47,61 @@ function withCommittedHeader(types: string): string {
   return header ? types.replace(/(export type Database = \{)\n/, `$1${header}`) : types;
 }
 
-const formatted = await format(withCommittedHeader(generated.stdout), {
-  filepath: OUTPUT_PATH,
-});
+/** The formatted types of the database this machine reaches: DEV, or the local stack. */
+async function generatedHere(): Promise<string> {
+  const generated = spawnSync(
+    process.execPath,
+    [
+      'x',
+      'supabase',
+      'gen',
+      'types',
+      'typescript',
+      ...(LOCAL ? ['--local'] : ['--project-id', DEV_PROJECT_ID]),
+      '--schema',
+      'graphql_public,public',
+    ],
+    {
+      cwd: REPOSITORY_ROOT,
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    },
+  );
+  if (generated.error || generated.status !== 0) {
+    throw new Error(`Supabase type generation failed: ${getSpawnFailureDetail(generated, 'unknown error')}`);
+  }
+  return format(withCommittedHeader(generated.stdout), { filepath: OUTPUT_PATH });
+}
+
+/** The formatted types and the stack they come from. */
+async function types(): Promise<{ formatted: string; source: string }> {
+  if (!LOCAL) return { formatted: await generatedHere(), source: 'DEV' };
+  const here = typesHereReason(process.env, () => readMigrationDrift(REPOSITORY_ROOT));
+  if (here !== undefined) {
+    if (here) console.info(`[types] Reading the local stack: ${here}`);
+    return { formatted: await generatedHere(), source: 'local stack' };
+  }
+  console.info(
+    "[types] The shared stack does not hold exactly this tree's migrations; Boat generates the types on a fresh stack.",
+  );
+  const boat = await typesOnBoat(REPOSITORY_ROOT);
+  if ('types' in boat) return { formatted: boat.types, source: 'Boat stack' };
+  if ('failed' in boat) {
+    console.error('[types] The generation failed on the Boat machine; its output is above.');
+    process.exit(boat.failed);
+  }
+  const ci = typesFromCi(REPOSITORY_ROOT);
+  if ('types' in ci) {
+    console.info(
+      `[types] Boat is unavailable (${boat.unavailable}); CI's SQL job generated the types for HEAD.`,
+    );
+    return { formatted: ci.types, source: 'CI stack' };
+  }
+  for (const line of typesUnavailableNotice(boat.unavailable, ci.unavailable)) console.error(line);
+  process.exit(1);
+}
+
+const { formatted, source: SOURCE } = await types();
 
 if (!CHECK_ONLY) {
   writeFileSync(OUTPUT_PATH, formatted, 'utf8');
@@ -73,6 +111,12 @@ if (!CHECK_ONLY) {
 
 const current = readFileSync(OUTPUT_PATH, 'utf8');
 if (current !== formatted) {
+  // CI keeps the file it generated: a workstation without Boat takes its types from there.
+  const artifact = process.env.WERKFLOW_TYPES_ARTIFACT;
+  if (artifact) {
+    mkdirSync(dirname(artifact), { recursive: true });
+    writeFileSync(artifact, formatted, 'utf8');
+  }
   const digest = (value: string): string => createHash('sha256').update(value).digest('hex').slice(0, 12);
   throw new Error(
     `Generated ${SOURCE} types differ from the committed file (${digest(current)} != ${digest(formatted)}). Run bun run types:generate${LOCAL ? ' -- --local' : ''} and review the schema delta.`,
