@@ -57,9 +57,7 @@ mock.module('@/lib/data/background-read-client', () => ({
   },
 }));
 
-const { draftUnsentSource, keepDraftOpen, sendDraft, sendDrafts, startDraftSync } = await import(
-  './draft-sync'
-);
+const { keepDraftOpen, sendDraft, startDraftSync } = await import('./draft-sync');
 
 const holder: DraftHolder = {
   userId: '9d000000-0000-4000-8000-000000000001',
@@ -239,8 +237,8 @@ describe('lost access', () => {
     expect(kept?.refusal?.kind).toBe('no_access');
     expect(kept?.sealed).toBe(false);
 
-    startDraftSync(holder);
-    await sendDrafts();
+    const { send } = startDraftSync(holder);
+    await send();
     expect(await sendDraft(holder, DRAFT_ID)).toBe('no_access');
     expect(sent.length).toBe(1);
     expect((await stored()).length).toBe(1);
@@ -302,8 +300,8 @@ describe('what is sent by itself', () => {
     expect(await sendDraft(holder, DRAFT_ID)).toBe('refused');
     expect((await stored())[0]).toMatchObject({ sealed: false, refusal: { kind: 'failed' } });
 
-    startDraftSync(holder);
-    await sendDrafts();
+    const { send } = startDraftSync(holder);
+    await send();
     expect(sent.length).toBe(1);
 
     handlerAnswers = [results('accepted', 'accepted')];
@@ -324,14 +322,14 @@ describe('what is sent by itself', () => {
     await save(draft({ id: '9d000000-0000-4000-8000-000000000040', photos: [], ready: false }));
     await save(draft({ id: '9d000000-0000-4000-8000-000000000050', photos: [], updatedAt: old }));
     const close = keepDraftOpen(DRAFT_ID);
-    startDraftSync(holder);
-    await sendDrafts();
+    const { send } = startDraftSync(holder);
+    await send();
     expect(sent).toEqual([]);
 
     // Closed, the complete recent draft goes; the person can still send the old one.
     close();
     handlerAnswers = [results('accepted', 'accepted'), results('accepted', 'accepted')];
-    await sendDrafts();
+    await send();
     expect(sent.map((operation) => operation.payload.artifactId)).toEqual([DRAFT_ID]);
     expect(await sendDraft(holder, '9d000000-0000-4000-8000-000000000050')).toBe('sent');
     expect((await stored()).map((entry) => entry.id)).toEqual(['9d000000-0000-4000-8000-000000000040']);
@@ -343,14 +341,14 @@ describe('what is sent by itself', () => {
     const noSignal = (): Promise<Response> => Promise.reject(new TypeError('Failed to fetch'));
     // Two passes: the app start and one more trigger.
     handlerAnswers = [noSignal, noSignal];
-    startDraftSync(holder);
-    await sendDrafts();
+    const { send } = startDraftSync(holder);
+    await send();
     expect(sent.map((operation) => operation.payload.artifactId)).toEqual([DRAFT_ID, DRAFT_ID]);
 
     // The signal returns: the `online` event sends what waited.
     handlerAnswers = [results('replayed', 'replayed'), results('accepted', 'accepted')];
     onOnline?.();
-    await sendDrafts();
+    await send();
     expect(await stored()).toEqual([]);
   });
 });
@@ -366,15 +364,15 @@ describe('drafts as unsent work at sign-out', () => {
       }),
     );
     await save(draft({ ...otherPerson, id: '9d000000-0000-4000-8000-000000000060', photos: [] }));
-    startDraftSync(holder);
-    await sendDrafts();
+    const { send, unsentSource } = startDraftSync(holder);
+    await send();
 
-    expect(await draftUnsentSource.summarize()).toEqual([
+    expect(await unsentSource.summarize()).toEqual([
       { label: 'Berichtsentwürfe', count: 1 },
       { label: 'Berichtsentwürfe ohne Zugriff', count: 1 },
     ]);
-    await draftUnsentSource.discard();
-    expect(await draftUnsentSource.summarize()).toEqual([]);
+    await unsentSource.discard();
+    expect(await unsentSource.summarize()).toEqual([]);
     expect((await stored(otherPerson)).length).toBe(1);
   });
 });

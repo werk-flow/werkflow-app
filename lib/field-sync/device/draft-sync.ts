@@ -253,11 +253,8 @@ async function finishSend<T>(run: () => Promise<T>): Promise<T> {
  * Sends every draft of the holder that may go by itself: complete, not open in this tab's
  * editor, not refused and changed within the last seven days. It stops at the first draft that
  * gets no answer, so a phone without signal tries once, not once per draft.
- *
- * @internal The sender the sync runner registers once the clock outbox is on `main`
- * (werk-flow/werkflow-planning#319); until then only `startDraftSync` and the tests call it.
  */
-export function sendDrafts(): Promise<void> {
+function sendDrafts(): Promise<void> {
   const owner = holder;
   if (!owner) return Promise.resolve();
   return enqueue(() =>
@@ -275,29 +272,11 @@ export function sendDraft(owner: DraftHolder, draftId: string): Promise<DraftSen
 }
 
 /**
- * Names the person and organization the drafts are sent for, sends now and again on every
- * `online`. Until the sync runner of the clock outbox is on `main`, this holds the triggers; then
- * it becomes `registerSender('report-drafts', sendDrafts)` and
- * `registerUnsentSource(draftUnsentSource)`, and only names the holder.
- */
-export function startDraftSync(next: DraftHolder): void {
-  holder = next;
-  if (!listening) {
-    listening = true;
-    window.addEventListener('online', () => void sendDrafts());
-  }
-  void sendDrafts();
-}
-
-/**
  * The drafts as unsent work, for the sign-out and the organization switch (decision record 0010,
  * "Device data"): they name what is left, send it or delete it. It answers for the holder
  * `startDraftSync` named; a tab that never named one holds no draft it could show.
- *
- * @internal The source the unsent-work seam registers once the clock outbox is on `main`
- * (werk-flow/werkflow-planning#319); until then only the tests read it.
  */
-export const draftUnsentSource = {
+const draftUnsentSource = {
   name: 'report-drafts',
   async summarize(): Promise<{ label: string; count: number }[]> {
     if (!holder) return [];
@@ -315,3 +294,22 @@ export const draftUnsentSource = {
     notify();
   },
 };
+
+/**
+ * Names the person and organization the drafts are sent for, sends now and again on every
+ * `online`. It answers the sender and the unsent-work source of the drafts: once the sync runner
+ * of the clock outbox is on `main` (werk-flow/werkflow-planning#319), that runner registers both
+ * (`registerSender`, `registerUnsentSource`) and owns the triggers this function holds until then.
+ */
+export function startDraftSync(next: DraftHolder): {
+  send: () => Promise<void>;
+  unsentSource: typeof draftUnsentSource;
+} {
+  holder = next;
+  if (!listening) {
+    listening = true;
+    window.addEventListener('online', () => void sendDrafts());
+  }
+  void sendDrafts();
+  return { send: sendDrafts, unsentSource: draftUnsentSource };
+}
