@@ -575,8 +575,11 @@ describe('the device claim and its owner', () => {
   });
 
   test("a day saved under another person's or organization's claim is refused", async () => {
-    await saveTodayOnDevice(snapshot(), MORNING);
     for (const other of [otherOrganization, { ...holder, userId: '9a000000-0000-4000-8000-000000000002' }]) {
+      // Saved anew each time: a refused read deletes the day, and each claim must meet a stored one.
+      claimToday(holder);
+      await saveTodayOnDevice(snapshot(), MORNING);
+      expect(await readTodayOnDevice(MORNING)).not.toBeNull();
       localStorage.setItem(TODAY_HOLDER_KEY, `${other.userId}:${other.organizationId}:another-tab`);
       expect(await readTodayOnDevice(MORNING)).toBeNull();
     }
