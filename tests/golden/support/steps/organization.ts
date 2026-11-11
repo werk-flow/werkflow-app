@@ -465,6 +465,16 @@ export async function loginViaUi(
   }
 }
 
+/** The button of the sidebar's profile card that opens the account menu. */
+export function accountMenuButton(page: Page): Locator {
+  return page.getByRole('button', { name: ORGANIZATION_COPY.accountMenu }).filter({ visible: true }).first();
+}
+
+/** „Abmelden“ in the open account menu. */
+export function signOutMenuItem(page: Page): Locator {
+  return page.getByRole('menuitem', { name: ORGANIZATION_COPY.signOut }).filter({ visible: true }).first();
+}
+
 export async function signOutViaUi(page: Page): Promise<void> {
   await page.goto('/dashboard');
   const directButton = page.getByRole('button', { name: ORGANIZATION_COPY.signOut });
@@ -472,17 +482,11 @@ export async function signOutViaUi(page: Page): Promise<void> {
     await directButton.click();
   } else {
     // The sign-out control sits in the sidebar profile card menu.
-    const accountMenuButton = page
-      .getByRole('button', { name: ORGANIZATION_COPY.accountMenu })
-      .filter({ visible: true })
-      .first();
-    await expect(accountMenuButton).toBeVisible();
-    const menuItem = page
-      .getByRole('menuitem', { name: ORGANIZATION_COPY.signOut })
-      .filter({ visible: true })
-      .first();
+    const menuButton = accountMenuButton(page);
+    await expect(menuButton).toBeVisible();
+    const menuItem = signOutMenuItem(page);
     for (let attempt = 1; attempt <= 3; attempt++) {
-      await accountMenuButton.click();
+      await menuButton.click();
       const menuOpened = await settledBeforeTimeout(menuItem.waitFor({ state: 'visible', timeout: 2_000 }));
       if (!menuOpened) {
         await pressKey(page, 'Escape');

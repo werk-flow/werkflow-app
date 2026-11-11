@@ -82,24 +82,25 @@ function useClockOutbox(
     let ended = false;
     let wasPending = false;
     let watching: Promise<ClockOutbox> | null = null;
-    const watch = (): Promise<ClockOutbox> =>
-      (watching ??= import('@/lib/field-sync/device/clock-outbox')
-        .then(async (outbox) => {
-          const stopWatching = await outbox.watchClockOutbox(holder, (view) => {
-            setWatched({ holder, view });
-            // The chain was sent or stopped: the server's state stands again, so read it.
-            if (wasPending && view?.status !== 'pending') void refresh();
-            wasPending = view?.status === 'pending';
-          });
-          if (ended) stopWatching();
-          else stop = stopWatching;
-          return outbox;
-        })
-        .catch((error: unknown) => {
-          // The next call loads again: a chunk a deployment removed, or a device storage that failed once.
-          watching = null;
-          throw error;
-        }));
+    const load = async (): Promise<ClockOutbox> => {
+      try {
+        const outbox = await import('@/lib/field-sync/device/clock-outbox');
+        const stopWatching = await outbox.watchClockOutbox(holder, (view) => {
+          setWatched({ holder, view });
+          // The chain was sent or stopped: the server's state stands again, so read it.
+          if (wasPending && view?.status !== 'pending') void refresh();
+          wasPending = view?.status === 'pending';
+        });
+        if (ended) stopWatching();
+        else stop = stopWatching;
+        return outbox;
+      } catch (error) {
+        // The next call loads again: a chunk a deployment removed, or a device storage that failed once.
+        watching = null;
+        throw error;
+      }
+    };
+    const watch = (): Promise<ClockOutbox> => (watching ??= load());
     watchRef.current = watch;
     if (deviceMayHoldUnsentWork())
       watch().catch((error: unknown) => {
@@ -242,14 +243,45 @@ function useClockTransitionCommands(
     (jobId: string | null) => transitionActivity(createActivitySelection('work', jobId)),
     [transitionActivity],
   );
-  return { transitionActivity, recoverAndContinue, clockIn, clockOut, switchJob };
+  return useMemo(
+    () => ({ transitionActivity, recoverAndContinue, clockIn, clockOut, switchJob }),
+    [transitionActivity, recoverAndContinue, clockIn, clockOut, switchJob],
+  );
 }
 
-/** The server's clock of the active organization, kept live; `serverState` is null until it is read for that organization. */
-function useServerClock(
-  activeOrgId: string | null,
-  initialState: LiveClockState | null,
-): { view: ClockLiveView; serverState: LiveClockState | null } {
+/** The signed-in person and the active organization: whose unsent clock events this tab shows and sends. */
+function useClockHolder(activeOrgId: string | null): OutboxHolder | null {
+  const userId = useUserProfile().profile?.id ?? null;
+  return useMemo(
+    () => (userId && activeOrgId ? { userId, organizationId: activeOrgId } : null),
+    [userId, activeOrgId],
+  );
+}
+
+/**
+ * Whether the clock can act, and the failed read it shows. Unsent events carry the clock on their
+ * own. A read that failed on a phone without network leaves the last confirmed clock usable, and
+ * its next action is kept on the phone.
+ */
+function clockReadiness(
+  view: Pick<ClockLiveView, 'isLoading' | 'error'>,
+  clock: { known: boolean; standsOnUnsent: boolean },
+): { isReady: boolean; statusError: string | null } {
+  const standsOnDevice = clock.standsOnUnsent || (Boolean(view.error) && !navigator.onLine);
+  return {
+    isReady: clock.known && !view.isLoading && (!view.error || standsOnDevice),
+    statusError: standsOnDevice ? null : (view.error ?? null),
+  };
+}
+
+export function ClockStateProvider({
+  children,
+  initialState = null,
+}: {
+  children: ReactNode;
+  initialState?: LiveClockState | null;
+}) {
+  const { activeOrgId } = useOrganization();
   // The running session's job, for the `jobs` event filter below; a ref so
   // the filter reads the latest value without re-registering.
   const activeJobIdRef = useRef<string | null>(null);
@@ -264,39 +296,19 @@ function useServerClock(
     initialData: initialState && initialState.organizationId === activeOrgId ? initialState : undefined,
     resetKey: activeOrgId,
   });
+  const { run, isPending } = useServerAction(transitionTimeActivity);
+  const { refresh, invalidate, setData } = view;
   const serverState = view.data?.organizationId === activeOrgId ? view.data : null;
+  const { view: unsent, capture } = useClockOutbox(useClockHolder(activeOrgId), refresh);
+  // While unsent events wait, the clock stands where they left it; a stopped chain shows the server's state.
+  const currentState = unsent?.state ?? serverState;
+  const { isReady, statusError } = clockReadiness(view, {
+    known: currentState !== null,
+    standsOnUnsent: Boolean(unsent?.state),
+  });
   useEffect(() => {
     activeJobIdRef.current = serverState?.activeJobId ?? null;
   }, [serverState?.activeJobId]);
-  return { view, serverState };
-}
-
-export function ClockStateProvider({
-  children,
-  initialState = null,
-}: {
-  children: ReactNode;
-  initialState?: LiveClockState | null;
-}) {
-  const { activeOrgId } = useOrganization();
-  const userId = useUserProfile().profile?.id ?? null;
-  const holder = useMemo(
-    () => (userId && activeOrgId ? { userId, organizationId: activeOrgId } : null),
-    [userId, activeOrgId],
-  );
-  const { view, serverState } = useServerClock(activeOrgId, initialState);
-  const { run, isPending } = useServerAction(transitionTimeActivity);
-  const { refresh, invalidate, setData } = view;
-  const { view: unsent, capture } = useClockOutbox(holder, refresh);
-  // While unsent events wait, the clock stands where they left it; a stopped chain shows the server's state.
-  const currentState = unsent?.state ?? serverState;
-  // A read that failed on a phone without network leaves the last confirmed clock usable: its next action is kept on the phone.
-  const withoutNetwork = Boolean(view.error) && !navigator.onLine;
-  const standsOnDevice = Boolean(unsent?.state) || withoutNetwork;
-  const isReady = currentState !== null && !view.isLoading && (!view.error || standsOnDevice);
-  const legacyOpen = currentState?.legacyOpen ?? false;
-  const isClockedIn = currentState?.isClockedIn ?? false;
-  const recoveryReason = currentState?.recoveryReason ?? null;
 
   const execute = useClockTransitionExecute({
     activeOrgId,
@@ -309,11 +321,11 @@ export function ClockStateProvider({
     refresh,
     setData,
   });
-  const { transitionActivity, recoverAndContinue, clockIn, clockOut, switchJob } = useClockTransitionCommands(
+  const commands = useClockTransitionCommands(
     execute,
-    legacyOpen,
-    isClockedIn,
-    recoveryReason,
+    currentState?.legacyOpen ?? false,
+    currentState?.isClockedIn ?? false,
+    currentState?.recoveryReason ?? null,
   );
 
   const value = useMemo<ClockStateContextValue>(
@@ -323,29 +335,11 @@ export function ClockStateProvider({
       isLoading: view.isLoading,
       isReady,
       isPending,
-      statusError: standsOnDevice ? null : (view.error ?? null),
+      statusError,
       refresh,
-      transitionActivity,
-      recoverAndContinue,
-      clockIn,
-      clockOut,
-      switchJob,
+      ...commands,
     }),
-    [
-      clockIn,
-      clockOut,
-      currentState,
-      isPending,
-      recoverAndContinue,
-      standsOnDevice,
-      switchJob,
-      transitionActivity,
-      unsent,
-      view.error,
-      view.isLoading,
-      isReady,
-      refresh,
-    ],
+    [commands, currentState, isPending, statusError, unsent, view.isLoading, isReady, refresh],
   );
 
   return <ClockStateContext.Provider value={value}>{children}</ClockStateContext.Provider>;

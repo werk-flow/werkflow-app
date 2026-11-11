@@ -76,7 +76,7 @@ export function UnsentStatusBadge({ view }: { view: ClockDeviceView }) {
   );
 }
 
-function eventLabel(event: UnsentTimeEvent): string {
+function unsentEventLabel(event: UnsentTimeEvent): string {
   if (event.action === 'end' || !event.selection) return 'Erfassung beendet';
   return `${TIME_ACTIVITY_LABELS[event.selection.kind]} gestartet`;
 }
@@ -87,7 +87,7 @@ export function UnsentEventList({ view }: { view: ClockDeviceView }) {
     <ul className="divide-y rounded-md border" aria-label="Nicht übertragene Zeiten">
       {view.events.map((event) => (
         <li key={event.operationId} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-          <span className="min-w-0 font-medium">{eventLabel(event)}</span>
+          <span className="min-w-0 font-medium">{unsentEventLabel(event)}</span>
           <span className="shrink-0 text-muted-foreground tabular-nums">
             {formatBerlinDateTime(event.capturedAt)}
           </span>

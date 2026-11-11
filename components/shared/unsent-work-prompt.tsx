@@ -142,36 +142,39 @@ function UnsentWorkDialog({
   return (
     <Dialog open onOpenChange={(open) => !open && onSettled(false)} pending={isPending}>
       <DialogContent size="sm">
-        <DialogHeader>
-          <DialogTitle>Noch nicht übertragen</DialogTitle>
-          <DialogDescription>
-            Auf diesem Gerät wartet noch etwas, das das Büro nicht erreicht hat. Sende es, bevor du
-            weitermachst. Was du verwirfst, ist endgültig gelöscht.
-          </DialogDescription>
-        </DialogHeader>
-        <UnsentItems items={items} />
-        <ErrorText>{error}</ErrorText>
-        <DialogFooter>
-          <Button type="button" variant="outline" disabled={isPending} onClick={() => onSettled(false)}>
-            Abbrechen
-          </Button>
-          <Button
-            type="button"
-            variant="destructive"
-            disabled={isPending}
-            onClick={() => setConfirming(true)}
-          >
-            Verwerfen
-          </Button>
-          <Button
-            type="button"
-            pending={running === 'send'}
-            disabled={isPending}
-            onClick={() => perform('send')}
-          >
-            Jetzt senden
-          </Button>
-        </DialogFooter>
+        <form
+          className="contents"
+          onSubmit={(event) => {
+            event.preventDefault();
+            perform('send');
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Noch nicht übertragen</DialogTitle>
+            <DialogDescription>
+              Auf diesem Gerät wartet noch etwas, das das Büro nicht erreicht hat. Sende es, bevor du
+              weitermachst. Was du verwirfst, ist endgültig gelöscht.
+            </DialogDescription>
+          </DialogHeader>
+          <UnsentItems items={items} />
+          <ErrorText>{error}</ErrorText>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={isPending} onClick={() => onSettled(false)}>
+              Abbrechen
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={isPending}
+              onClick={() => setConfirming(true)}
+            >
+              Verwerfen
+            </Button>
+            <Button type="submit" pending={running === 'send'} disabled={isPending}>
+              Jetzt senden
+            </Button>
+          </DialogFooter>
+        </form>
         <DiscardConfirmation
           items={items}
           open={confirming}
@@ -187,6 +190,8 @@ function UnsentWorkDialog({
 /** Shows the dialog and resolves with the person's choice once it is carried out. */
 function askAboutUnsentWork(items: UnsentWorkItem[]): Promise<boolean> {
   return new Promise((resolve) => {
+    // The root is gone before the dialog could hand the focus back, so this does it.
+    const opener = document.activeElement;
     const host = document.createElement('div');
     document.body.append(host);
     const root = createRoot(host);
@@ -196,6 +201,7 @@ function askAboutUnsentWork(items: UnsentWorkItem[]): Promise<boolean> {
         onSettled={(mayEnd) => {
           root.unmount();
           host.remove();
+          if (!mayEnd && opener instanceof HTMLElement && opener.isConnected) opener.focus();
           resolve(mayEnd);
         }}
       />,

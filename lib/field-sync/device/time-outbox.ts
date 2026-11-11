@@ -64,7 +64,7 @@ export type ClockDeviceView = {
 
 const NO_SESSION = { sessionId: null, version: null };
 
-function isExpired(event: StoredTimeEvent, now: Date): boolean {
+function waitedTooLong(event: StoredTimeEvent, now: Date): boolean {
   return now.getTime() - Date.parse(event.capturedAt) > UNSENT_TIME_EVENT_KEEP_MS;
 }
 
@@ -72,7 +72,7 @@ function headStatus(head: StoredTimeEvent, now: Date): { status: UnsentEventStat
   if (head.verdict?.outcome === 'rejected') return { status: 'failed', code: head.verdict.code };
   if (head.verdict?.code === 'correction_required') return { status: 'correction', code: head.verdict.code };
   if (head.verdict) return { status: 'conflict', code: head.verdict.code };
-  return isExpired(head, now) ? { status: 'failed', code: 'expired' } : { status: 'pending', code: null };
+  return waitedTooLong(head, now) ? { status: 'failed', code: 'expired' } : { status: 'pending', code: null };
 }
 
 /** The clock with one unsent event applied, at its captured time. */
