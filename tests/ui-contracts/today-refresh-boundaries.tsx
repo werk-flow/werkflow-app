@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { TodayRefreshOnStart } from '@/components/auftraege/work-pack/today-refresh-on-start';
+import { TodayLandingWipe } from '@/components/auth/today-landing-wipe';
 import {
   OrganizationProvider,
   useOrganization,
@@ -81,11 +82,21 @@ function SwitchToSecondOrganization(): React.JSX.Element {
   );
 }
 
-/** The start page's real refresh code, and the switch that moves the person to the second organization. */
+/** The page a sign-out lands on once its session ended, mounted when „Zur Anmeldung“ is pressed. */
+function SignOutLanding(): React.JSX.Element {
+  const [landed, setLanded] = useState(false);
+  return landed ? <TodayLandingWipe /> : <Button onClick={() => setLanded(true)}>Zur Anmeldung</Button>;
+}
+
+/**
+ * The start page's real refresh code, the switch that moves the person to the second organization,
+ * and the landing page of a sign-out.
+ */
 export function TodayRefreshSwitchContractFixture(): React.JSX.Element {
   return (
     <FieldWorkerStartPage>
       <SwitchToSecondOrganization />
+      <SignOutLanding />
     </FieldWorkerStartPage>
   );
 }

@@ -19,6 +19,8 @@ import type { TestWorld } from '../../golden/support/world';
 /** The IndexedDB database and the cross-tab wipe signal of lib/field-sync/device/today-wipe.ts. */
 const TODAY_DATABASE = 'werkflow-today';
 const TODAY_WIPE_KEY = 'werkflow:today-wiped';
+/** The device claim of lib/field-sync/device/today-wipe.ts. */
+const TODAY_HOLDER_KEY = 'werkflow:today-holder';
 
 /** The number of the job `seedTodayAssignment` creates. */
 export function todayJobNumber(world: TestWorld): string {
@@ -159,6 +161,7 @@ export async function waitForTodayOnDevice(page: Page, texts: readonly string[])
 export async function expectNoTodayOnDevice(page: Page): Promise<void> {
   const names = await page.evaluate(async () => (await indexedDB.databases()).map((info) => info.name));
   expect(names).not.toContain(TODAY_DATABASE);
+  expect(await page.evaluate((key) => localStorage.getItem(key), TODAY_HOLDER_KEY)).toBeNull();
 }
 
 /** What a sign-out in another tab does to the device: the shared wipe signal and the deleted database. */

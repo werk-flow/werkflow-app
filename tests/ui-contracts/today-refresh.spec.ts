@@ -291,3 +291,55 @@ test('another tab clearing all storage while a refresh is in flight leaves no re
   await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), TODAY_HOLDER_KEY)).toBeNull();
   await expect.poll(() => page.evaluate(() => window.todayRefreshContract.storedOrganization())).toBeNull();
 });
+
+// Every sign-out lands on an `(auth)` page once its session ended, and that page wipes the phone
+// again: a claimed, readable day is gone.
+test('the page a sign-out lands on leaves no claim and no readable day', async ({ page }) => {
+  const [first] = TODAY_CONTRACT_ORGANIZATIONS;
+  await routeTodayDays(page);
+  await openContractFixture(page, 'today-refresh-switch');
+  await expect.poll(() => page.evaluate(() => window.todayRefreshContract.storedOrganization())).toBe(first);
+  expect(await claimedHolder(page)).toBe(`${TODAY_CONTRACT_USER}:${first}`);
+
+  await page.getByRole('button', { name: 'Zur Anmeldung', exact: true }).click();
+
+  await expect.poll(() => claimedHolder(page)).toBeNull();
+  await expect.poll(() => page.evaluate(() => window.todayRefreshContract.storedOrganization())).toBeNull();
+});
+
+// The ordering no tab-local rule closes: this tab's switch wipes, another tab's sign-out writes its
+// wipe signal before this page renders the switch, and the switch claims and saves under that
+// signal before its `storage` event arrives. The sign-out's landing page, after its session ended,
+// wipes again: no day stays readable, whatever this tab does next.
+test('a day a switch saved under a foreign sign-out signal is gone once that sign-out lands', async ({
+  page,
+}) => {
+  const [, second] = TODAY_CONTRACT_ORGANIZATIONS;
+  await routeTodayDays(page);
+  await openContractFixture(page, 'today-refresh-switch');
+  await expect.poll(() => claimedHolder(page)).not.toBeNull();
+  await page.evaluate(
+    ({ holderKey, wipeKey }) => {
+      const write = Storage.prototype.setItem;
+      Storage.prototype.setItem = function setItem(this: Storage, key: string, value: string): void {
+        write.call(this, key, value);
+        if (key !== wipeKey) return;
+        Storage.prototype.setItem = write;
+        this.removeItem(holderKey);
+        write.call(this, wipeKey, 'sign-out-in-another-tab');
+      };
+    },
+    { holderKey: TODAY_HOLDER_KEY, wipeKey: TODAY_WIPE_KEY },
+  );
+  await page.getByRole('button', { name: 'Organisation wechseln', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.organizationContract.writes.length)).toBe(1);
+  await page.evaluate(() => window.organizationContract.finishCookie(true));
+  // Before the event arrives, the switch claims and saves under the sign-out's signal.
+  await expect.poll(() => page.evaluate(() => window.todayRefreshContract.storedOrganization())).toBe(second);
+
+  // The sign-out's session ended, and its landing page wipes.
+  await page.getByRole('button', { name: 'Zur Anmeldung', exact: true }).click();
+
+  await expect.poll(() => claimedHolder(page)).toBeNull();
+  await expect.poll(() => page.evaluate(() => window.todayRefreshContract.storedOrganization())).toBeNull();
+});

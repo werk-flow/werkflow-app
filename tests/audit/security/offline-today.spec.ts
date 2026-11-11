@@ -80,9 +80,10 @@ test("today's work pack reads without signal and leaves the phone on sign-out @A
     await waitForTodayOnDevice(page, [title, changed]);
   });
 
-  await test.step('sign-out leaves no day on the phone', async () => {
+  await test.step('sign-out lands on the login page and leaves no day on the phone', async () => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await signOutViaUi(page);
+    await expect(page).toHaveURL(/\/login$/);
     await expectNoTodayOnDevice(page);
   });
 });
