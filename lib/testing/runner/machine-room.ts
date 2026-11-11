@@ -188,11 +188,17 @@ const plural = (count: number, noun: string): string => `${count} ${noun}${count
  * - setup: its cost in room above the floor.
  * - thread: the machine, heavy commands aside, must still fit one heavy command
  *   after the thread, because every implementation thread ends in `check:changed`.
- *   A thread that leaves no room for it only adds a waiter.
+ *   A thread that leaves no room for it only adds a waiter. `threads` started in one call
+ *   each cost an agent and share that one heavy command, since heavy commands take turns.
  * A machine without the watch admits a heavy command and a setup, which keep
  * their own limits, and refuses a thread.
  */
-export function admission(start: StartKind, reading: RoomReading, heavy: readonly number[]): Admission {
+export function admission(
+  start: StartKind,
+  reading: RoomReading,
+  heavy: readonly number[],
+  threads = 1,
+): Admission {
   if ('unwatched' in reading) {
     const reason = `This machine's memory is not measured: ${reading.unwatched}. ${reading.fix}`;
     return { admitted: start !== 'thread', measured: false, unwatched: true, reason };
@@ -210,12 +216,13 @@ export function admission(start: StartKind, reading: RoomReading, heavy: readonl
     heavy.length === 0 ? 'no heavy command runs' : `${plural(heavy.length, 'heavy command')} running`;
   if (start === 'thread') {
     const held = heavy.reduce((sum, use) => sum + use, 0);
-    const fits = available + held >= floor + START_COST.heavy + cost;
+    const needed = floor + START_COST.heavy + cost * threads;
+    const fits = available + held >= needed;
     return {
       admitted: fits,
       measured: fits,
       unwatched: false,
-      reason: `${gib(available)} GiB available plus ${gib(held)} held by heavy commands (${running}); a thread needs ${gib(floor + START_COST.heavy + cost)}: the floor of ${gib(floor)}, ${gib(START_COST.heavy)} for its own check:changed and ${gib(cost)} for its agent.`,
+      reason: `${gib(available)} GiB available plus ${gib(held)} held by heavy commands (${running}); ${threads === 1 ? 'a thread needs' : `${threads} threads need`} ${gib(needed)}: the floor of ${gib(floor)}, ${gib(START_COST.heavy)} for a check:changed and ${gib(cost)} for each agent.`,
     };
   }
   const reserved = heavy.reduce((sum, use) => sum + Math.max(0, START_COST.heavy - use), 0);
@@ -233,9 +240,13 @@ export function admission(start: StartKind, reading: RoomReading, heavy: readonl
 }
 
 /** The admission of a start on this machine, measured now. */
-export function measuredAdmission(start: StartKind, environment: Environment = process.env): Admission {
+export function measuredAdmission(
+  start: StartKind,
+  environment: Environment = process.env,
+  threads = 1,
+): Admission {
   const reading = readMachineRoom(environment);
   const heavy =
     'room' in reading ? runningHeavyCommands(heavySlotDirectory(environment), processTable()) : [];
-  return admission(start, reading, heavy);
+  return admission(start, reading, heavy, threads);
 }
