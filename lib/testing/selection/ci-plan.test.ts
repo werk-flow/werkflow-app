@@ -256,7 +256,8 @@ test("every workflow runs the plan's browser shards untimed", () => {
       .filter(
         (line) =>
           line.includes('scripts/verify.ts run') &&
-          (line.includes('matrix.groups') || aliases.some((alias) => line.includes(`"$${alias}"`))),
+          (line.includes('matrix.groups') ||
+            aliases.some((alias) => new RegExp(`\\$\\{?${alias}\\b`).test(line))),
       )
       .map((line) => ({ file, untimed: line.includes('--untimed') }));
   });
