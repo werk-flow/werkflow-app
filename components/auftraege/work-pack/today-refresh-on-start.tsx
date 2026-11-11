@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useOrganization } from '@/components/organization/organization-context';
 import { useBanner } from '@/components/ui/banner';
 import { useUserProfile } from '@/components/user/user-profile-context';
-import { todayWipeGeneration } from '@/lib/field-sync/device/today-wipe';
+import { TODAY_WIPE_KEY, todayWipeGeneration } from '@/lib/field-sync/device/today-wipe';
 import { logError } from '@/lib/logging';
 
 /**
@@ -47,7 +47,22 @@ export function TodayRefreshOnStart(): null {
           : claim.generation,
       switchGeneration,
     });
-  const generationAtStart = claim.generation;
+  // Another tab wiped the device: its `storage` event never fires for this tab's own writes. A
+  // switch may have read that wipe's generation as its own, so this page claims nothing more until
+  // the next start page, and a claim it already made is dropped.
+  const [foreignWipe, setForeignWipe] = useState(false);
+  const refreshModule = useRef<typeof import('@/lib/field-sync/device/today-refresh') | null>(null);
+  useEffect(() => {
+    const onStorage = (event: StorageEvent): void => {
+      if (event.key !== TODAY_WIPE_KEY) return;
+      setForeignWipe(true);
+      refreshModule.current?.dropTodayClaim();
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+  // No wipe generation reads `blocked`, so `keepTodayFresh` refuses it.
+  const generationAtStart = foreignWipe ? 'blocked' : claim.generation;
   useEffect(() => {
     // No person or no field worker's organization yet: nothing to claim or refresh.
     if (!userId || !organizationId) return;
@@ -56,9 +71,10 @@ export function TodayRefreshOnStart(): null {
     const retryOnline = (): void => void start();
     const start = async (): Promise<void> => {
       try {
-        const { keepTodayFresh } = await import('@/lib/field-sync/device/today-refresh');
+        const refresh = await import('@/lib/field-sync/device/today-refresh');
+        refreshModule.current = refresh;
         if (current)
-          keepTodayFresh(
+          refresh.keepTodayFresh(
             { userId, organizationId },
             (retry) =>
               showBanner({
