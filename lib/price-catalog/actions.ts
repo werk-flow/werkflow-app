@@ -183,7 +183,10 @@ export async function setLeistungArchived(rawInput: SetLeistungArchivedInput): P
         logError('setLeistungArchived: leistung read failed', existing.error);
         return { success: false, error: 'load_failed' };
       }
-      return existing.data ? { success: true } : { success: false, error: 'leistung_not_found' };
+      if (!existing.data) return { success: false, error: 'leistung_not_found' };
+      // Another session already made the change: this caller's view still needs the new state.
+      revalidatePath(LEISTUNGEN_PATH);
+      return { success: true };
     }
     revalidatePath(LEISTUNGEN_PATH);
     return { success: true };

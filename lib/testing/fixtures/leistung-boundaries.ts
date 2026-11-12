@@ -4,6 +4,7 @@
 // carry its own organization and actor. supabase/tests/leistung_prices.sql
 // proves the grants, the history guard and the price on a day.
 import assert from 'node:assert/strict';
+import { mock } from 'bun:test';
 import {
   CALLER_ID,
   ORGANIZATION_A,
@@ -105,6 +106,14 @@ world.rpc = ({ name, args }) => {
     });
   return { data: rows, error: null };
 };
+
+// Counts the route revalidations, so a successful repeat proves it refreshes the caller's view too.
+const revalidated: string[] = [];
+mock.module('next/cache', () => ({
+  updateTag: () => {},
+  revalidatePath: (path: string) => revalidated.push(path),
+  revalidateTag: () => {},
+}));
 
 const { addLeistungPrice, createLeistung, setLeistungArchived, updateLeistung } = await import(
   '@/lib/price-catalog/actions'
@@ -210,6 +219,11 @@ assert.equal(
 assert.deepEqual(await setLeistungArchived({ leistungId: ownLeistungId, archived: true }), { success: true });
 const archivedAt = tableRows(world, 'leistungen').find((row) => row.id === ownLeistungId)?.archived_at;
 assert.ok(typeof archivedAt === 'string');
+// A repeat (another session archived first) keeps the first archive time and still refreshes the view.
+revalidated.length = 0;
+assert.deepEqual(await setLeistungArchived({ leistungId: ownLeistungId, archived: true }), { success: true });
+assert.equal(tableRows(world, 'leistungen').find((row) => row.id === ownLeistungId)?.archived_at, archivedAt);
+assert.deepEqual(revalidated, ['/angebote/leistungen']);
 
 // Admin reads the prices of its own Leistungen, archived ones included, with the cost rate.
 signInAs(world, 'admin');
