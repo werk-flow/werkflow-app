@@ -18,10 +18,15 @@ type SampleOfferRead = { success: true; url: string; sizeBytes: number } | Actio
 
 /** Renders the Musterangebot once and keeps its bytes, so opening and downloading show the same file. */
 async function readSampleOffer(signal: AbortSignal): Promise<SampleOfferRead> {
-  const response = await fetch(SAMPLE_OFFER_PATH, { signal, cache: 'no-store' });
-  if (!response.ok) return { success: false, error: 'load_failed' };
-  const file = await response.blob();
-  return { success: true, url: URL.createObjectURL(file), sizeBytes: file.size };
+  try {
+    const response = await fetch(SAMPLE_OFFER_PATH, { signal, cache: 'no-store' });
+    if (!response.ok) return { success: false, error: 'load_failed' };
+    const file = await response.blob();
+    return { success: true, url: URL.createObjectURL(file), sizeBytes: file.size };
+  } catch {
+    // A lost connection is the same failure as a refused render: the retry asks again.
+    return { success: false, error: 'load_failed' };
+  }
 }
 
 /** The Musterangebot as the PDF a customer receives, to open or download. */
