@@ -64,7 +64,7 @@ export function FieldSiteAccessButton({
         type="button"
         variant="ghost"
         size="sm"
-        className="-my-3.5 ml-auto h-11 min-w-11 px-2"
+        className="-my-3.5 h-11 min-w-11 px-2"
         aria-label={label}
         pending={waiting}
         onPointerEnter={lazyProposalDialog.preload}
