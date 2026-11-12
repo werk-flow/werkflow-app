@@ -97,10 +97,17 @@ export async function hydratedAndSettled(page: Page): Promise<void> {
   await settled(page);
 }
 
+/** Keys that activate the focused control: they go to a named control, never to whatever holds focus. */
+const ACTIVATION_KEYS = new Set(['Enter', ' ', 'Space']);
+
 /**
- * Settles the scope, then presses the key. Without `into`, focus must not sit
- * in a text field, combobox or listbox, where a shortcut becomes typed text.
- * With `into`, the key goes to that field (Enter in a search box).
+ * Settles the scope, then presses the key. With `into`, the key goes to that
+ * control (Enter on a trigger, Enter in a search box) once it is enabled: a
+ * client-only action stays disabled in server HTML until hydration
+ * (`hooks/use-hydrated.ts`), and focus on a disabled control does not land,
+ * so the key would reach the page instead. Without `into`, the key is a
+ * shortcut: it may not be an activation key, and focus must not sit in a text
+ * field, combobox or listbox, where a shortcut becomes typed text.
  */
 export async function pressKey(
   scope: Scope,
@@ -110,9 +117,14 @@ export async function pressKey(
   const timeout = options.timeout !== undefined ? { timeout: options.timeout } : {};
   await settled(scope, timeout);
   if (options.into) {
+    await expect(options.into, `The control that takes "${key}" is enabled`).toBeEnabled(timeout);
     await options.into.press(key, timeout);
     return;
   }
+  if (ACTIVATION_KEYS.has(key))
+    throw new Error(
+      `pressKey("${key}") refused: an activation key goes to its control. Pass { into: control }, so the key waits until the control can take it.`,
+    );
   const page = pageOf(scope);
   const focusedRole = await page.evaluate(() => {
     const element = document.activeElement;

@@ -9,6 +9,7 @@ const fixtureUrl = 'http://localhost/interaction';
 const fixture = `<html lang="de"><body><main>
   <label>Suche <input id="search"></label>
   <button id="outside">Außen</button>
+  <button id="create" disabled>Vorlage erstellen</button>
   <div role="dialog" aria-label="Formular" id="dialog" aria-busy="true" data-pending="true">
     <button id="inside">Speichern</button>
   </div>
@@ -17,6 +18,9 @@ const fixture = `<html lang="de"><body><main>
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape' && dialog.getAttribute('data-pending') !== 'true') dialog.hidden = true;
       if (event.key === 'j') document.querySelector('main').dataset.shortcut = 'j';
+    });
+    document.getElementById('create').addEventListener('click', () => {
+      document.querySelector('main').dataset.opened = 'create';
     });
   </script>
 </main></body></html>`;
@@ -84,4 +88,27 @@ test('pressKey refuses a shortcut while focus sits in a text field and presses i
 
   await pressKey(page, 'x', { into: search });
   await expect(search).toHaveValue('x');
+});
+
+test('an activation key waits until its control is enabled, as a client-only action is after hydration', async ({
+  page,
+}) => {
+  await page.evaluate(() => {
+    const element = document.getElementById('dialog');
+    element?.removeAttribute('aria-busy');
+    element?.removeAttribute('data-pending');
+  });
+  // The server HTML of a client-only action (hooks/use-hydrated.ts): disabled until React owns its events.
+  const create = page.getByRole('button', { name: 'Vorlage erstellen' });
+  await expect(pressKey(page, 'Enter')).rejects.toThrow('an activation key goes to its control');
+  let pressedAt = 0;
+  const pressing = pressKey(page, 'Enter', { into: create }).then(() => {
+    pressedAt = Date.now();
+  });
+  await expect(create).toBeDisabled();
+  const enabledAt = Date.now();
+  await page.evaluate(() => document.getElementById('create')?.removeAttribute('disabled'));
+  await pressing;
+  expect(pressedAt).toBeGreaterThanOrEqual(enabledAt);
+  await expect(page.getByRole('main')).toHaveAttribute('data-opened', 'create');
 });
