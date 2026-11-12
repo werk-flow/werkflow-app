@@ -491,7 +491,6 @@ async function main(): Promise<void> {
           hasDiagnosis: (reportId) => existsSync(resolve(archive, reportId, RELEASE_DIAGNOSIS_FILE)),
         })
       : undefined,
-    freshBrowserEntries.length ? browserStorageProblem(repository) : undefined,
     unclassifiedFailureProblem({
       groupIds: freshBrowserEntries.map((entry) => entry.group.id),
       target: options.target,
@@ -509,8 +508,12 @@ async function main(): Promise<void> {
     }),
   ].filter((refusal): refusal is string => Boolean(refusal));
   for (const refusal of refusals) console.log(`[verify] refused: ${refusal}`);
+  // Free disk space is this machine's own, and a Boat machine has its own disk: only the refusals
+  // above, which the evidence history decides, stop a run before Boat starts a machine for it.
+  const storage = freshBrowserEntries.length ? browserStorageProblem(repository) : undefined;
+  if (storage) console.log(`[verify] refused on this machine: ${storage}`);
   if (!options.execute) return;
-  if (refusals.length) throw new Error(refusals.join('\n'));
+  if (refusals.length || storage) throw new Error([...refusals, storage].filter(Boolean).join('\n'));
   await withWorkspaceTestLock({ operation: 'independent verification groups' }, async () => {
     if (changedInputs(snapshot, captureInputSnapshot(repository)).length)
       throw new Error('Inputs changed after planning. Re-plan before executing or reusing results.');

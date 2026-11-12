@@ -58,7 +58,9 @@ export function layoutNames(
 
 /** The layout audits and the acceptance captures own their worlds; no other group seeds these rows. */
 export function isSurfaceAuditWorld(world: TestWorld): boolean {
-  return Boolean(world.auditGroup?.startsWith('layout/') || world.auditGroup === 'visual/acceptance.spec.ts');
+  return Boolean(
+    world.auditGroup?.startsWith('layout/') || world.auditGroup?.startsWith('visual/acceptance-'),
+  );
 }
 
 /** Creates page inputs only. These cases prove rendered layout, not creation workflows. */

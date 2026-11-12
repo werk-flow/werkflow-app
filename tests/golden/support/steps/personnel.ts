@@ -19,8 +19,6 @@ import { ROLE_LABELS } from '../../../../lib/roles';
 import {
   confirmed,
   datePickerDigits,
-  employeeAssignmentPicker,
-  employeeAssignmentSearch,
   expectVisibleAfterSave,
   pageHeader,
   selectFromSearchable,
@@ -29,7 +27,6 @@ import {
   visibleText,
 } from './shared';
 import { settledBeforeTimeout } from './interaction';
-import { workCreateButton, workCreateTab } from './work';
 import { getEmployeeRecordById, type PersistedEmployeeRecord } from '../db/personnel';
 
 /**
@@ -490,18 +487,6 @@ export async function sendInviteFromPersonnelRecord(
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(visibleText(page, PERSONNEL_COPY.invited)).toBeVisible();
   await expect(visibleText(page, PERSONNEL_COPY.inviteSent)).toBeVisible();
-}
-
-/**
- * Opens the job dialog's employee picker on /auftraege and returns its search
- * field: the picker that a personnel record without login must never reach.
- */
-export async function openJobEmployeePickerSearch(page: Page): Promise<Locator> {
-  await page.goto('/auftraege');
-  await workCreateButton(page).click();
-  await workCreateTab(page, 'job').click();
-  await employeeAssignmentPicker(page).click();
-  return employeeAssignmentSearch(page);
 }
 
 // P1-04: date-effective work schedules and holiday/closure context.
