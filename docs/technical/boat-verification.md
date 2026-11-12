@@ -74,7 +74,7 @@ When Boat is [unavailable](#fallback), the capture does not run: a block names t
 
 ## Types on Boat
 
-`bun run types:generate -- --local` reads the stack on its machine where that stack has the tree's schema: CI, a Boat machine, a shared stack whose ledger matches. A tree with its own migration reads a private copy of that stack's schema plus the migration (`lib/testing/local-stack/stack-copy.ts`). Where no copy can answer, a Boat machine's fresh stack generates the file. Without Boat, CI's SQL job uploads it (`database-types`) when the committed types are stale, which the command takes.
+`bun run types:generate -- --local` reads the stack on its machine where that stack has the tree's schema: CI, a Boat machine, a shared stack whose ledger matches. Otherwise a Boat machine's fresh stack generates the file, byte for byte what CI's check computes. Without Boat, CI's SQL job uploads it (`database-types`) when the committed types are stale, which the command takes.
 
 ## The key contract
 

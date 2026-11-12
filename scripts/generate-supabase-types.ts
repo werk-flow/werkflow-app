@@ -13,7 +13,6 @@ import {
   typesUnavailableNotice,
 } from '../lib/testing/boat/types-on-boat';
 import { readMigrationDrift } from '../lib/testing/local-stack/migration-drift';
-import { withStackCopy } from '../lib/testing/local-stack/stack-copy';
 import { withStackLock } from '../lib/testing/runner/stack-lock';
 import { getSpawnFailureDetail } from '../lib/testing/runner/spawn-result';
 
@@ -26,9 +25,8 @@ const CHECK_ONLY = process.argv.slice(2).includes('--check');
  * reaches DEV only when it merges, and CI checks the committed types against a stack that applied
  * every committed migration (docs/technical/environments.md, "The migration rule"). CI and a Boat
  * machine read their own fresh stack. A workstation's stack is shared and holds main's migrations,
- * so a tree with its own migration reads a private copy of that stack's schema with the migration
- * applied (lib/testing/local-stack/stack-copy.ts), and where no copy can answer takes the file
- * from Boat, or from CI's run of the pushed commit (lib/testing/boat/types-on-boat.ts).
+ * so a tree with its own migration takes the file from Boat, or from CI's run of the pushed commit
+ * (lib/testing/boat/types-on-boat.ts).
  */
 const LOCAL = process.argv.slice(2).includes('--local');
 
@@ -77,10 +75,14 @@ async function generatedFrom(database: readonly string[]): Promise<string> {
 }
 
 /**
- * The types from the stack on this machine: the stack itself where it has the tree's schema, else a
- * private copy of it. A workstation reads them under a shared hold of the stack, so the sync cannot
- * move it between the ledger read and the generation; a writer outside the lock is caught by a
- * second read of the ledger.
+ * The types from the stack on this machine, where it has the tree's schema. A workstation reads
+ * them under a shared hold of the stack, so the sync cannot move it between the ledger read and the
+ * generation; a writer outside the lock is caught by a second read of the ledger.
+ *
+ * A private database inside the shared stack's Postgres was tried and dropped: a tree's pending SQL
+ * runs there in the same cluster, and three review rounds each found a statement a guard admitted
+ * that created a cluster-wide role (werk-flow/werkflow-app#362). Nothing short of a separate server
+ * proves that SQL stays in one database.
  */
 async function typesHere(): Promise<{ formatted: string; source: string } | { unavailable: string }> {
   // '' on CI and on a Boat machine, whose stack is the run's own, at the tree's migrations.
@@ -92,17 +94,12 @@ async function typesHere(): Promise<{ formatted: string; source: string } | { un
       const drift = readMigrationDrift(REPOSITORY_ROOT);
       if (!drift) return { unavailable: 'the shared stack is not running or cannot be read.' };
       const here = typesHereReason(process.env, () => drift);
-      if (here) {
-        console.info(`[types] Reading the local stack: ${here}`);
-        const formatted = await generatedFrom(['--local']);
-        return JSON.stringify(readMigrationDrift(REPOSITORY_ROOT)) === JSON.stringify(drift)
-          ? { formatted, source: 'local stack' }
-          : { unavailable: 'the shared stack changed while its types were read.' };
-      }
-      const copy = await withStackCopy({ repository: REPOSITORY_ROOT, drift, runCli: supabase }, (url) =>
-        generatedFrom(['--db-url', url]),
-      );
-      return 'result' in copy ? { formatted: copy.result, source: 'stack copy' } : copy;
+      if (!here) return { unavailable: "the shared stack does not hold exactly this tree's migrations." };
+      console.info(`[types] Reading the local stack: ${here}`);
+      const formatted = await generatedFrom(['--local']);
+      return JSON.stringify(readMigrationDrift(REPOSITORY_ROOT)) === JSON.stringify(drift)
+        ? { formatted, source: 'local stack' }
+        : { unavailable: 'the shared stack changed while its types were read.' };
     },
   );
 }
