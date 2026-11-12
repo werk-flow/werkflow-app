@@ -145,6 +145,8 @@ export async function seedRefusedTimeEvent(page: Page, world: TestWorld): Promis
       });
       try {
         const transaction = database.transaction(['events', 'clocks'], 'readwrite');
+        // One stopped chain, also when a capture runs again in the same browser context.
+        transaction.objectStore('events').clear();
         transaction.objectStore('events').put({
           operationId: crypto.randomUUID(),
           userId,

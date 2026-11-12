@@ -1,197 +1,22 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
-import { assertWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-lock';
-import type { LiveClockState } from '@/lib/time-tracking/types';
-import { z } from '@/lib/zod';
+import { expect, test } from '@playwright/test';
 import { clockDock, clockStatus } from '../golden/support/steps/time-tracking';
 import { CLOCK_ORGANIZATION_ID, CLOCK_USER_ID, RUNNING_CLOCK_STATE } from './clock-state-fixture';
+import {
+  ACCEPTED,
+  CLOCKED_OUT_STATE,
+  mountClock,
+  setNetwork,
+  startWithoutNetwork,
+  unsentBadge,
+  unsentOnDevice,
+  unsentSection,
+  withoutSentAt,
+} from './clock-unsent-support';
 
 // The clock's states for time events a phone holds unsent, and the choices a
 // sign-out offers over them (werk-flow/werkflow-planning#319; decision record
-// 0010, the amendment "the time outbox"). The server is the route below: every
-// envelope it received and the answer it gives.
-
-declare global {
-  interface Window {
-    contractOnline: boolean;
-  }
-}
-
-const CLOCKED_OUT_STATE: LiveClockState = {
-  ...RUNNING_CLOCK_STATE,
-  status: 'clocked_out',
-  isClockedIn: false,
-  clockInTime: null,
-  statusStartedAt: null,
-  captureModel: 'none',
-  sessionId: null,
-  sessionVersion: null,
-  currentSegmentId: null,
-  currentActivity: null,
-  resumeActivity: null,
-};
-
-const envelopeSchema = z.object({
-  operationId: z.string(),
-  kind: z.string(),
-  capturedAt: z.string(),
-  sentAt: z.string(),
-  organizationId: z.string(),
-  payload: z.object({
-    action: z.string(),
-    expectedSessionId: z.string().nullable(),
-    expectedVersion: z.number().nullable(),
-  }),
-});
-type Envelope = z.infer<typeof envelopeSchema>;
-type Verdict = {
-  outcome: string;
-  code: string;
-  state?: { sessionId: string; segmentId: null; version: number };
-};
-
-/** The server's side of the contract: the clock it answers, the envelopes it got, and its verdict. */
-type Server = {
-  state: LiveClockState;
-  sent: Envelope[];
-  /** The bearer token of each send: the person the server records for. */
-  authorization: string[];
-  verdict: Verdict;
-  status: number;
-  online: boolean;
-};
-
-const ACCEPTED: Verdict = {
-  outcome: 'accepted',
-  code: 'accepted',
-  state: { sessionId: '20000000-0000-4000-8000-000000000009', segmentId: null, version: 1 },
-};
-
-async function mountClock(
-  page: Page,
-  initial: LiveClockState,
-  prepare: () => void = () => undefined,
-): Promise<Server> {
-  assertWorkspaceTestLock();
-  const bundle = process.env.WERKFLOW_UI_CONTRACT_BUNDLE;
-  if (!bundle) throw new Error('Run through bun tests/ui-contracts/run.ts.');
-  const server: Server = {
-    state: initial,
-    sent: [],
-    authorization: [],
-    verdict: ACCEPTED,
-    status: 200,
-    online: true,
-  };
-  await page.route('http://localhost/ui-contracts**', (route) =>
-    route.fulfill({
-      contentType: 'text/html',
-      body: '<html lang="de"><body><div id="root"></div></body></html>',
-    }),
-  );
-  await page.route('**/api/time-tracking-state?**', (route) =>
-    route.fulfill({ json: { success: true, state: server.state } }),
-  );
-  await page.route('**/api/field-sync/v1/operations', async (route) => {
-    // Without network a send never arrives, whatever the page believes about its connection.
-    if (!server.online) {
-      await route.abort('internetdisconnected');
-      return;
-    }
-    const body = z.object({ operations: z.array(envelopeSchema) }).parse(route.request().postDataJSON());
-    server.sent.push(...body.operations);
-    server.authorization.push(route.request().headers()['authorization'] ?? '');
-    await route.fulfill({
-      status: server.status,
-      json: {
-        results: body.operations.map((operation) => ({
-          operationId: operation.operationId,
-          ...server.verdict,
-        })),
-      },
-    });
-  });
-  await page.goto('http://localhost/ui-contracts');
-  await page.evaluate(() => {
-    window.uiContractFixture = 'clock';
-    window.clockContract = { transitions: [], directResult: null, resolveTransition: null };
-    // The phone's network, as the page reads it: the contract turns it off and on.
-    window.contractOnline = true;
-    Object.defineProperty(navigator, 'onLine', { get: () => window.contractOnline });
-  });
-  // What the device holds before the app starts.
-  await page.evaluate(prepare);
-  await page.addScriptTag({ path: bundle });
-  await expect(page.getByLabel('Zeitstatus')).toHaveText(/^Bereit/);
-  return server;
-}
-
-async function setNetwork(page: Page, server: Server, online: boolean): Promise<void> {
-  server.online = online;
-  await page.evaluate((next) => {
-    window.contractOnline = next;
-    if (next) window.dispatchEvent(new Event('online'));
-  }, online);
-}
-
-const deviceRowSchema = z.object({
-  userId: z.string(),
-  action: z.string(),
-  operationId: z.string(),
-  sequence: z.number().optional(),
-});
-
-/** What the device holds unsent: the outbox's events in their order, then the actions pages kept. */
-async function unsentOnDevice(
-  page: Page,
-): Promise<{ userId: string; action: string; operationId: string }[]> {
-  const stored = await page.evaluate(async () => {
-    const names = (await indexedDB.databases()).map((info) => info.name);
-    let events: unknown[] = [];
-    if (names.includes('werkflow-time-outbox')) {
-      const database = await new Promise<IDBDatabase>((resolve, reject) => {
-        const request = indexedDB.open('werkflow-time-outbox');
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-      events = await new Promise<unknown[]>((resolve, reject) => {
-        const request = database.transaction('events').objectStore('events').getAll();
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-      database.close();
-    }
-    const kept = Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index) ?? '')
-      .filter((key) => key.startsWith('werkflow:unsent:clock:'))
-      .toSorted()
-      .map((key): unknown => JSON.parse(localStorage.getItem(key) ?? 'null'));
-    return { events, kept };
-  });
-  const events = z.array(deviceRowSchema).parse(stored.events);
-  const kept = z.array(deviceRowSchema).parse(stored.kept);
-  return [...events.toSorted((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0)), ...kept].map(
-    ({ userId, action, operationId }) => ({ userId, action, operationId }),
-  );
-}
-
-function unsentBadge(scope: Page | Locator): Locator {
-  return scope.locator('[data-clock-unsent]');
-}
-
-function unsentSection(page: Page): Locator {
-  return page.getByRole('region', { name: 'Noch nicht übertragen', exact: true });
-}
-
-/** A clock start without network, from the stopped clock's sheet. */
-async function startWithoutNetwork(page: Page, server: Server): Promise<void> {
-  await setNetwork(page, server, false);
-  await page.getByRole('button', { name: 'Zeiterfassung starten', exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Arbeit starten', exact: true }).click();
-  await expect(clockStatus(page)).toHaveText('Arbeit');
-}
-
-function withoutSentAt(envelope: Envelope | undefined): Envelope | undefined {
-  return envelope && { ...envelope, sentAt: '' };
-}
+// 0010, the amendment "the time outbox"). The server is the route in
+// clock-unsent-support.ts: every envelope it received and the answer it gives.
 
 test('a page whose device holds nothing unsent never runs the outbox code at its start', async ({ page }) => {
   await mountClock(page, CLOCKED_OUT_STATE);
@@ -400,6 +225,70 @@ test('a late event shows „Korrektur nötig“, opens the correction with its c
   expect(server.sent).toHaveLength(1);
 });
 
+test('a correction covers the first day only: the next day’s events stay on the phone, shown, and go on from the server’s clock', async ({
+  page,
+}) => {
+  const days = [
+    ['start', '2026-11-09T06:00:00.000Z'],
+    ['end', '2026-11-09T15:00:00.000Z'],
+    ['start', '2026-11-10T06:30:00.000Z'],
+    ['end', '2026-11-10T14:00:00.000Z'],
+  ];
+  const server = await mountClock(page, CLOCKED_OUT_STATE, () => undefined, {
+    outcome: 'conflict',
+    code: 'correction_required',
+  });
+  await page.evaluate(
+    ({ kept, userId, organizationId, base }) => {
+      kept.forEach(([action, capturedAt], index) => {
+        const operationId = `50000000-0000-4000-8000-00000000010${index}`;
+        localStorage.setItem(
+          `werkflow:unsent:clock:${String(Date.parse(capturedAt ?? '')).padStart(15, '0')}:1:${operationId}`,
+          JSON.stringify({
+            userId,
+            organizationId,
+            operationId,
+            action,
+            selection: action === 'end' ? null : { kind: 'work', allocationKind: 'unallocated', jobId: null },
+            expectedSessionId: null,
+            expectedVersion: null,
+            capturedAt,
+            triedOnline: false,
+            wipeGeneration: '',
+            base: index === 0 ? base : null,
+            readAt: index === 0 ? '2026-11-09T05:59:00.000Z' : null,
+          }),
+        );
+      });
+      window.dispatchEvent(new Event('online'));
+    },
+    { kept: days, userId: CLOCK_USER_ID, organizationId: CLOCK_ORGANIZATION_ID, base: CLOCKED_OUT_STATE },
+  );
+  await expect(unsentBadge(clockDock(page))).toHaveText('Korrektur nötig');
+  await page.getByRole('button', { name: 'Zeiterfassung starten', exact: true }).click();
+  const section = unsentSection(page);
+
+  await section.getByRole('button', { name: 'Korrektur beantragen', exact: true }).click();
+  const correction = page.getByRole('dialog', { name: 'Zeit nachtragen', exact: true });
+  // Monday's start and end, never Tuesday's end.
+  await expect(correction.getByLabel('Vorbelegung')).toHaveText('9.11.2026 | 07:00 | 16:00');
+  await correction.getByRole('button', { name: 'Korrektur einreichen', exact: true }).click();
+
+  await expect(section.getByRole('listitem')).toHaveCount(2);
+  expect((await unsentOnDevice(page)).map((event) => event.operationId)).toEqual([
+    '50000000-0000-4000-8000-000000000102',
+    '50000000-0000-4000-8000-000000000103',
+  ]);
+  // Tuesday's start goes on from the server's clock: no session open.
+  await expect.poll(() => server.sent.length).toBe(2);
+  expect(withoutSentAt(server.sent.at(-1))).toEqual(
+    expect.objectContaining({
+      operationId: '50000000-0000-4000-8000-000000000102',
+      payload: expect.objectContaining({ expectedSessionId: null, expectedVersion: null }),
+    }),
+  );
+});
+
 test('a conflict shows what changed and the server’s clock, never the phone’s, and the event is not sent again', async ({
   page,
 }) => {
@@ -481,8 +370,34 @@ test('while the outbox of a device that holds unsent work has not answered yet, 
       .map((key) => JSON.parse(localStorage.getItem(key) ?? 'null')),
   );
   expect(kept).toEqual([
-    expect.objectContaining({ standsOnUnsent: true, base: expect.objectContaining({ isClockedIn: false }) }),
+    expect.objectContaining({
+      readAt: expect.any(String),
+      base: expect.objectContaining({ isClockedIn: false }),
+    }),
   ]);
+});
+
+test('a device whose storage fails says so, and its clock actions still reach the server while it has signal', async ({
+  page,
+}) => {
+  const server = await mountClock(page, CLOCKED_OUT_STATE, () => {
+    localStorage.setItem('werkflow:unsent:time', '1');
+    // A full disk: the device store refuses every request.
+    Object.defineProperty(window, 'indexedDB', {
+      value: {
+        open: () => {
+          throw new DOMException('The disk is full.', 'QuotaExceededError');
+        },
+      },
+    });
+  });
+
+  await page.getByRole('button', { name: 'Zeiterfassung starten', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('Der Speicher deines Geräts antwortet nicht.');
+  await page.getByRole('dialog').getByRole('button', { name: 'Arbeit starten', exact: true }).click();
+
+  await expect.poll(() => page.evaluate(() => window.clockContract.transitions.length)).toBe(1);
+  expect(server.sent).toEqual([]);
 });
 
 test('a sign-out with unsent events names them and offers to send, to discard or to stay; it ends only once nothing is unsent', async ({
@@ -539,6 +454,53 @@ test('„Verwerfen“ asks once more, then deletes the unsent events for good an
   expect(server.sent).toHaveLength(1);
 });
 
+test('„Verwerfen“ deletes only what the person was shown: an action kept since the question stays and is asked about', async ({
+  page,
+}) => {
+  const server = await mountClock(page, CLOCKED_OUT_STATE);
+  server.verdict = { outcome: 'rejected', code: 'forbidden' };
+  await startWithoutNetwork(page, server);
+  await setNetwork(page, server, true);
+  await expect(unsentBadge(clockDock(page))).toHaveText('Nicht übertragen');
+  await page.getByRole('button', { name: 'Abmelden prüfen', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Noch nicht übertragen', exact: true });
+  await dialog.getByRole('button', { name: 'Verwerfen', exact: true }).click();
+
+  // Another tab keeps an end while the question is open.
+  await page.evaluate(
+    ({ userId, organizationId }) => {
+      const operationId = '50000000-0000-4000-8000-0000000000e1';
+      localStorage.setItem(
+        `werkflow:unsent:clock:${String(Date.now()).padStart(15, '0')}:1:${operationId}`,
+        JSON.stringify({
+          userId,
+          organizationId,
+          operationId,
+          action: 'end',
+          selection: null,
+          expectedSessionId: null,
+          expectedVersion: null,
+          capturedAt: new Date().toISOString(),
+          triedOnline: false,
+          wipeGeneration: '',
+          base: null,
+          readAt: null,
+        }),
+      );
+    },
+    { userId: CLOCK_USER_ID, organizationId: CLOCK_ORGANIZATION_ID },
+  );
+  const confirmation = page.getByRole('alertdialog', { name: 'Nicht Übertragenes verwerfen?' });
+  await confirmation.getByRole('button', { name: 'Endgültig verwerfen', exact: true }).click();
+
+  await expect(dialog).toContainText('Seit deiner Frage ist noch etwas dazugekommen.');
+  await expect(dialog.getByRole('listitem')).toHaveText('Stempelzeiten1');
+  await expect(page.getByLabel('Abmeldung')).toHaveText('');
+  expect((await unsentOnDevice(page)).map((event) => event.operationId)).toEqual([
+    '50000000-0000-4000-8000-0000000000e1',
+  ]);
+});
+
 test('a sign-out is not asked about another person’s events, which stay on the phone unsent', async ({
   page,
 }) => {
@@ -560,7 +522,7 @@ test('a sign-out is not asked about another person’s events, which stay on the
           triedOnline: false,
           wipeGeneration: '',
           base,
-          standsOnUnsent: false,
+          readAt: new Date().toISOString(),
         }),
       );
     },

@@ -3,6 +3,7 @@ import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
 import type { LiveClockState } from '@/lib/time-tracking/types';
+import { z } from '@/lib/zod';
 import type { ClockDeviceView } from './time-outbox';
 import { readTimeOutbox, type OutboxHolder } from './time-outbox-store';
 import { TODAY_WIPE_KEY } from './today-wipe';
@@ -39,6 +40,10 @@ async function isolatedTests(): Promise<void> {
   /** The browser cannot read its session, as with an expired token and no network. */
   let sessionUnreadable = false;
   const sent: string[] = [];
+  /** While set, every send waits for it: a request in flight. */
+  let inFlight: Promise<void> | null = null;
+  /** The server's verdict on each send; without one it asks to retry later. */
+  let verdict: Record<string, unknown> | null = null;
 
   Object.assign(globalThis, {
     localStorage: {
@@ -60,10 +65,32 @@ async function isolatedTests(): Promise<void> {
     fetch: async (_url: string, init: RequestInit) => {
       const body: unknown = JSON.parse(String(init.body));
       sent.push(JSON.stringify(body));
-      return Response.json({ outcome: 'retry', code: 'unavailable' }, { status: 503 });
+      if (inFlight) await inFlight;
+      const operationId = z.object({ operations: z.array(z.object({ operationId: z.string() })) }).parse(body)
+        .operations[0]?.operationId;
+      return verdict
+        ? Response.json({ results: [{ operationId, ...verdict }] })
+        : Response.json({ outcome: 'retry', code: 'unavailable' }, { status: 503 });
     },
   });
   Object.defineProperty(globalThis.navigator, 'onLine', { value: false, configurable: true });
+  // Web Locks within this one tab: each lock name runs its holders one after the other.
+  const held = new Map<string, Promise<unknown>>();
+  Object.defineProperty(globalThis.navigator, 'locks', {
+    configurable: true,
+    value: {
+      request: (name: string, work: () => Promise<unknown>) => {
+        const run = (held.get(name) ?? Promise.resolve()).then(work, work);
+        // The next holder waits for this one either way; the failure reaches the caller through `run`.
+        const settled = run.then(
+          () => undefined,
+          () => undefined,
+        );
+        held.set(name, settled);
+        return run;
+      },
+    },
+  });
 
   void mock.module('@/lib/supabase/client', () => ({
     createSupabaseBrowserClient: () => ({
@@ -81,9 +108,8 @@ async function isolatedTests(): Promise<void> {
     }),
   }));
 
-  const { holdClock, sendOwnTimeEvents, takeInKept, timeUnsentSource, clockHolder } = await import(
-    './clock-device'
-  );
+  const { captureBehindKept, holdClock, sendOwnTimeEvents, takeInKept, timeUnsentSource, clockHolder } =
+    await import('./clock-device');
   const { keepClockAction } = await import('./unsent-mark');
 
   const WORKER: OutboxHolder = {
@@ -141,7 +167,7 @@ async function isolatedTests(): Promise<void> {
         selection: { kind: 'work', allocationKind: 'unallocated', jobId: null },
         base: { ...CLOCKED_OUT, organizationId: holder.organizationId },
         triedOnline: false,
-        standsOnUnsent: false,
+        readAt: '2026-11-11T06:59:00.000Z',
         capturedAt: '2026-11-11T07:00:00.000Z',
       },
       '',
@@ -161,6 +187,16 @@ async function isolatedTests(): Promise<void> {
       request.onerror = () => reject(request.error ?? new Error('delete failed'));
     });
   });
+
+  /** Lets every task queued so far run: no timed wait. */
+  function nextTask(): Promise<void> {
+    return new Promise((resolve) => setImmediate(resolve));
+  }
+
+  /** The ids of the events a question named, as the person was shown them. */
+  function shownIds(items: { ids: readonly string[] }[]): string[] {
+    return items.flatMap((item) => item.ids);
+  }
 
   describe('this tab’s hold on the time outbox', () => {
     test('an action a page kept without signal is taken into its person’s outbox, shows as waiting, and leaves the start-up hint', async () => {
@@ -212,7 +248,7 @@ async function isolatedTests(): Promise<void> {
           selection: { kind: 'work', allocationKind: 'unallocated', jobId: null },
           base: CLOCKED_OUT,
           triedOnline: false,
-          standsOnUnsent: false,
+          readAt: '2026-11-11T06:59:00.000Z',
           capturedAt: '2026-11-11T07:01:00.000Z',
         },
         '',
@@ -233,11 +269,50 @@ async function isolatedTests(): Promise<void> {
         '{"operationId":"x","kind":"new"}',
       );
 
-      expect(await takeInKept()).toEqual({ unreadable: 1 });
+      expect(await takeInKept()).toEqual({ moved: 0, unreadable: 1 });
       await expect(timeUnsentSource.summarize()).rejects.toThrow('cannot be read');
 
       expect((await readTimeOutbox(WORKER)).events).toEqual([]);
       expect(storage.has('werkflow:unsent:clock:000000000000001:1:from-a-newer-version')).toBe(true);
+    });
+
+    test('the page without signal takes the other tabs’ kept actions in before its own, so an earlier tap stays first', async () => {
+      await holdClock(WORKER, () => undefined);
+      keepClockAction(
+        {
+          ...WORKER,
+          operationId: '50000000-0000-4000-8000-0000000000c1',
+          action: 'start',
+          expectedSessionId: null,
+          expectedVersion: null,
+          selection: { kind: 'work', allocationKind: 'unallocated', jobId: null },
+          base: CLOCKED_OUT,
+          readAt: '2026-11-11T09:59:00.000Z',
+          triedOnline: false,
+          capturedAt: '2026-11-11T10:00:00.000Z',
+        },
+        '',
+      );
+
+      await captureBehindKept(WORKER, {
+        command: {
+          operationId: '50000000-0000-4000-8000-0000000000c2',
+          action: 'end',
+          expectedSessionId: null,
+          expectedVersion: null,
+          selection: null,
+        },
+        base: null,
+        readAt: null,
+        capturedAt: new Date('2026-11-11T10:05:00.000Z'),
+        triedOnline: false,
+        wipeGeneration: '',
+      });
+
+      expect((await readTimeOutbox(WORKER)).events.map((event) => event.operationId)).toEqual([
+        '50000000-0000-4000-8000-0000000000c1',
+        '50000000-0000-4000-8000-0000000000c2',
+      ]);
     });
 
     test('two actions kept at once are two keys, so neither overwrites the other, and they are taken in in the order of their taps', async () => {
@@ -254,7 +329,7 @@ async function isolatedTests(): Promise<void> {
             : { kind: 'work' as const, allocationKind: 'unallocated' as const, jobId: null },
         base: CLOCKED_OUT,
         triedOnline: false,
-        standsOnUnsent: kind !== 'start',
+        readAt: '2026-11-11T06:59:00.000Z',
         capturedAt,
       });
       // The later tap is written first, as another tab's write can land first.
@@ -291,7 +366,7 @@ async function isolatedTests(): Promise<void> {
             selection: { kind: 'work', allocationKind: 'unallocated', jobId: null },
             base: CLOCKED_OUT,
             triedOnline: false,
-            standsOnUnsent: false,
+            readAt: '2026-11-11T06:59:00.000Z',
             capturedAt: '2026-11-11T07:00:00.000Z',
           },
           signal,
@@ -310,8 +385,9 @@ async function isolatedTests(): Promise<void> {
       await keepStart(OTHER_COMPANY);
       await keepStart(WORKER);
 
-      expect(await timeUnsentSource.summarize()).toEqual([{ label: 'Stempelzeiten', count: 2 }]);
-      await timeUnsentSource.discard();
+      const shown = await timeUnsentSource.summarize();
+      expect(shown).toEqual([expect.objectContaining({ label: 'Stempelzeiten', count: 2 })]);
+      await timeUnsentSource.discard('session', shownIds(shown));
 
       expect(await timeUnsentSource.summarize()).toEqual([]);
       expect((await readTimeOutbox(OTHER_COMPANY)).events).toEqual([]);
@@ -320,21 +396,97 @@ async function isolatedTests(): Promise<void> {
       expect(storage.get('werkflow:unsent:time')).toBe('1');
     });
 
+    test('a discard deletes exactly the events the person was shown; one kept after the question stays and is asked about', async () => {
+      await keepStart(WORKER);
+      const shown = await timeUnsentSource.summarize();
+      await keepStart(WORKER);
+
+      await timeUnsentSource.discard('session', shownIds(shown));
+
+      expect(await timeUnsentSource.summarize()).toEqual([
+        expect.objectContaining({ label: 'Stempelzeiten', count: 1 }),
+      ]);
+    });
+
+    test('an action another tab kept is taken in and sent here, also when that tab closed before it sent', async () => {
+      sessionUserId = WORKER.userId;
+      verdict = {
+        outcome: 'accepted',
+        code: 'accepted',
+        state: { sessionId: null, segmentId: null, version: 1 },
+      };
+      await holdClock(WORKER, () => undefined);
+      keepClockAction(
+        {
+          ...WORKER,
+          operationId: '50000000-0000-4000-8000-0000000000b1',
+          action: 'start',
+          expectedSessionId: null,
+          expectedVersion: null,
+          selection: { kind: 'work', allocationKind: 'unallocated', jobId: null },
+          base: CLOCKED_OUT,
+          readAt: '2026-11-11T06:59:00.000Z',
+          triedOnline: false,
+          capturedAt: '2026-11-11T07:00:00.000Z',
+        },
+        '',
+      );
+      const key = [...storage.keys()].find((stored) => stored.startsWith('werkflow:unsent:clock:')) ?? null;
+
+      for (const listener of storageListeners) listener({ key });
+      for (let turn = 0; turn < 50 && sent.length === 0; turn += 1) await nextTask();
+
+      expect(sent).toHaveLength(1);
+      verdict = null;
+    });
+
+    test('a discard waits for a send in flight, so the server never records an event the person was told is gone', async () => {
+      sessionUserId = WORKER.userId;
+      await keepStart(WORKER);
+      const shown = await timeUnsentSource.summarize();
+      let release = (): void => undefined;
+      inFlight = new Promise((resolve) => {
+        release = resolve;
+      });
+      verdict = {
+        outcome: 'accepted',
+        code: 'accepted',
+        state: { sessionId: null, segmentId: null, version: 1 },
+      };
+      const sending = sendOwnTimeEvents();
+      await nextTask();
+
+      let discarded = false;
+      const discarding = timeUnsentSource.discard('session', shownIds(shown)).then(() => {
+        discarded = true;
+      });
+      await nextTask();
+      expect(discarded).toBe(false);
+
+      release();
+      await Promise.all([sending, discarding]);
+      expect(sent).toHaveLength(1);
+      expect((await readTimeOutbox(WORKER)).events).toEqual([]);
+      inFlight = null;
+      verdict = null;
+    });
+
     test('a switch asks only about the organization it leaves, so the other organization’s events stay for when the person works there', async () => {
       await keepStart(OTHER_COMPANY);
       // The tab works in WORKER's organization; the person also has an unsent event in another one.
       await keepStart(WORKER);
 
-      expect(await timeUnsentSource.summarize('organization')).toEqual([
-        { label: 'Stempelzeiten', count: 1 },
-      ]);
-      await timeUnsentSource.discard('organization');
+      const shown = await timeUnsentSource.summarize('organization');
+      expect(shown).toEqual([expect.objectContaining({ label: 'Stempelzeiten', count: 1 })]);
+      await timeUnsentSource.discard('organization', shownIds(shown));
 
       expect((await readTimeOutbox(WORKER)).events).toEqual([]);
       expect((await readTimeOutbox(OTHER_COMPANY)).events).toHaveLength(1);
       expect(await timeUnsentSource.summarize('organization')).toEqual([]);
       // A sign-out still names it, since it ends every organization's session.
-      expect(await timeUnsentSource.summarize()).toEqual([{ label: 'Stempelzeiten', count: 1 }]);
+      expect(await timeUnsentSource.summarize()).toEqual([
+        expect.objectContaining({ label: 'Stempelzeiten', count: 1 }),
+      ]);
     });
 
     // Last: a wipe ends this module's hold for the rest of the process, as for the rest of a tab's life.

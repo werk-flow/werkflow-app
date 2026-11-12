@@ -8,8 +8,8 @@ import { ErrorText } from '@/components/ui/error-text';
 import { SectionError } from '@/components/ui/section-error';
 import { useClientRead } from '@/hooks/use-client-read';
 import { usePendingTask } from '@/hooks/use-server-action';
-import { outboxChanged, takeInKept } from '@/lib/field-sync/device/clock-device';
-import { captureTimeEvent, clockDeviceView, type ClockDeviceView } from '@/lib/field-sync/device/time-outbox';
+import { captureBehindKept, takeInKept } from '@/lib/field-sync/device/clock-device';
+import { clockDeviceView, type ClockDeviceView } from '@/lib/field-sync/device/time-outbox';
 import { readWholeTimeOutbox, type OutboxHolder } from '@/lib/field-sync/device/time-outbox-store';
 import { sharedWipeGeneration } from '@/lib/field-sync/device/today-wipe';
 import { TODAY_WIPE_KEY } from '@/lib/field-sync/device/today-wipe';
@@ -108,7 +108,7 @@ function useOfflineCapture(clock: OfflineClock | null, reload: () => void) {
     setPendingId(action.id);
     void run(async () => {
       try {
-        await captureTimeEvent(holder, {
+        await captureBehindKept(holder, {
           command: {
             operationId: crypto.randomUUID(),
             action: action.kind === 'end' ? 'end' : view.state?.isClockedIn ? 'switch' : 'start',
@@ -118,12 +118,11 @@ function useOfflineCapture(clock: OfflineClock | null, reload: () => void) {
           },
           // Every event here stands on the one before it; the page holds no confirmed clock of its own.
           base: null,
-          standsOnUnsent: true,
+          readAt: null,
           capturedAt: new Date(),
           triedOnline: false,
           wipeGeneration: generation,
         });
-        await outboxChanged();
       } catch (failure) {
         logError('OfflineClock: clock action not kept on the device', failure);
         setError('Dein Gerät konnte die Zeit nicht speichern. Bitte versuche es erneut.');

@@ -3,17 +3,36 @@ import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, test } from 'bun:test';
 
 import { createActivitySelection } from '@/lib/time-tracking/segments';
-import type { LiveClockState } from '@/lib/time-tracking/types';
-import { z } from '@/lib/zod';
 import {
   captureTimeEvent,
   clockDeviceView,
-  discardTimeEvents,
   isOfflineClockAction,
+  removeTimeEvents,
   retryFirstTimeEvent,
 } from './time-outbox';
-import { sendTimeOutbox, type TimeOutboxSendOptions } from './time-outbox-send';
-import { readTimeOutbox, readWholeTimeOutbox, type OutboxHolder } from './time-outbox-store';
+import {
+  CLOCKED_OUT,
+  COLLEAGUE,
+  OTHER_COMPANY,
+  OTHER_SESSION_ID,
+  SESSION_ID,
+  TIME_OUTBOX_DATABASE,
+  UNSENT_TIME_EVENT_KEEP_MS,
+  WORKER,
+  WORKING,
+  accepting,
+  capture,
+  command,
+  deleteDatabase,
+  keptIds,
+  resetDevice,
+  result,
+  server,
+  storage,
+  withoutSentAt,
+} from '@/lib/testing/fixtures/time-outbox';
+import { sendTimeOutbox } from './time-outbox-send';
+import { readTimeOutbox, readWholeTimeOutbox } from './time-outbox-store';
 import { TODAY_DATABASE } from './today-wipe';
 
 // The time outbox of werk-flow/werkflow-planning#319 (decision record 0010,
@@ -22,205 +41,7 @@ import { TODAY_DATABASE } from './today-wipe';
 // another person and never dropped without the server's answer or the
 // person's own decision.
 
-/** localStorage of the origin: the wipe signal the kept clock is stamped with. */
-const storage = new Map<string, string>();
-globalThis.localStorage = {
-  get length() {
-    return storage.size;
-  },
-  clear: () => storage.clear(),
-  getItem: (key) => storage.get(key) ?? null,
-  key: (index) => [...storage.keys()][index] ?? null,
-  removeItem: (key) => void storage.delete(key),
-  setItem: (key, value) => void storage.set(key, value),
-};
-
-/** The database of time-outbox-store.ts, and the 7 days an unsent event counts as waiting (time-outbox.ts). */
-const TIME_OUTBOX_DATABASE = 'werkflow-time-outbox';
-const UNSENT_TIME_EVENT_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
-
-const WORKER: OutboxHolder = {
-  userId: '10000000-0000-4000-8000-00000000000a',
-  organizationId: '20000000-0000-4000-8000-00000000000a',
-};
-const COLLEAGUE: OutboxHolder = { ...WORKER, userId: '10000000-0000-4000-8000-00000000000b' };
-const OTHER_COMPANY: OutboxHolder = { ...WORKER, organizationId: '20000000-0000-4000-8000-00000000000b' };
-const JOB_ID = '30000000-0000-4000-8000-000000000001';
-const SESSION_ID = '40000000-0000-4000-8000-000000000001';
-
-const CLOCKED_OUT: LiveClockState = {
-  organizationId: WORKER.organizationId,
-  breakMode: 'manual',
-  autoBreakThresholdMinutes: 360,
-  autoBreakDurationMinutes: 30,
-  status: 'clocked_out',
-  isClockedIn: false,
-  isOnBreak: false,
-  clockInTime: null,
-  statusStartedAt: null,
-  breakStartTime: null,
-  todayMinutes: 0,
-  workMinutes: 0,
-  breakMinutes: 0,
-  timelineSegments: [],
-  activeJobId: null,
-  activeJobInfo: null,
-  captureModel: 'none',
-  sessionId: null,
-  sessionVersion: null,
-  currentSegmentId: null,
-  currentActivity: null,
-  resumeActivity: null,
-  resumeJobInfo: null,
-  recoveryReason: null,
-  legacyOpen: false,
-  standbyMinutes: 0,
-  travelMinutes: 0,
-  calloutMinutes: 0,
-  internalMinutes: 0,
-  fetchedAt: '2026-11-11T06:00:00.000Z',
-};
-
-const WORKING: LiveClockState = {
-  ...CLOCKED_OUT,
-  status: 'working',
-  isClockedIn: true,
-  clockInTime: '2026-11-11T06:00:00.000Z',
-  statusStartedAt: '2026-11-11T06:00:00.000Z',
-  activeJobId: JOB_ID,
-  activeJobInfo: {
-    id: JOB_ID,
-    title: 'Heizung tauschen',
-    jobNumber: 'AUF-1',
-    status: 'in_arbeit',
-    projectName: 'Neubau Musterweg',
-    clientName: 'Erika Beispiel',
-  },
-  captureModel: 'canonical',
-  sessionId: SESSION_ID,
-  sessionVersion: 3,
-  currentActivity: createActivitySelection('work', JOB_ID),
-  resumeActivity: createActivitySelection('work', JOB_ID),
-};
-
-type OfflineClockCommand = Omit<Parameters<typeof captureTimeEvent>[1]['command'], 'action'> & {
-  action: string;
-};
-
-let operations = 0;
-/** A clock command as the clock's provider builds it, with a fresh operation id. */
-function command(
-  action: string,
-  overrides: Partial<OfflineClockCommand> = {},
-): OfflineClockCommand & { operationId: string } {
-  operations += 1;
-  return {
-    operationId: `50000000-0000-4000-8000-${String(operations).padStart(12, '0')}`,
-    action,
-    expectedSessionId: null,
-    expectedVersion: null,
-    selection: action === 'end' ? null : createActivitySelection('work'),
-    ...overrides,
-  };
-}
-
-async function capture(
-  holder: OutboxHolder,
-  kept: OfflineClockCommand,
-  options: {
-    base?: LiveClockState | null;
-    at?: string;
-    triedOnline?: boolean;
-    standsOnUnsent?: boolean;
-  } = {},
-) {
-  if (!isOfflineClockAction(kept.action)) throw new Error(`${kept.action} cannot be captured without signal`);
-  return captureTimeEvent(holder, {
-    command: { ...kept, action: kept.action },
-    base: options.base === undefined ? CLOCKED_OUT : options.base,
-    capturedAt: new Date(options.at ?? '2026-11-11T07:00:00.000Z'),
-    triedOnline: options.triedOnline ?? false,
-    standsOnUnsent: options.standsOnUnsent ?? false,
-    wipeGeneration: 'signal-1',
-  });
-}
-
-const sentBodySchema = z.object({
-  operations: z.array(
-    z.object({
-      operationId: z.string(),
-      capturedAt: z.string(),
-      sentAt: z.string(),
-      organizationId: z.string(),
-      kind: z.string(),
-      payload: z.object({
-        action: z.string(),
-        expectedSessionId: z.string().nullable(),
-        expectedVersion: z.number().nullable(),
-      }),
-    }),
-  ),
-});
-type SentEnvelope = z.infer<typeof sentBodySchema>['operations'][number];
-
-/** The server's side of the sends: every envelope it got, and the answer it gives to each. */
-function server(answer: (envelope: SentEnvelope, call: number) => Response | Error) {
-  const received: SentEnvelope[] = [];
-  /** The bearer token of each request: the identity the server records the event for. */
-  const tokens: string[] = [];
-  let sends = 0;
-  const options: TimeOutboxSendOptions = {
-    fetch: async (_url, init) => {
-      sends += 1;
-      const body = sentBodySchema.parse(JSON.parse(String(init.body)));
-      const [envelope] = body.operations;
-      if (!envelope || body.operations.length !== 1) throw new Error('one event per request');
-      received.push(envelope);
-      tokens.push(new Headers(init.headers).get('authorization') ?? '');
-      const response = answer(envelope, received.length);
-      if (response instanceof Error) throw response;
-      return response;
-    },
-    now: () => new Date(Date.parse('2026-11-11T09:00:00.000Z') + sends * 1_000),
-    holdersToken: async () => 'token-of-the-holder',
-  };
-  return { received, tokens, options };
-}
-
-function result(envelope: SentEnvelope, verdict: Record<string, unknown>, status = 200): Response {
-  return Response.json({ results: [{ operationId: envelope.operationId, ...verdict }] }, { status });
-}
-
-/** Accepts every event and moves the session's version on by one, as the database function does. */
-function accepting() {
-  let version = 0;
-  return server((envelope) => {
-    version += 1;
-    return result(envelope, {
-      outcome: 'accepted',
-      code: 'accepted',
-      state: { sessionId: SESSION_ID, segmentId: `segment-${version}`, version },
-    });
-  });
-}
-
-/** The envelope as the server hashes it: everything but the time of this send. */
-function withoutSentAt(envelope: SentEnvelope): SentEnvelope {
-  return { ...envelope, sentAt: '' };
-}
-
-async function deleteDatabase(name: string): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const request = indexedDB.deleteDatabase(name);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error ?? new Error('delete failed'));
-  });
-}
-
-beforeEach(async () => {
-  storage.clear();
-  await deleteDatabase(TIME_OUTBOX_DATABASE);
-});
+beforeEach(resetDevice);
 
 describe('sending the chain', () => {
   test('events are sent in the order they were captured, one request each, and the outbox is empty after the answers', async () => {
@@ -386,7 +207,7 @@ describe('an event the server does not record', () => {
     const at = new Date('2026-11-11T09:00:00.000Z');
     expect(clockDeviceView(await readTimeOutbox(WORKER), at)?.events[0]?.status).toBe('correction');
 
-    await discardTimeEvents(WORKER);
+    await removeTimeEvents(WORKER, await keptIds(WORKER), null);
     await capture(WORKER, command('start'));
     answers = { outcome: 'rejected', code: 'forbidden' };
     await sendTimeOutbox(WORKER, options);
@@ -567,7 +388,7 @@ describe('whose events', () => {
       [own.operationId, WORKER.organizationId],
     ]);
 
-    const { deviceHoldsEvents } = await discardTimeEvents(WORKER);
+    const { deviceHoldsEvents } = await removeTimeEvents(WORKER, await keptIds(WORKER), null);
     expect(deviceHoldsEvents).toBe(true);
     expect((await readTimeOutbox(COLLEAGUE)).events).toHaveLength(1);
     expect((await readTimeOutbox(OTHER_COMPANY)).events).toHaveLength(1);
@@ -578,7 +399,7 @@ describe('whose events', () => {
     await capture(WORKER, command('start'));
     await capture(WORKER, command('end'));
 
-    expect(await discardTimeEvents(WORKER)).toEqual({
+    expect(await removeTimeEvents(WORKER, await keptIds(WORKER), null)).toEqual({
       outbox: { clock: null, events: [] },
       deviceHoldsEvents: false,
     });
@@ -644,12 +465,13 @@ describe('capturing', () => {
     expect(received).toHaveLength(1);
   });
 
-  test('an action kept while unsent work of someone else may wait still keeps the confirmed clock, and expects it', async () => {
+  test('a first action of an empty chain keeps the clock the page read, so the phone can show it without signal', async () => {
     // The start-up hint covers the whole device: here the waiting work is a colleague's.
     await capture(COLLEAGUE, command('start'));
     await capture(WORKER, command('end', { expectedSessionId: SESSION_ID, expectedVersion: 3 }), {
       base: WORKING,
-      standsOnUnsent: true,
+      readAt: '2026-11-11T07:59:00.000Z',
+      at: '2026-11-11T08:00:00.000Z',
     });
 
     const outbox = await readTimeOutbox(WORKER);
@@ -660,7 +482,35 @@ describe('capturing', () => {
     );
   });
 
-  test('an action kept behind the person’s own sent chain expects what it left, not the clock the page had read', async () => {
+  test('a page that read the server after the chain emptied keeps its own expectation, not the older one the chain left', async () => {
+    // Monday's offline end is recorded: the chain leaves "no session".
+    await capture(WORKER, command('end', { expectedSessionId: SESSION_ID, expectedVersion: 3 }), {
+      base: WORKING,
+      at: '2026-11-10T16:00:00.000Z',
+    });
+    const { received, options } = server((envelope) =>
+      result(envelope, {
+        outcome: 'accepted',
+        code: 'accepted',
+        state: { sessionId: SESSION_ID, segmentId: null, version: 4 },
+      }),
+    );
+    await sendTimeOutbox(WORKER, options);
+    // Tuesday an online clock-in opened session 2; a page read it, then lost its signal.
+    const tuesday = { ...WORKING, sessionId: OTHER_SESSION_ID, sessionVersion: 1 };
+    await capture(WORKER, command('switch', { expectedSessionId: OTHER_SESSION_ID, expectedVersion: 1 }), {
+      base: tuesday,
+      readAt: '2026-11-11T10:00:00.000Z',
+      at: '2026-11-11T10:05:00.000Z',
+    });
+    await sendTimeOutbox(WORKER, options);
+
+    expect(received.at(-1)?.payload).toEqual(
+      expect.objectContaining({ action: 'switch', expectedSessionId: OTHER_SESSION_ID, expectedVersion: 1 }),
+    );
+  });
+
+  test('a page that read the server before the chain emptied expects what the chain left, not the clock it had read', async () => {
     await capture(WORKER, command('start'), { at: '2026-11-11T07:00:00.000Z' });
     const { received, options } = server((envelope) =>
       result(envelope, {
@@ -671,9 +521,10 @@ describe('capturing', () => {
     );
     await sendTimeOutbox(WORKER, options);
 
+    // Another tab sent the start; this page still holds the clock it read before it.
     await capture(WORKER, command('end'), {
       base: CLOCKED_OUT,
-      standsOnUnsent: true,
+      readAt: '2026-11-11T06:59:00.000Z',
       at: '2026-11-11T07:30:00.000Z',
     });
     await sendTimeOutbox(WORKER, options);
@@ -682,6 +533,39 @@ describe('capturing', () => {
       expect.objectContaining({ action: 'start' }),
       expect.objectContaining({ action: 'end', expectedSessionId: SESSION_ID, expectedVersion: 1 }),
     ]);
+  });
+
+  test('an action the outbox already sent is never taken in again, even when its kept copy outlived the send', async () => {
+    const start = command('start');
+    await capture(WORKER, start, { at: '2026-11-11T07:00:00.000Z' });
+    const { received, options } = accepting();
+    await sendTimeOutbox(WORKER, options);
+
+    // The tab that kept it stopped before it removed its key; a later take-in meets the copy.
+    await capture(WORKER, start, { at: '2026-11-11T07:00:00.000Z' });
+    await sendTimeOutbox(WORKER, options);
+
+    expect((await readTimeOutbox(WORKER)).events).toEqual([]);
+    expect(received).toHaveLength(1);
+  });
+
+  test('a capture of the page without signal keeps nothing once another tab’s wipe changed the signal', async () => {
+    storage.set('werkflow:today-wiped', 'after-the-wipe');
+    await expect(
+      captureTimeEvent(
+        WORKER,
+        {
+          command: { ...command('start'), action: 'start' },
+          base: null,
+          readAt: null,
+          capturedAt: new Date('2026-11-11T07:00:00.000Z'),
+          triedOnline: false,
+          wipeGeneration: 'before-the-wipe',
+        },
+        { underSignal: true },
+      ),
+    ).rejects.toThrow();
+    expect((await readTimeOutbox(WORKER)).events).toEqual([]);
   });
 
   test('the same action captured twice is kept once', async () => {
@@ -709,6 +593,16 @@ describe('capturing', () => {
 });
 
 describe('what the clock shows', () => {
+  test('a kept session across midnight counts only the new Berlin day in today’s totals', async () => {
+    const lateStart = { ...CLOCKED_OUT, fetchedAt: '2026-11-10T21:59:00.000Z' };
+    await capture(WORKER, command('start'), { base: lateStart, at: '2026-11-10T22:00:00.000Z' });
+    await capture(WORKER, command('end'), { at: '2026-11-11T00:00:00.000Z' });
+
+    const view = clockDeviceView(await readTimeOutbox(WORKER), new Date('2026-11-11T09:00:00.000Z'));
+    // 23:00 to 01:00 Berlin: 60 minutes fall on the new day.
+    expect(view?.state?.todayMinutes).toBe(60);
+  });
+
   test('the unsent events are applied at their captured times', async () => {
     await capture(WORKER, command('start'), { at: '2026-11-11T07:00:00.000Z' });
     await capture(WORKER, command('switch', { selection: createActivitySelection('break') }), {

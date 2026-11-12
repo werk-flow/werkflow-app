@@ -1,17 +1,23 @@
 'use client';
 
 import './registrations';
-import { holdClock, outboxChanged, takeInKept } from './clock-device';
+import {
+  holdClock,
+  outboxChanged,
+  removeShownTimeEvents,
+  takeInKept,
+  type ViewListener,
+} from './clock-device';
 import { runSync, startSyncRunner } from './sync-runner';
-import { discardTimeEvents, retryFirstTimeEvent, type ClockDeviceView } from './time-outbox';
+import { retryFirstTimeEvent } from './time-outbox';
+import { logError } from '@/lib/logging';
+import type { LiveClockState } from '@/lib/time-tracking/types';
 import type { OutboxHolder } from './time-outbox-store';
 
 // What the clock calls on the phone's time outbox. The clock's provider loads
 // this module only when the device may hold unsent events or a clock action
 // meets no network, so no page pays for it at start. A page whose signal is already gone keeps its
 // action with the few lines of unsent-mark.ts and hands it over here later.
-
-type ViewListener = (view: ClockDeviceView | null) => void;
 
 /** The pages' listeners that already watch the outbox, each with the call that ends its watching. */
 const attached = new WeakMap<ViewListener, () => void>();
@@ -33,11 +39,22 @@ export async function attachClockOutbox(
   let detach = attached.get(listener);
   if (!detach) {
     let wasPending = false;
-    detach = await holdClock(holder, (view) => {
-      listener(view);
-      if (wasPending && view?.status !== 'pending') onSettled();
-      wasPending = view?.status === 'pending';
-    });
+    try {
+      detach = await holdClock(holder, (view, holdEnded) => {
+        listener(view, holdEnded);
+        if (wasPending && view?.status !== 'pending') onSettled();
+        wasPending = view?.status === 'pending';
+      });
+    } catch (failure) {
+      logError('clock outbox: the device storage failed', failure);
+      throw failure;
+    }
+    const stop = detach;
+    // A listener attached again after it was detached holds the outbox again.
+    detach = () => {
+      attached.delete(listener);
+      stop();
+    };
     attached.set(listener, detach);
     // eslint-disable-next-line no-restricted-syntax -- the runner logs a sender's failure itself, and the events stay shown as unsent
     void startSyncRunner().catch(() => undefined);
@@ -58,8 +75,17 @@ export async function resendRefusedTimeEvent(holder: OutboxHolder): Promise<void
   await runSync();
 }
 
-/** Deletes the holder's unsent events after the person confirmed it, or after their correction was filed. */
-export async function deleteUnsentTimeEvents(holder: OutboxHolder): Promise<void> {
-  await discardTimeEvents(holder);
+/**
+ * Deletes the unsent events `operationIds` names: the ones the person confirmed deleting, or the
+ * ones their filed correction covers. What stays goes on from `resume`, the server's current clock.
+ */
+export async function deleteUnsentTimeEvents(
+  holder: OutboxHolder,
+  operationIds: readonly string[],
+  resume: LiveClockState | null,
+): Promise<void> {
+  const { outbox } = await removeShownTimeEvents(holder, operationIds, resume);
   await outboxChanged();
+  // What stays is the person's next work to send.
+  if (outbox.events.length > 0) void sendUnsentNow();
 }

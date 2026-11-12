@@ -1,8 +1,10 @@
 'use client';
 
+import { formatBerlinLocalDate, getLocalDayStart, isSameLocalDay } from '@/lib/date-time/berlin';
 import { applyTransitionEcho } from '@/lib/time-tracking/clock-echo';
 import type { LiveClockState, TimeActivitySelection } from '@/lib/time-tracking/types';
 import { todayHolderKey } from './today-store';
+import { sharedWipeGeneration } from './today-wipe';
 import {
   changeTimeOutbox,
   type OutboxHolder,
@@ -75,10 +77,32 @@ function headStatus(head: StoredTimeEvent, now: Date): { status: UnsentEventStat
   return waitedTooLong(head, now) ? { status: 'failed', code: 'expired' } : { status: 'pending', code: null };
 }
 
+/** How many recorded operation ids the clock record remembers against a late second take-in. */
+const RECORDED_IDS_KEPT = 50;
+
+/** The clock on the Berlin day `at` falls on: a new day starts its totals at midnight. */
+function onDayOf(state: LiveClockState, at: Date): LiveClockState {
+  if (isSameLocalDay(new Date(state.fetchedAt), at)) return state;
+  const midnight = getLocalDayStart(at).toISOString();
+  return {
+    ...state,
+    todayMinutes: 0,
+    workMinutes: 0,
+    breakMinutes: 0,
+    travelMinutes: 0,
+    standbyMinutes: 0,
+    calloutMinutes: 0,
+    internalMinutes: 0,
+    timelineSegments: [],
+    statusStartedAt: state.isClockedIn ? midnight : state.statusStartedAt,
+    fetchedAt: midnight,
+  };
+}
+
 /** The clock with one unsent event applied, at its captured time. */
 function applyUnsentEvent(state: LiveClockState, event: StoredTimeEvent): LiveClockState {
   return applyTransitionEcho(
-    state,
+    onDayOf(state, new Date(event.capturedAt)),
     event.selection,
     {
       outcome: event.action === 'end' ? 'ended' : 'active',
@@ -133,11 +157,10 @@ export type TimeEventCapture = {
   /** The clock the server last confirmed, as the page read it; null when the page holds none. */
   base: LiveClockState | null;
   /**
-   * The page knew of unsent work before this action, or could not yet rule it out. The event then
-   * expects what the person's chain left, and `base` only fills a clock the chain does not hold:
-   * the work the page waited for may be another person's or organization's.
+   * When the page read `base`. A first event expects what the person's chain left only when the
+   * chain was settled after this read; otherwise it expects what the page read.
    */
-  standsOnUnsent: boolean;
+  readAt: Date | null;
   capturedAt: Date;
   triedOnline: boolean;
   /** The wipe signal when the person acted (today-store.ts): the page without signal shows the clock only under the current one. */
@@ -154,10 +177,18 @@ export type TimeEventCapture = {
 export function captureTimeEvent(
   holder: OutboxHolder,
   capture: TimeEventCapture,
+  /**
+   * `underSignal`: the page itself captures, so the action is kept only while the wipe signal is the
+   * one the page started with. A sign-out or switch in another tab then fails the capture instead.
+   */
+  { underSignal = false }: { underSignal?: boolean } = {},
 ): ReturnType<typeof changeTimeOutbox> {
   const { command, base } = capture;
   return changeTimeOutbox(holder, (current) => {
+    if (underSignal && sharedWipeGeneration() !== capture.wipeGeneration)
+      throw new Error('another tab ended the session since the page started');
     if (current.events.some((kept) => kept.operationId === command.operationId)) return null;
+    if (current.clock?.recorded?.includes(command.operationId)) return null;
     const last = current.events.at(-1);
     const event: StoredTimeEvent = {
       operationId: command.operationId,
@@ -172,10 +203,12 @@ export function captureTimeEvent(
     };
     if (last) return { clock: current.clock, events: [...current.events, event] };
     const kept = base && clockToKeep(holder, base, capture.wipeGeneration);
-    if (kept && !capture.standsOnUnsent) return { clock: kept, events: [event] };
-    // Kept behind events the outbox has sent since: it expects what the last of them left.
-    const after = current.clock?.after;
-    return { clock: current.clock ?? kept, events: [after ? { ...event, expected: after } : event] };
+    const { after, afterAt } = current.clock ?? {};
+    const settledSinceRead =
+      after && (!capture.readAt || !afterAt || Date.parse(afterAt) > capture.readAt.getTime());
+    // Kept behind events the outbox has sent since the page read the server: it expects what the last of them left.
+    if (settledSinceRead) return { clock: current.clock, events: [{ ...event, expected: after }] };
+    return { clock: kept ?? current.clock, events: [event] };
   });
 }
 
@@ -198,6 +231,8 @@ export function settleFirstTimeEvent(
   holder: OutboxHolder,
   operationId: string,
   answer: HeadAnswer,
+  /** When the device applied the answer: a page that read the server before it expects `after`. */
+  at: Date,
 ): ReturnType<typeof changeTimeOutbox> {
   return changeTimeOutbox(holder, (current) => {
     const [head, next, ...rest] = current.events;
@@ -224,6 +259,8 @@ export function settleFirstTimeEvent(
         ...holder,
         base: base ?? null,
         after,
+        afterAt: at.toISOString(),
+        recorded: [...(current.clock?.recorded ?? []), head.operationId].slice(-RECORDED_IDS_KEPT),
         wipeGeneration: current.clock?.wipeGeneration ?? 'unreadable',
       },
       events: next ? [{ ...next, expected: after }, ...rest] : [],
@@ -241,9 +278,47 @@ export function retryFirstTimeEvent(holder: OutboxHolder): ReturnType<typeof cha
 }
 
 /**
- * Deletes the holder's unsent events and their clock: after the person chose to discard them, or
- * filed the correction that replaces them.
+ * The events one correction request covers: the chain's first session, through its end, on the
+ * Berlin day it started. The correction form records one clock-in and one clock-out, so a later
+ * session or day stays for its own request, and no break between two sessions is filed as work.
  */
-export function discardTimeEvents(holder: OutboxHolder): ReturnType<typeof changeTimeOutbox> {
-  return changeTimeOutbox(holder, () => ({ clock: null, events: [] }));
+export function correctionScope(view: ClockDeviceView): UnsentTimeEvent[] {
+  const day = view.events[0] && formatBerlinLocalDate(view.events[0].capturedAt);
+  const nextDay = view.events.findIndex((event) => formatBerlinLocalDate(event.capturedAt) !== day);
+  const sameDay = nextDay === -1 ? view.events : view.events.slice(0, nextDay);
+  const end = sameDay.findIndex((event) => event.action === 'end');
+  return end === -1 ? sameDay : sameDay.slice(0, end + 1);
+}
+
+/**
+ * Deletes exactly the events `operationIds` names: the ones the person was shown when they chose to
+ * delete them, or the ones the correction they filed covers. An event kept after the question stays.
+ * When the chain's first event leaves, the new first event goes on from `resume`, the clock the
+ * server confirmed; unknown, it expects no open session, and a wrong guess ends as a conflict.
+ */
+export function removeTimeEvents(
+  holder: OutboxHolder,
+  operationIds: readonly string[],
+  resume: LiveClockState | null,
+): ReturnType<typeof changeTimeOutbox> {
+  return changeTimeOutbox(holder, (current) => {
+    const left = current.events.filter((event) => !operationIds.includes(event.operationId));
+    if (left.length === current.events.length) return null;
+    const [head, ...behind] = left;
+    if (!head) return { clock: null, events: [] };
+    if (head.operationId === current.events[0]?.operationId) return { clock: current.clock, events: left };
+    const wipeGeneration = current.clock?.wipeGeneration ?? 'unreadable';
+    return {
+      clock: resume
+        ? clockToKeep(holder, resume, wipeGeneration)
+        : current.clock && { ...current.clock, base: null },
+      events: [
+        {
+          ...head,
+          expected: resume ? { sessionId: resume.sessionId, version: resume.sessionVersion } : NO_SESSION,
+        },
+        ...behind,
+      ],
+    };
+  });
 }

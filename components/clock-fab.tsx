@@ -4,7 +4,8 @@ import { Clock3, Coffee, Play } from 'lucide-react';
 import { lazy, Suspense, useState, type ReactNode } from 'react';
 
 import { ClockActionList } from '@/components/clock-action-list';
-import { loadClockOutbox, useClockState } from '@/components/clock-state-provider';
+import { loadClockOutbox } from '@/components/clock-outbox-state';
+import { useClockState } from '@/components/clock-state-provider';
 import { useOrganization } from '@/components/organization/organization-context';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';

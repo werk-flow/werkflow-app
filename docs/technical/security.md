@@ -72,7 +72,6 @@ A customer's export stays on the owner's machine, outside every repository. The 
 - RLS restricts every client read, by role and assignment where the server readers restrict them. `supabase/tests/client_read_boundaries.sql` proves an employee reads only their own jobs, assignments and projects, and a suspended member nothing. Extend it for a new role-limited table.
 - RLS checks effective personnel access wherever a policy or its helper reads `organization_members`, `job_assignments` or `employee_records`.
 - Client roles write no table directly, except a user's own name and avatar.
-- Nothing is granted to `anon` without the owner's approval.
 - A table's migration revokes everything from `public`, `anon`, `authenticated` and `service_role`, then grants exactly the needed operations to the needed roles. Default grants are revoked, so a new object has no Data API access until its migration grants it.
 - Grant the sequence privileges an intended insert needs. The service role bypasses RLS, not SQL privileges.
 - A ledger table refuses direct UPDATE and DELETE, also for privileged roles, with a real denial and a permitted-cleanup assertion. Cascade or reference-nulling follows the domain's retention rule.
@@ -102,7 +101,7 @@ The service worker (`public/sw.js`) caches only the cookie-free offline page and
 
 ### Server caches
 
-A reader cached across requests throws `CachedReadError` on a failed read, so the cache never keeps a failure. No permission fact is cached across requests, and no authenticated response is cached at the CDN.
+A reader cached across requests throws `CachedReadError` on a failed read, so the cache never keeps a failure.
 
 ### Supply chain
 
@@ -148,7 +147,7 @@ List each owner-accepted residual exposure until it closes.
 - The lint toolchain's minimatch (GHSA-g3hv-75wg-m249) is a reviewed exception in `lib/security/dependency-exceptions.json`.
 - A coworker's Arbeitsnachweis detail hides the customer signer's name; an exported report, a job or project document, shows it to all its readers (owner decision, werk-flow/werkflow-planning#241).
 - Unverified without a stronger read token: the R2 buckets' CORS rules (`GetBucketCors` refuses runtime tokens) and the Vercel environment scopes.
-- A phone's offline day can outlive lost access or sign-out ([decision 0010](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-owner-accepted-residual-exposure)).
+- A phone's offline day can outlive lost access or sign-out ([decision 0010](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-owner-accepted-residual-exposure)). Unsent time events stay in that browser profile past sign-out, readable to its users, until sent or deleted by their person ([the time outbox](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-the-time-outbox); OQ-4, werk-flow/werkflow-planning#22).
 
 ## Revocation boundaries
 

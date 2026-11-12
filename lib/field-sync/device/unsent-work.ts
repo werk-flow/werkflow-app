@@ -9,8 +9,11 @@ import { logError } from '@/lib/logging';
 // ends the session only when nothing is left or the person chose to discard
 // it (lib/field-sync/device/unsent-work-gate.ts asks).
 
-/** One line of what is still unsent, such as „Zeitereignisse“ with their number. */
-export type UnsentWorkItem = { label: string; count: number };
+/**
+ * One line of what is still unsent, such as „Stempelzeiten“ with their number, and the ids of what
+ * it names: a discard deletes exactly those, never what was kept after the question.
+ */
+export type UnsentWorkItem = { label: string; count: number; ids: readonly string[] };
 
 /**
  * Whose work a flow asks about. `session`: the signed-in person's in every organization, before a
@@ -25,8 +28,8 @@ export type UnsentSource = {
   summarize(scope?: UnsentScope): Promise<UnsentWorkItem[]>;
   /** Sends what it can now. What the server did not accept stays. */
   flush(): Promise<void>;
-  /** Deletes what this source holds in the scope. */
-  discard(scope?: UnsentScope): Promise<void>;
+  /** Deletes what this source holds in the scope among `ids`, the ids the person was shown. */
+  discard(scope: UnsentScope, ids: readonly string[]): Promise<void>;
 };
 
 const sources: UnsentSource[] = [];
@@ -63,7 +66,15 @@ export async function flushUnsentWork(scope: UnsentScope = 'session'): Promise<U
   return summarizeUnsentWork(scope);
 }
 
-/** Deletes every source's unsent work, after the person chose „Verwerfen“. Throws when a source cannot delete. */
-export async function discardUnsentWork(scope: UnsentScope = 'session'): Promise<void> {
-  for (const source of [...sources]) await source.discard(scope);
+/**
+ * Deletes the unsent work the person was shown in `items`, after they chose „Verwerfen“, and
+ * answers what is left: work kept after the question. Throws when a source cannot delete.
+ */
+export async function discardUnsentWork(
+  items: readonly UnsentWorkItem[],
+  scope: UnsentScope = 'session',
+): Promise<UnsentWorkItem[]> {
+  const ids = items.flatMap((item) => item.ids);
+  for (const source of [...sources]) await source.discard(scope, ids);
+  return summarizeUnsentWork(scope);
 }

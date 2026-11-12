@@ -217,6 +217,11 @@ export function ClockActionList({
       <ClockActionButtons actions={actions} busy={busy} pendingId={pendingId} onActivate={activate} />
       <TimeActivityStatusNotice isReady={isReady} statusError={statusError} onRetry={() => void refresh()} />
       <ErrorText>{error}</ErrorText>
+      {clock.deviceFailed && (
+        <ErrorText>
+          Der Speicher deines Geräts antwortet nicht. Ohne Netz kann die Uhr gerade nichts aufbewahren.
+        </ErrorText>
+      )}
 
       <ClockJobPicker.Dialog
         open={pickerMode !== null}

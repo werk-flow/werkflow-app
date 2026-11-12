@@ -74,7 +74,9 @@ describe('unsent work before a session ends', () => {
     const left = { time: 2, drafts: 1 };
     registerUnsentSource({
       name: 'time',
-      summarize: async () => [{ label: 'Stempelzeiten', count: left.time }],
+      summarize: async () => [
+        { label: 'Stempelzeiten', count: left.time, ids: ['t1', 't2'].slice(0, left.time) },
+      ],
       flush: async () => {
         left.time = 0;
       },
@@ -82,7 +84,7 @@ describe('unsent work before a session ends', () => {
     });
     registerUnsentSource({
       name: 'drafts',
-      summarize: async () => [{ label: 'Berichte', count: left.drafts }],
+      summarize: async () => [{ label: 'Berichte', count: left.drafts, ids: ['d1'].slice(0, left.drafts) }],
       flush: async () => {
         throw new Error('no signal');
       },
@@ -91,9 +93,9 @@ describe('unsent work before a session ends', () => {
       },
     });
 
-    expect(await flushUnsentWork()).toEqual([{ label: 'Berichte', count: 1 }]);
-    await discardUnsentWork();
-    expect(await flushUnsentWork()).toEqual([]);
+    const shown = await flushUnsentWork();
+    expect(shown).toEqual([{ label: 'Berichte', count: 1, ids: ['d1'] }]);
+    expect(await discardUnsentWork(shown)).toEqual([]);
   });
 
   test('a source that cannot say what it holds fails the check: the session must not end over unread work', async () => {

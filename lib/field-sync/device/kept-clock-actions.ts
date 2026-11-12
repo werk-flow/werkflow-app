@@ -28,8 +28,8 @@ const keptClockActionSchema = z.object({
   wipeGeneration: z.string(),
   /** The clock the server last confirmed, as the page read it; null when the page held none. */
   base: clockStateSchema.nullable(),
-  /** The page knew of unsent work before this action, or could not yet rule it out (time-outbox.ts). */
-  standsOnUnsent: z.boolean(),
+  /** When the page read `base` from the server (time-outbox.ts, TimeEventCapture). */
+  readAt: z.string().nullable(),
 });
 
 /** One clock action as a page keeps it when it meets no network. */
@@ -71,7 +71,7 @@ export async function takeInKeptClockActions(): Promise<{ moved: number; unreada
       organizationId,
       action,
       base,
-      standsOnUnsent,
+      readAt,
       capturedAt,
       triedOnline,
       wipeGeneration,
@@ -83,7 +83,7 @@ export async function takeInKeptClockActions(): Promise<{ moved: number; unreada
       {
         command: { ...command, action },
         base,
-        standsOnUnsent,
+        readAt: readAt === null ? null : new Date(readAt),
         capturedAt: new Date(capturedAt),
         triedOnline,
         wipeGeneration,

@@ -128,7 +128,9 @@ function catchChained(load: ts.CallExpression): boolean {
     ts.isPropertyAccessExpression(access) &&
     access.name.text === 'catch' &&
     ts.isCallExpression(access.parent) &&
-    access.parent.expression === access
+    access.parent.expression === access &&
+    // `.catch()` without a handler still rejects.
+    access.parent.arguments.length > 0
   );
 }
 

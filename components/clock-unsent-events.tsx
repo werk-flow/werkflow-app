@@ -1,8 +1,9 @@
 'use client';
 
-import { lazy, Suspense, useState } from 'react';
+import { useState, type ComponentProps } from 'react';
 
 import { useClockState } from '@/components/clock-state-provider';
+import { lazyDialog } from '@/components/shared/lazy-dialog';
 import {
   UnsentEventList,
   UnsentStatusBadge,
@@ -28,7 +29,7 @@ import {
   resendRefusedTimeEvent,
   sendUnsentNow,
 } from '@/lib/field-sync/device/clock-outbox';
-import type { ClockDeviceView } from '@/lib/field-sync/device/time-outbox';
+import { correctionScope, type ClockDeviceView } from '@/lib/field-sync/device/time-outbox';
 import { logError } from '@/lib/logging';
 import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import { formatBerlinTime, parseIsoLocalDate } from '@/lib/utils';
@@ -42,10 +43,22 @@ export { attachClockOutbox } from '@/lib/field-sync/device/clock-outbox';
 
 /**
  * The existing correction request, loaded when the person asks for it: its form is far larger than
- * this view, and every page's start-up code lists the files this view needs.
+ * this view. A load that fails without signal closes it with an error banner; the next tap retries.
  */
-const ManualEntryDialog = lazy(() =>
-  import('@/components/manual-entry-dialog').then((loaded) => ({ default: loaded.ManualEntryDialog })),
+const CorrectionDialog = lazyDialog(() =>
+  import('@/components/manual-entry-dialog').then(({ ManualEntryDialog }) => {
+    function ClockCorrectionDialog({
+      open,
+      onOpenChange,
+      ...props
+    }: Omit<ComponentProps<typeof ManualEntryDialog>, 'controlledOpen' | 'onOpenChange'> & {
+      open: boolean;
+      onOpenChange: (open: boolean) => void;
+    }) {
+      return <ManualEntryDialog {...props} controlledOpen={open} onOpenChange={onOpenChange} />;
+    }
+    return ClockCorrectionDialog;
+  }),
 );
 
 const STORAGE_FAILED = 'Der Speicher deines Geräts hat nicht geantwortet. Bitte versuche es erneut.';
@@ -55,12 +68,15 @@ function useOutboxAction() {
   const { run, isPending } = usePendingTask();
   const [running, setRunning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  function perform(id: string, task: () => Promise<void>): Promise<void> {
+  /** Answers whether the action succeeded; a failure stays shown at its action. */
+  async function perform(id: string, task: () => Promise<void>): Promise<boolean> {
     setError(null);
     setRunning(id);
-    return run(async () => {
+    let succeeded = false;
+    await run(async () => {
       try {
         await task();
+        succeeded = true;
       } catch (failure) {
         logError('clock outbox: action failed', failure);
         setError(STORAGE_FAILED);
@@ -68,14 +84,15 @@ function useOutboxAction() {
         setRunning(null);
       }
     });
+    return succeeded;
   }
   return { perform, running, isPending, error };
 }
 
-/** The correction the kept events prefill: their day, the first start and the last end. */
-function correctionPrefill(view: ClockDeviceView) {
-  const first = view.events[0];
-  const end = view.events.findLast((event) => event.action === 'end');
+/** The correction the first day's kept events prefill: their day, its first start and its last end. */
+function correctionPrefill(day: ClockDeviceView['events']) {
+  const first = day[0];
+  const end = day.findLast((event) => event.action === 'end');
   if (!first) return {};
   return {
     preselectedDate: parseIsoLocalDate(formatBerlinLocalDate(first.capturedAt)),
@@ -90,12 +107,15 @@ function DeleteUnsentDialog({
   onOpenChange,
   onConfirm,
   pending,
+  error,
 }: {
   count: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm: () => Promise<void>;
+  /** Answers whether the events were deleted: only then does the question close. */
+  onConfirm: () => Promise<boolean>;
   pending: boolean;
+  error: string | null;
 }) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange} pending={pending}>
@@ -108,15 +128,16 @@ function DeleteUnsentDialog({
               : `Die ${count} Stempelzeiten werden von diesem Gerät gelöscht und nicht erfasst.`}
           </AlertDialogDescription>
         </AlertDialogHeader>
+        <ErrorText>{error}</ErrorText>
         <AlertDialogFooter>
           <AlertDialogCancel>Abbrechen</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             pending={pending}
             onClick={(event) => {
-              // The dialog stays until the device answered: a failure must land in an open dialog.
+              // The dialog stays until the device answered, and stays open with the failure.
               event.preventDefault();
-              void onConfirm().then(() => onOpenChange(false));
+              void onConfirm().then((deleted) => deleted && onOpenChange(false));
             }}
           >
             Endgültig löschen
@@ -190,15 +211,24 @@ function UnsentActions({
 
 /** The sheet's section: every unsent event, what happens to it, and the person's choices. */
 function UnsentPanel({ view }: { view: ClockDeviceView }) {
+  const { confirmed } = useClockState();
   const { perform, running, isPending, error } = useOutboxAction();
   const [deleting, setDeleting] = useState(false);
   const [correcting, setCorrecting] = useState(false);
   const status = unsentChainStatus(view);
   const holder = clockHolder();
+  // One correction request records one day: the days after it stay for their own.
+  const day = correctionScope(view);
 
-  async function deleteEvents(): Promise<void> {
-    await perform('delete', async () => {
-      if (holder) await deleteUnsentTimeEvents(holder);
+  /** Deletes exactly `events`, the ones the person was shown; what stays goes on from the server's clock. */
+  async function deleteEvents(events: ClockDeviceView['events']): Promise<boolean> {
+    return perform('delete', async () => {
+      if (holder)
+        await deleteUnsentTimeEvents(
+          holder,
+          events.map((event) => event.operationId),
+          confirmed,
+        );
     });
   }
 
@@ -230,20 +260,19 @@ function UnsentPanel({ view }: { view: ClockDeviceView }) {
         count={view.events.length}
         open={deleting}
         onOpenChange={setDeleting}
-        onConfirm={deleteEvents}
+        onConfirm={() => deleteEvents(view.events)}
         pending={running === 'delete'}
+        error={error}
       />
-      {correcting && (
-        <Suspense>
-          <ManualEntryDialog
-            controlledOpen={correcting}
-            onOpenChange={setCorrecting}
-            {...correctionPrefill(view)}
-            // The request is filed, and the form confirms it: only now do the kept events leave the phone.
-            onSuccess={deleteEvents}
-          />
-        </Suspense>
-      )}
+      <CorrectionDialog.Dialog
+        open={correcting}
+        onOpenChange={setCorrecting}
+        {...correctionPrefill(day)}
+        // The request is filed, and the form confirms it: only now do the session's kept events leave the phone.
+        onSuccess={async () => {
+          await deleteEvents(day);
+        }}
+      />
     </section>
   );
 }

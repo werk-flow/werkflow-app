@@ -49,12 +49,15 @@ function DiscardConfirmation({
   onOpenChange,
   onConfirm,
   pending,
+  error,
 }: {
   items: readonly UnsentWorkItem[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
   pending: boolean;
+  /** A failed discard, shown at its action with the retry beside it. */
+  error: string | null;
 }) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange} pending={pending}>
@@ -65,6 +68,7 @@ function DiscardConfirmation({
             {itemsLabel(items)}. Das wird von diesem Gerät gelöscht und nie erfasst.
           </AlertDialogDescription>
         </AlertDialogHeader>
+        <ErrorText>{error}</ErrorText>
         <AlertDialogFooter>
           <AlertDialogCancel>Abbrechen</AlertDialogCancel>
           <AlertDialogAction
@@ -108,14 +112,22 @@ function useUnsentChoice(
   const [running, setRunning] = useState<'send' | 'discard' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  function perform(action: 'send' | 'discard'): void {
+  /** `onKeptSince` runs when a discard leaves work kept after the question, which is asked about anew. */
+  function perform(action: 'send' | 'discard', onKeptSince?: () => void): void {
     setError(null);
     setRunning(action);
     void run(async () => {
       try {
         if (action === 'discard') {
-          await discardUnsentWork(scope);
-          onSettled(true);
+          // Only what the person was shown goes; work kept since then is asked about anew.
+          const kept = await discardUnsentWork(items, scope);
+          if (kept.length === 0) {
+            onSettled(true);
+            return;
+          }
+          setItems(kept);
+          onKeptSince?.();
+          setError('Seit deiner Frage ist noch etwas dazugekommen. Entscheide auch darüber.');
           return;
         }
         const left = await flushUnsentWork(scope);
@@ -202,8 +214,9 @@ function UnsentWorkDialog({
           items={items}
           open={confirming}
           onOpenChange={setConfirming}
-          onConfirm={() => perform('discard')}
+          onConfirm={() => perform('discard', () => setConfirming(false))}
           pending={isDiscarding}
+          error={confirming ? error : null}
         />
       </DialogContent>
     </Dialog>

@@ -1,8 +1,15 @@
 'use client';
 
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import type { LiveClockState } from '@/lib/time-tracking/types';
 import { takeInKeptClockActions } from './kept-clock-actions';
-import { clockDeviceView, discardTimeEvents, type ClockDeviceView } from './time-outbox';
+import {
+  captureTimeEvent,
+  clockDeviceView,
+  removeTimeEvents,
+  type ClockDeviceView,
+  type TimeEventCapture,
+} from './time-outbox';
 import { sendTimeOutbox } from './time-outbox-send';
 import { readTimeOutbox, readWholeTimeOutbox, type OutboxHolder } from './time-outbox-store';
 import { TODAY_WIPE_KEY } from './today-wipe';
@@ -24,7 +31,8 @@ const SEND_LOCK = 'werkflow-time-outbox';
 const TAKE_IN_LOCK = 'werkflow-kept-clock-actions';
 const UNSENT_KIND = 'time';
 
-type ViewListener = (view: ClockDeviceView | null) => void;
+/** Hears what the outbox holds for this tab's holder; `holdEnded` when another tab's wipe ended the hold. */
+export type ViewListener = (view: ClockDeviceView | null, holdEnded?: boolean) => void;
 
 let holder: OutboxHolder | null = null;
 let dropped = false;
@@ -38,7 +46,9 @@ export function clockHolder(): OutboxHolder | null {
 /** What the outbox holds for this tab's holder, told to every listener. */
 async function publish(): Promise<void> {
   const current = clockHolder();
-  const view = current ? clockDeviceView(await readTimeOutbox(current), new Date()) : null;
+  // A hold another tab's wipe ended was told so once; it hears nothing after.
+  if (!current) return;
+  const view = clockDeviceView(await readTimeOutbox(current), new Date());
   // A wipe or another holder while the device read: this answer is the former holder's, never shown.
   if (clockHolder() !== current) return;
   for (const listener of listeners) listener(view);
@@ -63,14 +73,20 @@ function onStorage(event: StorageEvent): void {
   // Another tab's wipe, or its `localStorage.clear()` (no key), which took the signal with it.
   if (event.key === TODAY_WIPE_KEY || event.key === null) {
     dropped = true;
-    for (const listener of listeners) listener(null);
+    for (const listener of listeners) listener(null, true);
     return;
   }
   // eslint-disable-next-line no-restricted-syntax -- a failed read here is shown by the next action's own read; a storage event has no caller to tell
   if (event.key === OUTBOX_CHANGED_KEY) void publish().catch(() => undefined);
   // Another tab's page kept an action without signal: the next pass of this tab sends it too.
   // eslint-disable-next-line no-restricted-syntax -- as above; the action stays kept and the next start takes it in
-  if (event.key?.startsWith(KEPT_CLOCK_ACTION_PREFIX)) void takeInKept().catch(() => undefined);
+  if (event.key?.startsWith(KEPT_CLOCK_ACTION_PREFIX)) void takeInAndSend().catch(() => undefined);
+}
+
+/** Takes in what other tabs kept and sends it: the tab that kept it may close before it sends. */
+async function takeInAndSend(): Promise<void> {
+  const { moved } = await takeInKept();
+  if (moved > 0) await sendOwnTimeEvents();
 }
 
 /**
@@ -78,13 +94,38 @@ function onStorage(event: StorageEvent): void {
  * time: a second tab that took in the same list after the first one already sent an event would
  * put that event back with the expectation of the page that kept it, not of the answer before it.
  */
-export async function takeInKept(): Promise<{ unreadable: number }> {
+export async function takeInKept(): Promise<{ moved: number; unreadable: number }> {
   let taken = { moved: 0, unreadable: 0 };
   await exclusively(TAKE_IN_LOCK, async () => {
     taken = await takeInKeptClockActions();
   });
   if (taken.moved > 0) await outboxChanged();
-  return { unreadable: taken.unreadable };
+  return taken;
+}
+
+/**
+ * Deletes the events `operationIds` names once no send is in flight: a send that already left
+ * finishes first, so the server never records an event the person was told is gone.
+ */
+export async function removeShownTimeEvents(
+  holder: OutboxHolder,
+  operationIds: readonly string[],
+  resume: LiveClockState | null,
+): ReturnType<typeof removeTimeEvents> {
+  return exclusively(SEND_LOCK, () => removeTimeEvents(holder, operationIds, resume));
+}
+
+/**
+ * Keeps one clock action of the page without signal behind every action other tabs kept before it:
+ * those are taken in first, under the same lock, so an earlier tap never ends up behind a later one.
+ * Throws when the device storage fails.
+ */
+export async function captureBehindKept(holder: OutboxHolder, capture: TimeEventCapture): Promise<void> {
+  await exclusively(TAKE_IN_LOCK, async () => {
+    await takeInKeptClockActions();
+    await captureTimeEvent(holder, capture, { underSignal: true });
+  });
+  await outboxChanged();
 }
 
 /**
@@ -118,9 +159,9 @@ async function sessionUserId(): Promise<string | null> {
 }
 
 /** Runs `work` while no other tab of the origin holds `lock`; a browser without Web Locks relies on the server recording each event once. */
-async function exclusively(lock: string, work: () => Promise<void>): Promise<void> {
-  if (typeof navigator.locks?.request === 'function') await navigator.locks.request(lock, work);
-  else await work();
+async function exclusively<T>(lock: string, work: () => Promise<T>): Promise<T> {
+  if (typeof navigator.locks?.request === 'function') return navigator.locks.request(lock, work);
+  return work();
 }
 
 /**
@@ -189,14 +230,16 @@ export const timeUnsentSource: UnsentSource = {
     // A kept action this version cannot read may be anyone's: no session ends over it unseen.
     const { unreadable } = await takeInKept();
     if (unreadable > 0) throw new Error(`${unreadable} kept clock actions cannot be read by this version`);
-    let count = 0;
-    for (const holder of await holdersInScope(scope)) count += (await readTimeOutbox(holder)).events.length;
-    return count > 0 ? [{ label: 'Stempelzeiten', count }] : [];
+    const ids: string[] = [];
+    for (const holder of await holdersInScope(scope))
+      ids.push(...(await readTimeOutbox(holder)).events.map((event) => event.operationId));
+    return ids.length > 0 ? [{ label: 'Stempelzeiten', count: ids.length, ids }] : [];
   },
   flush: sendOwnTimeEvents,
-  async discard(scope) {
+  async discard(scope, ids) {
     await takeInKept();
-    for (const holder of await holdersInScope(scope)) await discardTimeEvents(holder);
+    // The session ends: no server state to go on from, and what stays is asked about again.
+    for (const holder of await holdersInScope(scope)) await removeShownTimeEvents(holder, ids, null);
     await outboxChanged();
   },
 };

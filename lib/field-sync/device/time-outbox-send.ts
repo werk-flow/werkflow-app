@@ -132,7 +132,7 @@ export async function sendTimeOutbox(holder: OutboxHolder, options: TimeOutboxSe
     if (!token) return;
     const answer = await sendEvent(head, token, options);
     if (!answer) return;
-    await settleFirstTimeEvent(holder, head.operationId, answer);
+    await settleFirstTimeEvent(holder, head.operationId, answer, options.now());
     if (answer.kind === 'stopped') return;
   }
 }

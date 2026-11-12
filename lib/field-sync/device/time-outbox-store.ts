@@ -59,6 +59,10 @@ const storedClockSchema = z.object({
    * the last answer left. An action a page kept behind them is taken in later and expects this.
    */
   after: expectationSchema.optional(),
+  /** When the device applied the answer that left `after`. */
+  afterAt: z.string().optional(),
+  /** The operation ids the server recorded last, newest last: a kept copy that outlived its send is not taken in again. */
+  recorded: z.array(z.string()).optional(),
   /** The wipe signal when the clock was last saved in the person's own session (today-store.ts). */
   wipeGeneration: z.string(),
 });
