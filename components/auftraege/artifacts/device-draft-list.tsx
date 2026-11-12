@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import {
   AlertDialog,
@@ -144,7 +144,7 @@ export function DeviceDraftList(props: DeviceDraftListProps) {
   const { run, isBusy, anyBusy } = useBusyIds();
   const [deleting, setDeleting] = useState<DraftDeletion | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const unreadable = useUnreadableDrafts(device, props.drafts);
+  const unreadable = useUnreadableDrafts(device);
   const rows = listedDrafts(props);
   const unreadableDrafts = unreadable.data?.drafts ?? [];
   if (rows.length === 0 && unreadableDrafts.length === 0 && !unreadable.failure) return null;
@@ -221,10 +221,12 @@ export function DeviceDraftList(props: DeviceDraftListProps) {
 /**
  * The person's drafts on this device that this version of the app cannot read, such as one a
  * later release stored before the app went back. They are never sent or deleted by themselves.
+ * Read once per holder and after the person deletes one: this tab never writes such a record, and
+ * another tab's writes reach no list of this tab.
  */
-function useUnreadableDrafts(device: DraftDevice, drafts: readonly StoredDraft[]) {
+function useUnreadableDrafts(device: DraftDevice) {
   const { userId, organizationId } = device.holder;
-  const read = useClientRead({
+  return useClientRead({
     read: async () => ({
       success: true as const,
       drafts: await listUnreadableDraftsOnDevice({ userId, organizationId }),
@@ -232,10 +234,6 @@ function useUnreadableDrafts(device: DraftDevice, drafts: readonly StoredDraft[]
     deps: [userId, organizationId],
     failureMessage: 'Die Entwürfe auf diesem Gerät konnten nicht gelesen werden.',
   });
-  // Reads again with every read of the readable drafts: a send pass or a change may come with one.
-  const { reload } = read;
-  useEffect(() => reload(), [drafts, reload]);
-  return read;
 }
 
 /** A draft this version of the app cannot read: the person knows it exists and that it waits. */
