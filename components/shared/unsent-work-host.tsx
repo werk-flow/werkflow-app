@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { Fragment, memo, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 
 // Where the unsent-work question renders (unsent-work-prompt.tsx). Each client
 // tree whose flows can ask mounts one host: the app shell, and the pages
@@ -47,7 +47,8 @@ export function showInUnsentWorkHost(node: ReactNode): () => void {
   };
 }
 
-export function UnsentWorkHost() {
+/** Memoized: it takes no props, so a parent's render never renders it again. */
+export const UnsentWorkHost = memo(function UnsentWorkHost() {
   const [id] = useState(() => Symbol('unsent-work-host'));
   useEffect(() => {
     hosts = [...hosts, id];
@@ -69,4 +70,4 @@ export function UnsentWorkHost() {
   );
   if (first !== id) return null;
   return current.map((entry) => <Fragment key={entry.key}>{entry.node}</Fragment>);
-}
+});
