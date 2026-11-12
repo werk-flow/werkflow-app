@@ -71,14 +71,20 @@ Each rule has a test named after it in `lib/problem-reports/scrub/scrub-text.tes
 
 ### Limits of the text scrubber
 
-Not accepted: the owner's answer on werk-flow/werkflow-planning#21 is pending. The scrubbed copy keeps what neither the dictionary nor a pattern covers:
+The owner accepted these limits on 2026-11-12 (werk-flow/werkflow-planning#21). The scrubbed copy keeps what neither the dictionary nor a pattern covers:
 
 - a name the organization's data does not know and that follows no salutation, such as a neighbour, a nickname or a misspelt customer;
 - a name of two letters alone;
-- a lone word of a customer's name that is one of the app's own UI words, such as „Service“ or „Lager“;
+- a city without its postcode;
+- an unknown phone number without a leading `0` or `+`;
+- a lone word of a customer's name that is one of the app's own UI words, such as „Service“ or „Lager“.
+
+The owner also accepted on 2026-11-12 that a scrubbed copy, once handed out, outlives WerkFlow's deletion periods in the receiving thread's transcript and at its model provider. The owner's position is that the scrubbed copy counts as anonymous. Nothing hands a copy out yet.
+
+These limits are not accepted; the owner's answer on werk-flow/werkflow-planning#21 is pending:
+
 - a word of a site's name alone, and a site named with one UI word;
-- a city without its postcode, and a street of one word without a street ending and without its number;
-- an unknown phone number without a leading `0` or `+`.
+- a street of one word without a street ending and without its number.
 
 The scrubber also replaces too much, which costs readability and never privacy. A name that is an ordinary word and no UI word replaces that word everywhere, such as a customer called „Klein“. A lower-case word after „frau“ or „herr“ that is no name is replaced too, such as „sagte“. A date written `07-11-2026` has a phone number's shape.
 
