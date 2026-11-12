@@ -172,7 +172,8 @@ function readArticle(reading: Reading, record: RecordLine): void {
   reading.articlesByNumber.set(articleNumber, article);
 }
 
-const B_FIELDS = 3;
+// A B record reaches at least its product group, field 10; a shorter one is cut off.
+const B_FIELDS = 10;
 
 function readArticleDetails(reading: Reading, record: RecordLine): void {
   if (record.fields.length < B_FIELDS) return reject(reading, record, 'too_few_fields', 'B');

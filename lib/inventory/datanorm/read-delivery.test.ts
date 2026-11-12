@@ -124,7 +124,10 @@ describe('a broken DATANORM delivery', () => {
       { file: 'DATANORM.001', line: 3, code: 'price_not_number' },
       { file: 'DATANORM.001', line: 4, code: 'price_unit_unknown' },
       { file: 'DATANORM.001', line: 6, code: 'price_not_number' },
-      { file: 'DATANORM.001', line: 7, code: 'record_type_unknown' },
+      { file: 'DATANORM.001', line: 8, code: 'too_few_fields' },
+      { file: 'DATANORM.001', line: 9, code: 'price_unit_unknown' },
+      { file: 'DATANORM.001', line: 10, code: 'price_kind_unknown' },
+      { file: 'DATANORM.001', line: 11, code: 'record_type_unknown' },
       { file: 'DATANORM.002', line: 1, code: 'header_missing' },
       { file: 'DATPREIS.001', line: 1, code: 'version_unsupported' },
       { file: 'DATANORM.WRG', line: 1, code: 'version_unsupported' },
@@ -146,6 +149,11 @@ describe('a broken DATANORM delivery', () => {
     expect(delivery.articles.map((article) => [article.articleNumber, article.unit])).toEqual([
       ['NR-2004', 'Bund'],
     ]);
+    expect(delivery.articles[0]).toMatchObject({
+      matchcode: 'MUFFE35',
+      ean: '4006501000031',
+      productGroup: '1030',
+    });
     expect(delivery.priceChanges).toEqual([]);
     expect(delivery.productGroups).toEqual([]);
   });

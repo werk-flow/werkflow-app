@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { SENSITIVE_VALUES, writeSyntheticExport } from '../testing/fixtures/export-profile-world';
@@ -140,6 +140,21 @@ describe('export profile: tables', () => {
     expect(tableNamed('Artikel/DATANORM.001', 'record type A').note).toBe(
       'the DATANORM 4 reader, reading this file alone, refuses: version_unsupported 1',
     );
+  });
+
+  test('a fixed-width DATANORM table keeps the reader note beside its layout note', () => {
+    const folder = mkdtempSync(join(tmpdir(), 'export-profile-datanorm-'));
+    try {
+      const header = `V 120526${'Großhandel Nordrohr'.padEnd(115, ' ')}03EUR`;
+      writeFileSync(join(folder, 'DATANORM.001'), `${header}\r\nANNR-1001   Kupferrohr\r\n`);
+      const [table] = profileExportFolder(folder, { maskLabels: false }).tables;
+      expect(table?.note).toBe(
+        'fixed-width lines (DATANORM 3): reading the fields needs the DATANORM 3 field layout; ' +
+          'the DATANORM 4 reader, reading this file alone, refuses: version_unsupported 1',
+      );
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
+    }
   });
 
   test('a DATANORM line whose first field is not a record letter names no table', () => {

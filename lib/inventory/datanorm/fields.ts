@@ -27,18 +27,21 @@ export function wholeNumberField(written: string): FieldRead<number | null> {
 }
 
 /** The price-unit code: a power of ten from 0 (per 1) to 3 (per 1000). */
-export const PRICE_QUANTITY_CODES: Readonly<Record<string, DatanormPriceQuantity>> = {
-  '0': 1,
-  '1': 10,
-  '2': 100,
-  '3': 1000,
-};
+export const PRICE_QUANTITY_CODES: ReadonlyMap<string, DatanormPriceQuantity> = new Map([
+  ['0', 1],
+  ['1', 10],
+  ['2', 100],
+  ['3', 1000],
+]);
 
-export const PRICE_KIND_CODES: Readonly<Record<string, DatanormPriceKind>> = { '1': 'list', '2': 'net' };
+export const PRICE_KIND_CODES: ReadonlyMap<string, DatanormPriceKind> = new Map([
+  ['1', 'list'],
+  ['2', 'net'],
+]);
 
-/** A one-character code looked up in its table. */
-export function codeField<T>(codes: Readonly<Record<string, T>>, written: string): FieldRead<T> {
-  const value = codes[written.trim()];
+/** A code looked up in its table; a Map, so no inherited property ever counts as a code. */
+export function codeField<T>(codes: ReadonlyMap<string, T>, written: string): FieldRead<T> {
+  const value = codes.get(written.trim());
   return value === undefined ? { ok: false, written } : { ok: true, value };
 }
 

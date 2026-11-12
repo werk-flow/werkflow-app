@@ -304,9 +304,10 @@ function profileDatanorm(run: Run, file: ExportFile, label: string, name: string
   const readerNote = datanormReaderNote(name, bytes);
   run.counts.tableFiles += 1;
   for (const { recordType, fixedWidth, table } of tables) {
-    const note = fixedWidth
+    const layoutNote = fixedWidth
       ? 'fixed-width lines (DATANORM 3): reading the fields needs the DATANORM 3 field layout'
-      : readerNote;
+      : null;
+    const note = [layoutNote, readerNote].filter((part) => part !== null).join('; ') || null;
     const source: TableSource = {
       file: label,
       table: `record type ${recordType}`,
