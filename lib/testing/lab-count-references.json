@@ -2468,7 +2468,7 @@
         },
         "script": {
           "requests": { "reference": 4, "tolerance": 0 },
-          "encodedBytes": { "reference": 37609, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 37082, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         }
@@ -2680,6 +2680,24 @@
           },
           "runKeys": ["2026-11-08T142527257Z-73e286"],
           "reason": "werk-flow/werkflow-app#276 adds the employee's „Zeit nachtragen“ flow to /zeiterfassung (earlier-day Zeitkorrektur, withdrawal confirmation, extended „Vorgemerkte Zeit“). The Aufgaben step prefetches that route from the sidebar, so its script grew by about 2.5 kB over main's 35153; the Aufgaben route and its reads are unchanged."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 4, "tolerance": 0 },
+            "encodedBytes": { "reference": 37609, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 4, "tolerance": 0 },
+            "encodedBytes": { "reference": 37082, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-12T113736093Z-772a48"],
+          "reason": "The break rule travels as one object without the hard-coded 360/30 fallbacks, so the clock dock's script is smaller (werk-flow/werkflow-planning#161)"
         }
       ]
     },
