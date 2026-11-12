@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir, totalmem } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
@@ -8,9 +8,13 @@ import {
   hasFlock,
   heavySlotCount,
   heavySlotSkip,
+  offeredHeavySlots,
   tryHeavySlot,
   type HeavySlot,
 } from './heavy-slot';
+import type { RoomReading } from './machine-room';
+
+const GIB = 1024 ** 3;
 
 const directories: string[] = [];
 const processes: ChildProcess[] = [];
@@ -45,7 +49,7 @@ async function held(directory: string, slot: number, ownerPid: number): Promise<
 const exited = (child: ChildProcess): Promise<number | null> =>
   new Promise((resolveExit) => child.once('exit', resolveExit));
 
-test('CI and a command already inside a slot take no slot; a machine without flock warns instead', () => {
+test('CI and a command already inside a slot take no slot; a machine without flock is told apart', () => {
   const available = () => true;
   expect(heavySlotSkip({ CI: 'true' }, available)).toBe('ci');
   expect(heavySlotSkip({ [HEAVY_SLOT_VARIABLE]: '2' }, available)).toBe('nested');
@@ -63,7 +67,79 @@ test('a machine holds as many heavy slots as its memory fits: two on the 16 GB P
   expect(heavySlotCount(8 * gibibytes)).toBe(1);
 });
 
-// The slots are util-linux flock locks; without flock (macOS) the limit is off, as the test above proves.
+const pcRoom = (available: number, blocked: string | null = null): RoomReading => ({
+  room: { available: available * GIB, floor: 1.56 * GIB, blocked, alerted: false },
+});
+
+// The count from total memory never saw what the agents held (2026-11-11); it stays only as the upper limit.
+test('a machine offers heavy slots by its measured room, up to its count', () => {
+  // Room for a further command: every slot up to the count.
+  expect(offeredHeavySlots(pcRoom(10), [0], 2).slots).toEqual([0, 1]);
+  expect(offeredHeavySlots(pcRoom(10), [], 2).slots).toEqual([0, 1]);
+  // 9.1 GiB beside one running command is 5.1 of room, under the 5.56 a second one needs.
+  expect(offeredHeavySlots(pcRoom(9.1), [0], 2)).toMatchObject({ slots: [], admitted: false });
+  // The count still caps a machine with room to spare.
+  expect(offeredHeavySlots(pcRoom(15), [4 * GIB, 4 * GIB], 2).slots).toEqual([0, 1]);
+  expect(
+    offeredHeavySlots(pcRoom(10, 'the 5-minute load is 40.0 on 14 cores, above 35.0'), [], 2).slots,
+  ).toEqual([]);
+});
+
+test('the only heavy command without measured room may take slot 0 alone', () => {
+  // Two commands that start together both see "no heavy command runs": one slot means one of them waits.
+  const offer = offeredHeavySlots(pcRoom(3), [], 2);
+  expect(offer).toMatchObject({ slots: [0], admitted: true, measured: false });
+  expect(offer.reason).toContain('It is the only heavy command, so it runs without measured room.');
+});
+
+test('a machine without the load watch keeps the count from total memory as its only limit', () => {
+  const unwatched: RoomReading = { unwatched: 'no load watch at /nowhere', fix: 'Install the load watch.' };
+  expect(offeredHeavySlots(unwatched, [], 3)).toMatchObject({ slots: [0, 1, 2], unwatched: true });
+});
+
+/** A fresh process's exit code and stderr. */
+async function finished(child: ChildProcess): Promise<{ code: number | null; errors: string }> {
+  let errors = '';
+  child.stderr?.on('data', (chunk: Buffer) => {
+    errors += chunk.toString();
+  });
+  return { code: await exited(child), errors };
+}
+
+// Without flock nothing would limit the command, so it does not start (it used to warn and run).
+test('a heavy command on a machine without flock is refused with the install command', async () => {
+  const emptyPath = slotDirectory();
+  const slotModule = JSON.stringify(resolve(import.meta.dir, 'heavy-slot.ts'));
+  const child = spawn(
+    process.execPath,
+    [
+      '-e',
+      `const { acquireHeavySlot } = await import(${slotModule});\nawait acquireHeavySlot('no flock'); console.log('started');`,
+    ],
+    {
+      env: {
+        ...process.env,
+        CI: '',
+        [HEAVY_SLOT_VARIABLE]: '',
+        PATH: emptyPath,
+        WERKFLOW_HEAVY_SLOT_DIR: slotDirectory(),
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
+  processes.push(child);
+  let output = '';
+  child.stdout.on('data', (chunk: Buffer) => {
+    output += chunk.toString();
+  });
+  const { code, errors } = await finished(child);
+  expect(code).not.toBe(0);
+  expect(output).not.toContain('started');
+  expect(errors).toContain('Refused: flock is missing');
+  expect(errors).toContain('brew install flock');
+});
+
+// The slots are util-linux flock locks; a machine without flock runs no heavy command, as the test above proves.
 if (hasFlock()) {
   test('a held slot is refused to another owner and the other slots stay free', async () => {
     const directory = slotDirectory();
@@ -77,7 +153,11 @@ if (hasFlock()) {
     const released = await held(directory, 0, process.pid);
     const killedOwner = owner();
     const orphaned = await held(directory, 1, killedOwner.pid);
+    // While held, the slot file names its owner, so the room can count what that command still reserves.
+    expect(readFileSync(join(directory, 'slot-0'), 'utf8')).toBe(`${process.pid}\n`);
+    expect(readFileSync(join(directory, 'slot-1'), 'utf8')).toBe(`${killedOwner.pid}\n`);
     released.release();
+    expect(readFileSync(join(directory, 'slot-0'), 'utf8')).toBe('');
     killedOwner.child.kill('SIGKILL');
     await Promise.all([released.released, orphaned.released]);
     expect((await held(directory, 0, process.pid)).slot).toBe(0);
@@ -91,7 +171,14 @@ if (hasFlock()) {
       process.execPath,
       ['-e', `const { acquireHeavySlot } = await import(${slotModule});\n${body}`],
       {
-        env: { ...process.env, CI: '', [HEAVY_SLOT_VARIABLE]: '', WERKFLOW_HEAVY_SLOT_DIR: directory },
+        // No load watch, whatever machine the test runs on: the count from total memory is the limit.
+        env: {
+          ...process.env,
+          CI: '',
+          [HEAVY_SLOT_VARIABLE]: '',
+          WERKFLOW_HEAVY_SLOT_DIR: directory,
+          WERKFLOW_LOAD_WATCH: join(directory, 'no-watch.py'),
+        },
         stdio: ['ignore', 'pipe', 'inherit'],
       },
     );

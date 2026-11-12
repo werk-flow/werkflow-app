@@ -14,6 +14,7 @@ import {
 } from '../lib/testing/boat/types-on-boat';
 import { readMigrationDrift } from '../lib/testing/local-stack/migration-drift';
 import { withStackCopy } from '../lib/testing/local-stack/stack-copy';
+import { withStackLock } from '../lib/testing/runner/stack-lock';
 import { getSpawnFailureDetail } from '../lib/testing/runner/spawn-result';
 
 const DEV_PROJECT_ID = 'mbkkzuqjbdvzelqvuzcn';
@@ -75,22 +76,43 @@ async function generatedFrom(database: readonly string[]): Promise<string> {
   return format(withCommittedHeader(generated.stdout), { filepath: OUTPUT_PATH });
 }
 
+/**
+ * The types from the stack on this machine: the stack itself where it has the tree's schema, else a
+ * private copy of it. A workstation reads them under a shared hold of the stack, so the sync cannot
+ * move it between the ledger read and the generation; a writer outside the lock is caught by a
+ * second read of the ledger.
+ */
+async function typesHere(): Promise<{ formatted: string; source: string } | { unavailable: string }> {
+  // '' on CI and on a Boat machine, whose stack is the run's own, at the tree's migrations.
+  if (typesHereReason(process.env, () => undefined) === '')
+    return { formatted: await generatedFrom(['--local']), source: 'local stack' };
+  return withStackLock(
+    { mode: 'shared', operation: 'types from the shared stack', repositoryRoot: REPOSITORY_ROOT },
+    async () => {
+      const drift = readMigrationDrift(REPOSITORY_ROOT);
+      if (!drift) return { unavailable: 'the shared stack is not running or cannot be read.' };
+      const here = typesHereReason(process.env, () => drift);
+      if (here) {
+        console.info(`[types] Reading the local stack: ${here}`);
+        const formatted = await generatedFrom(['--local']);
+        return JSON.stringify(readMigrationDrift(REPOSITORY_ROOT)) === JSON.stringify(drift)
+          ? { formatted, source: 'local stack' }
+          : { unavailable: 'the shared stack changed while its types were read.' };
+      }
+      const copy = await withStackCopy({ repository: REPOSITORY_ROOT, drift, runCli: supabase }, (url) =>
+        generatedFrom(['--db-url', url]),
+      );
+      return 'result' in copy ? { formatted: copy.result, source: 'stack copy' } : copy;
+    },
+  );
+}
+
 /** The formatted types and the stack they come from. */
 async function types(): Promise<{ formatted: string; source: string }> {
   if (!LOCAL) return { formatted: await generatedFrom(['--project-id', DEV_PROJECT_ID]), source: 'DEV' };
-  let drift: ReturnType<typeof readMigrationDrift>;
-  const here = typesHereReason(process.env, () => (drift = readMigrationDrift(REPOSITORY_ROOT)));
-  if (here !== undefined) {
-    if (here) console.info(`[types] Reading the local stack: ${here}`);
-    return { formatted: await generatedFrom(['--local']), source: 'local stack' };
-  }
-  const copy = drift
-    ? await withStackCopy({ repository: REPOSITORY_ROOT, drift, runCli: supabase }, (url) =>
-        generatedFrom(['--db-url', url]),
-      )
-    : { unavailable: 'the shared stack is not running or cannot be read.' };
-  if ('result' in copy) return { formatted: copy.result, source: 'stack copy' };
-  console.info(`[types] No private copy of the shared stack: ${copy.unavailable}`);
+  const here = await typesHere();
+  if ('formatted' in here) return here;
+  console.info(`[types] Not from the shared stack: ${here.unavailable}`);
   console.info('[types] Boat generates the types on a fresh stack.');
   const boat = await typesOnBoat(REPOSITORY_ROOT);
   if ('types' in boat) return { formatted: boat.types, source: 'Boat stack' };
