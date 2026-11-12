@@ -227,7 +227,12 @@ export function JobDetailMainColumn({
       />
 
       {isAdminOrManager && (
-        <WorkBillingPartiesSection kind="job" id={liveJob.id} initialParties={billingParties} />
+        <WorkBillingPartiesSection
+          kind="job"
+          id={liveJob.id}
+          initialParties={billingParties}
+          site={liveJob.site ?? null}
+        />
       )}
 
       {/* Assigned Employees */}

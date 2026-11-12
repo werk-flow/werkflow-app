@@ -61,7 +61,7 @@ function earlierPartiesList(versions: WorkBillingPartyVersion[]): React.ReactNod
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Früher</p>
       <ul className="mt-1 space-y-1 text-xs text-muted-foreground">
         {versions.map((version) => (
-          <li key={version.id}>
+          <li key={version.version}>
             Rechnung an {version.recipientName}, Auftraggeber {version.clientName} ·{' '}
             {formatBerlinDateTime(version.setAt)}
           </li>
@@ -72,9 +72,9 @@ function earlierPartiesList(versions: WorkBillingPartyVersion[]): React.ReactNod
 }
 
 /** Auftraggeber, recipient, Einsatzort and access contacts. */
-function partyFacts(parties: WorkBillingParties): React.ReactNode {
+function partyFacts(parties: WorkBillingParties, site: WorkBillingParties['site']): React.ReactNode {
   const [current] = parties.versions;
-  const siteAddress = parties.site ? formatSiteAddress(parties.site) : '';
+  const siteAddress = site ? formatSiteAddress(site) : '';
   return (
     <dl className="mt-3 grid gap-3 sm:grid-cols-2">
       {partyFact(
@@ -84,9 +84,9 @@ function partyFacts(parties: WorkBillingParties): React.ReactNode {
       {partyFact('Rechnungsempfänger', current ? <RecipientFact current={current} /> : '—')}
       {partyFact(
         'Einsatzort',
-        parties.site ? (
+        site ? (
           <>
-            {parties.site.name}
+            {site.name}
             {siteAddress && <span className="block text-muted-foreground">{siteAddress}</span>}
           </>
         ) : (
@@ -121,12 +121,15 @@ export function WorkBillingPartiesSection({
   kind,
   id,
   initialParties,
+  site,
   className = '',
 }: {
   kind: Exclude<BillingWorkKind, 'request'>;
   id: string;
   /** Undefined: the page's read failed, and the section reads after mount. */
   initialParties?: WorkBillingParties | undefined;
+  /** The Einsatzort the page already holds (the job's); otherwise the read's. */
+  site?: WorkBillingParties['site'] | undefined;
   className?: string;
 }) {
   const view = useWorkBillingParties(kind, id, initialParties);
@@ -172,7 +175,7 @@ export function WorkBillingPartiesSection({
           )}
         </div>
         {parties.hasClient ? (
-          partyFacts(parties)
+          partyFacts(parties, site === undefined ? parties.site : site)
         ) : (
           <p className="mt-3 text-sm text-muted-foreground">Ordne zuerst einen Kunden zu.</p>
         )}

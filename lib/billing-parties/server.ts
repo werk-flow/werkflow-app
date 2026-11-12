@@ -9,7 +9,6 @@ import { z } from '@/lib/zod';
 import { BILLING_PARTY_SOURCES, type BillingWorkKind, type WorkBillingParties } from './types';
 
 const versionSchema = z.object({
-  id: z.string(),
   version: z.number(),
   source: z.enum(BILLING_PARTY_SOURCES),
   clientId: z.string(),
@@ -42,7 +41,7 @@ const workBillingPartiesSchema = z.object({
  * them without a request of its own (lab.office.job-open).
  */
 export const JOB_BILLING_PARTIES_EMBED =
-  'work_billing_parties(id, version, source, client_id, recipient_client_id, recipient_name, recipient_address, created_at, auftraggeber:clients!work_billing_parties_client_fk(name))';
+  'work_billing_parties(version, source, client_id, recipient_client_id, recipient_name, recipient_address, created_at, auftraggeber:clients!work_billing_parties_client_fk(name))';
 
 /** The Objekt's contacts as the job's site read embeds them; only active access contacts count. */
 export const SITE_CONTACTS_EMBED =
@@ -50,7 +49,6 @@ export const SITE_CONTACTS_EMBED =
 
 const embeddedVersionsSchema = z.array(
   z.object({
-    id: z.string(),
     version: z.number(),
     source: z.enum(BILLING_PARTY_SOURCES),
     client_id: z.string(),
@@ -67,14 +65,13 @@ const embeddedContactsSchema = z.array(
 );
 
 /**
- * The parties of a job from its own read: the embedded versions, the site it
- * already holds and the site's embedded contacts. Null when an embed is
+ * The parties of a job from its own read: the embedded versions and the
+ * site's embedded contacts. Null when an embed is
  * malformed, so the section reads them itself.
  */
 export function jobBillingPartiesFrom(input: {
   hasClient: boolean;
   versions: unknown;
-  site: WorkBillingParties['site'];
   siteContacts: unknown;
 }): WorkBillingParties | null {
   const versions = embeddedVersionsSchema.safeParse(input.versions);
@@ -88,7 +85,6 @@ export function jobBillingPartiesFrom(input: {
     versions: versions.data
       .toSorted((a, b) => b.version - a.version)
       .map((row) => ({
-        id: row.id,
         version: row.version,
         source: row.source,
         clientId: row.client_id,
@@ -98,7 +94,8 @@ export function jobBillingPartiesFrom(input: {
         recipientAddress: row.recipient_address,
         setAt: row.created_at,
       })),
-    site: input.site,
+    // The job page passes the site the job carries.
+    site: null,
     accessContacts: contacts.data
       .filter((contact) => contact.is_active && contact.site_role === 'zugangskontakt')
       .toSorted((a, b) => a.name.localeCompare(b.name, 'de'))

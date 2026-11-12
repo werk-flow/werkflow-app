@@ -42,7 +42,6 @@ import {
 import type { AssignmentApproval } from '@/lib/qualifications/types';
 import { JOB_BILLING_PARTIES_EMBED, jobBillingPartiesFrom } from '@/lib/billing-parties/server';
 import type { WorkBillingParties } from '@/lib/billing-parties/types';
-import type { ClientSite } from '@/lib/clients/types';
 import {
   loadJobDetailRelations,
   readJobAssigneeProfiles,
@@ -508,29 +507,22 @@ async function readJobDetails(input: {
   return {
     success: true,
     job,
-    billingParties: officeBillingParties(
-      input.billingParties,
-      effectiveClientId,
-      relations.site,
-      siteContacts,
-    ),
+    billingParties: officeBillingParties(input.billingParties, effectiveClientId, siteContacts),
   };
 }
 
-/** The job read's embedded billing parties for the office; undefined when it embedded none or a malformed set. */
+/**
+ * The job read's embedded billing parties for the office, without the site the
+ * job already carries; undefined when it embedded none or a malformed set.
+ */
 function officeBillingParties(
   embedded: unknown,
   clientId: string | null,
-  site: ClientSite | null,
   siteContacts: unknown,
 ): WorkBillingParties | undefined {
   if (embedded === undefined) return undefined;
-  const place = site
-    ? { id: site.id, name: site.name, street: site.street, postalCode: site.postalCode, city: site.city }
-    : null;
   return (
-    jobBillingPartiesFrom({ hasClient: clientId !== null, versions: embedded, site: place, siteContacts }) ??
-    undefined
+    jobBillingPartiesFrom({ hasClient: clientId !== null, versions: embedded, siteContacts }) ?? undefined
   );
 }
 

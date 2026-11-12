@@ -12,7 +12,6 @@ export const BILLING_PARTY_SOURCES = ['objekt', 'auftraggeber', 'projekt', 'anfr
 export type BillingPartySource = (typeof BILLING_PARTY_SOURCES)[number];
 
 export type WorkBillingPartyVersion = {
-  id: string;
   version: number;
   source: BillingPartySource;
   clientId: string;

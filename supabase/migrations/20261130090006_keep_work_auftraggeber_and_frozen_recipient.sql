@@ -513,7 +513,7 @@ as $$
     'hasClient', work.client_id is not null,
     'versions', coalesce((
       select jsonb_agg(jsonb_build_object(
-        'id', party.id, 'version', party.version, 'source', party.source,
+        'version', party.version, 'source', party.source,
         'clientId', party.client_id, 'clientName', auftraggeber.name,
         'recipientClientId', party.recipient_client_id,
         'recipientName', party.recipient_name, 'recipientAddress', party.recipient_address,

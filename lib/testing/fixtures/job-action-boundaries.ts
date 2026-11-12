@@ -64,7 +64,6 @@ const world = installActionWorld({
       // The billing parties the job read embeds: the office's alone.
       work_billing_parties: [
         {
-          id: '5f000000-0000-4000-8000-000000000001',
           version: 1,
           source: 'objekt',
           client_id: clientId,
