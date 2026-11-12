@@ -19,9 +19,9 @@ async function siteAccessTasks(world: TestWorld): Promise<SurfaceDestination> {
 }
 
 /**
- * werk-flow/werkflow-planning#329 of 2026-11-12: the field worker's „Zugang
- * stimmt nicht?“ on the job's Einsatzort, the form, the open and the rejected
- * proposal, and the „Zugang prüfen“ task in Aufgaben with its review on the
+ * werk-flow/werkflow-planning#329 of 2026-11-12: the field worker's pencil
+ * on the job's Einsatzort, the form, the open and the rejected proposal with
+ * the rejected one's form, and the „Zugang prüfen“ task in Aufgaben with its review on the
  * customer page.
  */
 function siteAccessCaptures(): OpenSet {
@@ -36,7 +36,6 @@ function siteAccessCaptures(): OpenSet {
         ...job,
         view: { kind: 'page' },
         destination: siteAccessJobDestination('none'),
-        reveal: 'Zugang stimmt nicht?',
         ...phone,
       },
       {
@@ -51,7 +50,6 @@ function siteAccessCaptures(): OpenSet {
         ...job,
         view: { kind: 'page' },
         destination: siteAccessJobDestination('open'),
-        reveal: 'Hinweis ändern',
         ...phone,
       },
       {
@@ -59,7 +57,13 @@ function siteAccessCaptures(): OpenSet {
         ...job,
         view: { kind: 'page' },
         destination: siteAccessJobDestination('rejected'),
-        reveal: 'Zugang stimmt nicht?',
+        ...phone,
+      },
+      {
+        id: 'handwerker-zugang-abgelehnt-formular',
+        ...job,
+        view: { kind: 'dialog', opener: 'field.site-access' },
+        destination: siteAccessJobDestination('rejected'),
         ...phone,
       },
       {

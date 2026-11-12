@@ -1,77 +1,73 @@
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 
-import type {
-  FieldSiteAccess,
-  JobSiteAccessProposal,
-  SiteAccessProposalValues,
-} from '@/lib/site-access-proposals/types';
+import { Badge } from '@/components/ui/badge';
+import type { FieldSiteAccess, JobSiteAccessProposal } from '@/lib/site-access-proposals/types';
 import { formatGermanDate } from '@/lib/utils';
-import { FieldSiteAccessButton } from './field-site-access-proposal';
+import { FieldSiteAccessButton, FieldSiteAccessReadError } from './field-site-access-proposal';
 
 /**
- * The field worker's access proposal under the job's Einsatzort: what became
- * of it, and „Zugang stimmt nicht?“. The state renders on the server, so the
- * job page's client code carries only the button (lab.field.cold-start). The
- * proposal changes nothing at the Einsatzort until the office accepts it.
+ * Where the field work pack places the access proposal: `action` sits on the
+ * Einsatzort's label line and takes no height of its own, because the
+ * worker's primary next action must stay on the first screen
+ * (tests/audit/wave-2/p1-16.spec.ts); `readError` follows the access notes.
  */
-export function FieldSiteAccess({ jobId, access }: { jobId: string; access: FieldSiteAccess }): ReactElement {
+export type FieldSiteAccessSlots = { action: ReactNode; readError?: ReactNode };
+
+/**
+ * The field worker's access proposal on the job's Einsatzort: one button that
+ * shows what became of the latest proposal and opens the form with its
+ * details. The state renders on the server, so the job page's client code
+ * carries only the button (lab.field.cold-start). The proposal changes
+ * nothing at the Einsatzort until the office accepts it.
+ */
+export function fieldSiteAccessSlots(jobId: string, access: FieldSiteAccess): FieldSiteAccessSlots {
   const proposal = access.proposal ?? null;
   const ownOpenValues = proposal?.status === 'open' ? proposal.values : null;
-  return (
-    <div className="mt-3 space-y-2" data-testid="field-site-access">
-      {!access.failed && <SiteAccessProposalState proposal={proposal} />}
-      <FieldSiteAccessButton
-        jobId={jobId}
-        siteId={access.siteId}
-        // Changes with every sent or decided proposal, so the button's save can wait for it.
-        stateKey={proposal ? `${proposal.id}:${proposal.status}:${proposal.proposedAt}` : ''}
-        {...(access.failed ? { failed: true } : {})}
-        {...(ownOpenValues ? { ownOpenValues } : {})}
-      />
-    </div>
+  const state = proposal ? PROPOSAL_STATES[proposal.status] : null;
+  const notice = proposal ? proposalNotice(proposal) : null;
+  const action = (
+    <FieldSiteAccessButton
+      jobId={jobId}
+      siteId={access.siteId}
+      label={state ? `Zugang korrigieren (${state.badge})` : 'Zugang korrigieren'}
+      // Changes with every sent or decided proposal, so the button's save can wait for it.
+      stateKey={proposal ? `${proposal.id}:${proposal.status}:${proposal.proposedAt}` : ''}
+      {...(notice ? { notice } : {})}
+      {...(ownOpenValues ? { ownOpenValues } : {})}
+    >
+      {state && <ProposalBadge {...state} />}
+    </FieldSiteAccessButton>
   );
+  return access.failed ? { action, readError: <FieldSiteAccessReadError /> } : { action };
 }
 
-function SiteAccessProposalState({
-  proposal,
+const PROPOSAL_STATES = {
+  open: { badge: 'Hinweis beim Büro', variant: 'warning' },
+  accepted: { badge: 'Hinweis übernommen', variant: 'success' },
+  rejected: { badge: 'Hinweis abgelehnt', variant: 'outline' },
+} as const;
+
+function ProposalBadge({
+  badge,
+  variant,
 }: {
-  proposal: JobSiteAccessProposal | null;
-}): ReactElement | null {
-  if (!proposal) return null;
+  badge: string;
+  variant: 'warning' | 'success' | 'outline';
+}): ReactElement {
+  return <Badge variant={variant}>{badge}</Badge>;
+}
+
+/** What the form says above its fields about the latest proposal. */
+function proposalNotice(proposal: JobSiteAccessProposal): string {
   if (proposal.status === 'open') {
-    return (
-      <div className="rounded-md bg-warning-soft p-3 text-sm text-warning-soft-foreground" role="status">
-        <p className="font-medium">
-          {proposal.proposedByMe
-            ? 'Dein Hinweis zum Zugang liegt beim Büro.'
-            : 'Ein Hinweis aus deinem Team zum Zugang liegt beim Büro.'}
-        </p>
-        {proposal.values && <ProposedValues values={proposal.values} />}
-      </div>
-    );
+    return proposal.proposedByMe
+      ? 'Dein Hinweis liegt beim Büro. Was du jetzt sendest, ersetzt ihn.'
+      : 'Ein Hinweis aus deinem Team liegt beim Büro. Was du jetzt sendest, ersetzt ihn.';
   }
   const decidedOn = proposal.decidedAt ? ` am ${formatGermanDate(proposal.decidedAt)}` : '';
-  if (proposal.status === 'accepted') {
-    return (
-      <p className="text-sm text-muted-foreground" role="status">
-        Das Büro hat den Hinweis zum Zugang{decidedOn} übernommen.
-      </p>
-    );
-  }
-  return (
-    <p className="text-sm text-muted-foreground" role="status">
-      Das Büro hat den Hinweis zum Zugang{decidedOn} nicht übernommen
-      {proposal.rejectionReason ? `: ${proposal.rejectionReason}` : '.'}
-    </p>
-  );
-}
-
-function ProposedValues({ values }: { values: SiteAccessProposalValues }): ReactElement {
-  const contact = [values.contactName, values.contactPhone, values.contactNote].filter(Boolean).join(' · ');
-  return (
-    <div className="mt-1 space-y-0.5 wrap-anywhere">
-      {contact && <p>Zugangskontakt: {contact}</p>}
-      {values.accessNotes && <p className="whitespace-pre-wrap">Zugang: {values.accessNotes}</p>}
-    </div>
-  );
+  if (proposal.status === 'accepted')
+    return `Das Büro hat den letzten Hinweis zum Zugang${decidedOn} übernommen.`;
+  return `Das Büro hat den letzten Hinweis zum Zugang${decidedOn} nicht übernommen${
+    proposal.rejectionReason ? `: ${proposal.rejectionReason}` : '.'
+  }`;
 }

@@ -39,13 +39,14 @@ const PROPOSE_FAILURES = {
 
 const PROPOSE_FALLBACK = 'Dein Hinweis konnte nicht gesendet werden. Versuche es in einem Moment erneut.';
 
-/** The proposal form; it loads when the worker reaches for „Zugang stimmt nicht?“. */
+/** The proposal form; it loads when the worker reaches for the Einsatzort's pencil. */
 export function SiteAccessProposalDialog({
   open,
   onOpenChange,
   jobId,
   siteId,
   initialValues,
+  notice,
   settle,
 }: {
   open: boolean;
@@ -53,6 +54,8 @@ export function SiteAccessProposalDialog({
   jobId: string;
   siteId: string;
   initialValues: SiteAccessProposalValues;
+  /** The latest proposal's state: still open, taken, or declined with the office's reason. */
+  notice: string | null;
   /** Waits for the page's refreshed proposal state after a sent proposal. */
   settle: () => Promise<void>;
 }): ReactElement {
@@ -101,6 +104,7 @@ export function SiteAccessProposalDialog({
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="space-y-4 py-1">
+            {notice && <p className="rounded-md bg-muted p-3 text-sm wrap-anywhere">{notice}</p>}
             <SiteAccessProposalFields values={values} errors={errors} onChange={setValues} />
             <ErrorText>{failure}</ErrorText>
           </DialogBody>

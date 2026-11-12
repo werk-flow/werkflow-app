@@ -2,13 +2,14 @@
 
 import { formatDuration } from '@/lib/time-tracking/helpers';
 import { CalendarClock, ClipboardCopy, MapPin, Navigation, Phone, UserRound } from 'lucide-react';
-import { useEffect, useRef, type ReactElement, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactElement } from 'react';
 
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import { useBanner } from '@/components/ui/banner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { FieldWorkPackJob } from '@/lib/jobs/field-work-pack';
+import type { FieldSiteAccessSlots } from './field-site-access';
 import { JOB_PRIORITY_LABELS } from '@/lib/jobs/types';
 
 function formatSchedule(job: FieldWorkPackJob): string {
@@ -27,8 +28,8 @@ export function FieldWorkPackOverview({
   siteAccess,
 }: {
   job: FieldWorkPackJob;
-  /** The access proposal block under the Einsatzort, rendered on the server; absent without an Einsatzort. */
-  siteAccess?: ReactNode;
+  /** The access proposal on the Einsatzort, rendered on the server; absent without an Einsatzort. */
+  siteAccess?: FieldSiteAccessSlots;
 }): ReactElement {
   const { showBanner } = useBanner();
   const overviewRef = useRef<HTMLElement>(null);
@@ -107,8 +108,8 @@ function FieldWorkPackOverviewFacts({
   siteAccess,
 }: {
   job: FieldWorkPackJob;
-  /** The job's Einsatzort and its latest access proposal; null without an Einsatzort. */
-  siteAccess: ReactNode;
+  /** The access proposal on the Einsatzort; undefined without an Einsatzort. */
+  siteAccess: FieldSiteAccessSlots | undefined;
 }): ReactElement {
   const duration = formatDurationOrNull(job.plannedWorkingMinutes);
   return (
@@ -141,7 +142,10 @@ function FieldWorkPackOverviewFacts({
         <div className="flex gap-3">
           <MapPin className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
           <div className="min-w-0">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Einsatzort</p>
+            <div className="flex items-center gap-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Einsatzort</p>
+              {siteAccess?.action}
+            </div>
             <p className="mt-0.5 text-sm font-medium">{job.siteName ?? 'Einsatzort'}</p>
             <p className="text-sm text-muted-foreground">{job.siteAddress ?? 'Keine Adresse hinterlegt'}</p>
             {job.accessNotes && (
@@ -149,7 +153,7 @@ function FieldWorkPackOverviewFacts({
                 <span className="font-medium">Zugang:</span> {job.accessNotes}
               </p>
             )}
-            {siteAccess}
+            {siteAccess?.readError}
           </div>
         </div>
       </div>
