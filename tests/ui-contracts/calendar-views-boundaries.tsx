@@ -635,7 +635,6 @@ export function CalendarDayContractFixture(): React.JSX.Element {
               onSessionClick={() => {
                 window.calendarViewContract.opened.push('Arbeitszeit');
               }}
-              highlightMemberId={null}
               verticalScroller={scroller}
             />
           </WithBoardAbsences>

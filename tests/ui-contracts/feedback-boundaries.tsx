@@ -15,6 +15,7 @@ import { BannerProvider } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { PendingApprovals } from '@/components/zeiterfassung/pending-approvals';
 import { OpeningDateCorrections } from '@/components/zeiterfassung/time-account-opening-corrections';
+import { MissingTimeAccountsCard } from '@/components/zeiterfassung/time-account-opening-form';
 import { TimeCorrectionRequests } from '@/components/zeiterfassung/time-correction-requests';
 import { CorrectionTimelineFields } from '@/components/zeiterfassung/time-correction-dialog-timeline';
 import { useCorrectionTimeline } from '@/components/zeiterfassung/time-correction-dialog-timeline-state';
@@ -43,6 +44,7 @@ const FEEDBACK_FIXTURES = [
   'team-qualifications',
   'service-evidence-link',
   'time-account-opening',
+  'time-account-bulk-opening',
   'work-artifact-report',
   'correction-timeline',
   'work-artifact-customer-decision',
@@ -66,12 +68,32 @@ function useRouteProps<Props>(read: () => Props): Props {
 
 const readMaterialLines = () => structuredClone(window.uiContractMaterial.lines);
 const readClientRelations = () => structuredClone(window.uiContractClientRelations);
+// Not cloned: a read that returns the same roles keeps their identity, as a
+// refresh with unchanged server props does.
+const readClientSiteRoles = () => window.uiContractClientSiteRoles;
 const readQualifications = () => structuredClone(window.uiContractQualifications);
 const readTimeAccounts = () => structuredClone(window.uiContractTimeAccounts);
 
 function TimeAccountOpeningHost(): React.JSX.Element {
   const accounts = useRouteProps(readTimeAccounts);
   return <OpeningDateCorrections accounts={accounts} suggestedStartDate="2026-09-01" />;
+}
+
+const readMissingAccounts = () => structuredClone(window.uiContractMissingAccounts);
+
+function TimeAccountBulkOpeningHost(): React.JSX.Element {
+  const missingAccounts = useRouteProps(readMissingAccounts);
+  return (
+    <MissingTimeAccountsCard
+      settings={{
+        openAccountCount: 2 - missingAccounts.length,
+        employeeCount: 2,
+        missingAccounts,
+        accounts: [],
+        suggestedStartDate: '2026-09-01',
+      }}
+    />
+  );
 }
 
 const orphanClockIn: WorkSession = {
@@ -230,12 +252,14 @@ function RequestListHost(): React.JSX.Element {
 
 function ClientRelationsHost(): React.JSX.Element {
   const relations = useRouteProps(readClientRelations);
+  const siteRoles = useRouteProps(readClientSiteRoles);
   return (
     <ClientRelationsSection
       clientId={clientRelationContractId}
       clientAddress={null}
       contacts={relations.contacts}
       sites={relations.sites}
+      siteRoles={siteRoles}
       isAdminOrManager
       equipment={[]}
       equipmentLoadFailed={false}
@@ -341,6 +365,8 @@ function FeedbackSurface({ name }: { name: FeedbackFixtureName }): React.JSX.Ele
       return <ServiceEvidenceHost />;
     case 'time-account-opening':
       return <TimeAccountOpeningHost />;
+    case 'time-account-bulk-opening':
+      return <TimeAccountBulkOpeningHost />;
     case 'correction-timeline':
       return <CorrectionTimelineHost />;
     case 'work-artifact-report':

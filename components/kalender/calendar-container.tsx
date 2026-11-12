@@ -177,19 +177,6 @@ function useScopedCalendarMutations({
   });
 }
 
-/** A highlighted member fades after 1.5 s, counted from the moment the grid shows. */
-function useHighlightFade(
-  highlightMemberId: string | null,
-  isLoading: boolean,
-  setHighlightMemberId: (memberId: string | null) => void,
-): void {
-  useEffect(() => {
-    if (!highlightMemberId || isLoading) return;
-    const timer = window.setTimeout(() => setHighlightMemberId(null), 1500);
-    return () => window.clearTimeout(timer);
-  }, [highlightMemberId, isLoading, setHighlightMemberId]);
-}
-
 /** The keyboard commands of the scoped calendar; `c` creates only for a caller who may. */
 function useCalendarCommandKeys(
   viewState: CalendarViewState,
@@ -219,7 +206,7 @@ function useCalendarCommandKeys(
 
 /**
  * The second half of the scoped calendar's hooks, built on the reads: the
- * optimistic owner, the manual-entry bridge, the highlight, the shortcuts, the
+ * optimistic owner, the manual-entry bridge, the shortcuts, the
  * view scope, the park flow, the surface actions and the readiness marker.
  */
 function useScopedCalendarFlows(
@@ -227,7 +214,7 @@ function useScopedCalendarFlows(
   reads: ScopedCalendarReads,
 ) {
   const { showBanner, viewState, overlays, data } = reads;
-  const { preferences, view, needed, highlightMemberId, setHighlightMemberId } = viewState;
+  const { preferences, view, needed } = viewState;
   const { range, handleOperationStart } = data;
   const { readiness } = range;
   // The skeleton replaces the grid only while no data exists at all (first
@@ -246,7 +233,6 @@ function useScopedCalendarFlows(
     setEntries: range.updateEntries,
   });
 
-  useHighlightFade(highlightMemberId, isLoading, setHighlightMemberId);
   useCalendarCommandKeys(viewState, overlays, mutations, isAdminOrManager);
 
   const viewScope = useCalendarViewScope({
@@ -308,7 +294,7 @@ function useScopedCalendarFlows(
  * One organization, user and role's calendar. The hooks run in a fixed order
  * that the effects depend on: scope, view state, the range owner and the
  * Parkplatz reads, the optimistic owner, then the manual-entry bridge, the
- * highlight, the shortcuts and the readiness marker.
+ * shortcuts and the readiness marker.
  */
 function ScopedCalendarContainer(props: CalendarContainerProps) {
   const { organizationId, currentUserId, currentUserRole, isAdminOrManager, members } = props;

@@ -7,10 +7,23 @@ const ERROR_MESSAGES: Record<string, string> = {
   contact_not_found: 'Der Ansprechpartner wurde nicht gefunden.',
   site_not_found: 'Der Einsatzort wurde nicht gefunden.',
   no_changes: 'Keine Änderungen zum Speichern.',
+  source_number_taken: 'Diese Objektnummer hat schon ein anderer Einsatzort.',
 };
 
 export function clientRelationErrorMessage(error: string): string {
   return describeFailure(error, ERROR_MESSAGES, 'Speichern fehlgeschlagen. Bitte versuche es erneut.');
+}
+
+const PROVISIONAL_ID_PREFIX = 'pending-';
+
+/** The id of a contact or site shown before the server stored it. */
+export function provisionalRelationId(): string {
+  return `${PROVISIONAL_ID_PREFIX}${crypto.randomUUID()}`;
+}
+
+/** A row the server has not stored yet: nothing may point at it. */
+export function isProvisionalRelationId(id: string): boolean {
+  return id.startsWith(PROVISIONAL_ID_PREFIX);
 }
 
 type ContactDraft = SaveClientContactInput;
@@ -41,6 +54,8 @@ export const EMPTY_CONTACT: ContactDraft = {
   email: '',
   phone: '',
   notes: '',
+  siteId: null,
+  siteRole: null,
   isPrimary: false,
 };
 
@@ -49,6 +64,7 @@ export const EMPTY_SITE: SiteDraft = {
   street: '',
   postalCode: '',
   city: '',
+  sourceNumber: '',
   accessNotes: '',
   notes: '',
   primaryContactId: null,

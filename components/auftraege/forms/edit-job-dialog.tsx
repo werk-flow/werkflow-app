@@ -38,6 +38,21 @@ interface EditJobDialogProps {
   onSuccess?: ((payload: { job: Job; selectedEmployeeIds?: string[] }) => void | Promise<void>) | undefined;
 }
 
+/**
+ * Opens on the title, the field an edit changes most, with the caret at its
+ * end. Radix would focus the first control, the Auftragsnummer, and select its
+ * whole value, so one stray keystroke replaced the job number.
+ */
+function focusTitle(event: Event): void {
+  const content = event.currentTarget;
+  if (!(content instanceof HTMLElement)) return;
+  const title = content.querySelector('#edit-job-title');
+  if (!(title instanceof HTMLInputElement) || title.disabled) return;
+  event.preventDefault();
+  title.focus();
+  title.setSelectionRange(title.value.length, title.value.length);
+}
+
 export function EditJobDialog({
   job,
   open,
@@ -72,7 +87,7 @@ export function EditJobDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange} pending={isLoading}>
-        <DialogContent>
+        <DialogContent onOpenAutoFocus={focusTitle}>
           <DialogHeader>
             <DialogTitle>Auftrag bearbeiten</DialogTitle>
             <DialogDescription>Ändere die Daten des Auftrags.</DialogDescription>

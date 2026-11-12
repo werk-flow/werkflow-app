@@ -29,6 +29,8 @@ import {
   customerRowEditItem,
   customerSiteDialog,
   followUpDialog,
+  siteRolesButton,
+  siteRolesDialog,
 } from '../../../golden/support/steps/customers';
 import {
   detailActionsButton,
@@ -98,6 +100,10 @@ export const CUSTOMERS_OPENERS = {
   'customers.site': {
     trigger: async ({ page }) => addSiteButton(page),
     layer: customerSiteDialog,
+  },
+  'customers.site-roles': {
+    trigger: async ({ page }) => siteRolesButton(page),
+    layer: siteRolesDialog,
   },
   'customers.communication-settings': {
     trigger: async ({ page }) => communicationSettingsButton(page),

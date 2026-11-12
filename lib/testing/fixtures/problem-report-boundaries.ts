@@ -6,6 +6,7 @@
 // finalize. A file ticket and a finalize reach only a report the caller filed.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
+import * as nextServer from 'next/server';
 import type { ProblemReportContext } from '@/lib/problem-reports/schemas';
 import {
   CALLER_ID,
@@ -57,6 +58,14 @@ world.rpc = ({ name }) => {
   assert.ok(name === 'submit_problem_report' || name === 'register_problem_report_file', name);
   return { data: name === 'submit_problem_report' ? 3 : null, error: null };
 };
+// The scrub a submit leaves for after its answer; problem-report-scrub-boundaries.ts runs it.
+let scrubsLeft = 0;
+mock.module('next/server', () => ({
+  ...nextServer,
+  after: () => {
+    scrubsLeft += 1;
+  },
+}));
 const storageCalls: string[] = [];
 mock.module('@/lib/storage/r2', () => ({
   createSignedUploadUrl: async ({ path }: { path: string }) => {
@@ -119,6 +128,7 @@ assert.deepEqual(await actions.submitProblemReport(submission(ORGANIZATION_B)), 
   error: 'not_a_member',
 });
 assert.equal(submitCalls().length, 0);
+assert.equal(scrubsLeft, 0, 'a refused submit left a scrub');
 
 // A member's report saves in their organization under the device's id, with the
 // caller as reporter and filer.
