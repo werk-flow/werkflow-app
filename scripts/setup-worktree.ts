@@ -1,9 +1,12 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { lstatSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { heavySlotDirectory, measuredAdmission } from '../lib/testing/runner/machine-room';
+import { claimSetupTurn, waitForSetupTurn } from '../lib/testing/runner/setup-turn';
 
 // T3 Code runs this in the background after it creates a worktree (t3.json).
-// It installs the locked dependencies, links the main checkout's env backups
+// It waits for its turn and for room on the machine (lib/testing/runner/setup-turn.ts),
+// installs the locked dependencies, links the main checkout's env backups
 // and Supabase CLI state, and points the worktree's own .env.local at the
 // local stack. Only Node built-ins: it runs before the install.
 // docs/technical/environments.md, "Work in a worktree", owns the rule that an
@@ -69,7 +72,24 @@ async function run(command: string, args: readonly string[]): Promise<void> {
   }
 }
 
+// One setup at a time per machine, and none while the machine takes no start. The marker says why it waits.
+const { verdict, turn } = await waitForSetupTurn({
+  claim: () => claimSetupTurn(heavySlotDirectory(process.env), process.pid),
+  admission: () => measuredAdmission('setup'),
+  announce: (waiting) => {
+    const since = waiting && new Date(waiting.since).toISOString().slice(11, 16);
+    writeFileSync(
+      running,
+      waiting
+        ? `${process.pid}\nWaiting since ${since} UTC to install: ${waiting.reason}\nSee the machine's room: bun scripts/room.ts\n`
+        : `${process.pid}\n`,
+    );
+    process.stdout.write(waiting ? `[setup] waits: ${waiting.reason}\n` : '[setup] the wait is over.\n');
+  },
+});
+if (!verdict.measured) process.stdout.write(`[setup] ${verdict.reason}\n`);
 await run(process.execPath, ['install', '--frozen-lockfile']);
+turn.release();
 
 // Links replace only links, so a real file the worktree owns always survives.
 function link(path: string, kind: 'file' | 'directory'): void {

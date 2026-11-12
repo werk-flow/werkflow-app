@@ -5,6 +5,7 @@ import { Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { TextLink } from '@/components/ui/text-link';
 import type { WorkHandoverWorkspace } from '@/lib/work-handover/types';
 import type { WorkHandoverReview } from './use-work-handover-review';
 import type { WorkHandoverActions } from './work-handover-actions';
@@ -12,12 +13,40 @@ import { FeedbackText } from './work-handover-feedback';
 
 type WorkHandoverSourceSelectionProps = {
   initialWorkspace: WorkHandoverWorkspace;
+  workHref: string;
   review: WorkHandoverReview;
   actions: WorkHandoverActions;
 };
 
+/** The empty selection names what the reviewer does first, where. */
+function WorkHandoverNextStep({
+  targetType,
+  href,
+}: {
+  targetType: WorkHandoverWorkspace['targetType'];
+  href: string;
+}) {
+  return (
+    <p className="rounded-md border p-3 text-sm text-muted-foreground">
+      Noch nichts zum Übergeben. Gib zuerst{' '}
+      {targetType === 'job' ? (
+        <>
+          im <TextLink href={href}>Auftrag</TextLink> einen Arbeitsnachweis für die Kundendokumentation frei.
+        </>
+      ) : (
+        <>
+          im <TextLink href={href}>Projekt</TextLink> einen Arbeitsnachweis für die Kundendokumentation frei
+          oder übergib einen seiner Aufträge.
+        </>
+      )}{' '}
+      Danach wählst du ihn hier aus und gibst die Übergabe frei.
+    </p>
+  );
+}
+
 export function WorkHandoverSourceSelection({
   initialWorkspace,
+  workHref,
   review,
   actions,
 }: WorkHandoverSourceSelectionProps) {
@@ -58,20 +87,20 @@ export function WorkHandoverSourceSelection({
           })}
         </div>
       ) : (
-        <p className="rounded-md border p-3 text-sm text-muted-foreground">
-          Es gibt noch keine freigegebenen kundenfähigen Nachweise, Dokumentversionen oder Auftragsübergaben.
-        </p>
+        <WorkHandoverNextStep targetType={initialWorkspace.targetType} href={workHref} />
       )}
-      <Button
-        pending={isBusy('draft')}
-        type="button"
-        variant="outline"
-        onClick={saveDraft}
-        disabled={anyBusy}
-      >
-        <Save />
-        Entwurf speichern
-      </Button>
+      {(initialWorkspace.availableSources.length > 0 || initialWorkspace.staleSourceCount > 0) && (
+        <Button
+          pending={isBusy('draft')}
+          type="button"
+          variant="outline"
+          onClick={saveDraft}
+          disabled={anyBusy}
+        >
+          <Save />
+          Entwurf speichern
+        </Button>
+      )}
       <FeedbackText feedback={feedbackFor('draft')} />
     </div>
   );

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { resolvePageMembership } from '@/lib/org/page-context';
 import { getEmployeeDocuments } from '@/lib/documents/actions';
 import { getCachedOrganizationSettings, getOrganizationUserPreferencesForView } from '@/lib/data/cached';
+import { breakPolicyOf } from '@/lib/time-tracking/settings';
 import { getMemberDetail, getProfilesByIds, type OrgMemberInfo } from '@/lib/members/actions';
 import { isManagerRole } from '@/lib/roles';
 import { getOrgMembersForUser } from '@/lib/members/queries';
@@ -187,9 +188,7 @@ function memberSectionProps({
     jobAssignmentMap: jobsData?.jobAssignmentMap ?? {},
     visibleColumns: organizationUserPreferences.visibleColumns,
     documents: documentsResult.success ? documentsResult.documents : null,
-    breakMode: organizationSettings.breakMode,
-    autoBreakThresholdMinutes: organizationSettings.autoBreakThresholdMinutes,
-    autoBreakDurationMinutes: organizationSettings.autoBreakDurationMinutes,
+    breakPolicy: breakPolicyOf(organizationSettings),
     initialWeek,
     responsibilitySettings: responsibilitySettingsResult.success ? responsibilitySettingsResult.data : null,
   };

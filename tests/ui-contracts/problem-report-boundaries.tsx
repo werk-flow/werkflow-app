@@ -86,7 +86,7 @@ export const submitProblemReport: ReportActions['submitProblemReport'] = async (
   return { success: true, reportId: input.reportId, number };
 };
 
-// `./file-actions` of the upload client
+// `@/lib/problem-reports/file-actions` of the send hook
 export const createProblemReportFileUploadTicket: FileActions['createProblemReportFileUploadTicket'] = async (
   input,
 ) => {

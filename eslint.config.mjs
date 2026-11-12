@@ -374,7 +374,7 @@ const landmarkSelectors = [
   {
     selector: 'JSXOpeningElement[name.name="main"]',
     message:
-      'The app shell and StandaloneScreen own the one <main> landmark of a screen; render a <div> or <section> inside (werkflow-design skill: Density and layout).',
+      'The app shell, StandaloneScreen and SupportFrame own the one <main> landmark of a screen; render a <div> or <section> inside (werkflow-design skill: Density and layout).',
   },
 ];
 
@@ -1505,6 +1505,14 @@ const eslintConfig = defineConfig([
   },
   {
     files: ['components/sidebar/app-shell-skeleton.tsx'],
+    rules: {
+      'no-restricted-syntax': productRestrictions({ jsx: true, allow: landmarkSelectors }),
+    },
+  },
+  // WerkFlow support's area mounts no app shell: its frame owns the main
+  // landmark of every support page.
+  {
+    files: ['components/support/support-frame.tsx'],
     rules: {
       'no-restricted-syntax': productRestrictions({ jsx: true, allow: landmarkSelectors }),
     },

@@ -15,6 +15,7 @@ import {
   EMPTY_SITE,
   clientRelationErrorMessage,
   getRelationId,
+  provisionalRelationId,
   type SiteDialogState,
 } from './client-relation-drafts';
 import { toggleRelationActive } from './toggle-relation-active';
@@ -54,6 +55,7 @@ function siteEditorDialogState(site: ClientSite): SiteDialogState {
       street: site.street ?? '',
       postalCode: site.postalCode ?? '',
       city: site.city ?? '',
+      sourceNumber: site.sourceNumber ?? '',
       accessNotes: site.accessNotes ?? '',
       notes: site.notes ?? '',
       primaryContactId: site.primaryContactId,
@@ -121,7 +123,7 @@ export function useClientSites({
     if (invalidDialog) return setSiteDialog(invalidDialog);
     const { siteId, draft } = siteDialog;
     const stored = sites.find((site) => site.id === siteId);
-    const echoId = stored?.id ?? `pending-${crypto.randomUUID()}`;
+    const echoId = stored?.id ?? provisionalRelationId();
     const echo = buildSiteEcho(stored ?? { id: echoId, clientId }, draft);
     if (stored) siteList.update(echoId, echo);
     else siteList.insert(echoId, echo);

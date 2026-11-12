@@ -28,13 +28,14 @@ const PAIRS = [
   ],
   ['components/dokumente/document-work-context-view.tsx'],
   ['components/inventar/inventory-content.tsx', 'components/loading-states/inventar-page-skeleton.tsx'],
-  ['components/kunden/clients-table.tsx'],
+  ['components/kunden/clients-table.tsx', 'components/kunden/clients-table-frame.tsx'],
   ['components/mitarbeiter/members-table.tsx'],
   [
     'components/problem-reports/own-problem-report-list.tsx',
     'components/problem-reports/own-problem-report-columns.tsx',
   ],
   ['components/service/equipment-list-content.tsx', 'components/loading-states/equipment-page-skeleton.tsx'],
+  ['components/support/support-queue.tsx', 'components/support/support-queue-columns.tsx'],
   [
     'components/service/service-case-list-content.tsx',
     'components/loading-states/service-cases-page-skeleton.tsx',

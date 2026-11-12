@@ -8,6 +8,7 @@ import { ZeiterfassungContent } from '@/components/zeiterfassung/zeiterfassung-c
 import { ZeiterfassungContentSkeleton } from '@/components/loading-states/zeiterfassung-content-skeleton';
 import { getCurrentClockState } from '@/lib/time-tracking/clock-state-actions';
 import { getTimeEntries } from '@/lib/time-tracking/entry-read-actions';
+import { breakPolicyOf } from '@/lib/time-tracking/settings';
 import { getWeeklyTargets } from '@/lib/personnel/target-actions';
 import { isManagerRole, type OrgRole } from '@/lib/roles';
 import { getOrgMembersForUser } from '@/lib/members/queries';
@@ -50,6 +51,7 @@ async function getInitialOverview(
 
   return {
     clockState: clockStateResult.state,
+    breakPolicy: breakPolicyOf(organizationSettings),
     weekData: buildWeeklyTimeData(
       weekEntriesResult.entries,
       monday,

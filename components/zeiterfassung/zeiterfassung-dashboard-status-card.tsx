@@ -82,9 +82,7 @@ export function ZeiterfassungDashboardStatusCard({
               todayIndex={todayIndex}
               liveTodayMinutes={liveTotalMinutes}
               liveTodayBreakMinutes={liveBreakMinutes}
-              liveTodayBreakMode={effectiveState.breakMode}
-              liveAutoBreakThresholdMinutes={effectiveState.autoBreakThresholdMinutes}
-              liveAutoBreakDurationMinutes={effectiveState.autoBreakDurationMinutes}
+              liveTodayBreakPolicy={effectiveState.breakPolicy}
               narrowBars
               weekLabel={weekLabel}
               weekTargets={weekTargets}

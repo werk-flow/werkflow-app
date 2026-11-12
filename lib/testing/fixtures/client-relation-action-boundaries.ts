@@ -209,3 +209,43 @@ assert.equal(withEmail.contact.email, 'kunde@example.de');
 const cleared = await actions.updateClientContact(withEmail.contact.id, { email: '  ' });
 assert.ok(cleared.success);
 assert.equal(cleared.contact.email, null);
+
+// A Mieter or Zugangskontakt belongs to an Einsatzort of the contact's own
+// customer: another organization's Einsatzort is not found and nothing is
+// written; an Einsatzort without its role, or a role without it, is refused
+// before the database.
+const contactsBeforeSiteLinks = JSON.stringify(tableRows(world, 'client_contacts'));
+assert.deepEqual(
+  await actions.createClientContact(clientId, {
+    name: 'Max Mieter',
+    siteId: foreignSiteId,
+    siteRole: 'mieter',
+  }),
+  { success: false, error: 'site_not_found' },
+);
+assert.deepEqual(
+  await actions.updateClientContact(primaryContactId, { siteId: foreignSiteId, siteRole: 'mieter' }),
+  { success: false, error: 'site_not_found' },
+);
+const requestsBeforeHalfLinks = world.adminClientRequests;
+assert.deepEqual(await actions.createClientContact(clientId, { name: 'Ohne Rolle', siteId: primarySiteId }), {
+  success: false,
+  error: 'invalid_input',
+});
+assert.deepEqual(await actions.updateClientContact(primaryContactId, { siteRole: 'zugangskontakt' }), {
+  success: false,
+  error: 'invalid_input',
+});
+assert.equal(
+  world.adminClientRequests,
+  requestsBeforeHalfLinks,
+  'a half link is refused before the database',
+);
+assert.equal(JSON.stringify(tableRows(world, 'client_contacts')), contactsBeforeSiteLinks);
+const tenant = await actions.createClientContact(clientId, {
+  name: 'Max Mieter',
+  siteId: primarySiteId,
+  siteRole: 'mieter',
+});
+assert.ok(tenant.success);
+assert.deepEqual([tenant.contact.siteId, tenant.contact.siteRole], [primarySiteId, 'mieter']);
