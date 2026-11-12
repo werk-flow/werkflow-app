@@ -14,6 +14,7 @@ import { rememberPasswordResetAddress } from '@/lib/auth/actions';
 import { logError } from '@/lib/logging';
 import { clearServiceWorkerCaches } from '@/lib/offline/service-worker-caches';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { clearTodayOnDevice } from '@/lib/field-sync/device/today-wipe';
 import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
 import {
   type PasswordWithConfirmationValues,
@@ -231,6 +232,7 @@ async function redirectToPasswordReset(
     // Global on purpose: a password change ends every existing session.
     clearManualEntryBridge();
     await clearServiceWorkerCaches();
+    await clearTodayOnDevice();
     const { error } = await supabase.auth.signOut({ scope: 'global' });
     if (error) throw error;
   } catch (error) {

@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { expect, type Browser, type Locator, type Page, type TestInfo } from '@playwright/test';
+import { expect, type Locator, type Page, type TestInfo } from '@playwright/test';
+import type { DialogOpenerId } from '../../../lib/testing/selection/dialog-inventory';
 import { z } from '../../../lib/zod';
 import { browserTestIdentity } from '../../../lib/testing/evidence/test-evidence';
 import { withFileLock, writeJsonAtomically } from '../../../lib/testing/runner/file-lock';
@@ -16,18 +17,15 @@ import {
 } from '../../golden/support/steps/time-tracking';
 import { currentRunKey } from '../../golden/support/run-state';
 import type { TestWorld } from '../../golden/support/world';
-import { standaloneScreen } from '../../../lib/testing/selection/standalone-route-inventory';
-import { ACCEPTANCE_RECORDS } from './acceptance-records';
-import type { CaptureSpec, StandaloneCaptureSpec } from './acceptance-sets';
+import type { CaptureSpec } from './acceptance-rounds';
 import { stateCapturePlan, type CaptureState } from './acceptance-state-plan';
-import { withState } from './acceptance-states';
-import { DIALOG_OPENERS } from './dialog-openers';
+import { withState, type OpenedView } from './acceptance-states';
+import type { DialogOpener } from './dialog-opener';
 import { openLayerAt } from './open-layer';
 import { DESKTOP, VIEWPORT_HEIGHT } from './open-layer-plan';
 import { settleLiveShell } from './performance-steps';
-import { openStandaloneScreen } from './standalone-sessions';
 import { layoutNames, prepareLayoutDetails } from './layout-fixtures';
-import { openSurface, surfaceDestination } from './surface-routes';
+import { openSurface, surfaceDestination, type SurfaceDestination } from './surface-routes';
 
 // The capture fixture of rendered acceptance (docs/technical/standards-audit.md,
 // "Rendered design acceptance"). It refuses to write a capture of a screen that
@@ -100,7 +98,10 @@ export function settleAcceptanceEntries(testInfo: TestInfo): void {
   );
 }
 
-/** The screen is ready to be judged: requested page, title, settled, fonts, clock button, no failed region. */
+/** The report button of the phone header and of the sidebar; at every width one of them shows. */
+const PROBLEM_REPORT_BUTTONS = 'button[aria-label="Problem melden"], button[aria-keyshortcuts="F2"]';
+
+/** The screen is ready to be judged: requested page, title, settled, fonts, clock and report buttons, no failed region. */
 async function expectReady(page: Page, scope: Locator, view: CaptureSpec['view']['kind']): Promise<void> {
   await expect(page, 'a capture of a sign-in or onboarding screen is missing evidence').not.toHaveURL(
     /\/(login|signup|onboarding)(\/|$)/,
@@ -119,6 +120,14 @@ async function expectReady(page: Page, scope: Locator, view: CaptureSpec['view']
   await expect(page.locator('[data-slot="section-error"]:visible')).toHaveCount(0);
   for (const launcher of [clockInLauncher(page), runningClockLauncher(page)])
     if (await launcher.count()) await expect(launcher).toBeEnabled();
+  // The shell's „Problem melden“ renders only once React owns its events
+  // (useHydrated), later than the clock launcher, so the capture waits for it.
+  // Visibility is read from CSS, not the accessibility tree, which an open modal hides the shell from.
+  await expect
+    .poll(() => page.locator(PROBLEM_REPORT_BUTTONS).filter({ visible: true }).count(), {
+      message: 'the shell shows its report button',
+    })
+    .toBeGreaterThan(0);
   await page.evaluate(async () => {
     await document.fonts.ready;
   });
@@ -126,7 +135,8 @@ async function expectReady(page: Page, scope: Locator, view: CaptureSpec['view']
 
 type CaptureIdentity = Pick<AcceptanceEntry, 'role' | 'view'> & { id: string };
 
-async function writeCapture(
+/** Writes the image of the screen as it is and its index entry; the caller proved the screen ready. */
+export async function writeCapture(
   page: Page,
   testInfo: TestInfo,
   set: string,
@@ -173,6 +183,7 @@ async function captureState(
   input: { page: Page; world: TestWorld; businessDate: string; testInfo: TestInfo },
   set: string,
   capture: CaptureSpec & { state: CaptureState },
+  view: OpenedView,
   route: string,
 ): Promise<void> {
   const { page, world, businessDate, testInfo } = input;
@@ -181,7 +192,7 @@ async function captureState(
   const identity = { id: capture.id, role: capture.role, view: capture.view.kind };
   try {
     for (const width of capture.widths)
-      await withState(context, capture.view, plan, width, async (prove) => {
+      await withState(context, view, plan, width, async (prove) => {
         for (const scheme of capture.schemes) {
           await page.emulateMedia({ colorScheme: scheme });
           await prove();
@@ -193,6 +204,24 @@ async function captureState(
   }
 }
 
+/** What the capturing group supplies: a spec passes only what its own captures open. */
+export type CaptureSources = {
+  /** The openers of the group's dialogs, from its modules under dialog-openers/. */
+  openers: Partial<Record<DialogOpenerId, DialogOpener>>;
+  /** Opens a seeded record instead of the route's layout record (acceptance-records.ts). */
+  destination?: ((world: TestWorld) => Promise<SurfaceDestination>) | undefined;
+};
+
+function openedView(capture: CaptureSpec, openers: CaptureSources['openers']): OpenedView {
+  if (capture.view.kind !== 'dialog') return capture.view;
+  const opener = openers[capture.view.opener];
+  if (!opener)
+    throw new Error(
+      `The spec of ${capture.id} supplies no opener for ${capture.view.opener}. A dialog capture runs in the group of its opener module (acceptance-rounds.ts).`,
+    );
+  return { kind: 'dialog', opener };
+}
+
 /**
  * Captures one spec of a set at each of its widths and schemes: the page, one
  * of its tabs, or one of its dialogs opened the way the layout audit opens it.
@@ -201,14 +230,16 @@ export async function captureAcceptance(
   input: { page: Page; world: TestWorld; businessDate: string; testInfo: TestInfo },
   set: string,
   capture: CaptureSpec,
+  sources: CaptureSources,
 ): Promise<void> {
   const { page, world, businessDate, testInfo } = input;
+  const view = openedView(capture, sources.openers);
   await page.setViewportSize(DESKTOP);
-  const destination = capture.record
-    ? await ACCEPTANCE_RECORDS[capture.record](world)
+  const destination = sources.destination
+    ? await sources.destination(world)
     : await surfaceDestination(capture.route, page, world, businessDate);
   if (capture.state) {
-    await captureState(input, set, { ...capture, state: capture.state }, destination.route);
+    await captureState(input, set, { ...capture, state: capture.state }, view, destination.route);
     return;
   }
   const context = { page, role: capture.role, world, businessDate, route: destination.route };
@@ -224,15 +255,13 @@ export async function captureAcceptance(
     await openSurface(page, destination);
     for (const [index, width] of capture.widths.entries()) {
       let scope: Locator = page.locator('[data-page-body]').first();
-      if (capture.view.kind === 'dialog') {
+      if (view.kind === 'dialog') {
         // Each width opens the dialog anew, the way a user at that width opens it.
-        ({ layer: scope } = await openLayerAt(context, DIALOG_OPENERS[capture.view.opener], width, {
-          fresh: true,
-        }));
+        ({ layer: scope } = await openLayerAt(context, view.opener, width, { fresh: true }));
       } else {
         await page.setViewportSize({ width, height: VIEWPORT_HEIGHT[width] ?? 800 });
-        if (capture.view.kind === 'tab' && index === 0) {
-          const tab = inPageTab(page.getByRole('main'), capture.view.value);
+        if (view.kind === 'tab' && index === 0) {
+          const tab = inPageTab(page.getByRole('main'), view.value);
           await tab.click();
           await expect(tab).toHaveAttribute('data-state', 'active');
         }
@@ -243,49 +272,18 @@ export async function captureAcceptance(
           .first()
           .evaluate((element) => element.scrollIntoView({ block: 'center' }));
       }
-      const identity = { id: capture.id, role: capture.role, view: capture.view.kind };
+      const identity = { id: capture.id, role: capture.role, view: view.kind };
       for (const scheme of capture.schemes) {
         await page.emulateMedia({ colorScheme: scheme });
-        await expectReady(page, scope, capture.view.kind);
+        await expectReady(page, scope, view.kind);
         // A clocked-in capture shows the running clock, or it proves nothing about it.
         if (clockedIn) await expect(runningClockLauncher(page)).toBeVisible();
         await writeCapture(page, testInfo, set, identity, destination.route, width, scheme);
       }
-      if (capture.view.kind === 'dialog') await page.emulateMedia({ colorScheme: 'light' });
+      if (view.kind === 'dialog') await page.emulateMedia({ colorScheme: 'light' });
     }
   } finally {
     await page.emulateMedia({ colorScheme: 'light' });
     if (clockedIn) await clockOut(page);
-  }
-}
-
-/**
- * Captures a screen outside the app shell at each width and scheme. The screen
- * opens with the session its inventory entry names, and the session helper
- * refuses a redirect, so the image shows the requested screen.
- */
-export async function captureStandalone(
-  input: { browser: Browser; baseURL: string | undefined; world: TestWorld; testInfo: TestInfo },
-  set: string,
-  capture: StandaloneCaptureSpec,
-): Promise<void> {
-  const screen = standaloneScreen(capture.screen);
-  const { context, page } = await openStandaloneScreen({ ...input, screen });
-  try {
-    const identity = { id: capture.id, role: screen.session, view: 'standalone' } as const;
-    for (const width of capture.widths) {
-      await page.setViewportSize({ width, height: VIEWPORT_HEIGHT[width] ?? 800 });
-      for (const scheme of capture.schemes) {
-        await page.emulateMedia({ colorScheme: scheme });
-        await settled(page);
-        await expect(page.locator('[data-slot="section-error"]:visible')).toHaveCount(0);
-        await page.evaluate(async () => {
-          await document.fonts.ready;
-        });
-        await writeCapture(page, input.testInfo, set, identity, screen.path, width, scheme);
-      }
-    }
-  } finally {
-    await context.close();
   }
 }

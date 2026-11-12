@@ -1082,6 +1082,18 @@ export function workCreateTab(scope: Page | Locator, tab: WorkCreateTab): Locato
   return scope.getByRole('tab', { name: WORK_CREATE_COPY.tab[tab] });
 }
 
+/**
+ * Opens the job dialog's employee picker on /auftraege and returns its search
+ * field: the picker that a personnel record without login must never reach.
+ */
+export async function openJobEmployeePickerSearch(page: Page): Promise<Locator> {
+  await page.goto('/auftraege');
+  await workCreateButton(page).click();
+  await workCreateTab(page, 'job').click();
+  await employeeAssignmentPicker(page).click();
+  return employeeAssignmentSearch(page);
+}
+
 /** The submit of the open tab's form; it carries the tab's name. */
 export function workCreateSubmit(scope: Page | Locator, tab: WorkCreateTab): Locator {
   return scope.getByRole('button', { name: WORK_CREATE_COPY.tab[tab], exact: true });
