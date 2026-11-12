@@ -40,6 +40,7 @@ This table is the one home of every deployment and workflow credential. No check
 
 - `.github/workflows/health.yml` checks every row in GitHub's reach each Monday with a read-only call where the value lives. A failed run fails the step named after the credential and opens or updates the issue "Weekly health check failed". Only a failed check marked `prod` assigns the owner ([monitoring](recovery-and-incidents.md#monitoring)); a run off `main` or with `break_check` reports on "… (proof)".
 - The app checks its runtime credentials at `GET /api/health`, each Supabase project at its `health` function. Both answer only a request with the header `x-health-check-token`. The answer names each check `ok` or `failed`, never a value.
+- Agents never read a workstation secret file. `.claude/hooks/refuse-boat-key-reads.ts` refuses a call that would read the Boat key or the hand-out file `~/.config/werkflow/problem-report-handout.env`, which only `bun scripts/report-thread.ts` and the report dispatcher read.
 
 | Credential | Lives in | Used by | Expires | Rotate |
 | --- | --- | --- | --- | --- |
@@ -104,7 +105,7 @@ Agents never read PROD data through any tool: every tool result goes to the mode
 
 ## The migration rule
 
-1. Every schema change is a committed file in `supabase/migrations/` first. A PR carries at most one migration, with its regenerated types: apply it locally (`supabase migration up`) and run `bun run types:generate -- --local`. CI fails while the committed types differ. Its version sorts after the newest migration on `main`, or `supabase db push` refuses it after the merge; `bun run migrations:order` (in `check:changed` and CI) fails otherwise and names the version to rename it to.
+1. Every schema change is a committed file in `supabase/migrations/` first. A PR carries at most one migration, with its regenerated types: `bun run types:generate -- --local` writes them and leaves the shared stack alone ([types on Boat](boat-verification.md#types-on-boat)). CI fails while the committed types differ. Its version sorts after `main`'s newest, or `supabase db push` refuses it after the merge; `bun run migrations:order` (in `check:changed` and CI) fails otherwise and names the new version.
 2. A migration that creates a table follows [add a table](security.md#add-a-table).
 3. DEV receives a migration only when its PR merges to `main`: `.github/workflows/staging.yml` runs `supabase db push`, deploys the edge functions, then deploys that commit to staging. Never apply a migration to DEV by hand. `bun run migrations:check` and the canary fail when DEV's history diverges. `bun run advisors:check` fails on an advisor finding without a reviewed exception, and on an exception the advisor no longer reports.
 4. PROD receives migrations only through the `release` workflow ([Release and rollback](#release-and-rollback)). Never link, push or apply a migration to PROD by hand.

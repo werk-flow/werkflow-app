@@ -268,7 +268,7 @@ export function InvitationsTable({ rows }: InvitationsTableProps) {
       <EmptyState
         icon={Mail}
         title="Noch keine Einladungen"
-        description="Lade jemanden über „Mitarbeiter hinzufügen“ ein. Offene Einladungen erscheinen hier."
+        description="Lade jemanden über „Mitarbeiter einladen“ ein. Offene Einladungen erscheinen hier."
       />
     );
   }

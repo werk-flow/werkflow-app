@@ -60,6 +60,11 @@ const SECTION_PRESENTATION: Record<
     title: 'Beitrittsanfragen',
     testId: 'attention-join-request-tasks',
   },
+  siteAccess: {
+    icon: <ClipboardCheck className="size-4" />,
+    title: 'Zugang prüfen',
+    testId: 'attention-site-access-tasks',
+  },
   dispatchAcknowledgement: {
     icon: <Send className="size-4" />,
     title: 'Einsätze bestätigen',

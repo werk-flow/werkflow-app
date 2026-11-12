@@ -17,6 +17,11 @@ import {
   workArtifactCreateDialog,
 } from '../../../golden/support/spec-helpers/work-artifact-dialog';
 import { hydratedAndSettled } from '../../../golden/support/steps/interaction';
+import {
+  deviceDraftDeleteButton,
+  deviceDraftDeleteConfirmation,
+  leaveDraftOnDevice,
+} from '../offline-drafts';
 import { problemReportButton, problemReportDialog } from '../../../golden/support/steps/problem-reports';
 import { ownEvidenceUploadButton, ownEvidenceUploadDialog } from '../../../golden/support/steps/personnel';
 import {
@@ -51,6 +56,7 @@ import {
   vacationRejectDialog,
   vacationRequestDialog,
 } from '../../../golden/support/steps/vacation';
+import { fieldPackSiteAccessButton, fieldPackSiteAccessDialog } from '../../../golden/support/steps/work';
 import type { TestWorld } from '../../../golden/support/world';
 import type { DialogOpener } from '../dialog-opener';
 import { prepareLayoutDetails } from '../layout-fixtures';
@@ -267,8 +273,21 @@ export const TIME_OPENERS = {
     },
     layer: ownEvidenceUploadDialog,
   },
+  // The field worker's proposal from the pencil on the opened job's Einsatzort, in any proposal state.
+  'field.site-access': {
+    trigger: async ({ page }) => fieldPackSiteAccessButton(page),
+    layer: fieldPackSiteAccessDialog,
+  },
   'field.artifact': {
     trigger: async ({ page }) => newWorkArtifactButton(page, { exact: true }),
     layer: workArtifactCreateDialog,
+  },
+  'field.artifact-draft-delete': {
+    trigger: async ({ page }) => {
+      // A draft only this device holds; the audit opens its confirmation at several widths.
+      await leaveDraftOnDevice(page, 'Entwurf nur auf dem Gerät');
+      return deviceDraftDeleteButton(page, 'Entwurf nur auf dem Gerät');
+    },
+    layer: deviceDraftDeleteConfirmation,
   },
 } satisfies Partial<Record<DialogOpenerId, DialogOpener>>;

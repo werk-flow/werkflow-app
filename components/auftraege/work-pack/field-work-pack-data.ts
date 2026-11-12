@@ -17,6 +17,7 @@ import { getWorkHandoverFieldStatus } from '@/lib/work-handover/actions';
 import { getAssignedEquipmentForJob } from '@/lib/installed-equipment/actions';
 import { getAssignedServiceContextForJob } from '@/lib/service-cases/actions';
 import { getAssignedMaintenanceContextForJob } from '@/lib/maintenance/actions';
+import { readJobSiteAccessProposal } from '@/lib/site-access-proposals/field-read';
 import { formatBerlinDateTime } from '@/lib/utils';
 
 type FieldWorkPackAssignment = JobWithDetails['assignments'][number];
@@ -75,6 +76,7 @@ export async function loadFieldWorkPackData(
     equipmentResult,
     serviceContextResult,
     maintenanceContextResult,
+    siteAccessProposalRead,
   ] = await Promise.all([
     getJobInstructionItems(job.id),
     getJobDocuments(job.id),
@@ -87,6 +89,7 @@ export async function loadFieldWorkPackData(
     getAssignedEquipmentForJob(job.id),
     getAssignedServiceContextForJob(job.id),
     getAssignedMaintenanceContextForJob(job.id),
+    readJobSiteAccessProposal(job, currentUserId),
   ]);
 
   const fieldJob = projectFieldWorkPackJob(job);
@@ -123,6 +126,7 @@ export async function loadFieldWorkPackData(
     equipmentResult,
     serviceContextResult,
     maintenanceContextResult,
+    siteAccessProposalRead,
     fieldJob,
     instructionItems,
     documents,

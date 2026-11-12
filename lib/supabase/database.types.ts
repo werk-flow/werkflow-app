@@ -8746,6 +8746,104 @@ export type Database = {
           },
         ];
       };
+      site_access_proposals: {
+        Row: {
+          access_notes: string | null;
+          applied_access_notes: boolean;
+          applied_contact_id: string | null;
+          client_id: string;
+          contact_name: string | null;
+          contact_note: string | null;
+          contact_phone: string | null;
+          created_at: string;
+          decided_at: string | null;
+          decided_by: string | null;
+          id: string;
+          job_id: string;
+          organization_id: string;
+          proposed_at: string;
+          proposed_by: string | null;
+          rejection_reason: string | null;
+          revision: number;
+          site_id: string;
+          status: string;
+          updated_at: string;
+        };
+        Insert: {
+          access_notes?: string | null;
+          applied_access_notes?: boolean;
+          applied_contact_id?: string | null;
+          client_id: string;
+          contact_name?: string | null;
+          contact_note?: string | null;
+          contact_phone?: string | null;
+          created_at?: string;
+          decided_at?: string | null;
+          decided_by?: string | null;
+          id?: string;
+          job_id: string;
+          organization_id: string;
+          proposed_at?: string;
+          proposed_by?: string | null;
+          rejection_reason?: string | null;
+          revision?: number;
+          site_id: string;
+          status?: string;
+          updated_at?: string;
+        };
+        Update: {
+          access_notes?: string | null;
+          applied_access_notes?: boolean;
+          applied_contact_id?: string | null;
+          client_id?: string;
+          contact_name?: string | null;
+          contact_note?: string | null;
+          contact_phone?: string | null;
+          created_at?: string;
+          decided_at?: string | null;
+          decided_by?: string | null;
+          id?: string;
+          job_id?: string;
+          organization_id?: string;
+          proposed_at?: string;
+          proposed_by?: string | null;
+          rejection_reason?: string | null;
+          revision?: number;
+          site_id?: string;
+          status?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "site_access_proposals_applied_contact_id_fkey";
+            columns: ["applied_contact_id"];
+            isOneToOne: false;
+            referencedRelation: "client_contacts";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "site_access_proposals_job_fk";
+            columns: ["job_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "jobs";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "site_access_proposals_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "site_access_proposals_site_fk";
+            columns: ["site_id", "client_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "client_sites";
+            referencedColumns: ["id", "client_id", "organization_id"];
+          },
+        ];
+      };
       storage_purge_queue: {
         Row: {
           attempts: number;
@@ -11492,6 +11590,57 @@ export type Database = {
           },
         ];
       };
+      work_artifact_draft_operations: {
+        Row: {
+          actor_id: string;
+          captured_at: string;
+          created_at: string;
+          id: string;
+          organization_id: string;
+          request_hash: string;
+          result_payload: Json;
+          revision_id: string;
+          sent_at: string;
+        };
+        Insert: {
+          actor_id: string;
+          captured_at: string;
+          created_at?: string;
+          id: string;
+          organization_id: string;
+          request_hash: string;
+          result_payload: Json;
+          revision_id: string;
+          sent_at: string;
+        };
+        Update: {
+          actor_id?: string;
+          captured_at?: string;
+          created_at?: string;
+          id?: string;
+          organization_id?: string;
+          request_hash?: string;
+          result_payload?: Json;
+          revision_id?: string;
+          sent_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "work_artifact_draft_operations_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "work_artifact_draft_operations_revision_fkey";
+            columns: ["revision_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "work_artifact_revisions";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
       work_artifact_measurement_lines: {
         Row: {
           description: string;
@@ -11694,6 +11843,7 @@ export type Database = {
           customer_statement: string | null;
           decisions: string | null;
           deliveries: string | null;
+          draft_changed_at: string | null;
           id: string;
           impediments: string | null;
           instruction_item_id: string | null;
@@ -11732,6 +11882,7 @@ export type Database = {
           customer_statement?: string | null;
           decisions?: string | null;
           deliveries?: string | null;
+          draft_changed_at?: string | null;
           id: string;
           impediments?: string | null;
           instruction_item_id?: string | null;
@@ -11770,6 +11921,7 @@ export type Database = {
           customer_statement?: string | null;
           decisions?: string | null;
           deliveries?: string | null;
+          draft_changed_at?: string | null;
           id?: string;
           impediments?: string | null;
           instruction_item_id?: string | null;
@@ -13823,6 +13975,47 @@ export type Database = {
       };
     };
     Functions: {
+      accept_site_access_proposal: {
+        Args: {
+          p_actor_id: string;
+          p_contact_id?: string;
+          p_organization_id: string;
+          p_proposal_id: string;
+          p_reviewed_access_notes: string;
+          p_reviewed_contact_name?: string;
+          p_reviewed_contact_note?: string;
+          p_reviewed_contact_phone?: string;
+          p_revision: number;
+        };
+        Returns: {
+          access_notes: string | null;
+          applied_access_notes: boolean;
+          applied_contact_id: string | null;
+          client_id: string;
+          contact_name: string | null;
+          contact_note: string | null;
+          contact_phone: string | null;
+          created_at: string;
+          decided_at: string | null;
+          decided_by: string | null;
+          id: string;
+          job_id: string;
+          organization_id: string;
+          proposed_at: string;
+          proposed_by: string | null;
+          rejection_reason: string | null;
+          revision: number;
+          site_id: string;
+          status: string;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "site_access_proposals";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       acknowledge_personnel_item: {
         Args: {
           p_acknowledgement_kind: Database["public"]["Enums"]["personnel_acknowledgement_kind"];
@@ -14051,6 +14244,26 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      attach_work_artifact_draft: {
+        Args: {
+          p_actor_id: string;
+          p_artifact_id: string;
+          p_captured_at: string;
+          p_content: Json;
+          p_job_id: string;
+          p_kind: Database["public"]["Enums"]["work_artifact_kind"];
+          p_operation_id: string;
+          p_organization_id: string;
+          p_photos: Json;
+          p_recorded_at: string;
+          p_request_hash: string;
+          p_revision_id: string;
+          p_sent_at: string;
+          p_title: string;
+          p_visibility: Database["public"]["Enums"]["work_artifact_visibility"];
+        };
+        Returns: Json;
       };
       batch_reschedule_planning_occurrences: {
         Args: {
@@ -15383,27 +15596,50 @@ export type Database = {
           isSetofReturn: false;
         };
       };
-      create_work_artifact_revision: {
-        Args: {
-          p_actor_id: string;
-          p_artifact_id: string;
-          p_captured_at: string;
-          p_content: Json;
-          p_correction_reason: string;
-          p_corrects_revision_id: string;
-          p_expected_version: number;
-          p_job_id: string;
-          p_kind: Database["public"]["Enums"]["work_artifact_kind"];
-          p_organization_id: string;
-          p_project_id: string;
-          p_revision_id: string;
-          p_submit: boolean;
-          p_submit_action_id: string;
-          p_title: string;
-          p_visibility: Database["public"]["Enums"]["work_artifact_visibility"];
-        };
-        Returns: Json;
-      };
+      create_work_artifact_revision:
+        | {
+            Args: {
+              p_actor_id: string;
+              p_artifact_id: string;
+              p_captured_at: string;
+              p_content: Json;
+              p_correction_reason: string;
+              p_corrects_revision_id: string;
+              p_expected_version: number;
+              p_job_id: string;
+              p_kind: Database["public"]["Enums"]["work_artifact_kind"];
+              p_organization_id: string;
+              p_project_id: string;
+              p_revision_id: string;
+              p_submit: boolean;
+              p_submit_action_id: string;
+              p_title: string;
+              p_visibility: Database["public"]["Enums"]["work_artifact_visibility"];
+            };
+            Returns: Json;
+          }
+        | {
+            Args: {
+              p_actor_id: string;
+              p_artifact_id: string;
+              p_captured_at: string;
+              p_content: Json;
+              p_correction_reason: string;
+              p_corrects_revision_id: string;
+              p_draft_changed_at: string;
+              p_expected_version: number;
+              p_job_id: string;
+              p_kind: Database["public"]["Enums"]["work_artifact_kind"];
+              p_organization_id: string;
+              p_project_id: string;
+              p_revision_id: string;
+              p_submit: boolean;
+              p_submit_action_id: string;
+              p_title: string;
+              p_visibility: Database["public"]["Enums"]["work_artifact_visibility"];
+            };
+            Returns: Json;
+          };
       create_work_template: {
         Args: {
           p_actor_id: string;
@@ -16829,6 +17065,46 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      propose_site_access: {
+        Args: {
+          p_access_notes: string;
+          p_actor_id: string;
+          p_contact_name: string;
+          p_contact_note: string;
+          p_contact_phone: string;
+          p_job_id: string;
+          p_organization_id: string;
+          p_site_id: string;
+        };
+        Returns: {
+          access_notes: string | null;
+          applied_access_notes: boolean;
+          applied_contact_id: string | null;
+          client_id: string;
+          contact_name: string | null;
+          contact_note: string | null;
+          contact_phone: string | null;
+          created_at: string;
+          decided_at: string | null;
+          decided_by: string | null;
+          id: string;
+          job_id: string;
+          organization_id: string;
+          proposed_at: string;
+          proposed_by: string | null;
+          rejection_reason: string | null;
+          revision: number;
+          site_id: string;
+          status: string;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "site_access_proposals";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       publish_personnel_onboarding_template: {
         Args: {
           p_actor_id: string;
@@ -16868,6 +17144,10 @@ export type Database = {
       queue_storage_purge: {
         Args: { p_organization_id: string; p_paths: string[] };
         Returns: undefined;
+      };
+      read_manager_attention_sets: {
+        Args: { p_limit: number; p_organization_id: string };
+        Returns: Json;
       };
       read_open_absences: {
         Args: { p_organization_id: string; p_today: string };
@@ -17055,6 +17335,43 @@ export type Database = {
           p_storage_path: string;
         };
         Returns: undefined;
+      };
+      reject_site_access_proposal: {
+        Args: {
+          p_actor_id: string;
+          p_organization_id: string;
+          p_proposal_id: string;
+          p_reason: string;
+          p_revision: number;
+        };
+        Returns: {
+          access_notes: string | null;
+          applied_access_notes: boolean;
+          applied_contact_id: string | null;
+          client_id: string;
+          contact_name: string | null;
+          contact_note: string | null;
+          contact_phone: string | null;
+          created_at: string;
+          decided_at: string | null;
+          decided_by: string | null;
+          id: string;
+          job_id: string;
+          organization_id: string;
+          proposed_at: string;
+          proposed_by: string | null;
+          rejection_reason: string | null;
+          revision: number;
+          site_id: string;
+          status: string;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "site_access_proposals";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       release_work_handover: {
         Args: {

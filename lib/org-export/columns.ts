@@ -36,7 +36,10 @@ type ExcludedTable =
   // after seven days; one row per file would grow every export by the last.
   // Their history stays in `organization_exports` and `organization_export_events`.
   | 'organization_export_files'
-  | 'organization_export_parts';
+  | 'organization_export_parts'
+  // Idempotency keys of report drafts a phone sent; the revision each one
+  // wrote is in `work_artifact_revisions`.
+  | 'work_artifact_draft_operations';
 
 export type ExportTable = Exclude<TableName, ExcludedTable>;
 type ColumnOf<Table extends ExportTable> = keyof PublicTables[Table]['Row'] & string;
@@ -171,6 +174,7 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   service_cases: 'Servicefälle',
   sickness_report_events: 'Krankmeldungen_Ereignisse',
   sickness_reports: 'Krankmeldungen',
+  site_access_proposals: 'Kunden_Zugangsvorschläge',
   team_events: 'Teams_Ereignisse',
   team_memberships: 'Teams_Mitglieder',
   teams: 'Teams',

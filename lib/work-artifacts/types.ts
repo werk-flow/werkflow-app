@@ -7,7 +7,13 @@ export type WorkArtifactVisibility = Database['public']['Enums']['work_artifact_
 export type WorkArtifactActionType = Database['public']['Enums']['work_artifact_action_type'];
 export type WorkArtifactMeasurementUnit = Database['public']['Enums']['work_artifact_measurement_unit'];
 export type WorkArtifactRow = Database['public']['Tables']['work_artifacts']['Row'];
-export type WorkArtifactRevisionRow = Database['public']['Tables']['work_artifact_revisions']['Row'];
+/** A revision as the server stores it, with the device marker the page never needs. */
+export type StoredWorkArtifactRevisionRow = Database['public']['Tables']['work_artifact_revisions']['Row'];
+/**
+ * A revision as a page sees it: without `draft_changed_at`, the device's last-change time of the
+ * draft the revision was written from, which only the draft attach compares.
+ */
+export type WorkArtifactRevisionRow = Omit<StoredWorkArtifactRevisionRow, 'draft_changed_at'>;
 /** The job or project an artifact belongs to. */
 export type WorkArtifactTarget = { targetType: 'job' | 'project'; targetId: string };
 export type WorkArtifactActionRow = Database['public']['Tables']['work_artifact_actions']['Row'];
@@ -101,6 +107,8 @@ export type SaveWorkArtifactInput = {
   correctionReason?: string;
   submit: boolean;
   submitActionId?: string;
+  /** The device's last-change time of the draft this save comes from, when it comes from one. */
+  draftChangedAt?: string;
 };
 
 export type WorkArtifactActionInput = {
@@ -142,6 +150,9 @@ export type WorkArtifactTimeSourceOption = {
   label: string;
   sourceType: 'time_entry' | 'time_segment';
 };
+
+/** The most photos one report draft carries from a phone (field sync `work_artifact.draft`). */
+export const WORK_ARTIFACT_DRAFT_PHOTO_LIMIT = 20;
 
 export const WORK_ARTIFACT_KINDS = [
   'site_diary',
