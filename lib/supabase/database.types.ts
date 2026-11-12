@@ -14300,6 +14300,18 @@ export type Database = {
         Returns: undefined;
       };
       complete_storage_purge: { Args: { p_ids: string[] }; Returns: undefined };
+      confirm_payroll_mapping_version: {
+        Args: {
+          p_actor_id: string;
+          p_code_mappings: Json;
+          p_employee_mappings: Json;
+          p_expected_version: number;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_request_hash: string;
+        };
+        Returns: string;
+      };
       consume_rate_limit: {
         Args: {
           p_action: string;
@@ -16666,6 +16678,17 @@ export type Database = {
           p_request_hash: string;
         };
         Returns: string;
+      };
+      open_time_accounts: {
+        Args: {
+          p_actor_id: string;
+          p_opened_on: string;
+          p_openings: Json;
+          p_organization_id: string;
+          p_reason: string;
+          p_request_hash: string;
+        };
+        Returns: number;
       };
       park_work_target: {
         Args: {
