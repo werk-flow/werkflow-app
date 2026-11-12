@@ -542,7 +542,7 @@ function openRequests(organizationId: unknown): Row[] {
     .map((row) => ({ ...row, callback_due_at: null, callback_overdue: false, owner_is_manager: true }));
 }
 
-/** The open access proposals of `read_manager_attention_sets` (migration 20261201100003). */
+/** The open access proposals of `read_manager_attention_sets` (migration 20261201100004). */
 function openProposals(organizationId: unknown): Row[] {
   return (world.get('site_access_proposals') ?? []).filter(
     (row) => row.organization_id === organizationId && row.status === 'open',
