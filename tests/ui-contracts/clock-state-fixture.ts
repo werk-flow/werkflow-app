@@ -5,9 +5,11 @@ export const CLOCK_ORGANIZATION_ID = '10000000-0000-4000-8000-000000000001';
 export const CLOCK_USER_ID = '10000000-0000-4000-8000-0000000000aa';
 export const RUNNING_CLOCK_STATE: LiveClockState = {
   organizationId: CLOCK_ORGANIZATION_ID,
-  breakMode: 'manual',
-  autoBreakThresholdMinutes: 360,
-  autoBreakDurationMinutes: 30,
+  breakPolicy: {
+    breakMode: 'manual',
+    autoBreakThresholdMinutes: 360,
+    autoBreakDurationMinutes: 30,
+  },
   status: 'working',
   isClockedIn: true,
   isOnBreak: false,
