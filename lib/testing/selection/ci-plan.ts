@@ -12,6 +12,8 @@ export type CiGroup = {
   executionInputs: readonly string[];
   /** The group's `changeTrigger`. */
   trigger?: ChangeTrigger | undefined;
+  /** A layout sweep's rendered product files (surface-closure.ts). */
+  renderedFiles?: readonly string[] | undefined;
 };
 
 type CiShard = { shard: number; groups: string };
@@ -147,6 +149,7 @@ function changeSelection(
       scopes: group.scopes,
       executionInputs: group.executionInputs,
       trigger: group.trigger,
+      renderedFiles: group.renderedFiles,
     })),
     changedFiles,
     unresolvedGroupIds: [],
