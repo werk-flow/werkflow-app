@@ -38,6 +38,14 @@ test('the first preview saves the selection as the draft, then previews that dra
     selectedSourceKeys: ['artifact:9a000000-0000-4000-8000-000000000165'],
   });
   await answerHeldWrite(page, null);
+  // The save revalidates the route: its answer brings the saved draft as new props.
+  await page.evaluate(() =>
+    window.uiContractHandoverServerRender?.({
+      packageVersion: 1,
+      packageState: 'draft',
+      selectedSourceKeys: ['artifact:9a000000-0000-4000-8000-000000000165'],
+    }),
+  );
 
   await expect
     .poll(() => page.evaluate(() => window.uiContractWrites.calls.map((call) => call.kind)))
@@ -48,6 +56,10 @@ test('the first preview saves the selection as the draft, then previews that dra
   await answerHeldWrite(page, null);
 
   await expect(main.getByRole('button', { name: 'Freigeben und übergeben' })).toBeEnabled();
+  expect(
+    await page.evaluate(() => window.uiContractWrites.calls.length),
+    'the preview of the saved draft needs no second save',
+  ).toBe(2);
 });
 
 test('a handover with nothing to hand over names the next step and links to the job', async ({ page }) => {

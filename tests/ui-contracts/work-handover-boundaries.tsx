@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 import { WorkHandoverSection } from '@/components/auftraege/handover/work-handover-review';
 import type { WorkHandoverWorkspace } from '@/lib/work-handover/types';
 
@@ -5,6 +7,8 @@ declare global {
   interface Window {
     /** Set by a spec's init script: the job has no content to hand over yet. */
     uiContractHandoverWithoutSources?: boolean;
+    /** Renders the review with the props a revalidating action's answer carries. */
+    uiContractHandoverServerRender?: (patch: Partial<WorkHandoverWorkspace>) => void;
   }
 }
 
@@ -63,13 +67,16 @@ function firstOpenWorkspace(withSources: boolean): WorkHandoverWorkspace {
 
 /** The handover review of a job opened for the first time. */
 export function WorkHandoverContractFixture(): React.JSX.Element {
+  const [workspace, setWorkspace] = useState(() =>
+    firstOpenWorkspace(!window.uiContractHandoverWithoutSources),
+  );
+  useEffect(() => {
+    window.uiContractHandoverServerRender = (patch) => setWorkspace((current) => ({ ...current, ...patch }));
+  }, []);
   return (
     <main>
       <h1>Komponentenverträge</h1>
-      <WorkHandoverSection
-        initialWorkspace={firstOpenWorkspace(!window.uiContractHandoverWithoutSources)}
-        workHref="/auftraege/AUF-2026-163"
-      />
+      <WorkHandoverSection initialWorkspace={workspace} workHref="/auftraege/AUF-2026-163" />
     </main>
   );
 }

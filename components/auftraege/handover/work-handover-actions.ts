@@ -31,7 +31,8 @@ type WorkHandoverReleaseErrors = {
 
 /**
  * Saves the reviewer's selection as the package draft, creating the package on
- * its first save. Answers the saved package version, or null after reporting
+ * its first save. The action revalidates the route, whose new props arrive with
+ * its answer, so no client refresh follows. Answers the saved package version, or null after reporting
  * the refusal on `operation`.
  */
 async function persistHandoverDraft(
@@ -58,12 +59,11 @@ async function persistHandoverDraft(
 }
 
 function saveHandoverDraft(context: WorkHandoverWriteContext): void {
-  const { refreshRoute, setFeedback, runHandoverTask, succeed } = context.review;
+  const { setFeedback, runHandoverTask, succeed } = context.review;
   setFeedback(null);
   void runHandoverTask('draft', async () => {
     if ((await persistHandoverDraft(context, 'draft')) === null) return;
     succeed('draft', 'Entwurf gespeichert.');
-    refreshRoute();
   });
 }
 
@@ -74,7 +74,7 @@ function saveHandoverDraft(context: WorkHandoverWriteContext): void {
  */
 function createHandoverPreview(context: WorkHandoverWriteContext): void {
   const { initialWorkspace, review } = context;
-  const { refreshRoute, dirty, setPreview, setFeedback, runHandoverTask, packageVersion } = review;
+  const { dirty, setPreview, setFeedback, runHandoverTask, packageVersion } = review;
   const { succeed, fail, failWithCode } = review;
   // The server holds no draft of this selection, or one with stale sources.
   const needsDraftSave = dirty || packageVersion === 0 || initialWorkspace.staleSourceCount > 0;
@@ -106,7 +106,6 @@ function createHandoverPreview(context: WorkHandoverWriteContext): void {
       expectedPackageVersion: savedVersion,
       releaseId: identity.releaseId,
     });
-    if (needsDraftSave) refreshRoute();
     if (!result.success) {
       previewWindow.close();
       failWithCode('preview', result.error);
