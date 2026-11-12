@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Pencil, ReceiptText } from 'lucide-react';
 
 import { SectionTitle } from '@/components/shared/section-title';
@@ -112,6 +112,51 @@ function partyFacts(parties: WorkBillingParties, site: WorkBillingParties['site'
   );
 }
 
+/** The card itself, built once per shown state so a live-view tick re-renders none of it. */
+function billingCard(input: {
+  id: string;
+  parties: WorkBillingParties;
+  site: WorkBillingParties['site'];
+  stale: boolean;
+  onEdit: () => void;
+}): React.ReactNode {
+  const { id, parties, stale, onEdit } = input;
+  return (
+    <section
+      aria-labelledby={`work-billing-parties-${id}`}
+      className="rounded-lg border bg-card p-4 sm:p-5"
+      data-testid="work-billing-parties"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <SectionTitle as="h2" id={`work-billing-parties-${id}`} icon={<ReceiptText className="size-4" />}>
+          Auftraggeber und Rechnung
+        </SectionTitle>
+        {parties.hasClient && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-label="Auftraggeber und Rechnungsempfänger ändern"
+            onClick={onEdit}
+            onPointerEnter={lazyWorkBillingPartiesDialog.preload}
+            onFocus={lazyWorkBillingPartiesDialog.preload}
+            disabled={stale}
+          >
+            <Pencil className="size-4" />
+            Ändern
+          </Button>
+        )}
+      </div>
+      {parties.hasClient ? (
+        partyFacts(parties, input.site)
+      ) : (
+        <p className="mt-3 text-sm text-muted-foreground">Ordne zuerst einen Kunden zu.</p>
+      )}
+      {earlierPartiesList(parties.versions.slice(1))}
+    </section>
+  );
+}
+
 /**
  * Who commissioned a job, project or Servicefall and who receives its
  * invoice, with the Einsatzort and its access contacts. Office-only: the
@@ -134,7 +179,16 @@ export function WorkBillingPartiesSection({
 }) {
   const view = useWorkBillingParties(kind, id, initialParties);
   const [editing, setEditing] = useState(false);
+  const openEditor = useCallback(() => setEditing(true), []);
   const parties = view.data;
+  const shownSite = site === undefined ? (parties?.site ?? null) : site;
+  const card = useMemo(
+    () =>
+      parties === undefined
+        ? null
+        : billingCard({ id, parties, site: shownSite, stale: view.isStale, onEdit: openEditor }),
+    [id, parties, shownSite, view.isStale, openEditor],
+  );
   if (parties === undefined) {
     return view.isLoading ? null : (
       <SectionError
@@ -146,49 +200,20 @@ export function WorkBillingPartiesSection({
       </SectionError>
     );
   }
-  const [current = null, ...earlier] = parties.versions;
   return (
     <StaleRegion stale={view.isStale} onRetry={view.refresh} className={className}>
-      <section
-        aria-labelledby={`work-billing-parties-${id}`}
-        className="rounded-lg border bg-card p-4 sm:p-5"
-        data-testid="work-billing-parties"
-      >
-        <div className="flex items-start justify-between gap-3">
-          <SectionTitle as="h2" id={`work-billing-parties-${id}`} icon={<ReceiptText className="size-4" />}>
-            Auftraggeber und Rechnung
-          </SectionTitle>
-          {parties.hasClient && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              aria-label="Auftraggeber und Rechnungsempfänger ändern"
-              onClick={() => setEditing(true)}
-              onPointerEnter={lazyWorkBillingPartiesDialog.preload}
-              onFocus={lazyWorkBillingPartiesDialog.preload}
-              disabled={view.isStale}
-            >
-              <Pencil className="size-4" />
-              Ändern
-            </Button>
-          )}
-        </div>
-        {parties.hasClient ? (
-          partyFacts(parties, site === undefined ? parties.site : site)
-        ) : (
-          <p className="mt-3 text-sm text-muted-foreground">Ordne zuerst einen Kunden zu.</p>
-        )}
-        {earlierPartiesList(earlier)}
-      </section>
-      <lazyWorkBillingPartiesDialog.Dialog
-        open={editing}
-        onOpenChange={setEditing}
-        kind={kind}
-        workId={id}
-        current={current}
-        onSaved={view.refresh}
-      />
+      {card}
+      {/* Mounted while open, so a page that only shows the parties renders no dialog. */}
+      {editing && (
+        <lazyWorkBillingPartiesDialog.Dialog
+          open
+          onOpenChange={setEditing}
+          kind={kind}
+          workId={id}
+          current={parties.versions[0] ?? null}
+          onSaved={view.refresh}
+        />
+      )}
     </StaleRegion>
   );
 }
