@@ -11,6 +11,7 @@ import { rpcArgs } from '@/lib/supabase/rpc-args';
 import type { z } from '@/lib/zod';
 import type { importInventoryRowsSchema } from './action-schemas';
 import { toNumber } from './types';
+import { normalizeInventoryUnitInput } from './units';
 
 // The value rules and write helpers the inventory Server Actions in
 // `./actions` and `./catalog-actions` share. The callers authorize first and
@@ -31,52 +32,6 @@ export function normalizeQuantity(value: number): number {
 export function normalizePrice(value: number | null | undefined): number | null {
   if (value === null || value === undefined || !Number.isFinite(value)) return null;
   return Math.max(0, Math.round(value));
-}
-
-export function normalizeInventoryUnitInput(value: string | null | undefined): string {
-  const normalized = (value ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/ü/g, 'ue')
-    .replace(/ä/g, 'ae')
-    .replace(/ö/g, 'oe');
-
-  if (!normalized) return 'piece';
-
-  const aliases: Record<string, string> = {
-    stueck: 'piece',
-    stuck: 'piece',
-    stk: 'piece',
-    st: 'piece',
-    piece: 'piece',
-    pieces: 'piece',
-    meter: 'meter',
-    m: 'meter',
-    rolle: 'roll',
-    roll: 'roll',
-    packung: 'package',
-    paket: 'package',
-    package: 'package',
-    karton: 'box',
-    box: 'box',
-    set: 'set',
-    paar: 'pair',
-    pair: 'pair',
-    liter: 'liter',
-    l: 'liter',
-    kilogramm: 'kilogram',
-    kilogram: 'kilogram',
-    kg: 'kilogram',
-    sack: 'sack',
-    kartusche: 'cartridge',
-    cartridge: 'cartridge',
-    bund: 'bundle',
-    bundle: 'bundle',
-    palette: 'pallet',
-    pallet: 'pallet',
-  };
-
-  return aliases[normalized] ?? value?.trim() ?? 'piece';
 }
 
 export function invalidateInventory(): void {
@@ -205,7 +160,9 @@ export function inventoryImportItem(
   return {
     item_type: row.itemType ?? 'material',
     name,
-    unit: normalizeInventoryUnitInput(row.unit),
+    // The import keeps its earlier handling (an empty unit is Stück, other
+    // text stays as typed) until werk-flow/werkflow-planning#371 reviews units.
+    unit: normalizeInventoryUnitInput(row.unit) ?? cleanText(row.unit) ?? 'piece',
     internal_sku: cleanText(row.internalSku),
     manufacturer: cleanText(row.manufacturer),
     supplier_article_number: cleanText(row.supplierArticleNumber),

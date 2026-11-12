@@ -73,8 +73,8 @@
           "rows": null
         },
         "script": {
-          "requests": { "reference": 42, "tolerance": 1 },
-          "encodedBytes": { "reference": 671304, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "requests": { "reference": 43, "tolerance": 1 },
+          "encodedBytes": { "reference": 693562, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         },
@@ -352,60 +352,6 @@
           },
           "runKeys": ["2026-11-09T191958859Z-6ffc80"],
           "reason": "The route payload names one script chunk fewer (cold-start script requests 43 to 42): the app shell now imports lazyDialog for the report dialog, so /auftraege no longer references it as a chunk of its own. Rows and route renders are unchanged; nothing is missing."
-        },
-        {
-          "kind": "floor-accept",
-          "target": "script",
-          "from": {
-            "requests": { "reference": 43, "tolerance": 1 },
-            "encodedBytes": { "reference": 693562, "tolerance": { "relative": 0.01, "absolute": 512 } },
-            "decodedBytes": null,
-            "rows": null
-          },
-          "to": {
-            "requests": { "reference": 44, "tolerance": 1 },
-            "encodedBytes": { "reference": 682610, "tolerance": { "relative": 0.01, "absolute": 512 } },
-            "decodedBytes": null,
-            "rows": null
-          },
-          "runKeys": ["2026-11-12T092434335Z-82bba9"],
-          "reason": "The Arbeitsnachweis dialog and all draft code load apart from the job page's own code, which the job list prefetches (werk-flow/werkflow-planning#320). Cold-start script 693,562 B on main a1e0e908's reference -> 682,610 B on the merged tree (-10,952 B); 44 script requests against main's 43 (tolerance 1). Nothing is missing: every cold-start request shape matches main's."
-        },
-        {
-          "kind": "floor-accept",
-          "target": "script",
-          "from": {
-            "requests": { "reference": 44, "tolerance": 1 },
-            "encodedBytes": { "reference": 682610, "tolerance": { "relative": 0.01, "absolute": 512 } },
-            "decodedBytes": null,
-            "rows": null
-          },
-          "to": {
-            "requests": { "reference": 43, "tolerance": 1 },
-            "encodedBytes": { "reference": 679994, "tolerance": { "relative": 0.01, "absolute": 512 } },
-            "decodedBytes": null,
-            "rows": null
-          },
-          "runKeys": ["2026-11-12T102738653Z-90c2c7"],
-          "reason": "The Arbeitsnachweis dialog and all draft code load apart from the job page's own code, which the job list prefetches (werk-flow/werkflow-planning#320). Cold-start script 679,994 B in 43 requests, the request count of main a1e0e908 (43). A capture of the cold start's script URLs on main and on this branch matched every chunk; a draft hint module the lazy code imported had become a chunk of its own (+1 request) until the page handed its hint writer to the lazy code."
-        },
-        {
-          "kind": "floor-accept",
-          "target": "script",
-          "from": {
-            "requests": { "reference": 43, "tolerance": 1 },
-            "encodedBytes": { "reference": 679994, "tolerance": { "relative": 0.01, "absolute": 512 } },
-            "decodedBytes": null,
-            "rows": null
-          },
-          "to": {
-            "requests": { "reference": 42, "tolerance": 1 },
-            "encodedBytes": { "reference": 671304, "tolerance": { "relative": 0.01, "absolute": 512 } },
-            "decodedBytes": null,
-            "rows": null
-          },
-          "runKeys": ["2026-11-12T142553577Z-21d7cf"],
-          "reason": "werk-flow/werkflow-app#393 on main removed one start-up script and about 6.1 KB (main alone measures 687,435 B against its 693,562 B reference, 42 requests); together with this PR's lazy dialog the sum is 671,304 B, below this PR's floor of 673,194 B. Request shapes match main's and the job-open step is unchanged. Measured on Boat run 2026-11-12T142553577Z-21d7cf on the merged tree 4c3aab90; CI run 2026-11-12T143946890Z-e66388 measured 671,308 B."
         }
       ]
     },
@@ -424,13 +370,13 @@
         "backend": "local"
       },
       "counts": {
-        "requests": { "reference": 3, "tolerance": 0 },
+        "requests": { "reference": 1, "tolerance": 0 },
         "routeRenders": { "reference": 1, "tolerance": 0 },
         "echoRenders": { "reference": 0, "tolerance": 0 },
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 31, "tolerance": 1 },
-        "componentRenders": { "reference": 587, "tolerance": 10 }
+        "componentRenders": { "reference": 536, "tolerance": 10 }
       },
       "payloads": {
         "prefetch:/auftraege": {
@@ -441,14 +387,8 @@
         },
         "route:/auftraege/[jobNumber]": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 1221, "tolerance": { "relative": 1, "absolute": 512 } },
-          "decodedBytes": { "reference": 17763, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "rows": null
-        },
-        "script": {
-          "requests": { "reference": 2, "tolerance": 0 },
-          "encodedBytes": { "reference": 28400, "tolerance": { "relative": 0.05, "absolute": 512 } },
-          "decodedBytes": null,
+          "encodedBytes": { "reference": 1234, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 17871, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         }
       },
@@ -538,35 +478,6 @@
           "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
         },
         {
-          "kind": "raise",
-          "target": "requests",
-          "from": { "reference": 1, "tolerance": 0 },
-          "to": { "reference": 3, "tolerance": 0 },
-          "runKeys": ["2026-11-12T092434335Z-82bba9"],
-          "reason": "The report dialog loads after the job page is idle so a first open without signal works (werk-flow/werkflow-planning#320, CodeRabbit r4547677458; lead decision). Measured on the tree merged with main a1e0e908. Job-open requests 1 -> 3: the two chunks of the dialog module the idle load fetches."
-        },
-        {
-          "kind": "raise",
-          "target": "componentRenders",
-          "from": { "reference": 536, "tolerance": 10 },
-          "to": { "reference": 587, "tolerance": 10 },
-          "runKeys": ["2026-11-12T092434335Z-82bba9"],
-          "reason": "The report dialog loads after the job page is idle so a first open without signal works (werk-flow/werkflow-planning#320, CodeRabbit r4547677458; lead decision). Measured on the tree merged with main a1e0e908. Job-open component renders 536 -> 587: the loaded drafts list and the closed dialog host mount (586 before the merge with #329)."
-        },
-        {
-          "kind": "shape-accept",
-          "target": "script",
-          "from": null,
-          "to": {
-            "requests": { "reference": 2, "tolerance": 0 },
-            "encodedBytes": { "reference": 28259, "tolerance": { "relative": 0.05, "absolute": 512 } },
-            "decodedBytes": null,
-            "rows": null
-          },
-          "runKeys": ["2026-11-12T092434335Z-82bba9"],
-          "reason": "The report dialog loads after the job page is idle so a first open without signal works (werk-flow/werkflow-planning#320, CodeRabbit r4547677458; lead decision). Measured on the tree merged with main a1e0e908. New script shape, 28,259 B (27,522 B before the merge with #329): the dialog module's chunks, which the field worker loads on the job page instead of at the app start."
-        },
-        {
           "kind": "ceiling-accept",
           "target": "route:/auftraege/[jobNumber]",
           "from": {
@@ -578,55 +489,11 @@
           "to": {
             "requests": { "reference": 1, "tolerance": 0 },
             "encodedBytes": { "reference": 1234, "tolerance": { "relative": 1, "absolute": 512 } },
-            "decodedBytes": { "reference": 17986, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 17871, "tolerance": { "relative": 0.01, "absolute": 512 } },
             "rows": null
           },
-          "runKeys": ["2026-11-12T092434335Z-82bba9"],
-          "reason": "The report dialog loads after the job page is idle so a first open without signal works (werk-flow/werkflow-planning#320, CodeRabbit r4547677458; lead decision). Measured on the tree merged with main a1e0e908. Route payload 17,263 -> 17,986 B. Payload diff of base 8df078d6 (17,763 B, 29 chunks) and head (17,986 B, 30 chunks): each of the 12 client-reference I[...] rows names one more chunk (+6 B each, +72 B); the rest (+151 B) is renumbering and module-id strings. No new data rows."
-        },
-        {
-          "kind": "ratchet",
-          "target": "componentRenders",
-          "from": { "reference": 587, "tolerance": 10 },
-          "to": { "reference": 587, "tolerance": 10 },
-          "runKeys": ["2026-11-12T102738653Z-90c2c7"],
-          "reason": "The report dialog loads after the job page is idle so a first open without signal works (werk-flow/werkflow-planning#320, CodeRabbit r4547677458; lead decision). Measured on the tree merged with main a1e0e908. Job-open component renders 536 -> 587: the loaded drafts list and the closed dialog host mount; 586 before the merge. #329 (a1e0e908) puts the problem-report control on every page, and the dialog chunk shares code with it; the lead accepted the move without more digging."
-        },
-        {
-          "kind": "ceiling-accept",
-          "target": "script",
-          "from": {
-            "requests": { "reference": 2, "tolerance": 0 },
-            "encodedBytes": { "reference": 28259, "tolerance": { "relative": 0.05, "absolute": 512 } },
-            "decodedBytes": null,
-            "rows": null
-          },
-          "to": {
-            "requests": { "reference": 2, "tolerance": 0 },
-            "encodedBytes": { "reference": 28400, "tolerance": { "relative": 0.05, "absolute": 512 } },
-            "decodedBytes": null,
-            "rows": null
-          },
-          "runKeys": ["2026-11-12T102738653Z-90c2c7"],
-          "reason": "The report dialog loads after the job page is idle so a first open without signal works (werk-flow/werkflow-planning#320, CodeRabbit r4547677458; lead decision). Measured on the tree merged with main a1e0e908. Script shape of 2 requests, 28,400 B: the dialog module's chunks, which the field worker loads on the job page instead of at the app start; 27,522 B before the merge. #329 (a1e0e908) puts the problem-report control on every page, and the dialog chunk shares code with it; the lead accepted the move without more digging."
-        },
-        {
-          "kind": "floor-accept",
-          "target": "route:/auftraege/[jobNumber]",
-          "from": {
-            "requests": { "reference": 1, "tolerance": 0 },
-            "encodedBytes": { "reference": 1234, "tolerance": { "relative": 1, "absolute": 512 } },
-            "decodedBytes": { "reference": 17986, "tolerance": { "relative": 0.01, "absolute": 512 } },
-            "rows": null
-          },
-          "to": {
-            "requests": { "reference": 1, "tolerance": 0 },
-            "encodedBytes": { "reference": 1221, "tolerance": { "relative": 1, "absolute": 512 } },
-            "decodedBytes": { "reference": 17763, "tolerance": { "relative": 0.01, "absolute": 512 } },
-            "rows": null
-          },
-          "runKeys": ["2026-11-12T102738653Z-90c2c7"],
-          "reason": "The report dialog loads after the job page is idle so a first open without signal works (werk-flow/werkflow-planning#320, CodeRabbit r4547677458; lead decision). Measured on the tree merged with main a1e0e908. Route payload 17,763 B, the size of base 8df078d6 (17,763 B): once the lazy draft code stopped importing the page's draft hint module, the client references name no extra chunk. Earlier accepted 17,986 B came from that extra chunk in each of 12 client-reference I[...] rows."
+          "runKeys": ["2026-11-12T143746833Z-bb55cf"],
+          "reason": "werk-flow/werkflow-planning#369: the job page's navigation payload grew 608 B (17263 to 17871, the same in two runs) with identical backendByPath and rows. The change adds the client module lib/inventory/units.ts, which lib/inventory/types.ts (formatInventoryQuantity, used by the job material rows) now imports, so the payload's client references name one more chunk. No data was added; the response body stayed on Boat and was not opened."
         }
       ]
     },
