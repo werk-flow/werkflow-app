@@ -13,7 +13,7 @@ import {
   UNUSUALLY_LONG_SESSION_MS,
   type TimeSegmentFact,
 } from './segments';
-import { breakPolicyOf, computeBreakdownForSettings, type BreakPolicy } from './settings';
+import { computeBreakdownForSettings, currentBreakPolicy, type BreakPolicy } from './settings';
 import type { ClockJobInfo, LiveClockState, TimeActivitySelection } from './types';
 
 // The caller's canonical clock day for getCurrentClockState: the segments of
@@ -233,7 +233,7 @@ export function clockTotalsState(
 > {
   const breakdown = computeBreakdownForSettings(totals.presenceMinutes, totals.breakMinutes, settings);
   return {
-    breakPolicy: breakPolicyOf(settings),
+    breakPolicy: currentBreakPolicy(settings),
     todayMinutes: totals.presenceMinutes,
     workMinutes: breakdown.workMinutes,
     breakMinutes: breakdown.breakMinutes,

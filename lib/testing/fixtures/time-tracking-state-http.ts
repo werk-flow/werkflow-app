@@ -67,7 +67,6 @@ const state: LiveClockState = {
     breakMode: 'manual',
     autoBreakThresholdMinutes: 360,
     autoBreakDurationMinutes: 30,
-    breakPolicyHistory: [],
   },
   status: 'working',
   isClockedIn: true,

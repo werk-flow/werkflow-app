@@ -68,13 +68,12 @@ export type BreakPolicyValues = Pick<
  */
 export type BreakPolicy = BreakPolicyValues & { breakPolicyHistory: BreakPolicyHistoryEntry[] };
 
-/** The break rule as it travels to the client, history included. */
-export const breakPolicySchema = z.object({
+/** Today's break rule as the clock state carries it to the client, without the earlier versions. */
+export const breakPolicyValuesSchema = z.object({
   breakMode: z.enum(['manual', 'automatic']),
   autoBreakThresholdMinutes: z.number(),
   autoBreakDurationMinutes: z.number(),
-  breakPolicyHistory: z.array(breakPolicyHistoryEntrySchema),
-}) satisfies z.ZodType<BreakPolicy>;
+}) satisfies z.ZodType<BreakPolicyValues>;
 
 export type OrganizationTimeTrackingSettings = BreakPolicy & { organizationId: string };
 
@@ -85,6 +84,15 @@ export function breakPolicyOf(settings: BreakPolicy): BreakPolicy {
     autoBreakThresholdMinutes: settings.autoBreakThresholdMinutes,
     autoBreakDurationMinutes: settings.autoBreakDurationMinutes,
     breakPolicyHistory: settings.breakPolicyHistory,
+  };
+}
+
+/** Only the current version of a rule, without the earlier ones. */
+export function currentBreakPolicy(policy: BreakPolicyValues): BreakPolicyValues {
+  return {
+    breakMode: policy.breakMode,
+    autoBreakThresholdMinutes: policy.autoBreakThresholdMinutes,
+    autoBreakDurationMinutes: policy.autoBreakDurationMinutes,
   };
 }
 

@@ -141,7 +141,7 @@ if (ISOLATED) {
   }));
 
   const { updateTimeTrackingSettings } = await import('./settings-actions');
-  const { breakPolicySchema, resolveBreakPolicyAtTimestamp } = await import('./settings');
+  const { parseBreakPolicyHistory, resolveBreakPolicyAtTimestamp } = await import('./settings');
 
   beforeEach(() => {
     stored = {
@@ -233,12 +233,12 @@ if (ISOLATED) {
     expect(result.success).toBe(true);
 
     // The rule as saved, with the history the call wrote.
-    const settings = breakPolicySchema.parse({
-      breakMode: 'manual',
+    const settings = {
+      breakMode: 'manual' as const,
       autoBreakThresholdMinutes: 360,
       autoBreakDurationMinutes: 45,
-      breakPolicyHistory: rpcCalls[0]?.args.p_break_policy_history,
-    });
+      breakPolicyHistory: parseBreakPolicyHistory(z.json().parse(rpcCalls[0]?.args.p_break_policy_history)),
+    };
     // A day before the change keeps the rule it ran under, not the new one.
     expect(resolveBreakPolicyAtTimestamp(settings, '2026-10-13T15:00:00.000Z')).toEqual({
       breakMode: 'automatic',

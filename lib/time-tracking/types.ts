@@ -320,7 +320,8 @@ export type ClockTimelineSegment = {
 
 export type LiveClockState = {
   organizationId: string;
-  breakPolicy: BreakPolicy;
+  /** Today's rule: the live totals need no earlier versions. */
+  breakPolicy: BreakPolicyValues;
   status: ClockStatus;
   isClockedIn: boolean;
   isOnBreak: boolean;
@@ -358,6 +359,8 @@ export type LiveClockState = {
 
 export type ZeiterfassungOverview = {
   clockState: LiveClockState;
+  /** The rule with its earlier versions, for the week's past days. */
+  breakPolicy: BreakPolicy;
   weekData: WeeklyTimeDataPoint[];
   todayIndex: number;
   weekLabel: WeeklyTimeLabel;
