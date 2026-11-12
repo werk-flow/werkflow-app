@@ -311,10 +311,22 @@ begin
   end if;
   -- A named refusal carries no code: its reason says it all.
   if exists (
-    select 1 from public.inventory_import_batches batch, jsonb_array_elements(batch.result_payload) result
-    where batch.organization_id = v_org and result.value->>'reason' <> 'failed' and result.value ? 'code'
+    select 1 from jsonb_array_elements(v_booking->'rows') result
+    where result.value->>'reason' <> 'failed' and result.value ? 'code'
   ) then
     raise exception 'a named refusal must carry no SQLSTATE';
+  end if;
+  -- Managers read the stored result through the Data API: it keeps no code,
+  -- and a repeated confirm answers the rows without it.
+  if exists (
+    select 1 from public.inventory_import_batches batch, jsonb_array_elements(batch.result_payload) result
+    where batch.organization_id = v_org and result.value ? 'code'
+  )
+    or (public.book_inventory_import(v_org, v_admin, (v_preview->>'batch_id')::uuid)->'rows')
+      is distinct from (select jsonb_agg(result.value - 'code' order by result.ordinality)
+        from jsonb_array_elements(v_booking->'rows') with ordinality result)
+  then
+    raise exception 'a stored booking result must keep no SQLSTATE';
   end if;
 end;
 $$;

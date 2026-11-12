@@ -17,7 +17,7 @@
 -- - public.book_inventory_import books the staged rows of a draft batch. The
 --   batch row is the idempotency key: the call locks it, books only a draft,
 --   and answers a booked batch with its stored result, so a confirm sent twice
---   books once.
+--   books once. The stored result keeps no SQLSTATE of a failed row.
 --
 -- A row whose unit differs from its matched item's unit is refused
 -- (unit_mismatch, its detail the item's unit); the action refuses an empty or
@@ -378,7 +378,12 @@ begin
     imported_count = jsonb_array_length(v_results) - v_rejected,
     failed_count = v_rejected,
     completed_at = now(),
-    result_payload = v_results
+    -- Managers read the batch through the Data API and Realtime: the stored
+    -- rows keep no SQLSTATE. Only this first answer carries it, for the log.
+    result_payload = (
+      select coalesce(jsonb_agg(result.value - 'code' order by result.ordinality), '[]'::jsonb)
+      from jsonb_array_elements(v_results) with ordinality result
+    )
   where id = v_batch.id;
 
   return jsonb_build_object('already_booked', false, 'rows', v_results);
