@@ -3,8 +3,7 @@
 import { DatePicker } from '@/components/ui/date-picker';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
-import { parseIsoLocalDate } from '@/lib/utils';
+import { parseIsoLocalDate, toLocalDateString } from '@/lib/utils';
 import type { LeistungPriceForm } from './leistung-form-state';
 
 /**
@@ -26,6 +25,8 @@ export function LeistungPriceFields({
   onChange: (form: LeistungPriceForm) => void;
   errors: Record<string, string | undefined>;
 }) {
+  // The picker answers the chosen day as the browser's local midnight: keep that
+  // calendar day (toLocalDateString), never the Berlin day of the instant.
   const perUnit = unitLabel ? `Netto je ${unitLabel}.` : 'Netto je Einheit.';
   return (
     <div className="grid gap-4 sm:grid-cols-3">
@@ -39,7 +40,7 @@ export function LeistungPriceFields({
           id={`${prefix}-valid-from`}
           ariaLabel="Gültig ab"
           value={parseIsoLocalDate(form.validFrom)}
-          onChange={(date) => onChange({ ...form, validFrom: date ? formatBerlinLocalDate(date) : '' })}
+          onChange={(date) => onChange({ ...form, validFrom: date ? toLocalDateString(date) : '' })}
         />
       </Field>
       <Field

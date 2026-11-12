@@ -13846,6 +13846,17 @@ export type Database = {
         };
         Returns: string;
       };
+      add_leistung_price: {
+        Args: {
+          p_actor_id: string;
+          p_cost_rate_cents: number;
+          p_leistung_id: string;
+          p_organization_id: string;
+          p_sale_price_cents: number;
+          p_valid_from: string;
+        };
+        Returns: string;
+      };
       add_team_membership: {
         Args: {
           p_actor_id: string;

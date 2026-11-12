@@ -69,11 +69,16 @@ create index leistung_price_versions_leistung_day_idx
   on public.leistung_price_versions (leistung_id, valid_from desc, created_at desc, id desc);
 
 -- A version and a Leistung outlive every direct DELETE; only the cascade of a
--- deleted organization removes them. A version never changes.
+-- deleted organization removes them. A version never changes, except that a
+-- deleted account's author reference becomes NULL (its foreign key action).
 create function app_private.keep_leistung_price_history()
 returns trigger language plpgsql set search_path = '' as $$
 begin
   if tg_op = 'DELETE' and pg_trigger_depth() > 1 then return old; end if;
+  if tg_op = 'UPDATE' and pg_trigger_depth() > 1 and new.created_by is null
+    and (to_jsonb(new) - 'created_by') = (to_jsonb(old) - 'created_by') then
+    return new;
+  end if;
   if tg_table_name = 'leistungen' then raise exception 'leistung_is_archived_not_deleted'; end if;
   raise exception 'leistung_price_version_is_immutable';
 end;
@@ -137,6 +142,35 @@ revoke all on function public.create_leistung(uuid, uuid, text, text, text, text
   from public, anon, authenticated;
 grant execute on function public.create_leistung(uuid, uuid, text, text, text, text, text, integer, date, integer, integer)
   to service_role;
+
+-- A new price of an active Leistung, in one call: the Leistung row stays
+-- locked from the check to the insert, so an archive in between waits.
+create function public.add_leistung_price(
+  p_organization_id uuid,
+  p_actor_id uuid,
+  p_leistung_id uuid,
+  p_valid_from date,
+  p_sale_price_cents integer,
+  p_cost_rate_cents integer
+) returns uuid language plpgsql security invoker set search_path = '' as $$
+declare
+  v_version_id uuid;
+begin
+  perform 1 from public.leistungen
+  where id = p_leistung_id and organization_id = p_organization_id and archived_at is null
+  for update;
+  if not found then raise exception 'leistung_not_found'; end if;
+  insert into public.leistung_price_versions (
+    organization_id, leistung_id, valid_from, sale_price_cents, cost_rate_cents, created_by
+  ) values (
+    p_organization_id, p_leistung_id, p_valid_from, p_sale_price_cents, p_cost_rate_cents, p_actor_id
+  ) returning id into v_version_id;
+  return v_version_id;
+end;
+$$;
+revoke all on function public.add_leistung_price(uuid, uuid, uuid, date, integer, integer)
+  from public, anon, authenticated;
+grant execute on function public.add_leistung_price(uuid, uuid, uuid, date, integer, integer) to service_role;
 
 -- The price of each named Leistung of the organization on one Berlin day: the
 -- version with the latest first day up to that day, the latest recorded one

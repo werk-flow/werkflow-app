@@ -25,8 +25,9 @@ import {
 
 const LEISTUNGEN_PATH = '/angebote/leistungen';
 
-// The refusals create_leistung raises.
+// The refusals create_leistung and add_leistung_price raise.
 const createRefusal = writeRefusalFor(new Set(['leistung_number_taken']));
+const priceRefusal = writeRefusalFor(new Set(['leistung_not_found']));
 
 /** The caller in the active organization, refused unless Admin or Büro. */
 async function resolveManager() {
@@ -125,33 +126,21 @@ export async function addLeistungPrice(rawInput: AddLeistungPriceInput): Promise
     const caller = await resolveManager();
     if (!caller.success) return caller;
     const { orgId, userId } = caller.context;
+    // The function locks the Leistung, so an archive in between waits or wins before the insert.
     const admin = createSupabaseAdminClient();
-    const leistung = await admin
-      .from('leistungen')
-      .select('id')
-      .eq('organization_id', orgId)
-      .eq('id', input.leistungId)
-      .is('archived_at', null)
-      .maybeSingle();
-    if (leistung.error) {
-      logError('addLeistungPrice: leistung read failed', leistung.error);
-      return { success: false, error: 'load_failed' };
-    }
-    if (!leistung.data) return { success: false, error: 'leistung_not_found' };
-    // The composite key refuses a version whose Leistung is in another organization.
-    const { error } = await admin.from('leistung_price_versions').insert({
-      organization_id: orgId,
-      leistung_id: input.leistungId,
-      valid_from: input.validFrom,
-      sale_price_cents: input.salePriceCents,
-      cost_rate_cents: input.costRateCents,
-      created_by: userId,
-    });
-    if (error?.code === '23503') return { success: false, error: 'leistung_not_found' };
-    if (error) {
-      logError('addLeistungPrice: insert failed', error);
-      return { success: false, error: 'save_failed' };
-    }
+    const { data, error } = await admin.rpc(
+      'add_leistung_price',
+      rpcArgs('add_leistung_price', {
+        p_organization_id: orgId,
+        p_actor_id: userId,
+        p_leistung_id: input.leistungId,
+        p_valid_from: input.validFrom,
+        p_sale_price_cents: input.salePriceCents,
+        p_cost_rate_cents: input.costRateCents,
+      }),
+    );
+    if (error || !data)
+      return priceRefusal(error, 'save_failed', 'addLeistungPrice: add_leistung_price failed');
     revalidatePath(LEISTUNGEN_PATH);
     return { success: true };
   } catch (error) {

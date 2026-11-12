@@ -61,9 +61,32 @@ const world = installActionWorld({
   ],
 });
 
+// `add_leistung_price` answered from the world's tables: an active Leistung of the named
+// organization gets the version; the SQL test proves the lock and the refusals.
+function addLeistungPriceInWorld(args: Record<string, unknown>) {
+  const target = tableRows(world, 'leistungen').find(
+    (row) =>
+      row.id === args.p_leistung_id &&
+      row.organization_id === args.p_organization_id &&
+      row.archived_at === null,
+  );
+  if (!target) return { data: null, error: { code: 'P0001', message: 'leistung_not_found' } };
+  tableRows(world, 'leistung_price_versions').push({
+    id: '93000000-0000-4000-8000-0000000000aa',
+    organization_id: args.p_organization_id,
+    leistung_id: args.p_leistung_id,
+    valid_from: args.p_valid_from,
+    sale_price_cents: args.p_sale_price_cents,
+    cost_rate_cents: args.p_cost_rate_cents,
+    created_by: args.p_actor_id,
+  });
+  return { data: '93000000-0000-4000-8000-0000000000aa', error: null };
+}
+
 // `leistung_prices_on_day` answered from the world's tables for the organization the call names.
 // The SQL test owns the choice of the version on a day; here each Leistung has one.
 world.rpc = ({ name, args }) => {
+  if (name === 'add_leistung_price') return addLeistungPriceInWorld(args);
   if (name !== 'leistung_prices_on_day') return { data: 'created-id', error: null };
   const ids = Array.isArray(args.p_leistung_ids) ? args.p_leistung_ids : [];
   const rows = tableRows(world, 'leistungen')
@@ -119,16 +142,23 @@ await assertRefused(
   world,
   [
     ['updateLeistung foreign', () => updateLeistung({ ...fields, leistungId: foreignLeistungId })],
-    ['addLeistungPrice foreign', () => addLeistungPrice({ ...price, leistungId: foreignLeistungId })],
     [
       'setLeistungArchived foreign',
       () => setLeistungArchived({ leistungId: foreignLeistungId, archived: true }),
     ],
     ['updateLeistung archived', () => updateLeistung({ ...fields, leistungId: archivedLeistungId })],
-    ['addLeistungPrice archived', () => addLeistungPrice({ ...price, leistungId: archivedLeistungId })],
   ],
   { success: false, error: 'leistung_not_found' },
   'reads',
+);
+await assertRefused(
+  world,
+  [
+    ['addLeistungPrice foreign', () => addLeistungPrice({ ...price, leistungId: foreignLeistungId })],
+    ['addLeistungPrice archived', () => addLeistungPrice({ ...price, leistungId: archivedLeistungId })],
+  ],
+  { success: false, error: 'leistung_not_found' },
+  'one-call',
 );
 assert.deepEqual(await readLeistungPrices([foreignLeistungId], '2026-11-12'), { success: true, prices: [] });
 

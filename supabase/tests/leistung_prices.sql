@@ -64,6 +64,7 @@ begin
       raise exception '% can select a Leistung price column', v_role;
     end if;
     if has_function_privilege(v_role, 'public.create_leistung(uuid,uuid,text,text,text,text,text,integer,date,integer,integer)', 'EXECUTE')
+      or has_function_privilege(v_role, 'public.add_leistung_price(uuid,uuid,uuid,date,integer,integer)', 'EXECUTE')
       or has_function_privilege(v_role, 'public.leistung_prices_on_day(uuid,uuid[],date)', 'EXECUTE')
       or has_function_privilege(v_role, 'public.list_leistung_page(uuid,date,text,text,integer,integer)', 'EXECUTE') then
       raise exception '% can execute a Leistung function', v_role;
@@ -258,6 +259,34 @@ select pg_temp.expect_refusal(
   '23514'
 );
 
+-- Adding a price refuses an archived or foreign Leistung and records an active one's.
+select pg_temp.expect_refusal(
+  'a price for an archived Leistung',
+  $sql$select public.add_leistung_price('47000000-0000-0000-0000-000000000010', '47000000-0000-0000-0000-000000000002',
+    (select archived from ids), '2040-01-01', 1, null)$sql$,
+  'leistung_not_found'
+);
+select pg_temp.expect_refusal(
+  'a price for a foreign Leistung',
+  $sql$select public.add_leistung_price('47000000-0000-0000-0000-000000000010', '47000000-0000-0000-0000-000000000002',
+    (select foreign_leistung from ids), '2040-01-01', 1, null)$sql$,
+  'leistung_not_found'
+);
+do $$
+declare
+  v_id uuid;
+begin
+  v_id := public.add_leistung_price('47000000-0000-0000-0000-000000000010', '47000000-0000-0000-0000-000000000002',
+    (select anfahrt from ids), '2040-01-01', 4100, null);
+  if not exists (
+    select 1 from public.leistung_price_versions
+    where id = v_id and leistung_id = (select anfahrt from ids) and sale_price_cents = 4100 and valid_from = '2040-01-01'
+  ) then
+    raise exception 'add_leistung_price did not record the price';
+  end if;
+end;
+$$;
+
 -- The list page: the price on the day, the next coming first day, view, search and the organization boundary.
 do $$
 declare
@@ -336,6 +365,26 @@ cross join unnest(array[
   $sql$select public.leistung_prices_on_day('47000000-0000-0000-0000-000000000010', array[(select montage from ids)], '2038-11-12')$sql$,
   $sql$select public.list_leistung_page('47000000-0000-0000-0000-000000000010', '2038-11-12')$sql$
 ]) as statement;
+
+-- A deleted account leaves its prices with an empty author; every price field stays.
+reset role;
+delete from public.organization_members where user_id = '47000000-0000-0000-0000-000000000002';
+delete from auth.users where id = '47000000-0000-0000-0000-000000000002';
+do $$
+begin
+  if exists (select 1 from public.leistung_price_versions where created_by = '47000000-0000-0000-0000-000000000002')
+    or (select count(*) from public.leistung_price_versions
+        where organization_id = '47000000-0000-0000-0000-000000000010' and created_by is null) <> 7
+    or not exists (select 1 from public.leistung_price_versions where sale_price_cents = 7100 and cost_rate_cents = 4500) then
+    raise exception 'deleting a price author changed the price history';
+  end if;
+end;
+$$;
+select pg_temp.expect_refusal(
+  'clearing a price author directly',
+  $sql$update public.leistung_price_versions set created_by = null$sql$,
+  'leistung_price_version_is_immutable'
+);
 
 -- Deleting an organization removes its Leistungen with their versions (legitimate teardown).
 delete from public.organizations where id = '47000000-0000-0000-0000-000000000011';
