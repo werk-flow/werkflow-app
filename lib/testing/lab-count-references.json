@@ -370,13 +370,13 @@
         "backend": "local"
       },
       "counts": {
-        "requests": { "reference": 1, "tolerance": 0 },
+        "requests": { "reference": 3, "tolerance": 0 },
         "routeRenders": { "reference": 1, "tolerance": 0 },
         "echoRenders": { "reference": 0, "tolerance": 0 },
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 31, "tolerance": 1 },
-        "componentRenders": { "reference": 536, "tolerance": 10 }
+        "componentRenders": { "reference": 586, "tolerance": 10 }
       },
       "payloads": {
         "prefetch:/auftraege": {
@@ -387,8 +387,14 @@
         },
         "route:/auftraege/[jobNumber]": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 1101, "tolerance": { "relative": 1, "absolute": 512 } },
-          "decodedBytes": { "reference": 17263, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 1233, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 17986, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "script": {
+          "requests": { "reference": 2, "tolerance": 0 },
+          "encodedBytes": { "reference": 27522, "tolerance": { "relative": 0.05, "absolute": 512 } },
+          "decodedBytes": null,
           "rows": null
         }
       },
@@ -476,6 +482,53 @@
           "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
           "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
           "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
+        },
+        {
+          "kind": "raise",
+          "target": "requests",
+          "from": { "reference": 1, "tolerance": 0 },
+          "to": { "reference": 3, "tolerance": 0 },
+          "runKeys": ["2026-11-12T082240713Z-ffad7e"],
+          "reason": "The report dialog loads after the job page is idle so a first open without signal works (werk-flow/werkflow-planning#320, CodeRabbit r4547677458; lead decision). Job-open requests 1 -> 3: the two chunks of the dialog module the idle load fetches."
+        },
+        {
+          "kind": "raise",
+          "target": "componentRenders",
+          "from": { "reference": 536, "tolerance": 10 },
+          "to": { "reference": 586, "tolerance": 10 },
+          "runKeys": ["2026-11-12T082240713Z-ffad7e"],
+          "reason": "The report dialog loads after the job page is idle so a first open without signal works (werk-flow/werkflow-planning#320, CodeRabbit r4547677458; lead decision). Job-open component renders 536 -> 586: the loaded drafts list and the closed dialog host mount."
+        },
+        {
+          "kind": "shape-accept",
+          "target": "script",
+          "from": null,
+          "to": {
+            "requests": { "reference": 2, "tolerance": 0 },
+            "encodedBytes": { "reference": 27522, "tolerance": { "relative": 0.05, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-12T082240713Z-ffad7e"],
+          "reason": "The report dialog loads after the job page is idle so a first open without signal works (werk-flow/werkflow-planning#320, CodeRabbit r4547677458; lead decision). New script shape, 27,522 B: the dialog module's chunks. The cold-start script stays at 679,377 B (was 689,612 B before the lazy load), so the field worker pays these bytes on the job page, not at the app start."
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "route:/auftraege/[jobNumber]",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 1101, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 17263, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 1233, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 17986, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-12T082240713Z-ffad7e"],
+          "reason": "The report dialog loads after the job page is idle so a first open without signal works (werk-flow/werkflow-planning#320, CodeRabbit r4547677458; lead decision). Route payload 17,263 -> 17,986 B. Payload diff of base 8df078d6 (17,763 B, 29 chunks) and head (17,986 B, 30 chunks): each of the 12 client-reference I[...] rows names one more chunk (+6 B each, +72 B); the rest (+151 B) is renumbering and module-id strings. No new data rows."
         }
       ]
     },
