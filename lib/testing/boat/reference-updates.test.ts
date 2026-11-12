@@ -68,6 +68,18 @@ test('the machine collects only the references the update rewrote or wrote', () 
   ]);
   expect(readFileSync(join(folder, SNAPSHOTS, 'changed.png'), 'utf8')).toBe('new');
   expect(existsSync(join(folder, SNAPSHOTS, 'same.png'))).toBe(false);
+  expect(existsSync(join(repository, '.reference-updates-collecting'))).toBe(false);
+});
+
+test('a collection that fails leaves no folder to come back, not even part of one', () => {
+  const repository = mkdtempSync(join(tmpdir(), 'reference-collect-'));
+  write(repository, `${SNAPSHOTS}/changed.png`, 'new');
+  // The update folder's parent is a file, so publishing the set fails after the copies were made.
+  write(repository, '.agent-logs/visual-reference-updates', 'not a folder');
+  const folder = join(repository, '.agent-logs/visual-reference-updates/run');
+  expect(() => collectReferenceUpdates(repository, new Map(), folder)).toThrow();
+  expect(existsSync(folder)).toBe(false);
+  expect(existsSync(join(repository, '.reference-updates-collecting'))).toBe(false);
 });
 
 test('rewritten references are placed in the checkout, and any bad entry refuses the whole set', () => {
@@ -108,4 +120,16 @@ test('rewritten references are placed in the checkout, and any bad entry refuses
       write(update, 'tests/audit/layout/linked.spec.ts-snapshots/a.png', 'x');
     }).error,
   ).toContain('symbolic link');
+  // An existing destination that is a hard link or no regular file is never replaced.
+  expect(
+    placed((_update, repository) =>
+      linkSync(join(repository, SNAPSHOTS, 'kept.png'), join(repository, SNAPSHOTS, 'twin-of-kept.png')),
+    ).error,
+  ).toContain('hard link in the checkout');
+  expect(
+    placed((update, repository) => {
+      mkdirSync(join(repository, SNAPSHOTS, 'folder.png'));
+      write(update, `${SNAPSHOTS}/folder.png`, 'x');
+    }).error,
+  ).toContain('is not a regular file');
 });

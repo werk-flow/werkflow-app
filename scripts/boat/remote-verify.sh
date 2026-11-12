@@ -154,9 +154,11 @@ kill "$sampler" 2> /dev/null
 phase "$script exited $code; peak memory in use $(sort -n "$HOME/memory.log" | tail -n 1) MiB"
 
 # The run's own evidence: every report and run folder that did not exist before, and the server log.
+# A failed collection brings no reference back and fails the run, whatever the browser run's exit.
 if [ "$update" = 1 ] && ! bun scripts/boat/reference-updates.ts collect "$HOME/references-before.json" \
   ".agent-logs/visual-reference-updates/$(date -u +%Y-%m-%dT%H%M%SZ)"; then
-  printf '[boat] collecting the rewritten visual references failed; none come back.\n'
+  printf '[boat] collecting the rewritten visual references failed; none come back, and the run fails.\n'
+  code=1
 fi
 find .agent-logs -mindepth 2 -maxdepth 2 -type d | sort > "$HOME/evidence-after.txt"
 comm -13 "$HOME/evidence-before.txt" "$HOME/evidence-after.txt" > "$HOME/evidence-new.txt"

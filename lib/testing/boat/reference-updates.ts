@@ -1,8 +1,17 @@
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+} from 'node:fs';
 import { dirname, isAbsolute, join, relative } from 'node:path';
 
-import { linkedDestination, placeFiles } from './verify-on-boat';
+import { destinationConflict, linkedDestination, placeFiles } from './verify-on-boat';
 
 // A visual reference update runs on Boat (docs/technical/standards-audit.md, "To update references
 // after an intended design change"). On the machine, the references are hashed before the update and
@@ -61,7 +70,9 @@ export function referenceHashes(repository: string): Map<string, string> {
 
 /**
  * On the machine, after the update: copies every reference that is new or differs from `before`
- * into `folder` under its own path, and answers the paths.
+ * into `folder` under its own path, and answers the paths. The copies gather in a staging folder in
+ * the checkout, outside the evidence, and `folder` appears only once every copy is made: a failure
+ * throws and leaves no folder, so no part of a set comes back.
  */
 export function collectReferenceUpdates(
   repository: string,
@@ -72,9 +83,17 @@ export function collectReferenceUpdates(
     .filter(([path, hash]) => before.get(path) !== hash)
     .map(([path]) => path)
     .sort();
-  for (const path of changed) {
-    mkdirSync(dirname(join(folder, path)), { recursive: true });
-    copyFileSync(join(repository, path), join(folder, path));
+  const staging = join(repository, '.reference-updates-collecting');
+  rmSync(staging, { recursive: true, force: true });
+  try {
+    for (const path of changed) {
+      mkdirSync(dirname(join(staging, path)), { recursive: true });
+      copyFileSync(join(repository, path), join(staging, path));
+    }
+    mkdirSync(dirname(folder), { recursive: true });
+    renameSync(staging, folder);
+  } finally {
+    rmSync(staging, { recursive: true, force: true });
   }
   return changed;
 }
@@ -82,13 +101,15 @@ export function collectReferenceUpdates(
 /**
  * On the workstation: checks every file of an update folder and places it in the checkout, or
  * throws and writes nothing. A file that is no audit reference, a link or a hard link refuses the
- * whole set, as does a destination reached through a symbolic link.
+ * whole set, as does a destination reached through a symbolic link, or one that exists and is no
+ * regular file or is a hard link, as for the results import (verify-on-boat.ts).
  */
 export function applyReferenceUpdates(repository: string, folder: string): string[] {
   const files = filesUnder(folder);
   const problem =
     files.map(referencePathProblem).find((found) => found !== undefined) ??
-    linkedDestination(repository, files);
+    linkedDestination(repository, files) ??
+    destinationConflict(repository, files);
   if (problem) throw new Error(`The rewritten references were refused: ${problem}`);
   placeFiles(folder, repository, files);
   return files;

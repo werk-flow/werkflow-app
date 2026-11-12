@@ -596,7 +596,7 @@ export function copyResults(staging: string, repository: string): void {
  * folder, or an existing destination that is not a regular file or is a hard link, whose other names
  * a copy would change too. Checked for every file before the first write.
  */
-function destinationConflict(repository: string, files: readonly string[]): string | undefined {
+export function destinationConflict(repository: string, files: readonly string[]): string | undefined {
   for (const path of files) {
     const parts = path.split('/');
     const target = join(repository, path);
