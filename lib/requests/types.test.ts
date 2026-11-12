@@ -9,6 +9,8 @@ import {
   REQUEST_SOURCE_ORDER,
   REQUEST_URGENCY_LABELS,
   REQUEST_URGENCY_ORDER,
+  REQUEST_ATTACHED_LABEL,
+  describeAttachedRequestEvent,
   isCallbackOverdue,
   requestEquipmentOptions,
   requestUrgencyToJobPriority,
@@ -180,5 +182,26 @@ describe('toClientRequestEvent', () => {
     for (const payload of [null, ['duplikat'], 'duplikat', 3, true]) {
       expect(toClientRequestEvent({ ...eventRow, event_payload: payload }).eventPayload).toEqual({});
     }
+  });
+});
+
+describe('a request added to existing work names that work and links to it', () => {
+  test('a job, project or Servicefall reads by its kind and number and opens its detail page', () => {
+    expect(
+      describeAttachedRequestEvent({ target: 'job', workNumber: 'A-2026-0042', jobId: 'job-1' }),
+    ).toEqual({ label: 'Zu Auftrag A-2026-0042 hinzugefügt', workHref: '/auftraege/A-2026-0042' });
+    expect(
+      describeAttachedRequestEvent({ target: 'project', workNumber: 'P-2026-0007', projectId: 'project-1' }),
+    ).toEqual({ label: 'Zu Projekt P-2026-0007 hinzugefügt', workHref: '/auftraege/projekt/P-2026-0007' });
+    expect(
+      describeAttachedRequestEvent({ target: 'service_case', workNumber: 'SF-2026-0003', serviceCaseId: 'case-1' }),
+    ).toEqual({ label: 'Zu Servicefall SF-2026-0003 hinzugefügt', workHref: '/service/faelle/SF-2026-0003' });
+  });
+
+  test('a payload without a readable work keeps the general label and links nowhere', () => {
+    for (const payload of [null, {}, { target: 'offer', workNumber: 'X-1' }, { target: 'job', workNumber: 7 }]) {
+      expect(describeAttachedRequestEvent(payload)).toEqual({ label: REQUEST_ATTACHED_LABEL, workHref: null });
+    }
+    expect(REQUEST_ATTACHED_LABEL).toBe('Zu bestehender Arbeit hinzugefügt');
   });
 });
