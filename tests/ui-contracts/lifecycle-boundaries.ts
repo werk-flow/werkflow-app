@@ -56,6 +56,7 @@ declare global {
       | 'absence-picker'
       | 'schedule-parked-picker'
       | 'problem-report'
+      | 'support-triage'
       | AuthUrlFixtureName
       | FeedbackFixtureName;
     uiContractLifecycle: LifecycleBoundaryState;

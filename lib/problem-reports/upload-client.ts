@@ -1,7 +1,10 @@
 import type { ActionResult } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
-import { createProblemReportFileUploadTicket, finalizeProblemReportFileUpload } from './file-actions';
-import type { ProblemReportFileKind } from './types';
+import type {
+  CreateProblemReportFileUploadTicketInput,
+  FinalizeProblemReportFileUploadInput,
+} from './schemas';
+import type { ProblemReportFileKind, ProblemReportFileUploadTicketResult } from './types';
 
 // The browser half of a report file's upload (docs/technical/document-storage-and-access.md,
 // "Report files"): the ticket signs a PUT, the browser sends the bytes straight
@@ -9,6 +12,14 @@ import type { ProblemReportFileKind } from './types';
 // passes through a Server Action.
 
 export type ProblemReportFile = { kind: ProblemReportFileKind; bytes: Blob; fileName: string };
+
+/** The ticket and finalize actions of the person who filed the report: a member's own, or support's. */
+export type ProblemReportFileActions = {
+  createTicket: (
+    input: CreateProblemReportFileUploadTicketInput,
+  ) => Promise<ProblemReportFileUploadTicketResult>;
+  finalize: (input: FinalizeProblemReportFileUploadInput) => Promise<ActionResult>;
+};
 
 /** Finalize refusals after which the server discarded the stored copy. */
 const DISCARDED_ON_REFUSAL: ReadonlySet<string> = new Set([
@@ -29,16 +40,18 @@ export type ProblemReportUploadOutcome = { result: ActionResult; storedFileId: s
  * Sends one file of a saved report. After a failed try, pass its
  * `storedFileId` back: the retry registers those bytes first, so a finalize
  * whose answer got lost is found, not repeated under a new id. It sends the
- * bytes again only when storage no longer holds them.
+ * bytes again only when storage no longer holds them. `actions` are the
+ * filer's own.
  */
 export async function uploadProblemReportFile(
+  actions: ProblemReportFileActions,
   target: { organizationId: string; reportId: string },
   file: ProblemReportFile,
   storedFileId: string | null,
 ): Promise<ProblemReportUploadOutcome> {
   const fields = { ...target, kind: file.kind, fileName: file.fileName };
   const register = async (fileId: string): Promise<ActionResult> => {
-    const finalized = await finalizeProblemReportFileUpload({ ...fields, fileId });
+    const finalized = await actions.finalize({ ...fields, fileId });
     if (finalized.success) return finalized;
     // A screenshot whose first finalize committed after this retry found its
     // staging key gone is the report's screenshot: there is only one.
@@ -55,7 +68,7 @@ export async function uploadProblemReportFile(
         return { result, storedFileId: kept(result, stored) };
       stored = null;
     }
-    const ticket = await createProblemReportFileUploadTicket({
+    const ticket = await actions.createTicket({
       ...fields,
       mimeType: file.bytes.type,
       fileSizeBytes: file.bytes.size,

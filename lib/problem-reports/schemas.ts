@@ -1,7 +1,13 @@
 import { z } from '@/lib/zod';
 
 import { uuidSchema } from '@/lib/validation/uuid';
-import { PROBLEM_REPORT_DESCRIPTION_MAX_LENGTH, PROBLEM_REPORT_FILE_KINDS } from './types';
+import {
+  PROBLEM_REPORT_BUCKETS,
+  PROBLEM_REPORT_DESCRIPTION_MAX_LENGTH,
+  PROBLEM_REPORT_FILE_KINDS,
+  PROBLEM_REPORT_RESPONSE_MAX_LENGTH,
+  PROBLEM_REPORT_STATUSES,
+} from './types';
 
 // Boundary schemas of the problem-report actions. The captured context has a
 // fixed shape and nothing else (werk-flow/werkflow-planning#331): strict
@@ -30,7 +36,7 @@ const tokenSchema = z
   .max(64)
   .regex(/^[A-Za-z0-9_.:+-]+$/);
 
-const problemReportContextSchema = z.strictObject({
+export const problemReportContextSchema = z.strictObject({
   routeTemplate: routeTemplateSchema,
   recentActions: z
     .array(
@@ -61,21 +67,49 @@ const problemReportContextSchema = z.strictObject({
 export type ProblemReportContext = z.infer<typeof problemReportContextSchema>;
 
 /**
- * A stored context: the whole capture, or null for the empty object of a
- * report filed without one. Any other shape throws, a part of a capture too.
+ * The scrubbed context: the capture, where the scrubber removed the app
+ * version or an error's name, code or digest that may name a record.
  */
-export function parseStoredProblemReportContext(value: unknown): ProblemReportContext | null {
-  const capture = problemReportContextSchema.safeParse(value);
+const scrubbedProblemReportContextSchema = problemReportContextSchema.extend({
+  clientErrors: z
+    .array(
+      z.strictObject({
+        name: tokenSchema.nullable(),
+        code: tokenSchema.nullable(),
+        digest: tokenSchema.nullable(),
+        routeTemplate: routeTemplateSchema,
+      }),
+    )
+    .max(10),
+  appVersion: tokenSchema.nullable(),
+});
+export type ScrubbedProblemReportContext = z.infer<typeof scrubbedProblemReportContextSchema>;
+
+/** The whole capture, or null for the empty object of a report filed without one. Any other shape throws. */
+function parseStoredCapture<T>(schema: z.ZodType<T>, value: unknown): T | null {
+  const capture = schema.safeParse(value);
   if (capture.success) return capture.data;
   z.strictObject({}).parse(value);
   return null;
 }
 
+/** A stored context; a part of a capture throws too. */
+export function parseStoredProblemReportContext(value: unknown): ProblemReportContext | null {
+  return parseStoredCapture(problemReportContextSchema, value);
+}
+
+/** A stored scrubbed context, as the scrubber wrote it. */
+export function parseScrubbedProblemReportContext(value: unknown): ScrubbedProblemReportContext | null {
+  return parseStoredCapture(scrubbedProblemReportContextSchema, value);
+}
+
+const descriptionSchema = z.string().trim().min(1).max(PROBLEM_REPORT_DESCRIPTION_MAX_LENGTH);
+
 export const submitProblemReportInputSchema = z.strictObject({
   organizationId: uuidSchema,
   /** Chosen by the device once per report, so a retry after a lost answer saves nothing twice. */
   reportId: uuidSchema,
-  description: z.string().trim().min(1).max(PROBLEM_REPORT_DESCRIPTION_MAX_LENGTH),
+  description: descriptionSchema,
   context: problemReportContextSchema,
 });
 export type SubmitProblemReportInput = z.input<typeof submitProblemReportInputSchema>;
@@ -101,3 +135,52 @@ export const finalizeProblemReportFileUploadInputSchema = z.strictObject({
   fileId: uuidSchema,
 });
 export type FinalizeProblemReportFileUploadInput = z.input<typeof finalizeProblemReportFileUploadInputSchema>;
+
+// Support's actions (docs/features/problem-reports.md, "Support"). A triage
+// names only the fields it changes; an empty answer clears it.
+
+export const SUPPORT_QUEUE_STATUS_FILTERS = ['offen', ...PROBLEM_REPORT_STATUSES, 'alle'] as const;
+export type SupportQueueStatusFilter = (typeof SUPPORT_QUEUE_STATUS_FILTERS)[number];
+export const SUPPORT_QUEUE_BUCKET_FILTERS = ['alle', 'ohne', ...PROBLEM_REPORT_BUCKETS] as const;
+export type SupportQueueBucketFilter = (typeof SUPPORT_QUEUE_BUCKET_FILTERS)[number];
+
+export const supportQueueQuerySchema = z.strictObject({
+  status: z.enum(SUPPORT_QUEUE_STATUS_FILTERS),
+  bucket: z.enum(SUPPORT_QUEUE_BUCKET_FILTERS),
+  page: z.number().int().min(1).max(100_000),
+});
+export type SupportQueueQuery = z.infer<typeof supportQueueQuerySchema>;
+
+export const triageProblemReportInputSchema = z.strictObject({
+  reportId: uuidSchema,
+  changes: z
+    .strictObject({
+      status: z.enum(PROBLEM_REPORT_STATUSES),
+      bucket: z.enum(PROBLEM_REPORT_BUCKETS).nullable(),
+      assigneeId: uuidSchema.nullable(),
+      response: z
+        .string()
+        .trim()
+        .max(PROBLEM_REPORT_RESPONSE_MAX_LENGTH)
+        .transform((text) => text || null)
+        .nullable(),
+    })
+    .partial(),
+});
+export type TriageProblemReportInput = z.input<typeof triageProblemReportInputSchema>;
+
+export const openProblemReportAttachmentInputSchema = z.strictObject({
+  reportId: uuidSchema,
+  fileId: uuidSchema,
+});
+export type OpenProblemReportAttachmentInput = z.input<typeof openProblemReportAttachmentInputSchema>;
+
+export const fileProblemReportForCallerInputSchema = z.strictObject({
+  organizationId: uuidSchema,
+  /** The member who phoned: the report's reporter. */
+  reporterId: uuidSchema,
+  /** Chosen by the support person's device once per report, as for a member's own report. */
+  reportId: uuidSchema,
+  description: descriptionSchema,
+});
+export type FileProblemReportForCallerInput = z.input<typeof fileProblemReportForCallerInputSchema>;

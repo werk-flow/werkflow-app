@@ -7,6 +7,7 @@ import {
   interceptsRequest,
   isTargetPrefetch,
   navigationStart,
+  stateCapturePlan,
   type ObservedRequest,
   type StatePlan,
 } from './acceptance-state-plan';
@@ -206,6 +207,39 @@ export async function withState(
   const { scope, interception } = await reachState(context, view, plan, width);
   try {
     await capture(() => expectState(context.page, scope, plan, interception));
+  } finally {
+    await interception.release();
+  }
+}
+
+/**
+ * Runs `capture` while a screen outside the app shell shows the `loading.tsx`
+ * of `to`: the page opens `from`, another route of the same area, and
+ * navigates on the client while the target's server render gets no answer.
+ * The hold ends afterwards, a failed capture included.
+ */
+export async function withStandaloneLoading(
+  page: Page,
+  route: { from: string; to: string },
+  capture: () => Promise<void>,
+): Promise<void> {
+  await page.goto(route.from);
+  await settled(page);
+  const interception = await interceptFor(page, stateCapturePlan('loading', 'page'), route.to);
+  try {
+    // A page of the area links to its other pages, so the target's loading
+    // boundary may be prefetched already and a second prefetch sends nothing:
+    // ask for it, then wait until the network is quiet instead of for a request.
+    await appRouter(page, 'prefetch', route.to);
+    await page.waitForLoadState('networkidle');
+    await interception.arm();
+    await appRouter(page, 'push', route.to);
+    await expect(
+      page.locator(SKELETON_SELECTOR).filter({ visible: true }).first(),
+      'the held navigation shows its skeleton',
+    ).toBeVisible();
+    expect(interception.heldNavigations(), 'the skeleton belongs to the held navigation').toBeGreaterThan(0);
+    await capture();
   } finally {
     await interception.release();
   }

@@ -42,6 +42,7 @@ import { CalendarContractFixture } from './calendar-boundaries';
 import { FeedbackContractFixture, isFeedbackFixture } from './feedback-boundaries';
 import { mountHydrationFixture } from './hydration-boundaries';
 import { initializeProblemReportBoundary, ProblemReportContractFixture } from './problem-report-boundaries';
+import { SupportTriageContractFixture } from './support-triage-boundaries';
 import { AuthUrlContractFixture } from './auth-url-boundaries';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -568,6 +569,8 @@ createRoot(root).render(
     </main>
   ) : window.uiContractFixture === 'problem-report' ? (
     <ProblemReportContractFixture />
+  ) : window.uiContractFixture === 'support-triage' ? (
+    <SupportTriageContractFixture />
   ) : window.uiContractFixture === 'presentation' ? (
     <PresentationFixture />
   ) : window.uiContractFixture === 'customer' ? (
