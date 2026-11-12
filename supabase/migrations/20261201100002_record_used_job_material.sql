@@ -13,7 +13,7 @@
 --    event carries on its own row the job or project, the line, the article,
 --    the quantity in the article's base unit, the unit cost snapshot, actor
 --    and time. A wrong entry is corrected by a new event with a negative
---    quantity that names the event it corrects; the ledger guard refuses
+--    quantity that names the event it corrects and keeps its unit and cost; the ledger guard refuses
 --    UPDATE and DELETE outside an organization deletion. The cost snapshot is
 --    the article's purchase price at that moment, per price quantity 1; an
 --    article without a price leaves both cost columns empty, never 0. A
@@ -172,6 +172,8 @@ begin
     end if;
     v_cost_amount := v_corrected.cost_amount_cents;
     v_cost_quantity := v_corrected.cost_price_quantity;
+    -- The article's unit may have changed since; the correction counts in the event's unit.
+    v_unit := v_corrected.unit;
   end if;
 
   insert into public.job_material_use_events (

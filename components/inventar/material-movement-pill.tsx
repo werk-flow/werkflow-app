@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 
 import { formatInventoryQuantity } from '@/lib/inventory/types';
 import { cn } from '@/lib/utils';
+import { openMaterialQuantity } from './job-material-dialog-model';
 
 function MovementPill({ tone, children }: { tone: 'planned' | 'booked'; children: ReactNode }) {
   return (
@@ -39,7 +40,7 @@ export function MaterialQuantityPills({
   /** Null for a reader who must not see the billable quantity. */
   billableQuantity: number | null;
 }) {
-  const openQuantity = Math.max(0, takenQuantity - usedQuantity - returnedQuantity);
+  const openQuantity = openMaterialQuantity({ takenQuantity, usedQuantity, returnedQuantity });
   const facts = [
     takenQuantity > 0 && `${formatInventoryQuantity(takenQuantity, unit)} entnommen`,
     usedQuantity > 0 && `${formatInventoryQuantity(usedQuantity, unit)} verbraucht`,

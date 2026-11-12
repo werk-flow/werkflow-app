@@ -153,11 +153,15 @@ export function getLocationOptions(
   return locations.map((location) => ({ id: location.id, label: location.name }));
 }
 
-/** Taken and neither used nor returned yet: what a worker can still use or return. */
+/**
+ * Taken and neither used nor returned yet: what a worker can still use or
+ * return, in the stored thousandths, so 0.3 − 0.1 reads 0.2 and not just below.
+ */
 export function openMaterialQuantity(
   line: Pick<JobMaterialLine, 'takenQuantity' | 'usedQuantity' | 'returnedQuantity'>,
 ): number {
-  return Math.max(0, line.takenQuantity - line.usedQuantity - line.returnedQuantity);
+  const open = line.takenQuantity - line.usedQuantity - line.returnedQuantity;
+  return Math.max(0, Math.round(open * 1000) / 1000);
 }
 
 export function buildDialogRow(

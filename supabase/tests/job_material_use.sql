@@ -183,10 +183,15 @@ begin
     raise exception 'a negative use that names no event must be refused, got %', v_refusal;
   end if;
 
+  -- The office changes the article's unit after the use; the correction still counts in meters.
+  update public.inventory_items set unit = 'piece' where id = '37000000-0000-4000-8000-000000000020';
   v_used := public.record_job_material_use(v_org, v_actor, v_line, -2, 'Falsch gezählt', v_original);
   select id into v_event_id from public.job_material_use_events
   where job_material_line_id = v_line and corrects_event_id is not null;
   select * into v_event from public.job_material_use_events where id = v_event_id;
+  if v_event.unit <> 'meter' then
+    raise exception 'a correction must keep the unit of the event it corrects, also after the article''s unit changed';
+  end if;
   if v_used <> 1 or v_event.corrects_event_id <> v_original or v_event.quantity <> -2
     or v_event.cost_amount_cents is distinct from 412 or v_event.cost_price_quantity is distinct from 1
   then
