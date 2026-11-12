@@ -11,14 +11,14 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import { SelectWithCreate } from '@/components/ui/select-with-create';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import type { InventoryCategory, InventoryLocation, InventoryUnitOption } from '@/lib/inventory/types';
+import type { InventoryCategory, InventoryLocation } from '@/lib/inventory/types';
 import {
   formatInventoryQuantity,
   getInventoryUnitLabel,
   INVENTORY_ITEM_TYPE_LABELS,
   INVENTORY_ITEM_TYPES,
-  INVENTORY_UNIT_OPTIONS,
 } from '@/lib/inventory/types';
+import { OFFERED_INVENTORY_UNITS } from '@/lib/inventory/units';
 import { getItemNumberFieldErrors, NONE_VALUE, type ItemFormState } from './inventory-form-state';
 import { LocationSelectWithCreate } from './location-select-with-create';
 import { NEW_SUPPLIER_VALUE, SupplierQuickCreateDialog } from './supplier-quick-create-dialog';
@@ -31,6 +31,8 @@ type ItemFieldsProps = {
 /** Number-field errors after a submit attempt, keyed by control id. */
 type NumberFieldErrors = Partial<ReturnType<typeof getItemNumberFieldErrors>>;
 
+const UNIT_OPTIONS = OFFERED_INVENTORY_UNITS.map((unit) => ({ value: unit.code, label: unit.label }));
+
 // The four field groups of the item dialog. Each renders straight into the
 // dialog body's grid, so none of them adds a wrapper element.
 
@@ -39,12 +41,12 @@ export function ItemMasterDataFields({
   setForm,
   categories,
   nameError,
+  unitError,
 }: ItemFieldsProps & {
   categories: InventoryCategory[];
   nameError: string | undefined;
+  unitError: string | undefined;
 }) {
-  const unitOptions: InventoryUnitOption[] = INVENTORY_UNIT_OPTIONS;
-
   return (
     <>
       <h3 className="text-sm font-semibold sm:col-span-2">Stammdaten</h3>
@@ -86,10 +88,11 @@ export function ItemMasterDataFields({
           noneLabel="Keine Kategorie"
         />
       </Field>
-      <Field label="Einheit" htmlFor="inventory-item-unit">
+      <Field label="Einheit" htmlFor="inventory-item-unit" required error={unitError}>
         <SearchableSelect
-          options={unitOptions}
+          options={UNIT_OPTIONS}
           value={form.unit}
+          placeholder="Einheit wählen"
           onChange={(value) => setForm({ ...form, unit: value })}
           searchPlaceholder="Einheit suchen …"
           emptyMessage="Keine Einheit gefunden"

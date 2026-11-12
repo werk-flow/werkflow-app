@@ -1,6 +1,7 @@
 import type { Database } from '@/lib/supabase/database.types';
 import { constrainedValue } from '@/lib/validation/constrained-value';
 import type { InventoryPageQuery } from './list-page';
+import { INVENTORY_UNITS } from './units';
 
 // The values the database check constraints allow for each text column.
 export const INVENTORY_ITEM_TYPES = ['material', 'consumable', 'tool', 'asset'] as const;
@@ -258,11 +259,6 @@ export type MaterialConsumptionLine = {
   events: MaterialUseEvent[];
 };
 
-export type InventoryUnitOption = {
-  value: string;
-  label: string;
-};
-
 export const INVENTORY_ITEM_TYPE_LABELS: Record<InventoryItemType, string> = {
   material: 'Material',
   consumable: 'Verbrauchsmaterial',
@@ -304,22 +300,6 @@ export const JOB_MATERIAL_STATUS_LABELS: Record<JobMaterialStatus, string> = {
   cancelled: 'Storniert',
 };
 
-export const INVENTORY_UNIT_OPTIONS: InventoryUnitOption[] = [
-  { value: 'piece', label: 'Stück' },
-  { value: 'meter', label: 'Meter' },
-  { value: 'roll', label: 'Rolle' },
-  { value: 'package', label: 'Packung' },
-  { value: 'box', label: 'Karton' },
-  { value: 'set', label: 'Set' },
-  { value: 'pair', label: 'Paar' },
-  { value: 'liter', label: 'Liter' },
-  { value: 'kilogram', label: 'Kilogramm' },
-  { value: 'sack', label: 'Sack' },
-  { value: 'cartridge', label: 'Kartusche' },
-  { value: 'bundle', label: 'Bund' },
-  { value: 'pallet', label: 'Palette' },
-];
-
 export function formatInventoryQuantity(quantity: number, unit: string, maximumFractionDigits = 2): string {
   const formatter = new Intl.NumberFormat('de-DE', {
     maximumFractionDigits,
@@ -327,8 +307,9 @@ export function formatInventoryQuantity(quantity: number, unit: string, maximumF
   return `${formatter.format(quantity)} ${getInventoryUnitLabel(unit)}`;
 }
 
+/** The long label of a unit, or the stored text itself for a unit outside the list. */
 export function getInventoryUnitLabel(unit: string): string {
-  return INVENTORY_UNIT_OPTIONS.find((option) => option.value === unit)?.label ?? unit;
+  return INVENTORY_UNITS.find((entry) => entry.code === unit)?.label ?? unit;
 }
 
 export function toNumber(value: number | string | null | undefined): number {

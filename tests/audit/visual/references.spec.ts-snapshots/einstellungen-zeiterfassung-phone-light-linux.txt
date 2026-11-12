@@ -1,7 +1,6 @@
 Menü öffnen
 Einstellungen
-Dashboard
-Organisation
+Dokumente & Briefpapier
 Kalender
 Zeiterfassung
 Zeiterfassung
