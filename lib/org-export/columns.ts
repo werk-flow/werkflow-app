@@ -65,6 +65,7 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   client_follow_ups: 'Kunden_Wiedervorlagen',
   client_request_events: 'Anfragen_Ereignisse',
   client_requests: 'Anfragen',
+  client_site_roles: 'Kunden_Objektrollen',
   client_sites: 'Kunden_Standorte',
   clients: 'Kunden',
   document_audit_events: 'Dokumente_Protokoll',

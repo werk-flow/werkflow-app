@@ -68,6 +68,9 @@ function useRouteProps<Props>(read: () => Props): Props {
 
 const readMaterialLines = () => structuredClone(window.uiContractMaterial.lines);
 const readClientRelations = () => structuredClone(window.uiContractClientRelations);
+// Not cloned: a read that returns the same roles keeps their identity, as a
+// refresh with unchanged server props does.
+const readClientSiteRoles = () => window.uiContractClientSiteRoles;
 const readQualifications = () => structuredClone(window.uiContractQualifications);
 const readTimeAccounts = () => structuredClone(window.uiContractTimeAccounts);
 
@@ -249,12 +252,14 @@ function RequestListHost(): React.JSX.Element {
 
 function ClientRelationsHost(): React.JSX.Element {
   const relations = useRouteProps(readClientRelations);
+  const siteRoles = useRouteProps(readClientSiteRoles);
   return (
     <ClientRelationsSection
       clientId={clientRelationContractId}
       clientAddress={null}
       contacts={relations.contacts}
       sites={relations.sites}
+      siteRoles={siteRoles}
       isAdminOrManager
       equipment={[]}
       equipmentLoadFailed={false}

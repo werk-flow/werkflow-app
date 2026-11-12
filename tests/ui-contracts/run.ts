@@ -72,7 +72,7 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
                 if (reportModule) return { path: join(import.meta.dir, 'problem-report-boundaries.tsx') };
               },
             );
-            builder.onResolve({ filter: /^@\/lib\/clients\/actions$/ }, () => ({
+            builder.onResolve({ filter: /^@\/lib\/clients\/(site-role-)?actions$/ }, () => ({
               path: join(import.meta.dir, 'customer-service-boundaries.ts'),
             }));
             builder.onResolve({ filter: /^next\/navigation$/ }, (args) => {

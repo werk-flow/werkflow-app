@@ -375,6 +375,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['request-attach-to-work', ['request_attach_to_work.sql'], ['customers', 'work', 'service', 'documents']],
   ['client-duplicates', ['client_duplicates.sql'], ['customers']],
   ['client-archive-history', ['client_archive_history.sql'], ['customers']],
+  ['client-site-roles', ['client_site_roles.sql'], ['customers', 'service']],
   [
     'request-callback-and-equipment',
     ['request_callback_and_equipment.sql'],
