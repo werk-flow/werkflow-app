@@ -227,6 +227,11 @@ export function DeviceDraftKeeper(props: DeviceDraftKeeperProps) {
   const { write, settled, deviceSaveError } = useDraftWrites(device, artifactId);
   const text = draftText(editor);
   const withText = textChange(device, { artifactId, jobId }, text);
+  // The text of the latest render, for a save that began before the person typed on.
+  const latestText = useRef(withText);
+  useEffect(() => {
+    latestText.current = withText;
+  });
   const photos = useDraftPhotos(write, withText, restored?.draft.photos ?? []);
   const save = useSaveThroughDevice(props, write);
 
@@ -269,8 +274,11 @@ export function DeviceDraftKeeper(props: DeviceDraftKeeperProps) {
           ? { kind: 'online', revisionId: stored.revisionId, changedAt: stored.updatedAt }
           : { kind: 'device', changedAt: stored.updatedAt };
       },
+      // In the same transaction, the form's text: what was typed while the seal held the draft.
       unseal: async () =>
-        void (await write((current) => (current ? { ...current, sealed: false } : current))),
+        void (await write((current) =>
+          current ? latestText.current({ ...current, sealed: false }) : current,
+        )),
       save,
       discard: async () => void (await write(() => null)),
     });

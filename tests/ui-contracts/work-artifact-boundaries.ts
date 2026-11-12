@@ -30,6 +30,12 @@ declare global {
       loseSaveAnswer?: boolean;
       /** Set by a spec: a save is recorded, but its answer is lost on the way back. */
       loseSaveAnswerAfterCommit?: boolean;
+      /** Set by a spec: the next save waits until the spec calls `releaseSave`. */
+      holdSave?: boolean;
+      /** Set while a held save waits: answers it. */
+      releaseSave?: () => void;
+      /** Set by a spec: the code the next save is refused with; nothing is recorded. */
+      refuseSave?: string;
       /** Set by a spec: the code the next decision save is refused with. */
       refuseDecision?: string;
       /** Set by a spec: the next decision save is recorded, but its answer is lost. */
@@ -250,6 +256,12 @@ export async function readSignatureViewContract(): Promise<
 }
 
 export const saveWorkArtifact: WorkArtifactActions['saveWorkArtifact'] = async (input) => {
+  const state = window.uiContractWorkArtifacts;
+  if (state.holdSave) {
+    state.holdSave = false;
+    await new Promise<void>((resolve) => (state.releaseSave = resolve));
+  }
+  if (state.refuseSave) return { success: false, error: state.refuseSave };
   if (window.uiContractWorkArtifacts.loseSaveAnswer) throw new TypeError('Failed to fetch');
   window.uiContractWorkArtifacts.saves.push(structuredClone(input));
   if (window.uiContractWorkArtifacts.loseSaveAnswerAfterCommit) throw new TypeError('Failed to fetch');

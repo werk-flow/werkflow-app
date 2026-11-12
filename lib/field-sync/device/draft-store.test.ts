@@ -174,11 +174,74 @@ describe('the end of a lost-access draft, whoever starts the app next', () => {
     await save(draft());
     expect(storage.get(DEVICE_MARK)).toBe('1');
     await changeDraftOnDevice(holder, draft().id, () => null);
+    // The mark goes once a fresh count after the commit finds no draft.
+    for (let turn = 0; turn < 100 && storage.has(DEVICE_MARK); turn += 1)
+      await new Promise((resolve) => setImmediate(resolve));
     expect(storage.has(DEVICE_MARK)).toBe(false);
   });
 });
 
 describe('the device mark follows only what the store committed', () => {
+  test("a sweep whose complete handling runs only after another tab stored a draft keeps that tab's mark", async () => {
+    const storage = new Map<string, string>();
+    Object.assign(globalThis, {
+      localStorage: {
+        getItem: (key: string) => storage.get(key) ?? null,
+        setItem: (key: string, value: string) => void storage.set(key, value),
+        removeItem: (key: string) => void storage.delete(key),
+      },
+    });
+    const lostAt = new Date(NOW.getTime() - DRAFT_NO_ACCESS_KEPT_MS).toISOString();
+    await save(draft({ refusal: { kind: 'no_access', at: lostAt } }));
+
+    // The sweep's tab is busy: the complete listeners of its transaction run only after another
+    // tab's put committed.
+    const listen = IDBTransaction.prototype.addEventListener;
+    let armed = true;
+    let otherTab: Promise<unknown> | null = null;
+    const delayed: Array<() => void> = [];
+    IDBTransaction.prototype.addEventListener = function (
+      this: IDBTransaction,
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | AddEventListenerOptions,
+    ) {
+      if (type !== 'complete' || typeof listener !== 'function')
+        return listen.call(this, type, listener, options);
+      // The first transaction that listens for its commit is the sweep's; it carries a flag from here on.
+      if (armed) {
+        armed = false;
+        Reflect.set(this, 'delayedSweep', true);
+      }
+      if (Reflect.get(this, 'delayedSweep') !== true) return listen.call(this, type, listener, options);
+      return listen.call(
+        this,
+        type,
+        (event: Event) => {
+          delayed.push(() => listener(event));
+          otherTab ??= save(draft({ id: '9c000000-0000-4000-8000-000000000070' })).then(() => {
+            for (const run of delayed) run();
+          });
+        },
+        options,
+      );
+    };
+    try {
+      const sweeping = sweepExpiredDraftsOnDevice(NOW);
+      await new Promise((resolve) => setImmediate(resolve));
+      for (let turn = 0; turn < 50 && otherTab === null; turn += 1)
+        await new Promise((resolve) => setImmediate(resolve));
+      await otherTab;
+      await sweeping;
+      for (let turn = 0; turn < 20; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+    } finally {
+      IDBTransaction.prototype.addEventListener = listen;
+    }
+    // Read the mark before any further read of the store, which counts again.
+    expect(storage.get('werkflow:drafts-on-device')).toBe('1');
+    expect(await listDraftsOnDevice(holder, new Date(0))).toHaveLength(1);
+  });
+
   test('a sweep whose transaction aborts after it deleted the last draft keeps the mark', async () => {
     const storage = new Map<string, string>();
     Object.assign(globalThis, {

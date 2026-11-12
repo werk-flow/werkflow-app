@@ -140,6 +140,24 @@ async function storedDraftCount(page: Page): Promise<number> {
   });
 }
 
+/** Whether the one stored draft is sealed. */
+async function storedDraftSealed(page: Page): Promise<boolean | null> {
+  return page.evaluate(async () => {
+    const opening = indexedDB.open('werkflow-drafts', 1);
+    opening.onupgradeneeded = () => opening.result.createObjectStore('drafts', { keyPath: 'id' });
+    const database = await new Promise<IDBDatabase>(
+      (resolve) => (opening.onsuccess = () => resolve(opening.result)),
+    );
+    const reading = database.transaction('drafts').objectStore('drafts').getAll();
+    const records = await new Promise<unknown[]>(
+      (resolve) => (reading.onsuccess = () => resolve(reading.result)),
+    );
+    database.close();
+    const [record] = records;
+    return typeof record === 'object' && record !== null ? Reflect.get(record, 'sealed') === true : null;
+  });
+}
+
 /** Seals the one stored draft as another tab's online save does before it leaves. */
 async function sealStoredDraftElsewhere(page: Page): Promise<void> {
   await expect.poll(() => storedDraftCount(page)).toBe(1);
@@ -608,6 +626,37 @@ test('a draft with photos that another tab changes and seals after this save dec
     'Brenner gereinigt',
   );
   expect(sent).toEqual([]);
+});
+
+test('text typed while an online save holds the draft sealed reaches the device when the server refuses that save', async ({
+  page,
+}) => {
+  await openContractFixture(page, 'work-artifact-report');
+  await answerSync(page, () => 'offline');
+  await page.evaluate(() => {
+    window.uiContractWorkArtifacts.holdSave = true;
+    window.uiContractWorkArtifacts.refuseSave = 'work_artifact_not_authorized';
+  });
+  await writeReport(page, 'Wartung Heizung', 0);
+  await page.getByRole('button', { name: 'Als Entwurf speichern', exact: true }).click();
+  await expect
+    .poll(() => page.evaluate(() => typeof window.uiContractWorkArtifacts.releaseSave))
+    .toBe('function');
+
+  // The draft is sealed while the save is out; the person keeps typing.
+  const dialog = page.getByRole('dialog', { name: 'Arbeitsnachweis erstellen', exact: true });
+  await dialog.getByRole('textbox', { name: 'Ausgeführte Arbeiten', exact: true }).fill('Brenner und Pumpe');
+  await page.evaluate(() => window.uiContractWorkArtifacts.releaseSave?.());
+  // The refusal unseals the draft.
+  await expect.poll(() => storedDraftSealed(page)).toBe(false);
+  await closeDialog(dialog);
+
+  await draftRow(page, 'Wartung Heizung').getByRole('button', { name: 'Bearbeiten', exact: true }).click();
+  await expect(
+    page
+      .getByRole('dialog', { name: 'Arbeitsnachweis erstellen', exact: true })
+      .getByRole('textbox', { name: 'Ausgeführte Arbeiten', exact: true }),
+  ).toHaveValue('Brenner und Pumpe');
 });
 
 test('a review request that fails after the device sent the draft says the draft is saved but not submitted', async ({

@@ -154,14 +154,25 @@ function noAccessTimeOver(draft: StoredDraft, now: Date): boolean {
 
 /**
  * Sets the device mark from what the store holds after this transaction, once it committed: an
- * aborted deletion leaves the mark as it was, so a draft never stays on the phone without it.
+ * aborted deletion leaves the mark as it was, so a draft never stays on the phone without it. A
+ * transaction that left no draft removes the mark only after a fresh count still finds none: another
+ * tab may have stored a draft, and set the mark, before this tab handled the commit.
  */
 function markWhatRemains(store: IDBObjectStore): void {
   const counting = store.count();
   counting.addEventListener('success', () => {
     const remaining = counting.result;
-    store.transaction.addEventListener('complete', () => markDraftsOnDevice(remaining > 0));
+    store.transaction.addEventListener('complete', () => {
+      if (remaining > 0) markDraftsOnDevice(true);
+      else void removeMarkIfStillEmpty();
+    });
   });
+}
+
+/** Removes the device mark when a fresh count finds no draft; a failed count keeps it. */
+async function removeMarkIfStillEmpty(): Promise<void> {
+  const remaining = await inDraftStore('readonly', (store) => store.count()).catch(() => null);
+  if (remaining === 0) markDraftsOnDevice(false);
 }
 
 /** Deletes every draft among `records` whose time after a lost access is over, of any holder. */

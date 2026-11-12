@@ -74,7 +74,10 @@ export type DeviceDraftHandle = {
    * Null when the device could not answer; the keeper then shows why.
    */
   prepareSave: () => Promise<DraftSavePlan | null>;
-  /** Unseals the draft after the server refused its online save: the server holds nothing of it. */
+  /**
+   * Unseals the draft after the server refused its online save, which it holds nothing of, and
+   * writes the form's text into it: what was typed while the seal held the draft.
+   */
   unseal: () => Promise<void>;
   /**
    * Sends the draft with its photos in the state its save decided on (`expected`, the draft's
