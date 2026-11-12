@@ -218,16 +218,19 @@ assert.equal(stored(id(15))?.scrub_state, 'ausstehend');
 
 // The daily run scrubs every report with originals and no copy, page by page:
 // the failed ones again, the pending one of organization B with B's own
-// dictionary, and a report filed without a capture. It leaves a report alone
-// whose originals are gone.
+// dictionary, and a report filed without a capture. A report whose originals
+// the deletion run removed before any scrub succeeded keeps no text: it ends
+// as `nicht_bereinigbar`, with no copy. One that already failed is left alone.
+const orphaned = { description: null, context: null, originals_deleted_at: '2026-11-01' };
 reports().push(
-  report(id(16), ORGANIZATION_A, { description: null, context: null, originals_deleted_at: '2026-11-01' }),
+  report(id(16), ORGANIZATION_A, orphaned),
+  report(id(19), ORGANIZATION_A, { ...orphaned, scrub_state: 'nicht_bereinigbar' }),
   report(id(17), ORGANIZATION_A, { context: {} }),
   ...Array.from({ length: 100 }, (_, index) => report(id(100 + index), ORGANIZATION_A)),
 );
 const run = await scrubPendingProblemReports();
-// Reports 14 and 18 keep their foreign shape, so they stay without a copy.
-assert.deepEqual(run, { ok: true, scrubbed: 104, notScrubbed: 2 });
+// Reports 14 and 18 keep their foreign shape, so they stay without a copy; 16 has no text left.
+assert.deepEqual(run, { ok: true, scrubbed: 104, notScrubbed: 3 });
 assert.equal(stored(id(12))?.scrubbed_description, scrubbedDescription);
 assert.equal(stored(id(13))?.scrub_state, 'bereinigt');
 assert.equal(stored(id(14))?.scrub_state, 'nicht_bereinigbar');
@@ -236,9 +239,25 @@ assert.equal(
   `Bei ${ownCustomer} ([Telefon 1]) und bei [Kunde 1] speichert der Auftrag nicht.`,
   "organization B's report was not scrubbed with B's own dictionary",
 );
-assert.equal(stored(id(16))?.scrub_state, 'ausstehend');
+assert.equal(stored(id(16))?.scrub_state, 'nicht_bereinigbar');
+assert.equal(stored(id(16))?.scrubbed_description, null);
+assert.equal(stored(id(16))?.scrubbed_context, null);
+assert.ok(
+  scrubWrites().every((call) => call.args.p_report_id !== id(19)),
+  'the run wrote a report whose originals are gone and whose state was already final',
+);
 assert.deepEqual(stored(id(17))?.scrubbed_context, {});
 assert.equal(stored(id(199))?.scrub_state, 'bereinigt', 'the run stopped after its first page');
+
+// The next run leaves the orphaned report alone and does not fail; only 14 and 18 are tried again.
+const writesBeforeNextRun = scrubWrites().length;
+assert.deepEqual(await scrubPendingProblemReports(), { ok: true, scrubbed: 0, notScrubbed: 2 });
+assert.deepEqual(
+  scrubWrites()
+    .slice(writesBeforeNextRun)
+    .map((call) => call.args.p_report_id),
+  [id(14), id(18)],
+);
 
 // A run that cannot list its reports says so.
 world.failingTables.add('problem_reports');

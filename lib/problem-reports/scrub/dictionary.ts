@@ -70,20 +70,25 @@ function addTerm(root: TermNode, words: readonly string[], term: Term): void {
 
 /**
  * A name is replaced as a whole and word by word, so a surname alone is
- * caught. A word in `notAlone` is replaced only inside the whole name.
+ * caught. A word in `notAlone` is replaced only inside the whole name. A
+ * short part before a word that stands alone goes with it, so „O’Neill“
+ * leaves no „O“ readable.
  */
 function addName(root: TermNode, kind: PlaceholderKind, name: string, notAlone: ReadonlySet<string>): void {
   const words = foldedWordsOf(name);
   if (words.length === 0) return;
   const term: Term = { kind, key: words.join(' ') };
   addTerm(root, words, term);
-  for (const word of words) {
+  for (const [index, word] of words.entries()) {
     const alone =
       word.length >= NAME_WORD_MIN_LENGTH &&
       /\p{L}/u.test(word) &&
       !NOT_A_NAME_ALONE.has(word) &&
       !notAlone.has(word);
-    if (alone) addTerm(root, [word], term);
+    if (!alone) continue;
+    addTerm(root, [word], term);
+    const before = words[index - 1];
+    if (before !== undefined && before.length < NAME_WORD_MIN_LENGTH) addTerm(root, [before, word], term);
   }
 }
 

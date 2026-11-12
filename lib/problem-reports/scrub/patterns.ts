@@ -51,7 +51,7 @@ export function findIbans(text: string): Found[] {
         compact += character;
         digitsOnly &&= character >= '0' && character <= '9';
         index += 1;
-      } else if (/[ \u00a0]/u.test(character) && IBAN_CHARACTER.test(text[index + 1] ?? '')) {
+      } else if (/\p{Zs}/u.test(character) && IBAN_CHARACTER.test(text[index + 1] ?? '')) {
         noteEnd();
         index += 1;
       } else break;
@@ -69,11 +69,12 @@ export function findIbans(text: string): Found[] {
 // --- Email ---
 
 // Every character an unquoted local part may hold (RFC 5322), so „o'neill@…“ is one address.
-const EMAIL_LOCAL_CHARACTER = /[\p{L}\p{N}.!#$%&'*+/=?^_`{|}~-]/u;
+const EMAIL_LOCAL_CHARACTER = /[\p{L}\p{M}\p{N}.!#$%&'*+/=?^_`{|}~-]/u;
 /** The longest local part, with its two quotes. */
 const EMAIL_QUOTED_LOCAL_MAX_LENGTH = 66;
-const EMAIL_DOMAIN_CHARACTER = /[\p{L}\p{N}.-]/u;
-const EMAIL_DOMAIN = /^[^.].*\.\p{L}{2,}$/u;
+// A letter may carry combining marks that no precomposed letter covers (`q\u0307`).
+const EMAIL_DOMAIN_CHARACTER = /[\p{L}\p{M}\p{N}.-]/u;
+const EMAIL_DOMAIN = /^[^.].*\.\p{L}[\p{L}\p{M}]+$/u;
 
 /**
  * Every email address: the characters around an `@` that form a local part
@@ -108,7 +109,7 @@ export function findEmails(text: string): Found[] {
 // What may stand between two digit groups of one number: spaces, a slash, a
 // dash, a bracket. The second run of spaces follows a separator only, so a
 // long run of spaces is read once and never divided between the two.
-const PHONE_GAP = /^[ \u00a0\t]*(?:[-\u2013/()]{1,2}[ \u00a0\t]*)?$/u;
+const PHONE_GAP = /^[\p{Zs}\t]*(?:[-\u2013/()]{1,2}[\p{Zs}\t]*)?$/u;
 const PHONE_MIN_DIGITS = 7;
 /** The longest phone number (E.164). Digits without a phone's shape are compared with known numbers up to here. */
 const PHONE_MAX_DIGITS = 15;

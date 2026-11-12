@@ -9,7 +9,7 @@
 -- originals change only there. The retention run deletes only due originals,
 -- keeps the scrubbed copy, and queues every file path; 24 months after
 -- closing it deletes the report. The scrub outcome
--- (20261130100001_keep_the_scrubbed_copy_of_a_problem_report.sql, #332)
+-- (20261201100001_keep_the_scrubbed_copy_of_a_problem_report.sql, #332)
 -- writes both parts of the copy with the state in one call, only inside the
 -- report's organization, and never changes a written copy.
 begin;
@@ -538,6 +538,14 @@ begin
   ) then raise exception 'retention kept an original text'; end if;
   if exists (select 1 from public.problem_report_files where report_id = '33100000-0000-0000-0000-000000000020')
   then raise exception 'retention kept a file row'; end if;
+  -- A due report without a scrubbed copy loses its originals on time too: the
+  -- deletion periods bind, and the daily run marks it nicht_bereinigbar.
+  if not exists (
+    select 1 from public.problem_reports
+    where id = '33100000-0000-0000-0000-000000000021' and originals_deleted_at is not null
+      and description is null and context is null
+      and scrubbed_description is null and scrubbed_context is null
+  ) then raise exception 'retention waited for a scrubbed copy'; end if;
   if not exists (
     select 1 from public.problem_reports
     where id = '33100000-0000-0000-0000-000000000020' and scrubbed_description = 'Speichern geht nicht'

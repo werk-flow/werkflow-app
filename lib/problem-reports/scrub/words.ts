@@ -28,9 +28,14 @@ function fold(word: string): string {
   return folded.endsWith('strasse') ? folded.slice(0, -4) : folded;
 }
 
-/** The words of an NFC-normalized text, in order. */
+/**
+ * The words of an NFC-normalized text, in order. The modifier apostrophe
+ * `ʼ` counts as a letter in Unicode; here it separates like `'` and `’`, so
+ * „OʼNeill“ is „O“ and „Neill“, as the stored „O'Neill“ is. It keeps the
+ * text's length, so every position stays.
+ */
 export function wordsOf(text: string): Word[] {
-  return Array.from(text.matchAll(WORD), (match) => ({
+  return Array.from(text.replace(/\u02bc/gu, '\u2019').matchAll(WORD), (match) => ({
     start: match.index,
     end: match.index + match[0].length,
     folded: fold(match[0]),

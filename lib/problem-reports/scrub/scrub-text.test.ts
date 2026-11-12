@@ -19,6 +19,7 @@ const dictionary = buildScrubDictionary(
       'Wei Li',
       'Li Na',
       'Kältetechnik Service Nordlicht',
+      "Liam O'Neill",
     ],
     personNames: ['Jonas Weiß', 'Petra von Lindqvist', 'Tom Wartung'],
     siteNames: ['Neubau Kita Regenbogen', 'Werkhalle', 'Hauptstandort', 'Montagehalle (Altbau)'],
@@ -50,6 +51,12 @@ test('matching rule: umlaut and ß spellings', () => {
   expect(scrub('Müller')).toBe('[Kunde 1]');
   expect(scrub('Lindenstraße 12a, Lindenstrasse 12a, Lindenstr. 12a und LINDENSTRASSE 12A')).toBe(
     '[Adresse 1], [Adresse 1], [Adresse 1] und [Adresse 1]',
+  );
+});
+
+test('matching rule: a known name with an apostrophe matches with each of the three apostrophes', () => {
+  expect(scrub("Liam O'Neill, Liam O’Neill und Liam OʼNeill, kurz O’Neill")).toBe(
+    '[Kunde 1], [Kunde 1] und [Kunde 1], kurz [Kunde 1]',
   );
 });
 
@@ -170,6 +177,10 @@ test('pattern rule: any phone-number shape', () => {
   );
   expect(unknown('Zimmer 12 0152 98765432')).toBe('Zimmer 12 [Telefon 1]');
   expect(unknown('0041 44 123 45 67 und +43 1 2345678')).toBe('[Telefon 1] und [Telefon 2]');
+  // Any Unicode space may group the digits: the narrow no-break space of a
+  // formatted number, a thin space, a figure space.
+  expect(unknown('Ruf 0171\u202f2345678 an')).toBe('Ruf [Telefon 1] an');
+  expect(unknown('Ruf 0171\u2009234\u200756 78 an')).toBe('Ruf [Telefon 1] an');
   // Any number of spaces may group the digits.
   expect(unknown('Ruf 0171   2345678 an')).toBe('Ruf [Telefon 1] an');
   // A number ends where its groups end: no group of it stays readable, even
@@ -187,6 +198,8 @@ test('pattern rule: any email address', () => {
     'Mail an [E-Mail 1] oder [E-Mail 2].',
   );
   expect(scrub('jonas+test@firma.example, Jonas+Test@Firma.example')).toBe('[E-Mail 1], [E-Mail 1]');
+  // A letter of the address may carry a combining mark that no precomposed letter covers.
+  expect(scrub('Mail an q\u0307uentin@beispi\u0307el.example')).toBe('Mail an [E-Mail 1]');
   // A local part may hold an apostrophe, and in quotes a space.
   expect(scrub("Mail an anne.o'neill@beispiel.example")).toBe('Mail an [E-Mail 1]');
   expect(scrub('Mail an "anna meier"@beispiel.example und "sag @alle"')).toBe(
@@ -202,6 +215,9 @@ test('pattern rule: any IBAN', () => {
   expect(scrub('Konto GB82 WEST 1234 5698 7654 32 und AT61 1904 3002 3457 3201.')).toBe(
     'Konto [IBAN 1] und [IBAN 2].',
   );
+  // Any Unicode space may separate the groups.
+  expect(scrub('IBAN DE89\u202f3704\u202f0044\u202f0532\u202f0130\u202f00 ok')).toBe('IBAN [IBAN 1] ok');
+  expect(scrub('IBAN DE89\u20093704\u20090044\u20090532\u20090130\u200900 ok')).toBe('IBAN [IBAN 1] ok');
   // A mistyped number fails its check and is replaced by its shape.
   expect(scrub('DE89 3704 0044 0532 0130 01')).toBe('[IBAN 1]');
   // A product code with a number is no IBAN.
@@ -244,6 +260,13 @@ test('salutation rule: a lower-case word after a salutation is the name, unless 
   expect(unknown('frau meier-lüdenscheidt sommer, fa. rohrfrei nord, frau dr. albers')).toBe(
     'frau [Person 1] sommer, fa. [Kunde 1] nord, frau dr. [Person 2]',
   );
+  // An apostrophe joins the parts of a name like a hyphen, with any of the three apostrophes.
+  expect(unknown("Frau O’Neill, Herr D'Angelo und Frau OʼBrien")).toBe(
+    'Frau [Person 1], Herr [Person 2] und Frau [Person 3]',
+  );
+  expect(unknown('frau o’neill rief an')).toBe('frau [Person 1] rief an');
+  // A possessive after a capitalized name is no part of it.
+  expect(unknown('Frau Berger’s Bad')).toBe('Frau [Person 1]’s Bad');
   // A company's name may hold a digit.
   expect(unknown('firma rohrfrei24 und herr 24')).toBe('firma [Kunde 1] und herr 24');
   // The same person with and without the capital.

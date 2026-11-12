@@ -211,14 +211,18 @@ export async function scrubStoredProblemReport(organizationId: string, reportId:
 
 type PendingScrubResult = { ok: boolean; scrubbed: number; notScrubbed: number };
 
-/** One page, in id order, of the reports of every organization that have originals and no scrubbed copy. */
+/**
+ * One page, in id order, of the reports of every organization that have no
+ * scrubbed copy and either still have their originals, or lost them to the
+ * deletion run while still `ausstehend`: their scrub records `nicht_bereinigbar`.
+ */
 async function readPendingPage(admin: Admin, after: string | null) {
   // tenant-scope: cross-organization-by-design — the scheduled run has no caller and spans every organization; each listed report names its organization, which its scrub passes to every read and to the write
   const pending = admin
     .from('problem_reports')
     .select('id, organization_id')
     .neq('scrub_state', 'bereinigt')
-    .is('originals_deleted_at', null)
+    .or('originals_deleted_at.is.null,scrub_state.eq.ausstehend')
     .order('id')
     .limit(PENDING_PAGE_SIZE);
   return after === null ? pending : pending.gt('id', after);
@@ -227,7 +231,9 @@ async function readPendingPage(admin: Admin, after: string | null) {
 /**
  * Scrubs every report that has its originals but no scrubbed copy: one saved
  * before the scrubber existed, one whose scrub never ran, and one whose last
- * scrub failed. It goes page by page in id order, so a report that stays
+ * scrub failed. A report whose originals the deletion run removed before any
+ * scrub succeeded keeps no text; it ends as `nicht_bereinigbar` and is left
+ * alone afterwards. It goes page by page in id order, so a report that stays
  * unscrubbed never stops the run from reaching the next ones.
  */
 export async function scrubPendingProblemReports(): Promise<PendingScrubResult> {

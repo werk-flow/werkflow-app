@@ -34,10 +34,14 @@ function isLowerCaseName(folded: string): boolean {
   );
 }
 
+/** What joins two parts of one name: a hyphen („Meier-Lüdenscheidt“) or an apostrophe („O’Neill“). */
+const NAME_JOIN = /^[-'’ʼ]$/u;
+
 /**
  * The name after a salutation, known or not: up to two capitalized words
- * after „Herr“, „Frau“, „Familie“, „Fam.“, „Firma“ or „Fa.“. A hyphenated
- * double name counts as one word, and a title before the name is skipped.
+ * after „Herr“, „Frau“, „Familie“, „Fam.“, „Firma“ or „Fa.“. A double name
+ * joined by a hyphen or an apostrophe counts as one word, and a title before
+ * the name is skipped.
  * Typed in lower case, as on a phone, the one word after the salutation is
  * the name, unless it is a function word or an auxiliary.
  */
@@ -56,7 +60,7 @@ function findSalutedNames(text: string, words: readonly Word[]): Found[] {
     let previous = salutation;
     for (let next = index + 1, word = words[next]; word !== undefined; next += 1, word = words[next]) {
       const gap = text.slice(previous.end, word.start);
-      const hyphenated = nameWords > 0 && gap === '-';
+      const hyphenated = nameWords > 0 && NAME_JOIN.test(gap);
       // A dot belongs to an abbreviation („Fam.“, „Dr.“); after a name it ends the sentence.
       if (!hyphenated && !(nameWords === 0 ? /^\.?\s+$/u : /^\s+$/u).test(gap)) break;
       previous = word;
@@ -65,7 +69,12 @@ function findSalutedNames(text: string, words: readonly Word[]): Found[] {
         if (!word.capitalized && !lowerCase) break;
       } else if (word.capitalized && !lowerCase && nameWords < SALUTED_NAME_WORDS) {
         nameWords += 1;
-      } else if (nameWords === 0 && isLowerCaseName(word.folded)) {
+      } else if (
+        nameWords === 0 &&
+        // A single letter is a name only as the first part of a joined one („o’neill“).
+        (isLowerCaseName(word.folded) ||
+          (/^\p{L}$/u.test(word.folded) && NAME_JOIN.test(text.slice(word.end, words[next + 1]?.start))))
+      ) {
         lowerCase = true;
         nameWords = 1;
       } else break;
