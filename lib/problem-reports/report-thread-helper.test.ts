@@ -141,7 +141,11 @@ test('the screenshot lands outside the checkout, readable only by its owner', as
 
 test('the write-back sends the JSON object on stdin with the bearer secret', async () => {
   answer = () => new Response(null, { status: 204 });
-  const body = { changes: { bucket: 'fehler', status: 'erledigt' }, expected: { status: 'eingegangen' } };
+  // The body of the skill's step 4, as the hand-out's write-back schema reads it: `expected` has the keys of `changes`.
+  const body = {
+    changes: { bucket: 'fehler', status: 'erledigt', response: 'Behoben, ab morgen live.' },
+    expected: { bucket: 'fehler', status: 'in_bearbeitung', response: null },
+  };
   expect(await helper(['write-back', REPORT_ID], JSON.stringify(body))).toEqual({
     code: 0,
     stdout: 'written\n',
@@ -154,16 +158,16 @@ test('the write-back sends the JSON object on stdin with the bearer secret', asy
 test('a triage conflict prints the current state and nothing of an answer', async () => {
   answer = () =>
     Response.json(
+      // The hand-out's conflict answer, with a field beside it that must not be printed.
       {
         error: 'triage_conflict',
-        status: 'in_bearbeitung',
-        bucket: 'fehler',
-        hasAnswer: true,
+        current: { status: 'in_bearbeitung', bucket: 'fehler', hasAnswer: true },
         response: 'Hallo',
       },
       { status: 409 },
     );
-  expect(await helper(['write-back', REPORT_ID], '{"changes":{"status":"erledigt"}}')).toEqual({
+  const body = '{"changes":{"status":"erledigt"},"expected":{"status":"eingegangen"}}';
+  expect(await helper(['write-back', REPORT_ID], body)).toEqual({
     code: 3,
     stdout: '',
     stderr: 'refused: triage_conflict {"status":"in_bearbeitung","bucket":"fehler","hasAnswer":true}\n',

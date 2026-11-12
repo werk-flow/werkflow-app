@@ -89,12 +89,17 @@ async function post(handout: Handout, path: string, body?: string): Promise<Resp
 }
 
 const errorSchema = z.object({ error: z.string().regex(/^[a-z_]+$/) });
-// A conflict names the report's current state, never its text.
+// A conflict names the report's state now, never its text.
 const conflictSchema = z.object({
   error: z.literal('triage_conflict'),
-  status: z.string().nullable().optional(),
-  bucket: z.string().nullable().optional(),
-  hasAnswer: z.boolean().optional(),
+  current: z.object({
+    status: z.string().regex(/^[a-z_]+$/),
+    bucket: z
+      .string()
+      .regex(/^[a-z_]+$/)
+      .nullable(),
+    hasAnswer: z.boolean(),
+  }),
 });
 
 /** Stops on a refusal: its code, and for a triage conflict the current state; never another word of the answer. */
@@ -103,7 +108,7 @@ async function refuse(response: Response): Promise<never> {
   const body: unknown = await response.json().catch(() => null);
   const conflict = conflictSchema.safeParse(body);
   if (conflict.success) {
-    const { status, bucket, hasAnswer } = conflict.data;
+    const { status, bucket, hasAnswer } = conflict.data.current;
     throw new Stop(`refused: triage_conflict ${JSON.stringify({ status, bucket, hasAnswer })}`, EXIT.refused);
   }
   const error = errorSchema.safeParse(body);

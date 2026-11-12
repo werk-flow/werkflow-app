@@ -66,12 +66,13 @@ Run `bun scripts/report-thread.ts write-back <id>` with one JSON object on stdin
 ```json
 {
   "changes": { "bucket": "fehler", "status": "erledigt", "response": "Behoben, ab morgen live." },
-  "expected": { "status": "in_bearbeitung", "bucket": "fehler", "hasAnswer": false }
+  "expected": { "bucket": "fehler", "status": "in_bearbeitung", "response": null }
 }
 ```
 
 - `changes` holds at least one of `bucket`, `status` and `response`.
-- `expected` is the state you last saw: from the hand-out, then from your own last write-back.
+- `expected` has exactly the keys of `changes`, each with the value you last saw: `status` and `bucket` from the hand-out, then from your own last write-back. `response` is `null`, or the answer you wrote last. You never see support's answer.
+- When the hand-out showed `hasAnswer: true`, support has answered: write back no `response`.
 - Exit 3 `refused: triage_conflict`: a person has taken the report. Stop. Overwrite nothing and never retry.
 
 The answer is for the reporter, who sees it marked „Automatisch geschrieben“. Write natural German with „du“: plain, short, no technical words, no link, and no promise you cannot keep.
