@@ -1,11 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 
-import {
-  describeSchoolDay,
-  expandSchoolDaySpans,
-  groupSchoolDaySpansByRecord,
-  type SchoolDay,
-} from './school-days';
+import { describeSchoolDay, groupSchoolDaySpansByRecord, type SchoolDay } from './school-days';
+import type { ApprovedAbsenceSpan } from './targets';
+
+/** One record's spans; the rules of each test belong to one record. */
+function expandSchoolDaySpans(schoolDays: SchoolDay[], start: string, end: string): ApprovedAbsenceSpan[] {
+  return [...groupSchoolDaySpansByRecord(schoolDays, start, end).values()].flat();
+}
 
 const weeklyMonday: SchoolDay = {
   id: 'rule-1',
@@ -27,7 +28,7 @@ const block: SchoolDay = {
   cancelledAt: null,
 };
 
-function dates(spans: ReturnType<typeof expandSchoolDaySpans>): string[][] {
+function dates(spans: ApprovedAbsenceSpan[]): string[][] {
   return spans.map((span) => [span.startDate, span.endDate]);
 }
 

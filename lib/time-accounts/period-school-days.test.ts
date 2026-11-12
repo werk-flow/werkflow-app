@@ -181,3 +181,37 @@ describe('a Berufsschule day on the Zeitkonto', () => {
     expect(dailyTargets.map((day) => day.targetMinutes)).toEqual([0]);
   });
 });
+
+describe('a Berufsschule day under an informational absence policy', () => {
+  const schoolFriday = '2026-11-06';
+  const informational = new Map([
+    [
+      schoolFriday,
+      { ...policy, vacationTreatment: 'informational' as const, sicknessTreatment: 'informational' as const },
+    ],
+  ]);
+  const fullDay = (type: 'vacation' | 'sickness'): ApprovedAbsenceSpan => ({
+    type,
+    startDate: schoolFriday,
+    endDate: schoolFriday,
+    dayPortion: 'full',
+  });
+
+  test.each(['vacation', 'sickness'] as const)(
+    'an informational %s on a school day keeps the school day credited',
+    (type) => {
+      const { dailyTargets } = resolveEmployeeDailyTargets(APPRENTICE, informational, {
+        sources: {
+          schedules: [eightHourWeek],
+          conditions: [],
+          vacations: new Map(type === 'vacation' ? [[APPRENTICE.id, [fullDay(type)]]] : []),
+          sickness: new Map(type === 'sickness' ? [[APPRENTICE.id, [fullDay(type)]]] : []),
+          school: groupSchoolDaySpansByRecord([fridaySchool], schoolFriday, schoolFriday),
+          calendar: EMPTY_HOLIDAY_CALENDAR,
+        },
+        index: { dates: [schoolFriday] },
+      });
+      expect(dailyTargets.map((day) => [day.targetMinutes, day.schoolMinutes])).toEqual([[0, 480]]);
+    },
+  );
+});

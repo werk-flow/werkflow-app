@@ -45,25 +45,31 @@ export function resolveEmployeeDailyTargets(
     employment: { entryDate: employee.entry_date, exitDate: employee.exit_date },
     absences: absenceSpans,
   });
+  // A school day relieves its target whatever absence keeps the attribution:
+  // a vacation or sickness the policy counts as informational must not bring
+  // the target back on it (werk-flow/werkflow-planning#165).
+  const schoolSpans = school.get(employee.id) ?? [];
+  const schoolDates = new Set(
+    dates.filter((date) => schoolSpans.some((span) => span.startDate <= date && date <= span.endDate)),
+  );
   const dailyTargets: DailyTargetInput[] = resolvedTargets.map((target) => {
     const vacationMinutes =
       target.absence?.type === 'vacation' ? target.baseTargetMinutes - target.targetMinutes : 0;
     const sicknessMinutes =
       target.absence?.type === 'sickness' ? target.baseTargetMinutes - target.targetMinutes : 0;
-    // On a holiday or closure day the day's own rule already removed the
-    // target, so the school day credits nothing more.
-    const schoolMinutes =
-      target.absence?.type === 'school' && !target.isHoliday && !target.isClosureDay
-        ? target.baseTargetMinutes - target.targetMinutes
-        : 0;
     const treatment =
       target.absence?.type === 'vacation'
         ? policiesByDate.get(target.date)?.vacationTreatment
         : target.absence?.type === 'sickness'
           ? policiesByDate.get(target.date)?.sicknessTreatment
           : undefined;
-    const targetMinutes =
-      target.absence && treatment === 'informational' ? target.baseTargetMinutes : target.targetMinutes;
+    const informational = target.absence !== null && treatment === 'informational';
+    // On a holiday or closure day the day's own rule already removed the
+    // target, so the school day credits nothing more.
+    const schoolDay = schoolDates.has(target.date) && !target.isHoliday && !target.isClosureDay;
+    const schoolMinutes =
+      schoolDay && (target.absence?.type === 'school' || informational) ? target.baseTargetMinutes : 0;
+    const targetMinutes = informational ? (schoolDay ? 0 : target.baseTargetMinutes) : target.targetMinutes;
     return {
       localDate: target.date,
       targetMinutes,

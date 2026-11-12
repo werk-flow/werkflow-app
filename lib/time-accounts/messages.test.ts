@@ -139,6 +139,10 @@ describe('period page live tables', () => {
     expect(TIME_PERIOD_DETAIL_LIVE_TABLES).toContain('time_sessions');
   });
 
+  test('the detail re-reads its Berufsschule minutes when a school day changes', () => {
+    expect(TIME_PERIOD_DETAIL_LIVE_TABLES).toContain('school_days');
+  });
+
   test('every table is published', () => {
     for (const table of TIME_PERIOD_DETAIL_LIVE_TABLES) expect(REALTIME_TABLES).toContain(table);
   });

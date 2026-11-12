@@ -4,10 +4,10 @@ import { getCachedOrganizationCalendar } from '@/lib/data/cached';
 import { loadSchoolDaySpansByRecord } from '@/lib/personnel/school-day-server';
 import { loadActiveSicknessSpansByRecord } from '@/lib/sickness/server';
 import type { AdminClient } from '@/lib/supabase/admin';
-import { readInBatches } from '@/lib/supabase/query-batches';
+import { readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { loadApprovedVacationSpansByRecord } from '@/lib/vacation/server';
 import { resolveEmployeeDailyTargets } from './period-daily-targets';
-import { getDateRange } from './period-sources';
+import { getDateRange, PERIOD_SOURCE_ROW_CAP, requirePeriodRows } from './period-sources';
 
 /**
  * The Berufsschule minutes per person of a period, for the period review: the
@@ -29,6 +29,8 @@ export async function readPeriodSchoolMinutes(
   // Most organizations have no apprentice in a period: one read answers them.
   if (recordIds.length === 0) return new Map();
 
+  // The version histories read completely, as the preparation reads them
+  // (period-sources.ts): PostgREST truncates a page silently.
   const [employees, schedules, conditions, calendar, vacations, sickness] = await Promise.all([
     readInBatches(recordIds, (ids) =>
       admin
@@ -37,26 +39,33 @@ export async function readPeriodSchoolMinutes(
         .eq('organization_id', orgId)
         .in('id', [...ids]),
     ),
-    readInBatches(recordIds, (ids) =>
-      admin
-        .from('work_schedules')
-        .select('*')
-        .eq('organization_id', orgId)
-        .in('employee_record_id', [...ids]),
-    ),
-    readInBatches(recordIds, (ids) =>
-      admin
-        .from('employment_conditions')
-        .select('*')
-        .eq('organization_id', orgId)
-        .in('employee_record_id', [...ids]),
-    ),
+    readCompleteRows(
+      (from, to) =>
+        admin
+          .from('work_schedules')
+          .select('*')
+          .eq('organization_id', orgId)
+          .lte('valid_from', period.end)
+          .order('id')
+          .range(from, to),
+      PERIOD_SOURCE_ROW_CAP,
+    ).then(requirePeriodRows),
+    readCompleteRows(
+      (from, to) =>
+        admin
+          .from('employment_conditions')
+          .select('*')
+          .eq('organization_id', orgId)
+          .lte('valid_from', period.end)
+          .order('id')
+          .range(from, to),
+      PERIOD_SOURCE_ROW_CAP,
+    ).then(requirePeriodRows),
     getCachedOrganizationCalendar(orgId),
     loadApprovedVacationSpansByRecord(orgId, period.start, period.end),
     loadActiveSicknessSpansByRecord(orgId, period.start, period.end),
   ]);
-  const failed = employees.error ?? schedules.error ?? conditions.error;
-  if (failed) throw failed;
+  if (employees.error) throw employees.error;
   if (!vacations || !sickness) throw new Error('period_school_minutes: absences');
 
   const dates = getDateRange(period.start, period.end);
@@ -64,8 +73,8 @@ export async function readPeriodSchoolMinutes(
   for (const employee of employees.data ?? []) {
     const { dailyTargets } = resolveEmployeeDailyTargets(employee, new Map(), {
       sources: {
-        schedules: schedules.data ?? [],
-        conditions: conditions.data ?? [],
+        schedules: schedules.data,
+        conditions: conditions.data,
         vacations,
         sickness,
         school,

@@ -53,7 +53,7 @@ export function toSchoolDay(row: SchoolDayRow): SchoolDay {
  * one span clamped to the window; a weekly rule is one single-day span per
  * matching weekday. A cancelled rule yields nothing.
  */
-export function expandSchoolDaySpans(
+function expandSchoolDaySpans(
   schoolDays: readonly SchoolDay[],
   windowStartIso: string,
   windowEndIso: string,

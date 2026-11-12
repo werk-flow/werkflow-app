@@ -13,8 +13,10 @@ export const TIME_PERIOD_LIST_LIVE_TABLES = [
 /**
  * The period detail also shows the sessions that still run in the period,
  * because they block the close: a clock-out elsewhere must lift the block.
+ * Its Berufsschule minutes are read live from `school_days`.
  */
 export const TIME_PERIOD_DETAIL_LIVE_TABLES = [
   ...TIME_PERIOD_LIST_LIVE_TABLES,
   'time_sessions',
+  'school_days',
 ] as const satisfies readonly RealtimeTable[];
