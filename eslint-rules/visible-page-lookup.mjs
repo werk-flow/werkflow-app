@@ -52,15 +52,15 @@ function selectsShownOnly(argument) {
   );
 }
 
-/** An options object that sets the named option to `true`. */
+/** An options object that sets the named option to `true`, under a plain or a quoted key. */
 function setsTrue(options, name) {
   return (
     options?.type === 'ObjectExpression' &&
     options.properties.some(
       (property) =>
         property.type === 'Property' &&
-        property.key.type === 'Identifier' &&
-        property.key.name === name &&
+        !property.computed &&
+        (property.key.type === 'Identifier' ? property.key.name : property.key.value) === name &&
         property.value.type === 'Literal' &&
         property.value.value === true,
     )
