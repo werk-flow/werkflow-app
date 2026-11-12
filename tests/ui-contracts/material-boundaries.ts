@@ -61,7 +61,12 @@ const takenContractLine: JobMaterialLine = {
   availableQuantity: materialContractItem.availableQuantity,
 };
 
-window.uiContractMaterial = { lines: window.uiContractFixture === 'material-use' ? [takenContractLine] : [] };
+window.uiContractMaterial = {
+  lines:
+    window.uiContractFixture === 'material-use' || window.uiContractFixture === 'material-use-off-page'
+      ? [takenContractLine]
+      : [],
+};
 
 export function readMaterialLinesContract(): { success: true; lines: JobMaterialLine[] } {
   return { success: true, lines: structuredClone(window.uiContractMaterial.lines) };

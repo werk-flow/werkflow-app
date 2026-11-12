@@ -390,6 +390,18 @@ export async function deleteJobMaterialLine(lineIdInput: string): Promise<Action
 
   // Used material is built in and stays on its line: the line cannot be removed.
   if (toNumber(line.used_quantity) > 0) return { success: false, error: 'material_use_recorded' };
+  // A fully corrected use nets to 0 but stays history: the event ledger decides too.
+  const { data: useEvents, error: useEventsError } = await loggedRead(
+    'deleteJobMaterialLine: job_material_use_events read failed',
+    admin
+      .from('job_material_use_events')
+      .select('id')
+      .eq('organization_id', auth.context.orgId)
+      .eq('job_material_line_id', lineId)
+      .limit(1),
+  );
+  if (useEventsError) return { success: false, error: 'load_failed' };
+  if ((useEvents ?? []).length > 0) return { success: false, error: 'material_use_recorded' };
 
   // A line with movements is cancelled so its ledger keeps the line; one without
   // is deleted. The quantity filters refuse a movement or use booked after the check.

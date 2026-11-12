@@ -41,6 +41,7 @@ const INVENTORY_LABELS = {
   typeFilter: 'Nach Typ filtern',
   locationFilter: 'Nach Lager filtern',
   pendingLocation: 'Lager wird angelegt',
+  pendingMaterialLine: 'Wird gespeichert',
   newSupplier: 'Neuen Lieferanten anlegen',
   applySupplier: 'Übernehmen',
   planMaterial: 'Material planen',
@@ -188,6 +189,11 @@ export function itemLocationFilter(page: Page): Locator {
 /** The optimistic card of a location that is still being created. */
 export function pendingLocationStatus(page: Page): Locator {
   return page.getByRole('status', { name: INVENTORY_LABELS.pendingLocation });
+}
+
+/** The pending mark of a job material line whose booking is not confirmed yet. */
+export function materialLinePendingStatus(line: Locator): Locator {
+  return line.getByRole('status', { name: INVENTORY_LABELS.pendingMaterialLine, exact: true });
 }
 
 /** A table row on /inventar (items or movements) that mentions this text. */

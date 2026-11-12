@@ -266,7 +266,8 @@ export function useJobMaterialDialog({
 
     if (line) {
       let item = picker.items.find((entry) => entry.id === line.itemId);
-      if (!item && (jobId || isAdminOrManager)) {
+      // An entry without stock may be the line-derived one a use added; a take needs the Lager.
+      if ((!item || item.stockByLocation.length === 0) && (jobId || isAdminOrManager)) {
         const targetedItem = await readTargetedPickerItem(line.itemId, { jobId, isAdminOrManager });
         if (targetedItem) {
           item = targetedItem;

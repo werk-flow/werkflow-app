@@ -68,6 +68,8 @@ export async function recordJobMaterialUse(
   if (error) {
     if (error.message === 'use_exceeds_taken') return { success: false, error: 'use_exceeds_taken' };
     if (error.message === 'material_line_not_found') return { success: false, error: 'line_not_found' };
+    if (error.message === 'material_unit_changed') return { success: false, error: 'material_unit_changed' };
+    if (error.message === 'not_authorized') return { success: false, error: 'not_authorized' };
     logError('recordJobMaterialUse: record_job_material_use failed', { code: error.code ?? 'unknown' });
     return { success: false, error: 'use_failed' };
   }

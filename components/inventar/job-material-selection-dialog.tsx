@@ -241,7 +241,7 @@ export function MaterialSelectionDialog({
               <FurtherMaterialButton onClick={() => editor.patchDialog({ catalogOpen: true })} />
             )}
 
-            <ErrorText className={cn(catalog !== 'collapsed' && 'lg:col-span-2')}>
+            <ErrorText className={cn((catalog === 'catalog' || catalog === 'locked') && 'lg:col-span-2')}>
               {currentDialog.error}
             </ErrorText>
           </DialogBody>

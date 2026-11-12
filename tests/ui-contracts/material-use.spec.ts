@@ -53,3 +53,23 @@ test('an accepted use keeps the new facts once the line is read again', async ({
   await expect(line.getByRole('status', { name: 'Wird gespeichert', exact: true })).toHaveCount(0);
   await expect(line).toContainText('2 Stück entnommen · 1 Stück verbraucht · 1 Stück noch offen');
 });
+
+// The use dialog names its article from the line when the loaded catalog page
+// lacks it. A take on the same line afterwards still reads the article's stock,
+// so the dialog offers the Lager to take from.
+test('a take after a use on an article off the loaded page still offers its Lager', async ({ page }) => {
+  await openContractFixture(page, 'material-use-off-page');
+  const line = page.getByTestId('job-material-line');
+  await line.getByRole('button', { name: 'Verbraucht', exact: true }).click();
+  const useDialog = page.getByRole('dialog', { name: 'Verbrauch buchen', exact: true });
+  await expect(useDialog).toContainText('Kupferrohr 15 mm');
+  await useDialog.getByRole('textbox', { name: 'Menge', exact: true }).fill('1');
+  await useDialog.getByRole('button', { name: 'Verbrauch buchen', exact: true }).click();
+  await expectHeldWrite(page, 'record-job-material-use');
+  await answerHeldWrite(page, null);
+  await expect(line.getByRole('status', { name: 'Wird gespeichert', exact: true })).toHaveCount(0);
+
+  await line.getByRole('button', { name: 'Entnahme buchen', exact: true }).click();
+  const takeDialog = page.getByRole('dialog', { name: 'Entnahme buchen', exact: true });
+  await expect(takeDialog.locator('button[id$="-location"]')).toContainText('Hauptlager · 20 Stück');
+});

@@ -20,7 +20,14 @@
 --    correction carries the cost of the event it corrects.
 -- 3. record_job_material_use records one event and the line's used quantity in
 --    one call and returns the line's new used quantity. It changes no stock:
---    the material left the Lager at the take.
+--    the material left the Lager at the take. Like
+--    take_unplanned_inventory_material it re-checks the caller's access under a
+--    share lock: a manager, or an employee assigned to the line's job; a
+--    project's own line is for managers only. A new use is refused while the
+--    article's unit differs from the unit of the line's recorded uses, so one
+--    used quantity never sums two units.
+--    An insert trigger keeps every event's line, article, job, project and
+--    corrected event inside the event's organization and line.
 -- 4. record_inventory_movement refuses a return beyond taken minus used. Its
 --    signature, result and grants stay as before.
 --
@@ -80,6 +87,44 @@ alter table public.job_material_use_events enable row level security;
 revoke all on table public.job_material_use_events from public, anon, authenticated, service_role;
 grant select, insert on table public.job_material_use_events to service_role;
 
+-- The tenant boundary of an event's references (data-model.md, "Tenant
+-- boundary"): its line belongs to its organization and carries its article,
+-- job and project, and a corrected event belongs to the same line.
+create function app_private.validate_job_material_use_event()
+returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  if not exists (
+    select 1 from public.job_material_lines line
+    where line.id = new.job_material_line_id
+      and line.organization_id = new.organization_id
+      and line.item_id = new.item_id
+      and line.job_id is not distinct from new.job_id
+      and line.project_id is not distinct from new.project_id
+  ) then
+    raise exception 'material use event must match a line of its organization';
+  end if;
+  if new.corrects_event_id is not null and not exists (
+    select 1 from public.job_material_use_events event
+    where event.id = new.corrects_event_id
+      and event.organization_id = new.organization_id
+      and event.job_material_line_id = new.job_material_line_id
+  ) then
+    raise exception 'material use correction must name an event of its line';
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function app_private.validate_job_material_use_event() from public, anon, authenticated;
+
+create trigger validate_job_material_use_event
+before insert on public.job_material_use_events
+for each row execute function app_private.validate_job_material_use_event();
+
 create trigger guard_job_material_use_events_append_only
 before update or delete on public.job_material_use_events
 for each row execute function app_private.guard_inventory_ledger_append_only();
@@ -107,17 +152,19 @@ declare
   v_cost_amount integer;
   v_cost_quantity integer;
   v_used numeric(12,3);
+  v_role public.org_role;
+  v_recorded_unit text;
 begin
   if p_quantity is null or p_quantity = 0 then
     raise exception 'quantity_required';
   end if;
 
-  if not exists (
-    select 1 from public.organization_members member
-    where member.organization_id = p_organization_id
-      and member.user_id = p_actor_id
-  ) then
-    raise exception 'actor is not a member of organization';
+  select member.role into v_role from public.organization_members member
+  where member.organization_id = p_organization_id
+    and member.user_id = p_actor_id
+  for share;
+  if v_role is null then
+    raise exception 'not_authorized';
   end if;
 
   -- The lock serializes every use, take and return of the line.
@@ -131,6 +178,21 @@ begin
     raise exception 'material_line_not_found';
   end if;
 
+  -- The action checked the same access; a removed assignment or role since then refuses here.
+  if v_role not in ('admin', 'buero') then
+    if v_line.job_id is null then
+      raise exception 'not_authorized';
+    end if;
+    perform 1 from public.job_assignments assignment
+    where assignment.organization_id = p_organization_id
+      and assignment.job_id = v_line.job_id
+      and assignment.user_id = p_actor_id
+    for share;
+    if not found then
+      raise exception 'not_authorized';
+    end if;
+  end if;
+
   select item.unit, item.purchase_price_cents into v_unit, v_price
   from public.inventory_items item
   where item.id = v_line.item_id
@@ -142,6 +204,14 @@ begin
     end if;
     if v_line.used_quantity + v_line.returned_quantity + p_quantity > v_line.taken_quantity then
       raise exception 'use_exceeds_taken';
+    end if;
+    -- Every event of a line carries one unit; a changed article unit waits for the office.
+    select event.unit into v_recorded_unit
+    from public.job_material_use_events event
+    where event.job_material_line_id = v_line.id
+    limit 1;
+    if v_recorded_unit is not null and v_recorded_unit <> v_unit then
+      raise exception 'material_unit_changed';
     end if;
     v_cost_amount := v_price;
     v_cost_quantity := case when v_price is null then null else 1 end;

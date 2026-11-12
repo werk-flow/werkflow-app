@@ -350,7 +350,9 @@ function toConsumptionLines(
   const eventsByLine = new Map<string, MaterialUseEvent[]>();
   // All events of one line come from one batch, already in their order.
   for (const event of eventRows.map(toMaterialUseEvent)) {
-    eventsByLine.set(event.lineId, [...(eventsByLine.get(event.lineId) ?? []), event]);
+    const lineEvents = eventsByLine.get(event.lineId);
+    if (lineEvents) lineEvents.push(event);
+    else eventsByLine.set(event.lineId, [event]);
   }
   const lines: MaterialConsumptionLine[] = [];
   for (const line of rows) {

@@ -18,6 +18,7 @@ const ownItemId = '90000000-0000-4000-8000-000000000008';
 const ownJobLineId = '90000000-0000-4000-8000-000000000009';
 const ownProjectLineId = '90000000-0000-4000-8000-00000000000a';
 const ownUsedLineId = '90000000-0000-4000-8000-00000000000b';
+const ownCorrectedLineId = '90000000-0000-4000-8000-00000000000c';
 
 const world = installActionWorld({
   jobs: [
@@ -56,6 +57,18 @@ const world = installActionWorld({
       returned_quantity: 0,
       status: 'taken',
     },
+    // A use corrected back to 0: the net quantity is 0, the events stay history.
+    {
+      id: ownCorrectedLineId,
+      organization_id: ORGANIZATION_A,
+      job_id: ownJobId,
+      project_id: null,
+      item_id: ownItemId,
+      taken_quantity: 2,
+      used_quantity: 0,
+      returned_quantity: 0,
+      status: 'taken',
+    },
     {
       id: ownUsedLineId,
       organization_id: ORGANIZATION_A,
@@ -77,6 +90,21 @@ const world = installActionWorld({
       used_quantity: 0,
       returned_quantity: 0,
       status: 'taken',
+    },
+  ],
+  job_material_use_events: [
+    {
+      id: '90000000-0000-4000-8000-00000000000d',
+      organization_id: ORGANIZATION_A,
+      job_material_line_id: ownCorrectedLineId,
+      quantity: 1,
+    },
+    {
+      id: '90000000-0000-4000-8000-00000000000e',
+      organization_id: ORGANIZATION_A,
+      job_material_line_id: ownCorrectedLineId,
+      quantity: -1,
+      corrects_event_id: '90000000-0000-4000-8000-00000000000d',
     },
   ],
 });
@@ -258,7 +286,10 @@ await assertRefused(
 // A line with recorded use stays on its job: removing it is refused before any write.
 await assertRefused(
   world,
-  [['deleteJobMaterialLine', () => deleteJobMaterialLine(ownUsedLineId)]],
+  [
+    ['deleteJobMaterialLine', () => deleteJobMaterialLine(ownUsedLineId)],
+    ['deleteJobMaterialLine', () => deleteJobMaterialLine(ownCorrectedLineId)],
+  ],
   { success: false, error: 'material_use_recorded' },
   'reads',
 );

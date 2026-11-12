@@ -218,6 +218,29 @@ begin
     raise exception 'a correction of a correction must be refused, got %', v_refusal;
   end if;
 
+  -- The article's unit changed after the line's uses were recorded in meters:
+  -- a new use would add pieces to meters, so it is refused until the office checks the line.
+  begin
+    perform public.record_job_material_use(v_org, v_actor, v_line, 1);
+    v_refusal := null;
+  exception when others then
+    v_refusal := sqlerrm;
+  end;
+  if v_refusal is distinct from 'material_unit_changed' then
+    raise exception 'a new use after the article''s unit changed must be refused with material_unit_changed, got %', v_refusal;
+  end if;
+
+  -- The function re-checks access: an employee never records use on a project's own line.
+  begin
+    perform public.record_job_material_use(v_org, '37000000-0000-4000-8000-000000000002', v_line, 1);
+    v_refusal := null;
+  exception when others then
+    v_refusal := sqlerrm;
+  end;
+  if v_refusal is distinct from 'not_authorized' then
+    raise exception 'an employee''s use on a project line must be refused by the function, got %', v_refusal;
+  end if;
+
   -- The event belongs to the line: a foreign organization finds no line.
   begin
     perform public.record_job_material_use('37000000-0000-4000-8000-000000000011', '37000000-0000-4000-8000-000000000003', v_line, 1);
@@ -227,6 +250,44 @@ begin
   end;
   if v_refusal is distinct from 'material_line_not_found' then
     raise exception 'a use on another organization''s line must be refused, got %', v_refusal;
+  end if;
+end $$;
+
+-- An event's references stay inside its organization and line, also for a
+-- direct service-role insert that bypasses the function.
+do $$
+declare
+  v_refusal text;
+begin
+  begin
+    insert into public.job_material_use_events (
+      organization_id, project_id, job_material_line_id, item_id, unit, quantity, actor_id
+    ) values (
+      '37000000-0000-4000-8000-000000000010', '37000000-0000-4000-8000-000000000040',
+      '37000000-0000-4000-8000-000000000050', '37000000-0000-4000-8000-000000000021',
+      'piece', 1, '37000000-0000-4000-8000-000000000001'
+    );
+    v_refusal := null;
+  exception when raise_exception then
+    v_refusal := sqlerrm;
+  end;
+  if v_refusal is distinct from 'material use event must match a line of its organization' then
+    raise exception 'an event naming another article than its line must be refused, got %', v_refusal;
+  end if;
+  begin
+    insert into public.job_material_use_events (
+      organization_id, project_id, job_material_line_id, item_id, unit, quantity, actor_id
+    ) values (
+      '37000000-0000-4000-8000-000000000011', '37000000-0000-4000-8000-000000000040',
+      '37000000-0000-4000-8000-000000000050', '37000000-0000-4000-8000-000000000020',
+      'meter', 1, '37000000-0000-4000-8000-000000000003'
+    );
+    v_refusal := null;
+  exception when raise_exception then
+    v_refusal := sqlerrm;
+  end;
+  if v_refusal is distinct from 'material use event must match a line of its organization' then
+    raise exception 'an event of another organization naming this line must be refused, got %', v_refusal;
   end if;
 end $$;
 
@@ -333,6 +394,12 @@ declare
 begin
   perform public.record_inventory_movement(v_org, v_actor, '37000000-0000-4000-8000-000000000021',
     '37000000-0000-4000-8000-000000000030', 'job_take', -1, v_job, null, v_line);
+  begin
+    perform public.record_job_material_use(v_org, '37000000-0000-4000-8000-000000000002', v_line, 1);
+    raise exception 'an unassigned employee recorded use on a job line';
+  exception when raise_exception then
+    if sqlerrm <> 'not_authorized' then raise; end if;
+  end;
   perform public.record_job_material_use(v_org, v_actor, v_line, 1);
   begin
     delete from public.jobs where id = v_job;

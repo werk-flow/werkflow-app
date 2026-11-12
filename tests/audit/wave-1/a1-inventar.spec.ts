@@ -33,6 +33,7 @@ import {
   jobMaterialLineAction,
   materialReturnedText,
   materialTakenText,
+  materialLinePendingStatus,
   materialUsedText,
   openItemRowAction,
   pendingLocationStatus,
@@ -42,6 +43,7 @@ import {
 } from '../../golden/support/steps/inventory';
 import { projectQualificationSection } from '../../golden/support/steps/qualifications';
 import {
+  expectGone,
   SHARED_COPY,
   selectFromSearchable,
   testData,
@@ -99,6 +101,8 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
       world.inventory.locationId,
     );
     await bookMaterialUse(employeePage, jobMaterialLineAction(materialLine, 'use'), '1');
+    // The line shows the use at once; its pending mark clears only after the write and the fresh read.
+    await expectGone(materialLinePendingStatus(materialLine));
     await expect(materialLine).toContainText(materialUsedText(1));
     expect(
       await getInventoryLedgerState(world.orgId, world.inventory.itemId, world.inventory.locationId),

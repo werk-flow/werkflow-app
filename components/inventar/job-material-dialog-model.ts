@@ -78,6 +78,8 @@ export function getActionErrorMessage(error: string, mode: MaterialDialogMode): 
       'Der Bestand in diesem Lager reicht nicht aus. Wähle eine kleinere Menge oder ein anderes Lager.',
     return_exceeds_taken:
       'Du kannst nur zurücklegen, was für diese Position entnommen und noch nicht verbraucht oder zurückgelegt wurde.',
+    material_unit_changed:
+      'Die Einheit des Artikels wurde geändert, nachdem für diese Position schon Verbrauch erfasst wurde. Bitte das Büro, die Position zu prüfen.',
     use_exceeds_taken:
       'So viel ist nicht mehr offen. Verbrauchen kannst du nur, was entnommen und noch nicht verbraucht oder zurückgelegt wurde.',
     line_has_movements:
