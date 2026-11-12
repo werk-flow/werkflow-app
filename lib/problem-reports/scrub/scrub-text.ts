@@ -3,6 +3,7 @@ import type { ProblemReportContext, ScrubbedProblemReportContext } from '@/lib/p
 import { dictionaryKnows, findTerms, NOT_A_NAME_ALONE, type ScrubDictionary } from './dictionary';
 import { findEmails, findIbans, findPhones, type Found, type PlaceholderKind } from './patterns';
 import { wordsOf, type Word } from './words';
+import { isUuid } from '@/lib/validation/uuid';
 
 // The scrubbed copy of a problem report's text and context
 // (docs/technical/problem-report-scrubbing.md, "Text scrubbing"). Every rule
@@ -150,12 +151,22 @@ export function scrubReportText(original: string, dictionary: ScrubDictionary): 
   return parts.join('');
 }
 
+const RECORD_ID_LENGTH = 36;
+
+/** Whether a token holds a record id anywhere, such as an organization's id inside an error code. */
+export function holdsRecordId(token: string): boolean {
+  for (let start = 0; start + RECORD_ID_LENGTH <= token.length; start += 1) {
+    if (isUuid(token.slice(start, start + RECORD_ID_LENGTH))) return true;
+  }
+  return false;
+}
+
 /**
  * The context without any text of a record. The label of a pressed control
  * stays when the whole label is one of the app's own UI strings. The app
  * version and an error's name, code and digest are tokens; one that the
- * dictionary knows as a name or a phone number is removed. No pattern rule
- * applies to a token, so a numeric digest stays. The server checks all of
+ * dictionary knows as a name or a phone number, or that holds a record id, is
+ * removed. No other pattern rule applies to a token, so a numeric digest stays. The server checks all of
  * this again, because the device's filter is not trusted.
  */
 export function scrubReportContext(
@@ -164,7 +175,7 @@ export function scrubReportContext(
   dictionary: ScrubDictionary,
 ): ScrubbedProblemReportContext {
   const kept = (token: string | null): string | null =>
-    token !== null && dictionaryKnows(dictionary, token) ? null : token;
+    token !== null && (dictionaryKnows(dictionary, token) || holdsRecordId(token)) ? null : token;
   return {
     ...context,
     recentActions: context.recentActions.map((action) => ({

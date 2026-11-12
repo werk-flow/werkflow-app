@@ -397,3 +397,23 @@ test('context rule: a token that the dictionary knows as a name or a phone numbe
   ]);
   expect(scrubReportContext(context, uiStrings, dictionary).appVersion).toBe('a1b2c3d4e5f6');
 });
+
+test('context rule: a token that holds a record id is removed', () => {
+  const routeTemplate = '/auftraege/[jobNumber]';
+  const recordId = '7c1e2d3f-0000-4000-8000-00000000abcd';
+  const crafted: ProblemReportContext = {
+    ...context,
+    appVersion: `org-${recordId}`,
+    clientErrors: [
+      { name: 'TypeError', code: `missing:${recordId}`, digest: recordId.toUpperCase(), routeTemplate },
+      { name: 'TypeError', code: 'load_failed', digest: '0123456789', routeTemplate },
+    ],
+  };
+  const scrubbed = scrubReportContext(crafted, uiStrings, dictionary);
+  expect(JSON.stringify(scrubbed).toLowerCase()).not.toContain(recordId);
+  expect(scrubbed.appVersion).toBeNull();
+  expect(scrubbed.clientErrors).toEqual([
+    { name: 'TypeError', code: null, digest: null, routeTemplate },
+    { name: 'TypeError', code: 'load_failed', digest: '0123456789', routeTemplate },
+  ]);
+});

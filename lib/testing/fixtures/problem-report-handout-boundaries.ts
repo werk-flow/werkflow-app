@@ -129,6 +129,12 @@ const world = installActionWorld(
       },
     ],
     problem_report_events: [],
+    // The scrubber's dictionary sources beside the organization and its members.
+    clients: [],
+    client_contacts: [],
+    client_sites: [],
+    client_requests: [],
+    employee_records: [],
   },
   {
     problem_report_events: () => ({
@@ -160,8 +166,17 @@ const recordAgent = (args: Record<string, unknown>, eventType: string) => {
 world.rpc = ({ name, args }) => {
   const row = reportRow(args);
   if (!row) return refused('report_not_found');
+  if (name === 'record_problem_report_scrub') {
+    if (row.scrub_state !== 'bereinigt') {
+      row.scrubbed_description = args.p_scrubbed_description;
+      row.scrubbed_context = args.p_scrubbed_context;
+      row.scrub_state = args.p_scrubbed_description === null ? 'nicht_bereinigbar' : 'bereinigt';
+    }
+    return { data: row.scrub_state, error: null };
+  }
   if (name === 'hand_out_problem_report') {
-    if (row.scrub_state === 'ausstehend') return refused('copy_pending');
+    const sentRecently = Date.parse(String(row.created_at)) > Date.now() - 10 * 60 * 1000;
+    if (row.scrub_state === 'ausstehend' || sentRecently) return refused('copy_pending');
     if (row.scrub_state !== 'bereinigt') return refused('copy_unavailable');
     if (row.closed_at !== null) return refused('report_closed');
     if (row.handed_out_at !== null) return refused('already_handed_out');
@@ -222,6 +237,8 @@ mock.module('@/lib/storage/r2', () => ({
   discardStorageObjects: async () => assert.fail('an object was discarded'),
 }));
 mock.module('next/server', () => ({ ...nextServer, connection: async () => {} }));
+// The build inlines the UI string catalog; here the environment holds it.
+process.env.WERKFLOW_UI_STRING_CATALOG = JSON.stringify(['Speichern']);
 const logged: string[] = [];
 console.error = (...parts: unknown[]) => {
   logged.push(parts.map((part) => JSON.stringify(part)).join(' '));
@@ -236,6 +253,7 @@ const writeBackRoute = await import(
   '../../../app/api/problem-reports/v1/reports/[reportId]/write-back/route'
 );
 const support = await import('@/lib/problem-reports/support-actions');
+const { scrubStoredProblemReport } = await import('@/lib/problem-reports/scrub/scrub-report');
 const own = await import('@/lib/problem-reports/actions');
 
 const BASE = 'https://app.example.test/api/problem-reports/v1/reports';
@@ -408,6 +426,50 @@ assert.equal(screenshot.headers.get('cache-control'), 'no-store');
 assert.deepEqual(new Uint8Array(await screenshot.arrayBuffer()), SCREENSHOT_BYTES);
 assert.deepEqual(storageReads, [filePath(waitingId, screenshotId, 'screenshot')]);
 assert.equal(events().at(-1)?.event_type, 'screenshot_handed_out');
+
+// A report sent just now waits ten minutes, while its screenshot may still be
+// uploading: the list leaves it out and its hand-out is refused unclaimed.
+const freshId = '33600000-0000-4000-8000-000000000025';
+reports().push(report(freshId, ORGANIZATION_B, 6, { created_at: new Date().toISOString() }));
+assert.deepEqual(await (await call.waiting(BEARER)).json(), { reportIds: [] });
+assert.deepEqual(await refusal(call.handOut(freshId)), [409, { error: 'copy_pending' }]);
+assert.equal(reports().find((row) => row.id === freshId)?.handed_out_at, null);
+
+// The real scrubber, then the hand-out: a description that names the
+// reporting organization, and an error code that holds its id, leave as placeholders.
+const namingId = '33600000-0000-4000-8000-000000000026';
+reports().push(
+  report(namingId, ORGANIZATION_B, 7, {
+    ...unscrubbed,
+    description: `Bei ${ORGANIZATION_NAME} hängt die Liste.`,
+    context: {
+      ...ORIGINAL_CONTEXT,
+      clientErrors: [
+        { name: 'TypeError', code: `org:${ORGANIZATION_B}`, digest: null, routeTemplate: '/auftraege' },
+      ],
+    },
+  }),
+);
+assert.equal(await scrubStoredProblemReport(ORGANIZATION_B, namingId), true);
+const named = await call.handOut(namingId);
+assert.equal(named.status, 200);
+const namedBody = await named.text();
+assert.ok(
+  !namedBody.includes('Beispiel') && !namedBody.includes('Sanitär'),
+  'the hand-out names its organization',
+);
+assert.ok(!namedBody.toLowerCase().includes(ORGANIZATION_B), "the hand-out carries its organization's id");
+
+// A copy written before those rules, which still names its organization,
+// never leaves: refused, unclaimed and without a history entry.
+const legacyId = '33600000-0000-4000-8000-000000000027';
+reports().push(
+  report(legacyId, ORGANIZATION_B, 8, { scrubbed_description: `Bei ${ORGANIZATION_NAME} hängt die Liste.` }),
+);
+const historyBeforeLegacy = events().length;
+assert.deepEqual(await refusal(call.handOut(legacyId)), [409, { error: 'copy_unavailable' }]);
+assert.equal(reports().find((row) => row.id === legacyId)?.handed_out_at, null);
+assert.equal(events().length, historyBeforeLegacy, 'a withheld copy wrote history');
 
 // The write-back refuses an invalid bucket or status, an assignee, an empty
 // answer, an empty change, a change without the value it was based on, and

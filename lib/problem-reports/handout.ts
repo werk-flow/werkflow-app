@@ -7,6 +7,7 @@ import type { AdminClient } from '@/lib/supabase/admin';
 import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { supportUserIds } from '@/lib/support/allowlist';
+import { copyNamesItsOrganization } from './scrub/scrub-report';
 import { constrainedValue } from '@/lib/validation/constrained-value';
 import { z } from '@/lib/zod';
 import {
@@ -91,8 +92,15 @@ function refusalOf(
 }
 
 /**
- * The ids of the reports waiting for a thread, oldest first: with a scrubbed
- * copy, not handed out and still open. Ids only.
+ * How long a report waits after it was sent before a thread may take it: the
+ * device uploads the screenshot after the save. hand_out_problem_report
+ * refuses a younger report with the same interval.
+ */
+const HANDOUT_GRACE_MILLISECONDS = 10 * 60 * 1000;
+
+/**
+ * The ids of the reports waiting for a thread, oldest first: sent at least ten
+ * minutes ago, with a scrubbed copy, not handed out and still open. Ids only.
  */
 export async function listWaitingProblemReportIds(
   admin: AdminClient,
@@ -106,6 +114,7 @@ export async function listWaitingProblemReportIds(
         .eq('scrub_state', 'bereinigt')
         .is('handed_out_at', null)
         .is('closed_at', null)
+        .lte('created_at', new Date(Date.now() - HANDOUT_GRACE_MILLISECONDS).toISOString())
         .order('created_at')
         .order('id')
         .range(from, to),
@@ -135,6 +144,44 @@ async function loadReport(
   if (error) return FAILED;
   if (!data) return NOT_FOUND;
   return { ok: true, report: data };
+}
+
+/**
+ * Whether the report's written copy still names its organization, which a
+ * copy written before that rule may: then it never leaves (`copy_unavailable`).
+ * A report without a copy passes here; the hand-out refuses it with its code.
+ */
+async function copyWithheld(
+  admin: AdminClient,
+  report: { id: string; organization_id: string },
+): Promise<boolean | null> {
+  const [copy, organization] = await Promise.all([
+    loggedRead(
+      'problem report hand-out: copy read failed',
+      admin
+        // tenant-scope: cross-organization-by-design — the copy of the one report a thread names, by its id
+        .from('problem_reports')
+        .select('scrub_state, scrubbed_description, scrubbed_context')
+        .eq('id', report.id)
+        .maybeSingle(),
+    ),
+    loggedRead(
+      'problem report hand-out: organization read failed',
+      admin.from('organizations').select('name').eq('id', report.organization_id).maybeSingle(),
+    ),
+  ]);
+  if (copy.error || organization.error || !copy.data || !organization.data) return null;
+  const { scrub_state: state, scrubbed_description: description, scrubbed_context: context } = copy.data;
+  if (state !== 'bereinigt' || description === null) return false;
+  try {
+    return copyNamesItsOrganization(
+      { description, context: parseScrubbedProblemReportContext(context) },
+      organization.data.name,
+    );
+  } catch (thrown) {
+    logError('problem report hand-out: copy check failed', thrown);
+    return null;
+  }
 }
 
 /** The arguments of a hand-out call about one loaded report. */
@@ -173,9 +220,10 @@ const handedOutRowSchema = z.strictObject({
 const handedOutScreenshotSchema = z.strictObject({ path: z.string(), mime_type: z.string() });
 
 /**
- * Hands one report's scrubbed copy to a thread, once. The database call
- * claims the report and writes the hand-out into its history before it
- * answers; a report without a scrubbed copy, a closed one and one already
+ * Hands one report's scrubbed copy to a thread, once. A copy that still
+ * names its organization is held back first. The database call claims the
+ * report and writes the hand-out into its history before it answers; a
+ * report without a scrubbed copy, a younger one, a closed one and one already
  * handed out are refused with their codes.
  */
 export async function handOutProblemReport(
@@ -184,6 +232,9 @@ export async function handOutProblemReport(
 ): Promise<HandoutResult<{ copy: HandedOutCopy }>> {
   const loaded = await loadReport(admin, reportId);
   if (!loaded.ok) return loaded;
+  const withheld = await copyWithheld(admin, loaded.report);
+  if (withheld === null) return FAILED;
+  if (withheld) return { ok: false, error: 'copy_unavailable' };
   const { data, error } = await admin.rpc(
     'hand_out_problem_report',
     // tenant-scope: cross-organization-by-design — a report thread takes a report of any organization; the loaded report's own organization scopes the call

@@ -24,8 +24,11 @@ import {
 const id = (index: number): string => `33200000-0000-4000-8000-${String(index).padStart(12, '0')}`;
 const ownCustomer = 'Erika Müller';
 const foreignCustomer = 'Bodo Fremdmann';
-const description = `Bei ${ownCustomer} (0171 2345678) und bei ${foreignCustomer} speichert der Auftrag nicht.`;
-const scrubbedDescription = `Bei [Kunde 1] ([Telefon 1]) und bei ${foreignCustomer} speichert der Auftrag nicht.`;
+// The reporting organization's own name is a term like a customer's; the other organization's name is not.
+const ownOrganization = 'Sonnfeld Wärmetechnik GmbH';
+const foreignOrganization = 'Fremdhaus Bäder GmbH';
+const description = `Wir bei ${ownOrganization}, nicht ${foreignOrganization}: Bei ${ownCustomer} (0171 2345678) und bei ${foreignCustomer} speichert der Auftrag nicht.`;
+const scrubbedDescription = `Wir bei [Kunde 1], nicht ${foreignOrganization}: Bei [Kunde 2] ([Telefon 1]) und bei ${foreignCustomer} speichert der Auftrag nicht.`;
 
 const context: ProblemReportContext = {
   routeTemplate: '/auftraege/[jobNumber]',
@@ -62,6 +65,10 @@ const report = (reportId: string, organizationId: string, fields: Record<string,
 });
 
 const world = installActionWorld({
+  organizations: [
+    { id: ORGANIZATION_A, name: ownOrganization },
+    { id: ORGANIZATION_B, name: foreignOrganization },
+  ],
   problem_reports: [],
   clients: [
     { id: id(1), organization_id: ORGANIZATION_A, name: ownCustomer, address: null, phone: null },
@@ -144,9 +151,9 @@ assert.equal(stored(id(10))?.scrub_state, 'ausstehend');
 assert.equal(scrubWrites().length, 0, 'the receipt waited for the scrub');
 
 // The scrub writes the copy and its state in one call, inside the caller's
-// organization. Its own customer and the phone number are replaced; the
-// foreign organization's customer stays, so the dictionary held only
-// organization A. The crafted label is gone, the app's own label stays.
+// organization. Its own name, its own customer and the phone number are
+// replaced; the foreign organization's name and customer stay, so the
+// dictionary held only organization A. The crafted label is gone, the app's own label stays.
 await scrubSubmitted();
 assert.deepEqual(scrubWrites().at(-1)?.args, {
   p_organization_id: ORGANIZATION_A,
@@ -236,7 +243,7 @@ assert.equal(stored(id(13))?.scrub_state, 'bereinigt');
 assert.equal(stored(id(14))?.scrub_state, 'nicht_bereinigbar');
 assert.equal(
   stored(id(15))?.scrubbed_description,
-  `Bei ${ownCustomer} ([Telefon 1]) und bei [Kunde 1] speichert der Auftrag nicht.`,
+  `Wir bei ${ownOrganization}, nicht [Kunde 1]: Bei ${ownCustomer} ([Telefon 1]) und bei [Kunde 2] speichert der Auftrag nicht.`,
   "organization B's report was not scrubbed with B's own dictionary",
 );
 assert.equal(stored(id(16))?.scrub_state, 'nicht_bereinigbar');

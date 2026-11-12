@@ -34,27 +34,34 @@ insert into public.organization_members (organization_id, user_id, role) values
 ('33600000-0000-0000-0000-000000000010', '33600000-0000-0000-0000-000000000002', 'employee');
 
 -- 20 open with a copy and a screenshot, 21 waiting for its scrub, 22 not
--- scrubbable, 23 closed with a copy, 24 open with a copy and no screenshot.
+-- scrubbable, 23 closed with a copy, 24 open with a copy and no screenshot,
+-- all sent an hour ago; 25 open with a copy, sent just now.
 insert into public.problem_reports (
   id, organization_id, reporter_id, filed_by_id, description, context,
-  scrub_state, scrubbed_description, scrubbed_context, status, closed_at
+  scrub_state, scrubbed_description, scrubbed_context, status, closed_at, created_at
 ) values
 ('33600000-0000-0000-0000-000000000020', '33600000-0000-0000-0000-000000000010',
  '33600000-0000-0000-0000-000000000002', '33600000-0000-0000-0000-000000000002',
- 'Bei Familie Beispiel speichert nichts', '{}', 'bereinigt', 'Bei [Person 1] speichert nichts', '{}',
- 'eingegangen', null),
+ 'Bei Familie Beispiel speichert nichts', '{}', 'bereinigt', 'Bei [Person 1] speichert nichts', '{}', 'eingegangen', null, now() - interval '1 hour'),
 ('33600000-0000-0000-0000-000000000021', '33600000-0000-0000-0000-000000000010',
  '33600000-0000-0000-0000-000000000002', '33600000-0000-0000-0000-000000000002',
- 'Noch nicht bereinigt', '{}', 'ausstehend', null, null, 'eingegangen', null),
+ 'Noch nicht bereinigt', '{}', 'ausstehend', null, null, 'eingegangen', null, now() - interval '1 hour'),
 ('33600000-0000-0000-0000-000000000022', '33600000-0000-0000-0000-000000000010',
  '33600000-0000-0000-0000-000000000002', '33600000-0000-0000-0000-000000000002',
- 'Nicht bereinigbar', '{}', 'nicht_bereinigbar', null, null, 'eingegangen', null),
+ 'Nicht bereinigbar', '{}', 'nicht_bereinigbar', null, null, 'eingegangen', null, now() - interval '1 hour'),
 ('33600000-0000-0000-0000-000000000023', '33600000-0000-0000-0000-000000000010',
  '33600000-0000-0000-0000-000000000002', '33600000-0000-0000-0000-000000000002',
- 'Schon erledigt', '{}', 'bereinigt', 'Schon erledigt', '{}', 'erledigt', now()),
+ 'Schon erledigt', '{}', 'bereinigt', 'Schon erledigt', '{}', 'erledigt', now(), now() - interval '1 hour'),
 ('33600000-0000-0000-0000-000000000024', '33600000-0000-0000-0000-000000000010',
  '33600000-0000-0000-0000-000000000002', '33600000-0000-0000-0000-000000000002',
- 'Ohne Bild', '{}', 'bereinigt', 'Ohne Bild', '{}', 'eingegangen', null);
+ 'Ohne Bild', '{}', 'bereinigt', 'Ohne Bild', '{}', 'eingegangen', null, now() - interval '1 hour');
+insert into public.problem_reports (
+  id, organization_id, reporter_id, filed_by_id, description, context,
+  scrub_state, scrubbed_description, scrubbed_context
+) values
+('33600000-0000-0000-0000-000000000025', '33600000-0000-0000-0000-000000000010',
+ '33600000-0000-0000-0000-000000000002', '33600000-0000-0000-0000-000000000002',
+ 'Gerade gesendet', '{}', 'bereinigt', 'Gerade gesendet', '{}');
 insert into public.problem_report_files (
   id, organization_id, report_id, kind, storage_path, file_name, mime_type, size_bytes
 ) values
@@ -115,7 +122,8 @@ begin
 end;
 $$;
 
--- A report without a scrubbed copy, a closed one and a report of another
+-- A report without a scrubbed copy, one sent less than ten minutes ago (its
+-- screenshot may still be uploading), a closed one and a report of another
 -- organization are refused with their codes and get no entry.
 do $$
 declare
@@ -124,6 +132,7 @@ declare
 begin
   for v_case in select * from (values
     (v_org, '33600000-0000-0000-0000-000000000021'::uuid, 'copy_pending'),
+    (v_org, '33600000-0000-0000-0000-000000000025'::uuid, 'copy_pending'),
     (v_org, '33600000-0000-0000-0000-000000000022'::uuid, 'copy_unavailable'),
     (v_org, '33600000-0000-0000-0000-000000000023'::uuid, 'report_closed'),
     ('33600000-0000-0000-0000-000000000011'::uuid, '33600000-0000-0000-0000-000000000024'::uuid, 'report_not_found'),

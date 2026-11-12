@@ -1,13 +1,16 @@
 import 'server-only';
 
 import { logError } from '@/lib/logging';
-import { parseStoredProblemReportContext } from '@/lib/problem-reports/schemas';
+import {
+  parseStoredProblemReportContext,
+  type ScrubbedProblemReportContext,
+} from '@/lib/problem-reports/schemas';
 import { loadUiStringCatalog } from '@/lib/problem-reports/screenshot/load-ui-string-catalog';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
-import { buildScrubDictionary, type ScrubDictionarySources } from './dictionary';
-import { scrubReportContext, scrubReportText } from './scrub-text';
+import { buildScrubDictionary, dictionaryKnows, type ScrubDictionarySources } from './dictionary';
+import { holdsRecordId, scrubReportContext, scrubReportText } from './scrub-text';
 
 // The scrubbed copy of a stored problem report
 // (docs/technical/problem-report-scrubbing.md, "Text scrubbing"). Scrubbing
@@ -26,9 +29,10 @@ const present = (values: ReadonlyArray<string | null>): string[] =>
   values.filter((value): value is string => value !== null && value.trim() !== '');
 const joined = (separator: string, ...parts: Array<string | null>): string => present(parts).join(separator);
 
-/** The rows of the organization that name a person, a customer, an address or a phone number. */
+/** The organization itself and its rows that name a person, a customer, an address or a phone number. */
 async function readDictionaryRows(admin: Admin, organizationId: string) {
-  const [clients, contacts, sites, requests, employees, members] = await Promise.all([
+  const [organization, clients, contacts, sites, requests, employees, members] = await Promise.all([
+    admin.from('organizations').select('name').eq('id', organizationId).maybeSingle(),
     readCompleteRows(
       (from, to) =>
         admin
@@ -96,7 +100,7 @@ async function readDictionaryRows(admin: Admin, organizationId: string) {
     members.data.map((member) => member.user_id),
     (ids) => admin.from('profiles').select('first_name, last_name').in('id', ids),
   );
-  return { clients, contacts, sites, requests, employees, members, profiles };
+  return { organization, clients, contacts, sites, requests, employees, members, profiles };
 }
 
 /** What the organization's own rows know as names, addresses and phone numbers; null when a read fails. */
@@ -113,7 +117,9 @@ async function readDictionarySources(
   const [clients, contacts, sites] = [reads.clients.data, reads.contacts.data, reads.sites.data];
   const [requests, employees, profiles] = [reads.requests.data, reads.employees.data, reads.profiles.data];
   return {
+    // The organization's own name is a company name like a customer's.
     customerNames: present([
+      reads.organization.data?.name ?? null,
       ...clients.map((client) => client.name),
       ...requests.map((request) => request.caller_name),
     ]),
@@ -165,6 +171,33 @@ async function buildScrubbedCopy(
     logError('scrubStoredProblemReport: scrub failed', error);
     return null;
   }
+}
+
+/**
+ * Whether a written copy still holds what identifies its organization: the
+ * organization's own name in its text or a token, or a record id in a token.
+ * A copy written before those rules existed is checked again before it may
+ * leave WerkFlow (docs/technical/problem-report-scrubbing.md, "Hand-out"). A
+ * missing catalog throws, so the caller hands nothing out.
+ */
+export function copyNamesItsOrganization(
+  copy: { description: string; context: ScrubbedProblemReportContext | null },
+  organizationName: string,
+): boolean {
+  const dictionary = buildScrubDictionary(
+    { customerNames: [organizationName], personNames: [], siteNames: [], addresses: [], phones: [] },
+    loadUiStringCatalog(),
+  );
+  if (scrubReportText(copy.description, dictionary) !== copy.description) return true;
+  const tokens = copy.context
+    ? [
+        copy.context.appVersion,
+        ...copy.context.clientErrors.flatMap((error) => [error.name, error.code, error.digest]),
+      ]
+    : [];
+  return tokens.some(
+    (token) => token !== null && (holdsRecordId(token) || dictionaryKnows(dictionary, token)),
+  );
 }
 
 /**

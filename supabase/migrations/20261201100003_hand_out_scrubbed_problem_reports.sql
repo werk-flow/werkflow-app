@@ -151,8 +151,9 @@ $$;
 -- signals the support persons in p_support_ids. It answers one object: the
 -- copy, the scrubbed context, status, bucket, whether an answer exists (never
 -- its text, which support wrote unscrubbed) and whether a redrawn screenshot exists;
--- never an original, a name or another id. A report without a scrubbed copy
--- is `copy_pending` or `copy_unavailable`, a closed one `report_closed`, one
+-- never an original, a name or another id. A report sent less than ten
+-- minutes ago, or still waiting for its scrub, is `copy_pending`; one that
+-- cannot be scrubbed `copy_unavailable`, a closed one `report_closed`, one
 -- already handed out `already_handed_out`, and a report of another
 -- organization `report_not_found`.
 create function public.hand_out_problem_report(
@@ -172,7 +173,11 @@ begin
   where report.id = p_report_id and report.organization_id = p_organization_id
   for update;
   if not found then raise exception 'report_not_found'; end if;
-  if v_report.scrub_state = 'ausstehend' then raise exception 'copy_pending'; end if;
+  -- The device uploads the screenshot after the save, so a report waits ten
+  -- minutes before a thread may take it; lib/problem-reports/handout.ts lists
+  -- it from the same moment.
+  if v_report.scrub_state = 'ausstehend' or v_report.created_at > now() - interval '10 minutes'
+  then raise exception 'copy_pending'; end if;
   if v_report.scrub_state <> 'bereinigt' then raise exception 'copy_unavailable'; end if;
   if v_report.closed_at is not null then raise exception 'report_closed'; end if;
   if v_report.handed_out_at is not null then raise exception 'already_handed_out'; end if;
