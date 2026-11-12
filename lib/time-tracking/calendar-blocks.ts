@@ -39,6 +39,11 @@ export type CalendarWorkBlock = {
    * when the block is the day's only counting presence.
    */
   breakDayPosition?: BreakDayPosition;
+  /**
+   * The time of the day's last entry: every block of the day resolves the
+   * break rule there, as the totals do. Absent: the block's own end.
+   */
+  breakPolicyAt?: string;
 };
 
 type OpenBlockState = {
@@ -212,7 +217,10 @@ function resolveDisplayBreakPolicy(
     return null;
   }
 
-  return resolveBreakPolicyAtTimestamp(settings, block.end ? new Date(block.end) : referenceDate);
+  return resolveBreakPolicyAtTimestamp(
+    settings,
+    block.breakPolicyAt ?? (block.end ? new Date(block.end) : referenceDate),
+  );
 }
 
 function getCalendarBlockDisplayBreaks(
@@ -455,7 +463,7 @@ export function calculateCalendarWorkBlocks(entries: TimeEntry[]): CalendarWorkB
     }
   }
 
-  return withBreakDayPositions(blocks.filter((block) => !isMomentary(block.start, block.end)));
+  return withBreakDayPositions(blocks);
 }
 
 /** Standby counts as presence but not toward the automatic break, as in the totals. */
@@ -463,7 +471,11 @@ function countsTowardBreak(block: CalendarWorkBlock): boolean {
   return block.startEntry.activityKind !== 'standby';
 }
 
-/** Each block with its place in the same person's counted presence that day. */
+/**
+ * The shown blocks, a block shorter than a minute left out, each with its
+ * place in the same person's counted presence that day and the time the day's
+ * rule is resolved at. The left-out blocks still count toward the steps.
+ */
 function withBreakDayPositions(blocks: CalendarWorkBlock[], now = Date.now()): CalendarWorkBlock[] {
   const dayOf = (block: CalendarWorkBlock) =>
     `${block.userId}:${formatBerlinLocalDate(new Date(block.start))}`;
@@ -474,18 +486,33 @@ function withBreakDayPositions(blocks: CalendarWorkBlock[], now = Date.now()): C
           ((block.end ? new Date(block.end).getTime() : now) - new Date(block.start).getTime()) / 60000,
         )
       : 0;
-  const dayMinutes = new Map<string, number>();
-  for (const block of blocks)
-    dayMinutes.set(dayOf(block), (dayMinutes.get(dayOf(block)) ?? 0) + countedMinutes(block));
+  const isShown = (block: CalendarWorkBlock) => !isMomentary(block.start, block.end);
+  type DayTotals = { shownMinutes: number; hiddenMinutes: number; lastEntryAt: string };
+  const days = new Map<string, DayTotals>();
+  for (const block of blocks) {
+    const day = days.get(dayOf(block)) ?? { shownMinutes: 0, hiddenMinutes: 0, lastEntryAt: block.start };
+    if (isShown(block)) day.shownMinutes += countedMinutes(block);
+    else day.hiddenMinutes += countedMinutes(block);
+    // The totals resolve the day's rule at its last entry; an open block's last entry is its start.
+    const lastEntryAt = block.end ?? block.start;
+    if (Date.parse(lastEntryAt) > Date.parse(day.lastEntryAt)) day.lastEntryAt = lastEntryAt;
+    days.set(dayOf(block), day);
+  }
   const beforeByDay = new Map<string, number>();
-  return blocks.map((block) => {
-    const day = dayOf(block);
-    const beforeMinutes = beforeByDay.get(day) ?? 0;
+  return blocks.filter(isShown).map((block) => {
+    const day = days.get(dayOf(block)) ?? { shownMinutes: 0, hiddenMinutes: 0, lastEntryAt: block.start };
+    const beforeMinutes = beforeByDay.get(dayOf(block)) ?? 0;
     const ownMinutes = countedMinutes(block);
-    beforeByDay.set(day, beforeMinutes + ownMinutes);
-    const afterMinutes = (dayMinutes.get(day) ?? 0) - beforeMinutes - ownMinutes;
-    const counts = countsTowardBreak(block);
-    if (counts && beforeMinutes === 0 && afterMinutes === 0) return block;
-    return { ...block, breakDayPosition: { countsTowardBreak: counts, beforeMinutes, afterMinutes } };
+    beforeByDay.set(dayOf(block), beforeMinutes + ownMinutes);
+    return {
+      ...block,
+      breakDayPosition: {
+        countsTowardBreak: countsTowardBreak(block),
+        beforeMinutes,
+        afterMinutes: day.shownMinutes - beforeMinutes - ownMinutes,
+        hiddenMinutes: day.hiddenMinutes,
+      },
+      breakPolicyAt: day.lastEntryAt,
+    };
   });
 }

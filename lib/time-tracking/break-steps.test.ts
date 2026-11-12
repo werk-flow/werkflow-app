@@ -10,6 +10,7 @@ import {
   timeTrackingSettingsSchema,
   type BreakPolicy,
   type BreakPolicyValues,
+  type OrganizationTimeTrackingSettings,
 } from './settings';
 import { calculateCalendarWorkBlocks, getCalendarBlockDisplaySegments } from './calendar-blocks';
 import { buildWeeklyTimeData } from './weekly';
@@ -197,17 +198,15 @@ describe('a day split across blocks', () => {
     });
   };
   const settings = { organizationId: 'org', ...TWO_STEPS, breakPolicyHistory: [] };
-  const breaks = (entries: TimeEntry[]) => {
+  const breaks = (entries: TimeEntry[], rule: OrganizationTimeTrackingSettings = settings) => {
     const shown = calculateCalendarWorkBlocks(entries)
-      .flatMap((block) =>
-        getCalendarBlockDisplaySegments(block, new Date('2026-10-06T20:00:00.000Z'), settings),
-      )
+      .flatMap((block) => getCalendarBlockDisplaySegments(block, new Date('2026-10-06T20:00:00.000Z'), rule))
       .filter((segment) => segment.type === 'break')
       .reduce(
         (total, segment) => total + (Date.parse(segment.end ?? '') - Date.parse(segment.start)) / 60_000,
         0,
       );
-    const [, tuesday] = buildWeeklyTimeData(entries, new Date('2026-10-04T22:00:00.000Z'), settings);
+    const [, tuesday] = buildWeeklyTimeData(entries, new Date('2026-10-04T22:00:00.000Z'), rule);
     return { shown, deducted: tuesday?.breakMinutes };
   };
 
@@ -219,7 +218,20 @@ describe('a day split across blocks', () => {
       45,
     ],
     ['three hours of standby before seven of work', [{ minutes: 180, standby: true }, { minutes: 420 }], 30],
+    ['a block too short to show: 8:59:30 and 0:00:45', [{ minutes: 539.5 }, { minutes: 0.75 }], 45],
   ])('%s: the calendar shows the break the totals deduct', (_label, blocks, breakMinutes) => {
     expect(breaks(day(blocks))).toEqual({ shown: breakMinutes, deducted: breakMinutes });
+  });
+
+  test('a second step switched on during the day applies to all its blocks, as in the totals', () => {
+    // Nine hours under one step, then one more hour, with the second step switched on at 16:05 Berlin.
+    const rule: OrganizationTimeTrackingSettings = {
+      ...settings,
+      breakPolicyHistory: parseBreakPolicyHistory([
+        { ...ONE_STEP, effectiveFrom: '2026-01-01T00:00:00.000Z' },
+        { ...TWO_STEPS, effectiveFrom: at(545) },
+      ]),
+    };
+    expect(breaks(day([{ minutes: 540 }, { minutes: 60 }]), rule)).toEqual({ shown: 45, deducted: 45 });
   });
 });
