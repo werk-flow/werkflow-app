@@ -13,7 +13,7 @@ import { readTimeOutbox, type OutboxHolder } from '@/lib/field-sync/device/time-
 
 /** localStorage of the origin: the wipe signal the kept clock is stamped with. */
 export const storage = new Map<string, string>();
-globalThis.localStorage = {
+const deviceStorage: Storage = {
   get length() {
     return storage.size;
   },
@@ -23,6 +23,7 @@ globalThis.localStorage = {
   removeItem: (key) => void storage.delete(key),
   setItem: (key, value) => void storage.set(key, value),
 };
+globalThis.localStorage = deviceStorage;
 
 /** The database of time-outbox-store.ts, and the 7 days an unsent event counts as waiting (time-outbox.ts). */
 export const TIME_OUTBOX_DATABASE = 'werkflow-time-outbox';
@@ -215,6 +216,8 @@ export async function deleteDatabase(name: string): Promise<void> {
 
 /** A device without unsent work: run before each test. */
 export async function resetDevice(): Promise<void> {
+  // Another test file of the same run may have put its own localStorage in place.
+  globalThis.localStorage = deviceStorage;
   storage.clear();
   await deleteDatabase(TIME_OUTBOX_DATABASE);
 }

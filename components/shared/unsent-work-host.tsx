@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, memo, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { createListeners } from '@/lib/listeners';
 
 // Where the unsent-work question renders (unsent-work-prompt.tsx). Each client
 // tree whose flows can ask mounts one host: the app shell, and the pages
@@ -18,18 +19,7 @@ let shown: readonly Shown[] = NOTHING;
 let nextKey = 0;
 /** The mounted hosts in mount order; only the first renders, so a question never shows twice. */
 let hosts: readonly symbol[] = [];
-const listeners = new Set<() => void>();
-
-function subscribeToHost(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
-function notify(): void {
-  for (const listener of listeners) listener();
-}
+const { subscribe: subscribeToHost, notify: notifyHostListeners } = createListeners();
 
 /**
  * Renders `node` in the mounted host and answers the call that removes it. Throws when no host is
@@ -40,10 +30,10 @@ export function showInUnsentWorkHost(node: ReactNode): () => void {
   const key = nextKey;
   nextKey += 1;
   shown = [...shown, { key, node }];
-  notify();
+  notifyHostListeners();
   return () => {
     shown = shown.filter((entry) => entry.key !== key);
-    notify();
+    notifyHostListeners();
   };
 }
 
@@ -52,10 +42,10 @@ export const UnsentWorkHost = memo(function UnsentWorkHost() {
   const [id] = useState(() => Symbol('unsent-work-host'));
   useEffect(() => {
     hosts = [...hosts, id];
-    notify();
+    notifyHostListeners();
     return () => {
       hosts = hosts.filter((host) => host !== id);
-      notify();
+      notifyHostListeners();
     };
   }, [id]);
   const current = useSyncExternalStore(
