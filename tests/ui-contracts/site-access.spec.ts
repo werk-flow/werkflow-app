@@ -41,6 +41,10 @@ test('a replaced proposal drops the choice and the reason made for the previous 
   await expect(dialog.getByRole('alert')).toContainText('Der Hinweis wurde gerade geändert.');
   await expect(dialog.getByText('Erika Mustermann', { exact: false })).toBeVisible();
   await expect(reason, 'the reason was written for the previous revision').toHaveValue('');
+  await expect(
+    dialog.getByText('Bitte gib eine Begründung', { exact: false }),
+    'the new revision has not been submitted yet',
+  ).toHaveCount(0);
 
   await dialog.getByRole('button', { name: 'Zurück', exact: true }).click();
   await expect(dialog.getByRole('combobox'), 'the choice was made for the previous revision').toContainText(

@@ -87,20 +87,22 @@ function initialContactChoice(review: SiteAccessReview): string {
 }
 
 /**
- * The contact choice and the reason, which belong to one revision: a
- * replacement starts both anew, while the review's failure notice stays and
- * says why the review changed.
+ * The contact choice, the reason and the submit attempt, which belong to one
+ * revision: a replacement starts them anew, while the review's failure notice
+ * stays and says why the review changed.
  */
 function useRevisionInput(review: SiteAccessReview) {
   const [choiceRevision, setChoiceRevision] = useState(review.revision);
   const [contactChoice, setContactChoice] = useState(() => initialContactChoice(review));
   const [reason, setReason] = useState('');
+  const [attempted, setAttempted] = useState(false);
   if (choiceRevision !== review.revision) {
     setChoiceRevision(review.revision);
     setContactChoice(initialContactChoice(review));
     setReason('');
+    setAttempted(false);
   }
-  return { contactChoice, setContactChoice, reason, setReason };
+  return { contactChoice, setContactChoice, reason, setReason, attempted, setAttempted };
 }
 
 /**
@@ -130,8 +132,8 @@ function useSiteAccessDecision(
   const { showBanner } = useBanner();
   const router = useRouter();
   const [mode, setMode] = useState<'review' | 'reject'>('review');
-  const { contactChoice, setContactChoice, reason, setReason } = useRevisionInput(review);
-  const [attempted, setAttempted] = useState(false);
+  const { contactChoice, setContactChoice, reason, setReason, attempted, setAttempted } =
+    useRevisionInput(review);
   const [failure, setFailure] = useState<string | null>(null);
   const contactChoiceError =
     review.values.contactName !== '' &&

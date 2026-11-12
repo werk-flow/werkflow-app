@@ -117,27 +117,34 @@ export function SiteAccessReviewContractFixture(): React.JSX.Element {
 
 /** The field worker's form, settling on the work pack's rendered proposal state. */
 export function SiteAccessProposalContractFixture(): React.JSX.Element {
+  return (
+    <BannerProvider>
+      <SiteAccessProposalHost />
+    </BannerProvider>
+  );
+}
+
+function SiteAccessProposalHost(): React.JSX.Element {
   const { stateKey } = useSiteAccessProps();
+  // The settle wait reports a timeout through the banner, so it lives inside the provider.
   const settle = useSettleOnChange(stateKey);
   const [open, setOpen] = useState(false);
   return (
-    <BannerProvider>
-      <main>
-        <h1>Komponentenverträge</h1>
-        <p>{stateKey === '' ? 'Kein Hinweis' : 'Hinweis beim Büro'}</p>
-        <Button onClick={() => setOpen(true)}>Zugang korrigieren</Button>
-        {open && (
-          <SiteAccessProposalDialog
-            open={open}
-            onOpenChange={setOpen}
-            jobId="9b000000-0000-4000-8000-000000000030"
-            siteId="9b000000-0000-4000-8000-000000000040"
-            initialValues={{ contactName: '', contactPhone: '', contactNote: '', accessNotes: '' }}
-            notice={null}
-            settle={settle}
-          />
-        )}
-      </main>
-    </BannerProvider>
+    <main>
+      <h1>Komponentenverträge</h1>
+      <p>{stateKey === '' ? 'Kein Hinweis' : 'Hinweis beim Büro'}</p>
+      <Button onClick={() => setOpen(true)}>Zugang korrigieren</Button>
+      {open && (
+        <SiteAccessProposalDialog
+          open={open}
+          onOpenChange={setOpen}
+          jobId="9b000000-0000-4000-8000-000000000030"
+          siteId="9b000000-0000-4000-8000-000000000040"
+          initialValues={{ contactName: '', contactPhone: '', contactNote: '', accessNotes: '' }}
+          notice={null}
+          settle={settle}
+        />
+      )}
+    </main>
   );
 }
