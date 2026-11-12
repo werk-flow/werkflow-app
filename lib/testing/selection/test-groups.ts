@@ -309,6 +309,7 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['security:account', 'security/account.spec.ts', ['*']],
   ['security:offline-shell', 'security/offline-shell.spec.ts', ['standalone', 'work']],
   ['security:offline-today', 'security/offline-today.spec.ts', ['standalone', 'work', 'planning']],
+  ['security:offline-clock', 'security/offline-clock.spec.ts', ['standalone', 'time']],
   ['security:offline-drafts', 'security/offline-drafts.spec.ts', ['standalone', 'work', 'documents']],
   // The report screenshot redraw on a seeded customer and job (docs/technical/problem-report-scrubbing.md).
   ['problem-reports:redraw', 'problem-reports/screenshot-redraw.spec.ts', ['customers', 'work']],

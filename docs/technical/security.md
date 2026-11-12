@@ -149,7 +149,7 @@ List each owner-accepted residual exposure until it closes.
 - A coworker's Arbeitsnachweis detail hides the customer signer's name; an exported report, a job or project document, shows it to all its readers (owner decision, werk-flow/werkflow-planning#241).
 - Unverified without a stronger read token: the R2 buckets' CORS rules (`GetBucketCors` refuses runtime tokens) and the Vercel environment scopes.
 - A phone's offline day can outlive lost access or sign-out ([decision 0010](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-owner-accepted-residual-exposure)).
-- Report drafts stay on the phone (owner decision 2026-11-12, werk-flow/werkflow-planning#22; [decision 0010](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-report-drafts)): text and photos 7 days past lost access, then until the phone's next use; unsent ones until their author sends or deletes them. The app shows one only to its author; the phone's browser storage holds it for anyone who unlocks it.
+- Unsent work outlives sign-out on the phone, readable to whoever unlocks its browser profile; the app shows it only to its person (werk-flow/werkflow-planning#22, OQ-4). [Report drafts](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-report-drafts) keep text and photos 7 days past lost access, then until the phone's next use; unsent [drafts and time events](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-the-time-outbox) stay until their person sends or deletes them.
 
 ## Revocation boundaries
 
