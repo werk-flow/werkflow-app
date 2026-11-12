@@ -473,7 +473,8 @@ function addRequestEventItems(add: AddTimelineItem, sources: TimelineSources): v
   for (const event of sources.requestEventsResult.data ?? []) {
     const request = firstRelation(event.client_requests);
     if (!request) continue;
-    const attached = event.event_type === 'attached' ? describeAttachedRequestEvent(event.event_payload) : null;
+    const attached =
+      event.event_type === 'attached' ? describeAttachedRequestEvent(event.event_payload) : null;
     add({
       kind: 'request_event',
       category: 'work',

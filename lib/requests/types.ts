@@ -280,7 +280,11 @@ const workNumberSchema = z.string().min(1).nullable().optional();
 const attachedPayloadSchema = z.discriminatedUnion('target', [
   z.object({ target: z.literal('job'), workNumber: workNumberSchema, jobId: z.string().min(1) }),
   z.object({ target: z.literal('project'), workNumber: workNumberSchema, projectId: z.string().min(1) }),
-  z.object({ target: z.literal('service_case'), workNumber: workNumberSchema, serviceCaseId: z.string().min(1) }),
+  z.object({
+    target: z.literal('service_case'),
+    workNumber: workNumberSchema,
+    serviceCaseId: z.string().min(1),
+  }),
 ]);
 
 /** The `attached` request event as one line naming the work, and that work's detail page. */
@@ -292,7 +296,9 @@ export function describeAttachedRequestEvent(payload: unknown): { label: string;
   const id =
     event.target === 'job' ? event.jobId : event.target === 'project' ? event.projectId : event.serviceCaseId;
   return {
-    label: number ? `Zu ${WORK_TARGET_KIND_LABELS[event.target]} ${number} hinzugefügt` : REQUEST_ATTACHED_LABEL,
+    label: number
+      ? `Zu ${WORK_TARGET_KIND_LABELS[event.target]} ${number} hinzugefügt`
+      : REQUEST_ATTACHED_LABEL,
     workHref: requestWorkHref({ kind: event.target, id, number }),
   };
 }
