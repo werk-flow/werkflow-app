@@ -27,17 +27,6 @@ import { createActivitySelection } from '@/lib/time-tracking/segments';
 import type { LiveClockState, TimeActivitySelection, TimeTransitionResult } from '@/lib/time-tracking/types';
 
 const FAILED: TimeTransitionResult = { success: false, error: 'time_transition_failed' };
-/** The clock's answer for an action kept on the phone: what the server would answer once it accepts it. */
-const KEPT = {
-  success: true,
-  kept: true,
-  sessionId: null,
-  segmentId: null,
-  version: null,
-  recoveryReason: null,
-  replayed: false,
-  legacyBridged: false,
-} as const;
 
 type ClockStateContextValue = {
   /** The clock as it stands: the server's state, with the phone's unsent events applied while they wait. */
@@ -150,23 +139,15 @@ function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promise<void
   const keep = useCallback<ClockOutboxState['keep']>(
     (action) => {
       const signal = signalRef.current;
-      const waits = action.action === 'start' || action.action === 'switch' || action.action === 'end';
-      if (stopped || !waits || signal === null || !keepClockAction(action, signal)) return FAILED;
+      const kept = stopped || signal === null ? null : keepClockAction(action, signal);
+      if (!kept) return FAILED;
       setKept(true);
       attachRef.current?.();
-      return { ...KEPT, outcome: action.action === 'end' ? 'ended' : 'active' };
+      return kept;
     },
     [stopped],
   );
   return { view, kept, unchecked: uncheckedRef, keep };
-}
-
-/**
- * The clock a first kept action stands on: the one the server confirmed, kept without job, customer
- * and project names. Null for an action behind others, which stands on them.
- */
-function keptBase(serverState: LiveClockState | null): LiveClockState | null {
-  return serverState && { ...serverState, activeJobInfo: null, resumeJobInfo: null };
 }
 
 /** Echoes an accepted or kept action first, so no in-flight read overwrites it, then reads fresh. */
@@ -253,7 +234,7 @@ function useClockTransitionExecute({
       }
       if (!result) {
         if (!userId) return FAILED;
-        const base = keptBase(standsOnUnsent ? null : serverState);
+        const base = standsOnUnsent ? null : serverState;
         result = keep({
           ...command,
           userId,

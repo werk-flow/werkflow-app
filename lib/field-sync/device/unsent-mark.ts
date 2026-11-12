@@ -1,5 +1,6 @@
 'use client';
 
+import type { TimeTransitionResult } from '@/lib/time-tracking/types';
 import type { KeptClockAction } from './kept-clock-actions';
 import { TODAY_WIPE_KEY } from './today-wipe';
 
@@ -45,25 +46,39 @@ export function wipeSignal(): string | null {
 }
 
 /**
- * Keeps one clock action on the device under the wipe signal `pageSignal` the page started with.
- * False when the device cannot store it, or when a sign-out or switch in another tab wiped since
- * then: this page's person may no longer be the one signed in. The action is then not recorded,
- * and the clock says so.
+ * Keeps one clock action on the device under the wipe signal `pageSignal` the page started with,
+ * and answers as the accepted action would, or null when it keeps nothing. Only a start, a switch
+ * and an end can wait for signal. Nothing is kept when the device cannot store it, or when a
+ * sign-out or switch in another tab wiped since then: this page's person may no longer be the one
+ * signed in. The first kept action stands on `base`, the clock the server confirmed, which is kept
+ * without job, customer and project names.
  */
 export function keepClockAction(
   action: Omit<KeptClockAction, 'wipeGeneration'>,
   pageSignal: string,
-): boolean {
-  if (wipeSignal() !== pageSignal) return false;
+): Extract<TimeTransitionResult, { success: true }> | null {
+  const kind = action.action;
+  if ((kind !== 'start' && kind !== 'switch' && kind !== 'end') || wipeSignal() !== pageSignal) return null;
+  const base = action.base && { ...action.base, activeJobInfo: null, resumeJobInfo: null };
   keptOnThisPage += 1;
   const order = `${String(Date.parse(action.capturedAt)).padStart(15, '0')}:${keptOnThisPage}`;
   try {
     localStorage.setItem(
       `${KEPT_CLOCK_ACTION_PREFIX}${order}:${action.operationId}`,
-      JSON.stringify({ ...action, wipeGeneration: pageSignal } satisfies KeptClockAction),
+      JSON.stringify({ ...action, base, wipeGeneration: pageSignal } satisfies KeptClockAction),
     );
-    return true;
   } catch {
-    return false;
+    return null;
   }
+  return {
+    success: true,
+    kept: true,
+    outcome: kind === 'end' ? 'ended' : 'active',
+    sessionId: null,
+    segmentId: null,
+    version: null,
+    recoveryReason: null,
+    replayed: false,
+    legacyBridged: false,
+  };
 }

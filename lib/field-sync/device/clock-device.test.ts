@@ -140,7 +140,7 @@ async function isolatedTests(): Promise<void> {
       },
       '',
     );
-    expect(kept).toBe(true);
+    expect(kept?.kept).toBe(true);
     await takeInKept();
   }
 
@@ -251,16 +251,14 @@ async function isolatedTests(): Promise<void> {
       });
       // The later tap is written first, as another tab's write can land first.
       expect(
-        keepClockAction(
-          action('50000000-0000-4000-8000-0000000000e2', '2026-11-11T08:00:00.000Z', 'end'),
-          '',
-        ),
+        keepClockAction(action('50000000-0000-4000-8000-0000000000e2', '2026-11-11T08:00:00.000Z', 'end'), '')
+          ?.kept,
       ).toBe(true);
       expect(
         keepClockAction(
           action('50000000-0000-4000-8000-0000000000e1', '2026-11-11T07:00:00.000Z', 'start'),
           '',
-        ),
+        )?.kept,
       ).toBe(true);
 
       await takeInKept();
@@ -293,9 +291,9 @@ async function isolatedTests(): Promise<void> {
       // Another tab signed out: the signal moved on.
       storage.set('werkflow:today-wiped', 'signal-of-the-sign-out');
 
-      expect(kept('signal-of-this-page')).toBe(false);
+      expect(kept('signal-of-this-page')).toBeNull();
       expect([...storage.keys()].filter((key) => key.startsWith('werkflow:unsent:clock:'))).toEqual([]);
-      expect(kept('signal-of-the-sign-out')).toBe(true);
+      expect(kept('signal-of-the-sign-out')?.kept).toBe(true);
     });
 
     test('a sign-out is asked about the person’s own events of every organization, and discards only those', async () => {
