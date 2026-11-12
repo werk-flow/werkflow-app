@@ -428,18 +428,21 @@ begin
 end;
 $$;
 
--- Records a role on an Objekt. With p_replace, the open role of that kind
--- ends the day before p_starts_on in the same call: a change of Hausverwaltung
--- or owner. Refusals as lock_client_for_master_write, and invalid_input,
--- site_not_found, holder_not_found, holder_archived, holder_unchanged,
--- role_starts_before_current and role_overlaps.
+-- Records a role on an Objekt. With p_replaced_role_id, that role ends the
+-- day before p_starts_on in the same call: a change of Hausverwaltung or
+-- owner. It must still be the open role of the kind, so a change made on a
+-- stale view is refused. An open role of the kind with the same holder and
+-- start is this assignment already recorded: a retried request returns it
+-- and writes nothing. Refusals as lock_client_for_master_write, and
+-- invalid_input, site_not_found, holder_not_found, holder_archived,
+-- role_changed, holder_unchanged, role_starts_before_current and role_overlaps.
 create function public.assign_client_site_role(
   p_actor_id uuid,
   p_organization_id uuid,
   p_site_id uuid,
   p_role text,
   p_holder_client_id uuid,
-  p_replace boolean,
+  p_replaced_role_id uuid default null,
   p_starts_on date default null
 )
 returns public.client_site_roles
@@ -454,7 +457,7 @@ declare
   v_role public.client_site_roles;
 begin
   if p_role is null or p_role not in ('eigentuemer', 'hausverwaltung', 'rechnungsempfaenger')
-    or p_holder_client_id is null or p_replace is null or (p_replace and p_starts_on is null)
+    or p_holder_client_id is null or (p_replaced_role_id is not null and p_starts_on is null)
   then
     raise exception 'invalid_input';
   end if;
@@ -464,6 +467,13 @@ begin
     raise exception 'site_not_found';
   end if;
   perform app_private.lock_client_for_master_write(p_actor_id, p_organization_id, v_client_id);
+  select * into v_role from public.client_site_roles role
+  where role.organization_id = p_organization_id and role.site_id = p_site_id
+    and role.role = p_role and role.holder_client_id = p_holder_client_id
+    and role.starts_on is not distinct from p_starts_on and role.ends_on is null;
+  if found then
+    return v_role;
+  end if;
   select holder.archived_at into v_holder_archived_at from public.clients holder
   where holder.id = p_holder_client_id and holder.organization_id = p_organization_id
   for share;
@@ -474,22 +484,23 @@ begin
     raise exception 'holder_archived';
   end if;
 
-  if p_replace then
+  if p_replaced_role_id is not null then
     select * into v_open from public.client_site_roles role
     where role.organization_id = p_organization_id and role.site_id = p_site_id
       and role.role = p_role and role.ends_on is null
     for update;
-    if found then
-      if v_open.holder_client_id = p_holder_client_id then
-        raise exception 'holder_unchanged';
-      end if;
-      if v_open.starts_on is not null and v_open.starts_on > p_starts_on - 1 then
-        raise exception 'role_starts_before_current';
-      end if;
-      update public.client_site_roles role
-      set ends_on = p_starts_on - 1, ended_by = p_actor_id
-      where role.id = v_open.id;
+    if not found or v_open.id <> p_replaced_role_id then
+      raise exception 'role_changed';
     end if;
+    if v_open.holder_client_id = p_holder_client_id then
+      raise exception 'holder_unchanged';
+    end if;
+    if v_open.starts_on is not null and v_open.starts_on > p_starts_on - 1 then
+      raise exception 'role_starts_before_current';
+    end if;
+    update public.client_site_roles role
+    set ends_on = p_starts_on - 1, ended_by = p_actor_id
+    where role.id = v_open.id;
   end if;
 
   begin
@@ -505,13 +516,14 @@ begin
   return v_role;
 end;
 $$;
-revoke all on function public.assign_client_site_role(uuid, uuid, uuid, text, uuid, boolean, date)
+revoke all on function public.assign_client_site_role(uuid, uuid, uuid, text, uuid, uuid, date)
   from public, anon, authenticated;
-grant execute on function public.assign_client_site_role(uuid, uuid, uuid, text, uuid, boolean, date)
+grant execute on function public.assign_client_site_role(uuid, uuid, uuid, text, uuid, uuid, date)
   to service_role;
 
--- Ends a role on its last day, inclusive. The role stays as history.
--- Refusals as lock_client_for_master_write, and invalid_input,
+-- Ends a role on its last day, inclusive. The role stays as history. A role
+-- that already ends on that day is this end already recorded: a retried
+-- request returns it and writes nothing. Refusals as lock_client_for_master_write, and invalid_input,
 -- role_not_found, role_already_ended and role_ends_before_start.
 create function public.end_client_site_role(
   p_actor_id uuid,
@@ -536,6 +548,11 @@ begin
     raise exception 'role_not_found';
   end if;
   perform app_private.lock_client_for_master_write(p_actor_id, p_organization_id, v_role.client_id);
+  select * into v_role from public.client_site_roles role
+  where role.id = p_role_id and role.organization_id = p_organization_id;
+  if v_role.ends_on = p_ends_on then
+    return v_role;
+  end if;
   if v_role.starts_on is not null and p_ends_on < v_role.starts_on then
     raise exception 'role_ends_before_start';
   end if;

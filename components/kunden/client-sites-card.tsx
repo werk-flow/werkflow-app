@@ -24,10 +24,12 @@ import {
   SITE_ROLE_KINDS,
   SITE_ROLE_LABELS,
   berlinToday,
+  describeSiteRolePeriod,
   siteRoleState,
   type ClientSiteRole,
 } from '@/lib/clients/site-roles';
 import { TextLink } from '@/components/ui/text-link';
+import { formatGermanDate } from '@/lib/utils';
 import { EQUIPMENT_STATE_LABELS, type EquipmentListItem } from '@/lib/installed-equipment/types';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { SectionTitle } from '@/components/shared/section-title';
@@ -76,7 +78,10 @@ function ClientSiteEquipmentLinks({ siteId, equipment }: { siteId: string; equip
   );
 }
 
-/** The current owner, Hausverwaltung and Rechnungsempfänger of an Objekt, or that none is recorded. */
+/**
+ * The current owner, Hausverwaltung and Rechnungsempfänger of an Objekt; a
+ * kind with no current holder shows its coming one with the start day.
+ */
 function ClientSiteRoleSummary({
   clientId,
   site,
@@ -86,9 +91,16 @@ function ClientSiteRoleSummary({
 }: Pick<ClientSiteRowProps, 'clientId' | 'site' | 'siteRoles' | 'isAdminOrManager' | 'onOpenRoles'>) {
   if (siteRoles === null) return null;
   const today = berlinToday();
-  const current = SITE_ROLE_KINDS.flatMap((kind) =>
-    siteRoles.filter((role) => role.role === kind && siteRoleState(role, today) === 'current'),
-  );
+  const current = SITE_ROLE_KINDS.flatMap((kind) => {
+    const ofKind = siteRoles.filter((role) => role.role === kind);
+    const now = ofKind.filter((role) => siteRoleState(role, today) === 'current');
+    if (now.length > 0) return now;
+    // Roles of a kind never overlap, so the earliest coming one starts next.
+    const next = ofKind
+      .filter((role) => siteRoleState(role, today) === 'upcoming')
+      .sort((a, b) => (a.startsOn ?? '').localeCompare(b.startsOn ?? ''))[0];
+    return next ? [next] : [];
+  });
   return (
     <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
       {current.length === 0 ? (
@@ -102,6 +114,8 @@ function ClientSiteRoleSummary({
             ) : (
               <TextLink href={`/kunden/${role.holderClientId}`}>{role.holderName}</TextLink>
             )}
+            {siteRoleState(role, today) === 'upcoming' &&
+              ` ${describeSiteRolePeriod(role, today, formatGermanDate)}`}
           </span>
         ))
       )}

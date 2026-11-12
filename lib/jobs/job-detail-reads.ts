@@ -1,7 +1,8 @@
 import 'server-only';
 
 import type { ActionFailure } from '@/lib/action-result';
-import { toClientContact, toClientSite, type ClientContact, type ClientSite } from '@/lib/clients/types';
+import { toClientContact, toClientSite } from '@/lib/clients/relation-rows';
+import type { ClientContact, ClientSite } from '@/lib/clients/types';
 import { logReadFailure } from '@/lib/data/read-request-cache';
 import { formatBerlinLocalDate, getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { formatEmployeeRecordName } from '@/lib/personnel/types';

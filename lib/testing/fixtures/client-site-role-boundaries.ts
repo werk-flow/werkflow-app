@@ -28,7 +28,13 @@ const { assignClientSiteRole, endClientSiteRole, getClientSiteRoles } = await im
 );
 
 const assign = (siteId: string, holderClientId: string) => () =>
-  assignClientSiteRole({ siteId, role: 'hausverwaltung', holderClientId, startsOn: null, replace: false });
+  assignClientSiteRole({
+    siteId,
+    role: 'hausverwaltung',
+    holderClientId,
+    startsOn: null,
+    replacesRoleId: null,
+  });
 const end = (roleId: string) => () => endClientSiteRole({ roleId, endsOn: '2026-06-30' });
 
 // Field workers are refused before the service-role client exists.
@@ -83,7 +89,8 @@ await assertRefused(
 );
 assert.equal(world.rpcCalls.at(-1)?.args.p_organization_id, ORGANIZATION_A);
 
-// Malformed input never reaches the database: an unknown kind or a change without its day.
+// Malformed input never reaches the database: a change without its day, or
+// a day the calendar does not have.
 await assertRefused(
   world,
   [
@@ -95,9 +102,21 @@ await assertRefused(
           role: 'hausverwaltung',
           holderClientId: ownClientId,
           startsOn: null,
-          replace: true,
+          replacesRoleId: foreignRoleId,
         }),
     ],
+    [
+      'assignClientSiteRole',
+      () =>
+        assignClientSiteRole({
+          siteId: ownSiteId,
+          role: 'hausverwaltung',
+          holderClientId: ownClientId,
+          startsOn: '2026-02-30',
+          replacesRoleId: null,
+        }),
+    ],
+    ['endClientSiteRole', () => endClientSiteRole({ roleId: foreignRoleId, endsOn: '2026-02-30' })],
   ],
   { success: false, error: 'invalid_input' },
   'none',

@@ -8,6 +8,7 @@ import type { ClientSiteRole } from '@/lib/clients/site-roles';
 import type { EquipmentListItem } from '@/lib/installed-equipment/types';
 
 import { ClientContactDialog } from './client-contact-dialog';
+import { isProvisionalRelationId } from './client-relation-drafts';
 import { ClientContactsCard, type ContactRequestHandler } from './client-contacts-card';
 import { ClientSiteDialog } from './client-site-dialog';
 import { ClientSiteRolesDialog } from './client-site-roles-dialog';
@@ -50,7 +51,9 @@ function ClientRelationDialogs({
   return (
     <>
       <ClientContactDialog
-        sites={siteState.activeSites}
+        sites={[...siteState.activeSites, ...siteState.inactiveSites].filter(
+          (site) => !isProvisionalRelationId(site.id),
+        )}
         contactDialog={contactState.contactDialog}
         onContactDialogChange={contactState.setContactDialog}
         onSave={contactState.saveContact}
@@ -64,7 +67,7 @@ function ClientRelationDialogs({
       <ClientSiteRolesDialog
         site={sites.find((site) => site.id === rolesSiteId) ?? null}
         clientId={clientId}
-        roles={siteRoles ?? []}
+        roles={siteRoles}
         onClose={onCloseRoles}
       />
     </>

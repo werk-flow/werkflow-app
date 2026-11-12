@@ -23,10 +23,9 @@ import {
   type ClientMatchList,
   type ClientRelationsResult,
   type ClientSiteResult,
-  toClientContact,
   toClientMatch,
-  toClientSite,
 } from '@/lib/clients/types';
+import { toClientContact, toClientSite } from '@/lib/clients/relation-rows';
 import { logError } from '@/lib/logging';
 import { Constants, type Json } from '@/lib/supabase/database.types';
 import { writeRefusalFor } from '@/lib/supabase/write-refusal';

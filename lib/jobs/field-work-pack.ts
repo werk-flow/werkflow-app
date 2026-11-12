@@ -1,8 +1,10 @@
-import { formatSiteAddress, type ClientContact, type ClientSite } from '@/lib/clients/types';
+import { formatSiteAddress } from '@/lib/clients/types';
 import type {
   Client,
   JobInstructionActor,
+  JobContact,
   JobInstructionItemWithDetails,
+  JobSite,
   JobWithDetails,
 } from '@/lib/jobs/types';
 import { isTerminalWorkExecutionState, type WorkExecutionState } from '@/lib/work-lifecycle/types';
@@ -58,7 +60,7 @@ export function projectFieldClient(client: Client): Client {
   };
 }
 
-function projectFieldSite(site: ClientSite): ClientSite {
+function projectFieldSite(site: JobSite): JobSite {
   return {
     id: site.id,
     organizationId: site.organizationId,
@@ -67,7 +69,6 @@ function projectFieldSite(site: ClientSite): ClientSite {
     street: site.street,
     postalCode: site.postalCode,
     city: site.city,
-    sourceNumber: null,
     accessNotes: site.accessNotes,
     notes: null,
     primaryContactId: null,
@@ -79,7 +80,7 @@ function projectFieldSite(site: ClientSite): ClientSite {
   };
 }
 
-function projectFieldContact(contact: ClientContact): ClientContact {
+function projectFieldContact(contact: JobContact): JobContact {
   return {
     id: contact.id,
     organizationId: contact.organizationId,
@@ -89,8 +90,6 @@ function projectFieldContact(contact: ClientContact): ClientContact {
     email: null,
     phone: contact.phone,
     notes: null,
-    siteId: null,
-    siteRole: null,
     isPrimary: contact.isPrimary,
     isActive: contact.isActive,
     createdBy: null,

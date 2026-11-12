@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { resolveBerlinWallTime } from '../../../lib/date-time/berlin';
 import { worldName } from '../../../lib/testing/seed-world-plan';
 import { berlinDateAtOffset } from '../../golden/support/date-ownership';
 import { seedCustomer } from '../../golden/support/db/customers';
@@ -13,6 +14,7 @@ import { rpcArgs } from '../../../lib/supabase/rpc-args';
 import { createAdminClient } from '../../golden/support/db/shared';
 import type { TestWorld } from '../../golden/support/world';
 import type { AcceptanceRecord } from './acceptance-sets';
+import { layoutNames, prepareLayoutDetails } from './layout-fixtures';
 import { surfaceFixture } from './surface-fixtures';
 import type { SurfaceDestination } from './surface-routes';
 
@@ -217,23 +219,24 @@ async function managedBuildings(world: TestWorld): Promise<ManagedBuildings> {
       kind: 'eigentuemer' | 'hausverwaltung' | 'rechnungsempfaenger',
       holderId: string,
       startsOn: string | null,
-      replace = false,
-    ): Promise<void> => {
-      await admin
+      replacedRoleId?: string,
+    ): Promise<string> => {
+      const { data } = await admin
         .rpc('assign_client_site_role', {
           p_actor_id: actor,
           p_organization_id: orgId,
           p_site_id: siteId,
           p_role: kind,
           p_holder_client_id: holderId,
-          p_replace: replace,
+          ...(replacedRoleId ? { p_replaced_role_id: replacedRoleId } : {}),
           ...(startsOn ? { p_starts_on: startsOn } : {}),
         })
         .throwOnError();
+      return data.id;
     };
     await role(ownerSite, 'eigentuemer', owner.clientId, null);
-    await role(ownerSite, 'hausverwaltung', former.clientId, '2019-01-01');
-    await role(ownerSite, 'hausverwaltung', manager.clientId, '2025-01-01', true);
+    const formerManagement = await role(ownerSite, 'hausverwaltung', former.clientId, '2019-01-01');
+    await role(ownerSite, 'hausverwaltung', manager.clientId, '2025-01-01', formerManagement);
     await role(ownerSite, 'rechnungsempfaenger', manager.clientId, '2025-01-01');
     await role(privateSite, 'eigentuemer', privateOwner.clientId, null);
     await role(privateSite, 'hausverwaltung', manager.clientId, '2023-07-01');
@@ -394,6 +397,61 @@ async function callbackOverdueRequest(world: TestWorld): Promise<SurfaceDestinat
 async function callbackOverdueTasks(world: TestWorld): Promise<SurfaceDestination> {
   await seedCallbackOverdueRequest(world);
   return { route: '/aufgaben', heading: 'Rückruf überfällig' };
+}
+
+/** The instant `seconds` after a Berlin wall-clock minute, `days` business days from today. */
+function berlinInstant(days: number, time: string, seconds = 0): string {
+  const resolved = resolveBerlinWallTime(`${berlinDateAtOffset(days)}T${time}`);
+  if (!resolved) throw new Error(`berlinInstant: ${time} is not a Berlin wall time`);
+  return new Date(resolved.instant.getTime() + seconds * 1000).toISOString();
+}
+
+/**
+ * The employee's recorded time on the layout job as legacy entries wrote
+ * it: yesterday's day with a break, where the job rides only on the clock-in
+ * and the break end, and a tap shorter than a minute; the day before, a
+ * clock-in without its clock-out.
+ */
+async function seedEmployeeActivities(world: TestWorld): Promise<void> {
+  const { jobId } = await prepareLayoutDetails(world);
+  await surfaceFixture(world, 'acceptance.employee-activities', async () => {
+    const rows = [
+      [-1, 'clock_in', '06:57', 0, jobId],
+      [-1, 'break_start', '11:08', 0, null],
+      [-1, 'break_end', '11:38', 0, jobId],
+      [-1, 'clock_out', '15:49', 0, null],
+      [-1, 'clock_in', '16:10', 10, jobId],
+      [-1, 'clock_out', '16:10', 40, null],
+      [-2, 'clock_in', '07:00', 0, jobId],
+    ] as const;
+    await createAdminClient()
+      .from('time_entries')
+      .insert(
+        rows.map(([days, entryType, time, seconds, job]) => ({
+          organization_id: world.orgId,
+          user_id: world.users.employee.id,
+          entry_type: entryType,
+          timestamp: berlinInstant(days, time, seconds),
+          job_id: job,
+          status: 'approved' as const,
+          // The database takes a past entry only as a manual one, as the legacy same-day entry was.
+          is_manual: true,
+        })),
+      )
+      .throwOnError();
+    return 'seeded';
+  });
+}
+
+async function employeeActivityHistory(world: TestWorld): Promise<SurfaceDestination> {
+  await seedEmployeeActivities(world);
+  return { route: '/zeiterfassung' };
+}
+
+async function employeeActivityJob(world: TestWorld): Promise<SurfaceDestination> {
+  await seedEmployeeActivities(world);
+  const { jobNumber } = await prepareLayoutDetails(world);
+  return { route: `/auftraege/${jobNumber}`, heading: layoutNames(world).job };
 }
 
 /**
@@ -585,6 +643,8 @@ export const ACCEPTANCE_RECORDS: Record<AcceptanceRecord, (world: TestWorld) => 
     'managed-building-search': managedBuildingSearch,
     'callback-overdue-request': callbackOverdueRequest,
     'callback-overdue-tasks': callbackOverdueTasks,
+    'employee-activity-history': employeeActivityHistory,
+    'employee-activity-job': employeeActivityJob,
     'attachable-request': attachableRequest,
     'request-without-open-work': requestWithoutOpenWork,
     'attached-request': attachedRequest,

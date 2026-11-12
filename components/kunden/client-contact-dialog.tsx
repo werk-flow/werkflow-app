@@ -27,7 +27,7 @@ import type { ContactDialogState } from './client-relation-drafts';
 import { ContactRoleField } from './contact-role-field';
 
 interface ClientContactDialogProps {
-  /** The customer's active Einsatzorte a contact can live at or open. */
+  /** The customer's stored Einsatzorte; a contact can be linked to an active one. */
   sites: ClientSite[];
   /** Null while the dialog is closed; the parent keeps the draft. */
   contactDialog: ContactDialogState | null;
@@ -119,14 +119,17 @@ function ClientContactSiteFields({
   onContactDialogChange: (next: ContactDialogState | null) => void;
 }) {
   const { draft } = contactDialog;
-  if (sites.length === 0 && !draft.siteId) return null;
+  // An archived Objekt takes no new contact, but the one the contact already
+  // has stays shown by name.
+  const options = sites.filter((site) => site.isActive || site.id === draft.siteId);
+  if (options.length === 0 && !draft.siteId) return null;
   return (
     <div className="grid items-start gap-4 sm:grid-cols-2">
       <Field label="Einsatzort" htmlFor="contact-site" description="Für Mieter und Zugangskontakte.">
         <SearchableSelect
-          options={sites.map((site) => ({
+          options={options.map((site) => ({
             value: site.id,
-            label: site.name,
+            label: site.isActive ? site.name : `${site.name} (archiviert)`,
             description: formatSiteAddress(site) || undefined,
           }))}
           value={draft.siteId ?? ''}

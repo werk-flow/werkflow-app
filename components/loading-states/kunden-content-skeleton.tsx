@@ -1,6 +1,6 @@
 'use client';
 
-import { ClientsTableSkeleton } from '@/components/kunden/clients-table';
+import { ClientsTableSkeleton } from '@/components/kunden/clients-table-frame';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export function KundenContentSkeleton() {
