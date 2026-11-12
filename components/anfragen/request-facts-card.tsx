@@ -6,7 +6,9 @@ import { SectionTitle } from '@/components/shared/section-title';
 import { TextLink } from '@/components/ui/text-link';
 import { CallbackOverdueBadge } from './request-badges';
 import { useCallbackOverdue } from './use-callback-overdue';
-import { RequestBillingRows } from '@/components/auftraege/shared/work-billing-parties-loaders';
+// Static: a dynamic chunk would hold the page's hydration, and a press on a
+// header action right after the page opens would get lost.
+import { RequestBillingRows } from './request-billing-rows';
 import type { WorkBillingParties } from '@/lib/billing-parties/types';
 
 interface RequestFactsCardProps {
