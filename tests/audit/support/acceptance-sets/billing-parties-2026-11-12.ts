@@ -4,7 +4,7 @@ import { createAdminClient } from '../../../golden/support/db/shared';
 import { seedJob, seedJobAssignment } from '../../../golden/support/db/work';
 import type { TestWorld } from '../../../golden/support/world';
 import { acceptanceSet, type OpenSet } from '../acceptance-sets';
-import { managedBuilding } from '../managed-buildings';
+import { managedBuildingCustomer } from '../managed-buildings';
 import { surfaceFixture } from '../surface-fixtures';
 import type { SurfaceDestination } from '../surface-routes';
 
@@ -15,9 +15,7 @@ import type { SurfaceDestination } from '../surface-routes';
  * field worker sees of the same work.
  */
 async function seedBilledWork(world: TestWorld): Promise<{ jobNumber: string; caseNumber: string }> {
-  // The WEG's customer page names the customer the house is filed under.
-  const ownerId = (await managedBuilding(world)).route.split('/').at(-1);
-  if (!ownerId) throw new Error('seedBilledWork: the managed building has no customer.');
+  const ownerId = (await managedBuildingCustomer(world, 'owner')).clientId;
   const jobNumber = `A-${world.runId}-RECHNUNG`;
   const caseNumber = await surfaceFixture(world, 'acceptance.billed-work', async () => {
     const orgId = world.orgId;
