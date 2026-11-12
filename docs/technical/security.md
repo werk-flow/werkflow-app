@@ -12,7 +12,7 @@ Every rule here is hard, even where only review enforces it; virtue 3 in `AGENTS
 4. A table that feeds the period calculation gets the closed-period trigger. A ledger refuses UPDATE and DELETE, and `security_boundaries.sql` asserts the denial.
 5. A table the UI shows live follows [add Realtime data](realtime-and-caching.md#add-realtime-data).
 6. Filter every service-role query on the table by `organization_id`, or add a reviewed `tenant-scope:` comment.
-7. Run `bun run test:verify --group sql:security`, `bun run migrations:check`, `bun run types:check` and `bun run test:unit lib/conventions/tenant-scope.test.ts`.
+7. Run `bun run test:verify --group sql:security`, `bun run migrations:check`, `bun run types:check -- --local` and `bun run test:unit lib/conventions/tenant-scope.test.ts`.
 
 Wrong turn: a policy that checks membership but not the role, so every member reads through the Data API what only managers see.
 
@@ -128,7 +128,7 @@ An exception matching no finding on an unchanged tree means the registry narrowe
 ## Verify your work
 
 1. Run `bun run test:unit`.
-2. For a migration, a policy or a privileged function: `bun run test:verify --group sql:security` on the local stack, plus the SQL group that owns the table or function. Then `bun run migrations:check` and `bun run types:check`.
+2. For a migration, a policy or a privileged function: `bun run test:verify --group sql:security`, plus the SQL group that owns the table or function. Then `bun run migrations:check` and `bun run types:check -- --local`.
 3. For a dependency change: `bun run security:dependencies`. A network failure leaves it unverified, not passed.
 4. Before a release, the cloud canary runs `canary:security` against DEV (`bun run test:verify --target cloud`). It checks the live grants and Realtime delivery to foreign and removed receivers.
 5. Record which permission check guards each new operation and why it fits, and every residual exposure with the owner's acceptance, in the slice record or the commit body.
