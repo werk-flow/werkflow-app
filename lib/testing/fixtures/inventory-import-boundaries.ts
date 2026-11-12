@@ -4,7 +4,13 @@
 // booking call refuses with the caller's organization and actor; and another
 // organization's booking of the same file is no repeat.
 import assert from 'node:assert/strict';
-import { CALLER_ID, ORGANIZATION_A, ORGANIZATION_B, installActionWorld, signInAs } from './action-boundary-world';
+import {
+  CALLER_ID,
+  ORGANIZATION_A,
+  ORGANIZATION_B,
+  installActionWorld,
+  signInAs,
+} from './action-boundary-world';
 import { assertRefused, refuseForeignIds } from './operations-boundary-refusals';
 
 const foreignBatchId = '91000000-0000-4000-8000-000000000001';

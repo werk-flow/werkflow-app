@@ -17,10 +17,14 @@ import {
   type ImportRowOutcome,
   type InventoryImportMode,
 } from '@/lib/inventory/csv-import';
-import { bookInventoryImport, findInventoryImportRepeat, previewInventoryImport } from '@/lib/inventory/import-actions';
+import {
+  bookInventoryImport,
+  findInventoryImportRepeat,
+  previewInventoryImport,
+} from '@/lib/inventory/import-actions';
 
 /** Where the dialog stands: choosing file and columns, looking at the preview, or reading the result. */
-export type ImportStep =
+type ImportStep =
   | { kind: 'choose' }
   | { kind: 'preview'; batchId: string; outcomes: ImportRowOutcome[] }
   | { kind: 'result'; outcomes: ImportRowOutcome[]; alreadyBooked: boolean };
@@ -65,7 +69,9 @@ function importValidationErrors(
         : repeat.state === 'checking'
           ? 'Die Datei wird noch geprüft. Versuch es gleich noch einmal.'
           : undefined),
-    'inventory-import-repeat': undecided ? 'Entscheide, ob du diese Datei noch einmal importierst.' : undefined,
+    'inventory-import-repeat': undecided
+      ? 'Entscheide, ob du diese Datei noch einmal importierst.'
+      : undefined,
     'inventory-import-name':
       rowCount > 0 && !mapping.name ? 'Ordne die Spalte mit dem Artikelnamen zu.' : undefined,
   };
@@ -159,7 +165,9 @@ function useImportRun() {
     void run(async () => {
       const result = await previewInventoryImport(input).catch(() => null);
       if (!result?.success) {
-        setError('Die Vorschau konnte nicht erstellt werden. Es wurde nichts gebucht. Versuch es noch einmal.');
+        setError(
+          'Die Vorschau konnte nicht erstellt werden. Es wurde nichts gebucht. Versuch es noch einmal.',
+        );
         return;
       }
       setStep({ kind: 'preview', batchId: result.batchId, outcomes: result.rows });

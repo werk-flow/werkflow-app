@@ -189,7 +189,12 @@ function StepFooter({ csvImport }: { csvImport: CsvImport }) {
   return (
     <DialogFooter>
       {step.kind === 'choose' && (
-        <Button type="button" variant="outline" onClick={() => csvImport.handleOpenChange(false)} disabled={isPending}>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => csvImport.handleOpenChange(false)}
+          disabled={isPending}
+        >
           Abbrechen
         </Button>
       )}

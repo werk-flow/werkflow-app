@@ -251,11 +251,44 @@ const BASE: ImportRowOutcome = {
 // A synthetic file of Großhandel Nordrohr as the preview answers it.
 const OUTCOMES: ImportRowOutcome[] = [
   BASE,
-  { ...BASE, index: 1, matchedBy: 'internal_sku', itemName: 'Kupferrohr 15 mm', unit: 'meter', quantity: 0.1, quantityAfter: 4.1 },
-  { ...BASE, index: 2, matchedBy: 'barcode', unit: 'meter', quantity: 0.2, locationName: 'Regal Nord', locationCreated: true, quantityAfter: 0.2 },
+  {
+    ...BASE,
+    index: 1,
+    matchedBy: 'internal_sku',
+    itemName: 'Kupferrohr 15 mm',
+    unit: 'meter',
+    quantity: 0.1,
+    quantityAfter: 4.1,
+  },
+  {
+    ...BASE,
+    index: 2,
+    matchedBy: 'barcode',
+    unit: 'meter',
+    quantity: 0.2,
+    locationName: 'Regal Nord',
+    locationCreated: true,
+    quantityAfter: 0.2,
+  },
   { ...BASE, index: 3, matchedBy: 'internal_sku', unit: 'meter', quantity: 0.2, quantityAfter: 4.3 },
-  { ...BASE, index: 4, outcome: 'rejected', reason: 'unit_mismatch', unit: 'piece', itemUnit: 'meter', quantityAfter: null },
-  { ...BASE, index: 5, outcome: 'rejected', reason: 'unknown_unit', itemName: null, unit: 'Fass', quantityAfter: null },
+  {
+    ...BASE,
+    index: 4,
+    outcome: 'rejected',
+    reason: 'unit_mismatch',
+    unit: 'piece',
+    itemUnit: 'meter',
+    quantityAfter: null,
+  },
+  {
+    ...BASE,
+    index: 5,
+    outcome: 'rejected',
+    reason: 'unknown_unit',
+    itemName: null,
+    unit: 'Fass',
+    quantityAfter: null,
+  },
   { ...BASE, index: 6, outcome: 'missing_location', locationName: null, quantityAfter: null },
   { ...BASE, index: 7, outcome: 'rejected', reason: 'missing_name', itemName: null, quantityAfter: null },
 ];
@@ -285,7 +318,13 @@ describe('importTotals', () => {
   });
 
   test('an empty preview has no totals', () => {
-    expect(importTotals([])).toEqual({ created: 0, matched: 0, rejected: 0, withoutLocation: 0, locations: [] });
+    expect(importTotals([])).toEqual({
+      created: 0,
+      matched: 0,
+      rejected: 0,
+      withoutLocation: 0,
+      locations: [],
+    });
   });
 });
 
@@ -332,7 +371,9 @@ describe('importReportCsv', () => {
   });
 
   test('a file without a problem row has no report', () => {
-    expect(importReportCsv({ headers, rows, lineNumbers, outcomes: OUTCOMES.slice(0, 4), fileUnits })).toBeNull();
+    expect(
+      importReportCsv({ headers, rows, lineNumbers, outcomes: OUTCOMES.slice(0, 4), fileUnits }),
+    ).toBeNull();
   });
 });
 
@@ -356,17 +397,19 @@ describe('previewInventoryImportSchema', () => {
     const columnMapping = Object.fromEntries(IMPORT_COLUMNS.map((column) => [column.key, column.label]));
     expect(previewInventoryImportSchema.safeParse({ ...input, columnMapping }).success).toBe(true);
     expect(
-      previewInventoryImportSchema.safeParse({ ...input, columnMapping: { ...columnMapping, extra: 'Spalte' } })
-        .success,
+      previewInventoryImportSchema.safeParse({
+        ...input,
+        columnMapping: { ...columnMapping, extra: 'Spalte' },
+      }).success,
     ).toBe(false);
   });
 
   test('refuses a hash that is no SHA-256 and a mode outside the list', () => {
-    expect(previewInventoryImportSchema.safeParse({ ...input, columnMapping: {}, contentHash: 'abc' }).success).toBe(
-      false,
-    );
-    expect(previewInventoryImportSchema.safeParse({ ...input, columnMapping: {}, mode: 'transfer' }).success).toBe(
-      false,
-    );
+    expect(
+      previewInventoryImportSchema.safeParse({ ...input, columnMapping: {}, contentHash: 'abc' }).success,
+    ).toBe(false);
+    expect(
+      previewInventoryImportSchema.safeParse({ ...input, columnMapping: {}, mode: 'transfer' }).success,
+    ).toBe(false);
   });
 });

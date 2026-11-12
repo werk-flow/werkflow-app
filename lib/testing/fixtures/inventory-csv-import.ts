@@ -42,8 +42,18 @@ answer = {
   data: {
     batch_id: batchId,
     rows: [
-      { index: 0, outcome: 'imported', matched_by: null, item_name: 'Kupferrohr 15 mm', unit: 'meter',
-        location_name: null, location_created: false, quantity: 5, quantity_before: null, quantity_after: null },
+      {
+        index: 0,
+        outcome: 'imported',
+        matched_by: null,
+        item_name: 'Kupferrohr 15 mm',
+        unit: 'meter',
+        location_name: null,
+        location_created: false,
+        quantity: 5,
+        quantity_before: null,
+        quantity_after: null,
+      },
       { index: 1, outcome: 'rejected', reason: 'missing_name' },
       { index: 2, outcome: 'rejected', reason: 'unknown_unit' },
       { index: 3, outcome: 'rejected', reason: 'unknown_unit' },
@@ -68,7 +78,12 @@ assert.deepEqual(
     hash: previewCall()?.args.p_content_hash,
     mapping: previewCall()?.args.p_column_mapping,
   },
-  { fileName: 'nordrohr.csv', mode: 'master_data', hash: contentHash, mapping: { name: 'Bezeichnung', unit: 'Einheit' } },
+  {
+    fileName: 'nordrohr.csv',
+    mode: 'master_data',
+    hash: contentHash,
+    mapping: { name: 'Bezeichnung', unit: 'Einheit' },
+  },
 );
 const staged = previewCall()?.args.p_rows;
 assert.ok(Array.isArray(staged), 'the preview must stage the rows as an array');
@@ -99,7 +114,9 @@ assert.deepEqual(staged[0], {
   quantity: 5,
 });
 assert.equal(
-  typeof staged[4] === 'object' && staged[4] !== null && 'item' in staged[4] ? JSON.stringify(staged[4].item) : '',
+  typeof staged[4] === 'object' && staged[4] !== null && 'item' in staged[4]
+    ? JSON.stringify(staged[4].item)
+    : '',
   JSON.stringify({ ...staged[0].item, name: 'Pressfitting', unit: 'piece' }),
 );
 
@@ -138,11 +155,20 @@ assert.ok(!JSON.stringify(logged).includes('Kupferrohr'));
 // 4. The booking names only the batch; a repeated confirm answers the first
 //    booking's rows and says so.
 world.rpcCalls.length = 0;
-answer = { data: { already_booked: true, rows: [{ index: 0, outcome: 'booked', matched_by: 'barcode' }] }, error: null };
+answer = {
+  data: { already_booked: true, rows: [{ index: 0, outcome: 'booked', matched_by: 'barcode' }] },
+  error: null,
+};
 const booking = await bookInventoryImport({ batchId });
-assert.deepEqual(world.rpcCalls.map((call) => [call.name, call.args]), [
-  ['book_inventory_import', { p_organization_id: ORGANIZATION_A, p_actor_id: CALLER_ID, p_import_batch_id: batchId }],
-]);
+assert.deepEqual(
+  world.rpcCalls.map((call) => [call.name, call.args]),
+  [
+    [
+      'book_inventory_import',
+      { p_organization_id: ORGANIZATION_A, p_actor_id: CALLER_ID, p_import_batch_id: batchId },
+    ],
+  ],
+);
 assert.ok(booking.success, 'the booking must succeed');
 assert.equal(booking.alreadyBooked, true);
 assert.equal(booking.rows[0]?.matchedBy, 'barcode');

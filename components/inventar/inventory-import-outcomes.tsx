@@ -4,8 +4,10 @@ import { useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Label } from '@/components/ui/label';
 import { ListRow } from '@/components/ui/list-row';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { InventoryImportRow } from '@/lib/inventory/action-inputs';
 import {
   importRowEffect,
@@ -19,10 +21,15 @@ import { formatInventoryQuantity } from '@/lib/inventory/types';
 // A preview of a large file reveals its rows in steps, so the dialog stays responsive.
 const ROWS_PER_STEP = 100;
 
-function rowBadge(row: ImportRowOutcome): { label: string; variant: 'secondary' | 'outline' | 'warning' | 'destructive' } {
+function rowBadge(row: ImportRowOutcome): {
+  label: string;
+  variant: 'secondary' | 'outline' | 'warning' | 'destructive';
+} {
   if (row.outcome === 'rejected') return { label: 'Abgelehnt', variant: 'destructive' };
   if (row.outcome === 'missing_location') return { label: 'Ohne Lager', variant: 'warning' };
-  return row.matchedBy === null ? { label: 'Neu', variant: 'secondary' } : { label: 'Vorhanden', variant: 'outline' };
+  return row.matchedBy === null
+    ? { label: 'Neu', variant: 'secondary' }
+    : { label: 'Vorhanden', variant: 'outline' };
 }
 
 const MATCHED_BY_LABELS = { internal_sku: 'über Artikelnummer', barcode: 'über Barcode' } as const;
@@ -129,22 +136,22 @@ export function ImportOutcomeList({
   return (
     <section aria-label="Zeilen" className="space-y-3">
       {!onlyProblems && (
-        <Tabs
-          panels={false}
-          value={filter}
-          onValueChange={(value) => {
-            setFilter(value === 'problems' ? 'problems' : 'all');
-            setVisibleCount(ROWS_PER_STEP);
-          }}
-        >
-          <TabsList>
-            <TabsTrigger value="all">Alle Zeilen ({outcomes.length})</TabsTrigger>
-            <TabsTrigger value="problems">Mit Hinweis ({problemRows.length})</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="inventory-import-only-problems"
+            checked={filter === 'problems'}
+            onCheckedChange={(checked) => {
+              setFilter(checked === true ? 'problems' : 'all');
+              setVisibleCount(ROWS_PER_STEP);
+            }}
+          />
+          <Label htmlFor="inventory-import-only-problems" className="font-normal">
+            Nur Zeilen mit Hinweis zeigen ({problemRows.length} von {outcomes.length})
+          </Label>
+        </div>
       )}
       {shown.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Keine Zeile mit Hinweis.</p>
+        <EmptyState size="compact" title="Keine Zeile mit Hinweis gefunden" />
       ) : (
         <div className="divide-y rounded-lg border">
           {shown.slice(0, visibleCount).map((row) => (
@@ -159,7 +166,11 @@ export function ImportOutcomeList({
         </div>
       )}
       {shown.length > visibleCount && (
-        <Button type="button" variant="outline" onClick={() => setVisibleCount((count) => count + ROWS_PER_STEP)}>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setVisibleCount((count) => count + ROWS_PER_STEP)}
+        >
           Weitere {Math.min(ROWS_PER_STEP, shown.length - visibleCount)} Zeilen anzeigen
         </Button>
       )}

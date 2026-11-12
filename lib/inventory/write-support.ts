@@ -205,7 +205,7 @@ type ImportRow = z.infer<typeof previewInventoryImportSchema>['rows'][number];
  * names no unit of the list: the import refuses such a row and never reads it
  * as Stück.
  */
-export function importUnitCode(text: string | null | undefined): string | null {
+function importUnitCode(text: string | null | undefined): string | null {
   if (!cleanText(text)) return null;
   const code = normalizeInventoryUnitInput(text);
   return INVENTORY_UNIT_OPTIONS.some((option) => option.value === code) ? code : null;
@@ -235,7 +235,9 @@ export function stagedImportRows(rows: readonly ImportRow[]): Json[] {
         is_billable: row.isBillable ?? true,
         global_minimum_stock: normalizeQuantity(row.minimumStock ?? 0),
         global_target_stock:
-          row.targetStock === null || row.targetStock === undefined ? null : normalizeQuantity(row.targetStock),
+          row.targetStock === null || row.targetStock === undefined
+            ? null
+            : normalizeQuantity(row.targetStock),
         notes: cleanText(row.notes),
       },
       category_name: cleanText(row.categoryName),
@@ -247,8 +249,16 @@ export function stagedImportRows(rows: readonly ImportRow[]): Json[] {
   });
 }
 
-const nullableText = z.string().nullable().optional().transform((value) => value ?? null);
-const nullableNumber = z.number().nullable().optional().transform((value) => value ?? null);
+const nullableText = z
+  .string()
+  .nullable()
+  .optional()
+  .transform((value) => value ?? null);
+const nullableNumber = z
+  .number()
+  .nullable()
+  .optional()
+  .transform((value) => value ?? null);
 
 // A reason a newer release names reads as `failed`.
 const importRowOutcomeSchema = z

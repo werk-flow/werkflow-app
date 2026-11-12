@@ -3,7 +3,7 @@
 import type { ActionResult } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
 import { formatProfileName } from '@/lib/members/profile-name';
-import { resolveActionContext, type ActionContext } from '@/lib/org/action-context';
+import { resolveActionContext } from '@/lib/org/action-context';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import type {
@@ -31,21 +31,15 @@ import {
 // (migration 20261201120000); the preview and the booking both run it. Only
 // Admin and Büro import.
 
-async function requireInventoryManager(): Promise<ActionResult<{ context: ActionContext }>> {
-  const auth = await resolveActionContext();
-  if (!auth.success) return auth;
-  if (!auth.context.isManagerOrAbove) return { success: false, error: 'not_authorized' };
-  return auth;
-}
-
 /** The latest booking of a file with the same content, so the dialog warns before a repeat. */
 export async function findInventoryImportRepeat(
   rawInput: InventoryImportRepeatInput,
 ): Promise<ActionResult<{ repeat: { bookedAt: string; bookedBy: string } | null }>> {
   const parsedInput = inventoryImportRepeatSchema.safeParse(rawInput);
   if (!parsedInput.success) return { success: false, error: 'invalid_input' };
-  const auth = await requireInventoryManager();
+  const auth = await resolveActionContext();
   if (!auth.success) return auth;
+  if (!auth.context.isManagerOrAbove) return { success: false, error: 'not_authorized' };
 
   const admin = createSupabaseAdminClient();
   const { data: batch, error } = await admin
@@ -90,8 +84,9 @@ export async function previewInventoryImport(
   const parsedInput = previewInventoryImportSchema.safeParse(rawInput);
   if (!parsedInput.success) return { success: false, error: 'invalid_input' };
   const input = parsedInput.data;
-  const auth = await requireInventoryManager();
+  const auth = await resolveActionContext();
   if (!auth.success) return auth;
+  if (!auth.context.isManagerOrAbove) return { success: false, error: 'not_authorized' };
 
   const admin = createSupabaseAdminClient();
   await ensureInventoryDefaults(admin, auth.context);
@@ -125,8 +120,9 @@ export async function bookInventoryImport(
 ): Promise<ActionResult<{ alreadyBooked: boolean; rows: ImportRowOutcome[] }>> {
   const parsedInput = bookInventoryImportSchema.safeParse(rawInput);
   if (!parsedInput.success) return { success: false, error: 'invalid_input' };
-  const auth = await requireInventoryManager();
+  const auth = await resolveActionContext();
   if (!auth.success) return auth;
+  if (!auth.context.isManagerOrAbove) return { success: false, error: 'not_authorized' };
 
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin.rpc(

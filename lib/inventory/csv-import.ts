@@ -1,5 +1,9 @@
 import { INVENTORY_IMPORT_MAX_ROWS, type InventoryImportRow } from '@/lib/inventory/action-inputs';
-import { formatInventoryQuantity, getInventoryUnitLabel, type InventoryItemType } from '@/lib/inventory/types';
+import {
+  formatInventoryQuantity,
+  getInventoryUnitLabel,
+  type InventoryItemType,
+} from '@/lib/inventory/types';
 import { parseDecimalInput } from '@/lib/ui/decimal';
 
 type ImportColumnKey = keyof InventoryImportRow;
@@ -221,7 +225,6 @@ export function buildImportRows(
   });
 }
 
-
 /** What the import does with the quantity column: book it, or only create articles. */
 export const INVENTORY_IMPORT_MODES = ['stock', 'master_data'] as const;
 export type InventoryImportMode = (typeof INVENTORY_IMPORT_MODES)[number];
@@ -236,7 +239,7 @@ export const IMPORT_REJECTIONS = [
   'stock_not_tracked',
   'failed',
 ] as const;
-export type ImportRejection = (typeof IMPORT_REJECTIONS)[number];
+type ImportRejection = (typeof IMPORT_REJECTIONS)[number];
 
 /**
  * One row's effect as the preview answers it and the booking did it
@@ -314,7 +317,8 @@ export function importRowEffect(row: ImportRowOutcome, mode: InventoryImportMode
     return 'Menge 0: kein Bestand gebucht';
   }
   const place = row.locationCreated ? `${row.locationName} (neues Lager)` : row.locationName;
-  const after = row.quantityAfter === null ? '' : `, danach ${formatInventoryQuantity(row.quantityAfter, row.unit)}`;
+  const after =
+    row.quantityAfter === null ? '' : `, danach ${formatInventoryQuantity(row.quantityAfter, row.unit)}`;
   const added = row.matchedBy === null ? '' : ' zum vorhandenen Bestand';
   return `+${formatInventoryQuantity(row.quantity, row.unit)}${added} in ${place}${after}`;
 }

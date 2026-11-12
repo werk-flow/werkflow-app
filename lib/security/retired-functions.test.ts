@@ -62,6 +62,8 @@ const SQL_CALLERS: Readonly<Record<string, string>> = {
 
 /** Function -> why it stays although the current build does not call it. */
 const KEPT_FOR_DEPLOYED_BUILD: Readonly<Record<string, string>> = {
+  import_inventory_row:
+    'the deployed production build books CSV rows through it; drop it in the first migration after the release that ships book_inventory_import (werk-flow/werkflow-planning#371)',
   renew_employee_capability:
     'the deployed production build still calls it; drop it in the first migration after the next production release',
 };
