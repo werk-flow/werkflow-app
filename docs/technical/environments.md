@@ -40,6 +40,7 @@ This table is the one home of every deployment and workflow credential. No check
 
 - `.github/workflows/health.yml` checks every row in GitHub's reach each Monday with a read-only call where the value lives. A failed run fails the step named after the credential and opens or updates the issue "Weekly health check failed". Only a failed check marked `prod` assigns the owner ([monitoring](recovery-and-incidents.md#monitoring)); a run off `main` or with `break_check` reports on "… (proof)".
 - The app checks its runtime credentials at `GET /api/health`, each Supabase project at its `health` function. Both answer only a request with the header `x-health-check-token`. The answer names each check `ok` or `failed`, never a value.
+- Agents never read a workstation secret file. `.claude/hooks/refuse-boat-key-reads.ts` refuses a call that would read the Boat key or the hand-out file `~/.config/werkflow/problem-report-handout.env`, which only `bun scripts/report-thread.ts` and the report dispatcher read.
 
 | Credential | Lives in | Used by | Expires | Rotate |
 | --- | --- | --- | --- | --- |
