@@ -37,7 +37,8 @@ function lockFindings(
       : [],
   );
   for (const name of LOCKED_SCRIPTS) {
-    const file = /^bun\s+(\S+\.ts)\b/.exec(scripts[name] ?? '')?.[1];
+    // A preload runs first and holds no lock; the script after it must take it.
+    const file = /^bun(?:\s+--preload\s+\S+)*\s+(\S+\.ts)\b/.exec(scripts[name] ?? '')?.[1];
     if (!file) findings.push(`"${name}" must run a Bun script that takes the workspace lock.`);
     else if (!readRepositoryFile(file).includes('withWorkspaceTestLock'))
       findings.push(`"${name}" runs ${file}, which does not call withWorkspaceTestLock.`);

@@ -5,6 +5,7 @@ import { captureInputSnapshot } from '../lib/testing/evidence/group-evidence';
 import { createGroupQualification } from '../lib/testing/evidence/group-qualification';
 import { ciBrowserHoldUntil, midnightProofHoldUntil } from '../lib/testing/runner/group-schedule';
 import { ciPlan, runnerModules } from '../lib/testing/selection/ci-plan';
+import { renderedSurfaceFiles, surfaceRoots } from '../lib/testing/selection/surface-closure';
 import { getTestGroups } from '../lib/testing/selection/test-groups';
 
 // The `Plan` job of .github/workflows/ci.yml: which browser groups this run
@@ -44,6 +45,7 @@ function changedSince(base: string): string[] | undefined {
 
 const groups = getTestGroups(repository);
 const qualification = createGroupQualification(repository, groups, captureInputSnapshot(repository));
+const rendered = renderedSurfaceFiles(qualification.graph, surfaceRoots(repository));
 const plan = ciPlan({
   groups: groups.map((group) => ({
     id: group.id,
@@ -52,6 +54,7 @@ const plan = ciPlan({
     scopes: group.scopes,
     executionInputs: qualification.qualify(group).executionInputs ?? [],
     trigger: group.changeTrigger,
+    renderedFiles: rendered.get(group.id),
   })),
   changedFiles: flag === '--base' ? changedSince(value) : [],
   fullRun: flag === '--full' ? value : undefined,
