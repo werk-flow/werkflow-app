@@ -55,13 +55,43 @@ const breakPolicyHistoryEntrySchema = z.object({
 
 export type BreakPolicyHistoryEntry = z.infer<typeof breakPolicyHistoryEntrySchema>;
 
-export type OrganizationTimeTrackingSettings = {
-  organizationId: string;
-  breakMode: OrgBreakMode;
-  autoBreakThresholdMinutes: number;
-  autoBreakDurationMinutes: number;
-  breakPolicyHistory: BreakPolicyHistoryEntry[];
-};
+/** One version of the break rule: the mode and its automatic step. */
+export type BreakPolicyValues = Pick<
+  BreakPolicyHistoryEntry,
+  'breakMode' | 'autoBreakThresholdMinutes' | 'autoBreakDurationMinutes'
+>;
+
+/**
+ * The organization's break rule: the current version and every earlier one.
+ * A past day resolves against the version that applied to it
+ * (`resolveBreakPolicyAtTimestamp`), so a rule change never moves it.
+ */
+export type BreakPolicy = BreakPolicyValues & { breakPolicyHistory: BreakPolicyHistoryEntry[] };
+
+/** The break rule as it travels to the client, history included. */
+export const breakPolicySchema = z.object({
+  breakMode: z.enum(['manual', 'automatic']),
+  autoBreakThresholdMinutes: z.number(),
+  autoBreakDurationMinutes: z.number(),
+  breakPolicyHistory: z.array(breakPolicyHistoryEntrySchema),
+}) satisfies z.ZodType<BreakPolicy>;
+
+export type OrganizationTimeTrackingSettings = BreakPolicy & { organizationId: string };
+
+/** Only the break rule of a value that carries more, such as the organization settings. */
+export function breakPolicyOf(settings: BreakPolicy): BreakPolicy {
+  return {
+    breakMode: settings.breakMode,
+    autoBreakThresholdMinutes: settings.autoBreakThresholdMinutes,
+    autoBreakDurationMinutes: settings.autoBreakDurationMinutes,
+    breakPolicyHistory: settings.breakPolicyHistory,
+  };
+}
+
+/** A key that changes whenever the rule or one of its versions changes. */
+export function breakPolicyKey(policy: BreakPolicyValues): string {
+  return JSON.stringify(policy);
+}
 
 export function getDefaultTimeTrackingSettings(organizationId: string): OrganizationTimeTrackingSettings {
   return {
@@ -74,10 +104,7 @@ export function getDefaultTimeTrackingSettings(organizationId: string): Organiza
 }
 
 export function buildBreakPolicyHistoryEntry(
-  values: Pick<
-    OrganizationTimeTrackingSettings,
-    'breakMode' | 'autoBreakThresholdMinutes' | 'autoBreakDurationMinutes'
-  >,
+  values: BreakPolicyValues,
   effectiveFrom = new Date().toISOString(),
 ): BreakPolicyHistoryEntry {
   return {
@@ -100,25 +127,28 @@ export function parseBreakPolicyHistory(value: Json | null | undefined): BreakPo
     .sort((a, b) => new Date(a.effectiveFrom).getTime() - new Date(b.effectiveFrom).getTime());
 }
 
+/**
+ * The stored settings with defaults for missing values. The history is
+ * required: settings without it would resolve every past day against the
+ * current rule.
+ */
 export function normalizeTimeTrackingSettings(
-  input: Partial<OrganizationTimeTrackingSettings> & { organizationId: string },
+  input: Partial<BreakPolicyValues> &
+    Pick<OrganizationTimeTrackingSettings, 'organizationId' | 'breakPolicyHistory'>,
 ): OrganizationTimeTrackingSettings {
   return {
     organizationId: input.organizationId,
     breakMode: input.breakMode ?? 'manual',
     autoBreakThresholdMinutes: input.autoBreakThresholdMinutes ?? DEFAULT_AUTO_BREAK_THRESHOLD_MINUTES,
     autoBreakDurationMinutes: input.autoBreakDurationMinutes ?? DEFAULT_AUTO_BREAK_DURATION_MINUTES,
-    breakPolicyHistory: input.breakPolicyHistory ?? [],
+    breakPolicyHistory: input.breakPolicyHistory,
   };
 }
 
 export function resolveBreakPolicyAtTimestamp(
-  settings: OrganizationTimeTrackingSettings,
+  settings: BreakPolicy,
   referenceTimestamp?: string | Date | null,
-): Pick<
-  OrganizationTimeTrackingSettings,
-  'breakMode' | 'autoBreakThresholdMinutes' | 'autoBreakDurationMinutes'
-> {
+): BreakPolicyValues {
   const history = settings.breakPolicyHistory;
   const [earliestEntry] = history;
 
@@ -157,13 +187,7 @@ export function resolveBreakPolicyAtTimestamp(
 export function computeBreakdownForSettings(
   totalMinutes: number,
   trackedBreakMinutes: number,
-  settings:
-    | Pick<
-        OrganizationTimeTrackingSettings,
-        'breakMode' | 'autoBreakThresholdMinutes' | 'autoBreakDurationMinutes'
-      >
-    | null
-    | undefined,
+  settings: BreakPolicyValues | null | undefined,
   targetMinutes?: number,
 ): TimeBreakdown {
   if (!settings || settings.breakMode === 'manual') {
@@ -179,13 +203,7 @@ export function computeBreakdownForSettings(
 export function getAutomaticBreakRange(
   start: string | Date | null | undefined,
   end: string | Date | null | undefined,
-  settings:
-    | Pick<
-        OrganizationTimeTrackingSettings,
-        'breakMode' | 'autoBreakThresholdMinutes' | 'autoBreakDurationMinutes'
-      >
-    | null
-    | undefined,
+  settings: BreakPolicyValues | null | undefined,
 ): { breakStart: Date; breakEnd: Date } | null {
   if (
     !start ||
@@ -221,10 +239,23 @@ export function getAutomaticBreakRange(
   return { breakStart, breakEnd };
 }
 
+// The start of an organization's first recorded version when the rule it had
+// before was never recorded: it covers every earlier day.
+const FIRST_VERSION_EFFECTIVE_FROM = new Date(0).toISOString();
+
+/**
+ * The history after a rule change. An organization without recorded versions
+ * first records the rule it had until now, so its earlier days keep it instead
+ * of falling back to the new version.
+ */
 export function appendBreakPolicyHistory(
-  history: BreakPolicyHistoryEntry[],
+  current: BreakPolicy,
   nextEntry: BreakPolicyHistoryEntry,
 ): BreakPolicyHistoryEntry[] {
+  const history =
+    current.breakPolicyHistory.length > 0
+      ? current.breakPolicyHistory
+      : [buildBreakPolicyHistoryEntry(current, FIRST_VERSION_EFFECTIVE_FROM)];
   const lastEntry = history[history.length - 1];
 
   if (

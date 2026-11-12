@@ -1,7 +1,7 @@
 import type { ActionFailure } from '@/lib/action-result';
 import type { ProfileReference } from '@/lib/profile-reference';
 import type { OrgRole } from '@/lib/roles';
-import type { OrgBreakMode } from '@/lib/time-tracking/settings';
+import type { BreakPolicy, BreakPolicyValues } from '@/lib/time-tracking/settings';
 import type { TimeValidationCode, TimeValidationFailure } from '@/lib/time-tracking/validation-messages';
 import type { Database } from '@/lib/supabase/database.types';
 import { constrainedValue } from '@/lib/validation/constrained-value';
@@ -228,9 +228,8 @@ export type InteractiveCalendarSession = WorkSession & {
   calendarBlockId?: string;
   sourceEntries?: TimeEntry[];
   breaks?: WorkSessionBreak[];
-  breakMode?: OrgBreakMode | undefined;
-  autoBreakThresholdMinutes?: number | undefined;
-  autoBreakDurationMinutes?: number | undefined;
+  /** The break rule that applied to the block's day. */
+  breakPolicy?: BreakPolicyValues | undefined;
   isCompositeBlock?: boolean;
   isOnBreakBlock?: boolean;
   employeeName?: string | null;
@@ -321,9 +320,7 @@ export type ClockTimelineSegment = {
 
 export type LiveClockState = {
   organizationId: string;
-  breakMode: OrgBreakMode;
-  autoBreakThresholdMinutes: number;
-  autoBreakDurationMinutes: number;
+  breakPolicy: BreakPolicy;
   status: ClockStatus;
   isClockedIn: boolean;
   isOnBreak: boolean;

@@ -12,6 +12,7 @@ import { readAffectedVisitsContract } from './absence-service-boundaries';
 import { readPlannedVisitsContract } from './correction-timeline-boundaries';
 import { readSignatureViewContract, readWorkArtifactDetailContract } from './work-artifact-boundaries';
 import { readRequestWorkTargetsContract } from './request-attach-boundaries';
+import { readBreakRuleWeekEntries } from './break-rule-week-boundaries';
 import { absenceAffectedVisitsInputSchema } from '@/lib/calendar/absence-visits-types';
 
 export async function readInBackground(kind: string, input: unknown, signal?: AbortSignal): Promise<unknown> {
@@ -35,6 +36,9 @@ export async function readInBackground(kind: string, input: unknown, signal?: Ab
     return readMaterialPickerContract();
   if (kind === 'absence-affected-visits')
     return readAffectedVisitsContract(absenceAffectedVisitsInputSchema.parse(input));
+  if (kind === 'time-entries') return readBreakRuleWeekEntries(input);
+  // The week views fall back to their default targets; the break rule does not depend on them.
+  if (kind === 'weekly-targets') return { success: false, error: 'fetch_failed' };
   if (kind === 'work-artifact-detail') return readWorkArtifactDetailContract();
   if (kind === 'document-view-url') return readSignatureViewContract();
   if (kind === 'own-personnel-actions') return getOwnPersonnelActions();

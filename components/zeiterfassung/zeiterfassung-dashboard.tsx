@@ -39,9 +39,7 @@ export function ZeiterfassungDashboard({
   } = useWeeklyTimeData({
     organizationId,
     userId,
-    breakMode: effectiveState.breakMode,
-    autoBreakThresholdMinutes: effectiveState.autoBreakThresholdMinutes,
-    autoBreakDurationMinutes: effectiveState.autoBreakDurationMinutes,
+    breakPolicy: effectiveState.breakPolicy,
     initialWeekData: initialOverview.weekData,
     initialTodayIndex: initialOverview.todayIndex,
     initialWeekLabel: initialOverview.weekLabel,

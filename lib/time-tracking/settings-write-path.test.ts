@@ -106,7 +106,7 @@ test.skipIf(ISOLATED)('the write path cases pass in an isolated process', async 
     `${stdout}
 ${stderr}`,
   ).toBe(0);
-  expect(stderr).toContain('6 pass');
+  expect(stderr).toContain('7 pass');
 });
 
 if (ISOLATED) {
@@ -141,6 +141,7 @@ if (ISOLATED) {
   }));
 
   const { updateTimeTrackingSettings } = await import('./settings-actions');
+  const { breakPolicySchema, resolveBreakPolicyAtTimestamp } = await import('./settings');
 
   beforeEach(() => {
     stored = {
@@ -218,5 +219,32 @@ if (ISOLATED) {
     rpcError = { code: 'WFP01', message: 'period_closed' };
     expect(await updateTimeTrackingSettings(change)).toEqual({ success: false, error: 'update_failed' });
     expect(invalidatedTags).toEqual([]);
+  });
+
+  test('an organization without recorded versions keeps its earlier days after its first change', async () => {
+    // Created before the history existed: an automatic rule, no versions.
+    stored = {
+      break_mode: 'automatic',
+      auto_break_threshold_minutes: 360,
+      auto_break_duration_minutes: 30,
+      break_policy_history: [],
+    };
+    const result = await updateTimeTrackingSettings({ ...change, breakMode: 'manual' });
+    expect(result.success).toBe(true);
+
+    // The rule as saved, with the history the call wrote.
+    const settings = breakPolicySchema.parse({
+      breakMode: 'manual',
+      autoBreakThresholdMinutes: 360,
+      autoBreakDurationMinutes: 45,
+      breakPolicyHistory: rpcCalls[0]?.args.p_break_policy_history,
+    });
+    // A day before the change keeps the rule it ran under, not the new one.
+    expect(resolveBreakPolicyAtTimestamp(settings, '2026-10-13T15:00:00.000Z')).toEqual({
+      breakMode: 'automatic',
+      autoBreakThresholdMinutes: 360,
+      autoBreakDurationMinutes: 30,
+    });
+    expect(resolveBreakPolicyAtTimestamp(settings, NOW).breakMode).toBe('manual');
   });
 }

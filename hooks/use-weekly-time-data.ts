@@ -11,7 +11,7 @@ import {
   getTodayIndex,
   getWeekBounds,
 } from '@/lib/time-tracking/weekly';
-import { normalizeTimeTrackingSettings, type OrgBreakMode } from '@/lib/time-tracking/settings';
+import { breakPolicyKey, type BreakPolicy } from '@/lib/time-tracking/settings';
 
 export type DayData = WeeklyTimeDataPoint;
 
@@ -43,9 +43,8 @@ function weekSnapshotOf(
 interface UseWeeklyTimeDataOptions {
   organizationId: string;
   userId: string;
-  breakMode: OrgBreakMode;
-  autoBreakThresholdMinutes: number;
-  autoBreakDurationMinutes: number;
+  /** The rule with its earlier versions: each day of the week keeps the version that applied to it. */
+  breakPolicy: BreakPolicy;
   enabled?: boolean;
   initialWeekData?: WeeklyTimeDataPoint[];
   initialTodayIndex?: number;
@@ -56,9 +55,7 @@ interface UseWeeklyTimeDataOptions {
 export function useWeeklyTimeData({
   organizationId,
   userId,
-  breakMode,
-  autoBreakThresholdMinutes,
-  autoBreakDurationMinutes,
+  breakPolicy,
   enabled = true,
   initialWeekData,
   initialTodayIndex,
@@ -111,13 +108,7 @@ export function useWeeklyTimeData({
       const nextTargets = targetsResult.success ? targetsResult.targets : lastKnownTargetsRef.current;
       lastKnownTargetsRef.current = nextTargets;
 
-      const settings = normalizeTimeTrackingSettings({
-        organizationId,
-        breakMode,
-        autoBreakThresholdMinutes,
-        autoBreakDurationMinutes,
-      });
-      const weekData = buildWeeklyTimeData(result.entries || [], monday, settings, nextTargets);
+      const weekData = buildWeeklyTimeData(result.entries || [], monday, breakPolicy, nextTargets);
       return { ok: true, data: weekSnapshotOf(weekData, nextTargets, monday, !targetsResult.success) };
     },
     initialData: initialWeekData
@@ -130,7 +121,7 @@ export function useWeeklyTimeData({
         }
       : undefined,
     enabled,
-    resetKey: `${organizationId}:${userId}:${breakMode}:${autoBreakThresholdMinutes}:${autoBreakDurationMinutes}`,
+    resetKey: `${organizationId}:${userId}:${breakPolicyKey(breakPolicy)}`,
   });
 
   return {

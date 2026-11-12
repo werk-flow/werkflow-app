@@ -13,7 +13,7 @@ import type { PersonnelDetail } from '@/lib/personnel/actions';
 
 import type { MemberDetail } from '@/lib/members/actions';
 import type { OrgRole } from '@/lib/roles';
-import type { OrgBreakMode } from '@/lib/time-tracking/settings';
+import type { BreakPolicy } from '@/lib/time-tracking/settings';
 import type { Job, ProjectWithDetails } from '@/lib/jobs/types';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import type { AuftraegeColumnId } from '@/lib/jobs/auftraege-table-columns';
@@ -47,14 +47,7 @@ const DETAIL_REFRESH_TABLES: readonly RealtimeTable[] = [
 /** The live status and week cards of one member. */
 function MitarbeiterDetailLiveTimeCards(input: Parameters<typeof useMitarbeiterDetailLiveTime>[0]) {
   const liveTime = useMitarbeiterDetailLiveTime(input);
-  return (
-    <MitarbeiterDetailTimeCards
-      liveTime={liveTime}
-      breakMode={input.breakMode}
-      autoBreakThresholdMinutes={input.autoBreakThresholdMinutes}
-      autoBreakDurationMinutes={input.autoBreakDurationMinutes}
-    />
-  );
+  return <MitarbeiterDetailTimeCards liveTime={liveTime} breakPolicy={input.breakPolicy} />;
 }
 
 interface MitarbeiterDetailContentProps {
@@ -76,9 +69,7 @@ interface MitarbeiterDetailContentProps {
   visibleColumns: AuftraegeColumnId[];
   /** `null` when the documents failed to load. */
   documents: OrganizationDocument[] | null;
-  breakMode: OrgBreakMode;
-  autoBreakThresholdMinutes: number;
-  autoBreakDurationMinutes: number;
+  breakPolicy: BreakPolicy;
   /** `null` when the server read of the week failed. */
   initialWeek: MemberInitialWeek | null;
   /** `null` when the responsibility settings failed to load. */
@@ -112,9 +103,7 @@ function MitarbeiterDetailCards({
   organizationId,
   isAdminOrManager,
   documents,
-  breakMode,
-  autoBreakThresholdMinutes,
-  autoBreakDurationMinutes,
+  breakPolicy,
   initialWeek,
   responsibilitySettings,
   qualificationSummary,
@@ -167,9 +156,7 @@ function MitarbeiterDetailCards({
         key={`${personnel?.record.entryDate ?? ''}:${personnel?.record.exitDate ?? ''}`}
         organizationId={organizationId}
         userId={member.userId}
-        breakMode={breakMode}
-        autoBreakThresholdMinutes={autoBreakThresholdMinutes}
-        autoBreakDurationMinutes={autoBreakDurationMinutes}
+        breakPolicy={breakPolicy}
         initialWeek={initialWeek}
       />
     </div>
