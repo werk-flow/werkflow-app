@@ -21,7 +21,10 @@ test('visual captures render in the official image of the installed Playwright v
 test('only a run of visual specs uses the image, and a mixed run is refused', () => {
   expect(selectsVisualBrowser(['tests/audit/visual/references.spec.ts'])).toBe(true);
   expect(
-    selectsVisualBrowser(['tests/audit/visual/references.spec.ts', 'tests/audit/visual/acceptance.spec.ts']),
+    selectsVisualBrowser([
+      'tests/audit/visual/references.spec.ts',
+      'tests/audit/visual/acceptance-sets.spec.ts',
+    ]),
   ).toBe(true);
   expect(selectsVisualBrowser(['tests/audit/wave-1/a1-zeiten.spec.ts'])).toBe(false);
   expect(() =>

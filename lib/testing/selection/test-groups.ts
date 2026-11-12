@@ -290,12 +290,29 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['layout:standalone', 'layout/standalone-screens.spec.ts', ['standalone']],
   // Reference screenshots of every page family.
   ['visual', 'visual/references.spec.ts', ['*']],
-  // Rendered acceptance captures of the open sets (tests/audit/support/acceptance-sets.ts).
-  ['visual:acceptance', 'visual/acceptance.spec.ts', ['*']],
+  // Rendered acceptance captures by what a capture drives, so a changed helper selects the groups that import it:
+  // the inventory rounds' pages, dialogs per opener module and standalone screens
+  // (tests/audit/support/acceptance-rounds.ts), then the open sets (acceptance-sets/, one file each).
+  ['visual:acceptance:pages', 'visual/acceptance-pages.spec.ts', ['*']],
+  ['visual:acceptance:calendar', 'visual/acceptance-calendar.spec.ts', ['planning']],
+  ['visual:acceptance:customers', 'visual/acceptance-customers.spec.ts', ['customers']],
+  ['visual:acceptance:documents', 'visual/acceptance-documents.spec.ts', ['documents']],
+  ['visual:acceptance:inventory', 'visual/acceptance-inventory.spec.ts', ['inventory']],
+  ['visual:acceptance:people', 'visual/acceptance-people.spec.ts', ['personnel']],
+  ['visual:acceptance:requests', 'visual/acceptance-requests.spec.ts', ['customers', 'work']],
+  ['visual:acceptance:service', 'visual/acceptance-service.spec.ts', ['service']],
+  ['visual:acceptance:settings', 'visual/acceptance-settings.spec.ts', ['attention', 'personnel']],
+  ['visual:acceptance:time', 'visual/acceptance-time.spec.ts', ['time', 'personnel']],
+  ['visual:acceptance:work', 'visual/acceptance-work.spec.ts', ['work']],
+  ['visual:acceptance:standalone', 'visual/acceptance-standalone.spec.ts', ['standalone']],
+  ['visual:acceptance:sets', 'visual/acceptance-sets.spec.ts', ['*']],
   ['security:account', 'security/account.spec.ts', ['*']],
   ['security:offline-shell', 'security/offline-shell.spec.ts', ['standalone', 'work']],
+  ['security:offline-today', 'security/offline-today.spec.ts', ['standalone', 'work', 'planning']],
   // The report screenshot redraw on a seeded customer and job (docs/technical/problem-report-scrubbing.md).
   ['problem-reports:redraw', 'problem-reports/screenshot-redraw.spec.ts', ['customers', 'work']],
+  // Reporting a problem from the app shell, with a redacted screenshot, to „Meine Meldungen“.
+  ['problem-reports:report', 'problem-reports/report-a-problem.spec.ts', ['*']],
   ['list-pagination', 'pagination/list-pagination.spec.ts', ['inventory', 'documents', 'work']],
   // Measured navigation and view switches against the typical data profile (Step 2).
   [

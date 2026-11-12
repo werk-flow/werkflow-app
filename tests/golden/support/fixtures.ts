@@ -3,8 +3,9 @@ import { expect, test as base, type Browser, type Page } from '@playwright/test'
 import { resolve } from 'node:path';
 import { workspaceAppOrigin } from '../../../lib/testing/runner/app-port';
 import { testBusinessDate } from '../../../lib/testing/runner/business-date';
-import { createRolePage, type SessionRole } from './sessions';
+import type { SessionRole } from './sessions';
 import { resetPersistedPreferences } from './preferences-reset';
+import { openRolePage, revealStreamedContentAfterEachLoad } from './streamed-content';
 import { loadWorld, type TestWorld } from './world';
 
 type GoldenFixtures = {
@@ -30,7 +31,7 @@ async function rolePage(
   role: SessionRole,
   provide: (page: Page) => Promise<void>,
 ): Promise<void> {
-  const { context, page } = await createRolePage({
+  const { context, page } = await openRolePage({
     browser,
     baseUrl,
     world: loadWorld(),
@@ -70,6 +71,10 @@ export const test = base.extend<GoldenFixtures>({
   },
   businessDate: async ({}, provide) => {
     await provide(testBusinessDate());
+  },
+  page: async ({ page }, provide) => {
+    revealStreamedContentAfterEachLoad(page);
+    await provide(page);
   },
   freshPreferences: [
     async ({}, provide) => {

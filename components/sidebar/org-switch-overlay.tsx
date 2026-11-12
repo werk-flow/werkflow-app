@@ -22,6 +22,7 @@ import { InventarPageSkeleton } from '@/components/loading-states/inventar-page-
 import { AufgabenPageSkeleton } from '@/components/loading-states/aufgaben-page-skeleton';
 import { AnfragenPageSkeleton } from '@/components/loading-states/anfragen-page-skeleton';
 import { QualifikationenPageSkeleton } from '@/components/loading-states/qualifikationen-page-skeleton';
+import { MeldungenPageSkeleton } from '@/components/loading-states/meldungen-page-skeleton';
 import { EinstellungenPageSkeleton } from '@/components/loading-states/einstellungen-page-skeleton';
 import { WorkTemplatesPageSkeleton } from '@/components/loading-states/work-templates-page-skeleton';
 import { EquipmentPageSkeleton } from '@/components/loading-states/equipment-page-skeleton';
@@ -98,6 +99,7 @@ const ORG_SWITCH_SKELETONS: ReadonlyArray<readonly [prefix: string, skeleton: ()
   ],
   ['/anfragen', () => <AnfragenPageSkeleton />],
   ['/qualifikationen', () => <QualifikationenPageSkeleton />],
+  ['/meldungen', () => <MeldungenPageSkeleton />],
   ['/arbeitsvorlagen', () => <WorkTemplatesPageSkeleton />],
   ['/einstellungen', () => <EinstellungenPageSkeleton />],
   ['/inventar', () => <InventarPageSkeleton />],

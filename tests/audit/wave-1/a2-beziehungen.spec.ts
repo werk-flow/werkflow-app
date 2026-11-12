@@ -1,6 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 
 import { expect, test } from '../support/fixtures';
+import { openPage } from '../../golden/support/streamed-content';
 import { berlinDateAtOffset } from '../../golden/support/date-ownership';
 import { getCustomerRelationshipState, seedCustomer } from '../../golden/support/db/customers';
 import { seedRequest } from '../../golden/support/db/requests';
@@ -80,7 +81,7 @@ test.describe('A2 Kundenbeziehungen @AUDIT-W1-A2', () => {
     const inviteCode = await getPendingInviteCode(world.orgId, world.invitee.email);
     const inviteeContext = await browser.newContext();
     await joinOrganizationViaInviteLink(
-      await inviteeContext.newPage(),
+      await openPage(inviteeContext),
       inviteCode,
       world.invitee,
       world.orgId,

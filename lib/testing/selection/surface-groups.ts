@@ -54,6 +54,7 @@ const MANAGER_GROUPS: Readonly<Record<InventoriedRoute, Exclude<SurfaceGroup, Fi
   '/zeiterfassung/einstellungen': 'time',
   '/zeiterfassung/perioden/[periodId]': 'time',
   '/qualifikationen': 'people',
+  '/meldungen': 'settings',
   '/anfragen': 'requests',
   '/anfragen/[requestId]': 'requests',
   '/arbeitsvorlagen': 'templates',

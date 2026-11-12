@@ -9,6 +9,7 @@ export const MANAGER_PHONE_ROUTES = [
   '/zeiterfassung/perioden',
   '/zeiterfassung/einstellungen',
   '/qualifikationen',
+  '/meldungen',
   '/anfragen',
   '/auftraege',
   '/kunden',
@@ -65,6 +66,7 @@ export const EMPLOYEE_PHONE_ROUTES = [
   '/zeiterfassung',
   '/auftraege',
   '/qualifikationen',
+  '/meldungen',
   '/einstellungen/profil',
 ] as const satisfies readonly (typeof MANAGER_PHONE_ROUTES)[number][];
 
