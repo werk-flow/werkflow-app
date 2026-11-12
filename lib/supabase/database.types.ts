@@ -13879,6 +13879,7 @@ export type Database = {
           p_proposal_id: string;
           p_reviewed_access_notes: string;
           p_reviewed_contact_name?: string;
+          p_reviewed_contact_note?: string;
           p_reviewed_contact_phone?: string;
           p_revision: number;
         };

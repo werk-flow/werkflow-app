@@ -31,7 +31,7 @@ function readReviewReferences(
       (from, to) =>
         admin
           .from('client_contacts')
-          .select('id, name, phone')
+          .select('id, name, phone, notes')
           .eq('organization_id', orgId)
           .eq('site_id', row.site_id)
           .eq('site_role', 'zugangskontakt')

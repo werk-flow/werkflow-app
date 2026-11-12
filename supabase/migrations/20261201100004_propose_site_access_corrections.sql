@@ -285,7 +285,7 @@ grant execute on function app_private.lock_open_site_access_proposal(uuid, uuid,
 -- becomes a new one; its note replaces the contact's note only when given.
 -- Proposed access notes replace the Einsatzort's. The call names what the
 -- review showed of what it overwrites: the Einsatzort's access notes, and the
--- corrected contact's name and phone, an empty text for none. Another
+-- corrected contact's name, phone and note, an empty text for none. Another
 -- decision on the same Einsatzort since then refuses it with site_changed, so
 -- it never overwrites a change its manager has not seen. Refusals as
 -- lock_open_site_access_proposal, and invalid_input (a contact to correct
@@ -298,7 +298,8 @@ create function public.accept_site_access_proposal(
   p_reviewed_access_notes text,
   p_contact_id uuid default null,
   p_reviewed_contact_name text default null,
-  p_reviewed_contact_phone text default null
+  p_reviewed_contact_phone text default null,
+  p_reviewed_contact_note text default null
 )
 returns public.site_access_proposals
 language plpgsql
@@ -334,8 +335,11 @@ begin
     if not found then
       raise exception 'contact_not_found';
     end if;
+    -- The contact's note only when the proposal replaces it.
     if v_contact.name is distinct from p_reviewed_contact_name
-      or coalesce(v_contact.phone, '') <> coalesce(p_reviewed_contact_phone, '') then
+      or coalesce(v_contact.phone, '') <> coalesce(p_reviewed_contact_phone, '')
+      or (v_proposal.contact_note is not null
+        and coalesce(v_contact.notes, '') <> coalesce(p_reviewed_contact_note, '')) then
       raise exception 'site_changed';
     end if;
   end if;
@@ -377,9 +381,9 @@ begin
   return v_proposal;
 end;
 $$;
-revoke all on function public.accept_site_access_proposal(uuid, uuid, uuid, integer, text, uuid, text, text)
+revoke all on function public.accept_site_access_proposal(uuid, uuid, uuid, integer, text, uuid, text, text, text)
   from public, anon, authenticated;
-grant execute on function public.accept_site_access_proposal(uuid, uuid, uuid, integer, text, uuid, text, text) to service_role;
+grant execute on function public.accept_site_access_proposal(uuid, uuid, uuid, integer, text, uuid, text, text, text) to service_role;
 
 -- Rejects an open proposal with a reason of 3 to 500 characters and clears
 -- the proposed values in the same statement. Refusals as

@@ -78,8 +78,8 @@ export function fieldSiteAccess(siteId: string, read: JobSiteAccessProposalRead)
   return read.proposal ? { siteId, proposal: read.proposal } : { siteId };
 }
 
-/** A Zugangskontakt of the Einsatzort that an acceptance can correct. */
-type SiteAccessContactOption = { id: string; name: string; phone: string | null };
+/** A Zugangskontakt of the Einsatzort that an acceptance can correct, as it is now. */
+type SiteAccessContactOption = { id: string; name: string; phone: string | null; notes: string | null };
 
 /** An open proposal as the office reviews it on the customer's page. */
 export type SiteAccessReview = {

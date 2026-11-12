@@ -55,7 +55,7 @@ insert into public.client_contacts (id, organization_id, client_id, name, phone,
 ('46000000-0000-0000-0000-000000000051', '46000000-0000-0000-0000-000000000010',
  '46000000-0000-0000-0000-000000000020', 'Frau Birke', '030 222', null,
  '46000000-0000-0000-0000-000000000041', 'zugangskontakt');
--- 30: the job at 40 with employee 03; 31 and 32: two more of their jobs at
+-- 30: the job at 40 with employee 03; 31 to 34: four more of their jobs at
 -- 40; 39: another organization's job.
 insert into public.jobs (id, organization_id, title, job_number, client_id, site_id, created_by) values
 ('46000000-0000-0000-0000-000000000030', '46000000-0000-0000-0000-000000000010',
@@ -67,6 +67,12 @@ insert into public.jobs (id, organization_id, title, job_number, client_id, site
 ('46000000-0000-0000-0000-000000000032', '46000000-0000-0000-0000-000000000010',
  'Rohrbruch', 'ACC-3', '46000000-0000-0000-0000-000000000020',
  '46000000-0000-0000-0000-000000000040', '46000000-0000-0000-0000-000000000001'),
+('46000000-0000-0000-0000-000000000033', '46000000-0000-0000-0000-000000000010',
+ 'Therme tauschen', 'ACC-4', '46000000-0000-0000-0000-000000000020',
+ '46000000-0000-0000-0000-000000000040', '46000000-0000-0000-0000-000000000001'),
+('46000000-0000-0000-0000-000000000034', '46000000-0000-0000-0000-000000000010',
+ 'Wasserzähler', 'ACC-5', '46000000-0000-0000-0000-000000000020',
+ '46000000-0000-0000-0000-000000000040', '46000000-0000-0000-0000-000000000001'),
 ('46000000-0000-0000-0000-000000000039', '46000000-0000-0000-0000-000000000011',
  'Fremder Auftrag', 'ACC-9', '46000000-0000-0000-0000-000000000029',
  '46000000-0000-0000-0000-000000000049', '46000000-0000-0000-0000-000000000005');
@@ -76,6 +82,10 @@ insert into public.job_assignments (organization_id, job_id, user_id, assigned_b
 ('46000000-0000-0000-0000-000000000010', '46000000-0000-0000-0000-000000000031',
  '46000000-0000-0000-0000-000000000003', '46000000-0000-0000-0000-000000000001'),
 ('46000000-0000-0000-0000-000000000010', '46000000-0000-0000-0000-000000000032',
+ '46000000-0000-0000-0000-000000000003', '46000000-0000-0000-0000-000000000001'),
+('46000000-0000-0000-0000-000000000010', '46000000-0000-0000-0000-000000000033',
+ '46000000-0000-0000-0000-000000000003', '46000000-0000-0000-0000-000000000001'),
+('46000000-0000-0000-0000-000000000010', '46000000-0000-0000-0000-000000000034',
  '46000000-0000-0000-0000-000000000003', '46000000-0000-0000-0000-000000000001');
 
 -- Runs one statement and requires the named refusal.
@@ -118,7 +128,7 @@ begin
     or has_column_privilege('authenticated', 'public.site_access_proposals', 'rejection_reason', 'SELECT')
   then raise exception 'a browser session can read a proposed value'; end if;
   if has_function_privilege('authenticated', 'public.propose_site_access(uuid,uuid,uuid,uuid,text,text,text,text)', 'EXECUTE')
-    or has_function_privilege('authenticated', 'public.accept_site_access_proposal(uuid,uuid,uuid,integer,text,uuid,text,text)', 'EXECUTE')
+    or has_function_privilege('authenticated', 'public.accept_site_access_proposal(uuid,uuid,uuid,integer,text,uuid,text,text,text)', 'EXECUTE')
     or has_function_privilege('authenticated', 'public.reject_site_access_proposal(uuid,uuid,uuid,integer,text)', 'EXECUTE')
     or has_function_privilege('anon', 'public.propose_site_access(uuid,uuid,uuid,uuid,text,text,text,text)', 'EXECUTE')
     or has_function_privilege('authenticated', 'public.read_manager_attention_sets(uuid,integer)', 'EXECUTE')
@@ -282,7 +292,7 @@ begin
     '46000000-0000-0000-0000-000000000010',
     (select id from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030'),
     (select revision from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030'),
-    'Schlüssel beim Hausmeister', '46000000-0000-0000-0000-000000000050', 'Herr Alt', '030 111');
+    'Schlüssel beim Hausmeister', '46000000-0000-0000-0000-000000000050', 'Herr Alt', '030 111', 'Hausmeister');
   select * into v_contact from public.client_contacts where id = '46000000-0000-0000-0000-000000000050';
   if v_contact.name <> 'Frau Neumann' or v_contact.phone <> '0171 556' or v_contact.notes <> 'Klingel 3'
     or v_contact.site_role <> 'zugangskontakt'
@@ -454,6 +464,41 @@ end;
 $$;
 reset role;
 
+-- Two proposals with the contact's name and phone and different notes: the
+-- second acceptance names the note its review showed, which the first one
+-- replaced, so it is refused and changes nothing.
+set local role service_role;
+do $$
+declare
+  v_contact public.client_contacts;
+  v_first public.site_access_proposals;
+  v_second public.site_access_proposals;
+begin
+  select * into v_contact from public.client_contacts where id = '46000000-0000-0000-0000-000000000050';
+  v_first := public.propose_site_access('46000000-0000-0000-0000-000000000003',
+    '46000000-0000-0000-0000-000000000010', '46000000-0000-0000-0000-000000000033',
+    '46000000-0000-0000-0000-000000000040', v_contact.name, v_contact.phone, 'Nur vormittags', null);
+  v_second := public.propose_site_access('46000000-0000-0000-0000-000000000003',
+    '46000000-0000-0000-0000-000000000010', '46000000-0000-0000-0000-000000000034',
+    '46000000-0000-0000-0000-000000000040', v_contact.name, v_contact.phone, 'Nur nachmittags', null);
+  perform public.accept_site_access_proposal('46000000-0000-0000-0000-000000000002',
+    '46000000-0000-0000-0000-000000000010', v_first.id, v_first.revision, '',
+    '46000000-0000-0000-0000-000000000050', v_contact.name, v_contact.phone, v_contact.notes);
+  begin
+    perform public.accept_site_access_proposal('46000000-0000-0000-0000-000000000001',
+      '46000000-0000-0000-0000-000000000010', v_second.id, v_second.revision, '',
+      '46000000-0000-0000-0000-000000000050', v_contact.name, v_contact.phone, v_contact.notes);
+    raise exception 'an acceptance over a changed contact note was not refused';
+  exception when others then
+    if sqlerrm <> 'site_changed' then raise; end if;
+  end;
+  if (select notes from public.client_contacts where id = '46000000-0000-0000-0000-000000000050') <> 'Nur vormittags'
+    or (select status from public.site_access_proposals where id = v_second.id) <> 'open'
+  then raise exception 'a refused acceptance over a changed contact note changed a row'; end if;
+end;
+$$;
+reset role;
+
 -- An acceptance is one call: when the Einsatzort's write fails after the
 -- contact's, the contact, its history, the access notes and the open
 -- proposal stay as they were.
@@ -468,24 +513,30 @@ set local role service_role;
 do $$
 declare
   v_open public.site_access_proposals;
+  v_contact public.client_contacts;
+  v_notes text := (select access_notes from public.client_sites where id = '46000000-0000-0000-0000-000000000040');
   v_events bigint := (select count(*) from public.client_master_events
     where contact_id = '46000000-0000-0000-0000-000000000050');
 begin
   select * into v_open from public.site_access_proposals
   where job_id = '46000000-0000-0000-0000-000000000032' and status = 'open';
+  select * into v_contact from public.client_contacts where id = '46000000-0000-0000-0000-000000000050';
   begin
     perform public.accept_site_access_proposal('46000000-0000-0000-0000-000000000002',
-      '46000000-0000-0000-0000-000000000010', v_open.id, v_open.revision, 'Code 1111',
-      '46000000-0000-0000-0000-000000000050', 'Frau Erste', '030 401');
+      '46000000-0000-0000-0000-000000000010', v_open.id, v_open.revision, v_notes,
+      '46000000-0000-0000-0000-000000000050', v_contact.name, v_contact.phone, v_contact.notes);
     raise exception 'the failing Einsatzort write did not fail the acceptance';
   exception when others then
     if sqlerrm <> 'test_site_update_refused' then raise; end if;
   end;
-  if (select name from public.client_contacts where id = '46000000-0000-0000-0000-000000000050') <> 'Frau Erste'
+  if (select contact from public.client_contacts contact
+      where contact.id = '46000000-0000-0000-0000-000000000050') is distinct from v_contact
+    or (select proposal from public.site_access_proposals proposal where proposal.id = v_open.id)
+      is distinct from v_open
     or (select count(*) from public.client_master_events
         where contact_id = '46000000-0000-0000-0000-000000000050') <> v_events
-    or (select access_notes from public.client_sites where id = '46000000-0000-0000-0000-000000000040') <> 'Code 1111'
-    or (select status from public.site_access_proposals where id = v_open.id) <> 'open'
+    or (select access_notes from public.client_sites where id = '46000000-0000-0000-0000-000000000040')
+      is distinct from v_notes
   then raise exception 'a failed acceptance left a partial write'; end if;
 end;
 $$;

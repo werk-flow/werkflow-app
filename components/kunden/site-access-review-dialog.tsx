@@ -42,7 +42,8 @@ function contactOptions(review: SiteAccessReview): SearchableSelectOption[] {
     ...review.accessContacts.map((contact) => ({
       value: contact.id,
       label: `Ersetzt ${contact.name}`,
-      description: contact.phone ?? undefined,
+      // The contact as it is now: what an acceptance would replace.
+      description: [contact.phone, contact.notes].filter(Boolean).join(' · ') || undefined,
     })),
   ];
 }
@@ -72,7 +73,7 @@ type AcceptInput = {
   proposalId: string;
   revision: number;
   reviewedAccessNotes: string;
-  contact: { id: string; reviewedName: string; reviewedPhone: string } | null;
+  contact: { id: string; reviewedName: string; reviewedPhone: string; reviewedNote: string } | null;
 };
 type AcceptRunner = Runner<AcceptInput>;
 
@@ -118,7 +119,14 @@ function acceptInput(review: SiteAccessReview, contactChoice: string): AcceptInp
     proposalId: review.proposalId,
     revision: review.revision,
     reviewedAccessNotes: review.currentAccessNotes ?? '',
-    contact: chosen ? { id: chosen.id, reviewedName: chosen.name, reviewedPhone: chosen.phone ?? '' } : null,
+    contact: chosen
+      ? {
+          id: chosen.id,
+          reviewedName: chosen.name,
+          reviewedPhone: chosen.phone ?? '',
+          reviewedNote: chosen.notes ?? '',
+        }
+      : null,
   };
 }
 
@@ -321,7 +329,27 @@ function ProposedContact({
           />
         </Field>
       )}
+      {decision.mode === 'review' && (
+        <ReplacedContactNote review={review} contactChoice={decision.contactChoice} />
+      )}
     </section>
+  );
+}
+
+/** The chosen Zugangskontakt's note as it is now, when the proposed note would replace it. */
+function ReplacedContactNote({
+  review,
+  contactChoice,
+}: {
+  review: SiteAccessReview;
+  contactChoice: string;
+}): ReactElement | null {
+  const chosen = review.accessContacts.find((contact) => contact.id === contactChoice);
+  if (!chosen || review.values.contactNote === '') return null;
+  return (
+    <p className="text-muted-foreground">
+      {chosen.notes ? `Bisheriger Hinweis zur Person: ${chosen.notes}` : 'Bisher ohne Hinweis zur Person.'}
+    </p>
   );
 }
 

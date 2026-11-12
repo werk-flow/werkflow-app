@@ -41,12 +41,17 @@ const reviewOfRevision1: SiteAccessReview = {
   values: {
     contactName: 'Erika Musterfrau',
     contactPhone: '0160 5550123',
-    contactNote: '',
+    contactNote: 'Neue Hausmeisterin',
     accessNotes: 'Seiteneingang über den Hof',
   },
   accessContacts: [
-    { id: '9b000000-0000-4000-8000-000000000051', name: 'Frau Birke', phone: '030 222' },
-    { id: '9b000000-0000-4000-8000-000000000050', name: 'Herr Alt', phone: '030 111' },
+    {
+      id: '9b000000-0000-4000-8000-000000000051',
+      name: 'Frau Birke',
+      phone: '030 222',
+      notes: 'Hausmeisterin',
+    },
+    { id: '9b000000-0000-4000-8000-000000000050', name: 'Herr Alt', phone: '030 111', notes: null },
   ],
 };
 

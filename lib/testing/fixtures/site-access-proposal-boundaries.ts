@@ -68,7 +68,10 @@ const accept =
       proposalId: id,
       revision: 1,
       reviewedAccessNotes,
-      contact: contact === null ? null : { id: contact, reviewedName: 'Herr Alt', reviewedPhone: '030 111' },
+      contact:
+        contact === null
+          ? null
+          : { id: contact, reviewedName: 'Herr Alt', reviewedPhone: '030 111', reviewedNote: 'Hausmeister' },
     });
 const reject = (id: string) => () =>
   rejectSiteAccessProposal({ proposalId: id, revision: 1, reason: 'Stimmt nicht' });
@@ -171,8 +174,9 @@ assert.deepEqual(
     contact: world.rpcCalls.at(-1)?.args.p_contact_id,
     name: world.rpcCalls.at(-1)?.args.p_reviewed_contact_name,
     phone: world.rpcCalls.at(-1)?.args.p_reviewed_contact_phone,
+    note: world.rpcCalls.at(-1)?.args.p_reviewed_contact_note,
   },
-  { notes: staleNotes, contact: contactId, name: 'Herr Alt', phone: '030 111' },
+  { notes: staleNotes, contact: contactId, name: 'Herr Alt', phone: '030 111', note: 'Hausmeister' },
 );
 
 // Malformed input never reaches the database.

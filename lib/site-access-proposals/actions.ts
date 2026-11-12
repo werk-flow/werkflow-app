@@ -55,7 +55,12 @@ const acceptInputSchema = z.object({
   revision: revisionSchema,
   reviewedAccessNotes: reviewedTextSchema,
   contact: z
-    .object({ id: uuidSchema, reviewedName: reviewedTextSchema, reviewedPhone: reviewedTextSchema })
+    .object({
+      id: uuidSchema,
+      reviewedName: reviewedTextSchema,
+      reviewedPhone: reviewedTextSchema,
+      reviewedNote: reviewedTextSchema,
+    })
     .nullable(),
 });
 
@@ -151,6 +156,7 @@ export async function acceptSiteAccessProposal(
             p_contact_id: parsed.data.contact.id,
             p_reviewed_contact_name: parsed.data.contact.reviewedName,
             p_reviewed_contact_phone: parsed.data.contact.reviewedPhone,
+            p_reviewed_contact_note: parsed.data.contact.reviewedNote,
           }),
     });
     if (error || !data) return proposalRefusal(error, 'save_failed', 'acceptSiteAccessProposal: save failed');

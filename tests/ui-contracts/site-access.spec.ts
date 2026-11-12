@@ -56,6 +56,10 @@ test('a replaced proposal drops the choice and the reason made for the previous 
   expect(await page.evaluate(() => window.uiContractWrites.calls.length)).toBe(1);
 
   await chooseContact(dialog, 'Frau Birke');
+  await expect(
+    dialog.getByText('Bisheriger Hinweis zur Person: Hausmeisterin', { exact: true }),
+    'the review shows the note the proposed one replaces',
+  ).toBeVisible();
   await dialog.getByRole('button', { name: 'Übernehmen', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.uiContractWrites.calls.length)).toBe(2);
   expect(await heldInput(page)).toEqual({
@@ -66,6 +70,7 @@ test('a replaced proposal drops the choice and the reason made for the previous 
       id: '9b000000-0000-4000-8000-000000000051',
       reviewedName: 'Frau Birke',
       reviewedPhone: '030 222',
+      reviewedNote: 'Hausmeisterin',
     },
   });
   await answerHeldWrite(page, null);
