@@ -458,7 +458,9 @@ test('„Verwerfen“ asks once more, then deletes the unsent events for good an
   const dialog = page.getByRole('dialog', { name: 'Noch nicht übertragen', exact: true });
   await dialog.getByRole('button', { name: 'Verwerfen', exact: true }).click();
   const confirmation = page.getByRole('alertdialog', { name: 'Nicht Übertragenes verwerfen?' });
-  await expect(confirmation).toContainText('1 Stempelzeiten');
+  await expect(confirmation).toContainText(
+    'Stempelzeiten: 1. Das wird von diesem Gerät gelöscht und nie erfasst.',
+  );
   await confirmation.getByRole('button', { name: 'Abbrechen', exact: true }).click();
   expect(await unsentOnDevice(page)).toHaveLength(1);
 

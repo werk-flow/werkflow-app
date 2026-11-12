@@ -21,6 +21,7 @@ import type { UnsentSource } from './unsent-work';
 /** Changes with every change to the outbox, so the other tabs of the origin read it again. */
 const OUTBOX_CHANGED_KEY = 'werkflow:time-outbox-changed';
 const SEND_LOCK = 'werkflow-time-outbox';
+const TAKE_IN_LOCK = 'werkflow-kept-clock-actions';
 const UNSENT_KIND = 'time';
 
 type ViewListener = (view: ClockDeviceView | null) => void;
@@ -70,9 +71,17 @@ function onStorage(event: StorageEvent): void {
   if (event.key === KEPT_CLOCK_ACTIONS_KEY) void takeInKept().catch(() => undefined);
 }
 
-/** Moves the clock actions pages kept without signal into the outbox and shows them. */
+/**
+ * Moves the clock actions pages kept without signal into the outbox and shows them. One tab at a
+ * time: a second tab that took in the same list after the first one already sent an event would
+ * put that event back with the expectation of the page that kept it, not of the answer before it.
+ */
 export async function takeInKept(): Promise<void> {
-  if (await takeInKeptClockActions()) await outboxChanged();
+  let moved = false;
+  await exclusively(TAKE_IN_LOCK, async () => {
+    moved = await takeInKeptClockActions();
+  });
+  if (moved) await outboxChanged();
 }
 
 /**
@@ -91,15 +100,20 @@ export async function holdClock(next: OutboxHolder, listener: ViewListener): Pro
   };
 }
 
+/**
+ * The person of the browser's session, or null when nobody is signed in. Throws when the session
+ * cannot be read: whoever asks then knows nothing, and neither sends nor ends a session over it.
+ */
 async function sessionUserId(): Promise<string | null> {
-  const { data } = await createSupabaseBrowserClient().auth.getSession();
+  const { data, error } = await createSupabaseBrowserClient().auth.getSession();
+  if (error) throw error;
   return data.session?.user.id ?? null;
 }
 
-/** Runs `send` while no other tab of the origin sends; a browser without Web Locks relies on the server recording each event once. */
-async function exclusively(send: () => Promise<void>): Promise<void> {
-  if (typeof navigator.locks?.request === 'function') await navigator.locks.request(SEND_LOCK, send);
-  else await send();
+/** Runs `work` while no other tab of the origin holds `lock`; a browser without Web Locks relies on the server recording each event once. */
+async function exclusively(lock: string, work: () => Promise<void>): Promise<void> {
+  if (typeof navigator.locks?.request === 'function') await navigator.locks.request(lock, work);
+  else await work();
 }
 
 /** Sends this tab's holder's unsent events, as far as the server records them now. */
@@ -107,7 +121,7 @@ export async function sendOwnTimeEvents(): Promise<void> {
   await takeInKept();
   const current = clockHolder();
   if (!current) return;
-  await exclusively(() =>
+  await exclusively(SEND_LOCK, () =>
     sendTimeOutbox(current, {
       fetch: (url, init) => fetch(url, init),
       now: () => new Date(),

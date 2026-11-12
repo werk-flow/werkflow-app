@@ -34,7 +34,7 @@ import { logError } from '@/lib/logging';
 // app shell, and none of them carries this dialog's code at start.
 
 function itemsLabel(items: readonly UnsentWorkItem[]): string {
-  return items.map((item) => `${item.count} ${item.label}`).join(', ');
+  return items.map((item) => `${item.label}: ${item.count}`).join(', ');
 }
 
 /** The irreversible step behind „Verwerfen“: it names what goes and asks once more. */
@@ -57,7 +57,7 @@ function DiscardConfirmation({
         <AlertDialogHeader>
           <AlertDialogTitle>Nicht Übertragenes verwerfen?</AlertDialogTitle>
           <AlertDialogDescription>
-            {itemsLabel(items)}: Das wird von diesem Gerät gelöscht und nie erfasst.
+            {itemsLabel(items)}. Das wird von diesem Gerät gelöscht und nie erfasst.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

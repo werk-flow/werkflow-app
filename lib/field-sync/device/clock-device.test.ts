@@ -36,6 +36,8 @@ async function isolatedTests(): Promise<void> {
   const storage = new Map<string, string>();
   const storageListeners: ((event: { key: string | null }) => void)[] = [];
   let sessionUserId: string | null = null;
+  /** The browser cannot read its session, as with an expired token and no network. */
+  let sessionUnreadable = false;
   const sent: string[] = [];
 
   Object.assign(globalThis, {
@@ -67,8 +69,8 @@ async function isolatedTests(): Promise<void> {
     createSupabaseBrowserClient: () => ({
       auth: {
         getSession: async () => ({
-          data: { session: sessionUserId ? { user: { id: sessionUserId } } : null },
-          error: null,
+          data: { session: sessionUserId && !sessionUnreadable ? { user: { id: sessionUserId } } : null },
+          error: sessionUnreadable ? new Error('The session could not be refreshed.') : null,
         }),
       },
     }),
@@ -142,6 +144,7 @@ async function isolatedTests(): Promise<void> {
     storage.clear();
     sent.length = 0;
     sessionUserId = WORKER.userId;
+    sessionUnreadable = false;
     await new Promise<void>((resolve, reject) => {
       const request = indexedDB.deleteDatabase('werkflow-time-outbox');
       request.onsuccess = () => resolve();
@@ -174,6 +177,16 @@ async function isolatedTests(): Promise<void> {
       sessionUserId = WORKER.userId;
       await sendOwnTimeEvents();
       expect(sent).toHaveLength(1);
+      expect((await readTimeOutbox(WORKER)).events).toHaveLength(1);
+    });
+
+    test('a session that cannot be read sends nothing', async () => {
+      await keepStart(WORKER);
+      sessionUnreadable = true;
+
+      await expect(sendOwnTimeEvents()).rejects.toThrow('The session could not be refreshed.');
+
+      expect(sent).toEqual([]);
       expect((await readTimeOutbox(WORKER)).events).toHaveLength(1);
     });
 
@@ -248,6 +261,10 @@ async function isolatedTests(): Promise<void> {
       expect(sent).toEqual([]);
       // The event itself stays on the phone for the person's next page.
       expect((await readTimeOutbox(WORKER)).events).toHaveLength(1);
+      // Without a hold the sign-out question asks the session; one it cannot read fails the
+      // question instead of answering that nothing is unsent.
+      sessionUnreadable = true;
+      await expect(timeUnsentSource.summarize()).rejects.toThrow('The session could not be refreshed.');
     });
   });
 }
