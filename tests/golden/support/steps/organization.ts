@@ -53,6 +53,9 @@ const ORGANIZATION_COPY = {
     remove: SHARED_COPY.action.remove,
     changeRole: 'Rolle ändern',
     removeTitle: 'Mitglied entfernen?',
+    removalBlocked:
+      'Vor dem Entfernen muss die Verantwortung für Zeitfreigaben neu zugewiesen oder auf den Standard zurückgestellt werden.',
+    reassignFirst: 'Zuerst neu zuweisen',
   },
   workSchedule: /Arbeitszeitmodell/,
   memberDetailProgress: 'Tagesfortschritt',
@@ -428,7 +431,7 @@ export async function joinOrganizationViaInviteLink(
 }
 
 /** The actions menu trigger of a member detail. */
-export function memberDetailActionsButton(page: Page): Locator {
+function memberDetailActionsButton(page: Page): Locator {
   return page.getByRole('button', { name: ORGANIZATION_COPY.memberMenu.actions, exact: true });
 }
 
@@ -439,6 +442,21 @@ export async function removeMemberFromDetail(page: Page, name: string): Promise<
   await expect(page.getByRole('heading', { name: ORGANIZATION_COPY.memberMenu.removeTitle })).toBeVisible();
   await page.getByRole('button', { name: ORGANIZATION_COPY.memberMenu.remove, exact: true }).click();
   await page.waitForURL(/\/mitarbeiter\?removed_member=/);
+}
+
+/** The removal of a member who still approves time entries stops at its reassignment notice. */
+export async function expectMemberRemovalBlockedByResponsibility(
+  page: Page,
+  memberName: string,
+): Promise<void> {
+  await openMemberDetailFromList(page, memberName);
+  await memberDetailActionsButton(page).click();
+  await page.getByRole('menuitem', { name: ORGANIZATION_COPY.memberMenu.remove }).click();
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog.getByText(ORGANIZATION_COPY.memberMenu.removalBlocked)).toBeVisible();
+  await expect(
+    dialog.getByRole('button', { name: ORGANIZATION_COPY.memberMenu.reassignFirst }),
+  ).toBeDisabled();
 }
 
 export async function expectRedirectedAway(page: Page, path: string): Promise<void> {

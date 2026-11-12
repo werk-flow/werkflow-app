@@ -28,6 +28,7 @@ import {
   detailsRegion,
   employeeAssignmentPicker,
   employeeAssignmentSearch,
+  jobPickerSearch,
   SHARED_COPY,
   testData,
   textInDom,
@@ -246,7 +247,7 @@ test.describe('A1 Kunden und Auftragsdaten @AUDIT-W1-A1', () => {
     await adminPage.getByRole('button', { name: SHARED_COPY.assignment.assign, exact: true }).click();
     const assignmentDialog = projectJobAssignmentDialog(adminPage);
     await projectJobPicker(assignmentDialog).click();
-    await adminPage.getByPlaceholder(SHARED_COPY.picker.searchJob).fill(jobNumber);
+    await jobPickerSearch(adminPage).fill(jobNumber);
     await adminPage.getByRole('listbox').getByRole('option').filter({ hasText: jobNumber }).click();
     await dismissDialog(adminPage.getByRole('listbox'));
     await assignmentDialog.getByRole('button', { name: SHARED_COPY.action.save }).click();

@@ -5,6 +5,7 @@ import {
   setResponsibilityHolders,
 } from './support/db/personnel';
 import { getLatestManualTimeEntryState, seedPendingManualInterval } from './support/db/time-tracking';
+import { expectMemberRemovalBlockedByResponsibility } from './support/steps/organization';
 import {
   confirmResponsibilityPreview,
   createResponsibilityDelegationViaSettings,
@@ -14,7 +15,6 @@ import {
 import {
   approvePendingTimeEntry,
   createOwnManualTimeEntry,
-  expectMemberRemovalBlockedByResponsibility,
   expectPendingTimeApprovalVisible,
   openTimeApprovals,
 } from './support/steps/time-tracking';
