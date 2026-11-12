@@ -177,3 +177,36 @@ describe('the end of a lost-access draft, whoever starts the app next', () => {
     expect(storage.has(DEVICE_MARK)).toBe(false);
   });
 });
+
+describe('the device mark follows only what the store committed', () => {
+  test('a sweep whose transaction aborts after it deleted the last draft keeps the mark', async () => {
+    const storage = new Map<string, string>();
+    Object.assign(globalThis, {
+      localStorage: {
+        getItem: (key: string) => storage.get(key) ?? null,
+        setItem: (key: string, value: string) => void storage.set(key, value),
+        removeItem: (key: string) => void storage.delete(key),
+      },
+    });
+    const lostAt = new Date(NOW.getTime() - DRAFT_NO_ACCESS_KEPT_MS).toISOString();
+    await save(draft({ refusal: { kind: 'no_access', at: lostAt } }));
+    expect(storage.get('werkflow:drafts-on-device')).toBe('1');
+
+    // The transaction aborts after the sweep counted what remains: nothing was deleted.
+    const count = IDBObjectStore.prototype.count;
+    IDBObjectStore.prototype.count = function (this: IDBObjectStore, query?: IDBValidKey | IDBKeyRange) {
+      const request = count.call(this, query);
+      // After every success listener of the count ran, before the transaction commits.
+      request.addEventListener('success', () => queueMicrotask(() => this.transaction.abort()));
+      return request;
+    };
+    try {
+      await sweepExpiredDraftsOnDevice(NOW).catch(() => 'aborted');
+    } finally {
+      IDBObjectStore.prototype.count = count;
+    }
+    // Read the mark before any further read of the store, which counts again.
+    expect(storage.get('werkflow:drafts-on-device')).toBe('1');
+    expect(await listDraftsOnDevice(holder, new Date(0))).toHaveLength(1);
+  });
+});
