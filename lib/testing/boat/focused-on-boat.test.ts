@@ -7,8 +7,13 @@ import { expect, test } from 'bun:test';
 import { focusedKind, focusedLocalReason, focusedOnBoat, focusedUnavailableNotice } from './focused-on-boat';
 
 const UPDATE = { WERKFLOW_UPDATE_VISUAL_REFERENCES: '1' };
-const drift = { stackOnly: [], treeOnly: ['20261201090000_zeiterfassung_settings'], changed: [] };
-const noDrift = { stackOnly: [], treeOnly: [], changed: [] };
+const drift = {
+  stackOnly: [],
+  treeOnly: ['20261201090000_zeiterfassung_settings'],
+  changed: [],
+  unverified: [],
+};
+const noDrift = { stackOnly: [], treeOnly: [], changed: [], unverified: [] };
 const absent = () => ({ kind: 'absent' as const });
 
 test('a capture, a reference update and any other focused audit or golden run are focused kinds', () => {

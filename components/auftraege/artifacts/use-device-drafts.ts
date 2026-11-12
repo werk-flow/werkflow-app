@@ -1,0 +1,193 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+
+import { useClientRead, type ReadFailure } from '@/hooks/use-client-read';
+import type { DraftHolder, StoredDraft } from '@/lib/field-sync/device/draft-store';
+import type { DraftSendOutcome, DraftSendProgress } from '@/lib/field-sync/device/draft-sync';
+import type { WorkArtifactKind, WorkArtifactVisibility } from '@/lib/work-artifacts/types';
+import type { WorkArtifactContentDraft } from './work-artifact-content';
+
+// The report drafts of a device as a job page sees them (decision record
+// 0010, the report draft amendment). This module is all of it that a job page
+// loads with its own code, and it imports nothing a job page did not load
+// before: the job list prefetches a job page's code, so that code counts
+// toward the field cold start. Every other part (the device store, the
+// sender, the list, the photo field, the dialog's draft keeper, the active
+// organization) loads with the dialog's module (work-artifact-dialog.tsx).
+
+/** What the artifact screens ask of the device, for the signed-in person in the active organization. */
+export type DraftDevice = {
+  holder: DraftHolder;
+  list: () => Promise<StoredDraft[]>;
+  /** Changes one draft in a single transaction; `null` from `change` deletes it. Rejects when the device refuses the write. */
+  change: (
+    draftId: string,
+    change: (current: StoredDraft | null) => StoredDraft | null,
+  ) => Promise<StoredDraft | null>;
+  /** Tells every list of this tab that a draft changed. */
+  changed: () => void;
+  /** Sends one draft now because the person asked. */
+  send: (draftId: string, expected?: string) => Promise<DraftSendOutcome>;
+  /** Keeps a draft out of the automatic send until the returned function runs. */
+  keepOpen: (draftId: string) => () => void;
+  subscribe: (listener: () => void) => () => void;
+  progress: () => DraftSendProgress | null;
+  /** Names the holder to the sender and sends what waits, now and on every `online`. */
+  start: () => void;
+  isPastUnsentLimit: (draft: StoredDraft) => boolean;
+  /** Remembers that the holder may hold a draft on this device, or forgets it once none is left. */
+  noteHeld: (held: boolean) => void;
+  /** How long a draft stays after the server refused it for lost access. */
+  noAccessKeptMs: number;
+};
+
+/** A draft the device kept, opened to go on writing: the stored draft and its fields as the form holds them. */
+export type RestoredDraft = {
+  draft: StoredDraft;
+  form: {
+    kind: WorkArtifactKind;
+    visibility: WorkArtifactVisibility;
+    title: string;
+    /** „Erfasst am“ as the form's local date and time. */
+    capturedAt: string;
+    content: WorkArtifactContentDraft;
+  };
+};
+
+/** How the dialog's save of a device draft goes; see DeviceDraftHandle.prepareSave. */
+type DraftSavePlan =
+  | { kind: 'online'; revisionId: string; changedAt: string }
+  | { kind: 'device'; changedAt: string }
+  | { kind: 'sealed_elsewhere' };
+
+/** What the dialog's save asks of the draft keeper once the device keeps the new Arbeitsnachweis. */
+export type DeviceDraftHandle = {
+  /**
+   * Writes every change made so far and decides, in that one transaction, how the save goes:
+   * - `online`: no photos; the draft is now sealed, so if its online save lands and the answer is
+   *   lost, the device's later send carries exactly the saved content. The save names the draft's
+   *   revision id and its last-change time, which the server compares.
+   * - `device`: the draft has photos, which reach the server only with the draft's own send.
+   * - `sealed_elsewhere`: another tab's save sealed the draft before; this editor's changes since
+   *   are not on the device and must stay in the form.
+   * Null when the device could not answer; the keeper then shows why.
+   */
+  prepareSave: () => Promise<DraftSavePlan | null>;
+  /**
+   * Unseals the draft after the server refused its online save, which it holds nothing of, and
+   * writes the form's text into it: what was typed while the seal held the draft. Only the seal
+   * this save made (`changedAt`, the sealed draft's last-change time); a draft another tab unsealed
+   * and changed since stays as it is, and the answer is false.
+   */
+  unseal: (changedAt: string) => Promise<boolean>;
+  /**
+   * Sends the draft with its photos in the state its save decided on (`expected`, the draft's
+   * last-change time from prepareSave) and answers the revision the server wrote and the version it
+   * left the Arbeitsnachweis at, or null when the draft did not arrive; the keeper has said why. A
+   * draft another tab changed or sealed since is not sent, and the form keeps its text.
+   */
+  save: (submit: boolean, expected: string) => Promise<{ revisionId: string; version: number } | null>;
+  /** Removes the draft from the device once the server holds the Arbeitsnachweis. */
+  discard: () => Promise<void>;
+};
+
+/**
+ * The localStorage key that says this person may hold a draft on this device in this organization.
+ * A job page looks for one of the person's keys before it loads any draft code, so a page without
+ * drafts costs no request.
+ */
+function draftHintKey(holder: DraftHolder): string {
+  return `${draftHintPrefix(holder.userId)}${holder.organizationId}`;
+}
+
+/**
+ * Remembers that the holder wrote a draft on this device, or forgets it once none is left. The page
+ * hands it to the lazily loaded draft code (DeviceDrafts), which never imports this module: a module
+ * the job page and that code both import would become a script file of its own in the cold start.
+ */
+export function noteDraftsOnDevice(holder: DraftHolder, held: boolean): void {
+  try {
+    if (held) localStorage.setItem(draftHintKey(holder), '1');
+    else localStorage.removeItem(draftHintKey(holder));
+  } catch {
+    // best-effort: without localStorage every job page asks the device itself.
+  }
+}
+
+function draftHintPrefix(userId: string): string {
+  return `werkflow:drafts:${userId}:`;
+}
+
+/**
+ * The device mark of `lib/field-sync/device/draft-expiry.ts`: set while the phone holds a draft of
+ * anyone. Read here by its key, not through that module: the `(auth)` layout loads that module, and
+ * a module both load would become a chunk of its own in the job list's cold start.
+ */
+const DEVICE_DRAFTS_MARK = 'werkflow:drafts-on-device';
+
+/**
+ * Whether the person may hold a draft here, or the phone holds anyone's: then the draft code loads,
+ * and its send pass deletes every lost-access draft past its seven days, of every holder.
+ */
+function mayHoldDrafts(userId: string): boolean {
+  try {
+    const prefix = draftHintPrefix(userId);
+    return Object.keys(localStorage).some((key) => key.startsWith(prefix) || key === DEVICE_DRAFTS_MARK);
+  } catch {
+    // best-effort: without localStorage the device is asked itself.
+    return true;
+  }
+}
+
+/** The lazily loaded part of the section: the dialog and the list of the device's drafts. */
+type ArtifactCode = Pick<typeof import('./work-artifact-dialog'), 'DeviceDrafts' | 'WorkArtifactDialogHost'>;
+
+/**
+ * The dialog's module. A field worker's job page loads it once the page is idle, so a first open
+ * without signal still finds it; otherwise it loads on the first open, or once the device may hold
+ * a draft of the person. The section loads it with this read instead of a shared lazy-dialog
+ * helper, so the job page's own code names no module it did not name before. An idle load that
+ * fails stays silent; the next open loads again and shows a failure that persists.
+ */
+export function useArtifactCode(
+  currentUserId: string,
+  wanted: boolean,
+  loadWhenIdle: boolean,
+): { code: ArtifactCode | null; failure: ReadFailure | null } {
+  // Once wanted, the section keeps the code: a draft written since must show.
+  const [everWanted, setEverWanted] = useState(wanted);
+  if (wanted && !everWanted) setEverWanted(true);
+  const [hinted] = useState(() => mayHoldDrafts(currentUserId));
+  const idle = usePageIdle(loadWhenIdle);
+  const load = useClientRead({
+    read: async () => {
+      const { DeviceDrafts, WorkArtifactDialogHost } = await import('./work-artifact-dialog');
+      return { success: true as const, code: { DeviceDrafts, WorkArtifactDialogHost } };
+    },
+    deps: [currentUserId],
+    enabled: everWanted || hinted || idle,
+    failureMessage: 'Der Arbeitsnachweis konnte nicht geladen werden. Prüfe deine Verbindung.',
+  });
+  // An open after a failed idle load tries once more.
+  const { failure, reload } = load;
+  useEffect(() => {
+    if (wanted && failure) reload();
+  }, [wanted]); // eslint-disable-line react-hooks/exhaustive-deps -- reload once per open, not on every failure
+  return { code: load.data?.code ?? null, failure: everWanted || hinted ? failure : null };
+}
+
+/** True once the page had an idle moment after it mounted; never when `enabled` is false. */
+function usePageIdle(enabled: boolean): boolean {
+  const [idle, setIdle] = useState(false);
+  useEffect(() => {
+    if (!enabled) return;
+    if (typeof window.requestIdleCallback === 'function') {
+      const handle = window.requestIdleCallback(() => setIdle(true));
+      return () => window.cancelIdleCallback(handle);
+    }
+    const handle = window.setTimeout(() => setIdle(true), 1);
+    return () => window.clearTimeout(handle);
+  }, [enabled]);
+  return idle;
+}

@@ -1,6 +1,6 @@
 # Verify on Boat
 
-On a workstation with a Boat key, `bun run test:verify` and each [focused browser run that needs it](#focused-runs-on-boat) run on a short-lived Boat machine instead of the workstation (owner decision 15, werk-flow/werkflow-planning#294). Type-aware lint, the build, the stack and the browsers then load Boat's machine, not the 16 GB PC that agents share. CI stays on GitHub's runners ([decision 0009](../decisions/0009-pull-requests-and-ci.md)).
+On a workstation with a Boat key, `bun run test:verify`, each [focused browser run that needs it](#focused-runs-on-boat) and [a migration's types](#types-on-boat) run on a short-lived Boat machine instead of the workstation (owner decision 15, werk-flow/werkflow-planning#294). Type-aware lint, the build, the stack and the browsers then load Boat's machine, not the 16 GB PC that agents share. CI stays on GitHub's runners ([decision 0009](../decisions/0009-pull-requests-and-ci.md)).
 
 ## How a run picks Boat
 
@@ -11,7 +11,7 @@ On a workstation with a Boat key, `bun run test:verify` and each [focused browse
 - `--mode release`, or a group under `audit:performance` without `--untimed`: their medians measure the workstation's wall clock. Every other audit group runs on Boat. Lab counts repeat on any machine, and layout groups check computed boxes. Visual groups render in the pinned Playwright image on `linux/amd64` ([visual references](standards-audit.md#keep-accepted-screens-as-visual-references)), so a Boat machine compares with the same references as the workstation and CI. A new machine pulls the image once, in about 30 s.
 - `--target cloud`: the canary needs DEV's secrets.
 - The plan prints `[verify] refused:` (an unclassified failed run): the run ends there, exit 1, nothing run.
-- The plan runs no group, or only cheap groups, at most one of them not a SQL group. A Boat run's upload and setup cost about 95 s of machine time; here a SQL group takes about 1 s against the shared stack, `unit:all` 60 to 90 s and a static gate up to 35 s. `static:lint` takes 170 to 370 s and 3 to 4 GB, so it goes to Boat even alone, as do `ui:contracts` and the browser groups. A SQL group goes to Boat while the shared stack [drifts](testing.md#recurring-traps).
+- The plan runs no group, or only cheap groups, at most one of them not a SQL group. A Boat run's upload and setup cost more than these groups do here (`CHEAP_HERE`, `verify-on-boat.ts`). `static:lint` goes to Boat even alone, as do `ui:contracts` and the browser groups. A SQL group goes to Boat while the shared stack [drifts](testing.md#recurring-traps).
 
 The whole plan runs there, static gates included: type-aware lint is the largest local load. A Boat run takes no heavy slot, and holds the workspace lock while the machine runs, so the edit guard works as during a local run.
 
@@ -29,7 +29,7 @@ A proof records its backend by a digest of `.env.local`, which on a workstation 
 
 ### Fallback
 
-When Boat is unavailable, a run never sends its heavy groups to the workstation by default. A heavy local fallback once overloaded the shared PC: one refused connection sent a whole plan there, type-aware lint included, and with the other worktrees' work the lint ran for three hours with swap full.
+When Boat is unavailable, a run never sends its heavy groups to the workstation by default. A heavy local fallback once overloaded the shared PC for hours.
 
 Boat is unavailable when one of these happens before the results are back:
 
@@ -65,15 +65,19 @@ Idle machines count toward the 10 machines a member may run at once, and toward 
 
 ## Focused runs on Boat
 
-A focused run (`test:audit:focused`, `test:golden:focused`) needs a production build, its server, the stack and a browser, a large load here, and the server refuses a stack whose migrations differ from the tree's. It goes to Boat (`lib/testing/boat/focused-on-boat.ts`): a rendered acceptance capture (`--grep "@ACCEPT <set>"`) and a [visual reference update](standards-audit.md#keep-accepted-screens-as-visual-references) always, any other focused run when the tree's migrations drift from the shared stack's. The machine serves a build at the tree's migrations and runs the same command; the run folder comes back, captures under `.agent-logs/playwright-runs/<run>/acceptance/<set>/`. An iteration takes about 2 minutes on a kept machine, 3 on a new one. Start no test server for it.
+A focused run (`test:audit:focused`, `test:golden:focused`) needs a production build, its server, the stack and a browser, and the server refuses a stack whose migrations differ from the tree's. It goes to Boat (`lib/testing/boat/focused-on-boat.ts`): a rendered acceptance capture (`--grep "@ACCEPT <set>"`) and a [visual reference update](standards-audit.md#keep-accepted-screens-as-visual-references) always, any other focused run when the tree's migrations drift from the shared stack's. The machine serves a build at the tree's migrations and runs the same command; the run folder comes back, captures under `.agent-logs/playwright-runs/<run>/acceptance/<set>/`. An iteration takes about 2 minutes on a kept machine, 3 on a new one. Start no test server for it.
 
 An update prints and returns each reference it rewrote or wrote, only as `.png` or `.txt` files directly in an audit snapshot folder: any other path, an absolute path, a `..` segment or a link refuses the whole set (`lib/testing/boat/reference-updates.ts`).
 
 Both sides render in the pinned Playwright image: a Boat and a local capture of one commit differed only in the world's run id and at most 99 pixels an image, each by 1 of 255. On the workstation, a Boat capture cost 19 s of processor time, a local one 500 s at up to 3 GB.
 
-A focused run stays local under `WERKFLOW_VERIFY_LOCAL=1`, with `--reuse-run` (the retained world lives on the workstation's stack) or with `--target cloud`; a capture or update says so in a `Running locally:` line. Diagnostic replays stay local.
+A focused run stays local under `WERKFLOW_VERIFY_LOCAL=1`, with `--reuse-run` (the retained world lives on the workstation's stack) or with `--target cloud`; a capture or update prints why. Diagnostic replays stay local.
 
 When Boat is [unavailable](#fallback), nothing runs: a block names the reason, writes nothing and exits 1. To run here on purpose, start `bun run test:server local` in a second shell, then the same command with `WERKFLOW_VERIFY_LOCAL=1`.
+
+## Types on Boat
+
+`bun run types:generate -- --local` reads the stack on its machine where that stack has the tree's schema: CI, a Boat machine, a shared stack whose ledger matches. Otherwise a Boat machine's fresh stack generates the file, byte for byte what CI's check computes. Without Boat, CI's SQL job uploads it (`database-types`) when the committed types are stale, which the command takes.
 
 ## The key contract
 
