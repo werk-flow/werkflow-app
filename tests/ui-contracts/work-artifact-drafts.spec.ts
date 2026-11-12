@@ -406,6 +406,45 @@ test('a save whose answer is lost after it committed sends the same draft revisi
   expect(sent[0]?.payload.revisionId).toBe(saved?.revisionId);
 });
 
+test('a draft whose online save may have landed cannot be changed until its send is answered, so the send carries what was saved', async ({
+  page,
+}) => {
+  // The browser's own network flag, which the spec turns off once the save's answer is lost.
+  await page.addInitScript(() => {
+    Reflect.set(window, 'contractOnline', true);
+    Object.defineProperty(navigator, 'onLine', { get: () => Reflect.get(window, 'contractOnline') === true });
+  });
+  await openContractFixture(page, 'work-artifact-report');
+  let online = false;
+  const sent = await answerSync(page, () => (online ? { outcome: 'replayed', code: 'replayed' } : 'offline'));
+  await page.evaluate(() => {
+    window.uiContractWorkArtifacts.loseSaveAnswerAfterCommit = true;
+  });
+  await writeReport(page, 'Wartung Heizung', 0);
+  // The save reaches the server, then the signal goes before its answer comes back.
+  await page.evaluate(() => Reflect.set(window, 'contractOnline', false));
+  await page.getByRole('button', { name: 'Als Entwurf speichern', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.uiContractWorkArtifacts.saves.length)).toBe(1);
+
+  // The save may be on the server: the draft keeps exactly that text until the server answers.
+  const row = draftRow(page, 'Wartung Heizung');
+  await expect(row).toBeVisible();
+  await expect(row.getByRole('button', { name: 'Bearbeiten', exact: true })).toHaveCount(0);
+
+  online = true;
+  await page.evaluate(() => {
+    Reflect.set(window, 'contractOnline', true);
+    window.dispatchEvent(new Event('online'));
+  });
+  await expect.poll(() => sent.length).toBeGreaterThan(0);
+  const [saved] = await page.evaluate(() => window.uiContractWorkArtifacts.saves);
+  expect(sent.map((operation) => operation.payload.revisionId)).toEqual(sent.map(() => saved?.revisionId));
+  expect(sent.map((operation) => operation.payload.content.performedWork)).toEqual(
+    sent.map(() => 'Brenner gereinigt'),
+  );
+  await expect(row).toBeHidden();
+});
+
 test('a review request that fails after the device sent the draft says the draft is saved but not submitted', async ({
   page,
 }) => {

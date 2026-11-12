@@ -250,6 +250,15 @@ export function DeviceDraftKeeper(props: DeviceDraftKeeperProps) {
           ? null
           : { photoCount: stored.photos.length, revisionId: stored.revisionId };
       },
+      seal: async () => {
+        const stored = await write((current) => {
+          const next = withText(current);
+          return next ? { ...next, sealed: true } : next;
+        });
+        return stored !== null && stored !== 'not_stored' && stored.sealed;
+      },
+      unseal: async () =>
+        void (await write((current) => (current ? { ...current, sealed: false } : current))),
       save,
       discard: async () => void (await write(() => null)),
     });

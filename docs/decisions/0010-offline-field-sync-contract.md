@@ -192,3 +192,9 @@ Decided by the E7 lead for werk-flow/werkflow-planning#320. It replaces the last
 - The deletion 7 days after a lost-access refusal no longer waits for a person who loads the draft code. A device mark (`werkflow:drafts-on-device` in localStorage, without a person) is set before the device stores any draft and removed once it holds none.
 - The `(auth)` landing page and every job page read the mark. When it is set, they load the draft store lazily and delete every lost-access draft past its 7 days, of every holder. The sweep never sends, lists or changes a live draft. Every change of person on a shared phone passes the landing page, so a phone that only office users touch afterwards deletes it too.
 - The draft code's send pass keeps running the same deletion.
+
+## Amendment 2026-11-12: an online save seals the draft
+
+Decided for werk-flow/werkflow-planning#320 after the Sol review. It adds to the report drafts amendment's **Online save** point.
+
+- A draft without photos is sealed on the device before its online save leaves with the draft's revision id. A success removes the draft, and a refusal from the server unseals it. A save whose answer is lost leaves it sealed, so nothing changes the draft until the device's send of the same revision is answered. The attach adopts the author's own revision only for content that was never changed after that save.

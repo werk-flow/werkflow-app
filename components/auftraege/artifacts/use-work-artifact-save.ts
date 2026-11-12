@@ -99,7 +99,10 @@ export function useWorkArtifactSave({
     const draft = onDevice ? await onDevice.committed() : null;
     // The device could not say whether the draft has photos: a text-only save could lose them.
     if (onDevice && draft === null) return;
-    // Photos reach the server only with the draft the device holds.
+    // Photos reach the server only with the draft the device holds. A draft without photos is sealed
+    // before its online save leaves: if that save lands and its answer is lost, nothing changes the
+    // draft until the device's send of the same revision is answered.
+    if (onDevice && draft && draft.photoCount === 0 && !(await onDevice.seal())) return;
     const result =
       draft && draft.photoCount > 0 ? 'no_answer' : await saveOnServer(submit, draft?.revisionId ?? null);
     if (result === 'no_answer') {
@@ -108,6 +111,8 @@ export function useWorkArtifactSave({
       return;
     }
     if (!result.success) {
+      // The server refused the save and holds nothing of it: the draft can change again.
+      await onDevice?.unseal();
       await editor.handleMutationFailure(
         result,
         'Der Arbeitsnachweis konnte nicht gespeichert werden.',
