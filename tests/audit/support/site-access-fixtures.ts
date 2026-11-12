@@ -12,10 +12,7 @@ export type SiteAccessJobState = 'none' | 'open' | 'rejected';
 const JOB_CODES: Record<SiteAccessJobState, string> = { none: 'ZUG', open: 'ZUGO', rejected: 'ZUGA' };
 
 /** The number and title of the seeded job in that state. */
-export function siteAccessJob(
-  world: TestWorld,
-  state: SiteAccessJobState,
-): { jobNumber: string; title: string } {
+function siteAccessJob(world: TestWorld, state: SiteAccessJobState): { jobNumber: string; title: string } {
   return {
     jobNumber: `A-${world.runId}-${JOB_CODES[state]}`,
     title: worldName('Heizungswartung Lindenhof', world.runId),
