@@ -21,6 +21,7 @@ import type { OrgRole } from '@/lib/roles';
 import { bueroMayManage, ROLE_LABELS } from '@/lib/roles';
 import { getMemberActionErrorMessage } from '@/lib/members/errors';
 import { MemberRemoveConfirmDialog } from './member-actions-menu-remove-dialog';
+import { RoleEscalationConfirmDialog, useConfirmedRoleChange } from './role-escalation-confirm-dialog';
 import { loadDocument } from '@/lib/navigation/document-load';
 
 const ADMIN_ASSIGNABLE_ROLES: OrgRole[] = ['buero', 'employee'];
@@ -61,6 +62,9 @@ export function MemberActionsMenu({
   const { run: runRemove, isPending: isRemoving } = usePendingTask();
   const [showRemoveDialog, setShowRemoveDialog] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const roleChange = useConfirmedRoleChange(memberRole, (role) => {
+    void onRoleChange(memberId, role, memberFirstName, memberLastName);
+  });
 
   // Check if this is the current user's own row
   const isOwnRow = memberId === currentUserId;
@@ -121,8 +125,15 @@ export function MemberActionsMenu({
         isLoading={isLoading}
         availableRoles={availableRoles}
         onShowDetails={() => router.push(`/mitarbeiter/${memberId}`)}
-        onRoleSelect={(role) => void onRoleChange(memberId, role, memberFirstName, memberLastName)}
+        onRoleSelect={roleChange.requestRoleChange}
         onRemove={() => setShowRemoveDialog(true)}
+      />
+
+      <RoleEscalationConfirmDialog
+        memberName={memberName}
+        open={roleChange.confirmingRole !== null}
+        onCancel={roleChange.cancel}
+        onConfirm={roleChange.confirm}
       />
 
       <MemberRemoveConfirmDialog

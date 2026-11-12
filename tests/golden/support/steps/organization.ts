@@ -39,7 +39,7 @@ const ORGANIZATION_COPY = {
     'Du kannst keiner Organisation beitreten, die nicht vom gleichen Admin stammt wie deine bestehenden Organisationen.',
   memberJoinedSignal: 'ist jetzt Mitglied',
   invite: {
-    open: 'Mitarbeiter hinzufügen',
+    open: 'Mitarbeiter einladen',
     title: 'Mitarbeiter einladen',
     send: 'Einladung senden',
     invitationsTab: /^Einladungen/,
@@ -335,10 +335,14 @@ export function memberActionsMenu(page: Page): Locator {
   return page.getByRole('menu');
 }
 
-export function memberMenuItem(page: Page, item: 'details' | 'remove' | 'cancelInvitation'): Locator {
+export function memberMenuItem(
+  page: Page,
+  item: 'details' | 'remove' | 'changeRole' | 'cancelInvitation',
+): Locator {
   const names = {
     details: ORGANIZATION_COPY.memberMenu.details,
     remove: ORGANIZATION_COPY.memberMenu.remove,
+    changeRole: ORGANIZATION_COPY.memberMenu.changeRole,
     cancelInvitation: ORGANIZATION_COPY.invite.cancel,
   } as const;
   return page.getByRole('menuitem', { name: names[item] });

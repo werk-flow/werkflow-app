@@ -14,6 +14,7 @@ import { ColumnsTableHeader, SkeletonList, SkeletonRows } from '@/components/ui/
 import { MemberActionsMenu } from './member-actions-menu';
 import { STATUS_SKELETON, PROGRESS_SKELETON, memberColumns } from './members-table-columns';
 import { StatusBadge } from './status-badge';
+import { memberStatusVisibility, type StatusVisibility } from './member-status-visibility';
 import { HoursDisplay } from './hours-display';
 import { AccessStateBadge, EmploymentStateBadge } from './personnel-state-badges';
 import type { OrgMemberInfo } from '@/lib/members/actions';
@@ -23,34 +24,7 @@ import type { MemberStatus } from '@/hooks/use-member-status';
 import type { PersonnelListEntry } from '@/lib/personnel/record-read-actions';
 import { getAccessState, getEmploymentState } from '@/lib/personnel/types';
 import type { DailyTarget } from '@/lib/personnel/targets';
-import { MANAGED_ROLES } from '@/lib/time-tracking/types';
 import { formatBerlin } from '@/lib/utils';
-
-/**
- * Check if the current user can view a member's working status
- * - Admins can view everyone
- * - Büro can only view: themselves + the managed roles in MANAGED_ROLES
- */
-function canViewMemberStatus(
-  currentUserRole: OrgRole,
-  currentUserId: string,
-  memberId: string,
-  memberRole: OrgRole,
-): boolean {
-  // Admins can view everyone
-  if (currentUserRole === 'admin') return true;
-
-  // Users can always see their own status
-  if (currentUserId === memberId) return true;
-
-  // Managers can only view managed roles
-  if (currentUserRole === 'buero') {
-    return MANAGED_ROLES.includes(memberRole);
-  }
-
-  // Default: can't view
-  return false;
-}
 
 export type OrgMember = OrgMemberInfo;
 
@@ -75,7 +49,7 @@ interface MembersTableProps {
   isStatusLoading?: boolean;
   /**
    * The status read failed. A member without a last-known status shows
-   * „Nicht verfügbar“ instead of a status the read never delivered.
+   * „Status nicht geladen“ instead of a status the read never delivered.
    */
   isStatusUnavailable?: boolean;
   /** Rows with a change in flight (role change until refreshed props land). */
@@ -90,7 +64,7 @@ type MemberRowProps = {
   member: OrgMember;
   memberName: string;
   canManageMembers: boolean;
-  canViewStatus: boolean;
+  statusVisibility: StatusVisibility;
   currentUserId: string;
   currentUserRole: OrgRole;
   onRoleChange: RoleChangeHandler;
@@ -132,10 +106,10 @@ export function MembersTableSkeleton({ count, showActions }: { count: number; sh
   );
 }
 
-type MemberStatusProps = Pick<MemberRowProps, 'status' | 'isStatusLoading' | 'canViewStatus' | 'target'>;
+type MemberStatusProps = Pick<MemberRowProps, 'status' | 'isStatusLoading' | 'statusVisibility' | 'target'>;
 
 /** The mobile card's status line; a skeleton while the first status read runs. */
-function MemberCardStatus({ status, isStatusLoading, canViewStatus, target }: MemberStatusProps) {
+function MemberCardStatus({ status, isStatusLoading, statusVisibility, target }: MemberStatusProps) {
   return isStatusLoading && !status ? (
     <Skeleton className="h-[18px] w-40" />
   ) : (
@@ -144,14 +118,14 @@ function MemberCardStatus({ status, isStatusLoading, canViewStatus, target }: Me
         status={status?.status}
         isClockedIn={status?.isClockedIn ?? false}
         isPending={status?.isPending ?? false}
-        canViewStatus={canViewStatus}
+        visibility={statusVisibility}
       />
       <HoursDisplay
         status={status?.status}
         isClockedIn={status?.isClockedIn ?? false}
         statusStartedAt={status?.statusStartedAt ?? null}
         workMinutes={status?.workMinutes ?? 0}
-        canViewStatus={canViewStatus}
+        visibility={statusVisibility}
         target={target}
       />
     </div>
@@ -159,7 +133,7 @@ function MemberCardStatus({ status, isStatusLoading, canViewStatus, target }: Me
 }
 
 /** The desktop row's status and hours cells; skeletons while the first status read runs. */
-function MemberStatusCells({ status, isStatusLoading, canViewStatus, target }: MemberStatusProps) {
+function MemberStatusCells({ status, isStatusLoading, statusVisibility, target }: MemberStatusProps) {
   const showStatusSkeleton = isStatusLoading && !status;
 
   return (
@@ -172,7 +146,7 @@ function MemberStatusCells({ status, isStatusLoading, canViewStatus, target }: M
             status={status?.status}
             isClockedIn={status?.isClockedIn ?? false}
             isPending={status?.isPending ?? false}
-            canViewStatus={canViewStatus}
+            visibility={statusVisibility}
           />
         )}
       </TableCell>
@@ -185,7 +159,7 @@ function MemberStatusCells({ status, isStatusLoading, canViewStatus, target }: M
             isClockedIn={status?.isClockedIn ?? false}
             statusStartedAt={status?.statusStartedAt ?? null}
             workMinutes={status?.workMinutes ?? 0}
-            canViewStatus={canViewStatus}
+            visibility={statusVisibility}
             target={target}
           />
         )}
@@ -236,7 +210,7 @@ function MemberCard({
   member,
   memberName,
   canManageMembers,
-  canViewStatus,
+  statusVisibility,
   currentUserId,
   currentUserRole,
   onRoleChange,
@@ -274,7 +248,7 @@ function MemberCard({
         <MemberCardStatus
           status={status}
           isStatusLoading={isStatusLoading}
-          canViewStatus={canViewStatus}
+          statusVisibility={statusVisibility}
           target={target}
         />
         <div className="text-xs text-muted-foreground">
@@ -304,7 +278,7 @@ function MemberTableRow({
   member,
   memberName,
   canManageMembers,
-  canViewStatus,
+  statusVisibility,
   currentUserId,
   currentUserRole,
   onRoleChange,
@@ -348,7 +322,7 @@ function MemberTableRow({
       <MemberStatusCells
         status={status}
         isStatusLoading={isStatusLoading}
-        canViewStatus={canViewStatus}
+        statusVisibility={statusVisibility}
         target={target}
       />
       <TableCell className="text-muted-foreground">{formatBerlin(member.joined_at, 'date')}</TableCell>
@@ -402,15 +376,17 @@ function memberRowPropsFor(
 ): MemberRowProps {
   const memberName =
     member.first_name || member.last_name ? `${member.first_name} ${member.last_name}`.trim() : member.email;
-  const canViewStatus =
-    canViewMemberStatus(currentUserRole, currentUserId, member.user_id, member.role) &&
-    !(isStatusUnavailable && !statusMap[member.user_id]);
+  const statusVisibility = memberStatusVisibility(
+    { userId: currentUserId, role: currentUserRole },
+    { userId: member.user_id, role: member.role, hasStatus: Boolean(statusMap[member.user_id]) },
+    isStatusUnavailable,
+  );
 
   return {
     member,
     memberName,
     canManageMembers,
-    canViewStatus,
+    statusVisibility,
     currentUserId,
     currentUserRole,
     onRoleChange,
@@ -459,7 +435,7 @@ export function MembersTable({
       <EmptyState
         icon={Users}
         title="Noch keine Mitarbeiter"
-        description="Lade dein Team über „Mitarbeiter hinzufügen“ in die Organisation ein."
+        description="Lade dein Team über „Mitarbeiter einladen“ in die Organisation ein."
       />
     );
   }

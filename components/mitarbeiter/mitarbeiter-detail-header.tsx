@@ -45,6 +45,8 @@ export function MitarbeiterDetailHeader({
       actions={
         canManage ? (
           <MitarbeiterDetailActionsMenu
+            memberName={fullName}
+            memberRole={member.role}
             availableRoles={availableRoles}
             isUpdatingRole={isUpdatingRole}
             onRoleChange={handleRoleChange}

@@ -107,6 +107,9 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               if (args.importer.endsWith('use-sickness-report-record-form.ts'))
                 return { path: join(import.meta.dir, 'absence-service-boundaries.ts') };
             });
+            builder.onResolve({ filter: /^@\/lib\/members\/actions$/ }, () => ({
+              path: join(import.meta.dir, 'member-role-service-boundaries.ts'),
+            }));
             builder.onResolve({ filter: /^@\/lib\/org\/join-request-actions$/ }, () => ({
               path: join(import.meta.dir, 'join-request-service-boundaries.ts'),
             }));
