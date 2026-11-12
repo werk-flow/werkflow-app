@@ -35,7 +35,11 @@ export type AcceptanceRecord =
   | 'attachable-request'
   | 'request-without-open-work'
   | 'attached-request'
-  | 'job-with-attached-request';
+  | 'job-with-attached-request'
+  | 'site-access-job'
+  | 'site-access-open-job'
+  | 'site-access-rejected-job'
+  | 'site-access-tasks';
 
 export type CaptureSpec = {
   /** Unique within its set; part of the image name and the citation token. */
@@ -797,6 +801,70 @@ function siteRoleCaptures(): AcceptanceSet {
   };
 }
 
+/**
+ * werk-flow/werkflow-planning#329: the field worker's „Zugang stimmt nicht?“
+ * on the job's Einsatzort, the form, the open and the rejected proposal, and
+ * the office review in Aufgaben.
+ */
+function siteAccessCaptures(): AcceptanceSet {
+  const phone = { widths: [375], schemes: ['light', 'dark'] } as const;
+  const desktop = { widths: [1280], schemes: ['light', 'dark'] } as const;
+  const job = { role: 'employee', route: '/auftraege/[jobNumber]' } as const;
+  return {
+    id: 'site-access-proposal',
+    captures: [
+      {
+        id: 'handwerker-zugang',
+        ...job,
+        view: { kind: 'page' },
+        record: 'site-access-job',
+        reveal: 'Zugang stimmt nicht?',
+        ...phone,
+      },
+      {
+        id: 'handwerker-zugang-formular',
+        ...job,
+        view: { kind: 'dialog', opener: 'field.site-access' },
+        record: 'site-access-job',
+        ...phone,
+      },
+      {
+        id: 'handwerker-zugang-offen',
+        ...job,
+        view: { kind: 'page' },
+        record: 'site-access-open-job',
+        reveal: 'Hinweis ändern',
+        ...phone,
+      },
+      {
+        id: 'handwerker-zugang-abgelehnt',
+        ...job,
+        view: { kind: 'page' },
+        record: 'site-access-rejected-job',
+        reveal: 'nicht übernommen',
+        ...phone,
+      },
+      {
+        id: 'buero-aufgaben-zugang',
+        role: 'buero',
+        route: '/aufgaben',
+        view: { kind: 'page' },
+        record: 'site-access-tasks',
+        ...desktop,
+      },
+      {
+        id: 'buero-aufgaben-zugang-pruefen',
+        role: 'buero',
+        route: '/aufgaben',
+        view: { kind: 'dialog', opener: 'work.site-access-review' },
+        record: 'site-access-tasks',
+        ...desktop,
+      },
+    ],
+    standalone: [],
+  };
+}
+
 export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   uiRoundCaptures(),
   fieldTargetCaptures(),
@@ -821,4 +889,5 @@ export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   requestAttachCaptures(),
   lifecycleStepCaptures(),
   siteRoleCaptures(),
+  siteAccessCaptures(),
 ];

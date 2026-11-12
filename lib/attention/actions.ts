@@ -31,6 +31,7 @@ import {
 import { deriveDispatchAcknowledgementTasks, deriveDispatchChallengeTasks } from './dispatch-tasks';
 import { deriveParkingReviewTasks } from './parking-tasks';
 import { deriveVisitReplanTasks } from './replan-tasks';
+import { deriveSiteAccessProposalTasks } from './site-access-tasks';
 import {
   deriveCertificationExpiryNotifications,
   readNotificationReadVersions,
@@ -305,6 +306,7 @@ async function deriveAttention(context: ActionContext): Promise<DerivedAttention
       deriveWorkHandoverTasks(context),
       deriveJoinRequestTasks(context),
       deriveVisitReplanTasks(context),
+      deriveSiteAccessProposalTasks(context),
     ]),
     Promise.all([
       deriveOwnNotifications(context, ownRecord),

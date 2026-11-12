@@ -18,5 +18,5 @@ const HANDOVER_TASKS = toWorkHandoverTasks(
 );
 
 export function TaskSectionsContractFixture() {
-  return <AufgabenTaskSection tasks={HANDOVER_TASKS} />;
+  return <AufgabenTaskSection tasks={HANDOVER_TASKS} onTaskDecided={async () => undefined} />;
 }

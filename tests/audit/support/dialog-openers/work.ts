@@ -8,6 +8,7 @@ import { getEmployeeRecordStateByUser } from '../../../golden/support/db/personn
 import { hydratedAndSettled, settled } from '../../../golden/support/steps/interaction';
 import { seedOrganizationCertification } from '../../../golden/support/db/qualifications';
 import { seedCustomer } from '../../../golden/support/db/customers';
+import { seedSiteAccessJob } from '../site-access-fixtures';
 import {
   seedDeclaredWorkDependency,
   seedJob,
@@ -189,6 +190,21 @@ function listRowMenuButton({ page }: SurfaceContext, record: LayoutRecord): Loca
 }
 
 export const WORK_OPENERS = {
+  // The field worker's proposal from the Einsatzort of the opened job.
+  'field.site-access': {
+    trigger: async ({ page }) => page.getByRole('button', { name: 'Zugang stimmt nicht?' }),
+    layer: (page) => page.getByRole('dialog', { name: 'Zugang korrigieren' }),
+  },
+  // The office review of an open proposal from „Zugang prüfen“ in Aufgaben.
+  'work.site-access-review': {
+    trigger: async ({ page, world }) => {
+      await seedSiteAccessJob(world, 'open');
+      await page.reload();
+      await hydratedAndSettled(page);
+      return page.getByRole('button', { name: /^Zugangshinweis von .+ prüfen$/ }).first();
+    },
+    layer: (page) => page.getByRole('dialog', { name: /^Zugang zu .+ prüfen$/ }),
+  },
   'work.artifact': {
     trigger: async ({ page }) => workArtifactCreateButton(page),
     layer: workArtifactCreateDialog,

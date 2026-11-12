@@ -9,6 +9,7 @@ import { rpcArgs } from '../../../lib/supabase/rpc-args';
 import { createAdminClient } from '../../golden/support/db/shared';
 import type { TestWorld } from '../../golden/support/world';
 import type { AcceptanceRecord } from './acceptance-sets';
+import { seedSiteAccessJob, type SiteAccessJobState } from './site-access-fixtures';
 import { surfaceFixture } from './surface-fixtures';
 import type { SurfaceDestination } from './surface-routes';
 
@@ -506,6 +507,19 @@ async function jobWithAttachedRequest(world: TestWorld): Promise<SurfaceDestinat
   return { route: `/auftraege/${encodeURIComponent(jobNumber)}`, heading: jobTitle };
 }
 
+/** The employee's job at an Einsatzort in the given proposal state. */
+function siteAccessJob(state: SiteAccessJobState) {
+  return async (world: TestWorld): Promise<SurfaceDestination> => {
+    const { jobNumber, title } = await seedSiteAccessJob(world, state);
+    return { route: `/auftraege/${encodeURIComponent(jobNumber)}`, heading: title };
+  };
+}
+
+async function siteAccessTasks(world: TestWorld): Promise<SurfaceDestination> {
+  await seedSiteAccessJob(world, 'open');
+  return { route: '/aufgaben', heading: 'Zugang prüfen' };
+}
+
 /** Each record an acceptance capture opens instead of its route's layout record, seeded once per world. */
 export const ACCEPTANCE_RECORDS: Record<AcceptanceRecord, (world: TestWorld) => Promise<SurfaceDestination>> =
   {
@@ -523,4 +537,8 @@ export const ACCEPTANCE_RECORDS: Record<AcceptanceRecord, (world: TestWorld) => 
     'request-without-open-work': requestWithoutOpenWork,
     'attached-request': attachedRequest,
     'job-with-attached-request': jobWithAttachedRequest,
+    'site-access-job': siteAccessJob('none'),
+    'site-access-open-job': siteAccessJob('open'),
+    'site-access-rejected-job': siteAccessJob('rejected'),
+    'site-access-tasks': siteAccessTasks,
   };

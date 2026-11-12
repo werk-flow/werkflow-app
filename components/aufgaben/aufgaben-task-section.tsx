@@ -5,6 +5,7 @@ import {
   CalendarClock,
   CalendarX,
   ClipboardCheck,
+  DoorOpen,
   PhoneCall,
   Clock,
   Inbox,
@@ -60,6 +61,11 @@ const SECTION_PRESENTATION: Record<
     title: 'Beitrittsanfragen',
     testId: 'attention-join-request-tasks',
   },
+  siteAccess: {
+    icon: <DoorOpen className="size-4" />,
+    title: 'Zugang prüfen',
+    testId: 'attention-site-access-tasks',
+  },
   dispatchAcknowledgement: {
     icon: <Send className="size-4" />,
     title: 'Einsätze bestätigen',
@@ -98,7 +104,14 @@ const SECTION_PRESENTATION: Record<
   },
 };
 
-export function AufgabenTaskSection({ tasks }: { tasks: AttentionTask[] }) {
+export function AufgabenTaskSection({
+  tasks,
+  onTaskDecided,
+}: {
+  tasks: AttentionTask[];
+  /** Reads the overview again after a task was decided in its row. */
+  onTaskDecided: () => Promise<void>;
+}) {
   return (
     <section className="space-y-4" aria-labelledby="aufgaben-heading">
       <h2 id="aufgaben-heading" className="text-sm font-semibold">
@@ -108,7 +121,7 @@ export function AufgabenTaskSection({ tasks }: { tasks: AttentionTask[] }) {
       {tasks.length === 0 && <EmptyState size="compact" title="Keine offenen Aufgaben." />}
 
       {groupAttentionTasks(tasks).map((section) => (
-        <TaskGroup key={section.key} section={section} />
+        <TaskGroup key={section.key} section={section} onTaskDecided={onTaskDecided} />
       ))}
     </section>
   );
@@ -118,7 +131,13 @@ function taskKey(task: AttentionTask): string {
   return `${task.sourceType}:${task.sourceId}`;
 }
 
-function TaskGroup({ section }: { section: AttentionTaskSection }) {
+function TaskGroup({
+  section,
+  onTaskDecided,
+}: {
+  section: AttentionTaskSection;
+  onTaskDecided: () => Promise<void>;
+}) {
   const { icon, title, testId, previewRows } = SECTION_PRESENTATION[section.key];
   const [showAll, setShowAll] = useState(false);
   const restId = useId();
@@ -137,13 +156,13 @@ function TaskGroup({ section }: { section: AttentionTaskSection }) {
       </h3>
       <Card className="gap-0 divide-y py-0">
         {preview.map((task) => (
-          <TaskRow key={taskKey(task)} task={task} />
+          <TaskRow key={taskKey(task)} task={task} onDecided={onTaskDecided} />
         ))}
         {rest.length > 0 && (
           <>
             <div id={restId} hidden={!showAll} className="divide-y">
               {rest.map((task) => (
-                <TaskRow key={taskKey(task)} task={task} />
+                <TaskRow key={taskKey(task)} task={task} onDecided={onTaskDecided} />
               ))}
             </div>
             <div className="flex items-center justify-between gap-2 px-4 py-2">

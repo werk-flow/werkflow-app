@@ -62,7 +62,10 @@ export async function FieldWorkPackPage({
       <PageBody maxWidth="wide">
         {/* The test id scopes the pack's body content; the specs never reach the header through it. */}
         <div data-testid="field-work-pack" className="space-y-4 sm:space-y-6">
-          <FieldWorkPackOverview job={fieldJob} />
+          <FieldWorkPackOverview
+            job={fieldJob}
+            siteAccess={job.siteId ? { siteId: job.siteId, read: data.siteAccessProposalRead } : null}
+          />
           <FieldWorkPackContextSources job={job} data={data} />
           <FieldWorkPackExecutionSection
             key={job.id}

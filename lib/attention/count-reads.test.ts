@@ -163,6 +163,7 @@ if (ISOLATED) {
     'rpc list_pending_dispatch_recipients',
     'rpc read_open_absences',
     'sickness_reports',
+    'site_access_proposals',
     'time_correction_requests',
     'time_entries',
     'vacation_requests',

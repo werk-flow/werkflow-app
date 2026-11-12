@@ -9,6 +9,11 @@ import { useBanner } from '@/components/ui/banner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { FieldWorkPackJob } from '@/lib/jobs/field-work-pack';
+import type { JobSiteAccessProposalRead } from '@/lib/site-access-proposals/types';
+import { FieldSiteAccessProposal } from './field-site-access-proposal';
+
+/** The job's Einsatzort and the latest access proposal for it; null without an Einsatzort. */
+type FieldSiteAccess = { siteId: string; read: JobSiteAccessProposalRead } | null;
 import { JOB_PRIORITY_LABELS } from '@/lib/jobs/types';
 
 function formatSchedule(job: FieldWorkPackJob): string {
@@ -22,7 +27,13 @@ function formatDurationOrNull(minutes: number | null): string | null {
   return minutes ? formatDuration(minutes) : null;
 }
 
-export function FieldWorkPackOverview({ job }: { job: FieldWorkPackJob }): ReactElement {
+export function FieldWorkPackOverview({
+  job,
+  siteAccess,
+}: {
+  job: FieldWorkPackJob;
+  siteAccess: FieldSiteAccess;
+}): ReactElement {
   const { showBanner } = useBanner();
   const overviewRef = useRef<HTMLElement>(null);
 
@@ -34,6 +45,8 @@ export function FieldWorkPackOverview({ job }: { job: FieldWorkPackJob }): React
       'clients',
       'client_contacts',
       'client_sites',
+      // An office decision on the job's access proposal shows on the Einsatzort.
+      'site_access_proposals',
       'job_instruction_items',
       'job_material_lines',
       'inventory_stock_levels',
@@ -78,7 +91,7 @@ export function FieldWorkPackOverview({ job }: { job: FieldWorkPackJob }): React
         </Badge>
       </div>
 
-      <FieldWorkPackOverviewFacts job={job} />
+      <FieldWorkPackOverviewFacts job={job} siteAccess={siteAccess} />
 
       {job.requestedOutcome && (
         <div className="mt-3 border-t pt-3 sm:mt-4 sm:pt-4">
@@ -93,7 +106,13 @@ export function FieldWorkPackOverview({ job }: { job: FieldWorkPackJob }): React
 }
 
 /** Schedule, contact and site of the job. */
-function FieldWorkPackOverviewFacts({ job }: { job: FieldWorkPackJob }): ReactElement {
+function FieldWorkPackOverviewFacts({
+  job,
+  siteAccess,
+}: {
+  job: FieldWorkPackJob;
+  siteAccess: FieldSiteAccess;
+}): ReactElement {
   const duration = formatDurationOrNull(job.plannedWorkingMinutes);
   return (
     <div className="mt-3 grid gap-3 sm:mt-4 sm:grid-cols-2 sm:gap-4">
@@ -132,6 +151,9 @@ function FieldWorkPackOverviewFacts({ job }: { job: FieldWorkPackJob }): ReactEl
               <p className="mt-1 text-sm">
                 <span className="font-medium">Zugang:</span> {job.accessNotes}
               </p>
+            )}
+            {siteAccess && (
+              <FieldSiteAccessProposal jobId={job.id} siteId={siteAccess.siteId} read={siteAccess.read} />
             )}
           </div>
         </div>

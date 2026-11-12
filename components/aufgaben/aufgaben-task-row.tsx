@@ -8,6 +8,7 @@ import { WORK_ARTIFACT_KIND_LABELS } from '@/lib/work-artifacts/types';
 import { CALENDAR_DISPATCH_STATE_LABELS } from '@/lib/calendar/board';
 import { formatOpenSince } from '@/lib/attention/task-sections';
 import { formatGermanDate, formatGermanDateRange, formatBerlinDateTime } from '@/lib/utils';
+import { SiteAccessTaskRow } from './site-access-review';
 
 type AttentionApprovalTask = Extract<
   AttentionTask,
@@ -39,7 +40,8 @@ type AttentionClientTask = Extract<
   { sourceType: 'client_follow_up' | 'client_request_open' | 'client_request_callback_overdue' }
 >;
 
-export function TaskRow({ task }: { task: AttentionTask }) {
+/** One task; `onDecided` reads the overview again after a decision taken in its row. */
+export function TaskRow({ task, onDecided }: { task: AttentionTask; onDecided: () => Promise<void> }) {
   switch (task.sourceType) {
     case 'time_session_approval':
     case 'time_change_request_approval':
@@ -89,7 +91,9 @@ export function TaskRow({ task }: { task: AttentionTask }) {
             {` · Abwesend · Einsatz ${CALENDAR_DISPATCH_STATE_LABELS[task.dispatchState]}`}
           </p>
         </TaskLink>
-      );
+      ); // A field worker's access proposal: decided in its own dialog.
+    case 'site_access_proposal':
+      return <SiteAccessTaskRow task={task} onDecided={onDecided} />;
   }
 }
 
