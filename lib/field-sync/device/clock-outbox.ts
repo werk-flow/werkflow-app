@@ -11,28 +11,40 @@ import type { OutboxHolder } from './time-outbox-store';
 // meets no network, so no page pays for it at start. A page whose signal is already gone keeps its
 // action with the few lines of unsent-mark.ts and hands it over here later.
 
-/**
- * Shows `listener` the holder's unsent events, now and after every change, and sends what the
- * phone holds: now, the app start, and on every `online`. Returns the call that ends the showing.
- */
-export async function watchClockOutbox(
-  holder: OutboxHolder,
-  listener: (view: ClockDeviceView | null) => void,
-): Promise<() => void> {
-  const stop = await holdClock(holder, listener);
-  // eslint-disable-next-line no-restricted-syntax -- the runner logs a sender's failure itself, and the events stay shown as unsent
-  void startSyncRunner().catch(() => undefined);
-  return stop;
-}
+type ViewListener = (view: ClockDeviceView | null) => void;
+
+/** The pages' listeners that already watch the outbox, each with the call that ends its watching. */
+const attached = new WeakMap<ViewListener, () => void>();
 
 /**
- * Takes the clock action a page just kept without the server's answer into the outbox and tries to
- * send it at once: the online call may only have failed on its way, and a phone can be wrong about
- * having no network. Without one the send fails and the event waits.
+ * What a page calls whenever the device may hold unsent clock events: at its start, on `online`,
+ * and after it kept an action without the server's answer. The first call for a listener shows it
+ * the holder's unsent events, now and after every change, and starts the runner, which sends now
+ * and on every `online`. Every call takes the actions pages kept into the outbox and tries to
+ * send at once: a phone can be wrong about having no network. `onSettled` runs when a waiting
+ * chain was sent or stopped, so the page reads the server's state again. Returns the call that
+ * ends the watching.
  */
-export async function takeInKeptClockAction(): Promise<void> {
+export async function attachClockOutbox(
+  holder: OutboxHolder,
+  listener: ViewListener,
+  onSettled: () => void,
+): Promise<() => void> {
+  let detach = attached.get(listener);
+  if (!detach) {
+    let wasPending = false;
+    detach = await holdClock(holder, (view) => {
+      listener(view);
+      if (wasPending && view?.status !== 'pending') onSettled();
+      wasPending = view?.status === 'pending';
+    });
+    attached.set(listener, detach);
+    // eslint-disable-next-line no-restricted-syntax -- the runner logs a sender's failure itself, and the events stay shown as unsent
+    void startSyncRunner().catch(() => undefined);
+  }
   await takeInKept();
   void sendUnsentNow();
+  return detach;
 }
 
 /** „Jetzt senden“: one pass over every sender, resolved when it ended. */

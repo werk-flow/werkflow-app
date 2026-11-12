@@ -33,6 +33,9 @@ import { logError } from '@/lib/logging';
 import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import { formatBerlinTime, parseIsoLocalDate } from '@/lib/utils';
 
+// The one lazy entry of the clock's outbox: the call that attaches a page to it, and the view below.
+export { attachClockOutbox } from '@/lib/field-sync/device/clock-outbox';
+
 // The clock's view of the events this phone holds unsent (decision record
 // 0010, the 2026-11-11 amendment "the time outbox"). The clock dock and its
 // sheet load this file only while such events exist.

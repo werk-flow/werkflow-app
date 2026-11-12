@@ -4,7 +4,7 @@ import { Clock3, Coffee, Play } from 'lucide-react';
 import { lazy, Suspense, useState, type ReactNode } from 'react';
 
 import { ClockActionList } from '@/components/clock-action-list';
-import { useClockState } from '@/components/clock-state-provider';
+import { loadClockOutbox, useClockState } from '@/components/clock-state-provider';
 import { useOrganization } from '@/components/organization/organization-context';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -25,10 +25,8 @@ import { cn, formatBerlinTime } from '@/lib/utils';
 
 /** The events this phone holds unsent, as a badge in the dock and a section in the sheet; loaded only while some exist. */
 const ClockUnsentEvents = lazy(() =>
-  import('@/components/clock-unsent-events').catch(() => ({
-    // The events stay on the phone, and a sign-out still asks about them; a reload brings their view back.
-    default: () => <>Nicht übertragene Zeiten: Bitte lade die Seite neu.</>,
-  })),
+  // The outbox's own code came through this same load, so its view cannot be missing alone.
+  loadClockOutbox().catch(() => ({ default: () => null })),
 );
 
 /**

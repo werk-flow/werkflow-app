@@ -67,7 +67,14 @@ type ClockTransitionExecute = (
   acknowledgeLong?: boolean,
 ) => Promise<TimeTransitionResult>;
 
-type ClockOutbox = typeof import('@/lib/field-sync/device/clock-outbox');
+/**
+ * The one lazy load of the clock's outbox and of the view of its unsent events. It rejects without
+ * signal and in a tab left open across a deployment.
+ */
+export function loadClockOutbox(): Promise<typeof import('@/components/clock-unsent-events')> {
+  return import('@/components/clock-unsent-events');
+}
+
 type ClockOutboxState = {
   /** What the phone's outbox holds unsent for the person, once its code ran. */
   view: ClockDeviceView | null;
@@ -84,48 +91,36 @@ type ClockOutboxState = {
 function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promise<void>): ClockOutboxState {
   const [view, setView] = useState<ClockDeviceView | null>(null);
   const [kept, setKept] = useState(false);
-  const takeInRef = useRef<(() => void) | null>(null);
+  const attachRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (!holder) return;
-    let stop: (() => void) | null = null;
+    let detach: (() => void) | null = null;
     let ended = false;
-    let wasPending = false;
-    let watching: Promise<ClockOutbox> | null = null;
-    const load = async (): Promise<ClockOutbox> => {
-      try {
-        const outbox = await import('@/lib/field-sync/device/clock-outbox');
-        const stopWatching = await outbox.watchClockOutbox(holder, (next) => {
-          setView(next);
-          setKept(false);
-          // The chain was sent or stopped: the server's state stands again, so read it.
-          if (wasPending && next?.status !== 'pending') void refresh();
-          wasPending = next?.status === 'pending';
-        });
-        if (ended) stopWatching();
-        else stop = stopWatching;
-        return outbox;
-      } catch (error) {
-        // The next call loads again: no signal yet, a chunk a deployment removed, or a device storage that failed once.
-        watching = null;
-        throw error;
-      }
+    const onView = (next: ClockDeviceView | null): void => {
+      setView(next);
+      setKept(false);
     };
     /** Hands what pages kept to the outbox; without its code the actions stay kept and marked until the next `online`. */
-    const takeIn = (): void => {
-      (watching ??= load())
-        .then((outbox) => outbox.takeInKeptClockAction())
-        // eslint-disable-next-line no-restricted-syntax -- no signal is the expected case here; the actions stay kept and marked, and `online` or the next start tries again
-        .catch(() => undefined);
+    const attach = async (): Promise<void> => {
+      try {
+        const outbox = await loadClockOutbox();
+        const stop = await outbox.attachClockOutbox(holder, onView, () => void refresh());
+        detach = stop;
+        if (ended) stop();
+      } catch {
+        // best-effort: no signal is the expected case here; the actions stay kept and marked, and `online` or the next start tries again.
+      }
     };
-    takeInRef.current = takeIn;
-    if (deviceMayHoldUnsentWork()) takeIn();
+    const attachNow = (): void => void attach();
+    attachRef.current = attachNow;
+    if (deviceMayHoldUnsentWork()) attachNow();
     // Every return of the network asks the outbox: another tab may have sent what this page kept.
-    window.addEventListener('online', takeIn);
+    window.addEventListener('online', attachNow);
     return () => {
       ended = true;
-      takeInRef.current = null;
-      window.removeEventListener('online', takeIn);
-      stop?.();
+      attachRef.current = null;
+      window.removeEventListener('online', attachNow);
+      detach?.();
       // The next person or organization never sees these events, also when its own outbox is never asked.
       setView(null);
       setKept(false);
@@ -135,7 +130,7 @@ function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promise<void
   const keep = useCallback<ClockOutboxState['keep']>((action) => {
     if (!keepClockAction(action)) return false;
     setKept(true);
-    takeInRef.current?.();
+    attachRef.current?.();
     return true;
   }, []);
   return { view, kept, keep };

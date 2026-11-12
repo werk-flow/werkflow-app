@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
-import { ClockActionButtons } from '@/components/clock-action-buttons';
 import { UnsentEventList, UnsentStatusBadge, unsentChainReason } from '@/components/clock-unsent-list';
+import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import { SectionError } from '@/components/ui/section-error';
 import { useClientRead } from '@/hooks/use-client-read';
@@ -90,24 +90,15 @@ function offlineActions(view: ClockDeviceView): ClockAction[] {
     : [];
 }
 
-/** The clock without signal: where it stands with the unsent events, and the next actions it can capture. */
-export function OfflineClock() {
-  const { clock, failure, reload } = useOfflineClock();
+/** Keeps one more action behind the unsent ones, one at a time, and reads the device again. */
+function useOfflineCapture(clock: OfflineClock | null, reload: () => void) {
   const { run, isPending } = usePendingTask();
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  if (failure)
-    return (
-      <div className="mb-6 w-full max-w-2xl">
-        <SectionError title="Deine Zeiterfassung konnte nicht gelesen werden" failure={failure} />
-      </div>
-    );
-  if (!clock) return null;
-  const { holder, view, generation } = clock;
-  const { state } = view;
 
   function activate(action: ClockAction): void {
-    if (action.kind !== 'transition' && action.kind !== 'end') return;
+    if (!clock || (action.kind !== 'transition' && action.kind !== 'end')) return;
+    const { holder, view, generation } = clock;
     setError(null);
     setPendingId(action.id);
     void run(async () => {
@@ -115,7 +106,7 @@ export function OfflineClock() {
         await captureTimeEvent(holder, {
           command: {
             operationId: crypto.randomUUID(),
-            action: action.kind === 'end' ? 'end' : state?.isClockedIn ? 'switch' : 'start',
+            action: action.kind === 'end' ? 'end' : view.state?.isClockedIn ? 'switch' : 'start',
             expectedSessionId: null,
             expectedVersion: null,
             selection: action.kind === 'end' ? null : action.selection,
@@ -136,6 +127,22 @@ export function OfflineClock() {
       }
     });
   }
+  return { activate, isPending, pendingId, error };
+}
+
+/** The clock without signal: where it stands with the unsent events, and the next actions it can capture. */
+export function OfflineClock() {
+  const { clock, failure, reload } = useOfflineClock();
+  const { activate, isPending, pendingId, error } = useOfflineCapture(clock, reload);
+  if (failure)
+    return (
+      <div className="mb-6 w-full max-w-2xl">
+        <SectionError title="Deine Zeiterfassung konnte nicht gelesen werden" failure={failure} />
+      </div>
+    );
+  if (!clock) return null;
+  const { view } = clock;
+  const { state } = view;
 
   return (
     <section
@@ -156,12 +163,23 @@ export function OfflineClock() {
             : 'Nicht eingestempelt'}
         </p>
       )}
-      <ClockActionButtons
-        actions={offlineActions(view)}
-        busy={isPending}
-        pendingId={pendingId}
-        onActivate={activate}
-      />
+      {state && (
+        <div className="flex flex-col gap-2" role="group" aria-label="Nächste Aktion">
+          {offlineActions(view).map((action, index) => (
+            <Button
+              key={action.id}
+              type="button"
+              variant={index === 0 ? 'default' : 'outline'}
+              className="h-auto min-h-12 w-full justify-start px-4 text-left text-base whitespace-normal"
+              disabled={isPending}
+              pending={pendingId === action.id}
+              onClick={() => activate(action)}
+            >
+              {action.label}
+            </Button>
+          ))}
+        </div>
+      )}
       <ErrorText>{error}</ErrorText>
       <p className="text-sm text-muted-foreground">
         {state
