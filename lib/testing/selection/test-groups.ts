@@ -309,10 +309,13 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['security:account', 'security/account.spec.ts', ['*']],
   ['security:offline-shell', 'security/offline-shell.spec.ts', ['standalone', 'work']],
   ['security:offline-today', 'security/offline-today.spec.ts', ['standalone', 'work', 'planning']],
+  ['security:offline-drafts', 'security/offline-drafts.spec.ts', ['standalone', 'work', 'documents']],
   // The report screenshot redraw on a seeded customer and job (docs/technical/problem-report-scrubbing.md).
   ['problem-reports:redraw', 'problem-reports/screenshot-redraw.spec.ts', ['customers', 'work']],
   // Reporting a problem from the app shell, with a redacted screenshot, to „Meine Meldungen“.
   ['problem-reports:report', 'problem-reports/report-a-problem.spec.ts', ['*']],
+  // Support triages a report and answers, the reporter reads it live; support files a report for a caller.
+  ['problem-reports:support', 'problem-reports/support-queue.spec.ts', ['*']],
   ['list-pagination', 'pagination/list-pagination.spec.ts', ['inventory', 'documents', 'work']],
   // Measured navigation and view switches against the typical data profile (Step 2).
   [
@@ -334,7 +337,11 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['p1-13', ['p1_13_work_templates.sql'], ['work', 'inventory', 'personnel']],
   [
     'work-execution',
-    ['work_execution_boundaries.sql', 'work_artifact_customer_decisions.sql'],
+    [
+      'work_execution_boundaries.sql',
+      'work_artifact_customer_decisions.sql',
+      'work_artifact_draft_attach.sql',
+    ],
     ['work', 'time', 'documents', 'inventory'],
   ],
   ['p1-21', ['p1_21_time_segments.sql', 'clock_job_row_lock.sql'], ['time', 'personnel', 'work']],
@@ -410,7 +417,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['rate-limits', ['rate_limits.sql'], ['*']],
   ['organization-deletion', ['organization_deletion.sql'], ['*']],
   ['storage-purge', ['storage_purge.sql'], ['documents']],
-  ['problem-reports', ['problem_reports.sql'], ['*']],
+  ['problem-reports', ['problem_reports.sql', 'problem_report_support.sql'], ['*']],
   ['organization-export', ['organization_export.sql'], ['*']],
   ['record-numbers', ['record_numbers.sql'], ['work', 'customers', 'personnel', 'service']],
   ['hot-read-volume', ['hot_read_volume.sql'], ['planning', 'time', 'attention', 'work', 'documents']],

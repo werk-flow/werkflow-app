@@ -28,13 +28,18 @@ type ExcludedTable =
   | 'problem_reports'
   | 'problem_report_events'
   | 'problem_report_files'
+  // The reporter's live signal of a changed report: a timestamp, no record.
+  | 'problem_report_signals'
   // The paying account's billing state, not the organization's records.
   | 'subscriptions'
   // The file plan and part state of earlier exports, whose archives are gone
   // after seven days; one row per file would grow every export by the last.
   // Their history stays in `organization_exports` and `organization_export_events`.
   | 'organization_export_files'
-  | 'organization_export_parts';
+  | 'organization_export_parts'
+  // Idempotency keys of report drafts a phone sent; the revision each one
+  // wrote is in `work_artifact_revisions`.
+  | 'work_artifact_draft_operations';
 
 export type ExportTable = Exclude<TableName, ExcludedTable>;
 type ColumnOf<Table extends ExportTable> = keyof PublicTables[Table]['Row'] & string;

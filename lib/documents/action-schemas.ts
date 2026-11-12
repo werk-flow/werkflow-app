@@ -115,6 +115,8 @@ export const finalizeDocumentUploadInputSchema = documentUploadTargetSchema.and(
     documentId: uuidSchema,
     fileName: fileNameSchema,
     category: z.string().max(100).nullable().optional(),
+    /** The person who started the upload, as a phone's report draft names its author: only refuses, never authorizes. */
+    expectedUploaderId: uuidSchema.optional(),
   }),
 );
 export type FinalizeDocumentUploadInput = z.input<typeof finalizeDocumentUploadInputSchema>;

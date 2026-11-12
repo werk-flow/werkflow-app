@@ -17,7 +17,7 @@ import type { RealtimeTable } from '@/lib/realtime/tables';
 import type { OrgRole } from '@/lib/roles';
 import type { PersonnelListEntry } from '@/lib/personnel/record-read-actions';
 import type { DailyTarget } from '@/lib/personnel/targets';
-import type { OrgBreakMode } from '@/lib/time-tracking/settings';
+import type { BreakPolicy } from '@/lib/time-tracking/settings';
 import type { QualificationWorkspace } from '@/lib/qualifications/types';
 import type { PendingJoinRequest } from '@/lib/org/types';
 import { JoinRequestsSection } from './join-requests-section';
@@ -36,9 +36,7 @@ interface MitarbeiterTabsProps {
   currentUserId: string;
   currentUserRole: OrgRole;
   organizationId: string;
-  breakMode: OrgBreakMode;
-  autoBreakThresholdMinutes: number;
-  autoBreakDurationMinutes: number;
+  breakPolicy: BreakPolicy;
   qualificationWorkspace: QualificationWorkspace | null;
 }
 
@@ -106,17 +104,14 @@ function useMitarbeiterPersonnelLookups(members: OrgMember[], personnelEntries: 
   return { memberIds, personnelWithoutMembership, personnelByUserId };
 }
 
-type MitarbeiterMemberStatusOptions = Pick<
-  MitarbeiterTabsProps,
-  'organizationId' | 'breakMode' | 'autoBreakThresholdMinutes' | 'autoBreakDurationMinutes'
-> & { memberIds: string[] };
+type MitarbeiterMemberStatusOptions = Pick<MitarbeiterTabsProps, 'organizationId' | 'breakPolicy'> & {
+  memberIds: string[];
+};
 
 function useMitarbeiterMemberStatus({
   organizationId,
   memberIds,
-  breakMode,
-  autoBreakThresholdMinutes,
-  autoBreakDurationMinutes,
+  breakPolicy,
 }: MitarbeiterMemberStatusOptions) {
   // Poll for member status (working status and hours)
   const {
@@ -128,9 +123,7 @@ function useMitarbeiterMemberStatus({
   } = useMemberStatus({
     organizationId,
     memberIds,
-    breakMode,
-    autoBreakThresholdMinutes,
-    autoBreakDurationMinutes,
+    breakPolicy,
     enabled: memberIds.length > 0,
   });
 
@@ -220,9 +213,7 @@ export function MitarbeiterTabs({
   currentUserId,
   currentUserRole,
   organizationId,
-  breakMode,
-  autoBreakThresholdMinutes,
-  autoBreakDurationMinutes,
+  breakPolicy,
   qualificationWorkspace,
 }: MitarbeiterTabsProps) {
   const { memberList, inviteList, members, invites } = useMitarbeiterTabsLists(
@@ -243,9 +234,7 @@ export function MitarbeiterTabs({
   const status = useMitarbeiterMemberStatus({
     organizationId,
     memberIds,
-    breakMode,
-    autoBreakThresholdMinutes,
-    autoBreakDurationMinutes,
+    breakPolicy,
   });
 
   useRealtimeRouterRefresh({ tables: MITARBEITER_TABS_REFRESH_TABLES });

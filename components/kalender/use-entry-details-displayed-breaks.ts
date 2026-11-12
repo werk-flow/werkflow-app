@@ -78,11 +78,7 @@ export function useEntryDetailsDisplayedBreaks(
 
     const blockStart = editedClockIn ?? clockInDate;
     const blockEnd = editedClockOut ?? clockOutDate ?? (blockStart ? new Date() : null);
-    const automaticBreak = getAutomaticBreakRange(blockStart, blockEnd, {
-      breakMode: interactiveSession.breakMode ?? 'manual',
-      autoBreakThresholdMinutes: interactiveSession.autoBreakThresholdMinutes ?? 360,
-      autoBreakDurationMinutes: interactiveSession.autoBreakDurationMinutes ?? 30,
-    });
+    const automaticBreak = getAutomaticBreakRange(blockStart, blockEnd, interactiveSession.breakPolicy);
 
     if (!automaticBreak) {
       return [];
@@ -96,9 +92,7 @@ export function useEntryDetailsDisplayedBreaks(
     editedClockOut,
     entryOrganizationId,
     entryUserId,
-    interactiveSession.autoBreakDurationMinutes,
-    interactiveSession.autoBreakThresholdMinutes,
-    interactiveSession.breakMode,
+    interactiveSession.breakPolicy,
     isAutomaticBreakMode,
   ]);
   const displayedBreaks = isAutomaticBreakMode ? automaticDisplayBreaks : editedBreaks;

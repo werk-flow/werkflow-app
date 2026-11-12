@@ -6,6 +6,7 @@ import {
   type FieldSyncToday,
 } from '@/lib/field-sync/today-snapshot';
 import { logError } from '@/lib/logging';
+import { belongsTo } from './device-store';
 import { dropOthersTodayOnDevice, readTodayOnDevice, saveTodayOnDevice, todayHolderKey } from './today-store';
 import { TODAY_HOLDER_KEY, clearTodayOnDevice, todayWipeGeneration } from './today-wipe';
 
@@ -122,10 +123,6 @@ async function losesAccess(response: Response): Promise<boolean> {
     body.outcome === 'rejected' &&
     (body.code === 'forbidden' || body.code === 'organization_mismatch')
   );
-}
-
-function belongsTo(snapshot: { userId: string; organizationId: string }, holder: TodayHolder): boolean {
-  return snapshot.userId === holder.userId && snapshot.organizationId === holder.organizationId;
 }
 
 /** One refresh of the today snapshot for the holder. Throws only when the device storage fails. */
