@@ -9,7 +9,7 @@
 -- originals change only there. The retention run deletes only due originals,
 -- keeps the scrubbed copy, and queues every file path; 24 months after
 -- closing it deletes the report. The scrub outcome
--- (20261130090005_keep_the_scrubbed_copy_of_a_problem_report.sql, #332)
+-- (20261130100001_keep_the_scrubbed_copy_of_a_problem_report.sql, #332)
 -- writes both parts of the copy with the state in one call, only inside the
 -- report's organization, and never changes a written copy.
 begin;
