@@ -1,6 +1,6 @@
 -- A report draft a phone wrote without signal is attached once, with its
 -- photos, in one call or not at all
--- (20261201090002_attach_a_report_draft_with_its_photos_once.sql,
+-- (20261201100002_attach_a_report_draft_with_its_photos_once.sql,
 -- werk-flow/werkflow-planning#320). A resend answers the first result as
 -- replayed and writes nothing; the same operation id with other content or
 -- from another person is refused. The call refuses another organization's
