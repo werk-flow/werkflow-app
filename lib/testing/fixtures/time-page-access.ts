@@ -57,6 +57,9 @@ const automaticBreak: TimeTrackingSettingsValues = {
   breakMode: 'automatic',
   autoBreakThresholdMinutes: 360,
   autoBreakDurationMinutes: 30,
+  secondStepEnabled: false,
+  secondStepThresholdMinutes: 540,
+  secondStepDurationMinutes: 45,
 };
 const unchangedRows = (table: string) => JSON.stringify(tableRows(world, table));
 

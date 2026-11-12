@@ -10,6 +10,7 @@ import { saveFailureBanner } from '@/lib/settings/save-answers';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Field } from '@/components/ui/field';
 import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
@@ -19,6 +20,7 @@ import { useServerAction } from '@/hooks/use-server-action';
 import { updateTimeTrackingSettings } from '@/lib/time-tracking/settings-actions';
 import {
   BREAK_MODE_OPTIONS,
+  breakPolicyFormValues,
   timeTrackingSettingsSchema,
   type TimeTrackingSettingsValues,
 } from '@/lib/time-tracking/settings';
@@ -91,56 +93,123 @@ function BreakModeField({ form, disabled }: { form: TimeTrackingRulesForm; disab
   );
 }
 
+type MinutesFieldName =
+  | 'autoBreakThresholdMinutes'
+  | 'autoBreakDurationMinutes'
+  | 'secondStepThresholdMinutes'
+  | 'secondStepDurationMinutes';
+
+function MinutesField({
+  form,
+  name,
+  label,
+  description,
+  required = false,
+  disabled,
+}: {
+  form: TimeTrackingRulesForm;
+  name: MinutesFieldName;
+  label: string;
+  description: string;
+  required?: boolean;
+  disabled: boolean;
+}) {
+  return (
+    <FormField
+      control={form.control}
+      name={name}
+      render={({ field, fieldState }) => (
+        <Field label={label} required={required} description={description} error={fieldState.error?.message}>
+          <Input
+            name={field.name}
+            ref={field.ref}
+            type="text"
+            inputMode="numeric"
+            disabled={disabled}
+            onBlur={field.onBlur}
+            value={typeof field.value === 'number' ? field.value : ''}
+            onChange={(event) => field.onChange(Number(event.target.value.replace(/[^0-9]/g, '') || 0))}
+          />
+        </Field>
+      )}
+    />
+  );
+}
+
 function AutoBreakFields({ form, disabled }: { form: TimeTrackingRulesForm; disabled: boolean }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      <FormField
-        control={form.control}
+      <MinutesField
+        form={form}
         name="autoBreakThresholdMinutes"
-        render={({ field, fieldState }) => (
-          <Field
-            label="Automatische Schwelle (Minuten)"
-            required
-            description="Ab dieser gesamten Anwesenheitszeit wird die automatische Pause berücksichtigt."
-            error={fieldState.error?.message}
-          >
-            <Input
-              name={field.name}
-              ref={field.ref}
-              type="text"
-              inputMode="numeric"
-              disabled={disabled}
-              onBlur={field.onBlur}
-              value={typeof field.value === 'number' ? field.value : ''}
-              onChange={(event) => field.onChange(Number(event.target.value.replace(/[^0-9]/g, '') || 0))}
-            />
-          </Field>
-        )}
+        label="Automatische Schwelle (Minuten)"
+        required
+        description="Ab dieser gesamten Anwesenheitszeit wird die automatische Pause berücksichtigt."
+        disabled={disabled}
       />
-
-      <FormField
-        control={form.control}
+      <MinutesField
+        form={form}
         name="autoBreakDurationMinutes"
-        render={({ field, fieldState }) => (
-          <Field
-            label="Automatische Pausendauer (Minuten)"
-            description="Diese Minuten werden automatisch abgezogen, sobald die Schwelle erreicht ist."
-            error={fieldState.error?.message}
-          >
-            <Input
-              name={field.name}
-              ref={field.ref}
-              type="text"
-              inputMode="numeric"
-              disabled={disabled}
-              onBlur={field.onBlur}
-              value={typeof field.value === 'number' ? field.value : ''}
-              onChange={(event) => field.onChange(Number(event.target.value.replace(/[^0-9]/g, '') || 0))}
-            />
-          </Field>
-        )}
+        label="Automatische Pausendauer (Minuten)"
+        description="Diese Minuten werden automatisch abgezogen, sobald die Schwelle erreicht ist."
+        disabled={disabled}
       />
     </div>
+  );
+}
+
+function SecondStepFields({
+  form,
+  disabled,
+  startsWithSave,
+}: {
+  form: TimeTrackingRulesForm;
+  disabled: boolean;
+  /** The step is off in the saved rule: switching it on starts with the save. */
+  startsWithSave: boolean;
+}) {
+  const enabled = useWatch({ control: form.control, name: 'secondStepEnabled' });
+  return (
+    <fieldset className="space-y-4">
+      <FormField
+        control={form.control}
+        name="secondStepEnabled"
+        render={({ field }) => (
+          <label className="flex items-start gap-2 text-sm">
+            <Checkbox
+              ref={field.ref}
+              checked={field.value}
+              disabled={disabled}
+              onCheckedChange={(checked) => field.onChange(checked === true)}
+            />
+            <span className="font-medium">
+              Zweite Stufe für lange Tage
+              <span className="block font-normal text-muted-foreground">
+                Ab der zweiten Schwelle gilt die längere Gesamtpause. Vorgabe nach ArbZG § 4: ab 9 Stunden
+                insgesamt 45 Minuten.
+                {startsWithSave ? ' Sie gilt ab dem Speichern, frühere Tage behalten ihre Pause.' : null}
+              </span>
+            </span>
+          </label>
+        )}
+      />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <MinutesField
+          form={form}
+          name="secondStepThresholdMinutes"
+          label="Zweite Schwelle (Minuten)"
+          description="Ab dieser gesamten Anwesenheitszeit gilt die längere Pause."
+          disabled={disabled || !enabled}
+        />
+        <MinutesField
+          form={form}
+          name="secondStepDurationMinutes"
+          label="Pause gesamt ab der zweiten Schwelle (Minuten)"
+          description="Die gesamte Pause des Tages, nicht zusätzlich zur ersten Stufe."
+          disabled={disabled || !enabled}
+        />
+      </div>
+    </fieldset>
   );
 }
 
@@ -159,31 +228,51 @@ function TimeTrackingSaveFooter({ canEdit, isSaving }: { canEdit: boolean; isSav
   );
 }
 
-export function TimeTrackingSettingsForm({ initialSettings, role }: TimeTrackingSettingsFormProps) {
-  const { showBanner } = useBanner();
-  const { run: runSave, isPending: isSaving } = useServerAction(updateTimeTrackingSettings);
-  const canEdit = role === 'admin';
+/** Adopts saved rules that arrive with new server props, such as another admin's save. */
+function useAdoptSavedRules(
+  reset: TimeTrackingRulesForm['reset'],
+  initialSettings: TimeTrackingSettingsValues,
+) {
   const {
     breakMode: initialBreakMode,
     autoBreakThresholdMinutes: initialAutoBreakThresholdMinutes,
     autoBreakDurationMinutes: initialAutoBreakDurationMinutes,
+    secondStepEnabled: initialSecondStepEnabled,
+    secondStepThresholdMinutes: initialSecondStepThresholdMinutes,
+    secondStepDurationMinutes: initialSecondStepDurationMinutes,
   } = initialSettings;
-
-  const form = useForm<TimeTrackingSettingsFormInput, undefined, TimeTrackingSettingsFormOutput>({
-    resolver: zodResolver(timeTrackingSettingsSchema),
-    defaultValues: initialSettings,
-  });
-
-  const selectedBreakMode = useWatch({ control: form.control, name: 'breakMode' });
-  const { reset } = form;
 
   useEffect(() => {
     reset({
       breakMode: initialBreakMode,
       autoBreakThresholdMinutes: initialAutoBreakThresholdMinutes,
       autoBreakDurationMinutes: initialAutoBreakDurationMinutes,
+      secondStepEnabled: initialSecondStepEnabled,
+      secondStepThresholdMinutes: initialSecondStepThresholdMinutes,
+      secondStepDurationMinutes: initialSecondStepDurationMinutes,
     });
-  }, [initialAutoBreakDurationMinutes, initialAutoBreakThresholdMinutes, initialBreakMode, reset]);
+  }, [
+    initialAutoBreakDurationMinutes,
+    initialAutoBreakThresholdMinutes,
+    initialBreakMode,
+    initialSecondStepDurationMinutes,
+    initialSecondStepEnabled,
+    initialSecondStepThresholdMinutes,
+    reset,
+  ]);
+}
+
+export function TimeTrackingSettingsForm({ initialSettings, role }: TimeTrackingSettingsFormProps) {
+  const { showBanner } = useBanner();
+  const { run: runSave, isPending: isSaving } = useServerAction(updateTimeTrackingSettings);
+  const canEdit = role === 'admin';
+  const form = useForm<TimeTrackingSettingsFormInput, undefined, TimeTrackingSettingsFormOutput>({
+    resolver: zodResolver(timeTrackingSettingsSchema),
+    defaultValues: initialSettings,
+  });
+
+  const selectedBreakMode = useWatch({ control: form.control, name: 'breakMode' });
+  useAdoptSavedRules(form.reset, initialSettings);
 
   const onSubmit = useSaveChangesSubmit(form, async (values) => {
     if (!canEdit) {
@@ -199,11 +288,7 @@ export function TimeTrackingSettingsForm({ initialSettings, role }: TimeTracking
       }
 
       // The action's response renders the route with the saved rules.
-      form.reset({
-        breakMode: result.breakMode,
-        autoBreakThresholdMinutes: result.autoBreakThresholdMinutes,
-        autoBreakDurationMinutes: result.autoBreakDurationMinutes,
-      });
+      form.reset(breakPolicyFormValues(result.policy));
       showBanner({
         message: 'Die Regeln für die Zeiterfassung wurden gespeichert.',
         variant: 'success',
@@ -226,6 +311,17 @@ export function TimeTrackingSettingsForm({ initialSettings, role }: TimeTracking
                 form={form}
                 disabled={!canEdit || isSaving || selectedBreakMode !== 'automatic'}
               />
+
+              <SecondStepFields
+                form={form}
+                disabled={!canEdit || isSaving || selectedBreakMode !== 'automatic'}
+                startsWithSave={!initialSettings.secondStepEnabled}
+              />
+
+              <p className="text-sm text-muted-foreground">
+                Die automatische Pause ist eine Rechenhilfe, kein Nachweis, dass die Pausen nach dem
+                Arbeitszeitgesetz eingehalten wurden.
+              </p>
             </CardContent>
             <TimeTrackingSaveFooter canEdit={canEdit} isSaving={isSaving} />
           </form>

@@ -17,17 +17,20 @@ const RULE_CHANGED_ON_TUESDAY: BreakPolicy = {
   breakMode: 'automatic',
   autoBreakThresholdMinutes: 360,
   autoBreakDurationMinutes: 30,
+  secondStep: null,
   breakPolicyHistory: [
     {
       breakMode: 'manual',
       autoBreakThresholdMinutes: 360,
       autoBreakDurationMinutes: 30,
+      secondStep: null,
       effectiveFrom: '2026-01-01T00:00:00.000Z',
     },
     {
       breakMode: 'automatic',
       autoBreakThresholdMinutes: 360,
       autoBreakDurationMinutes: 30,
+      secondStep: null,
       effectiveFrom: '2026-09-08T06:00:00.000Z',
     },
   ],

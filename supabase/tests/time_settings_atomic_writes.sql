@@ -3,6 +3,9 @@
 -- a refused break end leaves the settings unchanged, a stale snapshot, a
 -- foreign organization, a field worker and a Büro member are refused, a save
 -- leaves a completed day as it was, and only the service role executes the function.
+-- The nine-hour step: an existing organization has it off, switching it on writes
+-- it with its version, the save refuses an inconsistent step, and a new
+-- organization starts with it on.
 begin;
 
 insert into auth.users (
@@ -193,7 +196,102 @@ select pg_temp.expect_refusal('a second first save', $sql$
     'manual', 360, 30, '[]', '[]')
 $sql$, 'settings_changed');
 
+-- The nine-hour step (migration 20261130100001_add_the_nine_hour_break_step.sql).
+-- An existing organization has it off until an admin switches it on.
+do $$
+begin
+  if (select auto_break_second_threshold_minutes is not null or auto_break_second_duration_minutes is not null
+      from public.organization_settings where organization_id = '26104154-0000-0000-0000-000000000010')
+  then raise exception 'an existing organization got the second step without switching it on'; end if;
+end;
+$$;
+
+create view pg_temp.second_step_call as
+select
+  jsonb_build_object(
+    'break_mode', settings.break_mode,
+    'auto_break_threshold_minutes', settings.auto_break_threshold_minutes,
+    'auto_break_duration_minutes', settings.auto_break_duration_minutes,
+    'auto_break_second_threshold_minutes', settings.auto_break_second_threshold_minutes,
+    'auto_break_second_duration_minutes', settings.auto_break_second_duration_minutes,
+    'break_policy_history', settings.break_policy_history) expected,
+  settings.break_policy_history || '[{"breakMode":"automatic","autoBreakThresholdMinutes":360,"autoBreakDurationMinutes":30,"secondStep":{"thresholdMinutes":540,"durationMinutes":45},"effectiveFrom":"2026-10-05T08:00:00.000Z"}]'::jsonb history
+from public.organization_settings settings
+where settings.organization_id = '26104154-0000-0000-0000-000000000010';
+grant select on pg_temp.second_step_call to service_role;
+
+-- The ten-argument save compares the second step too: a snapshot without it is stale.
+select pg_temp.expect_refusal('a snapshot without the second step', $sql$
+  select public.update_time_tracking_settings('26104154-0000-0000-0000-000000000001',
+    '26104154-0000-0000-0000-000000000010',
+    (select expected - 'auto_break_second_threshold_minutes' - 'auto_break_second_duration_minutes'
+     from pg_temp.second_step_call),
+    'automatic', 360, 30, 540, 45, (select history from pg_temp.second_step_call), '[]')
+$sql$, 'settings_changed');
+select pg_temp.expect_refusal('a second step with only a threshold', $sql$
+  select public.update_time_tracking_settings('26104154-0000-0000-0000-000000000001',
+    '26104154-0000-0000-0000-000000000010', (select expected from pg_temp.second_step_call),
+    'automatic', 360, 30, 540, null, (select history from pg_temp.second_step_call), '[]')
+$sql$, 'invalid_input');
+select pg_temp.expect_refusal('a second threshold before the first', $sql$
+  select public.update_time_tracking_settings('26104154-0000-0000-0000-000000000001',
+    '26104154-0000-0000-0000-000000000010', (select expected from pg_temp.second_step_call),
+    'automatic', 360, 30, 300, 45, (select history from pg_temp.second_step_call), '[]')
+$sql$, 'invalid_input');
+select pg_temp.expect_refusal('a second step shorter than the first', $sql$
+  select public.update_time_tracking_settings('26104154-0000-0000-0000-000000000001',
+    '26104154-0000-0000-0000-000000000010', (select expected from pg_temp.second_step_call),
+    'automatic', 360, 30, 540, 20, (select history from pg_temp.second_step_call), '[]')
+$sql$, 'invalid_input');
+
+do $$
+begin
+  perform public.update_time_tracking_settings('26104154-0000-0000-0000-000000000001',
+    '26104154-0000-0000-0000-000000000010', (select expected from pg_temp.second_step_call),
+    'automatic', 360, 30, 540, 45, (select history from pg_temp.second_step_call), '[]');
+  if (select auto_break_second_threshold_minutes::text || '/' || auto_break_second_duration_minutes
+        || '/' || jsonb_array_length(break_policy_history)
+      from public.organization_settings
+      where organization_id = '26104154-0000-0000-0000-000000000010') is distinct from '540/45/3'
+  then raise exception 'switching the second step on did not write it and its version'; end if;
+end;
+$$;
+
 reset role;
+
+-- A new organization starts with the nine-hour step on, in its row and its first version.
+do $$
+declare
+  v_organization_id uuid;
+  v_settings public.organization_settings;
+begin
+  v_organization_id := public.create_organization_with_defaults(
+    '26104154-0000-0000-0000-000000000004', 'Neue Pausenregel SQL', 'TSETSQL3');
+  select * into strict v_settings from public.organization_settings where organization_id = v_organization_id;
+  if v_settings.auto_break_second_threshold_minutes is distinct from 540
+    or v_settings.auto_break_second_duration_minutes is distinct from 45
+    or v_settings.break_policy_history -> 0 -> 'secondStep'
+      is distinct from '{"thresholdMinutes":540,"durationMinutes":45}'::jsonb
+  then raise exception 'a new organization did not start with the nine-hour step: %', row_to_json(v_settings); end if;
+end;
+$$;
+
+do $$
+declare
+  v_function constant text :=
+    'public.update_time_tracking_settings(uuid, uuid, jsonb, text, integer, integer, integer, integer, jsonb, jsonb)';
+  v_role text;
+begin
+  if not has_function_privilege('service_role', v_function, 'execute') then
+    raise exception '% lost its service_role grant', v_function;
+  end if;
+  foreach v_role in array array['anon', 'authenticated'] loop
+    if has_function_privilege(v_role, v_function, 'execute') then
+      raise exception '% is executable by %', v_function, v_role;
+    end if;
+  end loop;
+end;
+$$;
 
 do $$
 declare

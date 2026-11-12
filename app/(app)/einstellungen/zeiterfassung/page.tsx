@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { getCachedOrganizationCalendar, getCachedOrganizationSettings } from '@/lib/data/cached';
 import { readSettingsSectionMembership } from '@/lib/settings/section-access';
+import { breakPolicyFormValues } from '@/lib/time-tracking/settings';
 
 export default async function TimeTrackingSettingsPage() {
   const { membership: activeMembership } = await readSettingsSectionMembership('zeiterfassung');
@@ -20,11 +21,7 @@ export default async function TimeTrackingSettingsPage() {
     <div className="space-y-6">
       <LiveRouteRefresh tables={['organization_settings', 'organization_closure_days']} />
       <TimeTrackingSettingsForm
-        initialSettings={{
-          breakMode: settings.breakMode,
-          autoBreakThresholdMinutes: settings.autoBreakThresholdMinutes,
-          autoBreakDurationMinutes: settings.autoBreakDurationMinutes,
-        }}
+        initialSettings={breakPolicyFormValues(settings)}
         role={activeMembership.role}
       />
       <HolidayCalendarSettings

@@ -4,7 +4,7 @@ import { isMomentary } from './activity-intervals';
 import { getEffectiveTimeEntries } from './effective-entries';
 import { isBreakEndFollowedByClockIn } from './transition-pairs';
 import {
-  getAutomaticBreakRange,
+  getAutomaticBreakRanges,
   resolveBreakPolicyAtTimestamp,
   type OrganizationTimeTrackingSettings,
 } from './settings';
@@ -187,6 +187,15 @@ function buildSyntheticBreakEntry(
   };
 }
 
+/** The first automatic break keeps the ids it had before the second step existed. */
+function autoBreakId(edge: 'start' | 'end', index: number): string {
+  return index === 0 ? `auto-break-${edge}` : `auto-break-${index + 1}-${edge}`;
+}
+
+function autoSegmentId(blockId: string, part: 'work-before' | 'break', index: number): string {
+  return index === 0 ? `${blockId}-auto-${part}` : `${blockId}-auto-${part}-${index + 1}`;
+}
+
 function resolveDisplayBreakPolicy(
   block: CalendarWorkBlock,
   referenceDate: Date,
@@ -211,26 +220,11 @@ function getCalendarBlockDisplayBreaks(
 
   const displayPolicy = resolveDisplayBreakPolicy(block, referenceDate, settings);
   const displayEnd = block.end ? new Date(block.end) : referenceDate;
-  const automaticBreak = getAutomaticBreakRange(block.start, displayEnd, displayPolicy);
 
-  if (!automaticBreak) {
-    return [];
-  }
-
-  const breakStartEntry = buildSyntheticBreakEntry(
-    block,
-    'break_start',
-    automaticBreak.breakStart,
-    'auto-break-start',
-  );
-  const breakEndEntry = buildSyntheticBreakEntry(
-    block,
-    'break_end',
-    automaticBreak.breakEnd,
-    'auto-break-end',
-  );
-
-  return [{ breakStart: breakStartEntry, breakEnd: breakEndEntry }];
+  return getAutomaticBreakRanges(block.start, displayEnd, displayPolicy).map((range, index) => ({
+    breakStart: buildSyntheticBreakEntry(block, 'break_start', range.breakStart, autoBreakId('start', index)),
+    breakEnd: buildSyntheticBreakEntry(block, 'break_end', range.breakEnd, autoBreakId('end', index)),
+  }));
 }
 
 /** A block's work and break segments as the day shows them, without the momentary ones. */
@@ -256,38 +250,40 @@ function blockSegments(
 
   const displayPolicy = resolveDisplayBreakPolicy(block, referenceDate, settings);
   const displayEnd = block.end ? new Date(block.end) : referenceDate;
-  const automaticBreak = getAutomaticBreakRange(block.start, displayEnd, displayPolicy);
+  const automaticBreaks = getAutomaticBreakRanges(block.start, displayEnd, displayPolicy);
 
-  if (!automaticBreak) {
+  if (automaticBreaks.length === 0) {
     return block.segments;
   }
 
-  const blockStart = new Date(block.start);
+  // Work, then each automatic break in order, then the work after the last one.
   const segments: CalendarBlockSegment[] = [];
-
-  if (blockStart < automaticBreak.breakStart) {
+  let workStart = new Date(block.start);
+  for (const [index, automaticBreak] of automaticBreaks.entries()) {
+    if (workStart < automaticBreak.breakStart) {
+      segments.push({
+        id: autoSegmentId(block.id, 'work-before', index),
+        type: 'work',
+        start: workStart.toISOString(),
+        end: automaticBreak.breakStart.toISOString(),
+        jobId: block.jobId,
+      });
+    }
     segments.push({
-      id: `${block.id}-auto-work-before`,
-      type: 'work',
-      start: block.start,
-      end: automaticBreak.breakStart.toISOString(),
+      id: autoSegmentId(block.id, 'break', index),
+      type: 'break',
+      start: automaticBreak.breakStart.toISOString(),
+      end: automaticBreak.breakEnd.toISOString(),
       jobId: block.jobId,
     });
+    workStart = automaticBreak.breakEnd;
   }
 
-  segments.push({
-    id: `${block.id}-auto-break`,
-    type: 'break',
-    start: automaticBreak.breakStart.toISOString(),
-    end: automaticBreak.breakEnd.toISOString(),
-    jobId: block.jobId,
-  });
-
-  if (displayEnd > automaticBreak.breakEnd) {
+  if (displayEnd > workStart) {
     segments.push({
       id: `${block.id}-auto-work-after`,
       type: 'work',
-      start: automaticBreak.breakEnd.toISOString(),
+      start: workStart.toISOString(),
       end: block.end,
       jobId: block.jobId,
     });

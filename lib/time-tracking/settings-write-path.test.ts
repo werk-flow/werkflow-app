@@ -13,6 +13,8 @@ type StoredSettings = {
   break_mode: 'manual' | 'automatic';
   auto_break_threshold_minutes: number;
   auto_break_duration_minutes: number;
+  auto_break_second_threshold_minutes: number | null;
+  auto_break_second_duration_minutes: number | null;
   break_policy_history: unknown[];
 };
 type RpcCall = { name: string; args: Record<string, unknown> };
@@ -148,6 +150,8 @@ if (ISOLATED) {
       break_mode: 'manual',
       auto_break_threshold_minutes: 360,
       auto_break_duration_minutes: 30,
+      auto_break_second_threshold_minutes: null,
+      auto_break_second_duration_minutes: null,
       break_policy_history: [recordedEntry],
     };
     organizationAdminId = 'owner';
@@ -162,6 +166,9 @@ if (ISOLATED) {
     breakMode: 'automatic',
     autoBreakThresholdMinutes: 360,
     autoBreakDurationMinutes: 45,
+    secondStepEnabled: false,
+    secondStepThresholdMinutes: 540,
+    secondStepDurationMinutes: 45,
   } as const;
 
   test('a settings change appends to the stored policy history, not to a cached copy', async () => {
@@ -170,7 +177,8 @@ if (ISOLATED) {
     expect(rpcCalls.map((call) => call.name)).toEqual(['update_time_tracking_settings']);
     const history = writtenHistorySchema.parse(rpcCalls[0]?.args.p_break_policy_history);
     expect(history.map((entry) => entry.breakMode)).toEqual(['manual', 'automatic']);
-    expect(history[0]).toEqual(recordedEntry);
+    // The earlier version is kept; read back, it names its missing second step as off.
+    expect(history[0]).toEqual({ ...recordedEntry, secondStep: null });
     // The function refuses when the stored row no longer equals this snapshot.
     expect(rpcCalls[0]?.args.p_expected_settings).toEqual(stored);
     expect(invalidatedTags).toEqual(['organization-settings-org']);
@@ -227,6 +235,8 @@ if (ISOLATED) {
       break_mode: 'automatic',
       auto_break_threshold_minutes: 360,
       auto_break_duration_minutes: 30,
+      auto_break_second_threshold_minutes: null,
+      auto_break_second_duration_minutes: null,
       break_policy_history: [],
     };
     const result = await updateTimeTrackingSettings({ ...change, breakMode: 'manual' });
@@ -237,6 +247,7 @@ if (ISOLATED) {
       breakMode: 'manual' as const,
       autoBreakThresholdMinutes: 360,
       autoBreakDurationMinutes: 45,
+      secondStep: null,
       breakPolicyHistory: parseBreakPolicyHistory(z.json().parse(rpcCalls[0]?.args.p_break_policy_history)),
     };
     // A day before the change keeps the rule it ran under, not the new one.
@@ -244,6 +255,7 @@ if (ISOLATED) {
       breakMode: 'automatic',
       autoBreakThresholdMinutes: 360,
       autoBreakDurationMinutes: 30,
+      secondStep: null,
     });
     expect(resolveBreakPolicyAtTimestamp(settings, NOW).breakMode).toBe('manual');
   });

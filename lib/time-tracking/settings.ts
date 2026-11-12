@@ -8,6 +8,15 @@ export type OrgBreakMode = Database['public']['Enums']['time_tracking_break_mode
 const DEFAULT_AUTO_BREAK_THRESHOLD_MINUTES = 360;
 const DEFAULT_AUTO_BREAK_DURATION_MINUTES = 30;
 
+/** One step of the automatic break: from this much presence, this much break in total. */
+export type BreakStep = { thresholdMinutes: number; durationMinutes: number };
+
+/**
+ * The second step a new organization starts with and an existing one is
+ * offered: beyond nine hours, 45 minutes in total (ArbZG § 4).
+ */
+const DEFAULT_SECOND_BREAK_STEP: BreakStep = { thresholdMinutes: 540, durationMinutes: 45 };
+
 export const BREAK_MODE_OPTIONS: Array<{
   value: OrgBreakMode;
   label: string;
@@ -31,6 +40,9 @@ export const timeTrackingSettingsSchema = z
     breakMode: z.enum(['manual', 'automatic']),
     autoBreakThresholdMinutes: z.coerce.number().int().min(1).max(1440),
     autoBreakDurationMinutes: z.coerce.number().int().min(0).max(1440),
+    secondStepEnabled: z.boolean(),
+    secondStepThresholdMinutes: z.coerce.number().int().min(1).max(1440),
+    secondStepDurationMinutes: z.coerce.number().int().min(0).max(1440),
   })
   .superRefine((value, ctx) => {
     if (value.autoBreakDurationMinutes > value.autoBreakThresholdMinutes) {
@@ -40,14 +52,44 @@ export const timeTrackingSettingsSchema = z
         message: 'Die Pause darf nicht länger als die Schwelle sein.',
       });
     }
+    if (!value.secondStepEnabled) return;
+    if (value.secondStepThresholdMinutes <= value.autoBreakThresholdMinutes) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['secondStepThresholdMinutes'],
+        message: 'Die zweite Schwelle muss nach der ersten liegen.',
+      });
+    } else if (value.secondStepDurationMinutes < value.autoBreakDurationMinutes) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['secondStepDurationMinutes'],
+        message: 'Die Pause der zweiten Stufe ist die Gesamtpause und darf nicht kürzer als die erste sein.',
+      });
+    } else if (
+      value.secondStepDurationMinutes - value.autoBreakDurationMinutes >
+      value.secondStepThresholdMinutes - value.autoBreakThresholdMinutes
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['secondStepDurationMinutes'],
+        message: 'Die zusätzliche Pause passt nicht zwischen die beiden Schwellen.',
+      });
+    }
   });
 
 export type TimeTrackingSettingsValues = z.infer<typeof timeTrackingSettingsSchema>;
+
+const breakStepSchema = z.object({
+  thresholdMinutes: z.number().int().min(1).max(1440),
+  durationMinutes: z.number().int().min(0).max(1440),
+});
 
 const breakPolicyHistoryEntrySchema = z.object({
   breakMode: z.enum(['manual', 'automatic']),
   autoBreakThresholdMinutes: z.number().int().min(1).max(1440),
   autoBreakDurationMinutes: z.number().int().min(0).max(1440),
+  // A version saved before the second step existed has none.
+  secondStep: breakStepSchema.nullish().transform((step) => step ?? null),
   // Postgres writes the first entry with a `+00:00` offset, the app with `Z`.
   // Both are accepted and read back in the `Z` form.
   effectiveFrom: z.iso.datetime({ offset: true }).transform((value) => new Date(value).toISOString()),
@@ -55,10 +97,10 @@ const breakPolicyHistoryEntrySchema = z.object({
 
 export type BreakPolicyHistoryEntry = z.infer<typeof breakPolicyHistoryEntrySchema>;
 
-/** One version of the break rule: the mode and its automatic step. */
+/** One version of the break rule: the mode, its first automatic step and the optional second one. */
 export type BreakPolicyValues = Pick<
   BreakPolicyHistoryEntry,
-  'breakMode' | 'autoBreakThresholdMinutes' | 'autoBreakDurationMinutes'
+  'breakMode' | 'autoBreakThresholdMinutes' | 'autoBreakDurationMinutes' | 'secondStep'
 >;
 
 /**
@@ -73,6 +115,7 @@ export const breakPolicyValuesSchema = z.object({
   breakMode: z.enum(['manual', 'automatic']),
   autoBreakThresholdMinutes: z.number(),
   autoBreakDurationMinutes: z.number(),
+  secondStep: breakStepSchema.nullable(),
 }) satisfies z.ZodType<BreakPolicyValues>;
 
 export type OrganizationTimeTrackingSettings = BreakPolicy & { organizationId: string };
@@ -83,6 +126,7 @@ export function breakPolicyOf(settings: BreakPolicy): BreakPolicy {
     breakMode: settings.breakMode,
     autoBreakThresholdMinutes: settings.autoBreakThresholdMinutes,
     autoBreakDurationMinutes: settings.autoBreakDurationMinutes,
+    secondStep: settings.secondStep,
     breakPolicyHistory: settings.breakPolicyHistory,
   };
 }
@@ -93,7 +137,55 @@ export function currentBreakPolicy(policy: BreakPolicyValues): BreakPolicyValues
     breakMode: policy.breakMode,
     autoBreakThresholdMinutes: policy.autoBreakThresholdMinutes,
     autoBreakDurationMinutes: policy.autoBreakDurationMinutes,
+    secondStep: policy.secondStep,
   };
+}
+
+/** The stored second step: both columns set, or none (the step is off). */
+export function breakStepOf(
+  thresholdMinutes: number | null,
+  durationMinutes: number | null,
+): BreakStep | null {
+  return thresholdMinutes === null || durationMinutes === null ? null : { thresholdMinutes, durationMinutes };
+}
+
+/** The rule's values as the settings form edits them; a switched-off second step offers the defaults. */
+export function breakPolicyFormValues(policy: BreakPolicyValues): TimeTrackingSettingsValues {
+  const secondStep = policy.secondStep ?? DEFAULT_SECOND_BREAK_STEP;
+  return {
+    breakMode: policy.breakMode,
+    autoBreakThresholdMinutes: policy.autoBreakThresholdMinutes,
+    autoBreakDurationMinutes: policy.autoBreakDurationMinutes,
+    secondStepEnabled: policy.secondStep !== null,
+    secondStepThresholdMinutes: secondStep.thresholdMinutes,
+    secondStepDurationMinutes: secondStep.durationMinutes,
+  };
+}
+
+/** The rule a saved form describes. */
+export function breakPolicyValuesOf(values: TimeTrackingSettingsValues): BreakPolicyValues {
+  return {
+    breakMode: values.breakMode,
+    autoBreakThresholdMinutes: values.autoBreakThresholdMinutes,
+    autoBreakDurationMinutes: values.autoBreakDurationMinutes,
+    secondStep: values.secondStepEnabled
+      ? {
+          thresholdMinutes: values.secondStepThresholdMinutes,
+          durationMinutes: values.secondStepDurationMinutes,
+        }
+      : null,
+  };
+}
+
+/** Whether two versions describe the same rule. */
+export function sameBreakPolicy(a: BreakPolicyValues, b: BreakPolicyValues): boolean {
+  return (
+    a.breakMode === b.breakMode &&
+    a.autoBreakThresholdMinutes === b.autoBreakThresholdMinutes &&
+    a.autoBreakDurationMinutes === b.autoBreakDurationMinutes &&
+    a.secondStep?.thresholdMinutes === b.secondStep?.thresholdMinutes &&
+    a.secondStep?.durationMinutes === b.secondStep?.durationMinutes
+  );
 }
 
 /** A key that changes whenever the rule or one of its versions changes. */
@@ -107,6 +199,8 @@ export function getDefaultTimeTrackingSettings(organizationId: string): Organiza
     breakMode: 'manual',
     autoBreakThresholdMinutes: DEFAULT_AUTO_BREAK_THRESHOLD_MINUTES,
     autoBreakDurationMinutes: DEFAULT_AUTO_BREAK_DURATION_MINUTES,
+    // Only an organization created before the settings existed has no row: it keeps one step.
+    secondStep: null,
     breakPolicyHistory: [],
   };
 }
@@ -119,6 +213,7 @@ export function buildBreakPolicyHistoryEntry(
     breakMode: values.breakMode,
     autoBreakThresholdMinutes: values.autoBreakThresholdMinutes,
     autoBreakDurationMinutes: values.autoBreakDurationMinutes,
+    secondStep: values.secondStep,
     effectiveFrom,
   };
 }
@@ -149,6 +244,7 @@ export function normalizeTimeTrackingSettings(
     breakMode: input.breakMode ?? 'manual',
     autoBreakThresholdMinutes: input.autoBreakThresholdMinutes ?? DEFAULT_AUTO_BREAK_THRESHOLD_MINUTES,
     autoBreakDurationMinutes: input.autoBreakDurationMinutes ?? DEFAULT_AUTO_BREAK_DURATION_MINUTES,
+    secondStep: input.secondStep ?? null,
     breakPolicyHistory: input.breakPolicyHistory,
   };
 }
@@ -161,11 +257,7 @@ export function resolveBreakPolicyAtTimestamp(
   const [earliestEntry] = history;
 
   if (!earliestEntry || !referenceTimestamp) {
-    return {
-      breakMode: settings.breakMode,
-      autoBreakThresholdMinutes: settings.autoBreakThresholdMinutes,
-      autoBreakDurationMinutes: settings.autoBreakDurationMinutes,
-    };
+    return currentBreakPolicy(settings);
   }
 
   const referenceMs =
@@ -174,22 +266,28 @@ export function resolveBreakPolicyAtTimestamp(
       : new Date(referenceTimestamp).getTime();
 
   if (!Number.isFinite(referenceMs)) {
-    return {
-      breakMode: settings.breakMode,
-      autoBreakThresholdMinutes: settings.autoBreakThresholdMinutes,
-      autoBreakDurationMinutes: settings.autoBreakDurationMinutes,
-    };
+    return currentBreakPolicy(settings);
   }
 
   const matchingEntry =
     [...history].reverse().find((entry) => new Date(entry.effectiveFrom).getTime() <= referenceMs) ??
     earliestEntry;
 
-  return {
-    breakMode: matchingEntry.breakMode,
-    autoBreakThresholdMinutes: matchingEntry.autoBreakThresholdMinutes,
-    autoBreakDurationMinutes: matchingEntry.autoBreakDurationMinutes,
+  return currentBreakPolicy(matchingEntry);
+}
+
+/** The rule's automatic steps in threshold order: the first, and the second when it is on. */
+function breakSteps(settings: BreakPolicyValues): BreakStep[] {
+  const first = {
+    thresholdMinutes: settings.autoBreakThresholdMinutes,
+    durationMinutes: settings.autoBreakDurationMinutes,
   };
+  return settings.secondStep ? [first, settings.secondStep] : [first];
+}
+
+/** The automatic break of a day with this much presence: the total of the last step it reached. */
+function automaticBreakMinutes(totalMinutes: number, settings: BreakPolicyValues): number {
+  return breakSteps(settings).findLast((step) => totalMinutes >= step.thresholdMinutes)?.durationMinutes ?? 0;
 }
 
 export function computeBreakdownForSettings(
@@ -202,25 +300,25 @@ export function computeBreakdownForSettings(
     return computeTimeBreakdown(totalMinutes, trackedBreakMinutes, targetMinutes);
   }
 
-  const breakMinutes =
-    totalMinutes >= settings.autoBreakThresholdMinutes ? settings.autoBreakDurationMinutes : 0;
-
-  return computeTimeBreakdown(totalMinutes, breakMinutes, targetMinutes);
+  return computeTimeBreakdown(totalMinutes, automaticBreakMinutes(totalMinutes, settings), targetMinutes);
 }
 
-export function getAutomaticBreakRange(
+export type AutomaticBreakRange = { breakStart: Date; breakEnd: Date };
+
+/**
+ * Where a block's automatic break lies: each reached step adds its share of
+ * the total and ends at its threshold, so beyond nine hours a 30-minute break
+ * ends at six hours and 15 more minutes end at nine. The ranges add up to
+ * `automaticBreakMinutes` for the block. A share that would not fit inside
+ * the block is left out.
+ */
+export function getAutomaticBreakRanges(
   start: string | Date | null | undefined,
   end: string | Date | null | undefined,
   settings: BreakPolicyValues | null | undefined,
-): { breakStart: Date; breakEnd: Date } | null {
-  if (
-    !start ||
-    !end ||
-    !settings ||
-    settings.breakMode !== 'automatic' ||
-    settings.autoBreakDurationMinutes <= 0
-  ) {
-    return null;
+): AutomaticBreakRange[] {
+  if (!start || !end || !settings || settings.breakMode !== 'automatic') {
+    return [];
   }
 
   const startDate = start instanceof Date ? start : new Date(start);
@@ -229,22 +327,22 @@ export function getAutomaticBreakRange(
   const endMs = endDate.getTime();
 
   if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
-    return null;
+    return [];
   }
 
   const totalMinutes = (endMs - startMs) / 60000;
-  if (totalMinutes < settings.autoBreakThresholdMinutes) {
-    return null;
+  const ranges: AutomaticBreakRange[] = [];
+  let previousDuration = 0;
+  for (const step of breakSteps(settings)) {
+    if (totalMinutes < step.thresholdMinutes) break;
+    const shareMinutes = step.durationMinutes - previousDuration;
+    previousDuration = Math.max(previousDuration, step.durationMinutes);
+    if (shareMinutes <= 0) continue;
+    const breakEnd = new Date(startMs + step.thresholdMinutes * 60000);
+    const breakStart = new Date(breakEnd.getTime() - shareMinutes * 60000);
+    if (breakStart > startDate && breakEnd <= endDate) ranges.push({ breakStart, breakEnd });
   }
-
-  const breakEnd = new Date(startMs + settings.autoBreakThresholdMinutes * 60000);
-  const breakStart = new Date(breakEnd.getTime() - settings.autoBreakDurationMinutes * 60000);
-
-  if (breakStart <= startDate || breakEnd > endDate) {
-    return null;
-  }
-
-  return { breakStart, breakEnd };
+  return ranges;
 }
 
 // The start of an organization's first recorded version when the rule it had
@@ -266,12 +364,7 @@ export function appendBreakPolicyHistory(
       : [buildBreakPolicyHistoryEntry(current, FIRST_VERSION_EFFECTIVE_FROM)];
   const lastEntry = history[history.length - 1];
 
-  if (
-    lastEntry &&
-    lastEntry.breakMode === nextEntry.breakMode &&
-    lastEntry.autoBreakThresholdMinutes === nextEntry.autoBreakThresholdMinutes &&
-    lastEntry.autoBreakDurationMinutes === nextEntry.autoBreakDurationMinutes
-  ) {
+  if (lastEntry && sameBreakPolicy(lastEntry, nextEntry)) {
     return history;
   }
 

@@ -59,6 +59,8 @@ export const COLUMN_LABELS: Record<LabeledColumn, string> = {
   authoritative_targets: 'Maßgebliche Ziele',
   authorization_state: 'Freigabestatus',
   auto_break_duration_minutes: 'Automatische Pause (Minuten)',
+  auto_break_second_duration_minutes: 'Automatische Pause zweite Stufe, gesamt (Minuten)',
+  auto_break_second_threshold_minutes: 'Automatische Pause zweite Stufe ab (Minuten)',
   auto_break_threshold_minutes: 'Automatische Pause ab (Minuten)',
   avatar_path: 'Profilbild (Speicherort)',
   barcode_type: 'Barcode-Typ',
