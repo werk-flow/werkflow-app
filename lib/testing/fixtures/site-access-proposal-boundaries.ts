@@ -195,6 +195,16 @@ await assertRefused(
   'none',
 );
 
+// Reviewed access notes are the Einsatzort's as they are, longer than any
+// proposal may be: the acceptance still reaches the database.
+world.rpc = () => ({ data: { id: proposalId }, error: null });
+world.rpcCalls.length = 0;
+const longNotes = 'Schlüssel beim Hausmeister. '.repeat(200);
+assert.ok(longNotes.length > 2000);
+assert.deepEqual(await accept(proposalId, null, longNotes)(), { success: true });
+assert.equal(world.rpcCalls.length, 1);
+assert.equal(world.rpcCalls[0]?.args.p_reviewed_access_notes, longNotes);
+
 // The assigned field worker's proposal is one call naming the caller, the
 // organization, the job and its Einsatzort.
 signInAs(world, 'employee');

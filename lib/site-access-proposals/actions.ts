@@ -45,8 +45,10 @@ const proposeInputSchema = z.object({
 const revisionSchema = z.number().int().min(1);
 
 // What the review showed of what an acceptance overwrites; '' for none. Another
-// decision on the Einsatzort since then refuses it (site_changed).
-const reviewedTextSchema = z.string().max(SITE_ACCESS_LIMITS.accessNotes);
+// decision on the Einsatzort since then refuses it (site_changed). These are
+// master data as they are, not proposal input: the bound only caps the request
+// at the customer editor's largest text (10,000 characters, lib/clients/actions.ts).
+const reviewedTextSchema = z.string().max(10_000);
 
 const acceptInputSchema = z.object({
   proposalId: uuidSchema,
