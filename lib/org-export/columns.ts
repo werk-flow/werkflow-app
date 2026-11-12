@@ -216,6 +216,7 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   work_artifact_revisions: 'Arbeitsnachweise_Fassungen',
   work_artifact_signature_uploads: 'Arbeitsnachweise_Unterschriften',
   work_artifacts: 'Arbeitsnachweise',
+  work_billing_parties: 'Arbeit_Auftraggeber_und_Rechnungsempfänger',
   work_blocker_events: 'Arbeit_Hindernisse_Ereignisse',
   work_blockers: 'Arbeit_Hindernisse',
   work_dependencies: 'Arbeit_Abhängigkeiten',

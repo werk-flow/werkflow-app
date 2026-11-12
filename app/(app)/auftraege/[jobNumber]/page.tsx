@@ -19,6 +19,7 @@ import { getWorkArtifacts } from '@/lib/work-artifacts/actions';
 import { getEffectiveResponsibilityHolderForActor } from '@/lib/responsibilities/server';
 import { getWorkHandoverWorkspace } from '@/lib/work-handover/actions';
 import { getWorkRequestEntries } from '@/lib/requests/work-attach-server';
+import { getWorkBillingParties } from '@/lib/billing-parties/server';
 import { jobDetailHref } from '@/lib/jobs/routes';
 import JobDetailLoading from './loading';
 
@@ -62,6 +63,10 @@ function loadJobDetailReads(
   const requestEntriesPromise = jobResultPromise.then((result) =>
     result.success ? getWorkRequestEntries({ kind: 'job', id: result.job.id }) : null,
   );
+  // Office-only: the Auftraggeber and the frozen Rechnungsempfänger.
+  const billingPartiesPromise = jobResultPromise.then((result) =>
+    result.success ? getWorkBillingParties({ kind: 'job', id: result.job.id }) : null,
+  );
 
   // Origin request (P1-02): read through the RLS-enforced client, so only
   // managers (who may see requests) get the back-link.
@@ -88,6 +93,7 @@ function loadJobDetailReads(
     handoverWorkspacePromise,
     originRequestPromise,
     requestEntriesPromise,
+    billingPartiesPromise,
   ]);
 }
 
@@ -148,6 +154,7 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
     handoverWorkspaceResult,
     originRequest,
     requestEntriesResult,
+    billingPartiesResult,
   ] = await loadJobDetailReads(supabase, { jobNumber, activeOrgId, userId: user.id });
 
   // A missing or forbidden job leaves the page; a failed read must not look like one.
@@ -206,6 +213,7 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
       currentUserId={user.id}
       originRequest={originRequestLink(originRequest)}
       requestEntries={requestEntriesResult?.success ? requestEntriesResult.entries : undefined}
+      billingParties={billingPartiesResult?.success ? billingPartiesResult.parties : undefined}
       lifecycleSnapshot={lifecycleResult?.success ? lifecycleResult.snapshot : null}
       handoverWorkspace={handoverWorkspace}
     />

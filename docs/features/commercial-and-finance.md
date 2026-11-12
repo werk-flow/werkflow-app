@@ -7,6 +7,7 @@ The commercial loop takes an SHK business from a customer request to agreed scop
 WerkFlow has no commercial or finance module. Admin and Büro work with the operational records that the commercial loop will consume.
 
 - **Documents.** Jobs, projects, customers and service cases hold linked documents, and the central library stores business documents. An uploaded PDF is not a structured offer, contract, invoice, incoming bill, payment or accounting record.
+- **Invoice recipient.** Each request, job, project and Servicefall keeps its Auftraggeber and its Rechnungsempfänger with the recipient's name and address as they were when set ([Customers and CRM](customers-and-crm.md#current-product-baseline)). Offers (werk-flow/werkflow-planning#16) read this copy as their recipient: the current version that `get_work_billing_parties` returns. Nothing invoices, prices or sends from it yet.
 - **Inventory prices.** Articles carry purchase price, sale price, tax rate and billable defaults. No workflow turns them into offers, invoices, revenue or profit.
 - **Time.** Time entries attach to operational work. No billable-time handoff, labor calculation, rate card or post-calculation exists. The payroll-ready time export carries minutes only and creates no wage calculation, posting, billable labor or invoice.
 - **Measurements and change work.** Aufmaß and Regie- or Änderungsnachweise carry internal decisions and customer-response evidence. They carry no price, scope acceptance, billing release or invoice effect.

@@ -56,6 +56,10 @@ export const DIALOG_INVENTORY = {
   'components/anfragen/attach-request-dialog.tsx#AttachRequestDialog|Zu bestehender Arbeit hinzufügen': {
     audits: [{ route: '/anfragen/[requestId]', role: 'admin', opener: 'requests.attach-to-work' }],
   },
+  'components/auftraege/shared/work-billing-parties-dialog.tsx#WorkBillingPartiesForm|Auftraggeber und Rechnungsempfänger':
+    {
+      audits: [{ route: '/anfragen/[requestId]', role: 'admin', opener: 'requests.billing-parties' }],
+    },
   'components/anfragen/close-request-dialog.tsx#CloseRequestDialog|Anfrage ohne Auftrag schließen': {
     audits: [{ route: '/anfragen/[requestId]', role: 'admin', opener: 'requests.close' }],
   },

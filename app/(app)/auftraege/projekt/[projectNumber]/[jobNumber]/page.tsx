@@ -18,6 +18,7 @@ import { RouteRedirect } from '@/components/shared/route-redirect';
 import { getWorkLifecycleSnapshot } from '@/lib/work-lifecycle/actions';
 import { getWorkArtifacts } from '@/lib/work-artifacts/actions';
 import { getWorkRequestEntries } from '@/lib/requests/work-attach-server';
+import { getWorkBillingParties } from '@/lib/billing-parties/server';
 import { getEffectiveResponsibilityHolderForActor } from '@/lib/responsibilities/server';
 import { getWorkHandoverWorkspace } from '@/lib/work-handover/actions';
 import NestedJobDetailLoading from './loading';
@@ -33,6 +34,14 @@ type NestedJobDetailReadScope = {
   userId: string;
 };
 
+/** Starts a read of the job once it arrived; null when the job read failed. */
+function afterJob<T>(
+  jobResultPromise: ReturnType<typeof getJobByNumber>,
+  read: (jobId: string) => Promise<T>,
+): Promise<T | null> {
+  return jobResultPromise.then((result) => (result.success ? read(result.job.id) : null));
+}
+
 async function loadNestedJobDetailReads({
   projectNumber,
   jobNumber,
@@ -40,15 +49,9 @@ async function loadNestedJobDetailReads({
   userId,
 }: NestedJobDetailReadScope) {
   const jobResultPromise = getJobByNumber(decodeURIComponent(jobNumber));
-  const instructionItemsResultPromise = jobResultPromise.then((result) =>
-    result.success ? getJobInstructionItems(result.job.id) : null,
-  );
-  const documentsResultPromise = jobResultPromise.then((result) =>
-    result.success ? getJobDocuments(result.job.id) : null,
-  );
-  const materialLinesResultPromise = jobResultPromise.then((result) =>
-    result.success ? getJobMaterialLines(result.job.id) : null,
-  );
+  const instructionItemsResultPromise = afterJob(jobResultPromise, getJobInstructionItems);
+  const documentsResultPromise = afterJob(jobResultPromise, getJobDocuments);
+  const materialLinesResultPromise = afterJob(jobResultPromise, getJobMaterialLines);
   const inventoryOptionsResultPromise = getInventoryPickerPage();
   const lifecycleResultPromise = jobResultPromise.then((result) =>
     result.success ? getWorkLifecycleSnapshot({ targetType: 'job', targetId: result.job.id }) : null,
@@ -64,9 +67,13 @@ async function loadNestedJobDetailReads({
   const handoverWorkspacePromise = jobResultPromise.then((result) =>
     result.success ? getWorkHandoverWorkspace({ targetType: 'job', targetId: result.job.id }) : null,
   );
-  // The attached requests arrive with the page, so the section opens without a read of its own.
-  const requestEntriesPromise = jobResultPromise.then((result) =>
-    result.success ? getWorkRequestEntries({ kind: 'job', id: result.job.id }) : null,
+  // The attached requests and the billing parties arrive with the page, so
+  // their sections open without a read of their own.
+  const requestEntriesPromise = afterJob(jobResultPromise, (id) =>
+    getWorkRequestEntries({ kind: 'job', id }),
+  );
+  const billingPartiesPromise = afterJob(jobResultPromise, (id) =>
+    getWorkBillingParties({ kind: 'job', id }),
   );
 
   const [
@@ -82,6 +89,7 @@ async function loadNestedJobDetailReads({
     approvalHolder,
     handoverWorkspaceResult,
     requestEntriesResult,
+    billingPartiesResult,
   ] = await Promise.all([
     getProjectByNumber(decodeURIComponent(projectNumber)),
     jobResultPromise,
@@ -95,6 +103,7 @@ async function loadNestedJobDetailReads({
     approvalHolderPromise,
     handoverWorkspacePromise,
     requestEntriesPromise,
+    billingPartiesPromise,
   ]);
   return {
     projectResult,
@@ -109,6 +118,7 @@ async function loadNestedJobDetailReads({
     approvalHolder,
     handoverWorkspaceResult,
     requestEntriesResult,
+    billingPartiesResult,
   };
 }
 
@@ -124,6 +134,7 @@ function nestedJobDetailRegions(
     approvalHolder,
     handoverWorkspaceResult,
     requestEntriesResult,
+    billingPartiesResult,
   }: Awaited<ReturnType<typeof loadNestedJobDetailReads>>,
   memberRows: readonly OrgMemberInfo[],
 ) {
@@ -158,6 +169,7 @@ function nestedJobDetailRegions(
     lifecycleSnapshot: lifecycleResult?.success ? lifecycleResult.snapshot : null,
     handoverWorkspace,
     requestEntries: requestEntriesResult?.success ? requestEntriesResult.entries : undefined,
+    billingParties: billingPartiesResult?.success ? billingPartiesResult.parties : undefined,
   } satisfies Partial<ComponentProps<typeof JobDetailContent>>;
 }
 

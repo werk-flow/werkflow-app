@@ -58,7 +58,8 @@ export async function setWorkBillingParties(
       p_client_id: input.clientId,
       p_recipient_client_id: input.recipientClientId,
     });
-    if (error || !data) return partiesWriteRefusal(error, 'save_failed', 'setWorkBillingParties: save failed');
+    if (error || !data)
+      return partiesWriteRefusal(error, 'save_failed', 'setWorkBillingParties: save failed');
     return { success: true };
   } catch (error) {
     logError('Unexpected error in setWorkBillingParties:', error);
