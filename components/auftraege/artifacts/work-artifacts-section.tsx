@@ -2,22 +2,14 @@
 
 import { StaleRegion } from '@/components/shared/stale-region';
 import { EmptyState } from '@/components/ui/empty-state';
+import { SectionError } from '@/components/ui/section-error';
 import { PlainButton } from '@/components/ui/plain-button';
-import { useId, useState, type Dispatch, type ReactElement, type SetStateAction } from 'react';
+import { useState, type Dispatch, type ReactElement, type SetStateAction } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ClipboardList, Plus } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { useLiveView } from '@/hooks/use-live-view';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import { readInBackground } from '@/lib/data/background-read-client';
@@ -29,20 +21,14 @@ import {
   type WorkArtifactSummary,
   type WorkArtifactTimeSourceOption,
 } from '@/lib/work-artifacts/types';
-import { useWorkArtifactCustomerActions } from './use-work-artifact-customer-actions';
-import { useWorkArtifactEditor, type WorkArtifactEditor } from './use-work-artifact-editor';
-import { useWorkArtifactLinks } from './use-work-artifact-links';
-import { useWorkArtifactReviewActions } from './use-work-artifact-review-actions';
-import { useWorkArtifactSave } from './use-work-artifact-save';
+import {
+  noteDraftsOnDevice,
+  useArtifactCode,
+  type DraftDevice,
+  type RestoredDraft,
+} from './use-device-drafts';
 import type { WorkArtifactTarget } from '@/lib/work-artifacts/types';
 import type { WorkArtifactEvidenceRequirement } from './work-artifact-content';
-import { ArtifactDetail } from './work-artifact-detail';
-import {
-  WorkArtifactDialogActions,
-  WorkArtifactDialogSkeleton,
-  WorkArtifactDraftForm,
-  WorkArtifactRemoteUpdateHint,
-} from './work-artifacts-section-dialog-parts';
 import { SectionTitle } from '@/components/shared/section-title';
 
 type WorkArtifactsSectionProps = WorkArtifactTarget & {
@@ -75,18 +61,16 @@ export function WorkArtifactsSection({
   defaultSiteId,
   readOnly = false,
 }: WorkArtifactsSectionProps): ReactElement {
-  const searchParams = useSearchParams();
-  const [selectedId, setSelectedId] = useState<string | null>(() => {
-    const requestedId = searchParams.get('arbeitsnachweis');
-    return initialArtifacts.some((artifact) => artifact.id === requestedId) ? requestedId : null;
-  });
-  const [creating, setCreating] = useState(false);
+  const { selectedId, editing, restoredDraft, draftDevice, ...open } = useOpenArtifact(initialArtifacts);
   // Newest version seen per artifact while the dialog is open. The dialog
   // compares it with its loaded version, so the user's own writes never
   // raise the remote-change hint.
   const [remoteVersions, setRemoteVersions] = useState<Record<string, number>>({});
 
-  const editing = Boolean(selectedId || creating);
+  // The dialog and everything only it needs load apart from the job page's own code: the job list
+  // prefetches that code, so a dialog in it would count toward the field cold start. A field
+  // worker's page loads it once idle, so a first open without signal finds it.
+  const { code, failure } = useArtifactCode(currentUserId, editing, !isManager && !readOnly);
   const view = useWorkArtifactsLiveView({
     targetType,
     targetId,
@@ -95,7 +79,6 @@ export function WorkArtifactsSection({
     setRemoteVersions,
   });
   const artifacts = view.data ?? initialArtifacts;
-  const refresh = view.refresh;
 
   return (
     <section
@@ -103,19 +86,25 @@ export function WorkArtifactsSection({
       data-testid="work-artifacts-section"
       className="rounded-lg border bg-card p-4 shadow-xs sm:p-5"
     >
-      <WorkArtifactsSectionHeader
-        readOnly={readOnly}
-        isManager={isManager}
-        onCreate={() => setCreating(true)}
-      />
-      <StaleRegion stale={view.isStale} onRetry={refresh}>
-        <WorkArtifactList artifacts={artifacts} onSelect={setSelectedId} />
+      <WorkArtifactsSectionHeader readOnly={readOnly} isManager={isManager} onCreate={open.create} />
+      <StaleRegion stale={view.isStale} onRetry={view.refresh}>
+        <WorkArtifactList artifacts={artifacts} onSelect={open.select} />
       </StaleRegion>
       {view.isRefreshing && (
         <p className="mt-2 text-xs text-muted-foreground">Arbeitsnachweise werden aktualisiert…</p>
       )}
-      {(creating || selectedId) && (
-        <WorkArtifactDialog
+      <SectionDeviceDrafts
+        code={code}
+        failure={failure}
+        currentUserId={currentUserId}
+        jobId={targetType === 'job' ? targetId : null}
+        onOpen={open.restore}
+        onDevice={open.setDraftDevice}
+      />
+      {code && (
+        <code.WorkArtifactDialogHost
+          open={editing}
+          onOpenChange={open.change}
           targetType={targetType}
           targetId={targetId}
           artifactId={selectedId}
@@ -130,18 +119,70 @@ export function WorkArtifactsSection({
           instructionOptions={instructionOptions}
           defaultSiteId={defaultSiteId}
           readOnly={readOnly}
+          draftDevice={targetType === 'job' ? draftDevice : null}
+          restoredDraft={restoredDraft}
           remoteVersions={remoteVersions}
           onRemoteUpdateHandled={() => setRemoteVersions({})}
           onClose={() => {
-            setCreating(false);
-            setSelectedId(null);
+            open.close();
             setRemoteVersions({});
-            void refresh();
+            void view.refresh();
           }}
         />
       )}
     </section>
   );
+}
+
+/** The drafts this device keeps, once the dialog's code is loaded; code that cannot load shows its retry. */
+function SectionDeviceDrafts({
+  code,
+  failure,
+  ...drafts
+}: ReturnType<typeof useArtifactCode> & {
+  currentUserId: string;
+  jobId: string | null;
+  onOpen: (restored: RestoredDraft) => void;
+  onDevice: (device: DraftDevice | null) => void;
+}) {
+  if (failure) return <SectionError className="mt-4" failure={failure} />;
+  return code ? <code.DeviceDrafts {...drafts} noteDrafts={noteDraftsOnDevice} /> : null;
+}
+
+/** Which Arbeitsnachweis the dialog shows: a saved one, a new one, or a draft of this job the device kept. */
+function useOpenArtifact(initialArtifacts: WorkArtifactSummary[]) {
+  const searchParams = useSearchParams();
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    const requestedId = searchParams.get('arbeitsnachweis');
+    return initialArtifacts.some((artifact) => artifact.id === requestedId) ? requestedId : null;
+  });
+  const [creating, setCreating] = useState(false);
+  const [restoredDraft, setRestoredDraft] = useState<RestoredDraft | null>(null);
+  // Only a job keeps drafts on the device; their code loads with the dialog for a new Arbeitsnachweis.
+  const [draftDevice, setDraftDevice] = useState<DraftDevice | null>(null);
+  const close = (): void => {
+    setCreating(false);
+    setRestoredDraft(null);
+    setSelectedId(null);
+  };
+  return {
+    selectedId,
+    editing: Boolean(selectedId || creating),
+    restoredDraft,
+    draftDevice,
+    setDraftDevice,
+    select: setSelectedId,
+    create: () => setCreating(true),
+    restore: (draft: RestoredDraft) => {
+      setRestoredDraft(draft);
+      setCreating(true);
+    },
+    /** The lazy load closes a dialog whose code could not download. */
+    change: (next: boolean) => {
+      if (!next) close();
+    },
+    close,
+  };
 }
 
 type WorkArtifactsLiveViewOptions = WorkArtifactTarget & {
@@ -242,172 +283,5 @@ function WorkArtifactList({
         </PlainButton>
       ))}
     </div>
-  );
-}
-
-type WorkArtifactDialogProps = WorkArtifactTarget & {
-  artifactId: string | null;
-  initialSummary: WorkArtifactSummary | null;
-  isManager: boolean;
-  canApprove: boolean;
-  currentUserId: string;
-  documents: OrganizationDocument[];
-  evidenceRequirements: WorkArtifactEvidenceRequirement[];
-  timeEntryOptions: WorkArtifactTimeSourceOption[];
-  recordedVisit: RecordedVisitWindow;
-  instructionOptions: Array<{ id: string; label: string }>;
-  defaultSiteId?: string | undefined;
-  remoteVersions: Record<string, number>;
-  onRemoteUpdateHandled: () => void;
-  onClose: () => void;
-  readOnly: boolean;
-};
-
-function WorkArtifactDialog(props: WorkArtifactDialogProps) {
-  const { readOnly } = props;
-  const artifactFormId = useId();
-  const { editor, save, review, customer, links } = useWorkArtifactDialogActions(props);
-  const { detail, loading, editing, isBusy, anyBusy, currentRevision } = editor;
-  const { requestClose } = customer;
-
-  return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open) requestClose();
-      }}
-      pending={anyBusy}
-    >
-      <DialogContent size="4xl">
-        <DialogHeader>
-          <DialogTitle>
-            {detail ? (currentRevision?.title ?? 'Arbeitsnachweis') : 'Arbeitsnachweis erstellen'}
-          </DialogTitle>
-          <DialogDescription>{workArtifactDialogDescription(detail, currentRevision)}</DialogDescription>
-        </DialogHeader>
-        <DialogBody className="space-y-5 py-1">
-          <WorkArtifactRemoteUpdateHint {...props} editor={editor} />
-          {loading ? (
-            <WorkArtifactDialogSkeleton />
-          ) : !readOnly && editing ? (
-            <form
-              id={artifactFormId}
-              onSubmit={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                if (anyBusy || loading || readOnly || !editing) return;
-                save(true);
-              }}
-              noValidate
-            >
-              <WorkArtifactDraftForm editor={editor} instructionOptions={props.instructionOptions} />
-            </form>
-          ) : detail && currentRevision ? (
-            <ArtifactDetail
-              detail={detail}
-              currentRevision={currentRevision}
-              currentUserId={props.currentUserId}
-              documents={props.documents}
-            />
-          ) : null}
-
-          <WorkArtifactDialogActions
-            {...props}
-            editor={editor}
-            review={review}
-            customer={customer}
-            links={links}
-          />
-        </DialogBody>
-        <DialogFooter>
-          <WorkArtifactSecondaryActions
-            isBusy={isBusy}
-            anyBusy={anyBusy}
-            canEdit={!readOnly && editing}
-            onClose={requestClose}
-            onSaveDraft={() => save(false)}
-          />
-          {!readOnly && editing && (
-            <Button
-              pending={isBusy('submit')}
-              type="submit"
-              form={artifactFormId}
-              disabled={anyBusy || loading}
-            >
-              Zur Prüfung einreichen
-            </Button>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/** The editor and the action hooks of one open artifact dialog. */
-function useWorkArtifactDialogActions({
-  targetType,
-  targetId,
-  artifactId,
-  initialSummary,
-  defaultSiteId,
-  readOnly,
-  timeEntryOptions,
-  recordedVisit,
-  onClose,
-}: WorkArtifactDialogProps) {
-  const editor = useWorkArtifactEditor({
-    artifactId,
-    initialSummary,
-    defaultSiteId,
-    recordedVisit,
-    readOnly,
-  });
-  const save = useWorkArtifactSave({ targetType, targetId, editor });
-  const review = useWorkArtifactReviewActions(editor);
-  const customer = useWorkArtifactCustomerActions({ targetType, targetId, editor, onClose });
-  const links = useWorkArtifactLinks({ editor, review, timeEntryOptions });
-  return { editor, save, review, customer, links };
-}
-
-function workArtifactDialogDescription(
-  detail: WorkArtifactEditor['detail'],
-  currentRevision: WorkArtifactEditor['currentRevision'],
-): string {
-  return detail
-    ? `${WORK_ARTIFACT_KIND_LABELS[detail.kind]} · ${WORK_ARTIFACT_STATUS_LABELS[detail.status]} · Version ${currentRevision?.revision_number ?? 1}`
-    : 'Strukturierte Dokumentation direkt dem aktuellen Auftrag oder Projekt zuordnen.';
-}
-
-/** The footer's close and draft actions; the dialog keeps its submit beside its form. */
-function WorkArtifactSecondaryActions({
-  isBusy,
-  anyBusy,
-  canEdit,
-  onClose,
-  onSaveDraft,
-}: {
-  isBusy: (state: string) => boolean;
-  anyBusy: boolean;
-  canEdit: boolean;
-  onClose: () => void;
-  onSaveDraft: () => void;
-}) {
-  return (
-    <>
-      <Button pending={isBusy('close')} type="button" variant="outline" onClick={onClose} disabled={anyBusy}>
-        Schließen
-      </Button>
-      {canEdit && (
-        <Button
-          pending={isBusy('draft')}
-          type="button"
-          variant="outline"
-          onClick={onSaveDraft}
-          disabled={anyBusy}
-        >
-          Als Entwurf speichern
-        </Button>
-      )}
-    </>
   );
 }

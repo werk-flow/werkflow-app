@@ -1,5 +1,7 @@
 'use client';
 
+import type { ReactNode } from 'react';
+
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import { SectionError } from '@/components/ui/section-error';
@@ -66,9 +68,12 @@ export function WorkArtifactDialogSkeleton() {
 export function WorkArtifactDraftForm({
   editor,
   instructionOptions,
+  keeper,
 }: {
   editor: WorkArtifactEditor;
   instructionOptions: Array<{ id: string; label: string }>;
+  /** The draft keeper with the photos of a new job Arbeitsnachweis, once its code is loaded. */
+  keeper: ReactNode;
 }) {
   const {
     detail,
@@ -91,28 +96,31 @@ export function WorkArtifactDraftForm({
     fieldErrors,
   } = editor;
   return (
-    <ArtifactForm
-      kind={kind}
-      setKind={setKind}
-      lockedKind={Boolean(detail)}
-      visibility={visibility}
-      setVisibility={setVisibility}
-      title={title}
-      setTitle={setTitle}
-      capturedAt={capturedAt}
-      setCapturedAt={setCapturedAt}
-      content={content}
-      patchContent={patchContent}
-      measurementLines={measurementLines}
-      setMeasurementLines={(lines) => patchContent({ measurementLines: lines })}
-      instructionOptions={instructionOptions}
-      requiresCorrectionReason={requiresCorrectionReason}
-      correctionReason={correctionReason}
-      correctionReasonError={correctionReasonError}
-      setCorrectionReason={setCorrectionReason}
-      fieldState={fieldState}
-      fieldErrors={fieldErrors}
-    />
+    <div className="space-y-5">
+      <ArtifactForm
+        kind={kind}
+        setKind={setKind}
+        lockedKind={Boolean(detail)}
+        visibility={visibility}
+        setVisibility={setVisibility}
+        title={title}
+        setTitle={setTitle}
+        capturedAt={capturedAt}
+        setCapturedAt={setCapturedAt}
+        content={content}
+        patchContent={patchContent}
+        measurementLines={measurementLines}
+        setMeasurementLines={(lines) => patchContent({ measurementLines: lines })}
+        instructionOptions={instructionOptions}
+        requiresCorrectionReason={requiresCorrectionReason}
+        correctionReason={correctionReason}
+        correctionReasonError={correctionReasonError}
+        setCorrectionReason={setCorrectionReason}
+        fieldState={fieldState}
+        fieldErrors={fieldErrors}
+      />
+      {keeper}
+    </div>
   );
 }
 

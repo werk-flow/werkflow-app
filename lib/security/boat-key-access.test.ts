@@ -29,6 +29,7 @@ test('a command that names the key file or the CLI config in any spelling is ref
 });
 
 test('a glob that matches a secret file is refused', () => {
+  // `~/.config/werkflow/*` matches the hand-out file too, so its refusal names both secrets.
   for (const command of [
     'cat ~/.config/werkflow/*',
     'head ~/.config/werkflow/boat-api-*',
@@ -37,7 +38,7 @@ test('a glob that matches a secret file is refused', () => {
     'cd ~/.config/werkflow; tail -n1 *',
     'cat ../../.config/werkflow/b*',
   ])
-    expect(refused(command), command).toContain('matches a file that holds a Boat API key');
+    expect(refused(command), command).toMatch(/matches (?:a file that holds|files that hold) a Boat API key/);
 });
 
 test('a recursive read of a folder that holds a secret file is refused', () => {
@@ -152,6 +153,89 @@ test('the Read and Grep tools refuse a secret file and a search of its folder', 
   expect(call('Grep', { pattern: 'boat_' })).toBeUndefined();
 });
 
+// The problem-report hand-out secret: a report thread works on a user's text, so the same shapes
+// are refused for its file, while the helper and the dispatcher, which read it themselves, run.
+const HANDOUT = 'the problem-report hand-out secret';
+
+test('a command that names the hand-out secret file is refused', () => {
+  for (const command of [
+    'cat ~/.config/werkflow/problem-report-handout.env',
+    'grep SECRET "$HOME/.config/werkflow/problem-report-handout.env"',
+    'source ~/.config/werkflow/problem-report-handout.env && echo "$PROBLEM_REPORT_HANDOUT_SECRET"',
+    'cp ~/.config/werkflow/problem-report-handout.env /tmp/handout',
+    'bash -c "cat ~/.config/werkflow/problem-report-handout.env"',
+    // Spellings the shell reader cannot follow: only the name in the text refuses them.
+    'F=~/.config/werkflow/problem-report-handout.env; cat "$F"',
+    'cat <<EOF | sh\ncat ~/.config/werkflow/problem-report-handout.env\nEOF',
+  ])
+    expect(refused(command), command).toContain(HANDOUT);
+});
+
+test('a spelling of the hand-out file that hides its name from the text is refused by its path', () => {
+  // The quotes keep the name out of the raw text; the shell reader still resolves the path.
+  expect(refused('cat ~/.config/werkflow/problem-report-"handout".env')).toContain(
+    `names a file that holds ${HANDOUT}`,
+  );
+  expect(refused('cat ./problem-report-"handout".env', '/home/agent/.config/werkflow')).toContain(HANDOUT);
+  expect(refused('cd ~/.config && cd werkflow && cat < problem-report-"handout".env')).toContain(HANDOUT);
+});
+
+test('a glob that matches the hand-out file is refused', () => {
+  for (const command of ['cat ~/.config/werkflow/*.env', 'cd ~/.config/werkflow && head problem-report-*'])
+    expect(refused(command), command).toContain(`matches a file that holds ${HANDOUT}`);
+});
+
+test('a recursive read of the folder that holds the hand-out file names it', () => {
+  for (const command of [
+    'grep -r SECRET ~/.config/werkflow',
+    'rg --hidden HANDOUT ~/.config',
+    'tar czf /tmp/config.tgz ~/.config',
+  ])
+    expect(refused(command), command).toMatch(
+      new RegExp(`would read every file under .*${HANDOUT} included`),
+    );
+});
+
+test('the Read and Grep tools refuse the hand-out file and a search of its folder', () => {
+  const call = (tool_name: string, tool_input: unknown) =>
+    boatKeyToolRefusal({ tool_name, tool_input }, context);
+  expect(call('Read', { file_path: '~/.config/werkflow/problem-report-handout.env' })).toContain(HANDOUT);
+  expect(call('Grep', { pattern: 'SECRET', path: '/home/agent/.config/werkflow' })).toContain(HANDOUT);
+});
+
+test('a command that would read both secrets names both and what to do instead for each', () => {
+  const both =
+    /a Boat API key[^]*the problem-report hand-out secret[^]*`bun run test:verify`[^]*report-thread/;
+  for (const command of [
+    // One glob over the folder of both files.
+    'cat ~/.config/werkflow/*',
+    // Two operands, each naming one file by its path.
+    'cat ~/.config/werkflow/b"oat-api-key" ~/.config/werkflow/problem-report-"handout".env',
+    // Two raw mentions in one text.
+    'F=~/.config/werkflow/boat-api-key; G=~/.config/werkflow/problem-report-handout.env; cat "$F" "$G"',
+    // A recursive read of a folder that holds both.
+    'grep -r SECRET ~/.config/werkflow',
+  ])
+    expect(refused(command), command).toMatch(both);
+  // A mention of one and a path to the other in the same line.
+  const mixed = refused(
+    'cat ~/.config/werkflow/boat-api-key ~/.config/werkflow/problem-report-"handout".env',
+  );
+  expect(mixed).toContain('a Boat API key');
+  expect(mixed).toContain(HANDOUT);
+});
+
+test('the helper and the dispatcher, which read the hand-out secret themselves, run', () => {
+  for (const command of [
+    'bun scripts/report-thread.ts hand-out 0b9f3c1e-5d2a-4c7b-9e8f-1a2b3c4d5e6f',
+    'bun scripts/report-thread.ts screenshot 0b9f3c1e-5d2a-4c7b-9e8f-1a2b3c4d5e6f',
+    'echo \'{"changes":{"status":"erledigt"}}\' | bun scripts/report-thread.ts write-back 0b9f3c1e-5d2a-4c7b-9e8f-1a2b3c4d5e6f',
+    'python3 -I ~/code/werkflow-planning/ops/report-dispatch.py --dry-run',
+    'bun run test:unit lib/problem-reports/report-thread-helper.test.ts',
+  ])
+    expect(refused(command), command).toBeUndefined();
+});
+
 // The hook itself, as the agent runs it: exit 2 with the reason refuses the call.
 test('the hook refuses a read of the key and passes ordinary work', () => {
   const hook = resolve(import.meta.dir, '../../.claude/hooks/refuse-boat-key-reads.ts');
@@ -161,6 +245,12 @@ test('the hook refuses a read of the key and passes ordinary work', () => {
   expect(refusedRun.status).toBe(2);
   expect(refusedRun.stderr).toContain('Refused');
   expect(run(bash('git status')).status).toBe(0);
+  const handout = run(bash('cat ~/.config/werkflow/problem-report-handout.env'));
+  expect(handout.status).toBe(2);
+  expect(handout.stderr).toContain('hand-out secret');
+  expect(run(bash('bun scripts/report-thread.ts hand-out 0b9f3c1e-5d2a-4c7b-9e8f-1a2b3c4d5e6f')).status).toBe(
+    0,
+  );
   expect(
     run(JSON.stringify({ tool_name: 'Read', tool_input: { file_path: '~/.config/ascii/boat/config.json' } }))
       .status,

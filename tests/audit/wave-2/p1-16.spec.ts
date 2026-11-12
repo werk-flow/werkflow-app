@@ -42,6 +42,7 @@ import {
   lifecycleSavedBanner,
   openFieldWorkPack,
   parkJobOnJobPage,
+  proposeSiteAccessFromFieldPack,
   removeJobAssignment,
   reportOwnBlockerOnJobPage,
   resolveOwnBlockerOnJobPage,
@@ -211,6 +212,18 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
       jobNumber: childJobNumber,
     });
     expect(stateAfterOpen).toEqual(stateBeforeOpen);
+
+    // An open access proposal shows on the Einsatzort and still leaves the
+    // next action on the first screen (werk-flow/werkflow-planning#329).
+    await proposeSiteAccessFromFieldPack(employeePage, pack, {
+      contactName: testData`Erika Musterfrau`,
+      accessNotes: testData`Seiteneingang über den Hof.`,
+    });
+    const openProposalBox = expectDefined(
+      await primaryAction.boundingBox(),
+      'the primary action box with an open access proposal',
+    );
+    expect(openProposalBox.y + openProposalBox.height).toBeLessThanOrEqual(FIELD_VIEWPORT.height);
 
     await adminPage.goto(`/auftraege/projekt/${projectNumber}/${childJobNumber}`);
     await expectNoFieldWorkPack(adminPage);

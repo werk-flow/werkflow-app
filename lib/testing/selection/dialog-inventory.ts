@@ -270,6 +270,9 @@ export const DIALOG_INVENTORY = {
     {
       audits: [{ route: '/mitarbeiter', role: 'admin', opener: 'people.member-remove' }],
     },
+  'components/mitarbeiter/role-escalation-confirm-dialog.tsx#RoleEscalationConfirmDialog|{copy.title}': {
+    audits: [{ route: '/mitarbeiter', role: 'admin', opener: 'people.member-role-escalation' }],
+  },
   'components/mitarbeiter/personnel-invite-dialog.tsx#PersonnelInviteDialog|Zugang für {personName} einladen':
     {
       audits: [{ route: '/mitarbeiter/[userId]', role: 'admin', opener: 'people.personnel-invite' }],
@@ -464,12 +467,22 @@ export const DIALOG_INVENTORY = {
   'components/zeiterfassung/vacation-section-request-dialog.tsx#OwnVacationRequestDialog|Urlaub beantragen': {
     audits: [{ route: '/zeiterfassung', role: 'employee', opener: 'field.vacation-request' }],
   },
-  "components/auftraege/artifacts/work-artifacts-section.tsx#WorkArtifactDialog|{detail ? (currentRevision?.title ?? 'Arbeitsnachweis') : 'Arbeitsnachweis erstellen'}":
+  'components/auftraege/work-pack/field-site-access-dialog.tsx#SiteAccessProposalDialog|Zugang korrigieren': {
+    audits: [{ route: '/auftraege/[jobNumber]', role: 'employee', opener: 'field.site-access' }],
+  },
+  'components/kunden/site-access-review-dialog.tsx#SiteAccessReviewDialog|{title}': {
+    audits: [{ route: '/aufgaben', role: 'admin', opener: 'customers.site-access-review' }],
+  },
+  "components/auftraege/artifacts/work-artifact-dialog.tsx#WorkArtifactDialog|{detail ? (currentRevision?.title ?? 'Arbeitsnachweis') : 'Arbeitsnachweis erstellen'}":
     {
       audits: [
         { route: '/auftraege/[jobNumber]', role: 'admin', opener: 'work.artifact' },
         { route: '/auftraege/[jobNumber]', role: 'employee', opener: 'field.artifact' },
       ],
+    },
+  "components/auftraege/artifacts/device-draft-list.tsx#DeviceDraftDeleteDialog|Entwurf „ {draft?.title.trim() || 'Ohne Titel'} “ löschen?":
+    {
+      audits: [{ route: '/auftraege/[jobNumber]', role: 'employee', opener: 'field.artifact-draft-delete' }],
     },
   'components/auftraege/forms/create-auftrag-project-dialog.tsx#CreateAuftragProjectDialog|Neuen Auftrag oder Projekt erstellen':
     {
