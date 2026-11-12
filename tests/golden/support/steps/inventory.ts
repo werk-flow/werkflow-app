@@ -178,6 +178,11 @@ export function csvImportButtonOf(
   return dialog.getByRole('button', { name: INVENTORY_LABELS[action], exact: true });
 }
 
+/** The import dialog once the repeat check of its chosen file has answered (`clear`, `repeat` or `failed`). */
+export function csvImportRepeatChecked(dialog: Locator): Locator {
+  return dialog.locator('[data-import-repeat-check="clear"], [data-import-repeat-check="repeat"]');
+}
+
 /** One row of the import preview or result, found by the article name it shows. */
 export function csvImportRow(dialog: Locator, text: string): Locator {
   return confirmed(dialog.getByTestId('inventory-import-row').filter({ hasText: text }));

@@ -16,6 +16,7 @@ import {
   createLocationButton,
   csvImportButton,
   csvImportButtonOf,
+  csvImportRepeatChecked,
   csvImportRow,
   INVENTORY_COPY,
   INVENTORY_VIEWS,
@@ -355,6 +356,7 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     for (const [field, header] of Object.entries(mappings)) {
       await selectFromSearchable(adminPage, inventoryImportColumnPicker(dialog, field), header);
     }
+    await expect(csvImportRepeatChecked(dialog)).toBeVisible();
     await csvImportButtonOf(dialog, 'importPreview').click();
     // The preview names each row's effect; nothing is booked yet.
     const newItemRow = csvImportRow(dialog, importedItem);

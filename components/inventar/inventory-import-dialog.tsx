@@ -93,7 +93,7 @@ function RepeatNotice({
   if (repeat.state === 'checking') {
     return <p className="text-sm text-muted-foreground">Prüfe, ob du diese Datei schon importiert hast …</p>;
   }
-  if (repeat.state === 'none') return null;
+  if (repeat.state === 'none' || repeat.state === 'clear') return null;
   const message =
     repeat.state === 'repeat'
       ? `Diese Datei wurde schon am ${formatBerlinDateTime(repeat.bookedAt)} von ${repeat.bookedBy} importiert. Ein zweiter Import bucht ihre Mengen noch einmal.`
@@ -239,7 +239,7 @@ export function ImportDialog(props: ImportDialogProps) {
           noValidate
           className="flex min-h-0 flex-1 flex-col"
         >
-          <DialogBody className="space-y-4 py-1">
+          <DialogBody className="space-y-4 py-1" data-import-repeat-check={csvImport.repeat.state}>
             {step.kind === 'choose' && <ChooseStep csvImport={csvImport} />}
             {step.kind !== 'choose' && (
               <>

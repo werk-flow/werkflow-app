@@ -7,6 +7,7 @@ import {
   createLocationButton,
   csvImportButton,
   csvImportButtonOf,
+  csvImportRepeatChecked,
   inventoryImportFileInput,
   inventoryDialogLayer,
   inventoryItemRow,
@@ -96,14 +97,19 @@ export const INVENTORY_OPENERS = {
     layer: (page) => inventoryDialogLayer(page, 'importCsv'),
   },
   'inventory.import-preview': {
-    trigger: async ({ page }) =>
-      csvImportButtonOf(await importWithFile(page, importFile('mixed')), 'importPreview'),
+    trigger: async ({ page }) => {
+      const dialog = await importWithFile(page, importFile('mixed'));
+      // The preview waits for the repeat check of the chosen file.
+      await expect(csvImportRepeatChecked(dialog)).toBeVisible();
+      return csvImportButtonOf(dialog, 'importPreview');
+    },
     layer: importLayer,
     returnFocus: importStateReturnFocus,
   },
   'inventory.import-result': {
     trigger: async ({ page }) => {
       const dialog = await importWithFile(page, importFile('mixed'));
+      await expect(csvImportRepeatChecked(dialog)).toBeVisible();
       await csvImportButtonOf(dialog, 'importPreview').click();
       return csvImportButtonOf(dialog, 'importBook');
     },

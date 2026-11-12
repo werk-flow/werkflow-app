@@ -33,6 +33,7 @@ type ImportStep =
 export type RepeatCheck =
   | { state: 'none' }
   | { state: 'checking' }
+  | { state: 'clear' }
   | { state: 'repeat'; bookedAt: string; bookedBy: string; confirmed: boolean }
   | { state: 'failed'; confirmed: boolean };
 
@@ -100,7 +101,7 @@ function useCsvFile() {
     if (thisRead !== latestRead.current) return;
     if (!result?.success) setRepeat({ state: 'failed', confirmed: false });
     else if (result.repeat) setRepeat({ state: 'repeat', ...result.repeat, confirmed: false });
-    else setRepeat({ state: 'none' });
+    else setRepeat({ state: 'clear' });
   }
 
   function read(file: File) {
