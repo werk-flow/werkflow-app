@@ -24,7 +24,7 @@ A useful test survives an equivalent implementation. Check a regression test aga
 2. Take dates from the `businessDate` fixture or `berlinDateAtOffset`. Give every record a test-specific name.
 3. Keep a connected workflow inside one test, with named `test.step` stages.
 4. Locate controls through the area module under `tests/golden/support/steps/`. It owns copy, structure hooks and key presses; the spec passes data. Act through `steps/interaction.ts` and wait for the exact changed fact.
-5. Run `bun run test:unit lib/testing/spec-support` and `bun run lint <spec>`. Then run the test alone with `bun run test:audit:focused --grep "<title>"` (or `test:golden:focused`) while `bun run test:server local` serves the build.
+5. Run `bun run test:unit lib/testing/spec-support` and `bun run lint <spec>`. Run it alone: `bun run test:audit:focused --grep "<title>"` (or `test:golden:focused`) beside `bun run test:server local`, or on Boat under [migration drift](boat-verification.md#focused-runs-on-boat).
 
 ### Run checks while you work
 

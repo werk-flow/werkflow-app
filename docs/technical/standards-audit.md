@@ -20,7 +20,7 @@ Each visual and interaction finding needs an explicit disposition. Visual polish
 ### Captures
 
 - Run `bun run test:audit:focused --grep "@ACCEPT <set>"` over a set in `tests/audit/support/acceptance-sets.ts`. The fixture writes an image only of a ready screen. On an app page that includes the live reads that land after the page body without a skeleton, such as the nav's badge counts (`settleLiveShell`); a visual reference waits the same way.
-- With a Boat key the capture runs on a Boat machine and brings its images back to the same folder; start no test server for it. To capture on the workstation on purpose, run `bun run test:server local`, then the capture with `WERKFLOW_VERIFY_LOCAL=1` ([captures on Boat](boat-verification.md#captures-on-boat)).
+- With a Boat key the capture runs on a Boat machine and brings its images back to the same folder; start no test server for it. To capture on the workstation on purpose, run `bun run test:server local`, then the capture with `WERKFLOW_VERIFY_LOCAL=1` ([focused runs on Boat](boat-verification.md#focused-runs-on-boat)).
 - A capture id ending in `-loading` or `-error` captures that state.
 - Capture a changed screen before and after the change, so the reviewer judges a pair.
 - Images land under `.agent-logs/playwright-runs/<run>/acceptance/<set>/`. Only a capture whose entry in `acceptance/index.json` says `passed` is evidence. Cite it as `` `capture:<run-key>/<set>/<capture>-<width>-<scheme>` ``.
@@ -38,7 +38,7 @@ A failed comparison is an intended design change that is not accepted yet, or a 
 To update references after an intended design change:
 
 1. Accept the rendered change through [rendered design acceptance](#rendered-design-acceptance).
-2. Run `WERKFLOW_UPDATE_VISUAL_REFERENCES=1 bun run test:audit:focused --grep "@AUDIT-VISUAL rendered references"`. The full title matters: the bare tag also matches `@AUDIT-VISUAL-ACCEPT`, and the runner refuses two spec files. The run rewrites differing images and text references and writes missing ones. An image under the tolerance is rewritten only when you delete it first. The update run certifies nothing and may repeat.
+2. Run `WERKFLOW_UPDATE_VISUAL_REFERENCES=1 bun run test:audit:focused --grep "@AUDIT-VISUAL rendered references"`. The full title matters: the bare tag also matches `@AUDIT-VISUAL-ACCEPT`, and the runner refuses two spec files. The run rewrites differing images and text references and writes missing ones. An image under the tolerance is rewritten only when you delete it first. The update run certifies nothing and may repeat. With a Boat key it runs on Boat at the tree's migrations, so a branch with a migration updates its references too, and the references come back into the checkout with a list ([focused runs on Boat](boat-verification.md#focused-runs-on-boat)).
 3. Look at every changed image. Keep the ones the accepted change explains and restore the others with `git checkout`. List the kept ones under "For the owner to look at".
 4. Run `bun run test:verify --group audit:visual`. A failure there follows [Failures](testing.md#failures).
 
