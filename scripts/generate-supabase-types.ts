@@ -8,6 +8,7 @@ import { format } from 'prettier';
 import {
   typesFromCi,
   typesHereReason,
+  typesInputDigest,
   typesOnBoat,
   typesUnavailableNotice,
 } from '../lib/testing/boat/types-on-boat';
@@ -123,6 +124,11 @@ if (current !== formatted) {
   if (artifact) {
     mkdirSync(dirname(artifact), { recursive: true });
     writeFileSync(artifact, formatted, 'utf8');
+    writeFileSync(
+      resolve(dirname(artifact), 'inputs.sha256'),
+      `${typesInputDigest(REPOSITORY_ROOT)}\n`,
+      'utf8',
+    );
   }
   const digest = (value: string): string => createHash('sha256').update(value).digest('hex').slice(0, 12);
   throw new Error(

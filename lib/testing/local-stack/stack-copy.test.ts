@@ -5,7 +5,7 @@ import { expect, test } from 'bun:test';
 
 import { copyRefusal } from './stack-copy';
 
-const pending = { stackOnly: [], treeOnly: ['add_a_table'], changed: [] };
+const pending = { stackOnly: [], treeOnly: ['add_a_table'], changed: [], unverified: [] };
 
 test("a tree that only adds its own migrations to the stack's may use the copy", () => {
   expect(
@@ -23,6 +23,7 @@ test("a tree that only adds its own migrations to the stack's may use the copy",
 test('a stack that holds what the tree lacks is no base for the tree', () => {
   expect(copyRefusal({ ...pending, stackOnly: ['merged_after_this_branch'] }, [])).toContain('merge main');
   expect(copyRefusal({ ...pending, changed: ['reviewed_again'] }, [])).toContain('other statements');
+  expect(copyRefusal({ ...pending, unverified: ['repaired'] }, [])).toContain('without their statements');
 });
 
 test('a pending migration that reaches past a private database goes to a fresh stack', () => {

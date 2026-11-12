@@ -53,6 +53,8 @@ end $$;
  * each migration the stack lacks.
  */
 export function copyRefusal(drift: MigrationDrift, pendingSql: readonly string[]): string | undefined {
+  if (drift.unverified.length)
+    return `the shared stack's ledger records ${drift.unverified.length} migrations without their statements (${drift.unverified.slice(0, 3).join(', ')}), so nothing proves it ran this tree's SQL.`;
   if (drift.stackOnly.length || drift.changed.length)
     return "the shared stack holds migrations this tree lacks or has with other statements (merge main, or the stack needs its reset), so a copy of it is not this tree's schema.";
   const reaching = pendingSql

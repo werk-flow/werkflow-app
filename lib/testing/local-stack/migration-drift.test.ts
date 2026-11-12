@@ -88,6 +88,7 @@ test('drift compares by name and statements, never by version', () => {
     stackOnly: ['another_branch'],
     treeOnly: ['only_here'],
     changed: ['edited_after_apply'],
+    unverified: ['repaired'],
   });
   expect(driftLine(drift)).toBe(
     "The shared stack's migrations drift from this tree's: 1 migrations only on the shared stack (another_branch), 1 only in this tree (only_here), 1 with other statements (edited_after_apply).",
@@ -101,7 +102,7 @@ test('drift compares by name and statements, never by version', () => {
 });
 
 test('the line names at most three migrations per part', () => {
-  expect(driftLine({ stackOnly: ['a', 'b', 'c', 'd'], treeOnly: [], changed: [] })).toBe(
+  expect(driftLine({ stackOnly: ['a', 'b', 'c', 'd'], treeOnly: [], changed: [], unverified: [] })).toBe(
     "The shared stack's migrations drift from this tree's: 4 migrations only on the shared stack (a, b, c, …), 0 only in this tree.",
   );
 });

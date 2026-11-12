@@ -2,16 +2,20 @@
 // this tree's schema (CI, a Boat machine, or a shared stack whose ledger matches the tree), and
 // never falls back to the shared stack when Boat is unavailable.
 import { expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { typesFromCi, typesHereReason, typesOnBoat, typesUnavailableNotice } from './types-on-boat';
-import { gitEnvironment } from './verify-on-boat';
+import {
+  acceptedCiTypes,
+  typesHereReason,
+  typesInputDigest,
+  typesOnBoat,
+  typesUnavailableNotice,
+} from './types-on-boat';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
-const noDrift = { stackOnly: [], treeOnly: [], changed: [] };
+const noDrift = { stackOnly: [], treeOnly: [], changed: [], unverified: [] };
 
 test("CI and a Boat machine read their own stack without asking the shared stack's ledger", () => {
   const readDrift = () => {
@@ -28,6 +32,8 @@ test("a workstation reads the shared stack only while its ledger matches the tre
   expect(typesHereReason({}, () => ({ ...noDrift, stackOnly: ['other_branch'] }))).toBeUndefined();
   expect(typesHereReason({}, () => ({ ...noDrift, changed: ['reviewed_again'] }))).toBeUndefined();
   expect(typesHereReason({}, () => undefined)).toBeUndefined();
+  // A row `supabase migration repair` wrote matches by name and proves nothing about the SQL.
+  expect(typesHereReason({}, () => ({ ...noDrift, unverified: ['repaired'] }))).toBeUndefined();
 });
 
 test('without a usable key the types come back as Boat unavailable, never from the shared stack', async () => {
@@ -38,21 +44,44 @@ test('without a usable key the types come back as Boat unavailable, never from t
   });
 });
 
-test('CI answers only for a pushed commit: changed migrations or types refuse before any request', () => {
+// CI's SQL job checks out the pull request merged with main, so its file may be another tree's.
+test("CI's file is accepted only for the tree it was generated from", () => {
   const repository = mkdtempSync(join(tmpdir(), 'types-from-ci-'));
+  const artifact = mkdtempSync(join(tmpdir(), 'types-artifact-'));
   try {
-    const git = (...args: string[]) =>
-      execFileSync('git', args, { cwd: repository, env: gitEnvironment(), stdio: 'ignore' });
-    git('init', '-q');
-    mkdirSync(join(repository, 'supabase/migrations'), { recursive: true });
-    writeFileSync(join(repository, 'supabase/migrations/20260101000000_first.sql'), 'select 1;\n');
-    git('add', '.');
-    git('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-q', '-m', 'first');
-    writeFileSync(join(repository, 'supabase/migrations/20260102000000_second.sql'), 'select 2;\n');
-    const answer = typesFromCi(repository);
-    expect('unavailable' in answer && answer.unavailable).toContain('commit and push the migration first');
+    const write = (path: string, text: string) => {
+      mkdirSync(join(repository, path, '..'), { recursive: true });
+      writeFileSync(join(repository, path), text);
+    };
+    write('supabase/migrations/20260101000000_first.sql', 'select 1;\n');
+    write('supabase/config.toml', '[db]\nport = 54322\n');
+    write('bun.lock', '{}\n');
+    write('.prettierrc.json', '{}\n');
+    write('scripts/generate-supabase-types.ts', '// generator\n');
+    write('lib/supabase/database.types.ts', 'export type Database = {};\n');
+    writeFileSync(join(artifact, 'database.types.ts'), 'export type Database = { generated: true };\n');
+    expect(acceptedCiTypes(artifact, repository)).toEqual({
+      unavailable: "CI's database-types artifact is incomplete.",
+    });
+    writeFileSync(join(artifact, 'inputs.sha256'), `${typesInputDigest(repository)}\n`);
+    expect(acceptedCiTypes(artifact, repository)).toEqual({
+      types: 'export type Database = { generated: true };\n',
+    });
+    // Main's newer migration in CI's merge commit, absent here; then a changed statement; then the pinned tools.
+    const before = typesInputDigest(repository);
+    write('supabase/migrations/20260102000000_from_main.sql', 'select 2;\n');
+    const refused = acceptedCiTypes(artifact, repository);
+    expect('unavailable' in refused && refused.unavailable).toContain('another tree than this one');
+    rmSync(join(repository, 'supabase/migrations/20260102000000_from_main.sql'));
+    expect(typesInputDigest(repository)).toBe(before);
+    write('supabase/migrations/20260101000000_first.sql', 'select 3;\n');
+    expect(typesInputDigest(repository)).not.toBe(before);
+    write('supabase/migrations/20260101000000_first.sql', 'select 1;\n');
+    write('bun.lock', '{"changed": true}\n');
+    expect(typesInputDigest(repository)).not.toBe(before);
   } finally {
     rmSync(repository, { recursive: true, force: true });
+    rmSync(artifact, { recursive: true, force: true });
   }
 });
 
