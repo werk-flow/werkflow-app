@@ -31,16 +31,3 @@ export function centsToEuroInput(cents: number | null): string {
   const fraction = String(Math.abs(cents % 100)).padStart(2, '0');
   return `${whole},${fraction}`;
 }
-
-const euroFormat = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
-
-/** „1.234,50 €“. */
-export function formatEuroCents(cents: number): string {
-  return euroFormat.format(cents / 100);
-}
-
-/** „19 %“, „7 %“. */
-export function formatTaxRate(basisPoints: number): string {
-  const percent = basisPoints / 100;
-  return `${Number.isInteger(percent) ? percent : percent.toFixed(2).replace('.', ',')} %`;
-}

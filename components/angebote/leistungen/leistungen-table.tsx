@@ -11,7 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ColumnsTableHeader, hiddenHeader, type SkeletonColumn } from '@/components/ui/skeleton-table';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { INVENTORY_UNITS } from '@/lib/inventory/units';
-import { formatEuroCents, formatTaxRate } from '@/lib/price-catalog/money';
+import { formatEuroCents, formatTaxRate } from '@/lib/document-rendering/format';
 import { LEISTUNG_KIND_LABELS, type LeistungListEntry } from '@/lib/price-catalog/types';
 import { formatGermanDate } from '@/lib/utils';
 

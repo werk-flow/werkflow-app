@@ -22,7 +22,7 @@ import { usePendingTask } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import type { ActionResult } from '@/lib/action-result';
 import { OFFERED_INVENTORY_UNITS } from '@/lib/inventory/units';
-import { formatTaxRate } from '@/lib/price-catalog/money';
+import { formatTaxRate } from '@/lib/document-rendering/format';
 import {
   LEISTUNG_KIND_LABELS,
   LEISTUNG_KINDS,

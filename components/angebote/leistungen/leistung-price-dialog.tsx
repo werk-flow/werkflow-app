@@ -19,7 +19,7 @@ import { usePendingTask } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import type { ActionResult } from '@/lib/action-result';
 import { INVENTORY_UNITS } from '@/lib/inventory/units';
-import { formatEuroCents } from '@/lib/price-catalog/money';
+import { formatEuroCents } from '@/lib/document-rendering/format';
 import type { LeistungListEntry, LeistungPriceVersion } from '@/lib/price-catalog/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { formatGermanDate } from '@/lib/utils';

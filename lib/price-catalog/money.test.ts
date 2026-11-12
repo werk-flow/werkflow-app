@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { centsToEuroInput, formatTaxRate, parseEuroCents } from './money';
+import { centsToEuroInput, parseEuroCents } from './money';
 
 describe('a typed euro amount becomes exact cents or is refused', () => {
   const cases: Array<[string, number | null | undefined]> = [
@@ -38,10 +38,4 @@ test('an amount field shows cents with a decimal comma and parses back to the sa
     expect(parseEuroCents(centsToEuroInput(cents))).toBe(cents);
   }
   expect(centsToEuroInput(null)).toBe('');
-});
-
-test('a tax rate reads as a German percentage', () => {
-  expect(formatTaxRate(1900)).toBe('19 %');
-  expect(formatTaxRate(700)).toBe('7 %');
-  expect(formatTaxRate(0)).toBe('0 %');
 });
