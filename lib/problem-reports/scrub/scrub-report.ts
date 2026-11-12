@@ -175,7 +175,7 @@ async function buildScrubbedCopy(
 
 /**
  * Whether a written copy still holds what identifies its organization: the
- * organization's own name in its text or a token, or a record id in a token.
+ * organization's own name or a record id, in its text or a token.
  * A copy written before those rules existed is checked again before it may
  * leave WerkFlow (docs/technical/problem-report-scrubbing.md, "Hand-out"). A
  * missing catalog throws, so the caller hands nothing out.

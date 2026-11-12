@@ -1,9 +1,15 @@
 import { isUiString, type UiStringCatalog } from '@/lib/problem-reports/screenshot/ui-string-catalog';
 import type { ProblemReportContext, ScrubbedProblemReportContext } from '@/lib/problem-reports/schemas';
 import { dictionaryKnows, findTerms, NOT_A_NAME_ALONE, type ScrubDictionary } from './dictionary';
-import { findEmails, findIbans, findPhones, type Found, type PlaceholderKind } from './patterns';
+import {
+  findEmails,
+  findIbans,
+  findPhones,
+  findRecordIds,
+  type Found,
+  type PlaceholderKind,
+} from './patterns';
 import { wordsOf, type Word } from './words';
-import { isUuid } from '@/lib/validation/uuid';
 
 // The scrubbed copy of a problem report's text and context
 // (docs/technical/problem-report-scrubbing.md, "Text scrubbing"). Every rule
@@ -118,14 +124,15 @@ function mergeFound(ranked: readonly Found[][]): Found[] {
 }
 
 /**
- * The text with every IBAN, email address, phone number, known name and
- * address and every saluted name replaced by a placeholder such as
+ * The text with every record id, IBAN, email address, phone number, known
+ * name and address and every saluted name replaced by a placeholder such as
  * `[Kunde 1]`. The same name takes the same placeholder throughout the text.
  */
 export function scrubReportText(original: string, dictionary: ScrubDictionary): string {
   const text = original.normalize('NFC');
   const words = wordsOf(text);
   const found = mergeFound([
+    findRecordIds(text),
     findIbans(text),
     findEmails(text),
     findPhones(text, dictionary.phones),
@@ -151,14 +158,9 @@ export function scrubReportText(original: string, dictionary: ScrubDictionary): 
   return parts.join('');
 }
 
-const RECORD_ID_LENGTH = 36;
-
 /** Whether a token holds a record id anywhere, such as an organization's id inside an error code. */
 export function holdsRecordId(token: string): boolean {
-  for (let start = 0; start + RECORD_ID_LENGTH <= token.length; start += 1) {
-    if (isUuid(token.slice(start, start + RECORD_ID_LENGTH))) return true;
-  }
-  return false;
+  return findRecordIds(token).length > 0;
 }
 
 /**

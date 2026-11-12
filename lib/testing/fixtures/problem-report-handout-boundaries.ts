@@ -441,7 +441,7 @@ const namingId = '33600000-0000-4000-8000-000000000026';
 reports().push(
   report(namingId, ORGANIZATION_B, 7, {
     ...unscrubbed,
-    description: `Bei ${ORGANIZATION_NAME} hängt die Liste.`,
+    description: `Bei ${ORGANIZATION_NAME} (${ORGANIZATION_B}) hängt die Liste.`,
     context: {
       ...ORIGINAL_CONTEXT,
       clientErrors: [
@@ -454,21 +454,29 @@ assert.equal(await scrubStoredProblemReport(ORGANIZATION_B, namingId), true);
 const named = await call.handOut(namingId);
 assert.equal(named.status, 200);
 const namedBody = await named.text();
+assert.equal(JSON.parse(namedBody).description, 'Bei [Kunde 1] ([ID 1]) hängt die Liste.');
 assert.ok(
   !namedBody.includes('Beispiel') && !namedBody.includes('Sanitär'),
   'the hand-out names its organization',
 );
 assert.ok(!namedBody.toLowerCase().includes(ORGANIZATION_B), "the hand-out carries its organization's id");
 
-// A copy written before those rules, which still names its organization,
-// never leaves: refused, unclaimed and without a history entry.
-const legacyId = '33600000-0000-4000-8000-000000000027';
-reports().push(
-  report(legacyId, ORGANIZATION_B, 8, { scrubbed_description: `Bei ${ORGANIZATION_NAME} hängt die Liste.` }),
-);
+// A copy written before those rules, which still names its organization or
+// holds its id in the text, never leaves: refused, unclaimed and without a
+// history entry.
+const legacyCopies = [
+  ['33600000-0000-4000-8000-000000000027', `Bei ${ORGANIZATION_NAME} hängt die Liste.`],
+  [
+    '33600000-0000-4000-8000-000000000028',
+    'Organisation: c3f9a1b2-7d4e-4f60-9a8b-1e2d3c4b5a69, die Liste hängt.',
+  ],
+] as const;
 const historyBeforeLegacy = events().length;
-assert.deepEqual(await refusal(call.handOut(legacyId)), [409, { error: 'copy_unavailable' }]);
-assert.equal(reports().find((row) => row.id === legacyId)?.handed_out_at, null);
+for (const [legacyId, scrubbedDescription] of legacyCopies) {
+  reports().push(report(legacyId, ORGANIZATION_B, 8, { scrubbed_description: scrubbedDescription }));
+  assert.deepEqual(await refusal(call.handOut(legacyId)), [409, { error: 'copy_unavailable' }]);
+  assert.equal(reports().find((row) => row.id === legacyId)?.handed_out_at, null);
+}
 assert.equal(events().length, historyBeforeLegacy, 'a withheld copy wrote history');
 
 // The write-back refuses an invalid bucket or status, an assignee, an empty

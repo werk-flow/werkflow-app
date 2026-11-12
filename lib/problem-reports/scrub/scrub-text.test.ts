@@ -417,3 +417,11 @@ test('context rule: a token that holds a record id is removed', () => {
     { name: 'TypeError', code: 'load_failed', digest: '0123456789', routeTemplate },
   ]);
 });
+
+test('pattern rule: any record id, also inside a longer word', () => {
+  const organizationId = '7c1e2d3f-0000-4000-8000-00000000abcd';
+  const text = `Organisation: ${organizationId}, Link /kunden/${organizationId.toUpperCase()}x und ref-1f2e3d4c-5b6a-4789-8a7b-6c5d4e3f2a1b.`;
+  expect(scrubReportText(text, dictionary)).toBe(
+    'Organisation: [ID 1], Link /kunden/[ID 1]x und ref-[ID 2].',
+  );
+});
