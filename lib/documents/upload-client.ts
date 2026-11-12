@@ -83,7 +83,9 @@ export type UploadFailureReason =
   | 'refused'
   | 'not_saved'
   | 'version_conflict'
-  | 'document_filed';
+  | 'document_filed'
+  /** Another person's session than the one the upload was started for: nothing was registered. */
+  | 'uploader_changed';
 
 /**
  * The upload whose bytes reached storage. A retry first registers these
@@ -127,6 +129,8 @@ function refusalReason(error: string): UploadFailureReason {
       return 'version_conflict';
     case 'document_filed':
       return 'document_filed';
+    case 'uploader_changed':
+      return 'uploader_changed';
     case 'ticket_failed':
     case 'load_failed':
     case 'upload_failed':
@@ -158,13 +162,22 @@ export async function uploadDocumentDirect({
   transferred,
   onProgress,
   signal,
+  expectedUploaderId,
 }: UploadAttempt & {
   file: File;
   target: DocumentUploadTarget;
   category?: DocumentCategory;
+  /** The person the upload is for: its registration is refused under another person's session. */
+  expectedUploaderId?: string;
 }): Promise<UploadOutcome<OrganizationDocument>> {
   const registerDocument = (documentId: string) =>
-    finalizeDocumentUpload({ documentId, fileName: file.name, category: category ?? null, ...target });
+    finalizeDocumentUpload({
+      documentId,
+      fileName: file.name,
+      category: category ?? null,
+      ...target,
+      ...(expectedUploaderId === undefined ? {} : { expectedUploaderId }),
+    });
   let stored = transferred;
   try {
     if (stored) {

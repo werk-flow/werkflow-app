@@ -141,6 +141,14 @@ export async function finalizeDocumentUpload(rawInput: FinalizeDocumentUploadInp
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
+  // Identity stays with the session: the expected uploader only refuses. A phone that started the
+  // upload for one person must not register it under another person who signed in meanwhile. The
+  // staging object stays where the browser put it: the author's next try registers exactly those
+  // bytes under the author's own session, and no other finalize can reach that staging key.
+  if (input.expectedUploaderId !== undefined && input.expectedUploaderId !== auth.context.userId) {
+    return { success: false, error: 'uploader_changed' };
+  }
+
   const originalFileName = input.fileName.trim() || 'Dokument';
   // The upload's path is recomputed server-side from the authenticated org and
   // the document id, so a client can never register a foreign object key.

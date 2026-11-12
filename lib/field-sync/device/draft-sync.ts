@@ -203,6 +203,7 @@ async function uploadPhotos(claim: SendClaim, draft: StoredDraft): Promise<Draft
       category: 'photo',
       transferred: photo.transferred,
       signal: transfer.signal,
+      expectedUploaderId: owner.userId,
     }).finally(() => {
       window.removeEventListener('storage', abortOnWipe);
       if (activeTransfer === transfer) activeTransfer = null;
@@ -229,6 +230,8 @@ async function uploadPhotos(claim: SendClaim, draft: StoredDraft): Promise<Draft
       continue;
     }
     const reason = result.status === 'failed' ? result.reason : null;
+    // Another person's session: like every other stop of that kind, the draft waits for its author.
+    if (reason === 'uploader_changed') return 'waiting';
     if (reason !== null && WAITING_UPLOAD_REASONS.has(reason)) return 'waiting';
     // The access read and the refusal speak for the author only while the tab is still theirs.
     if (!stillHolder(claim)) return 'waiting';

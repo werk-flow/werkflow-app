@@ -18,7 +18,13 @@ import {
 // The upload path, the access reader and the sync handler are stand-ins that
 // record what the device sent them.
 
-type UploadCall = { name: string; jobId: string | null; category: string | undefined; transferred: unknown };
+type UploadCall = {
+  name: string;
+  jobId: string | null;
+  category: string | undefined;
+  transferred: unknown;
+  expectedUploaderId: string | undefined;
+};
 const uploads: UploadCall[] = [];
 /** What the upload path answers, as far as the sender reads it. */
 type UploadAnswer =
@@ -40,6 +46,7 @@ mock.module('@/lib/documents/upload-client', () => ({
     category?: string;
     transferred: unknown;
     signal?: AbortSignal;
+    expectedUploaderId?: string;
   }) => {
     uploadSignals.push(input.signal ?? null);
     const call = {
@@ -47,6 +54,7 @@ mock.module('@/lib/documents/upload-client', () => ({
       jobId: input.target.jobId ?? null,
       category: input.category,
       transferred: input.transferred,
+      expectedUploaderId: input.expectedUploaderId,
     };
     uploads.push(call);
     const answer = uploadAnswers.shift();
@@ -642,5 +650,18 @@ describe('round 5: an account switch on the photo refusal path', () => {
     startDraftSync(holder);
     expect((await stored())[0]?.refusal).toBeNull();
     expect(accessReads).toEqual([]);
+  });
+});
+
+describe("the upload names the draft's author", () => {
+  test("every photo upload names the draft's author, and a refusal for another person's session leaves the draft waiting, unmarked", async () => {
+    await save(draft());
+    uploadAnswers = [() => ({ status: 'failed', reason: 'uploader_changed', transferred: null })];
+    accessAnswer = { success: false, error: 'not_authorized' };
+    expect(await sendDraft(holder, DRAFT_ID)).toBe('waiting');
+    expect(uploads[0]?.expectedUploaderId).toBe(holder.userId);
+    expect(accessReads).toEqual([]);
+    expect(sent).toEqual([]);
+    expect((await stored())[0]?.refusal).toBeNull();
   });
 });
