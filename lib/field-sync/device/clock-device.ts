@@ -352,6 +352,10 @@ async function takeInShownActions(scope: UnsentScope, ids: readonly string[]): P
       ids.includes(action.operationId),
     );
     if (shown.length === 0 || !deferred) return;
+    // Held by a stop the person was not shown, not by an open call: nothing to wait for. The session
+    // stays, and the person is asked again with that stop named.
+    if (deferred.recheckAt === null && deferred.lock === null)
+      throw new Error('a stop the person was not shown holds an action they were shown');
     // The page's call answers, then its entry goes or becomes a kept action this take-in moves.
     await untilCallAnswers(deferred);
   }
@@ -384,8 +388,9 @@ export const timeUnsentSource: UnsentSource = {
   },
   flush: sendOwnTimeEvents,
   async discard(scope, ids) {
-    await takeInShownActions(scope, ids);
+    // The shown stops go first: what they held can then be taken in and discarded with them.
     removeUnreadableKeptActions(ids);
+    await takeInShownActions(scope, ids);
     // The session ends: no server state to go on from, and what stays is asked about again.
     for (const holder of await holdersInScope(scope)) await removeShownTimeEvents(holder, ids, null);
     await outboxChanged();

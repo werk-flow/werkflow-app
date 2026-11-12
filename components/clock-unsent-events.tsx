@@ -36,7 +36,6 @@ import {
   type ClockDeviceView,
 } from '@/lib/field-sync/device/time-outbox';
 import { logError } from '@/lib/logging';
-import type { LiveClockState } from '@/lib/time-tracking/types';
 import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import { formatBerlinTime, parseIsoLocalDate } from '@/lib/utils';
 

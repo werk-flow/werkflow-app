@@ -404,7 +404,9 @@ test('a conflict shows what changed and the server’s clock, never the phone’
   await page.getByRole('button', { name: 'Laufende Zeiterfassung öffnen', exact: true }).click();
   const section = unsentSection(page);
   await expect(section).toContainText('Deine Zeiterfassung wurde inzwischen geändert');
-  await expect(section.getByRole('listitem')).toHaveText(/^Erfassung beendet/);
+  await expect(
+    section.getByRole('list', { name: 'Nicht übertragene Zeiten' }).getByRole('listitem'),
+  ).toHaveText(/^Erfassung beendet/);
   await expect(section.getByRole('button', { name: 'Erneut senden', exact: true })).toHaveCount(0);
   // The end belongs to the session the server still runs: deleted, ended through the clock, then corrected.
   await expect(section.getByRole('button', { name: 'Korrektur beantragen', exact: true })).toHaveCount(0);

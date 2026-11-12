@@ -98,8 +98,15 @@ async function isolatedTests(): Promise<void> {
     }),
   }));
 
-  const { captureBehindKept, holdClock, sendOwnTimeEvents, takeInKept, timeUnsentSource, clockHolder } =
-    await import('./clock-device');
+  const {
+    captureBehindKept,
+    holdClock,
+    sendOwnTimeEvents,
+    takeInKept,
+    timeUnsentSource,
+    clockHolder,
+    outboxChanged,
+  } = await import('./clock-device');
   const { callWhileKept, keepClockAction } = await import('./unsent-mark');
   const { beginSessionEnd, endSessionEnd } = await import('./today-wipe');
   const { captureTimeEvent } = await import('./time-outbox');
@@ -255,30 +262,27 @@ async function isolatedTests(): Promise<void> {
       expect(sent[0]).not.toContain('50000000-0000-4000-8000-0000000000ff');
     });
 
-    test('an action this version cannot read that names no person is a stop the person sees, is asked about, and deletes (F2)', async () => {
+    test('an action this version cannot read that names no person is a stop the person sees, is asked about, and is discarded with what it held (F2, F29)', async () => {
       const key = 'werkflow:unsent:clock:000000000000001:1:from-a-newer-version';
       storage.set(key, '{"operationId":"x","kind":"new"}');
       const views: (ClockDeviceView | null)[] = [];
       await holdClock(WORKER, (view) => views.push(view));
-
-      expect(await takeInKept()).toEqual({
-        moved: 0,
-        unreadable: 1,
-        deferred: null,
-        stops: [{ userId: null, at: 1 }],
-      });
+      keepClockAction(startAction('50000000-0000-4000-8000-0000000000d8'), ''); // the person's own tap, behind it
+      expect((await takeInKept()).stops).toEqual([{ userId: null, at: 1 }]);
+      await outboxChanged();
       expect(views.at(-1)?.events.map(({ status }) => status)).toEqual(['unreadable']);
-      // The sign-out question names it instead of failing, so the person can go on after deciding.
+      // The sign-out question names both instead of failing, so the person can go on after deciding.
       const items = await timeUnsentSource.summarize('session');
-      expect(items).toEqual([
-        { label: 'Stempelzeiten, die diese App-Version nicht lesen kann', count: 1, ids: [key] },
+      expect(items.map(({ label, count }) => [label, count])).toEqual([
+        ['Stempelzeiten', 1],
+        ['Stempelzeiten, die diese App-Version nicht lesen kann', 1],
       ]);
-
+      // „Endgültig verwerfen“ finishes: the stop goes first, so the tap it held is taken in and discarded.
       await timeUnsentSource.discard(
         'session',
         items.flatMap(({ ids }) => ids),
       );
-      expect(storage.has(key)).toBe(false);
+      expect([...storage.keys()].filter((stored) => stored.startsWith('werkflow:unsent:clock:'))).toEqual([]);
       expect(await timeUnsentSource.summarize('session')).toEqual([]);
     });
 
