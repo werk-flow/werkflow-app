@@ -70,24 +70,9 @@ function WeeklyHoursChartBars({ data, todayIndex, narrowBars, minutesToPx }: Wee
               )}
               style={{ height: workPx + breakPx + overtimePx }}
             >
-              {workPx > 0 && (
-                <div
-                  className="w-full shrink-0 bg-success transition-all duration-500"
-                  style={{ height: workPx }}
-                />
-              )}
-              {breakPx > 0 && (
-                <div
-                  className="w-full shrink-0 bg-warning transition-all duration-500"
-                  style={{ height: breakPx }}
-                />
-              )}
-              {overtimePx > 0 && (
-                <div
-                  className="w-full shrink-0 bg-info transition-all duration-500"
-                  style={{ height: overtimePx }}
-                />
-              )}
+              {workPx > 0 && <div className="w-full shrink-0 bg-success" style={{ height: workPx }} />}
+              {breakPx > 0 && <div className="w-full shrink-0 bg-warning" style={{ height: breakPx }} />}
+              {overtimePx > 0 && <div className="w-full shrink-0 bg-info" style={{ height: overtimePx }} />}
             </div>
           </div>
         );
