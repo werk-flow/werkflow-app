@@ -28,6 +28,16 @@ Postgres holds metadata: folders, documents, links, categories, trash state, ver
 - An `Arbeitsnachweis` export stores each attempt's HTML under a key of its own. An export the database refused, or answered as a duplicate of a committed export, deletes only its own object; after an unknown outcome the object stays.
 - A handover release renders deterministic customer-safe HTML on the server and stores each attempt under a key of its own; a guarded RPC registers it. A release the database refused, or answered as a replay of a committed release, deletes only its own object; after an unknown outcome the object stays. A replay answers with the registered package.
 
+## Generated documents
+
+`lib/document-rendering/` is the one renderer of generated business documents: offers now, invoices later. A caller maps its records into the module's plain model, with every amount already computed; the module imports no domain or database type.
+
+- It runs inside the app's Node functions with `pdf-lib` and the bundled Geist fonts, embedded as subsets. No browser and no external service sees a document.
+- The same model gives the same bytes: the PDF's dates come from the model, so a preview and a stored copy of the same input are equal.
+- Optional stationery (a PDF page or an image for the first page, another for the following pages) lies under the content, which keeps to the stationery's margins. Without it the module draws a plain letterhead from logo and sender.
+- Every page says „Seite x von y“, the table header repeats on each page, a position keeps its first description line, and a subtotal keeps its section's last position.
+- A generated offer belongs to its offer and customer, never to a job or project, because an assigned employee reads a job's documents.
+
 ## Links and ownership
 
 A document exists once. A `document_links` row points to exactly one target. A link never moves an object or changes the folder.
