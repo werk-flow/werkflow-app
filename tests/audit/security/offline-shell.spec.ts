@@ -23,6 +23,9 @@ import {
 // worker answers a navigation without network with the offline fallback, and
 // no cache it owns ever holds an authenticated response or outlives a sign-out.
 
+// Every other browser test blocks service workers (playwright.audit.config.ts); this one tests the worker.
+test.use({ serviceWorkers: 'allow' });
+
 test('the app shell opens without signal and keeps nothing of the person @AUDIT-SECURITY-OFFLINE-SHELL', async ({
   employeePage: page,
   world,

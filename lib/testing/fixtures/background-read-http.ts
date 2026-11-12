@@ -126,6 +126,10 @@ mock.module('@/lib/projects/actions', () => ({
   getProjectDetails: seam('project-details'),
 }));
 mock.module('@/lib/requests/actions', () => ({ getNextRequestNumber: seam('next-request-number') }));
+mock.module('@/lib/requests/work-attach-server', () => ({
+  getRequestWorkTargets: seam('request-work-targets'),
+  getWorkRequestEntries: seam('work-request-entries'),
+}));
 mock.module('@/lib/personnel/record-read-actions', () => ({
   suggestPersonnelNumber: seam('next-personnel-number'),
 }));
@@ -420,6 +424,8 @@ const inputs: Record<string, unknown> = {
   'service-case-page': { organizationId, search: '', status: 'open', page: 1 },
   'service-case-detail': { organizationId, caseNumber: 'SF-1' },
   'service-client-option': { organizationId, clientId: jobId },
+  'request-work-targets': { organizationId, requestId: jobId, query: ' Heiz ' },
+  'work-request-entries': { organizationId, kind: 'service_case', id: jobId },
   'personnel-lifecycle': { employeeRecordId: jobId },
   'sickness-reports-for-record': { employeeRecordId: jobId },
   'job-picker-jobs': { organizationId, query: 'Heizung', limit: 100, selectedJobId: jobId },
@@ -483,6 +489,9 @@ const readerArguments: Record<string, unknown> = {
   'decidable-approved-vacation': undefined,
   'service-case-detail': 'SF-1',
   'service-client-option': jobId,
+  // The readers never receive the organization: they take it from the session.
+  'request-work-targets': { requestId: jobId, query: 'Heiz' },
+  'work-request-entries': { kind: 'service_case', id: jobId },
   'attention-overview': undefined,
   'own-personnel-actions': undefined,
   'personnel-lifecycle': jobId,

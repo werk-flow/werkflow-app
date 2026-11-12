@@ -1,5 +1,7 @@
 // CI runs the browser groups a change can break, and everything when it cannot tell.
 import { expect, test } from 'bun:test';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { UNKNOWN_IMPORT_DEPENDENCY } from '../evidence/group-evidence';
 import { ciPlan, MAX_SHARDS, runnerModules as runnerModulesOf, type CiGroup } from './ci-plan';
 import { CRITICAL_JOURNEYS, type ChangeTrigger } from './change-triggers';
@@ -63,9 +65,16 @@ test('an unreadable diff and a tooling change run every browser group except the
     expect(ids(ciPlan({ groups, changedFiles: [tooling], fullRun: undefined, runnerModules }))).toEqual(
       EVERY_BROWSER_GROUP,
     );
-  const nightly = ciPlan({ groups, changedFiles: [], fullRun: 'Nightly run', runnerModules });
-  expect(nightly.fullReason).toBe('Nightly run');
-  expect(ids(nightly)).toEqual(EVERY_BROWSER_GROUP);
+});
+
+test("the nightly run and the release gate add each wall-clock group's steps, untimed", () => {
+  for (const fullRun of ['Nightly run', 'Release 0123abc']) {
+    const plan = ciPlan({ groups, changedFiles: [], fullRun, runnerModules });
+    expect(plan.fullReason).toBe(fullRun);
+    expect(ids(plan)).toEqual([...EVERY_BROWSER_GROUP, 'audit:performance:calendar']);
+    expect(plan.browser.at(-1)?.reason).toBe(`${fullRun}: its steps, untimed`);
+    expect(plan.shards.flatMap((shard) => shard.groups.split(','))).toContain('audit:performance:calendar');
+  }
 });
 
 test('a pull request or a push to main runs the critical journeys and the groups its changed files select', () => {
@@ -158,6 +167,7 @@ test('visual and layout groups run in a pull request only when their own test co
     ...EVERY_BROWSER_GROUP,
     'audit:layout:work',
     'audit:lab:office',
+    'audit:performance:calendar',
   ]);
 });
 
@@ -230,4 +240,27 @@ test('the critical journeys and both lab groups of a product change split into t
     'audit:lab:office',
   ]);
   expect(plan.shards.map((shard) => shard.groups.split(',').length)).toEqual([4, 4, 3]);
+});
+
+// A hosted runner has no reviewed wall-clock baseline, so a timed shard fails its wall-clock group on
+// "no reviewed baseline" whatever its steps do. Every job that runs the plan's shards runs them untimed.
+test("every workflow runs the plan's browser shards untimed", () => {
+  const workflows = resolve(import.meta.dir, '../../../.github/workflows');
+  const shardRuns = readdirSync(workflows).flatMap((file) => {
+    const lines = readFileSync(join(workflows, file), 'utf8').split('\n');
+    // A shard's groups reach its step as `matrix.groups`, directly or through an env variable.
+    const aliases = lines.flatMap(
+      (line) => /^\s*([A-Z_]+): \$\{\{ matrix\.groups \}\}/.exec(line)?.[1] ?? [],
+    );
+    return lines
+      .filter(
+        (line) =>
+          line.includes('scripts/verify.ts run') &&
+          (line.includes('matrix.groups') ||
+            aliases.some((alias) => new RegExp(`\\$\\{?${alias}\\b`).test(line))),
+      )
+      .map((line) => ({ file, untimed: line.includes('--untimed') }));
+  });
+  expect([...new Set(shardRuns.map((run) => run.file))].sort()).toEqual(['ci.yml', 'date-lookahead.yml']);
+  expect(shardRuns.filter((run) => !run.untimed)).toEqual([]);
 });

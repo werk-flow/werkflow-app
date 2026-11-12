@@ -10,6 +10,8 @@ declare global {
       transitions: TimeTransitionInput[];
       directResult: TimeTransitionResult | null;
       resolveTransition: (() => void) | null;
+      /** The next transition fails as the server would refuse it. */
+      refuse?: boolean;
     };
   }
 }
@@ -33,9 +35,10 @@ export async function transitionTimeActivity(input: TimeTransitionInput): Promis
     window.clockContract.resolveTransition = resolve;
   });
   window.clockContract.resolveTransition = null;
+  if (window.clockContract.refuse) return { success: false, error: 'time_transition_failed' };
   return {
     success: true,
-    outcome: 'active',
+    outcome: input.action === 'end' ? 'ended' : 'active',
     sessionId: RUNNING_CLOCK_STATE.sessionId,
     segmentId: RUNNING_CLOCK_STATE.currentSegmentId,
     version: 8,

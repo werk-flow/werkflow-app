@@ -110,9 +110,9 @@ export function usePersonnelLifecycleView(initialData: PersonnelLifecycleView) {
     // The owned reader settles independently of route commits and mutation pending.
     void view.refresh();
   }
-  /** The stale_version text promises a refresh; the owned reader delivers it (Step 3 release run 6). */
+  /** The stale_version and transition_not_allowed texts promise a refresh; the owned reader delivers it (Step 3 release run 6). */
   function failureMessage(code: string): string {
-    if (code === 'stale_version') void view.refresh();
+    if (code === 'stale_version' || code === 'transition_not_allowed') void view.refresh();
     return personnelLifecycleErrorMessage(code);
   }
 

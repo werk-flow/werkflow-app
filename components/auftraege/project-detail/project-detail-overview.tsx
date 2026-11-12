@@ -4,6 +4,7 @@ import type { WorkHandoverWorkspace } from '@/lib/work-handover/types';
 import type { WorkLifecycleSnapshot } from '@/lib/work-lifecycle/types';
 import { WorkHandoverSummary } from '../handover/work-handover-section';
 import { OriginRequestLine, type OriginRequestLink } from '../shared/origin-request-line';
+import { WorkRequestEntriesSection } from '../shared/work-request-entries-section';
 import { WorkLifecycleCard, WorkLifecycleLoadError } from '../lifecycle/work-lifecycle-card';
 
 type ProjectDetailOverviewProps = {
@@ -15,7 +16,7 @@ type ProjectDetailOverviewProps = {
   originRequest: OriginRequestLink | undefined;
 };
 
-/** Above the columns: the originating Anfrage, the lifecycle and the handover. */
+/** Above the columns: the originating Anfrage, the lifecycle, the handover and the attached requests. */
 export function ProjectDetailOverview({
   liveProject,
   lifecycleSnapshot,
@@ -54,6 +55,9 @@ export function ProjectDetailOverview({
           </div>
         )}
       </div>
+      {isAdminOrManager ? (
+        <WorkRequestEntriesSection kind="project" id={liveProject.id} className="mb-6" />
+      ) : null}
     </>
   );
 }

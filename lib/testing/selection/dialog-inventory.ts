@@ -53,6 +53,9 @@ export const DIALOG_INVENTORY = {
     {
       audits: [{ route: '/dashboard', role: 'employee', opener: 'field.time-activity' }],
     },
+  'components/anfragen/attach-request-dialog.tsx#AttachRequestDialog|Zu bestehender Arbeit hinzufügen': {
+    audits: [{ route: '/anfragen/[requestId]', role: 'admin', opener: 'requests.attach-to-work' }],
+  },
   'components/anfragen/close-request-dialog.tsx#CloseRequestDialog|Anfrage ohne Auftrag schließen': {
     audits: [{ route: '/anfragen/[requestId]', role: 'admin', opener: 'requests.close' }],
   },

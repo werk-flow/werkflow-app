@@ -6,6 +6,7 @@ import { ArrowLeft, Pencil } from 'lucide-react';
 
 import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
 import { useOrganization } from '@/components/organization/organization-context';
+import { WorkRequestEntriesSection } from '@/components/auftraege/shared/work-request-entries-section';
 import { DetailColumns } from '@/components/shared/detail-columns';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +16,7 @@ import { InlinePending } from '@/components/ui/inline-pending';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useLiveView } from '@/hooks/use-live-view';
 import { readInBackground } from '@/lib/data/background-read-client';
+import { isEventForRow } from '@/lib/realtime/events';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import {
   SERVICE_CASE_STATUS_LABELS,
@@ -42,10 +44,7 @@ function useServiceCaseDetailLive(initial: ServiceCaseDetailWorkspace) {
     tables: ['service_cases'],
     initialData: initial,
     resetKey: initial.serviceCase.id,
-    eventFilter: (event) => {
-      const row = event.new ?? event.old;
-      return !row?.id || row.id === initial.serviceCase.id;
-    },
+    eventFilter: (event) => isEventForRow(event, initial.serviceCase.id),
     read: async ({ signal }) => {
       if (!activeOrgId) return { ok: false as const };
       const result = await readInBackground(
@@ -165,6 +164,7 @@ export function ServiceCaseDetailContent({
       <DetailColumns layout="main-and-aside">
         <div className="min-w-0 space-y-6">
           <ServiceCaseOriginSection item={item} />
+          <WorkRequestEntriesSection kind="service_case" id={item.id} />
           <ServiceCaseTriageSection item={item} />
           <ServiceCaseDocuments item={item} documents={documents} documentsLoadFailed={documentsLoadFailed} />
           <ServiceCaseEvidenceLink
