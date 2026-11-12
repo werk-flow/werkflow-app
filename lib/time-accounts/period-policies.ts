@@ -12,6 +12,7 @@ import {
   type PeriodPolicies,
   requirePeriodRows,
 } from './period-sources';
+import { versionInForce } from './policy-versions';
 import type { TimeAccountPolicy, TimeCreditPercentage, TimeCreditRule } from './types';
 import { requirePresent } from './validation';
 
@@ -197,6 +198,7 @@ function assignPoliciesByDate(input: {
   policyByVersionId: ReadonlyMap<string, TimeAccountPolicy>;
 }): Map<string, PeriodPolicies> {
   const { employeeRecordIds, dates, assignments, defaultPolicyId, versions, policyByVersionId } = input;
+  const versionsByPolicy = Map.groupBy(versions, (version) => version.policy_id);
   const result = new Map<string, PeriodPolicies>();
   for (const employeeRecordId of employeeRecordIds) {
     const employeeAssignments = assignments.filter(
@@ -209,9 +211,7 @@ function assignPoliciesByDate(input: {
           candidate.valid_from <= date && (candidate.valid_until === null || candidate.valid_until >= date),
       );
       const policyId = assignment?.policy_id ?? defaultPolicyId;
-      const version = versions.find(
-        (candidate) => candidate.policy_id === policyId && candidate.effective_from <= date,
-      );
+      const version = policyId ? versionInForce(versionsByPolicy.get(policyId) ?? [], date) : undefined;
       byDate.set(date, version ? (policyByVersionId.get(version.id) ?? null) : null);
     }
     result.set(employeeRecordId, byDate);

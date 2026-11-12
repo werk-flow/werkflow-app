@@ -130,13 +130,17 @@ export type JobInstructionItem = {
   lastStatusChangedAt: string | null;
 };
 
+/** The job's Objekt and contact as the job pages read them; the customer page owns the rest. */
+export type JobSite = Omit<ClientSite, 'sourceNumber'>;
+export type JobContact = Omit<ClientContact, 'siteId' | 'siteRole'>;
+
 export type JobWithDetails = Job & {
   assignments: JobAssignmentWithProfile[];
   client: Client | null;
   project: Pick<Project, 'id' | 'name' | 'projectNumber'> | null;
   // Loaded by the job detail queries; list builders may omit them.
-  site?: ClientSite | null;
-  contact?: ClientContact | null;
+  site?: JobSite | null;
+  contact?: JobContact | null;
   scheduledVisitCount?: number;
 };
 

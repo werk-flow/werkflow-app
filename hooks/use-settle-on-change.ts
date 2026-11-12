@@ -4,8 +4,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useBanner } from '@/components/ui/banner';
 import { createChangeSettlement } from '@/lib/ui/change-settlement';
 
-/** Waits for the next change of the watched value, or for one after `since` (`markChange`). */
-export type SettleOnChange = ((since?: number) => Promise<void>) & { markChange: () => number };
+/**
+ * Waits for the next change of the watched value, or for one after `since`
+ * (`markChange`). `confirmChange` waits the same way and answers whether the
+ * value changed: false after a timeout, which the banner already reported,
+ * or a cancellation.
+ */
+export type SettleOnChange = ((since?: number) => Promise<void>) & {
+  markChange: () => number;
+  confirmChange: (since?: number) => Promise<boolean>;
+};
 
 /**
  * The settle read for a surface whose authority arrives as refreshed server
@@ -35,7 +43,7 @@ export function useSettleOnChange(value: unknown, timeoutMs = 15_000): SettleOnC
   useEffect(() => () => settlement.cancel(), [settlement]);
 
   return useMemo(() => {
-    const waitForChange = async (since?: number): Promise<void> => {
+    const confirmChange = async (since?: number): Promise<boolean> => {
       const outcome = await settlement.wait(timeoutMs, since);
       if (outcome === 'timed-out') {
         showBanner({
@@ -44,7 +52,11 @@ export function useSettleOnChange(value: unknown, timeoutMs = 15_000): SettleOnC
             'Die Änderung wurde gespeichert, die Ansicht aber noch nicht aktualisiert. Bitte aktualisiere die Seite.',
         });
       }
+      return outcome === 'changed';
     };
-    return Object.assign(waitForChange, { markChange: () => settlement.mark() });
+    const waitForChange = async (since?: number): Promise<void> => {
+      await confirmChange(since);
+    };
+    return Object.assign(waitForChange, { markChange: () => settlement.mark(), confirmChange });
   }, [settlement, timeoutMs, showBanner]);
 }
