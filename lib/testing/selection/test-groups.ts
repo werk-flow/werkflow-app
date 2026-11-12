@@ -309,6 +309,7 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['security:account', 'security/account.spec.ts', ['*']],
   ['security:offline-shell', 'security/offline-shell.spec.ts', ['standalone', 'work']],
   ['security:offline-today', 'security/offline-today.spec.ts', ['standalone', 'work', 'planning']],
+  ['security:offline-drafts', 'security/offline-drafts.spec.ts', ['standalone', 'work', 'documents']],
   // The report screenshot redraw on a seeded customer and job (docs/technical/problem-report-scrubbing.md).
   ['problem-reports:redraw', 'problem-reports/screenshot-redraw.spec.ts', ['customers', 'work']],
   // Reporting a problem from the app shell, with a redacted screenshot, to „Meine Meldungen“.
@@ -336,7 +337,11 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['p1-13', ['p1_13_work_templates.sql'], ['work', 'inventory', 'personnel']],
   [
     'work-execution',
-    ['work_execution_boundaries.sql', 'work_artifact_customer_decisions.sql'],
+    [
+      'work_execution_boundaries.sql',
+      'work_artifact_customer_decisions.sql',
+      'work_artifact_draft_attach.sql',
+    ],
     ['work', 'time', 'documents', 'inventory'],
   ],
   ['p1-21', ['p1_21_time_segments.sql', 'clock_job_row_lock.sql'], ['time', 'personnel', 'work']],

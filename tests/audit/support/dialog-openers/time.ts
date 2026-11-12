@@ -17,6 +17,11 @@ import {
   workArtifactCreateDialog,
 } from '../../../golden/support/spec-helpers/work-artifact-dialog';
 import { hydratedAndSettled } from '../../../golden/support/steps/interaction';
+import {
+  deviceDraftDeleteButton,
+  deviceDraftDeleteConfirmation,
+  leaveDraftOnDevice,
+} from '../offline-drafts';
 import { problemReportButton, problemReportDialog } from '../../../golden/support/steps/problem-reports';
 import { ownEvidenceUploadButton, ownEvidenceUploadDialog } from '../../../golden/support/steps/personnel';
 import {
@@ -276,5 +281,13 @@ export const TIME_OPENERS = {
   'field.artifact': {
     trigger: async ({ page }) => newWorkArtifactButton(page, { exact: true }),
     layer: workArtifactCreateDialog,
+  },
+  'field.artifact-draft-delete': {
+    trigger: async ({ page }) => {
+      // A draft only this device holds; the audit opens its confirmation at several widths.
+      await leaveDraftOnDevice(page, 'Entwurf nur auf dem Gerät');
+      return deviceDraftDeleteButton(page, 'Entwurf nur auf dem Gerät');
+    },
+    layer: deviceDraftDeleteConfirmation,
   },
 } satisfies Partial<Record<DialogOpenerId, DialogOpener>>;

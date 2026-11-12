@@ -76,6 +76,14 @@ export function initializeServiceBoundaries(): void {
       ) {
         return browserFetch(input, init);
       }
+      // The report draft contracts answer the sync handler at Playwright's network boundary.
+      if (
+        window.uiContractFixture === 'work-artifact-report' &&
+        input === '/api/field-sync/v1/operations' &&
+        init?.method === 'POST'
+      ) {
+        return browserFetch(input, init);
+      }
       // The report dialog's contract answers its storage PUTs at Playwright's network boundary.
       if (
         window.uiContractFixture === 'problem-report' &&

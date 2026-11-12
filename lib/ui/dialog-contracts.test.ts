@@ -55,7 +55,7 @@ const exceptions: Record<string, DialogException> = {
     },
   'components/auftraege/shared/qualification-warning-dialog.tsx#QualificationWarningDialogContent|Zuweisung prüfen':
     { kind: 'command', reason: 'Reasoned qualification override requires deliberate acknowledgement.' },
-  "components/auftraege/artifacts/work-artifacts-section.tsx#WorkArtifactDialog|{detail ? (currentRevision?.title ?? 'Arbeitsnachweis') : 'Arbeitsnachweis erstellen'}":
+  "components/auftraege/artifacts/work-artifact-dialog.tsx#WorkArtifactDialog|{detail ? (currentRevision?.title ?? 'Arbeitsnachweis') : 'Arbeitsnachweis erstellen'}":
     {
       kind: 'multiple-actions',
       reason:
@@ -179,7 +179,7 @@ const editingModes: Record<string, EditingMode> = {
     formId: 'correctionFormId',
     condition: "kind !== 'delete'",
   },
-  'components/auftraege/artifacts/work-artifacts-section.tsx#WorkArtifactDialog': {
+  'components/auftraege/artifacts/work-artifact-dialog.tsx#WorkArtifactDialog': {
     formId: 'artifactFormId',
     condition: '!readOnly && editing',
   },

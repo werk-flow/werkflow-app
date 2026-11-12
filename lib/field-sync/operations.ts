@@ -6,6 +6,7 @@ import { logError } from '@/lib/logging';
 import type { ActionContext } from '@/lib/org/action-context';
 import { INVALID, UNAVAILABLE } from './outcomes';
 import { TIME_TRANSITION_KIND, replayTimeTransition, type TimeTransitionVerdict } from './time-transition';
+import { WORK_ARTIFACT_DRAFT_KIND, replayWorkArtifactDraft } from './work-artifact-draft';
 
 // A batch of field sync v1 operations in the envelope of decision record 0010.
 // Operations run in the order the device sent them, each as a fresh request:
@@ -43,10 +44,11 @@ async function runOperation(context: ActionContext, raw: unknown): Promise<TimeT
   const parsed = envelopeSchema.safeParse(raw);
   if (!parsed.success) return INVALID;
   const envelope = parsed.data;
-  // v1 names one kind so far; any other is refused, never guessed.
-  if (envelope.kind !== TIME_TRANSITION_KIND) return INVALID;
+  // v1 names these kinds; any other is refused, never guessed.
+  if (envelope.kind !== TIME_TRANSITION_KIND && envelope.kind !== WORK_ARTIFACT_DRAFT_KIND) return INVALID;
   if (envelope.organizationId !== context.orgId)
     return { outcome: 'rejected', code: 'organization_mismatch' };
+  if (envelope.kind === WORK_ARTIFACT_DRAFT_KIND) return replayWorkArtifactDraft(context, envelope);
   return replayTimeTransition(
     { userId: context.userId, organizationId: context.orgId },
     {
@@ -60,7 +62,8 @@ async function runOperation(context: ActionContext, raw: unknown): Promise<TimeT
 /**
  * The result of each operation, in the sent order. After the first `retry`
  * the rest are not attempted and answer `retry` too: a later operation of the
- * same clock depends on the earlier one, so it waits for it.
+ * same clock depends on the earlier one, so it waits for it, and a report
+ * draft waits with it.
  */
 export async function runFieldSyncOperations(
   context: ActionContext,
