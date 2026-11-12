@@ -21,7 +21,9 @@ export const ATTENTION_ROW_COPY = {
 
 export async function openAufgaben(page: Page): Promise<void> {
   await page.goto('/aufgaben');
-  await expect(page.locator('[data-testid="aufgaben-content"][data-loaded="true"]')).toBeVisible({
+  await expect(
+    page.locator('[data-testid="aufgaben-content"][data-loaded="true"]').filter({ visible: true }),
+  ).toBeVisible({
     timeout: TASK_OVERVIEW_READ_TIMEOUT_MS,
   });
 }

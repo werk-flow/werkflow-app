@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 import { UNKNOWN_IMPORT_DEPENDENCY } from '../evidence/group-evidence';
 import { ciPlan, MAX_SHARDS, runnerModules as runnerModulesOf, type CiGroup } from './ci-plan';
 import { CRITICAL_JOURNEYS, type ChangeTrigger } from './change-triggers';
+import { getTestGroups } from './test-groups';
 
 const group = (id: string, file: string, scopes: string[], trigger?: ChangeTrigger): CiGroup => ({
   id,
@@ -26,7 +27,7 @@ const groups: CiGroup[] = [
     'release-only',
   ),
   group('audit:visual', 'tests/audit/visual/references.spec.ts', ['*'], 'release-only'),
-  group('audit:visual:acceptance', 'tests/audit/visual/acceptance.spec.ts', ['*'], 'release-only'),
+  group('audit:visual:acceptance:sets', 'tests/audit/visual/acceptance-sets.spec.ts', ['*'], 'release-only'),
 ];
 // What the runner entry points import, and two selection modules only a spec or a static check imports.
 const graph = new Map<string, string[]>([
@@ -48,7 +49,7 @@ const EVERY_BROWSER_GROUP = [
   'golden:p1-04',
   'audit:wave-2:p1-13',
   'audit:visual',
-  'audit:visual:acceptance',
+  'audit:visual:acceptance:sets',
 ];
 
 test('an unreadable diff and a tooling change run every browser group except the wall-clock ones', () => {
@@ -155,7 +156,7 @@ test('visual and layout groups run in a pull request only when their own test co
   expect(plan(['docs/technical/performance.md'])).toEqual([]);
   for (const spec of [
     'tests/audit/visual/references.spec.ts',
-    'tests/audit/visual/acceptance.spec.ts',
+    'tests/audit/visual/acceptance-sets.spec.ts',
     'tests/audit/layout/surfaces-work.spec.ts',
     'tests/audit/lab/office.spec.ts',
   ])
@@ -171,14 +172,13 @@ test('visual and layout groups run in a pull request only when their own test co
   ]);
 });
 
-test('each visual group runs in a shard of its own', () => {
+test('the visual groups share shards of their own, and the other groups always keep one', () => {
   const plan = ciPlan({ groups, changedFiles: undefined, fullRun: undefined, runnerModules });
-  expect(plan.shards.slice(0, 2)).toEqual([
-    { shard: 1, groups: 'audit:visual' },
-    { shard: 2, groups: 'audit:visual:acceptance' },
+  expect(plan.shards).toEqual([
+    { shard: 1, groups: 'audit:visual,audit:visual:acceptance:sets' },
+    { shard: 2, groups: 'golden:gg-00,golden:p1-04,audit:wave-2:p1-13' },
   ]);
-  expect(plan.shards[2]?.groups).toBe('golden:gg-00,golden:p1-04,audit:wave-2:p1-13');
-  const crowded = Array.from({ length: MAX_SHARDS }, (_, index) =>
+  const crowded = Array.from({ length: 100 }, (_, index) =>
     group(`audit:visual:set-${index}`, `tests/audit/visual/set-${index}.spec.ts`, ['*']),
   );
   const shards = ciPlan({
@@ -187,7 +187,27 @@ test('each visual group runs in a shard of its own', () => {
     fullRun: undefined,
     runnerModules,
   }).shards;
-  expect(shards.flatMap((shard) => shard.groups.split(','))).toContain('golden:gg-00');
+  expect(shards.length).toBeGreaterThan(MAX_SHARDS);
+  expect(shards.at(-1)?.groups).toBe('golden:gg-00');
+});
+
+test('a full run of the registered groups fills the job budget, two shards of it with the visual groups', () => {
+  const registered = getTestGroups(resolve(import.meta.dir, '../../..')).map((entry) => ({
+    ...entry,
+    executionInputs: entry.files,
+    trigger: entry.changeTrigger,
+  }));
+  const { shards } = ciPlan({
+    groups: registered,
+    changedFiles: [],
+    fullRun: 'Nightly run',
+    runnerModules,
+  });
+  expect(shards).toHaveLength(MAX_SHARDS);
+  const visual = shards.filter((shard) => shard.groups.includes('audit:visual'));
+  expect(visual.map((shard) => shard.shard)).toEqual([1, 2]);
+  for (const shard of visual)
+    expect(shard.groups.split(',').every((id) => id.startsWith('audit:visual'))).toBe(true);
 });
 
 test('shards hold every selected group once and never exceed the job budget', () => {
