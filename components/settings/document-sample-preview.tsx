@@ -27,11 +27,14 @@ async function readSampleOffer(signal: AbortSignal): Promise<SampleOfferRead> {
   }
 }
 
-/** The Musterangebot as the PDF a customer receives, to open or download. */
-export function DocumentSamplePreview() {
+/**
+ * The Musterangebot as the PDF a customer receives, to open or download. A
+ * saved change of the company profile renders it anew.
+ */
+export function DocumentSamplePreview({ profileUpdatedAt }: { profileUpdatedAt: string | null }) {
   const sample = useClientRead({
     read: readSampleOffer,
-    deps: [],
+    deps: [profileUpdatedAt],
     failureMessage: 'Das Musterangebot konnte nicht erstellt werden.',
   });
   const url = sample.data?.url;
@@ -42,8 +45,8 @@ export function DocumentSamplePreview() {
       <CardHeader>
         <CardTitle>Musterangebot</CardTitle>
         <CardDescription>
-          So kommt ein Angebot als PDF bei deinen Kunden an: dein Firmenname als Absender, ein erfundener
-          Kunde und erfundene Preise.
+          So kommt ein Angebot als PDF bei deinen Kunden an: mit deinen Firmenangaben, deinem Logo oder
+          Briefpapier, einem erfundenen Kunden und erfundenen Preisen.
         </CardDescription>
       </CardHeader>
       <CardContent>

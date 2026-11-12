@@ -37,6 +37,7 @@ Postgres holds metadata: folders, documents, links, categories, trash state, ver
 - Optional stationery (a PDF page or an image for the first page, another for the following pages) lies under the content, which keeps to the stationery's margins. Without it the module draws a plain letterhead from logo and sender.
 - Every page says „Seite x von y“, the table header repeats on each page, a position keeps its first description line, and a subtotal keeps its section's last position.
 - A generated offer belongs to its offer and customer, never to a job or project, because an assigned employee reads a job's documents.
+- The company document profile's logo and stationery lie under `{organizationId}/briefpapier/{fileId}/{kind}`, outside the library. They follow the [upload flow](#upload-flow); the finalize also refuses a file the renderer cannot embed, and registers the copy with its history entry in one call. A replaced or removed file queues its old object for the [purge](#storage-cleanup): a stored document carries its own bytes and never needs the live file.
 
 ## Links and ownership
 

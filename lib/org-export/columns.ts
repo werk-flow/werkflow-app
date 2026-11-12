@@ -65,6 +65,8 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   client_site_roles: 'Kunden_Objektrollen',
   client_sites: 'Kunden_Standorte',
   clients: 'Kunden',
+  company_document_profile_events: 'Firmenangaben_Ereignisse',
+  company_document_profiles: 'Firmenangaben',
   document_audit_events: 'Dokumente_Protokoll',
   document_folders: 'Dokumente_Ordner',
   document_links: 'Dokumente_Verknüpfungen',
