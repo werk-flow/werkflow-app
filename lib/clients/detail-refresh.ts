@@ -11,8 +11,6 @@ export function roleRelatedRecords(roles: readonly ClientSiteRole[] | null): Rol
   };
 }
 
-const textOf = (value: unknown): string | null => (typeof value === 'string' ? value : null);
-
 /**
  * Whether a change reaches the customer page: the customer's own rows, a
  * role naming it as holder, and a renamed or archived holder, owner or
@@ -25,7 +23,7 @@ export function isCustomerDetailEvent(
 ): boolean {
   const row = event.new ?? event.old;
   if (!row) return false;
-  const id = textOf(row.id);
+  const id = typeof row.id === 'string' ? row.id : null;
   if (event.table === 'clients') return id === clientId || (id !== null && related.clientIds.has(id));
   if (event.table === 'client_sites' && id !== null && related.siteIds.has(id)) return true;
   if (event.table === 'client_site_roles' && row.holder_client_id === clientId) return true;
