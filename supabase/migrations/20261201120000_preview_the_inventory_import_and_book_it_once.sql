@@ -52,6 +52,12 @@ create index inventory_import_batches_content_hash_idx
 -- One row: create or match the item, attach the barcode, book the quantity.
 -- Raises the refusal of the first failing step, so a caller's savepoint or
 -- transaction leaves nothing behind.
+--
+-- p_reviewed is the previewed flow. It refuses a matched item whose unit
+-- differs, and changes no matched item: a matched row only checks that its
+-- barcode belongs to no other item, and creates no category or supplier.
+-- It creates a Lager only for a quantity it books. Without it, the row
+-- behaves as import_inventory_row always did.
 create function app_private.apply_inventory_import_row(
   p_organization_id uuid,
   p_actor_id uuid,
@@ -64,7 +70,7 @@ create function app_private.apply_inventory_import_row(
   p_quantity numeric,
   p_reason text,
   p_mode text,
-  p_refuse_unit_mismatch boolean
+  p_reviewed boolean
 )
 returns jsonb
 language plpgsql
@@ -89,9 +95,11 @@ begin
     raise exception 'invalid_input';
   end if;
 
-  v_category_id := app_private.ensure_inventory_category(p_organization_id, p_category_name);
-  v_supplier_id := app_private.ensure_inventory_supplier(p_organization_id, p_supplier_name);
-  if p_mode = 'stock' then
+  if not p_reviewed then
+    v_category_id := app_private.ensure_inventory_category(p_organization_id, p_category_name);
+    v_supplier_id := app_private.ensure_inventory_supplier(p_organization_id, p_supplier_name);
+  end if;
+  if p_mode = 'stock' and (not p_reviewed or v_quantity > 0) then
     v_location_id := app_private.ensure_inventory_location(p_organization_id, p_actor_id, p_location_name);
     select location.* into v_location from public.inventory_locations location where location.id = v_location_id;
   end if;
@@ -113,11 +121,15 @@ begin
     end if;
   end if;
 
-  if v_item.id is not null and p_refuse_unit_mismatch and v_item.unit is distinct from v_fields.unit then
+  if v_item.id is not null and p_reviewed and v_item.unit is distinct from v_fields.unit then
     raise exception 'unit_mismatch' using detail = v_item.unit;
   end if;
 
   if v_item.id is null then
+    if p_reviewed then
+      v_category_id := app_private.ensure_inventory_category(p_organization_id, p_category_name);
+      v_supplier_id := app_private.ensure_inventory_supplier(p_organization_id, p_supplier_name);
+    end if;
     insert into public.inventory_items (
       organization_id, item_type, name, category_id, unit, internal_sku, manufacturer, supplier_id,
       supplier_article_number, purchase_price_cents, sale_price_cents, is_billable,
@@ -131,7 +143,17 @@ begin
     returning * into v_item;
   end if;
 
-  perform app_private.attach_primary_inventory_barcode(p_organization_id, v_item.id, v_barcode);
+  if p_reviewed and v_matched_by is not null then
+    if exists (
+      select 1 from public.inventory_item_barcodes barcode
+      where barcode.organization_id = p_organization_id and barcode.barcode_value = v_barcode
+        and barcode.item_id <> v_item.id
+    ) then
+      raise exception 'barcode_taken';
+    end if;
+  else
+    perform app_private.attach_primary_inventory_barcode(p_organization_id, v_item.id, v_barcode);
+  end if;
 
   v_outcome := jsonb_build_object(
     'outcome', 'imported',

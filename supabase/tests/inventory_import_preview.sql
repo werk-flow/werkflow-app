@@ -233,6 +233,49 @@ begin
 end;
 $$;
 
+-- 4b. A matched row changes no article: no barcode attached, no category or
+--     supplier created; a barcode of another article refuses it; and a row
+--     that books nothing creates no Lager.
+do $$
+declare
+  v_org constant uuid := '99200000-0000-4000-8000-000000000010';
+  v_admin constant uuid := '99200000-0000-4000-8000-000000000001';
+  v_rows constant jsonb := jsonb_build_array(
+    jsonb_build_object('item', jsonb_build_object('name', 'Kupferrohr', 'item_type', 'material',
+      'unit', 'meter', 'internal_sku', 'NR-ROHR-15', 'is_billable', true, 'global_minimum_stock', 0),
+      'barcode', '4000000000099', 'category_name', 'Nur Treffer', 'supplier_name', 'Großhandel Treffer',
+      'location_name', 'Hauptlager', 'quantity', 1),
+    jsonb_build_object('item', jsonb_build_object('name', 'Pressfitting', 'item_type', 'material',
+      'unit', 'piece', 'internal_sku', 'NR-FIT-15', 'is_billable', true, 'global_minimum_stock', 0),
+      'barcode', '4000000000015', 'location_name', 'Hauptlager', 'quantity', 1),
+    jsonb_build_object('item', jsonb_build_object('name', 'Muffe 15 mm', 'item_type', 'material',
+      'unit', 'piece', 'internal_sku', 'NR-MU-15', 'is_billable', true, 'global_minimum_stock', 0),
+      'location_name', 'Leeres Regal', 'quantity', 0)
+  );
+  v_booking jsonb;
+begin
+  v_booking := public.book_inventory_import(v_org, v_admin, (public.preview_inventory_import(
+    v_org, v_admin, 'treffer.csv', '{}'::jsonb, null, 'stock', v_rows)->>'batch_id')::uuid);
+  if v_booking->'rows'->0 @> '{"outcome":"booked","matched_by":"internal_sku"}' is not true
+    or v_booking->'rows'->1 @> '{"outcome":"rejected","reason":"barcode_taken"}' is not true
+    or v_booking->'rows'->2 @> '{"outcome":"imported","matched_by":null,"location_name":null}' is not true
+  then
+    raise exception 'a matched row must book its quantity, a foreign barcode refuse it, a zero row book nothing: %', v_booking->'rows';
+  end if;
+  if exists (select 1 from public.inventory_item_barcodes where organization_id = v_org and barcode_value = '4000000000099')
+    or exists (select 1 from public.inventory_categories where organization_id = v_org and name = 'Nur Treffer')
+    or exists (select 1 from public.inventory_suppliers where organization_id = v_org and name = 'Großhandel Treffer')
+    or not exists (select 1 from public.inventory_item_barcodes
+      where item_id = '99200000-0000-4000-8000-000000000030' and barcode_value = '4000000000015' and is_primary)
+  then
+    raise exception 'a matched row must leave the article''s barcodes unchanged and create no category or supplier';
+  end if;
+  if exists (select 1 from public.inventory_locations where organization_id = v_org and name = 'Leeres Regal') then
+    raise exception 'a row that books no quantity must create no Lager';
+  end if;
+end;
+$$;
+
 -- 5. Only a manager of the batch's organization previews or books it.
 select pg_temp.expect_refusal('a preview by an employee', $sql$
   select public.preview_inventory_import(

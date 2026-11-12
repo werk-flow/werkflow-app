@@ -16,7 +16,7 @@ import {
   type ImportTotals,
   type InventoryImportMode,
 } from '@/lib/inventory/csv-import';
-import { formatInventoryQuantity } from '@/lib/inventory/types';
+import { formatInventoryQuantity, getInventoryUnitLabel } from '@/lib/inventory/types';
 
 // A preview of a large file reveals its rows in steps, so the dialog stays responsive.
 const ROWS_PER_STEP = 100;
@@ -58,6 +58,7 @@ function OutcomeRow({
           <p className="truncate text-sm font-medium">{name}</p>
           <p className="text-xs text-muted-foreground">
             Zeile {lineNumber}
+            {row.unit ? ` · Einheit ${getInventoryUnitLabel(row.unit)}` : ''}
             {matched}
           </p>
           {effect && <p className="text-sm">{effect}</p>}

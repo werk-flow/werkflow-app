@@ -18,7 +18,7 @@ signInAs(world, 'admin');
 const batchId = '92000000-0000-4000-8000-000000000001';
 const contentHash = 'c'.repeat(64);
 let answer: { data: unknown; error: { code: string; message: string } | null } = { data: null, error: null };
-world.rpc = ({ name }) => (name === 'ensure_inventory_defaults' ? { data: null, error: null } : answer);
+world.rpc = () => answer;
 
 function previewRows(rows: Array<Record<string, unknown>>) {
   return previewInventoryImport({
@@ -69,6 +69,11 @@ const preview = await previewRows([
   { unit: '  ' },
   { name: 'Pressfitting', unit: 'Stk' },
 ]);
+// The preview writes nothing but its draft batch: it is the one call.
+assert.deepEqual(
+  world.rpcCalls.map((call) => call.name),
+  ['preview_inventory_import'],
+);
 assert.equal(previewCall()?.args.p_organization_id, ORGANIZATION_A);
 assert.equal(previewCall()?.args.p_actor_id, CALLER_ID);
 assert.deepEqual(

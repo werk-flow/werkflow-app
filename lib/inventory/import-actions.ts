@@ -19,7 +19,6 @@ import {
 import type { ImportRowOutcome } from './csv-import';
 import {
   cleanText,
-  ensureInventoryDefaults,
   importAnswerSchema,
   invalidateInventory,
   inventoryWriteFailure,
@@ -88,8 +87,9 @@ export async function previewInventoryImport(
   if (!auth.success) return auth;
   if (!auth.context.isManagerOrAbove) return { success: false, error: 'not_authorized' };
 
+  // The preview writes nothing but its draft batch. The inventory page that
+  // opens the import already seeded the default categories.
   const admin = createSupabaseAdminClient();
-  await ensureInventoryDefaults(admin, auth.context);
   const { data, error } = await admin.rpc(
     'preview_inventory_import',
     rpcArgs('preview_inventory_import', {
