@@ -55,10 +55,30 @@ let holder: DraftHolder | null = null;
  */
 let holderGeneration: string | null = null;
 
-/** Whether this tab may still send for the holder it was given: no sign-out or sign-in page came since. */
-function stillHolder(): boolean {
-  return holderGeneration !== null && todayWipeGeneration() === holderGeneration;
+/**
+ * A send's claim on the tab: the person it was queued for and the wipe signal of that moment. It
+ * holds while no sign-out or sign-in page wrote a new signal and no page named another person.
+ */
+type SendClaim = { owner: DraftHolder; generation: string | null };
+
+function claimFor(owner: DraftHolder): SendClaim {
+  const named =
+    holder !== null && holder.userId === owner.userId && holder.organizationId === owner.organizationId;
+  return { owner, generation: named ? holderGeneration : null };
 }
+
+function stillHolder(claim: SendClaim): boolean {
+  return (
+    claim.generation !== null &&
+    claim.generation === holderGeneration &&
+    todayWipeGeneration() === claim.generation &&
+    holder?.userId === claim.owner.userId &&
+    holder.organizationId === claim.owner.organizationId
+  );
+}
+
+/** The photo transfer running now: a page that names another person aborts it. */
+let activeTransfer: AbortController | null = null;
 let progress: DraftSendProgress | null = null;
 let listening = false;
 /** One send at a time: two triggers never upload the same photo twice. */
@@ -161,14 +181,16 @@ function refusedNow(kind: DraftRefusal['kind']): DraftRefusal {
 }
 
 /** Uploads the photos storage does not hold yet. Returns null when all are saved, else what the draft is left as. */
-async function uploadPhotos(owner: DraftHolder, draft: StoredDraft): Promise<DraftSendOutcome | null> {
+async function uploadPhotos(claim: SendClaim, draft: StoredDraft): Promise<DraftSendOutcome | null> {
+  const { owner } = claim;
   let uploaded = draft.photos.filter((photo) => photo.documentId !== null).length;
   for (const photo of draft.photos) {
     if (photo.documentId !== null) continue;
-    if (!stillHolder()) return 'waiting';
+    if (!stillHolder(claim)) return 'waiting';
     // A sign-out or a sign-in page in another tab during the transfer aborts it: the photo must not
     // be registered with the next person's session.
     const transfer = new AbortController();
+    activeTransfer = transfer;
     const abortOnWipe = (event: StorageEvent): void => {
       if (event.key === TODAY_WIPE_KEY || event.key === null) transfer.abort();
     };
@@ -181,8 +203,11 @@ async function uploadPhotos(owner: DraftHolder, draft: StoredDraft): Promise<Dra
       category: 'photo',
       transferred: photo.transferred,
       signal: transfer.signal,
-    }).finally(() => window.removeEventListener('storage', abortOnWipe));
-    if (!stillHolder()) return 'waiting';
+    }).finally(() => {
+      window.removeEventListener('storage', abortOnWipe);
+      if (activeTransfer === transfer) activeTransfer = null;
+    });
+    if (!stillHolder(claim)) return 'waiting';
     // A saved upload whose answer names no document was registered by an earlier try's lost answer.
     const documentId =
       result.status === 'saved' ? (result.saved?.id ?? photo.transferred?.documentId ?? null) : null;
@@ -228,18 +253,15 @@ const UPLOAD_PASSES = 3;
  * tab added meanwhile is uploaded in the next pass, so a sealed draft always names every photo.
  * Answers the sealed draft, or what the draft is left as.
  */
-async function uploadAndSeal(
-  owner: DraftHolder,
-  first: StoredDraft,
-): Promise<StoredDraft | DraftSendOutcome> {
+async function uploadAndSeal(claim: SendClaim, first: StoredDraft): Promise<StoredDraft | DraftSendOutcome> {
   let draft = first;
   for (let pass = 0; pass < UPLOAD_PASSES; pass += 1) {
-    if (!stillHolder()) return 'waiting';
-    const left = draft.sealed ? null : await uploadPhotos(owner, draft);
+    if (!stillHolder(claim)) return 'waiting';
+    const left = draft.sealed ? null : await uploadPhotos(claim, draft);
     if (left !== null) return left;
-    if (!stillHolder()) return 'waiting';
+    if (!stillHolder(claim)) return 'waiting';
     // Sealed before the request leaves: from here the server may hold the draft, whatever answer arrives.
-    const current = await changeDraftOnDevice(owner, draft.id, (stored) =>
+    const current = await changeDraftOnDevice(claim.owner, draft.id, (stored) =>
       stored && (stored.sealed || stored.photos.every((photo) => photo.documentId !== null))
         ? { ...stored, sealed: true, refusal: null }
         : stored,
@@ -252,14 +274,15 @@ async function uploadAndSeal(
 }
 
 /** Sends one draft of the holder. `byPerson` is „Erneut senden“ or a save: it also sends a refused or old draft. */
-async function sendOne(owner: DraftHolder, draftId: string, byPerson: boolean): Promise<DraftSendOutcome> {
+async function sendOne(claim: SendClaim, draftId: string, byPerson: boolean): Promise<DraftSendOutcome> {
+  const { owner } = claim;
   const draft = (await listDraftsOnDevice(owner)).find((entry) => entry.id === draftId);
   if (!draft) return 'skipped';
   if (draft.refusal?.kind === 'no_access') return 'no_access';
   if (!draft.ready) return 'skipped';
   if (!byPerson && (openInEditor.has(draftId) || draft.refusal !== null || isPastUnsentLimit(draft)))
     return 'skipped';
-  const sealed = await uploadAndSeal(owner, draft);
+  const sealed = await uploadAndSeal(claim, draft);
   if (typeof sealed === 'string') return sealed;
   const verdict = await attach(sealed);
   if (verdict === null) return 'waiting';
@@ -316,10 +339,11 @@ async function finishSend<T>(run: () => Promise<T>): Promise<T> {
 function sendDrafts(): Promise<void> {
   const owner = holder;
   if (!owner) return Promise.resolve();
+  const claim = claimFor(owner);
   return enqueue(() =>
     finishSend(async () => {
       for (const draft of await listDraftsOnDevice(owner)) {
-        if ((await sendOne(owner, draft.id, false)) === 'waiting') return;
+        if ((await sendOne(claim, draft.id, false)) === 'waiting') return;
       }
     }),
   );
@@ -327,7 +351,8 @@ function sendDrafts(): Promise<void> {
 
 /** Sends one draft now because the person asked: „Erneut senden“ or a save in the editor. */
 export function sendDraft(owner: DraftHolder, draftId: string): Promise<DraftSendOutcome> {
-  return enqueue(() => finishSend(() => sendOne(owner, draftId, true)));
+  const claim = claimFor(owner);
+  return enqueue(() => finishSend(() => sendOne(claim, draftId, true)));
 }
 
 /**
@@ -364,6 +389,8 @@ export function startDraftSync(next: DraftHolder): {
   send: () => Promise<void>;
   unsentSource: typeof draftUnsentSource;
 } {
+  if (holder && (holder.userId !== next.userId || holder.organizationId !== next.organizationId))
+    activeTransfer?.abort();
   holder = next;
   holderGeneration = todayWipeGeneration();
   if (!listening) {

@@ -550,3 +550,36 @@ describe('round 2: a send never strands or splits a draft', () => {
     expect(sent).toEqual([]);
   });
 });
+
+describe('round 3: a queued send stays with the person it was queued for', () => {
+  test("a send of one person queued behind another tab's lock does nothing after a sign-in of another person took over the tab", async () => {
+    const realNavigator: unknown = Reflect.get(globalThis, 'navigator');
+    let releaseLock = (): void => undefined;
+    const lockHeld = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+    Object.assign(globalThis, {
+      navigator: {
+        locks: {
+          request: async (_name: string, run: () => Promise<unknown>) => {
+            await lockHeld;
+            return run();
+          },
+        },
+      },
+    });
+    try {
+      await save(draft());
+      const queued = sendDraft(holder, DRAFT_ID);
+      // A sign-in of a coworker writes the wipe signal, and the page names the coworker.
+      storage.set(TODAY_WIPE_KEY, 'coworker-sign-in');
+      startDraftSync(otherPerson);
+      releaseLock();
+      expect(await queued).toBe('waiting');
+      expect(uploads).toEqual([]);
+      expect(sent).toEqual([]);
+    } finally {
+      Object.assign(globalThis, { navigator: realNavigator });
+    }
+  });
+});
