@@ -1275,7 +1275,7 @@
         },
         "script": {
           "requests": { "reference": 36, "tolerance": 1 },
-          "encodedBytes": { "reference": 581215, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 573760, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         },
@@ -1518,6 +1518,24 @@
           },
           "runKeys": ["2026-11-12T065056958Z-ac2af3"],
           "reason": "The app shell gained the report button, its recorder and its launcher, which the owner accepted on #329 (2026-11-10). CI passed both lab groups on 82a9e350 (run 43092771815) and main passes alone; the merged tree reads 581,215 B, over the 580,887 B ceiling by 328 B, because main's shell changes since then used the remaining room. The field cold start needs no accept: #348's ceiling-accept already covers it."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 36, "tolerance": 1 },
+            "encodedBytes": { "reference": 581215, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 36, "tolerance": 1 },
+            "encodedBytes": { "reference": 573760, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-12T221701408Z-cb4509"],
+          "reason": "Merged with main 0a645ab9 (#405, #391), the office cold start loads 36 script files (main alone 7635410d: 37; this branch alone 6cfc656d: 37) and 573,760 B (main before #405 7ef4b95c: 581,060; main alone: 578,033; branch alone: 579,387). Module comparison of the captured start-up chunks: the branch's lazy-loader stubs chunk 250d7s622ddpd.js (456 B, loaders 986332, 210572, 777462) now shares a chunk with layout module 537416 again, as on main; every module of main's and of the branch's start-up is present, except the activity fields and their alarm-clock icon (decision 13, loaded on first use) and #405's five Mitarbeiter member-removal modules, absent from main's start-up too. Lead's decision of 2026-11-12."
         }
       ]
     },
