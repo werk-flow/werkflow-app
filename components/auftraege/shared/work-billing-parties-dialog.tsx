@@ -111,6 +111,16 @@ function useBillingPartiesForm({ kind, workId, current, task, onSaved }: FormPro
   };
 }
 
+export type WorkBillingPartiesDialogProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  kind: BillingWorkKind;
+  workId: string;
+  current: WorkBillingPartyVersion | null;
+  /** Resolves once the card shows the saved parties. */
+  onSaved: () => Promise<void>;
+};
+
 /**
  * Chooses who commissioned the work and who receives its invoice. Saving
  * copies the recipient's name and address onto the work; the previous choice
@@ -118,23 +128,16 @@ function useBillingPartiesForm({ kind, workId, current, task, onSaved }: FormPro
  */
 export function WorkBillingPartiesDialog({
   open,
+  onOpenChange,
   kind,
   workId,
   current,
-  onClose,
   onSaved,
-}: {
-  open: boolean;
-  kind: BillingWorkKind;
-  workId: string;
-  current: WorkBillingPartyVersion | null;
-  onClose: () => void;
-  /** Resolves once the card shows the saved parties. */
-  onSaved: () => Promise<void>;
-}) {
+}: WorkBillingPartiesDialogProps) {
   const task = usePendingTask();
+  const onClose = () => onOpenChange(false);
   return (
-    <Dialog open={open} pending={task.isPending} onOpenChange={(next) => !next && onClose()}>
+    <Dialog open={open} pending={task.isPending} onOpenChange={onOpenChange}>
       {open && (
         <WorkBillingPartiesForm
           kind={kind}

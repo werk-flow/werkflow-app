@@ -18,7 +18,6 @@ import { RouteRedirect } from '@/components/shared/route-redirect';
 import { getWorkLifecycleSnapshot } from '@/lib/work-lifecycle/actions';
 import { getWorkArtifacts } from '@/lib/work-artifacts/actions';
 import { getWorkRequestEntries } from '@/lib/requests/work-attach-server';
-import { getWorkBillingParties } from '@/lib/billing-parties/server';
 import { getEffectiveResponsibilityHolderForActor } from '@/lib/responsibilities/server';
 import { getWorkHandoverWorkspace } from '@/lib/work-handover/actions';
 import NestedJobDetailLoading from './loading';
@@ -67,13 +66,9 @@ async function loadNestedJobDetailReads({
   const handoverWorkspacePromise = jobResultPromise.then((result) =>
     result.success ? getWorkHandoverWorkspace({ targetType: 'job', targetId: result.job.id }) : null,
   );
-  // The attached requests and the billing parties arrive with the page, so
-  // their sections open without a read of their own.
+  // The attached requests arrive with the page, so the section opens without a read of its own.
   const requestEntriesPromise = afterJob(jobResultPromise, (id) =>
     getWorkRequestEntries({ kind: 'job', id }),
-  );
-  const billingPartiesPromise = afterJob(jobResultPromise, (id) =>
-    getWorkBillingParties({ kind: 'job', id }),
   );
 
   const [
@@ -89,7 +84,6 @@ async function loadNestedJobDetailReads({
     approvalHolder,
     handoverWorkspaceResult,
     requestEntriesResult,
-    billingPartiesResult,
   ] = await Promise.all([
     getProjectByNumber(decodeURIComponent(projectNumber)),
     jobResultPromise,
@@ -103,7 +97,6 @@ async function loadNestedJobDetailReads({
     approvalHolderPromise,
     handoverWorkspacePromise,
     requestEntriesPromise,
-    billingPartiesPromise,
   ]);
   return {
     projectResult,
@@ -118,7 +111,6 @@ async function loadNestedJobDetailReads({
     approvalHolder,
     handoverWorkspaceResult,
     requestEntriesResult,
-    billingPartiesResult,
   };
 }
 
@@ -134,7 +126,6 @@ function nestedJobDetailRegions(
     approvalHolder,
     handoverWorkspaceResult,
     requestEntriesResult,
-    billingPartiesResult,
   }: Awaited<ReturnType<typeof loadNestedJobDetailReads>>,
   memberRows: readonly OrgMemberInfo[],
 ) {
@@ -169,7 +160,6 @@ function nestedJobDetailRegions(
     lifecycleSnapshot: lifecycleResult?.success ? lifecycleResult.snapshot : null,
     handoverWorkspace,
     requestEntries: requestEntriesResult?.success ? requestEntriesResult.entries : undefined,
-    billingParties: billingPartiesResult?.success ? billingPartiesResult.parties : undefined,
   } satisfies Partial<ComponentProps<typeof JobDetailContent>>;
 }
 
@@ -254,6 +244,7 @@ async function NestedJobDetailData({
       }}
       isAdminOrManager={isAdminOrManager}
       currentUserId={user.id}
+      billingParties={jobResult.billingParties}
       {...regions}
     />
   );

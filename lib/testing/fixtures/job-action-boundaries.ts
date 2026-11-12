@@ -61,6 +61,20 @@ const world = installActionWorld({
       client_id: clientId,
       site_id: siteId,
       contact_id: contactId,
+      // The billing parties the job read embeds: the office's alone.
+      work_billing_parties: [
+        {
+          id: '5f000000-0000-4000-8000-000000000001',
+          version: 1,
+          source: 'objekt',
+          client_id: clientId,
+          recipient_client_id: clientId,
+          recipient_name: 'Hausverwaltung Lindenhof GmbH',
+          recipient_address: 'Hofweg 1, 10117 Berlin',
+          created_at: '2026-11-01T08:00:00.000Z',
+          auftraggeber: { name: 'Familie Berger' },
+        },
+      ],
     },
     jobRow(unassignedJobId, ORGANIZATION_A, 'A-2026-002'),
     jobRow(foreignJobId, ORGANIZATION_B, 'A-2026-900'),
@@ -238,6 +252,10 @@ assert.equal(managerDetails.job.client?.notes, 'Zahlt spät');
 assert.equal(managerDetails.job.site?.notes, 'Interne Standortnotiz');
 assert.equal(managerDetails.job.contact?.email, 'anna@example.test');
 assert.equal(managerDetails.job.assignments[1]?.email, 'max@example.test');
+// The office reads the job's frozen recipient with the job; the field read above carries no such field.
+const managerByNumber = await actions.getJobByNumber('A-2026-001');
+assert.ok(managerByNumber.success);
+assert.equal(managerByNumber.billingParties?.versions[0]?.recipientName, 'Hausverwaltung Lindenhof GmbH');
 
 // A manager of organization A reaches no job of organization B by id or by number.
 assert.deepEqual(await actions.getJobDetails(foreignJobId), jobNotFound);

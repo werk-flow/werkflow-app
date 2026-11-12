@@ -8,16 +8,25 @@ import { StaleRegion } from '@/components/shared/stale-region';
 import { Button } from '@/components/ui/button';
 import { SectionError } from '@/components/ui/section-error';
 import { TextLink } from '@/components/ui/text-link';
-import {
-  BILLING_PARTY_SOURCE_LABELS,
-  type BillingWorkKind,
-  type WorkBillingParties,
-  type WorkBillingPartyVersion,
+import type {
+  BillingPartySource,
+  BillingWorkKind,
+  WorkBillingParties,
+  WorkBillingPartyVersion,
 } from '@/lib/billing-parties/types';
 import { formatSiteAddress } from '@/lib/clients/types';
 import { formatBerlinDateTime } from '@/lib/utils';
-import { WorkBillingPartiesDialog } from './work-billing-parties-dialog';
+import { lazyWorkBillingPartiesDialog } from './work-billing-parties-lazy-dialog';
 import { WORK_BILLING_PARTIES_LOAD_FAILED, useWorkBillingParties } from './use-work-billing-parties';
+
+/** Why this recipient: shown under it on the work. */
+const SOURCE_LABELS: Readonly<Record<BillingPartySource, string>> = {
+  objekt: 'Rechnungsempfänger des Einsatzorts',
+  auftraggeber: 'Wie Auftraggeber',
+  projekt: 'Aus dem Projekt übernommen',
+  anfrage: 'Aus der Anfrage übernommen',
+  buero: 'Vom Büro gewählt',
+};
 
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -37,8 +46,7 @@ export function RecipientFact({ current }: { current: WorkBillingPartyVersion })
         <span className="block whitespace-pre-line text-muted-foreground">{current.recipientAddress}</span>
       )}
       <span className="block text-xs text-muted-foreground">
-        {BILLING_PARTY_SOURCE_LABELS[current.source]} · {formatBerlinDateTime(current.setAt)}
-        {current.setByName ? ` · ${current.setByName}` : ''}
+        {SOURCE_LABELS[current.source]} · {formatBerlinDateTime(current.setAt)}
       </span>
     </>
   );
@@ -55,7 +63,6 @@ function BillingPartiesHistory({ versions }: { versions: WorkBillingPartyVersion
           <li key={version.id}>
             Rechnung an {version.recipientName}, Auftraggeber {version.clientName} ·{' '}
             {formatBerlinDateTime(version.setAt)}
-            {version.setByName ? ` · ${version.setByName}` : ''}
           </li>
         ))}
       </ul>
@@ -154,6 +161,8 @@ export function WorkBillingPartiesSection({
               size="sm"
               aria-label="Auftraggeber und Rechnungsempfänger ändern"
               onClick={() => setEditing(true)}
+              onPointerEnter={lazyWorkBillingPartiesDialog.preload}
+              onFocus={lazyWorkBillingPartiesDialog.preload}
               disabled={view.isStale}
             >
               <Pencil className="size-4" />
@@ -168,12 +177,12 @@ export function WorkBillingPartiesSection({
         )}
         <BillingPartiesHistory versions={earlier} />
       </section>
-      <WorkBillingPartiesDialog
+      <lazyWorkBillingPartiesDialog.Dialog
         open={editing}
+        onOpenChange={setEditing}
         kind={kind}
         workId={id}
         current={current}
-        onClose={() => setEditing(false)}
         onSaved={view.refresh}
       />
     </StaleRegion>

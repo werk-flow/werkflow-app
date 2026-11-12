@@ -474,7 +474,7 @@ revoke all on function public.set_work_billing_parties(uuid, uuid, text, uuid, u
 grant execute on function public.set_work_billing_parties(uuid, uuid, text, uuid, uuid, uuid) to service_role;
 
 -- 5. The parties of one work for the office: every version, newest first,
--- with the Auftraggeber's current name, who set it, the work's Einsatzort and
+-- with the Auftraggeber's current name, the work's Einsatzort and
 -- the Objekt's active access contacts. Null when the work is not in the
 -- organization.
 create function public.get_work_billing_parties(p_organization_id uuid, p_kind text, p_work_id uuid)
@@ -506,13 +506,11 @@ as $$
         'clientId', party.client_id, 'clientName', auftraggeber.name,
         'recipientClientId', party.recipient_client_id,
         'recipientName', party.recipient_name, 'recipientAddress', party.recipient_address,
-        'setAt', party.created_at,
-        'setByName', nullif(btrim(concat_ws(' ', actor.first_name, actor.last_name)), '')
+        'setAt', party.created_at
       ) order by party.version desc)
       from public.work_billing_parties party
       join public.clients auftraggeber
         on auftraggeber.id = party.client_id and auftraggeber.organization_id = p_organization_id
-      left join public.profiles actor on actor.id = party.set_by
       where party.organization_id = p_organization_id and party.work_id = p_work_id
     ), '[]'),
     'site', (

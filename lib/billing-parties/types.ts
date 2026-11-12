@@ -1,54 +1,38 @@
-import { z } from '@/lib/zod';
-
 /**
  * Who commissioned a request, job, project or Servicefall (the Auftraggeber)
  * and who receives its invoice (the Rechnungsempfänger), with the
  * recipient's name and address as they were when it was set. Offers read
- * this copy (werk-flow/werkflow-planning#16). Office-only.
+ * this copy (werk-flow/werkflow-planning#16). Office-only. Types only, so a
+ * client module that imports them carries no code.
  */
 export const BILLING_WORK_KINDS = ['request', 'job', 'project', 'service_case'] as const;
 export type BillingWorkKind = (typeof BILLING_WORK_KINDS)[number];
 
-const BILLING_PARTY_SOURCES = ['objekt', 'auftraggeber', 'projekt', 'anfrage', 'buero'] as const;
-type BillingPartySource = (typeof BILLING_PARTY_SOURCES)[number];
+export const BILLING_PARTY_SOURCES = ['objekt', 'auftraggeber', 'projekt', 'anfrage', 'buero'] as const;
+export type BillingPartySource = (typeof BILLING_PARTY_SOURCES)[number];
 
-/** Why this recipient: shown under it on the work. */
-export const BILLING_PARTY_SOURCE_LABELS: Readonly<Record<BillingPartySource, string>> = {
-  objekt: 'Rechnungsempfänger des Einsatzorts',
-  auftraggeber: 'Wie Auftraggeber',
-  projekt: 'Aus dem Projekt übernommen',
-  anfrage: 'Aus der Anfrage übernommen',
-  buero: 'Vom Büro gewählt',
+export type WorkBillingPartyVersion = {
+  id: string;
+  version: number;
+  source: BillingPartySource;
+  clientId: string;
+  clientName: string;
+  recipientClientId: string;
+  recipientName: string;
+  recipientAddress: string | null;
+  setAt: string;
 };
 
-const versionSchema = z.object({
-  id: z.string(),
-  version: z.number(),
-  source: z.enum(BILLING_PARTY_SOURCES),
-  clientId: z.string(),
-  clientName: z.string(),
-  recipientClientId: z.string(),
-  recipientName: z.string(),
-  recipientAddress: z.string().nullable(),
-  setAt: z.string(),
-  setByName: z.string().nullable(),
-});
-
-/** The read of get_work_billing_parties: every version, newest first. */
-export const workBillingPartiesSchema = z.object({
-  hasClient: z.boolean(),
-  versions: z.array(versionSchema),
-  site: z
-    .object({
-      id: z.string(),
-      name: z.string(),
-      street: z.string().nullable(),
-      postalCode: z.string().nullable(),
-      city: z.string().nullable(),
-    })
-    .nullable(),
-  accessContacts: z.array(z.object({ id: z.string(), name: z.string(), phone: z.string().nullable() })),
-});
-
-export type WorkBillingParties = z.infer<typeof workBillingPartiesSchema>;
-export type WorkBillingPartyVersion = WorkBillingParties['versions'][number];
+/** Every version of one work, newest first, with its Einsatzort and the Objekt's access contacts. */
+export type WorkBillingParties = {
+  hasClient: boolean;
+  versions: WorkBillingPartyVersion[];
+  site: {
+    id: string;
+    name: string;
+    street: string | null;
+    postalCode: string | null;
+    city: string | null;
+  } | null;
+  accessContacts: { id: string; name: string; phone: string | null }[];
+};

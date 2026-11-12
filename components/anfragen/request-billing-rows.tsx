@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Pencil } from 'lucide-react';
 
 import { RecipientFact } from '@/components/auftraege/shared/work-billing-parties-section';
-import { WorkBillingPartiesDialog } from '@/components/auftraege/shared/work-billing-parties-dialog';
+import { lazyWorkBillingPartiesDialog } from '@/components/auftraege/shared/work-billing-parties-lazy-dialog';
 import {
   WORK_BILLING_PARTIES_LOAD_FAILED,
   useWorkBillingParties,
@@ -61,6 +61,8 @@ export function RequestBillingRows({
               className="mt-1.5"
               aria-label="Auftraggeber und Rechnungsempfänger ändern"
               onClick={() => setEditing(true)}
+              onPointerEnter={lazyWorkBillingPartiesDialog.preload}
+              onFocus={lazyWorkBillingPartiesDialog.preload}
               disabled={view.isStale}
             >
               <Pencil className="size-4" />
@@ -69,12 +71,12 @@ export function RequestBillingRows({
           )}
         </dd>
       </div>
-      <WorkBillingPartiesDialog
+      <lazyWorkBillingPartiesDialog.Dialog
         open={editing}
+        onOpenChange={setEditing}
         kind="request"
         workId={requestId}
         current={current}
-        onClose={() => setEditing(false)}
         onSaved={view.refresh}
       />
     </>
