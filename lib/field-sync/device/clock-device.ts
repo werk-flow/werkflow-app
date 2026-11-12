@@ -7,7 +7,7 @@ import { sendTimeOutbox } from './time-outbox-send';
 import { readTimeOutbox, readWholeTimeOutbox, type OutboxHolder } from './time-outbox-store';
 import { TODAY_WIPE_KEY } from './today-wipe';
 import { markUnsentWork } from './sync-runner';
-import { KEPT_CLOCK_ACTIONS_KEY } from './unsent-mark';
+import { KEPT_CLOCK_ACTION_PREFIX } from './unsent-mark';
 import type { UnsentSource } from './unsent-work';
 
 // This tab's hold on the time outbox: whose unsent events it shows and sends.
@@ -39,6 +39,8 @@ export function clockHolder(): OutboxHolder | null {
 async function publish(): Promise<void> {
   const current = clockHolder();
   const view = current ? clockDeviceView(await readTimeOutbox(current), new Date()) : null;
+  // A wipe or another holder while the device read: this answer is the former holder's, never shown.
+  if (clockHolder() !== current) return;
   for (const listener of listeners) listener(view);
 }
 
@@ -68,7 +70,7 @@ function onStorage(event: StorageEvent): void {
   if (event.key === OUTBOX_CHANGED_KEY) void publish().catch(() => undefined);
   // Another tab's page kept an action without signal: the next pass of this tab sends it too.
   // eslint-disable-next-line no-restricted-syntax -- as above; the action stays kept and the next start takes it in
-  if (event.key === KEPT_CLOCK_ACTIONS_KEY) void takeInKept().catch(() => undefined);
+  if (event.key?.startsWith(KEPT_CLOCK_ACTION_PREFIX)) void takeInKept().catch(() => undefined);
 }
 
 /**
@@ -76,12 +78,13 @@ function onStorage(event: StorageEvent): void {
  * time: a second tab that took in the same list after the first one already sent an event would
  * put that event back with the expectation of the page that kept it, not of the answer before it.
  */
-export async function takeInKept(): Promise<void> {
-  let moved = false;
+export async function takeInKept(): Promise<{ unreadable: number }> {
+  let taken = { moved: 0, unreadable: 0 };
   await exclusively(TAKE_IN_LOCK, async () => {
-    moved = await takeInKeptClockActions();
+    taken = await takeInKeptClockActions();
   });
-  if (moved) await outboxChanged();
+  if (taken.moved > 0) await outboxChanged();
+  return { unreadable: taken.unreadable };
 }
 
 /**
@@ -116,18 +119,32 @@ async function exclusively(lock: string, work: () => Promise<void>): Promise<voi
   else await work();
 }
 
-/** Sends this tab's holder's unsent events, as far as the server records them now. */
+/**
+ * The chains this tab sends: its holder's, or, on a page without one (a password reset, the
+ * invite error, a tab whose hold another tab's wipe ended), the session person's in each of their
+ * organizations. The server accepts only the active organization's; the others stay pending.
+ */
+async function holdersToSend(): Promise<OutboxHolder[]> {
+  const current = clockHolder();
+  if (current) return [current];
+  const userId = await sessionUserId();
+  if (!userId) return [];
+  return (await ownOrganizations(userId)).map((organizationId) => ({ userId, organizationId }));
+}
+
+/** Sends the unsent events of this tab's holder, or of the session's person, as far as the server records them now. */
 export async function sendOwnTimeEvents(): Promise<void> {
   await takeInKept();
-  const current = clockHolder();
-  if (!current) return;
-  await exclusively(SEND_LOCK, () =>
-    sendTimeOutbox(current, {
-      fetch: (url, init) => fetch(url, init),
-      now: () => new Date(),
-      sessionIsHolders: async () => clockHolder() === current && (await sessionUserId()) === current.userId,
-    }),
-  );
+  const hold = clockHolder();
+  for (const holder of await holdersToSend())
+    await exclusively(SEND_LOCK, () =>
+      sendTimeOutbox(holder, {
+        fetch: (url, init) => fetch(url, init),
+        now: () => new Date(),
+        // Checked before every send: the hold and the session can change between two events.
+        sessionIsHolders: async () => clockHolder() === hold && (await sessionUserId()) === holder.userId,
+      }),
+    );
   await outboxChanged();
 }
 
@@ -148,7 +165,9 @@ async function ownOrganizations(userId: string): Promise<string[]> {
 export const timeUnsentSource: UnsentSource = {
   name: UNSENT_KIND,
   async summarize() {
-    await takeInKept();
+    // A kept action this version cannot read may be anyone's: no session ends over it unseen.
+    const { unreadable } = await takeInKept();
+    if (unreadable > 0) throw new Error(`${unreadable} kept clock actions cannot be read by this version`);
     const userId = await signedInUserId();
     const { events } = await readWholeTimeOutbox();
     const count = events.filter((event) => event.userId === userId).length;

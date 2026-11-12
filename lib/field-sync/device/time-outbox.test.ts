@@ -236,7 +236,10 @@ describe('sending the chain', () => {
       '2026-11-11T15:00:00.000Z',
     ]);
     expect(received.every((envelope) => envelope.kind === 'time.transition')).toBe(true);
-    expect(await readTimeOutbox(WORKER)).toEqual({ clock: null, events: [] });
+    const after = await readTimeOutbox(WORKER);
+    expect(after.events).toEqual([]);
+    // The clock keeps what the last answer left, for an action a page kept meanwhile: after an end, no session.
+    expect(after.clock?.after).toEqual({ sessionId: null, version: null });
   });
 
   test('each event names the session and version the answer before it left, and a start after an end names none', async () => {
@@ -421,24 +424,70 @@ describe('an event the server does not record', () => {
     });
   });
 
-  test('an action whose online call reached the server is not recorded twice: the server holding its id clears it', async () => {
+  test('an action whose online call reached the server is never cleared on a guess: the person checks it, and nothing behind it is sent', async () => {
     const start = command('start');
     await capture(WORKER, start, { triedOnline: true });
     await capture(WORKER, command('end'));
-    const { received, options } = server((envelope, call) =>
-      call === 1
-        ? result(envelope, { outcome: 'rejected', code: 'idempotency_conflict' })
-        : result(envelope, { outcome: 'conflict', code: 'version_conflict' }),
+    // The server holds the id from the online call. It may hold the start, or only a recovery it answered instead.
+    const { received, options } = server((envelope) =>
+      result(envelope, { outcome: 'rejected', code: 'idempotency_conflict' }),
     );
 
     await sendTimeOutbox(WORKER, options);
+    await sendTimeOutbox(WORKER, options);
 
-    // The end learned no session from the start's answer, so it names none and the server decides.
-    expect(received.map((envelope) => envelope.payload)).toEqual([
-      expect.objectContaining({ action: 'start' }),
-      expect.objectContaining({ action: 'end', expectedSessionId: null, expectedVersion: null }),
+    expect(received.map((envelope) => envelope.payload.action)).toEqual(['start']);
+    const view = clockDeviceView(await readTimeOutbox(WORKER), new Date('2026-11-11T09:00:00.000Z'));
+    expect(view?.events.map((event) => [event.action, event.status, event.code])).toEqual([
+      ['start', 'conflict', 'unconfirmed_online'],
+      ['end', 'held', null],
     ]);
-    expect((await readTimeOutbox(WORKER)).events.map((event) => event.action)).toEqual(['end']);
+  });
+
+  test('an event for an organization that is not the active one waits, and is never refused for good', async () => {
+    await capture(WORKER, command('start'));
+    let answer: Record<string, unknown> = { outcome: 'rejected', code: 'organization_mismatch' };
+    const { received, options } = server((envelope) => result(envelope, answer));
+
+    await sendTimeOutbox(WORKER, options);
+    expect((await readTimeOutbox(WORKER)).events[0]?.verdict).toBeNull();
+
+    answer = { outcome: 'accepted', code: 'accepted' };
+    await sendTimeOutbox(WORKER, options);
+    expect(received).toHaveLength(2);
+    expect((await readTimeOutbox(WORKER)).events).toEqual([]);
+  });
+
+  test('an action kept behind events the outbox sent meanwhile expects what the last of them left', async () => {
+    await capture(WORKER, command('start'), { at: '2026-11-11T07:00:00.000Z' });
+    let version = 0;
+    const { received, options } = server((envelope) => {
+      version += 1;
+      return result(envelope, {
+        outcome: 'accepted',
+        code: 'accepted',
+        state: { sessionId: SESSION_ID, segmentId: null, version },
+      });
+    });
+    await sendTimeOutbox(WORKER, options);
+    expect((await readTimeOutbox(WORKER)).events).toEqual([]);
+
+    // The page kept the switch while the start was still waiting, with the stale clock it had read.
+    await capture(
+      WORKER,
+      command('switch', {
+        expectedSessionId: null,
+        expectedVersion: null,
+        selection: createActivitySelection('break'),
+      }),
+      { base: null, at: '2026-11-11T07:30:00.000Z' },
+    );
+    await sendTimeOutbox(WORKER, options);
+
+    expect(received.map((envelope) => envelope.payload)).toEqual([
+      expect.objectContaining({ action: 'start', expectedSessionId: null, expectedVersion: null }),
+      expect.objectContaining({ action: 'switch', expectedSessionId: SESSION_ID, expectedVersion: 1 }),
+    ]);
   });
 
   test('an id the server holds for an event that never went online is a refusal, never a success', async () => {
@@ -591,8 +640,8 @@ describe('capturing', () => {
     });
 
     const { clock } = await readTimeOutbox(WORKER);
-    expect(clock?.base.activeJobInfo).toBeNull();
-    expect(clock?.base.resumeJobInfo).toBeNull();
+    expect(clock?.base?.activeJobInfo).toBeNull();
+    expect(clock?.base?.resumeJobInfo).toBeNull();
     expect(clock?.wipeGeneration).toBe('signal-1');
     const kept = JSON.stringify(await readWholeTimeOutbox());
     expect(kept).not.toContain('Heizung tauschen');

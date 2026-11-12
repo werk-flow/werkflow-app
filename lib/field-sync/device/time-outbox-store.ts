@@ -52,8 +52,13 @@ const storedClockSchema = z.object({
   holder: z.string(),
   userId: z.string(),
   organizationId: z.string(),
-  /** The clock as the server last confirmed it, which the unsent events are applied to. */
-  base: clockStateSchema,
+  /** The clock as the server last confirmed it, which the unsent events are applied to; null when unknown. */
+  base: clockStateSchema.nullable(),
+  /**
+   * What the next event expects once the events before it were recorded: the session and version
+   * the last answer left. An action a page kept behind them is taken in later and expects this.
+   */
+  after: expectationSchema.optional(),
   /** The wipe signal when the clock was last saved in the person's own session (today-store.ts). */
   wipeGeneration: z.string(),
 });

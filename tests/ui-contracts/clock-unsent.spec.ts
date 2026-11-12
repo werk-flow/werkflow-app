@@ -58,7 +58,11 @@ const ACCEPTED: Verdict = {
   state: { sessionId: '20000000-0000-4000-8000-000000000009', segmentId: null, version: 1 },
 };
 
-async function mountClock(page: Page, initial: LiveClockState): Promise<Server> {
+async function mountClock(
+  page: Page,
+  initial: LiveClockState,
+  prepare: () => void = () => undefined,
+): Promise<Server> {
   assertWorkspaceTestLock();
   const bundle = process.env.WERKFLOW_UI_CONTRACT_BUNDLE;
   if (!bundle) throw new Error('Run through bun tests/ui-contracts/run.ts.');
@@ -98,6 +102,8 @@ async function mountClock(page: Page, initial: LiveClockState): Promise<Server> 
     window.contractOnline = true;
     Object.defineProperty(navigator, 'onLine', { get: () => window.contractOnline });
   });
+  // What the device holds before the app starts.
+  await page.evaluate(prepare);
   await page.addScriptTag({ path: bundle });
   await expect(page.getByLabel('Zeitstatus')).toHaveText(/^Bereit/);
   return server;
@@ -138,10 +144,14 @@ async function unsentOnDevice(
       });
       database.close();
     }
-    return { events, kept: localStorage.getItem('werkflow:unsent:clock') ?? '[]' };
+    const kept = Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index) ?? '')
+      .filter((key) => key.startsWith('werkflow:unsent:clock:'))
+      .toSorted()
+      .map((key): unknown => JSON.parse(localStorage.getItem(key) ?? 'null'));
+    return { events, kept };
   });
   const events = z.array(deviceRowSchema).parse(stored.events);
-  const kept = z.array(deviceRowSchema).parse(JSON.parse(stored.kept));
+  const kept = z.array(deviceRowSchema).parse(stored.kept);
   return [...events.toSorted((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0)), ...kept].map(
     ({ userId, action, operationId }) => ({ userId, action, operationId }),
   );
@@ -333,7 +343,12 @@ test('the clock a page keeps for its first unsent action names no job, customer 
   await expect(clockStatus(page)).toHaveText('Pause');
   await expect(unsentBadge(clockDock(page))).toHaveText('Wartet auf Netz');
 
-  const kept = await page.evaluate(() => localStorage.getItem('werkflow:unsent:clock') ?? '');
+  const kept = await page.evaluate(() =>
+    Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index) ?? '')
+      .filter((key) => key.startsWith('werkflow:unsent:clock:'))
+      .map((key) => localStorage.getItem(key) ?? '')
+      .join(''),
+  );
   expect(kept).toContain(RUNNING_CLOCK_STATE.sessionId ?? 'no session');
   for (const name of [job.title, job.jobNumber, job.projectName, job.clientName])
     expect(kept).not.toContain(name);
@@ -397,9 +412,10 @@ test('a conflict shows what changed and the server’s clock, never the phone’
   expect(server.sent).toHaveLength(1);
 });
 
-test('an online clock call that fails on its way is kept under the same operation id, so the server records the action once', async ({
+test('an online clock call that fails late is kept at the time of the tap, under its operation id, and never cleared on a guess', async ({
   page,
 }) => {
+  await page.clock.install({ time: new Date('2026-11-12T07:00:00.000Z') });
   const server = await mountClock(page, CLOCKED_OUT_STATE);
   // The failed call had reached the server: it holds the id and refuses the resend as a reuse.
   server.verdict = { outcome: 'rejected', code: 'idempotency_conflict' };
@@ -409,12 +425,38 @@ test('an online clock call that fails on its way is kept under the same operatio
 
   await page.getByRole('button', { name: 'Zeiterfassung starten', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Arbeit starten', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.clockContract.transitions.length)).toBe(1);
+  // The connection drops only a minute after the tap.
+  await page.clock.fastForward(60_000);
+  await page.evaluate(() => window.clockContract.resolveTransition?.());
 
   await expect.poll(() => server.sent.length).toBe(1);
   const [online] = await page.evaluate(() => window.clockContract.transitions);
   expect(server.sent[0]?.operationId).toBe(online?.operationId);
-  await expect.poll(() => unsentOnDevice(page)).toEqual([]);
-  await expect(unsentBadge(page)).toHaveCount(0);
+  // Recorded at the tap, seconds after the clock started, not at the failure a minute later.
+  const capturedAt = Date.parse(server.sent[0]?.capturedAt ?? '');
+  expect(capturedAt - Date.parse('2026-11-12T07:00:00.000Z')).toBeLessThan(30_000);
+  // The server may hold the start or only a recovery: the person checks it.
+  await expect(unsentBadge(clockDock(page))).toHaveText('Konflikt');
+  expect((await unsentOnDevice(page)).map((event) => event.operationId)).toEqual([online?.operationId]);
+});
+
+test('while the outbox of a device that holds unsent work has not answered yet, a new action waits behind it instead of reaching the server first', async ({
+  page,
+}) => {
+  const server = await mountClock(page, CLOCKED_OUT_STATE, () => {
+    // An earlier visit left unsent work, and the device store does not answer yet.
+    localStorage.setItem('werkflow:unsent:time', '1');
+    Object.defineProperty(window, 'indexedDB', { value: { open: () => ({}) } });
+  });
+
+  await page.getByRole('button', { name: 'Zeiterfassung starten', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Arbeit starten', exact: true }).click();
+
+  await expect(clockStatus(page)).toHaveText('Arbeit');
+  await expect(unsentBadge(clockDock(page))).toHaveText('Wartet auf Netz');
+  expect(await page.evaluate(() => window.clockContract.transitions)).toEqual([]);
+  expect(server.sent).toEqual([]);
 });
 
 test('a sign-out with unsent events names them and offers to send, to discard or to stay; it ends only once nothing is unsent', async ({
@@ -479,22 +521,20 @@ test('a sign-out is not asked about another person’s events, which stay on the
   await page.evaluate(
     ({ userId, organizationId, base }) => {
       localStorage.setItem(
-        'werkflow:unsent:clock',
-        JSON.stringify([
-          {
-            userId,
-            organizationId,
-            operationId: '50000000-0000-4000-8000-000000000001',
-            action: 'start',
-            selection: { kind: 'work', allocationKind: 'unallocated', jobId: null },
-            expectedSessionId: null,
-            expectedVersion: null,
-            capturedAt: new Date().toISOString(),
-            triedOnline: false,
-            wipeGeneration: '',
-            base,
-          },
-        ]),
+        'werkflow:unsent:clock:000000000000001:1:50000000-0000-4000-8000-000000000001',
+        JSON.stringify({
+          userId,
+          organizationId,
+          operationId: '50000000-0000-4000-8000-000000000001',
+          action: 'start',
+          selection: { kind: 'work', allocationKind: 'unallocated', jobId: null },
+          expectedSessionId: null,
+          expectedVersion: null,
+          capturedAt: new Date().toISOString(),
+          triedOnline: false,
+          wipeGeneration: '',
+          base,
+        }),
       );
     },
     { userId: colleague, organizationId: CLOCK_ORGANIZATION_ID, base: CLOCKED_OUT_STATE },

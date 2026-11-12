@@ -126,16 +126,20 @@ async function isolatedTests(): Promise<void> {
   async function keepStart(holder: OutboxHolder, views: (ClockDeviceView | null)[] = []): Promise<void> {
     operations += 1;
     await holdClock(holder, (view) => views.push(view));
-    const kept = keepClockAction({
-      ...holder,
-      operationId: `50000000-0000-4000-8000-${String(operations).padStart(12, '0')}`,
-      action: 'start',
-      expectedSessionId: null,
-      expectedVersion: null,
-      selection: { kind: 'work', allocationKind: 'unallocated', jobId: null },
-      base: { ...CLOCKED_OUT, organizationId: holder.organizationId },
-      triedOnline: false,
-    });
+    const kept = keepClockAction(
+      {
+        ...holder,
+        operationId: `50000000-0000-4000-8000-${String(operations).padStart(12, '0')}`,
+        action: 'start',
+        expectedSessionId: null,
+        expectedVersion: null,
+        selection: { kind: 'work', allocationKind: 'unallocated', jobId: null },
+        base: { ...CLOCKED_OUT, organizationId: holder.organizationId },
+        triedOnline: false,
+        capturedAt: '2026-11-11T07:00:00.000Z',
+      },
+      '',
+    );
     expect(kept).toBe(true);
     await takeInKept();
   }
@@ -162,7 +166,7 @@ async function isolatedTests(): Promise<void> {
       expect(views.at(-1)?.state?.isClockedIn).toBe(true);
       expect((await readTimeOutbox(WORKER)).events).toHaveLength(1);
       expect(storage.get('werkflow:unsent:time')).toBe('1');
-      expect(storage.has('werkflow:unsent:clock')).toBe(false);
+      expect([...storage.keys()].filter((key) => key.startsWith('werkflow:unsent:clock:'))).toEqual([]);
     });
 
     test('nothing is sent while the browser’s session belongs to someone else, or to nobody', async () => {
@@ -192,16 +196,20 @@ async function isolatedTests(): Promise<void> {
 
     test('an action kept for another person goes into that person’s outbox, never into the tab holder’s', async () => {
       await keepStart(WORKER);
-      keepClockAction({
-        ...COLLEAGUE,
-        operationId: '50000000-0000-4000-8000-0000000000ff',
-        action: 'start',
-        expectedSessionId: null,
-        expectedVersion: null,
-        selection: { kind: 'work', allocationKind: 'unallocated', jobId: null },
-        base: CLOCKED_OUT,
-        triedOnline: false,
-      });
+      keepClockAction(
+        {
+          ...COLLEAGUE,
+          operationId: '50000000-0000-4000-8000-0000000000ff',
+          action: 'start',
+          expectedSessionId: null,
+          expectedVersion: null,
+          selection: { kind: 'work', allocationKind: 'unallocated', jobId: null },
+          base: CLOCKED_OUT,
+          triedOnline: false,
+          capturedAt: '2026-11-11T07:01:00.000Z',
+        },
+        '',
+      );
       await takeInKept();
 
       expect((await readTimeOutbox(WORKER)).events).toHaveLength(1);
@@ -211,26 +219,83 @@ async function isolatedTests(): Promise<void> {
       expect(sent[0]).not.toContain('50000000-0000-4000-8000-0000000000ff');
     });
 
-    test('an action that is no start, switch or end, or that this version cannot read, stays kept and is never dropped', async () => {
+    test('an action this version cannot read stays kept, and the sign-out question fails instead of answering „nothing unsent“', async () => {
       await holdClock(WORKER, () => undefined);
-      const unreadable = { operationId: 'from-a-newer-version' };
-      storage.set('werkflow:unsent:clock', JSON.stringify([unreadable]));
-      keepClockAction({
+      storage.set(
+        'werkflow:unsent:clock:000000000000001:1:from-a-newer-version',
+        '{"operationId":"x","kind":"new"}',
+      );
+
+      expect(await takeInKept()).toEqual({ unreadable: 1 });
+      await expect(timeUnsentSource.summarize()).rejects.toThrow('cannot be read');
+
+      expect((await readTimeOutbox(WORKER)).events).toEqual([]);
+      expect(storage.has('werkflow:unsent:clock:000000000000001:1:from-a-newer-version')).toBe(true);
+    });
+
+    test('two actions kept at once are two keys, so neither overwrites the other, and they are taken in in the order of their taps', async () => {
+      await holdClock(WORKER, () => undefined);
+      const action = (operation: string, capturedAt: string, kind: 'start' | 'end') => ({
         ...WORKER,
-        operationId: '50000000-0000-4000-8000-0000000000fe',
-        action: 'recover_end',
+        operationId: operation,
+        action: kind,
         expectedSessionId: null,
         expectedVersion: null,
-        selection: null,
-        base: CLOCKED_OUT,
+        selection:
+          kind === 'end'
+            ? null
+            : { kind: 'work' as const, allocationKind: 'unallocated' as const, jobId: null },
+        base: kind === 'start' ? CLOCKED_OUT : null,
         triedOnline: false,
+        capturedAt,
       });
+      // The later tap is written first, as another tab's write can land first.
+      expect(
+        keepClockAction(
+          action('50000000-0000-4000-8000-0000000000e2', '2026-11-11T08:00:00.000Z', 'end'),
+          '',
+        ),
+      ).toBe(true);
+      expect(
+        keepClockAction(
+          action('50000000-0000-4000-8000-0000000000e1', '2026-11-11T07:00:00.000Z', 'start'),
+          '',
+        ),
+      ).toBe(true);
 
       await takeInKept();
 
-      expect((await readTimeOutbox(WORKER)).events).toEqual([]);
-      const kept: unknown = JSON.parse(storage.get('werkflow:unsent:clock') ?? '[]');
-      expect(kept).toHaveLength(2);
+      expect((await readTimeOutbox(WORKER)).events.map((event) => [event.action, event.capturedAt])).toEqual([
+        ['start', '2026-11-11T07:00:00.000Z'],
+        ['end', '2026-11-11T08:00:00.000Z'],
+      ]);
+      expect([...storage.keys()].filter((key) => key.startsWith('werkflow:unsent:clock:'))).toEqual([]);
+    });
+
+    test('a page whose wipe signal another tab changed keeps nothing more: its person may have signed out', async () => {
+      storage.set('werkflow:today-wiped', 'signal-of-this-page');
+      const kept = (signal: string) =>
+        keepClockAction(
+          {
+            ...WORKER,
+            operationId: '50000000-0000-4000-8000-0000000000d1',
+            action: 'start',
+            expectedSessionId: null,
+            expectedVersion: null,
+            selection: { kind: 'work', allocationKind: 'unallocated', jobId: null },
+            base: CLOCKED_OUT,
+            triedOnline: false,
+            capturedAt: '2026-11-11T07:00:00.000Z',
+          },
+          signal,
+        );
+
+      // Another tab signed out: the signal moved on.
+      storage.set('werkflow:today-wiped', 'signal-of-the-sign-out');
+
+      expect(kept('signal-of-this-page')).toBe(false);
+      expect([...storage.keys()].filter((key) => key.startsWith('werkflow:unsent:clock:'))).toEqual([]);
+      expect(kept('signal-of-the-sign-out')).toBe(true);
     });
 
     test('a sign-out is asked about the person’s own events of every organization, and discards only those', async () => {
@@ -248,12 +313,18 @@ async function isolatedTests(): Promise<void> {
       expect(storage.get('werkflow:unsent:time')).toBe('1');
     });
 
-    test('another tab’s sign-out or switch ends the hold: this tab shows, keeps and sends nothing more', async () => {
+    // Last: a wipe ends this module's hold for the rest of the process, as for the rest of a tab's life.
+    test('another tab’s sign-out ends the hold, also during a read: the tab shows nothing and sends nothing without the person’s session', async () => {
       const views: (ClockDeviceView | null)[] = [];
       await keepStart(WORKER, views);
       expect(clockHolder()).toEqual(WORKER);
 
+      // Another tab changed the outbox, so this tab reads it; the sign-out lands during that read.
+      for (const listener of storageListeners) listener({ key: 'werkflow:time-outbox-changed' });
       for (const listener of storageListeners) listener({ key: TODAY_WIPE_KEY });
+      // Lets the read finish: queued tasks and IndexedDB events only, no clock.
+      for (let turn = 0; turn < 50; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+      sessionUserId = null;
 
       expect(views.at(-1)).toBeNull();
       expect(clockHolder()).toBeNull();
@@ -265,6 +336,13 @@ async function isolatedTests(): Promise<void> {
       // question instead of answering that nothing is unsent.
       sessionUnreadable = true;
       await expect(timeUnsentSource.summarize()).rejects.toThrow('The session could not be refreshed.');
+
+      // A page without a hold, such as the password reset page, sends the session person's chain.
+      sessionUnreadable = false;
+      sessionUserId = WORKER.userId;
+      await sendOwnTimeEvents();
+      expect(sent).toHaveLength(1);
+      expect(sent[0]).toContain(WORKER.organizationId);
     });
   });
 }

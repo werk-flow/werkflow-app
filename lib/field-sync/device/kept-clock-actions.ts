@@ -4,13 +4,13 @@ import { timeActivitySelectionSchema } from '@/lib/time-tracking/activity-select
 import { clockStateSchema } from '@/lib/time-tracking/state-client';
 import { z } from '@/lib/zod';
 import { captureTimeEvent, isOfflineClockAction } from './time-outbox';
-import { KEPT_CLOCK_ACTIONS_KEY } from './unsent-mark';
+import { KEPT_CLOCK_ACTION_PREFIX, storageKeys } from './unsent-mark';
 
 // Takes the clock actions a page kept without signal (unsent-mark.ts) into the
 // time outbox. A page that loses its signal can load no code any more, so it
 // writes the action to localStorage with the few lines it carries; this module
-// moves it into the outbox, whose rules need IndexedDB. An action leaves the
-// list only after the outbox holds it.
+// moves it into the outbox, whose rules need IndexedDB. An action's key goes
+// only after the outbox holds it.
 
 const keptClockActionSchema = z.object({
   userId: z.string(),
@@ -33,23 +33,39 @@ const keptClockActionSchema = z.object({
 /** One clock action as a page keeps it when it meets no network. */
 export type KeptClockAction = z.infer<typeof keptClockActionSchema>;
 
-function readKeptActions(): unknown[] {
-  const kept: unknown = JSON.parse(localStorage.getItem(KEPT_CLOCK_ACTIONS_KEY) ?? '[]');
-  return Array.isArray(kept) ? kept : [];
+/** The keys of the kept clock actions, in the order of their taps. */
+function keptActionKeys(): string[] {
+  return storageKeys()
+    .filter((key) => key.startsWith(KEPT_CLOCK_ACTION_PREFIX))
+    .toSorted();
+}
+
+function readKeptAction(key: string): KeptClockAction | null {
+  try {
+    const kept = keptClockActionSchema.safeParse(JSON.parse(localStorage.getItem(key) ?? 'null'));
+    return kept.success && isOfflineClockAction(kept.data.action) ? kept.data : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Moves every kept clock action into its person's outbox, in the kept order, and answers whether
- * it moved any. An action this version cannot read stays in the list: it is never dropped unread.
- * Throws when the device storage fails; the actions then stay kept.
+ * Moves every kept clock action into its person's outbox, in the order of the taps, and answers
+ * how many it moved and how many it cannot read. An action this version cannot read stays kept: it
+ * is never dropped unread, and a session must not end over it (clock-device.ts). Throws when the
+ * device storage fails; the actions then stay kept.
  */
-export async function takeInKeptClockActions(): Promise<boolean> {
-  const taken = new Set<string>();
-  for (const raw of readKeptActions()) {
-    const kept = keptClockActionSchema.safeParse(raw);
-    if (!kept.success) continue;
+export async function takeInKeptClockActions(): Promise<{ moved: number; unreadable: number }> {
+  let moved = 0;
+  let unreadable = 0;
+  for (const key of keptActionKeys()) {
+    const kept = readKeptAction(key);
+    if (!kept) {
+      unreadable += 1;
+      continue;
+    }
     const { userId, organizationId, action, base, capturedAt, triedOnline, wipeGeneration, ...command } =
-      kept.data;
+      kept;
     if (!isOfflineClockAction(action)) continue;
     await captureTimeEvent(
       { userId, organizationId },
@@ -61,14 +77,9 @@ export async function takeInKeptClockActions(): Promise<boolean> {
         wipeGeneration,
       },
     );
-    taken.add(command.operationId);
+    // Only after the outbox holds it; a second take-in of the same action is kept once there.
+    localStorage.removeItem(key);
+    moved += 1;
   }
-  if (taken.size === 0) return false;
-  // Read again, with no wait before the write: an action a page kept meanwhile stays for the next call.
-  const left = readKeptActions().filter(
-    (raw) => !taken.has(z.object({ operationId: z.string() }).safeParse(raw).data?.operationId ?? ''),
-  );
-  if (left.length > 0) localStorage.setItem(KEPT_CLOCK_ACTIONS_KEY, JSON.stringify(left));
-  else localStorage.removeItem(KEPT_CLOCK_ACTIONS_KEY);
-  return true;
+  return { moved, unreadable };
 }

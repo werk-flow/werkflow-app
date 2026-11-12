@@ -175,3 +175,15 @@ Decided for werk-flow/werkflow-planning#319. Where the accepted text above diffe
 - **What the phone holds.** For each event: its operation id, captured time, action, activity kind and job id, and the person and organization. For the chain: the clock the server last confirmed, without job, customer or project names. The page without signal therefore names a running job only as „Auftrag“.
 - **The page without signal.** It knows no session, so it fails closed: it shows a clock only when exactly one was kept under the current wipe signal, and none after a sign-out, a switch or a visit to a login page. It captures and never sends; the app sends once it loads with signal and knows who is signed in.
 - **Triggers.** The app start, `online`, „Jetzt senden“, and each kept action, which is tried at once because a phone can be wrong about having no network. A return to the visible app is no trigger: that listener belongs to the Realtime provider alone (client freshness contract rule 2). The runner's code loads at the app start only when a localStorage hint says the device may hold unsent work.
+
+## Amendment 2026-11-12: the time outbox after review
+
+Decided for werk-flow/werkflow-planning#319 on its outside review. Where the amendment above differs, this section wins.
+
+- **Keeping an action.** Each kept action has a localStorage key of its own, so two tabs never overwrite each other's action, and the outbox takes them in by the time of the tap. The time of the tap is taken before the online call, so a call that fails late changes no recorded time. A page keeps only under the wipe signal its person started with: after a sign-out or switch in another tab it keeps nothing more.
+- **Unknown until checked.** When the device held unsent work at a page's start, every new action goes behind it until the outbox has shown what waits, also when the outbox cannot load without signal. No new action reaches the server before older ones.
+- **Unreadable work.** A kept action this version cannot read stays kept, and the check before a session ends fails on it with its reload, instead of answering that nothing is unsent.
+- **After the last answer.** When the last event of a chain was recorded, the outbox keeps that answer for an action a page kept behind the chain and the outbox takes in later.
+- **An online call that reached the server.** `idempotency_conflict` for an event tried online first no longer counts as recorded: the id may hold the action or only a recovery the server answered instead. The chain stops as a conflict, and the person checks the clock, then deletes the kept events or files a correction.
+- **Another organization.** An event for an organization that is not the active one, as after a switch in another tab, waits instead of failing; the server still refuses it under any other organization.
+- **Whose events.** A session that cannot be read sends nothing. Another tab's wipe ends a tab's hold also while it reads the outbox. A page without a hold, such as the password reset, sends the session person's chains; the server accepts only the active organization's.

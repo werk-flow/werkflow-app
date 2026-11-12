@@ -100,7 +100,7 @@ export function clockDeviceView(outbox: TimeOutbox, now: Date): ClockDeviceView 
   const { clock } = outbox;
   return {
     status: stopped ? 'stopped' : 'pending',
-    state: stopped || !clock ? null : outbox.events.reduce(applyUnsentEvent, clock.base),
+    state: stopped || !clock?.base ? null : outbox.events.reduce(applyUnsentEvent, clock.base),
     events: [
       { ...head, ...first },
       ...behind.map((event) => ({
@@ -165,7 +165,10 @@ export function captureTimeEvent(
       verdict: null,
     };
     if (last) return { clock: current.clock, events: [...current.events, event] };
-    return { clock: base && clockToKeep(holder, base, capture.wipeGeneration), events: [event] };
+    if (base) return { clock: clockToKeep(holder, base, capture.wipeGeneration), events: [event] };
+    // Kept behind events the outbox has sent since: it expects what the last of them left.
+    const after = current.clock?.after;
+    return { clock: current.clock, events: [after ? { ...event, expected: after } : event] };
   });
 }
 
@@ -175,15 +178,14 @@ export type HeadAnswer =
       kind: 'recorded';
       state: { sessionId: string | null; segmentId: string | null; version: number | null };
     }
-  /** The online clock call that failed on the phone had reached the server: the action is recorded. */
-  | { kind: 'recorded_online' }
   | { kind: 'stopped'; verdict: NonNullable<StoredTimeEvent['verdict']> };
 
 /**
  * Applies the server's answer to the chain's first event, if `operationId` still is that event:
  * another tab may have applied the same answer already. A recorded event leaves, the clock moves
- * on by it and the next event learns what it expects, all in one transaction. A stopped event
- * stays with the server's answer.
+ * on by it and the next event learns what it expects, all in one transaction. When it was the last
+ * one, the clock keeps that expectation for an action a page kept meanwhile and the outbox takes in
+ * later (`after`). A stopped event stays with the server's answer.
  */
 export function settleFirstTimeEvent(
   holder: OutboxHolder,
@@ -198,36 +200,26 @@ export function settleFirstTimeEvent(
         clock: current.clock,
         events: [{ ...head, verdict: answer.verdict }, ...current.events.slice(1)],
       };
-    if (!next) return { clock: null, events: [] };
-    const state = answer.kind === 'recorded' ? answer.state : null;
+    const { state } = answer;
+    // After an end no session is open.
+    const after = head.action === 'end' ? NO_SESSION : { sessionId: state.sessionId, version: state.version };
+    const base =
+      current.clock?.base &&
+      applyTransitionEcho(
+        current.clock.base,
+        head.selection,
+        { outcome: head.action === 'end' ? 'ended' : 'active', ...state, recoveryReason: null },
+        new Date(head.capturedAt),
+      );
     return {
-      clock: current.clock && {
-        ...current.clock,
-        base: applyTransitionEcho(
-          current.clock.base,
-          head.selection,
-          {
-            outcome: head.action === 'end' ? 'ended' : 'active',
-            sessionId: state?.sessionId ?? null,
-            segmentId: state?.segmentId ?? null,
-            version: state?.version ?? null,
-            recoveryReason: null,
-          },
-          new Date(head.capturedAt),
-        ),
+      clock: {
+        holder: todayHolderKey(holder),
+        ...holder,
+        base: base ?? null,
+        after,
+        wipeGeneration: current.clock?.wipeGeneration ?? 'unreadable',
       },
-      events: [
-        {
-          ...next,
-          // After an end no session is open. An event recorded by its online call answered no state,
-          // so the next one names none and the server decides.
-          expected:
-            state && head.action !== 'end'
-              ? { sessionId: state.sessionId, version: state.version }
-              : NO_SESSION,
-        },
-        ...rest,
-      ],
+      events: next ? [{ ...next, expected: after }, ...rest] : [],
     };
   });
 }

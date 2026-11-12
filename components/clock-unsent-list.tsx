@@ -26,6 +26,8 @@ const REFUSAL_REASONS: Partial<Record<string, string>> = {
 
 /** What changed on the server, by the conflict's code. */
 const CONFLICT_REASONS: Partial<Record<string, string>> = {
+  unconfirmed_online:
+    'Die Verbindung brach ab, als du gestempelt hast. Vielleicht ist die Zeit schon erfasst: Prüfe deine Zeiterfassung. Stimmt sie, lösche die Zeiten hier. Fehlt etwas, beantrage eine Korrektur.',
   version_conflict:
     'Deine Zeiterfassung wurde inzwischen geändert, zum Beispiel vom Büro oder auf einem anderen Gerät. Die Zeiten unten sind nicht erfasst.',
   office_changed:

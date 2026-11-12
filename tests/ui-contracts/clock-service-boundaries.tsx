@@ -38,11 +38,12 @@ export function useUserProfile(): { profile: { id: string } } {
 
 export async function transitionTimeActivity(input: TimeTransitionInput): Promise<TimeTransitionResult> {
   window.clockContract.transitions.push(input);
-  if (window.clockContract.failTransition) throw new TypeError('Failed to fetch');
   await new Promise<void>((resolve) => {
     window.clockContract.resolveTransition = resolve;
   });
   window.clockContract.resolveTransition = null;
+  // Fails when the contract releases it, as a connection that drops after a while.
+  if (window.clockContract.failTransition) throw new TypeError('Failed to fetch');
   if (window.clockContract.refuse) return { success: false, error: 'time_transition_failed' };
   return {
     success: true,

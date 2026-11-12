@@ -33,7 +33,12 @@ async function readOfflineClock(): Promise<OfflineClock | null> {
   // What the app's page kept when its signal went is in no outbox yet; each action goes to its own person's.
   await takeInKept();
   const { clocks, events } = await readWholeTimeOutbox();
-  const current = clocks.filter((clock) => clock.wipeGeneration === generation);
+  // Only a clock with unsent events counts: one whose chain was sent shows nothing.
+  const current = clocks.filter(
+    (clock) =>
+      clock.wipeGeneration === generation &&
+      events.some((event) => event.userId === clock.userId && event.organizationId === clock.organizationId),
+  );
   const [clock] = current;
   if (!clock || current.length !== 1) return null;
   const holder = { userId: clock.userId, organizationId: clock.organizationId };

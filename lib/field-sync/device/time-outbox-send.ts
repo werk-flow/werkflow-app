@@ -75,9 +75,13 @@ function answerOf(response: { status: number; body: unknown }, event: StoredTime
   const { outcome, code } = own;
   if (outcome === 'accepted' || outcome === 'replayed')
     return { kind: 'recorded', state: own.state ?? { sessionId: null, segmentId: null, version: null } };
-  // The online clock call that failed on this phone used the same operation id without a captured
-  // time. The server holding that id means it recorded the action then.
-  if (code === 'idempotency_conflict' && event.triedOnline) return { kind: 'recorded_online' };
+  // Another organization is active now, as after a switch in another tab: the event waits for its own.
+  if (code === 'organization_mismatch') return null;
+  // The online call that failed on this phone used the same operation id without a captured time,
+  // so the server holds that id. It may hold the action, or only a recovery it answered instead:
+  // the person checks, the device decides nothing.
+  if (code === 'idempotency_conflict' && event.triedOnline)
+    return { kind: 'stopped', verdict: { outcome: 'conflict', code: 'unconfirmed_online' } };
   if (outcome === 'conflict') return { kind: 'stopped', verdict: { outcome, code } };
   if (outcome === 'rejected' || response.status < 500)
     return { kind: 'stopped', verdict: { outcome: 'rejected', code } };
