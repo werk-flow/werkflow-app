@@ -2,7 +2,8 @@
 // (werk-flow/werkflow-planning#336). Without PROBLEM_REPORT_HANDOUT_SECRET
 // every handler answers 503 and reads nothing; a missing or wrong token is
 // refused, and so is every signed-in person without it: an admin, a Büro
-// member, an employee and a support person. The list names ids only and
+// member, an employee and a support person. The list names an id and its
+// bucket only, and
 // leaves out a report already handed out. A hand-out carries none of the
 // seeded originals, no attachment, no name and no id but the report's own;
 // a report without a scrubbed copy, a closed one and one already handed out
@@ -33,6 +34,7 @@ const pendingId = '33600000-0000-4000-8000-000000000021';
 const unscrubbableId = '33600000-0000-4000-8000-000000000022';
 const claimedId = '33600000-0000-4000-8000-000000000023';
 const closedId = '33600000-0000-4000-8000-000000000024';
+const blockerId = '33600000-0000-4000-8000-000000000029';
 const unknownId = '33600000-0000-4000-8000-0000000000ff';
 const screenshotId = '33600000-0000-4000-8000-000000000030';
 const attachmentId = '33600000-0000-4000-8000-000000000031';
@@ -105,6 +107,7 @@ const world = installActionWorld(
       report(unscrubbableId, ORGANIZATION_A, 3, { ...unscrubbed, scrub_state: 'nicht_bereinigbar' }),
       report(claimedId, ORGANIZATION_B, 4, { handed_out_at: '2026-11-10T08:00:00.000Z' }),
       report(closedId, ORGANIZATION_B, 5, { status: 'erledigt', closed_at: '2026-11-06T08:00:00.000Z' }),
+      report(blockerId, ORGANIZATION_A, 6, { bucket: 'blocker' }),
     ],
     problem_report_files: [
       {
@@ -335,13 +338,19 @@ process.env.SUPPORT_USER_IDS = CALLER_ID;
 signInAs(world, null);
 await assertEveryHandlerRefuses(401, null, 'a support person');
 
-// The list names only the ids of open reports with a scrubbed copy that no
-// thread received yet: no number, no organization, no text.
+// The list names only the id and bucket of open reports with a scrubbed copy
+// that no thread received yet, so a dispatcher starts a blocker first: no
+// number, no organization, no text.
 const waiting = await call.waiting(BEARER);
 assert.equal(waiting.status, 200);
 assert.equal(waiting.headers.get('cache-control'), 'no-store');
 const waitingBody = await waiting.text();
-assert.deepEqual(JSON.parse(waitingBody), { reportIds: [waitingId] });
+assert.deepEqual(JSON.parse(waitingBody), {
+  reports: [
+    { id: waitingId, bucket: null },
+    { id: blockerId, bucket: 'blocker' },
+  ],
+});
 
 // The hand-out carries the scrubbed copy, its context, status, bucket and the
 // screenshot's address on this API, and nothing of the originals.
@@ -390,7 +399,9 @@ assert.deepEqual(
   events().map((event) => [event.report_id, event.event_type, event.actor_id]),
   [[waitingId, 'copy_handed_out', null]],
 );
-assert.deepEqual(await (await call.waiting(BEARER)).json(), { reportIds: [] });
+assert.deepEqual(await (await call.waiting(BEARER)).json(), {
+  reports: [{ id: blockerId, bucket: 'blocker' }],
+});
 
 /** The answer to a refused request: its status and its code alone. */
 async function refusal(response: Promise<Response>): Promise<[number, unknown]> {
@@ -431,7 +442,9 @@ assert.equal(events().at(-1)?.event_type, 'screenshot_handed_out');
 // uploading: the list leaves it out and its hand-out is refused unclaimed.
 const freshId = '33600000-0000-4000-8000-000000000025';
 reports().push(report(freshId, ORGANIZATION_B, 6, { created_at: new Date().toISOString() }));
-assert.deepEqual(await (await call.waiting(BEARER)).json(), { reportIds: [] });
+assert.deepEqual(await (await call.waiting(BEARER)).json(), {
+  reports: [{ id: blockerId, bucket: 'blocker' }],
+});
 assert.deepEqual(await refusal(call.handOut(freshId)), [409, { error: 'copy_pending' }]);
 assert.equal(reports().find((row) => row.id === freshId)?.handed_out_at, null);
 

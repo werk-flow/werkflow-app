@@ -98,19 +98,23 @@ function refusalOf(
  */
 const HANDOUT_GRACE_MILLISECONDS = 10 * 60 * 1000;
 
+/** A report waiting for a thread: its id and its bucket, which a dispatcher starts a blocker by. No text. */
+type WaitingReport = { id: string; bucket: ProblemReportBucket | null };
+
 /**
- * The ids of the reports waiting for a thread, oldest first: sent at least ten
- * minutes ago, with a scrubbed copy, not handed out and still open. Ids only.
+ * The reports waiting for a thread, oldest first: sent at least ten minutes
+ * ago, with a scrubbed copy, not handed out and still open. Each names its id
+ * and bucket only.
  */
-export async function listWaitingProblemReportIds(
+export async function listWaitingProblemReports(
   admin: AdminClient,
-): Promise<HandoutResult<{ reportIds: string[] }>> {
+): Promise<HandoutResult<{ reports: WaitingReport[] }>> {
   const { data, error } = await readCompleteRows(
     (from, to) =>
       admin
-        // tenant-scope: cross-organization-by-design — report threads take the waiting reports of every organization, by id only
+        // tenant-scope: cross-organization-by-design — report threads take the waiting reports of every organization, by id and bucket only
         .from('problem_reports')
-        .select('id')
+        .select('id, bucket')
         .eq('scrub_state', 'bereinigt')
         .is('handed_out_at', null)
         .is('closed_at', null)
@@ -121,10 +125,10 @@ export async function listWaitingProblemReportIds(
     LIST_ROW_CAP,
   );
   if (error) {
-    logError('listWaitingProblemReportIds: report read failed', error);
+    logError('listWaitingProblemReports: report read failed', error);
     return FAILED;
   }
-  return { ok: true, reportIds: data.map((row) => row.id) };
+  return { ok: true, reports: data.map((row) => ({ id: row.id, bucket: bucketOf(row.bucket) })) };
 }
 
 /** The organization of one report, which scopes every call about it. */

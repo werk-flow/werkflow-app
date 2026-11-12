@@ -73,8 +73,8 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
   },
   'app/api/problem-reports/v1/reports/route.ts': {
     authorization:
-      'report threads send the dedicated PROBLEM_REPORT_HANDOUT_SECRET as a bearer token, compared in constant time, never a user session; without a configured secret the handler reads nothing and answers 503, a missing or wrong one 401; answers only the ids of open reports with a scrubbed copy not yet handed out, no-store',
-    mustCall: ['problemReportHandoutAccess', 'listWaitingProblemReportIds'],
+      'report threads send the dedicated PROBLEM_REPORT_HANDOUT_SECRET as a bearer token, compared in constant time, never a user session; without a configured secret the handler reads nothing and answers 503, a missing or wrong one 401; answers only the id and bucket of open reports with a scrubbed copy not yet handed out, no-store',
+    mustCall: ['problemReportHandoutAccess', 'listWaitingProblemReports'],
   },
   'app/api/problem-reports/v1/reports/[reportId]/hand-out/route.ts': {
     authorization:
