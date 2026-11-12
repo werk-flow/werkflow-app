@@ -215,8 +215,7 @@ async function showWorkBlock(context: SurfaceContext): Promise<Locator> {
 /** Opens the entry details of the recorded block with its keyboard path (Tab target, Enter). */
 async function openWorkBlockDetails(context: SurfaceContext): Promise<Locator> {
   const block = await showWorkBlock(context);
-  await block.focus();
-  await pressKey(context.page, 'Enter');
+  await pressKey(context.page, 'Enter', { into: block });
   const details = timeEntryDetailsDialog(context.page);
   await expect(details).toBeVisible();
   return details;
@@ -245,8 +244,7 @@ async function showVisitCard(context: SurfaceContext, title: string): Promise<Lo
 /** Opens the card popover with the card's keyboard path (focus, Enter); returns the popover. */
 async function openCardPopover(context: SurfaceContext, title: string): Promise<Locator> {
   const card = await showVisitCard(context, title);
-  await card.focus();
-  await pressKey(context.page, 'Enter');
+  await pressKey(context.page, 'Enter', { into: card });
   const popover = jobPopover(context.page);
   await expect(popover).toBeVisible();
   return popover;

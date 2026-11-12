@@ -4,6 +4,7 @@ import { createAdminClient } from '../../golden/support/db/shared';
 import { seedJob, seedJobAssignment } from '../../golden/support/db/work';
 import type { TestWorld } from '../../golden/support/world';
 import { surfaceFixture } from './surface-fixtures';
+import type { SurfaceDestination } from './surface-routes';
 
 /** What became of the field worker's access proposal on the seeded job. */
 export type SiteAccessJobState = 'none' | 'open' | 'rejected';
@@ -101,4 +102,19 @@ export async function seedSiteAccessJob(world: TestWorld, state: SiteAccessJobSt
     }
     return jobNumber;
   });
+}
+
+/** The employee's job at an Einsatzort in the given proposal state, as a capture opens it. */
+export function siteAccessJobDestination(state: SiteAccessJobState) {
+  return async (world: TestWorld): Promise<SurfaceDestination> => {
+    await seedSiteAccessJob(world, state);
+    const { jobNumber, title } = siteAccessJob(world, state);
+    return { route: `/auftraege/${encodeURIComponent(jobNumber)}`, heading: title };
+  };
+}
+
+/** The office's Aufgaben with one open access proposal. */
+export async function siteAccessTasks(world: TestWorld): Promise<SurfaceDestination> {
+  await seedSiteAccessJob(world, 'open');
+  return { route: '/aufgaben', heading: 'Zugang prüfen' };
 }
