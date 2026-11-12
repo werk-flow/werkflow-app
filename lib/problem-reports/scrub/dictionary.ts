@@ -89,8 +89,10 @@ function addName(root: TermNode, kind: PlaceholderKind, name: string, notAlone: 
 
 /**
  * An address is replaced in its parts: the street with its number, the
- * street alone, and the postcode with its city. A street of one word counts
- * alone only with a street ending, so a part such as „Hinterhaus“ is none.
+ * street alone, and the postcode with its city. The street alone is every
+ * stretch before a number, because a street's name may hold one („Straße
+ * des 17. Juni 5“). A street of one word counts alone only with a street
+ * ending, so a part such as „Hinterhaus“ is none.
  */
 function addAddress(root: TermNode, address: string): void {
   const term: Term = { kind: 'Adresse', key: foldedWordsOf(address).join(' ') };
@@ -99,9 +101,8 @@ function addAddress(root: TermNode, address: string): void {
     const postcode = words.findIndex((word, index) => index > 0 && POSTCODE.test(word));
     const parts = postcode === -1 ? [words] : [words.slice(0, postcode), words.slice(postcode)];
     for (const part of parts) {
-      const number = part.findIndex((word) => /^\d/u.test(word));
-      const street = number === -1 ? part : part.slice(0, number);
-      for (const phrase of [part, street]) {
+      const streets = part.flatMap((word, index) => (/^\d/u.test(word) ? [part.slice(0, index)] : []));
+      for (const phrase of [part, ...streets]) {
         if (phrase.length >= 2 || STREET_SUFFIX.test(phrase[0] ?? '')) addTerm(root, phrase, term);
       }
     }
@@ -148,9 +149,6 @@ export function buildScrubDictionary(
   return { terms, phones: new Set(sources.phones.flatMap(knownPhoneKeysOf)) };
 }
 
-/** What may stand between two words of one term: spaces, a line break, a dot, a comma, a hyphen. */
-const TERM_GAP = /^[\s.,\-–]*$/u;
-
 /** The node a word leads to: by its own spelling, or without a genitive `s` („Müllers“). */
 function step(node: TermNode, word: string): TermNode | undefined {
   return node.next.get(word) ?? (word.endsWith('s') ? node.next.get(word.slice(0, -1)) : undefined);
@@ -159,21 +157,21 @@ function step(node: TermNode, word: string): TermNode | undefined {
 /**
  * Every known name and address in the words of a text. From each word the
  * tree is walked as far as the following words lead, and the longest term
- * from that word is a find. Finds may overlap, as „Wei Li“ and „Li Na“ do in
- * „Wei Li Na“; the caller merges them.
+ * from that word is a find. Whatever stands between two words (spaces, a
+ * line break, any punctuation) never ends a term, so „Werkhalle (Neubau)“
+ * and a name split over two lines are found. Finds may overlap, as „Wei Li“
+ * and „Li Na“ do in „Wei Li Na“; the caller merges them.
  */
-export function findTerms(text: string, words: readonly Word[], root: TermNode): Found[] {
+export function findTerms(words: readonly Word[], root: TermNode): Found[] {
   const found: Found[] = [];
   words.forEach((head, first) => {
     let node = step(root, head.folded);
     let match: { end: number; term: Term } | null = null;
-    for (let last = first, word = head; node !== undefined; ) {
+    for (let last = first, word: Word | undefined = head; node !== undefined && word !== undefined; ) {
       if (node.term !== null) match = { end: word.end, term: node.term };
-      const next = words[last + 1];
-      if (next === undefined || !TERM_GAP.test(text.slice(word.end, next.start))) break;
-      node = step(node, next.folded);
       last += 1;
-      word = next;
+      word = words[last];
+      node = word === undefined ? undefined : step(node, word.folded);
     }
     if (match !== null) {
       found.push({ start: head.start, end: match.end, kind: match.term.kind, key: match.term.key });
@@ -186,7 +184,7 @@ export function findTerms(text: string, words: readonly Word[], root: TermNode):
 export function dictionaryKnows(dictionary: ScrubDictionary, original: string): boolean {
   const text = original.normalize('NFC');
   return (
-    findTerms(text, wordsOf(text), dictionary.terms).length > 0 ||
+    findTerms(wordsOf(text), dictionary.terms).length > 0 ||
     knownPhoneKeysOf(text).some((key) => dictionary.phones.has(key))
   );
 }

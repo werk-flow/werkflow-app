@@ -21,7 +21,7 @@ const dictionary = buildScrubDictionary(
       'Kältetechnik Service Nordlicht',
     ],
     personNames: ['Jonas Weiß', 'Petra von Lindqvist', 'Tom Wartung'],
-    siteNames: ['Neubau Kita Regenbogen', 'Werkhalle', 'Hauptstandort'],
+    siteNames: ['Neubau Kita Regenbogen', 'Werkhalle', 'Hauptstandort', 'Montagehalle (Altbau)'],
     addresses: [
       'Lindenstraße 12a, 54321 Beispielstadt',
       'Am Mühlbach 3\n54322 Musterhausen',
@@ -104,8 +104,8 @@ test('matching rule: a name is replaced as a whole and word by word, except its 
   );
   // A two-letter word is replaced only inside its whole name.
   expect(scrub('Wei Li schreibt li. und re.')).toBe('[Kunde 1] schreibt li. und re.');
-  expect(scrub('Petra von Lindqvist; von Petra; von Lindqvist')).toBe(
-    '[Person 1]; von [Person 1]; von [Person 1]',
+  expect(scrub('Petra von Lindqvist war da, dann von Petra und von Lindqvist')).toBe(
+    '[Person 1] war da, dann von [Person 1] und von [Person 1]',
   );
 });
 
@@ -126,6 +126,14 @@ test('matching rule: a known street is replaced without its number', () => {
   expect(scrub('Wir stehen Am Mühlbach und warten')).toBe('Wir stehen [Adresse 1] und warten');
   // A street of one word without a street ending is replaced only with its number.
   expect(scrub('Kirchberg 5 liegt am Kirchberg')).toBe('[Adresse 1] liegt am Kirchberg');
+  // A number inside the street's name is not its house number.
+  const withNumber = buildScrubDictionary(
+    { ...NO_SOURCES, addresses: ['Straße des 17. Juni 5, 54321 Beispielstadt'] },
+    uiStrings,
+  );
+  expect(scrubReportText('Wir stehen in der Straße des 17. Juni vor Nummer 5', withNumber)).toBe(
+    'Wir stehen in der [Adresse 1] vor Nummer 5',
+  );
 });
 
 test('matching rule: a site name is replaced as a whole phrase, never word by word', () => {
@@ -133,6 +141,10 @@ test('matching rule: a site name is replaced as a whole phrase, never word by wo
     'Im [Adresse 1] fehlt der Zähler, im Neubau nebenan und in der Kita nicht.',
   );
   expect(scrub('Die Werkhalle ist zu')).toBe('Die [Adresse 1] ist zu');
+  // Punctuation inside a stored name never ends the phrase.
+  expect(scrub('In der Montagehalle (Altbau) und in der Montagehalle/Altbau fehlt Licht')).toBe(
+    'In der [Adresse 1]) und in der [Adresse 1] fehlt Licht',
+  );
   // A site named with one of the app's own UI words is no term: every report would lose the word.
   expect(scrub('Der Hauptstandort fehlt')).toBe('Der Hauptstandort fehlt');
 });
@@ -232,6 +244,8 @@ test('salutation rule: a lower-case word after a salutation is the name, unless 
   expect(unknown('frau meier-lüdenscheidt sommer, fa. rohrfrei nord, frau dr. albers')).toBe(
     'frau [Person 1] sommer, fa. [Kunde 1] nord, frau dr. [Person 2]',
   );
+  // A company's name may hold a digit.
+  expect(unknown('firma rohrfrei24 und herr 24')).toBe('firma [Kunde 1] und herr 24');
   // The same person with and without the capital.
   expect(unknown('Frau Berger, frau berger')).toBe('Frau [Person 1], frau [Person 1]');
   // What a sentence goes on with is no name.

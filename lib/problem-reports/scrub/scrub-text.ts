@@ -24,10 +24,13 @@ const NOT_A_NAME_AFTER_SALUTATION = new Set(
   ).split(' '),
 );
 
-/** True for a lower-case word that can be a name typed without its capital. */
+/** True for a lower-case word that can be a name typed without its capital; a company's may hold a digit. */
 function isLowerCaseName(folded: string): boolean {
   return (
-    /^\p{L}{2,}$/u.test(folded) && !NOT_A_NAME_ALONE.has(folded) && !NOT_A_NAME_AFTER_SALUTATION.has(folded)
+    folded.length >= 2 &&
+    /\p{L}/u.test(folded) &&
+    !NOT_A_NAME_ALONE.has(folded) &&
+    !NOT_A_NAME_AFTER_SALUTATION.has(folded)
   );
 }
 
@@ -116,7 +119,7 @@ export function scrubReportText(original: string, dictionary: ScrubDictionary): 
     findIbans(text),
     findEmails(text),
     findPhones(text, dictionary.phones),
-    findTerms(text, words, dictionary.terms),
+    findTerms(words, dictionary.terms),
     findSalutedNames(text, words),
   ]);
   const numbers = new Map<string, number>();
