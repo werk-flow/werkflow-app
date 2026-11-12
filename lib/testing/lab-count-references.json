@@ -73,8 +73,8 @@
           "rows": null
         },
         "script": {
-          "requests": { "reference": 43, "tolerance": 1 },
-          "encodedBytes": { "reference": 679994, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "requests": { "reference": 42, "tolerance": 1 },
+          "encodedBytes": { "reference": 671304, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         },
@@ -388,6 +388,24 @@
           },
           "runKeys": ["2026-11-12T102738653Z-90c2c7"],
           "reason": "The Arbeitsnachweis dialog and all draft code load apart from the job page's own code, which the job list prefetches (werk-flow/werkflow-planning#320). Cold-start script 679,994 B in 43 requests, the request count of main a1e0e908 (43). A capture of the cold start's script URLs on main and on this branch matched every chunk; a draft hint module the lazy code imported had become a chunk of its own (+1 request) until the page handed its hint writer to the lazy code."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 43, "tolerance": 1 },
+            "encodedBytes": { "reference": 679994, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 42, "tolerance": 1 },
+            "encodedBytes": { "reference": 671304, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-12T142553577Z-21d7cf"],
+          "reason": "werk-flow/werkflow-app#393 on main removed one start-up script and about 6.1 KB (main alone measures 687,435 B against its 693,562 B reference, 42 requests); together with this PR's lazy dialog the sum is 671,304 B, below this PR's floor of 673,194 B. Request shapes match main's and the job-open step is unchanged. Measured on Boat run 2026-11-12T142553577Z-21d7cf on the merged tree 4c3aab90; CI run 2026-11-12T143946890Z-e66388 measured 671,308 B."
         }
       ]
     },
