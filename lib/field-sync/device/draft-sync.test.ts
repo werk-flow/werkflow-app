@@ -448,12 +448,26 @@ describe('a save sends the state of the draft it decided on', () => {
     expect(sent).toEqual([]);
   });
 
-  test('the state the save decided on is sent, also when this save sealed it itself', async () => {
-    const decided = draft({ photos: [], sealed: true });
+  test("an upload cut off while another tab changed the draft answers changed, not waiting, so the form keeps this save's text", async () => {
+    const decided = draft({ photos: draft().photos.slice(0, 1) });
     await save(decided);
-    handlerAnswers = [results('accepted', 'accepted')];
-    expect(await sendDraft(holder, DRAFT_ID, decided.updatedAt)).toBe('sent');
-    expect(sent).toHaveLength(1);
+    uploadAnswers = [
+      async () => {
+        // Another tab writes its own text while the photo is on its way, then the connection drops.
+        await save({
+          ...decided,
+          content: { performedWork: 'Text aus dem anderen Fenster' },
+          updatedAt: '2026-11-09T07:59:00.000Z',
+        });
+        return { status: 'failed', reason: 'interrupted', transferred: null };
+      },
+    ];
+    expect(await sendDraft(holder, DRAFT_ID, decided.updatedAt)).toBe('changed');
+    expect(sent).toEqual([]);
+    expect((await stored())[0]).toMatchObject({
+      sealed: false,
+      content: { performedWork: 'Text aus dem anderen Fenster' },
+    });
   });
 });
 

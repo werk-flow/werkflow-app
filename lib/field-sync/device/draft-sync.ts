@@ -325,6 +325,11 @@ async function sendOne(
   if (!byPerson && (openInEditor.has(draftId) || draft.refusal !== null || isPastUnsentLimit(draft)))
     return 'skipped';
   const sealed = await uploadAndSeal(claim, draft, expected);
+  if (sealed === 'waiting' && expected !== null) {
+    // A save that waits closes its form: only while the draft still holds what that save decided on.
+    const now = (await listDraftsOnDevice(owner)).find((entry) => entry.id === draftId);
+    if (now?.updatedAt !== expected) return 'changed';
+  }
   if (typeof sealed === 'string') return sealed;
   // The seal's transaction can outlast a sign-in elsewhere: the claim is checked again right before the request.
   if (!stillHolder(claim)) return 'waiting';
