@@ -24,6 +24,7 @@ declare global {
       | 'approvals'
       | 'personnel'
       | 'join-requests'
+      | 'member-role'
       | 'own-personnel'
       | 'task-sections'
       | 'calendar'

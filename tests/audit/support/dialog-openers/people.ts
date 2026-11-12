@@ -33,6 +33,7 @@ import {
 import { handoverDialog, handoverTrigger } from '../../../golden/support/steps/personnel-handover';
 import { teamDissolveButton, teamDissolveConfirmation } from '../../../golden/support/steps/qualifications';
 import { inPageTab, openMenuItem } from '../../../golden/support/steps/shared';
+import { pressKey } from '../../../golden/support/steps/interaction';
 import {
   recordSicknessButton,
   sicknessManagerDialog,
@@ -264,6 +265,19 @@ export const PEOPLE_OPENERS = {
         memberMenuItem(page, 'remove'),
       ),
     layer: (page) => peopleConfirmation(page, 'memberRemove'),
+    returnFocus: ({ page, world }) => memberRowActionsButton(memberRow(page, employeeName(world))),
+  },
+  'people.member-role-escalation': {
+    trigger: async ({ page, world }) => {
+      const changeRole = await openMenuItem(
+        memberRowActionsButton(memberRow(page, employeeName(world))),
+        memberMenuItem(page, 'changeRole'),
+      );
+      await changeRole.focus();
+      await pressKey(page, 'ArrowRight');
+      return page.getByRole('menuitem', { name: 'Büro', exact: true });
+    },
+    layer: (page) => peopleConfirmation(page, 'roleEscalation'),
     returnFocus: ({ page, world }) => memberRowActionsButton(memberRow(page, employeeName(world))),
   },
   'people.team-dissolve': {

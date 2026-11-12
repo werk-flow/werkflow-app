@@ -31,6 +31,7 @@ import {
   DocumentVersionUploadContractFixture,
 } from './document-upload-boundaries';
 import { OrganizationContractFixture } from './organization-boundaries';
+import { MemberRoleContractFixture } from './member-role-boundaries';
 import { OrganizationExportContractFixture } from './organization-export-boundaries';
 import {
   TodayRefreshContractFixture,
@@ -722,6 +723,8 @@ createRoot(root).render(
         />
       </main>
     </BannerProvider>
+  ) : window.uiContractFixture === 'member-role' ? (
+    <MemberRoleContractFixture />
   ) : window.uiContractFixture === 'personnel' ? (
     <BannerProvider>
       <main>
