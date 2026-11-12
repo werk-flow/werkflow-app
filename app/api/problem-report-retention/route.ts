@@ -7,9 +7,11 @@ import { cronRequestAccess } from '@/lib/security/shared-secret';
 
 // Vercel Cron calls this daily on production (vercel.json). It first scrubs
 // every report that still has no scrubbed copy
-// (lib/problem-reports/scrub/scrub-report.ts), so a copy exists before its
-// originals go. Then it deletes the problem-report originals and reports
-// whose period has passed (lib/problem-reports/retention.ts); their files
+// (lib/problem-reports/scrub/scrub-report.ts), so a report usually has its
+// copy before its originals go. Then it deletes the problem-report originals
+// and reports whose period has passed (lib/problem-reports/retention.ts),
+// with or without a copy: the deletion periods bind, and a report whose
+// scrub kept failing then keeps no text at all. Their files
 // reach the storage purge through its queue. A failed deletion, a failed
 // list, or a missing CRON_SECRET answers a server error, so the production
 // watcher reports the route. A report that cannot be scrubbed is a state of
