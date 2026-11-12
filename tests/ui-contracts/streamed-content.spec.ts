@@ -1,6 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
 import { assertWorkspaceTestLock } from '../../lib/testing/runner/workspace-test-lock';
-import { openPage, revealStreamedContentBeforeEachStep } from '../golden/support/streamed-content';
+import {
+  openPage,
+  revealStreamedContentBeforeEachStep,
+  STREAMED_SEGMENT,
+} from '../golden/support/streamed-content';
 
 // The document right after a load, as two failed runs left it. React keeps a
 // Suspense boundary's streamed content in `<div hidden id="S:…">` at the end
@@ -39,6 +43,20 @@ async function renderOnClient(page: Page): Promise<void> {
   }, searchField);
 }
 
+/**
+ * Resolves when the wait's handler starts on the page: it looks for the
+ * streamed segment only while it holds a step.
+ */
+function handlerRuns(page: Page): Promise<void> {
+  const locate = page.locator.bind(page);
+  return new Promise((resolve) => {
+    page.locator = (selector, options) => {
+      if (selector === STREAMED_SEGMENT) resolve();
+      return locate(selector, options);
+    };
+  });
+}
+
 /** What React's batched reveal does once the client rendered the boundary: the streamed copy goes. */
 async function reveal(page: Page): Promise<void> {
   await page.evaluate(() => document.getElementById('S:2')?.remove());
@@ -55,38 +73,45 @@ test('without the wait, a step on the page meets the streamed copy and fails str
   await expect(expect(search(page)).toBeVisible()).rejects.toThrow(/strict mode violation/);
 });
 
-test('with the wait, a step is held while the streamed copy is left, not failed', async ({ context }) => {
+test('with the wait, a step is held while both copies exist and passes once React revealed', async ({
+  context,
+}) => {
   const page = await openPage(context);
   await open(page, { clientRendered: true });
-  const held = await expect(search(page))
+  const holding = handlerRuns(page);
+  let passedAt = 0;
+  const shown = expect(search(page))
     .toBeVisible()
-    .then(
-      () => 'passed',
-      (error: unknown) => String(error),
-    );
-  expect(held).not.toMatch(/strict mode violation/);
-  // The handler's own check or the call log that names its interception: either proves the hold.
-  expect(held).toMatch(
-    /React reveals the content it streamed after the load|intercepting action to run the handler/,
-  );
-});
-
-test('with the wait, a step passes once React revealed the streamed content', async ({ page }) => {
-  await revealStreamedContentBeforeEachStep(page);
-  await open(page, { clientRendered: true });
-  const shown = expect(search(page)).toBeVisible();
+    .then(() => {
+      passedAt = Date.now();
+    });
+  // Without the wait, the step fails strict mode here instead.
+  await Promise.race([holding, shown]);
+  const revealedAt = Date.now();
   await reveal(page);
   await shown;
+  expect(passedAt).toBeGreaterThanOrEqual(revealedAt);
   await expect(search(page)).toHaveCount(1);
 });
 
-test('with the wait, a step started before the client render passes after the reveal', async ({ page }) => {
+test('with the wait, a step started before the client render is held through it until the reveal', async ({
+  page,
+}) => {
   await revealStreamedContentBeforeEachStep(page);
   // audit:wave-1:a1-kunden first saw the streamed copy alone, hidden, then both.
   await open(page, { clientRendered: false });
-  const shown = expect(search(page)).toBeVisible();
+  const holding = handlerRuns(page);
+  let passedAt = 0;
+  const shown = expect(search(page))
+    .toBeVisible()
+    .then(() => {
+      passedAt = Date.now();
+    });
+  await Promise.race([holding, shown]);
   await renderOnClient(page);
+  const revealedAt = Date.now();
   await reveal(page);
   await shown;
+  expect(passedAt).toBeGreaterThanOrEqual(revealedAt);
   await expect(search(page)).toHaveCount(1);
 });

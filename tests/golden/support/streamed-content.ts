@@ -4,7 +4,7 @@ import { expect, type BrowserContext, type Page } from '@playwright/test';
  * React's hidden container for a Suspense boundary's streamed content, at the
  * end of `<body>` until the batched reveal moves the content into place.
  */
-const STREAMED_SEGMENT = 'div[hidden][id^="S:"]';
+export const STREAMED_SEGMENT = 'div[hidden][id^="S:"]';
 
 /**
  * Holds every step of the page until React revealed the content it streamed
