@@ -55,6 +55,9 @@ test('a migration file never reaches psql on this machine', () => {
     `psql ${LOCAL_URL} -f ${file}`,
     `psql -h 127.0.0.1 -p 54322 -U postgres -f /work/app/${file}`,
     `PGPASSWORD=postgres psql -h localhost -p 54322 -U postgres postgres -v ON_ERROR_STOP=1 --file=${file}`,
+    // An include in a heredoc psql reads (CodeRabbit on #363).
+    `psql -h localhost -p 54322 -U postgres <<'SQL'\n\\i ${file}\nSQL`,
+    `docker exec -i supabase_db_werkflow-app psql -U postgres <<SQL\n\\ir ${file}\nSQL`,
   ]) {
     const refusal = sharedStackMigrationRefusal(command);
     expect(refusal, command).toContain(`\`psql\` with ${file}`);

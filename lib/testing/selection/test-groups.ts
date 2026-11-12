@@ -380,6 +380,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['responsibility-delegation-end', ['responsibility_delegation_end.sql'], ['personnel']],
   ['user-preference-writes', ['user_preference_writes.sql'], ['work', 'planning']],
   ['rate-limits', ['rate_limits.sql'], ['*']],
+  ['shared-stack-ledger', ['shared_stack_ledger_guard.sql'], ['*']],
   ['organization-deletion', ['organization_deletion.sql'], ['*']],
   ['storage-purge', ['storage_purge.sql'], ['documents']],
   ['problem-reports', ['problem_reports.sql'], ['*']],

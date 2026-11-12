@@ -79,8 +79,8 @@ export function syncDecision(drift: MigrationDrift | undefined): SyncDecision {
         `Check that supabase_migrations.schema_migrations exists and answers; a stack without its ledger needs the reset (${RESET_DOC}).`,
       ],
     };
-  const { stackOnly, changed, treeOnly, unverified } = drift;
-  if (stackOnly.length || changed.length || unverified.length)
+  const { stackOnly, changed, treeOnly, unverified, unknownVersions } = drift;
+  if (stackOnly.length || changed.length || unverified.length || unknownVersions.length)
     return {
       kind: 'ahead',
       lines: [
@@ -91,6 +91,11 @@ export function syncDecision(drift: MigrationDrift | undefined): SyncDecision {
           : []),
         ...(unverified.length
           ? [`  ${unverified.length} recorded without their statements, so unproven: ${named(unverified)}`]
+          : []),
+        ...(unknownVersions.length
+          ? [
+              `  ${unknownVersions.length} recorded under versions main has no file for, which the CLI refuses on its next migration up: ${named(unknownVersions)}`,
+            ]
           : []),
         'Every SQL and browser plan on this machine drifts until the stack is reset to main. Tell your lead:',
         `the reset is announced first and runs when no worktree holds the stack (${RESET_DOC}).`,

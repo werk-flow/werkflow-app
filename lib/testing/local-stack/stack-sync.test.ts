@@ -5,6 +5,8 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { sqlShape } from './migration-drift';
+
 import {
   GUARD_QUERY,
   GUARD_SQL,
@@ -17,7 +19,7 @@ import {
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
 const read = (path: string) => readFileSync(resolve(repositoryRoot, path), 'utf8');
-const none = { stackOnly: [], treeOnly: [], changed: [], unverified: [] };
+const none = { stackOnly: [], treeOnly: [], changed: [], unverified: [], unknownVersions: [] };
 
 test('a stack that matches main is current, and one that lacks merged migrations takes them', () => {
   expect(syncDecision(none)).toEqual({ kind: 'current' });
@@ -42,6 +44,12 @@ test('a stack that holds anything main lacks is refused, pending migrations or n
   expect(repaired.kind === 'ahead' && repaired.lines.join('\n')).toContain(
     '1 recorded without their statements, so unproven: repaired',
   );
+  // main's migration applied before the merge under another version: same SQL, but the CLI
+  // refuses main's next migration while the ledger holds a version with no file.
+  const renumbered = syncDecision({ ...none, unknownVersions: ['20261107150000'] });
+  expect(renumbered.kind === 'ahead' && renumbered.lines.join('\n')).toContain(
+    '1 recorded under versions main has no file for',
+  );
 });
 
 // A stack that answered but whose ledger could not be read never passes check:changed.
@@ -64,6 +72,15 @@ test('the ledger trigger refuses every write but the sync session and names the 
   // The message sits inside a single-quoted SQL literal.
   expect(GUARD_SQL).toContain("main''s migrations");
   expect(GUARD_QUERY).toContain("'werkflow_main_only', 'werkflow_main_only_truncate'");
+});
+
+// supabase/tests/shared_stack_ledger_guard.sql proves the trigger in rolled-back SQL; it must
+// prove this trigger, statement for statement.
+test('the rolled-back SQL test installs exactly the trigger the sync installs', () => {
+  const guard = GUARD_SQL.trim()
+    .replace(/^begin;/, '')
+    .replace(/commit;$/, '');
+  expect(sqlShape(read('supabase/tests/shared_stack_ledger_guard.sql'))).toContain(sqlShape(guard));
 });
 
 test('a reset names what it destroys and whom it would hit', () => {

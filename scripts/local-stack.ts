@@ -120,8 +120,14 @@ async function withMain<T>(work: (folder: string, commit: string) => Promise<T>)
 }
 
 /** Installs the ledger trigger unless it is in place; false when the stack refused it. */
+/** Whether the ledger trigger is in place, read without a write. */
+function guarded(): boolean {
+  return sql(GUARD_QUERY, '-c default_transaction_read_only=on') === 't';
+}
+
+/** Installs the ledger trigger unless it is in place; false when the stack refused it. Only under the exclusive hold. */
 function guard(): boolean {
-  if (sql(GUARD_QUERY, '-c default_transaction_read_only=on') === 't') return true;
+  if (guarded()) return true;
   if (sql(GUARD_SQL) === undefined) return false;
   say('Installed the ledger trigger: only this sync writes the migration ledger now.');
   return true;
@@ -144,17 +150,18 @@ async function sync(wait: boolean): Promise<number> {
     // The stack answered the probe, so a ledger it cannot read is a failure, never a pass.
     const decision = syncDecision(readMigrationDrift(folder));
     if (refused(decision)) return 1;
-    if (!guard()) return 1;
-    if (decision.kind === 'current') {
+    // Read-only: a stack at main with its trigger needs no lock and no write.
+    if (decision.kind === 'current' && guarded()) {
       say(`The shared stack is at main (${commit}).`);
       return 0;
     }
+    // Every write, the trigger's installation included, happens under the exclusive hold.
     const apply = withStackLock(
       { mode: 'exclusive', operation: 'stack sync', repositoryRoot, wait },
       async () => {
         // Another worktree's sync may have applied them while this one waited.
         const now = syncDecision(readMigrationDrift(folder));
-        if (refused(now)) return 1;
+        if (refused(now) || !guard()) return 1;
         if (now.kind === 'behind') {
           say(`Applying main's ${now.pending.length} pending migrations (${commit}).`);
           if (!supabase(folder, ['migration', 'up'])) {
@@ -171,7 +178,9 @@ async function sync(wait: boolean): Promise<number> {
     return apply.catch((error: unknown) => {
       if (!(error instanceof StackHeldError)) throw error;
       say(
-        `Main has ${decision.pending.length} migrations the shared stack lacks. ${error.message} The next sync applies them.`,
+        decision.kind === 'behind'
+          ? `Main has ${decision.pending.length} migrations the shared stack lacks. ${error.message} The next sync applies them.`
+          : `The shared stack is at main, without its ledger trigger. ${error.message} The next sync installs it.`,
       );
       return 0;
     });

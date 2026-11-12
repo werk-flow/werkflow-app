@@ -172,12 +172,16 @@ export function sharedStackMigrationRefusal(command: string, depth = 0): string 
       (call.name === 'docker' && call.args.includes('exec') && call.args.includes('psql')),
   );
   const local = psql.filter(reachesLocalDatabase);
-  // The file reaches psql as `-f` or as its input, or through a `cat` piped into it. A `cat` that
-  // only prints the file beside a psql call feeds nothing.
+  // The file reaches psql as `-f` or as its input, through a `cat` piped into it, or as an include
+  // (`\i`, `\ir`) in a heredoc psql reads. A `cat` that only prints the file beside a psql call
+  // feeds nothing. A heredoc on the line of a local psql counts as its input whoever reads it: the
+  // reader cannot tell a heredoc's reader in every pipeline, and a false refusal costs one retry.
   const piped = local.length ? CAT_INTO_PSQL.exec(command)?.[1] : undefined;
+  const bodies = local.length ? [...reading.dataBodies, ...reading.unknownBodies] : [];
   const fed = [
     ...local.flatMap((call) => call.words.flatMap((word) => MIGRATION_FILE.exec(word.text)?.[0] ?? [])),
     ...(piped ? [piped] : []),
+    ...bodies.flatMap((body) => MIGRATION_FILE.exec(body)?.[0] ?? []),
   ];
   return fed[0]
     ? `Refused: \`psql\` with ${fed[0]} would run this tree's migration in the local stack, which every worktree shares and which holds only main's ${RULE}. ${INSTEAD}`
