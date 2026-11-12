@@ -2,8 +2,8 @@ Menü öffnen
 Mitarbeiter
 Personalakte anlegen
 Personalakte
-Mitarbeiter hinzufügen
-Hinzufügen
+Mitarbeiter einladen
+Einladen
 4
 Mitglieder
 0

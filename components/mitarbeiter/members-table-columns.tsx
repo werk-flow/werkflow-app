@@ -1,5 +1,12 @@
 import { Skeleton } from '@/components/ui/skeleton';
-import { hiddenHeader, type SkeletonColumn } from '@/components/ui/skeleton-table';
+import {
+  ColumnsTableHeader,
+  hiddenHeader,
+  SkeletonList,
+  SkeletonRows,
+  type SkeletonColumn,
+} from '@/components/ui/skeleton-table';
+import { Table, TableBody } from '@/components/ui/table';
 
 // The status cells' skeletons double as their loading state in the live table.
 export const STATUS_SKELETON = <Skeleton className="h-[22px] w-24 rounded-full" />;
@@ -56,4 +63,35 @@ const MEMBER_ACTIONS_COLUMN: SkeletonColumn = {
 
 export function memberColumns(showActions: boolean): readonly SkeletonColumn[] {
   return showActions ? [...MEMBER_COLUMNS, MEMBER_ACTIONS_COLUMN] : MEMBER_COLUMNS;
+}
+
+// Here, not beside the table: the route skeleton loads with the app shell, so it
+// must not pull the live table, its menus and dialogs into every page.
+/** Same frame as the loaded list; rows hover because loaded rows navigate. */
+export function MembersTableSkeleton({ count, showActions }: { count: number; showActions: boolean }) {
+  return (
+    <>
+      <SkeletonList count={count} interactive className="md:hidden">
+        <div className="flex-1 min-w-0 space-y-1">
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-[20px] w-[120px]" />
+            <Skeleton className="h-[18px] w-[70px] rounded-full" />
+          </div>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <Skeleton className="h-[16px] w-[160px]" />
+            <Skeleton className="h-[16px] w-[100px]" />
+          </div>
+        </div>
+        {showActions && <Skeleton className="size-8 rounded shrink-0" />}
+      </SkeletonList>
+      <div className="hidden md:block">
+        <Table>
+          <ColumnsTableHeader columns={memberColumns(showActions)} />
+          <TableBody>
+            <SkeletonRows columns={memberColumns(showActions)} rows={count} interactive />
+          </TableBody>
+        </Table>
+      </div>
+    </>
+  );
 }
