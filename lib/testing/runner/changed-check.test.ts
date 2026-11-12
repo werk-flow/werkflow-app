@@ -27,6 +27,20 @@ test('formats and lints changed sources and runs the unit tests beside changed m
   expect(plan.formatted).not.toContain('docs/README.md');
 });
 
+test('a file outside lib/ runs the unit tests that name it or its folder by path', () => {
+  const sources = new Map([
+    ['lib/conventions/scripts.test.ts', "readRepositoryFile('package.json')"],
+    ['lib/testing/specs.test.ts', "readdirSync(join(root, 'tests/audit'))"],
+    ['lib/testing/unrelated.test.ts', "const name = 'tests';"],
+  ]);
+  const plan = (changed: string[]): string[] => changedCheckPlan(changed, () => false, sources).unitTests;
+  // #386: a preload in a package script broke a convention test that check:changed never ran.
+  expect(plan(['package.json'])).toEqual(['./lib/conventions/scripts.test.ts']);
+  // #366: a new audit spec broke a convention test that scans tests/audit.
+  expect(plan(['tests/audit/visual/acceptance-pages.spec.ts'])).toEqual(['./lib/testing/specs.test.ts']);
+  expect(plan(['tests/golden/p1-01.spec.ts', 'docs/README.md'])).toEqual([]);
+});
+
 test('a change without sources runs no unit test', () => {
   expect(changedCheckPlan(['docs/README.md'], () => true)).toEqual({
     formatted: [],
