@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { createRoot } from 'react-dom/client';
 
 import {
   AlertDialog,
@@ -23,6 +22,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
+import { showInUnsentWorkHost } from '@/components/shared/unsent-work-host';
 import { usePendingTask } from '@/hooks/use-server-action';
 import '@/lib/field-sync/device/registrations';
 import {
@@ -34,9 +34,10 @@ import {
 import { logError } from '@/lib/logging';
 
 // The question a sign-out or an organization switch asks about unsent work
-// (components/shared/unsent-work-gate.ts loads it). It renders in a root of
-// its own: the six flows that ask sit in different trees, some outside the
-// app shell, and none of them carries this dialog's code at start.
+// (components/shared/unsent-work-gate.ts loads it). It renders in the host the
+// root layout mounts (unsent-work-host.tsx): the six flows that ask sit in
+// different trees, some outside the app shell, and none of them carries this
+// dialog's code at start.
 
 function itemsLabel(items: readonly UnsentWorkItem[]): string {
   return items.map((item) => `${item.label}: ${item.count}`).join(', ');
@@ -225,18 +226,14 @@ function UnsentWorkDialog({
 /** Shows the dialog and resolves with the person's choice once it is carried out. */
 function askAboutUnsentWork(items: UnsentWorkItem[], scope: UnsentScope): Promise<boolean> {
   return new Promise((resolve) => {
-    // The root is gone before the dialog could hand the focus back, so this does it.
+    // The dialog is gone before it could hand the focus back, so this does it.
     const opener = document.activeElement;
-    const host = document.createElement('div');
-    document.body.append(host);
-    const root = createRoot(host);
-    root.render(
+    const remove = showInUnsentWorkHost(
       <UnsentWorkDialog
         initialItems={items}
         scope={scope}
         onSettled={(mayEnd) => {
-          root.unmount();
-          host.remove();
+          remove();
           if (!mayEnd && opener instanceof HTMLElement && opener.isConnected) opener.focus();
           resolve(mayEnd);
         }}

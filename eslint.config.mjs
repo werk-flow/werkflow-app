@@ -796,6 +796,12 @@ const sonnerImportPath = {
   message:
     'Toasts are removed by the UI/UX consolidation — use the Banner primitive (components/ui/banner) per the feedback policy matrix.',
 };
+// Next's bootstrap owns React's DOM renderer (docs/technical/performance.md, "Never").
+const reactDomClientImportPath = {
+  name: 'react-dom/client',
+  message:
+    "Next's bootstrap owns react-dom/client: a second importer cuts React's DOM renderer out of the start-up chunk, one more script on every cold start. Render into a host a layout mounts, as components/shared/unsent-work-host.tsx does.",
+};
 const realtimeHookMessage =
   'Consume Realtime through useLiveView (hooks/use-live-view.ts) or useRealtimeRouterRefresh — they own debounce, generation guards, keep-last-known, dialog suspension, and catch-up (client freshness contract).';
 // Layering: lib/ is the domain and data layer that components build on; a
@@ -828,6 +834,7 @@ function importRestrictions({ realtimeHooks = true, libLayer = false, radixPrimi
     {
       paths: [
         sonnerImportPath,
+        reactDomClientImportPath,
         ...(realtimeHooks
           ? [
               {

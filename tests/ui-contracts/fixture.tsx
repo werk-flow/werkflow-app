@@ -46,6 +46,7 @@ import { initializeProblemReportBoundary, ProblemReportContractFixture } from '.
 import { AuthUrlContractFixture } from './auth-url-boundaries';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { UnsentWorkHost } from '@/components/shared/unsent-work-host';
 
 import { BannerProvider } from '@/components/ui/banner';
 import { LocationSelectWithCreate } from '@/components/inventar/location-select-with-create';
@@ -559,6 +560,10 @@ if (hydrationRoot)
       ? 'instruction-hydration'
       : 'auftraege-hydration',
   );
+// The root layout's host of the unsent-work question, which no fixture renders.
+const unsentWorkHost = document.createElement('div');
+document.body.append(unsentWorkHost);
+createRoot(unsentWorkHost).render(<UnsentWorkHost />);
 createRoot(root).render(
   hydrationRoot ? null : window.uiContractFixture === 'planning-options' ? (
     <PlanningOptionContractFixture />

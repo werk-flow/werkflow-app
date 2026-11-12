@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
+import { UnsentWorkHost } from '@/components/shared/unsent-work-host';
 import { getOptionalSupabaseUrl } from '@/lib/env/public';
 import './globals.css';
 
@@ -41,7 +42,10 @@ export default function RootLayout({
           </>
         )}
       </head>
-      <body className="min-h-dvh bg-background text-foreground antialiased">{children}</body>
+      <body className="min-h-dvh bg-background text-foreground antialiased">
+        {children}
+        <UnsentWorkHost />
+      </body>
     </html>
   );
 }

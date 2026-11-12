@@ -192,6 +192,7 @@ export async function recordTimeTransition(
   }
 
   const transition = (asked: OfflineCapture | null) =>
+    // tenant-scope: built-from-context — transitionArgs passes the caller's resolved organization as p_organization_id
     admin.rpc('transition_time_activity', transitionArgs(caller, command, asked));
   let { data, error } = await transition(capture);
   // The phone's online call carried this operation id and its page closed before the answer: the
