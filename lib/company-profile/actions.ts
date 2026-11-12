@@ -8,6 +8,7 @@ import { canEmbedFile, stationeryMarginsFit } from '@/lib/document-rendering/ren
 import { logError } from '@/lib/logging';
 import { resolveActionContextFor, type ActionContext } from '@/lib/org/action-context';
 import { createSignedUploadUrl, discardStorageObjects, promoteUploadedObject } from '@/lib/storage/r2';
+import { uploadRuleFailure } from '@/lib/storage/upload-rules';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { isConfirmedWriteRefusal, writeRefusalFor } from '@/lib/supabase/write-refusal';
@@ -19,7 +20,6 @@ import {
   companyFileTicketInputSchema,
   saveCompanyProfileInputSchema,
   type CompanyFileFinalizeInput,
-  type CompanyFileKind,
   type CompanyFileRemoveInput,
   type CompanyFileTicketInput,
   type CompanyFileTicketResult,
@@ -117,18 +117,6 @@ export async function saveCompanyDocumentProfile(
   return { success: true, version: data };
 }
 
-/** Whether the type and size fit the file kind; the ticket and the stored copy are checked alike. */
-function fileRuleFailure(
-  kind: CompanyFileKind,
-  mimeType: string | null,
-  sizeBytes: number | null,
-): 'file_type_not_allowed' | 'file_empty' | 'file_too_large' | null {
-  const rule = COMPANY_FILE_RULES[kind];
-  if (mimeType === null || !rule.mimeTypes.includes(mimeType)) return 'file_type_not_allowed';
-  if (sizeBytes === null || sizeBytes <= 0) return 'file_empty';
-  return sizeBytes > rule.maxSizeBytes ? 'file_too_large' : null;
-}
-
 /** Signs the browser's upload of a logo or stationery page. */
 export async function createCompanyDocumentFileUploadTicket(
   rawInput: CompanyFileTicketInput,
@@ -138,7 +126,7 @@ export async function createCompanyDocumentFileUploadTicket(
   const input = parsed.data;
   const auth = await resolveManager(input.organizationId);
   if (!auth.success) return auth;
-  const ruleFailure = fileRuleFailure(input.kind, input.mimeType, input.fileSizeBytes);
+  const ruleFailure = uploadRuleFailure(COMPANY_FILE_RULES[input.kind], input.mimeType, input.fileSizeBytes);
   if (ruleFailure) return { success: false, error: ruleFailure };
 
   const fileId = randomUUID();
@@ -178,7 +166,7 @@ export async function finalizeCompanyDocumentFileUpload(
   }
   if (!copy.exists) return { success: false, error: 'file_missing' };
   const discardCopy = () => discardStorageObjects({ organizationId, paths: [copy.path] });
-  const ruleFailure = fileRuleFailure(input.kind, copy.contentType, copy.sizeBytes);
+  const ruleFailure = uploadRuleFailure(COMPANY_FILE_RULES[input.kind], copy.contentType, copy.sizeBytes);
   if (ruleFailure || copy.contentType === null) {
     await discardCopy();
     return { success: false, error: ruleFailure ?? 'file_type_not_allowed' };

@@ -129,8 +129,8 @@ function wholeNumber(text: string, minimum: number, maximum: number): number | n
 }
 
 type ParsedDraft =
-  | { success: true; details: CompanyProfileDetails }
-  | { success: false; errors: Record<string, string> };
+  | { kind: 'valid'; details: CompanyProfileDetails }
+  | { kind: 'invalid'; errors: Record<string, string> };
 
 /** The details of a valid draft, or the message of each invalid field by its control id. */
 export function parseDraft(draft: ProfileDraft): ParsedDraft {
@@ -148,10 +148,10 @@ export function parseDraft(draft: ProfileDraft): ParsedDraft {
   };
   const firstPageMargins = margins('firstPageMargins');
   const followingPageMargins = margins('followingPageMargins');
-  if (validity === null || Object.keys(errors).length > 0) return { success: false, errors };
+  if (validity === null || Object.keys(errors).length > 0) return { kind: 'invalid', errors };
   const text = (key: TextFieldKey) => draft[key].trim();
   return {
-    success: true,
+    kind: 'valid',
     details: {
       companyName: text('companyName'),
       street: text('street'),

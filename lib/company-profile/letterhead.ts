@@ -17,7 +17,7 @@ export type OfferLetterhead = Pick<BusinessDocument, 'sender' | 'footerColumns' 
   validityDays: number;
 };
 
-const present = (lines: string[]) => lines.filter((line) => line !== '');
+const filledLines = (lines: string[]) => lines.filter((line) => line !== '');
 
 function cityLine(details: CompanyProfileDetails): string {
   return `${details.postalCode} ${details.city}`.trim();
@@ -37,18 +37,22 @@ export function offerLetterhead(
   organizationName: string,
 ): OfferLetterhead {
   const name = details.companyName || organizationName;
-  const address = present([details.street, cityLine(details)]);
-  const register = present([details.registerCourt, details.registerNumber]).join(' ');
+  const address = filledLines([details.street, cityLine(details)]);
+  const register = filledLines([details.registerCourt, details.registerNumber]).join(' ');
   const footerColumns = [
-    present([name, ...address]),
-    present([details.phone && `Tel. ${details.phone}`, details.email, details.website]),
-    present([
+    filledLines([name, ...address]),
+    filledLines([details.phone && `Tel. ${details.phone}`, details.email, details.website]),
+    filledLines([
       register,
       details.managingDirectors,
       details.taxNumber && `St.-Nr. ${details.taxNumber}`,
       details.vatId && `USt-IdNr. ${details.vatId}`,
     ]),
-    present([details.bankName, details.iban && `IBAN ${details.iban}`, details.bic && `BIC ${details.bic}`]),
+    filledLines([
+      details.bankName,
+      details.iban && `IBAN ${details.iban}`,
+      details.bic && `BIC ${details.bic}`,
+    ]),
   ].filter((column) => column.length > 0);
   const firstPage = files.stationery_first;
   const followingPages = files.stationery_following;

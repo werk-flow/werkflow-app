@@ -68,7 +68,7 @@ function MissingDetailsHint({ details }: { details: CompanyProfileDetails }) {
   );
 }
 
-function TextField({
+function ProfileTextField({
   field,
   draft,
   disabled,
@@ -208,7 +208,7 @@ function useProfileSave({ organizationId, version, details }: Omit<FormProps, 's
     event.preventDefault();
     setFailure(null);
     const parsed = parseDraft(draft);
-    if (!parsed.success) {
+    if (parsed.kind === 'invalid') {
       setErrors(parsed.errors);
       focusFirstInvalidField(parsed.errors);
       return;
@@ -262,7 +262,7 @@ export function DocumentCompanyProfileForm({ stationery, ...profile }: FormProps
               <h3 className="text-sm font-semibold">{section.title}</h3>
               <div className="grid gap-4 sm:grid-cols-2">
                 {section.fields.map((field) => (
-                  <TextField
+                  <ProfileTextField
                     key={field.key}
                     field={field}
                     draft={controls.draft}
