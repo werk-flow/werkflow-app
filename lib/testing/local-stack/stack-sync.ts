@@ -54,7 +54,7 @@ export const GUARD_QUERY = `select count(*) = ${GUARD_TRIGGERS.length} from pg_t
 const RESET_DOC = 'the supabase-live-workflow skill, "Reset the shared stack"';
 
 export type SyncDecision =
-  /** The stack holds a migration main lacks, or one whose statements differ: only a reset repairs it. */
+  /** The stack holds a migration main lacks, one whose statements differ or one it cannot prove: only a reset repairs it. */
   | { kind: 'ahead'; lines: string[] }
   /** Main has merged migrations the stack lacks, by name. */
   | { kind: 'behind'; pending: readonly string[] }
@@ -65,8 +65,8 @@ const named = (names: readonly string[]) =>
 
 /** What the sync does about the drift between the stack's ledger and main's migrations. */
 export function syncDecision(drift: MigrationDrift): SyncDecision {
-  const { stackOnly, changed, treeOnly } = drift;
-  if (stackOnly.length || changed.length)
+  const { stackOnly, changed, treeOnly, unverified } = drift;
+  if (stackOnly.length || changed.length || unverified.length)
     return {
       kind: 'ahead',
       lines: [
@@ -74,6 +74,9 @@ export function syncDecision(drift: MigrationDrift): SyncDecision {
         ...(stackOnly.length ? [`  ${stackOnly.length} not on main: ${named(stackOnly)}`] : []),
         ...(changed.length
           ? [`  ${changed.length} applied with other statements than main's: ${named(changed)}`]
+          : []),
+        ...(unverified.length
+          ? [`  ${unverified.length} recorded without their statements, so unproven: ${named(unverified)}`]
           : []),
         'Every SQL and browser plan on this machine drifts until the stack is reset to main. Tell your lead:',
         `the reset is announced first and runs when no worktree holds the stack (${RESET_DOC}).`,

@@ -17,7 +17,7 @@ import {
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
 const read = (path: string) => readFileSync(resolve(repositoryRoot, path), 'utf8');
-const none = { stackOnly: [], treeOnly: [], changed: [] };
+const none = { stackOnly: [], treeOnly: [], changed: [], unverified: [] };
 
 test('a stack that matches main is current, and one that lacks merged migrations takes them', () => {
   expect(syncDecision(none)).toEqual({ kind: 'current' });
@@ -28,7 +28,7 @@ test('a stack that matches main is current, and one that lacks merged migrations
 });
 
 test('a stack that holds anything main lacks is refused, pending migrations or not', () => {
-  const branch = syncDecision({ stackOnly: ['a_branch_migration'], treeOnly: ['merged_one'], changed: [] });
+  const branch = syncDecision({ ...none, stackOnly: ['a_branch_migration'], treeOnly: ['merged_one'] });
   expect(branch.kind).toBe('ahead');
   expect(branch.kind === 'ahead' && branch.lines.join('\n')).toContain('1 not on main: a_branch_migration');
   // A migration that changed in review after a branch applied it.
@@ -37,6 +37,11 @@ test('a stack that holds anything main lacks is refused, pending migrations or n
     "1 applied with other statements than main's: reviewed_again",
   );
   expect(changed.kind === 'ahead' && changed.lines.join('\n')).toContain('Reset the shared stack');
+  // A row `supabase migration repair` wrote: nothing proves which SQL the stack ran.
+  const repaired = syncDecision({ ...none, unverified: ['repaired'] });
+  expect(repaired.kind === 'ahead' && repaired.lines.join('\n')).toContain(
+    '1 recorded without their statements, so unproven: repaired',
+  );
 });
 
 test('the ledger trigger refuses every write but the sync session and names the sanctioned commands', () => {
