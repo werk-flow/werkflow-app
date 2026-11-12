@@ -618,3 +618,29 @@ describe('round 4: an account switch around the seal or the attach', () => {
     expect((await stored())[0]?.refusal).toBeNull();
   });
 });
+
+describe('round 5: an account switch on the photo refusal path', () => {
+  test("a switch while a refused photo is written never lets the next person's access read mark the author's draft", async () => {
+    await save(draft());
+    uploadAnswers = [() => ({ status: 'failed', reason: 'refused', transferred: null })];
+    accessAnswer = { success: false, error: 'not_authorized' };
+    const put = IDBObjectStore.prototype.put;
+    let switched = false;
+    IDBObjectStore.prototype.put = function (this: IDBObjectStore, value: unknown, key?: IDBValidKey) {
+      if (!switched) {
+        switched = true;
+        storage.set(TODAY_WIPE_KEY, 'coworker-sign-in');
+        startDraftSync(otherPerson);
+      }
+      return put.call(this, value, key);
+    };
+    try {
+      expect(await sendDraft(holder, DRAFT_ID)).toBe('waiting');
+    } finally {
+      IDBObjectStore.prototype.put = put;
+    }
+    startDraftSync(holder);
+    expect((await stored())[0]?.refusal).toBeNull();
+    expect(accessReads).toEqual([]);
+  });
+});

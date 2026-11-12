@@ -230,8 +230,10 @@ async function uploadPhotos(claim: SendClaim, draft: StoredDraft): Promise<Draft
     }
     const reason = result.status === 'failed' ? result.reason : null;
     if (reason !== null && WAITING_UPLOAD_REASONS.has(reason)) return 'waiting';
+    // The access read and the refusal speak for the author only while the tab is still theirs.
+    if (!stillHolder(claim)) return 'waiting';
     const lost = reason === 'refused' ? await lostJobAccess(draft.jobId) : false;
-    if (lost === null) return 'waiting';
+    if (lost === null || !stillHolder(claim)) return 'waiting';
     await markRefused(owner, draft.id, lost ? 'no_access' : 'failed');
     return lost ? 'no_access' : 'refused';
   }
