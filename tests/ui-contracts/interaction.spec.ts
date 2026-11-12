@@ -101,14 +101,12 @@ test('an activation key waits until its control is enabled, as a client-only act
   // The server HTML of a client-only action (hooks/use-hydrated.ts): disabled until React owns its events.
   const create = page.getByRole('button', { name: 'Vorlage erstellen' });
   await expect(pressKey(page, 'Enter')).rejects.toThrow('an activation key goes to its control');
-  let pressedAt = 0;
-  const pressing = pressKey(page, 'Enter', { into: create }).then(() => {
-    pressedAt = Date.now();
-  });
-  await expect(create).toBeDisabled();
-  const enabledAt = Date.now();
+  // While the control stays disabled the key is never sent: focus would not land, and Enter would reach the page.
+  await expect(pressKey(page, 'Enter', { into: create, timeout: 500 })).rejects.toThrow(
+    'The control that takes "Enter" is enabled',
+  );
+  await expect(page.getByRole('main')).not.toHaveAttribute('data-opened', 'create');
   await page.evaluate(() => document.getElementById('create')?.removeAttribute('disabled'));
-  await pressing;
-  expect(pressedAt).toBeGreaterThanOrEqual(enabledAt);
+  await pressKey(page, 'Enter', { into: create });
   await expect(page.getByRole('main')).toHaveAttribute('data-opened', 'create');
 });
