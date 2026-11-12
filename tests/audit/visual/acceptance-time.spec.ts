@@ -4,8 +4,8 @@ import { roundCaptures } from '../support/acceptance-rounds';
 import { TIME_OPENERS } from '../support/dialog-openers/time';
 
 // Rendered acceptance captures of the inventory rounds (tests/audit/support/acceptance-rounds.ts):
-// the time-tracking dialogs of the office and the field worker's dialogs. The spec imports only this area's
-// openers, so a changed helper of another area does not select it.
+// the time-tracking dialogs of the office, the field worker's dialogs and the app shell's report dialog.
+// The spec imports only this area's openers, so a changed helper of another area does not select it.
 // Tags: @AUDIT-VISUAL-ACCEPT, @ACCEPT <set>.
 
 test.afterEach(async ({}, testInfo) => {

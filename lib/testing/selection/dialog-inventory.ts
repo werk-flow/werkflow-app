@@ -42,8 +42,8 @@ export const DIALOG_INVENTORY = {
   },
   'components/problem-reports/problem-report-dialog.tsx#ProblemReportDialog|Problem melden': {
     audits: [
-      { route: '/dashboard', role: 'employee', opener: 'field.problem-report' },
-      { route: '/auftraege', role: 'admin', opener: 'shell.problem-report' },
+      { route: '/dashboard', role: 'employee', opener: 'reports.field' },
+      { route: '/auftraege', role: 'admin', opener: 'reports.office' },
     ],
   },
   'components/job-picker-modal.tsx#JobPickerModal|{title}': {

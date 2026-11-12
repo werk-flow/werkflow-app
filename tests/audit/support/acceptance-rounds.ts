@@ -149,6 +149,9 @@ const OPENER_MODULES = {
   documents: 'documents',
   inventory: 'inventory',
   people: 'people',
+  // The report dialog opens from the app shell, as the clock does; a group of its own
+  // would deal the visual groups into a third CI shard.
+  reports: 'time',
   requests: 'requests',
   templates: 'requests',
   service: 'service',
