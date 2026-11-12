@@ -41,8 +41,9 @@ export const timeTrackingSettingsSchema = z
     autoBreakThresholdMinutes: z.coerce.number().int().min(1).max(1440),
     autoBreakDurationMinutes: z.coerce.number().int().min(0).max(1440),
     secondStepEnabled: z.boolean(),
-    secondStepThresholdMinutes: z.coerce.number().int().min(1).max(1440),
-    secondStepDurationMinutes: z.coerce.number().int().min(0).max(1440),
+    // Checked only while the step is on: a switched-off step keeps whatever its fields hold.
+    secondStepThresholdMinutes: z.coerce.number().int().min(0),
+    secondStepDurationMinutes: z.coerce.number().int().min(0),
   })
   .superRefine((value, ctx) => {
     if (value.autoBreakDurationMinutes > value.autoBreakThresholdMinutes) {
@@ -53,7 +54,13 @@ export const timeTrackingSettingsSchema = z
       });
     }
     if (!value.secondStepEnabled) return;
-    if (value.secondStepThresholdMinutes <= value.autoBreakThresholdMinutes) {
+    if (value.secondStepThresholdMinutes > 1440) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['secondStepThresholdMinutes'],
+        message: 'Die zweite Schwelle darf höchstens 1440 Minuten betragen.',
+      });
+    } else if (value.secondStepThresholdMinutes <= value.autoBreakThresholdMinutes) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['secondStepThresholdMinutes'],
@@ -306,41 +313,48 @@ export function computeBreakdownForSettings(
 export type AutomaticBreakRange = { breakStart: Date; breakEnd: Date };
 
 /**
- * Where a block's automatic break lies: each reached step adds its share of
- * the total and ends at its threshold, so beyond nine hours a 30-minute break
- * ends at six hours and 15 more minutes end at nine. The ranges add up to
- * `automaticBreakMinutes` for the block. A share that would not fit inside
- * the block is left out.
+ * Where a block's automatic break lies. The steps count the person's presence
+ * that day, including `presenceBeforeMinutes` from earlier blocks, as the
+ * totals do. Each step reached in this block adds its share of the total and
+ * ends where the day reaches its threshold, so beyond nine hours a 30-minute
+ * break ends at six hours and 15 more minutes end at nine. A share that would
+ * start before the block, or before the previous share ends, starts there
+ * instead; one that would not end inside the block is left out.
  */
 export function getAutomaticBreakRanges(
   start: string | Date | null | undefined,
   end: string | Date | null | undefined,
   settings: BreakPolicyValues | null | undefined,
+  presenceBeforeMinutes = 0,
 ): AutomaticBreakRange[] {
   if (!start || !end || !settings || settings.breakMode !== 'automatic') {
     return [];
   }
 
-  const startDate = start instanceof Date ? start : new Date(start);
-  const endDate = end instanceof Date ? end : new Date(end);
-  const startMs = startDate.getTime();
-  const endMs = endDate.getTime();
+  const startMs = new Date(start).getTime();
+  const endMs = new Date(end).getTime();
 
   if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
     return [];
   }
 
-  const totalMinutes = (endMs - startMs) / 60000;
+  const blockMinutes = (endMs - startMs) / 60000;
   const ranges: AutomaticBreakRange[] = [];
   let previousDuration = 0;
+  let notBeforeMs = startMs;
   for (const step of breakSteps(settings)) {
-    if (totalMinutes < step.thresholdMinutes) break;
+    const reachedAfterMinutes = step.thresholdMinutes - presenceBeforeMinutes;
     const shareMinutes = step.durationMinutes - previousDuration;
     previousDuration = Math.max(previousDuration, step.durationMinutes);
+    // Reached in an earlier block, which shows its share.
+    if (reachedAfterMinutes <= 0) continue;
+    if (blockMinutes < reachedAfterMinutes) break;
     if (shareMinutes <= 0) continue;
-    const breakEnd = new Date(startMs + step.thresholdMinutes * 60000);
-    const breakStart = new Date(breakEnd.getTime() - shareMinutes * 60000);
-    if (breakStart > startDate && breakEnd <= endDate) ranges.push({ breakStart, breakEnd });
+    const breakStartMs = Math.max(notBeforeMs, startMs + (reachedAfterMinutes - shareMinutes) * 60000);
+    const breakEndMs = breakStartMs + shareMinutes * 60000;
+    if (breakEndMs > endMs) continue;
+    ranges.push({ breakStart: new Date(breakStartMs), breakEnd: new Date(breakEndMs) });
+    notBeforeMs = breakEndMs;
   }
   return ranges;
 }

@@ -11,6 +11,7 @@ import {
   type BreakPolicy,
   type BreakPolicyValues,
 } from './settings';
+import { calculateCalendarWorkBlocks, getCalendarBlockDisplaySegments } from './calendar-blocks';
 import { buildWeeklyTimeData } from './weekly';
 import type { TimeEntry } from './types';
 
@@ -139,6 +140,8 @@ describe('the settings form', () => {
       'secondStepThresholdMinutes',
     ],
     ['a total below the first step', { secondStepDurationMinutes: 20 }, 'secondStepDurationMinutes'],
+    ['a cleared second threshold', { secondStepThresholdMinutes: 0 }, 'secondStepThresholdMinutes'],
+    ['a second threshold beyond a day', { secondStepThresholdMinutes: 5000 }, 'secondStepThresholdMinutes'],
     [
       'extra minutes that do not fit',
       { secondStepThresholdMinutes: 370, secondStepDurationMinutes: 45 },
@@ -149,8 +152,12 @@ describe('the settings form', () => {
     expect(result.error?.issues.map((issue) => issue.path.join('.'))).toEqual([path]);
   });
 
-  test('a switched-off second step is not checked', () => {
-    const values = { ...breakPolicyFormValues(ONE_STEP), secondStepThresholdMinutes: 300 };
+  test.each([
+    ['a threshold before the first', { secondStepThresholdMinutes: 300 }],
+    ['a cleared threshold', { secondStepThresholdMinutes: 0 }],
+    ['a threshold beyond a day', { secondStepThresholdMinutes: 5000 }],
+  ])('a switched-off second step with %s still saves', (_label, change) => {
+    const values = { ...breakPolicyFormValues(ONE_STEP), ...change };
     expect(timeTrackingSettingsSchema.safeParse(values).success).toBe(true);
   });
 
@@ -159,5 +166,52 @@ describe('the settings form', () => {
       thresholdMinutes: 540,
       durationMinutes: 45,
     });
+  });
+});
+
+describe('a day split across jobs', () => {
+  const entry = (
+    id: string,
+    entryType: TimeEntry['entryType'],
+    timestamp: string,
+    jobId: string,
+  ): TimeEntry => ({
+    id,
+    userId: 'worker',
+    organizationId: 'org',
+    entryType,
+    timestamp,
+    isManual: false,
+    jobId,
+    status: 'approved',
+    reviewedBy: null,
+    reviewedAt: null,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  });
+  // Seven hours on one job, then three on another, on Tuesday 6 October 2026.
+  const entries = [
+    entry('1', 'clock_in', '2026-10-06T05:00:00.000Z', 'job-a'),
+    entry('2', 'clock_out', '2026-10-06T12:00:00.000Z', 'job-a'),
+    entry('3', 'clock_in', '2026-10-06T12:00:00.000Z', 'job-b'),
+    entry('4', 'clock_out', '2026-10-06T15:00:00.000Z', 'job-b'),
+  ];
+  const settings = { organizationId: 'org', ...TWO_STEPS, breakPolicyHistory: [] };
+
+  test('the calendar shows the break the totals deduct, counting the whole day', () => {
+    const blocks = calculateCalendarWorkBlocks(entries);
+    expect(blocks).toHaveLength(2);
+    const shownBreakMinutes = blocks
+      .flatMap((block) =>
+        getCalendarBlockDisplaySegments(block, new Date('2026-10-06T16:00:00.000Z'), settings),
+      )
+      .filter((segment) => segment.type === 'break')
+      .reduce(
+        (total, segment) => total + (Date.parse(segment.end ?? '') - Date.parse(segment.start)) / 60_000,
+        0,
+      );
+    const [, tuesday] = buildWeeklyTimeData(entries, new Date('2026-10-04T22:00:00.000Z'), settings);
+    expect(tuesday?.breakMinutes).toBe(45);
+    expect(shownBreakMinutes).toBe(45);
   });
 });

@@ -230,6 +230,8 @@ export type InteractiveCalendarSession = WorkSession & {
   breaks?: WorkSessionBreak[];
   /** The break rule that applied to the block's day. */
   breakPolicy?: BreakPolicyValues | undefined;
+  /** The person's presence earlier that day, which the automatic break steps count. */
+  presenceBeforeMinutes?: number | undefined;
   isCompositeBlock?: boolean;
   isOnBreakBlock?: boolean;
   employeeName?: string | null;

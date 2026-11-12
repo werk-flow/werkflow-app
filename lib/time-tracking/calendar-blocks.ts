@@ -1,5 +1,5 @@
 import type { InteractiveCalendarSession, TimeEntry, WorkSessionBreak } from './types';
-import { getLocalDayEnd, isSameLocalDay } from '@/lib/date-time/berlin';
+import { formatBerlinLocalDate, getLocalDayEnd, isSameLocalDay } from '@/lib/date-time/berlin';
 import { isMomentary } from './activity-intervals';
 import { getEffectiveTimeEntries } from './effective-entries';
 import { isBreakEndFollowedByClockIn } from './transition-pairs';
@@ -32,6 +32,12 @@ export type CalendarWorkBlock = {
   isOnBreak: boolean;
   isComposite: boolean;
   isPending: boolean;
+  /**
+   * The person's presence earlier the same Berlin day, in earlier blocks: the
+   * automatic break steps count the whole day, as the totals do. Absent for
+   * the day's first block.
+   */
+  presenceBeforeMinutes?: number;
 };
 
 type OpenBlockState = {
@@ -221,10 +227,17 @@ function getCalendarBlockDisplayBreaks(
   const displayPolicy = resolveDisplayBreakPolicy(block, referenceDate, settings);
   const displayEnd = block.end ? new Date(block.end) : referenceDate;
 
-  return getAutomaticBreakRanges(block.start, displayEnd, displayPolicy).map((range, index) => ({
-    breakStart: buildSyntheticBreakEntry(block, 'break_start', range.breakStart, autoBreakId('start', index)),
-    breakEnd: buildSyntheticBreakEntry(block, 'break_end', range.breakEnd, autoBreakId('end', index)),
-  }));
+  return getAutomaticBreakRanges(block.start, displayEnd, displayPolicy, block.presenceBeforeMinutes).map(
+    (range, index) => ({
+      breakStart: buildSyntheticBreakEntry(
+        block,
+        'break_start',
+        range.breakStart,
+        autoBreakId('start', index),
+      ),
+      breakEnd: buildSyntheticBreakEntry(block, 'break_end', range.breakEnd, autoBreakId('end', index)),
+    }),
+  );
 }
 
 /** A block's work and break segments as the day shows them, without the momentary ones. */
@@ -250,7 +263,12 @@ function blockSegments(
 
   const displayPolicy = resolveDisplayBreakPolicy(block, referenceDate, settings);
   const displayEnd = block.end ? new Date(block.end) : referenceDate;
-  const automaticBreaks = getAutomaticBreakRanges(block.start, displayEnd, displayPolicy);
+  const automaticBreaks = getAutomaticBreakRanges(
+    block.start,
+    displayEnd,
+    displayPolicy,
+    block.presenceBeforeMinutes,
+  );
 
   if (automaticBreaks.length === 0) {
     return block.segments;
@@ -333,6 +351,7 @@ export function createSessionFromCalendarBlock(
     sourceEntries: block.sourceEntries,
     breaks: getCalendarBlockDisplayBreaks(block, referenceDate, settings),
     ...(displayPolicy ? { breakPolicy: displayPolicy } : {}),
+    ...(block.presenceBeforeMinutes ? { presenceBeforeMinutes: block.presenceBeforeMinutes } : {}),
     isCompositeBlock: block.isComposite,
     isOnBreakBlock: block.isOnBreak,
   };
@@ -435,5 +454,17 @@ export function calculateCalendarWorkBlocks(entries: TimeEntry[]): CalendarWorkB
     }
   }
 
-  return blocks.filter((block) => !isMomentary(block.start, block.end));
+  return withPresenceBefore(blocks.filter((block) => !isMomentary(block.start, block.end)));
+}
+
+/** Each block with the presence of the same person's earlier blocks that day. */
+function withPresenceBefore(blocks: CalendarWorkBlock[]): CalendarWorkBlock[] {
+  const presenceByDay = new Map<string, number>();
+  return blocks.map((block) => {
+    const day = `${block.userId}:${formatBerlinLocalDate(new Date(block.start))}`;
+    const before = presenceByDay.get(day) ?? 0;
+    const endMs = block.end ? new Date(block.end).getTime() : new Date(block.start).getTime();
+    presenceByDay.set(day, before + Math.max(0, (endMs - new Date(block.start).getTime()) / 60000));
+    return before > 0 ? { ...block, presenceBeforeMinutes: before } : block;
+  });
 }

@@ -64,7 +64,12 @@ export function useEntryDetailsDisplayedBreaks(
 
     const blockStart = editedClockIn ?? clockInDate;
     const blockEnd = editedClockOut ?? clockOutDate ?? (blockStart ? new Date() : null);
-    const automaticBreaks = getAutomaticBreakRanges(blockStart, blockEnd, interactiveSession.breakPolicy);
+    const automaticBreaks = getAutomaticBreakRanges(
+      blockStart,
+      blockEnd,
+      interactiveSession.breakPolicy,
+      interactiveSession.presenceBeforeMinutes,
+    );
     return automaticEditableBreaks(automaticBreaks, entryUserId, entryOrganizationId);
   }, [
     clockInDate,
@@ -74,6 +79,7 @@ export function useEntryDetailsDisplayedBreaks(
     entryOrganizationId,
     entryUserId,
     interactiveSession.breakPolicy,
+    interactiveSession.presenceBeforeMinutes,
     isAutomaticBreakMode,
   ]);
   const displayedBreaks = isAutomaticBreakMode ? automaticDisplayBreaks : editedBreaks;

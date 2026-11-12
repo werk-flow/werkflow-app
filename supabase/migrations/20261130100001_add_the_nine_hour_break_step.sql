@@ -35,7 +35,7 @@ create function public.update_time_tracking_settings(
 )
 returns void
 language plpgsql
-security definer
+security invoker
 set search_path to ''
 as $$
 declare
@@ -222,3 +222,168 @@ $$;
 revoke all on function public.create_organization_with_defaults(uuid, text, text)
   from public, anon, authenticated;
 grant execute on function public.create_organization_with_defaults(uuid, text, text) to service_role;
+
+-- The previous release saves through the eight-argument version and knows
+-- no second step: its history parser drops `secondStep` from every version it
+-- sends back. After a rollback, such a save would take the step from the days
+-- that ran under it. This version restores each sent version's step from its
+-- stored version, keeps the step on (in the columns and in the version it
+-- adds) while it still fits the first step, and turns it off otherwise.
+create or replace function public.update_time_tracking_settings(
+  p_actor_id uuid,
+  p_organization_id uuid,
+  p_expected_settings jsonb,
+  p_break_mode text,
+  p_auto_break_threshold_minutes integer,
+  p_auto_break_duration_minutes integer,
+  p_break_policy_history jsonb,
+  p_break_ends jsonb
+)
+returns void
+language plpgsql
+security invoker
+set search_path to ''
+as $$
+declare
+  v_admin_id uuid;
+  v_stored jsonb;
+  v_stored_history jsonb;
+  v_second_threshold integer;
+  v_second_duration integer;
+  v_keep_step boolean;
+  v_history jsonb;
+  v_inserted integer;
+  v_break_end_count integer;
+begin
+  if p_break_mode is null or p_break_mode not in ('manual', 'automatic')
+    or p_auto_break_threshold_minutes is null or p_auto_break_duration_minutes is null
+    or p_break_policy_history is null or jsonb_typeof(p_break_policy_history) <> 'array'
+    or p_break_ends is null or jsonb_typeof(p_break_ends) <> 'array'
+  then
+    raise exception 'invalid_input';
+  end if;
+  v_break_end_count := jsonb_array_length(p_break_ends);
+  if exists (
+    select 1 from jsonb_array_elements(p_break_ends) break_end
+    where jsonb_typeof(break_end) <> 'object' or break_end ->> 'user_id' is null
+  ) or v_break_end_count <> (
+    select count(distinct (break_end ->> 'user_id')::uuid) from jsonb_array_elements(p_break_ends) break_end
+  ) then
+    raise exception 'invalid_input';
+  end if;
+
+  -- A share lock holds the admin until commit: an ownership transfer waits.
+  select organization.admin_id into v_admin_id
+  from public.organizations organization
+  where organization.id = p_organization_id
+  for share;
+  if not found then
+    raise exception 'org_not_found';
+  end if;
+  if v_admin_id is distinct from p_actor_id then
+    raise exception 'not_authorized';
+  end if;
+
+  select jsonb_build_object(
+    'break_mode', settings.break_mode,
+    'auto_break_threshold_minutes', settings.auto_break_threshold_minutes,
+    'auto_break_duration_minutes', settings.auto_break_duration_minutes,
+    'break_policy_history', settings.break_policy_history
+  ), settings.break_policy_history, settings.auto_break_second_threshold_minutes,
+    settings.auto_break_second_duration_minutes
+  into v_stored, v_stored_history, v_second_threshold, v_second_duration
+  from public.organization_settings settings
+  where settings.organization_id = p_organization_id
+  for update;
+
+  if found then
+    if p_expected_settings is null or v_stored is distinct from p_expected_settings then
+      raise exception 'settings_changed';
+    end if;
+    -- The step stays on when it still fits after the first step this save sets.
+    v_keep_step := v_second_threshold is not null
+      and v_second_threshold > p_auto_break_threshold_minutes
+      and v_second_duration >= p_auto_break_duration_minutes
+      and v_second_duration - p_auto_break_duration_minutes
+        <= v_second_threshold - p_auto_break_threshold_minutes;
+    -- The caller's parser drops secondStep: a version it sends back gets the
+    -- step of its stored version, a version it adds gets the step that stays on.
+    select coalesce(jsonb_agg(
+      case
+        when version.entry ? 'secondStep' then version.entry
+        when stored.entry is not null then
+          case when stored.entry ? 'secondStep'
+            then version.entry || jsonb_build_object('secondStep', stored.entry -> 'secondStep')
+            else version.entry
+          end
+        when v_keep_step then version.entry || jsonb_build_object('secondStep', jsonb_build_object(
+          'thresholdMinutes', v_second_threshold, 'durationMinutes', v_second_duration))
+        else version.entry
+      end order by version.position), '[]'::jsonb)
+    into v_history
+    from jsonb_array_elements(p_break_policy_history) with ordinality as version(entry, position)
+    left join lateral (
+      select stored_version as entry
+      from jsonb_array_elements(v_stored_history) stored_version
+      where (stored_version ->> 'effectiveFrom')::timestamptz = (version.entry ->> 'effectiveFrom')::timestamptz
+      limit 1
+    ) stored on true;
+    update public.organization_settings settings
+    set break_mode = p_break_mode::public.time_tracking_break_mode,
+      auto_break_threshold_minutes = p_auto_break_threshold_minutes,
+      auto_break_duration_minutes = p_auto_break_duration_minutes,
+      break_policy_history = v_history,
+      auto_break_second_threshold_minutes = case when v_keep_step then v_second_threshold end,
+      auto_break_second_duration_minutes = case when v_keep_step then v_second_duration end,
+      updated_at = now()
+    where settings.organization_id = p_organization_id;
+  else
+    if p_expected_settings is not null then
+      raise exception 'settings_changed';
+    end if;
+    -- A concurrent first save inserts the row too: the later one waits for it
+    -- and refuses instead of overwriting the history the first one wrote.
+    insert into public.organization_settings (
+      organization_id, break_mode, auto_break_threshold_minutes, auto_break_duration_minutes,
+      break_policy_history
+    ) values (
+      p_organization_id, p_break_mode::public.time_tracking_break_mode, p_auto_break_threshold_minutes,
+      p_auto_break_duration_minutes, p_break_policy_history
+    )
+    on conflict (organization_id) do nothing;
+    get diagnostics v_inserted = row_count;
+    if v_inserted = 0 then
+      raise exception 'settings_changed';
+    end if;
+  end if;
+
+  if v_break_end_count = 0 then
+    return;
+  end if;
+
+  -- A share lock holds every named membership until commit: a removal waits
+  -- for this call or makes it refuse.
+  perform 1 from public.organization_members member
+  where member.organization_id = p_organization_id
+    and member.user_id in (
+      select (break_end ->> 'user_id')::uuid from jsonb_array_elements(p_break_ends) break_end
+    )
+  order by member.user_id
+  for share;
+  if exists (
+    select 1 from jsonb_array_elements(p_break_ends) break_end
+    where not exists (
+      select 1 from public.organization_members member
+      where member.organization_id = p_organization_id
+        and member.user_id = (break_end ->> 'user_id')::uuid
+    )
+  ) then
+    raise exception 'target_not_found';
+  end if;
+
+  insert into public.time_entries (user_id, organization_id, entry_type, timestamp, is_manual, status, job_id)
+  select (break_end ->> 'user_id')::uuid, p_organization_id, 'break_end', now(), false, 'approved',
+    (break_end ->> 'job_id')::uuid
+  from jsonb_array_elements(p_break_ends) break_end;
+end;
+$$;

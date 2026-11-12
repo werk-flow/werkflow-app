@@ -4,8 +4,9 @@
 -- foreign organization, a field worker and a Büro member are refused, a save
 -- leaves a completed day as it was, and only the service role executes the function.
 -- The nine-hour step: an existing organization has it off, switching it on writes
--- it with its version, the save refuses an inconsistent step, and a new
--- organization starts with it on.
+-- it with its version, the save refuses an inconsistent step, a save of the
+-- previous release keeps every version's step, and a new organization starts
+-- with it on.
 begin;
 
 insert into auth.users (
@@ -254,6 +255,59 @@ begin
       from public.organization_settings
       where organization_id = '26104154-0000-0000-0000-000000000010') is distinct from '540/45/3'
   then raise exception 'switching the second step on did not write it and its version'; end if;
+end;
+$$;
+
+-- A save of the previous release after a rollback: it sends the history back
+-- without secondStep and knows no second step.
+create view pg_temp.previous_release_call as
+select
+  jsonb_build_object(
+    'break_mode', settings.break_mode,
+    'auto_break_threshold_minutes', settings.auto_break_threshold_minutes,
+    'auto_break_duration_minutes', settings.auto_break_duration_minutes,
+    'break_policy_history', settings.break_policy_history) expected,
+  (select jsonb_agg(version - 'secondStep') from jsonb_array_elements(settings.break_policy_history) version)
+    || '[{"breakMode":"automatic","autoBreakThresholdMinutes":360,"autoBreakDurationMinutes":35,"effectiveFrom":"2026-10-06T08:00:00.000Z"}]'::jsonb
+    history
+from public.organization_settings settings
+where settings.organization_id = '26104154-0000-0000-0000-000000000010';
+grant select on pg_temp.previous_release_call to service_role;
+
+do $$
+declare
+  v_before jsonb := (select break_policy_history from public.organization_settings
+    where organization_id = '26104154-0000-0000-0000-000000000010');
+  v_after jsonb;
+begin
+  perform public.update_time_tracking_settings('26104154-0000-0000-0000-000000000001',
+    '26104154-0000-0000-0000-000000000010', (select expected from pg_temp.previous_release_call),
+    'automatic', 360, 35, (select history from pg_temp.previous_release_call), '[]');
+  select break_policy_history into v_after from public.organization_settings
+  where organization_id = '26104154-0000-0000-0000-000000000010';
+  -- Every earlier version keeps its step, so its days keep their break.
+  if (select jsonb_agg(version order by position)
+      from jsonb_array_elements(v_after) with ordinality as t(version, position)
+      where position <= jsonb_array_length(v_before)) is distinct from v_before
+  then raise exception 'a previous-release save took the step from earlier versions: %', v_after; end if;
+  -- The step that was on stays on, in the columns and in the added version.
+  if v_after -> 3 -> 'secondStep' is distinct from '{"thresholdMinutes":540,"durationMinutes":45}'::jsonb
+    or (select auto_break_second_threshold_minutes::text || '/' || auto_break_second_duration_minutes
+        from public.organization_settings
+        where organization_id = '26104154-0000-0000-0000-000000000010') is distinct from '540/45'
+  then raise exception 'a previous-release save turned the step off: %', v_after; end if;
+
+  -- A first step that no longer fits the second turns the step off.
+  perform public.update_time_tracking_settings('26104154-0000-0000-0000-000000000001',
+    '26104154-0000-0000-0000-000000000010', (select expected from pg_temp.previous_release_call),
+    'automatic', 600, 30,
+    (select jsonb_agg(version - 'secondStep') from jsonb_array_elements(v_after) version)
+      || '[{"breakMode":"automatic","autoBreakThresholdMinutes":600,"autoBreakDurationMinutes":30,"effectiveFrom":"2026-10-07T08:00:00.000Z"}]'::jsonb,
+    '[]');
+  if (select auto_break_second_threshold_minutes is not null or break_policy_history -> 4 ? 'secondStep'
+      or break_policy_history -> 3 -> 'secondStep' is distinct from '{"thresholdMinutes":540,"durationMinutes":45}'::jsonb
+      from public.organization_settings where organization_id = '26104154-0000-0000-0000-000000000010')
+  then raise exception 'a step that no longer fits stayed on, or an earlier version lost its step'; end if;
 end;
 $$;
 
