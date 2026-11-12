@@ -169,10 +169,21 @@ function markWhatRemains(store: IDBObjectStore): void {
   });
 }
 
-/** Removes the device mark when a fresh count finds no draft; a failed count keeps it. */
+/**
+ * Removes the device mark when a fresh count finds no draft, inside that count's success handler:
+ * the read transaction still keeps every writer out, so no tab can store a draft and set the mark
+ * in between. A failed count keeps the mark.
+ */
 async function removeMarkIfStillEmpty(): Promise<void> {
-  const remaining = await inDraftStore('readonly', (store) => store.count()).catch(() => null);
-  if (remaining === 0) markDraftsOnDevice(false);
+  const counted = await inDraftStore('readonly', (store) => {
+    const counting = store.count();
+    counting.addEventListener('success', () => {
+      if (counting.result === 0) markDraftsOnDevice(false);
+    });
+    return counting;
+  }).catch(() => null);
+  // A failed count is no reason to remove the mark: it stays, and the next sweep counts again.
+  if (counted === null) return;
 }
 
 /** Deletes every draft among `records` whose time after a lost access is over, of any holder. */

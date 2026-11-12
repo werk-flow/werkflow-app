@@ -76,9 +76,11 @@ export type DeviceDraftHandle = {
   prepareSave: () => Promise<DraftSavePlan | null>;
   /**
    * Unseals the draft after the server refused its online save, which it holds nothing of, and
-   * writes the form's text into it: what was typed while the seal held the draft.
+   * writes the form's text into it: what was typed while the seal held the draft. Only the seal
+   * this save made (`changedAt`, the sealed draft's last-change time); a draft another tab unsealed
+   * and changed since stays as it is, and the answer is false.
    */
-  unseal: () => Promise<void>;
+  unseal: (changedAt: string) => Promise<boolean>;
   /**
    * Sends the draft with its photos in the state its save decided on (`expected`, the draft's
    * last-change time from prepareSave) and answers the revision the server wrote and the version it

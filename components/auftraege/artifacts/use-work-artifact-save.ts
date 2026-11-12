@@ -120,8 +120,9 @@ export function useWorkArtifactSave({
       return;
     }
     if (!result.success) {
-      // The server refused the save and holds nothing of it: the draft can change again.
-      await onDevice?.unseal();
+      // The server refused the save and holds nothing of it: the draft can change again, unless
+      // another tab changed it meanwhile; the keeper then says so and the form keeps its text.
+      if (onDevice && plan?.kind === 'online' && !(await onDevice.unseal(plan.changedAt))) return;
       await editor.handleMutationFailure(
         result,
         'Der Arbeitsnachweis konnte nicht gespeichert werden.',

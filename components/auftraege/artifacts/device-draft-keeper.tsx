@@ -275,10 +275,15 @@ export function DeviceDraftKeeper(props: DeviceDraftKeeperProps) {
           : { kind: 'device', changedAt: stored.updatedAt };
       },
       // In the same transaction, the form's text: what was typed while the seal held the draft.
-      unseal: async () =>
-        void (await write((current) =>
-          current ? latestText.current({ ...current, sealed: false }) : current,
-        )),
+      unseal: async (changedAt) => {
+        let own = false;
+        await write((current) => {
+          own = current !== null && current.sealed && current.updatedAt === changedAt;
+          return current && own ? latestText.current({ ...current, sealed: false }) : current;
+        });
+        if (!own) editor.setError(SEND_REFUSALS.changed);
+        return own;
+      },
       save,
       discard: async () => void (await write(() => null)),
     });

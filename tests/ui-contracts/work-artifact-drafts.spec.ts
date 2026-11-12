@@ -659,6 +659,60 @@ test('text typed while an online save holds the draft sealed reaches the device 
   ).toHaveValue('Brenner und Pumpe');
 });
 
+test('a refused online save never writes over the newer text another tab stored after its own refusal unsealed the draft', async ({
+  page,
+}) => {
+  await openContractFixture(page, 'work-artifact-report');
+  await answerSync(page, () => 'offline');
+  await page.evaluate(() => {
+    window.uiContractWorkArtifacts.holdSave = true;
+    window.uiContractWorkArtifacts.refuseSave = 'work_artifact_not_authorized';
+  });
+  await writeReport(page, 'Wartung Heizung', 0);
+  await page.getByRole('button', { name: 'Als Entwurf speichern', exact: true }).click();
+  await expect
+    .poll(() => page.evaluate(() => typeof window.uiContractWorkArtifacts.releaseSave))
+    .toBe('function');
+
+  // Another tab's send was refused, which unsealed the draft, and that tab stored its own text.
+  await page.evaluate(async () => {
+    const opening = indexedDB.open('werkflow-drafts', 1);
+    const database = await new Promise<IDBDatabase>(
+      (resolve) => (opening.onsuccess = () => resolve(opening.result)),
+    );
+    const transaction = database.transaction('drafts', 'readwrite');
+    const store = transaction.objectStore('drafts');
+    const reading = store.getAll();
+    reading.onsuccess = () => {
+      const records: unknown[] = reading.result;
+      for (const record of records) {
+        if (typeof record !== 'object' || record === null) continue;
+        store.put({
+          ...record,
+          sealed: false,
+          content: { performedWork: 'Text aus dem anderen Fenster' },
+          updatedAt: new Date(Date.now() + 1000).toISOString(),
+        });
+      }
+    };
+    await new Promise<void>((resolve) => (transaction.oncomplete = () => resolve()));
+    database.close();
+  });
+  await page.evaluate(() => window.uiContractWorkArtifacts.releaseSave?.());
+
+  const dialog = page.getByRole('dialog', { name: 'Arbeitsnachweis erstellen', exact: true });
+  await expect(
+    visibleText(dialog, 'Dieser Entwurf wurde inzwischen in einem anderen Fenster geändert'),
+  ).toBeVisible();
+  await closeDialog(dialog);
+  await draftRow(page, 'Wartung Heizung').getByRole('button', { name: 'Bearbeiten', exact: true }).click();
+  await expect(
+    page
+      .getByRole('dialog', { name: 'Arbeitsnachweis erstellen', exact: true })
+      .getByRole('textbox', { name: 'Ausgeführte Arbeiten', exact: true }),
+  ).toHaveValue('Text aus dem anderen Fenster');
+});
+
 test('a review request that fails after the device sent the draft says the draft is saved but not submitted', async ({
   page,
 }) => {
