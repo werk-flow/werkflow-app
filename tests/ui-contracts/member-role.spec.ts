@@ -16,13 +16,14 @@ const ESCALATION_EFFECT =
 
 const roleChanges = (page: Page): Promise<string[]> => page.evaluate(() => window.uiContractRoleChanges);
 
-/** Settles the role change the fixture holds open. */
-async function settleRoleChange(page: Page): Promise<void> {
-  await page.evaluate(() => {
+/** Settles the role change the fixture holds open: saved, or refused with that sentence. */
+async function settleRoleChange(page: Page, refusal: string | null = null): Promise<void> {
+  await expect.poll(() => page.evaluate(() => window.uiContractSettleRoleChange !== null)).toBe(true);
+  await page.evaluate((sentence) => {
     const settle = window.uiContractSettleRoleChange;
     if (!settle) throw new Error('No role change is held open.');
-    settle();
-  });
+    settle(sentence);
+  }, refusal);
 }
 
 async function chooseRole(page: Page, menuTrigger: Locator, role: string): Promise<void> {
@@ -58,8 +59,16 @@ test('an escalation from the list menu waits for the confirmation and a cancel c
   await expect(confirmation).toBeVisible();
   expect(await roleChanges(page)).toEqual(['list:contract-hanna:buero']);
 
+  // A refused change keeps the dialog open with the reason, and a retry can save it.
+  const refusal = 'Die Rolle von Hanna Handwerk konnte nicht geändert werden: Keine Berechtigung.';
+  await settleRoleChange(page, refusal);
+  await expect(confirmation.getByRole('alert')).toHaveText(refusal);
+  await expect(confirm).toBeEnabled();
+  await confirm.click();
+  await expect(confirmation.getByRole('alert')).toHaveCount(0);
   await settleRoleChange(page);
   await expect(confirmation).toHaveCount(0);
+  expect(await roleChanges(page)).toEqual(['list:contract-hanna:buero', 'list:contract-hanna:buero']);
 });
 
 test('a downgrade from the list menu applies at once', async ({ page }) => {
@@ -69,6 +78,10 @@ test('a downgrade from the list menu applies at once', async ({ page }) => {
   await chooseRole(page, trigger, 'Handwerker/in');
   await expect.poll(() => roleChanges(page)).toEqual(['list:contract-bea:employee']);
   await expect(page.getByRole('alertdialog')).toHaveCount(0);
+  // A refused downgrade reports at the list, as every direct role change does.
+  const refusal = 'Die Rolle von Bea Büro konnte nicht geändert werden: Keine Berechtigung.';
+  await settleRoleChange(page, refusal);
+  await expect(page.getByRole('alert')).toContainText(refusal);
 });
 
 test('an escalation from the detail header menu waits for the confirmation', async ({ page }) => {

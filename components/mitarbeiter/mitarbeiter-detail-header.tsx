@@ -23,7 +23,14 @@ export function MitarbeiterDetailHeader({
   fullName,
   memberActions,
 }: MitarbeiterDetailHeaderProps) {
-  const { canManage, availableRoles, isUpdatingRole, handleRoleChange, setShowRemoveDialog } = memberActions;
+  const {
+    canManage,
+    availableRoles,
+    isUpdatingRole,
+    handleRoleChange,
+    showActionError,
+    setShowRemoveDialog,
+  } = memberActions;
 
   const breadcrumbs = [{ label: 'Mitarbeiter', href: '/mitarbeiter' }, { label: fullName }];
 
@@ -50,6 +57,7 @@ export function MitarbeiterDetailHeader({
             availableRoles={availableRoles}
             isUpdatingRole={isUpdatingRole}
             onRoleChange={handleRoleChange}
+            onRoleChangeFailure={showActionError}
             onRemoveRequest={() => setShowRemoveDialog(true)}
           />
         ) : undefined

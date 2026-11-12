@@ -33,7 +33,7 @@ type RoleChangeHandler = (
   newRole: OrgRole,
   firstName: string,
   lastName: string,
-) => Promise<void>;
+) => Promise<string | null>;
 
 interface MembersTableProps {
   members: OrgMember[];

@@ -34,29 +34,42 @@ export function roleEscalationCopy(memberName: string) {
   };
 }
 
+/** Changes a member's role and resolves with the failure sentence, or `null` once it is saved. */
+export type RoleChange = (role: OrgRole) => Promise<string | null>;
+
 /**
  * A menu's role choice: an escalation to Büro waits for the confirmation,
- * every other role goes straight to `onRoleChange`. A confirmed change keeps
- * the dialog pending until it settles; its failure shows where the caller
- * reports every role change (the list's banner, the detail header's error).
+ * every other role goes straight to `changeRole` and reports a failure through
+ * `reportFailure`. A confirmed change keeps the dialog pending until it
+ * settles, and a failure stays in the open dialog.
  */
-export function useConfirmedRoleChange(currentRole: OrgRole, onRoleChange: (role: OrgRole) => Promise<void>) {
+export function useConfirmedRoleChange(
+  currentRole: OrgRole,
+  changeRole: RoleChange,
+  reportFailure: (message: string) => void,
+) {
   const [confirmingRole, setConfirmingRole] = useState<OrgRole | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const { run, isPending } = usePendingTask();
 
   const requestRoleChange = (role: OrgRole) => {
-    if (escalatesToBuero(currentRole, role)) setConfirmingRole(role);
-    else void onRoleChange(role);
+    if (escalatesToBuero(currentRole, role)) {
+      setError(null);
+      setConfirmingRole(role);
+      return;
+    }
+    void changeRole(role).then((failure) => {
+      if (failure) reportFailure(failure);
+    });
   };
 
   const confirm = () => {
     if (!confirmingRole || isPending) return;
+    setError(null);
     void run(async () => {
-      try {
-        await onRoleChange(confirmingRole);
-      } finally {
-        setConfirmingRole(null);
-      }
+      const failure = await changeRole(confirmingRole);
+      if (failure) setError(failure);
+      else setConfirmingRole(null);
     });
   };
 
@@ -64,6 +77,7 @@ export function useConfirmedRoleChange(currentRole: OrgRole, onRoleChange: (role
     requestRoleChange,
     confirmingRole,
     isPending,
+    error,
     cancel: () => setConfirmingRole(null),
     confirm,
   };
@@ -71,25 +85,17 @@ export function useConfirmedRoleChange(currentRole: OrgRole, onRoleChange: (role
 
 type RoleEscalationConfirmDialogProps = {
   memberName: string;
-  open: boolean;
-  pending: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
+  roleChange: ReturnType<typeof useConfirmedRoleChange>;
 };
 
-export function RoleEscalationConfirmDialog({
-  memberName,
-  open,
-  pending,
-  onCancel,
-  onConfirm,
-}: RoleEscalationConfirmDialogProps) {
+export function RoleEscalationConfirmDialog({ memberName, roleChange }: RoleEscalationConfirmDialogProps) {
+  const { confirmingRole, isPending: pending, error, cancel, confirm } = roleChange;
   const copy = roleEscalationCopy(memberName);
   return (
     <AlertDialog
-      open={open}
+      open={confirmingRole !== null}
       onOpenChange={(next) => {
-        if (!next) onCancel();
+        if (!next) cancel();
       }}
       pending={pending}
     >
@@ -98,13 +104,13 @@ export function RoleEscalationConfirmDialog({
           <AlertDialogTitle>{copy.title}</AlertDialogTitle>
           <AlertDialogDescription>{copy.description}</AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter>
+        <AlertDialogFooter error={error}>
           <AlertDialogCancel disabled={pending}>Abbrechen</AlertDialogCancel>
           <AlertDialogAction
-            // Stays open until the role change settles (design skill, dialog close).
+            // Stays open until the role change is saved; a failure stays here (design skill).
             onClick={(event) => {
               event.preventDefault();
-              onConfirm();
+              confirm();
             }}
             pending={pending}
           >

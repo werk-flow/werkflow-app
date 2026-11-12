@@ -11,8 +11,8 @@ declare global {
   interface Window {
     /** Each role change a surface handed on, as "<surface>:<member>:<role>". */
     uiContractRoleChanges: string[];
-    /** Settles the held role change; set while one is open. */
-    uiContractSettleRoleChange: (() => void) | null;
+    /** Settles the held role change, refused with that sentence or saved with `null`; set while one is open. */
+    uiContractSettleRoleChange: ((refusal: string | null) => void) | null;
   }
 }
 
@@ -21,12 +21,12 @@ const HANNA = { id: 'contract-hanna', firstName: 'Hanna', lastName: 'Handwerk' }
 const BEA = { id: 'contract-bea', firstName: 'Bea', lastName: 'Büro' };
 
 /** Records the change and holds it open until the spec settles it, as the server would. */
-function record(surface: string, memberId: string, role: OrgRole): Promise<void> {
+function record(surface: string, memberId: string, role: OrgRole): Promise<string | null> {
   window.uiContractRoleChanges.push(`${surface}:${memberId}:${role}`);
   return new Promise((resolve) => {
-    window.uiContractSettleRoleChange = () => {
+    window.uiContractSettleRoleChange = (refusal) => {
       window.uiContractSettleRoleChange = null;
-      resolve();
+      resolve(refusal);
     };
   });
 }
@@ -66,6 +66,7 @@ export function MemberRoleContractFixture(): React.JSX.Element {
             availableRoles={['buero']}
             isUpdatingRole={false}
             onRoleChange={(role) => record('detail', HANNA.id, role)}
+            onRoleChangeFailure={() => undefined}
             onRemoveRequest={() => undefined}
           />
         </section>

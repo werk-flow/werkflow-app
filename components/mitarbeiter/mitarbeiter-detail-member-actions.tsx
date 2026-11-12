@@ -15,14 +15,19 @@ import {
 } from '@/components/ui/dropdown-menu';
 import type { OrgRole } from '@/lib/roles';
 import { ROLE_LABELS } from '@/lib/roles';
-import { RoleEscalationConfirmDialog, useConfirmedRoleChange } from './role-escalation-confirm-dialog';
+import {
+  RoleEscalationConfirmDialog,
+  useConfirmedRoleChange,
+  type RoleChange,
+} from './role-escalation-confirm-dialog';
 
 type MitarbeiterDetailActionsMenuProps = {
   memberName: string;
   memberRole: OrgRole;
   availableRoles: OrgRole[];
   isUpdatingRole: boolean;
-  onRoleChange: (role: OrgRole) => Promise<void>;
+  onRoleChange: RoleChange;
+  onRoleChangeFailure: (message: string) => void;
   onRemoveRequest: () => void;
 };
 
@@ -32,9 +37,10 @@ export function MitarbeiterDetailActionsMenu({
   availableRoles,
   isUpdatingRole,
   onRoleChange,
+  onRoleChangeFailure,
   onRemoveRequest,
 }: MitarbeiterDetailActionsMenuProps) {
-  const roleChange = useConfirmedRoleChange(memberRole, onRoleChange);
+  const roleChange = useConfirmedRoleChange(memberRole, onRoleChange, onRoleChangeFailure);
 
   return (
     <>
@@ -74,13 +80,7 @@ export function MitarbeiterDetailActionsMenu({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <RoleEscalationConfirmDialog
-        memberName={memberName}
-        open={roleChange.confirmingRole !== null}
-        pending={roleChange.isPending}
-        onCancel={roleChange.cancel}
-        onConfirm={roleChange.confirm}
-      />
+      <RoleEscalationConfirmDialog memberName={memberName} roleChange={roleChange} />
     </>
   );
 }
