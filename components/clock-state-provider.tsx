@@ -57,10 +57,7 @@ type ClockTransitionExecute = (
   acknowledgeLong?: boolean,
 ) => Promise<TimeTransitionResult>;
 
-/**
- * The one lazy load of the clock's outbox and of the view of its unsent events. It rejects without
- * signal and in a tab left open across a deployment.
- */
+/** The one lazy load of the clock's outbox and its view; it rejects without signal. */
 export function loadClockOutbox(): Promise<typeof import('@/components/clock-unsent-events')> {
   return import('@/components/clock-unsent-events');
 }
@@ -70,25 +67,17 @@ type ClockOutboxState = {
   view: ClockDeviceView | null;
   /** This page kept an action the outbox does not show yet: its code could not load without signal. */
   kept: boolean;
-  /**
-   * The device held unsent work when the page started, and the outbox has not shown it yet, as
-   * without signal. Read when an action starts; it renders nothing.
-   */
+  /** Unsent work the page started with that the outbox has not shown yet; read when an action starts. */
   unchecked: RefObject<boolean>;
   keep: (action: Parameters<typeof keepClockAction>[0]) => TimeTransitionResult;
 };
 
-/**
- * The phone's time outbox for the signed-in person (decision record 0010). Its code loads only
- * when the device may hold unsent work at the app start, on `online`, and after a clock action
- * met no network, so no cold start pays for it.
- */
+/** The phone's time outbox (decision record 0010); its code loads only when unsent work may wait. */
 function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promise<void>): ClockOutboxState {
   const [view, setView] = useState<ClockDeviceView | null>(null);
   const [kept, setKept] = useState(false);
   const attachRef = useRef<(() => void) | null>(null);
-  // The wipe signal this page's holder started under: after another tab's sign-out or switch the
-  // page keeps nothing more, since its person may no longer be the one signed in.
+  // The wipe signal the page started under: after another tab's wipe it keeps nothing more.
   const signalRef = useRef<string | null>(null);
   const uncheckedRef = useRef(false);
   useEffect(() => {
@@ -100,15 +89,14 @@ function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promise<void
       setView(next);
       setKept(false);
     };
-    /** Hands what pages kept to the outbox; without its code the actions stay kept and marked until the next `online`. */
-    /** Hands what pages kept to the outbox; without its code the actions stay kept and marked until the next `online`. */
+    /** Hands kept actions to the outbox; without signal they stay kept until the next `online`. */
     const attach = async (): Promise<void> => {
       try {
         const outbox = await loadClockOutbox();
         detach = await outbox.attachClockOutbox(holder, onView, () => void refresh());
         if (ended) detach();
       } catch {
-        // best-effort: no signal is the expected case here; the actions stay kept and marked, and `online` or the next start tries again.
+        // best-effort: no signal is expected here; `online` or the next start tries again.
       }
     };
     const attachNow = (): void => void attach();
@@ -124,17 +112,13 @@ function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promise<void
       attachRef.current = null;
       window.removeEventListener('online', attachNow);
       detach?.();
-      // The next person or organization never sees these events, also when its own outbox is never asked.
+      // The next person or organization never sees these events.
       setView(null);
       setKept(false);
     };
   }, [holder, refresh]);
 
-  /**
-   * Keeps a start, a switch or an end on the phone and answers as the accepted action would. Every
-   * other action needs the server's answer first, and events that wait for the person's decision
-   * carry nothing new: an action kept behind them would never be sent.
-   */
+  /** Keeps an action on the phone, never behind events that wait for the person: it would never be sent. */
   const stopped = view?.status === 'stopped';
   const keep = useCallback<ClockOutboxState['keep']>(
     (action) => {
@@ -170,10 +154,8 @@ function useSettleTransition(
 }
 
 /**
- * Sends one transition against the session the provider last read, echoes an
- * accepted one at once and reads fresh after it or after a stale version. An
- * action that meets no network, or that stands on unsent ones, is kept on the
- * phone instead, under the same operation id, and echoed the same way.
+ * Sends one transition against the session the provider last read and echoes it. An action without
+ * network, or behind unsent ones, is kept on the phone under the same operation id instead.
  */
 function useClockTransitionExecute({
   holder,
@@ -229,7 +211,7 @@ function useClockTransitionExecute({
         try {
           result = await run({ ...command, organizationId: activeOrgId, acknowledgeLong });
         } catch {
-          // best-effort: the call may have reached the server, so the phone keeps the action below under the same operation id and it is recorded once.
+          // best-effort: it may have reached the server; the phone keeps it under the same operation id.
         }
       }
       if (!result) {
@@ -331,8 +313,7 @@ export function ClockStateProvider({
   const unsent = outbox.view;
   // While the outbox shows unsent events, the clock stands where they left it; a stopped chain shows the server's state.
   const currentState = unsent?.state ?? serverState;
-  // Unsent actions carry the clock on their own. A read that failed on a phone without network leaves
-  // the last confirmed clock usable: its next action is kept on the phone.
+  // Unsent actions carry the clock; without network a failed read leaves the last confirmed clock usable.
   const standsOnDevice = Boolean(unsent?.state) || outbox.kept || (Boolean(view.error) && !navigator.onLine);
   const isReady = currentState !== null && !view.isLoading && (!view.error || standsOnDevice);
   const statusError = standsOnDevice ? null : (view.error ?? null);
