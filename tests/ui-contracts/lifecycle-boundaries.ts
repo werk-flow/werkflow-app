@@ -45,6 +45,8 @@ declare global {
       | 'today-refresh-profile'
       | 'today-refresh-fallback'
       | 'offline-today'
+      | 'offline-clock'
+      | 'unsent-time-landing'
       | 'work-handover'
       | 'edit-job'
       | 'sidebar'
@@ -64,6 +66,8 @@ declare global {
       | 'support-triage'
       | 'support-filing'
       | 'inventory-unit'
+      | 'site-access-review'
+      | 'site-access-proposal'
       | AuthUrlFixtureName
       | FeedbackFixtureName;
     uiContractLifecycle: LifecycleBoundaryState;

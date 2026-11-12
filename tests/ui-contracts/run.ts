@@ -116,7 +116,7 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve(
               {
                 filter:
-                  /^@\/(components\/organization\/organization-context|lib\/time-tracking\/segment-actions|components\/job-picker-modal)$/,
+                  /^@\/(components\/organization\/organization-context|components\/user\/user-profile-context|lib\/time-tracking\/segment-actions|components\/job-picker-modal)$/,
               },
               (args) => {
                 if (
@@ -129,6 +129,11 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
                 }
               },
             );
+            // The correction form is outside the clock's contract; the unsent section only opens it prefilled.
+            builder.onResolve({ filter: /^@\/components\/manual-entry-dialog$/ }, (args) => {
+              if (args.importer.endsWith('clock-unsent-events.tsx'))
+                return { path: join(import.meta.dir, 'clock-unsent-boundaries.tsx') };
+            });
             builder.onResolve({ filter: /^(next\/link|next\/navigation)$/ }, (args) => {
               if (args.importer.endsWith('sidebar-link.tsx'))
                 return { path: join(import.meta.dir, 'sidebar-service-boundaries.tsx') };
@@ -215,6 +220,10 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
                   return { path: join(import.meta.dir, 'edit-job-service-boundaries.ts') };
               },
             );
+            // The access proposal's form and office review write through held stand-ins.
+            builder.onResolve({ filter: /^@\/lib\/site-access-proposals\/actions$/ }, () => ({
+              path: join(import.meta.dir, 'site-access-boundaries.tsx'),
+            }));
             // The handover review saves its draft and previews through these held stand-ins.
             builder.onResolve({ filter: /^@\/lib\/(work-handover|documents)\/actions$/ }, (args) => {
               if (args.importer.includes('/components/auftraege/handover/'))

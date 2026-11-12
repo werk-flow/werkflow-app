@@ -48,6 +48,8 @@ async function runFixture(): Promise<void> {
     }
   }
   globalThis.localStorage = new MemoryStorage();
+  // The switch's session-end check renews its barrier on the browser's timers (unsent-work-gate.ts).
+  Object.defineProperty(globalThis, 'window', { value: globalThis, configurable: true });
 
   let membershipRows: unknown[] = [];
   const cookieWrites: string[] = [];

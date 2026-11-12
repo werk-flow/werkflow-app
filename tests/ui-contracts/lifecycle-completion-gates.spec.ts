@@ -195,6 +195,22 @@ test('own running time as the only open point ends and completes in one click', 
   await page.waitForURL(/field_transition=updated/);
 });
 
+test('own running time ended without signal waits on the phone and completes nothing', async ({ page }) => {
+  await mountFieldCard(page, { ...OPEN_GATES, activeJobClocks: 1 }, { initial: OWN_CLOCK_ON_JOB });
+  // The phone reports no network: the clock keeps the end on the phone instead of asking the server.
+  await page.evaluate(() => Object.defineProperty(navigator, 'onLine', { get: () => false }));
+  const endAndComplete = page.getByTestId('field-primary-next-action');
+  await endAndComplete.click();
+
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'Deine Zeit ist auf dem Gerät beendet' }),
+  ).toContainText(
+    'Deine Zeit ist auf dem Gerät beendet und wird gesendet, sobald du Netz hast. Schließe danach ab.',
+  );
+  expect(await page.evaluate(() => window.clockContract.transitions)).toEqual([]);
+  expect(await page.evaluate(() => window.uiContractLifecycle.transitions)).toBe(0);
+});
+
 test('ending own time with another gate open drops the clock gate without a live event', async ({ page }) => {
   await mountFieldCard(
     page,

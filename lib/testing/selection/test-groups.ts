@@ -309,6 +309,7 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['security:account', 'security/account.spec.ts', ['*']],
   ['security:offline-shell', 'security/offline-shell.spec.ts', ['standalone', 'work']],
   ['security:offline-today', 'security/offline-today.spec.ts', ['standalone', 'work', 'planning']],
+  ['security:offline-clock', 'security/offline-clock.spec.ts', ['standalone', 'time']],
   ['security:offline-drafts', 'security/offline-drafts.spec.ts', ['standalone', 'work', 'documents']],
   // The report screenshot redraw on a seeded customer and job (docs/technical/problem-report-scrubbing.md).
   ['problem-reports:redraw', 'problem-reports/screenshot-redraw.spec.ts', ['customers', 'work']],
@@ -378,6 +379,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['client-duplicates', ['client_duplicates.sql'], ['customers']],
   ['client-archive-history', ['client_archive_history.sql'], ['customers']],
   ['client-site-roles', ['client_site_roles.sql'], ['customers', 'service']],
+  ['site-access-proposals', ['site_access_proposals.sql'], ['customers', 'work', 'attention']],
   [
     'request-callback-and-equipment',
     ['request_callback_and_equipment.sql'],

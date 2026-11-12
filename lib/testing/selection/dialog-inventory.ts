@@ -38,7 +38,20 @@ export type DialogInventoryEntry =
 
 export const DIALOG_INVENTORY = {
   "components/clock-fab.tsx#ClockFAB|{isClockedIn ? 'Laufende Zeiterfassung' : 'Zeiterfassung starten'}": {
-    audits: [{ route: '/dashboard', role: 'employee', opener: 'field.clock' }],
+    audits: [
+      { route: '/dashboard', role: 'employee', opener: 'field.clock' },
+      // The same sheet while the phone holds a time event the server refused.
+      { route: '/dashboard', role: 'employee', opener: 'field.clock-unsent' },
+    ],
+  },
+  'components/clock-unsent-events.tsx#DeleteUnsentDialog|Nicht übertragene Zeiten löschen?': {
+    audits: [{ route: '/dashboard', role: 'employee', opener: 'field.unsent-delete' }],
+  },
+  'components/shared/unsent-work-prompt.tsx#UnsentWorkDialog|Noch nicht übertragen': {
+    audits: [{ route: '/dashboard', role: 'employee', opener: 'field.unsent-work' }],
+  },
+  'components/shared/unsent-work-prompt.tsx#DiscardConfirmation|Nicht Übertragenes verwerfen?': {
+    audits: [{ route: '/dashboard', role: 'employee', opener: 'field.unsent-discard' }],
   },
   'components/problem-reports/problem-report-dialog.tsx#ProblemReportDialog|Problem melden': {
     audits: [
@@ -466,6 +479,12 @@ export const DIALOG_INVENTORY = {
   },
   'components/zeiterfassung/vacation-section-request-dialog.tsx#OwnVacationRequestDialog|Urlaub beantragen': {
     audits: [{ route: '/zeiterfassung', role: 'employee', opener: 'field.vacation-request' }],
+  },
+  'components/auftraege/work-pack/field-site-access-dialog.tsx#SiteAccessProposalDialog|Zugang korrigieren': {
+    audits: [{ route: '/auftraege/[jobNumber]', role: 'employee', opener: 'field.site-access' }],
+  },
+  'components/kunden/site-access-review-dialog.tsx#SiteAccessReviewDialog|{title}': {
+    audits: [{ route: '/aufgaben', role: 'admin', opener: 'customers.site-access-review' }],
   },
   "components/auftraege/artifacts/work-artifact-dialog.tsx#WorkArtifactDialog|{detail ? (currentRevision?.title ?? 'Arbeitsnachweis') : 'Arbeitsnachweis erstellen'}":
     {
