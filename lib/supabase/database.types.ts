@@ -18551,6 +18551,7 @@ export type Database = {
         Args: {
           p_actor_id: string;
           p_changes: Json;
+          p_expected: Json;
           p_organization_id: string;
           p_report_id: string;
           p_support_ids: string[];

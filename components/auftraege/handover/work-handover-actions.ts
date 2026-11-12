@@ -29,43 +29,55 @@ type WorkHandoverReleaseErrors = {
   'handover-reason': string | undefined;
 };
 
-function saveHandoverDraft({ initialWorkspace, review }: WorkHandoverWriteContext): void {
-  const {
-    refreshRoute,
-    selectedKeys,
-    setLocalPackageVersion,
-    setDirty,
-    setPreview,
-    setFeedback,
-    runHandoverTask,
-    packageVersion,
-    succeed,
-    failWithCode,
-  } = review;
+/**
+ * Saves the reviewer's selection as the package draft, creating the package on
+ * its first save. The action revalidates the route, whose new props arrive with
+ * its answer, so no client refresh follows. Answers the saved package version, or null after reporting
+ * the refusal on `operation`.
+ */
+async function persistHandoverDraft(
+  { initialWorkspace, review }: WorkHandoverWriteContext,
+  operation: 'draft' | 'preview',
+): Promise<number | null> {
+  const { selectedKeys, setLocalPackageVersion, setDirty, setPreview, packageVersion, failWithCode } = review;
+  const result = await saveWorkHandoverDraft({
+    targetType: initialWorkspace.targetType,
+    targetId: initialWorkspace.targetId,
+    packageId: initialWorkspace.packageId,
+    expectedPackageVersion: packageVersion,
+    requestId: crypto.randomUUID(),
+    selectedSourceKeys: selectedKeys,
+  });
+  if (!result.success) {
+    failWithCode(operation, result.error);
+    return null;
+  }
+  setLocalPackageVersion({ base: packageVersion, value: result.packageVersion });
+  setDirty(false);
+  setPreview(null);
+  return result.packageVersion;
+}
+
+function saveHandoverDraft(context: WorkHandoverWriteContext): void {
+  const { setFeedback, runHandoverTask, succeed } = context.review;
   setFeedback(null);
   void runHandoverTask('draft', async () => {
-    const result = await saveWorkHandoverDraft({
-      targetType: initialWorkspace.targetType,
-      targetId: initialWorkspace.targetId,
-      packageId: initialWorkspace.packageId,
-      expectedPackageVersion: packageVersion,
-      requestId: crypto.randomUUID(),
-      selectedSourceKeys: selectedKeys,
-    });
-    if (!result.success) {
-      failWithCode('draft', result.error);
-      return;
-    }
-    setLocalPackageVersion({ base: packageVersion, value: result.packageVersion });
-    setDirty(false);
-    setPreview(null);
+    if ((await persistHandoverDraft(context, 'draft')) === null) return;
     succeed('draft', 'Entwurf gespeichert.');
-    refreshRoute();
   });
 }
 
-function createHandoverPreview({ initialWorkspace, review }: WorkHandoverWriteContext): void {
-  const { setPreview, setFeedback, runHandoverTask, packageVersion, succeed, fail, failWithCode } = review;
+/**
+ * Opens the preview of the selection. An unsaved selection, or a package that
+ * does not exist yet, is saved as the draft first: the review needs no separate
+ * „Entwurf speichern“ before its first preview.
+ */
+function createHandoverPreview(context: WorkHandoverWriteContext): void {
+  const { initialWorkspace, review } = context;
+  const { dirty, setPreview, setFeedback, runHandoverTask, packageVersion } = review;
+  const { succeed, fail, failWithCode } = review;
+  // The server holds no draft of this selection, or one with stale sources.
+  const needsDraftSave = dirty || packageVersion === 0 || initialWorkspace.staleSourceCount > 0;
   setFeedback(null);
   const previewWindow = window.open('about:blank', '_blank');
   if (!previewWindow) {
@@ -82,11 +94,16 @@ function createHandoverPreview({ initialWorkspace, review }: WorkHandoverWriteCo
     documentLinkId: crypto.randomUUID(),
   };
   void runHandoverTask('preview', async () => {
+    const savedVersion = needsDraftSave ? await persistHandoverDraft(context, 'preview') : packageVersion;
+    if (savedVersion === null) {
+      previewWindow.close();
+      return;
+    }
     const result = await previewWorkHandover({
       targetType: initialWorkspace.targetType,
       targetId: initialWorkspace.targetId,
       packageId: initialWorkspace.packageId,
-      expectedPackageVersion: packageVersion,
+      expectedPackageVersion: savedVersion,
       releaseId: identity.releaseId,
     });
     if (!result.success) {
@@ -94,7 +111,7 @@ function createHandoverPreview({ initialWorkspace, review }: WorkHandoverWriteCo
       failWithCode('preview', result.error);
       return;
     }
-    setPreview({ ...identity, contentHash: result.contentHash, packageVersion });
+    setPreview({ ...identity, contentHash: result.contentHash, packageVersion: savedVersion });
     renderHtmlPreview(previewWindow, result.html);
     succeed('preview', 'Vorschau erstellt. Prüfe das geöffnete Dokument vor der Freigabe.');
   });

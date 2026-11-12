@@ -1,15 +1,26 @@
 import { useEffect, useState, type ReactElement } from 'react';
 
 import { SupportReportDetail } from '@/components/support/support-report-detail';
+import { TriageDraftProvider } from '@/components/support/support-triage-form';
 import { BannerProvider } from '@/components/ui/banner';
 import type { ActionResult } from '@/lib/action-result';
-import type { TriageProblemReportInput } from '@/lib/problem-reports/schemas';
-import type { ProblemReportOriginalResult, SupportReport } from '@/lib/problem-reports/types';
+import type {
+  FileProblemReportForCallerInput,
+  TriageProblemReportInput,
+} from '@/lib/problem-reports/schemas';
+import type {
+  ProblemReportFileUploadTicketResult,
+  ProblemReportOriginalResult,
+  SubmitProblemReportResult,
+  SupportReport,
+} from '@/lib/problem-reports/types';
 import { holdWrite } from './held-write-boundary';
 import { ROUTE_REFRESH_EVENT } from './lifecycle-boundaries';
 
 // Support's report page for its contract: the real triage form and original
 // section run against stand-ins of `@/lib/problem-reports/support-actions`.
+// The filing form's contract (support-filing-boundaries.tsx) files through
+// the same stand-ins.
 // A triage stays open until the spec answers it; a route refresh brings the
 // report as the accepted writes and openings left it.
 
@@ -20,16 +31,23 @@ type SupportContractState = {
   report: SupportReport;
   /** The next action call fails as a lost connection does, before any answer. */
   failNextRequest: boolean;
+  /** The next route refresh fails its read, and the page shows the retry in place of the report. */
+  failNextRead: boolean;
 };
 
 declare global {
   interface Window {
     uiContractSupport: SupportContractState;
+    /** Every report the filing form saved, in order. */
+    uiContractSupportFilings: FileProblemReportForCallerInput[];
   }
 }
 
+window.uiContractSupportFilings = [];
+
 window.uiContractSupport = {
   failNextRequest: false,
+  failNextRead: false,
   report: {
     id: '33500000-0000-4000-8000-000000000020',
     number: 7,
@@ -81,6 +99,26 @@ export async function triageProblemReport(input: TriageProblemReportInput): Prom
   return { success: true };
 }
 
+export async function fileProblemReportForCaller(
+  input: FileProblemReportForCallerInput,
+): Promise<SubmitProblemReportResult> {
+  failIfAsked();
+  const refusal = await holdWrite('filing', input);
+  if (refusal) return { success: false, error: refusal };
+  window.uiContractSupportFilings.push(input);
+  return { success: true, reportId: input.reportId, number: window.uiContractSupportFilings.length };
+}
+
+export async function createSupportReportFileUploadTicket(): Promise<ProblemReportFileUploadTicketResult> {
+  failIfAsked();
+  return { success: false, error: 'upload_failed' };
+}
+
+export async function finalizeSupportReportFileUpload(): Promise<ActionResult> {
+  failIfAsked();
+  return { success: false, error: 'upload_failed' };
+}
+
 export async function openProblemReportOriginal(): Promise<ProblemReportOriginalResult> {
   failIfAsked();
   const state = window.uiContractSupport;
@@ -115,16 +153,28 @@ export async function openProblemReportAttachment(): Promise<ActionResult<{ url:
 /** The report page's content, with the report a route refresh brings. */
 export function SupportTriageContractFixture(): ReactElement {
   const [report, setReport] = useState(() => window.uiContractSupport.report);
+  const [readFailed, setReadFailed] = useState(false);
   useEffect(() => {
-    const adopt = (): void => setReport(window.uiContractSupport.report);
+    const adopt = (): void => {
+      setReadFailed(window.uiContractSupport.failNextRead);
+      window.uiContractSupport.failNextRead = false;
+      setReport(window.uiContractSupport.report);
+    };
     window.addEventListener(ROUTE_REFRESH_EVENT, adopt);
     return () => window.removeEventListener(ROUTE_REFRESH_EVENT, adopt);
   }, []);
+  // The page's read region: a failed read shows its retry in place of the report, as the route does.
   return (
     <BannerProvider>
       <main>
         <h1>Komponentenverträge</h1>
-        <SupportReportDetail report={report} />
+        <TriageDraftProvider>
+          {readFailed ? (
+            <p>Die Meldung konnte nicht geladen werden.</p>
+          ) : (
+            <SupportReportDetail report={report} />
+          )}
+        </TriageDraftProvider>
       </main>
     </BannerProvider>
   );

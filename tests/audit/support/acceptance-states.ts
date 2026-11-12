@@ -9,6 +9,7 @@ import {
   navigationStart,
   stateCapturePlan,
   type ObservedRequest,
+  type StandaloneTarget,
   type StatePlan,
 } from './acceptance-state-plan';
 import type { DialogOpener } from './dialog-opener';
@@ -220,20 +221,20 @@ export async function withState(
  */
 export async function withStandaloneLoading(
   page: Page,
-  route: { from: string; to: string },
+  route: { from: string; to: StandaloneTarget },
   capture: () => Promise<void>,
 ): Promise<void> {
   await page.goto(route.from);
   await settled(page);
-  const interception = await interceptFor(page, stateCapturePlan('loading', 'page'), route.to);
+  const interception = await interceptFor(page, stateCapturePlan('loading', 'page'), route.to.path);
   try {
     // A page of the area links to its other pages, so the target's loading
     // boundary may be prefetched already and a second prefetch sends nothing:
     // ask for it, then wait until the network is quiet instead of for a request.
-    await appRouter(page, 'prefetch', route.to);
+    await appRouter(page, 'prefetch', route.to.address);
     await page.waitForLoadState('networkidle');
     await interception.arm();
-    await appRouter(page, 'push', route.to);
+    await appRouter(page, 'push', route.to.address);
     await expect(
       page.locator(SKELETON_SELECTOR).filter({ visible: true }).first(),
       'the held navigation shows its skeleton',

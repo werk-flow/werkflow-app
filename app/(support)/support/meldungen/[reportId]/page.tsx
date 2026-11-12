@@ -11,6 +11,7 @@ import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { SupportReportDetail } from '@/components/support/support-report-detail';
+import { TriageDraftProvider } from '@/components/support/support-triage-form';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { readSupportProblemReport } from '@/lib/problem-reports/support-actions';
 import { isSupportRefusal } from '@/lib/problem-reports/support-messages';
@@ -52,7 +53,6 @@ async function ReportData({ params }: { params: ReportParams }) {
         actions={<RefreshButton label="Meldung aktualisieren" />}
       />
       <PageBody>
-        <ProblemReportSignalsLive />
         <SupportReportDetail key={report.id} report={report} />
       </PageBody>
     </PageShell>
@@ -61,8 +61,15 @@ async function ReportData({ params }: { params: ReportParams }) {
 
 export default function SupportReportPage({ params }: { params: ReportParams }) {
   return (
-    <Suspense fallback={<SupportReportPageSkeleton />}>
-      <ReportData params={params} />
-    </Suspense>
+    <>
+      {/* Outside the report's read, so a later signal still reads a failed report again. */}
+      <ProblemReportSignalsLive />
+      {/* Above the report's read, so a failed read keeps what support typed for the retry. */}
+      <TriageDraftProvider>
+        <Suspense fallback={<SupportReportPageSkeleton />}>
+          <ReportData params={params} />
+        </Suspense>
+      </TriageDraftProvider>
+    </>
   );
 }

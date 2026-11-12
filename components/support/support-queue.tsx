@@ -22,6 +22,7 @@ import {
   type SupportQueueStatusFilter,
 } from '@/lib/problem-reports/schemas';
 import { PROBLEM_REPORT_BUCKET_LABELS } from '@/lib/problem-reports/support-messages';
+import { supportReportHref } from '@/lib/problem-reports/support-queue-query';
 import type { SupportQueueEntry, SupportQueuePage } from '@/lib/problem-reports/types';
 import { rowIntentPrefetch } from '@/lib/ui/row-intent';
 import { formatBerlinDateTime } from '@/lib/utils';
@@ -43,8 +44,6 @@ const BUCKET_FILTER_LABELS: Record<SupportQueueBucketFilter, string> = {
   ...PROBLEM_REPORT_BUCKET_LABELS,
 };
 const NOT_ASSIGNED = 'Niemand';
-
-export const supportReportHref = (reportId: string): string => `/support/meldungen/${reportId}`;
 
 function reportTitle(entry: SupportQueueEntry): string {
   return `Nr. ${entry.number}`;

@@ -202,8 +202,12 @@ export async function readSupportQueuePage(
 
 /** The allowlisted support persons with their names, for the assignee choice. */
 function assigneesOf(profileNames: ReadonlyMap<string, string>): SupportAssignee[] {
+  // An allowlisted id without a profile names no account any more, so no report can point to it.
   return [...(supportUserIds() ?? [])]
-    .map((userId) => ({ userId, name: profileNames.get(userId) ?? FORMER_SUPPORT_PERSON }))
+    .flatMap((userId) => {
+      const name = profileNames.get(userId);
+      return name === undefined ? [] : [{ userId, name }];
+    })
     .sort((left, right) => left.name.localeCompare(right.name, 'de'));
 }
 

@@ -77,14 +77,14 @@ When Boat is [unavailable](#fallback), the capture does not run: a block names t
 
 | Setting | Value |
 | --- | --- |
-| Name | `werkflow-pc` on the PC (WSL user), `werkflow-mac` on the Mac |
+| Name | `werkflow-pc` on the PC (WSL user), `werkflow-mac` on the Mac, `werkflow-vm` on the headless Linux host |
 | Organization | `WerkFlow`; it bills the plan's included $20 a month, then a $20 wallet reserve. Auto top-up stays off, so once both are spent a start fails and Boat is unavailable. |
 | Expiry | 90 days |
 | Actions | Custom: exactly `sandbox.create`, `sandbox.read`, `sandbox.stop`, `sandbox.resume`, `sandbox.fork`, `sandbox.delete-own`, `exec`, `file.read`, `file.write`, `snapshot.read`, `snapshot.write`. No environment or sandbox restriction. |
 | File | `~/.config/werkflow/boat-api-key`, mode 600, folder mode 700, one line holding the key |
 | Expiry file | `~/.config/werkflow/boat-api-key.expires`, one ISO date |
 
-The runner reads the key in its own process and calls Boat's REST API with it. It never writes the key elsewhere and needs no Boat CLI and no SSH. A run refuses a key file or folder others can read, and counts Boat as unavailable when an untracked file is a dotfile or looks like a credential.
+The runner reads the key in its own process for Boat's REST API. It never writes the key elsewhere and needs no Boat CLI and no SSH. A run refuses a key file or folder others can read, and counts Boat as unavailable when an untracked file is a dotfile or looks like a credential.
 
 Agents never read the key or the Boat CLI's config, which holds a key in plain text after `boat login`. `.claude/hooks/refuse-boat-key-reads.ts` refuses such a call in Claude Code and Codex, and `permissions.deny` in `.claude/settings.json` covers Claude's file tools. The expiry file stays readable.
 
@@ -95,7 +95,7 @@ Machines get code and the local stack's synthetic data only: no customer data, n
 On the PC inside WSL Ubuntu, on the Mac in Terminal:
 
 1. The owner creates the key under [the key contract](#the-key-contract) in the Boat dashboard and copies it once.
-2. Install it without echo. Paste the key when the cursor waits, then press Enter:
+2. Install it without echo. Paste the key, then press Enter:
 
    ```sh
    sh -c 'umask 077; mkdir -p ~/.config/werkflow; chmod 700 ~/.config/werkflow; stty -echo; IFS= read -r k; stty echo; printf "%s\n" "$k" > ~/.config/werkflow/boat-api-key'

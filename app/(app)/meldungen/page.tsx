@@ -21,12 +21,7 @@ async function OwnProblemReports() {
       </RegionLoadError>
     );
   }
-  return (
-    <>
-      <ProblemReportSignalsLive />
-      <OwnProblemReportList reports={result.reports} />
-    </>
-  );
+  return <OwnProblemReportList reports={result.reports} />;
 }
 
 export default function MeldungenPage() {
@@ -34,6 +29,8 @@ export default function MeldungenPage() {
     <PageShell>
       <PageHeader title={MELDUNGEN_TITLE} subtitle={MELDUNGEN_SUBTITLE} />
       <PageBody>
+        {/* Outside the list's read, so a later signal still reads a failed list again. */}
+        <ProblemReportSignalsLive />
         <Suspense fallback={<OwnProblemReportListSkeleton />}>
           <OwnProblemReports />
         </Suspense>

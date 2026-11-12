@@ -57,7 +57,9 @@ import type {
 // cannot be resolved. An identity check that cannot complete throws.
 
 const INVALID_INPUT = { success: false, error: 'invalid_input' } as const;
-const triageRefusal = writeRefusalFor(new Set(['report_not_found', 'invalid_triage']));
+const triageRefusal = writeRefusalFor(
+  new Set(['report_not_found', 'invalid_triage', 'triage_conflict', 'assignee_not_support']),
+);
 const filingRefusal = writeRefusalFor(new Set(['reporter_not_member', 'report_conflict']));
 
 /** The guard of every action in this module: the verified session user, admitted as support. */
@@ -67,24 +69,31 @@ async function supportCaller(): Promise<SupportCallerResult | ActionFailure<'not
   return supportCallerOf(user.id);
 }
 
-type TriageChanges = ReturnType<typeof triageProblemReportInputSchema.parse>['changes'];
+type TriageInput = ReturnType<typeof triageProblemReportInputSchema.parse>;
+type TriageFields = TriageInput['changes'] | TriageInput['expected'];
+
+/** The fields the input names, under their column names. */
+function triageColumns(fields: TriageFields) {
+  return {
+    ...(fields.status === undefined ? {} : { status: fields.status }),
+    ...(fields.bucket === undefined ? {} : { bucket: fields.bucket }),
+    ...(fields.assigneeId === undefined ? {} : { assignee_id: fields.assigneeId }),
+    ...(fields.response === undefined ? {} : { response: fields.response }),
+  };
+}
 
 /** The arguments of a triage of one loaded report, with only the fields the input names. */
 function triageArguments(
   report: { id: string; organization_id: string },
   actorId: string,
-  changes: TriageChanges,
+  input: TriageInput,
 ) {
   return rpcArgs('triage_problem_report', {
     p_organization_id: report.organization_id,
     p_report_id: report.id,
     p_actor_id: actorId,
-    p_changes: {
-      ...(changes.status === undefined ? {} : { status: changes.status }),
-      ...(changes.bucket === undefined ? {} : { bucket: changes.bucket }),
-      ...(changes.assigneeId === undefined ? {} : { assignee_id: changes.assigneeId }),
-      ...(changes.response === undefined ? {} : { response: changes.response }),
-    },
+    p_changes: triageColumns(input.changes),
+    p_expected: triageColumns(input.expected),
     p_support_ids: otherSupportUserIds(actorId),
   });
 }
@@ -126,6 +135,8 @@ export async function readSupportProblemReport(reportId: string): Promise<Suppor
  * Sets the fields of one report that the input names: status, bucket,
  * assignee and the answer to the reporter. An assignee is a support person
  * of the allowlist. Each changed field enters the history with the caller.
+ * A field that changed since the page showed it refuses the save as
+ * `triage_conflict`, so a late save never replaces a newer one.
  */
 export async function triageProblemReport(rawInput: TriageProblemReportInput): Promise<ActionResult> {
   const parsed = triageProblemReportInputSchema.safeParse(rawInput);
@@ -152,7 +163,7 @@ export async function triageProblemReport(rawInput: TriageProblemReportInput): P
   const { error } = await admin.rpc(
     'triage_problem_report',
     // tenant-scope: cross-organization-by-design — support triages a report of any organization; the loaded report's own organization scopes the call
-    triageArguments(report, support.userId, changes),
+    triageArguments(report, support.userId, parsed.data),
   );
   if (error) return triageRefusal(error, 'triage_failed', 'triageProblemReport: save failed');
   return { success: true };

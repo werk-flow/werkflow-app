@@ -27,6 +27,8 @@ const FAILURE_MESSAGES: Readonly<Record<string, string>> = {
   report_not_found: 'Diese Meldung gibt es nicht mehr. Lade die Liste neu.',
   assignee_not_support: 'Diese Person gehört nicht mehr zum Support. Wähle eine andere aus.',
   triage_failed: 'Die Änderung konnte nicht gespeichert werden. Versuche es in einem Moment erneut.',
+  triage_conflict:
+    'Jemand anderes hat diese Meldung inzwischen geändert. Unter deinen Eingaben steht, was jetzt gespeichert ist. Drücke noch einmal auf „Speichern“, wenn deine Eingaben es ersetzen sollen.',
   file_not_found: 'Diesen Anhang gibt es nicht mehr. Seine Frist ist abgelaufen.',
   sign_failed: 'Der Anhang ließ sich gerade nicht öffnen. Versuche es in einem Moment erneut.',
   reporter_not_member: 'Diese Person gehört nicht mehr zu der Organisation. Wähle sie neu aus.',

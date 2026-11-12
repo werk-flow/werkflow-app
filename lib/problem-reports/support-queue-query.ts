@@ -20,3 +20,6 @@ export function parseSupportQueueQuery(
     page: Math.min(parseListPage(single('seite')), 100_000),
   };
 }
+
+/** The address of one report's page in support's area. */
+export const supportReportHref = (reportId: string): string => `/support/meldungen/${reportId}`;

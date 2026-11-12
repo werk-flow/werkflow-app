@@ -34,12 +34,7 @@ async function QueueData({ searchParams }: { searchParams: QueueSearchParams }) 
       </RegionLoadError>
     );
   }
-  return (
-    <>
-      <ProblemReportSignalsLive />
-      <SupportQueue page={result.page} query={query} />
-    </>
-  );
+  return <SupportQueue page={result.page} query={query} />;
 }
 
 export default function SupportQueuePage({ searchParams }: { searchParams: QueueSearchParams }) {
@@ -59,6 +54,8 @@ export default function SupportQueuePage({ searchParams }: { searchParams: Queue
         }
       />
       <PageBody>
+        {/* Outside the queue's read, so a later signal still reads a failed queue again. */}
+        <ProblemReportSignalsLive />
         <Suspense fallback={<SupportQueueSkeleton />}>
           <QueueData searchParams={searchParams} />
         </Suspense>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { createContext, useContext, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 
 import { AutomaticAnswerBadge } from '@/components/problem-reports/automatic-answer-badge';
 import { useBanner } from '@/components/ui/banner';
@@ -30,12 +30,19 @@ import { NOT_SORTED } from './report-labels';
 // Support's triage of one report: status, bucket, assignee and the answer
 // the reporter reads. A save sends only the fields that differ from the
 // loaded report, so two support persons who change different fields
-// overwrite nothing of each other.
+// overwrite nothing of each other. It names, for each of those fields, the
+// value the page showed when the edit began; the database refuses the save
+// when someone else changed that field since. The page then shows what is
+// saved under the field, keeps the edit, and the next press saves over it.
 
 const RESPONSE_ID = 'support-triage-response';
 const NO_BUCKET = 'ohne';
 
 type Draft = { status: string; bucket: string; assigneeId: string; response: string };
+type DraftField = keyof Draft;
+/** An unsaved edit: its value, and the loaded value it began from. */
+type Edit = { value: string; basis: string };
+type Edits = Partial<Record<DraftField, Edit>>;
 
 function draftOf(report: SupportReport): Draft {
   return {
@@ -59,19 +66,52 @@ function changesOf(report: SupportReport, draft: Draft): TriageProblemReportInpu
   };
 }
 
+/** For the changed fields, the values a save is based on, as the report holds them. */
+function expectedOf(
+  changes: TriageProblemReportInput['changes'],
+  basisOf: (field: DraftField) => string,
+): TriageProblemReportInput['expected'] {
+  const status = PROBLEM_REPORT_STATUSES.find((candidate) => candidate === basisOf('status'));
+  return {
+    ...(changes.status === undefined || status === undefined ? {} : { status }),
+    ...(changes.bucket === undefined
+      ? {}
+      : { bucket: PROBLEM_REPORT_BUCKETS.find((candidate) => candidate === basisOf('bucket')) ?? null }),
+    ...(changes.assigneeId === undefined ? {} : { assigneeId: basisOf('assigneeId') || null }),
+    ...(changes.response === undefined ? {} : { response: basisOf('response') || null }),
+  };
+}
+
+/** How a saved value reads in the note under a field someone else changed. */
+function savedValueLabel(report: SupportReport, field: DraftField): string {
+  const status = PROBLEM_REPORT_STATUSES.find((candidate) => candidate === report.status);
+  switch (field) {
+    case 'status':
+      return status === undefined ? report.status : PROBLEM_REPORT_STATUS_LABELS[status];
+    case 'bucket':
+      return report.bucket === null ? NOT_SORTED : PROBLEM_REPORT_BUCKET_LABELS[report.bucket];
+    case 'assigneeId':
+      return report.assigneeName ?? 'Niemand';
+    case 'response':
+      return report.response === null ? 'keine Antwort' : `„${report.response}“`;
+  }
+}
+
 type TriageFieldsProps = {
   report: SupportReport;
   draft: Draft;
+  /** What is saved by now in a field someone else changed during the edit. */
+  notes: Partial<Record<DraftField, string>>;
   onChange: (change: Partial<Draft>) => void;
   disabled: boolean;
   responseError: string | undefined;
 };
 
-function TriageFields({ report, draft, onChange, disabled, responseError }: TriageFieldsProps) {
+function TriageFields({ report, draft, notes, onChange, disabled, responseError }: TriageFieldsProps) {
   return (
     <>
       <div className="grid gap-4">
-        <Field label="Status">
+        <Field label="Status" description={notes.status}>
           <Select value={draft.status} disabled={disabled} onValueChange={(status) => onChange({ status })}>
             <SelectTrigger>
               <SelectValue />
@@ -85,7 +125,7 @@ function TriageFields({ report, draft, onChange, disabled, responseError }: Tria
             </SelectContent>
           </Select>
         </Field>
-        <Field label="Einordnung">
+        <Field label="Einordnung" description={notes.bucket}>
           <Select value={draft.bucket} disabled={disabled} onValueChange={(bucket) => onChange({ bucket })}>
             <SelectTrigger>
               <SelectValue />
@@ -101,7 +141,7 @@ function TriageFields({ report, draft, onChange, disabled, responseError }: Tria
           </Select>
         </Field>
       </div>
-      <Field label="Zuständig">
+      <Field label="Zuständig" description={notes.assigneeId}>
         <SearchableSelect
           value={draft.assigneeId}
           onChange={(assigneeId) => onChange({ assigneeId })}
@@ -121,7 +161,10 @@ function TriageFields({ report, draft, onChange, disabled, responseError }: Tria
           </>
         }
         htmlFor={RESPONSE_ID}
-        description="Sie liest das in „Meine Meldungen“, zum Beispiel „Behoben, ab morgen live“ oder warum es so bleibt."
+        description={
+          notes.response ??
+          'Sie liest das in „Meine Meldungen“, zum Beispiel „Behoben, ab morgen live“ oder warum es so bleibt.'
+        }
         error={responseError}
       >
         <Textarea
@@ -134,43 +177,94 @@ function TriageFields({ report, draft, onChange, disabled, responseError }: Tria
   );
 }
 
+type DraftStore = {
+  edits: Readonly<Record<string, Edits>>;
+  update: (reportId: string, next: (current: Edits) => Edits) => void;
+};
+
+const TriageDraftContext = createContext<DraftStore | null>(null);
+
+/**
+ * Holds the unsaved triage edits of support's report pages above the region
+ * that reads the report. A read that fails replaces the form with its retry;
+ * the form that comes back takes the edits up again.
+ */
+export function TriageDraftProvider({ children }: { children: ReactNode }) {
+  const [edits, setEdits] = useState<Readonly<Record<string, Edits>>>({});
+  const store = useMemo<DraftStore>(
+    () => ({
+      edits,
+      update: (reportId, next) => setEdits((all) => ({ ...all, [reportId]: next(all[reportId] ?? {}) })),
+    }),
+    [edits],
+  );
+  return <TriageDraftContext value={store}>{children}</TriageDraftContext>;
+}
+
 /**
  * The form's fields: the loaded report with the support person's unsaved
  * edits on top. A refresh that brings the report anew, such as the one after
- * „Original öffnen“, keeps the edits. They leave when the save that sent them
- * shows in the report.
+ * „Original öffnen“, keeps the edits, and so does a failed read that replaced
+ * the form for a while. They leave when the save that sent them shows in the
+ * report.
  */
 function useTriageDraft(report: SupportReport) {
-  const [edits, setEdits] = useState<Partial<Draft>>({});
-  // The report a save was accepted on: the next report is that save's result.
-  const [savedOn, setSavedOn] = useState<SupportReport | null>(null);
-  if (savedOn !== null && savedOn !== report) {
-    setSavedOn(null);
-    setEdits({});
+  const store = useContext(TriageDraftContext);
+  if (store === null) throw new Error('SupportTriageForm renders inside TriageDraftProvider.');
+  // What an accepted save sent shows until the report it saved arrives; the store forgets it at once.
+  const [sent, setSent] = useState<{ edits: Edits; on: SupportReport } | null>(null);
+  if (sent !== null && sent.on !== report) setSent(null);
+  const edits = sent !== null && sent.on === report ? sent.edits : (store.edits[report.id] ?? {});
+  const loaded = draftOf(report);
+  const draft: Draft = { ...loaded };
+  const notes: Partial<Record<DraftField, string>> = {};
+  for (const field of DRAFT_FIELDS) {
+    const edit = edits[field];
+    if (edit === undefined) continue;
+    draft[field] = edit.value;
+    if (edit.basis !== loaded[field])
+      notes[field] = `Inzwischen gespeichert: ${savedValueLabel(report, field)}`;
   }
   return {
-    draft: { ...draftOf(report), ...edits },
+    draft,
+    notes,
+    /** The loaded value an edit of the field began from. */
+    basisOf: (field: DraftField): string => edits[field]?.basis ?? loaded[field],
     change: (change: Partial<Draft>) =>
-      setEdits((current) => withoutUnchanged(report, { ...current, ...change })),
-    markSaved: () => setSavedOn(report),
+      store.update(report.id, (current) => withoutUnchanged(report, withChange(current, change, loaded))),
+    markSaved: () => {
+      setSent({ edits, on: report });
+      store.update(report.id, () => ({}));
+    },
   };
 }
 
 const DRAFT_FIELDS = ['status', 'bucket', 'assigneeId', 'response'] as const;
+
+/** The edits with a change on top; a field's first edit begins from its loaded value. */
+function withChange(edits: Edits, change: Partial<Draft>, loaded: Draft): Edits {
+  const next: Edits = { ...edits };
+  for (const field of DRAFT_FIELDS) {
+    const value = change[field];
+    if (value !== undefined) next[field] = { value, basis: edits[field]?.basis ?? loaded[field] };
+  }
+  return next;
+}
 
 /**
  * The edits that still differ from the loaded report. A field set back to its
  * loaded value is no edit: a colleague's later change of it then shows, and a
  * save of another field does not send the old value.
  */
-function withoutUnchanged(report: SupportReport, edits: Partial<Draft>): Partial<Draft> {
+function withoutUnchanged(report: SupportReport, edits: Edits): Edits {
   const loaded = draftOf(report);
-  const kept: Partial<Draft> = {};
+  const kept: Edits = {};
   for (const field of DRAFT_FIELDS) {
-    const value = edits[field];
-    if (value === undefined) continue;
-    const same = field === 'response' ? value.trim() === loaded.response.trim() : value === loaded[field];
-    if (!same) kept[field] = value;
+    const edit = edits[field];
+    if (edit === undefined) continue;
+    const same =
+      field === 'response' ? edit.value.trim() === loaded.response.trim() : edit.value === loaded[field];
+    if (!same) kept[field] = edit;
   }
   return kept;
 }
@@ -182,14 +276,16 @@ export function SupportTriageForm({ report }: { report: SupportReport }) {
   const { run, isPending, isSettling } = useServerAction(triageProblemReport, {
     settle: (result) => (result.success ? settle() : Promise.resolve()),
   });
-  const { draft, change, markSaved } = useTriageDraft(report);
+  const { draft, notes, basisOf, change, markSaved } = useTriageDraft(report);
   const [error, setError] = useState<string | null>(null);
   const [responseError, setResponseError] = useState<string | undefined>(undefined);
+  // A refused save showed what is saved now: the next press saves over what is on screen.
+  const [saveOverShown, setSaveOverShown] = useState(false);
 
-  const save = async (changes: TriageProblemReportInput['changes']): Promise<void> => {
+  const save = async (input: TriageProblemReportInput): Promise<void> => {
     let result: Awaited<ReturnType<typeof triageProblemReport>>;
     try {
-      result = await run({ reportId: report.id, changes });
+      result = await run(input);
     } catch (thrown) {
       // The request itself failed: the fields keep what was typed, and „Speichern“ tries again.
       logError('SupportTriageForm: save failed', thrown);
@@ -198,6 +294,10 @@ export function SupportTriageForm({ report }: { report: SupportReport }) {
     }
     if (!result.success) {
       setError(supportFailureMessage(result.error));
+      if (result.error === 'triage_conflict') {
+        setSaveOverShown(true);
+        refresh();
+      }
       return;
     }
     markSaved();
@@ -221,7 +321,10 @@ export function SupportTriageForm({ report }: { report: SupportReport }) {
       showBanner({ variant: 'info', message: 'Es gibt nichts zu speichern: Du hast nichts geändert.' });
       return;
     }
-    void save(changes);
+    const loaded = draftOf(report);
+    const expected = expectedOf(changes, (field) => (saveOverShown ? loaded[field] : basisOf(field)));
+    setSaveOverShown(false);
+    void save({ reportId: report.id, changes, expected });
   };
 
   // The fields rest from the press until the saved report is on screen.
@@ -231,6 +334,7 @@ export function SupportTriageForm({ report }: { report: SupportReport }) {
       <TriageFields
         report={report}
         draft={draft}
+        notes={notes}
         onChange={change}
         disabled={busy}
         responseError={responseError}

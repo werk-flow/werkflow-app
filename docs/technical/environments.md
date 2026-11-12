@@ -127,32 +127,6 @@ T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts`
 - `supabase db reset` and `supabase stop` affect every worktree: the edit guard refuses them while any worktree holds the stack. A hook refuses a second stack (`lib/testing/runner/second-stack.ts`).
 - Another worktree's unmerged migration may sit in the shared stack ([recurring traps](testing.md#recurring-traps)).
 
-## Set up a new machine
-
-1. Install Bun, Node 22 or later, git, the GitHub CLI, Docker and the Supabase CLI. On Windows, clone and work inside WSL Ubuntu.
-   On an Apple Silicon Mac, run `softwareupdate --install-rosetta` and `brew install colima docker flock`, then `colima start --cpu 4 --memory 6 --disk 40 --vm-type vz --vz-rosetta --mount-type virtiofs` ([why Rosetta](standards-audit.md#keep-accepted-screens-as-visual-references)). Run the repository's pinned CLI with `bunx supabase`. Grow the VM only for a measured need. On AC power, `caffeinate -s` keeps the Mac awake for agents.
-2. Export the owner's Supabase personal access token as `SUPABASE_ACCESS_TOKEN`, with a copy in every env backup (a switch overwrites `.env.local`). Never commit or print it.
-3. Get the DEV `.env.local` from the owner's password manager and copy it to `.env.dev-backup`. Add `.env.live-backup` only for production sessions.
-4. Add the DEV MCP server `supabase` above to Claude Code (`claude mcp add --scope user --transport http supabase "<url>"`) and Codex (`[mcp_servers.supabase]` in `~/.codex/config.toml`). The owner signs in once per tool. Never add a server for PROD. The Vercel CLI, signed in as the owner, serves both.
-5. Run `supabase start` and `supabase db reset`. Create `.env.local-stack-backup` from `supabase status`, then run `bun run env:local`.
-6. Run `bunx playwright install --with-deps chromium` once.
-7. CodeRabbit: `curl -fsSL https://cli.coderabbit.ai/install.sh | sh`. The owner signs in once with `coderabbit auth login`. `bun run review:doctor` confirms both. Agents install CodeRabbit only here.
-8. Install the [background jobs](#background-jobs); `bun run room` prints numbers.
-9. Verify: `bunx supabase projects list` shows both projects, `bun scripts/check-r2.ts` passes, and `WERKFLOW_VERIFY_LOCAL=1 bun run test:verify --group golden:gg-00` passes beside `bun run test:server local`.
-
-## Background jobs
-
-The `ops/` scripts of `werk-flow/werkflow-planning` run from `~/code/werkflow-planning`, as systemd user timers on Linux and launchd agents on the Mac (`ops/install-mac.py`).
-
-| Job | Runs on |
-| --- | --- |
-| `worktree-cleanup`, load watch | Each machine, for itself |
-| [CodeRabbit queue](coderabbit.md#the-coderabbit-queue), `ci-alert` | Both; only the lease holder acts |
-| [Production watcher](recovery-and-incidents.md#monitoring) | Where its [token](#credentials) is |
-| [Recovery rehearsal](recovery-and-incidents.md#recovery-rehearsal) | The PC, beside the stack |
-
-A lease is the ref `refs/leases/<job>` (`ops/lease.py`): its holder renews it every pass; another machine takes over once it lapses.
-
 ## Work on production
 
 - Reads: metadata only, through `bun run prod:inspect`. [Which tool reaches what](#which-tool-reaches-what) owns the rule.
