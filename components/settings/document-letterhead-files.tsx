@@ -5,7 +5,6 @@ import { useState } from 'react';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { FileInput } from '@/components/ui/file-input';
 import { InlinePending } from '@/components/ui/inline-pending';
@@ -85,24 +84,24 @@ function LetterheadFileRow({
       else setFailure(describeFailure(result.error, FILE_FAILURES, fallback));
     });
 
+  const status = stored ? `Hinterlegt (${TYPE_LABELS[stored.mimeType] ?? 'Datei'})` : 'Noch nicht hinterlegt';
+  const label = (
+    <span className="flex items-center gap-2">
+      {row.label}
+      <InlinePending active={isPending} label={`${row.label} wird gespeichert`} />
+    </span>
+  );
+  const description = (
+    <>
+      {row.description} {status} · {row.types}
+      {blockedBy && <span className="block">{blockedBy}</span>}
+    </>
+  );
   return (
-    <div className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between">
-      <div className="min-w-0 space-y-1">
-        <p className="flex items-center gap-2 text-sm font-medium">
-          {row.label}
-          <InlinePending active={isPending} label={`${row.label} wird gespeichert`} />
-        </p>
-        <p className="text-sm text-muted-foreground">{row.description}</p>
-        <p className="text-sm text-muted-foreground">
-          {stored ? `Hinterlegt (${TYPE_LABELS[stored.mimeType] ?? 'Datei'})` : 'Noch nicht hinterlegt'} ·{' '}
-          {row.types}
-        </p>
-        {blockedBy && <p className="text-sm text-muted-foreground">{blockedBy}</p>}
-        <ErrorText>{failure}</ErrorText>
-      </div>
-      {!blockedBy && (
-        <div className="flex shrink-0 flex-wrap gap-2">
-          <Field label={`${row.label} auswählen`} hideLabel>
+    <div className="py-4 first:pt-0 last:pb-0">
+      <Field label={label} description={description} error={failure ?? undefined}>
+        {blockedBy ? null : (
+          <div className="flex flex-wrap gap-2">
             <FileInput
               buttonLabel={stored ? 'Ersetzen' : 'Hochladen'}
               fileName={null}
@@ -117,25 +116,25 @@ function LetterheadFileRow({
                 );
               }}
             />
-          </Field>
-          {stored && (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={isPending}
-              onClick={() =>
-                void perform(
-                  () => removeCompanyDocumentFile({ organizationId, kind: row.kind }),
-                  `${row.label} wurde entfernt.`,
-                  `${row.label} konnte nicht entfernt werden. Versuch es noch einmal.`,
-                )
-              }
-            >
-              Entfernen
-            </Button>
-          )}
-        </div>
-      )}
+            {stored && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isPending}
+                onClick={() =>
+                  void perform(
+                    () => removeCompanyDocumentFile({ organizationId, kind: row.kind }),
+                    `${row.label} wurde entfernt.`,
+                    `${row.label} konnte nicht entfernt werden. Versuch es noch einmal.`,
+                  )
+                }
+              >
+                Entfernen
+              </Button>
+            )}
+          </div>
+        )}
+      </Field>
     </div>
   );
 }
