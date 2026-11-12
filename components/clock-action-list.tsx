@@ -13,7 +13,6 @@ import {
 
 import { JobPickerModal } from '@/components/job-picker-modal';
 import { useClockState } from '@/components/clock-state-provider';
-import { TimeActivityDialog } from '@/components/time-activity-dialog';
 import { TimeActivityStatusNotice } from '@/components/time-activity-fields';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
@@ -40,6 +39,8 @@ const ICONS: Record<ClockActionIcon, typeof Play> = {
   end: Square,
   more: SlidersHorizontal,
 };
+
+type MoreActivitiesDialog = typeof import('@/components/time-activity-dialog').TimeActivityDialog;
 
 /** Runs one clock transition at a time and reports its answer: inline, as a banner, or by settling. */
 function useClockTransitionRunner(
@@ -107,6 +108,25 @@ function useClockActionChoices({
 }) {
   const [pickerMode, setPickerMode] = useState<ClockPickerMode | null>(initialPickerMode);
   const [moreOpen, setMoreOpen] = useState(false);
+  // „Weitere Aktivitäten …“ is the clock's rarest action and the dock sits on every page, so the
+  // dialog's code loads with its first use instead of with every cold start.
+  const [MoreDialog, setMoreDialog] = useState<MoreActivitiesDialog | null>(null);
+
+  function openMore(): void {
+    setError(null);
+    if (MoreDialog) {
+      setMoreOpen(true);
+      return;
+    }
+    import('@/components/time-activity-dialog').then(
+      (loaded) => {
+        setMoreDialog(() => loaded.TimeActivityDialog);
+        setMoreOpen(true);
+      },
+      () =>
+        setError('Weitere Aktivitäten konnten nicht geladen werden. Prüfe dein Netz und versuche es erneut.'),
+    );
+  }
   const recovery = Boolean(state?.recoveryReason);
 
   function activate(action: ClockAction): void {
@@ -130,8 +150,7 @@ function useClockActionChoices({
         setPickerMode(action.pickerMode);
         return;
       case 'more':
-        setError(null);
-        setMoreOpen(true);
+        openMore();
         return;
     }
   }
@@ -149,7 +168,16 @@ function useClockActionChoices({
     );
   }
 
-  return { pickerMode, setPickerMode, moreOpen, setMoreOpen, recovery, activate, confirmPickedJob };
+  return {
+    pickerMode,
+    setPickerMode,
+    MoreDialog,
+    moreOpen,
+    setMoreOpen,
+    recovery,
+    activate,
+    confirmPickedJob,
+  };
 }
 
 /**
@@ -181,8 +209,16 @@ export function ClockActionList({
     onSettled,
     onPendingChange,
   );
-  const { pickerMode, setPickerMode, moreOpen, setMoreOpen, recovery, activate, confirmPickedJob } =
-    useClockActionChoices({ clock, initialPickerMode, perform, setError });
+  const {
+    pickerMode,
+    setPickerMode,
+    MoreDialog,
+    moreOpen,
+    setMoreOpen,
+    recovery,
+    activate,
+    confirmPickedJob,
+  } = useClockActionChoices({ clock, initialPickerMode, perform, setError });
   const actions = deriveClockActions(state);
   const busy = !isReady || isPending || isRunning;
 
@@ -203,13 +239,15 @@ export function ClockActionList({
         isPending={isPending || isRunning}
         isStatusLoading={!isReady}
       />
-      <TimeActivityDialog
-        open={moreOpen}
-        onOpenChange={setMoreOpen}
-        onSettled={onSettled}
-        organizationId={organizationId}
-        preferredJobId={state?.activeJobId ?? state?.resumeActivity?.jobId ?? null}
-      />
+      {MoreDialog && (
+        <MoreDialog
+          open={moreOpen}
+          onOpenChange={setMoreOpen}
+          onSettled={onSettled}
+          organizationId={organizationId}
+          preferredJobId={state?.activeJobId ?? state?.resumeActivity?.jobId ?? null}
+        />
+      )}
     </div>
   );
 }
