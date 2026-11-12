@@ -15,13 +15,13 @@ import {
   conditionWeeklyHoursText,
   createPersonnelRecordViaDialog,
   editConditionWeeklyHours,
-  openJobEmployeePickerSearch,
   openMemberDetailFromList,
   personnelRecordHeader,
   sendInviteFromPersonnelRecord,
   versionBadge,
 } from './support/steps/personnel';
 import { expectVisibleAfterSave, visibleText } from './support/steps/shared';
+import { openJobEmployeePickerSearch } from './support/steps/work';
 
 // P1-03 — Employee/personnel identity with date-effective employment
 // conditions (@P1-03). The journey: conditions stay distinguishable over time,
