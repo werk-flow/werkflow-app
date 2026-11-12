@@ -2,15 +2,13 @@
 
 import { formatDuration } from '@/lib/time-tracking/helpers';
 import { CalendarClock, ClipboardCopy, MapPin, Navigation, Phone, UserRound } from 'lucide-react';
-import { useEffect, useRef, type ReactElement } from 'react';
+import { useEffect, useRef, type ReactElement, type ReactNode } from 'react';
 
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import { useBanner } from '@/components/ui/banner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { FieldWorkPackJob } from '@/lib/jobs/field-work-pack';
-import type { FieldSiteAccess } from '@/lib/site-access-proposals/types';
-import { FieldSiteAccessProposal } from './field-site-access-proposal';
 import { JOB_PRIORITY_LABELS } from '@/lib/jobs/types';
 
 function formatSchedule(job: FieldWorkPackJob): string {
@@ -29,8 +27,8 @@ export function FieldWorkPackOverview({
   siteAccess,
 }: {
   job: FieldWorkPackJob;
-  /** The job's Einsatzort and its latest access proposal; absent without an Einsatzort. */
-  siteAccess?: FieldSiteAccess | undefined;
+  /** The access proposal block under the Einsatzort, rendered on the server; absent without an Einsatzort. */
+  siteAccess?: ReactNode;
 }): ReactElement {
   const { showBanner } = useBanner();
   const overviewRef = useRef<HTMLElement>(null);
@@ -110,7 +108,7 @@ function FieldWorkPackOverviewFacts({
 }: {
   job: FieldWorkPackJob;
   /** The job's Einsatzort and its latest access proposal; null without an Einsatzort. */
-  siteAccess: FieldSiteAccess | undefined;
+  siteAccess: ReactNode;
 }): ReactElement {
   const duration = formatDurationOrNull(job.plannedWorkingMinutes);
   return (
@@ -151,7 +149,7 @@ function FieldWorkPackOverviewFacts({
                 <span className="font-medium">Zugang:</span> {job.accessNotes}
               </p>
             )}
-            {siteAccess && <FieldSiteAccessProposal jobId={job.id} access={siteAccess} />}
+            {siteAccess}
           </div>
         </div>
       </div>

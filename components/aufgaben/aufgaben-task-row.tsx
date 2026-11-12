@@ -1,5 +1,7 @@
 import Link from 'next/link';
+import { lazy, Suspense } from 'react';
 
+import { ErrorText } from '@/components/ui/error-text';
 import { ListRow } from '@/components/ui/list-row';
 import type { AttentionTask } from '@/lib/attention/types';
 import { formatVacationDays } from '@/lib/vacation/balance';
@@ -8,7 +10,22 @@ import { WORK_ARTIFACT_KIND_LABELS } from '@/lib/work-artifacts/types';
 import { CALENDAR_DISPATCH_STATE_LABELS } from '@/lib/calendar/board';
 import { formatOpenSince } from '@/lib/attention/task-sections';
 import { formatGermanDate, formatGermanDateRange, formatBerlinDateTime } from '@/lib/utils';
-import { SiteAccessTaskRow } from './site-access-review';
+
+// The access proposal row and its review load on their own: every page's cold
+// start carries the Aufgaben code (lab.field.cold-start). A failed download
+// shows in the row; a reload tries again.
+const SiteAccessTaskRow = lazy(() =>
+  import('./site-access-review').then(
+    (mod) => ({ default: mod.SiteAccessTaskRow }),
+    () => ({
+      default: () => (
+        <ListRow variant="plain">
+          <ErrorText>Dieser Zugangshinweis konnte nicht geladen werden. Lade die Seite neu.</ErrorText>
+        </ListRow>
+      ),
+    }),
+  ),
+);
 
 type AttentionApprovalTask = Extract<
   AttentionTask,
@@ -93,7 +110,11 @@ export function TaskRow({ task, onDecided }: { task: AttentionTask; onDecided: (
         </TaskLink>
       ); // A field worker's access proposal: decided in its own dialog.
     case 'site_access_proposal':
-      return <SiteAccessTaskRow task={task} onDecided={onDecided} />;
+      return (
+        <Suspense fallback={<ListRow skeleton variant="plain" className="min-h-14" />}>
+          <SiteAccessTaskRow task={task} onDecided={onDecided} />
+        </Suspense>
+      );
   }
 }
 

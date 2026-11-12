@@ -5,7 +5,6 @@ import {
   CalendarClock,
   CalendarX,
   ClipboardCheck,
-  DoorOpen,
   PhoneCall,
   Clock,
   Inbox,
@@ -62,7 +61,7 @@ const SECTION_PRESENTATION: Record<
     testId: 'attention-join-request-tasks',
   },
   siteAccess: {
-    icon: <DoorOpen className="size-4" />,
+    icon: <ClipboardCheck className="size-4" />,
     title: 'Zugang prüfen',
     testId: 'attention-site-access-tasks',
   },

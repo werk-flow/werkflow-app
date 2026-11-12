@@ -3,16 +3,10 @@
 import { UserRound } from 'lucide-react';
 import { useState, type ReactElement } from 'react';
 
-import { FieldWorkPackLoadError } from '@/components/auftraege/work-pack/field-work-pack-load-error';
 import { lazyDialog } from '@/components/shared/lazy-dialog';
 import { Button } from '@/components/ui/button';
 import { useSettleOnChange } from '@/hooks/use-settle-on-change';
-import type {
-  FieldSiteAccess,
-  JobSiteAccessProposal,
-  SiteAccessProposalValues,
-} from '@/lib/site-access-proposals/types';
-import { formatGermanDate } from '@/lib/utils';
+import type { SiteAccessProposalValues } from '@/lib/site-access-proposals/types';
 
 const lazyProposalDialog = lazyDialog<{
   open: boolean;
@@ -30,35 +24,25 @@ const EMPTY_VALUES: SiteAccessProposalValues = {
   accessNotes: '',
 };
 
-/**
- * The field worker's way to tell the office that the access to the job's
- * Einsatzort is wrong, and what became of it. The proposal changes nothing at
- * the Einsatzort until the office accepts it in Aufgaben.
- */
-export function FieldSiteAccessProposal({
+/** „Zugang stimmt nicht?“ or „Hinweis ändern“; the form loads on the worker's intent. */
+export function FieldSiteAccessButton({
   jobId,
-  access,
+  siteId,
+  stateKey,
+  ownOpenValues,
 }: {
   jobId: string;
-  access: FieldSiteAccess;
+  siteId: string;
+  /** Identifies the proposal state the server rendered beside the button. */
+  stateKey: string;
+  /** The worker's own open proposal, which the form edits. */
+  ownOpenValues?: SiteAccessProposalValues;
 }): ReactElement {
   const [open, setOpen] = useState(false);
-  const { siteId } = access;
-  const proposal = access.proposal ?? null;
-  const settle = useSettleOnChange(access);
+  const settle = useSettleOnChange(stateKey);
   const waiting = lazyProposalDialog.useWaiting(open);
-  const ownOpenValues = proposal?.status === 'open' ? proposal.values : null;
-
   return (
-    <div className="mt-3 space-y-2" data-testid="field-site-access">
-      {access.failed ? (
-        <FieldWorkPackLoadError
-          title="Zugangshinweis nicht geladen"
-          description="Ob das Büro deinen Hinweis zum Zugang schon geprüft hat, ist gerade nicht bekannt."
-        />
-      ) : (
-        <SiteAccessProposalState proposal={proposal} />
-      )}
+    <>
       <Button
         type="button"
         variant="outline"
@@ -81,50 +65,6 @@ export function FieldSiteAccessProposal({
           settle={() => settle()}
         />
       )}
-    </div>
-  );
-}
-
-function SiteAccessProposalState({
-  proposal,
-}: {
-  proposal: JobSiteAccessProposal | null;
-}): ReactElement | null {
-  if (!proposal) return null;
-  if (proposal.status === 'open') {
-    return (
-      <div className="rounded-md bg-warning-soft p-3 text-sm text-warning-soft-foreground" role="status">
-        <p className="font-medium">
-          {proposal.proposedByMe
-            ? 'Dein Hinweis zum Zugang liegt beim Büro.'
-            : 'Ein Hinweis aus deinem Team zum Zugang liegt beim Büro.'}
-        </p>
-        {proposal.values && <ProposedValues values={proposal.values} />}
-      </div>
-    );
-  }
-  const decidedOn = proposal.decidedAt ? ` am ${formatGermanDate(proposal.decidedAt)}` : '';
-  if (proposal.status === 'accepted') {
-    return (
-      <p className="text-sm text-muted-foreground" role="status">
-        Das Büro hat den Hinweis zum Zugang{decidedOn} übernommen.
-      </p>
-    );
-  }
-  return (
-    <p className="text-sm text-muted-foreground" role="status">
-      Das Büro hat den Hinweis zum Zugang{decidedOn} nicht übernommen
-      {proposal.rejectionReason ? `: ${proposal.rejectionReason}` : '.'}
-    </p>
-  );
-}
-
-function ProposedValues({ values }: { values: SiteAccessProposalValues }): ReactElement {
-  const contact = [values.contactName, values.contactPhone, values.contactNote].filter(Boolean).join(' · ');
-  return (
-    <div className="mt-1 space-y-0.5 wrap-anywhere">
-      {contact && <p>Zugangskontakt: {contact}</p>}
-      {values.accessNotes && <p className="whitespace-pre-wrap">Zugang: {values.accessNotes}</p>}
-    </div>
+    </>
   );
 }

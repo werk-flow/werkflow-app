@@ -3,7 +3,6 @@
 import { useState, type ReactElement } from 'react';
 
 import { lazyDialog } from '@/components/shared/lazy-dialog';
-import { InlinePending } from '@/components/ui/inline-pending';
 import { ListRow } from '@/components/ui/list-row';
 import { PlainButton } from '@/components/ui/plain-button';
 import type { AttentionTask } from '@/lib/attention/types';
@@ -27,7 +26,6 @@ export function SiteAccessTaskRow({
   onDecided: () => Promise<void>;
 }): ReactElement {
   const [open, setOpen] = useState(false);
-  const waiting = lazyReviewDialog.useWaiting(open);
   return (
     <>
       <ListRow asChild interactive variant="plain">
@@ -46,7 +44,6 @@ export function SiteAccessTaskRow({
               {task.jobNumber ? ` · ${task.jobNumber}` : ''}
             </span>
           </span>
-          <InlinePending active={waiting} label="Wird geladen" />
         </PlainButton>
       </ListRow>
       {open && (

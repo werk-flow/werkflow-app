@@ -18,6 +18,7 @@ import { loadFieldWorkPackData, type FieldWorkPackData } from './field-work-pack
 import type { FieldWorkPackJob } from '@/lib/jobs/field-work-pack';
 import { jobDetailHref } from '@/lib/jobs/routes';
 import { fieldSiteAccess } from '@/lib/site-access-proposals/types';
+import { FieldSiteAccess } from './field-site-access';
 import { FieldWorkPackRecordSources, FieldWorkPackTimeAndMaterials } from './field-work-pack-record-sources';
 
 export async function FieldWorkPackPage({
@@ -66,7 +67,16 @@ export async function FieldWorkPackPage({
           {/* A job without an Einsatzort passes no access prop at all: the job page's payload is measured. */}
           <FieldWorkPackOverview
             job={fieldJob}
-            {...(job.siteId ? { siteAccess: fieldSiteAccess(job.siteId, data.siteAccessProposalRead) } : {})}
+            {...(job.siteId
+              ? {
+                  siteAccess: (
+                    <FieldSiteAccess
+                      jobId={job.id}
+                      access={fieldSiteAccess(job.siteId, data.siteAccessProposalRead)}
+                    />
+                  ),
+                }
+              : {})}
           />
           <FieldWorkPackContextSources job={job} data={data} />
           <FieldWorkPackExecutionSection
