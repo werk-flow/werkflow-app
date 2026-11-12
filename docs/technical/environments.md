@@ -15,7 +15,7 @@ WerkFlow runs on two cloud backends ([decision 0003](../decisions/0003-dev-prod-
 
 Both projects deploy the edge functions from `supabase/functions/`. Each secret store holds its own Resend key; the production key never leaves production.
 
-Both run Micro compute, whose latency rises steeply with concurrency. The owner accepts this while one beta business is the traffic. Cloud canary timings are no capacity proof.
+Both run Micro compute, whose latency rises steeply with concurrency, accepted while one beta business is the traffic. Cloud canary timings are no capacity proof.
 
 ### Vercel
 
@@ -32,11 +32,11 @@ No migration carries auth settings, mail templates, SMTP or rate limits. Both pr
 - After every auth change on the production dashboard, run `bun scripts/sync-dev-auth-from-prod.ts`. It prints the difference; `--apply` copies the mail fields from PROD to DEV.
 - `bun run auth:check` compares DEV's Auth configuration with the reviewed posture in `lib/security/supabase-project-checks.ts`. Change a setting and its posture entry together.
 - Not adopted, each an owner decision: point-in-time recovery, database network restrictions, Supabase branching, GitHub's deploy integration. Signup CAPTCHA turns on when public sign-up opens.
-- Owner duties no API covers: MFA on the Supabase account and a second organization owner.
+- Owner duties no API covers: Supabase account MFA and a second organization owner.
 
 ## Credentials
 
-This table is the one home of every credential of the deployments and workflows. No check copies a secret to test it.
+This table is the one home of every deployment and workflow credential. No check copies a secret to test it.
 
 - `.github/workflows/health.yml` checks every row in GitHub's reach each Monday with a read-only call where the value lives. A failed run fails the step named after the credential and opens or updates the issue "Weekly health check failed". Only a failed check marked `prod` assigns the owner ([monitoring](recovery-and-incidents.md#monitoring)); a run off `main` or with `break_check` reports on "… (proof)".
 - The app checks its runtime credentials at `GET /api/health`, each Supabase project at its `health` function. Both answer only a request with the header `x-health-check-token`. The answer names each check `ok` or `failed`, never a value.
@@ -57,7 +57,7 @@ This table is the one home of every credential of the deployments and workflows.
 | `SUPABASE_SECRET_KEY` | Vercel | Admin client, edge-function calls | Never | As above. The functions accept every secret key of their project. |
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | Vercel | Document storage | As set on the token | Cloudflare R2, Manage API tokens: one token scoped to the bucket; set both, redeploy, delete the old token. |
 | `CRON_SECRET` | Vercel, Production | Vercel Cron: [storage purge](document-storage-and-access.md#storage-cleanup) and [report deletion](../features/problem-reports.md#current-product-baseline) | Never | `openssl rand -hex 32`, then redeploy. |
-| `SUPPORT_USER_IDS` | Vercel, per environment | [Support allowlist](../features/problem-reports.md#current-product-baseline) | Never | Set, redeploy. |
+| `SUPPORT_USER_IDS` | Vercel, Production and Preview (PROD ids, DEV ids) | [Support allowlist](../features/problem-reports.md#current-product-baseline) | Never | Set, redeploy. |
 | `EMAIL_OTP_HASH_SECRET` | Vercel | Email-change code hashes and rate-limit subjects | Never | Only after a leak: a new value voids pending email-change codes and restarts every rate-limit window. |
 | `RESEND_API_KEY` | Supabase secrets, one key per project | The mail functions | Never | Resend, API keys: a sending key for the project, `supabase secrets set --project-ref <ref> RESEND_API_KEY`, delete the old key. |
 | `FROM_EMAIL` | Supabase secrets | The mail functions' sender | Never | `supabase secrets set`. |
