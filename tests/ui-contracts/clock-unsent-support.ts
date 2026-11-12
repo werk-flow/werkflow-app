@@ -56,6 +56,8 @@ export type Server = {
   verdict: Verdict;
   status: number;
   online: boolean;
+  /** The clock read fails, as a server error does. */
+  stateFails?: boolean;
 };
 
 export const ACCEPTED: Verdict = {
@@ -88,7 +90,9 @@ export async function mountClock(
     }),
   );
   await page.route('**/api/time-tracking-state?**', (route) =>
-    route.fulfill({ json: { success: true, state: server.state } }),
+    server.stateFails
+      ? route.fulfill({ status: 500, json: { success: false, error: 'unavailable' } })
+      : route.fulfill({ json: { success: true, state: server.state } }),
   );
   await page.route('**/api/field-sync/v1/operations', async (route) => {
     // Without network a send never arrives, whatever the page believes about its connection.

@@ -163,10 +163,25 @@ async function sessionUserId(): Promise<string | null> {
   return (await readSession())?.userId ?? null;
 }
 
-/** Runs `work` while no other tab of the origin holds `lock`; a browser without Web Locks relies on the server recording each event once. */
+/** The holders of each lock in this tab, for a browser without Web Locks: one after the other. */
+const tabQueues = new Map<string, Promise<unknown>>();
+
+/**
+ * Runs `work` while no other holder of `lock` runs: across the origin's tabs with Web Locks, within
+ * this tab without them. Across tabs without Web Locks the server still records each event once; a
+ * deletion there can overlap another tab's send (decision 0010, the time outbox).
+ */
 async function exclusively<T>(lock: string, work: () => Promise<T>): Promise<T> {
   if (typeof navigator.locks?.request === 'function') return navigator.locks.request(lock, work);
-  return work();
+  const turn = (tabQueues.get(lock) ?? Promise.resolve()).then(work, work);
+  tabQueues.set(
+    lock,
+    turn.then(
+      () => undefined,
+      () => undefined,
+    ),
+  );
+  return turn;
 }
 
 /**

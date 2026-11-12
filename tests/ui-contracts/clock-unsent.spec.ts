@@ -91,6 +91,21 @@ test('actions kept one after the other are sent in that order, each naming the s
   );
 });
 
+test('a refused event whose clock read then fails shows the server’s confirmed clock, never the phone’s kept one', async ({
+  page,
+}) => {
+  const server = await mountClock(page, CLOCKED_OUT_STATE);
+  server.verdict = { outcome: 'rejected', code: 'closed_period' };
+  await startWithoutNetwork(page, server);
+  server.stateFails = true;
+  await setNetwork(page, server, true);
+
+  await expect(unsentBadge(clockDock(page))).toHaveText('Nicht übertragen');
+  // No confirmed clock could be read again: the clock waits for it instead of showing the phone's start.
+  await expect(page.getByLabel('Zeitstatus')).toHaveText('Nicht bereit');
+  await expect(clockStatus(page)).toHaveCount(0);
+});
+
 test('a refused event shows „Nicht übertragen“ with its reason, is sent again unchanged on request, and leaves only after a confirmed deletion', async ({
   page,
 }) => {

@@ -474,7 +474,8 @@ async function isolatedTests(): Promise<void> {
       const discarding = timeUnsentSource.discard('session', shownIds(shown)).then(() => {
         discarded = true;
       });
-      await nextTask();
+      // As long as a discard needs to finish when nothing holds it back.
+      for (let turn = 0; turn < 50 && !discarded; turn += 1) await nextTask();
       expect(discarded).toBe(false);
 
       release();
@@ -483,6 +484,43 @@ async function isolatedTests(): Promise<void> {
       expect((await readTimeOutbox(WORKER)).events).toEqual([]);
       inFlight = null;
       verdict = null;
+    });
+
+    test('without Web Locks a discard still waits for this tab’s send in flight', async () => {
+      const locks = Object.getOwnPropertyDescriptor(globalThis.navigator, 'locks');
+      Object.defineProperty(globalThis.navigator, 'locks', { configurable: true, value: undefined });
+      try {
+        sessionUserId = WORKER.userId;
+        await keepStart(WORKER);
+        const shown = await timeUnsentSource.summarize();
+        let release = (): void => undefined;
+        inFlight = new Promise((resolve) => {
+          release = resolve;
+        });
+        verdict = {
+          outcome: 'accepted',
+          code: 'accepted',
+          state: { sessionId: null, segmentId: null, version: 1 },
+        };
+        const sending = sendOwnTimeEvents();
+        await nextTask();
+
+        let discarded = false;
+        const discarding = timeUnsentSource.discard('session', shownIds(shown)).then(() => {
+          discarded = true;
+        });
+        // As long as a discard needs to finish when nothing holds it back.
+        for (let turn = 0; turn < 50 && !discarded; turn += 1) await nextTask();
+        expect(discarded).toBe(false);
+
+        release();
+        await Promise.all([sending, discarding]);
+        expect(sent).toHaveLength(1);
+      } finally {
+        inFlight = null;
+        verdict = null;
+        if (locks) Object.defineProperty(globalThis.navigator, 'locks', locks);
+      }
     });
 
     test('a switch asks only about the organization it leaves, so the other organization’s events stay for when the person works there', async () => {
