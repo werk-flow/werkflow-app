@@ -42,6 +42,8 @@ Trap: a spinner or a generic skeleton as the loading state. The layout jumps whe
 6. Add the dialog to `lib/testing/selection/dialog-inventory.ts` and its opener to `tests/audit/support/dialog-openers/<area>.ts`.
 7. Run `bun run lint <files>`, `bun run test:unit lib/ui/dialog-contracts.test.ts lib/ui/field-contracts.test.tsx lib/testing/selection/dialog-inventory.test.ts lib/conventions/german-copy.test.ts`, then `bun run test:verify --group audit:layout:<area>`.
 
+A dialog opens with focus on its first control; one that starts on a later control to protect data names it with `startControlId`, which the layout audit checks.
+
 Trap: `autoFocus` on a field, or an `onOpenAutoFocus` that only prevents the default. Focus stays on the page behind the dialog.
 
 ### Add a list or a table
