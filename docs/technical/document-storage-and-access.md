@@ -107,7 +107,7 @@ A legacy original keeps its source system (`source_system`) and the number that 
 A problem report's screenshot and attachments lie in the same private bucket; [problem reports](../features/problem-reports.md) owns who reads them.
 
 - The key is `{organizationId}/problem-reports/{reportId}/{fileId}/{kind}`, and a check constraint refuses a key outside its report. A key holds no file name, so no name a person chose reaches a key, the purge queue or a log; the row keeps the name.
-- No customer role reads a report file, not even an Admin of the organization.
+- No customer role reads a report file, not even an Admin of the organization. WerkFlow support reads one through a signed address the server issues after it wrote the opening into the report's history.
 - Every deleted file row queues its object for the [purge](#storage-cleanup) in the same transaction, whichever path deleted it: the retention run, an organization deletion or an account deletion.
 
 ## Storage cleanup

@@ -12,6 +12,7 @@ First ask of every choice: entities or a fixed enum? A raw `Select` holds a fixe
 | Header actions that suspended content renders | `PageHeaderSlotProvider`, `PageHeaderSlot`, `PageHeaderActions` (`components/shared/page-action`) |
 | Subpage title, detail card title | `SubpageHeader`, `SectionTitle` (`components/shared/`) |
 | Screen outside the app shell | `StandaloneScreen` with `StandaloneTitle` (`components/shared/`) |
+| Page of WerkFlow support's area | `SupportFrame` in the area's layout (`components/support/`), then the page frame |
 | Columns of a detail page and its skeleton | `DetailColumns` (`components/shared/`) |
 | Form field | `Field`; on an invalid submit, `focusFirstInvalidField` (`lib/ui/field-validation`) |
 | Action or submit | `Button`: `default` for the one primary, `outline` for an action repeated per row, `destructive` only for an irreversible step |

@@ -36,6 +36,8 @@ export const CONTEXT_WRAPPERS: Record<string, string> = {
 const SESSION_IDENTITY = 'getAuthenticatedUser';
 
 const OWN_ACCOUNT = "Changes the caller's own account, which belongs to no organization.";
+const SUPPORT =
+  'WerkFlow support is no organization role: the action admits the verified user only from the allowlist (lib/support/allowlist.ts).';
 
 // Actions that run on the verified session identity alone. Keep each reason true; an entry
 // whose action gains an organization check, or disappears, fails as stale.
@@ -53,6 +55,15 @@ export const IDENTITY_ONLY_ACTIONS: Record<string, string> = {
   'lib/settings/email-change-actions.ts#touchPendingNewEmailVerification': OWN_ACCOUNT,
   'lib/settings/email-change-actions.ts#verifyCurrentEmailChangeOtp': OWN_ACCOUNT,
   'lib/settings/email-change-actions.ts#verifyNewEmailChangeOtp': OWN_ACCOUNT,
+  'lib/problem-reports/support-actions.ts#createSupportReportFileUploadTicket': SUPPORT,
+  'lib/problem-reports/support-actions.ts#fileProblemReportForCaller': SUPPORT,
+  'lib/problem-reports/support-actions.ts#finalizeSupportReportFileUpload': SUPPORT,
+  'lib/problem-reports/support-actions.ts#listSupportFilingOptions': SUPPORT,
+  'lib/problem-reports/support-actions.ts#listSupportProblemReports': SUPPORT,
+  'lib/problem-reports/support-actions.ts#openProblemReportAttachment': SUPPORT,
+  'lib/problem-reports/support-actions.ts#openProblemReportOriginal': SUPPORT,
+  'lib/problem-reports/support-actions.ts#readSupportProblemReport': SUPPORT,
+  'lib/problem-reports/support-actions.ts#triageProblemReport': SUPPORT,
   'lib/org/actions.ts#createOrganization': 'Runs before the caller has a membership.',
   'lib/org/join-request-actions.ts#requestOrganizationJoin': 'Runs before the caller has a membership.',
   'lib/org/join-request-actions.ts#withdrawOrganizationJoinRequest':

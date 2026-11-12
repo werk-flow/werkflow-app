@@ -1,5 +1,5 @@
 import { isUiString, type UiStringCatalog } from '@/lib/problem-reports/screenshot/ui-string-catalog';
-import type { ProblemReportContext } from '@/lib/problem-reports/schemas';
+import type { ProblemReportContext, ScrubbedProblemReportContext } from '@/lib/problem-reports/schemas';
 import { dictionaryKnows, findTerms, NOT_A_NAME_ALONE, type ScrubDictionary } from './dictionary';
 import { findEmails, findIbans, findPhones, type Found, type PlaceholderKind } from './patterns';
 import { wordsOf, type Word } from './words';
@@ -149,12 +149,6 @@ export function scrubReportText(original: string, dictionary: ScrubDictionary): 
   parts.push(text.slice(position));
   return parts.join('');
 }
-
-/** The scrubbed context: the capture, with a label or a token removed where it may name a record. */
-type ScrubbedProblemReportContext = Omit<ProblemReportContext, 'appVersion' | 'clientErrors'> & {
-  appVersion: string | null;
-  clientErrors: Array<Omit<ProblemReportContext['clientErrors'][number], 'name'> & { name: string | null }>;
-};
 
 /**
  * The context without any text of a record. The label of a pressed control

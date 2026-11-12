@@ -1,0 +1,22 @@
+Meldungen
+Meldung aufnehmen
+WerkFlow Support
+Meldung aufnehmen
+Für jemanden, der angerufen hat. Die Person sieht die Meldung danach in „Meine Meldungen“.
+Organisation
+*
+Pflichtfeld
+Organisation auswählen
+Wer hat angerufen?
+*
+Pflichtfeld
+Person auswählen
+Wähle zuerst die Organisation aus.
+Was hat die Person gemeldet?
+*
+Pflichtfeld
+So genau, wie sie es am Telefon gesagt hat: was sie tun wollte und was stattdessen passiert ist.
+Anhänge
+Foto oder PDF anhängen
+Fotos oder PDFs, höchstens fünf. Sie bleiben bei WerkFlow.
+Meldung aufnehmen
