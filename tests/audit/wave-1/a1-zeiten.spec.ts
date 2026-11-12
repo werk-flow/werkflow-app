@@ -229,6 +229,7 @@ test.describe('A1 Zeiterfassung @AUDIT-W1-A1', () => {
       .getByRole('alertdialog')
       .getByRole('button', { name: SHARED_COPY.action.delete, exact: true })
       .click();
+    // eslint-disable-next-line playwright-spec/visible-page-lookup -- an absence holds for every DOM node, a hidden copy included
     await expect(adminPage.getByTitle(/10:00.*11:30/)).toHaveCount(0);
     // Reassignment is an audited correction. Keep deletion coverage above on
     // a separate uncorrected booking, whose raw rows may still be deleted.

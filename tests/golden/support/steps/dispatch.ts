@@ -308,7 +308,7 @@ export async function openParkplatzPanel(page: Page): Promise<void> {
   await page.goto('/kalender');
   // The button's accessible name includes the live count badge.
   await parkplatzButton(page).click();
-  await expect(page.locator('[data-parkplatz-panel]')).toBeVisible();
+  await expect(page.locator('[data-parkplatz-panel]').filter({ visible: true })).toBeVisible();
 }
 
 export function parkplatzCard(page: Page, title: string): Locator {

@@ -11,6 +11,8 @@ const createdAt = '2026-10-01T08:00:00.000Z';
 declare global {
   interface Window {
     uiContractClientRelations: { contacts: ClientContact[]; sites: ClientSite[] };
+    /** The roles the next route read returns; null when that read fails. */
+    uiContractClientSiteRoles: ClientSiteRole[] | null;
   }
 }
 
@@ -59,27 +61,62 @@ window.uiContractClientRelations = {
 
 export const clientRelationContractId = clientId;
 
-/** The current Hausverwaltung of the contract's work site; the role dialog ends it. */
-export const clientRelationContractRoles: ClientSiteRole[] = [
+const contractSite = {
+  siteId: 'contract-site',
+  siteName: 'Heizungskeller Nordflügel',
+  siteAddress: 'Lindenstraße 4, 10115 Berlin',
+  siteSourceNumber: null,
+  siteIsActive: true,
+  siteClientId: clientId,
+  siteClientName: 'WEG Lindenstraße 4',
+  holderArchived: false,
+} as const;
+
+/**
+ * The roles of the contract's work site: a current Hausverwaltung; an owner
+ * handover already recorded for a day far ahead, so the current owner ends
+ * and the coming one has no end; and a Rechnungsempfänger only to come.
+ */
+window.uiContractClientSiteRoles = [
   {
+    ...contractSite,
     id: 'contract-role',
-    siteId: 'contract-site',
-    siteName: 'Heizungskeller Nordflügel',
-    siteAddress: 'Lindenstraße 4, 10115 Berlin',
-    siteSourceNumber: null,
-    siteIsActive: true,
-    siteClientId: clientId,
-    siteClientName: 'WEG Lindenstraße 4',
     holderClientId: 'contract-manager',
     holderName: 'Hausverwaltung Lindenhof GmbH',
-    holderArchived: false,
     role: 'hausverwaltung',
     startsOn: '2020-01-01',
     endsOn: null,
   },
+  {
+    ...contractSite,
+    id: 'contract-owner-now',
+    holderClientId: 'contract-owner-now',
+    holderName: 'Erika Musterfrau',
+    role: 'eigentuemer',
+    startsOn: '2020-01-01',
+    endsOn: '2098-12-31',
+  },
+  {
+    ...contractSite,
+    id: 'contract-owner-next',
+    holderClientId: 'contract-owner-next',
+    holderName: 'Max Mustermann',
+    role: 'eigentuemer',
+    startsOn: '2099-01-01',
+    endsOn: null,
+  },
+  {
+    ...contractSite,
+    id: 'contract-payer-next',
+    holderClientId: 'contract-manager',
+    holderName: 'Hausverwaltung Lindenhof GmbH',
+    role: 'rechnungsempfaenger',
+    startsOn: '2099-01-01',
+    endsOn: null,
+  },
 ];
 
-/** Ending a role waits in the write gate; the spec refuses it, so the roles never change. */
+/** Ending a role waits in the write gate; an accepted end changes no role, the spec sets what the next read returns. */
 export async function endClientSiteRoleContract(input: {
   roleId: string;
   endsOn: string;

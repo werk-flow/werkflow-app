@@ -21,7 +21,8 @@ export type ListEntries = ReadonlyMap<string, number | null>;
 type Extractor =
   | { readonly kind: 'json'; readonly path: readonly string[] }
   | { readonly kind: 'variable'; readonly name: string }
-  | { readonly kind: 'numeric-exports' };
+  | { readonly kind: 'numeric-exports' }
+  | { readonly kind: 'sql-object'; readonly name: string };
 
 export type ShrinkOnlyList = {
   readonly id: string;
@@ -42,6 +43,11 @@ export const SHRINK_ONLY_LISTS: readonly ShrinkOnlyList[] = [
   {
     id: 'type assertion ratchet',
     file: 'eslint-rules/type-assertion-ratchet.json',
+    extract: { kind: 'json', path: [] },
+  },
+  {
+    id: 'whole-page lookup ratchet',
+    file: 'eslint-rules/visible-page-lookup-ratchet.json',
     extract: { kind: 'json', path: [] },
   },
   {
@@ -93,6 +99,11 @@ export const SHRINK_ONLY_LISTS: readonly ShrinkOnlyList[] = [
   variable('delayed close sites', 'lib/realtime/debounce-ownership.test.ts', 'DELAYED_CLOSE_SITES'),
   variable('unlimited rate-limit sites', 'lib/security/rate-limit-inventory.test.ts', 'REVIEWED_UNLIMITED'),
   variable('closed-history count reads', 'lib/attention/count-volume.test.ts', 'HISTORY_READS'),
+  {
+    id: 'closed-history hot reads',
+    file: 'supabase/tests/hot_read_volume.sql',
+    extract: { kind: 'sql-object', name: 'history_reads' },
+  },
   variable('empty-state sentences', 'lib/ui/empty-state-copy.test.ts', 'REVIEWED_SENTENCES'),
   variable(
     'pending-state locators',
@@ -230,11 +241,55 @@ function jsonEntries(text: string, path: readonly string[]): Entries | null {
   return entries;
 }
 
+/**
+ * The keys of `<name> constant jsonb := jsonb_build_object('key', value, ...)` in a SQL file: the
+ * first literal of every key argument. A key that is no literal counts by its text.
+ */
+function sqlObjectKeys(text: string, name: string): Entries | null {
+  const opening = `${name} constant jsonb := jsonb_build_object(`;
+  const start = text.indexOf(opening);
+  if (start < 0) return null;
+  const entries: Entries = new Map();
+  let argument = 0;
+  let argumentText = '';
+  let depth = 0;
+  const closeArgument = (): void => {
+    const key = argumentText.trim();
+    if (argument % 2 === 0 && key)
+      entries.set(/^'(?:[^']|'')*'$/.test(key) ? key.slice(1, -1).replaceAll("''", "'") : key, null);
+    argument += 1;
+    argumentText = '';
+  };
+  for (let at = start + opening.length; at < text.length; at += 1) {
+    const char = text[at] ?? '';
+    if (char === "'") {
+      // A SQL literal, with '' for a quote inside it.
+      let end = at + 1;
+      while (end < text.length && !(text[end] === "'" && text[end + 1] !== "'"))
+        end += text[end] === "'" ? 2 : 1;
+      argumentText += text.slice(at, end + 1);
+      at = end;
+    } else if (char === '(') {
+      depth += 1;
+      argumentText += char;
+    } else if (char === ')' && depth === 0) {
+      closeArgument();
+      return entries;
+    } else if (char === ')') {
+      depth -= 1;
+      argumentText += char;
+    } else if (char === ',' && depth === 0) closeArgument();
+    else argumentText += char;
+  }
+  return null;
+}
+
 /** The list's entries in one version of its file, or `null` when the file or the list is absent. */
 export function listEntries(list: ShrinkOnlyList, text: string | null): ListEntries | null {
   if (text === null) return null;
   if (list.extract.kind === 'json') return jsonEntries(text, list.extract.path);
   if (list.extract.kind === 'numeric-exports') return numericExports(list.file, text);
+  if (list.extract.kind === 'sql-object') return sqlObjectKeys(text, list.extract.name);
   return variableEntries(list.file, text, list.extract.name);
 }
 

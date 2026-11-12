@@ -35,6 +35,8 @@ export type EntryHistoryRowActionProps = {
   currentUserId: string | null;
   withdraw: (entry: TimeEntry) => void;
   align?: 'start' | 'end';
+  /** The correction's label: an activity row offers „Ende korrigieren“ on its end. */
+  correctLabel?: string;
 };
 
 /** In place of „Korrigieren“ on an entry of a closed month: the server would refuse the correction. */
@@ -60,6 +62,7 @@ export function EntryHistoryRowAction({
   currentUserId,
   withdraw,
   align = 'start',
+  correctLabel = 'Korrigieren',
 }: EntryHistoryRowActionProps) {
   const inClosedMonth = isEntryInClosedPeriod(entry, closedPeriods);
   if (settling.isBusy(entry.id)) {
@@ -83,7 +86,7 @@ export function EntryHistoryRowAction({
   if (entry.status === 'approved') {
     return (
       <Button variant="ghost" size="sm" disabled={!hydrated} onClick={() => setCorrectionEntry(entry)}>
-        <Pencil className="mr-1.5 size-4" /> Korrigieren
+        <Pencil className="mr-1.5 size-4" /> {correctLabel}
       </Button>
     );
   }
