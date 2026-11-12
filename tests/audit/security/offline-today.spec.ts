@@ -1,6 +1,7 @@
 import { expect, test } from '../support/fixtures';
 import { signOutViaUi } from '../../golden/support/steps/organization';
 import { bypassHttpCache, offlineFallback, setNetwork, waitForOfflineShell } from '../support/offline-shell';
+import { openPage } from '../../golden/support/streamed-content';
 import {
   changeInstruction,
   expectNoTodayOnDevice,
@@ -63,7 +64,7 @@ test("today's work pack reads without signal and leaves the phone on sign-out @A
   });
 
   await test.step('after a restart the phone still reads the pack', async () => {
-    const restarted = await page.context().newPage();
+    const restarted = await openPage(page.context());
     await bypassHttpCache(restarted);
     await restarted.goto(`/auftraege/${jobNumber}`);
     await expect(restarted.getByRole('heading', { level: 1, name: title })).toBeVisible();
