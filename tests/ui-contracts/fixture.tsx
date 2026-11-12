@@ -46,6 +46,7 @@ import { mountHydrationFixture } from './hydration-boundaries';
 import { initializeProblemReportBoundary, ProblemReportContractFixture } from './problem-report-boundaries';
 import { SupportFilingContractFixture } from './support-filing-boundaries';
 import { SupportTriageContractFixture } from './support-triage-boundaries';
+import { initializeInventoryUnitBoundary, InventoryUnitContractFixture } from './inventory-unit-boundaries';
 import { AuthUrlContractFixture } from './auth-url-boundaries';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -98,6 +99,7 @@ initializeLifecycleBoundary();
 initializeDocumentArchiveBoundary();
 initializeLazyDialogBoundary();
 initializeProblemReportBoundary();
+initializeInventoryUnitBoundary();
 const personnelInitialData = initializePersonnelBoundary();
 
 /** The card as a manager's job page shows it, or with `fieldMode` as the assigned worker's work pack does. */
@@ -576,6 +578,8 @@ createRoot(root).render(
     <SupportTriageContractFixture />
   ) : window.uiContractFixture === 'support-filing' ? (
     <SupportFilingContractFixture />
+  ) : window.uiContractFixture === 'inventory-unit' ? (
+    <InventoryUnitContractFixture />
   ) : window.uiContractFixture === 'presentation' ? (
     <PresentationFixture />
   ) : window.uiContractFixture === 'customer' ? (

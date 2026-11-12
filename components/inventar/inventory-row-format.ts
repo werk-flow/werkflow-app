@@ -47,13 +47,16 @@ export function formatMovementTarget(movement: InventoryOverview['movements'][nu
   }
 }
 
+/** Low stock, and an article whose unit is outside the unit list („Einheit prüfen“). */
+export const WARNING_BADGE_CLASSES = 'border-warning/40 bg-warning-soft text-warning-soft-foreground';
+
 export function stockStatusClasses(status: InventoryOverviewItem['stockStatus']): string {
   switch (status) {
     case 'shortfall':
     case 'out_of_stock':
       return 'border-destructive/40 bg-destructive-soft text-destructive-soft-foreground';
     case 'low_stock':
-      return 'border-warning/40 bg-warning-soft text-warning-soft-foreground';
+      return WARNING_BADGE_CLASSES;
     case 'in_stock':
       return 'border-success/40 bg-success-soft text-success-soft-foreground';
   }
