@@ -120,10 +120,31 @@ begin
     p_job_id, null, p_kind, p_visibility, p_recorded_at, p_title, p_content,
     null, null, false, null
   );
-  -- The revision id is this operation's alone: one that exists without the
-  -- operation was written by another call.
+  -- The revision id is this draft's alone. One that exists without the
+  -- operation was written by the author's own online save of the same draft
+  -- whose answer was lost (it carries the draft's revision id and no photos):
+  -- the operation then records that save and answers `replayed`. Anything else
+  -- was written by another call.
   if (v_revision->>'duplicate')::boolean then
-    raise exception 'work_artifact_draft_idempotency_conflict';
+    if jsonb_array_length(p_photos) > 0 or not exists (
+      select 1 from public.work_artifact_revisions revision
+      where revision.id = p_revision_id
+        and revision.artifact_id = p_artifact_id
+        and revision.organization_id = p_organization_id
+        and revision.created_by = p_actor_id
+    ) then raise exception 'work_artifact_draft_idempotency_conflict'; end if;
+    v_result := jsonb_build_object(
+      'artifactId', p_artifact_id, 'revisionId', p_revision_id,
+      'version', (v_revision->>'version')::bigint, 'replayed', false
+    );
+    insert into public.work_artifact_draft_operations (
+      id, organization_id, actor_id, revision_id, request_hash,
+      captured_at, sent_at, result_payload
+    ) values (
+      p_operation_id, p_organization_id, p_actor_id, p_revision_id, p_request_hash,
+      p_captured_at, p_sent_at, v_result
+    );
+    return v_result || jsonb_build_object('replayed', true);
   end if;
   v_version := (v_revision->>'version')::bigint;
 

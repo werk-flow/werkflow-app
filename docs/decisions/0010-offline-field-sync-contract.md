@@ -183,3 +183,11 @@ The owner accepted two residual exposures of the phone's stored day on 2026-11-1
 
 - **Access that ends while the phone has no signal.** A person the office removes or suspends, or whose session expires, keeps reading their own assignments of the current Berlin day on a phone without signal. The day goes at the next Berlin midnight at the latest, and at once when the phone is online: the server's refusal deletes it, and an ended session lands on a login page, which wipes. The alternative is no reading without signal.
 - **A sign-out that another tab races.** A start page stores the day in the milliseconds around another tab's sign-out and closes or freezes before it handles that tab's wipe signal, and the signing-out tab never reaches a login page, because it is closed first or its last sign-out request fails. Then the day of the person who signed out stays readable in that browser profile: customer and contact names and phone numbers, site addresses, access notes and instructions. It goes with the next wipe (any sign-out, any visit to a login page), with a start page of another person or organization, and at Berlin midnight. Closing it would need a session check on a read that must work without network.
+
+## Amendment 2026-11-12: report drafts after review
+
+Decided by the E7 lead for werk-flow/werkflow-planning#320. It changes three points of the report draft amendment.
+
+- **Online save.** The online save of a new Arbeitsnachweis uses the draft's revision id, and the device's copy goes once every change is on the device. If a save whose answer was lost did land, the later attach finds the author's own revision under that id, without photos: the function records the operation and answers `replayed`, and the server keeps one revision. It no longer ends as `version_conflict`.
+- **Open guard.** A closed dialog keeps its draft out of the automatic send until every change made in it is written to the device.
+- **Lost access.** The deletion 7 days after a lost-access refusal runs whenever the draft code loads, for anyone: a field worker's job page loads it once idle, a page loads it when the phone may hold the person's drafts, and every page loads it at the dialog's first open. The sign-in page loads none of it, so a phone nobody opens a job on keeps such a draft until someone does.

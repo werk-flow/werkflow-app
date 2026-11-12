@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { useClientRead, type ReadFailure } from '@/hooks/use-client-read';
 import type { DraftHolder, StoredDraft } from '@/lib/field-sync/device/draft-store';
@@ -56,10 +56,11 @@ export type RestoredDraft = {
 /** What the dialog's save asks of the draft keeper once the device keeps the new Arbeitsnachweis. */
 export type DeviceDraftHandle = {
   /**
-   * How many photos the device holds for the draft once every change made so far has been written,
-   * or null when the device could not answer; the keeper then shows why, and nothing may be saved.
+   * The draft as the device holds it once every change made so far is written: its photo count
+   * and the revision id an online save of it uses, so a lost answer to that save and the later
+   * send are one write. Null when the device could not answer; the keeper then shows why.
    */
-  committedPhotoCount: () => Promise<number | null>;
+  committed: () => Promise<{ photoCount: number; revisionId: string } | null>;
   /**
    * Sends the draft with its photos and answers the revision the server wrote and the version it
    * left the Arbeitsnachweis at, or null when the draft did not arrive; the keeper has said why.
@@ -92,30 +93,54 @@ function mayHoldDrafts(userId: string): boolean {
   }
 }
 
+/** The lazily loaded part of the section: the dialog and the list of the device's drafts. */
+type ArtifactCode = Pick<typeof import('./work-artifact-dialog'), 'DeviceDrafts' | 'WorkArtifactDialogHost'>;
+
 /**
- * The list of the drafts this device keeps, loaded with the dialog's module once the device may
- * hold a draft of the person or `wanted` is set, as when the dialog for a new Arbeitsnachweis
- * opens. A load that fails carries its retry.
+ * The dialog's module. A field worker's job page loads it once the page is idle, so a first open
+ * without signal still finds it; otherwise it loads on the first open, or once the device may hold
+ * a draft of the person. The section loads it with this read instead of a shared lazy-dialog
+ * helper, so the job page's own code names no module it did not name before. An idle load that
+ * fails stays silent; the next open loads again and shows a failure that persists.
  */
-export function useDeviceDrafts(
+export function useArtifactCode(
   currentUserId: string,
   wanted: boolean,
-): {
-  DeviceDrafts: typeof import('./work-artifact-dialog').DeviceDrafts | null;
-  failure: ReadFailure | null;
-} {
-  // Once the dialog asked for the draft code, the section keeps it: a draft written since must show.
+  loadWhenIdle: boolean,
+): { code: ArtifactCode | null; failure: ReadFailure | null } {
+  // Once wanted, the section keeps the code: a draft written since must show.
   const [everWanted, setEverWanted] = useState(wanted);
   if (wanted && !everWanted) setEverWanted(true);
   const [hinted] = useState(() => mayHoldDrafts(currentUserId));
+  const idle = usePageIdle(loadWhenIdle);
   const load = useClientRead({
     read: async () => {
-      const { DeviceDrafts } = await import('./work-artifact-dialog');
-      return { success: true as const, DeviceDrafts };
+      const { DeviceDrafts, WorkArtifactDialogHost } = await import('./work-artifact-dialog');
+      return { success: true as const, code: { DeviceDrafts, WorkArtifactDialogHost } };
     },
     deps: [currentUserId],
-    enabled: everWanted || hinted,
-    failureMessage: 'Die Entwürfe auf diesem Gerät konnten nicht geladen werden.',
+    enabled: everWanted || hinted || idle,
+    failureMessage: 'Der Arbeitsnachweis konnte nicht geladen werden. Prüfe deine Verbindung.',
   });
-  return { DeviceDrafts: load.data?.DeviceDrafts ?? null, failure: load.failure };
+  // An open after a failed idle load tries once more.
+  const { failure, reload } = load;
+  useEffect(() => {
+    if (wanted && failure) reload();
+  }, [wanted]); // eslint-disable-line react-hooks/exhaustive-deps -- reload once per open, not on every failure
+  return { code: load.data?.code ?? null, failure: everWanted || hinted ? failure : null };
+}
+
+/** True once the page had an idle moment after it mounted; never when `enabled` is false. */
+function usePageIdle(enabled: boolean): boolean {
+  const [idle, setIdle] = useState(false);
+  useEffect(() => {
+    if (!enabled) return;
+    if (typeof window.requestIdleCallback === 'function') {
+      const handle = window.requestIdleCallback(() => setIdle(true));
+      return () => window.cancelIdleCallback(handle);
+    }
+    const handle = window.setTimeout(() => setIdle(true), 1);
+    return () => window.clearTimeout(handle);
+  }, [enabled]);
+  return idle;
 }

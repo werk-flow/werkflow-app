@@ -258,10 +258,15 @@ const UPLOAD_PASSES = 3;
  * tab added meanwhile is uploaded in the next pass, so a sealed draft always names every photo.
  * Answers the sealed draft, or what the draft is left as.
  */
+/** Whether the browser says it has no network: then nothing is sent, and no draft is sealed for nothing. */
+function knownOffline(): boolean {
+  return typeof navigator !== 'undefined' && navigator.onLine === false;
+}
+
 async function uploadAndSeal(claim: SendClaim, first: StoredDraft): Promise<StoredDraft | DraftSendOutcome> {
   let draft = first;
   for (let pass = 0; pass < UPLOAD_PASSES; pass += 1) {
-    if (!stillHolder(claim)) return 'waiting';
+    if (!stillHolder(claim) || knownOffline()) return 'waiting';
     const left = draft.sealed ? null : await uploadPhotos(claim, draft);
     if (left !== null) return left;
     if (!stillHolder(claim)) return 'waiting';

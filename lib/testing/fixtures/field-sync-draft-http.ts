@@ -268,6 +268,20 @@ assert.deepEqual(await replayBoth(resent), {
 });
 assert.equal(world.rpcCalls.length, 2);
 
+// An online save whose answer was lost wrote the draft's revision; the device then sends the draft
+// under a new operation id. The function adopts the author's own revision and answers replayed, so
+// the device removes its copy instead of showing a refusal.
+world.rpcCalls.length = 0;
+attachAnswer = { data: { ...attached, replayed: true }, error: null };
+const savedOnline = draft({ photos: [] });
+const afterLostAnswer = operation({ payload: savedOnline });
+assert.deepEqual(await replayBoth(afterLostAnswer), {
+  operationId: afterLostAnswer.operationId,
+  outcome: 'replayed',
+  code: 'replayed',
+});
+assert.equal(world.rpcCalls[0]?.args.p_revision_id, savedOnline.revisionId);
+
 // The database function's refusals keep their outcome class.
 for (const [message, expected] of [
   ['work_artifact_not_authorized', forbidden],

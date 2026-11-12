@@ -11,6 +11,7 @@ import {
   draftOnDevice,
   expectAttachedReports,
   expectDraftsOnDevice,
+  expectReportCodeLoaded,
   photoButton,
   savedOnDeviceBanner,
   takeSyntheticPhoto,
@@ -40,12 +41,20 @@ test('a report with two photos written without signal survives a reload and arri
   const reportTitle = `Wartungsbericht ${world.runId}`;
   await seedTodayAssignment(world, { title: jobTitle, instruction: `Brenner prüfen ${world.runId}` });
   const jobNumber = todayJobNumber(world);
+  const offlineText = 'Brenner gereinigt, Druck geprüft.';
 
-  const dialog = await test.step('the field worker opens the job and starts a report', async () => {
+  await test.step('the field worker opens the job while the phone has signal', async () => {
     await page.goto('/dashboard');
     await waitForTodayOnDevice(page, [jobTitle]);
     await waitForOfflineShell(page);
     await page.goto(`/auftraege/${jobNumber}`);
+    // The report dialog's code loads once the page is idle, before anyone opens it.
+    await expectReportCodeLoaded(page);
+  });
+
+  const dialog = await test.step('the signal goes: the first open of the report still works', async () => {
+    await bypassHttpCache(page);
+    await setNetwork(page, 'offline');
     return beginWorkArtifact(page, {
       kind: 'work_report',
       title: reportTitle,
@@ -54,12 +63,10 @@ test('a report with two photos written without signal survives a reload and arri
     });
   });
 
-  await test.step('the signal goes: the report and two photos are saved on the phone', async () => {
+  await test.step('the report and two photos are saved on the phone', async () => {
     // The dialog keeps its draft on the device from here on.
     await expect(photoButton(dialog)).toBeVisible();
-    await bypassHttpCache(page);
-    await setNetwork(page, 'offline');
-    await workArtifactField(dialog, 'performedWork').fill('Brenner gereinigt, Druck geprüft.');
+    await workArtifactField(dialog, 'performedWork').fill(offlineText);
     await takeSyntheticPhoto(dialog, 1);
     await takeSyntheticPhoto(dialog, 2);
     await workArtifactAction(dialog, 'saveDraft').click();
@@ -89,7 +96,7 @@ test('a report with two photos written without signal survives a reload and arri
   await test.step('the server holds one draft revision with two photos', async () => {
     // One version for the revision and one for each photo link.
     await expectAttachedReports(world, reportTitle, [
-      { status: 'draft', version: 3, revisions: 1, photos: 2, operations: 1 },
+      { status: 'draft', version: 3, revisions: 1, photos: 2, operations: 1, performedWork: [offlineText] },
     ]);
   });
 
@@ -98,7 +105,7 @@ test('a report with two photos written without signal survives a reload and arri
     await expect(workArtifactEntry(page, reportTitle)).toBeVisible();
     await expect(deviceDrafts(page)).toBeHidden();
     await expectAttachedReports(world, reportTitle, [
-      { status: 'draft', version: 3, revisions: 1, photos: 2, operations: 1 },
+      { status: 'draft', version: 3, revisions: 1, photos: 2, operations: 1, performedWork: [offlineText] },
     ]);
   });
 });

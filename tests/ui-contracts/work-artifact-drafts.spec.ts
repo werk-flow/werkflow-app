@@ -20,7 +20,12 @@ const PHOTO = Buffer.from(
 const sentOperationSchema = z.object({
   operationId: z.string(),
   kind: z.string(),
-  payload: z.object({ title: z.string(), photos: z.array(z.unknown()) }),
+  payload: z.object({
+    title: z.string(),
+    revisionId: z.string(),
+    content: z.object({ performedWork: z.string().optional() }),
+    photos: z.array(z.unknown()),
+  }),
 });
 type SentOperation = z.infer<typeof sentOperationSchema>;
 
@@ -64,6 +69,52 @@ async function closeDialog(dialog: Locator): Promise<void> {
     .locator('[data-slot="dialog-footer"]')
     .getByRole('button', { name: 'Schließen', exact: true })
     .click();
+}
+
+/** From now on every connection to the draft store opens only when the spec releases it. */
+async function holdDraftStoreOpens(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const held: Array<() => void> = [];
+    Object.assign(window, { heldDraftOpens: held });
+    const open = IDBFactory.prototype.open;
+    IDBFactory.prototype.open = function (this: IDBFactory, name: string, version?: number) {
+      const request = open.call(this, name, version);
+      if (name === 'werkflow-drafts')
+        request.addEventListener(
+          'success',
+          (event) => {
+            event.stopImmediatePropagation();
+            held.push(() => request.dispatchEvent(new Event('success')));
+          },
+          { once: true },
+        );
+      return request;
+    };
+  });
+}
+
+/** How many draft store connections wait for the spec. */
+async function heldOpens(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const held: unknown = Reflect.get(window, 'heldDraftOpens');
+    return Array.isArray(held) ? held.length : 0;
+  });
+}
+
+/** Releases held connections, the newest first, until none comes for a while. */
+async function releaseHeldOpensNewestFirst(page: Page): Promise<void> {
+  let quiet = 0;
+  while (quiet < 5) {
+    const released = await page.evaluate(() => {
+      const held: unknown = Reflect.get(window, 'heldDraftOpens');
+      if (!Array.isArray(held) || held.length === 0) return false;
+      const release: unknown = held.pop();
+      if (typeof release === 'function') release();
+      return true;
+    });
+    quiet = released ? 0 : quiet + 1;
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+  }
 }
 
 function draftRow(page: Page, title: string) {
@@ -337,4 +388,117 @@ test('a save that cannot read the draft on the device saves nothing and keeps th
   ).toBeVisible();
   expect(await page.evaluate(() => window.uiContractWorkArtifacts.saves)).toEqual([]);
   await expect(dialog.getByRole('img', { name: 'Foto 1', exact: true })).toBeVisible();
+});
+
+test('a save whose answer is lost after it committed sends the same draft revision, so the server replays instead of colliding', async ({
+  page,
+}) => {
+  await openContractFixture(page, 'work-artifact-report');
+  const sent = await answerSync(page, () => ({ outcome: 'replayed', code: 'replayed' }));
+  await page.evaluate(() => {
+    window.uiContractWorkArtifacts.loseSaveAnswerAfterCommit = true;
+  });
+  await writeReport(page, 'Wartung Heizung', 0);
+  await page.getByRole('button', { name: 'Als Entwurf speichern', exact: true }).click();
+
+  await expect.poll(() => sent.length).toBe(1);
+  const [saved] = await page.evaluate(() => window.uiContractWorkArtifacts.saves);
+  expect(sent[0]?.payload.revisionId).toBe(saved?.revisionId);
+});
+
+test('a review request that fails after the device sent the draft says the draft is saved but not submitted', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    window.uiContractRecordedVisit = {
+      startedAt: '2026-11-02T06:00:00.000Z',
+      endedAt: '2026-11-02T11:15:00.000Z',
+    };
+  });
+  await openContractFixture(page, 'work-artifact-report');
+  await answerSync(page, () => ({ outcome: 'accepted', code: 'accepted' }));
+  await writeReport(page, 'Wartung Heizung', 1);
+  // The review request after the send gets no answer.
+  await page.getByRole('button', { name: 'Zur Prüfung einreichen', exact: true }).click();
+
+  await expect(
+    page
+      .getByRole('dialog')
+      .getByText(/Der Entwurf ist gespeichert, wurde aber nicht zur Prüfung eingereicht/),
+  ).toBeVisible();
+});
+
+test('text typed but never saved is on the device: a restart without signal opens the draft with it', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'onLine', { get: () => false });
+  });
+  await openContractFixture(page, 'work-artifact-report');
+  await writeReport(page, 'Wartung Heizung', 0);
+  await expect
+    .poll(() =>
+      page.evaluate(() => Object.keys(localStorage).some((key) => key.startsWith('werkflow:drafts:'))),
+    )
+    .toBe(true);
+
+  await openContractFixture(page, 'work-artifact-report');
+  await draftRow(page, 'Wartung Heizung').getByRole('button', { name: 'Bearbeiten', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Arbeitsnachweis erstellen', exact: true });
+  await expect(dialog.getByRole('textbox', { name: 'Ausgeführte Arbeiten', exact: true })).toHaveValue(
+    'Brenner gereinigt',
+  );
+});
+
+test('two photos taken before the first is stored never take a draft past its photo limit', async ({
+  page,
+}) => {
+  await openContractFixture(page, 'work-artifact-report');
+  await writeReport(page, 'Wartung Heizung', 0);
+  const dialog = page.getByRole('dialog', { name: 'Arbeitsnachweis erstellen', exact: true });
+  for (let index = 1; index <= 19; index += 1)
+    await dialog
+      .getByTestId('artifact-photo-input')
+      .setInputFiles({ name: `foto-${index}.png`, mimeType: 'image/png', buffer: PHOTO });
+  await expect(dialog.getByRole('img', { name: /^Foto \d+$/ })).toHaveCount(19);
+  await holdDraftStoreOpens(page);
+  for (const index of [20, 21])
+    await dialog
+      .getByTestId('artifact-photo-input')
+      .setInputFiles({ name: `foto-${index}.png`, mimeType: 'image/png', buffer: PHOTO });
+  await releaseHeldOpensNewestFirst(page);
+
+  await expect(dialog.getByRole('img', { name: /^Foto \d+$/ })).toHaveCount(20);
+  await expect(dialog.getByText('Ein Entwurf kann höchstens 20 Fotos haben.', { exact: true })).toBeVisible();
+});
+
+test('a closed dialog keeps its draft out of every send until its last change is on the device, so no send carries older text', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    window.uiContractDraftsOffline = true;
+  });
+  await openContractFixture(page, 'work-artifact-report');
+  const sent = await answerSync(page, () => ({ outcome: 'accepted', code: 'accepted' }));
+  await writeReport(page, 'Wartung Heizung', 0);
+  const dialog = page.getByRole('dialog', { name: 'Arbeitsnachweis erstellen', exact: true });
+  await holdDraftStoreOpens(page);
+  await dialog.getByRole('textbox', { name: 'Ausgeführte Arbeiten', exact: true }).fill('Brenner und Pumpe');
+  await expect.poll(() => heldOpens(page)).toBeGreaterThan(0);
+  await dialog
+    .locator('[data-slot="dialog-footer"]')
+    .getByRole('button', { name: 'Schließen', exact: true })
+    .click();
+  // The signal returns while the last change still waits for the device; the send's reads go first.
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await expect.poll(() => heldOpens(page)).toBe(2);
+  await releaseHeldOpensNewestFirst(page);
+
+  // Whatever sends the draft, it sends the last text, never the one before it.
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await releaseHeldOpensNewestFirst(page);
+  await expect.poll(() => sent.length).toBeGreaterThan(0);
+  expect(sent.map((operation) => operation.payload.content.performedWork)).toEqual(
+    sent.map(() => 'Brenner und Pumpe'),
+  );
 });

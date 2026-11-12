@@ -29,14 +29,15 @@ function useSentDraft(editor: WorkArtifactEditor, newArtifactId: string) {
   return async function showSentDraft(submit: boolean, sent: { revisionId: string; version: number }) {
     let submitted = !submit;
     if (submit) {
+      // A request without an answer leaves the draft saved, not submitted: the editor says so.
       const review = await recordWorkArtifactAction({
         artifactId: newArtifactId,
         revisionId: sent.revisionId,
         actionId: crypto.randomUUID(),
         expectedVersion: sent.version,
         actionType: 'review_requested',
-      });
-      submitted = review.success;
+      }).catch(() => null);
+      submitted = review?.success === true;
     }
     await editor.load(newArtifactId);
     editor.setEditing(false);
@@ -66,11 +67,13 @@ export function useWorkArtifactSave({
   const showSentDraft = useSentDraft(editor, newArtifactId);
 
   /** The save over the network; `no_answer` when the request never returned and the device keeps the draft. */
-  async function saveOnServer(submit: boolean, onDevice: boolean) {
+  async function saveOnServer(submit: boolean, draftRevisionId: string | null) {
     try {
       return await saveWorkArtifact({
         artifactId: detail?.id ?? newArtifactId,
-        revisionId: crypto.randomUUID(),
+        // A draft on the device lends its revision id: when this answer is lost, the device's
+        // send of the same draft is the same write, and the server replays it.
+        revisionId: draftRevisionId ?? crypto.randomUUID(),
         expectedVersion: detail?.version ?? null,
         targetType,
         targetId,
@@ -86,18 +89,19 @@ export function useWorkArtifactSave({
       });
     } catch (error) {
       // Only a draft on the device has somewhere to wait for the signal.
-      if (!onDevice) throw error;
+      if (draftRevisionId === null) throw error;
       return 'no_answer' as const;
     }
   }
 
   async function runSave(submit: boolean): Promise<void> {
     const onDevice = deviceDraft.current;
-    // Photos reach the server only with the draft the device holds.
-    const photos = onDevice ? await onDevice.committedPhotoCount() : 0;
+    const draft = onDevice ? await onDevice.committed() : null;
     // The device could not say whether the draft has photos: a text-only save could lose them.
-    if (photos === null) return;
-    const result = photos > 0 ? 'no_answer' : await saveOnServer(submit, onDevice !== null);
+    if (onDevice && draft === null) return;
+    // Photos reach the server only with the draft the device holds.
+    const result =
+      draft && draft.photoCount > 0 ? 'no_answer' : await saveOnServer(submit, draft?.revisionId ?? null);
     if (result === 'no_answer') {
       const sent = (await onDevice?.save(submit)) ?? null;
       if (sent) await showSentDraft(submit, sent);
@@ -111,7 +115,8 @@ export function useWorkArtifactSave({
       );
       return;
     }
-    // The server holds it now: the copy on the device goes.
+    // The server holds it now: the copy on the device goes. A refused delete never rejects (the keeper
+    // shows it); the kept copy's later send carries this revision id, and the server replays it.
     await onDevice?.discard();
     // The save returns the stored detail; only a failed read after the write needs a second round trip.
     if (result.artifact) editor.applyDetail(result.artifact);

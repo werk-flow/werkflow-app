@@ -28,6 +28,8 @@ declare global {
       discards: string[];
       /** Set by a spec: a save gets no answer, as without signal. */
       loseSaveAnswer?: boolean;
+      /** Set by a spec: a save is recorded, but its answer is lost on the way back. */
+      loseSaveAnswerAfterCommit?: boolean;
       /** Set by a spec: the code the next decision save is refused with. */
       refuseDecision?: string;
       /** Set by a spec: the next decision save is recorded, but its answer is lost. */
@@ -250,6 +252,7 @@ export async function readSignatureViewContract(): Promise<
 export const saveWorkArtifact: WorkArtifactActions['saveWorkArtifact'] = async (input) => {
   if (window.uiContractWorkArtifacts.loseSaveAnswer) throw new TypeError('Failed to fetch');
   window.uiContractWorkArtifacts.saves.push(structuredClone(input));
+  if (window.uiContractWorkArtifacts.loseSaveAnswerAfterCommit) throw new TypeError('Failed to fetch');
   const artifact = savedDetail(input);
   return {
     success: true,

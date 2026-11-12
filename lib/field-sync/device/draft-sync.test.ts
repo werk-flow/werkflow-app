@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, mock, setSystemTime, test } fr
 import { z } from '@/lib/zod';
 import { TODAY_WIPE_KEY } from './today-wipe';
 import {
+  DRAFT_NO_ACCESS_KEPT_MS,
   DRAFT_UNSENT_LIMIT_MS,
   changeDraftOnDevice,
   deleteDraftsOnDevice,
@@ -193,6 +194,18 @@ beforeEach(async () => {
   // The page names the holder before anything is sent; the app start's send finds no draft yet.
   await startDraftSync(holder).send();
 });
+
+/** Whether a module loaded again under another URL is the sender. */
+function isSenderModule(value: unknown): value is typeof import('./draft-sync') {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'sendDraft' in value &&
+    typeof value.sendDraft === 'function' &&
+    'startDraftSync' in value &&
+    typeof value.startDraftSync === 'function'
+  );
+}
 
 const realWindow: unknown = Reflect.get(globalThis, 'window');
 
@@ -396,6 +409,28 @@ describe('what is sent by itself', () => {
   });
 });
 
+describe('the end of a lost-access draft', () => {
+  test("the next person's sync start deletes a former holder's draft seven days after its lost access, without anyone opening the list", async () => {
+    const lostAt = new Date(NOW.getTime() - DRAFT_NO_ACCESS_KEPT_MS).toISOString();
+    await changeDraftOnDevice(otherPerson, DRAFT_ID, () => ({
+      ...draft({ refusal: { kind: 'no_access', at: lostAt } }),
+      ...otherPerson,
+    }));
+    const keptId = '9d000000-0000-4000-8000-000000000013';
+    const lostRecently = new Date(NOW.getTime() - DRAFT_NO_ACCESS_KEPT_MS + 60_000).toISOString();
+    await changeDraftOnDevice(otherPerson, keptId, () => ({
+      ...draft({ id: keptId, refusal: { kind: 'no_access', at: lostRecently } }),
+      ...otherPerson,
+    }));
+    await startDraftSync(holder).send();
+    // Read at a time before any lost access ends, so this read deletes nothing itself.
+    const left = await listDraftsOnDevice(otherPerson, new Date(0));
+    expect(left.map((entry) => entry.id)).toEqual([keptId]);
+    expect(uploads).toEqual([]);
+    expect(sent).toEqual([]);
+  });
+});
+
 describe('drafts as unsent work at sign-out', () => {
   test("the source names the holder's drafts, those without access apart, and discards only the holder's", async () => {
     await save(draft({ photos: [] }));
@@ -473,25 +508,58 @@ describe('the draft belongs to its author and its sending', () => {
     ]);
   });
 
-  test("the tabs of a phone send one after the other: each send holds the browser's draft-send lock", async () => {
-    const requested: string[] = [];
+  test("the tabs of a phone send one after the other: a second tab's sender waits for the draft-send lock", async () => {
+    // A lock of one name that grants one holder at a time, in the order asked, as the browser's does.
     const realNavigator: unknown = Reflect.get(globalThis, 'navigator');
+    const requested: string[] = [];
+    let tail: Promise<unknown> = Promise.resolve();
     Object.assign(globalThis, {
       navigator: {
         locks: {
-          request: async (name: string, run: () => Promise<unknown>) => {
+          request: (name: string, run: () => Promise<unknown>) => {
             requested.push(name);
-            return run();
+            const granted = tail.then(run);
+            // The next holder waits for this one to end, however it ends; the caller gets its failure.
+            tail = granted.then(
+              () => 'released',
+              () => 'released',
+            );
+            return granted;
           },
         },
       },
     });
+    // A second tab: the same sender module, loaded again with its own in-tab queue.
+    const secondTabSpecifier = './draft-sync?tab=2';
+    const loaded: unknown = await import(secondTabSpecifier);
+    if (!isSenderModule(loaded)) throw new Error('The second tab did not load the sender.');
+    const secondTab = loaded;
     try {
-      await startDraftSync(holder).send();
-      await save(draft({ photos: [] }));
+      await secondTab.startDraftSync(holder).send();
+      await save(draft({ photos: draft().photos.slice(0, 1) }));
+      let finishUpload = (): void => undefined;
+      uploadAnswers = [
+        () =>
+          new Promise<UploadAnswer>((resolve) => {
+            finishUpload = () => resolve(savedAs('9d000000-0000-4000-8000-000000000041'));
+          }),
+      ];
       handlerAnswers = [results('accepted', 'accepted')];
-      expect(await sendDraft(holder, DRAFT_ID)).toBe('sent');
-      expect(requested).toContain('werkflow-draft-send');
+      const first = sendDraft(holder, DRAFT_ID);
+      await until(() => uploads.length === 1);
+      const second = secondTab.sendDraft(holder, DRAFT_ID);
+      // The second tab asked for the lock and waits: it neither uploads nor sends while the first holds it.
+      await until(() => requested.length >= 2);
+      for (let turn = 0; turn < 50; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+      expect(uploads).toHaveLength(1);
+      expect(sent).toEqual([]);
+      finishUpload();
+      expect(await first).toBe('sent');
+      // Once the first send removed the draft, the second finds nothing to send.
+      expect(await second).toBe('skipped');
+      expect(uploads).toHaveLength(1);
+      expect(sent).toHaveLength(1);
+      expect(requested.every((name) => name === 'werkflow-draft-send')).toBe(true);
     } finally {
       Object.assign(globalThis, { navigator: realNavigator });
     }

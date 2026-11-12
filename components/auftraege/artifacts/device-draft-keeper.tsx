@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
 import { DOCUMENT_MAX_FILE_SIZE_BYTES } from '@/lib/documents/types';
@@ -115,7 +115,9 @@ function useDraftWrites(device: DraftDevice, artifactId: string) {
     queue.current = result;
     return result;
   };
-  return { write, deviceSaveError };
+  /** Settles once every write queued so far has reached the device or failed. */
+  const settled = useCallback((): Promise<void> => queue.current.then(() => undefined), []);
+  return { write, settled, deviceSaveError };
 }
 
 /** The draft's photos: each is stored on the device the moment it is taken. */
@@ -123,7 +125,7 @@ function useDraftPhotos(write: DraftWrite, withText: DraftChange, restored: read
   const [photos, setPhotos] = useState<readonly DraftPhoto[]>(restored);
   const [photoError, setPhotoError] = useState<string | null>(null);
 
-  async function change(next: (photos: DraftPhoto[]) => DraftPhoto[]): Promise<void> {
+  async function change(next: (photos: DraftPhoto[]) => DraftPhoto[]): Promise<readonly DraftPhoto[] | null> {
     const stored = await write((current) => {
       const draft = withText(current);
       return draft && !draft.sealed
@@ -131,7 +133,9 @@ function useDraftPhotos(write: DraftWrite, withText: DraftChange, restored: read
         : draft;
     });
     // A photo the device could not store is not listed: the failure shows at the form.
-    if (stored !== null && stored !== 'not_stored') setPhotos(stored.photos);
+    if (stored === null || stored === 'not_stored') return null;
+    setPhotos(stored.photos);
+    return stored.photos;
   }
 
   async function addPhoto(file: File): Promise<void> {
@@ -151,11 +155,18 @@ function useDraftPhotos(write: DraftWrite, withText: DraftChange, restored: read
       transferred: null,
       documentId: null,
     };
-    await change((stored) => [...stored, photo]);
+    // Checked again in the write's own transaction: two photos taken before the first is stored both
+    // passed the check above.
+    const stored = await change((current) =>
+      current.length < WORK_ARTIFACT_DRAFT_PHOTO_LIMIT ? [...current, photo] : current,
+    );
+    if (stored && !stored.some((entry) => entry.id === photo.id))
+      setPhotoError(`Ein Entwurf kann höchstens ${WORK_ARTIFACT_DRAFT_PHOTO_LIMIT} Fotos haben.`);
   }
 
-  const removePhoto = (photoId: string): Promise<void> =>
-    change((stored) => stored.filter((entry) => entry.id !== photoId));
+  const removePhoto = async (photoId: string): Promise<void> => {
+    await change((stored) => stored.filter((entry) => entry.id !== photoId));
+  };
 
   return { photos, photoError, addPhoto, removePhoto };
 }
@@ -222,7 +233,7 @@ function useSaveThroughDevice(
  */
 export function DeviceDraftKeeper(props: DeviceDraftKeeperProps) {
   const { editor, device, jobId, artifactId, restored, onHandle } = props;
-  const { write, deviceSaveError } = useDraftWrites(device, artifactId);
+  const { write, settled, deviceSaveError } = useDraftWrites(device, artifactId);
   const text = draftText(editor);
   const withText = textChange(device, { artifactId, jobId }, text);
   const photos = useDraftPhotos(write, withText, restored?.draft.photos ?? []);
@@ -237,17 +248,22 @@ export function DeviceDraftKeeper(props: DeviceDraftKeeperProps) {
     void write(withText);
   });
 
-  // While the dialog is open nothing sends the draft by itself.
-  useEffect(() => device.keepOpen(artifactId), [device, artifactId]);
+  // While the dialog is open, and until its last change reached the device, nothing sends the draft
+  // by itself: a send must never seal a draft without the text or photo the person just gave it.
+  useEffect(() => {
+    const release = device.keepOpen(artifactId);
+    return () => void settled().then(release);
+  }, [device, artifactId, settled]);
 
   // The dialog's save reaches the keeper of this render; without a keeper it saves on the server alone.
   useEffect(() => {
     onHandle({
-      // An unchanged write waits behind every queued one: a photo just taken counts once it is stored.
-      committedPhotoCount: async () => {
-        const stored = await write((current) => current);
-        if (stored === 'not_stored') return null;
-        return stored === null ? 0 : stored.photos.length;
+      // The text write waits behind every queued one: a photo just taken counts once it is stored.
+      committed: async () => {
+        const stored = await write(withText);
+        return stored === null || stored === 'not_stored'
+          ? null
+          : { photoCount: stored.photos.length, revisionId: stored.revisionId };
       },
       save,
       discard: async () => void (await write(() => null)),

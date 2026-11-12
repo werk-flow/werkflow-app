@@ -151,7 +151,7 @@ begin
     or exists (select 1 from public.work_artifact_revisions where id = '32000000-0000-0000-0000-000000000031')
     or exists (select 1 from public.work_artifact_revision_documents
       where revision_id = '32000000-0000-0000-0000-000000000031')
-    or exists (select 1 from public.work_artifact_draft_operations)
+    or exists (select 1 from public.work_artifact_draft_operations where organization_id = v_org)
   then raise exception 'a refused draft attach left rows behind'; end if;
 end;
 $$;
@@ -194,7 +194,7 @@ begin
     or (select count(*) from public.work_artifact_revision_documents
       where revision_id = '32000000-0000-0000-0000-000000000031') <> 2
     or (select version from public.work_artifacts where id = '32000000-0000-0000-0000-000000000030') <> 3
-    or (select count(*) from public.work_artifact_draft_operations) <> 1
+    or (select count(*) from public.work_artifact_draft_operations where organization_id = v_org) <> 1
   then raise exception 'a replayed attach wrote again'; end if;
 
   -- The same operation id with other content, or from another person, is refused.
@@ -217,6 +217,49 @@ begin
       '32000000-0000-0000-0000-000000000082', repeat('d', 64), '32000000-0000-0000-0000-000000000033',
       '32000000-0000-0000-0000-000000000034', '32000000-0000-0000-0000-000000000020', '[]')
   $sql$, 'work_artifact_not_authorized');
+end;
+$$;
+
+-- The online save of a new draft committed, but its answer was lost: the phone then sends the same
+-- draft (same Arbeitsnachweis and revision id) as an operation. The attach answers `replayed`,
+-- records the operation and writes no second revision. With photos the online save never ran, so
+-- a revision without its photos stays a conflict.
+do $$
+declare
+  v_org constant uuid := '32000000-0000-0000-0000-000000000010';
+  v_employee constant uuid := '32000000-0000-0000-0000-000000000003';
+  v_answer jsonb;
+begin
+  perform public.create_work_artifact_revision(
+    p_organization_id => v_org, p_actor_id => v_employee,
+    p_artifact_id => '32000000-0000-0000-0000-000000000090',
+    p_revision_id => '32000000-0000-0000-0000-000000000091',
+    p_expected_version => null, p_job_id => '32000000-0000-0000-0000-000000000020', p_project_id => null,
+    p_kind => 'work_report', p_visibility => 'internal_only', p_captured_at => '2037-11-09T07:00:00Z',
+    p_title => 'Heizung gewartet', p_content => '{"performedWork":"Brenner gereinigt"}'::jsonb,
+    p_corrects_revision_id => null, p_correction_reason => null, p_submit => false, p_submit_action_id => null);
+  v_answer := pg_temp.attach(v_org, v_employee, '32000000-0000-0000-0000-000000000092', repeat('e', 64),
+    '32000000-0000-0000-0000-000000000090', '32000000-0000-0000-0000-000000000091',
+    '32000000-0000-0000-0000-000000000020', '[]');
+  if (v_answer->>'replayed')::boolean is distinct from true then
+    raise exception 'the attach after a committed online save answered %', v_answer;
+  end if;
+  if (select count(*) from public.work_artifact_revisions
+      where artifact_id = '32000000-0000-0000-0000-000000000090') <> 1
+    or not exists (select 1 from public.work_artifact_draft_operations
+      where organization_id = v_org and id = '32000000-0000-0000-0000-000000000092')
+  then raise exception 'the attach after a committed online save wrote again or kept no operation'; end if;
+  -- A resend of that operation replays it too.
+  v_answer := pg_temp.attach(v_org, v_employee, '32000000-0000-0000-0000-000000000092', repeat('e', 64),
+    '32000000-0000-0000-0000-000000000090', '32000000-0000-0000-0000-000000000091',
+    '32000000-0000-0000-0000-000000000020', '[]');
+  if (v_answer->>'replayed')::boolean is distinct from true then raise exception 'the resend answered %', v_answer; end if;
+  -- Another person never adopts a revision the author's online save wrote.
+  perform pg_temp.expect_refusal('another person adopting the saved revision', $sql$
+    select pg_temp.attach('32000000-0000-0000-0000-000000000010', '32000000-0000-0000-0000-000000000001',
+      '32000000-0000-0000-0000-000000000093', repeat('f', 64), '32000000-0000-0000-0000-000000000090',
+      '32000000-0000-0000-0000-000000000091', '32000000-0000-0000-0000-000000000020', '[]')
+  $sql$, 'work_artifact_draft_idempotency_conflict');
 end;
 $$;
 

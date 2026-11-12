@@ -10,7 +10,6 @@ import { ClipboardList, Plus } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { lazyDialog } from '@/components/shared/lazy-dialog';
 import { useLiveView } from '@/hooks/use-live-view';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import { readInBackground } from '@/lib/data/background-read-client';
@@ -22,16 +21,10 @@ import {
   type WorkArtifactSummary,
   type WorkArtifactTimeSourceOption,
 } from '@/lib/work-artifacts/types';
-import { useDeviceDrafts, type DraftDevice, type RestoredDraft } from './use-device-drafts';
+import { useArtifactCode, type DraftDevice, type RestoredDraft } from './use-device-drafts';
 import type { WorkArtifactTarget } from '@/lib/work-artifacts/types';
 import type { WorkArtifactEvidenceRequirement } from './work-artifact-content';
 import { SectionTitle } from '@/components/shared/section-title';
-
-// The dialog and everything only it needs download on the first open: the job list prefetches a
-// job page's own code, so a dialog in that code would count toward the field cold start.
-const lazyArtifactDialog = lazyDialog(() =>
-  import('./work-artifact-dialog').then((mod) => mod.WorkArtifactDialogHost),
-);
 
 type WorkArtifactsSectionProps = WorkArtifactTarget & {
   initialArtifacts: WorkArtifactSummary[];
@@ -63,16 +56,16 @@ export function WorkArtifactsSection({
   defaultSiteId,
   readOnly = false,
 }: WorkArtifactsSectionProps): ReactElement {
-  const { selectedId, creating, restoredDraft, ...open } = useOpenArtifact(initialArtifacts);
-  // Only a job keeps drafts on the device; their code loads with the dialog for a new Arbeitsnachweis.
-  const deviceDrafts = useDeviceDrafts(currentUserId, creating && targetType === 'job');
-  const [draftDevice, setDraftDevice] = useState<DraftDevice | null>(null);
+  const { selectedId, editing, restoredDraft, draftDevice, ...open } = useOpenArtifact(initialArtifacts);
   // Newest version seen per artifact while the dialog is open. The dialog
   // compares it with its loaded version, so the user's own writes never
   // raise the remote-change hint.
   const [remoteVersions, setRemoteVersions] = useState<Record<string, number>>({});
 
-  const editing = Boolean(selectedId || creating);
+  // The dialog and everything only it needs load apart from the job page's own code: the job list
+  // prefetches that code, so a dialog in it would count toward the field cold start. A field
+  // worker's page loads it once idle, so a first open without signal finds it.
+  const { code, failure } = useArtifactCode(currentUserId, editing, !isManager && !readOnly);
   const view = useWorkArtifactsLiveView({
     targetType,
     targetId,
@@ -81,72 +74,76 @@ export function WorkArtifactsSection({
     setRemoteVersions,
   });
   const artifacts = view.data ?? initialArtifacts;
-  const refresh = view.refresh;
 
   return (
     <section
       id="arbeitsnachweise"
       data-testid="work-artifacts-section"
+      // Whether the dialog's code is on the page: a first open without signal needs it loaded.
+      data-artifact-code={code ? 'ready' : 'pending'}
       className="rounded-lg border bg-card p-4 shadow-xs sm:p-5"
     >
       <WorkArtifactsSectionHeader readOnly={readOnly} isManager={isManager} onCreate={open.create} />
-      <StaleRegion stale={view.isStale} onRetry={refresh}>
+      <StaleRegion stale={view.isStale} onRetry={view.refresh}>
         <WorkArtifactList artifacts={artifacts} onSelect={open.select} />
       </StaleRegion>
       {view.isRefreshing && (
         <p className="mt-2 text-xs text-muted-foreground">Arbeitsnachweise werden aktualisiert…</p>
       )}
       <SectionDeviceDrafts
-        deviceDrafts={deviceDrafts}
+        code={code}
+        failure={failure}
         currentUserId={currentUserId}
         jobId={targetType === 'job' ? targetId : null}
         onOpen={open.restore}
-        onDevice={setDraftDevice}
+        onDevice={open.setDraftDevice}
       />
-      <lazyArtifactDialog.Dialog
-        open={editing}
-        onOpenChange={open.change}
-        targetType={targetType}
-        targetId={targetId}
-        artifactId={selectedId}
-        initialSummary={artifacts.find((artifact) => artifact.id === selectedId) ?? null}
-        isManager={isManager}
-        canApprove={canApprove}
-        currentUserId={currentUserId}
-        documents={documents}
-        evidenceRequirements={evidenceRequirements}
-        timeEntryOptions={timeEntryOptions}
-        recordedVisit={recordedVisit}
-        instructionOptions={instructionOptions}
-        defaultSiteId={defaultSiteId}
-        readOnly={readOnly}
-        draftDevice={targetType === 'job' ? draftDevice : null}
-        restoredDraft={restoredDraft}
-        remoteVersions={remoteVersions}
-        onRemoteUpdateHandled={() => setRemoteVersions({})}
-        onClose={() => {
-          open.close();
-          setRemoteVersions({});
-          void refresh();
-        }}
-      />
+      {code && (
+        <code.WorkArtifactDialogHost
+          open={editing}
+          onOpenChange={open.change}
+          targetType={targetType}
+          targetId={targetId}
+          artifactId={selectedId}
+          initialSummary={artifacts.find((artifact) => artifact.id === selectedId) ?? null}
+          isManager={isManager}
+          canApprove={canApprove}
+          currentUserId={currentUserId}
+          documents={documents}
+          evidenceRequirements={evidenceRequirements}
+          timeEntryOptions={timeEntryOptions}
+          recordedVisit={recordedVisit}
+          instructionOptions={instructionOptions}
+          defaultSiteId={defaultSiteId}
+          readOnly={readOnly}
+          draftDevice={targetType === 'job' ? draftDevice : null}
+          restoredDraft={restoredDraft}
+          remoteVersions={remoteVersions}
+          onRemoteUpdateHandled={() => setRemoteVersions({})}
+          onClose={() => {
+            open.close();
+            setRemoteVersions({});
+            void view.refresh();
+          }}
+        />
+      )}
     </section>
   );
 }
 
-/** The drafts this device keeps, once their code is loaded; code that cannot load shows its retry. */
+/** The drafts this device keeps, once the dialog's code is loaded; code that cannot load shows its retry. */
 function SectionDeviceDrafts({
-  deviceDrafts: { DeviceDrafts, failure },
+  code,
+  failure,
   ...drafts
-}: {
-  deviceDrafts: ReturnType<typeof useDeviceDrafts>;
+}: ReturnType<typeof useArtifactCode> & {
   currentUserId: string;
   jobId: string | null;
   onOpen: (restored: RestoredDraft) => void;
   onDevice: (device: DraftDevice | null) => void;
 }) {
   if (failure) return <SectionError className="mt-4" failure={failure} />;
-  return DeviceDrafts ? <DeviceDrafts {...drafts} /> : null;
+  return code ? <code.DeviceDrafts {...drafts} /> : null;
 }
 
 /** Which Arbeitsnachweis the dialog shows: a saved one, a new one, or a draft of this job the device kept. */
@@ -158,6 +155,8 @@ function useOpenArtifact(initialArtifacts: WorkArtifactSummary[]) {
   });
   const [creating, setCreating] = useState(false);
   const [restoredDraft, setRestoredDraft] = useState<RestoredDraft | null>(null);
+  // Only a job keeps drafts on the device; their code loads with the dialog for a new Arbeitsnachweis.
+  const [draftDevice, setDraftDevice] = useState<DraftDevice | null>(null);
   const close = (): void => {
     setCreating(false);
     setRestoredDraft(null);
@@ -165,8 +164,10 @@ function useOpenArtifact(initialArtifacts: WorkArtifactSummary[]) {
   };
   return {
     selectedId,
-    creating,
+    editing: Boolean(selectedId || creating),
     restoredDraft,
+    draftDevice,
+    setDraftDevice,
     select: setSelectedId,
     create: () => setCreating(true),
     restore: (draft: RestoredDraft) => {

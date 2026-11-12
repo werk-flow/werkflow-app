@@ -133,6 +133,11 @@ async function countDraftsOnPage(page: Page): Promise<number> {
   }, DRAFT_DATABASE);
 }
 
+/** Waits until the job page loaded the report dialog's code, which a first open without signal needs. */
+export async function expectReportCodeLoaded(page: Page): Promise<void> {
+  await expect(page.getByTestId('work-artifacts-section')).toHaveAttribute('data-artifact-code', 'ready');
+}
+
 /** One Arbeitsnachweis on the server: its state, and how many revisions, photo links and draft operations wrote it. */
 type AttachedReport = {
   status: string;
@@ -140,6 +145,8 @@ type AttachedReport = {
   revisions: number;
   photos: number;
   operations: number;
+  /** „Ausgeführte Arbeiten“ of each revision, oldest first. */
+  performedWork: Array<string | null>;
 };
 
 /** Asserts what the server holds of the job's Arbeitsnachweise with this title. */
@@ -156,9 +163,10 @@ async function readAttachedReports(world: TestWorld, title: string): Promise<Att
   const jobId = await getJobIdByNumber(world.orgId, todayJobNumber(world));
   const { data: revisions } = await admin
     .from('work_artifact_revisions')
-    .select('id, artifact_id')
+    .select('id, artifact_id, performed_work, revision_number')
     .eq('organization_id', world.orgId)
     .eq('title', title)
+    .order('revision_number')
     .throwOnError();
   const artifactIds = [...new Set(revisions.map((revision) => revision.artifact_id))];
   const revisionIds = revisions.map((revision) => revision.id);
@@ -182,13 +190,15 @@ async function readAttachedReports(world: TestWorld, title: string): Promise<Att
     .in('revision_id', revisionIds)
     .throwOnError();
   return artifacts.map((artifact) => {
-    const own = revisions.filter((revision) => revision.artifact_id === artifact.id).map(({ id }) => id);
+    const ownRevisions = revisions.filter((revision) => revision.artifact_id === artifact.id);
+    const own = ownRevisions.map(({ id }) => id);
     return {
       status: artifact.status,
       version: artifact.version,
       revisions: own.length,
       photos: links.filter((link) => own.includes(link.revision_id)).length,
       operations: operations.filter((operation) => own.includes(operation.revision_id)).length,
+      performedWork: ownRevisions.map((revision) => revision.performed_work),
     };
   });
 }
