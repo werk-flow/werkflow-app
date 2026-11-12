@@ -1255,7 +1255,6 @@ const eslintConfig = defineConfig([
     files: ['tests/golden/**/*.ts', 'tests/audit/**/*.ts', 'tests/canary/**/*.ts'],
     ignores: [
       'tests/golden/support/streamed-content.ts',
-      'tests/golden/support/fixtures.ts',
       'tests/golden/support/sessions.ts',
       'tests/audit/support/performance-steps.ts',
       'tests/audit/performance/planning-benchmark.spec.ts',
@@ -1275,10 +1274,10 @@ const eslintConfig = defineConfig([
         {
           patterns: [
             {
-              group: ['**/support/sessions'],
+              group: ['**/support/sessions', './sessions'],
               importNames: ['createRolePage'],
               message:
-                'Take a role page from the fixtures (adminPage, bueroPage, employeePage, outsiderPage): their goto and reload wait for React to reveal the content it streamed.',
+                'Take a role page from the fixtures (adminPage, bueroPage, employeePage, outsiderPage, rolePage) or open it through openRolePage (tests/golden/support/streamed-content.ts): their goto and reload wait for React to reveal the content it streamed.',
             },
           ],
         },

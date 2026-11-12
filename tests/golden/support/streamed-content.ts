@@ -1,4 +1,5 @@
 import { expect, type BrowserContext, type Page } from '@playwright/test';
+import { createRolePage } from './sessions';
 
 /**
  * React's hidden container for a Suspense boundary's streamed content, at the
@@ -71,6 +72,15 @@ async function expectStreamedContentRevealed(page: Page): Promise<void> {
       cause: error,
     });
   }
+}
+
+/** A signed-in page of the role, in its own context, whose loads wait for React's reveal. */
+export async function openRolePage(
+  input: Parameters<typeof createRolePage>[0],
+): ReturnType<typeof createRolePage> {
+  const opened = await createRolePage(input);
+  revealStreamedContentAfterEachLoad(opened.page);
+  return opened;
 }
 
 /** A new page of the context whose loads wait for React's reveal. */
