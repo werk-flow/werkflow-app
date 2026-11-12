@@ -165,6 +165,13 @@ export const APP_FAMILIES: readonly AppFamily[] = [
     heading: 'Qualifikationen',
   },
   {
+    id: 'meldungen',
+    role: 'admin',
+    covers: ['/meldungen'],
+    route: fixed('/meldungen'),
+    heading: 'Meine Meldungen',
+  },
+  {
     id: 'arbeitsvorlagen',
     role: 'admin',
     covers: ['/arbeitsvorlagen'],
@@ -325,6 +332,13 @@ export const APP_FAMILIES: readonly AppFamily[] = [
     covers: ['/qualifikationen'],
     route: fixed('/qualifikationen'),
     heading: 'Qualifikationen',
+  },
+  {
+    id: 'handwerker-meldungen',
+    role: 'employee',
+    covers: ['/meldungen'],
+    route: fixed('/meldungen'),
+    heading: 'Meine Meldungen',
   },
   {
     id: 'handwerker-einstellungen-profil',

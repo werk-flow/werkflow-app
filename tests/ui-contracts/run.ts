@@ -44,6 +44,7 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
         'process.env.NODE_ENV': JSON.stringify('production'),
         'process.env.NEXT_PUBLIC_SUPABASE_URL': JSON.stringify(CONTRACT_SUPABASE_URL),
         'process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY': JSON.stringify(CONTRACT_SUPABASE_PUBLISHABLE_KEY),
+        'process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA': JSON.stringify('contract-build'),
       },
       plugins: [
         {
@@ -57,6 +58,20 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               )
                 return { path: join(repository, 'lib/supabase/client.ts') };
             });
+            // The report dialog's contract runs the real launcher, dialog and upload
+            // client against stub actions, router, organization and redraw.
+            builder.onResolve(
+              {
+                filter:
+                  /^(?:@\/lib\/problem-reports\/(?:actions|screenshot\/(?:redraw-screenshot|load-ui-string-catalog))|\.\/file-actions|@\/components\/organization\/organization-context|next\/(?:navigation|link))$/,
+              },
+              (args) => {
+                const reportModule =
+                  args.importer.includes('/components/problem-reports/') ||
+                  args.importer.endsWith('lib/problem-reports/upload-client.ts');
+                if (reportModule) return { path: join(import.meta.dir, 'problem-report-boundaries.tsx') };
+              },
+            );
             builder.onResolve({ filter: /^@\/lib\/clients\/actions$/ }, () => ({
               path: join(import.meta.dir, 'customer-service-boundaries.ts'),
             }));
