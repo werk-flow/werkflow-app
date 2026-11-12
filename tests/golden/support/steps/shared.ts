@@ -573,8 +573,10 @@ export async function selectFromSearchable(
   options?: { searchFirst?: boolean },
 ): Promise<void> {
   const listbox = page.getByRole('listbox').filter({ visible: true }).first();
-  const triggerId = await trigger.getAttribute('id');
-  const stableTrigger = triggerId ? page.locator(`#${triggerId}`) : trigger;
+  // After a load the document can hold a hidden copy of the trigger: only the shown one opens the picker.
+  const shownTrigger = trigger.filter({ visible: true });
+  const triggerId = await shownTrigger.getAttribute('id');
+  const stableTrigger = triggerId ? page.locator(`#${triggerId}`).filter({ visible: true }) : shownTrigger;
   const openPicker = async (): Promise<void> => {
     if (await listbox.isVisible()) return;
     await expect(stableTrigger).toBeVisible();
