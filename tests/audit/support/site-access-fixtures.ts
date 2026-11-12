@@ -10,18 +10,25 @@ export type SiteAccessJobState = 'none' | 'open' | 'rejected';
 
 const JOB_CODES: Record<SiteAccessJobState, string> = { none: 'ZUG', open: 'ZUGO', rejected: 'ZUGA' };
 
+/** The number and title of the seeded job in that state. */
+export function siteAccessJob(
+  world: TestWorld,
+  state: SiteAccessJobState,
+): { jobNumber: string; title: string } {
+  return {
+    jobNumber: `A-${world.runId}-${JOB_CODES[state]}`,
+    title: worldName('Heizungswartung Lindenhof', world.runId),
+  };
+}
+
 /**
  * A job of the employee at an Einsatzort with one Zugangskontakt, once per
  * world and state: without a proposal, with the employee's open proposal, or
  * with a proposal the office rejected. Setup writes through the real database
  * functions, so the rows are what the app writes.
  */
-export async function seedSiteAccessJob(
-  world: TestWorld,
-  state: SiteAccessJobState,
-): Promise<{ jobNumber: string; title: string }> {
-  const jobNumber = `A-${world.runId}-${JOB_CODES[state]}`;
-  const title = worldName('Heizungswartung Lindenhof', world.runId);
+export async function seedSiteAccessJob(world: TestWorld, state: SiteAccessJobState): Promise<void> {
+  const { jobNumber, title } = siteAccessJob(world, state);
   await surfaceFixture(world, `acceptance.site-access-${state}`, async () => {
     const admin = createAdminClient();
     const siteName = 'Lindenhof 5';
@@ -93,5 +100,4 @@ export async function seedSiteAccessJob(
     }
     return jobNumber;
   });
-  return { jobNumber, title };
 }

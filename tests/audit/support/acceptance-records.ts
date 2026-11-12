@@ -9,7 +9,7 @@ import { rpcArgs } from '../../../lib/supabase/rpc-args';
 import { createAdminClient } from '../../golden/support/db/shared';
 import type { TestWorld } from '../../golden/support/world';
 import type { AcceptanceRecord } from './acceptance-sets';
-import { seedSiteAccessJob, type SiteAccessJobState } from './site-access-fixtures';
+import { seedSiteAccessJob, siteAccessJob, type SiteAccessJobState } from './site-access-fixtures';
 import { surfaceFixture } from './surface-fixtures';
 import type { SurfaceDestination } from './surface-routes';
 
@@ -510,7 +510,8 @@ async function jobWithAttachedRequest(world: TestWorld): Promise<SurfaceDestinat
 /** The employee's job at an Einsatzort in the given proposal state. */
 function siteAccessJob(state: SiteAccessJobState) {
   return async (world: TestWorld): Promise<SurfaceDestination> => {
-    const { jobNumber, title } = await seedSiteAccessJob(world, state);
+    await seedSiteAccessJob(world, state);
+    const { jobNumber, title } = siteAccessJob(world, state);
     return { route: `/auftraege/${encodeURIComponent(jobNumber)}`, heading: title };
   };
 }

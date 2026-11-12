@@ -166,6 +166,10 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               if (args.importer.endsWith('use-work-artifact-customer-actions.ts'))
                 return { path: join(import.meta.dir, 'work-artifact-boundaries.ts') };
             });
+            // The Aufgaben task rows reach the access proposal review's actions.
+            builder.onResolve({ filter: /^@\/lib\/site-access-proposals\/actions$/ }, () => ({
+              path: join(import.meta.dir, 'site-access-boundaries.ts'),
+            }));
             builder.onResolve({ filter: /^@\/lib\/qualifications\/actions$/ }, () => ({
               path: join(import.meta.dir, 'qualification-service-boundaries.ts'),
             }));

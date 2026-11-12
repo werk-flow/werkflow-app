@@ -22,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
+import type { ActionResult } from '@/lib/action-result';
 import type { AttentionTask } from '@/lib/attention/types';
 import { acceptSiteAccessProposal, rejectSiteAccessProposal } from '@/lib/site-access-proposals/actions';
 import { SITE_ACCESS_LIMITS } from '@/lib/site-access-proposals/types';
@@ -82,7 +83,7 @@ export function SiteAccessTaskRow({
 }
 
 type Runner<Input> = {
-  run: (input: Input) => Promise<{ success: true } | { success: false; error: string }>;
+  run: (input: Input) => Promise<ActionResult>;
   isPending: boolean;
 };
 type AcceptRunner = Runner<{ proposalId: string; contactId: string | null }>;
@@ -198,7 +199,7 @@ function SiteAccessReviewDialog({
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="space-y-4 py-1 text-sm wrap-anywhere">
-            <p className="text-muted-foreground">{task.siteAddress || 'Keine Adresse hinterlegt'}</p>
+            {task.siteAddress && <p className="text-muted-foreground">{task.siteAddress}</p>}
             <ProposedContact task={task} decision={decision} />
             <ProposedAccessNotes task={task} />
             {decision.mode === 'reject' && (
@@ -270,6 +271,12 @@ function ProposedContact({
           </Select>
         </Field>
       )}
+      {decision.mode === 'review' && task.accessContacts.length > MAX_CORRECTABLE_CONTACTS && (
+        <p className="text-muted-foreground">
+          Hier stehen die ersten {MAX_CORRECTABLE_CONTACTS} Zugangskontakte. Einen anderen korrigierst du beim
+          Kunden.
+        </p>
+      )}
     </section>
   );
 }
@@ -282,7 +289,9 @@ function ProposedAccessNotes({ task }: { task: SiteAccessTask }): ReactElement |
       <h3 id="site-access-notes-heading" className="font-medium">
         Zugangshinweis
       </h3>
-      <p className="text-muted-foreground">Bisher: {task.currentAccessNotes ?? 'Keiner hinterlegt'}</p>
+      <p className="text-muted-foreground">
+        {task.currentAccessNotes ? `Bisher: ${task.currentAccessNotes}` : 'Bisher ohne Zugangshinweis.'}
+      </p>
       <p className="whitespace-pre-wrap">Neu: {task.values.accessNotes}</p>
     </section>
   );
