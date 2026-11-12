@@ -7931,6 +7931,7 @@ export type Database = {
           reporter_id: string;
           response: string | null;
           scrub_state: string;
+          scrubbed_context: Json | null;
           scrubbed_description: string | null;
           status: string;
         };
@@ -7948,6 +7949,7 @@ export type Database = {
           reporter_id: string;
           response?: string | null;
           scrub_state?: string;
+          scrubbed_context?: Json | null;
           scrubbed_description?: string | null;
           status?: string;
         };
@@ -7965,6 +7967,7 @@ export type Database = {
           reporter_id?: string;
           response?: string | null;
           scrub_state?: string;
+          scrubbed_context?: Json | null;
           scrubbed_description?: string | null;
           status?: string;
         };
@@ -16903,6 +16906,15 @@ export type Database = {
           p_part_id: string;
         };
         Returns: Json;
+      };
+      record_problem_report_scrub: {
+        Args: {
+          p_organization_id: string;
+          p_report_id: string;
+          p_scrubbed_context: Json;
+          p_scrubbed_description: string;
+        };
+        Returns: string;
       };
       record_work_artifact_action: {
         Args: {
