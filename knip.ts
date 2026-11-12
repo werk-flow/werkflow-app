@@ -73,8 +73,9 @@ const config: KnipConfig = {
   },
   // Type-only exports are part of the gate since 2026-09-15 (owner decision, step 2).
   // The pinned Supabase CLI runs through bunx inside scripts/generate-supabase-types.ts;
-  // tailwindcss is imported by app/globals.css, which knip does not compile.
-  ignoreDependencies: ['supabase', 'tailwindcss'],
+  // tailwindcss is imported by app/globals.css, which knip does not compile; typescript7's tsc
+  // runs behind `bun scripts/heavy.ts --` in the `typecheck` script, where knip reads no binary.
+  ignoreDependencies: ['supabase', 'tailwindcss', 'typescript7'],
   // util-linux's flock holds the machine-wide heavy slots (lib/testing/runner/heavy-slot.ts);
   // T3 Code's CLI wakes the thread of a notified run (lib/testing/notified-run.ts);
   // POSIX mkfifo lets its test wait on the wake itself (lib/testing/notified-run.test.ts);

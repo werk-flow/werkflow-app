@@ -116,12 +116,12 @@ Between releases, merged migrations wait on DEV. `migrations:check`, `types:chec
 
 ## Work in a worktree
 
-T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts` in the background. It installs from the frozen lockfile, links the main checkout's env backups and Supabase link state, and runs `bun run env:local`. It writes `.t3/setup-running`, then `.t3/setup-done` or `.t3/setup-failed` with the failing output.
+T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts` in the background. It writes `.t3/setup-running`, then `.t3/setup-done` or `.t3/setup-failed` with the failing output.
 
-- Wait for `.t3/setup-done` before you run any command. On `.t3/setup-failed`, read the file, repair the cause, and run `bun scripts/setup-worktree.ts` again.
+- Wait for `.t3/setup-done` before you run any command. On `.t3/setup-failed`, repair the cause and run `bun scripts/setup-worktree.ts` again.
 - A checkout keeps its own `.next`, workspace lock and `.agent-logs/`. The main checkout serves on port 3000. A linked worktree derives its test-server and dev ports from its path (`lib/testing/runner/app-port.ts`).
-- Every worktree shares one local stack. Ordinary browser groups of several worktrees run side by side. A group that measures or restarts a stack service holds the stack alone (`lib/testing/runner/stack-lock.ts`).
-- `bun run check:changed`, `bun run test:verify` and a local test server's build each take a machine-wide slot, one per 4 GiB of memory beyond 6 GiB, and announce any wait (`lib/testing/runner/heavy-slot.ts`). Serving and CI take none.
+- Every worktree shares one local stack. Browser groups of several worktrees run side by side, except one that measures or restarts a stack service: it holds the stack alone (`lib/testing/runner/stack-lock.ts`).
+- `bun run check:changed`, `test:verify`, `typecheck`, `build` (a test server's too) and a `lint` over 150 files take a machine-wide slot, one per 4 GiB of memory beyond 6 GiB (`lib/testing/runner/heavy-slot.ts`). Serving and CI take none. A hook refuses a direct whole-repository `tsc`, wider `eslint` or `next build` and names the slot command (`lib/testing/runner/heavy-command.ts`). Other heavy work: `bun scripts/heavy.ts -- <command>`.
 - `supabase db reset` and `supabase stop` affect every worktree. The edit guard refuses them while any worktree holds the stack.
 - Another worktree's unmerged migration may sit in the shared stack ([recurring traps](testing.md#recurring-traps)).
 
