@@ -10,6 +10,7 @@ import {
 } from '@/lib/work-artifacts/types';
 import { z } from '@/lib/zod';
 import { belongsTo, requestResult, runInStore, type DeviceHolder } from './device-store';
+import { markDraftsOnDevice } from './draft-expiry';
 
 // The web half of the report drafts a phone keeps (decision record 0010, the
 // report draft amendment): one IndexedDB record per draft with its text and
@@ -151,6 +152,33 @@ function noAccessTimeOver(draft: StoredDraft, now: Date): boolean {
   );
 }
 
+/** Sets the device mark from what the store holds once the transaction's earlier requests ran. */
+function markWhatRemains(store: IDBObjectStore): void {
+  const counting = store.count();
+  counting.addEventListener('success', () => markDraftsOnDevice(counting.result > 0));
+}
+
+/** Deletes every draft among `records` whose time after a lost access is over, of any holder. */
+function deleteExpired(store: IDBObjectStore, records: readonly unknown[], now: Date): void {
+  for (const record of records) {
+    const draft = storedDraft(record);
+    if (draft && noAccessTimeOver(draft, now)) store.delete(draft.id);
+  }
+  markWhatRemains(store);
+}
+
+/**
+ * Deletes every draft whose time after a lost access is over, of every holder, and nothing else:
+ * no draft is read out, sent or changed. The start of any person's app runs it (draft-expiry.ts).
+ */
+export async function sweepExpiredDraftsOnDevice(now: Date = new Date()): Promise<void> {
+  await inDraftStore('readwrite', (store) => {
+    const request = store.getAll();
+    request.addEventListener('success', () => deleteExpired(store, request.result, now));
+    return request;
+  });
+}
+
 /**
  * The holder's drafts, oldest change first. On the way, every draft whose time after a lost
  * access is over is deleted, also another person's: that person may never open this phone again.
@@ -162,12 +190,7 @@ export async function listDraftsOnDevice(
 ): Promise<StoredDraft[]> {
   const records: unknown[] = await inDraftStore('readwrite', (store) => {
     const request = store.getAll();
-    request.addEventListener('success', () => {
-      for (const record of request.result) {
-        const draft = storedDraft(record);
-        if (draft && noAccessTimeOver(draft, now)) store.delete(draft.id);
-      }
-    });
+    request.addEventListener('success', () => deleteExpired(store, request.result, now));
     return request;
   });
   return records
@@ -204,7 +227,10 @@ export async function changeDraftOnDevice(
             stored = current;
           } else if (next === null) {
             store.delete(id);
+            markWhatRemains(store);
           } else {
+            // Before the write: a tab that dies right after it still leaves the mark.
+            markDraftsOnDevice(true);
             store.put(next);
             stored = next;
           }
@@ -232,6 +258,7 @@ export async function deleteDraftsOnDevice(holder: DraftHolder): Promise<void> {
         const draft = storedDraft(record);
         if (draft && belongsTo(draft, holder)) store.delete(draft.id);
       }
+      markWhatRemains(store);
     });
     return request;
   });

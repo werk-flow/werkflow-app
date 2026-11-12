@@ -184,3 +184,11 @@ Decided by the E7 lead for werk-flow/werkflow-planning#320. The lost-access rule
 - **Lost access.** A `forbidden` answer, or a refused photo upload that the server's reader of the job's Arbeitsnachweise confirms, marks the draft „Kein Zugriff mehr“. It is never sent again. The person can delete it, and the phone deletes it 7 days after the refusal, whoever uses the phone then. Set to zero, the limit deletes it at once. The deletion runs whenever the draft code loads, for anyone: a field worker's job page loads it once idle, a page loads it when the phone may hold the person's drafts, and every page loads it at the dialog's first open. The sign-in page loads none of it, so a phone nobody opens a job on keeps such a draft until someone does.
 - **Seven days.** A draft the person has not changed for 7 days is no longer sent by itself. It shows „Nicht übertragen“ and goes only when the person deletes it or sends it again.
 - **Online save.** With signal and without photos, a new Arbeitsnachweis saves through its Server Action as before, under the draft's revision id, and the device's copy goes once every change is on the device. A save that gets no answer leaves the draft to the sync. If that save did land, the later attach finds that revision and answers `replayed`, and the server keeps one revision.
+
+## Amendment 2026-11-12: where the lost-access deletion runs
+
+Decided by the E7 lead for werk-flow/werkflow-planning#320. It replaces the last two sentences of the report drafts amendment's **Lost access** point.
+
+- The deletion 7 days after a lost-access refusal no longer waits for a person who loads the draft code. A device mark (`werkflow:drafts-on-device` in localStorage, without a person) is set before the device stores any draft and removed once it holds none.
+- The `(auth)` landing page and every job page read the mark. When it is set, they load the draft store lazily and delete every lost-access draft past its 7 days, of every holder. The sweep never sends, lists or changes a live draft. Every change of person on a shared phone passes the landing page, so a phone that only office users touch afterwards deletes it too.
+- The draft code's send pass keeps running the same deletion.
