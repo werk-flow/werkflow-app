@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { getCachedOrganizationCalendar, getCachedOrganizationSettings } from '@/lib/data/cached';
 import { readSettingsSectionMembership } from '@/lib/settings/section-access';
-import { breakPolicyFormValues } from '@/lib/time-tracking/settings';
+import { breakPolicyFormValues } from '@/lib/time-tracking/break-rule-form';
 
 export default async function TimeTrackingSettingsPage() {
   const { membership: activeMembership } = await readSettingsSectionMembership('zeiterfassung');

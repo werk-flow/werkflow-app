@@ -23,7 +23,7 @@ import {
   breakPolicyFormValues,
   timeTrackingSettingsSchema,
   type TimeTrackingSettingsValues,
-} from '@/lib/time-tracking/settings';
+} from '@/lib/time-tracking/break-rule-form';
 
 const ERROR_MESSAGES = {
   org_not_found: 'Die aktive Organisation konnte nicht gefunden werden.',

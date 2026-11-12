@@ -15,18 +15,20 @@ import { getEffectiveTimeEntries } from '@/lib/time-tracking/effective-entries';
 import { deriveCurrentClockState } from '@/lib/time-tracking/helpers';
 import {
   appendBreakPolicyHistory,
-  breakPolicyValuesOf,
   breakStepOf,
   buildBreakPolicyHistoryEntry,
   getDefaultTimeTrackingSettings,
   normalizeTimeTrackingSettings,
   parseBreakPolicyHistory,
   sameBreakPolicy,
-  timeTrackingSettingsSchema,
   type BreakPolicyValues,
   type OrganizationTimeTrackingSettings,
-  type TimeTrackingSettingsValues,
 } from '@/lib/time-tracking/settings';
+import {
+  breakPolicyValuesOf,
+  timeTrackingSettingsSchema,
+  type TimeTrackingSettingsValues,
+} from '@/lib/time-tracking/break-rule-form';
 import { toTimeEntries, type TimeEntry } from '@/lib/time-tracking/types';
 
 export type UpdateTimeTrackingSettingsResult = ActionResult<

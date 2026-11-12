@@ -1,16 +1,15 @@
 import { describe, expect, setSystemTime, test } from 'bun:test';
 
 import {
-  breakPolicyFormValues,
   computeBreakdownForSettings,
   getAutomaticBreakRanges,
   parseBreakPolicyHistory,
   resolveBreakPolicyAtTimestamp,
-  timeTrackingSettingsSchema,
   type BreakPolicy,
   type BreakPolicyValues,
   type OrganizationTimeTrackingSettings,
 } from './settings';
+import { breakPolicyFormValues, timeTrackingSettingsSchema } from './break-rule-form';
 import { calculateCalendarWorkBlocks, getCalendarBlockDisplaySegments } from './calendar-blocks';
 import { buildWeeklyTimeData } from './weekly';
 import type { TimeEntry } from './types';
