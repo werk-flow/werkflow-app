@@ -67,7 +67,7 @@ export function clockCallLock(operationId: string): string {
  * a page that closes or loses its signal mid-call leaves it for the next start. The entry goes when
  * the server answered or the call failed; a failed call is then kept as usual.
  */
-export function callWhileKept<T>(
+export async function callWhileKept<T>(
   action: Omit<KeptClockAction, 'wipeGeneration'>,
   pageSignal: string | null,
   call: () => Promise<T>,
@@ -80,9 +80,8 @@ export function callWhileKept<T>(
       if (key) localStorage.removeItem(key);
     }
   };
-  return typeof navigator.locks?.request === 'function'
-    ? navigator.locks.request(clockCallLock(action.operationId), run)
-    : run();
+  if (typeof navigator.locks?.request !== 'function') return run();
+  return await navigator.locks.request(clockCallLock(action.operationId), run);
 }
 
 /**
