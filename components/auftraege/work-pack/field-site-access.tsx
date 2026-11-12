@@ -12,8 +12,7 @@ import { FieldSiteAccessButton } from './field-site-access-proposal';
  * The field worker's access proposal under the job's Einsatzort: what became
  * of it, and „Zugang stimmt nicht?“. The state renders on the server, so the
  * job page's client code carries only the button (lab.field.cold-start). The
- * proposal changes nothing at the Einsatzort until the office accepts it in
- * Aufgaben.
+ * proposal changes nothing at the Einsatzort until the office accepts it.
  */
 export function FieldSiteAccess({ jobId, access }: { jobId: string; access: FieldSiteAccess }): ReactElement {
   const proposal = access.proposal ?? null;

@@ -772,7 +772,7 @@ function siteRoleCaptures(): AcceptanceSet {
 /**
  * werk-flow/werkflow-planning#329: the field worker's „Zugang stimmt nicht?“
  * on the job's Einsatzort, the form, the open and the rejected proposal, and
- * the office review in Aufgaben.
+ * the „Zugang prüfen“ task in Aufgaben and its review on the customer page.
  */
 function siteAccessCaptures(): AcceptanceSet {
   const phone = { widths: [375], schemes: ['light', 'dark'] } as const;
