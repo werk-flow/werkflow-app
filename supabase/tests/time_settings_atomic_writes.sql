@@ -197,7 +197,7 @@ select pg_temp.expect_refusal('a second first save', $sql$
     'manual', 360, 30, '[]', '[]')
 $sql$, 'settings_changed');
 
--- The nine-hour step (migration 20261201090002_add_the_nine_hour_break_step.sql).
+-- The nine-hour step (migration 20261201100003_add_the_nine_hour_break_step.sql).
 -- An existing organization has it off until an admin switches it on.
 do $$
 begin
