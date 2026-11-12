@@ -1,6 +1,5 @@
 // The one list of units. An article's unit is its base unit: stock, job
-// material, prices and offers count in it. The check
-// `inventory_items_unit_known` holds the same codes; units.test.ts pins both.
+// material, prices and offers count in it.
 //
 // A code is stable: offer and order lines keep code and label as a snapshot.
 // A unit that is no longer wanted is retired (kept here, no longer offered in
@@ -12,32 +11,30 @@ export type InventoryUnitDefinition = {
   label: string;
   /** The short German label, for documents and narrow cells. */
   shortLabel: string;
-  /** Whether a quantity in this unit may have decimals (2,5 m but not 2,5 Stück). */
-  allowsDecimals: boolean;
   /** A retired unit stays valid on existing rows and is no longer offered. */
   retired: boolean;
 };
 
 export const INVENTORY_UNITS = [
-  { code: 'piece', label: 'Stück', shortLabel: 'Stk', allowsDecimals: false, retired: false },
-  { code: 'meter', label: 'Meter', shortLabel: 'm', allowsDecimals: true, retired: false },
-  { code: 'square_meter', label: 'Quadratmeter', shortLabel: 'm²', allowsDecimals: true, retired: false },
-  { code: 'cubic_meter', label: 'Kubikmeter', shortLabel: 'm³', allowsDecimals: true, retired: false },
-  { code: 'kilometer', label: 'Kilometer', shortLabel: 'km', allowsDecimals: true, retired: false },
-  { code: 'liter', label: 'Liter', shortLabel: 'l', allowsDecimals: true, retired: false },
-  { code: 'kilogram', label: 'Kilogramm', shortLabel: 'kg', allowsDecimals: true, retired: false },
-  { code: 'hour', label: 'Stunde', shortLabel: 'Std', allowsDecimals: true, retired: false },
-  { code: 'day', label: 'Tag', shortLabel: 'Tag', allowsDecimals: true, retired: false },
-  { code: 'flat_rate', label: 'Pauschal', shortLabel: 'psch', allowsDecimals: false, retired: false },
-  { code: 'roll', label: 'Rolle', shortLabel: 'Rolle', allowsDecimals: false, retired: false },
-  { code: 'package', label: 'Packung', shortLabel: 'Pkg', allowsDecimals: false, retired: false },
-  { code: 'box', label: 'Karton', shortLabel: 'Ktn', allowsDecimals: false, retired: false },
-  { code: 'set', label: 'Set', shortLabel: 'Satz', allowsDecimals: false, retired: false },
-  { code: 'pair', label: 'Paar', shortLabel: 'Paar', allowsDecimals: false, retired: false },
-  { code: 'sack', label: 'Sack', shortLabel: 'Sack', allowsDecimals: false, retired: false },
-  { code: 'cartridge', label: 'Kartusche', shortLabel: 'Kart', allowsDecimals: false, retired: false },
-  { code: 'bundle', label: 'Bund', shortLabel: 'Bd', allowsDecimals: false, retired: false },
-  { code: 'pallet', label: 'Palette', shortLabel: 'Pal', allowsDecimals: false, retired: false },
+  { code: 'piece', label: 'Stück', shortLabel: 'Stk', retired: false },
+  { code: 'meter', label: 'Meter', shortLabel: 'm', retired: false },
+  { code: 'square_meter', label: 'Quadratmeter', shortLabel: 'm²', retired: false },
+  { code: 'cubic_meter', label: 'Kubikmeter', shortLabel: 'm³', retired: false },
+  { code: 'kilometer', label: 'Kilometer', shortLabel: 'km', retired: false },
+  { code: 'liter', label: 'Liter', shortLabel: 'l', retired: false },
+  { code: 'kilogram', label: 'Kilogramm', shortLabel: 'kg', retired: false },
+  { code: 'hour', label: 'Stunde', shortLabel: 'Std', retired: false },
+  { code: 'day', label: 'Tag', shortLabel: 'Tag', retired: false },
+  { code: 'flat_rate', label: 'Pauschal', shortLabel: 'psch', retired: false },
+  { code: 'roll', label: 'Rolle', shortLabel: 'Rolle', retired: false },
+  { code: 'package', label: 'Packung', shortLabel: 'Pkg', retired: false },
+  { code: 'box', label: 'Karton', shortLabel: 'Ktn', retired: false },
+  { code: 'set', label: 'Set', shortLabel: 'Satz', retired: false },
+  { code: 'pair', label: 'Paar', shortLabel: 'Paar', retired: false },
+  { code: 'sack', label: 'Sack', shortLabel: 'Sack', retired: false },
+  { code: 'cartridge', label: 'Kartusche', shortLabel: 'Kart', retired: false },
+  { code: 'bundle', label: 'Bund', shortLabel: 'Bd', retired: false },
+  { code: 'pallet', label: 'Palette', shortLabel: 'Pal', retired: false },
 ] as const satisfies readonly InventoryUnitDefinition[];
 
 export type InventoryUnitCode = (typeof INVENTORY_UNITS)[number]['code'];

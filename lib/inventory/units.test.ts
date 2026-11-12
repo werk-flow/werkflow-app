@@ -1,6 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-import { readdirSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import {
   INVENTORY_UNITS,
   type InventoryUnitCode,
@@ -95,18 +93,5 @@ describe('the unit list', () => {
     expect(OFFERED_INVENTORY_UNITS.map((unit) => unit.code)).toEqual(
       INVENTORY_UNITS.filter((unit) => !unit.retired).map((unit) => unit.code),
     );
-  });
-
-  test('the database check inventory_items_unit_known allows exactly the listed codes', () => {
-    const directory = resolve(import.meta.dir, '../../supabase/migrations');
-    const definitions = readdirSync(directory)
-      .filter((file) => file.endsWith('.sql'))
-      .toSorted()
-      .map((file) => readFileSync(resolve(directory, file), 'utf8'))
-      .flatMap((sql) => [...sql.matchAll(/inventory_items_unit_known check \(\s*unit in \(([^)]*)\)/g)]);
-    const latest = definitions.at(-1)?.[1];
-    expect(latest, 'no migration defines inventory_items_unit_known').toBeDefined();
-    const allowed = [...(latest ?? '').matchAll(/'([^']+)'/g)].map((match) => match[1]);
-    expect(allowed.toSorted()).toEqual(INVENTORY_UNITS.map((unit) => unit.code).toSorted());
   });
 });

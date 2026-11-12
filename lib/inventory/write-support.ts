@@ -73,9 +73,6 @@ export function inventoryWriteFailure(
 ): ActionFailure {
   const message = error.message ?? '';
   if (INVENTORY_WRITE_REFUSALS.has(message)) return { success: false, error: message };
-  if (error.code === '23514' && message.includes('inventory_items_unit_known')) {
-    return { success: false, error: 'unit_unknown' };
-  }
   logError(label, error);
   if (message.includes('inventory stock cannot go below zero')) {
     return { success: false, error: 'stock_would_go_negative' };
@@ -163,9 +160,8 @@ export function inventoryImportItem(
   return {
     item_type: row.itemType ?? 'material',
     name,
-    // An empty unit stays Stück and other unknown text reaches the check
-    // inventory_items_unit_known, which fails the row, until
-    // werk-flow/werkflow-planning#371 gives the import its own unit review.
+    // The import keeps its earlier handling (an empty unit is Stück, other
+    // text stays as typed) until werk-flow/werkflow-planning#371 reviews units.
     unit: normalizeInventoryUnitInput(row.unit) ?? cleanText(row.unit) ?? 'piece',
     internal_sku: cleanText(row.internalSku),
     manufacturer: cleanText(row.manufacturer),
