@@ -129,14 +129,16 @@ function isReadableVersion(record: unknown): boolean {
 }
 
 /**
- * Whose draft a record is and which job it belongs to. Every version keeps these fields as they
- * are, so a record this code cannot read still shows to its person, never to anyone else.
+ * Whose draft a record is, and its job when the record names one this code reads. Every version
+ * keeps the id and the holder as they are, so a record this code cannot read still shows to its
+ * person, never to anyone else.
  */
 const heldRecordSchema = z.object({
   id: z.string(),
   userId: z.string(),
   organizationId: z.string(),
-  jobId: z.string().optional(),
+  // Read leniently: a job reference this code does not know never hides the record from its person.
+  jobId: z.unknown(),
 });
 
 /** A draft on the device that this version of the code cannot read: it is never sent, changed or deleted by itself. */
@@ -268,7 +270,7 @@ export async function listUnreadableDraftsOnDevice(holder: DraftHolder): Promise
   return records.flatMap((record) => {
     const held = heldRecordSchema.safeParse(record);
     if (!held.success || !belongsTo(held.data, holder) || storedDraft(record)) return [];
-    return [{ id: held.data.id, jobId: held.data.jobId ?? null }];
+    return [{ id: held.data.id, jobId: typeof held.data.jobId === 'string' ? held.data.jobId : null }];
   });
 }
 

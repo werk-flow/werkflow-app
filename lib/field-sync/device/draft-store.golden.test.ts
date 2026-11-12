@@ -279,4 +279,9 @@ describe('a record this version cannot read stays on the device and shows to its
     expect(await changeDraftOnDevice(holder, cases.text.id, () => cases.text)).toBeNull();
     expect(await listUnreadableDraftsOnDevice(holder)).toHaveLength(2);
   });
+
+  test('a record whose job this version cannot read still shows to its person, without a job', async () => {
+    await storeRecord({ ...revivedRecord(latest.text), version: 2, jobId: { later: 'shape' } });
+    expect(await listUnreadableDraftsOnDevice(holder)).toEqual([{ id: cases.text.id, jobId: null }]);
+  });
 });
