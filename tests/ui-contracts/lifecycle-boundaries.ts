@@ -20,6 +20,7 @@ declare global {
       | 'default'
       | 'dialog-pending'
       | 'lifecycle'
+      | 'lifecycle-field'
       | 'approvals'
       | 'personnel'
       | 'join-requests'
@@ -44,12 +45,16 @@ declare global {
       | 'route-refresh'
       | 'customer'
       | 'customer-create'
+      | 'request-capture'
+      | 'request-attach'
       | 'sickness-record'
       | 'absence-picker'
       | 'schedule-parked-picker'
       | AuthUrlFixtureName
       | FeedbackFixtureName;
     uiContractLifecycle: LifecycleBoundaryState;
+    /** Snapshot facts a spec sets before the bundle loads, so the card mounts with them. */
+    uiContractLifecycleSeed?: Partial<WorkLifecycleSnapshot>;
   }
 }
 
@@ -95,6 +100,7 @@ export function initializeLifecycleBoundary(): void {
         instruction: [],
         declared: [],
       },
+      ...window.uiContractLifecycleSeed,
     },
   };
 }

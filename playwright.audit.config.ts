@@ -61,6 +61,8 @@ export default defineConfig({
     viewport: { width: 1440, height: 900 },
     locale: 'de-DE',
     timezoneId: 'Europe/Berlin',
+    // Only the offline-shell audit runs the app's service worker (it opts in with test.use).
+    serviceWorkers: 'block',
     screenshot: 'only-on-failure',
     trace: process.env.WERKFLOW_RETAIN_PERFORMANCE_TRACE === '1' ? 'on' : 'retain-on-failure',
   },

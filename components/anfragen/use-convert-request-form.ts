@@ -11,6 +11,7 @@ import { requestUrgencyToJobPriority, type ClientRequest } from '@/lib/requests/
 import type { JobPriority } from '@/lib/jobs/types';
 import type { AssignmentApproval, AssignmentEvaluation } from '@/lib/qualifications/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
+import { useAttemptKey } from './use-attempt-key';
 
 const ERROR_MESSAGES = {
   not_authorized: 'Du bist nicht berechtigt, Anfragen umzuwandeln.',
@@ -243,31 +244,36 @@ type ConversionOutcome =
   | { kind: 'qualification_warning'; evaluation: AssignmentEvaluation }
   | { kind: 'failed'; error: string };
 
-/** Sends the conversion to the job or project action and names its outcome. */
+/** Sends the conversion under the opening's attempt key to the job or project action and names its outcome. */
 async function convertRequest(
   requestId: string,
   target: ConversionTarget,
   fields: ConversionFields & { number: string },
   approval: AssignmentApproval | undefined,
+  attemptKey: string,
 ): Promise<ConversionOutcome> {
   const { title, description, clientId, siteId, contactId, number } = fields;
   if (target === 'job') {
     const { priority, plannedDate, plannedTime, location, templateVersionId } = fields;
-    const result = await convertRequestToJob(requestId, {
-      title: title.trim(),
-      ...(description.trim() ? { description: description.trim() } : {}),
-      clientId,
-      ...(siteId ? { siteId } : {}),
-      ...(contactId ? { contactId } : {}),
-      jobNumber: number.trim(),
-      priority,
-      ...(plannedDate ? { plannedDate } : {}),
-      // The time field hides without a date; an undated job carries no time.
-      ...(plannedDate && plannedTime ? { plannedTime } : {}),
-      ...(location.trim() ? { location: location.trim() } : {}),
-      ...(templateVersionId ? { templateVersionId } : {}),
-      assignmentApproval: approval ?? null,
-    });
+    const result = await convertRequestToJob(
+      requestId,
+      {
+        title: title.trim(),
+        ...(description.trim() ? { description: description.trim() } : {}),
+        clientId,
+        ...(siteId ? { siteId } : {}),
+        ...(contactId ? { contactId } : {}),
+        jobNumber: number.trim(),
+        priority,
+        ...(plannedDate ? { plannedDate } : {}),
+        // The time field hides without a date; an undated job carries no time.
+        ...(plannedDate && plannedTime ? { plannedTime } : {}),
+        ...(location.trim() ? { location: location.trim() } : {}),
+        ...(templateVersionId ? { templateVersionId } : {}),
+        assignmentApproval: approval ?? null,
+      },
+      attemptKey,
+    );
     if (!result.success) {
       if (
         (result.error === 'qualification_warning' || result.error === 'stale_evaluation') &&
@@ -280,15 +286,19 @@ async function convertRequest(
     return { kind: 'converted', message: 'Anfrage wurde in einen Auftrag umgewandelt.' };
   }
   const { templateVersionId } = fields;
-  const result = await convertRequestToProject(requestId, {
-    name: title.trim(),
-    ...(description.trim() ? { description: description.trim() } : {}),
-    clientId,
-    ...(siteId ? { siteId } : {}),
-    ...(contactId ? { contactId } : {}),
-    ...(number.trim() ? { projectNumber: number.trim() } : {}),
-    ...(templateVersionId ? { templateVersionId } : {}),
-  });
+  const result = await convertRequestToProject(
+    requestId,
+    {
+      name: title.trim(),
+      ...(description.trim() ? { description: description.trim() } : {}),
+      clientId,
+      ...(siteId ? { siteId } : {}),
+      ...(contactId ? { contactId } : {}),
+      ...(number.trim() ? { projectNumber: number.trim() } : {}),
+      ...(templateVersionId ? { templateVersionId } : {}),
+    },
+    attemptKey,
+  );
   if (!result.success) {
     return { kind: 'failed', error: describeFailure(result.error, ERROR_MESSAGES, 'Unbekannter Fehler') };
   }
@@ -316,6 +326,8 @@ export function useConvertRequestForm({
   const { run: runConvert, isPending: isLoading } = usePendingTask();
   const [error, setError] = useState<string | null>(null);
   const [attempted, setAttempted] = useState(false);
+  // One conversion per opening: a retry after a lost answer returns its work.
+  const { attemptKey, renewAttemptKey } = useAttemptKey();
 
   // Prefill from the request each time the dialog opens, during render and
   // never in an effect. Keyed on open and request.id only: Realtime refreshes
@@ -328,6 +340,7 @@ export function useConvertRequestForm({
       prefill();
       setError(null);
       setAttempted(false);
+      renewAttemptKey();
     }
   }
 
@@ -353,7 +366,7 @@ export function useConvertRequestForm({
 
     await runConvert(async () => {
       try {
-        const outcome = await convertRequest(request.id, target, { ...fields, number }, approval);
+        const outcome = await convertRequest(request.id, target, { ...fields, number }, approval, attemptKey);
         if (outcome.kind === 'qualification_warning') {
           setQualificationWarning(outcome.evaluation);
           return;

@@ -9,6 +9,7 @@ import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { UsableContent } from '@/components/shared/usable-content';
 import type { WorkLifecycleSnapshot } from '@/lib/work-lifecycle/types';
 import type { WorkArtifactSummary } from '@/lib/work-artifacts/types';
+import type { WorkRequestEntry } from '@/lib/requests/types';
 
 import { readInBackground } from '@/lib/data/background-read-client';
 import type { JobTimeParticipant, TimeEntry } from '@/lib/time-tracking/types';
@@ -130,6 +131,8 @@ interface JobDetailContentProps {
   handoverWorkspace: WorkHandoverWorkspace | 'not_reviewer' | null;
   // Set when this job was created by converting an Anfrage (P1-02).
   originRequest?: OriginRequestLink;
+  // The requests attached to the job; undefined when the server read failed.
+  requestEntries: WorkRequestEntry[] | undefined;
 }
 
 /** Every hook of the job page, in render order: the live job, dialogs, assignments, fields, time and refresh. */
@@ -269,6 +272,7 @@ export function JobDetailContent(props: JobDetailContentProps) {
             lifecycleSnapshot={props.lifecycleSnapshot}
             handoverWorkspace={props.handoverWorkspace}
             originRequest={props.originRequest}
+            requestEntries={props.requestEntries}
           />
           <JobDetailContentColumns content={props} view={view} />
         </UsableContent>

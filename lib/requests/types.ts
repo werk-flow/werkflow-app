@@ -10,6 +10,7 @@ import type { ServiceCaseEquipment } from '@/lib/service-cases/types';
 import type { PlanningWarningFailure } from '@/lib/planning/conflict-acknowledgement';
 import type { Database } from '@/lib/supabase/database.types';
 import { jsonRecordOrEmpty } from '@/lib/supabase/json';
+import { jobDetailHref, projectDetailHref } from '@/lib/jobs/routes';
 
 // ============================================
 // Database Row Aliases
@@ -83,6 +84,7 @@ export const REQUEST_STATUS_LABELS: Record<RequestStatus, string> = {
   in_klaerung: 'In Klärung',
   umgewandelt: 'Umgewandelt',
   geschlossen: 'Geschlossen',
+  hinzugefuegt: 'Hinzugefügt',
 };
 
 export const REQUEST_CATEGORY_LABELS: Record<RequestCategory, string> = {
@@ -217,6 +219,58 @@ export type ConvertRequestResult =
   | QualificationWarningResult
   | PlanningWarningFailure
   | ActionResult<{ target: 'project'; projectId: string; projectNumber: string | null }>;
+
+/** The kinds of existing work a request can be attached to. */
+export const WORK_TARGET_KINDS = ['job', 'project', 'service_case'] as const;
+export type WorkTargetKind = (typeof WORK_TARGET_KINDS)[number];
+
+export const WORK_TARGET_KIND_LABELS: Record<WorkTargetKind, string> = {
+  job: 'Auftrag',
+  project: 'Projekt',
+  service_case: 'Servicefall',
+};
+
+/** One open job, project or Servicefall of the request's customer the attach dialog offers. */
+export type RequestWorkTarget = {
+  kind: WorkTargetKind;
+  id: string;
+  number: string | null;
+  title: string;
+  /** The work's site as one line, when it has one. */
+  siteLabel: string | null;
+  /** The work is at the request's site; the dialog lists these first. */
+  atRequestSite: boolean;
+};
+
+export type RequestWorkTargetPage = ActionResult<{ targets: RequestWorkTarget[]; hasMore: boolean }>;
+
+export type AttachRequestResult = ActionResult<{ entryId: string }>;
+
+/** A request attached to a job, project or Servicefall, as that work's history shows it. */
+export type WorkRequestEntry = {
+  id: string;
+  requestId: string;
+  requestNumber: string | null;
+  /** The request's summary and details when it was attached. */
+  summary: string;
+  details: string | null;
+  createdAt: string;
+  actorName: string | null;
+};
+
+export type WorkRequestEntriesResult = ActionResult<{ entries: WorkRequestEntry[] }>;
+
+/** The detail page of a job, project or Servicefall. */
+export function requestWorkHref(work: { kind: WorkTargetKind; id: string; number: string | null }): string {
+  switch (work.kind) {
+    case 'job':
+      return jobDetailHref({ id: work.id, jobNumber: work.number });
+    case 'project':
+      return projectDetailHref({ id: work.id, projectNumber: work.number });
+    case 'service_case':
+      return `/service/faelle/${encodeURIComponent(work.number ?? work.id)}`;
+  }
+}
 
 // ============================================
 // Converters
