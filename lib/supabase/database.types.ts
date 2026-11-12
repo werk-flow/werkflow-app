@@ -19369,6 +19369,8 @@ export type Database = {
             Args: {
               p_actor_id: string;
               p_auto_break_duration_minutes: number;
+              p_auto_break_second_duration_minutes: number;
+              p_auto_break_second_threshold_minutes: number;
               p_auto_break_threshold_minutes: number;
               p_break_ends: Json;
               p_break_mode: string;
@@ -19382,8 +19384,6 @@ export type Database = {
             Args: {
               p_actor_id: string;
               p_auto_break_duration_minutes: number;
-              p_auto_break_second_duration_minutes: number;
-              p_auto_break_second_threshold_minutes: number;
               p_auto_break_threshold_minutes: number;
               p_break_ends: Json;
               p_break_mode: string;
