@@ -568,6 +568,24 @@ describe('capturing', () => {
     expect((await readTimeOutbox(WORKER)).events).toEqual([]);
   });
 
+  test('a sent action stays recorded when a fresher page replaces the clock, so a late copy is still not taken in', async () => {
+    const start = command('start');
+    await capture(WORKER, start, { at: '2026-11-11T07:00:00.000Z' });
+    const { received, options } = accepting();
+    await sendTimeOutbox(WORKER, options);
+    await capture(WORKER, command('end'), {
+      base: WORKING,
+      readAt: '2026-11-11T10:00:00.000Z',
+      at: '2026-11-11T10:01:00.000Z',
+    });
+    await sendTimeOutbox(WORKER, options);
+
+    await capture(WORKER, start, { at: '2026-11-11T07:00:00.000Z' });
+
+    expect((await readTimeOutbox(WORKER)).events).toEqual([]);
+    expect(received).toHaveLength(2);
+  });
+
   test('the same action captured twice is kept once', async () => {
     const start = command('start');
     await capture(WORKER, start);
@@ -593,6 +611,30 @@ describe('capturing', () => {
 });
 
 describe('what the clock shows', () => {
+  test('events sent across midnight leave only the new Berlin day in the stored clock', async () => {
+    const lateStart = { ...CLOCKED_OUT, fetchedAt: '2026-11-10T21:59:00.000Z' };
+    await capture(WORKER, command('start'), { base: lateStart, at: '2026-11-10T22:00:00.000Z' });
+    await capture(WORKER, command('switch', { selection: createActivitySelection('break') }), {
+      at: '2026-11-11T00:00:00.000Z',
+    });
+    await capture(WORKER, command('end'), { at: '2026-11-11T01:00:00.000Z' });
+    let version = 0;
+    const { options } = server((envelope, call) =>
+      call <= 2
+        ? result(envelope, {
+            outcome: 'accepted',
+            code: 'accepted',
+            state: { sessionId: SESSION_ID, segmentId: null, version: (version += 1) },
+          })
+        : result(envelope, { outcome: 'retry', code: 'unavailable' }, 503),
+    );
+    await sendTimeOutbox(WORKER, options);
+
+    const view = clockDeviceView(await readTimeOutbox(WORKER), new Date('2026-11-11T09:00:00.000Z'));
+    // 00:00 to 01:00 work and 01:00 to 02:00 break, Berlin: the evening before is yesterday's.
+    expect(view?.state?.todayMinutes).toBe(120);
+  });
+
   test('a kept session across midnight counts only the new Berlin day in today’s totals', async () => {
     const lateStart = { ...CLOCKED_OUT, fetchedAt: '2026-11-10T21:59:00.000Z' };
     await capture(WORKER, command('start'), { base: lateStart, at: '2026-11-10T22:00:00.000Z' });

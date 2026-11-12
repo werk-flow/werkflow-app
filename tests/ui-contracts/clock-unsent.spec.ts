@@ -289,6 +289,24 @@ test('a correction covers the first day only: the next day’s events stay on th
   );
 });
 
+test('a request filed for a colleague never removes the person’s own unsent events', async ({ page }) => {
+  const server = await mountClock(page, CLOCKED_OUT_STATE);
+  server.verdict = { outcome: 'conflict', code: 'correction_required' };
+  await startWithoutNetwork(page, server);
+  await setNetwork(page, server, true);
+  await expect(unsentBadge(clockDock(page))).toHaveText('Korrektur nötig');
+  await page.getByRole('button', { name: 'Zeiterfassung starten', exact: true }).click();
+  const section = unsentSection(page);
+
+  await section.getByRole('button', { name: 'Korrektur beantragen', exact: true }).click();
+  const correction = page.getByRole('dialog', { name: 'Zeit nachtragen', exact: true });
+  await correction.getByRole('button', { name: 'Für Kollegin einreichen', exact: true }).click();
+
+  await expect(correction).toHaveCount(0);
+  await expect(section).toBeVisible();
+  expect(await unsentOnDevice(page)).toHaveLength(1);
+});
+
 test('a conflict shows what changed and the server’s clock, never the phone’s, and the event is not sent again', async ({
   page,
 }) => {

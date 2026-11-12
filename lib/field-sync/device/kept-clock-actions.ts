@@ -57,7 +57,10 @@ function readKeptAction(key: string): KeptClockAction | null {
  * is never dropped unread, and a session must not end over it (clock-device.ts). Throws when the
  * device storage fails; the actions then stay kept.
  */
-export async function takeInKeptClockActions(): Promise<{ moved: number; unreadable: number }> {
+export async function takeInKeptClockActions(
+  /** Marks the device as holding unsent work; runs before a key goes, so a tab closed mid-intake never hides the event. */
+  markHeld: () => void,
+): Promise<{ moved: number; unreadable: number }> {
   let moved = 0;
   let unreadable = 0;
   for (const key of keptActionKeys()) {
@@ -89,7 +92,8 @@ export async function takeInKeptClockActions(): Promise<{ moved: number; unreada
         wipeGeneration,
       },
     );
-    // Only after the outbox holds it; a second take-in of the same action is kept once there.
+    // Only after the outbox holds it and the start-up hint says so; a second take-in keeps it once there.
+    markHeld();
     localStorage.removeItem(key);
     moved += 1;
   }

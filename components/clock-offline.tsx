@@ -125,7 +125,12 @@ function useOfflineCapture(clock: OfflineClock | null, reload: () => void) {
         });
       } catch (failure) {
         logError('OfflineClock: clock action not kept on the device', failure);
-        setError('Dein Gerät konnte die Zeit nicht speichern. Bitte versuche es erneut.');
+        setError(
+          // Another tab signed out or switched since this page started: the tap belongs to nobody now.
+          sharedWipeGeneration() === generation
+            ? 'Dein Gerät konnte die Zeit nicht speichern. Bitte versuche es erneut.'
+            : 'Du wurdest in einem anderen Tab abgemeldet. Diese Zeit wurde nicht gespeichert.',
+        );
       } finally {
         setPendingId(null);
         reload();
@@ -145,7 +150,13 @@ export function OfflineClock() {
         <SectionError title="Deine Zeiterfassung konnte nicht gelesen werden" failure={failure} />
       </div>
     );
-  if (!clock) return null;
+  // A capture refused after another tab's wipe leaves no clock to show, but its refusal stays visible.
+  if (!clock)
+    return error ? (
+      <div className="mb-6 w-full max-w-2xl">
+        <ErrorText>{error}</ErrorText>
+      </div>
+    ) : null;
   const { view } = clock;
   const { state } = view;
 

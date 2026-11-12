@@ -31,6 +31,7 @@ import {
 } from '@/lib/field-sync/device/clock-outbox';
 import { correctionScope, type ClockDeviceView } from '@/lib/field-sync/device/time-outbox';
 import { logError } from '@/lib/logging';
+import type { TimeEntry } from '@/lib/time-tracking/types';
 import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import { formatBerlinTime, parseIsoLocalDate } from '@/lib/utils';
 
@@ -101,6 +102,19 @@ function correctionPrefill(day: ClockDeviceView['events']) {
   };
 }
 
+/** Whether the filed entries are the person's own, on the day of the kept session they replace. */
+function coversSession(
+  entries: readonly TimeEntry[],
+  userId: string | undefined,
+  session: ClockDeviceView['events'],
+): boolean {
+  const day = session[0] && formatBerlinLocalDate(session[0].capturedAt);
+  return (
+    entries.length > 0 &&
+    entries.every((entry) => entry.userId === userId && formatBerlinLocalDate(entry.timestamp) === day)
+  );
+}
+
 function DeleteUnsentDialog({
   count,
   open,
@@ -128,8 +142,7 @@ function DeleteUnsentDialog({
               : `Die ${count} Stempelzeiten werden von diesem Gerät gelöscht und nicht erfasst.`}
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <ErrorText>{error}</ErrorText>
-        <AlertDialogFooter>
+        <AlertDialogFooter error={error}>
           <AlertDialogCancel>Abbrechen</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
@@ -268,9 +281,11 @@ function UnsentPanel({ view }: { view: ClockDeviceView }) {
         open={correcting}
         onOpenChange={setCorrecting}
         {...correctionPrefill(day)}
-        // The request is filed, and the form confirms it: only now do the session's kept events leave the phone.
-        onSuccess={async () => {
-          await deleteEvents(day);
+        preselectedUserId={holder?.userId}
+        // The request is filed, and the form confirms it: only now do the session's kept events leave the phone,
+        // and only for a request of this person on that day; an Admin or Büro may file one for someone else.
+        onSuccess={async (entries) => {
+          if (coversSession(entries, holder?.userId, day)) await deleteEvents(day);
         }}
       />
     </section>

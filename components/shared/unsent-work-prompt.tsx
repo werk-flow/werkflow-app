@@ -68,8 +68,7 @@ function DiscardConfirmation({
             {itemsLabel(items)}. Das wird von diesem Gerät gelöscht und nie erfasst.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <ErrorText>{error}</ErrorText>
-        <AlertDialogFooter>
+        <AlertDialogFooter error={error}>
           <AlertDialogCancel>Abbrechen</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"

@@ -202,7 +202,11 @@ export function captureTimeEvent(
       verdict: null,
     };
     if (last) return { clock: current.clock, events: [...current.events, event] };
-    const kept = base && clockToKeep(holder, base, capture.wipeGeneration);
+    // A fresher clock replaces the record, never the ids it remembers as recorded.
+    const kept = base && {
+      ...clockToKeep(holder, base, capture.wipeGeneration),
+      recorded: current.clock?.recorded,
+    };
     const { after, afterAt } = current.clock ?? {};
     const settledSinceRead =
       after && (!capture.readAt || !afterAt || Date.parse(afterAt) > capture.readAt.getTime());
@@ -248,7 +252,7 @@ export function settleFirstTimeEvent(
     const base =
       current.clock?.base &&
       applyTransitionEcho(
-        current.clock.base,
+        onDayOf(current.clock.base, new Date(head.capturedAt)),
         head.selection,
         { outcome: head.action === 'end' ? 'ended' : 'active', ...state, recoveryReason: null },
         new Date(head.capturedAt),
@@ -310,7 +314,7 @@ export function removeTimeEvents(
     const wipeGeneration = current.clock?.wipeGeneration ?? 'unreadable';
     return {
       clock: resume
-        ? clockToKeep(holder, resume, wipeGeneration)
+        ? { ...clockToKeep(holder, resume, wipeGeneration), recorded: current.clock?.recorded }
         : current.clock && { ...current.clock, base: null },
       events: [
         {

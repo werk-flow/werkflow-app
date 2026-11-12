@@ -408,6 +408,20 @@ async function isolatedTests(): Promise<void> {
       ]);
     });
 
+    test('the start-up hint is set before a kept action’s key goes, so a tab closed mid-intake still sends at the next start', async () => {
+      storage.delete('werkflow:unsent:time');
+      const hintAtRemoval: (string | undefined)[] = [];
+      const { removeItem } = localStorage;
+      localStorage.removeItem = (key: string) => {
+        if (key.startsWith('werkflow:unsent:clock:')) hintAtRemoval.push(storage.get('werkflow:unsent:time'));
+        removeItem(key);
+      };
+      await keepStart(WORKER);
+      localStorage.removeItem = removeItem;
+
+      expect(hintAtRemoval).toEqual(['1']);
+    });
+
     test('an action another tab kept is taken in and sent here, also when that tab closed before it sent', async () => {
       sessionUserId = WORKER.userId;
       verdict = {

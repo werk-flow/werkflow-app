@@ -54,6 +54,11 @@ async function publish(): Promise<void> {
   for (const listener of listeners) listener(view);
 }
 
+/** Sets the start-up hint for time events before a kept action's key goes (kept-clock-actions.ts). */
+function markTimeHeld(): void {
+  markUnsentWork(UNSENT_KIND, true);
+}
+
 /**
  * Tells this tab's listeners and the origin's other tabs that the outbox changed, and keeps the
  * start-up hint in step with it: set while the device holds any person's event.
@@ -97,7 +102,7 @@ async function takeInAndSend(): Promise<void> {
 export async function takeInKept(): Promise<{ moved: number; unreadable: number }> {
   let taken = { moved: 0, unreadable: 0 };
   await exclusively(TAKE_IN_LOCK, async () => {
-    taken = await takeInKeptClockActions();
+    taken = await takeInKeptClockActions(markTimeHeld);
   });
   if (taken.moved > 0) await outboxChanged();
   return taken;
@@ -122,7 +127,7 @@ export async function removeShownTimeEvents(
  */
 export async function captureBehindKept(holder: OutboxHolder, capture: TimeEventCapture): Promise<void> {
   await exclusively(TAKE_IN_LOCK, async () => {
-    await takeInKeptClockActions();
+    await takeInKeptClockActions(markTimeHeld);
     await captureTimeEvent(holder, capture, { underSignal: true });
   });
   await outboxChanged();
