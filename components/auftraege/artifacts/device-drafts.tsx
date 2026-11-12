@@ -21,7 +21,6 @@ import {
   subscribeToDrafts,
   type DraftSendProgress,
 } from '@/lib/field-sync/device/draft-sync';
-import { noteDraftsOnDevice } from './device-draft-keeper';
 import { DeviceDraftList } from './device-draft-list';
 import type { DraftDevice, RestoredDraft } from './use-device-drafts';
 
@@ -30,7 +29,10 @@ import type { DraftDevice, RestoredDraft } from './use-device-drafts';
 // one person and organization, and the list of the device's drafts.
 
 /** The device store and the sender, bound to the holder. */
-function createDraftDevice(holder: DraftHolder): DraftDevice {
+function createDraftDevice(
+  holder: DraftHolder,
+  noteDrafts: (holder: DraftHolder, held: boolean) => void,
+): DraftDevice {
   return {
     holder,
     list: () => listDraftsOnDevice(holder),
@@ -43,6 +45,7 @@ function createDraftDevice(holder: DraftHolder): DraftDevice {
     start: () => void startDraftSync(holder),
     isPastUnsentLimit,
     noAccessKeptMs: DRAFT_NO_ACCESS_KEPT_MS,
+    noteHeld: (held) => noteDrafts(holder, held),
   };
 }
 
@@ -53,22 +56,27 @@ type DeviceDraftsProps = {
   onOpen: (restored: RestoredDraft) => void;
   /** Hands the device to the page once the active organization is known, and null when it is gone. */
   onDevice: (device: DraftDevice | null) => void;
+  /** The page's hint writer (use-device-drafts.ts), handed in so this code never imports the page's module. */
+  noteDrafts: (holder: DraftHolder, held: boolean) => void;
 };
 
 /**
  * The report drafts this device keeps for the signed-in person in the active organization: it
  * reads them, sends what waits, and lists them. Without an organization nothing is read.
  */
-export function DeviceDrafts({ currentUserId, jobId, onOpen, onDevice }: DeviceDraftsProps) {
+export function DeviceDrafts({ currentUserId, jobId, onOpen, onDevice, noteDrafts }: DeviceDraftsProps) {
   const organizationId = useOrganization().activeOrg?.orgId ?? null;
   const device = useMemo(
-    () => (organizationId === null ? null : createDraftDevice({ userId: currentUserId, organizationId })),
-    [currentUserId, organizationId],
+    () =>
+      organizationId === null
+        ? null
+        : createDraftDevice({ userId: currentUserId, organizationId }, noteDrafts),
+    [currentUserId, organizationId, noteDrafts],
   );
   const read = useClientRead({
     read: async () => {
       const drafts = device ? await device.list() : [];
-      if (device) noteDraftsOnDevice(device.holder, drafts.length > 0);
+      device?.noteHeld(drafts.length > 0);
       return { success: true as const, drafts };
     },
     deps: [currentUserId, organizationId],

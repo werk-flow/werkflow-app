@@ -36,6 +36,8 @@ export type DraftDevice = {
   /** Names the holder to the sender and sends what waits, now and on every `online`. */
   start: () => void;
   isPastUnsentLimit: (draft: StoredDraft) => boolean;
+  /** Remembers that the holder may hold a draft on this device, or forgets it once none is left. */
+  noteHeld: (held: boolean) => void;
   /** How long a draft stays after the server refused it for lost access. */
   noAccessKeptMs: number;
 };
@@ -75,8 +77,22 @@ export type DeviceDraftHandle = {
  * A job page looks for one of the person's keys before it loads any draft code, so a page without
  * drafts costs no request.
  */
-export function draftHintKey(holder: DraftHolder): string {
+function draftHintKey(holder: DraftHolder): string {
   return `${draftHintPrefix(holder.userId)}${holder.organizationId}`;
+}
+
+/**
+ * Remembers that the holder wrote a draft on this device, or forgets it once none is left. The page
+ * hands it to the lazily loaded draft code (DeviceDrafts), which never imports this module: a module
+ * the job page and that code both import would become a script file of its own in the cold start.
+ */
+export function noteDraftsOnDevice(holder: DraftHolder, held: boolean): void {
+  try {
+    if (held) localStorage.setItem(draftHintKey(holder), '1');
+    else localStorage.removeItem(draftHintKey(holder));
+  } catch {
+    // best-effort: without localStorage every job page asks the device itself.
+  }
 }
 
 function draftHintPrefix(userId: string): string {

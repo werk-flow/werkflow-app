@@ -4,18 +4,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
 import { DOCUMENT_MAX_FILE_SIZE_BYTES } from '@/lib/documents/types';
-import type { DraftHolder, DraftPhoto, StoredDraft } from '@/lib/field-sync/device/draft-store';
+import type { DraftPhoto, StoredDraft } from '@/lib/field-sync/device/draft-store';
 import type { DraftSendOutcome } from '@/lib/field-sync/device/draft-sync';
 import { logError } from '@/lib/logging';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { workArtifactFieldIssues } from '@/lib/work-artifacts/field-rules';
 import { WORK_ARTIFACT_DRAFT_PHOTO_LIMIT } from '@/lib/work-artifacts/types';
-import {
-  draftHintKey,
-  type DeviceDraftHandle,
-  type DraftDevice,
-  type RestoredDraft,
-} from './use-device-drafts';
+import type { DeviceDraftHandle, DraftDevice, RestoredDraft } from './use-device-drafts';
 import type { WorkArtifactEditor } from './use-work-artifact-editor';
 import { contentForKind, iso, savedContent } from './work-artifact-content';
 import { PHOTO_CONTROL_ID, WorkArtifactPhotoField } from './work-artifact-photo-field';
@@ -25,16 +20,6 @@ import { PHOTO_CONTROL_ID, WorkArtifactPhotoField } from './work-artifact-photo-
 // as the person types, each photo when it is taken, so both survive a lost
 // signal, a reload and a restart. The draft leaves the device when the server
 // holds it. This module loads with the dialog, never with the job page.
-
-/** Remembers that the holder wrote a draft on this device, or forgets it once none is left. */
-export function noteDraftsOnDevice(holder: DraftHolder, held: boolean): void {
-  try {
-    if (held) localStorage.setItem(draftHintKey(holder), '1');
-    else localStorage.removeItem(draftHintKey(holder));
-  } catch {
-    // best-effort: without localStorage every job page asks the device itself.
-  }
-}
 
 type DraftChange = (current: StoredDraft | null) => StoredDraft | null;
 /** What the device holds after a change, or `not_stored` when it refused the write. */
@@ -97,7 +82,7 @@ function useDraftWrites(device: DraftDevice, artifactId: string) {
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const write: DraftWrite = (change) => {
     // Before the write: a tab that dies right after it still finds its draft on the next page.
-    noteDraftsOnDevice(device.holder, true);
+    device.noteHeld(true);
     const result = queue.current
       .then(() => device.change(artifactId, change))
       .then(

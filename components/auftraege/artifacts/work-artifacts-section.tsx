@@ -21,7 +21,12 @@ import {
   type WorkArtifactSummary,
   type WorkArtifactTimeSourceOption,
 } from '@/lib/work-artifacts/types';
-import { useArtifactCode, type DraftDevice, type RestoredDraft } from './use-device-drafts';
+import {
+  noteDraftsOnDevice,
+  useArtifactCode,
+  type DraftDevice,
+  type RestoredDraft,
+} from './use-device-drafts';
 import type { WorkArtifactTarget } from '@/lib/work-artifacts/types';
 import type { WorkArtifactEvidenceRequirement } from './work-artifact-content';
 import { SectionTitle } from '@/components/shared/section-title';
@@ -141,7 +146,7 @@ function SectionDeviceDrafts({
   onDevice: (device: DraftDevice | null) => void;
 }) {
   if (failure) return <SectionError className="mt-4" failure={failure} />;
-  return code ? <code.DeviceDrafts {...drafts} /> : null;
+  return code ? <code.DeviceDrafts {...drafts} noteDrafts={noteDraftsOnDevice} /> : null;
 }
 
 /** Which Arbeitsnachweis the dialog shows: a saved one, a new one, or a draft of this job the device kept. */
