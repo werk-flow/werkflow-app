@@ -27,7 +27,7 @@ import type { ClientRequest } from '@/lib/requests/types';
 import type { ServiceCaseDetail } from '@/lib/service-cases/types';
 import { NO_RECORDED_VISIT } from '@/lib/work-artifacts/types';
 import type { WorkSession } from '@/lib/time-tracking/types';
-import { clientRelationContractId, clientRelationContractRoles } from './client-relation-boundaries';
+import { clientRelationContractId } from './client-relation-boundaries';
 import { ROUTE_REFRESH_EVENT } from './lifecycle-boundaries';
 import { useSearchParams } from './list-navigation-service-boundaries';
 import { materialContractItem, materialContractLocation } from './material-boundaries';
@@ -66,6 +66,9 @@ function useRouteProps<Props>(read: () => Props): Props {
 
 const readMaterialLines = () => structuredClone(window.uiContractMaterial.lines);
 const readClientRelations = () => structuredClone(window.uiContractClientRelations);
+// Not cloned: a read that returns the same roles keeps their identity, as a
+// refresh with unchanged server props does.
+const readClientSiteRoles = () => window.uiContractClientSiteRoles;
 const readQualifications = () => structuredClone(window.uiContractQualifications);
 const readTimeAccounts = () => structuredClone(window.uiContractTimeAccounts);
 
@@ -230,13 +233,14 @@ function RequestListHost(): React.JSX.Element {
 
 function ClientRelationsHost(): React.JSX.Element {
   const relations = useRouteProps(readClientRelations);
+  const siteRoles = useRouteProps(readClientSiteRoles);
   return (
     <ClientRelationsSection
       clientId={clientRelationContractId}
       clientAddress={null}
       contacts={relations.contacts}
       sites={relations.sites}
-      siteRoles={clientRelationContractRoles}
+      siteRoles={siteRoles}
       isAdminOrManager
       equipment={[]}
       equipmentLoadFailed={false}

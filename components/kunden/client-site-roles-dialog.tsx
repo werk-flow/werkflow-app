@@ -7,6 +7,7 @@ import {
   ClientSelectWithCreate,
   type ClientSelectItem,
 } from '@/components/auftraege/shared/client-select-with-create';
+import { RegionLoadError } from '@/components/shared/region-load-error';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -44,6 +45,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   holder_not_found: 'Der Kunde wurde nicht gefunden.',
   holder_archived: 'Der Kunde ist archiviert. Stelle ihn zuerst wieder her.',
   holder_unchanged: 'Dieser Kunde hat die Rolle bereits.',
+  role_changed: 'Die Rolle wurde inzwischen geändert. Schließe den Dialog und öffne ihn erneut.',
   role_starts_before_current: 'Der Wechsel muss nach dem Beginn der bisherigen Rolle liegen.',
   role_overlaps: 'In diesem Zeitraum hat schon ein anderer Kunde diese Rolle.',
   role_not_found: 'Die Rolle wurde nicht gefunden.',
@@ -51,9 +53,12 @@ const ERROR_MESSAGES: Record<string, string> = {
   role_ends_before_start: 'Das Ende darf nicht vor dem Beginn liegen.',
 };
 
-/** What the dialog edits: a new or changed holder of a kind, or the end of a role. */
+/**
+ * What the dialog edits: a first holder of a kind, a change after the role it
+ * replaces, or the end of a role. Each names the role it changes.
+ */
 type RoleEdit =
-  | { mode: 'assign'; kind: SiteRoleKind; replace: boolean }
+  | { mode: 'assign'; kind: SiteRoleKind; replaces: ClientSiteRole | null }
   | { mode: 'end'; kind: SiteRoleKind; role: ClientSiteRole };
 
 const HOLDER_FIELD_ID = 'site-role-holder';
@@ -80,47 +85,49 @@ function SiteRoleKindSection({
   const ofKind = roles.filter((role) => role.role === kind);
   const open = ofKind.filter((role) => siteRoleState(role, today) !== 'ended');
   const ended = ofKind.filter((role) => siteRoleState(role, today) === 'ended');
+  // At most one role of a kind has no end: the one a change or an end acts on.
+  // After a scheduled change it is the coming holder; the current one already ends.
   const lasting = open.find((role) => role.endsOn === null);
   return (
     <section className="space-y-2 rounded-md border p-3" aria-label={SITE_ROLE_LABELS[kind]}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-medium">{SITE_ROLE_LABELS[kind]}</p>
-        <div className="flex gap-1">
-          {lasting ? (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => onEdit({ mode: 'assign', kind, replace: true })}
-              >
-                Wechseln
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => onEdit({ mode: 'end', kind, role: lasting })}
-              >
-                Beenden
-              </Button>
-            </>
-          ) : (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => onEdit({ mode: 'assign', kind, replace: false })}
-            >
-              Eintragen
-            </Button>
-          )}
-        </div>
+        {!lasting && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onEdit({ mode: 'assign', kind, replaces: null })}
+          >
+            Eintragen
+          </Button>
+        )}
       </div>
       {open.length === 0 && <p className="text-sm text-muted-foreground">Nicht eingetragen</p>}
       <ul className="space-y-1 text-sm">
         {open.map((role) => (
-          <SiteRoleLine key={role.id} role={role} clientId={clientId} today={today} />
+          <SiteRoleLine key={role.id} role={role} clientId={clientId} today={today}>
+            {role === lasting && (
+              <div className="ml-auto flex gap-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onEdit({ mode: 'assign', kind, replaces: role })}
+                >
+                  Wechseln
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onEdit({ mode: 'end', kind, role })}
+                >
+                  Beenden
+                </Button>
+              </div>
+            )}
+          </SiteRoleLine>
         ))}
       </ul>
       {ended.length > 0 && (
@@ -137,9 +144,20 @@ function SiteRoleKindSection({
   );
 }
 
-function SiteRoleLine({ role, clientId, today }: { role: ClientSiteRole; clientId: string; today: string }) {
+function SiteRoleLine({
+  role,
+  clientId,
+  today,
+  children,
+}: {
+  role: ClientSiteRole;
+  clientId: string;
+  today: string;
+  /** The actions on this role, if it is the one a change or an end acts on. */
+  children?: React.ReactNode;
+}) {
   return (
-    <li className="flex flex-wrap gap-x-2">
+    <li className="flex flex-wrap items-center gap-x-2 gap-y-1">
       {role.holderClientId === clientId ? (
         <span>{role.holderName}</span>
       ) : (
@@ -147,6 +165,7 @@ function SiteRoleLine({ role, clientId, today }: { role: ClientSiteRole; clientI
       )}
       <span className="text-muted-foreground">{describeSiteRolePeriod(role, today, formatGermanDate)}</span>
       {role.holderArchived && <span className="text-muted-foreground">· archiviert</span>}
+      {children}
     </li>
   );
 }
@@ -176,7 +195,7 @@ function saveRoleEdit(
           role: edit.kind,
           holderClientId: holder?.id ?? '',
           startsOn: date || null,
-          replace: edit.replace,
+          replacesRoleId: edit.replaces?.id ?? null,
         })
   ).catch(() => ({ success: false as const, error: 'unexpected_error' }));
 }
@@ -185,13 +204,12 @@ function saveRoleEdit(
 function useSiteRoleEditForm({ site, edit, settle, task, onDone }: SiteRoleEditProps) {
   const router = useRouter();
   const [holder, setHolder] = useState<ClientSelectItem | null>(null);
-  // A change and an end need their day; a first entry may stay „seit unbekannt“.
-  const [date, setDate] = useState(edit.mode === 'assign' && !edit.replace ? '' : berlinToday());
+  const [date, setDate] = useState(() => initialDate(edit));
   const [holderError, setHolderError] = useState<string | null>(null);
   const [dateError, setDateError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { run, isPending } = task;
-  const dateRequired = edit.mode === 'end' || edit.replace;
+  const dateRequired = edit.mode === 'end' || edit.replaces !== null;
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -216,8 +234,8 @@ function useSiteRoleEditForm({ site, edit, settle, task, onDone }: SiteRoleEditP
         return;
       }
       router.refresh();
-      await settle(since);
-      onDone();
+      // A timeout keeps its warning and the edit: the list would show the old roles as saved.
+      if (await settle.confirmChange(since)) onDone();
     });
   };
 
@@ -243,9 +261,20 @@ function useSiteRoleEditForm({ site, edit, settle, task, onDone }: SiteRoleEditP
   };
 }
 
+/**
+ * A change and an end need their day: today, or the start of a role that has
+ * not begun. A first entry may stay „seit unbekannt“.
+ */
+function initialDate(edit: RoleEdit): string {
+  const today = berlinToday();
+  if (edit.mode === 'end')
+    return edit.role.startsOn && edit.role.startsOn > today ? edit.role.startsOn : today;
+  return edit.replaces ? today : '';
+}
+
 function dateDescription(edit: RoleEdit): string | undefined {
   if (edit.mode === 'end') return undefined;
-  return edit.replace
+  return edit.replaces
     ? 'Die bisherige Rolle endet am Tag davor und bleibt im Verlauf.'
     : 'Leer lassen, wenn du nicht weißt, seit wann.';
 }
@@ -253,7 +282,7 @@ function dateDescription(edit: RoleEdit): string | undefined {
 function editTitle(edit: RoleEdit): string {
   const label = SITE_ROLE_LABELS[edit.kind];
   if (edit.mode === 'end') return `${label} ${edit.role.holderName} beenden`;
-  return edit.replace ? `${label} wechseln` : `${label} eintragen`;
+  return edit.replaces ? `${label} ${edit.replaces.holderName} wechseln` : `${label} eintragen`;
 }
 
 /** The form of one edit: the new holder and the day it starts, or the last day of a role. */
@@ -340,15 +369,18 @@ export function ClientSiteRolesDialog({
   /** Null while the dialog is closed. */
   site: ClientSite | null;
   clientId: string;
-  /** Every role of the customer's Objekte; the dialog shows those of `site`. */
-  roles: ClientSiteRole[];
+  /** Every role of the customer's Objekte; the dialog shows those of `site`. Null when they could not be read. */
+  roles: ClientSiteRole[] | null;
   onClose: () => void;
 }) {
   const { showBanner } = useBanner();
   const [edit, setEdit] = useState<RoleEdit | null>(null);
   const settle = useSettleOnChange(roles);
   const task = usePendingTask();
-  const siteRoles = site ? roles.filter((role) => role.siteId === site.id) : [];
+  const siteRoles = site && roles ? roles.filter((role) => role.siteId === site.id) : [];
+  // Unknown roles offer no entry: an empty history would invite a duplicate.
+  // A running save keeps its form until it answers.
+  const rolesUnknown = roles === null && !task.isPending;
   const address = site ? formatSiteAddress(site) : '';
 
   return (
@@ -370,9 +402,15 @@ export function ClientSiteRolesDialog({
         </DialogHeader>
         {site && (
           <DialogBody className="space-y-3 py-1">
-            {edit ? (
+            {rolesUnknown ? (
+              <RegionLoadError>Die Rollen konnten nicht geladen werden.</RegionLoadError>
+            ) : edit ? (
               <SiteRoleEditForm
-                key={`${edit.mode}-${edit.kind}`}
+                key={
+                  edit.mode === 'end'
+                    ? `end-${edit.role.id}`
+                    : `assign-${edit.kind}-${edit.replaces?.id ?? 'new'}`
+                }
                 site={site}
                 edit={edit}
                 settle={settle}
