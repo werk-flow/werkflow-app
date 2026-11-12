@@ -2,7 +2,9 @@
 // (werk-flow/werkflow-planning#331). Without the cron secret nothing runs.
 // The run applies every due report page by page, goes on past a failed one,
 // answers a server error then, and its body and logs carry counts and codes
-// only, never a report's content.
+// only, never a report's content. The route scrubs the reports without a
+// scrubbed copy first (werk-flow/werkflow-planning#332), so a copy exists
+// before its originals go; the scrub fixture proves that run itself.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
 import * as nextServer from 'next/server';
@@ -20,6 +22,9 @@ let due: string[] = [];
 let outcomes = new Map<string, 'originals_deleted' | 'report_deleted' | 'fail'>();
 const listCalls: Array<{ after: unknown; limit: unknown }> = [];
 const applied: string[] = [];
+// What the stubbed scrub run answers, and how many retention calls had run when it started.
+let scrubOutcome = { ok: true, scrubbed: 0, notScrubbed: 0 };
+const scrubStartedAfter: number[] = [];
 const logged: string[] = [];
 console.error = (...parts: unknown[]) => {
   logged.push(parts.map((part) => JSON.stringify(part)).join(' '));
@@ -27,6 +32,12 @@ console.error = (...parts: unknown[]) => {
 
 mock.module('server-only', () => ({}));
 mock.module('next/server', () => ({ ...nextServer, connection: async () => {} }));
+mock.module('@/lib/problem-reports/scrub/scrub-report', () => ({
+  scrubPendingProblemReports: async () => {
+    scrubStartedAfter.push(listCalls.length + applied.length);
+    return scrubOutcome;
+  },
+}));
 mock.module('@/lib/supabase/admin', () => ({
   createSupabaseAdminClient: () => ({
     rpc: async (name: string, args: Record<string, unknown>) => {
@@ -67,15 +78,26 @@ for (const authorization of [undefined, 'Bearer wrong', secret]) {
   assert.equal((await GET(request(authorization))).status, 404, `${authorization} reached the run`);
 }
 assert.equal(listCalls.length + applied.length, 0, 'a refused request ran the retention');
+assert.equal(scrubStartedAfter.length, 0, 'a refused request ran the scrub');
 
 // More due reports than one page: every one is applied, in id order.
 due = Array.from({ length: 205 }, (_, index) => id(index + 1));
 outcomes = new Map(
   due.map((entry, index) => [entry, index % 2 === 0 ? 'originals_deleted' : 'report_deleted']),
 );
+scrubOutcome = { ok: true, scrubbed: 4, notScrubbed: 1 };
 const done = await GET(request(`Bearer ${secret}`));
 assert.equal(done.status, 200);
-assert.deepEqual(await done.json(), { ok: true, originalsDeleted: 103, reportsDeleted: 102, failed: 0 });
+assert.deepEqual(await done.json(), {
+  ok: true,
+  originalsDeleted: 103,
+  reportsDeleted: 102,
+  failed: 0,
+  scrubbed: 4,
+  notScrubbed: 1,
+});
+// The scrub ran once, before the first deletion: a report gets its copy before its originals go.
+assert.deepEqual(scrubStartedAfter, [0]);
 assert.equal(applied.length, 205);
 assert.deepEqual(applied, [...applied].sort(), 'the run left id order');
 assert.equal(listCalls[0]?.after, undefined, 'the first page did not start at the beginning');
@@ -92,7 +114,14 @@ outcomes = new Map([
 const failed = await GET(request(`Bearer ${secret}`));
 assert.equal(failed.status, 500);
 const body = await failed.text();
-assert.deepEqual(JSON.parse(body), { ok: false, originalsDeleted: 1, reportsDeleted: 1, failed: 1 });
+assert.deepEqual(JSON.parse(body), {
+  ok: false,
+  originalsDeleted: 1,
+  reportsDeleted: 1,
+  failed: 1,
+  scrubbed: 4,
+  notScrubbed: 1,
+});
 assert.deepEqual(applied, [id(1), id(2), id(3)]);
 assert.deepEqual(due, [id(1)], 'the failed report left the due list');
 assert.ok(!body.includes('Mustermann'), 'the body carried report content');
@@ -100,3 +129,20 @@ assert.ok(
   logged.length > 0 && logged.every((line) => !line.includes('Mustermann') && !line.includes(id(1))),
   'a log line carried report content or a report id',
 );
+
+// A scrub run that could not list its reports answers a server error too, and the deletions still run.
+applied.length = 0;
+due = [id(4)];
+outcomes = new Map([[id(4), 'originals_deleted']]);
+scrubOutcome = { ok: false, scrubbed: 0, notScrubbed: 0 };
+const unlisted = await GET(request(`Bearer ${secret}`));
+assert.equal(unlisted.status, 500);
+assert.deepEqual(await unlisted.json(), {
+  ok: false,
+  originalsDeleted: 1,
+  reportsDeleted: 0,
+  failed: 0,
+  scrubbed: 0,
+  notScrubbed: 0,
+});
+assert.deepEqual(applied, [id(4)]);

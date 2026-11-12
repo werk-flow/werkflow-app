@@ -39,6 +39,8 @@ import {
 } from './today-refresh-boundaries';
 import { OfflineClockContractFixture } from './offline-clock-boundaries';
 import { OfflineTodayContractFixture } from './offline-today-boundaries';
+import { WorkHandoverContractFixture } from './work-handover-boundaries';
+import { EditJobContractFixture } from './edit-job-boundaries';
 import { CalendarContractFixture } from './calendar-boundaries';
 import { FeedbackContractFixture, isFeedbackFixture } from './feedback-boundaries';
 import { mountHydrationFixture } from './hydration-boundaries';
@@ -626,6 +628,10 @@ createRoot(root).render(
     <OfflineTodayContractFixture />
   ) : window.uiContractFixture === 'offline-clock' ? (
     <OfflineClockContractFixture />
+  ) : window.uiContractFixture === 'work-handover' ? (
+    <WorkHandoverContractFixture />
+  ) : window.uiContractFixture === 'edit-job' ? (
+    <EditJobContractFixture />
   ) : window.uiContractFixture === 'calendar-board' ? (
     <CalendarBoardContractFixture />
   ) : window.uiContractFixture === 'calendar-day' ? (

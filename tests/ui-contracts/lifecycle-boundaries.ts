@@ -44,6 +44,8 @@ declare global {
       | 'today-refresh-fallback'
       | 'offline-today'
       | 'offline-clock'
+      | 'work-handover'
+      | 'edit-job'
       | 'sidebar'
       | 'lazy-dialog'
       | 'clock'
