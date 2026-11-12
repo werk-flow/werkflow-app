@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type ComponentType } from 'react';
 
 import { ErrorText } from '@/components/ui/error-text';
 import { ListRow } from '@/components/ui/list-row';
@@ -14,16 +14,23 @@ import { formatGermanDate, formatGermanDateRange, formatBerlinDateTime } from '@
 // The access proposal row and its review load on their own: every page's cold
 // start carries the Aufgaben code (lab.field.cold-start). A failed download
 // shows in the row; a reload tries again.
-const SiteAccessTaskRow = lazy(() =>
+type SiteAccessRowProps = {
+  task: Extract<AttentionTask, { sourceType: 'site_access_proposal' }>;
+  onDecided: () => Promise<void>;
+};
+
+function SiteAccessRowLoadError() {
+  return (
+    <ListRow variant="plain">
+      <ErrorText>Dieser Zugangshinweis konnte nicht geladen werden. Lade die Seite neu.</ErrorText>
+    </ListRow>
+  );
+}
+
+const SiteAccessTaskRow = lazy<ComponentType<SiteAccessRowProps>>(() =>
   import('./site-access-review').then(
     (mod) => ({ default: mod.SiteAccessTaskRow }),
-    () => ({
-      default: () => (
-        <ListRow variant="plain">
-          <ErrorText>Dieser Zugangshinweis konnte nicht geladen werden. Lade die Seite neu.</ErrorText>
-        </ListRow>
-      ),
-    }),
+    () => ({ default: SiteAccessRowLoadError }),
   ),
 );
 
