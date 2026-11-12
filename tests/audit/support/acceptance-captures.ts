@@ -98,7 +98,10 @@ export function settleAcceptanceEntries(testInfo: TestInfo): void {
   );
 }
 
-/** The screen is ready to be judged: requested page, title, settled, fonts, clock button, no failed region. */
+/** The report button of the phone header and of the sidebar; at every width one of them shows. */
+const PROBLEM_REPORT_BUTTONS = 'button[aria-label="Problem melden"], button[aria-keyshortcuts="F2"]';
+
+/** The screen is ready to be judged: requested page, title, settled, fonts, clock and report buttons, no failed region. */
 async function expectReady(page: Page, scope: Locator, view: CaptureSpec['view']['kind']): Promise<void> {
   await expect(page, 'a capture of a sign-in or onboarding screen is missing evidence').not.toHaveURL(
     /\/(login|signup|onboarding)(\/|$)/,
@@ -117,6 +120,14 @@ async function expectReady(page: Page, scope: Locator, view: CaptureSpec['view']
   await expect(page.locator('[data-slot="section-error"]:visible')).toHaveCount(0);
   for (const launcher of [clockInLauncher(page), runningClockLauncher(page)])
     if (await launcher.count()) await expect(launcher).toBeEnabled();
+  // The shell's „Problem melden“ renders only once React owns its events
+  // (useHydrated), later than the clock launcher, so the capture waits for it.
+  // Visibility is read from CSS, not the accessibility tree, which an open modal hides the shell from.
+  await expect
+    .poll(() => page.locator(PROBLEM_REPORT_BUTTONS).filter({ visible: true }).count(), {
+      message: 'the shell shows its report button',
+    })
+    .toBeGreaterThan(0);
   await page.evaluate(async () => {
     await document.fonts.ready;
   });
