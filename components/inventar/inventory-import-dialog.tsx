@@ -17,7 +17,12 @@ import { FileInput } from '@/components/ui/file-input';
 import { Label } from '@/components/ui/label';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import type { InventoryCategory, InventoryLocation } from '@/lib/inventory/types';
-import { IMPORT_COLUMNS, importTotals, type ImportColumnMapping } from '@/lib/inventory/csv-import';
+import {
+  IMPORT_COLUMNS,
+  importTotals,
+  type ImportColumnMapping,
+  type ImportRowOutcome,
+} from '@/lib/inventory/csv-import';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { formatBerlinDateTime } from '@/lib/utils';
 import { ImportOutcomeList, ImportTotalsSummary } from './inventory-import-outcomes';
@@ -182,10 +187,20 @@ function dialogDescription(csvImport: CsvImport, props: ImportDialogProps): stri
     : `${props.existingItemCount} bestehende Artikel, ${props.locations.length} Lager, ${props.categories.length} Kategorien`;
 }
 
+/** The download of the result report, above the rows it holds; nothing when every row went in as the file says. */
+function ReportDownload({ csvImport, outcomes }: { csvImport: CsvImport; outcomes: ImportRowOutcome[] }) {
+  const report = csvImport.report(outcomes);
+  if (report === null) return null;
+  return (
+    <Button type="button" variant="outline" onClick={() => csvImport.downloadReport(report)}>
+      Bericht herunterladen
+    </Button>
+  );
+}
+
 /** The footer of each step: its way back and its one primary action. */
 function StepFooter({ csvImport }: { csvImport: CsvImport }) {
   const { step, isPending } = csvImport;
-  const report = step.kind === 'result' ? csvImport.report(step.outcomes) : null;
   return (
     <DialogFooter>
       {step.kind === 'choose' && (
@@ -201,11 +216,6 @@ function StepFooter({ csvImport }: { csvImport: CsvImport }) {
       {step.kind === 'preview' && (
         <Button type="button" variant="outline" onClick={csvImport.backToChoose} disabled={isPending}>
           Zurück zur Zuordnung
-        </Button>
-      )}
-      {report !== null && (
-        <Button type="button" variant="outline" onClick={() => csvImport.downloadReport(report)}>
-          Bericht herunterladen
         </Button>
       )}
       <Button pending={isPending} type="submit" disabled={isPending}>
@@ -244,6 +254,7 @@ export function ImportDialog(props: ImportDialogProps) {
             {step.kind !== 'choose' && (
               <>
                 <ImportTotalsSummary totals={importTotals(step.outcomes)} mode={mode} />
+                {step.kind === 'result' && <ReportDownload csvImport={csvImport} outcomes={step.outcomes} />}
                 <ImportOutcomeList
                   outcomes={step.outcomes}
                   importRows={csvImport.importRows}

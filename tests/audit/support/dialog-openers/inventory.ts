@@ -7,6 +7,7 @@ import {
   createLocationButton,
   csvImportButton,
   csvImportButtonOf,
+  csvImportFileButton,
   csvImportRepeatChecked,
   inventoryImportFileInput,
   inventoryDialogLayer,
@@ -127,7 +128,8 @@ export const INVENTORY_OPENERS = {
       });
       const dialog = await importWithFile(page, file);
       await expect(csvImportButtonOf(dialog, 'importRepeatConfirm')).toBeVisible();
-      return csvImportButtonOf(dialog, 'importPreview');
+      // The warning shows before any submit; Enter on the file choice keeps focus on the first control.
+      return csvImportFileButton(dialog);
     },
     layer: importLayer,
     returnFocus: importStateReturnFocus,
