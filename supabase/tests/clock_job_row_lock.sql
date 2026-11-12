@@ -71,6 +71,12 @@ begin
     where revision.organization_id = '34800000-0000-4000-8000-000000000010'
       and 'For Update' = any(row_lock.modes)
   ) then raise exception 'the clock validator left the timeline revision row unlocked for a time write that then locks the job'; end if;
+  -- position() is 0 for absent text, so each marker must be found before the
+  -- comparison can mean anything.
+  if position('from public.time_timeline_revisions' in v_source) = 0
+  then raise exception 'the clock validator no longer reads the timeline revision with "from public.time_timeline_revisions"; update this lock-order check'; end if;
+  if position('from public.jobs' in v_source) = 0
+  then raise exception 'the clock validator no longer reads the job with "from public.jobs"; update this lock-order check'; end if;
   if position('from public.time_timeline_revisions' in v_source)
     > position('from public.jobs' in v_source)
   then raise exception 'the clock validator locks the job before the timeline revision, the reverse of a time write'; end if;
