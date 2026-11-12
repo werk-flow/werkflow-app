@@ -175,10 +175,22 @@ jobs:
           save-images: 'true'
       - run: bun scripts/verify.ts run --group "${{ needs.plan.outputs.sql }}"
       # The committed types match every committed migration (docs/technical/environments.md, "The migration rule").
+      # It runs after a failed SQL group too, and keeps the file it generated when the committed one
+      # is stale: a workstation without Boat takes its types from that artifact
+      # (docs/technical/boat-verification.md, "Types on Boat").
       - name: Check the generated types
+        if: ${{ !cancelled() }}
         env:
           SUPABASE_INTERNAL_IMAGE_REGISTRY: ghcr.io
+          WERKFLOW_TYPES_ARTIFACT: ${{ runner.temp }}/database-types/database.types.ts
         run: bun run types:check -- --local
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: database-types
+          path: ${{ runner.temp }}/database-types/
+          retention-days: 14
+          if-no-files-found: ignore
       # The owner's demo seeder seeds both companies on the stack with every committed migration.
       # The second run starts with the reset (docs/technical/environments.md, "Work on production").
       - name: Seed the demo companies twice
