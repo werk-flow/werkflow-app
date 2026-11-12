@@ -31,11 +31,7 @@ export function sampleOffer(organizationName: string, issuedOn: string): Busines
   return {
     issuedOn,
     sender: { name: organizationName, addressLines: [], logo: null },
-    recipientLines: [
-      'Hausverwaltung Ahornhof GmbH',
-      'Ahornweg 7',
-      '09876 Ahornstadt',
-    ],
+    recipientLines: ['Hausverwaltung Ahornhof GmbH', 'Ahornweg 7', '09876 Ahornstadt'],
     title: 'Angebot: Austausch der Gasheizung',
     metaRows: [
       { label: 'Angebot', value: 'Muster' },
