@@ -6,7 +6,6 @@ import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { TimeAccountDateField } from '@/components/zeiterfassung/time-account-date-field';
-import { OpeningDateCorrections } from '@/components/zeiterfassung/time-account-opening-corrections';
 import {
   PersonRow,
   PersonTable,
@@ -14,18 +13,16 @@ import {
 } from '@/components/zeiterfassung/time-account-person-table';
 import { TimeAccountSubmitButton } from '@/components/zeiterfassung/time-account-submit-button';
 import { useTimeAccountForm } from '@/components/zeiterfassung/use-time-account-form';
-import { assignEmployeeTimePolicy, openMissingTimeAccounts } from '@/lib/time-accounts/actions';
+import { assignEmployeeTimePolicy } from '@/lib/time-accounts/actions';
 import {
   decideTimeAccountAdjustment,
   withdrawTimeAccountAdjustment,
 } from '@/lib/time-accounts/decision-actions';
-import { startDateHint } from '@/lib/time-accounts/opening-dates';
 import type { TimeAccountSettingsData } from '@/lib/time-accounts/queries';
 import { formatMinutes } from '@/lib/time-accounts/presentation';
 import { formatGermanDate } from '@/lib/utils';
 
 type SettingsEmployee = TimeAccountSettingsData['employees'][number];
-type MissingAccount = TimeAccountSettingsData['missingAccounts'][number];
 type PersonCells = Parameters<typeof PersonRow>[0]['cells'];
 
 /** The non-default policies: a click on one assigns it. */
@@ -200,171 +197,6 @@ export function EmployeeTimePolicyAssignmentCard({
             }
           />
         )}
-      </CardContent>
-    </Card>
-  );
-}
-
-/** The table row takes the bare controls and right-aligns the submit; a card labels each control. */
-function openAccountCells(
-  layout: PersonLayout,
-  {
-    openingMinutes,
-    openedOn,
-    reason,
-    submit,
-  }: { openingMinutes: ReactNode; openedOn: ReactNode; reason: ReactNode; submit: ReactNode },
-): PersonCells {
-  return layout === 'row'
-    ? [
-        { key: 'openingMinutes', content: openingMinutes },
-        { key: 'openedOn', content: openedOn },
-        { key: 'reason', content: reason },
-        { key: 'submit', content: <div className="flex justify-end">{submit}</div> },
-      ]
-    : [
-        {
-          key: 'openingMinutes',
-          content: (
-            <Field label="Anfangssaldo (Minuten)" required>
-              {openingMinutes}
-            </Field>
-          ),
-        },
-        {
-          key: 'openedOn',
-          content: (
-            <Field label="Eröffnungsdatum" required>
-              {openedOn}
-            </Field>
-          ),
-        },
-        {
-          key: 'reason',
-          content: (
-            <Field label="Grund" required>
-              {reason}
-            </Field>
-          ),
-        },
-        { key: 'submit', content: submit },
-      ];
-}
-
-function MissingTimeAccount({
-  employee,
-  startDate,
-  layout,
-}: {
-  employee: MissingAccount;
-  startDate: string;
-  layout: PersonLayout;
-}) {
-  const { handleSubmit, isPending, pendingValue, error } = useTimeAccountForm({
-    action: 'openAccount',
-    serverAction: openMissingTimeAccounts,
-    fallback: 'open_failed',
-    successMessage: () => 'Das Zeitkonto ist eröffnet.',
-  });
-  const formId = `open-account-${layout}-${employee.employeeRecordId}`;
-  const openingMinutes = (
-    <Input
-      form={formId}
-      name="openingMinutes"
-      type="text"
-      inputMode="numeric"
-      pattern="-?[0-9]+"
-      defaultValue="0"
-      aria-label={`Anfangssaldo in Minuten für ${employee.employeeName}`}
-      required
-    />
-  );
-  const openedOn = (
-    <TimeAccountDateField
-      form={formId}
-      name="openedOn"
-      initialValue={startDate}
-      ariaLabel={`Eröffnungsdatum für ${employee.employeeName}`}
-    />
-  );
-  const reason = (
-    <Input
-      form={formId}
-      name="reason"
-      defaultValue="Einführung des Zeitkontos"
-      aria-label={`Eröffnungsgrund für ${employee.employeeName}`}
-      required
-    />
-  );
-  // One row per person: a repeated row action stays quiet, so orange keeps marking the one primary step.
-  const submit = (
-    <TimeAccountSubmitButton
-      form={formId}
-      variant="outline"
-      isPending={isPending}
-      pendingValue={pendingValue}
-      pendingLabel="Zeitkonto wird eröffnet"
-    >
-      Konto eröffnen
-    </TimeAccountSubmitButton>
-  );
-  return (
-    <PersonRow
-      layout={layout}
-      name={employee.employeeName}
-      form={
-        <form id={formId} onSubmit={handleSubmit} className="contents">
-          <input type="hidden" name="employeeRecordId" value={employee.employeeRecordId} />
-        </form>
-      }
-      cells={openAccountCells(layout, { openingMinutes, openedOn, reason, submit })}
-      error={error}
-    />
-  );
-}
-
-/** Opens the missing accounts and corrects the opening date of an opened one. */
-export function MissingTimeAccountsCard({ settings }: { settings: TimeAccountSettingsData }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Zeitkonten</CardTitle>
-        <CardDescription>
-          {settings.openAccountCount} von {settings.employeeCount} Zeitkonten sind eröffnet. Jeder
-          Anfangssaldo wird mit Datum und Grund ausdrücklich bestätigt.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-5">
-        {settings.missingAccounts.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Alle Zeitkonten sind eröffnet.</p>
-        ) : (
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">{startDateHint(settings.suggestedStartDate)}</p>
-            <PersonTable
-              heads={[
-                { label: 'Mitarbeiter' },
-                { label: 'Anfangssaldo (Minuten)', className: 'w-44' },
-                { label: 'Eröffnungsdatum', className: 'w-48' },
-                { label: 'Grund' },
-                { label: 'Aktion', className: 'sr-only' },
-              ]}
-              renderPeople={(layout) =>
-                settings.missingAccounts.map((employee) => (
-                  <MissingTimeAccount
-                    key={employee.employeeRecordId}
-                    employee={employee}
-                    startDate={settings.suggestedStartDate}
-                    layout={layout}
-                  />
-                ))
-              }
-            />
-          </div>
-        )}
-        <OpeningDateCorrections
-          accounts={settings.accounts}
-          suggestedStartDate={settings.suggestedStartDate}
-        />
       </CardContent>
     </Card>
   );

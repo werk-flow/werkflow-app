@@ -12,11 +12,7 @@ import {
 } from '@/components/zeiterfassung/time-account-person-table';
 import { TimeAccountSubmitButton } from '@/components/zeiterfassung/time-account-submit-button';
 import { useTimeAccountForm } from '@/components/zeiterfassung/use-time-account-form';
-import {
-  createDefaultPayrollMapping,
-  createStarterTimePolicy,
-  submitTimeAccountAdjustment,
-} from '@/lib/time-accounts/actions';
+import { createStarterTimePolicy, submitTimeAccountAdjustment } from '@/lib/time-accounts/actions';
 import { startDateHint } from '@/lib/time-accounts/opening-dates';
 import { formatMinutes } from '@/lib/time-accounts/presentation';
 import type { TimeAccountSettingsData } from '@/lib/time-accounts/queries';
@@ -251,27 +247,5 @@ export function AdjustmentRequestForms({
         ))
       }
     />
-  );
-}
-
-/** Confirms the default payroll mapping as a new version. */
-export function DefaultPayrollMappingForm() {
-  const { handleSubmit, isPending, pendingValue, error } = useTimeAccountForm({
-    action: 'createMapping',
-    serverAction: async () => createDefaultPayrollMapping(),
-    fallback: 'mapping_failed',
-    successMessage: () => 'Die Lohnarten-Zuordnung ist gespeichert.',
-  });
-  return (
-    <form onSubmit={handleSubmit} className="space-y-2">
-      <TimeAccountSubmitButton
-        isPending={isPending}
-        pendingValue={pendingValue}
-        pendingLabel="Standardzuordnung wird gespeichert"
-      >
-        Standardzuordnung bestätigen
-      </TimeAccountSubmitButton>
-      <ErrorText>{error}</ErrorText>
-    </form>
   );
 }
