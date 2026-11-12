@@ -3678,6 +3678,7 @@ export type Database = {
           status: string;
           taken_quantity: number;
           updated_at: string;
+          used_quantity: number;
           work_template_application_id: string | null;
         };
         Insert: {
@@ -3690,7 +3691,6 @@ export type Database = {
           item_id: string;
           job_id?: string | null;
           notes?: string | null;
-          used_quantity: number;
           organization_id: string;
           planned_quantity?: number;
           preferred_location_id?: string | null;
@@ -3700,6 +3700,7 @@ export type Database = {
           status?: string;
           taken_quantity?: number;
           updated_at?: string;
+          used_quantity?: number;
           work_template_application_id?: string | null;
         };
         Update: {
@@ -3712,7 +3713,6 @@ export type Database = {
           item_id?: string;
           job_id?: string | null;
           notes?: string | null;
-          used_quantity?: number;
           organization_id?: string;
           planned_quantity?: number;
           preferred_location_id?: string | null;
@@ -3722,6 +3722,7 @@ export type Database = {
           status?: string;
           taken_quantity?: number;
           updated_at?: string;
+          used_quantity?: number;
           work_template_application_id?: string | null;
         };
         Relationships: [
@@ -3734,7 +3735,6 @@ export type Database = {
           },
           {
             foreignKeyName: "job_material_lines_item_id_fkey";
-          used_quantity?: number;
             columns: ["item_id"];
             isOneToOne: false;
             referencedRelation: "inventory_items";
@@ -3784,18 +3784,6 @@ export type Database = {
           },
         ];
       };
-      job_qualification_assessments: {
-        Row: {
-          assessed_for_date: string;
-          coverage_fingerprint: string;
-          coverage_snapshot: Json;
-          created_at: string;
-          created_by: string | null;
-          id: string;
-          job_id: string;
-          organization_id: string;
-          override_reason: string | null;
-          requirements_snapshot: Json;
       job_material_use_events: {
         Row: {
           actor_id: string;
@@ -3897,6 +3885,18 @@ export type Database = {
           },
         ];
       };
+      job_qualification_assessments: {
+        Row: {
+          assessed_for_date: string;
+          coverage_fingerprint: string;
+          coverage_snapshot: Json;
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          job_id: string;
+          organization_id: string;
+          override_reason: string | null;
+          requirements_snapshot: Json;
           selected_employee_record_ids: string[];
           selected_user_ids: string[];
           team_source_id: string | null;
@@ -16895,6 +16895,17 @@ export type Database = {
           quantity_before: number;
         }[];
       };
+      record_job_material_use: {
+        Args: {
+          p_actor_id: string;
+          p_corrects_event_id?: string;
+          p_job_material_line_id: string;
+          p_note?: string;
+          p_organization_id: string;
+          p_quantity: number;
+        };
+        Returns: number;
+      };
       record_organization_export_download: {
         Args: {
           p_actor_id: string;
@@ -16936,17 +16947,6 @@ export type Database = {
           p_actor_id: string;
           p_artifact_id: string;
           p_comment: string;
-      record_job_material_use: {
-        Args: {
-          p_actor_id: string;
-          p_corrects_event_id?: string;
-          p_job_material_line_id: string;
-          p_note?: string;
-          p_organization_id: string;
-          p_quantity: number;
-        };
-        Returns: number;
-      };
           p_customer_context: Json;
           p_expected_version: number;
           p_organization_id: string;
