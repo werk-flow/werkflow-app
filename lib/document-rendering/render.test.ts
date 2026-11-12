@@ -330,6 +330,36 @@ describe('the business document renderer', () => {
     }
   });
 
+  test('a section’s last position keeps its last text line with its first description line at every length', async () => {
+    for (let count = 40; count <= 62; count += 1) {
+      const text = Array.from({ length: count }, (_, index) => `Textzeile${index + 1}`).join('\n');
+      const document = baseDocument([
+        {
+          number: '1',
+          title: 'Lang',
+          positions: [
+            position('1.1', { text, description: 'Erste Beschreibungszeile\nZweite Beschreibungszeile' }),
+          ],
+          subtotalCents: 10000,
+        },
+      ]);
+      const pages = await readPages(await renderBusinessDocument(document));
+      expect(pageOf(pages, `Textzeile${count}`), String(count)).toBe(
+        pageOf(pages, 'Erste Beschreibungszeile'),
+      );
+      expect(pageOf(pages, 'Summe 1 '), String(count)).toBe(pageOf(pages, 'Zweite Beschreibungszeile'));
+    }
+  });
+
+  test('a long firm name wraps in the letterhead instead of running off the page', async () => {
+    const name = 'Heizungsbau und Sanitärtechnik Sonnenberg und Partner Meisterbetrieb GmbH & Co. KG';
+    const document = { ...serviceOffer, sender: { ...serviceOffer.sender, name, logo: logoPng } };
+    const firstPage = (await readPages(await renderBusinessDocument(document)))[0] ?? [];
+    const nameLines = firstPage.filter((line) => line.top < 45 * MM && line.left < 30 * MM);
+    expect(nameLines.length).toBeGreaterThan(1);
+    expect(nameLines.map((line) => line.text).join(' ')).toContain(name);
+  });
+
   test('margins that leave no room for the content are refused instead of laid out', async () => {
     const cramped: BusinessDocument = {
       ...serviceOffer,

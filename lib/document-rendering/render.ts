@@ -37,6 +37,7 @@ const MINIMUM_INFO_VALUE_WIDTH_MM = 25;
 const MINIMUM_CONTENT_HEIGHT_MM = 120;
 const INFO_BLOCK_LEFT_MM = 125;
 const PAGE_NUMBER_SPACE = 8 * MM;
+const LOGO_MAX_WIDTH_MM = 55;
 
 const INK = rgb(0.11, 0.11, 0.13);
 const MUTED = rgb(0.38, 0.38, 0.42);
@@ -57,6 +58,12 @@ type Box = { left: number; right: number; top: number; bottom: number };
 type FlowItem = {
   height: number;
   keepWithNext: boolean;
+  /**
+   * Stronger than `keepWithNext`: a chain longer than a page breaks only where
+   * this is unset, so a section heading, a position's text lines and its first
+   * description line part only when they alone exceed a page.
+   */
+  bindsNext?: boolean;
   /** A table row: a page that holds one starts its table part with the column header. */
   inTable: boolean;
   draw: (page: PDFPage, top: number, box: Box) => void;
@@ -195,6 +202,7 @@ function positionFlow(
   const tableLine = (height: number, draw: FlowItem['draw']): FlowItem => ({
     height,
     keepWithNext: true,
+    bindsNext: true,
     inTable: true,
     draw,
   });
@@ -228,6 +236,7 @@ function positionFlow(
   if (last && !descriptionLines.length) {
     last.height += 4;
     last.keepWithNext = travelsWithSubtotal;
+    last.bindsNext = false;
   }
   const description = descriptionLines.map(
     (text, index): FlowItem => ({
@@ -246,6 +255,7 @@ function sectionFlow(section: DocumentSection, fonts: Fonts, textWidth: number):
   const heading: FlowItem = {
     height: 24,
     keepWithNext: true,
+    bindsNext: true,
     inTable: true,
     draw: (page, top, box) => {
       const columns = columnsOf(box);
@@ -383,8 +393,18 @@ function paginate(items: FlowItem[], boxOf: (pageIndex: number) => Box): PlacedP
     let cut = end;
     if (end < items.length) {
       while (cut > start && items[cut - 1]?.keepWithNext) cut -= 1;
-      // A chain longer than a page breaks inside, but its last item still goes along.
-      if (cut === start) cut = items[end - 1]?.keepWithNext && end - 1 > start ? end - 1 : end;
+      // A chain longer than a page breaks inside: at the latest point before the
+      // overflowing item that splits no bound pair; failing that, the overflowing
+      // item takes the item it is bound to along, so no item goes alone.
+      if (cut === start) {
+        cut = items[end - 1]?.bindsNext && end - 1 > start ? end - 1 : end;
+        for (let candidate = end - 1; candidate > start; candidate -= 1) {
+          if (!items[candidate - 1]?.bindsNext) {
+            cut = candidate;
+            break;
+          }
+        }
+      }
     }
     pages.push(placeItems(items.slice(start, cut), box.top));
     start = cut;
@@ -444,12 +464,16 @@ function drawLetterhead(
   logo: PDFImage | null,
   box: Box,
 ) {
-  drawLeft(page, document.sender.name, box.left, 15 * MM, fonts.bold, 13);
+  // A long firm name wraps beside the logo; the address lines follow below it.
+  const nameWidth = box.right - box.left - (logo ? LOGO_MAX_WIDTH_MM * MM + 5 * MM : 0);
+  const nameLines = wrap(document.sender.name, fonts.bold, 13, nameWidth);
+  nameLines.forEach((line, index) => drawLeft(page, line, box.left, 15 * MM + index * 16, fonts.bold, 13));
+  const addressTop = 15 * MM + nameLines.length * 16 + 3;
   document.sender.addressLines.forEach((line, index) =>
-    drawLeft(page, line, box.left, 15 * MM + 19 + index * 10.5, fonts.regular, 8, MUTED),
+    drawLeft(page, line, box.left, addressTop + index * 10.5, fonts.regular, 8, MUTED),
   );
   if (!logo) return;
-  const scale = Math.min((55 * MM) / logo.width, (22 * MM) / logo.height, 1);
+  const scale = Math.min((LOGO_MAX_WIDTH_MM * MM) / logo.width, (22 * MM) / logo.height, 1);
   const width = logo.width * scale;
   const height = logo.height * scale;
   page.drawImage(logo, { x: box.right - width, y: PAGE_HEIGHT - 12 * MM - height, width, height });
@@ -554,7 +578,7 @@ function documentFlow(
       draw: (page, top, box) => drawLeft(page, document.title, box.left, top, fonts.bold, 15),
     },
     ...paragraphFlow(document.openingText, fonts.regular, width, 0),
-    { height: 10, keepWithNext: true, inTable: false, draw: () => undefined },
+    { height: 10, keepWithNext: true, bindsNext: true, inTable: false, draw: () => undefined },
     ...document.sections.flatMap((section) => sectionFlow(section, fonts, textWidth)),
     ...totalsFlow(document, fonts),
     ...paragraphFlow(document.closingText, fonts.regular, width, 18),
