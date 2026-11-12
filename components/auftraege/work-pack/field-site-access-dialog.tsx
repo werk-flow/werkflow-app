@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactElement } from 'react';
+import { useRef, useState, type ReactElement } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,7 @@ import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useServerAction } from '@/hooks/use-server-action';
+import type { SettleOnChange } from '@/hooks/use-settle-on-change';
 import { describeFailure } from '@/lib/action-messages';
 import { proposeSiteAccess } from '@/lib/site-access-proposals/actions';
 import {
@@ -31,13 +32,33 @@ import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 // Loaded on the worker's intent through components/shared/lazy-dialog.tsx, so
 // the field work pack's cold start never carries the form (`lab.field.cold-start`).
 
+const PROPOSE_FALLBACK = 'Dein Hinweis konnte nicht gesendet werden. Versuche es in einem Moment erneut.';
+
 const PROPOSE_FAILURES = {
   job_not_found: 'Diesen Auftrag gibt es nicht mehr. Lade die Seite neu.',
   not_authorized: 'Du bist diesem Auftrag nicht mehr zugeteilt.',
   site_not_on_job: 'Der Einsatzort dieses Auftrags hat sich geändert. Lade die Seite neu.',
+  // A lost answer included: sending again replaces an open proposal, so a retry is safe.
+  unexpected_error: PROPOSE_FALLBACK,
 };
 
-const PROPOSE_FALLBACK = 'Dein Hinweis konnte nicht gesendet werden. Versuche es in einem Moment erneut.';
+/**
+ * Sends the proposal and, once saved, waits for the page's rendered proposal
+ * state. The save's revalidated render can land before the wait starts, so
+ * the wait counts from a mark taken before the save. A refused save changes
+ * nothing on the page; a lost answer reads like one, so the form stays open.
+ */
+function useProposalSave(settle: SettleOnChange) {
+  const sinceRef = useRef(0);
+  const { run, isPending } = useServerAction(proposeSiteAccess, {
+    settle: (result) => (result.success ? settle(sinceRef.current) : Promise.resolve()),
+  });
+  const save = (input: Parameters<typeof proposeSiteAccess>[0]) => {
+    sinceRef.current = settle.markChange();
+    return run(input).catch(() => ({ success: false as const, error: 'unexpected_error' }));
+  };
+  return { save, isPending };
+}
 
 /** The proposal form; it loads when the worker reaches for the Einsatzort's pencil. */
 export function SiteAccessProposalDialog({
@@ -57,13 +78,10 @@ export function SiteAccessProposalDialog({
   /** The latest proposal's state: still open, taken, or declined with the office's reason. */
   notice: string | null;
   /** Waits for the page's refreshed proposal state after a sent proposal. */
-  settle: () => Promise<void>;
+  settle: SettleOnChange;
 }): ReactElement {
   const { showBanner } = useBanner();
-  // Only a saved proposal changes the page; a refused one keeps it as it was.
-  const { run, isPending } = useServerAction(proposeSiteAccess, {
-    settle: (result) => (result.success ? settle() : Promise.resolve()),
-  });
+  const { save, isPending } = useProposalSave(settle);
   const onClose = () => onOpenChange(false);
   const [values, setValues] = useState(initialValues);
   const [attempted, setAttempted] = useState(false);
@@ -83,7 +101,7 @@ export function SiteAccessProposalDialog({
       return;
     setFailure(null);
     void (async () => {
-      const result = await run({ jobId, siteId, ...values });
+      const result = await save({ jobId, siteId, ...values });
       if (!result.success) {
         setFailure(describeFailure(result.error, PROPOSE_FAILURES, PROPOSE_FALLBACK));
         return;

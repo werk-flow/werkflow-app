@@ -22,6 +22,9 @@ const foreignSiteId = '8f000000-0000-4000-8000-000000000013';
 const proposalId = '8f000000-0000-4000-8000-000000000021';
 const foreignProposalId = '8f000000-0000-4000-8000-000000000029';
 const foreignContactId = '8f000000-0000-4000-8000-000000000039';
+const contactId = '8f000000-0000-4000-8000-000000000031';
+// Access notes another decision has replaced since the review showed them.
+const staleNotes = 'Schlüssel beim alten Hausmeister';
 
 const world = installActionWorld({
   jobs: [
@@ -59,9 +62,14 @@ const propose = (jobId: string, site: string) => () =>
     accessNotes: 'Über den Hof',
   });
 const accept =
-  (id: string, contactId: string | null = null) =>
+  (id: string, contact: string | null = null, reviewedAccessNotes = 'Über den Hof') =>
   () =>
-    acceptSiteAccessProposal({ proposalId: id, revision: 1, contactId });
+    acceptSiteAccessProposal({
+      proposalId: id,
+      revision: 1,
+      reviewedAccessNotes,
+      contact: contact === null ? null : { id: contact, reviewedName: 'Herr Alt', reviewedPhone: '030 111' },
+    });
 const reject = (id: string) => () =>
   rejectSiteAccessProposal({ proposalId: id, revision: 1, reason: 'Stimmt nicht' });
 
@@ -128,6 +136,7 @@ refuseForeignIds(
   new Map([
     [foreignProposalId, 'proposal_not_found'],
     [foreignContactId, 'contact_not_found'],
+    [staleNotes, 'site_changed'],
   ]),
 );
 await assertRefused(
@@ -148,6 +157,24 @@ await assertRefused(
 assert.equal(world.rpcCalls.at(-1)?.args.p_organization_id, ORGANIZATION_A);
 assert.equal(world.rpcCalls.at(-1)?.args.p_actor_id, CALLER_ID);
 
+// An acceptance names what its review showed; an Einsatzort another decision
+// changed since then refuses it in the database with nothing written.
+await assertRefused(
+  world,
+  [['acceptSiteAccessProposal', accept(proposalId, contactId, staleNotes)]],
+  { success: false, error: 'site_changed' },
+  'one-call',
+);
+assert.deepEqual(
+  {
+    notes: world.rpcCalls.at(-1)?.args.p_reviewed_access_notes,
+    contact: world.rpcCalls.at(-1)?.args.p_contact_id,
+    name: world.rpcCalls.at(-1)?.args.p_reviewed_contact_name,
+    phone: world.rpcCalls.at(-1)?.args.p_reviewed_contact_phone,
+  },
+  { notes: staleNotes, contact: contactId, name: 'Herr Alt', phone: '030 111' },
+);
+
 // Malformed input never reaches the database.
 await assertRefused(
   world,
@@ -155,7 +182,13 @@ await assertRefused(
     ['rejectSiteAccessProposal', () => rejectSiteAccessProposal({ proposalId, revision: 1, reason: ' a ' })],
     [
       'acceptSiteAccessProposal',
-      () => acceptSiteAccessProposal({ proposalId: 'kein-id', revision: 1, contactId: null }),
+      () =>
+        acceptSiteAccessProposal({
+          proposalId: 'kein-id',
+          revision: 1,
+          reviewedAccessNotes: '',
+          contact: null,
+        }),
     ],
   ],
   { success: false, error: 'invalid_input' },

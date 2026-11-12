@@ -283,15 +283,22 @@ grant execute on function app_private.lock_open_site_access_proposal(uuid, uuid,
 -- Applies an open proposal to its Einsatzort. A proposed contact corrects
 -- p_contact_id, an active Zugangskontakt of that Einsatzort, or with null
 -- becomes a new one; its note replaces the contact's note only when given.
--- Proposed access notes replace the Einsatzort's. Refusals as
+-- Proposed access notes replace the Einsatzort's. The call names what the
+-- review showed of what it overwrites: the Einsatzort's access notes, and the
+-- corrected contact's name and phone, an empty text for none. Another
+-- decision on the same Einsatzort since then refuses it with site_changed, so
+-- it never overwrites a change its manager has not seen. Refusals as
 -- lock_open_site_access_proposal, and invalid_input (a contact to correct
--- without a proposed contact) and contact_not_found.
+-- without a proposed contact), contact_not_found and site_changed.
 create function public.accept_site_access_proposal(
   p_actor_id uuid,
   p_organization_id uuid,
   p_proposal_id uuid,
   p_revision integer,
-  p_contact_id uuid default null
+  p_reviewed_access_notes text,
+  p_contact_id uuid default null,
+  p_reviewed_contact_name text default null,
+  p_reviewed_contact_phone text default null
 )
 returns public.site_access_proposals
 language plpgsql
@@ -300,6 +307,8 @@ set search_path to ''
 as $$
 declare
   v_proposal public.site_access_proposals;
+  v_contact public.client_contacts;
+  v_access_notes text;
   v_contact_id uuid;
 begin
   v_proposal := app_private.lock_open_site_access_proposal(p_actor_id, p_organization_id, p_proposal_id, p_revision);
@@ -307,18 +316,37 @@ begin
     raise exception 'invalid_input';
   end if;
 
+  -- What the review showed must still hold, under the row locks, before any write.
+  if v_proposal.access_notes is not null then
+    select site.access_notes into v_access_notes from public.client_sites site
+    where site.id = v_proposal.site_id and site.organization_id = p_organization_id
+    for update;
+    if coalesce(v_access_notes, '') <> coalesce(p_reviewed_access_notes, '') then
+      raise exception 'site_changed';
+    end if;
+  end if;
   if v_proposal.contact_name is not null and p_contact_id is not null then
+    select * into v_contact from public.client_contacts contact
+    where contact.id = p_contact_id and contact.organization_id = p_organization_id
+      and contact.client_id = v_proposal.client_id and contact.site_id = v_proposal.site_id
+      and contact.site_role = 'zugangskontakt' and contact.is_active
+    for update;
+    if not found then
+      raise exception 'contact_not_found';
+    end if;
+    if v_contact.name is distinct from p_reviewed_contact_name
+      or coalesce(v_contact.phone, '') <> coalesce(p_reviewed_contact_phone, '') then
+      raise exception 'site_changed';
+    end if;
+  end if;
+
+  if v_contact.id is not null then
     update public.client_contacts contact set
       name = v_proposal.contact_name,
       phone = v_proposal.contact_phone,
       notes = coalesce(v_proposal.contact_note, contact.notes)
-    where contact.id = p_contact_id and contact.organization_id = p_organization_id
-      and contact.client_id = v_proposal.client_id and contact.site_id = v_proposal.site_id
-      and contact.site_role = 'zugangskontakt' and contact.is_active
+    where contact.id = v_contact.id
     returning contact.id into v_contact_id;
-    if not found then
-      raise exception 'contact_not_found';
-    end if;
   elsif v_proposal.contact_name is not null then
     insert into public.client_contacts (
       organization_id, client_id, name, phone, notes, site_id, site_role, created_by
@@ -349,9 +377,9 @@ begin
   return v_proposal;
 end;
 $$;
-revoke all on function public.accept_site_access_proposal(uuid, uuid, uuid, integer, uuid)
+revoke all on function public.accept_site_access_proposal(uuid, uuid, uuid, integer, text, uuid, text, text)
   from public, anon, authenticated;
-grant execute on function public.accept_site_access_proposal(uuid, uuid, uuid, integer, uuid) to service_role;
+grant execute on function public.accept_site_access_proposal(uuid, uuid, uuid, integer, text, uuid, text, text) to service_role;
 
 -- Rejects an open proposal with a reason of 3 to 500 characters and clears
 -- the proposed values in the same statement. Refusals as

@@ -48,26 +48,76 @@ function contactOptions(review: SiteAccessReview): SearchableSelectOption[] {
 }
 const REASON_ID = 'site-access-reason';
 
+const DECISION_FALLBACK =
+  'Die Entscheidung konnte nicht gespeichert werden. Versuche es in einem Moment erneut.';
+
 const DECISION_FAILURES = {
   proposal_already_decided: 'Dieser Hinweis wurde schon entschieden.',
   proposal_changed:
     'Der Hinweis wurde gerade geändert. Hier steht jetzt die neue Fassung; prüfe sie und entscheide erneut.',
+  site_changed:
+    'Der Einsatzort wurde inzwischen geändert. Hier stehen jetzt die aktuellen Angaben; prüfe sie und entscheide erneut.',
   proposal_not_found: 'Diesen Hinweis gibt es nicht mehr.',
   contact_not_found: 'Der gewählte Zugangskontakt ist nicht mehr am Einsatzort. Wähle einen anderen.',
   client_not_found: 'Den Kunden dieses Einsatzorts gibt es nicht mehr.',
+  // A lost answer included: a decision that did land refuses the retry as already decided.
+  unexpected_error: DECISION_FALLBACK,
 };
 
 type Runner<Input> = {
   run: (input: Input) => Promise<ActionResult>;
   isPending: boolean;
 };
-type AcceptRunner = Runner<{ proposalId: string; revision: number; contactId: string | null }>;
+type AcceptInput = {
+  proposalId: string;
+  revision: number;
+  reviewedAccessNotes: string;
+  contact: { id: string; reviewedName: string; reviewedPhone: string } | null;
+};
+type AcceptRunner = Runner<AcceptInput>;
+
+/** A refused decision page reads the review again: a new revision, or the Einsatzort as it is now. */
+const REREAD_ON = new Set(['proposal_changed', 'site_changed']);
 type RejectRunner = Runner<{ proposalId: string; revision: number; reason: string }>;
 
 function initialContactChoice(review: SiteAccessReview): string {
   if (review.accessContacts.length === 0) return NEW_CONTACT;
   // One Zugangskontakt is the one the worker corrects; with several the office chooses.
   return review.accessContacts.length === 1 ? (review.accessContacts[0]?.id ?? '') : '';
+}
+
+/**
+ * The contact choice and the reason, which belong to one revision: a
+ * replacement starts both anew, while the review's failure notice stays and
+ * says why the review changed.
+ */
+function useRevisionInput(review: SiteAccessReview) {
+  const [choiceRevision, setChoiceRevision] = useState(review.revision);
+  const [contactChoice, setContactChoice] = useState(() => initialContactChoice(review));
+  const [reason, setReason] = useState('');
+  if (choiceRevision !== review.revision) {
+    setChoiceRevision(review.revision);
+    setContactChoice(initialContactChoice(review));
+    setReason('');
+  }
+  return { contactChoice, setContactChoice, reason, setReason };
+}
+
+/**
+ * The acceptance of the reviewed revision: the chosen Zugangskontakt, or
+ * none for a new one, and what the review showed of what it overwrites.
+ */
+function acceptInput(review: SiteAccessReview, contactChoice: string): AcceptInput {
+  const chosen =
+    review.values.contactName === ''
+      ? undefined
+      : review.accessContacts.find((contact) => contact.id === contactChoice);
+  return {
+    proposalId: review.proposalId,
+    revision: review.revision,
+    reviewedAccessNotes: review.currentAccessNotes ?? '',
+    contact: chosen ? { id: chosen.id, reviewedName: chosen.name, reviewedPhone: chosen.phone ?? '' } : null,
+  };
 }
 
 /** The review's state and its submit: accept with the chosen contact, or reject with a reason. */
@@ -80,29 +130,25 @@ function useSiteAccessDecision(
   const { showBanner } = useBanner();
   const router = useRouter();
   const [mode, setMode] = useState<'review' | 'reject'>('review');
-  const [contactChoice, setContactChoice] = useState(() => initialContactChoice(review));
-  const [reason, setReason] = useState('');
+  const { contactChoice, setContactChoice, reason, setReason } = useRevisionInput(review);
   const [attempted, setAttempted] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
-  const hasContact = review.values.contactName !== '';
   const contactChoiceError =
-    hasContact && contactChoice === '' ? 'Wähle, welchen Zugangskontakt der Hinweis ersetzt.' : undefined;
+    review.values.contactName !== '' &&
+    contactChoice !== NEW_CONTACT &&
+    !review.accessContacts.some((contact) => contact.id === contactChoice)
+      ? 'Wähle, welchen Zugangskontakt der Hinweis ersetzt.'
+      : undefined;
   const reasonError = reason.trim().length < 3 ? REASON_MIN_3_MESSAGE : undefined;
 
   const decide = (outcome: ReturnType<AcceptRunner['run']>, message: string) => {
     setFailure(null);
     void (async () => {
-      const result = await outcome;
+      // A transport failure answers like a refused save: the review stays open with its input.
+      const result = await outcome.catch(() => ({ success: false as const, error: 'unexpected_error' }));
       if (!result.success) {
-        // A replaced proposal: the page reads it again, and the review shows the new revision.
-        if (result.error === 'proposal_changed') router.refresh();
-        setFailure(
-          describeFailure(
-            result.error,
-            DECISION_FAILURES,
-            'Die Entscheidung konnte nicht gespeichert werden.',
-          ),
-        );
+        if (REREAD_ON.has(result.error)) router.refresh();
+        setFailure(describeFailure(result.error, DECISION_FAILURES, DECISION_FALLBACK));
         return;
       }
       onClose();
@@ -122,11 +168,7 @@ function useSiteAccessDecision(
       return;
     }
     if (focusFirstInvalidField({ [CONTACT_CHOICE_ID]: contactChoiceError })) return;
-    const contactId = hasContact && contactChoice !== NEW_CONTACT ? contactChoice : null;
-    decide(
-      accept.run({ proposalId: review.proposalId, revision: review.revision, contactId }),
-      'Der Zugang ist beim Einsatzort gespeichert.',
-    );
+    decide(accept.run(acceptInput(review, contactChoice)), 'Der Zugang ist beim Einsatzort gespeichert.');
   };
 
   const switchMode = (next: 'review' | 'reject') => {

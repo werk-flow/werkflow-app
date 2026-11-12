@@ -27,6 +27,7 @@ const proposalRefusal = writeRefusalFor(
     'proposal_not_found',
     'proposal_already_decided',
     'proposal_changed',
+    'site_changed',
     'contact_not_found',
   ]),
 );
@@ -43,10 +44,17 @@ const proposeInputSchema = z.object({
 // The revision the manager reviewed: a worker's replacement since then refuses the decision.
 const revisionSchema = z.number().int().min(1);
 
+// What the review showed of what an acceptance overwrites; '' for none. Another
+// decision on the Einsatzort since then refuses it (site_changed).
+const reviewedTextSchema = z.string().max(SITE_ACCESS_LIMITS.accessNotes);
+
 const acceptInputSchema = z.object({
   proposalId: uuidSchema,
   revision: revisionSchema,
-  contactId: uuidSchema.nullable(),
+  reviewedAccessNotes: reviewedTextSchema,
+  contact: z
+    .object({ id: uuidSchema, reviewedName: reviewedTextSchema, reviewedPhone: reviewedTextSchema })
+    .nullable(),
 });
 
 const rejectInputSchema = z.object({
@@ -111,9 +119,10 @@ export async function proposeSiteAccess(
 }
 
 /**
- * Applies an open proposal: its contact corrects `contactId`, a Zugangskontakt
+ * Applies an open proposal: its contact corrects `contact`, a Zugangskontakt
  * of the Einsatzort, or with null becomes a new one; its access notes replace
- * the Einsatzort's. Manager-only.
+ * the Einsatzort's. Manager-only. The values the review showed must still
+ * hold, or the database refuses with site_changed.
  */
 export async function acceptSiteAccessProposal(
   rawInput: z.input<typeof acceptInputSchema>,
@@ -132,8 +141,15 @@ export async function acceptSiteAccessProposal(
       p_organization_id: orgId,
       p_proposal_id: parsed.data.proposalId,
       p_revision: parsed.data.revision,
+      p_reviewed_access_notes: parsed.data.reviewedAccessNotes,
       // No contact to correct leaves p_contact_id null: a new Zugangskontakt.
-      ...(parsed.data.contactId === null ? {} : { p_contact_id: parsed.data.contactId }),
+      ...(parsed.data.contact === null
+        ? {}
+        : {
+            p_contact_id: parsed.data.contact.id,
+            p_reviewed_contact_name: parsed.data.contact.reviewedName,
+            p_reviewed_contact_phone: parsed.data.contact.reviewedPhone,
+          }),
     });
     if (error || !data) return proposalRefusal(error, 'save_failed', 'acceptSiteAccessProposal: save failed');
     return { success: true };

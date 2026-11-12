@@ -7,7 +7,7 @@ import { lazyDialog } from '@/components/shared/lazy-dialog';
 import { Button } from '@/components/ui/button';
 import { useRouterRefresh } from '@/components/ui/refresh-button';
 import { SectionError } from '@/components/ui/section-error';
-import { useSettleOnChange } from '@/hooks/use-settle-on-change';
+import { useSettleOnChange, type SettleOnChange } from '@/hooks/use-settle-on-change';
 import type { SiteAccessProposalValues } from '@/lib/site-access-proposals/types';
 
 const lazyProposalDialog = lazyDialog<{
@@ -17,7 +17,7 @@ const lazyProposalDialog = lazyDialog<{
   siteId: string;
   initialValues: SiteAccessProposalValues;
   notice: string | null;
-  settle: () => Promise<void>;
+  settle: SettleOnChange;
 }>(() => import('./field-site-access-dialog').then((mod) => mod.SiteAccessProposalDialog));
 
 const EMPTY_VALUES: SiteAccessProposalValues = {
@@ -82,7 +82,7 @@ export function FieldSiteAccessButton({
           siteId={siteId}
           initialValues={ownOpenValues ?? EMPTY_VALUES}
           notice={notice ?? null}
-          settle={() => settle()}
+          settle={settle}
         />
       )}
     </>
