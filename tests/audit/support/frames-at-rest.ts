@@ -44,6 +44,8 @@ type RestingPage = {
 async function runningAnimations(page: Page, kind: 'all' | 'one-shot'): Promise<string[]> {
   return page.evaluate((wanted) => {
     return document.getAnimations().flatMap((animation) => {
+      // A finished animation that keeps its end state stays in the list and draws nothing.
+      if (animation.playState !== 'running' && !animation.pending) return [];
       const endless = animation.effect?.getComputedTiming().iterations === Infinity;
       if (wanted === 'one-shot' && endless) return [];
       const target = animation.effect instanceof KeyframeEffect ? animation.effect.target : null;
