@@ -51,7 +51,7 @@ Merge with `gh pr merge --squash`, after a fresh `git fetch` and a last look at 
 
 ### The CodeRabbit queue
 
-`ops/coderabbit-queue.py` in `werk-flow/werkflow-planning` runs every 10 minutes on [the PC and the Mac](environments.md#background-jobs), so no thread has to stay alive to hand out reviews. Each pass on the machine that holds its lease:
+`ops/coderabbit-queue.py` in `werk-flow/werkflow-planning` runs every 10 minutes on [the PC and the Mac](machine-setup.md#background-jobs), so no thread has to stay alive to hand out reviews. Each pass on the machine that holds its lease:
 
 1. Lists the open PRs labelled `needs-coderabbit`. It skips a level 0 or 1 PR, and a PR that already got a CodeRabbit review or a request that is still good. A request is asked again when CodeRabbit answered it with a rate limit, "Review limit reached" or "Head commit changed", or with nothing for three hours, so a PR never waits for a review that will not come. A PR whose body states no review level, or two different ones, is refused, never guessed, and told so once in a comment.
 2. Waits, because CodeRabbit Essentials has no paid overage and its hourly review limit falls as the rolling 7-day review count rises ([rate limits](https://docs.coderabbit.ai/management/rate-limits)). It counts CodeRabbit's "Review finished" notes of the last 7 days. Below 50, it does nothing within 20 minutes of a CodeRabbit review, "Review finished" note or request on any PR; from 50, within 65 minutes. A rate-limit notice pauses it 65 minutes, or until the notice's "available in N minutes" ends.
@@ -74,7 +74,7 @@ bun run review -- --committed --base-commit <commit>    # committed work since a
 bun run review -- findings                              # replay the stored findings
 ```
 
-- Install the CLI only on a new machine ([environments](environments.md#set-up-a-new-machine)). On a missing binary or authentication, report it; only the owner signs in.
+- Install the CLI only on a new machine ([machine setup](machine-setup.md#set-up-a-new-machine)). On a missing binary or authentication, report it; only the owner signs in.
 - Over CodeRabbit's file limit, review in passes, one `--dir` per pass.
 - On a quota limit, report it. Never retry in a loop.
 - The owner authorizes sending repository code and review context to CodeRabbit, uncommitted changes included. The authorization does not cover buying credits or a subscription.
