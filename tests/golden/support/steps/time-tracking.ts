@@ -13,8 +13,6 @@ import {
 } from '../../../../lib/time-tracking/types';
 import { expectReadyWithin, TIME_CORRECTION_READY_MS } from '../live';
 import { pressKey } from './interaction';
-import { memberDetailActionsButton } from './organization';
-import { openMemberDetailFromList } from './personnel';
 import {
   confirmed,
   datePickerDigits,
@@ -111,9 +109,6 @@ export const TIME_ENTRY_COPY = {
   approveAll: 'Alle genehmigen',
   approveAllConfirmation: 'Alle Zeiteinträge genehmigen?',
   entryApproved: 'Der Zeiteintrag wurde genehmigt.',
-  removalBlocked:
-    'Vor dem Entfernen muss die Verantwortung für Zeitfreigaben neu zugewiesen oder auf den Standard zurückgestellt werden.',
-  reassignFirst: 'Zuerst neu zuweisen',
 } as const;
 
 /** The status labels of a time entry in the history table and its filter. */
@@ -647,18 +642,6 @@ export async function approvePendingTimeEntry(
   );
   await openTimeApprovals(page);
   await expect(card).toHaveCount(0);
-}
-
-export async function expectMemberRemovalBlockedByResponsibility(
-  page: Page,
-  memberName: string,
-): Promise<void> {
-  await openMemberDetailFromList(page, memberName);
-  await memberDetailActionsButton(page).click();
-  await page.getByRole('menuitem', { name: SHARED_COPY.action.remove }).click();
-  const dialog = page.getByRole('alertdialog');
-  await expect(dialog.getByText(TIME_ENTRY_COPY.removalBlocked)).toBeVisible();
-  await expect(dialog.getByRole('button', { name: TIME_ENTRY_COPY.reassignFirst })).toBeDisabled();
 }
 
 // ---------------------------------------------------------------------------

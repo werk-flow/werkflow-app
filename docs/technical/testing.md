@@ -91,7 +91,7 @@ After a failed release run, pass every failed group with `--group` before the ne
 
 - **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups with the change-mode rules: a PR's diff against its merge base, a push's against the previous `main` commit. Every browser group runs on an unreadable diff, in a full run, and on a change to how every group installs, builds or runs (`TOOLING_INPUTS`, `runnerModules`).
 - **Full run and release gate.** A full run is `ci.yml` called with `full` from a job named `Full run`, nightly and in the release. `release.yml` ships a commit only after the newest `Full run / Check` of a nightly or release run on `main` at that commit passed, or runs one first.
-- **Shards.** A visual group runs alone. A full selection fills at most `MAX_SHARDS` shards, so other pull requests keep most runners, and still ends with `audit:visual:acceptance`.
+- **Shards.** The visual groups share shards of their own. A full selection fills at most `MAX_SHARDS` shards, so other pull requests keep most runners.
 - **Queue.** The weekly `CI queue` job of `health.yml` reports the runner wait of pull request and `main` jobs at p50 and p90, and fails above its ceiling (`.github/scripts/ci-queue.sh`).
 - **Date look-ahead.** `date-lookahead.yml` runs the suite nightly on a shifted clock and gates nothing ([Monitoring](recovery-and-incidents.md#monitoring)).
 - **Not in CI.** Wall-clock timing ([only the steps run](performance.md#what-each-instrument-proves)) and the cloud canary stay local release checks.
@@ -187,7 +187,7 @@ Check these before classifying.
 - **The agent's tool killed the run.** A background limit or session end (SIGTERM, exit 137) is `environment`; [start it notified](#wait-for-a-long-run) next time.
 - **Host network.** `net::ERR_NETWORK_CHANGED`, or a Realtime socket that reconnects every few seconds, is `environment`. Run no heavy load beside a browser or measured group.
 - **Time zone and run day.** CI runs in UTC; a window computed in process time misses the Berlin window. A fixture on a DST switch or a run-day-dependent week fails on some days only. Check the run's business date and reproduce in UTC.
-- **Press before hydration.** A server-rendered button ignores it. Wait for the hydrated control.
+- **Press before hydration.** Server HTML keeps a button disabled; `pressKey` with `into` waits for it.
 - **Menus.** A Radix menu opened by mouse can select the item under the pointer on release; open menus through the area module. The row actions menu closes on scroll, and a sideways-overflowing table scrolls on click.
 - **Moved reads.** A hold on a Server Action POST never matches once the read moves to `GET /api/background-read`. Move the hold with the read.
 - **Mid-animation captures.** Axe and screenshots read mid fade or slide. Wait for the settled state.

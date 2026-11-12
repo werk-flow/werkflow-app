@@ -51,6 +51,8 @@ const config: KnipConfig = {
     'tests/golden/global-teardown.ts!',
     'tests/golden/support/discovery-reporter.ts!',
     'tests/**/*.spec.ts!',
+    // Loaded by directory from tests/audit/support/acceptance-sets.ts, never imported.
+    'tests/audit/support/acceptance-sets/*.ts!',
     'tests/ui-contracts/fixture.tsx!',
     'tests/ui-contracts/playwright.config.ts!',
     // Substituted for product modules by the component-contract bundler.

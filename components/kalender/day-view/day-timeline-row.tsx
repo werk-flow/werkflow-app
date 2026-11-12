@@ -110,10 +110,8 @@ function travelGapLabel(
  * button and day note, the timeline with the create overlay, the untimed
  * tray, the travel gaps between visits and the items in their lanes.
  */
-export function DayTimelineRow(
-  props: DayTimelineProps & { row: DayRow; highlighted: boolean },
-): React.JSX.Element {
-  const { row, highlighted, dateIso, hourWidth, timelineWidth, canCreate, createDrag } = props;
+export function DayTimelineRow(props: DayTimelineProps & { row: DayRow }): React.JSX.Element {
+  const { row, dateIso, hourWidth, timelineWidth, canCreate, createDrag } = props;
   const { model, boardDay, lanes, laneCount, untimed } = row;
   const trayHeight = untimed.length > 0 ? DAY_TRAY_HEIGHT : 0;
   const height = trayHeight + laneCount * DAY_LANE_HEIGHT;
@@ -126,7 +124,7 @@ export function DayTimelineRow(
       data-day-row={model.key}
       data-day-row-user={model.userId ?? undefined}
       aria-label={model.name}
-      className={cn('group/row flex flex-1', highlighted && 'animate-row-highlight')}
+      className="group/row flex flex-1"
       style={{ minHeight: height, maxHeight: Math.max(height, DAY_LANE_HEIGHT * 3) }}
     >
       {dayRowHeader(props, label)}

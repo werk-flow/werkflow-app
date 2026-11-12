@@ -10,8 +10,7 @@ import {
   type ObservedRequest,
   type StatePlan,
 } from './acceptance-state-plan';
-import type { CaptureSpec } from './acceptance-sets';
-import { DIALOG_OPENERS } from './dialog-openers';
+import type { DialogOpener } from './dialog-opener';
 import { openLayerAt } from './open-layer';
 import { VIEWPORT_HEIGHT } from './open-layer-plan';
 import type { SurfaceContext } from './surface-fixtures';
@@ -20,6 +19,12 @@ import { openSurface } from './surface-routes';
 // The browser half of the state captures (acceptance-state-plan.ts owns the
 // plan): it reaches the planned state through the test's route interception
 // and proves that exactly that state is on screen before an image is written.
+
+/** A capture's view with the opener of its dialog, which the capturing group supplies. */
+export type OpenedView =
+  | { kind: 'page' }
+  | { kind: 'tab'; value: string }
+  | { kind: 'dialog'; opener: DialogOpener };
 
 type Interception = {
   /** Starts intercepting; until then every request passes. */
@@ -115,7 +120,7 @@ async function navigateHeld(page: Page, path: string, interception: Interception
  */
 async function reachState(
   context: SurfaceContext,
-  view: CaptureSpec['view'],
+  view: OpenedView,
   plan: StatePlan,
   width: number,
 ): Promise<{ scope: Locator; interception: Interception }> {
@@ -123,7 +128,7 @@ async function reachState(
   const main = page.getByRole('main');
   if (view.kind === 'dialog') {
     const interception = await interceptFor(page, plan, route);
-    const { layer } = await openLayerAt(context, DIALOG_OPENERS[view.opener], width, {
+    const { layer } = await openLayerAt(context, view.opener, width, {
       fresh: true,
       beforeOpen: interception.arm,
       settleLayer: plan.shows === 'failed-region',
@@ -193,7 +198,7 @@ async function expectState(
  */
 export async function withState(
   context: SurfaceContext,
-  view: CaptureSpec['view'],
+  view: OpenedView,
   plan: StatePlan,
   width: number,
   capture: (prove: () => Promise<void>) => Promise<void>,

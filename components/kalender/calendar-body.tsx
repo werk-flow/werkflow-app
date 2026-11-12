@@ -180,7 +180,6 @@ function CalendarSurface({
         currentUserRole={currentUserRole}
         changeRequestMap={changeRequestMap}
         onSessionClick={onSessionClick}
-        highlightMemberId={viewState.highlightMemberId}
       />
     );
   return (
@@ -195,7 +194,7 @@ function CalendarSurface({
       currentUserId={currentUserId}
       currentUserRole={currentUserRole}
       isAdminOrManager={isAdminOrManager}
-      onOpenDay={(date) => viewState.handleOpenDay(date, null)}
+      onOpenDay={viewState.handleOpenDay}
       onSessionClick={onSessionClick}
     />
   );

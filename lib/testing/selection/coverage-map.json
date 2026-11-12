@@ -99,7 +99,9 @@
     "P1-22-F44": "6d4bec3a718e65f25d6cb8cc7ec45faa613364938989592a0253b60d96cce11f",
     "P1-22-F45": "af09274d06f3e91712bf95f7d1d934b7a0b18634c9a8dee4ff1be717017f6d7e",
     "P1-24a-F10": "3446449d9d7a889ae8b493907e797813b840d29f28aa11ab817dcbc52b7add8e",
-    "P1-24a-F15": "77849abb2099354224ca79119aa00ead278009541528b7c6e8cb977d0b7e4986"
+    "P1-24a-F15": "77849abb2099354224ca79119aa00ead278009541528b7c6e8cb977d0b7e4986",
+    "E6-F01": "dc0d5eea51203011b5c2d5fb0ab420f8baabd9985ffbaaa8e6eabcdea22a82cf",
+    "E6-F02": "84c21f927725510fb45656a55d661dc3bcadb25b23cd84352bf803798ad20a83"
   },
   "mappings": [
     {
@@ -3030,6 +3032,67 @@
       "review": {
         "kind": "assertions-reviewed",
         "rationale": "P1-24a closure 2026-09-18: every clause of the bullet read against the assertion bodies of the listed files; the rendered review of both themes at five viewports is recorded in the slice record."
+      }
+    },
+    {
+      "id": "e6-report-a-problem",
+      "flowIds": [
+        "E6-F01",
+        "E6-F02"
+      ],
+      "evidence": [
+        {
+          "file": "tests/audit/problem-reports/report-a-problem.spec.ts",
+          "kind": "browser",
+          "description": "An employee at 375 px and the office on the desktop open „Problem melden“, draw a redaction box, send, read the receipt's number, find the stored report with its screenshot, and open it from the receipt in „Meine Meldungen“.",
+          "titles": [
+            "E6-F01 E6-F02 a field worker reports from a phone, redacts the screenshot and finds the report",
+            "E6-F01 E6-F02 the office reports from the desktop, redacts the screenshot and finds the report"
+          ]
+        },
+        {
+          "file": "tests/ui-contracts/problem-report.spec.ts",
+          "kind": "browser",
+          "description": "An empty description is marked and focused; a text-only report uploads no screenshot; a drawn box is black in the uploaded image; the context keeps only catalog labels and route templates; the send shows its pending state at once. F2 opens the dialog from the keyboard. A failed file keeps the saved report, freezes what left the device and resends only what is missing.",
+          "titles": [
+            "an empty description marks the field, focuses it and sends nothing",
+            "a text-only report sends no screenshot",
+            "a redaction box is burned into the uploaded image",
+            "the context keeps a control label only when the app names it, and routes only as templates",
+            "F2 opens the report dialog from the keyboard, and Escape returns to where the person was",
+            "a failed attachment keeps the saved report and its sent screenshot, and the retry sends only the attachment",
+            "a registration whose answer got lost counts once on the retry, under the same file",
+            "the send shows its pending state in the first frame, and neither cancel, the list link nor the attachments change until the answer",
+            "a save whose outcome is unknown keeps the description frozen through a failed retry, and the report saves once",
+            "a screenshot over its size limit says to send without it, and the report then saves without one",
+            "a screenshot whose first registration commits while its retry uploads anew counts as sent"
+          ]
+        },
+        {
+          "file": "lib/problem-reports/action-boundaries.test.ts",
+          "kind": "unit",
+          "description": "The real actions: a report goes only into the caller's organization; an employee, a Büro member and an admin list only their own reports and get report_not_found for a colleague's report from the file ticket and finalize.",
+          "titles": [
+            "a report goes only into the caller's organization, and only its filer lists it and adds files to it"
+          ]
+        },
+        {
+          "file": "supabase/tests/problem_reports.sql",
+          "kind": "sql",
+          "description": "Each organization numbers its reports from 1 and a number never changes; a file registers only for the report's filer while its originals exist. A report saves once under its device's id.",
+          "titles": [
+            "a new report did not take the next number of its organization",
+            "a report number change was accepted",
+            "another member registered a file",
+            "a file registered under a foreign organization",
+            "a retried report save did not find its own report"
+          ]
+        }
+      ],
+      "clauses": "F01: button on every page at phone and desktop width (journey at 375 px and desktop), F2 shortcut (component), redrawn screenshot shown before sending and redacted with a box (journey, contract pixel check), text-only report (contract), empty description marked and focused (contract), receipt names the number (journey, contract). F02: the reporter's own report with number, date and status in „Meine Meldungen“ (journey), and no colleague lists it (boundary fixture).",
+      "review": {
+        "kind": "assertions-reviewed",
+        "rationale": "werk-flow/werkflow-planning#334: every clause of both bullets read against the assertion bodies of the listed files."
       }
     }
   ]
