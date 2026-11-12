@@ -83,7 +83,8 @@ let progress: DraftSendProgress | null = null;
 let listening = false;
 /** One send at a time: two triggers never upload the same photo twice. */
 let queue: Promise<unknown> = Promise.resolve();
-const openInEditor = new Set<string>();
+/** Each open editor's guard per draft: a draft is open while any editor of it holds one. */
+const openInEditor = new Map<string, Set<symbol>>();
 const listeners = new Set<() => void>();
 
 function notify(): void {
@@ -105,10 +106,20 @@ export function draftChangedOnDevice(): void {
   notify();
 }
 
-/** Marks a draft as open in this tab's editor until the returned function runs: it is not sent by itself meanwhile. */
+/**
+ * Marks a draft as open in one editor of this tab until the returned function runs: it is not sent
+ * by itself meanwhile. Each editor holds its own guard, so a release that comes late, after the
+ * draft was opened again, removes only its own.
+ */
 export function keepDraftOpen(draftId: string): () => void {
-  openInEditor.add(draftId);
-  return () => openInEditor.delete(draftId);
+  const guard = Symbol(draftId);
+  const guards = openInEditor.get(draftId) ?? new Set<symbol>();
+  guards.add(guard);
+  openInEditor.set(draftId, guards);
+  return () => {
+    guards.delete(guard);
+    if (guards.size === 0 && openInEditor.get(draftId) === guards) openInEditor.delete(draftId);
+  };
 }
 
 const verdictSchema = z.object({ outcome: z.string(), code: z.string() });

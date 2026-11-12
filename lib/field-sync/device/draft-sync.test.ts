@@ -391,6 +391,23 @@ describe('what is sent by itself', () => {
     expect((await stored()).map((entry) => entry.id)).toEqual(['9d000000-0000-4000-8000-000000000040']);
   });
 
+  test("a draft reopened before the first editor's guard is released stays out of the send until the second editor closes too", async () => {
+    await save(draft({ photos: [] }));
+    const closeFirst = keepDraftOpen(DRAFT_ID);
+    const closeSecond = keepDraftOpen(DRAFT_ID);
+    const { send } = startDraftSync(holder);
+    // The first editor's delayed release, and a second call of it, leave the second editor's guard.
+    closeFirst();
+    closeFirst();
+    await send();
+    expect(sent).toEqual([]);
+
+    closeSecond();
+    handlerAnswers = [results('accepted', 'accepted')];
+    await send();
+    expect(sent.map((operation) => operation.payload.artifactId)).toEqual([DRAFT_ID]);
+  });
+
   test('without signal the pass tries once, not once per draft', async () => {
     await save(draft({ photos: [] }));
     await save(draft({ id: '9d000000-0000-4000-8000-000000000040', photos: [] }));
