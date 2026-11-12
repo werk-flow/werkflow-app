@@ -49,14 +49,6 @@ export function RequestBillingRows({
   const links = current ? partyLinks(current, clientId) : null;
   return (
     <>
-      {view.isStale && (
-        // A failed refresh keeps the last parties; say so and offer the read again.
-        <div className="py-1">
-          <SectionError onRetry={() => void view.refresh()} retryPending={view.isRefreshing}>
-            {WORK_BILLING_PARTIES_STALE}
-          </SectionError>
-        </div>
-      )}
       <div className="flex gap-2">
         <dt className="w-28 shrink-0 text-muted-foreground">Auftraggeber</dt>
         <dd className="min-w-0">
@@ -66,6 +58,16 @@ export function RequestBillingRows({
       <div className="flex gap-2">
         <dt className="w-28 shrink-0 text-muted-foreground">Rechnung an</dt>
         <dd className="min-w-0 flex-1">
+          {view.isStale && (
+            // A failed refresh keeps the last parties; say so and offer the read again.
+            <SectionError
+              className="mb-1.5"
+              onRetry={() => void view.refresh()}
+              retryPending={view.isRefreshing}
+            >
+              {WORK_BILLING_PARTIES_STALE}
+            </SectionError>
+          )}
           {current && links ? <RecipientFact current={current} linked={links.recipient} /> : '—'}
           {isEditable && parties.hasClient && (
             <Button
