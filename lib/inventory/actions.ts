@@ -388,8 +388,11 @@ export async function deleteJobMaterialLine(lineIdInput: string): Promise<Action
   const line = existing;
   if (!line) return { success: false, error: 'line_not_found' };
 
+  // Used material is built in and stays on its line: the line cannot be removed.
+  if (toNumber(line.used_quantity) > 0) return { success: false, error: 'material_use_recorded' };
+
   // A line with movements is cancelled so its ledger keeps the line; one without
-  // is deleted. The quantity filters refuse a movement booked after the check.
+  // is deleted. The quantity filters refuse a movement or use booked after the check.
   const hasMovement = toNumber(line.taken_quantity) > 0 || toNumber(line.returned_quantity) > 0;
   const result = hasMovement
     ? await admin
@@ -397,6 +400,7 @@ export async function deleteJobMaterialLine(lineIdInput: string): Promise<Action
         .update({ status: 'cancelled' })
         .eq('id', lineId)
         .eq('organization_id', auth.context.orgId)
+        .eq('used_quantity', 0)
         .or('taken_quantity.gt.0,returned_quantity.gt.0')
         .select('id')
     : await admin

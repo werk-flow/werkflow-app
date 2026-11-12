@@ -313,6 +313,43 @@ begin
   end;
 end $$;
 
+-- A job whose material was used cannot be deleted: the database refuses the
+-- delete and keeps the line and its events.
+reset role;
+insert into public.jobs (id, organization_id, title, created_by) values
+('37000000-0000-4000-8000-000000000060', '37000000-0000-4000-8000-000000000010',
+ 'Heizraum Sonnenberg', '37000000-0000-4000-8000-000000000001');
+insert into public.job_material_lines (id, organization_id, job_id, item_id, planned_quantity) values
+('37000000-0000-4000-8000-000000000061', '37000000-0000-4000-8000-000000000010',
+ '37000000-0000-4000-8000-000000000060', '37000000-0000-4000-8000-000000000021', 1);
+set local role service_role;
+do $$
+declare
+  v_org constant uuid := '37000000-0000-4000-8000-000000000010';
+  v_actor constant uuid := '37000000-0000-4000-8000-000000000001';
+  v_job constant uuid := '37000000-0000-4000-8000-000000000060';
+  v_line constant uuid := '37000000-0000-4000-8000-000000000061';
+  v_refused boolean := false;
+begin
+  perform public.record_inventory_movement(v_org, v_actor, '37000000-0000-4000-8000-000000000021',
+    '37000000-0000-4000-8000-000000000030', 'job_take', -1, v_job, null, v_line);
+  perform public.record_job_material_use(v_org, v_actor, v_line, 1);
+  begin
+    delete from public.jobs where id = v_job;
+  exception when foreign_key_violation or raise_exception then
+    v_refused := true;
+  end;
+  if not v_refused then
+    raise exception 'a job with recorded material use must not be deletable';
+  end if;
+  if not exists (select 1 from public.jobs where id = v_job)
+    or not exists (select 1 from public.job_material_lines where id = v_line)
+    or not exists (select 1 from public.job_material_use_events where job_material_line_id = v_line)
+  then
+    raise exception 'a refused job delete must keep the job, its line and its use events';
+  end if;
+end $$;
+
 -- Deleting the organization still cascades through the events.
 reset role;
 delete from public.organizations where id = '37000000-0000-4000-8000-000000000010';

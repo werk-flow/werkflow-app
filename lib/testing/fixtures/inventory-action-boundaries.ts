@@ -17,6 +17,7 @@ const foreignLocationId = '90000000-0000-4000-8000-000000000007';
 const ownItemId = '90000000-0000-4000-8000-000000000008';
 const ownJobLineId = '90000000-0000-4000-8000-000000000009';
 const ownProjectLineId = '90000000-0000-4000-8000-00000000000a';
+const ownUsedLineId = '90000000-0000-4000-8000-00000000000b';
 
 const world = installActionWorld({
   jobs: [
@@ -56,6 +57,17 @@ const world = installActionWorld({
       status: 'taken',
     },
     {
+      id: ownUsedLineId,
+      organization_id: ORGANIZATION_A,
+      job_id: ownJobId,
+      project_id: null,
+      item_id: ownItemId,
+      taken_quantity: 2,
+      used_quantity: 1,
+      returned_quantity: 0,
+      status: 'taken',
+    },
+    {
       id: ownProjectLineId,
       organization_id: ORGANIZATION_A,
       job_id: null,
@@ -78,6 +90,7 @@ const {
   adjustInventoryStock,
   createJobMaterialLine,
   createProjectMaterialLine,
+  deleteJobMaterialLine,
   getJobMaterialLines,
   getProjectMaterialSummary,
   takeJobMaterial,
@@ -239,6 +252,14 @@ await assertRefused(
   world,
   [['readJobMaterialConsumption', () => readJobMaterialConsumption({ projectId: foreignProjectId })]],
   { success: false, error: 'project_not_found' },
+  'reads',
+);
+
+// A line with recorded use stays on its job: removing it is refused before any write.
+await assertRefused(
+  world,
+  [['deleteJobMaterialLine', () => deleteJobMaterialLine(ownUsedLineId)]],
+  { success: false, error: 'material_use_recorded' },
   'reads',
 );
 

@@ -89,6 +89,8 @@ export function getActionErrorMessage(error: string, mode: MaterialDialogMode): 
     create_failed: 'Die Materialposition konnte nicht gespeichert werden.',
     update_failed: 'Die Materialposition konnte nicht aktualisiert werden.',
     delete_failed: 'Die Materialposition konnte nicht entfernt werden.',
+    material_use_recorded:
+      'Für diese Position wurde Material als verbraucht erfasst. Sie bleibt deshalb am Auftrag und kann nicht entfernt werden.',
   };
 
   return describeFailure(error, messages, MODE_FAILURE_MESSAGES[mode]);
