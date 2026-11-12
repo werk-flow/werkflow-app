@@ -34,7 +34,7 @@ Wrong turn: trusting an id because the UI offers only the caller's own records. 
 
 1. Write `SECURITY DEFINER` only when one transaction must cross RLS, such as an approval that creates a membership. A function that writes related rows for a server action runs as `security invoker`.
 2. A public function is executable by `service_role` only. An RLS helper that policies call goes into `app_private`, is granted to `authenticated` only, and joins the definer-execution inventory with the policy that needs it.
-3. Resolve organization and role in the server caller before it calls the function. A service-only list or search function revokes browser execution.
+3. The server caller resolves organization and role before the call. A service-only list or search function revokes browser execution.
 4. Run `bun run test:verify --group sql:security` and the SQL group that owns the function.
 
 Wrong turn: granting `authenticated` so the browser can call the function, which then bypasses every policy with its owner's rights.
@@ -49,7 +49,7 @@ Call `logError('<function>: <what failed>', error)` from `lib/logging.ts`; it ke
 
 ### Profile a customer export
 
-A customer's export stays on the owner's machine, outside every repository. The owner runs `bun scripts/migration/profile-export.ts <export-folder>` offline; it writes a structure-only `profile.md` and `profile.json` to `~/werkflow-export-profiles/<date>/` and refuses when its self-check finds a name, email, phone number, IBAN or address. The owner reads `profile.md` before sharing it. Only the profile reaches an agent; fixtures are synthetic, derived from it. Wrong turn: opening a row of the export in an agent session to "check one field".
+A customer's export stays on the owner's machine, in no repository. The owner runs `bun scripts/migration/profile-export.ts <export-folder>` offline; it writes a structure-only `profile.md` and `profile.json` to `~/werkflow-export-profiles/<date>/` and refuses when its self-check finds a name, email, phone number, IBAN or address. The owner reads `profile.md` before sharing. Only the profile reaches an agent; fixtures are synthetic, derived from it. Wrong turn: opening a row of the export in an agent session to "check one field".
 
 ## Trust boundaries
 
@@ -63,7 +63,7 @@ A customer's export stays on the owner's machine, outside every repository. The 
 - **Identity failure.** An identity check that cannot complete is a failure, never a signed-out caller and never access: a page shows the error page, a route handler a private 500 or 503, the auth callback `/auth/unavailable`. The proxy passes the request to the layout. `lib/auth/identity-errors.ts` classifies Auth failures for both.
 - **Redirects.** A return destination from a query string goes through `resolveSafeReturnPath` and is a same-origin path. An invite code is a UUID before the app echoes it.
 - **Organization cookie.** The cookie is a hint. The server accepts it only for a current member and refuses to set it for a non-member.
-- **Joining.** Join codes come from the cryptographic random source. A code creates a join request, never a membership. Only an Admin or Büro approval in that organization creates the membership, in one database function. A signed-in user gets limited join attempts per hour.
+- **Joining.** Join codes are cryptographically random. A code creates a join request, never a membership; only an Admin or Büro approval in that organization creates it, in one database function. A signed-in user gets limited join attempts per hour.
 - **Cross-organization writes.** A write that names another record checks that it belongs to the caller's organization and, where it applies, to the same person.
 - **Abuse limits.** Invite mail, invite redemption, join codes, email-change codes, the simulated payment and health checks pass a limit per subject. A limiter that cannot decide refuses the operation; the health check proceeds. A subject reaches the database only as a keyed hash.
 
@@ -73,7 +73,7 @@ A customer's export stays on the owner's machine, outside every repository. The 
 - RLS checks effective personnel access wherever a policy or its helper reads `organization_members`, `job_assignments` or `employee_records`.
 - Client roles write no table directly, except a user's own name and avatar.
 - Nothing is granted to `anon` without the owner's approval.
-- A table's migration revokes everything from `public`, `anon`, `authenticated` and `service_role`, then grants exactly the needed operations to the needed roles. Default grants are revoked, so a new object has no Data API access until its migration grants it.
+- A table's migration revokes everything from `public`, `anon`, `authenticated` and `service_role`, then grants exactly what is needed. Default grants are revoked: a new object has no Data API access until its migration grants it.
 - Grant the sequence privileges an intended insert needs. The service role bypasses RLS, not SQL privileges.
 - A ledger table refuses direct UPDATE and DELETE, also for privileged roles, with a real denial and a permitted-cleanup assertion. Cascade or reference-nulling follows the domain's retention rule.
 - **Service-role queries.** A query on organization data passes an organization from the resolved context, or carries a reviewed `tenant-scope` reason.
@@ -84,7 +84,7 @@ A customer's export stays on the owner's machine, outside every repository. The 
 
 ### Realtime
 
-RLS and column grants govern INSERT and UPDATE delivery. Raw DELETE and TRUNCATE publication is off; deletion notices reach only current members. An event is a signal to read again through an authorized reader. [Realtime and caching](realtime-and-caching.md#realtime-model) owns the transport.
+RLS and column grants govern INSERT and UPDATE delivery. Raw DELETE and TRUNCATE publication is off; deletion notices reach only current members. An event only signals a new read through an authorized reader. [Realtime and caching](realtime-and-caching.md#realtime-model) owns the transport.
 
 ### Files
 
@@ -96,19 +96,19 @@ The edge functions accept only the project's secret keys and escape every interp
 
 ### Browser
 
-Responses carry the hardening headers and enforced Content-Security-Policy from `buildSecurityHeaders` (`next.config.ts`). Violations go to `POST /api/csp-report`, which is unauthenticated by design, stores nothing and logs a redacted summary. An `eval` report, or one that names another origin, is a finding. Product code has no HTML string sink or `eval`, and imports Zod through `lib/zod.ts`; `lib/zod-members.ts` turns off its `eval` probe.
+Responses carry the hardening headers and enforced Content-Security-Policy from `buildSecurityHeaders` (`next.config.ts`). Violations go to `POST /api/csp-report`, which is unauthenticated by design, stores nothing and logs a redacted summary. An `eval` report, or one that names another origin, is a finding. Product code imports Zod through `lib/zod.ts`; `lib/zod-members.ts` turns off its `eval` probe.
 
 The service worker (`public/sw.js`) caches only the cookie-free offline page and its build files; the CSP allows `worker-src` and `manifest-src` `'self'`. Sign-out and organization switch delete its caches and the stored day ([one exception](#known-residual-exposure)); unsent work stays, untrusted ([decision 0010](../decisions/0010-offline-field-sync-contract.md#device-data)).
 
 ### Server caches
 
-A reader cached across requests throws `CachedReadError` on a failed read, so the cache never keeps a failure. No permission fact is cached across requests, and no authenticated response is cached at the CDN.
+A reader cached across requests throws `CachedReadError` on a failed read, so the cache never keeps a failure.
 
 ### Supply chain
 
-Every plan carries an advisory check under 24 hours old. An unknown finding fails. So does an exception on a changed dependency tree, or one that is expired or outgrown, even when it matches nothing. An exception in `lib/security/dependency-exceptions.json` names its path, reason, digest and expiry. A workflow pins each outside action to a commit SHA and its release.
+Every plan carries an advisory check under 24 hours old. An unknown finding fails, as does an exception that is expired, outgrown or on a changed dependency tree, matching or not. An exception in `lib/security/dependency-exceptions.json` names its path, reason, digest and expiry. A workflow pins each outside action to a commit SHA and its release.
 
-An exception that matches no finding on an unchanged tree means the registry narrowed the advisory: the check passes with a note. Remove the exception.
+An exception matching no finding on an unchanged tree means the registry narrowed the advisory: the check passes with a note; remove the exception.
 
 ## Never
 
@@ -137,18 +137,19 @@ An exception that matches no finding on an unchanged tree means the registry nar
 
 List each owner-accepted residual exposure until it closes.
 
-- Injected inline scripts are not blocked. The script policy allows `'unsafe-inline'`. A per-request nonce needs every page rendered per request, which `cacheComponents` rules out. The `htmlSinkSelectors` lint set keeps product code from creating an injection point.
-- No edge rate limit covers every request. The app limits operations that send mail, redeem a capability or activate billing; Supabase Auth limits its own endpoints. Edge limiting is the owner's Vercel plan decision.
+- The script policy allows `'unsafe-inline'`, so injected inline scripts run: a per-request nonce needs per-request rendering, which `cacheComponents` rules out. The `htmlSinkSelectors` lint set keeps product code from creating an injection point.
+- No edge rate limit covers every request; the app and Supabase Auth limit only their own operations (see [Add a Server Action](#add-a-server-action-or-route-handler)). Edge limiting is the owner's Vercel plan decision.
 - The deletion transport lets current members receive a deleted row's identity, never its content.
 - `simulatePayment` in `lib/subscription/actions.ts` lets a signed-in user without an organization activate their own subscription once (beta; closes with werk-flow/werkflow-planning#248).
 - The code step keeps the address up to one hour in an httpOnly cookie scoped to `/verify`.
 - The `health` edge function has no rate limit; a constant-time 64-hex token bounds it.
 - Member removal refuses a target with recorded time; `P1-33` owns offboarding and asset return.
-- Organization deletion removes stored files after the rows. If storage fails, or a lost delete response cannot be rechecked, they stay under its prefix, logged, unreachable through the app.
+- Organization deletion removes stored files after the rows; a file whose delete fails or cannot be rechecked stays under its prefix, logged, unreachable through the app.
 - The lint toolchain's minimatch (GHSA-g3hv-75wg-m249) is a reviewed exception in `lib/security/dependency-exceptions.json`.
 - A coworker's Arbeitsnachweis detail hides the customer signer's name; an exported report, a job or project document, shows it to all its readers (owner decision, werk-flow/werkflow-planning#241).
 - Unverified without a stronger read token: the R2 buckets' CORS rules (`GetBucketCors` refuses runtime tokens) and the Vercel environment scopes.
 - A phone's offline day can outlive lost access or sign-out ([decision 0010](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-owner-accepted-residual-exposure)).
+- Report drafts stay on the phone (owner decision 2026-11-12, werk-flow/werkflow-planning#22; [decision 0010](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-report-drafts)): text and photos 7 days past lost access, then until the phone's next use; unsent ones until their author sends or deletes them. The app shows one only to its author; the phone's browser storage holds it for anyone who unlocks it.
 
 ## Revocation boundaries
 
