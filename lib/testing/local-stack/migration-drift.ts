@@ -107,27 +107,6 @@ function readsEscapes(
  * comments or layout changed after it was applied is no drift.
  */
 export function sqlShape(sql: string): string {
-  return shapePieces(sql).join('');
-}
-
-/**
- * The top-level statements of a SQL text, each in the shape sqlShape gives it: split at the
- * semicolons Postgres reads as statement ends, never inside a literal, a quoted identifier or a
- * dollar-quoted body.
- */
-export function sqlStatements(sql: string): string[] {
-  const statements: string[][] = [[]];
-  for (const piece of shapePieces(sql))
-    if (piece === ';') statements.push([]);
-    else statements.at(-1)?.push(piece);
-  return statements.map((pieces) => pieces.join('').trim()).filter(Boolean);
-}
-
-/**
- * The pieces of sqlShape: each token, with a ' ' or ';' between them. A ';' piece is always a
- * statement end: a literal or a body starts with its quote, and plain tokens hold no semicolon.
- */
-function shapePieces(sql: string): string[] {
   const text = sql.replace(/\r\n/g, '\n');
   const pieces: string[] = [];
   let gap: '' | ' ' | ';' = '';
@@ -168,7 +147,7 @@ function shapePieces(sql: string): string[] {
       }
     }
   }
-  return pieces;
+  return pieces.join('');
 }
 
 /** Groups values under their key, in order. */
@@ -239,9 +218,8 @@ function treeMigrations(repository: string): TreeMigration[] {
 /**
  * The drift between the shared stack and this tree's migrations, read without any write; undefined
  * when the tree has no migrations folder or the stack cannot be read, so the run goes on as before.
- * `database` is another database of the same server, such as a private copy (stack-copy.ts).
  */
-export function readMigrationDrift(repository: string, database = 'postgres'): MigrationDrift | undefined {
+export function readMigrationDrift(repository: string): MigrationDrift | undefined {
   try {
     const tree = treeMigrations(repository);
     const raw = execFileSync(
@@ -255,7 +233,7 @@ export function readMigrationDrift(repository: string, database = 'postgres'): M
         '-U',
         'postgres',
         '-d',
-        database,
+        'postgres',
         '-tA',
         '-c',
         LEDGER_QUERY,

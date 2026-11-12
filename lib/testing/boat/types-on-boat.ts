@@ -15,9 +15,8 @@ import { gitEnvironment, runOnBoat, withRunFolder } from './verify-on-boat';
 // `bun run types:generate -- --local` writes the types of this tree's migrations. Every worktree
 // of a workstation shares one local stack, which holds main's migrations and never a branch's
 // (docs/technical/environments.md, "The migration rule"), so a tree whose migrations differ from
-// that stack reads a private copy of it first (lib/testing/local-stack/stack-copy.ts). Where no
-// copy can answer, the types come from an isolated stack at the tree's migrations: a Boat
-// machine's, or, on a workstation without Boat, the one CI's SQL job started for the pushed commit.
+// that stack takes its types from an isolated stack at its own migrations: a Boat machine's, or,
+// on a workstation without Boat, the one CI's SQL job started for the pushed commit.
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
