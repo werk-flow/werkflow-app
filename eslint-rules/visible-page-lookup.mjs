@@ -19,15 +19,10 @@ const VISIBILITY_BLIND_LOOKUPS = new Set([
 /**
  * Helpers that look at every DOM node on purpose: the absence checks of
  * tests/golden/support/steps/shared.ts, which must hold for a hidden copy too,
- * and the wait for React's reveal (tests/golden/support/streamed-content.ts),
+ * and the check of React's reveal (tests/golden/support/streamed-content.ts),
  * which looks for the hidden copy itself.
  */
-const WHOLE_DOM_HELPERS = new Set([
-  'textInDom',
-  'expectGone',
-  'revealStreamedContentBeforeEachStep',
-  'expectStreamedContentRevealed',
-]);
+const WHOLE_DOM_HELPERS = new Set(['textInDom', 'expectGone', 'expectStreamedContentRevealed']);
 
 function insideWholeDomHelper(node) {
   for (let current = node.parent; current; current = current.parent) {

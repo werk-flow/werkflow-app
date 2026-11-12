@@ -1246,8 +1246,8 @@ const eslintConfig = defineConfig([
     },
   },
   // Streamed copies after a load (docs/technical/integrated-test-state.md):
-  // every page a browser test drives waits for React's reveal before each
-  // step. The fixtures install it on their pages; a page opened by hand goes
+  // every goto and reload of a page a browser test drives waits for React's
+  // reveal. The fixtures install it on their pages; a page opened by hand goes
   // through openPage. The measured pages stay as their references measured
   // them: the performance sessions and the two measured openings of P1-11.
   {
@@ -1266,7 +1266,7 @@ const eslintConfig = defineConfig([
         {
           property: 'newPage',
           message:
-            'Open the page through openPage (tests/golden/support/streamed-content.ts): its steps then wait for React to reveal the content it streamed after a load.',
+            'Open the page through openPage (tests/golden/support/streamed-content.ts): its goto and reload then wait for React to reveal the content it streamed.',
         },
       ],
       'no-restricted-imports': [
@@ -1277,7 +1277,7 @@ const eslintConfig = defineConfig([
               group: ['**/support/sessions'],
               importNames: ['createRolePage'],
               message:
-                'Take a role page from the fixtures (adminPage, bueroPage, employeePage, outsiderPage): their steps wait for React to reveal the content it streamed after a load.',
+                'Take a role page from the fixtures (adminPage, bueroPage, employeePage, outsiderPage): their goto and reload wait for React to reveal the content it streamed.',
             },
           ],
         },

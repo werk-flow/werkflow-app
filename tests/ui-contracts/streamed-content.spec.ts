@@ -1,35 +1,36 @@
 import { expect, test, type Page } from '@playwright/test';
 import { assertWorkspaceTestLock } from '../../lib/testing/runner/workspace-test-lock';
-import {
-  expectStreamedContentRevealed,
-  openPage,
-  revealStreamedContentBeforeEachStep,
-  STREAMED_SEGMENT,
-} from '../golden/support/streamed-content';
+import { openPage, revealStreamedContentAfterEachLoad } from '../golden/support/streamed-content';
 
 // The document right after a load, as two failed runs left it. React keeps a
 // Suspense boundary's streamed content in `<div hidden id="S:…">` at the end
 // of `<body>` until its batched reveal. An update made React render the same
 // content on the client first, so the document holds a shown and a hidden
 // copy until the reveal removes the streamed one. `audit:wave-1:a1-kunden`
-// failed on this state: `getByLabel('Kunden durchsuchen')` resolved to 2
-// elements. The fixture page never reveals by itself; the test does, as
+// failed on this state: `getByLabel('Kunden durchsuchen') resolved to 2
+// elements`. The fixture page never reveals by itself; the test does, as
 // React's reveal would.
 const searchField = '<input type="text" aria-label="Kunden durchsuchen">';
 const fixtureUrl = 'http://localhost/kunden';
+const nextUrl = 'http://localhost/kunden-weiter';
 
 function documentAfterLoad(options: { clientRendered: boolean }): string {
   return `<!doctype html><html lang="de"><body>
-    <main>${options.clientRendered ? searchField : '<p>Kunden werden geladen …</p>'}</main>
+    <main>${options.clientRendered ? searchField : '<p>Kunden werden geladen …</p>'}<a href="${nextUrl}">Weiter</a></main>
     <div hidden id="S:2"><h2>Kundenliste</h2>${searchField}</div>
   </body></html>`;
 }
 
-async function open(page: Page, options: { clientRendered: boolean }): Promise<void> {
+async function serve(page: Page, options: { clientRendered: boolean }): Promise<void> {
   await page.route(fixtureUrl, (route) =>
     route.fulfill({ contentType: 'text/html; charset=utf-8', body: documentAfterLoad(options) }),
   );
-  await page.goto(fixtureUrl);
+  await page.route(nextUrl, (route) =>
+    route.fulfill({
+      contentType: 'text/html; charset=utf-8',
+      body: `<!doctype html><html lang="de"><body><main>${searchField}</main></body></html>`,
+    }),
+  );
 }
 
 function search(page: Page) {
@@ -40,22 +41,8 @@ function search(page: Page) {
 async function renderOnClient(page: Page): Promise<void> {
   await page.evaluate((field) => {
     const main = document.querySelector('main');
-    if (main) main.innerHTML = field;
+    if (main) main.insertAdjacentHTML('afterbegin', field);
   }, searchField);
-}
-
-/**
- * Resolves when the wait's handler starts on the page: it looks for the
- * streamed segment only while it holds a step.
- */
-function handlerRuns(page: Page): Promise<void> {
-  const locate = page.locator.bind(page);
-  return new Promise((resolve) => {
-    page.locator = (selector, options) => {
-      if (selector === STREAMED_SEGMENT) resolve();
-      return locate(selector, options);
-    };
-  });
 }
 
 /** What React's batched reveal does once the client rendered the boundary: the streamed copy goes. */
@@ -67,69 +54,82 @@ test.beforeEach(() => {
   assertWorkspaceTestLock();
 });
 
-test('without the wait, a step on the page meets the streamed copy and fails strict mode', async ({
+test('without the wait, a step after the load meets the streamed copy and fails strict mode', async ({
   page,
 }) => {
-  await open(page, { clientRendered: true });
+  await serve(page, { clientRendered: true });
+  await page.goto(fixtureUrl);
   await expect(expect(search(page)).toBeVisible()).rejects.toThrow(/strict mode violation/);
 });
 
-test('with the wait, a step is held while both copies exist and passes once React revealed', async ({
+test('goto returns only after React revealed what it streamed, while both copies exist', async ({
   context,
 }) => {
   const page = await openPage(context);
-  await open(page, { clientRendered: true });
-  const holding = handlerRuns(page);
-  let passedAt = 0;
-  const shown = expect(search(page))
-    .toBeVisible()
-    .then(() => {
-      passedAt = Date.now();
-    });
-  // Without the wait, the step fails strict mode here instead.
-  await Promise.race([holding, shown]);
+  await serve(page, { clientRendered: true });
+  const loaded = page.waitForEvent('load');
+  let returnedAt = 0;
+  const going = page.goto(fixtureUrl).then(() => {
+    returnedAt = Date.now();
+  });
+  await loaded;
+  // The document loaded with both copies; the fixture page reveals nothing by itself.
+  await expect(search(page)).toHaveCount(2);
   const revealedAt = Date.now();
   await reveal(page);
-  await shown;
-  expect(passedAt).toBeGreaterThanOrEqual(revealedAt);
-  await expect(search(page)).toHaveCount(1);
+  await going;
+  expect(returnedAt).toBeGreaterThanOrEqual(revealedAt);
+  await expect(search(page)).toBeVisible();
 });
 
-test('with the wait, a step started before the client render is held through it until the reveal', async ({
-  page,
+test('goto waits through the client render to the reveal when the streamed copy came first', async ({
+  context,
 }) => {
-  await revealStreamedContentBeforeEachStep(page);
+  const page = await openPage(context);
   // audit:wave-1:a1-kunden first saw the streamed copy alone, hidden, then both.
-  await open(page, { clientRendered: false });
-  const holding = handlerRuns(page);
-  let passedAt = 0;
-  const shown = expect(search(page))
-    .toBeVisible()
-    .then(() => {
-      passedAt = Date.now();
-    });
-  await Promise.race([holding, shown]);
+  await serve(page, { clientRendered: false });
+  const loaded = page.waitForEvent('load');
+  let returnedAt = 0;
+  const going = page.goto(fixtureUrl).then(() => {
+    returnedAt = Date.now();
+  });
+  await loaded;
+  await expect(search(page)).toHaveCount(1);
   await renderOnClient(page);
+  await expect(search(page)).toHaveCount(2);
   const revealedAt = Date.now();
   await reveal(page);
-  await shown;
-  expect(passedAt).toBeGreaterThanOrEqual(revealedAt);
-  await expect(search(page)).toHaveCount(1);
+  await going;
+  expect(returnedAt).toBeGreaterThanOrEqual(revealedAt);
+  await expect(search(page)).toBeVisible();
 });
 
-test('a streamed container that never reveals fails the check, naming the container and its text', async ({
-  page,
+test('a navigation under the wait moves it to the new document instead of failing it', async ({
+  context,
 }) => {
-  await open(page, { clientRendered: true });
-  await expect(expectStreamedContentRevealed(page)).rejects.toThrow(/still hidden: S:2 "Kundenliste"/);
+  const page = await openPage(context);
+  await serve(page, { clientRendered: true });
+  const loaded = page.waitForEvent('load');
+  const going = page.goto(fixtureUrl);
+  await loaded;
+  // A redirect after the load: the old document and its pending reveal are gone.
+  await page.getByRole('link', { name: 'Weiter' }).click();
+  await going;
+  await expect(page).toHaveURL(nextUrl);
+  await expect(search(page)).toBeVisible();
 });
 
-test('a step held on a page whose streamed container never reveals fails before the test timeout', async ({
-  page,
+test('a streamed container that never reveals fails goto, naming the container and its text', async ({
+  context,
 }) => {
-  // Expected to fail, and only as failed: a step that passed, or hung into the test timeout, breaks this test.
-  test.fail();
-  await revealStreamedContentBeforeEachStep(page);
-  await open(page, { clientRendered: true });
-  await expect(search(page)).toBeVisible({ timeout: 10_000 });
+  const page = await openPage(context);
+  await serve(page, { clientRendered: true });
+  await expect(page.goto(fixtureUrl)).rejects.toThrow(/still hidden: S:2 "Kundenliste"/);
+});
+
+test('a streamed container that never reveals fails reload the same way', async ({ page }) => {
+  await serve(page, { clientRendered: true });
+  await page.goto(fixtureUrl);
+  revealStreamedContentAfterEachLoad(page);
+  await expect(page.reload()).rejects.toThrow(/still hidden: S:2 "Kundenliste"/);
 });
