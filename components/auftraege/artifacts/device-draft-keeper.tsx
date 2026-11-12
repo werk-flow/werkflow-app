@@ -255,7 +255,7 @@ export function DeviceDraftKeeper(props: DeviceDraftKeeperProps) {
           const next = withText(current);
           return next ? { ...next, sealed: true } : next;
         });
-        return stored !== null && stored !== 'not_stored' && stored.sealed;
+        return stored !== null && stored !== 'not_stored' && stored.sealed ? stored.updatedAt : null;
       },
       unseal: async () =>
         void (await write((current) => (current ? { ...current, sealed: false } : current))),

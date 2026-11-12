@@ -65,10 +65,11 @@ export type DeviceDraftHandle = {
   committed: () => Promise<{ photoCount: number; revisionId: string } | null>;
   /**
    * Seals the draft before its online save leaves with the draft's revision id: if that save lands
-   * and its answer is lost, the device's later send must carry exactly the saved content. False
-   * when the device could not seal it; the keeper then shows why.
+   * and its answer is lost, the device's later send must carry exactly the saved content. Answers the
+   * sealed draft's last-change time, which the save carries so the server can tell that state
+   * apart, or null when the device could not seal it; the keeper then shows why.
    */
-  seal: () => Promise<boolean>;
+  seal: () => Promise<string | null>;
   /** Unseals the draft after the server refused its online save: the server holds nothing of it. */
   unseal: () => Promise<void>;
   /**

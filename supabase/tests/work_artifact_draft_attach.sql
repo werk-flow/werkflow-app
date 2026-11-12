@@ -221,9 +221,11 @@ end;
 $$;
 
 -- The online save of a new draft committed, but its answer was lost: the phone then sends the same
--- draft (same Arbeitsnachweis and revision id) as an operation. The attach answers `replayed`,
--- records the operation and writes no second revision. With photos the online save never ran, so
--- a revision without its photos stays a conflict.
+-- draft (same Arbeitsnachweis and revision id) as an operation. The attach adopts the saved
+-- revision only when it was written from this very state of the draft: the same author and
+-- organization and the draft's last-change time (`draft_changed_at`, the envelope's capturedAt).
+-- It then answers `replayed`, records the operation and writes no second revision. Any other
+-- revision under the id, a null marker included, is a version conflict and nothing is overwritten.
 do $$
 declare
   v_org constant uuid := '32000000-0000-0000-0000-000000000010';
@@ -237,7 +239,8 @@ begin
     p_expected_version => null, p_job_id => '32000000-0000-0000-0000-000000000020', p_project_id => null,
     p_kind => 'work_report', p_visibility => 'internal_only', p_captured_at => '2037-11-09T07:00:00Z',
     p_title => 'Heizung gewartet', p_content => '{"performedWork":"Brenner gereinigt"}'::jsonb,
-    p_corrects_revision_id => null, p_correction_reason => null, p_submit => false, p_submit_action_id => null);
+    p_corrects_revision_id => null, p_correction_reason => null, p_submit => false, p_submit_action_id => null,
+    p_draft_changed_at => '2037-11-09T07:00:00Z');
   v_answer := pg_temp.attach(v_org, v_employee, '32000000-0000-0000-0000-000000000092', repeat('e', 64),
     '32000000-0000-0000-0000-000000000090', '32000000-0000-0000-0000-000000000091',
     '32000000-0000-0000-0000-000000000020', '[]');
@@ -259,7 +262,62 @@ begin
     select pg_temp.attach('32000000-0000-0000-0000-000000000010', '32000000-0000-0000-0000-000000000001',
       '32000000-0000-0000-0000-000000000093', repeat('f', 64), '32000000-0000-0000-0000-000000000090',
       '32000000-0000-0000-0000-000000000091', '32000000-0000-0000-0000-000000000020', '[]')
-  $sql$, 'work_artifact_draft_idempotency_conflict');
+  $sql$, 'work_artifact_stale_version');
+  -- Another organization never reaches the revision: its id belongs to this Arbeitsnachweis.
+  perform pg_temp.expect_refusal('another organization adopting the saved revision', $sql$
+    select pg_temp.attach('32000000-0000-0000-0000-000000000011', '32000000-0000-0000-0000-000000000003',
+      '32000000-0000-0000-0000-000000000094', repeat('f', 64), '32000000-0000-0000-0000-000000000090',
+      '32000000-0000-0000-0000-000000000091', '32000000-0000-0000-0000-000000000020', '[]')
+  $sql$, 'work_artifact_not_authorized');
+  if (select count(*) from public.work_artifact_revisions
+      where artifact_id = '32000000-0000-0000-0000-000000000090') <> 1
+  then raise exception 'a refused adoption wrote a revision'; end if;
+end;
+$$;
+
+-- A draft changed after its online save, or a revision written without a draft's marker, is never
+-- adopted: the device keeps the draft as a conflict.
+do $$
+declare
+  v_org constant uuid := '32000000-0000-0000-0000-000000000010';
+  v_employee constant uuid := '32000000-0000-0000-0000-000000000003';
+begin
+  -- 95/96: saved from an earlier state of the draft (06:00); the draft sent was changed at 07:00.
+  perform public.create_work_artifact_revision(
+    p_organization_id => v_org, p_actor_id => v_employee,
+    p_artifact_id => '32000000-0000-0000-0000-000000000095',
+    p_revision_id => '32000000-0000-0000-0000-000000000096',
+    p_expected_version => null, p_job_id => '32000000-0000-0000-0000-000000000020', p_project_id => null,
+    p_kind => 'work_report', p_visibility => 'internal_only', p_captured_at => '2037-11-09T07:00:00Z',
+    p_title => 'Heizung gewartet', p_content => '{"performedWork":"Brenner"}'::jsonb,
+    p_corrects_revision_id => null, p_correction_reason => null, p_submit => false, p_submit_action_id => null,
+    p_draft_changed_at => '2037-11-09T06:00:00Z');
+  perform pg_temp.expect_refusal('a draft changed after its online save', $sql$
+    select pg_temp.attach('32000000-0000-0000-0000-000000000010', '32000000-0000-0000-0000-000000000003',
+      '32000000-0000-0000-0000-000000000097', repeat('f', 64), '32000000-0000-0000-0000-000000000095',
+      '32000000-0000-0000-0000-000000000096', '32000000-0000-0000-0000-000000000020', '[]')
+  $sql$, 'work_artifact_stale_version');
+  -- 98/99: a revision written without a draft's marker (the existing callers' null).
+  perform public.create_work_artifact_revision(
+    p_organization_id => v_org, p_actor_id => v_employee,
+    p_artifact_id => '32000000-0000-0000-0000-000000000098',
+    p_revision_id => '32000000-0000-0000-0000-000000000099',
+    p_expected_version => null, p_job_id => '32000000-0000-0000-0000-000000000020', p_project_id => null,
+    p_kind => 'work_report', p_visibility => 'internal_only', p_captured_at => '2037-11-09T07:00:00Z',
+    p_title => 'Heizung gewartet', p_content => '{"performedWork":"Brenner gereinigt"}'::jsonb,
+    p_corrects_revision_id => null, p_correction_reason => null, p_submit => false, p_submit_action_id => null);
+  if (select draft_changed_at from public.work_artifact_revisions
+      where id = '32000000-0000-0000-0000-000000000099') is not null
+  then raise exception 'a revision written without a draft carries a draft marker'; end if;
+  perform pg_temp.expect_refusal('a revision without a draft marker', $sql$
+    select pg_temp.attach('32000000-0000-0000-0000-000000000010', '32000000-0000-0000-0000-000000000003',
+      '32000000-0000-0000-0000-00000000009a', repeat('f', 64), '32000000-0000-0000-0000-000000000098',
+      '32000000-0000-0000-0000-000000000099', '32000000-0000-0000-0000-000000000020', '[]')
+  $sql$, 'work_artifact_stale_version');
+  if exists (select 1 from public.work_artifact_draft_operations
+      where organization_id = v_org and id in (
+        '32000000-0000-0000-0000-000000000097', '32000000-0000-0000-0000-00000000009a'))
+  then raise exception 'a refused adoption recorded its operation'; end if;
 end;
 $$;
 

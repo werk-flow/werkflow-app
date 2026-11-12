@@ -95,6 +95,11 @@ const saveWorkArtifactFields = z.object({
   correctionReason: z.string().trim().min(3).max(1000).optional(),
   submit: z.boolean(),
   submitActionId: optionalUuid,
+  /**
+   * The device's last-change time of the draft this save comes from, when it comes from one: the
+   * attach of that draft adopts this revision only for the same value (decision record 0010).
+   */
+  draftChangedAt: z.string().datetime({ offset: true }).optional(),
 });
 
 type WorkArtifactRuleInput = Pick<

@@ -11610,6 +11610,7 @@ export type Database = {
           customer_statement: string | null;
           decisions: string | null;
           deliveries: string | null;
+          draft_changed_at: string | null;
           id: string;
           impediments: string | null;
           instruction_item_id: string | null;
@@ -11648,6 +11649,7 @@ export type Database = {
           customer_statement?: string | null;
           decisions?: string | null;
           deliveries?: string | null;
+          draft_changed_at?: string | null;
           id: string;
           impediments?: string | null;
           instruction_item_id?: string | null;
@@ -11686,6 +11688,7 @@ export type Database = {
           customer_statement?: string | null;
           decisions?: string | null;
           deliveries?: string | null;
+          draft_changed_at?: string | null;
           id?: string;
           impediments?: string | null;
           instruction_item_id?: string | null;
@@ -15172,27 +15175,50 @@ export type Database = {
           isSetofReturn: false;
         };
       };
-      create_work_artifact_revision: {
-        Args: {
-          p_actor_id: string;
-          p_artifact_id: string;
-          p_captured_at: string;
-          p_content: Json;
-          p_correction_reason: string;
-          p_corrects_revision_id: string;
-          p_expected_version: number;
-          p_job_id: string;
-          p_kind: Database["public"]["Enums"]["work_artifact_kind"];
-          p_organization_id: string;
-          p_project_id: string;
-          p_revision_id: string;
-          p_submit: boolean;
-          p_submit_action_id: string;
-          p_title: string;
-          p_visibility: Database["public"]["Enums"]["work_artifact_visibility"];
-        };
-        Returns: Json;
-      };
+      create_work_artifact_revision:
+        | {
+            Args: {
+              p_actor_id: string;
+              p_artifact_id: string;
+              p_captured_at: string;
+              p_content: Json;
+              p_correction_reason: string;
+              p_corrects_revision_id: string;
+              p_expected_version: number;
+              p_job_id: string;
+              p_kind: Database["public"]["Enums"]["work_artifact_kind"];
+              p_organization_id: string;
+              p_project_id: string;
+              p_revision_id: string;
+              p_submit: boolean;
+              p_submit_action_id: string;
+              p_title: string;
+              p_visibility: Database["public"]["Enums"]["work_artifact_visibility"];
+            };
+            Returns: Json;
+          }
+        | {
+            Args: {
+              p_actor_id: string;
+              p_artifact_id: string;
+              p_captured_at: string;
+              p_content: Json;
+              p_correction_reason: string;
+              p_corrects_revision_id: string;
+              p_draft_changed_at: string;
+              p_expected_version: number;
+              p_job_id: string;
+              p_kind: Database["public"]["Enums"]["work_artifact_kind"];
+              p_organization_id: string;
+              p_project_id: string;
+              p_revision_id: string;
+              p_submit: boolean;
+              p_submit_action_id: string;
+              p_title: string;
+              p_visibility: Database["public"]["Enums"]["work_artifact_visibility"];
+            };
+            Returns: Json;
+          };
       create_work_template: {
         Args: {
           p_actor_id: string;

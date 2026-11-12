@@ -20,6 +20,7 @@ const PHOTO = Buffer.from(
 const sentOperationSchema = z.object({
   operationId: z.string(),
   kind: z.string(),
+  capturedAt: z.string(),
   payload: z.object({
     title: z.string(),
     revisionId: z.string(),
@@ -404,6 +405,9 @@ test('a save whose answer is lost after it committed sends the same draft revisi
   await expect.poll(() => sent.length).toBe(1);
   const [saved] = await page.evaluate(() => window.uiContractWorkArtifacts.saves);
   expect(sent[0]?.payload.revisionId).toBe(saved?.revisionId);
+  // The save names the state of the draft it wrote; the send names the same one, so the server adopts it.
+  expect(saved?.draftChangedAt).toBeDefined();
+  expect(sent[0]?.capturedAt).toBe(saved?.draftChangedAt);
 });
 
 test('a draft whose online save may have landed cannot be changed until its send is answered, so the send carries what was saved', async ({

@@ -282,6 +282,19 @@ assert.deepEqual(await replayBoth(afterLostAnswer), {
 });
 assert.equal(world.rpcCalls[0]?.args.p_revision_id, savedOnline.revisionId);
 
+// The same lost answer, but the draft changed after that save (or the revision carries no draft
+// marker): the function refuses to adopt it, and the device learns a version conflict, never
+// `replayed`, so it keeps the draft.
+world.rpcCalls.length = 0;
+attachAnswer = { data: null, error: { message: 'work_artifact_stale_version' } };
+const changedSinceSave = operation({ payload: draft({ photos: [] }) });
+assert.deepEqual(await replayBoth(changedSinceSave), {
+  operationId: changedSinceSave.operationId,
+  outcome: 'conflict',
+  code: 'version_conflict',
+});
+assert.equal(world.rpcCalls[0]?.args.p_captured_at, changedSinceSave.capturedAt);
+
 // The database function's refusals keep their outcome class.
 for (const [message, expected] of [
   ['work_artifact_not_authorized', forbidden],

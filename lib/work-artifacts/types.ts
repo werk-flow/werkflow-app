@@ -7,7 +7,13 @@ export type WorkArtifactVisibility = Database['public']['Enums']['work_artifact_
 export type WorkArtifactActionType = Database['public']['Enums']['work_artifact_action_type'];
 export type WorkArtifactMeasurementUnit = Database['public']['Enums']['work_artifact_measurement_unit'];
 export type WorkArtifactRow = Database['public']['Tables']['work_artifacts']['Row'];
-export type WorkArtifactRevisionRow = Database['public']['Tables']['work_artifact_revisions']['Row'];
+/** A revision as the server stores it, with the device marker the page never needs. */
+export type StoredWorkArtifactRevisionRow = Database['public']['Tables']['work_artifact_revisions']['Row'];
+/**
+ * A revision as a page sees it: without `draft_changed_at`, the device's last-change time of the
+ * draft the revision was written from, which only the draft attach compares.
+ */
+export type WorkArtifactRevisionRow = Omit<StoredWorkArtifactRevisionRow, 'draft_changed_at'>;
 /** The job or project an artifact belongs to. */
 export type WorkArtifactTarget = { targetType: 'job' | 'project'; targetId: string };
 export type WorkArtifactActionRow = Database['public']['Tables']['work_artifact_actions']['Row'];

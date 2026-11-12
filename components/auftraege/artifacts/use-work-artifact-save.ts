@@ -67,13 +67,13 @@ export function useWorkArtifactSave({
   const showSentDraft = useSentDraft(editor, newArtifactId);
 
   /** The save over the network; `no_answer` when the request never returned and the device keeps the draft. */
-  async function saveOnServer(submit: boolean, draftRevisionId: string | null) {
+  async function saveOnServer(submit: boolean, fromDraft: { revisionId: string; changedAt: string } | null) {
     try {
       return await saveWorkArtifact({
         artifactId: detail?.id ?? newArtifactId,
         // A draft on the device lends its revision id: when this answer is lost, the device's
         // send of the same draft is the same write, and the server replays it.
-        revisionId: draftRevisionId ?? crypto.randomUUID(),
+        revisionId: fromDraft?.revisionId ?? crypto.randomUUID(),
         expectedVersion: detail?.version ?? null,
         targetType,
         targetId,
@@ -86,10 +86,12 @@ export function useWorkArtifactSave({
         ...(requiresCorrectionReason ? { correctionReason } : {}),
         submit,
         ...(submit ? { submitActionId: crypto.randomUUID() } : {}),
+        // The sealed draft's state: the server adopts this revision for that draft's send only then.
+        ...(fromDraft ? { draftChangedAt: fromDraft.changedAt } : {}),
       });
     } catch (error) {
       // Only a draft on the device has somewhere to wait for the signal.
-      if (draftRevisionId === null) throw error;
+      if (fromDraft === null) throw error;
       return 'no_answer' as const;
     }
   }
@@ -102,9 +104,12 @@ export function useWorkArtifactSave({
     // Photos reach the server only with the draft the device holds. A draft without photos is sealed
     // before its online save leaves: if that save lands and its answer is lost, nothing changes the
     // draft until the device's send of the same revision is answered.
-    if (onDevice && draft && draft.photoCount === 0 && !(await onDevice.seal())) return;
+    const changedAt = onDevice && draft && draft.photoCount === 0 ? await onDevice.seal() : null;
+    if (draft && draft.photoCount === 0 && changedAt === null) return;
     const result =
-      draft && draft.photoCount > 0 ? 'no_answer' : await saveOnServer(submit, draft?.revisionId ?? null);
+      draft && draft.photoCount > 0
+        ? 'no_answer'
+        : await saveOnServer(submit, draft && changedAt ? { revisionId: draft.revisionId, changedAt } : null);
     if (result === 'no_answer') {
       const sent = (await onDevice?.save(submit)) ?? null;
       if (sent) await showSentDraft(submit, sent);

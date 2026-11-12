@@ -34,7 +34,12 @@ import {
   registerWorkArtifactExport,
   workArtifactExportStoragePath,
 } from './export-storage';
-import { readArtifactForDetail, refuseHiddenCoworkerDraft, toVisibleArtifactDetail } from './detail';
+import {
+  pageRevision,
+  readArtifactForDetail,
+  refuseHiddenCoworkerDraft,
+  toVisibleArtifactDetail,
+} from './detail';
 import { isExportableRevision, isHiddenCoworkerDraft } from './field-visibility';
 import {
   WORK_ARTIFACT_STATUSES,
@@ -96,7 +101,7 @@ export async function getWorkArtifacts(
     logReadFailure('getWorkArtifacts: artifact or revision read failed', { code: loadError.code });
     return { success: false, error: 'work_artifacts_load_failed' };
   }
-  const revisionById = new Map(revisionsResult.data.map((revision) => [revision.id, revision]));
+  const revisionById = new Map(revisionsResult.data.map((revision) => [revision.id, pageRevision(revision)]));
   return {
     success: true,
     artifacts: artifacts.flatMap((artifact) => {
@@ -216,6 +221,7 @@ export async function saveWorkArtifact(input: SaveWorkArtifactInput): Promise<Wo
     p_correction_reason: parsed.data.correctionReason ?? null,
     p_submit: parsed.data.submit,
     p_submit_action_id: parsed.data.submitActionId ?? null,
+    p_draft_changed_at: parsed.data.draftChangedAt ?? null,
   });
   const { data, error } = await admin.rpc('create_work_artifact_revision', args);
   const status = mutationStatus(data);
