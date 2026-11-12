@@ -29,6 +29,11 @@ const PLAIN_MARGINS: PageMargins = { topMm: 20, rightMm: 20, bottomMm: 15, leftM
 const PLAIN_FOOTER_HEIGHT_MM = 17;
 const FIRST_PAGE_CONTENT_TOP_MM = 100;
 const RETURN_ADDRESS_TOP_MM = 47;
+/** Where form B's address field starts; a stationery top margin below it moves the field down. */
+const ADDRESS_FIELD_TOP_MM = 45;
+/** The narrowest content a page may leave: the table and the info block's values need this much. */
+const MINIMUM_CONTENT_WIDTH_MM = 120;
+const MINIMUM_INFO_VALUE_WIDTH_MM = 25;
 const INFO_BLOCK_LEFT_MM = 125;
 const PAGE_NUMBER_SPACE = 8 * MM;
 
@@ -134,7 +139,8 @@ function wrap(text: string, font: PDFFont, size: number, width: number): string[
       }
       if (line) lines.push(line);
       let rest = word;
-      while (font.widthOfTextAtSize(rest, size) > width) {
+      // Each cut takes at least one character, so a width narrower than a glyph still ends.
+      while (rest.length > 1 && font.widthOfTextAtSize(rest, size) > width) {
         let cut = rest.length - 1;
         while (cut > 1 && font.widthOfTextAtSize(rest.slice(0, cut), size) > width) cut -= 1;
         lines.push(rest.slice(0, cut));
@@ -376,7 +382,8 @@ function paginate(items: FlowItem[], boxOf: (pageIndex: number) => Box): PlacedP
     let cut = end;
     if (end < items.length) {
       while (cut > start && items[cut - 1]?.keepWithNext) cut -= 1;
-      if (cut === start) cut = end;
+      // A chain longer than a page breaks inside, but its last item still goes along.
+      if (cut === start) cut = items[end - 1]?.keepWithNext && end - 1 > start ? end - 1 : end;
     }
     pages.push(placeItems(items.slice(start, cut), box.top));
     start = cut;
@@ -447,17 +454,26 @@ function drawLetterhead(
   page.drawImage(logo, { x: box.right - width, y: PAGE_HEIGHT - 12 * MM - height, width, height });
 }
 
-/** The address field and the info block of the first page (DIN 5008, form B). */
-function drawAddressAndInfo(page: PDFPage, document: BusinessDocument, fonts: Fonts, box: Box) {
-  const addressLeft = 25 * MM;
+/**
+ * The address field and the info block of the first page (DIN 5008, form B),
+ * moved down by `shift` and starting at the content's left edge, so they keep
+ * to a stationery page's margins too.
+ */
+function drawAddressAndInfo(
+  page: PDFPage,
+  document: BusinessDocument,
+  fonts: Fonts,
+  box: Box,
+  shift: number,
+) {
   const returnAddress = [document.sender.name, ...document.sender.addressLines].join(' · ');
-  drawLeft(page, returnAddress, addressLeft, RETURN_ADDRESS_TOP_MM * MM, fonts.regular, 6.5, MUTED);
+  drawLeft(page, returnAddress, box.left, RETURN_ADDRESS_TOP_MM * MM + shift, fonts.regular, 6.5, MUTED);
   document.recipientLines.forEach((line, index) =>
-    drawLeft(page, line, addressLeft, 55 * MM + index * BODY_LEADING, fonts.regular, BODY_SIZE),
+    drawLeft(page, line, box.left, 55 * MM + shift + index * BODY_LEADING, fonts.regular, BODY_SIZE),
   );
   const labelLeft = INFO_BLOCK_LEFT_MM * MM;
   const valueLeft = labelLeft + 30 * MM;
-  let top = 50 * MM;
+  let top = 50 * MM + shift;
   for (const row of document.metaRows) {
     drawLeft(page, row.label, labelLeft, top, fonts.regular, 8, MUTED);
     const lines = wrap(row.value, fonts.regular, 8, box.right - valueLeft);
@@ -497,40 +513,37 @@ const PLAIN_GLYPHS = {
   mkmk: false,
 };
 
-/** Renders a business document to PDF bytes. */
-export async function renderBusinessDocument(document: BusinessDocument): Promise<Uint8Array> {
-  const pdf = await PDFDocument.create({ updateMetadata: false });
-  pdf.registerFontkit(fontkit);
-  const [regularBytes, boldBytes] = await loadFontBytes();
-  const fonts: Fonts = {
-    regular: await pdf.embedFont(regularBytes, {
-      subset: true,
-      customName: 'Geist-Regular',
-      features: PLAIN_GLYPHS,
-    }),
-    bold: await pdf.embedFont(boldBytes, {
-      subset: true,
-      customName: 'Geist-SemiBold',
-      features: PLAIN_GLYPHS,
-    }),
-  };
+/** The content boxes of the first and the following pages, and how far the address field moves down. */
+function pageGeometry(document: BusinessDocument) {
   const { stationery } = document;
-  const firstUnderlay = stationery ? await embedStationery(pdf, stationery.firstPage.file) : null;
-  const followingUnderlay = stationery?.followingPages
-    ? await embedStationery(pdf, stationery.followingPages.file)
-    : null;
-  const logo = !stationery && document.sender.logo ? await embedImage(pdf, document.sender.logo) : null;
-
   const plainBottomMm = PLAIN_MARGINS.bottomMm + (document.footerColumns.length ? PLAIN_FOOTER_HEIGHT_MM : 0);
   const plainMargins = { ...PLAIN_MARGINS, bottomMm: plainBottomMm };
-  const firstBox = boxFromMargins(stationery?.firstPage.margins ?? plainMargins, FIRST_PAGE_CONTENT_TOP_MM);
+  const addressShift = Math.max(0, (stationery?.firstPage.margins.topMm ?? 0) - ADDRESS_FIELD_TOP_MM) * MM;
+  const firstBox = boxFromMargins(
+    stationery?.firstPage.margins ?? plainMargins,
+    FIRST_PAGE_CONTENT_TOP_MM + addressShift / MM,
+  );
   const followingBox = boxFromMargins(stationery?.followingPages?.margins ?? plainMargins, 0);
-  const boxOf = (pageIndex: number) => (pageIndex === 0 ? firstBox : followingBox);
+  const tooNarrow = [firstBox, followingBox].some(
+    (box) => box.right - box.left < MINIMUM_CONTENT_WIDTH_MM * MM || box.bottom - box.top < 50 * MM,
+  );
+  if (tooNarrow || firstBox.right - (INFO_BLOCK_LEFT_MM + 30) * MM < MINIMUM_INFO_VALUE_WIDTH_MM * MM) {
+    throw new Error('document_margins_leave_no_room');
+  }
+  return { firstBox, followingBox, addressShift };
+}
 
+/** Title, opening text, sections, totals and closing text as one flow. */
+function documentFlow(
+  document: BusinessDocument,
+  fonts: Fonts,
+  firstBox: Box,
+  followingBox: Box,
+): FlowItem[] {
   // Lines wrap once, to the narrower of the two page kinds, so a line fits on whichever page it lands.
   const width = Math.min(firstBox.right - firstBox.left, followingBox.right - followingBox.left);
   const textWidth = Math.min(columnsOf(firstBox).textWidth, columnsOf(followingBox).textWidth);
-  const flow: FlowItem[] = [
+  return [
     {
       height: 26,
       keepWithNext: false,
@@ -543,8 +556,35 @@ export async function renderBusinessDocument(document: BusinessDocument): Promis
     ...totalsFlow(document, fonts),
     ...paragraphFlow(document.closingText, fonts.regular, width, 18),
   ];
-  const pages = paginate(flow, boxOf);
+}
 
+async function embedFonts(pdf: PDFDocument): Promise<Fonts> {
+  pdf.registerFontkit(fontkit);
+  const [regularBytes, boldBytes] = await loadFontBytes();
+  const options = (customName: string) => ({ subset: true, customName, features: PLAIN_GLYPHS });
+  return {
+    regular: await pdf.embedFont(regularBytes, options('Geist-Regular')),
+    bold: await pdf.embedFont(boldBytes, options('Geist-SemiBold')),
+  };
+}
+
+/** Renders a business document to PDF bytes. */
+export async function renderBusinessDocument(document: BusinessDocument): Promise<Uint8Array> {
+  const date = new Date(`${document.issuedOn}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) throw new Error('document_date_invalid');
+  const { firstBox, followingBox, addressShift } = pageGeometry(document);
+  const boxOf = (pageIndex: number) => (pageIndex === 0 ? firstBox : followingBox);
+
+  const pdf = await PDFDocument.create({ updateMetadata: false });
+  const fonts = await embedFonts(pdf);
+  const { stationery } = document;
+  const firstUnderlay = stationery ? await embedStationery(pdf, stationery.firstPage.file) : null;
+  const followingUnderlay = stationery?.followingPages
+    ? await embedStationery(pdf, stationery.followingPages.file)
+    : null;
+  const logo = !stationery && document.sender.logo ? await embedImage(pdf, document.sender.logo) : null;
+
+  const pages = paginate(documentFlow(document, fonts, firstBox, followingBox), boxOf);
   pages.forEach((placed, pageIndex) => {
     const page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
     const box = boxOf(pageIndex);
@@ -552,23 +592,15 @@ export async function renderBusinessDocument(document: BusinessDocument): Promis
     if (underlay) drawUnderlay(page, underlay);
     if (pageIndex === 0) {
       if (!stationery) drawLetterhead(page, document, fonts, logo, box);
-      drawAddressAndInfo(page, document, fonts, box);
+      drawAddressAndInfo(page, document, fonts, box, addressShift);
     }
     if (placed.header !== null) drawTableHeader(page, placed.header, box, fonts);
     for (const { item, top } of placed.items) item.draw(page, top, box);
     if (!stationery && document.footerColumns.length) drawFooter(page, document.footerColumns, fonts, box);
-    drawRight(
-      page,
-      `Seite ${pageIndex + 1} von ${pages.length}`,
-      box.right,
-      box.bottom + PAGE_NUMBER_SPACE - 9,
-      fonts.regular,
-      8,
-    );
+    const pageNumber = `Seite ${pageIndex + 1} von ${pages.length}`;
+    drawRight(page, pageNumber, box.right, box.bottom + PAGE_NUMBER_SPACE - 9, fonts.regular, 8);
   });
 
-  const date = new Date(`${document.issuedOn}T00:00:00Z`);
-  if (Number.isNaN(date.getTime())) throw new Error('document_date_invalid');
   pdf.setTitle(document.title);
   pdf.setAuthor(document.sender.name);
   pdf.setLanguage('de-DE');

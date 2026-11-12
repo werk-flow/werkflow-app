@@ -19,7 +19,7 @@ const MM = 72 / 25.4;
 const PAGE_HEIGHT = 297 * MM;
 const TABLE_HEADER = 'Pos. Bezeichnung Menge Einzelpreis Gesamt';
 
-type TextLine = { text: string; top: number };
+type TextLine = { text: string; top: number; left: number };
 
 /** Each page's text as lines from top to bottom, with each line's distance from the top edge in points. */
 async function readPages(bytes: Uint8Array): Promise<TextLine[][]> {
@@ -40,6 +40,7 @@ async function readPages(bytes: Uint8Array): Promise<TextLine[][]> {
         .sort(([a], [b]) => b - a)
         .map(([y, parts]) => ({
           top: PAGE_HEIGHT - y,
+          left: Math.min(...parts.map((part) => part.x)),
           text: parts
             .sort((a, b) => a.x - b.x)
             .map((part) => part.text)
@@ -200,7 +201,7 @@ const logoPng: DocumentImage = { format: 'png', bytes: stationeryPng() };
 
 const firstStationery: StationeryPage = {
   file: { format: 'pdf', bytes: await stationeryPdf() },
-  margins: { topMm: 30, rightMm: 30, bottomMm: 40, leftMm: 30 },
+  margins: { topMm: 60, rightMm: 30, bottomMm: 40, leftMm: 40 },
 };
 const followingStationery: StationeryPage = {
   file: { format: 'png', bytes: stationeryPng() },
@@ -278,6 +279,12 @@ describe('the business document renderer', () => {
     expectPageFrame(pages);
     expectKeepTogether(pages, installationSections);
     expect(pages[0]?.map((line) => line.text)).toContain('BRIEFPAPIER ERSTE SEITE');
+    // The address field and the info block move inside the first stationery page's margins too.
+    for (const line of pages[0] ?? []) {
+      if (line.text === 'BRIEFPAPIER ERSTE SEITE') continue;
+      expect(line.top).toBeGreaterThanOrEqual(firstStationery.margins.topMm * MM);
+      expect(line.left).toBeGreaterThanOrEqual(firstStationery.margins.leftMm * MM - 0.01);
+    }
     // The stationery replaces the drawn letterhead and its footer.
     expect(pages.flat().some((line) => line.text.includes('IBAN'))).toBe(false);
     pages.slice(1).forEach((lines) => {
@@ -288,6 +295,33 @@ describe('the business document renderer', () => {
     });
     const embedded = await PDFDocument.load(await renderBusinessDocument(stationeryOffer));
     expect(embedded.getPageCount()).toBe(pages.length);
+  });
+
+  test('a position longer than a page breaks inside, and its subtotal still keeps a line of it', async () => {
+    // Every length around a page's capacity, so one of them makes the subtotal the item that overflows.
+    for (let count = 50; count <= 62; count += 1) {
+      const description = Array.from({ length: count }, (_, index) => `Zeile ${index + 1}`).join('\n');
+      const document = baseDocument([
+        { number: '1', title: 'Lang', positions: [position('1.1', { description })], subtotalCents: 10000 },
+      ]);
+      const pages = await readPages(await renderBusinessDocument(document));
+      const subtotalPage = pages[pageOf(pages, 'Summe 1 ')] ?? [];
+      expect(
+        subtotalPage.map((line) => line.text),
+        String(count),
+      ).toContain(`Zeile ${count}`);
+    }
+  });
+
+  test('margins that leave no room for the content are refused instead of laid out', async () => {
+    const cramped: BusinessDocument = {
+      ...serviceOffer,
+      stationery: {
+        firstPage: { ...firstStationery, margins: { topMm: 30, rightMm: 60, bottomMm: 40, leftMm: 25 } },
+        followingPages: null,
+      },
+    };
+    await expect(renderBusinessDocument(cramped)).rejects.toThrow('document_margins_leave_no_room');
   });
 
   test('the same document renders to the same bytes', async () => {
