@@ -383,35 +383,6 @@ body {
   animation: row-highlight 1.5s ease-out forwards;
 }
 
-/* Green glow pulsation for active work ring */
-@keyframes green-glow {
-  0%,
-  100% {
-    filter: drop-shadow(0 0 12px color-mix(in oklab, var(--success) 35%, transparent));
-  }
-  50% {
-    filter: drop-shadow(0 0 22px color-mix(in oklab, var(--success) 55%, transparent));
-  }
-}
-
-.animate-green-glow {
-  animation: green-glow 2s ease-in-out infinite;
-}
-
-@keyframes yellow-glow {
-  0%,
-  100% {
-    filter: drop-shadow(0 0 12px color-mix(in oklab, var(--warning) 35%, transparent));
-  }
-  50% {
-    filter: drop-shadow(0 0 22px color-mix(in oklab, var(--warning) 55%, transparent));
-  }
-}
-
-.animate-yellow-glow {
-  animation: yellow-glow 2s ease-in-out infinite;
-}
-
 /* The calendar drag engine (P1-24a) sets this while a card is held: one
    cursor everywhere, no text selection, and the ghost stays the only thing
    that moves. */

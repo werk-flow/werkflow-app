@@ -13,6 +13,7 @@ const EVENT_LABELS: Record<string, string> = {
   promoted: 'Als neuer Kunde angelegt',
   converted_to_service_case: 'Als Servicefall übernommen',
   converted: 'Umgewandelt',
+  attached: 'Zu bestehender Arbeit hinzugefügt',
   closed: 'Geschlossen',
   reopened: 'Wieder geöffnet',
 };

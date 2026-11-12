@@ -49,6 +49,13 @@ async function rolePage(
   } catch (error) {
     cleanupError ??= error;
   }
+  // Playwright treats the contexts of a disconnected browser as closed, so close() alone would
+  // pass after a browser crash, and so would the worker's own browser.close().
+  if (!browser.isConnected()) {
+    cleanupError ??= new Error(
+      `The browser disconnected before the ${role} page closed: it crashed or was killed.`,
+    );
+  }
 
   if (provideError) {
     if (cleanupError) console.warn(`[golden] ${role} fixture cleanup also failed: ${String(cleanupError)}`);

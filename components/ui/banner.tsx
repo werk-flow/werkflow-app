@@ -68,6 +68,7 @@ export function Banner({
   onDismiss: () => void;
   isExiting?: boolean;
 }) {
+  const hasAction = Boolean(banner.actionLabel && banner.onAction);
   return (
     <div
       // CENTERING INVARIANT: `left-1/2 -translate-x-1/2` is the ONLY source
@@ -88,27 +89,32 @@ export function Banner({
     >
       <div
         className={cn(
-          'flex items-center gap-3 rounded-lg px-4 py-3 shadow-lg ring-1',
+          'flex gap-3 rounded-lg px-4 py-3 shadow-lg ring-1',
+          hasAction ? 'items-start sm:items-center' : 'items-center',
           VARIANT_CLASSES[banner.variant],
         )}
       >
         <BannerIcon variant={banner.variant} />
-        <p className="min-w-0 flex-1 break-words text-sm">{banner.message}</p>
-        {banner.actionLabel && banner.onAction && (
-          // A real button with an icon, not underlined text: the action (e.g.
-          // „Rückgängig“) must read as a clickable control at a glance.
-          <button
-            type="button"
-            onClick={() => {
-              onDismiss();
-              banner.onAction?.();
-            }}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-current/25 bg-white/40 px-2.5 py-1 text-sm font-semibold transition-colors hover:bg-white/70 dark:bg-white/10 dark:hover:bg-white/20"
-          >
-            {banner.actionIcon}
-            {banner.actionLabel}
-          </button>
-        )}
+        {/* Below `sm` the action stacks under the message, so the message
+            keeps the full width instead of a one-word column beside it. */}
+        <div className="flex min-w-0 flex-1 flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
+          <p className="w-full min-w-0 break-words text-sm sm:flex-1">{banner.message}</p>
+          {hasAction && (
+            // A real button with an icon, not underlined text: the action (e.g.
+            // „Rückgängig“) must read as a clickable control at a glance.
+            <button
+              type="button"
+              onClick={() => {
+                onDismiss();
+                banner.onAction?.();
+              }}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-current/25 bg-white/40 px-2.5 py-1 text-sm font-semibold transition-colors hover:bg-white/70 dark:bg-white/10 dark:hover:bg-white/20"
+            >
+              {banner.actionIcon}
+              {banner.actionLabel}
+            </button>
+          )}
+        </div>
         <button
           type="button"
           onClick={onDismiss}
@@ -116,7 +122,11 @@ export function Banner({
           // two identical labels on one screen are ambiguous for screen
           // readers and break strict-mode test locators.
           aria-label="Hinweis schließen"
-          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md opacity-70 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current"
+          className={cn(
+            'inline-flex size-8 shrink-0 items-center justify-center rounded-md opacity-70 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current',
+            // Centers the 32 px close on the message's first 20 px line.
+            hasAction && '-my-1.5 sm:my-0',
+          )}
         >
           <X className="size-4" />
         </button>

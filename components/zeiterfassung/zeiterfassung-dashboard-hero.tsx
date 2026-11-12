@@ -151,8 +151,6 @@ export function ZeiterfassungDashboardHero({
         targetMinutes={todayTargetMinutes}
         size={260}
         strokeWidth={14}
-        isActive={effectiveState.isClockedIn}
-        glowVariant={effectiveState.isOnBreak ? 'break' : 'work'}
       >
         <span className="text-4xl font-bold tabular-nums tracking-tight">{liveTime}</span>
         <span className="mt-1 text-sm text-muted-foreground">Gesamtzeit</span>

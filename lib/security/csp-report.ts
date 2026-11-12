@@ -22,8 +22,10 @@
 //   (lib/profile-avatar.ts), the signed document image preview from object
 //   storage (components/dokumente/document-viewer-dialog.tsx), and the logos
 //   and favicon from public/. data: and blob: are local-only schemes that
-//   cannot carry data to another origin; the report-only policy checks
-//   whether anything still needs them.
+//   cannot carry data to another origin. data: is proven: the problem report's
+//   screenshot redraw draws an SVG foreignObject from a data: image
+//   (docs/technical/problem-report-scrubbing.md, rule 8). The report-only
+//   policy still checks whether anything needs blob:.
 // - font-src 'self': next/font/google (app/layout.tsx) self-hosts the fonts
 //   under /_next/static/media; no stylesheet or font loads from a font CDN.
 // - connect-src 'self' Supabase (http(s) and ws(s)) storage: Server Actions
@@ -122,7 +124,7 @@ export function buildContentSecurityPolicy(env: CspEnvironment): string {
 export function buildReportOnlyContentSecurityPolicy(env: CspEnvironment): string {
   const { supabase, storage } = policyOrigins(env);
   return [
-    `img-src ${sourceList("'self'", supabase, storage)}`,
+    `img-src ${sourceList("'self'", 'data:', supabase, storage)}`,
     "media-src 'none'",
     `report-uri ${CSP_REPORT_PATH}`,
   ].join('; ');

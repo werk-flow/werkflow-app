@@ -14,9 +14,10 @@ import { toLocalDateString } from '@/lib/utils';
 
 import {
   ACCESS_CLASS_OPTIONS,
-  ACCESS_TRANSITIONS,
-  EMPLOYMENT_TRANSITIONS,
+  accessStepOptions,
+  employmentStepOptions,
   isScheduledAccessTransition,
+  type LifecycleStepOption,
 } from './personnel-lifecycle-options';
 import { PersonnelLifecycleOpenWorkNote } from './personnel-lifecycle-handover';
 import type { PersonnelLifecycleDocuments } from './use-personnel-lifecycle-documents';
@@ -25,6 +26,48 @@ import type { PersonnelLifecycleController } from './use-personnel-lifecycle-vie
 
 // The dialogs themselves stay in PersonnelLifecycleSection, which owns their
 // DialogContent and title; these components render the body and the footer.
+
+type StepFieldProps<Kind extends string> = {
+  id: string;
+  options: LifecycleStepOption<Kind>[];
+  value: Kind | undefined;
+  onChange: (value: Kind) => void;
+  error: string | undefined;
+};
+
+/**
+ * The step choice of a transition dialog: only the steps that fit the current
+ * state, each with its effect sentence in full, and the chosen step's effect
+ * under the field.
+ */
+function LifecycleStepField<Kind extends string>({
+  id,
+  options,
+  value,
+  onChange,
+  error,
+}: StepFieldProps<Kind>) {
+  const chosen = options.find((option) => option.value === value);
+  return (
+    <Field label="Übergang" htmlFor={id} required error={error} description={chosen?.description}>
+      <SearchableSelect
+        options={options}
+        value={value ?? ''}
+        onChange={(next) => {
+          const nextOption = options.find((option) => option.value === next);
+          if (nextOption) onChange(nextOption.value);
+        }}
+        searchPlaceholder="Übergang suchen…"
+        renderOption={(option) => (
+          <div className="min-w-0 flex-1">
+            <p className="font-medium">{option.label}</p>
+            <p className="text-xs text-muted-foreground">{option.description}</p>
+          </div>
+        )}
+      />
+    </Field>
+  );
+}
 
 type PersonnelLifecycleTransitionFieldsProps = {
   lifecycle: PersonnelLifecycleController;
@@ -42,18 +85,14 @@ export function PersonnelLifecycleAccessBody({
   return (
     <>
       <DialogBody className="space-y-4 py-1">
-        <Field label="Übergang" htmlFor="access-transition-kind">
-          <SearchableSelect
-            options={ACCESS_TRANSITIONS}
-            value={accessKind}
-            onChange={(value) => {
-              const nextKind = ACCESS_TRANSITIONS.find((option) => option.value === value);
-              if (nextKind) setAccessKind(nextKind.value);
-            }}
-            searchPlaceholder="Übergang suchen…"
-          />
-        </Field>
-        {isScheduledAccessTransition(accessKind) && (
+        <LifecycleStepField
+          id="access-transition-kind"
+          options={accessStepOptions(data.steps.access)}
+          value={accessKind}
+          onChange={setAccessKind}
+          error={fieldErrors['access-transition-kind']}
+        />
+        {accessKind && isScheduledAccessTransition(accessKind) && (
           <Field
             label="Zeitpunkt"
             htmlFor="access-transition-date"
@@ -130,17 +169,13 @@ export function PersonnelLifecycleEmploymentBody({
   return (
     <>
       <DialogBody className="space-y-4 py-1">
-        <Field label="Übergang" htmlFor="employment-transition-kind">
-          <SearchableSelect
-            options={EMPLOYMENT_TRANSITIONS}
-            value={employmentKind}
-            onChange={(value) => {
-              const nextKind = EMPLOYMENT_TRANSITIONS.find((option) => option.value === value);
-              if (nextKind) setEmploymentKind(nextKind.value);
-            }}
-            searchPlaceholder="Übergang suchen…"
-          />
-        </Field>
+        <LifecycleStepField
+          id="employment-transition-kind"
+          options={employmentStepOptions(data.steps.employment)}
+          value={employmentKind}
+          onChange={setEmploymentKind}
+          error={fieldErrors['employment-transition-kind']}
+        />
         <Field label="Wirksam am" htmlFor="employment-date" required error={fieldErrors['employment-date']}>
           <DatePicker
             value={employmentDate}
