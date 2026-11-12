@@ -71,6 +71,14 @@ test('the machine collects only the references the update rewrote or wrote', () 
   expect(existsSync(join(repository, '.reference-updates-collecting'))).toBe(false);
 });
 
+test('an update that rewrote nothing collects nothing and succeeds', () => {
+  const repository = mkdtempSync(join(tmpdir(), 'reference-collect-'));
+  write(repository, `${SNAPSHOTS}/same.png`, 'same');
+  const folder = join(repository, '.agent-logs/visual-reference-updates/run');
+  expect(collectReferenceUpdates(repository, referenceHashes(repository), folder)).toEqual([]);
+  expect(existsSync(folder)).toBe(false);
+});
+
 test('a collection that fails leaves no folder to come back, not even part of one', () => {
   const repository = mkdtempSync(join(tmpdir(), 'reference-collect-'));
   write(repository, `${SNAPSHOTS}/changed.png`, 'new');

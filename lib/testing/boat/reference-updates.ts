@@ -83,6 +83,8 @@ export function collectReferenceUpdates(
     .filter(([path, hash]) => before.get(path) !== hash)
     .map(([path]) => path)
     .sort();
+  // Nothing rewritten: no folder, and the run keeps its exit code.
+  if (!changed.length) return changed;
   const staging = join(repository, '.reference-updates-collecting');
   rmSync(staging, { recursive: true, force: true });
   try {
