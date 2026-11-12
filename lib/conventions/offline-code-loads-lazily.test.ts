@@ -245,6 +245,8 @@ describe('offline code loads lazily', () => {
       "export async function out() { try { await import('@/lib/offline/offline-data'); } catch {} }",
     'components/probe-chained-catch.ts':
       "export const View = lazy(() => import('@/lib/offline/offline-data').catch(() => ({ default: Fallback })));",
+    'components/probe-empty-catch.ts':
+      "export const View = lazy(() => import('@/lib/offline/offline-data').catch());",
     'components/probe-chained-then.ts':
       "export const View = lazy(() => import('@/lib/offline/offline-data').then((loaded) => loaded));",
     'components/probe-caller.ts': [
@@ -296,6 +298,7 @@ describe('offline code loads lazily', () => {
       'components/probe-nested.ts',
       'components/probe-unawaited-caller.ts',
       'components/probe-chained-then.ts',
+      'components/probe-empty-catch.ts',
     ])
       expect(uncaughtOfflineLoads(file, host), file).toEqual([`${file}:1`]);
     for (const file of [
