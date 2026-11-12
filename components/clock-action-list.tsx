@@ -184,6 +184,13 @@ function useClockActionChoices({
  * `TimeActivityDialog`. The clock button's sheet and the Zeiterfassung
  * dashboard render this same list.
  */
+/** True from the first render where `value` was true on. */
+function useOnceTrue(value: boolean): boolean {
+  const [seen, setSeen] = useState(value);
+  if (value && !seen) setSeen(true);
+  return seen || value;
+}
+
 export function ClockActionList({
   organizationId,
   onSettled,
@@ -208,6 +215,9 @@ export function ClockActionList({
   );
   const { pickerMode, setPickerMode, moreOpen, setMoreOpen, recovery, activate, confirmPickedJob } =
     useClockActionChoices({ clock, initialPickerMode, perform, setError });
+  // Each dialog mounts with its first opening and stays for its closing; no clock action renders it before.
+  const pickerUsed = useOnceTrue(pickerMode !== null);
+  const moreUsed = useOnceTrue(moreOpen);
   const actions = deriveClockActions(state);
   const busy = !isReady || isPending || isRunning;
 
@@ -223,23 +233,27 @@ export function ClockActionList({
         </ErrorText>
       )}
 
-      <ClockJobPicker.Dialog
-        open={pickerMode !== null}
-        onOpenChange={(open) => !open && setPickerMode(null)}
-        onConfirm={confirmPickedJob}
-        organizationId={organizationId}
-        mode={pickerMode ?? 'clock_in'}
-        currentJobId={state?.activeJobId ?? null}
-        isPending={isPending || isRunning}
-        isStatusLoading={!isReady}
-      />
-      <MoreActivities.Dialog
-        open={moreOpen}
-        onOpenChange={setMoreOpen}
-        onSettled={onSettled}
-        organizationId={organizationId}
-        preferredJobId={state?.activeJobId ?? state?.resumeActivity?.jobId ?? null}
-      />
+      {pickerUsed && (
+        <ClockJobPicker.Dialog
+          open={pickerMode !== null}
+          onOpenChange={(open) => !open && setPickerMode(null)}
+          onConfirm={confirmPickedJob}
+          organizationId={organizationId}
+          mode={pickerMode ?? 'clock_in'}
+          currentJobId={state?.activeJobId ?? null}
+          isPending={isPending || isRunning}
+          isStatusLoading={!isReady}
+        />
+      )}
+      {moreUsed && (
+        <MoreActivities.Dialog
+          open={moreOpen}
+          onOpenChange={setMoreOpen}
+          onSettled={onSettled}
+          organizationId={organizationId}
+          preferredJobId={state?.activeJobId ?? state?.resumeActivity?.jobId ?? null}
+        />
+      )}
     </div>
   );
 }

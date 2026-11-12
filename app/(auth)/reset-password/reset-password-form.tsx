@@ -1,5 +1,6 @@
 'use client';
 
+import { UnsentWorkHost } from '@/components/shared/unsent-work-host';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { type RefObject, useEffect, useMemo, useRef, useState } from 'react';
@@ -248,12 +249,16 @@ export function ResetPasswordForm() {
 
   // Valid token - show password reset form
   return (
-    <NewPasswordFieldsForm
-      formError={formError}
-      isSubmitting={isSubmitting}
-      submitLabel="Passwort zurücksetzen"
-      submittingLabel="Passwort wird gespeichert…"
-      onSubmit={handleSubmit}
-    />
+    <>
+      <NewPasswordFieldsForm
+        formError={formError}
+        isSubmitting={isSubmitting}
+        submitLabel="Passwort zurücksetzen"
+        submittingLabel="Passwort wird gespeichert…"
+        onSubmit={handleSubmit}
+      />
+      {/* The reset ends the session, which may ask about unsent work: outside the app shell it renders here. */}
+      <UnsentWorkHost />
+    </>
   );
 }

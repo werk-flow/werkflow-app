@@ -1,5 +1,6 @@
 'use client';
 
+import { UnsentWorkHost } from '@/components/shared/unsent-work-host';
 import { useState, useMemo } from 'react';
 import { Trash2, AlertTriangle } from 'lucide-react';
 
@@ -101,6 +102,8 @@ export function DeleteAccountButton() {
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
+      {/* The deletion ends the session, which may ask about unsent work: outside the app shell it renders here. */}
+      <UnsentWorkHost />
     </AlertDialog>
   );
 }

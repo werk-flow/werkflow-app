@@ -1,5 +1,6 @@
 'use client';
 
+import { UnsentWorkHost } from '@/components/shared/unsent-work-host';
 import { useState, useMemo } from 'react';
 import { LogOut } from 'lucide-react';
 
@@ -61,6 +62,8 @@ export function SignOutAndRedirectButton({ inviteCode }: SignOutAndRedirectButto
         {isLoading ? 'Wird abgemeldet…' : 'Abmelden & anmelden'}
       </Button>
       <ErrorText>{error}</ErrorText>
+      {/* The sign-out may ask about unsent work: outside the app shell it renders here. */}
+      <UnsentWorkHost />
     </div>
   );
 }

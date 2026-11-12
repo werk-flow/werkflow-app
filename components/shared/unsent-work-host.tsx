@@ -1,46 +1,72 @@
 'use client';
 
-import { Fragment, useSyncExternalStore, type ReactNode } from 'react';
+import { Fragment, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 
-// Where the unsent-work question renders (unsent-work-prompt.tsx). The root
-// layout mounts this host on every page, inside the app shell and outside it,
-// so the lazy question needs no React root of its own. A lazy module that
-// imports `react-dom/client` makes the bundler cut React's DOM renderer out of
-// the start-up chunk into a file of its own, one more request on every cold
-// start (docs/technical/performance.md).
+// Where the unsent-work question renders (unsent-work-prompt.tsx). Each client
+// tree whose flows can ask mounts one host: the app shell, and the pages
+// outside it that end a session (lib/conventions/unsent-work-hosts.test.ts).
+// The question needs no React root of its own: a lazy module that imports
+// `react-dom/client` makes the bundler cut React's DOM renderer out of the
+// start-up chunk into a file of its own, one more request on every cold
+// start (docs/technical/performance.md). The root layout stays a server file,
+// so no route payload carries this host.
 
 type Shown = { key: number; node: ReactNode };
 
 const NOTHING: readonly Shown[] = [];
 let shown: readonly Shown[] = NOTHING;
 let nextKey = 0;
+/** The mounted hosts in mount order; only the first renders, so a question never shows twice. */
+let hosts: readonly symbol[] = [];
 const listeners = new Set<() => void>();
 
-function subscribeToShown(listener: () => void): () => void {
+function subscribeToHost(listener: () => void): () => void {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
   };
 }
 
-function changed(next: readonly Shown[]): void {
-  shown = next;
+function notify(): void {
   for (const listener of listeners) listener();
 }
 
-/** Renders `node` in the host. Returns the call that removes it. */
+/**
+ * Renders `node` in the mounted host and answers the call that removes it. Throws when no host is
+ * mounted: the question would never show, and the session must not end over unasked work.
+ */
 export function showInUnsentWorkHost(node: ReactNode): () => void {
+  if (hosts.length === 0) throw new Error('no unsent-work host is mounted');
   const key = nextKey;
   nextKey += 1;
-  changed([...shown, { key, node }]);
-  return () => changed(shown.filter((entry) => entry.key !== key));
+  shown = [...shown, { key, node }];
+  notify();
+  return () => {
+    shown = shown.filter((entry) => entry.key !== key);
+    notify();
+  };
 }
 
 export function UnsentWorkHost() {
+  const [id] = useState(() => Symbol('unsent-work-host'));
+  useEffect(() => {
+    hosts = [...hosts, id];
+    notify();
+    return () => {
+      hosts = hosts.filter((host) => host !== id);
+      notify();
+    };
+  }, [id]);
   const current = useSyncExternalStore(
-    subscribeToShown,
+    subscribeToHost,
     () => shown,
     () => NOTHING,
   );
+  const first = useSyncExternalStore(
+    subscribeToHost,
+    () => hosts[0],
+    () => undefined,
+  );
+  if (first !== id) return null;
   return current.map((entry) => <Fragment key={entry.key}>{entry.node}</Fragment>);
 }

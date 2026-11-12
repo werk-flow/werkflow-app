@@ -447,6 +447,8 @@ test('a sign-out with unsent events names them and offers to send, to discard or
   await dialog.getByRole('button', { name: 'Abbrechen', exact: true }).click();
   await expect(outcome).toHaveText('Sitzung bleibt');
   expect(await unsentOnDevice(page)).toHaveLength(1);
+  // The person stays: the session-end barrier is gone, so every tab keeps actions again.
+  expect(await page.evaluate(() => localStorage.getItem('werkflow:session-ending'))).toBeNull();
 
   await check.click();
   await dialog.getByRole('button', { name: 'Jetzt senden', exact: true }).click();

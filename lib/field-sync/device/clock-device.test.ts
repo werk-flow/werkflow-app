@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, setSystemTime, test } from 'bun:test';
 
 import type { LiveClockState } from '@/lib/time-tracking/types';
 import { z } from '@/lib/zod';
@@ -560,6 +560,30 @@ async function isolatedTests(): Promise<void> {
       expect(keepClockAction(start, '')).toBeNull();
       markSessionEnding(false);
       expect(keepClockAction(start, '')?.kept).toBe(true);
+    });
+
+    test('a barrier whose tab closed mid-question lapses, so no tab is kept from keeping for good', () => {
+      // The asking tab closed 11 minutes ago without clearing it.
+      setSystemTime(new Date('2026-11-11T08:00:00.000Z'));
+      storage.set('werkflow:session-ending', String(Date.parse('2026-11-11T07:49:00.000Z')));
+      expect(
+        keepClockAction(
+          {
+            ...WORKER,
+            operationId: '50000000-0000-4000-8000-0000000000a5',
+            action: 'start',
+            expectedSessionId: null,
+            expectedVersion: null,
+            selection: { kind: 'work', allocationKind: 'unallocated', jobId: null },
+            base: CLOCKED_OUT,
+            readAt: '2026-11-11T06:59:00.000Z',
+            triedOnline: false,
+            capturedAt: '2026-11-11T07:00:00.000Z',
+          },
+          '',
+        )?.kept,
+      ).toBe(true);
+      setSystemTime();
     });
 
     test('a discard waits for a send in flight, so the server never records an event the person was told is gone', async () => {
