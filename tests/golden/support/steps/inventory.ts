@@ -17,6 +17,9 @@ import {
 
 /** Copy of the Lager area that no pure product module owns. Type and unit labels come from lib/inventory/types. */
 export const INVENTORY_COPY = {
+  importNewLocation: 'neues Lager',
+  importUnknownUnit: (unit: string) => `Unbekannte Einheit: „${unit}“.`,
+  importRepeatWarning: 'Diese Datei wurde schon am',
   rowActions: 'Aktionen',
   withdraw: 'Entnehmen',
   billable: 'Abrechenbar',
@@ -46,7 +49,11 @@ const INVENTORY_LABELS = {
   planMaterial: 'Material planen',
   takeFromStock: 'Aus Lager entnehmen',
   importCsv: 'CSV importieren',
-  import: 'Importieren',
+  importPreview: 'Vorschau anzeigen',
+  importBook: 'Jetzt buchen',
+  importDone: 'Fertig',
+  importReport: 'Bericht herunterladen',
+  importRepeatConfirm: 'Trotzdem fortfahren',
 } as const;
 
 /** The /inventar dialogs, each named by its heading. */
@@ -163,8 +170,17 @@ export function csvImportButton(page: Page): Locator {
   return page.getByRole('button', { name: INVENTORY_LABELS.importCsv });
 }
 
-export function csvImportSubmit(dialog: Locator): Locator {
-  return dialog.getByRole('button', { name: INVENTORY_LABELS.import });
+/** A step button of the import dialog: preview, book, done, the report download or the repeat decision. */
+export function csvImportButtonOf(
+  dialog: Locator,
+  action: 'importPreview' | 'importBook' | 'importDone' | 'importReport' | 'importRepeatConfirm',
+): Locator {
+  return dialog.getByRole('button', { name: INVENTORY_LABELS[action], exact: true });
+}
+
+/** One row of the import preview or result, found by the article name it shows. */
+export function csvImportRow(dialog: Locator, text: string): Locator {
+  return dialog.getByTestId('inventory-import-row').filter({ hasText: text });
 }
 
 export function inventoryTab(page: Page, view: InventoryView): Locator {

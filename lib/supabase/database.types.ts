@@ -2608,40 +2608,52 @@ export type Database = {
         Row: {
           column_mapping: Json;
           completed_at: string | null;
+          content_hash: string | null;
           created_at: string;
           created_by: string | null;
           failed_count: number;
           file_name: string;
           id: string;
           imported_count: number;
+          mode: string;
           organization_id: string;
+          result_payload: Json | null;
           row_count: number;
+          staged_rows: Json | null;
           status: string;
         };
         Insert: {
           column_mapping?: Json;
           completed_at?: string | null;
+          content_hash?: string | null;
           created_at?: string;
           created_by?: string | null;
           failed_count?: number;
           file_name: string;
           id?: string;
           imported_count?: number;
+          mode?: string;
           organization_id: string;
+          result_payload?: Json | null;
           row_count?: number;
+          staged_rows?: Json | null;
           status?: string;
         };
         Update: {
           column_mapping?: Json;
           completed_at?: string | null;
+          content_hash?: string | null;
           created_at?: string;
           created_by?: string | null;
           failed_count?: number;
           file_name?: string;
           id?: string;
           imported_count?: number;
+          mode?: string;
           organization_id?: string;
+          result_payload?: Json | null;
           row_count?: number;
+          staged_rows?: Json | null;
           status?: string;
         };
         Relationships: [
@@ -13914,6 +13926,14 @@ export type Database = {
         };
         Returns: string[];
       };
+      book_inventory_import: {
+        Args: {
+          p_actor_id: string;
+          p_import_batch_id: string;
+          p_organization_id: string;
+        };
+        Returns: Json;
+      };
       cancel_approved_vacation_request: {
         Args: {
           p_actor_id: string;
@@ -16608,6 +16628,18 @@ export type Database = {
           p_sources: Json;
         };
         Returns: string;
+      };
+      preview_inventory_import: {
+        Args: {
+          p_actor_id: string;
+          p_column_mapping: Json;
+          p_content_hash: string;
+          p_file_name: string;
+          p_mode: string;
+          p_organization_id: string;
+          p_rows: Json;
+        };
+        Returns: Json;
       };
       promote_client_request_caller: {
         Args: {

@@ -8,9 +8,10 @@ import { logError } from '@/lib/logging';
 import type { AdminClient } from '@/lib/supabase/admin';
 import type { Json } from '@/lib/supabase/database.types';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
-import type { z } from '@/lib/zod';
-import type { importInventoryRowsSchema } from './action-schemas';
-import { toNumber } from './types';
+import { z } from '@/lib/zod';
+import { IMPORT_REJECTIONS, type ImportRowOutcome } from './csv-import';
+import type { previewInventoryImportSchema } from './action-schemas';
+import { INVENTORY_UNIT_OPTIONS, toNumber } from './types';
 
 // The value rules and write helpers the inventory Server Actions in
 // `./actions` and `./catalog-actions` share. The callers authorize first and
@@ -197,48 +198,92 @@ export async function resolveInventoryLocation(
   return { success: true, referenceId: resolvedReference.id };
 }
 
-/** The `p_item` of one CSV row for import_inventory_row. */
-export function inventoryImportItem(
-  row: z.infer<typeof importInventoryRowsSchema>['rows'][number],
-  name: string,
-): Json {
-  return {
-    item_type: row.itemType ?? 'material',
-    name,
-    unit: normalizeInventoryUnitInput(row.unit),
-    internal_sku: cleanText(row.internalSku),
-    manufacturer: cleanText(row.manufacturer),
-    supplier_article_number: cleanText(row.supplierArticleNumber),
-    purchase_price_cents: normalizePrice(row.purchasePriceCents),
-    sale_price_cents: normalizePrice(row.salePriceCents),
-    is_billable: row.isBillable ?? true,
-    global_minimum_stock: normalizeQuantity(row.minimumStock ?? 0),
-    global_target_stock:
-      row.targetStock === null || row.targetStock === undefined ? null : normalizeQuantity(row.targetStock),
-    notes: cleanText(row.notes),
-  };
+type ImportRow = z.infer<typeof previewInventoryImportSchema>['rows'][number];
+
+/**
+ * The unit code of a CSV row's unit text, or null when the text is empty or
+ * names no unit of the list: the import refuses such a row and never reads it
+ * as Stück.
+ */
+export function importUnitCode(text: string | null | undefined): string | null {
+  if (!cleanText(text)) return null;
+  const code = normalizeInventoryUnitInput(text);
+  return INVENTORY_UNIT_OPTIONS.some((option) => option.value === code) ? code : null;
 }
 
-/** Closes the import batch with its counts; a failed close is logged and the import still answers. */
-export async function completeInventoryImportBatch(
-  admin: AdminClient,
-  organizationId: string,
-  batchId: string,
-  counts: { importedCount: number; missingLocationCount: number; failedCount: number },
-): Promise<void> {
-  const { error: updateError } = await admin
-    .from('inventory_import_batches')
-    .update({
-      status: counts.failedCount > 0 ? 'failed' : 'imported',
-      // The batch has no column for rows without a Lager; their items were imported.
-      imported_count: counts.importedCount + counts.missingLocationCount,
-      failed_count: counts.failedCount,
-      completed_at: new Date().toISOString(),
-    })
-    .eq('organization_id', organizationId)
-    .eq('id', batchId);
-
-  if (updateError) {
-    logError('Error updating inventory import batch:', updateError);
-  }
+/**
+ * The staged form of each CSV row that preview_inventory_import keeps on its
+ * batch: the row's values for the import rule, or the reason the action
+ * already refuses it. The order stays the file's order.
+ */
+export function stagedImportRows(rows: readonly ImportRow[]): Json[] {
+  return rows.map((row) => {
+    const name = cleanText(row.name);
+    if (!name) return { rejection: 'missing_name' };
+    const unit = importUnitCode(row.unit);
+    if (!unit) return { rejection: 'unknown_unit' };
+    return {
+      item: {
+        item_type: row.itemType ?? 'material',
+        name,
+        unit,
+        internal_sku: cleanText(row.internalSku),
+        manufacturer: cleanText(row.manufacturer),
+        supplier_article_number: cleanText(row.supplierArticleNumber),
+        purchase_price_cents: normalizePrice(row.purchasePriceCents),
+        sale_price_cents: normalizePrice(row.salePriceCents),
+        is_billable: row.isBillable ?? true,
+        global_minimum_stock: normalizeQuantity(row.minimumStock ?? 0),
+        global_target_stock:
+          row.targetStock === null || row.targetStock === undefined ? null : normalizeQuantity(row.targetStock),
+        notes: cleanText(row.notes),
+      },
+      category_name: cleanText(row.categoryName),
+      supplier_name: cleanText(row.supplierName),
+      location_name: cleanText(row.locationName),
+      barcode: cleanText(row.barcode),
+      quantity: normalizeQuantity(row.quantity ?? 0),
+    };
+  });
 }
+
+const nullableText = z.string().nullable().optional().transform((value) => value ?? null);
+const nullableNumber = z.number().nullable().optional().transform((value) => value ?? null);
+
+// A reason a newer release names reads as `failed`.
+const importRowOutcomeSchema = z
+  .object({
+    index: z.number(),
+    outcome: z.enum(['booked', 'imported', 'missing_location', 'rejected']),
+    matched_by: z.enum(['internal_sku', 'barcode']).nullable().optional(),
+    item_name: nullableText,
+    unit: nullableText,
+    location_name: nullableText,
+    location_created: z.boolean().optional(),
+    quantity: nullableNumber,
+    quantity_after: nullableNumber,
+    reason: z.enum(IMPORT_REJECTIONS).catch('failed').optional(),
+    item_unit: nullableText,
+  })
+  .transform(
+    (row): ImportRowOutcome => ({
+      index: row.index,
+      outcome: row.outcome,
+      matchedBy: row.matched_by ?? null,
+      itemName: row.item_name,
+      unit: row.unit,
+      locationName: row.location_name,
+      locationCreated: row.location_created ?? false,
+      quantity: row.quantity ?? 0,
+      quantityAfter: row.quantity_after,
+      reason: row.outcome === 'rejected' ? (row.reason ?? 'failed') : null,
+      itemUnit: row.item_unit,
+    }),
+  );
+
+/** The answer of preview_inventory_import and book_inventory_import. */
+export const importAnswerSchema = z.object({
+  batch_id: z.string().optional(),
+  already_booked: z.boolean().optional(),
+  rows: z.array(importRowOutcomeSchema),
+});

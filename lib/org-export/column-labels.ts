@@ -625,6 +625,7 @@ export const COLUMN_LABELS: Record<LabeledColumn, string> = {
   source_work_template_item_id: 'Vorlagenpunkt (ID)',
   source_work_template_material_line_id: 'Vorlagenmaterial (ID)',
   source_work_template_requirement_id: 'Vorlagenanforderung (ID)',
+  staged_rows: 'Importzeilen',
   standby_context: 'Bereitschaftskontext',
   start_at: 'Beginn (Zeitpunkt)',
   start_date: 'Beginn',

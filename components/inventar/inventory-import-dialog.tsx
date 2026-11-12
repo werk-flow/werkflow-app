@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogBody,
@@ -12,12 +13,15 @@ import {
 } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
+import { FileInput } from '@/components/ui/file-input';
+import { Label } from '@/components/ui/label';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import type { InventoryCategory, InventoryLocation } from '@/lib/inventory/types';
-import { IMPORT_COLUMNS, type ImportColumnMapping } from '@/lib/inventory/csv-import';
+import { IMPORT_COLUMNS, importTotals, type ImportColumnMapping } from '@/lib/inventory/csv-import';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
-import { useInventoryCsvImport } from './use-inventory-csv-import';
+import { formatBerlinDateTime } from '@/lib/utils';
+import { ImportOutcomeList, ImportTotalsSummary } from './inventory-import-outcomes';
+import { useInventoryCsvImport, type RepeatCheck } from './use-inventory-csv-import';
 
 type ImportDialogProps = {
   open: boolean;
@@ -26,6 +30,8 @@ type ImportDialogProps = {
   locations: InventoryLocation[];
   categories: InventoryCategory[];
 };
+
+type CsvImport = ReturnType<typeof useInventoryCsvImport>;
 
 /** One picker per import column: which CSV header fills it, or none. */
 function ImportColumnMappingFields({
@@ -70,84 +76,181 @@ function ImportColumnMappingFields({
   );
 }
 
-export function ImportDialog({
-  open,
-  onOpenChange,
-  existingItemCount,
-  locations,
-  categories,
-}: ImportDialogProps) {
-  const {
-    headers,
-    rows,
-    mapping,
-    setMapping,
-    error,
-    isPending,
-    validationErrors,
-    fileError,
-    nameMappingError,
-    setAttempted,
-    handleOpenChange,
-    handleFile,
-    handleImport,
-  } = useInventoryCsvImport({ onOpenChange });
+/** The warning before a file whose content was booked before, or whose check failed; the user decides. */
+function RepeatNotice({
+  repeat,
+  error,
+  onConfirm,
+  onRetry,
+  onOtherFile,
+}: {
+  repeat: RepeatCheck;
+  error: string | undefined;
+  onConfirm: () => void;
+  onRetry: () => void;
+  onOtherFile: () => void;
+}) {
+  if (repeat.state === 'checking') {
+    return <p className="text-sm text-muted-foreground">Prüfe, ob du diese Datei schon importiert hast …</p>;
+  }
+  if (repeat.state === 'none') return null;
+  const message =
+    repeat.state === 'repeat'
+      ? `Diese Datei wurde schon am ${formatBerlinDateTime(repeat.bookedAt)} von ${repeat.bookedBy} importiert. Ein zweiter Import bucht ihre Mengen noch einmal.`
+      : 'Ob diese Datei schon importiert wurde, konnte nicht geprüft werden.';
+  if (repeat.confirmed) {
+    return <p className="text-sm text-muted-foreground">{message} Du importierst sie trotzdem.</p>;
+  }
+  return (
+    <div className="space-y-3 rounded-lg border border-warning bg-warning-soft p-3 text-warning-soft-foreground">
+      <p className="text-sm">{message}</p>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="outline" id="inventory-import-repeat" onClick={onConfirm}>
+          Trotzdem fortfahren
+        </Button>
+        {repeat.state === 'failed' && (
+          <Button type="button" variant="outline" onClick={onRetry}>
+            Erneut prüfen
+          </Button>
+        )}
+        <Button type="button" variant="outline" onClick={onOtherFile}>
+          Andere Datei wählen
+        </Button>
+      </div>
+      <ErrorText>{error}</ErrorText>
+    </div>
+  );
+}
+
+/** File, repeat decision, mode and column mapping. */
+function ChooseStep({ csvImport }: { csvImport: CsvImport }) {
+  return (
+    <>
+      <Field label="CSV-Datei" htmlFor="inventory-import-file" required error={csvImport.fileError}>
+        <FileInput
+          buttonLabel="CSV-Datei auswählen"
+          fileName={csvImport.fileName || null}
+          accept=".csv,text/csv"
+          onSelect={csvImport.handleFile}
+        />
+      </Field>
+      <RepeatNotice
+        repeat={csvImport.repeat}
+        error={csvImport.repeatError}
+        onConfirm={csvImport.confirmRepeat}
+        onRetry={csvImport.retryRepeat}
+        onOtherFile={csvImport.clearFile}
+      />
+      {csvImport.headers.length > 0 && (
+        <>
+          <div className="flex items-start gap-2 rounded-md border px-3 py-2">
+            <Checkbox
+              id="inventory-import-master-data"
+              className="mt-0.5"
+              checked={csvImport.mode === 'master_data'}
+              onCheckedChange={(checked) => csvImport.setMode(checked === true ? 'master_data' : 'stock')}
+            />
+            <Label htmlFor="inventory-import-master-data" className="block font-normal">
+              <span className="font-medium">Nur Stammdaten und Preise</span>
+              <span className="block text-muted-foreground">
+                Legt Artikel an, bucht aber keinen Bestand, auch wenn die Datei Mengen enthält.
+              </span>
+            </Label>
+          </div>
+          <ImportColumnMappingFields
+            headers={csvImport.headers}
+            mapping={csvImport.mapping}
+            setMapping={csvImport.setMapping}
+            nameMappingError={csvImport.nameMappingError}
+          />
+        </>
+      )}
+    </>
+  );
+}
+
+function dialogDescription(csvImport: CsvImport, props: ImportDialogProps): string {
+  const { step, rows } = csvImport;
+  if (step.kind === 'preview') return `Vorschau von ${rows.length} Zeilen. Noch ist nichts gebucht.`;
+  if (step.kind === 'result') {
+    return step.alreadyBooked
+      ? 'Dieser Import war schon gebucht. Es wurde nichts doppelt gebucht.'
+      : 'Der Import ist gebucht. Diese Zeilen wurden nicht so übernommen, wie die Datei sie enthält.';
+  }
+  return rows.length > 0
+    ? `${rows.length} Zeilen erkannt`
+    : `${props.existingItemCount} bestehende Artikel, ${props.locations.length} Lager, ${props.categories.length} Kategorien`;
+}
+
+/** The footer of each step: its way back and its one primary action. */
+function StepFooter({ csvImport }: { csvImport: CsvImport }) {
+  const { step, isPending } = csvImport;
+  const report = step.kind === 'result' ? csvImport.report(step.outcomes) : null;
+  return (
+    <DialogFooter>
+      {step.kind === 'choose' && (
+        <Button type="button" variant="outline" onClick={() => csvImport.handleOpenChange(false)} disabled={isPending}>
+          Abbrechen
+        </Button>
+      )}
+      {step.kind === 'preview' && (
+        <Button type="button" variant="outline" onClick={csvImport.backToChoose} disabled={isPending}>
+          Zurück zur Zuordnung
+        </Button>
+      )}
+      {report !== null && (
+        <Button type="button" variant="outline" onClick={() => csvImport.downloadReport(report)}>
+          Bericht herunterladen
+        </Button>
+      )}
+      <Button pending={isPending} type="submit" disabled={isPending}>
+        {step.kind === 'choose' ? 'Vorschau anzeigen' : step.kind === 'preview' ? 'Jetzt buchen' : 'Fertig'}
+      </Button>
+    </DialogFooter>
+  );
+}
+
+export function ImportDialog(props: ImportDialogProps) {
+  const csvImport = useInventoryCsvImport({ onOpenChange: props.onOpenChange });
+  const { step, mode } = csvImport;
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange} pending={isPending}>
+    <Dialog open={props.open} onOpenChange={csvImport.handleOpenChange} pending={csvImport.isPending}>
       <DialogContent size="3xl">
         <DialogHeader>
           <DialogTitle>CSV importieren</DialogTitle>
-          <DialogDescription>
-            {rows.length > 0
-              ? `${rows.length} Zeilen erkannt`
-              : `${existingItemCount} bestehende Artikel, ${locations.length} Lager, ${categories.length} Kategorien`}
-          </DialogDescription>
+          <DialogDescription>{dialogDescription(csvImport, props)}</DialogDescription>
         </DialogHeader>
 
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            setAttempted(true);
-            if (focusFirstInvalidField(validationErrors)) return;
-            handleImport();
+            if (step.kind === 'preview') return csvImport.book(step.batchId);
+            if (step.kind === 'result') return csvImport.handleOpenChange(false);
+            csvImport.setAttempted(true);
+            if (focusFirstInvalidField(csvImport.validationErrors)) return;
+            csvImport.preview();
           }}
           noValidate
           className="flex min-h-0 flex-1 flex-col"
         >
           <DialogBody className="space-y-4 py-1">
-            <Field label="CSV-Datei" htmlFor="inventory-import-file" required error={fileError}>
-              <Input
-                type="file"
-                accept=".csv,text/csv"
-                onChange={(event) => handleFile(event.target.files?.[0] ?? null)}
-              />
-            </Field>
-
-            {headers.length > 0 && (
-              <ImportColumnMappingFields
-                headers={headers}
-                mapping={mapping}
-                setMapping={setMapping}
-                nameMappingError={nameMappingError}
-              />
+            {step.kind === 'choose' && <ChooseStep csvImport={csvImport} />}
+            {step.kind !== 'choose' && (
+              <>
+                <ImportTotalsSummary totals={importTotals(step.outcomes)} mode={mode} />
+                <ImportOutcomeList
+                  outcomes={step.outcomes}
+                  importRows={csvImport.importRows}
+                  lineNumbers={csvImport.lineNumbers}
+                  mode={mode}
+                  onlyProblems={step.kind === 'result'}
+                />
+              </>
             )}
-            <ErrorText>{error}</ErrorText>
+            <ErrorText>{csvImport.error}</ErrorText>
           </DialogBody>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => handleOpenChange(false)}
-              disabled={isPending}
-            >
-              Abbrechen
-            </Button>
-            <Button pending={isPending} type="submit" disabled={isPending}>
-              Importieren
-            </Button>
-          </DialogFooter>
+          <StepFooter csvImport={csvImport} />
         </form>
       </DialogContent>
     </Dialog>

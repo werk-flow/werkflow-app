@@ -54,7 +54,6 @@ const {
   takeJobMaterial,
   takeProjectMaterial,
   returnJobMaterial,
-  importInventoryRows,
 } = await import('@/lib/inventory/actions');
 
 const take = { locationId: foreignLocationId, quantity: 1 };
@@ -91,11 +90,6 @@ const officeOnly = [
     'createProjectMaterialLine',
     () =>
       createProjectMaterialLine({ projectId: foreignProjectId, itemId: foreignItemId, plannedQuantity: 2 }),
-  ],
-  [
-    'importInventoryRows',
-    () =>
-      importInventoryRows({ fileName: 'inventar.csv', columnMapping: {}, rows: [{ name: 'Kupferrohr' }] }),
   ],
 ] as const;
 
