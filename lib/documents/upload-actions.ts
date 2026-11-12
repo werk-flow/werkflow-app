@@ -141,6 +141,15 @@ export async function finalizeDocumentUpload(rawInput: FinalizeDocumentUploadInp
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
+  // Identity stays with the session: the expected uploader only refuses. A phone that started the
+  // upload for one person must not register it under another person who signed in meanwhile. The
+  // staging object stays where the browser put it, for the author's next try under the author's own
+  // session. A finalize that names no expected uploader is not bound to the staging object's
+  // creator; that server-side binding is tracked in werk-flow/werkflow-planning#364.
+  if (input.expectedUploaderId !== undefined && input.expectedUploaderId !== auth.context.userId) {
+    return { success: false, error: 'uploader_changed' };
+  }
+
   const originalFileName = input.fileName.trim() || 'Dokument';
   // The upload's path is recomputed server-side from the authenticated org and
   // the document id, so a client can never register a foreign object key.

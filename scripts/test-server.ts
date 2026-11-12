@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import { subscribeForDatabaseReadiness } from './realtime-probe';
 import { runSessionCommand, withTestSession } from '../lib/testing/local-stack/test-session';
 import { workspacePorts } from '../lib/testing/runner/app-port';
+import { TEST_SUPPORT_USER_IDS } from '../lib/testing/support-user';
 import { withWorkspaceTestLock } from '../lib/testing/runner/workspace-test-lock';
 
 const target = process.argv[2];
@@ -145,6 +146,11 @@ await withTestSession(async (signal) => {
     if (key !== 'SUPABASE_ACCESS_TOKEN' && /^(NEXT_PUBLIC_|SUPABASE_|R2_)/.test(key))
       delete childEnvironment[key];
   }
+  // The local stack's support allowlist names the synthetic test users, so
+  // the support journey and its captures run. A cloud target keeps the
+  // allowlist of its own environment, or none.
+  if (target === 'local') childEnvironment.SUPPORT_USER_IDS = TEST_SUPPORT_USER_IDS;
+  else delete childEnvironment.SUPPORT_USER_IDS;
   const run = async (
     command: readonly string[],
     output: { onStdout: (chunk: Buffer) => void; onStderr: (chunk: Buffer) => void } | undefined = undefined,

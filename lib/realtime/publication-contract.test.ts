@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import {
   DEFAULT_IDENTITY_REALTIME_TABLES,
+  OWN_USER_REALTIME_TABLES,
   REALTIME_DELETION_TABLE,
   REALTIME_PUBLISHED_TABLES,
   REALTIME_TABLES,
@@ -15,7 +16,9 @@ const tables: PublishedTableState[] = REALTIME_PUBLISHED_TABLES.map((tablename) 
   replident: DEFAULT_IDENTITY_REALTIME_TABLES.some((table) => String(table) === tablename) ? 'd' : 'i',
   replident_index: `${tablename}_replident_idx`,
   replident_index_columns: 'id,organization_id',
-  deletion_trigger_valid: tablename !== REALTIME_DELETION_TABLE,
+  deletion_trigger_valid:
+    tablename !== REALTIME_DELETION_TABLE &&
+    !OWN_USER_REALTIME_TABLES.some((table) => String(table) === tablename),
   transaction_stamp_valid: true,
 }));
 test('requires every business table trigger and the dedicated transport table', () => {
@@ -35,6 +38,15 @@ test('requires every business table trigger and the dedicated transport table', 
     ),
   ).not.toEqual([]);
 });
+test('an own-user table carries no deletion notice, which would reach every member', () => {
+  const notified = tables.map((table) =>
+    table.tablename === 'problem_report_signals' ? { ...table, deletion_trigger_valid: true } : table,
+  );
+  expect(validateRealtimePublication(notified, [flags])).toEqual([
+    'problem_report_signals: an own-user table carries no deletion notice; it would reach every member of the organization.',
+  ]);
+});
+
 test('a table listed as transaction-stamped needs its updated_at default and trigger', () => {
   const unstamped = tables.map((table) =>
     table.tablename === 'jobs' ? { ...table, transaction_stamp_valid: false } : table,
