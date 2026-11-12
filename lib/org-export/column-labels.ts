@@ -205,6 +205,7 @@ export const COLUMN_LABELS: Record<LabeledColumn, string> = {
   document_storage_path: 'Dokument (Speicherort)',
   document_type: 'Dokumentart',
   document_version_number: 'Dokumentversion',
+  draft_changed_at: 'Entwurf auf dem Gerät zuletzt geändert am',
   draft_version_id: 'Entwurfsfassung (ID)',
   dst_resolution: 'Auflösung Zeitumstellung',
   due_at: 'Fällig am (Zeitpunkt)',

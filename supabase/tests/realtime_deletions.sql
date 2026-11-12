@@ -12,11 +12,16 @@ begin
     select 1 from pg_publication_tables p
     join pg_namespace n on n.nspname=p.schemaname
     join pg_class c on c.relnamespace=n.oid and c.relname=p.tablename
-    where p.pubname='supabase_realtime' and p.tablename<>'realtime_deletions'
+    -- The own-user tables of lib/realtime/tables.ts (OWN_USER_REALTIME_TABLES)
+    -- carry no deletion notice; it would reach every member of the organization.
+    where p.pubname='supabase_realtime' and p.tablename not in ('realtime_deletions', 'problem_report_signals')
       and not exists(select 1 from pg_trigger t where t.tgrelid=c.oid
         and t.tgname='emit_realtime_deletion' and t.tgenabled='O' and t.tgtype=9
         and t.tgfoid='app_private.emit_realtime_deletion()'::regprocedure)
   ) then raise exception 'published_table_missing_deletion_trigger'; end if;
+  if exists (select 1 from pg_trigger t where t.tgrelid='public.problem_report_signals'::regclass
+      and t.tgfoid='app_private.emit_realtime_deletion()'::regprocedure)
+  then raise exception 'own_user_table_notifies_its_organization'; end if;
   if not exists(select 1 from cron.job where jobname='werkflow-realtime-deletions-cleanup'
     and active and schedule='*/5 * * * *'
     and command='select app_private.prune_realtime_deletions()') then

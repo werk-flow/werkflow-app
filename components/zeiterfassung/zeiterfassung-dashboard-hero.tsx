@@ -158,7 +158,7 @@ export function ZeiterfassungDashboardHero({
 
       <p className={cn('mt-6 text-lg font-medium', ACTIVITY_TONE_TEXT[activity.tone])}>{activity.sentence}</p>
 
-      {effectiveState.breakMode === 'automatic' ? (
+      {effectiveState.breakPolicy.breakMode === 'automatic' ? (
         <p className="mt-1 text-sm text-muted-foreground">
           Pausen werden in dieser Organisation automatisch abgezogen.
         </p>

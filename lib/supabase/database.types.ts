@@ -7928,8 +7928,45 @@ export type Database = {
           },
         ];
       };
+      problem_report_signals: {
+        Row: {
+          id: string;
+          organization_id: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "problem_report_signals_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "problem_report_signals_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       problem_reports: {
         Row: {
+          assignee_id: string | null;
           bucket: string | null;
           closed_at: string | null;
           context: Json | null;
@@ -7948,6 +7985,7 @@ export type Database = {
           status: string;
         };
         Insert: {
+          assignee_id?: string | null;
           bucket?: string | null;
           closed_at?: string | null;
           context?: Json | null;
@@ -7966,6 +8004,7 @@ export type Database = {
           status?: string;
         };
         Update: {
+          assignee_id?: string | null;
           bucket?: string | null;
           closed_at?: string | null;
           context?: Json | null;
@@ -7984,6 +8023,13 @@ export type Database = {
           status?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "problem_reports_assignee_id_fkey";
+            columns: ["assignee_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "problem_reports_filed_by_id_fkey";
             columns: ["filed_by_id"];
@@ -11458,6 +11504,57 @@ export type Database = {
           },
         ];
       };
+      work_artifact_draft_operations: {
+        Row: {
+          actor_id: string;
+          captured_at: string;
+          created_at: string;
+          id: string;
+          organization_id: string;
+          request_hash: string;
+          result_payload: Json;
+          revision_id: string;
+          sent_at: string;
+        };
+        Insert: {
+          actor_id: string;
+          captured_at: string;
+          created_at?: string;
+          id: string;
+          organization_id: string;
+          request_hash: string;
+          result_payload: Json;
+          revision_id: string;
+          sent_at: string;
+        };
+        Update: {
+          actor_id?: string;
+          captured_at?: string;
+          created_at?: string;
+          id?: string;
+          organization_id?: string;
+          request_hash?: string;
+          result_payload?: Json;
+          revision_id?: string;
+          sent_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "work_artifact_draft_operations_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "work_artifact_draft_operations_revision_fkey";
+            columns: ["revision_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "work_artifact_revisions";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
       work_artifact_measurement_lines: {
         Row: {
           description: string;
@@ -11660,6 +11757,7 @@ export type Database = {
           customer_statement: string | null;
           decisions: string | null;
           deliveries: string | null;
+          draft_changed_at: string | null;
           id: string;
           impediments: string | null;
           instruction_item_id: string | null;
@@ -11698,6 +11796,7 @@ export type Database = {
           customer_statement?: string | null;
           decisions?: string | null;
           deliveries?: string | null;
+          draft_changed_at?: string | null;
           id: string;
           impediments?: string | null;
           instruction_item_id?: string | null;
@@ -11736,6 +11835,7 @@ export type Database = {
           customer_statement?: string | null;
           decisions?: string | null;
           deliveries?: string | null;
+          draft_changed_at?: string | null;
           id?: string;
           impediments?: string | null;
           instruction_item_id?: string | null;
@@ -13914,6 +14014,26 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      attach_work_artifact_draft: {
+        Args: {
+          p_actor_id: string;
+          p_artifact_id: string;
+          p_captured_at: string;
+          p_content: Json;
+          p_job_id: string;
+          p_kind: Database["public"]["Enums"]["work_artifact_kind"];
+          p_operation_id: string;
+          p_organization_id: string;
+          p_photos: Json;
+          p_recorded_at: string;
+          p_request_hash: string;
+          p_revision_id: string;
+          p_sent_at: string;
+          p_title: string;
+          p_visibility: Database["public"]["Enums"]["work_artifact_visibility"];
+        };
+        Returns: Json;
+      };
       batch_reschedule_planning_occurrences: {
         Args: {
           p_actor_id: string;
@@ -15253,27 +15373,50 @@ export type Database = {
           isSetofReturn: false;
         };
       };
-      create_work_artifact_revision: {
-        Args: {
-          p_actor_id: string;
-          p_artifact_id: string;
-          p_captured_at: string;
-          p_content: Json;
-          p_correction_reason: string;
-          p_corrects_revision_id: string;
-          p_expected_version: number;
-          p_job_id: string;
-          p_kind: Database["public"]["Enums"]["work_artifact_kind"];
-          p_organization_id: string;
-          p_project_id: string;
-          p_revision_id: string;
-          p_submit: boolean;
-          p_submit_action_id: string;
-          p_title: string;
-          p_visibility: Database["public"]["Enums"]["work_artifact_visibility"];
-        };
-        Returns: Json;
-      };
+      create_work_artifact_revision:
+        | {
+            Args: {
+              p_actor_id: string;
+              p_artifact_id: string;
+              p_captured_at: string;
+              p_content: Json;
+              p_correction_reason: string;
+              p_corrects_revision_id: string;
+              p_expected_version: number;
+              p_job_id: string;
+              p_kind: Database["public"]["Enums"]["work_artifact_kind"];
+              p_organization_id: string;
+              p_project_id: string;
+              p_revision_id: string;
+              p_submit: boolean;
+              p_submit_action_id: string;
+              p_title: string;
+              p_visibility: Database["public"]["Enums"]["work_artifact_visibility"];
+            };
+            Returns: Json;
+          }
+        | {
+            Args: {
+              p_actor_id: string;
+              p_artifact_id: string;
+              p_captured_at: string;
+              p_content: Json;
+              p_correction_reason: string;
+              p_corrects_revision_id: string;
+              p_draft_changed_at: string;
+              p_expected_version: number;
+              p_job_id: string;
+              p_kind: Database["public"]["Enums"]["work_artifact_kind"];
+              p_organization_id: string;
+              p_project_id: string;
+              p_revision_id: string;
+              p_submit: boolean;
+              p_submit_action_id: string;
+              p_title: string;
+              p_visibility: Database["public"]["Enums"]["work_artifact_visibility"];
+            };
+            Returns: Json;
+          };
       create_work_template: {
         Args: {
           p_actor_id: string;
@@ -15677,6 +15820,17 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      file_problem_report_for_caller: {
+        Args: {
+          p_actor_id: string;
+          p_description: string;
+          p_organization_id: string;
+          p_report_id: string;
+          p_reporter_id: string;
+          p_support_ids: string[];
+        };
+        Returns: number;
       };
       finalize_document_upload: {
         Args: {
@@ -16830,6 +16984,16 @@ export type Database = {
           p_part_id: string;
         };
         Returns: Json;
+      };
+      record_problem_report_opening: {
+        Args: {
+          p_actor_id: string;
+          p_file_id: string;
+          p_organization_id: string;
+          p_report_id: string;
+          p_support_ids: string[];
+        };
+        Returns: undefined;
       };
       record_problem_report_scrub: {
         Args: {
@@ -18487,6 +18651,17 @@ export type Database = {
           p_actor_id: string;
           p_document_id: string;
           p_organization_id: string;
+        };
+        Returns: undefined;
+      };
+      triage_problem_report: {
+        Args: {
+          p_actor_id: string;
+          p_changes: Json;
+          p_expected: Json;
+          p_organization_id: string;
+          p_report_id: string;
+          p_support_ids: string[];
         };
         Returns: undefined;
       };

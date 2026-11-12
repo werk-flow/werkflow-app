@@ -11,6 +11,7 @@ import {
   SicknessRecordContractFixture,
 } from './absence-boundaries';
 import { ClockContractFixture } from './clock-boundaries';
+import { BreakRuleWeekFixture } from './break-rule-week-boundaries';
 import { ClockStateProvider } from '@/components/clock-state-provider';
 import { SidebarContractFixture } from './sidebar-boundaries';
 import { initializeLazyDialogBoundary, LazyDialogContractFixture } from './lazy-dialog-boundaries';
@@ -37,6 +38,7 @@ import {
   TodayRefreshProfileContractFixture,
   TodayRefreshSwitchContractFixture,
 } from './today-refresh-boundaries';
+import AuthLayout from '@/app/(auth)/layout';
 import { OfflineTodayContractFixture } from './offline-today-boundaries';
 import { WorkHandoverContractFixture } from './work-handover-boundaries';
 import { EditJobContractFixture } from './edit-job-boundaries';
@@ -44,6 +46,8 @@ import { CalendarContractFixture } from './calendar-boundaries';
 import { FeedbackContractFixture, isFeedbackFixture } from './feedback-boundaries';
 import { mountHydrationFixture } from './hydration-boundaries';
 import { initializeProblemReportBoundary, ProblemReportContractFixture } from './problem-report-boundaries';
+import { SupportFilingContractFixture } from './support-filing-boundaries';
+import { SupportTriageContractFixture } from './support-triage-boundaries';
 import { initializeInventoryUnitBoundary, InventoryUnitContractFixture } from './inventory-unit-boundaries';
 import { AuthUrlContractFixture } from './auth-url-boundaries';
 import { useEffect, useState } from 'react';
@@ -572,6 +576,10 @@ createRoot(root).render(
     </main>
   ) : window.uiContractFixture === 'problem-report' ? (
     <ProblemReportContractFixture />
+  ) : window.uiContractFixture === 'support-triage' ? (
+    <SupportTriageContractFixture />
+  ) : window.uiContractFixture === 'support-filing' ? (
+    <SupportFilingContractFixture />
   ) : window.uiContractFixture === 'inventory-unit' ? (
     <InventoryUnitContractFixture />
   ) : window.uiContractFixture === 'presentation' ? (
@@ -606,6 +614,8 @@ createRoot(root).render(
     </main>
   ) : window.uiContractFixture === 'clock' ? (
     <ClockContractFixture />
+  ) : window.uiContractFixture === 'break-rule-week' ? (
+    <BreakRuleWeekFixture />
   ) : window.uiContractFixture === 'sidebar' ? (
     <SidebarContractFixture />
   ) : window.uiContractFixture === 'lazy-dialog' ? (
@@ -614,6 +624,10 @@ createRoot(root).render(
     <OrganizationContractFixture />
   ) : window.uiContractFixture === 'organization-export' ? (
     <OrganizationExportContractFixture />
+  ) : window.uiContractFixture === 'draft-landing' ? (
+    <AuthLayout>
+      <h1>Komponentenverträge</h1>
+    </AuthLayout>
   ) : window.uiContractFixture === 'today-refresh' ? (
     <TodayRefreshContractFixture />
   ) : window.uiContractFixture === 'today-refresh-switch' ? (
