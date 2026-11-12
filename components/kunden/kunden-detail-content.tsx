@@ -21,6 +21,7 @@ import { EmbeddedAuftraegeSection } from '@/components/shared/embedded-auftraege
 import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
 import { ClientFinancePlaceholder } from '@/components/kunden/client-finance-placeholder';
 import { buildClientMetadataFields } from '@/components/kunden/client-metadata-fields';
+import { ClientHeldRolesCard } from '@/components/kunden/client-held-roles-card';
 import { ClientRelationsSection } from '@/components/kunden/client-relations-section';
 import { CustomerRelationshipWorkspace } from '@/components/kunden/customer-relationship-workspace';
 import { ClientRemovalDialog, type ClientRemoval } from '@/components/kunden/client-removal-dialog';
@@ -29,6 +30,8 @@ import { useCommunicationContactGuard } from '@/components/kunden/use-communicat
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 
 import type { ClientContact, ClientSite } from '@/lib/clients/types';
+import type { ClientSiteRole } from '@/lib/clients/site-roles';
+import { isCustomerDetailEvent, roleRelatedRecords } from '@/lib/clients/detail-refresh';
 import { CLIENT_TYPE_LABELS, type Client, type Job, type ProjectWithDetails } from '@/lib/jobs/types';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import type { AuftraegeColumnId } from '@/lib/jobs/auftraege-table-columns';
@@ -43,7 +46,11 @@ interface KundenDetailContentProps {
   client: Client;
   /** When the customer was archived; null while it is active. */
   archivedAt: string | null;
+  /** The number the previous system gave the customer. */
+  sourceNumber: string | null;
   relations: { contacts: ClientContact[]; sites: ClientSite[] } | null;
+  /** Roles on the customer's Einsatzorte and roles it holds elsewhere; null for a failed read. */
+  siteRoles: ClientSiteRole[] | null;
   documents: OrganizationDocument[] | null;
   linkedWork: {
     jobs: Job[];
@@ -63,7 +70,9 @@ interface KundenDetailContentProps {
 export function KundenDetailContent({
   client,
   archivedAt,
+  sourceNumber,
   relations,
+  siteRoles,
   documents,
   linkedWork,
   members,
@@ -79,9 +88,9 @@ export function KundenDetailContent({
     clientId: client.id,
   });
 
-  useKundenDetailRealtime(client.id, removal.isLeaving, removal.isLeavingRef);
+  useKundenDetailRealtime(client.id, siteRoles, removal.isLeaving, removal.isLeavingRef);
 
-  const metadataFields = buildClientMetadataFields(client);
+  const metadataFields = buildClientMetadataFields(client, sourceNumber);
 
   return (
     <PageShell>
@@ -107,6 +116,7 @@ export function KundenDetailContent({
           <KundenDetailOverviewColumn
             client={client}
             relations={relations}
+            siteRoles={siteRoles}
             documents={documents}
             isAdminOrManager={isAdminOrManager}
             equipment={equipment}
@@ -192,6 +202,7 @@ function KundenDetailActivityColumn({
 function KundenDetailOverviewColumn({
   client,
   relations,
+  siteRoles,
   documents,
   isAdminOrManager,
   equipment,
@@ -200,7 +211,13 @@ function KundenDetailOverviewColumn({
   contactGuard,
 }: Pick<
   KundenDetailContentProps,
-  'client' | 'relations' | 'documents' | 'isAdminOrManager' | 'equipment' | 'equipmentLoadFailed'
+  | 'client'
+  | 'relations'
+  | 'siteRoles'
+  | 'documents'
+  | 'isAdminOrManager'
+  | 'equipment'
+  | 'equipmentLoadFailed'
 > & {
   metadataFields: MetadataField[];
   contactGuard: Pick<ReturnType<typeof useCommunicationContactGuard>, 'requestContact' | 'isCheckingContact'>;
@@ -215,6 +232,7 @@ function KundenDetailOverviewColumn({
           clientAddress={client.address}
           contacts={relations.contacts}
           sites={relations.sites}
+          siteRoles={siteRoles?.filter((role) => role.siteClientId === client.id) ?? null}
           isAdminOrManager={isAdminOrManager}
           onRequestContact={contactGuard.requestContact}
           isCheckingContact={contactGuard.isCheckingContact}
@@ -223,6 +241,12 @@ function KundenDetailOverviewColumn({
         />
       ) : (
         <RegionLoadError>Ansprechpartner und Einsatzorte konnten nicht geladen werden.</RegionLoadError>
+      )}
+
+      {siteRoles ? (
+        <ClientHeldRolesCard clientId={client.id} roles={siteRoles} />
+      ) : (
+        <RegionLoadError>Die Rollen an Einsatzorten konnten nicht geladen werden.</RegionLoadError>
       )}
 
       {/* Financial Summary Placeholder */}
@@ -234,15 +258,18 @@ function KundenDetailOverviewColumn({
 /** Colleagues' contact/site/master-data changes appear without a reload. */
 function useKundenDetailRealtime(
   clientId: string,
+  siteRoles: ClientSiteRole[] | null,
   isLeaving: boolean,
   isLeavingRef: React.RefObject<boolean>,
 ): void {
+  const related = roleRelatedRecords(siteRoles);
   useRealtimeRouterRefresh({
     enabled: !isLeaving,
     tables: [
       'clients',
       'client_contacts',
       'client_sites',
+      'client_site_roles',
       'client_requests',
       'client_follow_ups',
       'client_communication_settings',
@@ -252,14 +279,7 @@ function useKundenDetailRealtime(
       'document_links',
       'installed_equipment',
     ],
-    eventFilter: (event) => {
-      if (isLeavingRef.current) return false;
-      const row = event.new ?? event.old;
-      if (!row) return false;
-      if (event.table === 'clients') return row.id === clientId;
-      if (row.client_id === undefined) return event.eventType === 'DELETE';
-      return row.client_id === clientId;
-    },
+    eventFilter: (event) => !isLeavingRef.current && isCustomerDetailEvent(event, clientId, related),
   });
 }
 

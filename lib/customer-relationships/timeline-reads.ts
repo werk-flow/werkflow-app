@@ -5,7 +5,7 @@ import type { ClientManagerContext } from '@/lib/clients/manager-access';
 import { logError } from '@/lib/logging';
 import { describeAttachedRequestEvent } from '@/lib/requests/types';
 import { readInBatches } from '@/lib/supabase/query-batches';
-import { describeMasterDataEvent } from './master-data-events';
+import { describeMasterDataEvent, roleEventSiteClientId } from './master-data-events';
 import { customerJobHref, firstRelation, profileName } from './relationship-labels';
 import { buildTimelinePage, decodeTimelineCursor, isTimelineCursorSafe, timelineItemKey } from './resolution';
 import { TIMELINE_PAGE_SIZE, type CustomerRelationshipBundle, type TimelineItem } from './types';
@@ -632,7 +632,8 @@ function addMasterDataItems(add: AddTimelineItem, clientId: string, sources: Tim
       actorName: null,
       reference,
       detail,
-      sourceHref: `/kunden/${clientId}${
+      // A role on another customer's Einsatzort links to that customer.
+      sourceHref: `/kunden/${roleEventSiteClientId(event.event_payload) ?? clientId}${
         event.contact_id ? '#ansprechpartner' : event.site_id ? '#einsatzorte' : ''
       }`,
       sourceAvailable: true,

@@ -28,7 +28,7 @@ const PAIRS = [
   ],
   ['components/dokumente/document-work-context-view.tsx'],
   ['components/inventar/inventory-content.tsx', 'components/loading-states/inventar-page-skeleton.tsx'],
-  ['components/kunden/clients-table.tsx'],
+  ['components/kunden/clients-table.tsx', 'components/kunden/clients-table-frame.tsx'],
   ['components/mitarbeiter/members-table.tsx'],
   [
     'components/problem-reports/own-problem-report-list.tsx',

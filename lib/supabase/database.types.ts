@@ -333,6 +333,8 @@ export type Database = {
           organization_id: string;
           phone: string | null;
           role: string | null;
+          site_id: string | null;
+          site_role: string | null;
           updated_at: string;
         };
         Insert: {
@@ -348,6 +350,8 @@ export type Database = {
           organization_id: string;
           phone?: string | null;
           role?: string | null;
+          site_id?: string | null;
+          site_role?: string | null;
           updated_at?: string;
         };
         Update: {
@@ -363,6 +367,8 @@ export type Database = {
           organization_id?: string;
           phone?: string | null;
           role?: string | null;
+          site_id?: string | null;
+          site_role?: string | null;
           updated_at?: string;
         };
         Relationships: [
@@ -386,6 +392,13 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "organizations";
             referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "client_contacts_site_fk";
+            columns: ["site_id", "client_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "client_sites";
+            referencedColumns: ["id", "client_id", "organization_id"];
           },
         ];
       };
@@ -831,6 +844,73 @@ export type Database = {
           },
         ];
       };
+      client_site_roles: {
+        Row: {
+          client_id: string;
+          created_at: string;
+          created_by: string | null;
+          ended_by: string | null;
+          ends_on: string | null;
+          holder_client_id: string;
+          id: string;
+          organization_id: string;
+          role: string;
+          site_id: string;
+          starts_on: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          client_id: string;
+          created_at?: string;
+          created_by?: string | null;
+          ended_by?: string | null;
+          ends_on?: string | null;
+          holder_client_id: string;
+          id?: string;
+          organization_id: string;
+          role: string;
+          site_id: string;
+          starts_on?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          client_id?: string;
+          created_at?: string;
+          created_by?: string | null;
+          ended_by?: string | null;
+          ends_on?: string | null;
+          holder_client_id?: string;
+          id?: string;
+          organization_id?: string;
+          role?: string;
+          site_id?: string;
+          starts_on?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "client_site_roles_holder_fk";
+            columns: ["holder_client_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "client_site_roles_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "client_site_roles_site_fk";
+            columns: ["site_id", "client_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "client_sites";
+            referencedColumns: ["id", "client_id", "organization_id"];
+          },
+        ];
+      };
       client_sites: {
         Row: {
           access_notes: string | null;
@@ -846,6 +926,7 @@ export type Database = {
           organization_id: string;
           postal_code: string | null;
           primary_contact_id: string | null;
+          source_number: string | null;
           street: string | null;
           updated_at: string;
         };
@@ -863,6 +944,7 @@ export type Database = {
           organization_id: string;
           postal_code?: string | null;
           primary_contact_id?: string | null;
+          source_number?: string | null;
           street?: string | null;
           updated_at?: string;
         };
@@ -880,6 +962,7 @@ export type Database = {
           organization_id?: string;
           postal_code?: string | null;
           primary_contact_id?: string | null;
+          source_number?: string | null;
           street?: string | null;
           updated_at?: string;
         };
@@ -927,6 +1010,7 @@ export type Database = {
           notes: string | null;
           organization_id: string;
           phone: string | null;
+          source_number: string | null;
           updated_at: string;
         };
         Insert: {
@@ -941,6 +1025,7 @@ export type Database = {
           notes?: string | null;
           organization_id: string;
           phone?: string | null;
+          source_number?: string | null;
           updated_at?: string;
         };
         Update: {
@@ -955,6 +1040,7 @@ export type Database = {
           notes?: string | null;
           organization_id?: string;
           phone?: string | null;
+          source_number?: string | null;
           updated_at?: string;
         };
         Relationships: [
@@ -13738,6 +13824,37 @@ export type Database = {
         };
         Returns: string;
       };
+      assign_client_site_role: {
+        Args: {
+          p_actor_id: string;
+          p_holder_client_id: string;
+          p_organization_id: string;
+          p_replaced_role_id?: string;
+          p_role: string;
+          p_site_id: string;
+          p_starts_on?: string;
+        };
+        Returns: {
+          client_id: string;
+          created_at: string;
+          created_by: string | null;
+          ended_by: string | null;
+          ends_on: string | null;
+          holder_client_id: string;
+          id: string;
+          organization_id: string;
+          role: string;
+          site_id: string;
+          starts_on: string | null;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "client_site_roles";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       assign_time_account_policy: {
         Args: {
           p_actor_id: string;
@@ -15351,6 +15468,34 @@ export type Database = {
         };
         Returns: undefined;
       };
+      end_client_site_role: {
+        Args: {
+          p_actor_id: string;
+          p_ends_on: string;
+          p_organization_id: string;
+          p_role_id: string;
+        };
+        Returns: {
+          client_id: string;
+          created_at: string;
+          created_by: string | null;
+          ended_by: string | null;
+          ends_on: string | null;
+          holder_client_id: string;
+          id: string;
+          organization_id: string;
+          role: string;
+          site_id: string;
+          starts_on: string | null;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "client_site_roles";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       end_responsibility_delegation: {
         Args: {
           p_actor_id: string;
@@ -16145,6 +16290,27 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      list_client_site_roles: {
+        Args: { p_client_id: string; p_organization_id: string };
+        Returns: {
+          ends_on: string;
+          holder_archived_at: string;
+          holder_client_id: string;
+          holder_name: string;
+          id: string;
+          role: string;
+          site_city: string;
+          site_client_id: string;
+          site_client_name: string;
+          site_id: string;
+          site_is_active: boolean;
+          site_name: string;
+          site_postal_code: string;
+          site_source_number: string;
+          site_street: string;
+          starts_on: string;
+        }[];
       };
       list_customer_page:
         | {
@@ -17527,6 +17693,7 @@ export type Database = {
           notes: string | null;
           organization_id: string;
           phone: string | null;
+          source_number: string | null;
           updated_at: string;
         };
         SetofOptions: {
@@ -18446,6 +18613,8 @@ export type Database = {
           organization_id: string;
           phone: string | null;
           role: string | null;
+          site_id: string | null;
+          site_role: string | null;
           updated_at: string;
         };
         SetofOptions: {
@@ -18515,6 +18684,7 @@ export type Database = {
           notes: string | null;
           organization_id: string;
           phone: string | null;
+          source_number: string | null;
           updated_at: string;
         };
         SetofOptions: {
@@ -18595,6 +18765,7 @@ export type Database = {
           organization_id: string;
           postal_code: string | null;
           primary_contact_id: string | null;
+          source_number: string | null;
           street: string | null;
           updated_at: string;
         };
