@@ -73,8 +73,8 @@
           "rows": null
         },
         "script": {
-          "requests": { "reference": 43, "tolerance": 1 },
-          "encodedBytes": { "reference": 693562, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "requests": { "reference": 44, "tolerance": 1 },
+          "encodedBytes": { "reference": 679377, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         },
@@ -334,6 +334,24 @@
           },
           "runKeys": ["2026-11-12T004607647Z-ed5cc5"],
           "reason": "main before #358 measured 690986 B, inside the old ceiling; two features then add script to the field cold start, which prefetches the work pack's route chunk: #358 (werk-flow/werkflow-planning#162, the work pack's completion-gate list) adds 1646 B (690986 before it, 692632 after, Boat runs of dedb9e84 and 034e1a62), and #348 (werk-flow/werkflow-planning#158, the „Meine Zeit“ rows: activity pairing and their labels, which the work pack renders on its first load) adds 930 B (693562 on 0b354338, after moving the Verlauf's day grouping out of that chunk, which saved 122 B)"
+        },
+        {
+          "kind": "floor-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 43, "tolerance": 1 },
+            "encodedBytes": { "reference": 693562, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 44, "tolerance": 1 },
+            "encodedBytes": { "reference": 679377, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-12T070742244Z-33aa23"],
+          "reason": "The Arbeitsnachweis dialog and the report-draft code download on the dialog's first open (components/shared/lazy-dialog.tsx) instead of with the work pack's route chunk the job list prefetches. Measured on Boat on this branch after merging t3/offline-todays-assignments ccf13679: 679,377 B against main's reference 693,562 B, 43 script requests; golden:gg-00, ui:contracts, audit:lab:office and the problem-report redraw passed on the same build."
         }
       ]
     },
