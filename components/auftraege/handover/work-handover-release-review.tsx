@@ -106,7 +106,7 @@ export function WorkHandoverReleaseReview({
     preview,
     packageVersion,
     canPreview,
-    dirty,
+    selectedKeys,
     isBusy,
     anyBusy,
     feedbackFor,
@@ -147,9 +147,9 @@ export function WorkHandoverReleaseReview({
         </Button>
       </div>
       <FeedbackText feedback={feedbackFor('preview')} />
-      {dirty && (
+      {selectedKeys.length === 0 && initialWorkspace.availableSources.length > 0 && (
         <p className="text-sm text-muted-foreground">
-          Speichere die Auswahl, bevor du die Vorschau erstellst.
+          Wähle oben mindestens einen Inhalt aus. Dann öffnest du die Vorschau und gibst frei.
         </p>
       )}
       {unassessedFacts(initialWorkspace.gateSnapshot).length > 0 && (

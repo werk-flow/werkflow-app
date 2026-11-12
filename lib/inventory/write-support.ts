@@ -11,7 +11,8 @@ import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { z } from '@/lib/zod';
 import { IMPORT_REJECTIONS, type ImportRowOutcome } from './csv-import';
 import type { previewInventoryImportSchema } from './action-schemas';
-import { INVENTORY_UNIT_OPTIONS, toNumber } from './types';
+import { toNumber } from './types';
+import { normalizeInventoryUnitInput } from './units';
 
 // The value rules and write helpers the inventory Server Actions in
 // `./actions` and `./catalog-actions` share. The callers authorize first and
@@ -32,52 +33,6 @@ export function normalizeQuantity(value: number): number {
 export function normalizePrice(value: number | null | undefined): number | null {
   if (value === null || value === undefined || !Number.isFinite(value)) return null;
   return Math.max(0, Math.round(value));
-}
-
-export function normalizeInventoryUnitInput(value: string | null | undefined): string {
-  const normalized = (value ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/ü/g, 'ue')
-    .replace(/ä/g, 'ae')
-    .replace(/ö/g, 'oe');
-
-  if (!normalized) return 'piece';
-
-  const aliases: Record<string, string> = {
-    stueck: 'piece',
-    stuck: 'piece',
-    stk: 'piece',
-    st: 'piece',
-    piece: 'piece',
-    pieces: 'piece',
-    meter: 'meter',
-    m: 'meter',
-    rolle: 'roll',
-    roll: 'roll',
-    packung: 'package',
-    paket: 'package',
-    package: 'package',
-    karton: 'box',
-    box: 'box',
-    set: 'set',
-    paar: 'pair',
-    pair: 'pair',
-    liter: 'liter',
-    l: 'liter',
-    kilogramm: 'kilogram',
-    kilogram: 'kilogram',
-    kg: 'kilogram',
-    sack: 'sack',
-    kartusche: 'cartridge',
-    cartridge: 'cartridge',
-    bund: 'bundle',
-    bundle: 'bundle',
-    palette: 'pallet',
-    pallet: 'pallet',
-  };
-
-  return aliases[normalized] ?? value?.trim() ?? 'piece';
 }
 
 export function invalidateInventory(): void {
@@ -201,17 +156,6 @@ export async function resolveInventoryLocation(
 type ImportRow = z.infer<typeof previewInventoryImportSchema>['rows'][number];
 
 /**
- * The unit code of a CSV row's unit text, or null when the text is empty or
- * names no unit of the list: the import refuses such a row and never reads it
- * as Stück.
- */
-function importUnitCode(text: string | null | undefined): string | null {
-  if (!cleanText(text)) return null;
-  const code = normalizeInventoryUnitInput(text);
-  return INVENTORY_UNIT_OPTIONS.some((option) => option.value === code) ? code : null;
-}
-
-/**
  * The staged form of each CSV row that preview_inventory_import keeps on its
  * batch: the row's values for the import rule, or the reason the action
  * already refuses it. The order stays the file's order.
@@ -220,7 +164,8 @@ export function stagedImportRows(rows: readonly ImportRow[]): Json[] {
   return rows.map((row) => {
     const name = cleanText(row.name);
     if (!name) return { rejection: 'missing_name' };
-    const unit = importUnitCode(row.unit);
+    // An empty unit or text that names no unit of the list is refused, never read as Stück.
+    const unit = normalizeInventoryUnitInput(row.unit);
     if (!unit) return { rejection: 'unknown_unit' };
     return {
       item: {

@@ -72,8 +72,8 @@ async function completeWithManagerOverride(page: Page, jobNumber: string): Promi
 async function releaseCurrentDraft(page: Page): Promise<string> {
   const section = workHandoverSection(page);
   await selectAllHandoverSources(section);
-  await handoverAction(section, 'saveDraft').click();
-  await expect(handoverMessage(section, 'draftSaved')).toBeVisible();
+  // No „Entwurf speichern“: the preview saves the selection as the draft
+  // (tests/audit/wave-2/p1-17.spec.ts keeps the explicit save).
   await expect(section).toContainText(HANDOVER_TEXT.openReviewPoints);
   await expect(section).toContainText(HANDOVER_TEXT.notAssessed);
   const override = handoverField(section, 'exceptionReason');
