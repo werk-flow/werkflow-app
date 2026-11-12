@@ -189,6 +189,7 @@ export async function seedRefusedTimeEvent(page: Page, world: TestWorld): Promis
 type RecordedSession = { startedAt: number; endedAt: number | null };
 
 /** The employee's recorded clock sessions in the world's organization, oldest first, as instants. */
+/** The employee's sessions on the server, oldest first. */
 async function recordedSessions(world: TestWorld): Promise<RecordedSession[]> {
   const { data } = await createAdminClient()
     .from('time_sessions')
@@ -201,6 +202,11 @@ async function recordedSessions(world: TestWorld): Promise<RecordedSession[]> {
     startedAt: Date.parse(row.started_at),
     endedAt: row.ended_at === null ? null : Date.parse(row.ended_at),
   }));
+}
+
+/** The employee's sessions on the server that started at `since` or later. */
+export async function sessionsSince(world: TestWorld, since: number): Promise<RecordedSession[]> {
+  return (await recordedSessions(world)).filter((session) => session.startedAt >= since);
 }
 
 /**

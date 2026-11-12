@@ -5,12 +5,14 @@ import {
   clockInLauncher,
   clockStartSheet,
   clockStatus,
+  tapClockOut,
 } from '../../golden/support/steps/time-tracking';
 import { bypassHttpCache, setNetwork, waitForOfflineShell } from '../support/offline-shell';
 import {
   UNSENT_COPY,
   expectOneSessionAtCapturedTimes,
   meineZeitActivity,
+  sessionsSince,
   expectTimeEventsOnDevice,
   offlineClock,
   offlineClockAction,
@@ -86,5 +88,69 @@ test('a clock start and end without signal are recorded once, at their captured 
 
   await test.step('„Meine Zeit“ shows the session as work at the captured times', async () => {
     await expect(await meineZeitActivity(page, world)).toBeVisible();
+  });
+});
+
+test('an online clock call whose page closed before the answer is recorded once, whether or not it reached the server @AUDIT-SECURITY-OFFLINE-CLOCK', async ({
+  employeePage: page,
+  world,
+}) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  const before = Date.now();
+  await page.goto('/dashboard');
+  await expect(clockInLauncher(page)).toBeEnabled();
+
+  await test.step('a start reaches the server, and the page closes before its answer', async () => {
+    let reached = (): void => undefined;
+    const atServer = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    await page.route('**/*', async (route) => {
+      if (route.request().method() !== 'POST' || !route.request().headers()['next-action'])
+        return route.fallback();
+      // The server records the call; its answer never reaches the closed page.
+      await route.fetch();
+      reached();
+    });
+    await clockInLauncher(page).click();
+    await startWorkAction(clockStartSheet(page)).click();
+    await atServer;
+    await page.close();
+  });
+
+  const next = await openPage(page.context());
+  await test.step('the next start sends the kept action under the same operation id: one session, no conflict', async () => {
+    await next.goto('/dashboard');
+    await expect(clockStatus(next)).toHaveText(UNSENT_COPY.working);
+    await expectTimeEventsOnDevice(next, []);
+    await expect(unsentBadge(next, UNSENT_COPY.refused)).toHaveCount(0);
+    expect(await sessionsSince(world, before)).toHaveLength(1);
+  });
+
+  await test.step('an end never reaches the server, and the page closes while it waits', async () => {
+    let held = (): void => undefined;
+    const waiting = new Promise<void>((resolve) => {
+      held = resolve;
+    });
+    await next.route('**/*', async (route) => {
+      if (route.request().method() !== 'POST' || !route.request().headers()['next-action'])
+        return route.fallback();
+      // The request stays in a dead spot: neither the server nor the page hears of it again.
+      held();
+    });
+    await tapClockOut(next);
+    await waiting;
+    await next.close();
+  });
+
+  await test.step('the next start sends the end: the session is ended once', async () => {
+    const last = await openPage(page.context());
+    await last.goto('/dashboard');
+    await expect(clockInLauncher(last)).toBeEnabled();
+    await expectTimeEventsOnDevice(last, []);
+    await expect
+      .poll(() => sessionsSince(world, before))
+      .toEqual([expect.objectContaining({ endedAt: expect.any(Number) })]);
+    await last.close();
   });
 });

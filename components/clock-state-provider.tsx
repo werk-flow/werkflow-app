@@ -87,12 +87,9 @@ function useSettleTransition(
  * network, or behind unsent ones, is kept on the phone under the same operation id instead.
  */
 /** The online clock call; null when it failed on its way, which it may have done after reaching the server. */
-async function tryOnline(
-  run: (input: TimeTransitionInput) => Promise<TimeTransitionResult>,
-  input: TimeTransitionInput,
-): Promise<TimeTransitionResult | null> {
+async function tryOnline(call: () => Promise<TimeTransitionResult>): Promise<TimeTransitionResult | null> {
   try {
-    return await run(input);
+    return await call();
   } catch {
     // best-effort: it may have reached the server; the phone keeps it under the same operation id.
     return null;
@@ -126,7 +123,7 @@ function useClockTransitionExecute({
   readTimes,
 }: ClockExecuteInput): ClockTransitionExecute {
   const { activeOrgId, userId } = holder;
-  const { keep, holderNow } = outbox;
+  const { keep, holderNow, callKept } = outbox;
   const settle = useSettleTransition(invalidate, setData, refresh, readTimes.confirm);
   // Unsent actions go first: one captured after them must never reach the server before them.
   const knownUnsent = outbox.kept || outbox.view?.status === 'pending';
@@ -156,23 +153,26 @@ function useClockTransitionExecute({
       const triedOnline = !standsOnUnsent && navigator.onLine;
       let result: TimeTransitionResult | null = null;
       const tapHolder = holderNow();
+      // What the phone keeps of the action, also while its online call runs (unsent-mark.ts, callWhileKept).
+      const toKeep = userId && {
+        ...command,
+        userId,
+        organizationId: activeOrgId,
+        triedOnline,
+        base: serverState,
+        readAt: readTimes.last(),
+        capturedAt,
+      };
       if (triedOnline) {
-        result = await tryOnline(run, { ...command, organizationId: activeOrgId, acknowledgeLong });
+        const online = () => run({ ...command, organizationId: activeOrgId, acknowledgeLong });
+        result = await tryOnline(toKeep ? () => callKept(toKeep, online) : online);
         // A switch finished meanwhile: the answer is the former organization's, never the clock shown now,
         // and its wipe ends what this page may keep.
         if (holderNow() !== tapHolder) return result ?? CLOCK_ACTION_FAILED;
       }
       if (!result) {
-        if (!userId) return CLOCK_ACTION_FAILED;
-        result = keep({
-          ...command,
-          userId,
-          organizationId: activeOrgId,
-          triedOnline,
-          base: serverState,
-          readAt: readTimes.last(),
-          capturedAt,
-        });
+        if (!toKeep) return CLOCK_ACTION_FAILED;
+        result = keep(toKeep);
       }
       await settle(result, selection, new Date(capturedAt));
       return result;
@@ -182,6 +182,7 @@ function useClockTransitionExecute({
       userId,
       isReady,
       holderNow,
+      callKept,
       keep,
       knownUnsent,
       readTimes,

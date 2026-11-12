@@ -6,6 +6,7 @@ import type { OutboxHolder } from '@/lib/field-sync/device/time-outbox-store';
 import { sharedWipeGeneration } from '@/lib/field-sync/device/today-wipe';
 import {
   UNSENT_MARK_PREFIX,
+  callWhileKept,
   deviceMayHoldUnsentWork,
   keepClockAction,
 } from '@/lib/field-sync/device/unsent-mark';
@@ -35,6 +36,8 @@ export type ClockOutboxState = {
   /** The person and organization the page works for now; another one after a switch. */
   holderNow: () => OutboxHolder | null;
   keep: (action: Parameters<typeof keepClockAction>[0]) => TimeTransitionResult;
+  /** Runs the online call with its action written down first (unsent-mark.ts, callWhileKept). */
+  callKept: <T>(action: Parameters<typeof keepClockAction>[0], call: () => Promise<T>) => Promise<T>;
 };
 
 /** The phone's time outbox (decision record 0010); its code loads only when unsent work may wait. */
@@ -122,5 +125,9 @@ export function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promi
     [stopped],
   );
   const holderNow = useCallback(() => holderRef.current, []);
-  return { view, kept, unchecked: uncheckedRef, deviceFailed, holderNow, keep };
+  const callKept = useCallback<ClockOutboxState['callKept']>(
+    (action, call) => callWhileKept(action, signalRef.current, call),
+    [],
+  );
+  return { view, kept, unchecked: uncheckedRef, deviceFailed, holderNow, keep, callKept };
 }

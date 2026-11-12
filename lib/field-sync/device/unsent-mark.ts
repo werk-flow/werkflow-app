@@ -2,7 +2,7 @@
 
 import type { TimeTransitionResult } from '@/lib/time-tracking/types';
 import type { KeptClockAction } from './kept-clock-actions';
-import { sharedWipeGeneration } from './today-wipe';
+import { sessionEnding, sharedWipeGeneration } from './today-wipe';
 
 // What every page carries of the phone's unsent work, so this module imports
 // only the static wipe signal (today-wipe.ts) and stays a few lines: the read of the hint that decides at the app
@@ -36,6 +36,55 @@ export function deviceMayHoldUnsentWork(): boolean {
   }
 }
 
+/** Writes one kept action; answers its key, or null when nothing may or can be kept. */
+function storeKept(action: Omit<KeptClockAction, 'wipeGeneration'>, pageSignal: string): string | null {
+  const kind = action.action;
+  if ((kind !== 'start' && kind !== 'switch' && kind !== 'end') || sharedWipeGeneration() !== pageSignal)
+    return null;
+  // A sign-out or switch makes its last check: what it does not see must not be kept after it.
+  if (sessionEnding()) return null;
+  const base = action.base && { ...action.base, activeJobInfo: null, resumeJobInfo: null };
+  keptOnThisPage += 1;
+  const key = `${KEPT_CLOCK_ACTION_PREFIX}${String(Date.parse(action.capturedAt)).padStart(15, '0')}:${keptOnThisPage}:${action.operationId}`;
+  try {
+    localStorage.setItem(
+      key,
+      JSON.stringify({ ...action, base, wipeGeneration: pageSignal } satisfies KeptClockAction),
+    );
+    return key;
+  } catch {
+    return null;
+  }
+}
+
+/** The Web Lock an online clock call holds while it runs: a take-in leaves its action to the page until then. */
+export function clockCallLock(operationId: string): string {
+  return `werkflow-clock-call:${operationId}`;
+}
+
+/**
+ * Runs the online clock call with its action written down first, under the same operation id, so
+ * a page that closes or loses its signal mid-call leaves it for the next start. The entry goes when
+ * the server answered or the call failed; a failed call is then kept as usual.
+ */
+export function callWhileKept<T>(
+  action: Omit<KeptClockAction, 'wipeGeneration'>,
+  pageSignal: string | null,
+  call: () => Promise<T>,
+): Promise<T> {
+  const run = async (): Promise<T> => {
+    const key = pageSignal === null ? null : storeKept({ ...action, inFlight: true }, pageSignal);
+    try {
+      return await call();
+    } finally {
+      if (key) localStorage.removeItem(key);
+    }
+  };
+  return typeof navigator.locks?.request === 'function'
+    ? navigator.locks.request(clockCallLock(action.operationId), run)
+    : run();
+}
+
 /**
  * Keeps one clock action on the device under the wipe signal `pageSignal` the page started with,
  * and answers as the accepted action would, or null when it keeps nothing. Only a start, a switch
@@ -48,19 +97,7 @@ export function keepClockAction(
   pageSignal: string,
 ): Extract<TimeTransitionResult, { success: true }> | null {
   const kind = action.action;
-  if ((kind !== 'start' && kind !== 'switch' && kind !== 'end') || sharedWipeGeneration() !== pageSignal)
-    return null;
-  const base = action.base && { ...action.base, activeJobInfo: null, resumeJobInfo: null };
-  keptOnThisPage += 1;
-  const order = `${String(Date.parse(action.capturedAt)).padStart(15, '0')}:${keptOnThisPage}`;
-  try {
-    localStorage.setItem(
-      `${KEPT_CLOCK_ACTION_PREFIX}${order}:${action.operationId}`,
-      JSON.stringify({ ...action, base, wipeGeneration: pageSignal } satisfies KeptClockAction),
-    );
-  } catch {
-    return null;
-  }
+  if (!storeKept(action, pageSignal)) return null;
   return {
     success: true,
     kept: true,

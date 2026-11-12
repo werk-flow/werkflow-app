@@ -4,7 +4,7 @@ import { timeActivitySelectionSchema } from '@/lib/time-tracking/activity-select
 import { clockStateSchema } from '@/lib/time-tracking/state-client';
 import { z } from '@/lib/zod';
 import { captureTimeEvent, isOfflineClockAction } from './time-outbox';
-import { KEPT_CLOCK_ACTION_PREFIX } from './unsent-mark';
+import { KEPT_CLOCK_ACTION_PREFIX, clockCallLock } from './unsent-mark';
 
 // Takes the clock actions a page kept without signal (unsent-mark.ts) into the
 // time outbox. A page that loses its signal can load no code any more, so it
@@ -24,6 +24,8 @@ const keptClockActionSchema = z.object({
   capturedAt: z.string(),
   /** The online clock call was tried first, under the same operation id. */
   triedOnline: z.boolean(),
+  /** Written before the online call and gone once it answered: an entry left behind belongs to a page that closed mid-call. */
+  inFlight: z.boolean().optional(),
   /** The wipe signal when the person acted (today-wipe.ts). */
   wipeGeneration: z.string(),
   /** The clock the server last confirmed, as the page read it; null when the page held none. */
@@ -49,6 +51,20 @@ function readKeptAction(key: string): KeptClockAction | null {
   } catch {
     return null;
   }
+}
+
+/** How long, without Web Locks, an entry written before an online call counts as its page's still. */
+const CALL_WITHOUT_LOCKS_MS = 2 * 60 * 1000;
+
+/** Whether the page that wrote this entry before its online call still holds that call open. */
+async function callStillRuns(kept: KeptClockAction): Promise<boolean> {
+  if (typeof navigator.locks?.request !== 'function')
+    return Date.now() - Date.parse(kept.capturedAt) < CALL_WITHOUT_LOCKS_MS;
+  return navigator.locks.request(
+    clockCallLock(kept.operationId),
+    { ifAvailable: true },
+    (lock) => lock === null,
+  );
 }
 
 /**
@@ -78,9 +94,12 @@ export async function takeInKeptClockActions(
       capturedAt,
       triedOnline,
       wipeGeneration,
+      inFlight,
       ...command
     } = kept;
     if (!isOfflineClockAction(action)) continue;
+    // Its page still waits for the server's answer; what was kept after it waits behind it.
+    if (inFlight && (await callStillRuns(kept))) break;
     await captureTimeEvent(
       { userId, organizationId },
       {

@@ -76,11 +76,25 @@ async function isolatedTests(): Promise<void> {
   Object.defineProperty(globalThis.navigator, 'onLine', { value: false, configurable: true });
   // Web Locks within this one tab: each lock name runs its holders one after the other.
   const held = new Map<string, Promise<unknown>>();
+  const holding = new Map<string, number>();
+  type LockWork = (lock: object | null) => Promise<unknown> | unknown;
   Object.defineProperty(globalThis.navigator, 'locks', {
     configurable: true,
     value: {
-      request: (name: string, work: () => Promise<unknown>) => {
-        const run = (held.get(name) ?? Promise.resolve()).then(work, work);
+      request: (name: string, options: { ifAvailable?: boolean } | LockWork, given?: LockWork) => {
+        const work = typeof options === 'function' ? options : given;
+        if (!work) throw new Error('a lock request needs its work');
+        if (typeof options !== 'function' && options.ifAvailable && (holding.get(name) ?? 0) > 0)
+          return Promise.resolve(work(null));
+        const hold = async (): Promise<unknown> => {
+          holding.set(name, (holding.get(name) ?? 0) + 1);
+          try {
+            return await work({});
+          } finally {
+            holding.set(name, (holding.get(name) ?? 1) - 1);
+          }
+        };
+        const run = (held.get(name) ?? Promise.resolve()).then(hold, hold);
         // The next holder waits for this one either way; the failure reaches the caller through `run`.
         const settled = run.then(
           () => undefined,
@@ -110,7 +124,8 @@ async function isolatedTests(): Promise<void> {
 
   const { captureBehindKept, holdClock, sendOwnTimeEvents, takeInKept, timeUnsentSource, clockHolder } =
     await import('./clock-device');
-  const { keepClockAction } = await import('./unsent-mark');
+  const { callWhileKept, keepClockAction } = await import('./unsent-mark');
+  const { markSessionEnding } = await import('./today-wipe');
 
   const WORKER: OutboxHolder = {
     userId: '10000000-0000-4000-8000-00000000000a',
@@ -452,6 +467,99 @@ async function isolatedTests(): Promise<void> {
 
       expect(sent).toHaveLength(1);
       verdict = null;
+    });
+
+    test('an online call’s action is written down first and left to its page while the call runs; one kept behind it waits', async () => {
+      sessionUserId = WORKER.userId;
+      await holdClock(WORKER, () => undefined);
+      const action = (operationId: string, capturedAt: string) => ({
+        ...WORKER,
+        operationId,
+        action: 'start',
+        expectedSessionId: null,
+        expectedVersion: null,
+        selection: { kind: 'work' as const, allocationKind: 'unallocated' as const, jobId: null },
+        base: CLOCKED_OUT,
+        readAt: '2026-11-11T06:59:00.000Z',
+        triedOnline: true,
+        capturedAt,
+      });
+      let answer = (): void => undefined;
+      const calling = callWhileKept(
+        action('50000000-0000-4000-8000-0000000000a1', '2026-11-11T07:00:00.000Z'),
+        '',
+        () =>
+          new Promise<void>((resolve) => {
+            answer = resolve;
+          }),
+      );
+      await nextTask();
+      expect([...storage.keys()].filter((key) => key.startsWith('werkflow:unsent:clock:'))).toHaveLength(1);
+      // Another tab kept a later action meanwhile.
+      keepClockAction(
+        { ...action('50000000-0000-4000-8000-0000000000a2', '2026-11-11T07:01:00.000Z'), triedOnline: false },
+        '',
+      );
+
+      await takeInKept();
+      expect((await readTimeOutbox(WORKER)).events).toEqual([]);
+
+      answer();
+      await calling;
+      expect([...storage.keys()].filter((key) => key.includes('0000000000a1'))).toEqual([]);
+      await takeInKept();
+      expect((await readTimeOutbox(WORKER)).events.map((event) => event.operationId)).toEqual([
+        '50000000-0000-4000-8000-0000000000a2',
+      ]);
+    });
+
+    test('the action of a page that closed mid-call is taken in at the next start under the same operation id', async () => {
+      sessionUserId = WORKER.userId;
+      await holdClock(WORKER, () => undefined);
+      // What a page left when it closed before the answer: the entry, and no lock any more.
+      storage.set(
+        'werkflow:unsent:clock:001762844400000:1:50000000-0000-4000-8000-0000000000a3',
+        JSON.stringify({
+          ...WORKER,
+          operationId: '50000000-0000-4000-8000-0000000000a3',
+          action: 'start',
+          expectedSessionId: null,
+          expectedVersion: null,
+          selection: { kind: 'work', allocationKind: 'unallocated', jobId: null },
+          base: CLOCKED_OUT,
+          readAt: '2026-11-11T06:59:00.000Z',
+          triedOnline: true,
+          inFlight: true,
+          capturedAt: '2026-11-11T07:00:00.000Z',
+          wipeGeneration: '',
+        }),
+      );
+
+      await takeInKept();
+
+      expect((await readTimeOutbox(WORKER)).events).toEqual([
+        expect.objectContaining({ operationId: '50000000-0000-4000-8000-0000000000a3', triedOnline: true }),
+      ]);
+    });
+
+    test('while a sign-out or switch makes its last check, no tab keeps an action; when the person stays, keeping works again', async () => {
+      const start = {
+        ...WORKER,
+        operationId: '50000000-0000-4000-8000-0000000000a4',
+        action: 'start',
+        expectedSessionId: null,
+        expectedVersion: null,
+        selection: { kind: 'work' as const, allocationKind: 'unallocated' as const, jobId: null },
+        base: CLOCKED_OUT,
+        readAt: '2026-11-11T06:59:00.000Z',
+        triedOnline: false,
+        capturedAt: '2026-11-11T07:00:00.000Z',
+      };
+      // The sign-out runs in one tab; this is the other tab, on the same storage.
+      markSessionEnding(true);
+      expect(keepClockAction(start, '')).toBeNull();
+      markSessionEnding(false);
+      expect(keepClockAction(start, '')?.kept).toBe(true);
     });
 
     test('a discard waits for a send in flight, so the server never records an event the person was told is gone', async () => {

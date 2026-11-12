@@ -1,5 +1,6 @@
 'use client';
 
+import { markSessionEnding } from '@/lib/field-sync/device/today-wipe';
 import { logError } from '@/lib/logging';
 
 // What every sign-out and the organization switch ask before they end the
@@ -30,10 +31,15 @@ export async function mayEndSession(
   /** `organization` for a switch, which leaves only the active organization (unsent-work.ts, UnsentScope). */
   scope: 'session' | 'organization' = 'session',
 ): Promise<boolean> {
+  // From here no tab keeps a clock action, so the check sees all the session leaves; the wipe ends it.
+  markSessionEnding(true);
   try {
     const { settleUnsentWork } = await import('./unsent-work-prompt');
-    return await settleUnsentWork(scope);
+    const mayEnd = await settleUnsentWork(scope);
+    if (!mayEnd) markSessionEnding(false);
+    return mayEnd;
   } catch (error) {
+    markSessionEnding(false);
     logError('unsent work: the check before the session ends failed', error);
     showFailure(CHECK_FAILED);
     return false;

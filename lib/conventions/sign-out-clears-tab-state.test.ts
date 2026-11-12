@@ -128,13 +128,14 @@ describe('sign-out clears the tab state', () => {
     }
   });
 
-  test('the unsent-work gate imports only the logging, and its one lazy load is caught', () => {
+  // The wipe module imports nothing and every sign-out already loads it, so its session-end barrier costs no script.
+  test('the unsent-work gate imports only the logging and the wipe module, and its one lazy load is caught', () => {
     const source = parseProductSource(UNSENT_GATE_MODULE);
     expect(
       source.statements
         .filter(ts.isImportDeclaration)
         .map((statement) => statement.moduleSpecifier.getText(source)),
-    ).toEqual(["'@/lib/logging'"]);
+    ).toEqual(["'@/lib/field-sync/device/today-wipe'", "'@/lib/logging'"]);
     expect(source.text.match(/import\(/g)).toHaveLength(1);
     expect(source.text).toMatch(
       /try \{\s+const \{ settleUnsentWork \} = await import\('\.\/unsent-work-prompt'\);/,

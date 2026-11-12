@@ -37,6 +37,7 @@ import {
   TodayRefreshProfileContractFixture,
   TodayRefreshSwitchContractFixture,
 } from './today-refresh-boundaries';
+import { OfflineClockContractFixture } from './offline-clock-boundaries';
 import { OfflineTodayContractFixture } from './offline-today-boundaries';
 import { CalendarContractFixture } from './calendar-boundaries';
 import { FeedbackContractFixture, isFeedbackFixture } from './feedback-boundaries';
@@ -618,6 +619,8 @@ createRoot(root).render(
     <TodayRefreshFallbackContractFixture />
   ) : window.uiContractFixture === 'offline-today' ? (
     <OfflineTodayContractFixture />
+  ) : window.uiContractFixture === 'offline-clock' ? (
+    <OfflineClockContractFixture />
   ) : window.uiContractFixture === 'calendar-board' ? (
     <CalendarBoardContractFixture />
   ) : window.uiContractFixture === 'calendar-day' ? (

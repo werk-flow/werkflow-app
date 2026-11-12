@@ -43,6 +43,7 @@ declare global {
       | 'today-refresh-profile'
       | 'today-refresh-fallback'
       | 'offline-today'
+      | 'offline-clock'
       | 'sidebar'
       | 'lazy-dialog'
       | 'clock'
