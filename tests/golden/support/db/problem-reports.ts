@@ -8,6 +8,7 @@ export type PersistedProblemReport = Persisted<{
   status: string;
   description: string | null;
   scrubState: string;
+  scrubbedDescription: string | null;
   fileKinds: string[];
 }>;
 
@@ -19,7 +20,7 @@ export async function getProblemReportByDescription(
   const admin = createAdminClient();
   const { data, error } = await admin
     .from('problem_reports')
-    .select('id, number, reporter_id, status, description, scrub_state')
+    .select('id, number, reporter_id, status, description, scrub_state, scrubbed_description')
     .eq('organization_id', orgId)
     .eq('description', description)
     .single();
@@ -36,6 +37,7 @@ export async function getProblemReportByDescription(
     status: data.status,
     description: data.description,
     scrubState: data.scrub_state,
+    scrubbedDescription: data.scrubbed_description,
     fileKinds: files.data.map((file) => file.kind).sort(),
   });
 }
