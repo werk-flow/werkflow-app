@@ -968,6 +968,15 @@ const ratchetedAssertionFiles = new Set(Object.keys(typeAssertionRatchet));
 const isRatchetedAssertionFile = (filePath) =>
   ratchetedAssertionFiles.has(relative(import.meta.dirname, filePath).replaceAll('\\', '/'));
 
+// A whole-page lookup in a browser test finds only what is shown
+// (playwright-spec/visible-page-lookup). eslint-rules/visible-page-lookup-ratchet.json
+// lists the support modules not swept yet, by file and count: the rule is off
+// for them, and lib/testing/spec-support/visible-page-lookup.test.mjs fails
+// when a listed file holds any other number of such lookups or is gone.
+const visiblePageLookupRatchet = JSON.parse(
+  readFileSync(new URL('./eslint-rules/visible-page-lookup-ratchet.json', import.meta.url), 'utf8'),
+);
+
 // The files that may start an interval (realtime/no-interval). Shrink-only:
 // the rule reports a listed file that starts none.
 const intervalAllowList = [
@@ -1222,6 +1231,18 @@ const eslintConfig = defineConfig([
       'playwright-spec/no-transport-internals': 'error',
       'playwright-spec/no-scoped-has-locator': 'error',
       'playwright-spec/no-one-shot-count-comparison': 'error',
+    },
+  },
+  // Hidden copies (docs/technical/integrated-test-state.md, "Keep the page
+  // stable during a step"): the specs and support modules that load the app
+  // look up on the whole page only what is shown. The contract specs mount a
+  // client bundle on a static page, which holds no copy.
+  {
+    files: ['tests/golden/**/*.ts', 'tests/audit/**/*.ts', 'tests/canary/**/*.ts'],
+    ignores: Object.keys(visiblePageLookupRatchet),
+    plugins: { 'playwright-spec': playwrightSpecRules },
+    rules: {
+      'playwright-spec/visible-page-lookup': 'error',
     },
   },
   // Failures in support modules (docs/technical/testing.md): no `.catch` or

@@ -320,7 +320,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
     ['work_execution_boundaries.sql', 'work_artifact_customer_decisions.sql'],
     ['work', 'time', 'documents', 'inventory'],
   ],
-  ['p1-21', ['p1_21_time_segments.sql'], ['time', 'personnel', 'work']],
+  ['p1-21', ['p1_21_time_segments.sql', 'clock_job_row_lock.sql'], ['time', 'personnel', 'work']],
   ['p1-22', ['p1_22_time_corrections.sql'], ['time', 'personnel', 'work']],
   ['a1-time-history', ['a1_time_history.sql'], ['time', 'personnel']],
   [
@@ -386,6 +386,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['problem-reports', ['problem_reports.sql'], ['*']],
   ['organization-export', ['organization_export.sql'], ['*']],
   ['record-numbers', ['record_numbers.sql'], ['work', 'customers', 'personnel', 'service']],
+  ['hot-read-volume', ['hot_read_volume.sql'], ['planning', 'time', 'attention', 'work', 'documents']],
   [
     'list-pagination',
     [

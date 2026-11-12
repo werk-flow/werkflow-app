@@ -551,7 +551,9 @@ export async function showPlanningMonth(page: Page, targetDate?: string): Promis
   await page.goto(targetDate ? `/kalender?date=${targetDate}` : '/kalender');
   await calendarViewTab(page, 'month').click();
   await expect(
-    page.locator('[data-calendar-scroll-container][data-calendar-state="ready"][data-calendar-view="month"]'),
+    page
+      .locator('[data-calendar-scroll-container][data-calendar-state="ready"][data-calendar-view="month"]')
+      .filter({ visible: true }),
   ).toBeVisible();
   if (targetDate)
     await expect(

@@ -19,7 +19,7 @@ import {
   type ClientRequest,
 } from '@/lib/requests/types';
 import type { OrganizationDocument } from '@/lib/documents/types';
-import { RequestStatusBadge, RequestUrgencyBadge } from './request-badges';
+import { RequestHeaderBadges } from './request-badges';
 import { AttachRequestDialog } from './attach-request-dialog';
 import { CloseRequestDialog } from './close-request-dialog';
 import { ConvertRequestDialog } from './convert-request-dialog';
@@ -72,12 +72,7 @@ function RequestDetailHeader(props: ComponentProps<typeof RequestHeaderActions>)
       breadcrumbs={[{ label: 'Anfragen', href: '/anfragen' }, { label: request.requestNumber || 'Anfrage' }]}
       title={request.summary}
       subtitle={`${REQUEST_CATEGORY_LABELS[request.category]} · ${REQUEST_SOURCE_LABELS[request.source]} · Eingegangen am ${formatDateTime(request.receivedAt)}`}
-      badges={
-        <>
-          <RequestStatusBadge status={shownStatus} />
-          <RequestUrgencyBadge urgency={request.urgency} />
-        </>
-      }
+      badges={<RequestHeaderBadges status={shownStatus} urgency={request.urgency} />}
       actions={<RequestHeaderActions {...props} />}
     />
   );

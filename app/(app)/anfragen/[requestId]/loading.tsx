@@ -25,7 +25,12 @@ export default function AnfrageDetailLoading() {
       <PageHeader
         breadcrumbs={[{ label: 'Anfragen', href: '/anfragen' }]}
         title={<Skeleton className="h-7 w-64 max-w-full sm:h-8" />}
-        badges={<Skeleton className="h-5 w-20 rounded-full" />}
+        badges={
+          <span className="flex flex-wrap items-center gap-2">
+            <Skeleton className="h-5 w-14 rounded-full" />
+            <Skeleton className="h-5 w-12 rounded-full" />
+          </span>
+        }
         subtitle={<Skeleton className="h-4 w-72 max-w-full" />}
         actions={<Skeleton className="h-9 w-32" />}
       />
