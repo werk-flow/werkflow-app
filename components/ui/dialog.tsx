@@ -160,6 +160,13 @@ const DialogContent = React.forwardRef<
      * first control appears late (the avatar crop area).
      */
     initialFocus?: DialogInitialFocus;
+    /**
+     * The id of the control an `onOpenAutoFocus` moves focus to when that is
+     * not the first control, such as the edit dialog's title, which keeps a
+     * stray keystroke off the job number. The layout audit accepts focus there
+     * (tests/audit/support/keyboard-path.ts).
+     */
+    startControlId?: string;
   }
 >(
   (
@@ -170,6 +177,7 @@ const DialogContent = React.forwardRef<
       workspace = false,
       size = 'lg',
       initialFocus = 'first-control',
+      startControlId,
       onEscapeKeyDown,
       onInteractOutside,
       onOpenAutoFocus,
@@ -192,6 +200,7 @@ const DialogContent = React.forwardRef<
         <DialogPrimitive.Content
           ref={ref}
           data-slot="dialog-content"
+          data-dialog-start={startControlId}
           className={dialogContentClassName({ placement, workspace, size, className })}
           {...props}
           {...returnFocus}
