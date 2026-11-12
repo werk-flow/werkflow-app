@@ -13,7 +13,7 @@ import {
   UNUSUALLY_LONG_SESSION_MS,
   type TimeSegmentFact,
 } from './segments';
-import { computeBreakdownForSettings, type OrganizationTimeTrackingSettings } from './settings';
+import { computeBreakdownForSettings, currentBreakPolicy, type BreakPolicy } from './settings';
 import type { ClockJobInfo, LiveClockState, TimeActivitySelection } from './types';
 
 // The caller's canonical clock day for getCurrentClockState: the segments of
@@ -30,11 +30,6 @@ export type CanonicalClockDay = {
   /** Every segment of today's sessions that overlaps the Berlin day, in start order. */
   segments: TimeSegmentFact[];
 };
-
-type ClockSettings = Pick<
-  OrganizationTimeTrackingSettings,
-  'breakMode' | 'autoBreakThresholdMinutes' | 'autoBreakDurationMinutes'
->;
 
 /**
  * Today's canonical capture of one person in one organization, in one read:
@@ -154,7 +149,7 @@ export async function buildCanonicalClockState(
   admin: AdminClient,
   input: {
     organizationId: string;
-    settings: ClockSettings;
+    settings: BreakPolicy;
     session: OpenSession;
     day: CanonicalClockDay;
     legacyTotals: ClockDayTotals;
@@ -223,12 +218,10 @@ function sessionRecoveryReason(session: OpenSession, now: Date): string | null {
 /** The settings and today's totals of a clock state, after the organization's break mode. */
 export function clockTotalsState(
   totals: ClockDayTotals,
-  settings: ClockSettings,
+  settings: BreakPolicy,
 ): Pick<
   LiveClockState,
-  | 'breakMode'
-  | 'autoBreakThresholdMinutes'
-  | 'autoBreakDurationMinutes'
+  | 'breakPolicy'
   | 'todayMinutes'
   | 'workMinutes'
   | 'breakMinutes'
@@ -240,9 +233,7 @@ export function clockTotalsState(
 > {
   const breakdown = computeBreakdownForSettings(totals.presenceMinutes, totals.breakMinutes, settings);
   return {
-    breakMode: settings.breakMode,
-    autoBreakThresholdMinutes: settings.autoBreakThresholdMinutes,
-    autoBreakDurationMinutes: settings.autoBreakDurationMinutes,
+    breakPolicy: currentBreakPolicy(settings),
     todayMinutes: totals.presenceMinutes,
     workMinutes: breakdown.workMinutes,
     breakMinutes: breakdown.breakMinutes,

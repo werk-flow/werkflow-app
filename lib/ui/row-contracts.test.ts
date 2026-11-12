@@ -35,6 +35,7 @@ const PAIRS = [
     'components/problem-reports/own-problem-report-columns.tsx',
   ],
   ['components/service/equipment-list-content.tsx', 'components/loading-states/equipment-page-skeleton.tsx'],
+  ['components/support/support-queue.tsx', 'components/support/support-queue-columns.tsx'],
   [
     'components/service/service-case-list-content.tsx',
     'components/loading-states/service-cases-page-skeleton.tsx',

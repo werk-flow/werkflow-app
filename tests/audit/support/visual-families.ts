@@ -93,6 +93,7 @@ const SETTINGS_SECTIONS = [
   'mitarbeiter',
   'auftraege-projekte',
   'datenexport',
+  'dokumente',
 ] as const;
 
 export const APP_FAMILIES: readonly AppFamily[] = [
@@ -372,6 +373,9 @@ export const STANDALONE_FAMILIES: readonly StandaloneFamily[] = [
     heading: 'Lass uns deine Organisation erstellen',
   },
   { id: 'onboarding-vorstart', screen: '/onboarding/meine-aufgaben', heading: 'Dein Start bei WerkFlow' },
+  { id: 'support-meldungen', screen: '/support', heading: 'Meldungen' },
+  { id: 'support-aufnehmen', screen: '/support/aufnehmen', heading: 'Meldung aufnehmen' },
+  { id: 'support-meldung', screen: '/support/meldungen/[reportId]', heading: 'Meldung Nr. 1' },
 ];
 
 /**

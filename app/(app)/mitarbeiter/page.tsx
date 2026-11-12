@@ -6,6 +6,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
 import { resolvePageMembership } from '@/lib/org/page-context';
 import { getCachedOrganizationSettings } from '@/lib/data/cached';
+import { breakPolicyOf } from '@/lib/time-tracking/settings';
 import { InviteDialog } from '@/components/mitarbeiter/invite-dialog';
 import { CreatePersonnelDialog } from '@/components/mitarbeiter/create-personnel-dialog';
 import { MitarbeiterTabs } from '@/components/mitarbeiter/mitarbeiter-tabs';
@@ -163,9 +164,7 @@ async function MitarbeiterData({ activeOrgId, userId, currentUserRole }: Mitarbe
         currentUserId={userId}
         currentUserRole={currentUserRole}
         organizationId={activeOrgId}
-        breakMode={organizationSettings.breakMode}
-        autoBreakThresholdMinutes={organizationSettings.autoBreakThresholdMinutes}
-        autoBreakDurationMinutes={organizationSettings.autoBreakDurationMinutes}
+        breakPolicy={breakPolicyOf(organizationSettings)}
         qualificationWorkspace={
           qualificationWorkspaceResult.success ? qualificationWorkspaceResult.data : null
         }

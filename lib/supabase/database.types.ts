@@ -7916,8 +7916,45 @@ export type Database = {
           },
         ];
       };
+      problem_report_signals: {
+        Row: {
+          id: string;
+          organization_id: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "problem_report_signals_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "problem_report_signals_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       problem_reports: {
         Row: {
+          assignee_id: string | null;
           bucket: string | null;
           closed_at: string | null;
           context: Json | null;
@@ -7936,6 +7973,7 @@ export type Database = {
           status: string;
         };
         Insert: {
+          assignee_id?: string | null;
           bucket?: string | null;
           closed_at?: string | null;
           context?: Json | null;
@@ -7954,6 +7992,7 @@ export type Database = {
           status?: string;
         };
         Update: {
+          assignee_id?: string | null;
           bucket?: string | null;
           closed_at?: string | null;
           context?: Json | null;
@@ -7972,6 +8011,13 @@ export type Database = {
           status?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "problem_reports_assignee_id_fkey";
+            columns: ["assignee_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "problem_reports_filed_by_id_fkey";
             columns: ["filed_by_id"];
@@ -15793,6 +15839,17 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      file_problem_report_for_caller: {
+        Args: {
+          p_actor_id: string;
+          p_description: string;
+          p_organization_id: string;
+          p_report_id: string;
+          p_reporter_id: string;
+          p_support_ids: string[];
+        };
+        Returns: number;
+      };
       finalize_document_upload: {
         Args: {
           p_actor_id: string;
@@ -16977,6 +17034,16 @@ export type Database = {
           p_part_id: string;
         };
         Returns: Json;
+      };
+      record_problem_report_opening: {
+        Args: {
+          p_actor_id: string;
+          p_file_id: string;
+          p_organization_id: string;
+          p_report_id: string;
+          p_support_ids: string[];
+        };
+        Returns: undefined;
       };
       record_problem_report_scrub: {
         Args: {
@@ -18671,6 +18738,17 @@ export type Database = {
           p_actor_id: string;
           p_document_id: string;
           p_organization_id: string;
+        };
+        Returns: undefined;
+      };
+      triage_problem_report: {
+        Args: {
+          p_actor_id: string;
+          p_changes: Json;
+          p_expected: Json;
+          p_organization_id: string;
+          p_report_id: string;
+          p_support_ids: string[];
         };
         Returns: undefined;
       };

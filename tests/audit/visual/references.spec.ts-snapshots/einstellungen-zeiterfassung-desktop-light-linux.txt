@@ -35,6 +35,8 @@ Dashboard
 Startansicht und Widgets
 Organisation
 Allgemeine Organisationsdaten
+Dokumente & Briefpapier
+Angebote als PDF
 Kalender
 Kalenderansichten und Regeln
 Zeiterfassung

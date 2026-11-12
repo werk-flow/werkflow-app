@@ -1,8 +1,7 @@
 'use client';
 
-import { Suspense, use, useRef, useState, type FormEvent } from 'react';
+import { Suspense, use, useState, type FormEvent } from 'react';
 import Link from 'next/link';
-import { X } from 'lucide-react';
 
 import { useOrganization } from '@/components/organization/organization-context';
 import { Button } from '@/components/ui/button';
@@ -18,20 +17,17 @@ import {
 } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
-import { FileInput } from '@/components/ui/file-input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { problemReportFailureMessage } from '@/lib/problem-reports/messages';
 import type { RedactionBox } from '@/lib/problem-reports/redaction';
-import {
-  PROBLEM_REPORT_DESCRIPTION_MAX_LENGTH,
-  PROBLEM_REPORT_FILE_RULES,
-  PROBLEM_REPORT_MAX_ATTACHMENTS,
-} from '@/lib/problem-reports/types';
+import { PROBLEM_REPORT_DESCRIPTION_MAX_LENGTH } from '@/lib/problem-reports/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
+import { AttachmentsField } from './attachments-field';
 import type { ProblemReportCapture } from './problem-report-launcher';
 import { ScreenshotRedactor } from './screenshot-redactor';
-import { useProblemReportSend, type ChosenAttachment } from './use-problem-report-send';
+import { useProblemReportSend } from './use-problem-report-send';
+import type { ChosenAttachment } from './use-report-files';
 
 // The report dialog (docs/features/problem-reports.md). It loads on the
 // press, together with the capture; the launcher took the screenshot before
@@ -150,80 +146,6 @@ function ProblemReportFooter({ pending, onClose }: { pending: boolean; onClose: 
         </Button>
       </div>
     </DialogFooter>
-  );
-}
-
-/** Why a chosen attachment cannot join the report, or null when it can. */
-function attachmentProblem(file: File, chosen: number): string | null {
-  const rule = PROBLEM_REPORT_FILE_RULES.anhang;
-  if (chosen >= PROBLEM_REPORT_MAX_ATTACHMENTS) return problemReportFailureMessage('too_many_attachments');
-  if (!rule.mimeTypes.includes(file.type)) return problemReportFailureMessage('file_type_not_allowed');
-  if (file.size === 0) return problemReportFailureMessage('file_empty');
-  return file.size > rule.maxSizeBytes ? problemReportFailureMessage('file_too_large') : null;
-}
-
-type AttachmentsFieldProps = {
-  attachments: ChosenAttachment[];
-  onAttachmentsChange: (update: (current: ChosenAttachment[]) => ChosenAttachment[]) => void;
-  frozenFiles: ReadonlySet<string>;
-  /** While a send runs, the list it sends stays as it is. */
-  disabled: boolean;
-};
-
-function AttachmentsField({
-  attachments,
-  onAttachmentsChange,
-  frozenFiles,
-  disabled,
-}: AttachmentsFieldProps) {
-  const [problem, setProblem] = useState<string | null>(null);
-  const nextKey = useRef(1);
-  return (
-    <>
-      <Field
-        label="Anhänge"
-        htmlFor="problem-report-attachment"
-        description="Fotos oder PDFs, höchstens fünf. Sie bleiben bei WerkFlow."
-        error={problem}
-      >
-        <FileInput
-          buttonLabel="Foto oder PDF anhängen"
-          fileName={null}
-          accept={PROBLEM_REPORT_FILE_RULES.anhang.mimeTypes.join(',')}
-          disabled={disabled}
-          onSelect={(file) => {
-            if (!file) return;
-            // A chooser opened before the send can close after it started; that file joins no send.
-            if (disabled) return setProblem('Die Meldung wird gerade gesendet. Hänge die Datei danach an.');
-            const refusal = attachmentProblem(file, attachments.length);
-            setProblem(refusal);
-            if (refusal) return;
-            const key = nextKey.current;
-            nextKey.current += 1;
-            onAttachmentsChange((current) => [...current, { key, file }]);
-          }}
-        />
-      </Field>
-      {attachments.length > 0 && (
-        <ul className="divide-y rounded-lg border">
-          {attachments.map(({ key, file }) => (
-            <li key={key} className="flex items-center gap-2 py-1 pr-1 pl-3 text-sm">
-              <span className="min-w-0 flex-1 truncate">{file.name}</span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label={`„${file.name}“ entfernen`}
-                disabled={disabled || frozenFiles.has(`anhang-${key}`)}
-                onClick={() => onAttachmentsChange((current) => current.filter((entry) => entry.key !== key))}
-              >
-                <X className="size-4" />
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </>
   );
 }
 

@@ -225,7 +225,7 @@ export async function updateTimeTrackingSettings(
     const breakEnds = await readOpenBreakEnds(activeOrgId);
 
     const nextHistory = appendBreakPolicyHistory(
-      currentSettings.breakPolicyHistory,
+      currentSettings,
       buildBreakPolicyHistoryEntry({
         breakMode: nextValues.breakMode,
         autoBreakThresholdMinutes: nextValues.autoBreakThresholdMinutes,
