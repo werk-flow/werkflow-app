@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { format } from 'prettier';
 
 import {
+  committedTypesHeader,
   typesFromCi,
   typesHereReason,
   typesInputDigest,
@@ -37,15 +38,10 @@ if (unknownArguments.length > 0) {
   throw new Error(`Unknown argument: ${unknownArguments.join(', ')}`);
 }
 
-/**
- * A hosted project's types name its PostgREST version for supabase-js; the local stack's do not.
- * A local generation keeps the committed header, so the source of the types never changes them.
- */
-const INTERNAL_HEADER =
-  /\n {2}\/\/ Allows to automatically instantiate[\s\S]*?__InternalSupabase: \{[\s\S]*?\n {2}\};?\n/;
+/** A local generation keeps the committed header (committedTypesHeader), which the local stack lacks. */
 function withCommittedHeader(types: string): string {
-  if (!LOCAL || INTERNAL_HEADER.test(types)) return types;
-  const header = INTERNAL_HEADER.exec(readFileSync(OUTPUT_PATH, 'utf8'))?.[0];
+  if (!LOCAL || committedTypesHeader(types)) return types;
+  const header = committedTypesHeader(readFileSync(OUTPUT_PATH, 'utf8'));
   return header ? types.replace(/(export type Database = \{)\n/, `$1${header}`) : types;
 }
 
