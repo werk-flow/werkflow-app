@@ -20,14 +20,25 @@ import {
   INVENTORY_ITEM_TYPE_LABELS,
   INVENTORY_STOCK_STATUS_LABELS,
 } from '@/lib/inventory/types';
+import { isInventoryUnitCode } from '@/lib/inventory/units';
 import { cn } from '@/lib/utils';
 import type { PendingItemDraft } from './inventory-form-state';
-import { itemTypeClasses, stockStatusClasses } from './inventory-row-format';
+import { itemTypeClasses, stockStatusClasses, WARNING_BADGE_CLASSES } from './inventory-row-format';
 
 type ItemRowActions = {
   onEdit: (item: InventoryOverviewItem) => void;
   onAdjust: (item: InventoryOverviewItem) => void;
 };
+
+/** Marks an article saved before the unit list with a unit outside it; its edit asks for a unit. */
+function UnitCheckBadge({ unit }: { unit: string }) {
+  if (isInventoryUnitCode(unit)) return null;
+  return (
+    <Badge variant="outline" className={cn('shrink-0', WARNING_BADGE_CLASSES)}>
+      Einheit prüfen
+    </Badge>
+  );
+}
 
 /** The mobile card content of a stored item. */
 export function InventoryItemCardBody({
@@ -43,6 +54,7 @@ export function InventoryItemCardBody({
       <div className="flex items-center gap-2">
         <p className="min-w-0 truncate text-sm font-medium">{item.name}</p>
         <InlinePending active={busy} />
+        <UnitCheckBadge unit={item.unit} />
         <Badge variant="outline" className={cn('shrink-0', stockStatusClasses(item.stockStatus))}>
           {INVENTORY_STOCK_STATUS_LABELS[item.stockStatus]}
         </Badge>
@@ -116,6 +128,7 @@ export function InventoryItemCells({
           <div className="flex items-center gap-2">
             <p className="font-medium">{item.name}</p>
             <InlinePending active={busy} />
+            <UnitCheckBadge unit={item.unit} />
           </div>
           <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
             {item.internalSku && <span>SKU {item.internalSku}</span>}

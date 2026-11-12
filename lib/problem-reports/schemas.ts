@@ -162,7 +162,8 @@ const triageExpectedSchema = z
   })
   .partial();
 
-const sameFields = (left: object, right: object): boolean =>
+/** Whether two objects name the same keys, whatever their values. */
+const sameKeySet = (left: object, right: object): boolean =>
   Object.keys(left).sort().join() === Object.keys(right).sort().join();
 
 export const triageProblemReportInputSchema = z
@@ -184,7 +185,7 @@ export const triageProblemReportInputSchema = z
     /** The values the page showed for the changed fields when the change began. */
     expected: triageExpectedSchema,
   })
-  .refine((input) => sameFields(input.changes, input.expected));
+  .refine((input) => sameKeySet(input.changes, input.expected));
 export type TriageProblemReportInput = z.input<typeof triageProblemReportInputSchema>;
 
 export const openProblemReportAttachmentInputSchema = z.strictObject({
@@ -221,5 +222,5 @@ export const problemReportWriteBackSchema = z
     changes: writeBackChangesSchema,
     expected: triageExpectedSchema.omit({ assigneeId: true }),
   })
-  .refine(({ changes, expected }) => Object.keys(changes).length > 0 && sameFields(changes, expected));
+  .refine(({ changes, expected }) => Object.keys(changes).length > 0 && sameKeySet(changes, expected));
 export type ProblemReportWriteBack = z.infer<typeof problemReportWriteBackSchema>;

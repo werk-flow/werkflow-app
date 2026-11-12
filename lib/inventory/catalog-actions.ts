@@ -11,12 +11,12 @@ import { inventoryPageQuerySchema, inventoryPageResultSchema } from './list-page
 import type { UpsertInventoryItemInput } from './action-inputs';
 import type { InventoryItem, InventoryLocation, InventoryOverview } from './types';
 import { toInventoryItem } from './types';
+import { normalizeInventoryUnitInput } from './units';
 import {
   cleanText,
   ensureInventoryDefaults,
   invalidateInventory,
   inventoryWriteFailure,
-  normalizeInventoryUnitInput,
   normalizePrice,
   normalizeQuantity,
 } from './write-support';
@@ -109,7 +109,8 @@ export async function upsertInventoryItem(
 
   const name = cleanText(input.name);
   if (!name) return { success: false, error: 'name_required' };
-  if (!input.unit.trim()) return { success: false, error: 'unit_required' };
+  const unit = normalizeInventoryUnitInput(input.unit);
+  if (!unit) return { success: false, error: input.unit.trim() ? 'unit_unknown' : 'unit_required' };
 
   const initialQuantity = normalizeQuantity(input.initialQuantity ?? 0);
   const requestedInitialLocationId = input.id ? null : (input.initialLocationId ?? null);
@@ -123,7 +124,7 @@ export async function upsertInventoryItem(
     name,
     description: cleanText(input.description),
     category_id: cleanText(input.categoryId),
-    unit: normalizeInventoryUnitInput(input.unit),
+    unit,
     internal_sku: cleanText(input.internalSku),
     manufacturer: cleanText(input.manufacturer),
     supplier_id: cleanText(input.supplierId),

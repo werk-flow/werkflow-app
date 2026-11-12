@@ -1,0 +1,59 @@
+Haustechnik Krämer GmbH
+Organisation erstellen
+Dashboard
+Aufgaben
+3
+3 offene Aufgaben und Benachrichtigungen
+Kalender
+Zeiterfassung
+Qualifikationen
+Anfragen
+Aufträge
+Dokumente
+Inventar
+Service
+Arbeitsvorlagen
+Mitarbeiter
+Kunden
+Problem melden
+F2
+MK
+Martin Krämer
+martin.kraemer@haustechnik-kraemer.de
+Einstellungen
+Persönlich
+Profil
+Name und Profilbild
+Konto & Sicherheit
+E-Mail und Passwort
+Aufträge & Projekte
+Persönliche Tabellenansicht
+Abonnement & Abrechnung
+Plan und Abrechnung
+Organisation
+Dashboard
+Startansicht und Widgets
+Organisation
+Allgemeine Organisationsdaten
+Dokumente & Briefpapier
+Angebote als PDF
+Kalender
+Kalenderansichten und Regeln
+Zeiterfassung
+Arbeitszeiten und Freigaben
+Mitarbeiter
+Freigaben und Vertretungen
+Kunden
+Kundenverwaltung und Defaults
+Datenexport
+Alle Daten herunterladen
+Dokumente & Briefpapier
+Zeigt am Musterangebot, wie deine Angebote als PDF bei deinen Kunden ankommen.
+Gilt für Haustechnik Krämer GmbH
+Musterangebot
+So kommt ein Angebot als PDF bei deinen Kunden an: dein Firmenname als Absender, ein erfundener Kunde und erfundene Preise.
+Musterangebot.pdf
+PDF-Datei, wie dein Kunde sie bekommt
+Öffnen
+Herunterladen
+Nicht eingestempelt

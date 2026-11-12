@@ -60,6 +60,7 @@ declare global {
       | 'problem-report'
       | 'support-triage'
       | 'support-filing'
+      | 'inventory-unit'
       | AuthUrlFixtureName
       | FeedbackFixtureName;
     uiContractLifecycle: LifecycleBoundaryState;
