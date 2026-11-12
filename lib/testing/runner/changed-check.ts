@@ -16,6 +16,18 @@ export type ChangedCheckPlan = {
   unitTests: string[];
 };
 
+/**
+ * The source of each unit test git lists that is still on disk: `git ls-files` keeps listing a
+ * tracked test deleted or moved before it is staged.
+ */
+export function unitTestSourcesOf(
+  listed: readonly string[],
+  exists: (file: string) => boolean,
+  read: (file: string) => string,
+): Map<string, string> {
+  return new Map(listed.filter(exists).map((file) => [file, read(file)]));
+}
+
 /** Whether a test's source names `file`, or a folder of it two levels deep or more, as a string literal. */
 function namesPath(source: string, file: string): boolean {
   const segments = file.split('/');

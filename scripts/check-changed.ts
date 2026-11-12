@@ -1,7 +1,7 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { CHANGED_CHECK_BASE, changedCheckPlan } from '../lib/testing/runner/changed-check';
+import { CHANGED_CHECK_BASE, changedCheckPlan, unitTestSourcesOf } from '../lib/testing/runner/changed-check';
 import { acquireHeavySlot } from '../lib/testing/runner/heavy-slot';
 
 // `bun run check:changed`: the fast check an agent runs before it pushes
@@ -30,11 +30,10 @@ const changed = [
     ...git('ls-files', '--others', '--exclude-standard', '-z'),
   ]),
 ].filter(present);
-const unitTestSources = new Map(
-  git('ls-files', '-z', 'lib/*.test.ts', 'lib/*.test.tsx', 'lib/*.test.mjs').map((file) => [
-    file,
-    readFileSync(resolve(repositoryRoot, file), 'utf8'),
-  ]),
+const unitTestSources = unitTestSourcesOf(
+  git('ls-files', '-z', 'lib/*.test.ts', 'lib/*.test.tsx', 'lib/*.test.mjs'),
+  present,
+  (file) => readFileSync(resolve(repositoryRoot, file), 'utf8'),
 );
 const plan = changedCheckPlan(changed, present, unitTestSources);
 
