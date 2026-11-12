@@ -318,7 +318,8 @@ async function sendOne(claim: SendClaim, draftId: string, byPerson: boolean): Pr
  */
 function acrossTabs<T>(run: () => Promise<T>): Promise<T> {
   const locks = typeof navigator === 'undefined' ? undefined : navigator.locks;
-  return locks ? locks.request('werkflow-draft-send', run) : run();
+  // `then` flattens the lock's answer: the DOM typing returns the callback's promise wrapped once more.
+  return locks ? locks.request('werkflow-draft-send', run).then((result) => result) : run();
 }
 
 function enqueue<T>(run: () => Promise<T>): Promise<T> {
