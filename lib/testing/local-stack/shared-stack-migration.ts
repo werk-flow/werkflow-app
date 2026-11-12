@@ -195,10 +195,10 @@ function readCommand(command: string, depth: number): { refusal?: string; localP
     ...(piped ? [piped] : []),
     ...bodies.flatMap((body) => MIGRATION_FILE.exec(body)?.[0] ?? []),
   ];
-  return {
-    refusal: fed[0]
-      ? `Refused: \`psql\` with ${fed[0]} would run this tree's migration in the local stack, which every worktree shares and which holds only main's ${RULE}. ${INSTEAD}`
-      : undefined,
-    localPsql,
-  };
+  return fed[0]
+    ? {
+        refusal: `Refused: \`psql\` with ${fed[0]} would run this tree's migration in the local stack, which every worktree shares and which holds only main's ${RULE}. ${INSTEAD}`,
+        localPsql,
+      }
+    : { localPsql };
 }
