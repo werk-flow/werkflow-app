@@ -34,6 +34,7 @@ const ADDRESS_FIELD_TOP_MM = 45;
 /** The narrowest content a page may leave: the table and the info block's values need this much. */
 const MINIMUM_CONTENT_WIDTH_MM = 120;
 const MINIMUM_INFO_VALUE_WIDTH_MM = 25;
+const MINIMUM_CONTENT_HEIGHT_MM = 120;
 const INFO_BLOCK_LEFT_MM = 125;
 const PAGE_NUMBER_SPACE = 8 * MM;
 
@@ -183,51 +184,51 @@ function positionFlow(
   fonts: Fonts,
   textWidth: number,
 ): FlowItem[] {
-  const textLines = wrap(position.text, fonts.regular, BODY_SIZE, textWidth);
+  const [firstLine = '', ...moreLines] = wrap(position.text, fonts.regular, BODY_SIZE, textWidth);
   const mark = POSITION_MARKS[position.kind];
   const descriptionLines = position.description.trim()
     ? wrap(position.description, fonts.regular, DESCRIPTION_SIZE, textWidth)
     : [];
-  const head: FlowItem = {
-    height:
-      4 +
-      textLines.length * BODY_LEADING +
-      (mark ? SMALL_LEADING + 1 : 0) +
-      (descriptionLines.length ? 0 : 4),
-    // A position never leaves the first line of its description behind.
-    keepWithNext: descriptionLines.length > 0 || travelsWithSubtotal,
+  // The text's lines, its mark and the first description line form one kept chain,
+  // so a position never leaves the first line of its description behind; a line
+  // per item lets a text longer than a page break instead of overflowing it.
+  const tableLine = (height: number, draw: FlowItem['draw']): FlowItem => ({
+    height,
+    keepWithNext: true,
     inTable: true,
-    draw: (page, top, box) => {
+    draw,
+  });
+  const head = [
+    tableLine(4 + BODY_LEADING, (page, top, box) => {
       const columns = columnsOf(box);
       const line = top + 4;
       drawLeft(page, position.number, columns.numberLeft, line, fonts.regular, BODY_SIZE);
-      textLines.forEach((text, index) =>
-        drawLeft(page, text, columns.textLeft, line + index * BODY_LEADING, fonts.regular, BODY_SIZE),
-      );
+      drawLeft(page, firstLine, columns.textLeft, line, fonts.regular, BODY_SIZE);
       const quantity = `${formatQuantity(position.quantity)} ${position.unitLabel}`;
       drawRight(page, quantity, columns.quantityRight, line, fonts.regular, BODY_SIZE);
-      drawRight(
-        page,
-        formatEuroCents(position.unitPriceCents),
-        columns.priceRight,
-        line,
-        fonts.regular,
-        BODY_SIZE,
-      );
-      drawRight(
-        page,
-        formatEuroCents(position.amountCents),
-        columns.amountRight,
-        line,
-        fonts.regular,
-        BODY_SIZE,
-      );
-      if (mark) {
-        const markTop = line + textLines.length * BODY_LEADING + 1;
-        drawLeft(page, mark, columns.textLeft, markTop, fonts.bold, SMALL_SIZE, MUTED);
-      }
-    },
-  };
+      const unitPrice = formatEuroCents(position.unitPriceCents);
+      drawRight(page, unitPrice, columns.priceRight, line, fonts.regular, BODY_SIZE);
+      const amount = formatEuroCents(position.amountCents);
+      drawRight(page, amount, columns.amountRight, line, fonts.regular, BODY_SIZE);
+    }),
+    ...moreLines.map((text) =>
+      tableLine(BODY_LEADING, (page, top, box) =>
+        drawLeft(page, text, columnsOf(box).textLeft, top, fonts.regular, BODY_SIZE),
+      ),
+    ),
+    ...(mark
+      ? [
+          tableLine(SMALL_LEADING + 1, (page, top, box) =>
+            drawLeft(page, mark, columnsOf(box).textLeft, top + 1, fonts.bold, SMALL_SIZE, MUTED),
+          ),
+        ]
+      : []),
+  ];
+  const last = head.at(-1);
+  if (last && !descriptionLines.length) {
+    last.height += 4;
+    last.keepWithNext = travelsWithSubtotal;
+  }
   const description = descriptionLines.map(
     (text, index): FlowItem => ({
       height: DESCRIPTION_LEADING + (index === descriptionLines.length - 1 ? 5 : 0),
@@ -237,7 +238,7 @@ function positionFlow(
         drawLeft(page, text, columnsOf(box).textLeft, top, fonts.regular, DESCRIPTION_SIZE, MUTED),
     }),
   );
-  return [head, ...description];
+  return [...head, ...description];
 }
 
 /** The flow of a section: its heading, its positions and its subtotal. */
@@ -525,7 +526,9 @@ function pageGeometry(document: BusinessDocument) {
   );
   const followingBox = boxFromMargins(stationery?.followingPages?.margins ?? plainMargins, 0);
   const tooNarrow = [firstBox, followingBox].some(
-    (box) => box.right - box.left < MINIMUM_CONTENT_WIDTH_MM * MM || box.bottom - box.top < 50 * MM,
+    (box) =>
+      box.right - box.left < MINIMUM_CONTENT_WIDTH_MM * MM ||
+      box.bottom - box.top < MINIMUM_CONTENT_HEIGHT_MM * MM,
   );
   if (tooNarrow || firstBox.right - (INFO_BLOCK_LEFT_MM + 30) * MM < MINIMUM_INFO_VALUE_WIDTH_MM * MM) {
     throw new Error('document_margins_leave_no_room');

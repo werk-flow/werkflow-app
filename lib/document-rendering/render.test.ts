@@ -313,6 +313,27 @@ describe('the business document renderer', () => {
     }
   });
 
+  test('a position text longer than a page breaks between its lines and keeps its last line with the description', async () => {
+    const text = Array.from({ length: 90 }, (_, index) => `Textzeile${index + 1}`).join('\n');
+    const document = baseDocument([
+      {
+        number: '1',
+        title: 'Lang',
+        positions: [position('1.1', { text, description: 'Erste Beschreibungszeile' })],
+        subtotalCents: 10000,
+      },
+    ]);
+    const pages = await readPages(await renderBusinessDocument(document));
+    expect(pageOf(pages, 'Textzeile90')).toBe(pageOf(pages, 'Erste Beschreibungszeile'));
+    for (const lines of pages) {
+      // Nothing runs past the page number, which sits below the content.
+      const pageNumberTop = lines.find((line) => line.text.startsWith('Seite '))?.top ?? 0;
+      expect(
+        Math.max(...lines.filter((line) => line.text.startsWith('Textzeile')).map((line) => line.top), 0),
+      ).toBeLessThan(pageNumberTop);
+    }
+  });
+
   test('margins that leave no room for the content are refused instead of laid out', async () => {
     const cramped: BusinessDocument = {
       ...serviceOffer,
