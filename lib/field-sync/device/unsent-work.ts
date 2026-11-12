@@ -46,7 +46,7 @@ export function registerUnsentSource(source: UnsentSource): void {
  * read its store: a flow that cannot tell whether work is left must not end
  * the session.
  */
-async function summarizeUnsentWork(scope: UnsentScope): Promise<UnsentWorkItem[]> {
+export async function summarizeUnsentWork(scope: UnsentScope): Promise<UnsentWorkItem[]> {
   const items: UnsentWorkItem[] = [];
   for (const source of [...sources])
     items.push(...(await source.summarize(scope)).filter((item) => item.count > 0));

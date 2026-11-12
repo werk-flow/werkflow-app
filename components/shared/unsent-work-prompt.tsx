@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import {
   AlertDialog,
@@ -28,6 +28,7 @@ import '@/lib/field-sync/device/registrations';
 import {
   discardUnsentWork,
   flushUnsentWork,
+  summarizeUnsentWork,
   type UnsentScope,
   type UnsentWorkItem,
 } from '@/lib/field-sync/device/unsent-work';
@@ -172,9 +173,12 @@ function UnsentWorkDialog({
     scope,
   );
   const [confirming, setConfirming] = useState(false);
+  // The question opens at once and sends from here, so a stalled send never hides „Abbrechen“.
+  const sendOnOpen = useRef(perform);
+  useEffect(() => sendOnOpen.current('send'), []);
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onSettled(false)} pending={isPending}>
+    <Dialog open onOpenChange={(open) => !open && onSettled(false)} pending={isDiscarding}>
       <DialogContent size="sm">
         <form
           className="contents"
@@ -191,9 +195,14 @@ function UnsentWorkDialog({
             </DialogDescription>
           </DialogHeader>
           <UnsentItems items={items} />
+          {isSending && (
+            <p role="status" className="text-sm text-muted-foreground">
+              Es wird gesendet …
+            </p>
+          )}
           <ErrorText>{error}</ErrorText>
           <DialogFooter>
-            <Button type="button" variant="outline" disabled={isPending} onClick={() => onSettled(false)}>
+            <Button type="button" variant="outline" disabled={isDiscarding} onClick={() => onSettled(false)}>
               Abbrechen
             </Button>
             <Button
@@ -228,11 +237,15 @@ function askAboutUnsentWork(items: UnsentWorkItem[], scope: UnsentScope): Promis
   return new Promise((resolve) => {
     // The dialog is gone before it could hand the focus back, so this does it.
     const opener = document.activeElement;
+    let settled = false;
     const remove = showInUnsentWorkHost(
       <UnsentWorkDialog
         initialItems={items}
         scope={scope}
         onSettled={(mayEnd) => {
+          // A send still running after „Abbrechen“ answers into the void.
+          if (settled) return;
+          settled = true;
           remove();
           if (!mayEnd && opener instanceof HTMLElement && opener.isConnected) opener.focus();
           resolve(mayEnd);
@@ -248,6 +261,7 @@ function askAboutUnsentWork(items: UnsentWorkItem[], scope: UnsentScope): Promis
  * when the device storage cannot say what is left: the session must not end then.
  */
 export async function settleUnsentWork(scope: UnsentScope): Promise<boolean> {
-  const left = await flushUnsentWork(scope);
-  return left.length === 0 || askAboutUnsentWork(left, scope);
+  // From the device alone: a send that stalls must never keep the question from opening.
+  const unsent = await summarizeUnsentWork(scope);
+  return unsent.length === 0 || askAboutUnsentWork(unsent, scope);
 }

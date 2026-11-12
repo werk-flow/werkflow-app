@@ -222,12 +222,12 @@ function UnsentActions({
 function UnsentPanel({ view }: { view: ClockDeviceView }) {
   const { confirmed } = useClockState();
   const { perform, running, isPending, error } = useOutboxAction();
-  const [deleting, setDeleting] = useState(false);
-  const [correcting, setCorrecting] = useState(false);
+  // What each question saw when it opened: a deletion or a correction acts on exactly that, never on
+  // events another tab settled or kept while it was open.
+  const [deletion, setDeletion] = useState<ClockDeviceView['events'] | null>(null);
+  const [correction, setCorrection] = useState<ClockDeviceView['events'] | null>(null);
   const status = unsentChainStatus(view);
   const holder = clockHolder();
-  // One correction request records one day: the days after it stay for their own.
-  const day = correctionScope(view);
 
   /** Deletes exactly `events`, the ones the person was shown; what stays goes on from the server's clock. */
   async function deleteEvents(events: ClockDeviceView['events']): Promise<boolean> {
@@ -261,27 +261,28 @@ function UnsentPanel({ view }: { view: ClockDeviceView }) {
             if (holder) await resendRefusedTimeEvent(holder);
           })
         }
-        onCorrect={() => setCorrecting(true)}
-        onDelete={() => setDeleting(true)}
+        // One correction request records one session on one day: the rest stays for its own.
+        onCorrect={() => setCorrection(correctionScope(view))}
+        onDelete={() => setDeletion(view.events)}
       />
       <ErrorText>{error}</ErrorText>
       <DeleteUnsentDialog
-        count={view.events.length}
-        open={deleting}
-        onOpenChange={setDeleting}
-        onConfirm={() => deleteEvents(view.events)}
+        count={deletion?.length ?? 0}
+        open={deletion !== null}
+        onOpenChange={(open) => !open && setDeletion(null)}
+        onConfirm={() => deleteEvents(deletion ?? [])}
         pending={running === 'delete'}
         error={error}
       />
       <CorrectionDialog.Dialog
-        open={correcting}
-        onOpenChange={setCorrecting}
-        {...correctionPrefill(day)}
+        open={correction !== null}
+        onOpenChange={(open) => !open && setCorrection(null)}
+        {...correctionPrefill(correction ?? [])}
         preselectedUserId={holder?.userId}
         // The request is filed, and the form confirms it: only now do the session's kept events leave the phone,
         // and only for a request of this person on that day; an Admin or Büro may file one for someone else.
         onSuccess={async (_entries, filed) => {
-          if (coversSession(filed, holder?.userId, day)) await deleteEvents(day);
+          if (correction && coversSession(filed, holder?.userId, correction)) await deleteEvents(correction);
         }}
       />
     </section>

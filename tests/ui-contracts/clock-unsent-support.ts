@@ -58,6 +58,8 @@ export type Server = {
   online: boolean;
   /** The clock read fails, as a server error does. */
   stateFails?: boolean;
+  /** A send that never answers, as in a dead spot where the phone still reports a connection. */
+  stalls?: boolean;
 };
 
 export const ACCEPTED: Verdict = {
@@ -100,6 +102,7 @@ export async function mountClock(
       await route.abort('internetdisconnected');
       return;
     }
+    if (server.stalls) return;
     const body = z.object({ operations: z.array(envelopeSchema) }).parse(route.request().postDataJSON());
     server.sent.push(...body.operations);
     server.authorization.push(route.request().headers()['authorization'] ?? '');

@@ -93,3 +93,151 @@ test('a session end that fails after its check lifts its own barrier, so keeping
     ),
   ).toEqual([]);
 });
+
+test('a correction cleans up only the session its form opened for, also after another tab settled that session', async ({
+  page,
+}) => {
+  const sessions = [
+    ['start', '2026-11-09T06:00:00.000Z'],
+    ['end', '2026-11-09T07:00:00.000Z'],
+    ['start', '2026-11-09T12:00:00.000Z'],
+    ['end', '2026-11-09T13:00:00.000Z'],
+  ];
+  await mountClock(page, CLOCKED_OUT_STATE, () => undefined, {
+    outcome: 'conflict',
+    code: 'correction_required',
+  });
+  await page.evaluate(
+    ({ kept, userId, organizationId, base }) => {
+      kept.forEach(([action, capturedAt], index) => {
+        const operationId = `50000000-0000-4000-8000-00000000020${index}`;
+        localStorage.setItem(
+          `werkflow:unsent:clock:${String(Date.parse(capturedAt ?? '')).padStart(15, '0')}:1:${operationId}`,
+          JSON.stringify({
+            userId,
+            organizationId,
+            operationId,
+            action,
+            selection: action === 'end' ? null : { kind: 'work', allocationKind: 'unallocated', jobId: null },
+            expectedSessionId: null,
+            expectedVersion: null,
+            capturedAt,
+            triedOnline: false,
+            wipeGeneration: '',
+            base: index === 0 ? base : null,
+            readAt: index === 0 ? '2026-11-09T05:59:00.000Z' : null,
+          }),
+        );
+      });
+      window.dispatchEvent(new Event('online'));
+    },
+    { kept: sessions, userId: CLOCK_USER_ID, organizationId: CLOCK_ORGANIZATION_ID, base: CLOCKED_OUT_STATE },
+  );
+  await expect(unsentBadge(clockDock(page))).toHaveText('Korrektur nötig');
+  await page.getByRole('button', { name: 'Zeiterfassung starten', exact: true }).click();
+  await page
+    .getByRole('region', { name: 'Noch nicht übertragen' })
+    .getByRole('button', { name: 'Korrektur beantragen', exact: true })
+    .click();
+  const correction = page.getByRole('dialog', { name: 'Zeit nachtragen', exact: true });
+  await expect(correction.getByLabel('Vorbelegung')).toHaveText('9.11.2026 | 07:00 | 08:00');
+
+  // Another tab settles the morning session while this form is open.
+  await page.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('werkflow-time-outbox');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const transaction = database.transaction('events', 'readwrite');
+    for (const id of ['50000000-0000-4000-8000-000000000200', '50000000-0000-4000-8000-000000000201'])
+      transaction.objectStore('events').delete(id);
+    await new Promise((resolve) => {
+      transaction.oncomplete = resolve;
+    });
+    database.close();
+    localStorage.setItem('werkflow:time-outbox-changed', String(Date.now()));
+    window.dispatchEvent(new StorageEvent('storage', { key: 'werkflow:time-outbox-changed' }));
+  });
+  // This page has heard of it: only the afternoon session is listed now.
+  await expect(page.getByRole('region', { name: 'Noch nicht übertragen' }).getByRole('listitem')).toHaveCount(
+    2,
+  );
+  await correction.getByRole('button', { name: 'Korrektur einreichen', exact: true }).click();
+
+  // The form closes once its cleanup ran. The afternoon session was never in this form: it stays.
+  await expect(correction).toHaveCount(0);
+  expect((await unsentOnDevice(page)).map((event) => event.operationId)).toEqual([
+    '50000000-0000-4000-8000-000000000202',
+    '50000000-0000-4000-8000-000000000203',
+  ]);
+});
+
+test('a deletion removes only the events its question showed, never one another tab kept while it was open', async ({
+  page,
+}) => {
+  const server = await mountClock(page, CLOCKED_OUT_STATE);
+  server.verdict = { outcome: 'rejected', code: 'closed_period' };
+  await startWithoutNetwork(page, server);
+  await setNetwork(page, server, true);
+  await expect(unsentBadge(clockDock(page))).toHaveText('Nicht übertragen');
+  const section = page.getByRole('region', { name: 'Noch nicht übertragen' });
+  await page.getByRole('button', { name: 'Zeiterfassung starten', exact: true }).click();
+  await section.getByRole('button', { name: 'Löschen', exact: true }).click();
+  const shown = (await unsentOnDevice(page)).map((event) => event.operationId);
+
+  // Another tab keeps an end while the question is open; this page takes it in behind the start.
+  await page.evaluate(
+    ({ userId, organizationId }) => {
+      const operationId = '50000000-0000-4000-8000-0000000000f9';
+      const key = `werkflow:unsent:clock:${String(Date.now()).padStart(15, '0')}:1:${operationId}`;
+      const value = JSON.stringify({
+        userId,
+        organizationId,
+        operationId,
+        action: 'end',
+        selection: null,
+        expectedSessionId: null,
+        expectedVersion: null,
+        capturedAt: new Date().toISOString(),
+        triedOnline: false,
+        wipeGeneration: '',
+        base: null,
+        readAt: null,
+      });
+      localStorage.setItem(key, value);
+      window.dispatchEvent(new StorageEvent('storage', { key, newValue: value }));
+    },
+    { userId: CLOCK_USER_ID, organizationId: CLOCK_ORGANIZATION_ID },
+  );
+  await expect.poll(async () => (await unsentOnDevice(page)).length).toBe(2);
+  const confirmation = page.getByRole('alertdialog', { name: 'Nicht übertragene Zeiten löschen?' });
+  await confirmation.getByRole('button', { name: 'Endgültig löschen', exact: true }).click();
+
+  await expect(confirmation).toHaveCount(0);
+  expect((await unsentOnDevice(page)).map((event) => event.operationId)).toEqual([
+    '50000000-0000-4000-8000-0000000000f9',
+  ]);
+  expect(shown).not.toContain('50000000-0000-4000-8000-0000000000f9');
+});
+
+test('a sign-out shows its question at once while it sends, and „Abbrechen“ keeps the session even if the send never answers', async ({
+  page,
+}) => {
+  const server = await mountClock(page, CLOCKED_OUT_STATE);
+  await startWithoutNetwork(page, server);
+  // The phone reports a connection, and the send stays in a dead spot.
+  server.online = true;
+  server.stalls = true;
+  await page.evaluate(() => {
+    window.contractOnline = true;
+  });
+
+  await page.getByRole('button', { name: 'Abmelden prüfen', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Noch nicht übertragen', exact: true });
+  await expect(dialog).toContainText('wird gesendet …');
+  await dialog.getByRole('button', { name: 'Abbrechen', exact: true }).click();
+
+  await expect(page.getByLabel('Abmeldung')).toHaveText('Sitzung bleibt');
+  await expect(dialog).toHaveCount(0);
+});

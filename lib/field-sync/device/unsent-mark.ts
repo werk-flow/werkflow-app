@@ -36,18 +36,20 @@ export function deviceMayHoldUnsentWork(): boolean {
   }
 }
 
+/** A kept action as the store holds it: the clock without job, customer and project names. */
+function keptValue(action: Omit<KeptClockAction, 'wipeGeneration'>, pageSignal: string): string {
+  const base = action.base && { ...action.base, activeJobInfo: null, resumeJobInfo: null };
+  return JSON.stringify({ ...action, base, wipeGeneration: pageSignal } satisfies KeptClockAction);
+}
+
 /** Writes one kept action; answers its key, or null when nothing may or can be kept. */
 function storeKept(action: Omit<KeptClockAction, 'wipeGeneration'>, pageSignal: string): string | null {
   const kind = action.action;
   if ((kind !== 'start' && kind !== 'switch' && kind !== 'end') || !mayKeepUnder(pageSignal)) return null;
-  const base = action.base && { ...action.base, activeJobInfo: null, resumeJobInfo: null };
   keptOnThisPage += 1;
   const key = `${KEPT_CLOCK_ACTION_PREFIX}${String(Date.parse(action.capturedAt)).padStart(15, '0')}:${keptOnThisPage}:${action.operationId}`;
   try {
-    localStorage.setItem(
-      key,
-      JSON.stringify({ ...action, base, wipeGeneration: pageSignal } satisfies KeptClockAction),
-    );
+    localStorage.setItem(key, keptValue(action, pageSignal));
     return key;
   } catch {
     return null;
@@ -68,15 +70,29 @@ export function callWhileKept<T>(
   action: Omit<KeptClockAction, 'wipeGeneration'>,
   pageSignal: string | null,
   call: () => Promise<T>,
-): Promise<T> {
+): Promise<T | KeptClockResult> {
   // Another tab ended the session, or is making its last check: no action leaves this page without its trace.
   if (pageSignal !== null && !mayKeepUnder(pageSignal))
     return Promise.reject(new Error('another tab ended the session, or is ending it'));
   const key = pageSignal === null ? null : storeKept({ ...action, inFlight: true }, pageSignal);
   // The call starts in the tap's own task, so its feedback stays in the first frame.
-  const answered = call().finally(() => {
-    if (key) localStorage.removeItem(key);
-  });
+  const answered = call().then(
+    (answer) => {
+      if (key) localStorage.removeItem(key);
+      return answer;
+    },
+    (failure: unknown) => {
+      // No answer: the entry written before the call is the kept action. It is never removed and
+      // kept anew, which a session end's barrier would refuse.
+      if (!key || pageSignal === null) throw failure;
+      try {
+        localStorage.setItem(key, keptValue({ ...action, inFlight: false }, pageSignal));
+      } catch {
+        // best-effort: an entry still marked in flight is taken in once this page let go of its call.
+      }
+      return keptResult(action.action);
+    },
+  );
   // The lock tells other tabs the page still waits; a take-in also leaves a fresh entry alone until it is granted.
   if (key && typeof navigator.locks?.request === 'function')
     void navigator.locks.request(clockCallLock(action.operationId), () =>
@@ -99,8 +115,14 @@ export function keepClockAction(
   action: Omit<KeptClockAction, 'wipeGeneration'>,
   pageSignal: string,
 ): Extract<TimeTransitionResult, { success: true }> | null {
-  const kind = action.action;
   if (!storeKept(action, pageSignal)) return null;
+  return keptResult(action.action);
+}
+
+/** What a kept clock action answers: as the server would have, without a session it cannot know yet. */
+type KeptClockResult = Extract<TimeTransitionResult, { success: true }>;
+
+function keptResult(kind: string): KeptClockResult {
   return {
     success: true,
     kept: true,

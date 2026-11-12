@@ -6,6 +6,7 @@ import type { LiveClockState } from '@/lib/time-tracking/types';
 import { z } from '@/lib/zod';
 import type { ClockDeviceView } from './time-outbox';
 import { readTimeOutbox, type OutboxHolder } from './time-outbox-store';
+import { installTabLocks } from '@/lib/testing/fixtures/time-outbox';
 import { TODAY_WIPE_KEY } from './today-wipe';
 
 // This tab's hold on the time outbox (werk-flow/werkflow-planning#319): the
@@ -74,37 +75,7 @@ async function isolatedTests(): Promise<void> {
     },
   });
   Object.defineProperty(globalThis.navigator, 'onLine', { value: false, configurable: true });
-  // Web Locks within this one tab: each lock name runs its holders one after the other.
-  const held = new Map<string, Promise<unknown>>();
-  const holding = new Map<string, number>();
-  type LockWork = (lock: object | null) => Promise<unknown> | unknown;
-  Object.defineProperty(globalThis.navigator, 'locks', {
-    configurable: true,
-    value: {
-      request: (name: string, options: { ifAvailable?: boolean } | LockWork, given?: LockWork) => {
-        const work = typeof options === 'function' ? options : given;
-        if (!work) throw new Error('a lock request needs its work');
-        if (typeof options !== 'function' && options.ifAvailable && (holding.get(name) ?? 0) > 0)
-          return Promise.resolve(work(null));
-        const hold = async (): Promise<unknown> => {
-          holding.set(name, (holding.get(name) ?? 0) + 1);
-          try {
-            return await work({});
-          } finally {
-            holding.set(name, (holding.get(name) ?? 1) - 1);
-          }
-        };
-        const run = (held.get(name) ?? Promise.resolve()).then(hold, hold);
-        // The next holder waits for this one either way; the failure reaches the caller through `run`.
-        const settled = run.then(
-          () => undefined,
-          () => undefined,
-        );
-        held.set(name, settled);
-        return run;
-      },
-    },
-  });
+  installTabLocks();
 
   void mock.module('@/lib/supabase/client', () => ({
     createSupabaseBrowserClient: () => ({

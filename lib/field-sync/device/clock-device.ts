@@ -2,7 +2,12 @@
 
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import type { LiveClockState } from '@/lib/time-tracking/types';
-import { takeInKeptClockActions, type DeferredTakeIn, type KeptClockAction } from './kept-clock-actions';
+import {
+  takeInKeptClockActions,
+  untilCallAnswers,
+  type DeferredTakeIn,
+  type KeptClockAction,
+} from './kept-clock-actions';
 import {
   captureTimeEvent,
   clockDeviceView,
@@ -319,11 +324,9 @@ async function takeInShownActions(scope: UnsentScope, ids: readonly string[]): P
     const shown = (await deferredInScope(deferred, scope)).filter((action) =>
       ids.includes(action.operationId),
     );
-    if (shown.length === 0) return;
-    if (!deferred?.lock || typeof navigator.locks?.request !== 'function')
-      throw new Error('an online clock call is still open on this device');
+    if (shown.length === 0 || !deferred) return;
     // The page's call answers, then its entry goes or becomes a kept action this take-in moves.
-    await navigator.locks.request(deferred.lock, async () => undefined);
+    await untilCallAnswers(deferred);
   }
 }
 

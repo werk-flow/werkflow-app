@@ -119,10 +119,12 @@ export async function takeInKeptClockActions(
     // Its page may still wait for the server's answer; what was kept after it waits behind it.
     const call = inFlight ? await callState(kept) : { runs: false as const };
     if (call.runs) {
-      const behind = keys.slice(index + 1).flatMap((later) => readKeptAction(later) ?? []);
+      const later = keys.slice(index + 1).map(readKeptAction);
+      // An action behind the call that this version cannot read still counts: a session end fails closed on it.
+      const behind = later.filter((action): action is KeptClockAction => action !== null);
       return {
         moved,
-        unreadable,
+        unreadable: unreadable + later.length - behind.length,
         deferred: { actions: [kept, ...behind], recheckAt: call.recheckAt, lock: call.lock },
       };
     }
@@ -144,4 +146,18 @@ export async function takeInKeptClockActions(
     moved += 1;
   }
   return { moved, unreadable, deferred: null };
+}
+
+/**
+ * Resolves once the open online call a take-in deferred to can be judged: after its first seconds,
+ * when its page may not hold the call's lock yet, and then once the page let go of that lock.
+ */
+export async function untilCallAnswers({ actions, recheckAt }: DeferredTakeIn): Promise<void> {
+  if (recheckAt !== null) {
+    const wait = Math.max(0, recheckAt - Date.now());
+    await new Promise<void>((resolve) => setTimeout(resolve, wait));
+  }
+  const [call] = actions;
+  if (call && typeof navigator.locks?.request === 'function')
+    await navigator.locks.request(clockCallLock(call.operationId), async () => undefined);
 }

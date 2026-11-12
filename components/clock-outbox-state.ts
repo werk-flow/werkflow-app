@@ -37,10 +37,49 @@ export type ClockOutboxState = {
   holderNow: () => OutboxHolder | null;
   keep: (action: Parameters<typeof keepClockAction>[0]) => TimeTransitionResult;
   /** Runs the online call with its action written down first (unsent-mark.ts, callWhileKept). */
-  callKept: <T>(action: Parameters<typeof keepClockAction>[0], call: () => Promise<T>) => Promise<T>;
+  callKept: (
+    action: Parameters<typeof keepClockAction>[0],
+    call: () => Promise<TimeTransitionResult>,
+  ) => Promise<TimeTransitionResult>;
 };
 
 /** The phone's time outbox (decision record 0010); its code loads only when unsent work may wait. */
+/**
+ * The page's two ways to keep an action: `keep` after a failed or skipped online call, `callKept` around
+ * the online call. Neither keeps behind events that wait for the person: such an action would never be sent.
+ */
+function useKeepers(
+  stopped: boolean,
+  signalRef: RefObject<string | null>,
+  attachRef: RefObject<(() => void) | null>,
+  setKept: (kept: boolean) => void,
+): Pick<ClockOutboxState, 'keep' | 'callKept'> {
+  const keep = useCallback<ClockOutboxState['keep']>(
+    (action) => {
+      const signal = signalRef.current;
+      const kept = stopped || signal === null ? null : keepClockAction(action, signal);
+      if (!kept) return CLOCK_ACTION_FAILED;
+      setKept(true);
+      attachRef.current?.();
+      return kept;
+    },
+    [attachRef, setKept, signalRef, stopped],
+  );
+  const callKept = useCallback<ClockOutboxState['callKept']>(
+    async (action, call) => {
+      const result = await callWhileKept(action, signalRef.current, call);
+      // The call failed on its way: its entry is the kept action now, and the outbox takes it in.
+      if (result.success && result.kept) {
+        setKept(true);
+        attachRef.current?.();
+      }
+      return result;
+    },
+    [attachRef, setKept, signalRef],
+  );
+  return { keep, callKept };
+}
+
 export function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promise<void>): ClockOutboxState {
   const [view, setView] = useState<ClockDeviceView | null>(null);
   const [kept, setKept] = useState(false);
@@ -111,23 +150,7 @@ export function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promi
     };
   }, [holder, refresh]);
 
-  /** Keeps an action on the phone, never behind events that wait for the person: it would never be sent. */
-  const stopped = view?.status === 'stopped';
-  const keep = useCallback<ClockOutboxState['keep']>(
-    (action) => {
-      const signal = signalRef.current;
-      const kept = stopped || signal === null ? null : keepClockAction(action, signal);
-      if (!kept) return CLOCK_ACTION_FAILED;
-      setKept(true);
-      attachRef.current?.();
-      return kept;
-    },
-    [stopped],
-  );
   const holderNow = useCallback(() => holderRef.current, []);
-  const callKept = useCallback<ClockOutboxState['callKept']>(
-    (action, call) => callWhileKept(action, signalRef.current, call),
-    [],
-  );
+  const { keep, callKept } = useKeepers(view?.status === 'stopped', signalRef, attachRef, setKept);
   return { view, kept, unchecked: uncheckedRef, deviceFailed, holderNow, keep, callKept };
 }
