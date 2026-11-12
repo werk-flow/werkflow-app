@@ -1,5 +1,7 @@
 'use server';
 
+import { after } from 'next/server';
+
 import { logError } from '@/lib/logging';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { writeRefusalFor } from '@/lib/supabase/write-refusal';
@@ -7,6 +9,7 @@ import { resolveActionContext, resolveActionContextFor } from '@/lib/org/action-
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
 import { OWN_REPORT_COLUMNS, toOwnProblemReport } from './reads';
+import { scrubStoredProblemReport } from './scrub/scrub-report';
 import { submitProblemReportInputSchema, type SubmitProblemReportInput } from './schemas';
 import type { OwnProblemReportsResult, SubmitProblemReportResult } from './types';
 
@@ -22,7 +25,9 @@ const refusal = writeRefusalFor(new Set(['report_conflict']));
  * original description and the captured context. The caller must be a
  * current member there; the report starts as `eingegangen` with its scrubbed
  * copy pending, and takes the next number of the organization. It saves once
- * under the id the device chose: a retry gets the same report back.
+ * under the id the device chose: a retry gets the same report back. The
+ * scrub runs after the answer, so the receipt never waits for it or fails
+ * with it; the daily run scrubs a report whose scrub never ran.
  */
 export async function submitProblemReport(
   rawInput: SubmitProblemReportInput,
@@ -44,6 +49,7 @@ export async function submitProblemReport(
     }),
   );
   if (error) return refusal(error, 'submit_failed', 'submitProblemReport: save failed');
+  after(() => scrubStoredProblemReport(auth.context.orgId, input.reportId));
   return { success: true, reportId: input.reportId, number: data };
 }
 
