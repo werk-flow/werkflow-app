@@ -29,8 +29,8 @@ export function FieldWorkPackOverview({
   siteAccess,
 }: {
   job: FieldWorkPackJob;
-  /** The job's Einsatzort and its latest access proposal; null without an Einsatzort. */
-  siteAccess: FieldSiteAccess | null;
+  /** The job's Einsatzort and its latest access proposal; absent without an Einsatzort. */
+  siteAccess?: FieldSiteAccess | undefined;
 }): ReactElement {
   const { showBanner } = useBanner();
   const overviewRef = useRef<HTMLElement>(null);
@@ -110,7 +110,7 @@ function FieldWorkPackOverviewFacts({
 }: {
   job: FieldWorkPackJob;
   /** The job's Einsatzort and its latest access proposal; null without an Einsatzort. */
-  siteAccess: FieldSiteAccess | null;
+  siteAccess: FieldSiteAccess | undefined;
 }): ReactElement {
   const duration = formatDurationOrNull(job.plannedWorkingMinutes);
   return (

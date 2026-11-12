@@ -63,9 +63,10 @@ export async function FieldWorkPackPage({
       <PageBody maxWidth="wide">
         {/* The test id scopes the pack's body content; the specs never reach the header through it. */}
         <div data-testid="field-work-pack" className="space-y-4 sm:space-y-6">
+          {/* A job without an Einsatzort passes no access prop at all: the job page's payload is measured. */}
           <FieldWorkPackOverview
             job={fieldJob}
-            siteAccess={job.siteId ? fieldSiteAccess(job.siteId, data.siteAccessProposalRead) : null}
+            {...(job.siteId ? { siteAccess: fieldSiteAccess(job.siteId, data.siteAccessProposalRead) } : {})}
           />
           <FieldWorkPackContextSources job={job} data={data} />
           <FieldWorkPackExecutionSection
