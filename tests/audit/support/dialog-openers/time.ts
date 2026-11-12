@@ -267,6 +267,11 @@ export const TIME_OPENERS = {
     },
     layer: ownEvidenceUploadDialog,
   },
+  // The field worker's proposal from the Einsatzort of the opened job.
+  'field.site-access': {
+    trigger: async ({ page }) => page.getByRole('button', { name: 'Zugang stimmt nicht?' }),
+    layer: (page) => page.getByRole('dialog', { name: 'Zugang korrigieren' }),
+  },
   'field.artifact': {
     trigger: async ({ page }) => newWorkArtifactButton(page, { exact: true }),
     layer: workArtifactCreateDialog,

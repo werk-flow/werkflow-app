@@ -189,11 +189,6 @@ function listRowMenuButton({ page }: SurfaceContext, record: LayoutRecord): Loca
 }
 
 export const WORK_OPENERS = {
-  // The field worker's proposal from the Einsatzort of the opened job.
-  'field.site-access': {
-    trigger: async ({ page }) => page.getByRole('button', { name: 'Zugang stimmt nicht?' }),
-    layer: (page) => page.getByRole('dialog', { name: 'Zugang korrigieren' }),
-  },
   'work.artifact': {
     trigger: async ({ page }) => workArtifactCreateButton(page),
     layer: workArtifactCreateDialog,
