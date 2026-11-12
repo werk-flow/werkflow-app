@@ -1,7 +1,6 @@
 import { test } from '../support/fixtures';
 import { captureAcceptance, settleAcceptanceEntries } from '../support/acceptance-captures';
-import { ACCEPTANCE_RECORDS } from '../support/acceptance-records';
-import { ACCEPTANCE_SETS } from '../support/acceptance-sets';
+import { acceptanceSets } from '../support/acceptance-sets';
 import { captureStandalone } from '../support/acceptance-standalone';
 import { DIALOG_OPENERS } from '../support/dialog-openers';
 
@@ -17,14 +16,14 @@ test.afterEach(async ({}, testInfo) => {
   settleAcceptanceEntries(testInfo);
 });
 
-for (const set of ACCEPTANCE_SETS) {
+for (const set of acceptanceSets()) {
   test.describe(`@AUDIT-VISUAL-ACCEPT @ACCEPT ${set.id}`, () => {
     for (const capture of set.captures)
       test(`@ACCEPT ${set.id} ${capture.id}`, async ({ rolePage, world, businessDate }, testInfo) => {
         const page = await rolePage(capture.role);
         await captureAcceptance({ page, world, businessDate, testInfo }, set.id, capture, {
           openers: DIALOG_OPENERS,
-          destination: capture.record && ACCEPTANCE_RECORDS[capture.record],
+          destination: capture.destination,
         });
       });
     for (const capture of set.standalone)

@@ -292,7 +292,7 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['visual', 'visual/references.spec.ts', ['*']],
   // Rendered acceptance captures by what a capture drives, so a changed helper selects the groups that import it:
   // the inventory rounds' pages, dialogs per opener module and standalone screens
-  // (tests/audit/support/acceptance-rounds.ts), then the open sets (acceptance-sets.ts).
+  // (tests/audit/support/acceptance-rounds.ts), then the open sets (acceptance-sets/, one file each).
   ['visual:acceptance:pages', 'visual/acceptance-pages.spec.ts', ['*']],
   ['visual:acceptance:calendar', 'visual/acceptance-calendar.spec.ts', ['planning']],
   ['visual:acceptance:customers', 'visual/acceptance-customers.spec.ts', ['customers']],
