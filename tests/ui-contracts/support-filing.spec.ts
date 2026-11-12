@@ -126,6 +126,28 @@ test('a filing that completes while the page is out of view leaves a fresh form 
   await expect(memberField(page)).toHaveText('Person auswählen');
 });
 
+test('a filing whose completion and hide land in one render still leaves a fresh form', async ({ page }) => {
+  await showOrganization(page, ORGANIZATION_A);
+  await chooseMember(page, 'Rita Melder');
+  await descriptionField(page).fill(DESCRIPTION);
+  await submitButton(page).click();
+  await expect.poll(() => page.evaluate(() => window.uiContractWrites.answer !== null)).toBe(true);
+  // One task: the save's answer and the navigation's hide, so React renders both updates together.
+  await page.evaluate((event) => {
+    window.uiContractWrites.answer?.(null);
+    window.uiContractSupportFilingHidden = true;
+    window.dispatchEvent(new Event(event));
+  }, PAGE_VISIBILITY_EVENT);
+  await expect
+    .poll(() => page.evaluate(() => window.listNavigationContract.requests))
+    .toEqual([expect.stringMatching(/^\/support\/meldungen\//u)]);
+  await expect(submitButton(page)).toBeHidden();
+  await setPageHidden(page, false, PAGE_VISIBILITY_EVENT);
+
+  await expect(submitButton(page)).toBeEnabled();
+  await expect(descriptionField(page)).toHaveValue('');
+});
+
 test('a member chosen under one organization is not filed under the next one the address names', async ({
   page,
 }) => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { AttachmentsField } from '@/components/problem-reports/attachments-field';
@@ -226,25 +226,22 @@ type SupportFilingFormProps = {
  */
 export function SupportFilingForm(props: SupportFilingFormProps) {
   const [generation, setGeneration] = useState(0);
-  const [completed, setCompleted] = useState(false);
-  // A hidden page's effects end, and so does an unmounted one's; a layout
-  // effect ends within the commit that hides the page.
+  // Refs, not state: a completion and the hide can land in one render, and
+  // the reset must not wait for an effect that a hidden page never mounts.
   const inView = useRef(false);
+  const completed = useRef(false);
+  // A layout effect ends within the commit that hides or unmounts the page.
   useLayoutEffect(() => {
     inView.current = true;
     return () => {
       inView.current = false;
-    };
-  }, []);
-  useEffect(() => {
-    if (!completed) return;
-    return () => {
-      setCompleted(false);
+      if (!completed.current) return;
+      completed.current = false;
       setGeneration((current) => current + 1);
     };
-  }, [completed]);
+  }, []);
   const onCompleted = (): void => {
-    if (inView.current) setCompleted(true);
+    if (inView.current) completed.current = true;
     else setGeneration((current) => current + 1);
   };
   return <FilingForm key={generation} {...props} onCompleted={onCompleted} />;
