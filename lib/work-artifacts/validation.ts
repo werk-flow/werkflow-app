@@ -156,6 +156,8 @@ export const workArtifactDraftSchema = saveWorkArtifactFields
     content: true,
   })
   .extend({
+    /** The person who wrote the draft on the phone; only that person's session sends it. */
+    authorId: uuidSchema,
     jobId: uuidSchema,
     photos: z
       .array(z.strictObject({ linkId: uuidSchema, documentId: uuidSchema }))

@@ -3,6 +3,7 @@ import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, mock, setSystemTime, test } from 'bun:test';
 
 import { z } from '@/lib/zod';
+import { TODAY_WIPE_KEY } from './today-wipe';
 import {
   DRAFT_UNSENT_LIMIT_MS,
   changeDraftOnDevice,
@@ -23,7 +24,7 @@ const uploads: UploadCall[] = [];
 type UploadAnswer =
   | { status: 'saved'; saved: { id: string } | null }
   | { status: 'failed'; reason: string; transferred: unknown };
-let uploadAnswers: Array<() => UploadAnswer> = [];
+let uploadAnswers: Array<() => UploadAnswer | Promise<UploadAnswer>> = [];
 let accessAnswer: { success: true } | { success: false; error: string } = { success: true };
 const accessReads: unknown[] = [];
 
@@ -50,6 +51,15 @@ mock.module('@/lib/documents/upload-client', () => ({
     return Promise.resolve(answer());
   },
 }));
+/** localStorage, shared by every tab of an origin: where a sign-out or a sign-in page leaves its wipe signal. */
+const storage = new Map<string, string>();
+Object.assign(globalThis, {
+  localStorage: {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => void storage.set(key, value),
+    removeItem: (key: string) => void storage.delete(key),
+  },
+});
 mock.module('@/lib/data/background-read-client', () => ({
   readInBackground: (kind: string, input: unknown) => {
     accessReads.push([kind, input]);
@@ -96,6 +106,15 @@ function draft(overrides: Partial<StoredDraft> = {}): StoredDraft {
   };
 }
 
+/** Lets queued tasks and IndexedDB events run until the condition holds; no clock is involved. */
+async function until(condition: () => boolean): Promise<void> {
+  for (let turn = 0; turn < 500; turn += 1) {
+    if (condition()) return;
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  throw new Error('The condition never held.');
+}
+
 function save(entry: StoredDraft): Promise<StoredDraft | null> {
   return changeDraftOnDevice(entry, entry.id, () => entry);
 }
@@ -113,6 +132,7 @@ const sentOperationSchema = z.object({
   payload: z.object({
     artifactId: z.string(),
     revisionId: z.string(),
+    authorId: z.string(),
     jobId: z.string(),
     photos: z.array(z.unknown()),
   }),
@@ -126,8 +146,9 @@ function results(outcome: string, code: string): () => Response {
   return () => Response.json({ results: [{ operationId: 'echo', outcome, code }] });
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   setSystemTime(NOW);
+  storage.clear();
   uploads.length = 0;
   accessReads.length = 0;
   sent.length = 0;
@@ -152,10 +173,15 @@ beforeEach(() => {
       return Promise.resolve(answer());
     },
   });
+  // The page names the holder before anything is sent; the app start's send finds no draft yet.
+  await startDraftSync(holder).send();
 });
+
+const realWindow: unknown = Reflect.get(globalThis, 'window');
 
 afterEach(async () => {
   setSystemTime();
+  Object.assign(globalThis, { window: realWindow });
   globalThis.fetch = realFetch;
   for (const each of [holder, otherPerson]) await deleteDraftsOnDevice(each);
 });
@@ -374,5 +400,95 @@ describe('drafts as unsent work at sign-out', () => {
     await unsentSource.discard();
     expect(await unsentSource.summarize()).toEqual([]);
     expect((await stored(otherPerson)).length).toBe(1);
+  });
+});
+
+describe('the draft belongs to its author and its sending', () => {
+  test('a sign-in page of another person since the sync started stops the old tab: no photo leaves and nothing is attached', async () => {
+    // The app start's send finds nothing yet.
+    await startDraftSync(holder).send();
+    await save(draft());
+    // The (auth) pages wipe on landing: a coworker signing in on this phone writes the signal.
+    storage.set(TODAY_WIPE_KEY, 'coworker-sign-in');
+    expect(await sendDraft(holder, DRAFT_ID)).toBe('waiting');
+    expect(uploads).toEqual([]);
+    expect(sent).toEqual([]);
+    expect((await stored())[0]?.sealed).toBe(false);
+  });
+
+  test("every attach names the draft's author, whose session alone may send it", async () => {
+    await startDraftSync(holder).send();
+    await save(draft({ photos: [] }));
+    handlerAnswers = [results('accepted', 'accepted')];
+    expect(await sendDraft(holder, DRAFT_ID)).toBe('sent');
+    expect(sent[0]?.payload.authorId).toBe(holder.userId);
+  });
+
+  test('an upload that ends after another tab sealed the draft never changes what was sealed', async () => {
+    await startDraftSync(holder).send();
+    await save(draft());
+    let releaseUpload = (): void => undefined;
+    uploadAnswers = [
+      () =>
+        new Promise<UploadAnswer>((resolve) => {
+          releaseUpload = () => resolve(savedAs('doc-from-this-tab'));
+        }),
+    ];
+    const sending = sendDraft(holder, DRAFT_ID);
+    await until(() => uploads.length === 1);
+    // Another tab uploaded both photos and sealed its attach, whose answer it lost.
+    await changeDraftOnDevice(holder, DRAFT_ID, (current) =>
+      current
+        ? {
+            ...current,
+            sealed: true,
+            photos: current.photos.map((photo, index) => ({ ...photo, documentId: `doc-other-${index}` })),
+          }
+        : null,
+    );
+    handlerAnswers = [results('replayed', 'replayed')];
+    releaseUpload();
+    await sending;
+    // The resend repeats the sealed content, so the server answers replayed.
+    expect(sent[0]?.payload.photos).toEqual([
+      { linkId: '9d000000-0000-4000-8000-000000000031', documentId: 'doc-other-0' },
+      { linkId: '9d000000-0000-4000-8000-000000000032', documentId: 'doc-other-1' },
+    ]);
+  });
+
+  test("the tabs of a phone send one after the other: each send holds the browser's draft-send lock", async () => {
+    const requested: string[] = [];
+    const realNavigator: unknown = Reflect.get(globalThis, 'navigator');
+    Object.assign(globalThis, {
+      navigator: {
+        locks: {
+          request: async (name: string, run: () => Promise<unknown>) => {
+            requested.push(name);
+            return run();
+          },
+        },
+      },
+    });
+    try {
+      await startDraftSync(holder).send();
+      await save(draft({ photos: [] }));
+      handlerAnswers = [results('accepted', 'accepted')];
+      expect(await sendDraft(holder, DRAFT_ID)).toBe('sent');
+      expect(requested).toContain('werkflow-draft-send');
+    } finally {
+      Object.assign(globalThis, { navigator: realNavigator });
+    }
+  });
+
+  test('an organization mismatch after a lost answer keeps the seal: the resend repeats the same content', async () => {
+    await startDraftSync(holder).send();
+    await save(draft({ photos: [] }));
+    handlerAnswers = [
+      () => Promise.reject(new TypeError('Failed to fetch')),
+      results('rejected', 'organization_mismatch'),
+    ];
+    expect(await sendDraft(holder, DRAFT_ID)).toBe('waiting');
+    expect(await sendDraft(holder, DRAFT_ID)).toBe('waiting');
+    expect((await stored())[0]?.sealed).toBe(true);
   });
 });

@@ -254,3 +254,58 @@ test('a photo is taken with the camera input: an image file input that asks for 
   await expect(input).toHaveAttribute('accept', 'image/*');
   await expect(input).toHaveAttribute('capture', 'environment');
 });
+
+test('a save right after a photo waits until the device stored the photo, and then keeps the photo with the draft', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    window.uiContractDraftsOffline = true;
+  });
+  await openContractFixture(page, 'work-artifact-report');
+  await page.getByRole('button', { name: 'Neu', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Arbeitsnachweis erstellen', exact: true });
+  await dialog.getByRole('textbox', { name: 'Titel', exact: true }).fill('Wartung Heizung');
+  await dialog.getByRole('textbox', { name: 'Ausgeführte Arbeiten', exact: true }).fill('Brenner gereinigt');
+  await expect(dialog.getByRole('button', { name: 'Fotos', exact: true })).toBeVisible();
+  // From here every connection to the draft store opens only when the spec lets it.
+  await page.evaluate(() => {
+    const held: Array<() => void> = [];
+    Object.assign(window, { heldDraftOpens: held });
+    const open = IDBFactory.prototype.open;
+    IDBFactory.prototype.open = function (this: IDBFactory, name: string, version?: number) {
+      const request = open.call(this, name, version);
+      if (name === 'werkflow-drafts')
+        request.addEventListener(
+          'success',
+          (event) => {
+            event.stopImmediatePropagation();
+            held.push(() => request.dispatchEvent(new Event('success')));
+          },
+          { once: true },
+        );
+      return request;
+    };
+  });
+  await dialog
+    .getByTestId('artifact-photo-input')
+    .setInputFiles({ name: 'foto-1.png', mimeType: 'image/png', buffer: PHOTO });
+  await page.getByRole('button', { name: 'Als Entwurf speichern', exact: true }).click();
+  // Release the held connections one by one until the save has settled.
+  await expect
+    .poll(async () => {
+      await page.evaluate(() => {
+        const held: unknown = Reflect.get(window, 'heldDraftOpens');
+        if (Array.isArray(held))
+          for (const release of held.splice(0)) if (typeof release === 'function') release();
+      });
+      return page
+        .getByRole('alert')
+        .filter({ hasText: /Gerade kein Netz/ })
+        .count();
+    })
+    .toBe(1);
+  expect(await page.evaluate(() => window.uiContractWorkArtifacts.saves)).toEqual([]);
+  await expect(
+    draftRow(page, 'Wartung Heizung').getByText('Arbeitsbericht · 1 Foto', { exact: true }),
+  ).toBeVisible();
+});

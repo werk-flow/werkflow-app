@@ -241,9 +241,16 @@ export function DeviceDraftKeeper(props: DeviceDraftKeeperProps) {
   useEffect(() => device.keepOpen(artifactId), [device, artifactId]);
 
   // The dialog's save reaches the keeper of this render; without a keeper it saves on the server alone.
-  const photoCount = photos.photos.length;
   useEffect(() => {
-    onHandle({ photoCount, save, discard: async () => void (await write(() => null)) });
+    onHandle({
+      // An unchanged write waits behind every queued one: a photo just taken counts once it is stored.
+      committedPhotoCount: async () => {
+        const stored = await write((current) => current);
+        return stored === null || stored === 'not_stored' ? 0 : stored.photos.length;
+      },
+      save,
+      discard: async () => void (await write(() => null)),
+    });
   });
   useEffect(() => () => onHandle(null), [onHandle]);
 

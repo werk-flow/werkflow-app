@@ -74,6 +74,7 @@ function draft(overrides: Record<string, unknown> = {}): Record<string, unknown>
   return {
     artifactId: id(),
     revisionId: id(),
+    authorId: CALLER_ID,
     jobId: assignedJobId,
     kind: 'work_report',
     visibility: 'internal_only',
@@ -182,6 +183,16 @@ assert.deepEqual(await replayBoth(foreignOrganization), {
   outcome: 'rejected',
   code: 'organization_mismatch',
 });
+
+// A draft written by another person is never sent with this person's session: a sign-in of a
+// coworker on the same phone leaves the draft waiting for its author, with no write.
+const othersDraft = operation({ payload: draft({ authorId: '3c000000-0000-4000-8000-000000000099' }) });
+assert.deepEqual(await replayBoth(othersDraft), {
+  operationId: othersDraft.operationId,
+  outcome: 'retry',
+  code: 'unauthenticated',
+});
+assert.equal(world.rpcCalls.length, 0, "another person's draft reached the database function");
 
 // A revoked membership refuses the whole request.
 world.memberships = [];

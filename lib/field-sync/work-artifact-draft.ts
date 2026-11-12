@@ -35,6 +35,9 @@ export async function replayWorkArtifactDraft(
 ): Promise<FieldSyncVerdict> {
   const draft = workArtifactDraftSchema.safeParse(operation.payload);
   if (!draft.success) return INVALID;
+  // A coworker who signed in on the same phone never sends the author's draft as theirs: it waits,
+  // pending, for its author's session.
+  if (draft.data.authorId !== context.userId) return { outcome: 'retry', code: 'unauthenticated' };
   const result = await attachWorkArtifactDraft(context, {
     operationId: operation.operationId,
     capturedAt: operation.capturedAt,

@@ -55,7 +55,8 @@ export type RestoredDraft = {
 
 /** What the dialog's save asks of the draft keeper once the device keeps the new Arbeitsnachweis. */
 export type DeviceDraftHandle = {
-  photoCount: number;
+  /** How many photos the device holds for the draft once every change made so far has been written. */
+  committedPhotoCount: () => Promise<number>;
   /**
    * Sends the draft with its photos and answers the revision the server wrote and the version it
    * left the Arbeitsnachweis at, or null when the draft did not arrive; the keeper has said why.

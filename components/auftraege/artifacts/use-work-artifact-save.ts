@@ -94,8 +94,8 @@ export function useWorkArtifactSave({
   async function runSave(submit: boolean): Promise<void> {
     const onDevice = deviceDraft.current;
     // Photos reach the server only with the draft the device holds.
-    const result =
-      onDevice && onDevice.photoCount > 0 ? 'no_answer' : await saveOnServer(submit, onDevice !== null);
+    const photos = onDevice ? await onDevice.committedPhotoCount() : 0;
+    const result = photos > 0 ? 'no_answer' : await saveOnServer(submit, onDevice !== null);
     if (result === 'no_answer') {
       const sent = (await onDevice?.save(submit)) ?? null;
       if (sent) await showSentDraft(submit, sent);

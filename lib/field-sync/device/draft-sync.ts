@@ -13,6 +13,7 @@ import {
   type DraftRefusal,
   type StoredDraft,
 } from './draft-store';
+import { todayWipeGeneration } from './today-wipe';
 
 // Sends the report drafts a phone keeps (decision record 0010, the report
 // draft amendment). Each photo goes to storage through the document upload
@@ -47,6 +48,17 @@ export function isPastUnsentLimit(draft: StoredDraft, now: Date = new Date()): b
 }
 
 let holder: DraftHolder | null = null;
+/**
+ * The wipe signal when the page named the holder (today-wipe.ts). Every sign-out and every sign-in
+ * page writes a new one, so a tab whose session may now belong to someone else sends nothing more
+ * until a page names its holder again.
+ */
+let holderGeneration: string | null = null;
+
+/** Whether this tab may still send for the holder it was given: no sign-out or sign-in page came since. */
+function stillHolder(): boolean {
+  return holderGeneration !== null && todayWipeGeneration() === holderGeneration;
+}
 let progress: DraftSendProgress | null = null;
 let listening = false;
 /** One send at a time: two triggers never upload the same photo twice. */
@@ -101,6 +113,7 @@ async function attach(draft: StoredDraft): Promise<{ outcome: string; code: stri
             payload: {
               artifactId: draft.id,
               revisionId: draft.revisionId,
+              authorId: draft.userId,
               jobId: draft.jobId,
               kind: draft.kind,
               visibility: draft.visibility,
@@ -152,6 +165,7 @@ async function uploadPhotos(owner: DraftHolder, draft: StoredDraft): Promise<Dra
   let uploaded = draft.photos.filter((photo) => photo.documentId !== null).length;
   for (const photo of draft.photos) {
     if (photo.documentId !== null) continue;
+    if (!stillHolder()) return 'waiting';
     progress = { draftId: draft.id, uploaded, total: draft.photos.length };
     notify();
     const result = await uploadDocumentDirect({
@@ -164,16 +178,18 @@ async function uploadPhotos(owner: DraftHolder, draft: StoredDraft): Promise<Dra
     const documentId =
       result.status === 'saved' ? (result.saved?.id ?? photo.transferred?.documentId ?? null) : null;
     const transferred = result.status === 'failed' ? result.transferred : photo.transferred;
-    await changeDraftOnDevice(owner, draft.id, (current) =>
-      current
+    const kept = await changeDraftOnDevice(owner, draft.id, (current) =>
+      // A sealed draft may be on the server as it is: an upload that ends later never changes it.
+      current && !current.sealed
         ? {
             ...current,
             photos: current.photos.map((entry) =>
               entry.id === photo.id ? { ...entry, documentId, transferred } : entry,
             ),
           }
-        : null,
+        : current,
     );
+    if (!kept || kept.sealed) return null;
     if (documentId !== null) {
       uploaded += 1;
       continue;
@@ -203,8 +219,10 @@ async function sendOne(owner: DraftHolder, draftId: string, byPerson: boolean): 
   if (!draft.ready) return 'skipped';
   if (!byPerson && (openInEditor.has(draftId) || draft.refusal !== null || isPastUnsentLimit(draft)))
     return 'skipped';
-  const left = await uploadPhotos(owner, draft);
+  if (!stillHolder()) return 'waiting';
+  const left = draft.sealed ? null : await uploadPhotos(owner, draft);
   if (left !== null) return left;
+  if (!stillHolder()) return 'waiting';
   // Sealed before the request leaves: from here the server may hold the draft, whatever answer arrives.
   const sealed = await changeDraftOnDevice(owner, draftId, (current) =>
     current ? { ...current, sealed: true, refusal: null } : null,
@@ -221,18 +239,26 @@ async function sendOne(owner: DraftHolder, draftId: string, byPerson: boolean): 
     verdict.outcome === 'retry' ||
     (verdict.outcome !== 'rejected' && verdict.outcome !== 'conflict' && verdict.status >= 500);
   if (retry) return 'waiting';
-  if (verdict.outcome === 'rejected' && verdict.code === 'organization_mismatch') {
-    // The session's active organization moved on; the draft waits for its own.
-    await changeDraftOnDevice(owner, draftId, (current) => (current ? { ...current, sealed: false } : null));
-    return 'waiting';
-  }
+  // The session's active organization moved on; the draft waits for its own, still sealed: an earlier
+  // send may have arrived, and only a resend of the same content can learn that.
+  if (verdict.outcome === 'rejected' && verdict.code === 'organization_mismatch') return 'waiting';
   const lost = verdict.outcome === 'rejected' && verdict.code === 'forbidden';
   await markRefused(owner, draftId, lost ? 'no_access' : 'failed');
   return lost ? 'no_access' : 'refused';
 }
 
+/**
+ * Runs one send while no other tab of the phone sends: two tabs never upload the same photo twice
+ * or attach different photos under one operation. A browser without the Web Locks API sends
+ * within the tab only.
+ */
+function acrossTabs<T>(run: () => Promise<T>): Promise<T> {
+  const locks = typeof navigator === 'undefined' ? undefined : navigator.locks;
+  return locks ? locks.request('werkflow-draft-send', run) : run();
+}
+
 function enqueue<T>(run: () => Promise<T>): Promise<T> {
-  const result = queue.then(run);
+  const result = queue.then(() => acrossTabs(run));
   queue = result.catch((error: unknown) => {
     // A full or refused device store: the draft stays as it was, and the list shows its own read failure.
     logError('draft sync: send failed', error);
@@ -306,6 +332,7 @@ export function startDraftSync(next: DraftHolder): {
   unsentSource: typeof draftUnsentSource;
 } {
   holder = next;
+  holderGeneration = todayWipeGeneration();
   if (!listening) {
     listening = true;
     window.addEventListener('online', () => void sendDrafts());
