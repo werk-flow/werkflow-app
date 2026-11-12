@@ -11,16 +11,10 @@ import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { ListRow, ListRowActions } from '@/components/ui/list-row';
 import { PendingRow } from '@/components/ui/pending-row';
-import { Skeleton } from '@/components/ui/skeleton';
-import {
-  ColumnsTableHeader,
-  hiddenHeader,
-  SkeletonList,
-  SkeletonRows,
-  type SkeletonColumn,
-} from '@/components/ui/skeleton-table';
+import { ColumnsTableHeader } from '@/components/ui/skeleton-table';
 import type { OptimisticListItem } from '@/hooks/use-optimistic-list';
 import { ClientActionsMenu, type ClientRowActions } from './client-actions-menu';
+import { CLIENT_COLUMNS } from './clients-table-frame';
 import { CustomerMatchedSites } from './customer-matched-sites';
 import type { CustomerListItem } from '@/lib/clients/list-page';
 import { CLIENT_TYPE_LABELS, type Client } from '@/lib/jobs/types';
@@ -34,65 +28,6 @@ interface ClientsTableProps {
 }
 
 const PENDING_LABEL = 'Kunde wird gespeichert';
-
-// One column definition for the loaded table and its skeleton (design canon):
-// header count, widths and hover cannot drift apart.
-const CLIENT_COLUMNS: readonly SkeletonColumn[] = [
-  {
-    id: 'name',
-    header: 'Name',
-    className: 'w-[25%]',
-    skeleton: <Skeleton className="h-5 w-28" />,
-  },
-  {
-    id: 'type',
-    header: 'Typ',
-    className: 'w-[120px] px-4',
-    skeleton: <Skeleton className="h-[22px] w-20 rounded-full" />,
-  },
-  { id: 'email', header: 'E-Mail', skeleton: <Skeleton className="h-5 w-40" /> },
-  {
-    id: 'phone',
-    header: 'Telefon',
-    className: 'w-[150px]',
-    skeleton: <Skeleton className="h-5 w-28" />,
-  },
-  {
-    id: 'actions',
-    header: hiddenHeader('Aktionen'),
-    className: 'w-[50px]',
-    skeleton: <Skeleton className="size-8 rounded" />,
-  },
-];
-
-/** Same frame as the loaded list; rows hover because loaded rows navigate. */
-export function ClientsTableSkeleton({ count }: { count: number }) {
-  return (
-    <>
-      <SkeletonList count={count} interactive className="md:hidden">
-        <div className="min-w-0 flex-1 space-y-1">
-          <div className="flex items-center gap-2">
-            <Skeleton className="h-[20px] w-[120px]" />
-            <Skeleton className="h-[18px] w-[70px] rounded-full" />
-          </div>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <Skeleton className="h-[16px] w-[160px]" />
-            <Skeleton className="h-[16px] w-[100px]" />
-          </div>
-        </div>
-        <Skeleton className="size-8 shrink-0 rounded" />
-      </SkeletonList>
-      <div className="hidden md:block">
-        <Table>
-          <ColumnsTableHeader columns={CLIENT_COLUMNS} />
-          <TableBody>
-            <SkeletonRows columns={CLIENT_COLUMNS} rows={count} interactive />
-          </TableBody>
-        </Table>
-      </div>
-    </>
-  );
-}
 
 function ClientTypeBadge({ clientType, compact }: { clientType: Client['clientType']; compact?: boolean }) {
   return (
@@ -224,7 +159,7 @@ function ClientTableRow({
 }
 
 // No loading prop on purpose: the list never turns into a skeleton over data
-// it already has (feedback canon); `ClientsTableSkeleton` serves loading.tsx.
+// it already has (feedback canon); `ClientsTableSkeleton` (clients-table-frame.tsx) serves loading.tsx.
 // A record the user just created rides along as an optimistic row.
 export function ClientsTable({ rows, isBusy, actions, isFiltered }: ClientsTableProps) {
   if (rows.length === 0) {
