@@ -24,15 +24,12 @@ export const KEPT_CLOCK_ACTION_PREFIX = `${UNSENT_MARK_PREFIX}clock:`;
 
 let keptOnThisPage = 0;
 
-/** Every key of localStorage. Throws where the browser refuses the storage. */
-export function storageKeys(): string[] {
-  return Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index) ?? '');
-}
-
 /** Whether the app start should load the sync runner. True when the hint cannot be read. */
 export function deviceMayHoldUnsentWork(): boolean {
   try {
-    return storageKeys().some((key) => key.startsWith(UNSENT_MARK_PREFIX));
+    for (let index = 0; index < localStorage.length; index += 1)
+      if (localStorage.key(index)?.startsWith(UNSENT_MARK_PREFIX)) return true;
+    return false;
   } catch {
     return true;
   }

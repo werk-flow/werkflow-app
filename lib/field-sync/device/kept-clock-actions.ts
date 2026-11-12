@@ -4,7 +4,7 @@ import { timeActivitySelectionSchema } from '@/lib/time-tracking/activity-select
 import { clockStateSchema } from '@/lib/time-tracking/state-client';
 import { z } from '@/lib/zod';
 import { captureTimeEvent, isOfflineClockAction } from './time-outbox';
-import { KEPT_CLOCK_ACTION_PREFIX, storageKeys } from './unsent-mark';
+import { KEPT_CLOCK_ACTION_PREFIX } from './unsent-mark';
 
 // Takes the clock actions a page kept without signal (unsent-mark.ts) into the
 // time outbox. A page that loses its signal can load no code any more, so it
@@ -35,7 +35,7 @@ export type KeptClockAction = z.infer<typeof keptClockActionSchema>;
 
 /** The keys of the kept clock actions, in the order of their taps. */
 function keptActionKeys(): string[] {
-  return storageKeys()
+  return Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index) ?? '')
     .filter((key) => key.startsWith(KEPT_CLOCK_ACTION_PREFIX))
     .toSorted();
 }
