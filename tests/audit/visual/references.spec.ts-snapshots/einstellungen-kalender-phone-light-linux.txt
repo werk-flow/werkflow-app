@@ -1,8 +1,7 @@
 Menü öffnen
 Einstellungen
-Abonnement & Abrechnung
-Dashboard
 Organisation
+Dokumente & Briefpapier
 Kalender
 Kalender
 Legt fest, wie Termine, Einsätze und Planungsansichten funktionieren.
