@@ -44,6 +44,15 @@ test('a stack that holds anything main lacks is refused, pending migrations or n
   );
 });
 
+// A stack that answered but whose ledger could not be read never passes check:changed.
+test('a ledger the sync cannot read is a finding, not a stack at main', () => {
+  const unreadable = syncDecision(undefined);
+  expect(unreadable.kind).toBe('unreadable');
+  expect(unreadable.kind === 'unreadable' && unreadable.lines.join('\n')).toContain(
+    'its migration ledger could not be read',
+  );
+});
+
 test('the ledger trigger refuses every write but the sync session and names the sanctioned commands', () => {
   // Rows and a truncate, in one transaction, admitted only under the sync's session setting.
   expect(GUARD_SQL).toContain('before insert or update or delete on supabase_migrations.schema_migrations');

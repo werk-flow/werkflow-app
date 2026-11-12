@@ -56,6 +56,8 @@ const RESET_DOC = 'the supabase-live-workflow skill, "Reset the shared stack"';
 export type SyncDecision =
   /** The stack holds a migration main lacks, one whose statements differ or one it cannot prove: only a reset repairs it. */
   | { kind: 'ahead'; lines: string[] }
+  /** The stack answered, but its ledger could not be read: nothing proves it is main. */
+  | { kind: 'unreadable'; lines: string[] }
   /** Main has merged migrations the stack lacks, by name. */
   | { kind: 'behind'; pending: readonly string[] }
   | { kind: 'current' };
@@ -63,8 +65,20 @@ export type SyncDecision =
 const named = (names: readonly string[]) =>
   `${names.slice(0, 5).join(', ')}${names.length > 5 ? `, and ${names.length - 5} more` : ''}`;
 
-/** What the sync does about the drift between the stack's ledger and main's migrations. */
-export function syncDecision(drift: MigrationDrift): SyncDecision {
+/**
+ * What the sync does about the drift between the stack's ledger and main's migrations; `undefined`
+ * is a ledger read that failed on a stack that answered (a timeout, no ledger table, rows of an
+ * unknown shape), which never passes as main.
+ */
+export function syncDecision(drift: MigrationDrift | undefined): SyncDecision {
+  if (!drift)
+    return {
+      kind: 'unreadable',
+      lines: [
+        "The shared local stack answers, but its migration ledger could not be read, so nothing proves it is main's.",
+        `Check that supabase_migrations.schema_migrations exists and answers; a stack without its ledger needs the reset (${RESET_DOC}).`,
+      ],
+    };
   const { stackOnly, changed, treeOnly, unverified } = drift;
   if (stackOnly.length || changed.length || unverified.length)
     return {

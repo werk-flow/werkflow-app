@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { gitEnvironment } from '../lib/testing/boat/verify-on-boat';
-import { type MigrationDrift, readMigrationDrift } from '../lib/testing/local-stack/migration-drift';
+import { readMigrationDrift } from '../lib/testing/local-stack/migration-drift';
 import {
   GUARD_QUERY,
   GUARD_SQL,
@@ -12,6 +12,7 @@ import {
   RESET_WARNING,
   SYNC_OPTIONS,
   resetRefusal,
+  type SyncDecision,
   syncDecision,
 } from '../lib/testing/local-stack/stack-sync';
 import { CHANGED_CHECK_BASE } from '../lib/testing/runner/changed-check';
@@ -126,9 +127,9 @@ function guard(): boolean {
   return true;
 }
 
-function refuseAhead(drift: MigrationDrift): boolean {
-  const decision = syncDecision(drift);
-  if (decision.kind !== 'ahead') return false;
+/** Prints why the stack is not main and answers true: a stack ahead of main, or one it cannot read. */
+function refused(decision: SyncDecision): decision is Extract<SyncDecision, { lines: string[] }> {
+  if (decision.kind !== 'ahead' && decision.kind !== 'unreadable') return false;
   for (const line of decision.lines) console.error(line);
   return true;
 }
@@ -140,27 +141,22 @@ async function sync(wait: boolean): Promise<number> {
     return 0;
   }
   return withMain(async (folder, commit) => {
-    const drift = readMigrationDrift(folder);
-    if (!drift) {
-      say('The local stack is not running or cannot be read; nothing to sync.');
-      return 0;
-    }
-    if (refuseAhead(drift)) return 1;
+    // The stack answered the probe, so a ledger it cannot read is a failure, never a pass.
+    const decision = syncDecision(readMigrationDrift(folder));
+    if (refused(decision)) return 1;
     if (!guard()) return 1;
-    const decision = syncDecision(drift);
     if (decision.kind === 'current') {
       say(`The shared stack is at main (${commit}).`);
       return 0;
     }
-    if (decision.kind !== 'behind') return 1;
     const apply = withStackLock(
       { mode: 'exclusive', operation: 'stack sync', repositoryRoot, wait },
       async () => {
         // Another worktree's sync may have applied them while this one waited.
-        const now = readMigrationDrift(folder);
-        if (!now || refuseAhead(now)) return 1;
-        if (now.treeOnly.length) {
-          say(`Applying main's ${now.treeOnly.length} pending migrations (${commit}).`);
+        const now = syncDecision(readMigrationDrift(folder));
+        if (refused(now)) return 1;
+        if (now.kind === 'behind') {
+          say(`Applying main's ${now.pending.length} pending migrations (${commit}).`);
           if (!supabase(folder, ['migration', 'up'])) {
             console.error(
               `[stack] Applying main's migrations failed; the output is above. A ledger that holds a version main lacks needs the reset (bun run stack:reset -- ${RESET_CONFIRMATION}).`,
@@ -194,8 +190,7 @@ async function reset(confirmed: boolean): Promise<number> {
         if (!supabase(folder, ['db', 'reset'])) return 1;
         // A reset leaves the edge runtime stopped on some machines; the test server starts it too.
         spawnSync('docker', ['start', EDGE_RUNTIME], { stdio: 'ignore' });
-        const drift = readMigrationDrift(folder);
-        if (!drift || syncDecision(drift).kind !== 'current' || !guard()) {
+        if (syncDecision(readMigrationDrift(folder)).kind !== 'current' || !guard()) {
           console.error(
             '[stack] The reset ran, but the stack does not read as main; run bun run stack:sync.',
           );
