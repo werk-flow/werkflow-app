@@ -330,6 +330,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
       'time_account_approval_scope.sql',
       'time_account_opening_correction.sql',
       'time_account_bulk_opening.sql',
+      'payroll_mapping_confirmation.sql',
     ],
     ['time', 'personnel', 'work'],
   ],

@@ -99,7 +99,7 @@ function PayrollMappingForm({ settings }: { settings: TimeAccountSettingsData })
       return;
     }
     try {
-      const result = await run({ codes });
+      const result = await run({ codes, basedOnVersion: current?.version ?? null });
       if (!result.success) {
         setError(getTimeAccountFailureMessage('createMapping', result.error));
         return;

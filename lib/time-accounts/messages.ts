@@ -72,7 +72,14 @@ const FAILURE_CODES = {
     'stale_version',
     'withdraw_failed',
   ],
-  createMapping: ['invalid_input', 'forbidden', 'invalid_code', 'employee_number_required', 'mapping_failed'],
+  createMapping: [
+    'invalid_input',
+    'forbidden',
+    'invalid_code',
+    'stale_version',
+    'employee_number_required',
+    'mapping_failed',
+  ],
   prepare: [
     'invalid_input',
     'forbidden',
@@ -241,6 +248,8 @@ const MESSAGES: ActionMessages = {
     messages: {
       forbidden: 'Nur Administratoren können die Lohnarten-Zuordnung ändern.',
       invalid_code: `Jede Zeile braucht einen Lohnart-Code mit höchstens ${PAYROLL_CODE_MAX_LENGTH} Zeichen.`,
+      stale_version:
+        'Die Zuordnung wurde inzwischen geändert. Lade die Seite neu und prüfe die Codes, bevor du speicherst.',
       employee_number_required:
         'Für mindestens eine Person fehlt die Personalnummer. Trage sie unter „Mitarbeiter“ in den Personalien ein.',
     },

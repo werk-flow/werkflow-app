@@ -1,5 +1,5 @@
 -- Opening several time accounts with one shared date and reason
--- (migration 20261201090000_open_time_accounts_together.sql): one function
+-- (migration 20261201090000_open_accounts_together_and_confirm_mapping_from_its_version.sql): one function
 -- call opens every named account or none, records one account and one
 -- opening event per person with that person's balance, refuses a foreign
 -- person or caller, and never opens on or before a closed month.
@@ -233,6 +233,10 @@ begin
   if not has_function_privilege('service_role',
       'public.open_time_accounts(uuid,uuid,jsonb,date,text,text)', 'EXECUTE')
   then raise exception 'the server cannot open time accounts'; end if;
+  -- It writes related rows for a server action, so it runs as its caller.
+  if (select prosecdef from pg_proc
+      where oid = 'public.open_time_accounts(uuid,uuid,jsonb,date,text,text)'::regprocedure)
+  then raise exception 'the bulk opening runs with its owner''s rights'; end if;
 end;
 $$;
 

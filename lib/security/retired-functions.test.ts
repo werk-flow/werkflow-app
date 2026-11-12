@@ -28,6 +28,7 @@ const SQL_CALLERS: Readonly<Record<string, string>> = {
   convert_client_request_to_job: 'convert_client_request_to_job_with_visit_assessment',
   create_maintenance_plan: 'create_maintenance_plan_with_due_work',
   delete_organization: 'delete_organization_with_files',
+  create_payroll_mapping_version: 'confirm_payroll_mapping_version',
   create_payroll_mapping_version_p1_23_base: 'create_payroll_mapping_version',
   fail_payroll_export_p1_23_base: 'fail_payroll_export',
   finalize_personnel_document_metadata_base: 'finalize_personnel_document_metadata',

@@ -1,5 +1,8 @@
+-- Two functions for Regeln & Export (werk-flow/werkflow-planning#160):
+-- open_time_accounts, and confirm_payroll_mapping_version further down.
+--
 -- „Alle eröffnen“ opens the missing time accounts of several people with one
--- shared opening date and reason, all or nothing (werk-flow/werkflow-planning#160).
+-- shared opening date and reason, all or nothing.
 -- Each person still gets their own account and their own opening event with
 -- their own balance: the function calls open_time_account once per person,
 -- so the per-person record, its lock and its guards stay exactly as before.
@@ -21,6 +24,12 @@
 -- its period row first makes this call see 'closed'; a close that waits finds
 -- a changed source fingerprint and refuses with stale_calculation.
 -- open_time_account itself is unchanged.
+--
+-- The function runs as its caller, service_role (docs/technical/security.md,
+-- "Add a privileged function"): it crosses no RLS boundary of its own, and
+-- the account and its event are written by open_time_account as before. The
+-- Admin check is app_private.p1_24_is_admin, the rule behind
+-- is_p1_23_org_admin, which service_role may execute.
 
 create function public.open_time_accounts(
   p_actor_id uuid,
@@ -32,14 +41,14 @@ create function public.open_time_accounts(
 )
 returns integer
 language plpgsql
-security definer
+security invoker
 set search_path to ''
 as $$
 declare
   v_opening record;
   v_count integer;
 begin
-  if not app_private.is_p1_23_org_admin(p_organization_id, p_actor_id) then
+  if not app_private.p1_24_is_admin(p_organization_id, p_actor_id) then
     raise exception 'not_authorized';
   end if;
   if nullif(btrim(p_reason), '') is null then raise exception 'reason_required'; end if;
@@ -137,4 +146,58 @@ $$;
 revoke all on function public.open_time_accounts(uuid, uuid, jsonb, date, text, text)
   from public, anon, authenticated;
 grant execute on function public.open_time_accounts(uuid, uuid, jsonb, date, text, text)
+  to service_role;
+
+-- The payroll mapping table shows the codes of the current version, and the
+-- Admin saves the edited table as the next version. A table read from an
+-- older version must not become the newest one: it would silently undo the
+-- codes another Admin saved in between. confirm_payroll_mapping_version
+-- names the version the table was read from (NULL before the first one) and
+-- refuses with stale_version when the current version is another. It then
+-- calls create_payroll_mapping_version, which is unchanged and writes the
+-- new version; an earlier version is never rewritten.
+--
+-- One advisory lock per organization serializes the confirmations, so the
+-- version read here is still current when the new one is written. Refusals:
+-- forbidden, stale_version, and those of create_payroll_mapping_version.
+
+create function public.confirm_payroll_mapping_version(
+  p_actor_id uuid,
+  p_organization_id uuid,
+  p_expected_version integer,
+  p_employee_mappings jsonb,
+  p_code_mappings jsonb,
+  p_operation_id uuid,
+  p_request_hash text
+)
+returns uuid
+language plpgsql
+security invoker
+set search_path to ''
+as $$
+declare
+  v_current_version integer;
+begin
+  if not app_private.p1_24_is_admin(p_organization_id, p_actor_id) then
+    raise exception 'forbidden';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended(
+    p_organization_id::text || ':payroll-mapping', 0
+  ));
+  select version.version into v_current_version
+  from public.payroll_mapping_profiles profile
+  join public.payroll_mapping_versions version on version.id = profile.current_version_id
+  where profile.organization_id = p_organization_id;
+  if v_current_version is distinct from p_expected_version then
+    raise exception 'stale_version';
+  end if;
+  return public.create_payroll_mapping_version(
+    p_actor_id, p_organization_id, p_employee_mappings, p_code_mappings, p_operation_id, p_request_hash
+  );
+end;
+$$;
+
+revoke all on function public.confirm_payroll_mapping_version(uuid, uuid, integer, jsonb, jsonb, uuid, text)
+  from public, anon, authenticated;
+grant execute on function public.confirm_payroll_mapping_version(uuid, uuid, integer, jsonb, jsonb, uuid, text)
   to service_role;

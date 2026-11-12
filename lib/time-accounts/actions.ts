@@ -60,6 +60,8 @@ const openTimeAccountsInputSchema = z.object({
 });
 const savePayrollMappingInputSchema = z.object({
   codes: z.record(z.string().max(80), z.string().max(200)),
+  // The mapping version the table showed; null before the first one.
+  basedOnVersion: z.number().int().positive().nullable(),
 });
 const correctTimeAccountOpeningDateFormSchema = z.object({
   accountId: id,
@@ -550,7 +552,8 @@ export async function reopenTimePeriod(formInput: FormData): Promise<TimeAccount
 /**
  * Saves the Admin's Lohnart codes as a new mapping version, with every
  * person's current Personalnummer. An earlier version stays as it was, and
- * every export keeps the version it was built from.
+ * every export keeps the version it was built from. A table read from a
+ * version that is no longer current is refused as stale.
  */
 export async function savePayrollMapping(input: unknown): Promise<TimeAccountActionResult<'createMapping'>> {
   const parsed = savePayrollMappingInputSchema.safeParse(input);
@@ -560,7 +563,12 @@ export async function savePayrollMapping(input: unknown): Promise<TimeAccountAct
   const codeMappings = toPayrollCodeMappings(parsed.data.codes);
   if (!codeMappings) return { success: false, error: 'invalid_code' };
   try {
-    await savePayrollMappingVersion(createSupabaseAdminClient(), context, codeMappings);
+    await savePayrollMappingVersion(
+      createSupabaseAdminClient(),
+      context,
+      codeMappings,
+      parsed.data.basedOnVersion,
+    );
   } catch (error) {
     return {
       success: false,

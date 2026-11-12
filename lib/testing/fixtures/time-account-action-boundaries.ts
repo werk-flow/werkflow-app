@@ -222,7 +222,7 @@ const openings = (...people: ReadonlyArray<readonly [string, string]>) => ({
   reason: 'Einführung',
   openings: people.map(([employeeRecordId, openingBalance]) => ({ employeeRecordId, openingBalance })),
 });
-const mappingCodes = { codes: payrollCodesByKey(null) };
+const mappingCodes = { codes: payrollCodesByKey(null), basedOnVersion: null };
 const forbidden = { success: false, error: 'forbidden' };
 // The responsibility state reads the caller's role from the organization's members.
 const callerMembership = tableRows(world, 'organization_members').find((row) => row.user_id === CALLER_ID);
@@ -374,10 +374,13 @@ assert.deepEqual(await openTimeAccounts(openings([ownRecordId, '750'])), {
   success: false,
   error: 'invalid_balance',
 });
-assert.deepEqual(await savePayrollMapping({ codes: { ...mappingCodes.codes, overtime: ' ' } }), {
-  success: false,
-  error: 'invalid_code',
-});
+assert.deepEqual(
+  await savePayrollMapping({ ...mappingCodes, codes: { ...mappingCodes.codes, overtime: ' ' } }),
+  {
+    success: false,
+    error: 'invalid_code',
+  },
+);
 assert.equal(world.rpcCalls.length, 0, 'a refused balance or code reached the database');
 assert.deepEqual(await openTimeAccounts(openings([ownRecordId, '+12:30'], [colleagueRecordId, '-3:15'])), {
   success: true,

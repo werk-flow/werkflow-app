@@ -4,19 +4,23 @@ import { randomUUID } from 'node:crypto';
 
 import type { AdminClient } from '@/lib/supabase/admin';
 import { readCompleteRows } from '@/lib/supabase/query-batches';
+import { rpcArgs } from '@/lib/supabase/rpc-args';
 import type { PayrollCodeMapping } from './payroll-mapping';
 import { hashPayload, PERIOD_SOURCE_ROW_CAP, requirePeriodRows } from './period-sources';
 import { requireRead } from './read-support';
 
 /**
  * Saves a new mapping version: the Admin's codes, and every person's current
- * Personalnummer. Throws a stable code (or a provider error) on every
- * refusal; the action maps it.
+ * Personalnummer. `basedOnVersion` is the version the Admin's table showed
+ * (null before the first one); the database refuses the save with
+ * `stale_version` when another version is current by now. Throws a stable
+ * code (or a provider error) on every refusal; the action maps it.
  */
 export async function savePayrollMappingVersion(
   admin: AdminClient,
   context: { orgId: string; userId: string },
   codeMappings: PayrollCodeMapping[],
+  basedOnVersion: number | null,
 ): Promise<void> {
   const { data: employees } = await readCompleteRows(
     (from, to) =>
@@ -33,15 +37,19 @@ export async function savePayrollMappingVersion(
     if (!employee.employee_number) throw new Error('employee_number_required');
     return { employee_record_id: employee.id, external_employee_reference: employee.employee_number };
   });
-  const payload = { employeeMappings, codeMappings };
-  const { error } = await admin.rpc('create_payroll_mapping_version', {
-    p_actor_id: context.userId,
-    p_organization_id: context.orgId,
-    p_employee_mappings: employeeMappings,
-    p_code_mappings: codeMappings,
-    p_operation_id: randomUUID(),
-    p_request_hash: hashPayload(payload),
-  });
+  const payload = { employeeMappings, codeMappings, basedOnVersion };
+  const { error } = await admin.rpc(
+    'confirm_payroll_mapping_version',
+    rpcArgs('confirm_payroll_mapping_version', {
+      p_actor_id: context.userId,
+      p_organization_id: context.orgId,
+      p_expected_version: basedOnVersion,
+      p_employee_mappings: employeeMappings,
+      p_code_mappings: codeMappings,
+      p_operation_id: randomUUID(),
+      p_request_hash: hashPayload(payload),
+    }),
+  );
   if (error) throw error;
 }
 

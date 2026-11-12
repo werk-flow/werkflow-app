@@ -16,7 +16,7 @@ export type PayrollCodeRow = {
   defaultCode: string;
 };
 
-/** The JSON shape of one code row of `create_payroll_mapping_version`. */
+/** The JSON shape of one code row of `confirm_payroll_mapping_version`. */
 export type PayrollCodeMapping = {
   value_kind: PayrollValueKind;
   activity_kind: TimeSegmentKind | null;
