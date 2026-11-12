@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { changedCheckPlan } from './changed-check';
+import { changedCheckPlan, unitTestSourcesOf } from './changed-check';
 
 test('formats and lints changed sources and runs the unit tests beside changed modules', () => {
   const existing = new Set(['lib/a/rule.test.ts', 'lib/b/view.test.tsx', 'lib/c/own.test.ts']);
@@ -25,6 +25,33 @@ test('formats and lints changed sources and runs the unit tests beside changed m
   ]);
   expect(plan.formatted).toContain('package.json');
   expect(plan.formatted).not.toContain('docs/README.md');
+});
+
+test('a file outside lib/ runs the unit tests that name it or its folder by path', () => {
+  const sources = new Map([
+    ['lib/conventions/scripts.test.ts', "readRepositoryFile('package.json')"],
+    ['lib/testing/specs.test.ts', "readdirSync(join(root, 'tests/audit'))"],
+    ['lib/testing/unrelated.test.ts', "const name = 'tests';"],
+  ]);
+  const plan = (changed: string[]): string[] => changedCheckPlan(changed, () => false, sources).unitTests;
+  // #386: a preload in a package script broke a convention test that check:changed never ran.
+  expect(plan(['package.json'])).toEqual(['./lib/conventions/scripts.test.ts']);
+  // #366: a new audit spec broke a convention test that scans tests/audit.
+  expect(plan(['tests/audit/visual/acceptance-pages.spec.ts'])).toEqual(['./lib/testing/specs.test.ts']);
+  expect(plan(['tests/golden/p1-01.spec.ts', 'docs/README.md'])).toEqual([]);
+});
+
+test('a tracked unit test deleted before it is staged is not read', () => {
+  const read = (file: string): string => {
+    if (file === 'lib/a/gone.test.ts') throw new Error(`ENOENT: ${file}`);
+    return 'source';
+  };
+  const sources = unitTestSourcesOf(
+    ['lib/a/gone.test.ts', 'lib/a/kept.test.ts'],
+    (file) => file !== 'lib/a/gone.test.ts',
+    read,
+  );
+  expect([...sources.keys()]).toEqual(['lib/a/kept.test.ts']);
 });
 
 test('a change without sources runs no unit test', () => {

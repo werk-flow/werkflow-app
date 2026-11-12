@@ -42,6 +42,8 @@ Trap: a spinner or a generic skeleton as the loading state. The layout jumps whe
 6. Add the dialog to `lib/testing/selection/dialog-inventory.ts` and its opener to `tests/audit/support/dialog-openers/<area>.ts`.
 7. Run `bun run lint <files>`, `bun run test:unit lib/ui/dialog-contracts.test.ts lib/ui/field-contracts.test.tsx lib/testing/selection/dialog-inventory.test.ts lib/conventions/german-copy.test.ts`, then `bun run test:verify --group audit:layout:<area>`.
 
+A dialog opens with focus on its first control; one that starts on a later control to protect data names it with `startControlId`, which the layout audit checks.
+
 Trap: `autoFocus` on a field, or an `onOpenAutoFocus` that only prevents the default. Focus stays on the page behind the dialog.
 
 ### Add a list or a table
@@ -203,4 +205,4 @@ Every write shows feedback in its first frame, while the server works:
 
 1. Run `bun run lint`, `bun run test:unit` and `bun run test:ui`.
 2. Run `bun run test:verify`, then the sweeps the plan leaves to the nightly run: `--group audit:layout` when a shared control or token changed, and `--group audit:layout:<area>` for each changed area. After an accepted redesign, add `--group audit:visual`.
-3. Capture each changed screen before and after: add it to `tests/audit/support/acceptance-sets.ts`, run `bun run test:audit:focused --grep "@ACCEPT <set>"`. With a Boat key it runs on Boat and the images come back to the run folder; start no test server ([captures](../../../docs/technical/standards-audit.md#captures)). Cover both themes, 375 px and desktop, empty, `-loading` and `-error`. Walk the keyboard path yourself. A screenshot does not prove an interaction.
+3. Capture each changed screen before and after: add a set file `tests/audit/support/acceptance-sets/<set>.ts`, run `bun run test:audit:focused --grep "@ACCEPT <set>"`. With a Boat key it runs on Boat and the images come back to the run folder; start no test server ([captures](../../../docs/technical/standards-audit.md#captures)). Cover both themes, 375 px and desktop, empty, `-loading` and `-error`. Walk the keyboard path yourself. A screenshot does not prove an interaction.

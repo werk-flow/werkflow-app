@@ -4,6 +4,7 @@ import { resolvePageMembership } from '@/lib/org/page-context';
 import { getOrganizationUserPreferencesForView } from '@/lib/data/cached';
 import { isManagerRole } from '@/lib/roles';
 import { getClientDetail, getClientRelations } from '@/lib/clients/actions';
+import { getClientSiteRoles } from '@/lib/clients/site-role-actions';
 import { getClientDocuments } from '@/lib/documents/actions';
 import { getJobsForClient } from '@/lib/jobs/actions';
 import { getCustomerRelationshipBundle } from '@/lib/customer-relationships/actions';
@@ -30,6 +31,7 @@ function readKundenDetail(clientId: string, activeOrgId: string, userId: string)
     getCustomerRelationshipBundle(clientId),
     getInstalledEquipmentForClient(clientId),
     getOrganizationUserPreferencesForView(activeOrgId, userId),
+    getClientSiteRoles(clientId),
   ]);
 }
 
@@ -53,6 +55,7 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
     relationshipResult,
     equipmentResult,
     { visibleColumns },
+    siteRolesResult,
   ] = await readKundenDetail(clientId, activeOrgId, user.id);
 
   // A missing or forbidden client leaves the page; a failed read must not look like one.
@@ -83,7 +86,7 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
     );
   }
 
-  const { client, archivedAt } = clientResult;
+  const { client, archivedAt, sourceNumber } = clientResult;
 
   const members: OrgMemberOption[] = membersResult.members.map((m) => ({
     userId: m.user_id,
@@ -96,6 +99,8 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
     <KundenDetailContent
       client={client}
       archivedAt={archivedAt}
+      sourceNumber={sourceNumber}
+      siteRoles={siteRolesResult.success ? siteRolesResult.roles : null}
       relations={
         relationsResult.success ? { contacts: relationsResult.contacts, sites: relationsResult.sites } : null
       }

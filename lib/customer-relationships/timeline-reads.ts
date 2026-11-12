@@ -3,8 +3,9 @@ import 'server-only';
 import type { ActionResult } from '@/lib/action-result';
 import type { ClientManagerContext } from '@/lib/clients/manager-access';
 import { logError } from '@/lib/logging';
+import { describeAttachedRequestEvent } from '@/lib/requests/types';
 import { readInBatches } from '@/lib/supabase/query-batches';
-import { describeMasterDataEvent } from './master-data-events';
+import { describeMasterDataEvent, roleEventSiteClientId } from './master-data-events';
 import { customerJobHref, firstRelation, profileName } from './relationship-labels';
 import { buildTimelinePage, decodeTimelineCursor, isTimelineCursorSafe, timelineItemKey } from './resolution';
 import { TIMELINE_PAGE_SIZE, type CustomerRelationshipBundle, type TimelineItem } from './types';
@@ -472,6 +473,8 @@ function addRequestEventItems(add: AddTimelineItem, sources: TimelineSources): v
   for (const event of sources.requestEventsResult.data ?? []) {
     const request = firstRelation(event.client_requests);
     if (!request) continue;
+    const attached =
+      event.event_type === 'attached' ? describeAttachedRequestEvent(event.event_payload) : null;
     add({
       kind: 'request_event',
       category: 'work',
@@ -480,8 +483,8 @@ function addRequestEventItems(add: AddTimelineItem, sources: TimelineSources): v
       actorId: event.created_by,
       actorName: null,
       reference: request.request_number ?? request.summary,
-      detail: eventLabel(REQUEST_EVENT_LABELS, event.event_type),
-      sourceHref: `/anfragen/${event.request_id}`,
+      detail: attached?.label ?? eventLabel(REQUEST_EVENT_LABELS, event.event_type),
+      sourceHref: attached?.workHref ?? `/anfragen/${event.request_id}`,
       sourceAvailable: true,
       currentStateOnly: false,
       metadata: {
@@ -629,7 +632,8 @@ function addMasterDataItems(add: AddTimelineItem, clientId: string, sources: Tim
       actorName: null,
       reference,
       detail,
-      sourceHref: `/kunden/${clientId}${
+      // A role on another customer's Einsatzort links to that customer.
+      sourceHref: `/kunden/${roleEventSiteClientId(event.event_payload) ?? clientId}${
         event.contact_id ? '#ansprechpartner' : event.site_id ? '#einsatzorte' : ''
       }`,
       sourceAvailable: true,

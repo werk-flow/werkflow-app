@@ -10,12 +10,17 @@ export const PROBLEM_REPORT_STATUS_LABELS: Record<ProblemReportStatus, string> =
   abgelehnt: 'Abgelehnt',
 };
 
-const FAILURE_MESSAGES: Readonly<Record<string, string>> = {
-  submit_failed: 'Deine Meldung konnte nicht gesendet werden. Versuche es in einem Moment erneut.',
+/** Why a file of a report was refused, for the reporter and for support alike. */
+export const PROBLEM_REPORT_FILE_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
   file_type_not_allowed: 'Diese Datei passt nicht. Hänge Fotos (PNG, JPEG, WebP, HEIC) oder PDFs an.',
   file_too_large: 'Diese Datei ist zu groß. Ein Anhang darf höchstens 15 MB haben.',
   file_empty: 'Diese Datei ist leer.',
   too_many_attachments: 'Eine Meldung nimmt höchstens fünf Anhänge.',
+};
+
+const FAILURE_MESSAGES: Readonly<Record<string, string>> = {
+  submit_failed: 'Deine Meldung konnte nicht gesendet werden. Versuche es in einem Moment erneut.',
+  ...PROBLEM_REPORT_FILE_FAILURE_MESSAGES,
 };
 
 /** A screenshot over its size limit: the person sends without it. */

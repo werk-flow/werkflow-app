@@ -51,10 +51,16 @@ const config: KnipConfig = {
     'tests/golden/global-teardown.ts!',
     'tests/golden/support/discovery-reporter.ts!',
     'tests/**/*.spec.ts!',
+    // Loaded by directory from tests/audit/support/acceptance-sets.ts, never imported.
+    'tests/audit/support/acceptance-sets/*.ts!',
     'tests/ui-contracts/fixture.tsx!',
     'tests/ui-contracts/playwright.config.ts!',
     // Substituted for product modules by the component-contract bundler.
     'tests/ui-contracts/*boundar*.{ts,tsx}!',
+    // The E1 ↔ E2a seam (werk-flow/werkflow-planning#15): the article price
+    // reader and the line arithmetic rule exist before E2a's offers import
+    // them. Remove this entry with the first production import.
+    'lib/inventory/{article-prices,line-amount}.ts!',
   ],
   project: ['**/*.{ts,tsx,mjs}!', '!lib/**/*.test.{ts,tsx,mjs}!', '!lib/testing/fixtures/**!'],
   // Deno functions have their own import graph; the transcript folder is

@@ -43,6 +43,8 @@ declare global {
       | 'today-refresh-profile'
       | 'today-refresh-fallback'
       | 'offline-today'
+      | 'work-handover'
+      | 'edit-job'
       | 'sidebar'
       | 'lazy-dialog'
       | 'clock'
@@ -57,6 +59,9 @@ declare global {
       | 'absence-picker'
       | 'schedule-parked-picker'
       | 'problem-report'
+      | 'support-triage'
+      | 'support-filing'
+      | 'inventory-unit'
       | AuthUrlFixtureName
       | FeedbackFixtureName;
     uiContractLifecycle: LifecycleBoundaryState;

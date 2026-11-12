@@ -1,5 +1,6 @@
 import {
   DEFAULT_IDENTITY_REALTIME_TABLES,
+  OWN_USER_REALTIME_TABLES,
   REALTIME_DELETION_TABLE,
   REALTIME_PUBLISHED_TABLES,
   REALTIME_TABLES,
@@ -31,6 +32,7 @@ export function validateRealtimePublication(
   const expected = new Set<string>(REALTIME_PUBLISHED_TABLES);
   const defaultIdentity = new Set<string>(DEFAULT_IDENTITY_REALTIME_TABLES);
   const stamped = new Set<string>(TRANSACTION_STAMPED_TABLES);
+  const ownUser = new Set<string>(OWN_USER_REALTIME_TABLES);
   for (const name of expected) {
     if (!tables.some((table) => table.schemaname === 'public' && table.tablename === name))
       problems.push(`${name}: missing from public Realtime publication.`);
@@ -43,7 +45,12 @@ export function validateRealtimePublication(
     } else if (table.replident !== 'i' || table.replident_index_columns !== 'id,organization_id') {
       problems.push(`${table.tablename}: expected minimal USING INDEX (id, organization_id) identity.`);
     }
-    if (table.tablename !== REALTIME_DELETION_TABLE && !table.deletion_trigger_valid) {
+    if (ownUser.has(table.tablename)) {
+      if (table.deletion_trigger_valid)
+        problems.push(
+          `${table.tablename}: an own-user table carries no deletion notice; it would reach every member of the organization.`,
+        );
+    } else if (table.tablename !== REALTIME_DELETION_TABLE && !table.deletion_trigger_valid) {
       problems.push(
         `${table.tablename}: missing enabled AFTER DELETE row trigger for app_private.emit_realtime_deletion().`,
       );

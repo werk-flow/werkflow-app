@@ -2,7 +2,6 @@ import { describe, expect, setSystemTime, test } from 'bun:test';
 
 import {
   breakPolicyFormValues,
-  breakPolicyValuesSchema,
   computeBreakdownForSettings,
   getAutomaticBreakRanges,
   parseBreakPolicyHistory,
@@ -160,13 +159,6 @@ describe('the settings form', () => {
   ])('a switched-off second step with %s still saves', (_label, change) => {
     const values = { ...breakPolicyFormValues(ONE_STEP), ...change };
     expect(timeTrackingSettingsSchema.safeParse(values).success).toBe(true);
-  });
-
-  test('the clock state carries the rule with its second step', () => {
-    expect(breakPolicyValuesSchema.parse(TWO_STEPS).secondStep).toEqual({
-      thresholdMinutes: 540,
-      durationMinutes: 45,
-    });
   });
 });
 

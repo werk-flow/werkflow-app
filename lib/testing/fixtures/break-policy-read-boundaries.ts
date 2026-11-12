@@ -1,6 +1,7 @@
 // The actual break-rule reader over the in-memory database: every member of
-// the organization reads its rule with the versions, and a caller who names
-// another organization is refused before any settings read.
+// the organization reads its rule with the versions; a caller who names another
+// organization or has no membership is refused as a non-member, and a caller
+// without a session as not signed in, each before any settings read.
 import { mock } from 'bun:test';
 import assert from 'node:assert/strict';
 import { ORGANIZATION_A, ORGANIZATION_B, installActionWorld, signInAs } from './action-boundary-world';
@@ -45,11 +46,30 @@ for (const role of ['admin', 'buero', 'employee'] as const) {
 
   settingsReads.length = 0;
   const foreign = await getBreakPolicy(ORGANIZATION_B);
-  assert.equal(foreign.success, false, `${role} is refused another organization's rule`);
+  assert.deepEqual(
+    foreign,
+    { success: false, error: 'not_a_member' },
+    `${role} is refused another organization's rule`,
+  );
   assert.deepEqual(settingsReads, [], `${role}'s refused read reads no settings`);
 }
 
+// Signed in, but no member of any organization: refused as a non-member.
 signInAs(world, null);
 settingsReads.length = 0;
-assert.equal((await getBreakPolicy(ORGANIZATION_A)).success, false, 'a caller without a session is refused');
+assert.deepEqual(
+  await getBreakPolicy(ORGANIZATION_A),
+  { success: false, error: 'not_a_member' },
+  'a caller without a membership is refused as a non-member',
+);
+assert.deepEqual(settingsReads, [], 'a caller without a membership reads no settings');
+
+// No session at all: refused for the missing identity, before any membership read.
+world.callerId = null;
+settingsReads.length = 0;
+assert.deepEqual(
+  await getBreakPolicy(ORGANIZATION_A),
+  { success: false, error: 'not_authenticated' },
+  'a caller without a session is refused as not signed in',
+);
 assert.deepEqual(settingsReads, [], 'a caller without a session reads no settings');

@@ -15,7 +15,7 @@ import type { CaptureState } from './acceptance-state-plan';
  * (`tests/audit/visual/acceptance-<group>.spec.ts`), by what a capture
  * drives, so a group imports only the dialog openers it uses and a changed
  * helper selects the groups that reach it. The open sets of single changes
- * live in acceptance-sets.ts and form the group `sets`.
+ * live in acceptance-sets/, one file each, and form the group `sets`.
  */
 type CaptureView =
   | { kind: 'page' }
@@ -44,6 +44,13 @@ export type StandaloneCaptureSpec = {
   screen: StandaloneRoute;
   widths: CaptureSpec['widths'];
   schemes: CaptureSpec['schemes'];
+  /** Another query of the screen's route than its inventory address, such as `?status=alle`. */
+  query?: string;
+  /**
+   * Captures the route's `loading.tsx`: a client navigation from this address
+   * of the same area whose server render is held. The id ends in `-loading`.
+   */
+  loadingFrom?: string;
 };
 
 export type AcceptanceSet<Capture extends CaptureSpec = CaptureSpec> = {

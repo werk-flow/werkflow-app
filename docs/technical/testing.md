@@ -16,7 +16,7 @@ Write each test at its boundary while you build the behavior.
 6. Map the catalog clause in `lib/testing/selection/coverage-map.json` to the titles of the tests that prove it (for SQL, the `raise exception` message).
 7. Probe a lint rule with `createProbeLinter()` from `eslint-rules/probe-linter.mjs`, never `new ESLint()`.
 
-A useful test survives an equivalent implementation. Check a regression test against the broken case. Keep catalog-clause coverage when you move an assertion. A runner test that enforces an author rule opens with `// Rule test:`.
+A useful test survives an equivalent implementation. Check a regression test against the broken case. Keep catalog-clause coverage when moving an assertion. A runner test that enforces an author rule opens with `// Rule test:`.
 
 ### Write a spec that stands alone
 
@@ -35,7 +35,7 @@ A useful test survives an equivalent implementation. Check a regression test aga
 
 ### Wait for a long run
 
-Only a child thread and a PR watch wake a thread when they end. A shell run never does, even in the background. Start any run that can outlast one tool call notified:
+Only a child thread and a PR watch wake a thread when they end; a shell run never does. Start any run that can outlast one tool call notified:
 
 ```bash
 bun scripts/run-notified.ts --began "[verify] starting " -- bun run test:verify --mode release
@@ -58,16 +58,16 @@ A proof is a passing result whose fingerprint matches the current inputs; a late
 
 ## How selection works
 
-`bun run test:plan` prints each group with its reason and the first file behind it. Change mode compares the tree with the baseline: the latest passing automatic plan, or `HEAD` without one.
+`bun run test:plan` prints each group with its reason and first file. Change mode compares the tree with the baseline: the latest passing automatic plan, or `HEAD`.
 
 Each browser group has a `changeTrigger` (`lib/testing/selection/change-triggers.ts`):
 
 - **Critical journeys** (`CRITICAL_JOURNEYS`, one or more per role) run when a product file, migration, dependency or shared test support changed.
 - **Lab groups** (`audit:lab:*`) run on the same changes, except shared test support.
-- **Permission groups** keep selection by declared scope: every group that drives an `outsiderPage` session or has a `ROLE_DENIAL_GROUPS` row. The auth path and dependency files add `audit:security:account`.
+- **Permission groups** keep selection by declared scope: each group that drives an `outsiderPage` session or has a `ROLE_DENIAL_GROUPS` row. The auth path and dependency files add `audit:security:account`.
 - **Other groups** run nightly and in release mode.
 - A spec or support file selects the groups that import it.
-- Wall-clock groups, captures and sweeps (`audit:performance:*`, `audit:visual*`, `audit:layout*`) run in release mode, with `--group`, in CI's full runs and, except wall-clock groups, when their test code changed.
+- Wall-clock groups, captures and sweeps (`audit:performance:*`, `audit:visual*`, `audit:layout*`) run in release mode, with `--group`, in CI's full runs and, except wall-clock groups, when their test code changed. `audit:layout:<area>` also runs when its pages or dialogs render a changed file at most five areas render (`surface-closure.ts`).
 - Static gates run in every plan. Unit, SQL and component groups run when their inputs changed.
 - Groups whose own spec or support changed run first.
 - `test:verify` refuses to start while a group it would run has an unclassified latest failure.
@@ -95,7 +95,7 @@ After a failed release run, pass every failed group with `--group` before the ne
 - **Queue.** The weekly `CI queue` job of `health.yml` reports the runner wait of pull request and `main` jobs at p50 and p90, and fails above its ceiling (`.github/scripts/ci-queue.sh`).
 - **Date look-ahead.** `date-lookahead.yml` runs the suite nightly on a shifted clock and gates nothing ([Monitoring](recovery-and-incidents.md#monitoring)).
 - **Not in CI.** Wall-clock timing ([only the steps run](performance.md#what-each-instrument-proves)) and the cloud canary stay local release checks.
-- **Branch freshness.** A branch need not be up to date with `main`: the push to `main` and the full runs cover it.
+- **Branch freshness.** A branch need not be current with `main`: the push to `main` and the full runs cover it.
 - **Evidence.** A failed job uploads `.agent-logs/` as `evidence-<job>`: `gh run download <run-id> -n evidence-<job>`. A rerun (`gh run rerun --failed`) follows the retry rules of a local repeat.
 
 ## Commands
@@ -186,15 +186,15 @@ Check these before classifying.
 - **Stale fakes.** When a read changes its `select` shape, update every unit-test fake of that table. Embedded relations come back as arrays.
 - **The agent's tool killed the run.** A background limit or session end (SIGTERM, exit 137) is `environment`; [start it notified](#wait-for-a-long-run) next time.
 - **Host network.** `net::ERR_NETWORK_CHANGED`, or a Realtime socket that reconnects every few seconds, is `environment`. Run no heavy load beside a browser or measured group.
-- **Time zone and run day.** CI runs in UTC; a window computed in process time misses the Berlin window. A fixture on a DST switch or a run-day-dependent week fails on some days only. Check the run's business date and reproduce in UTC.
-- **Press before hydration.** A server-rendered button ignores it. Wait for the hydrated control.
+- **Time zone and run day.** CI runs in UTC; a window in process time misses the Berlin window. A fixture on a DST switch or a run-day-dependent week fails on some days. Check the run's business date and reproduce in UTC.
+- **Press before hydration.** Server HTML keeps a button disabled; `pressKey` with `into` waits for it.
 - **Menus.** A Radix menu opened by mouse can select the item under the pointer on release; open menus through the area module. The row actions menu closes on scroll, and a sideways-overflowing table scrolls on click.
 - **Moved reads.** A hold on a Server Action POST never matches once the read moves to `GET /api/background-read`. Move the hold with the read.
 - **Mid-animation captures.** Axe and screenshots read mid fade or slide. Wait for the settled state.
-- **Unstable order.** A list ordered by a random UUID reorders between runs.
-- **Long tokens at 375 px.** An email address or a generated token is one unbreakable word.
+- **Unstable order.** A list ordered by random UUID reorders between runs.
+- **Long tokens at 375 px.** An email address or generated token is one unbreakable word.
 - **Fixture race.** Read-then-insert fixtures race under two workers.
-- **Slow machine.** When every measured scenario slows at once, replay `HEAD` on the same machine before you blame the change.
+- **Slow machine.** When every measured scenario slows at once, replay `HEAD` on that machine before blaming the change.
 
 ## Never
 

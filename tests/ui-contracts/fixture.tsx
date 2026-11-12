@@ -39,10 +39,15 @@ import {
   TodayRefreshSwitchContractFixture,
 } from './today-refresh-boundaries';
 import { OfflineTodayContractFixture } from './offline-today-boundaries';
+import { WorkHandoverContractFixture } from './work-handover-boundaries';
+import { EditJobContractFixture } from './edit-job-boundaries';
 import { CalendarContractFixture } from './calendar-boundaries';
 import { FeedbackContractFixture, isFeedbackFixture } from './feedback-boundaries';
 import { mountHydrationFixture } from './hydration-boundaries';
 import { initializeProblemReportBoundary, ProblemReportContractFixture } from './problem-report-boundaries';
+import { SupportFilingContractFixture } from './support-filing-boundaries';
+import { SupportTriageContractFixture } from './support-triage-boundaries';
+import { initializeInventoryUnitBoundary, InventoryUnitContractFixture } from './inventory-unit-boundaries';
 import { AuthUrlContractFixture } from './auth-url-boundaries';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -95,6 +100,7 @@ initializeLifecycleBoundary();
 initializeDocumentArchiveBoundary();
 initializeLazyDialogBoundary();
 initializeProblemReportBoundary();
+initializeInventoryUnitBoundary();
 const personnelInitialData = initializePersonnelBoundary();
 
 /** The card as a manager's job page shows it, or with `fieldMode` as the assigned worker's work pack does. */
@@ -569,6 +575,12 @@ createRoot(root).render(
     </main>
   ) : window.uiContractFixture === 'problem-report' ? (
     <ProblemReportContractFixture />
+  ) : window.uiContractFixture === 'support-triage' ? (
+    <SupportTriageContractFixture />
+  ) : window.uiContractFixture === 'support-filing' ? (
+    <SupportFilingContractFixture />
+  ) : window.uiContractFixture === 'inventory-unit' ? (
+    <InventoryUnitContractFixture />
   ) : window.uiContractFixture === 'presentation' ? (
     <PresentationFixture />
   ) : window.uiContractFixture === 'customer' ? (
@@ -621,6 +633,10 @@ createRoot(root).render(
     <TodayRefreshFallbackContractFixture />
   ) : window.uiContractFixture === 'offline-today' ? (
     <OfflineTodayContractFixture />
+  ) : window.uiContractFixture === 'work-handover' ? (
+    <WorkHandoverContractFixture />
+  ) : window.uiContractFixture === 'edit-job' ? (
+    <EditJobContractFixture />
   ) : window.uiContractFixture === 'calendar-board' ? (
     <CalendarBoardContractFixture />
   ) : window.uiContractFixture === 'calendar-day' ? (

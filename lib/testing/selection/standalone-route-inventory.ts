@@ -1,9 +1,10 @@
 import { VERIFY_ADDRESS_COOKIE } from '@/lib/auth/address-cookies';
 
 /**
- * The screens outside the app shell (`StandaloneScreen`): sign-in and sign-up,
- * onboarding, the upgrade offer, the invitation error, the unavailable sign-in,
- * the offline fallback and the root not-found page. Each entry names the session the screen needs
+ * The screens outside the app shell: sign-in and sign-up, onboarding, the
+ * upgrade offer, the invitation error, the unavailable sign-in, the offline
+ * fallback and the root not-found page (`StandaloneScreen`), and WerkFlow
+ * support's area (`SupportFrame`). Each entry names the session the screen needs
  * and the address the audit opens, because these screens refuse or redirect
  * every other visitor.
  * `standalone-route-inventory.test.ts` fails when a page under `app/` outside
@@ -16,14 +17,19 @@ import { VERIFY_ADDRESS_COOKIE } from '@/lib/auth/address-cookies';
  * - `newcomer`: a confirmed account without an organization or a subscription.
  * - `subscriber`: a newcomer whose payment the upgrade page simulated.
  * - `prestart`: a member whose access starts later, with an open blocking onboarding task.
+ * - `support`: the synthetic support user the test server's allowlist names
+ *   (lib/testing/support-user.ts), a member of no organization.
  */
-export type StandaloneSession = 'anonymous' | 'newcomer' | 'subscriber' | 'prestart';
+export type StandaloneSession = 'anonymous' | 'newcomer' | 'subscriber' | 'prestart' | 'support';
 
 export type StandaloneScreen = {
   /** The page folder under `app/`, or `not-found` for the root not-found page. */
   route: string;
   session: StandaloneSession;
-  /** The address the audit opens, query included. */
+  /**
+   * The address the audit opens, query included. A `[reportId]` segment stands
+   * for the report the session seeds (tests/audit/support/standalone-sessions.ts).
+   */
   path: string;
   /** A cookie the browser carries before it opens the screen, as the step before the screen leaves it. */
   cookie?: { name: string; value: string };
@@ -53,6 +59,16 @@ export const STANDALONE_SCREENS = [
     path: '/onboarding/create-organization',
   },
   { route: '/onboarding/meine-aufgaben', session: 'prestart', path: '/onboarding/meine-aufgaben' },
+  // Support's queue holds every organization's reports, so its content depends
+  // on the whole backend. No test closes a report as a rejected blocker: this
+  // filter shows the queue's frame with its empty state, the same in every run.
+  { route: '/support', session: 'support', path: '/support?status=abgelehnt&einordnung=blocker' },
+  { route: '/support/aufnehmen', session: 'support', path: '/support/aufnehmen' },
+  {
+    route: '/support/meldungen/[reportId]',
+    session: 'support',
+    path: '/support/meldungen/[reportId]',
+  },
 ] as const satisfies readonly StandaloneScreen[];
 
 export type StandaloneRoute = (typeof STANDALONE_SCREENS)[number]['route'];

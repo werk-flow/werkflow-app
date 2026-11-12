@@ -1,7 +1,6 @@
 import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import { z } from '@/lib/zod';
 import { timeActivitySelectionSchema } from './activity-selection-schema';
-import { breakPolicyValuesSchema } from './settings';
 import type { LiveClockState } from './types';
 import type {
   getCurrentClockState as readClock,
@@ -20,7 +19,14 @@ const clockJobInfoSchema = z.object({
 });
 const clockStateSchema = z.object({
   organizationId: text,
-  breakPolicy: breakPolicyValuesSchema,
+  // Inline, not imported from ./settings: that module in the layout's client
+  // bundle grows every route's payload by about 500 bytes (lab counts).
+  breakPolicy: z.object({
+    breakMode: z.enum(['manual', 'automatic']),
+    autoBreakThresholdMinutes: z.number(),
+    autoBreakDurationMinutes: z.number(),
+    secondStep: z.object({ thresholdMinutes: z.number(), durationMinutes: z.number() }).nullable(),
+  }),
   status: z.enum(['clocked_out', 'working', 'on_break']),
   isClockedIn: z.boolean(),
   isOnBreak: z.boolean(),

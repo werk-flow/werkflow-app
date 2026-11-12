@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { RealtimeProvider } from '@/components/realtime/realtime-provider';
 // The week views under a break rule that changed midweek: the Zeiterfassung
 // week chart and the Mitarbeiter detail read the week on the client and must
 // resolve each day against the rule version that applied to it.
@@ -111,6 +112,23 @@ const SAVED_ON_TUESDAY: BreakPolicy = {
   ],
 };
 
+declare global {
+  interface Window {
+    /** What the `break-policy` read answers: the saved rule, or `null` for a failed read. */
+    breakRuleWeekContract: { policy: BreakPolicy | null; policyReads: number };
+  }
+}
+window.breakRuleWeekContract = { policy: MANUAL_WITHOUT_VERSIONS, policyReads: 0 };
+
+/** The `break-policy` read: the rule the contract set, or a failure. */
+export function readBreakRuleWeekPolicy():
+  | { success: true; breakPolicy: BreakPolicy }
+  | { success: false; error: string } {
+  window.breakRuleWeekContract.policyReads += 1;
+  const { policy } = window.breakRuleWeekContract;
+  return policy ? { success: true, breakPolicy: policy } : { success: false, error: 'load_failed' };
+}
+
 function ZeiterfassungWeek({ breakPolicy, label }: { breakPolicy: BreakPolicy; label: string }) {
   const { weekData, todayIndex, weekLabel, weekTargets } = useWeeklyTimeData({
     organizationId: ORGANIZATION_ID,
@@ -143,13 +161,44 @@ function MitarbeiterDetailWeek() {
   );
 }
 
+/**
+ * The week of a page that stays open while another session saves the rule:
+ * its server data never changes; the saved rule arrives only through the
+ * week's own read after the organization_settings event.
+ */
+function ZeiterfassungWeekLive() {
+  const { weekData, todayIndex, weekLabel, weekTargets, isStale } = useWeeklyTimeData({
+    organizationId: ORGANIZATION_ID,
+    userId: USER_ID,
+    breakPolicy: MANUAL_WITHOUT_VERSIONS,
+  });
+  return (
+    <section aria-label="Zeiterfassung live">
+      <output aria-label="Wochenstand">{isStale ? 'veraltet' : 'aktuell'}</output>
+      <WeeklyHoursChart
+        weekData={weekData}
+        todayIndex={todayIndex}
+        weekLabel={weekLabel}
+        weekTargets={weekTargets}
+      />
+    </section>
+  );
+}
+
 /** The week of a page that stays open while another session saves the rule. */
 function ZeiterfassungWeekAcrossASave() {
   const [breakPolicy, setBreakPolicy] = useState(MANUAL_WITHOUT_VERSIONS);
   return (
     <>
       <ZeiterfassungWeek breakPolicy={breakPolicy} label="Zeiterfassung offen" />
-      <button type="button" onClick={() => setBreakPolicy(SAVED_ON_TUESDAY)}>
+      <button
+        type="button"
+        onClick={() => {
+          // The server render and the week's own read both answer the saved rule.
+          window.breakRuleWeekContract.policy = SAVED_ON_TUESDAY;
+          setBreakPolicy(SAVED_ON_TUESDAY);
+        }}
+      >
         Neue Regel übernehmen
       </button>
     </>
@@ -158,10 +207,11 @@ function ZeiterfassungWeekAcrossASave() {
 
 export function BreakRuleWeekFixture() {
   return (
-    <>
+    <RealtimeProvider>
       <ZeiterfassungWeek breakPolicy={RULE_CHANGED_ON_TUESDAY} label="Zeiterfassung" />
       <MitarbeiterDetailWeek />
       <ZeiterfassungWeekAcrossASave />
-    </>
+      <ZeiterfassungWeekLive />
+    </RealtimeProvider>
   );
 }

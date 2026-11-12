@@ -28,6 +28,8 @@ type ExcludedTable =
   | 'problem_reports'
   | 'problem_report_events'
   | 'problem_report_files'
+  // The reporter's live signal of a changed report: a timestamp, no record.
+  | 'problem_report_signals'
   // The paying account's billing state, not the organization's records.
   | 'subscriptions'
   // The file plan and part state of earlier exports, whose archives are gone
@@ -62,6 +64,7 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   client_follow_ups: 'Kunden_Wiedervorlagen',
   client_request_events: 'Anfragen_Ereignisse',
   client_requests: 'Anfragen',
+  client_site_roles: 'Kunden_Objektrollen',
   client_sites: 'Kunden_Standorte',
   clients: 'Kunden',
   document_audit_events: 'Dokumente_Protokoll',

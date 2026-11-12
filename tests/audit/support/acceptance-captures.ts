@@ -49,7 +49,16 @@ const entrySchema = z
     testId: z.string().min(1),
     route: z.string().min(1),
     /** The app role, or the session of a screen outside the app shell. */
-    role: z.enum(['admin', 'buero', 'employee', 'anonymous', 'newcomer', 'subscriber', 'prestart']),
+    role: z.enum([
+      'admin',
+      'buero',
+      'employee',
+      'anonymous',
+      'newcomer',
+      'subscriber',
+      'prestart',
+      'support',
+    ]),
     view: z.enum(['page', 'tab', 'dialog', 'standalone']),
     width: z.number().int().positive(),
     height: z.number().int().nonnegative(),
@@ -208,7 +217,7 @@ async function captureState(
 export type CaptureSources = {
   /** The openers of the group's dialogs, from its modules under dialog-openers/. */
   openers: Partial<Record<DialogOpenerId, DialogOpener>>;
-  /** Opens a seeded record instead of the route's layout record (acceptance-records.ts). */
+  /** Opens a record the set seeds instead of the route's layout record (acceptance-sets/). */
   destination?: ((world: TestWorld) => Promise<SurfaceDestination>) | undefined;
 };
 

@@ -12,7 +12,7 @@ import { readAffectedVisitsContract } from './absence-service-boundaries';
 import { readPlannedVisitsContract } from './correction-timeline-boundaries';
 import { readSignatureViewContract, readWorkArtifactDetailContract } from './work-artifact-boundaries';
 import { readRequestWorkTargetsContract } from './request-attach-boundaries';
-import { readBreakRuleWeekEntries } from './break-rule-week-boundaries';
+import { readBreakRuleWeekEntries, readBreakRuleWeekPolicy } from './break-rule-week-boundaries';
 import { absenceAffectedVisitsInputSchema } from '@/lib/calendar/absence-visits-types';
 
 export async function readInBackground(kind: string, input: unknown, signal?: AbortSignal): Promise<unknown> {
@@ -37,6 +37,7 @@ export async function readInBackground(kind: string, input: unknown, signal?: Ab
   if (kind === 'absence-affected-visits')
     return readAffectedVisitsContract(absenceAffectedVisitsInputSchema.parse(input));
   if (kind === 'time-entries') return readBreakRuleWeekEntries(input);
+  if (kind === 'break-policy') return readBreakRuleWeekPolicy();
   // The week views fall back to their default targets; the break rule does not depend on them.
   if (kind === 'weekly-targets') return { success: false, error: 'fetch_failed' };
   if (kind === 'work-artifact-detail') return readWorkArtifactDetailContract();
@@ -44,5 +45,8 @@ export async function readInBackground(kind: string, input: unknown, signal?: Ab
   if (kind === 'own-personnel-actions') return getOwnPersonnelActions();
   if (kind === 'personnel-lifecycle' && input && typeof input === 'object' && 'employeeRecordId' in input)
     return getPersonnelLifecycle(String(input.employeeRecordId));
+  // The job edit dialog's assignment reads stay in flight: its focus contract
+  // asserts the dialog as it opens, before they answer.
+  if (kind === 'job-details' || kind === 'assignment-team-options') return new Promise(() => undefined);
   throw new Error(`Unexpected background read in the UI fixture: ${kind} ${JSON.stringify(input)}`);
 }

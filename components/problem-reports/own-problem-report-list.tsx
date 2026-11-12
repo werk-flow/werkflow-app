@@ -1,31 +1,19 @@
 import { MessageSquareWarning } from 'lucide-react';
 
-import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ListRow } from '@/components/ui/list-row';
 import { ColumnsTableHeader } from '@/components/ui/skeleton-table';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
-import { PROBLEM_REPORT_STATUS_LABELS } from '@/lib/problem-reports/messages';
-import type { OwnProblemReport, ProblemReportStatus } from '@/lib/problem-reports/types';
+import type { OwnProblemReport } from '@/lib/problem-reports/types';
 import { formatBerlinDateTime } from '@/lib/utils';
 import { REPORT_COLUMNS } from './own-problem-report-columns';
+import { ReportStatusBadge } from './report-status-badge';
 
 // „Meine Meldungen“: the caller's own reports with their status and
 // support's answer. A report opens nothing, so no row hovers.
 
-const STATUS_BADGE: Record<ProblemReportStatus, 'secondary' | 'success' | 'outline'> = {
-  eingegangen: 'outline',
-  in_bearbeitung: 'secondary',
-  erledigt: 'success',
-  abgelehnt: 'secondary',
-};
-
 const DELETED_DESCRIPTION = 'Die Beschreibung ist nach ihrer Frist gelöscht.';
 const NO_RESPONSE = 'Noch keine Antwort';
-
-function ReportStatusBadge({ status }: { status: ProblemReportStatus }) {
-  return <Badge variant={STATUS_BADGE[status]}>{PROBLEM_REPORT_STATUS_LABELS[status]}</Badge>;
-}
 
 function ReportCard({ report }: { report: OwnProblemReport }) {
   return (
