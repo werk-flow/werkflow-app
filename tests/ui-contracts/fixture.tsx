@@ -38,6 +38,7 @@ import {
   TodayRefreshProfileContractFixture,
   TodayRefreshSwitchContractFixture,
 } from './today-refresh-boundaries';
+import AuthLayout from '@/app/(auth)/layout';
 import { OfflineTodayContractFixture } from './offline-today-boundaries';
 import { WorkHandoverContractFixture } from './work-handover-boundaries';
 import { EditJobContractFixture } from './edit-job-boundaries';
@@ -623,6 +624,10 @@ createRoot(root).render(
     <OrganizationContractFixture />
   ) : window.uiContractFixture === 'organization-export' ? (
     <OrganizationExportContractFixture />
+  ) : window.uiContractFixture === 'draft-landing' ? (
+    <AuthLayout>
+      <h1>Komponentenverträge</h1>
+    </AuthLayout>
   ) : window.uiContractFixture === 'today-refresh' ? (
     <TodayRefreshContractFixture />
   ) : window.uiContractFixture === 'today-refresh-switch' ? (

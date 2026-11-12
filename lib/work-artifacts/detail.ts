@@ -9,6 +9,7 @@ import { isHiddenCoworkerDraft, redactWorkArtifactActionForField } from './field
 import type {
   WorkArtifactActionRow,
   WorkArtifactActionType,
+  StoredWorkArtifactRevisionRow,
   WorkArtifactDetail,
   WorkArtifactRevisionRow,
   WorkArtifactRow,
@@ -89,12 +90,19 @@ function withoutRevisionJoin<Row extends RevisionJoin>(rows: Row[]): Omit<Row, '
   });
 }
 
+/** A stored revision without the draft attach's device marker, which never leaves the server. */
+export function pageRevision(stored: StoredWorkArtifactRevisionRow): WorkArtifactRevisionRow {
+  const copy: WorkArtifactRevisionRow & { draft_changed_at?: string | null } = { ...stored };
+  delete copy.draft_changed_at;
+  return copy;
+}
+
 /** The detail a caller may see: a field worker sees own, disclosed and customer-facing revisions. */
 export function toVisibleArtifactDetail(
   context: AuthContext,
   artifact: WorkArtifactRow,
   rows: {
-    revisions: WorkArtifactRevisionRow[];
+    revisions: StoredWorkArtifactRevisionRow[];
     actions: WorkArtifactActionRow[];
     lines: Array<WorkArtifactDetail['measurementLines'][number] & RevisionJoin>;
     defects: Array<WorkArtifactDetail['defectDetails'][number] & RevisionJoin>;
@@ -108,9 +116,10 @@ export function toVisibleArtifactDetail(
       .filter((action) => FIELD_DISCLOSING_ARTIFACT_ACTIONS.has(action.action_type))
       .map((action) => action.revision_id),
   );
+  const revisions = rows.revisions.map(pageRevision);
   const visibleRevisions = context.isManagerOrAbove
-    ? rows.revisions
-    : rows.revisions.filter(
+    ? revisions
+    : revisions.filter(
         (revision) =>
           revision.visibility !== 'internal_only' ||
           revision.created_by === context.userId ||
