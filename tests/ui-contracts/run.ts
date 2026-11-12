@@ -63,7 +63,7 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve(
               {
                 filter:
-                  /^(?:@\/lib\/problem-reports\/(?:actions|screenshot\/(?:redraw-screenshot|load-ui-string-catalog))|\.\/file-actions|@\/components\/organization\/organization-context|next\/(?:navigation|link))$/,
+                  /^(?:@\/lib\/problem-reports\/(?:actions|file-actions|screenshot\/(?:redraw-screenshot|load-ui-string-catalog))|@\/components\/organization\/organization-context|next\/(?:navigation|link))$/,
               },
               (args) => {
                 const reportModule =
@@ -72,6 +72,10 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
                 if (reportModule) return { path: join(import.meta.dir, 'problem-report-boundaries.tsx') };
               },
             );
+            // Support's report page triages and opens originals through its contract's stand-ins.
+            builder.onResolve({ filter: /^@\/lib\/problem-reports\/support-actions$/ }, () => ({
+              path: join(import.meta.dir, 'support-triage-boundaries.tsx'),
+            }));
             builder.onResolve({ filter: /^@\/lib\/clients\/(site-role-)?actions$/ }, () => ({
               path: join(import.meta.dir, 'customer-service-boundaries.ts'),
             }));
@@ -161,7 +165,8 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve({ filter: /^next\/navigation$/ }, (args) => {
               if (
                 args.importer.endsWith('use-list-navigation.ts') ||
-                args.importer.endsWith('use-document-library-navigation.ts')
+                args.importer.endsWith('use-document-library-navigation.ts') ||
+                args.importer.endsWith('support-filing-form.tsx')
               )
                 return { path: join(import.meta.dir, 'list-navigation-service-boundaries.ts') };
             });

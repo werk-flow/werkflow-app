@@ -132,5 +132,5 @@ Tier 3 defaults. Diverge after the owner tried the alternative.
 ## Verify your work
 
 1. With `bun run test:server local` running, run `bun run test:verify`: its plan takes both lab groups for any product change. Run a wall-clock group the plan names with `--group audit:performance:<name>` on a quiet machine.
-2. For a page, skeleton or shared control, run `bun run test:verify --group audit:layout` and `--group audit:layout:<area>` for each changed area.
+2. A change plan runs `audit:layout:<area>` for each area whose pages or dialogs render a changed file. For a list page or a shared control that more areas render, run `bun run test:verify --group audit:layout` and `--group audit:layout:<area>` for each area it reaches.
 3. Commit the lowered or accepted references with the change. Record the journey decision, the numbers and the person's verdict in the slice record.

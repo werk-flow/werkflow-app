@@ -1,0 +1,15 @@
+Menü öffnen
+Einstellungen
+Dashboard
+Organisation
+Dokumente & Briefpapier
+Dokumente & Briefpapier
+Zeigt am Musterangebot, wie deine Angebote als PDF bei deinen Kunden ankommen.
+Gilt für Haustechnik Krämer GmbH
+Musterangebot
+So kommt ein Angebot als PDF bei deinen Kunden an: dein Firmenname als Absender, ein erfundener Kunde und erfundene Preise.
+Musterangebot.pdf
+PDF-Datei, wie dein Kunde sie bekommt
+Öffnen
+Herunterladen
+Nicht eingestempelt
