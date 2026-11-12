@@ -312,6 +312,8 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['security:offline-drafts', 'security/offline-drafts.spec.ts', ['standalone', 'work', 'documents']],
   // The report screenshot redraw on a seeded customer and job (docs/technical/problem-report-scrubbing.md).
   ['problem-reports:redraw', 'problem-reports/screenshot-redraw.spec.ts', ['customers', 'work']],
+  // Reporting a problem from the app shell, with a redacted screenshot, to „Meine Meldungen“.
+  ['problem-reports:report', 'problem-reports/report-a-problem.spec.ts', ['*']],
   ['list-pagination', 'pagination/list-pagination.spec.ts', ['inventory', 'documents', 'work']],
   // Measured navigation and view switches against the typical data profile (Step 2).
   [

@@ -84,6 +84,14 @@ export function initializeServiceBoundaries(): void {
       ) {
         return browserFetch(input, init);
       }
+      // The report dialog's contract answers its storage PUTs at Playwright's network boundary.
+      if (
+        window.uiContractFixture === 'problem-report' &&
+        init?.method === 'PUT' &&
+        String(input instanceof Request ? input.url : input).startsWith('http://localhost/storage/')
+      ) {
+        return browserFetch(input, init);
+      }
       if (input !== '/auth/callback') throw new Error('Unexpected request in isolated UI contracts.');
       window.uiContractServices.callbackCalls += 1;
       if (window.uiContractServices.callbackFailure)
