@@ -33,11 +33,12 @@ agent_files=(.claude .claude.json .codex .gemini .cursor .pi .kimi-code .prime .
 # The only places in the home folder where a path may appear or change after `record` and stay: the
 # npm packages Bun installed (public), Boat's machine agent and its desktop driver (pid file and
 # version check), the snapshot's seed clone that Boat copies in while the run starts (a run only
-# clones from it), and the desktop session's own state, its Chrome profile included: a run's browsers
-# are Playwright's, with profiles under /tmp.
+# clones from it), and the desktop session's own state, its Chrome profile and keyring included: a
+# run's browsers are Playwright's, with profiles under /tmp, and no run reads a keyring.
 home_exceptions=(.bun/install/cache .ascii .cua-driver .cache/cua-driver werkflow-seed .cache/fontconfig
   .cache/openbox .cache/ibus .cache/dconf .config/sunshine .config/ibus .config/pulse .config/dconf
-  .config/systemd .config/google-chrome .dbus .Xauthority .xsession-errors .xsession-errors.old)
+  .config/systemd .config/google-chrome .local/share/keyrings .dbus .Xauthority .xsession-errors
+  .xsession-errors.old)
 
 fail() {
   printf '[boat] wipe failed: %s\n' "$1" >&2
