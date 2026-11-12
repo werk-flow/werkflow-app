@@ -304,28 +304,3 @@ export function TimeActivityRecoveryNotice(): ReactElement {
     </div>
   );
 }
-
-export function TimeActivityStatusNotice({
-  isReady,
-  statusError,
-  onRetry,
-}: {
-  isReady: boolean;
-  statusError: string | null;
-  onRetry: () => void;
-}): ReactElement {
-  return (
-    <>
-      {!isReady && (
-        <p role="status" className="text-sm text-muted-foreground">
-          {statusError ? 'Der Zeitstatus konnte nicht sicher geladen werden.' : 'Zeitstatus wird geladen…'}
-        </p>
-      )}
-      {statusError && (
-        <Button type="button" variant="outline" onClick={onRetry}>
-          Erneut laden
-        </Button>
-      )}
-    </>
-  );
-}

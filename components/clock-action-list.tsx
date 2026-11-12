@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 
 import { useClockState } from '@/components/clock-state-provider';
-import { TimeActivityStatusNotice } from '@/components/time-activity-fields';
+import { TimeActivityStatusNotice } from '@/components/time-activity-status-notice';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
