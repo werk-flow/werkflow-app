@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import type { WeeklyTimeDataPoint, WeeklyTimeLabel } from '@/lib/time-tracking/types';
@@ -68,7 +68,7 @@ function useLiveBreakPolicy(organizationId: string, breakPolicy: BreakPolicy, en
     enabled: enabled && Boolean(organizationId),
     resetKey: `${organizationId}:${breakPolicyKey(breakPolicy)}`,
   });
-  return { livePolicy: view.data ?? breakPolicy, policyStale: view.isStale };
+  return { livePolicy: view.data ?? breakPolicy, policyStale: view.isStale, refreshPolicy: view.refresh };
 }
 
 export function useWeeklyTimeData({
@@ -86,7 +86,7 @@ export function useWeeklyTimeData({
   // fallback while the entries fetch succeeded.
   const lastKnownTargetsRef = useRef<DailyTarget[] | undefined>(initialWeekTargets);
 
-  const { livePolicy, policyStale } = useLiveBreakPolicy(organizationId, breakPolicy, enabled);
+  const { livePolicy, policyStale, refreshPolicy } = useLiveBreakPolicy(organizationId, breakPolicy, enabled);
 
   const view = useLiveView<WeekSnapshot>({
     tables: [
@@ -98,6 +98,8 @@ export function useWeeklyTimeData({
       'work_schedules',
       'employment_conditions',
       'organization_closure_days',
+      // The holiday region; a saved break rule also reads the week again through the policy view.
+      'organization_settings',
     ],
     read: async ({ signal }): Promise<LiveViewResult<WeekSnapshot>> => {
       // Recompute week bounds fresh on every read so we never use stale dates
@@ -144,6 +146,12 @@ export function useWeeklyTimeData({
     resetKey: `${organizationId}:${userId}:${breakPolicyKey(livePolicy)}`,
   });
 
+  const { refresh: refreshWeek } = view;
+  // A retry reads the rule too: a failed rule read leaves the week stale as well.
+  const refetch = useCallback(async () => {
+    await Promise.all([refreshWeek(), refreshPolicy()]);
+  }, [refreshWeek, refreshPolicy]);
+
   return {
     weekData: view.data?.weekData ?? [],
     weekTargets: view.data?.weekTargets,
@@ -154,6 +162,6 @@ export function useWeeklyTimeData({
     /** A refresh failed: the week is last-known. */
     isStale: view.isStale || policyStale,
     error: view.error,
-    refetch: view.refresh,
+    refetch,
   };
 }
