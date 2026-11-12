@@ -1,6 +1,7 @@
 import { getMemberActionErrorMessage } from '../../../lib/members/errors';
 import { ROLE_LABELS } from '../../../lib/roles';
 import { expect, test } from '../support/fixtures';
+import { openPage } from '../../golden/support/streamed-content';
 import {
   getJoinRequestStatuses,
   getOrganizationJoinCode,
@@ -74,7 +75,7 @@ test.describe('A1 Organisation, Rollen und Stempeluhr @AUDIT-W1-A1', () => {
     world,
   }) => {
     const context = await browser.newContext({ locale: 'de-DE' });
-    const page = await context.newPage();
+    const page = await openPage(context);
     const email = goldenTestEmail('a1-signup', world.runId);
     const password = `A1-Sicher!${world.runId}2026`;
     const organizationName = goldenTestOrganizationName('A1 Signup', world.runId);
@@ -118,7 +119,7 @@ test.describe('A1 Organisation, Rollen und Stempeluhr @AUDIT-W1-A1', () => {
     world,
   }) => {
     const context = await browser.newContext({ locale: 'de-DE' });
-    const page = await context.newPage();
+    const page = await openPage(context);
     const email = goldenTestEmail('a1-join', world.runId);
     const password = `A1-Beitritt!${world.runId}2026`;
     const firstName = 'Jana';
@@ -407,7 +408,7 @@ test.describe('A1 Organisation, Rollen und Stempeluhr @AUDIT-W1-A1', () => {
     await inviteMember(adminPage, world.invitee.email, 'buero');
     const inviteCode = await getPendingInviteCode(world.orgId, world.invitee.email);
     const inviteeContext = await browser.newContext({ locale: 'de-DE' });
-    const inviteePage = await inviteeContext.newPage();
+    const inviteePage = await openPage(inviteeContext);
     await joinOrganizationViaInviteLink(inviteePage, inviteCode, world.invitee, world.orgId);
     await expect(visibleText(inviteePage, world.orgName)).toBeVisible();
     await adminPage.goto('/mitarbeiter');

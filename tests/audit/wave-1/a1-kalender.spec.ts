@@ -294,6 +294,7 @@ test.describe('A1 Kalender @AUDIT-W1-A1', () => {
     await expect(workBlock).toBeVisible();
     await calendarLayerToggle(adminPage, 'planned').click();
     await visibleCalendarLayerToggle(adminPage, 'work').click();
+    // eslint-disable-next-line playwright-spec/visible-page-lookup -- an absence holds for every DOM node, a hidden copy included
     await expect(adminPage.getByTitle(/00:06.*00:09/)).toHaveCount(0);
     await expect(dayViewCards(adminPage, plannedTitle)).toBeVisible();
     await visibleCalendarLayerToggle(adminPage, 'work').click();

@@ -299,15 +299,14 @@ export function listEntry(scope: Page | Locator, record: { has: Locator } | { ha
 }
 
 /**
- * Opens an actions menu from the keyboard (focus, Enter) once the page
+ * Opens an actions menu from the keyboard (Enter on the button) once the page
  * hydrated and returns the item. A click opens a Radix menu on press, and on
  * a phone card the release can choose the item that renders under the pointer.
  */
 export async function openMenuItem(button: Locator, item: Locator): Promise<Locator> {
   const page = button.page();
   await hydratedAndSettled(page);
-  await button.focus();
-  await pressKey(page, 'Enter');
+  await pressKey(page, 'Enter', { into: button });
   await expect(item, 'Enter on the menu button opens the menu').toBeVisible();
   return item;
 }
@@ -573,8 +572,10 @@ export async function selectFromSearchable(
   options?: { searchFirst?: boolean },
 ): Promise<void> {
   const listbox = page.getByRole('listbox').filter({ visible: true }).first();
-  const triggerId = await trigger.getAttribute('id');
-  const stableTrigger = triggerId ? page.locator(`#${triggerId}`) : trigger;
+  // After a load the document can hold a hidden copy of the trigger: only the shown one opens the picker.
+  const shownTrigger = trigger.filter({ visible: true });
+  const triggerId = await shownTrigger.getAttribute('id');
+  const stableTrigger = triggerId ? page.locator(`#${triggerId}`).filter({ visible: true }) : shownTrigger;
   const openPicker = async (): Promise<void> => {
     if (await listbox.isVisible()) return;
     await expect(stableTrigger).toBeVisible();

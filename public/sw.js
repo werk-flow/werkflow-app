@@ -20,7 +20,8 @@
 // Bump SHELL_VERSION when this file changes what the shell holds.
 
 const CACHE_PREFIX = 'werkflow-';
-const SHELL_VERSION = 1;
+// v2: the offline page reads today's assignments from the device (werk-flow/werkflow-planning#318).
+const SHELL_VERSION = 2;
 const SHELL_CACHE = `${CACHE_PREFIX}shell-v${SHELL_VERSION}`;
 const OFFLINE_PATH = '/offline';
 const REFILL_MESSAGE = 'werkflow:refill-shell';

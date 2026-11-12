@@ -9,7 +9,7 @@ import {
   type InputSnapshot,
 } from './group-evidence';
 import { TEST_SCOPE_PREFIXES, type TestGroup } from '../selection/test-groups';
-import { isTestInput, runnerPilotInputs } from '../selection/group-selection';
+import { isTestInput, RUNTIME_LOADED_SUPPORT, runnerPilotInputs } from '../selection/group-selection';
 import type { PlaywrightTarget } from '../runner/run-policy';
 import { BROWSER_INPUT_DRIFT_MESSAGE } from './test-evidence';
 
@@ -45,6 +45,36 @@ const GROUP_OWNED_PREFIXES: Readonly<Record<string, readonly string[]>> = {
   'static:lint': ['eslint-rules/'],
   'static:format': ['.prettierignore', '.editorconfig'],
 };
+
+/**
+ * The test code that running `roots` executes: their imports, type-only ones included, followed
+ * through test inputs and never into product code, and every file a reached module loads by
+ * directory. An import the graph cannot resolve widens to all test support.
+ */
+export function testExecutionClosure(
+  graph: ReadonlyMap<string, readonly string[]>,
+  files: readonly string[],
+  roots: readonly string[],
+): Set<string> {
+  const execution = new Set<string>();
+  const pending = [...roots];
+  while (pending.length) {
+    const file = pending.pop();
+    if (!file || execution.has(file)) continue;
+    if (file === UNKNOWN_IMPORT_DEPENDENCY) {
+      // An unresolved import inside test support widens to all test support, never to product code.
+      for (const candidate of files) if (isTestInput(candidate)) execution.add(candidate);
+      continue;
+    }
+    // The closure stays inside test code: product modules a helper imports are not proof inputs.
+    if (!isTestInput(file)) continue;
+    execution.add(file);
+    pending.push(...(graph.get(file) ?? []));
+    const directory = RUNTIME_LOADED_SUPPORT[file];
+    if (directory) pending.push(...files.filter((candidate) => candidate.startsWith(directory)));
+  }
+  return execution;
+}
 
 /** Direct commands and the orchestrator must qualify exactly the same inputs. */
 export function createGroupQualification(
@@ -86,22 +116,9 @@ export function createGroupQualification(
             ]
           : []),
       ];
-      const execution = new Set<string>();
-      const pending = [...roots];
-      while (pending.length) {
-        const file = pending.pop();
-        if (!file || execution.has(file)) continue;
-        if (file === UNKNOWN_IMPORT_DEPENDENCY) {
-          // An unresolved import inside test support widens to all test support, never to product code.
-          for (const candidate of files) if (isTestInput(candidate)) execution.add(candidate);
-          continue;
-        }
-        // The closure stays inside test code: product modules a helper imports are not proof inputs.
-        if (!isTestInput(file)) continue;
-        execution.add(file);
-        pending.push(...(graph.get(file) ?? []));
-      }
-      const executionInputs = [...execution].filter((file) => known.has(file)).sort();
+      const executionInputs = [...testExecutionClosure(graph, files, roots)]
+        .filter((file) => known.has(file))
+        .sort();
       // Repository convention units inspect files through the filesystem, not
       // just imports, so their inexpensive proof covers every file. A browser
       // proof covers its test code, the pilot's runner inputs and the

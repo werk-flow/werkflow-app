@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "dependencyDigest": "06af07a16327570444a670a0d1b55d6a3bc17a350a2aa74c35f61dc3dc6cc892",
+  "dependencyDigest": "4d7163d6ae157b9d3489eed26fbfc257e0373d4a4e76dc1f6e55ca3829aafd50",
   "exceptions": [
     {
       "package": "minimatch",
@@ -17,7 +17,8 @@
         "npm registry on 2026-10-31: minimatch 11.0.3 is the latest; @typescript-eslint/typescript-estree 8.47.0 requires ^9.0.4.",
         "bun pm why minimatch@9.0.9 on 2026-11-05: it comes through @typescript-eslint/typescript-estree 8.47.0 (typescript-eslint, @typescript-eslint/parser, eslint-config-next 16.3.6), and every path ends in a dev dependency.",
         "Re-reviewed on 2026-11-07 for a patched @supabase/ssr 0.7.0 (werk-flow/werkflow-planning#232): bun pm why minimatch@9.0.9 still shows only @typescript-eslint/typescript-estree 8.47.0, every path ending in a dev dependency.",
-        "Re-reviewed on 2026-11-08 for @vercel/functions 3.10.6 (werk-flow/werkflow-planning#288): bun pm why minimatch@9.0.9 still shows only @typescript-eslint/typescript-estree 8.47.0, every path ending in a dev dependency."
+        "Re-reviewed on 2026-11-08 for @vercel/functions 3.10.6 (werk-flow/werkflow-planning#288): bun pm why minimatch@9.0.9 still shows only @typescript-eslint/typescript-estree 8.47.0, every path ending in a dev dependency.",
+        "Re-reviewed on 2026-11-09 for the dev dependency fake-indexeddb 6.2.6, which has no dependencies (werk-flow/werkflow-planning#318): bun pm why minimatch@9.0.9 still shows only @typescript-eslint/typescript-estree 8.47.0, every path ending in a dev dependency."
       ]
     }
   ]

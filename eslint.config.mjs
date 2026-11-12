@@ -554,6 +554,7 @@ const floatingSelectors = [
 const floatingLayerFiles = [
   'components/clock-fab.tsx',
   'components/sidebar/app-shell.tsx',
+  'components/sidebar/mobile-drawer.tsx',
   'components/kalender/dispatch-panel.tsx',
   'components/kalender/parkplatz-panel.tsx',
   'components/kalender/drag-engine/drag-engine.tsx',
@@ -968,6 +969,15 @@ const ratchetedAssertionFiles = new Set(Object.keys(typeAssertionRatchet));
 const isRatchetedAssertionFile = (filePath) =>
   ratchetedAssertionFiles.has(relative(import.meta.dirname, filePath).replaceAll('\\', '/'));
 
+// A whole-page lookup in a browser test finds only what is shown
+// (playwright-spec/visible-page-lookup). eslint-rules/visible-page-lookup-ratchet.json
+// lists the support modules not swept yet, by file and count: the rule is off
+// for them, and lib/testing/spec-support/visible-page-lookup.test.mjs fails
+// when a listed file holds any other number of such lookups or is gone.
+const visiblePageLookupRatchet = JSON.parse(
+  readFileSync(new URL('./eslint-rules/visible-page-lookup-ratchet.json', import.meta.url), 'utf8'),
+);
+
 // The files that may start an interval (realtime/no-interval). Shrink-only:
 // the rule reports a listed file that starts none.
 const intervalAllowList = [
@@ -1222,6 +1232,56 @@ const eslintConfig = defineConfig([
       'playwright-spec/no-transport-internals': 'error',
       'playwright-spec/no-scoped-has-locator': 'error',
       'playwright-spec/no-one-shot-count-comparison': 'error',
+    },
+  },
+  // Hidden copies (docs/technical/integrated-test-state.md, "Keep the page
+  // stable during a step"): the specs and support modules that load the app
+  // look up on the whole page only what is shown. The contract specs mount a
+  // client bundle on a static page, which holds no copy.
+  {
+    files: ['tests/golden/**/*.ts', 'tests/audit/**/*.ts', 'tests/canary/**/*.ts'],
+    ignores: Object.keys(visiblePageLookupRatchet),
+    plugins: { 'playwright-spec': playwrightSpecRules },
+    rules: {
+      'playwright-spec/visible-page-lookup': 'error',
+    },
+  },
+  // Streamed copies after a load (docs/technical/integrated-test-state.md):
+  // every goto and reload of a page a browser test drives waits for React's
+  // reveal. The fixtures install it on their pages; a page opened by hand goes
+  // through openPage. The measured pages stay as their references measured
+  // them: the performance sessions and the two measured openings of P1-11.
+  {
+    files: ['tests/golden/**/*.ts', 'tests/audit/**/*.ts', 'tests/canary/**/*.ts'],
+    ignores: [
+      'tests/golden/support/streamed-content.ts',
+      'tests/golden/support/sessions.ts',
+      'tests/audit/support/performance-steps.ts',
+      'tests/audit/performance/planning-benchmark.spec.ts',
+      'tests/golden/p1-11.spec.ts',
+    ],
+    rules: {
+      'no-restricted-properties': [
+        'error',
+        {
+          property: 'newPage',
+          message:
+            'Open the page through openPage (tests/golden/support/streamed-content.ts): its goto and reload then wait for React to reveal the content it streamed.',
+        },
+      ],
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/support/sessions', './sessions'],
+              importNames: ['createRolePage'],
+              message:
+                'Take a role page from the fixtures (adminPage, bueroPage, employeePage, outsiderPage, rolePage) or open it through openRolePage (tests/golden/support/streamed-content.ts): their goto and reload wait for React to reveal the content it streamed.',
+            },
+          ],
+        },
+      ],
     },
   },
   // Failures in support modules (docs/technical/testing.md): no `.catch` or

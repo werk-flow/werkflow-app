@@ -17,6 +17,7 @@ import { useBanner } from '@/components/ui/banner';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import type { ActionResult } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
+import { clearTodayOnDevice } from '@/lib/field-sync/device/today-wipe';
 import { clearServiceWorkerCaches, restoreOfflineShell } from '@/lib/offline/service-worker-caches';
 import { setActiveOrgCookie } from '@/lib/org/actions';
 import type { UserOrg } from '@/lib/org/types';
@@ -157,12 +158,13 @@ async function refreshOwnMemberships({
     setMemberships(newMemberships);
 
     if (activeOrgId && !newMemberships.some((m) => m.orgId === activeOrgId)) {
-      // A selection the user makes meanwhile invalidates this fallback (see setActiveOrg).
-      if (generation !== refreshGenerationRef.current) return;
       const newActiveId = newMemberships[0]?.orgId ?? null;
-      if (newActiveId) {
+      // Nothing the former organization's day held stays, even when no organization remains. Before
+      // the cookie: the next start page's refresh must come after this wipe, never before it.
+      await clearTodayOnDevice();
+      // A selection the user made meanwhile (see setActiveOrg) owns the cookie; this fallback must not write over it.
+      if (newActiveId && generation === refreshGenerationRef.current)
         await setActiveOrgCookie(newActiveId).then(rejectRefusal);
-      }
       if (generation !== refreshGenerationRef.current) return;
       setActiveOrgId(newActiveId);
     }
@@ -310,6 +312,10 @@ export function OrganizationProvider({
       refreshGenerationRef.current += 1;
 
       try {
+        // Nothing the previous organization's day held stays on the device. Before the cookie: the
+        // new organization's start page can render from the cookie action's response, and its
+        // refresh must come after this wipe, never before it.
+        await clearTodayOnDevice();
         // The cookie call stays in this handler, where the double-render check sees it.
         await clearCachesAfterSwitch(setActiveOrgCookie(orgId));
         // GET readers authorize against this cookie. Publish the new scope only

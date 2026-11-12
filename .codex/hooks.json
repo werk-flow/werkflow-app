@@ -55,6 +55,17 @@
             "statusMessage": "Checking that a heavy command runs in a heavy slot"
           }
         ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "root=\"$(git rev-parse --show-toplevel)\" || exit 0; bun \"$root/.claude/hooks/refuse-second-stack.ts\"",
+            "timeout": 20,
+            "statusMessage": "Checking that the command starts no second Supabase stack"
+          }
+        ]
       }
     ]
   }

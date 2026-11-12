@@ -12,7 +12,7 @@ import { type BoatOutcome, runOnBoat, withRunFolder } from './verify-on-boat';
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
-/** A focused run's grep that selects rendered acceptance captures (tests/audit/visual/acceptance.spec.ts). */
+/** A focused run's grep that selects rendered acceptance captures (tests/audit/visual/acceptance-*.spec.ts). */
 const ACCEPTANCE_GREP = /^@ACCEPT(?:\s|$)/;
 
 /** The value of `--name value` or `--name=value` in runner arguments. */
