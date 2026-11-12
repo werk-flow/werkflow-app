@@ -43,6 +43,8 @@ declare global {
       | 'today-refresh-profile'
       | 'today-refresh-fallback'
       | 'offline-today'
+      | 'work-handover'
+      | 'edit-job'
       | 'sidebar'
       | 'lazy-dialog'
       | 'clock'

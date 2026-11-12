@@ -70,7 +70,7 @@ export const heavySlotDirectory = (environment: Environment): string =>
 const watchScript = (environment: Environment): string =>
   environment.WERKFLOW_LOAD_WATCH ?? join(homedir(), 'code/werkflow-planning/ops/workstation-load.py');
 
-/** How to install the watch on this machine (docs/technical/environments.md, "Set up a new machine"). */
+/** How to install the watch on this machine (docs/technical/machine-setup.md, "Set up a new machine"). */
 function watchFix(platform: NodeJS.Platform): string {
   const install =
     platform === 'darwin'

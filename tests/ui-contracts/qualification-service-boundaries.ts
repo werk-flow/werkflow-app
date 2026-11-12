@@ -92,3 +92,5 @@ export const createCapability = unexpectedWrite;
 export const retireCapabilityDefinition = unexpectedWrite;
 export const addEmployeeCapability = unexpectedWrite;
 export const setApprenticeWarningEnabled = unexpectedWrite;
+// The edit dialog's employee picker expands a team only on a pick, which no contract makes.
+export const expandTeamForAssignment = unexpectedWrite;
