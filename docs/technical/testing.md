@@ -67,7 +67,7 @@ Each browser group has a `changeTrigger` (`lib/testing/selection/change-triggers
 - **Permission groups** keep selection by declared scope: every group that drives an `outsiderPage` session or has a `ROLE_DENIAL_GROUPS` row. The auth path and dependency files add `audit:security:account`.
 - **Other groups** run nightly and in release mode.
 - A spec or support file selects the groups that import it.
-- Wall-clock groups, captures and sweeps (`audit:performance:*`, `audit:visual*`, `audit:layout*`) run in release mode, with `--group`, or, except wall-clock groups, in CI's full runs or when their test code changed.
+- Wall-clock groups, captures and sweeps (`audit:performance:*`, `audit:visual*`, `audit:layout*`) run in release mode, with `--group`, in CI's full runs and, except wall-clock groups, when their test code changed.
 - Static gates run in every plan. Unit, SQL and component groups run when their inputs changed.
 - Groups whose own spec or support changed run first.
 - `test:verify` refuses to start while a group it would run has an unclassified latest failure.
@@ -94,7 +94,7 @@ After a failed release run, pass every failed group with `--group` before the ne
 - **Shards.** A visual group runs alone. A full selection fills at most `MAX_SHARDS` shards, so other pull requests keep most runners, and still ends with `audit:visual:acceptance`.
 - **Queue.** The weekly `CI queue` job of `health.yml` reports the runner wait of pull request and `main` jobs at p50 and p90, and fails above its ceiling (`.github/scripts/ci-queue.sh`).
 - **Date look-ahead.** `date-lookahead.yml` runs the suite nightly on a shifted clock and gates nothing ([Monitoring](recovery-and-incidents.md#monitoring)).
-- **Not in CI.** The wall-clock `audit:performance:*` groups and the cloud canary stay local release checks.
+- **Not in CI.** Wall-clock timing ([only the steps run](performance.md#what-each-instrument-proves)) and the cloud canary stay local release checks.
 - **Branch freshness.** A branch need not be up to date with `main`: the push to `main` and the full runs cover it.
 - **Evidence.** A failed job uploads `.agent-logs/` as `evidence-<job>`: `gh run download <run-id> -n evidence-<job>`. A rerun (`gh run rerun --failed`) follows the retry rules of a local repeat.
 

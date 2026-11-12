@@ -349,7 +349,10 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['customer-atomic-writes', ['customer_atomic_writes.sql'], ['customers']],
   ['request-history-writes', ['request_history_writes.sql'], ['customers']],
   ['request-caller-matches', ['request_caller_matches.sql'], ['customers']],
+  ['request-retry-results', ['request_retry_results.sql'], ['customers', 'work', 'service']],
+  ['request-attach-to-work', ['request_attach_to_work.sql'], ['customers', 'work', 'service', 'documents']],
   ['client-duplicates', ['client_duplicates.sql'], ['customers']],
+  ['client-archive-history', ['client_archive_history.sql'], ['customers']],
   [
     'request-callback-and-equipment',
     ['request_callback_and_equipment.sql'],
@@ -388,6 +391,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['problem-reports', ['problem_reports.sql'], ['*']],
   ['organization-export', ['organization_export.sql'], ['*']],
   ['record-numbers', ['record_numbers.sql'], ['work', 'customers', 'personnel', 'service']],
+  ['hot-read-volume', ['hot_read_volume.sql'], ['planning', 'time', 'attention', 'work', 'documents']],
   [
     'list-pagination',
     [

@@ -74,7 +74,7 @@
         },
         "script": {
           "requests": { "reference": 43, "tolerance": 1 },
-          "encodedBytes": { "reference": 672846, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 693562, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         },
@@ -318,7 +318,7 @@
           "reason": "Tailwind no longer scans tests and test support (lint examples became shipped utilities), and the unused .hide-time-picker block and duplicate ::selection rules are gone; every dropped utility appears only in an excluded test file, and audit:visual, audit:layout and audit:layout:viewports pass on the same tree"
         },
         {
-          "kind": "floor-accept",
+          "kind": "ceiling-accept",
           "target": "script",
           "from": {
             "requests": { "reference": 43, "tolerance": 1 },
@@ -328,12 +328,12 @@
           },
           "to": {
             "requests": { "reference": 43, "tolerance": 1 },
-            "encodedBytes": { "reference": 672846, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "encodedBytes": { "reference": 693562, "tolerance": { "relative": 0.01, "absolute": 512 } },
             "decodedBytes": null,
             "rows": null
           },
-          "runKeys": ["2026-11-12T001919175Z-93bafd"],
-          "reason": "The Arbeitsnachweis dialog (form, detail, action panel, customer decision, signature pad) and the report-draft code now download on the dialog's first open through components/shared/lazy-dialog.tsx instead of with the job page, whose code the job list prefetches. Same build measured against the base commit 8028f170 on Boat: 689,612 B before, 672,846 B after, 43 script requests both times; golden p1-15 to p1-17, the field and work layout audits and the offline draft journey open and use the dialog on this build."
+          "runKeys": ["2026-11-12T004607647Z-ed5cc5"],
+          "reason": "main before #358 measured 690986 B, inside the old ceiling; two features then add script to the field cold start, which prefetches the work pack's route chunk: #358 (werk-flow/werkflow-planning#162, the work pack's completion-gate list) adds 1646 B (690986 before it, 692632 after, Boat runs of dedb9e84 and 034e1a62), and #348 (werk-flow/werkflow-planning#158, the „Meine Zeit“ rows: activity pairing and their labels, which the work pack renders on its first load) adds 930 B (693562 on 0b354338, after moving the Verlauf's day grouping out of that chunk, which saved 122 B)"
         }
       ]
     },
@@ -1739,7 +1739,7 @@
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 3, "tolerance": 0 },
-        "componentRenders": { "reference": 5713, "tolerance": 114 }
+        "componentRenders": { "reference": 4822, "tolerance": 114 }
       },
       "payloads": {
         "route:/kunden": {
@@ -1819,6 +1819,14 @@
           "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
           "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
           "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
+        },
+        {
+          "kind": "ratchet",
+          "target": "componentRenders",
+          "from": { "reference": 5713, "tolerance": 114 },
+          "to": { "reference": 4822, "tolerance": 114 },
+          "runKeys": ["2026-11-09T194256952Z-696650"],
+          "reason": null
         }
       ]
     },

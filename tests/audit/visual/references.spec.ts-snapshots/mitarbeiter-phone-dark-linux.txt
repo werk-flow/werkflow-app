@@ -16,7 +16,7 @@ Qualifikationen
 Martin Krämer
 Admin
 Aktiv
-Mit Zugang
+Mit Login
 Nicht eingestempelt
 0%
 martin.kraemer@haustechnik-kraemer.de
@@ -25,7 +25,7 @@ Beigetreten:
 Sabine Vogel
 Büro
 Aktiv
-Mit Zugang
+Mit Login
 Nicht eingestempelt
 0%
 sabine.vogel@haustechnik-kraemer.de
@@ -35,7 +35,7 @@ Aktionen öffnen
 Jonas Becker
 Handwerker/in
 Aktiv
-Mit Zugang
+Mit Login
 Nicht eingestempelt
 0%
 jonas.becker@haustechnik-kraemer.de
@@ -45,7 +45,7 @@ Aktionen öffnen
 Kevin Schmid
 Handwerker/in
 Aktiv
-Mit Zugang
+Mit Login
 Nicht eingestempelt
 0%
 kevin.schmid@haustechnik-kraemer.de

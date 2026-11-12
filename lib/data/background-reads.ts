@@ -39,6 +39,8 @@ import { getOwnPersonnelActions, getPersonnelLifecycle } from '@/lib/personnel/l
 import { getWeeklyTargets } from '@/lib/personnel/target-actions';
 import { getNextProjectNumber, getProjectDetails } from '@/lib/projects/actions';
 import { getNextRequestNumber } from '@/lib/requests/actions';
+import { getRequestWorkTargets, getWorkRequestEntries } from '@/lib/requests/work-attach-server';
+import { WORK_TARGET_KINDS } from '@/lib/requests/types';
 import { getServiceCaseDetailByNumber, getServiceClientOption } from '@/lib/service-cases/actions';
 import { serviceCaseListQuerySchema } from '@/lib/service-cases/list-page';
 import { getServiceCasePage } from '@/lib/service-cases/list-page-server';
@@ -227,6 +229,16 @@ export const BACKGROUND_READS = {
   'service-client-option': defineRead(
     z.object({ organizationId: uuidSchema, clientId: uuidSchema }),
     (input) => getServiceClientOption(input.clientId),
+  ),
+  // The open work a request can be attached to, narrowed by a search.
+  'request-work-targets': defineRead(
+    z.object({ organizationId: uuidSchema, requestId: uuidSchema, query: z.string().trim().max(120) }),
+    (input) => getRequestWorkTargets({ requestId: input.requestId, query: input.query }),
+  ),
+  // The requests attached to one job, project or Servicefall.
+  'work-request-entries': defineRead(
+    z.object({ organizationId: uuidSchema, kind: z.enum(WORK_TARGET_KINDS), id: uuidSchema }),
+    (input) => getWorkRequestEntries({ kind: input.kind, id: input.id }),
   ),
   'service-case-detail': defineRead(
     z.object({ organizationId: uuidSchema, caseNumber: z.string().trim().min(1).max(100) }),

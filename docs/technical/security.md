@@ -45,11 +45,11 @@ Start the key with the owning organization id and go through `lib/storage/r2.ts`
 
 ### Log a failure
 
-Call `logError('<function>: <what failed>', error)` from `lib/logging.ts`; it keeps only the error's name, code and status. Keep the label free of recipients, codes, links, row values and provider bodies. Wrong turn: `console.error(error)`, because a provider message can quote row values.
+Call `logError('<function>: <what failed>', error)` from `lib/logging.ts`; it keeps only the error's name, code and status. Keep the label free of recipients, codes, links, row values and provider bodies. Wrong turn: `console.error(error)`: a provider message can quote row values.
 
 ### Profile a customer export
 
-A customer's export stays on the owner's machine, outside every repository. The owner runs `bun scripts/migration/profile-export.ts <export-folder>` offline; it writes a structure-only `profile.md` and `profile.json` to `~/werkflow-export-profiles/<date>/` and refuses to write when its self-check finds a name, email, phone number, IBAN or address. The owner reads `profile.md` before sharing it. Only the profile reaches an agent; fixtures are synthetic, derived from the profile. Wrong turn: opening a row of the export in an agent session to "check one field".
+A customer's export stays on the owner's machine, outside every repository. The owner runs `bun scripts/migration/profile-export.ts <export-folder>` offline; it writes a structure-only `profile.md` and `profile.json` to `~/werkflow-export-profiles/<date>/` and refuses when its self-check finds a name, email, phone number, IBAN or address. The owner reads `profile.md` before sharing it. Only the profile reaches an agent; fixtures are synthetic, derived from it. Wrong turn: opening a row of the export in an agent session to "check one field".
 
 ## Trust boundaries
 
@@ -98,7 +98,7 @@ The edge functions accept only the project's secret keys and escape every interp
 
 Responses carry the hardening headers and enforced Content-Security-Policy from `buildSecurityHeaders` (`next.config.ts`). Violations go to `POST /api/csp-report`, which is unauthenticated by design, stores nothing and logs a redacted summary. An `eval` report, or one that names another origin, is a finding. Product code has no HTML string sink or `eval`, and imports Zod through `lib/zod.ts`; `lib/zod-members.ts` turns off its `eval` probe.
 
-The service worker (`public/sw.js`) caches only the cookie-free offline page and its build files; the CSP allows `worker-src` and `manifest-src` `'self'`. Sign-out and organization switch delete its caches and the stored day; unsent work stays, untrusted ([decision 0010](../decisions/0010-offline-field-sync-contract.md#device-data)).
+The service worker (`public/sw.js`) caches only the cookie-free offline page and its build files; the CSP allows `worker-src` and `manifest-src` `'self'`. Sign-out and organization switch delete its caches and the stored day ([one exception](#known-residual-exposure)); unsent work stays, untrusted ([decision 0010](../decisions/0010-offline-field-sync-contract.md#device-data)).
 
 ### Server caches
 
@@ -140,14 +140,15 @@ List each owner-accepted residual exposure until it closes.
 - Injected inline scripts are not blocked. The script policy allows `'unsafe-inline'`. A per-request nonce needs every page rendered per request, which `cacheComponents` rules out. The `htmlSinkSelectors` lint set keeps product code from creating an injection point.
 - No edge rate limit covers every request. The app limits operations that send mail, redeem a capability or activate billing; Supabase Auth limits its own endpoints. Edge limiting is the owner's Vercel plan decision.
 - The deletion transport lets current members receive a deleted row's identity, never its content.
-- `simulatePayment` in `lib/subscription/actions.ts` lets a signed-in user without an organization activate their own subscription once: the beta activation path, closing with werk-flow/werkflow-planning#248.
-- The code step keeps the address for up to one hour in an httpOnly cookie scoped to `/verify`.
+- `simulatePayment` in `lib/subscription/actions.ts` lets a signed-in user without an organization activate their own subscription once (beta; closes with werk-flow/werkflow-planning#248).
+- The code step keeps the address up to one hour in an httpOnly cookie scoped to `/verify`.
 - The `health` edge function has no rate limit; a constant-time 64-hex token bounds it.
 - Member removal refuses a target with recorded time; `P1-33` owns offboarding and asset return.
 - Organization deletion removes stored files after the rows. If storage fails, or a lost delete response cannot be rechecked, they stay under its prefix, logged, unreachable through the app.
-- The lint toolchain's minimatch (GHSA-g3hv-75wg-m249) is a reviewed dependency exception in `lib/security/dependency-exceptions.json`.
+- The lint toolchain's minimatch (GHSA-g3hv-75wg-m249) is a reviewed exception in `lib/security/dependency-exceptions.json`.
 - A coworker's Arbeitsnachweis detail hides the customer signer's name; an exported report, a job or project document, shows it to all its readers (owner decision, werk-flow/werkflow-planning#241).
-- Two provider facts need a stronger read token to verify: the R2 buckets' CORS rules (`GetBucketCors` refuses runtime tokens) and the Vercel environment scopes.
+- Unverified without a stronger read token: the R2 buckets' CORS rules (`GetBucketCors` refuses runtime tokens) and the Vercel environment scopes.
+- A phone's offline day can outlive lost access or sign-out ([decision 0010](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-owner-accepted-residual-exposure)).
 
 ## Revocation boundaries
 
@@ -157,7 +158,7 @@ List each owner-accepted residual exposure until it closes.
 | Direct database clients | RLS consults current membership and effective personnel access. A valid JWT alone grants no organization access. |
 | Realtime | INSERT and UPDATE use the table's current RLS. Deletion notices use the protected transport. Freshness inside one organization is no evidence of tenant denial. |
 | Signed file URLs already issued | A URL is a bearer capability. Revocation prevents new signing; an issued URL lives until expiry, and a download cannot be recalled. |
-| Auth sessions | [Supabase sign-out](https://supabase.com/docs/guides/auth/signout) lets an issued access token stay valid until it expires. During an incident, suspend operational access and follow the [runbook](recovery-and-incidents.md). |
+| Auth sessions | [Supabase sign-out](https://supabase.com/docs/guides/auth/signout) lets an issued access token live until expiry. During an incident, suspend operational access and follow the [runbook](recovery-and-incidents.md). |
 
 ## Sensitive data and owner decisions
 

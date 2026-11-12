@@ -1,7 +1,6 @@
 'use client';
 
-import { formatBerlinDateTime as formatDateTime } from '@/lib/utils';
-import { formatDuration } from '@/lib/time-tracking/helpers';
+import { formatBerlin } from '@/lib/utils';
 import { Clock3, LogIn, LogOut } from 'lucide-react';
 import { useState, type ReactElement } from 'react';
 
@@ -12,36 +11,39 @@ import { useRouterRefresh } from '@/components/ui/refresh-button';
 import { TimeActivityDialog } from '@/components/time-activity-dialog';
 import { SectionError } from '@/components/ui/section-error';
 import { usePendingTask } from '@/hooks/use-server-action';
-import type { TimeEntry } from '@/lib/time-tracking/types';
-import { calculateWorkSessions } from '@/lib/time-tracking/work-sessions';
+import { TIME_ACTIVITY_LABELS, type TimeEntry } from '@/lib/time-tracking/types';
+import {
+  intervalAnchor,
+  jobActivityIntervals,
+  type ActivityInterval,
+} from '@/lib/time-tracking/activity-intervals';
+import { intervalDurationLabel, intervalSpanLabel } from '@/lib/time-tracking/activity-interval-labels';
 import { SectionTitle } from '@/components/shared/section-title';
 
-function formatDurationOrRunning(minutes: number | null): string {
-  return minutes === null ? 'läuft' : formatDuration(Math.max(0, minutes));
+/** Day, activity and span of one of the worker's times on this job. */
+function sessionLabel(interval: ActivityInterval): string {
+  const day = formatBerlin(intervalAnchor(interval).timestamp, 'date');
+  const activity = interval.kind === 'work' ? '' : `${TIME_ACTIVITY_LABELS[interval.kind]} · `;
+  return `${day}, ${activity}${intervalSpanLabel(interval)}`;
 }
 
-function FieldWorkPackTimeSessions({ sessions }: { sessions: ReturnType<typeof calculateWorkSessions> }) {
+function FieldWorkPackTimeSessions({ sessions }: { sessions: readonly ActivityInterval[] }) {
   return sessions.length === 0 ? (
     <p className="mt-4 rounded-md border border-dashed bg-muted/20 px-4 py-5 text-sm text-muted-foreground">
       Für dich ist noch keine Arbeitszeit mit diesem Auftrag verknüpft.
     </p>
   ) : (
     <div className="mt-4 divide-y rounded-md border">
-      {sessions.map((session, index) => (
-        <div
-          key={session.clockIn?.id ?? session.clockOut?.id ?? index}
-          className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
-        >
+      {sessions.map((session) => (
+        <div key={session.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
           <div>
-            <p className="font-medium">
-              {session.clockIn ? formatDateTime(session.clockIn.timestamp) : 'Unvollständiger Eintrag'}
-            </p>
-            {session.pendingState && session.pendingState !== 'none' && (
+            <p className="font-medium tabular-nums">{sessionLabel(session)}</p>
+            {session.status === 'pending' && (
               <p className="text-xs text-muted-foreground">Änderung wartet auf Prüfung</p>
             )}
           </div>
           <span className="shrink-0 tabular-nums text-muted-foreground">
-            {formatDurationOrRunning(session.durationMinutes)}
+            {intervalDurationLabel(session)}
           </span>
         </div>
       ))}
@@ -191,8 +193,9 @@ function useFieldWorkPackTimeState({
   const { run: runClockChange, isPending: isChangingClock } = usePendingTask();
   const isClockBusy = isLoading || isPending || isChangingClock;
   const [activityDialogOpen, setActivityDialogOpen] = useState(false);
-  const sessions = calculateWorkSessions(entries.filter((entry) => entry.userId === currentUserId)).filter(
-    (session) => session.jobId === jobId,
+  const sessions = jobActivityIntervals(
+    entries.filter((entry) => entry.userId === currentUserId),
+    jobId,
   );
   const isClockedIntoThisJob = state?.isClockedIn && state.activeJobId === jobId;
   const isClockedIntoAnotherJob = state?.isClockedIn && state.activeJobId !== jobId;

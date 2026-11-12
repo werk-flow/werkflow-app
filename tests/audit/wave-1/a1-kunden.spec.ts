@@ -9,7 +9,11 @@ import {
   customerCreateDialog,
   customerCreateHeading,
   customerCreateSubmit,
+  archiveInsteadOfDeleting,
+  archivedCustomerNotice,
+  customerArchiveInsteadDialog,
   customerDeleteMenuItem,
+  showArchivedCustomers,
   customerFormField,
   customerSearchField,
   inlineCustomerCreateButton,
@@ -26,6 +30,7 @@ import {
   employeeAssignmentSearch,
   SHARED_COPY,
   testData,
+  textInDom,
   typeIntoTimeInput,
   visibleMatchingText,
   visibleText,
@@ -278,7 +283,10 @@ test.describe('A1 Kunden und Auftragsdaten @AUDIT-W1-A1', () => {
     await expect(visibleText(adminPage, '100%')).toBeVisible();
   });
 
-  test('A1-10/A1-14: Kunden- und Projektlöschung erhalten die Arbeit', async ({ adminPage, world }) => {
+  test('A1-10/A1-14: Ein Kunde mit Arbeit wird archiviert statt gelöscht, Projektlöschung erhält die Arbeit', async ({
+    adminPage,
+    world,
+  }) => {
     const customerName = `A1 Löschkunde ${world.runId}`;
     const linkedJobNumber = `A1-KD-${world.runId}`;
     const linkedProjectNumber = `A1-PD-${world.runId}`;
@@ -308,7 +316,18 @@ test.describe('A1 Kunden und Auftragsdaten @AUDIT-W1-A1', () => {
       .getByRole('button', { name: SHARED_COPY.action.delete });
     await expectButtonTextContrast(adminPage, confirmCustomerDeletion);
     await confirmCustomerDeletion.click();
-    await expect(adminPage).toHaveURL(/\/kunden$/);
+    // The server keeps a customer with work and the dialog offers archiving.
+    await expect(customerArchiveInsteadDialog(adminPage)).toBeVisible();
+    await archiveInsteadOfDeleting(adminPage);
+    await expect(archivedCustomerNotice(adminPage)).toBeVisible();
+
+    // The archived customer leaves the default list and stays under „Archivierte“.
+    await adminPage.goto('/kunden');
+    await expect(customerSearchField(adminPage)).toBeVisible();
+    await expect(textInDom(adminPage, customerName)).toHaveCount(0);
+    await showArchivedCustomers(adminPage);
+    await expect(visibleText(adminPage, customerName)).toBeVisible();
+
     await adminPage.goto('/auftraege');
     await expect(visibleText(adminPage, linkedProjectNumber)).toBeVisible();
     await expandProjectButton(adminPage.getByRole('row', { name: new RegExp(linkedProjectNumber) })).click();

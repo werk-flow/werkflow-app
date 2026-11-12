@@ -317,7 +317,7 @@ reset role;
 
 do $$
 declare
-  v_function constant text := 'public.promote_client_request_caller(uuid, uuid, uuid, text, public.client_type)';
+  v_function constant text := 'public.promote_client_request_caller(uuid, uuid, uuid, text, public.client_type, uuid)';
   v_role text;
 begin
   if not has_function_privilege('service_role', v_function, 'execute') then

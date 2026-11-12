@@ -35,6 +35,11 @@
             "type": "command",
             "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/refuse-production-logs.ts\"; code=$?; [ \"$code\" -eq 0 ] || [ \"$code\" -eq 2 ] || echo \"Refused: the log guard failed with exit $code, so it cannot rule out PROD logs.\" >&2; [ \"$code\" -eq 0 ] && exit 0; exit 2",
             "timeout": 20
+          },
+          {
+            "type": "command",
+            "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/refuse-heavy-commands.ts\"",
+            "timeout": 20
           }
         ]
       },

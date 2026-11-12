@@ -1,69 +1,69 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
+import { useBanner } from '@/components/ui/banner';
 import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
-import { deleteClient } from '@/lib/clients/actions';
+import { restoreClient } from '@/lib/clients/actions';
 import { loadDocument } from '@/lib/navigation/document-load';
+import { CLIENT_RESTORE_ERROR_MESSAGES, type ClientRemoval } from './client-removal-dialog';
 
-export const CLIENT_DELETE_ERROR_MESSAGES = {
-  not_authorized: 'Du bist nicht berechtigt, Kunden zu löschen.',
-  client_not_found: 'Der Kunde wurde nicht gefunden.',
-} satisfies Record<string, string>;
-
-const CLIENT_DELETE_FAILED_MESSAGE = 'Fehler beim Löschen des Kunden';
-
-interface ClientDeletion {
-  showDeleteDialog: boolean;
-  setShowDeleteDialog: (open: boolean) => void;
-  isDeleting: boolean;
+/**
+ * The customer detail page's archive, delete and restore: the dialog state,
+ * the page's reaction to each outcome and the restore action.
+ */
+export function useClientRemoval(client: { id: string; name: string }) {
+  const router = useRouter();
+  const { showBanner } = useBanner();
+  const [removal, setRemoval] = useState<ClientRemoval | null>(null);
+  const [isLeaving, setIsLeaving] = useState(false);
   /** Read by event handlers that must see the deletion before the next render. */
-  isDeletingRef: React.RefObject<boolean>;
-  deleteError: string | null;
-  handleDelete: () => Promise<void>;
-}
+  const isLeavingRef = useRef(false);
+  const { run: runRestore, isPending: isRestoring } = usePendingTask();
 
-/** Confirm-dialog state and the delete action of the customer detail page. */
-export function useClientDeletion(client: { id: string; name: string }): ClientDeletion {
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const { run: runDelete, isPending: isDeleting } = usePendingTask();
-  const isDeletingRef = useRef(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-
-  const handleDelete = async () => {
-    if (isDeleting) return;
-    isDeletingRef.current = true;
-    setDeleteError(null);
-    await runDelete(async () => {
-      try {
-        const result = await deleteClient(client.id);
-        if (result.success) {
-          // Full document load: a soft router.push after this server action can
-          // fail to commit (the deletion stall: DELETE succeeds, the URL never
-          // changes), and the deleted record's page would redirect first and drop
-          // the banner parameter. Leaving it loses no state worth keeping.
-          loadDocument(`/kunden?deleted_client=${encodeURIComponent(client.name)}`);
-          return untilPageLeaves();
-        }
-
-        isDeletingRef.current = false;
-        setDeleteError(
-          describeFailure(result.error, CLIENT_DELETE_ERROR_MESSAGES, CLIENT_DELETE_FAILED_MESSAGE),
-        );
-      } catch {
-        isDeletingRef.current = false;
-        setDeleteError(CLIENT_DELETE_FAILED_MESSAGE);
-      }
-    });
+  const onRemoved = async (done: ClientRemoval): Promise<void> => {
+    if (done === 'delete') {
+      isLeavingRef.current = true;
+      setIsLeaving(true);
+      // Full document load: a soft router.push after this server action can
+      // fail to commit (the deletion stall: DELETE succeeds, the URL never
+      // changes), and the deleted record's page would redirect first and drop
+      // the banner parameter. Leaving it loses no state worth keeping.
+      loadDocument(`/kunden?deleted_client=${encodeURIComponent(client.name)}`);
+      return untilPageLeaves();
+    }
+    setRemoval(null);
+    showBanner({ variant: 'success', message: `Kunde „${client.name}“ wurde archiviert.` });
+    router.refresh();
   };
 
+  const restore = () =>
+    runRestore(async () => {
+      const result = await restoreClient(client.id).catch(() => null);
+      if (!result?.success) {
+        const reason = result
+          ? describeFailure(result.error, CLIENT_RESTORE_ERROR_MESSAGES, 'Bitte versuche es erneut.')
+          : 'Bitte versuche es erneut.';
+        showBanner({
+          variant: 'error',
+          message: `Kunde „${client.name}“ konnte nicht wiederhergestellt werden: ${reason}`,
+        });
+        return;
+      }
+      showBanner({ variant: 'success', message: `Kunde „${client.name}“ wurde wiederhergestellt.` });
+      router.refresh();
+    });
+
   return {
-    showDeleteDialog,
-    setShowDeleteDialog,
-    isDeleting,
-    isDeletingRef,
-    deleteError,
-    handleDelete,
+    removal,
+    openRemoval: setRemoval,
+    closeRemoval: () => setRemoval(null),
+    onRemoved,
+    isLeaving,
+    isLeavingRef,
+    restore,
+    isRestoring,
   };
 }

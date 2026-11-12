@@ -12,11 +12,14 @@ import { readAffectedVisitsContract } from './absence-service-boundaries';
 import { readPlannedVisitsContract } from './correction-timeline-boundaries';
 import { readSignatureViewContract, readWorkArtifactDetailContract } from './work-artifact-boundaries';
 import { readDraftJobAccessContract } from './device-draft-boundaries';
+import { readRequestWorkTargetsContract } from './request-attach-boundaries';
 import { absenceAffectedVisitsInputSchema } from '@/lib/calendar/absence-visits-types';
 
 export async function readInBackground(kind: string, input: unknown, signal?: AbortSignal): Promise<unknown> {
   if (kind === 'planning-options') return readPlanningOptionContract(input, signal);
   if (kind === 'entity-options') return readEntityOptionContract(input);
+  if (kind === 'next-request-number') return { success: true, requestNumber: 'ANF-2026-0001' };
+  if (kind === 'request-work-targets') return readRequestWorkTargetsContract(input);
   if (kind === 'time-correction-form-options') return readTimeCorrectionFormOptionsContract();
   if (kind === 'work-lifecycle-snapshot') return getWorkLifecycleSnapshot();
   if (kind === 'pending-vacation-for-approver' || kind === 'decidable-approved-vacation')

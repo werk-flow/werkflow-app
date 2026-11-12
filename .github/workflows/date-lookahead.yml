@@ -110,8 +110,10 @@ jobs:
             fi
             sleep 5
           done
+      # Untimed, as in ci.yml: a shard holds a wall-clock group, and a hosted runner has no reviewed
+      # baseline, so it proves the group's steps on the date and judges no timing.
       - name: Run the groups on the shifted clock
-        run: bun scripts/verify.ts run --group "$LEG_GROUPS" --jobs 1
+        run: bun scripts/verify.ts run --group "$LEG_GROUPS" --jobs 1 --untimed
       # Before the evidence: the upload needs a clock the storage service accepts.
       - name: Restore the clock
         if: always()

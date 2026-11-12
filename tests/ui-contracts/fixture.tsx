@@ -2,6 +2,8 @@ import { PlanningOptionContractFixture } from './planning-option-boundaries';
 import { RouteRefreshFixture } from './route-refresh-boundaries';
 import { PresentationFixture } from './presentation-fixture';
 import { CreateClientContractFixture, CustomerContractFixture } from './customer-boundaries';
+import { RequestCaptureContractFixture } from './request-capture-boundaries';
+import { RequestAttachContractFixture } from './request-attach-boundaries';
 import { VacationApprovals } from '@/components/zeiterfassung/vacation-approvals';
 import {
   AbsencePickerContractFixture,
@@ -9,6 +11,7 @@ import {
   SicknessRecordContractFixture,
 } from './absence-boundaries';
 import { ClockContractFixture } from './clock-boundaries';
+import { ClockStateProvider } from '@/components/clock-state-provider';
 import { SidebarContractFixture } from './sidebar-boundaries';
 import { initializeLazyDialogBoundary, LazyDialogContractFixture } from './lazy-dialog-boundaries';
 import {
@@ -91,7 +94,8 @@ initializeDocumentArchiveBoundary();
 initializeLazyDialogBoundary();
 const personnelInitialData = initializePersonnelBoundary();
 
-function LifecycleRouteFixture(): React.JSX.Element {
+/** The card as a manager's job page shows it, or with `fieldMode` as the assigned worker's work pack does. */
+function LifecycleRouteFixture({ fieldMode = false }: { fieldMode?: boolean }): React.JSX.Element {
   const [routeSnapshot, setRouteSnapshot] = useState(window.uiContractLifecycle.snapshot);
   useEffect(() => {
     const reconcile = (): void => setRouteSnapshot(structuredClone(window.uiContractLifecycle.snapshot));
@@ -103,7 +107,12 @@ function LifecycleRouteFixture(): React.JSX.Element {
       <output aria-label="Auftragsstatus">
         {getJobStatusLabel({ status: 'nicht_bearbeitet', executionState: routeSnapshot.executionState })}
       </output>
-      <WorkLifecycleCard initialSnapshot={routeSnapshot} targetLabel="Prüfauftrag" isManager />
+      <WorkLifecycleCard
+        initialSnapshot={routeSnapshot}
+        targetLabel="Prüfauftrag"
+        isManager={!fieldMode}
+        fieldMode={fieldMode}
+      />
     </section>
   );
 }
@@ -561,6 +570,10 @@ createRoot(root).render(
     <CustomerContractFixture />
   ) : window.uiContractFixture === 'customer-create' ? (
     <CreateClientContractFixture />
+  ) : window.uiContractFixture === 'request-capture' ? (
+    <RequestCaptureContractFixture />
+  ) : window.uiContractFixture === 'request-attach' ? (
+    <RequestAttachContractFixture />
   ) : window.uiContractFixture === 'approvals' ? (
     <BannerProvider>
       <main>
@@ -627,6 +640,15 @@ createRoot(root).render(
         <h1>Komponentenverträge</h1>
         <LifecycleRouteFixture />
       </main>
+    </BannerProvider>
+  ) : window.uiContractFixture === 'lifecycle-field' ? (
+    <BannerProvider>
+      <ClockStateProvider>
+        <main>
+          <h1>Komponentenverträge</h1>
+          <LifecycleRouteFixture fieldMode />
+        </main>
+      </ClockStateProvider>
     </BannerProvider>
   ) : window.uiContractFixture === 'task-sections' ? (
     <main>

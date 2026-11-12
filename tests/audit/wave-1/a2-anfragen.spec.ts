@@ -32,12 +32,13 @@ import {
   REQUEST_DETAIL_TEXT,
   requestBacklink,
   requestCaptureButton,
-  requestCloseButton,
+  openRequestCloseItem,
   requestCloseReasonLabel,
   requestCloseSubmit,
   requestConvertButton,
   requestDocumentTrashedMessage,
   requestField,
+  requestMoreActionsButton,
   renderedMainNavigation,
   requestsNavLink,
   searchRequests,
@@ -358,7 +359,7 @@ test.describe('A2 Anfragen @AUDIT-W1-A2', () => {
     });
 
     await bueroPage.goto(`/anfragen/${openRequestId}`);
-    await requestCloseButton(bueroPage).click();
+    await (await openRequestCloseItem(bueroPage)).click();
     const closeDialog = bueroPage.getByRole('dialog');
     await expect(requestCloseReasonLabel(closeDialog)).toBeVisible();
     await expectSelectOptions(bueroPage, requestField(closeDialog, 'closeReason'), [
@@ -381,7 +382,8 @@ test.describe('A2 Anfragen @AUDIT-W1-A2', () => {
     await expect(visibleText(bueroPage, REQUEST_DETAIL_TEXT.converted)).toBeVisible();
     await expect(requestConvertButton(bueroPage)).toHaveCount(0);
     await expect(bueroPage.getByRole('button', { name: SHARED_COPY.action.edit })).toHaveCount(0);
-    await expect(bueroPage.getByRole('button', { name: SHARED_COPY.action.close })).toHaveCount(0);
+    // „Schließen“ and the status steps live in this menu, so its absence proves theirs.
+    await expect(requestMoreActionsButton(bueroPage)).toHaveCount(0);
     await expect(documentFileInputs(bueroPage)).toHaveCount(0);
   });
 
