@@ -167,6 +167,8 @@ const SEND_REFUSALS: Record<Exclude<DraftSendOutcome, 'sent' | 'waiting'>, strin
     'Du hast keinen Zugriff mehr auf diesen Auftrag. Der Entwurf bleibt auf diesem Gerät, wird aber nicht übertragen.',
   refused: 'Der Entwurf konnte nicht übertragen werden. Er bleibt auf diesem Gerät gespeichert.',
   skipped: 'Der Entwurf konnte nicht übertragen werden. Er bleibt auf diesem Gerät gespeichert.',
+  changed:
+    'Dieser Entwurf wurde inzwischen in einem anderen Fenster geändert oder gesendet. Deine Eingaben hier sind noch nicht gespeichert und bleiben im Formular.',
 };
 
 type DeviceDraftKeeperProps = {
@@ -190,14 +192,13 @@ type DeviceDraftKeeperProps = {
 function useSaveThroughDevice(
   { editor, device, artifactId, onClose }: DeviceDraftKeeperProps,
   write: DraftWrite,
-  withText: DraftChange,
 ): DeviceDraftHandle['save'] {
   const { showBanner } = useBanner();
-  return async function save(submit) {
-    // The last change reaches the device before anything is sent.
-    const stored = await write(withText);
+  return async function save(submit, expected) {
+    // prepareSave wrote the last change; this reads the draft behind every queued write, unchanged.
+    const stored = await write((current) => current);
     if (stored === null || stored === 'not_stored') return null;
-    const outcome = await device.send(artifactId);
+    const outcome = await device.send(artifactId, expected);
     if (outcome === 'sent') {
       // One version for the revision and one for each photo link.
       return { revisionId: stored.revisionId, version: 1 + stored.photos.length };
@@ -227,7 +228,7 @@ export function DeviceDraftKeeper(props: DeviceDraftKeeperProps) {
   const text = draftText(editor);
   const withText = textChange(device, { artifactId, jobId }, text);
   const photos = useDraftPhotos(write, withText, restored?.draft.photos ?? []);
-  const save = useSaveThroughDevice(props, write, withText);
+  const save = useSaveThroughDevice(props, write);
 
   // What the device holds of the text: the restored draft's, or the untouched form's, which is no draft yet.
   const snapshot = JSON.stringify(text);
@@ -263,9 +264,10 @@ export function DeviceDraftKeeper(props: DeviceDraftKeeperProps) {
           return { ...next, sealed: true };
         });
         if (stored === null || stored === 'not_stored') return null;
+        if (decided.plan === 'sealed_elsewhere') return { kind: 'sealed_elsewhere' };
         return decided.plan === 'online'
           ? { kind: 'online', revisionId: stored.revisionId, changedAt: stored.updatedAt }
-          : { kind: decided.plan };
+          : { kind: 'device', changedAt: stored.updatedAt };
       },
       unseal: async () =>
         void (await write((current) => (current ? { ...current, sealed: false } : current))),

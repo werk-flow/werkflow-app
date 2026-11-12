@@ -28,7 +28,7 @@ export type DraftDevice = {
   /** Tells every list of this tab that a draft changed. */
   changed: () => void;
   /** Sends one draft now because the person asked. */
-  send: (draftId: string) => Promise<DraftSendOutcome>;
+  send: (draftId: string, expected?: string) => Promise<DraftSendOutcome>;
   /** Keeps a draft out of the automatic send until the returned function runs. */
   keepOpen: (draftId: string) => () => void;
   subscribe: (listener: () => void) => () => void;
@@ -58,7 +58,7 @@ export type RestoredDraft = {
 /** How the dialog's save of a device draft goes; see DeviceDraftHandle.prepareSave. */
 type DraftSavePlan =
   | { kind: 'online'; revisionId: string; changedAt: string }
-  | { kind: 'device' }
+  | { kind: 'device'; changedAt: string }
   | { kind: 'sealed_elsewhere' };
 
 /** What the dialog's save asks of the draft keeper once the device keeps the new Arbeitsnachweis. */
@@ -77,10 +77,12 @@ export type DeviceDraftHandle = {
   /** Unseals the draft after the server refused its online save: the server holds nothing of it. */
   unseal: () => Promise<void>;
   /**
-   * Sends the draft with its photos and answers the revision the server wrote and the version it
-   * left the Arbeitsnachweis at, or null when the draft did not arrive; the keeper has said why.
+   * Sends the draft with its photos in the state its save decided on (`expected`, the draft's
+   * last-change time from prepareSave) and answers the revision the server wrote and the version it
+   * left the Arbeitsnachweis at, or null when the draft did not arrive; the keeper has said why. A
+   * draft another tab changed or sealed since is not sent, and the form keeps its text.
    */
-  save: (submit: boolean) => Promise<{ revisionId: string; version: number } | null>;
+  save: (submit: boolean, expected: string) => Promise<{ revisionId: string; version: number } | null>;
   /** Removes the draft from the device once the server holds the Arbeitsnachweis. */
   discard: () => Promise<void>;
 };

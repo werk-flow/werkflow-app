@@ -114,7 +114,8 @@ export function useWorkArtifactSave({
         ? 'no_answer'
         : await saveOnServer(submit, plan?.kind === 'online' ? plan : null);
     if (result === 'no_answer') {
-      const sent = (await onDevice?.save(submit)) ?? null;
+      // The device sends the draft in the state this save decided on, or keeps the form when it changed.
+      const sent = plan && onDevice ? await onDevice.save(submit, plan.changedAt) : null;
       if (sent) await showSentDraft(submit, sent);
       return;
     }

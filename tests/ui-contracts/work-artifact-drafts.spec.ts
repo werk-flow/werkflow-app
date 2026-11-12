@@ -161,11 +161,12 @@ async function sealStoredDraftElsewhere(page: Page): Promise<void> {
 }
 
 /**
- * From the save on, the second connection to the draft store first adds a photo to the unsealed
- * draft, as another tab's photo field does, between two of this tab's transactions.
+ * From the save on, the second connection to the draft store first changes the unsealed draft as
+ * another tab does, between two of this tab's transactions: its photo field adds a photo, or its
+ * save writes its own text and seals the draft.
  */
-async function addPhotoElsewhereBeforeSecondOpen(page: Page): Promise<void> {
-  await page.evaluate(() => {
+async function changeElsewhereBeforeSecondOpen(page: Page, change: 'photo' | 'sealed_text'): Promise<void> {
+  await page.evaluate((kind) => {
     const open = IDBFactory.prototype.open;
     let opens = 0;
     IDBFactory.prototype.open = function (this: IDBFactory, name: string, version?: number) {
@@ -195,8 +196,17 @@ async function addPhotoElsewhereBeforeSecondOpen(page: Page): Promise<void> {
                 documentId: null,
               };
               const existing: unknown[] = Array.isArray(photos) ? photos : [];
-              store.put({ ...record, photos: [...existing, photo] });
-              Reflect.set(window, 'photoAddedElsewhere', true);
+              store.put(
+                kind === 'photo'
+                  ? { ...record, photos: [...existing, photo] }
+                  : {
+                      ...record,
+                      content: { performedWork: 'Text aus dem anderen Fenster' },
+                      updatedAt: new Date(Date.now() + 1000).toISOString(),
+                      sealed: true,
+                    },
+              );
+              Reflect.set(window, 'changedElsewhere', true);
             }
           };
           transaction.oncomplete = () => request.dispatchEvent(new Event('success'));
@@ -205,7 +215,7 @@ async function addPhotoElsewhereBeforeSecondOpen(page: Page): Promise<void> {
       );
       return request;
     };
-  });
+  }, change);
 }
 
 function draftRow(page: Page, title: string) {
@@ -567,17 +577,37 @@ test("another tab's photo that reaches the draft before the save decides goes wi
   const sent = await answerSync(page, () => ({ outcome: 'accepted', code: 'accepted' }));
   await writeReport(page, 'Wartung Heizung', 0);
   await expect.poll(() => storedDraftCount(page)).toBe(1);
-  await addPhotoElsewhereBeforeSecondOpen(page);
+  await changeElsewhereBeforeSecondOpen(page, 'photo');
   await page.getByRole('button', { name: 'Als Entwurf speichern', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Arbeitsnachweis erstellen', exact: true })).toBeHidden();
 
   // Whether the other tab's photo came in before the decision or was refused after the seal, no
   // text-only save ever runs for a draft that holds a photo.
-  if (await page.evaluate(() => Reflect.get(window, 'photoAddedElsewhere') === true)) {
+  if (await page.evaluate(() => Reflect.get(window, 'changedElsewhere') === true)) {
     expect(await page.evaluate(() => window.uiContractWorkArtifacts.saves)).toEqual([]);
     await expect.poll(() => sent.length).toBe(1);
     expect(sent[0]?.payload.photos).toHaveLength(1);
   }
+});
+
+test('a draft with photos that another tab changes and seals after this save decided is not sent from here, and the form keeps its text', async ({
+  page,
+}) => {
+  await openContractFixture(page, 'work-artifact-report');
+  const sent = await answerSync(page, () => 'offline');
+  await writeReport(page, 'Wartung Heizung', 1);
+  await expect.poll(() => storedDraftCount(page)).toBe(1);
+  await changeElsewhereBeforeSecondOpen(page, 'sealed_text');
+  await page.getByRole('button', { name: 'Als Entwurf speichern', exact: true }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'Arbeitsnachweis erstellen', exact: true });
+  await expect(
+    visibleText(dialog, 'Dieser Entwurf wurde inzwischen in einem anderen Fenster geändert'),
+  ).toBeVisible();
+  await expect(dialog.getByRole('textbox', { name: 'Ausgeführte Arbeiten', exact: true })).toHaveValue(
+    'Brenner gereinigt',
+  );
+  expect(sent).toEqual([]);
 });
 
 test('a review request that fails after the device sent the draft says the draft is saved but not submitted', async ({

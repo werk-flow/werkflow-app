@@ -38,7 +38,7 @@ function createDraftDevice(
     list: () => listDraftsOnDevice(holder),
     change: (draftId, change) => changeDraftOnDevice(holder, draftId, change),
     changed: draftChangedOnDevice,
-    send: (draftId) => sendDraft(holder, draftId),
+    send: (draftId, expected) => sendDraft(holder, draftId, expected ?? null),
     keepOpen: keepDraftOpen,
     subscribe: subscribeToDrafts,
     progress: draftSendProgress,

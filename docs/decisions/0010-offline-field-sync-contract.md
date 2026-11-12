@@ -197,7 +197,7 @@ Decided by the E7 lead for werk-flow/werkflow-planning#320. It replaces the last
 
 Decided for werk-flow/werkflow-planning#320 after the Sol review. It adds to the report drafts amendment's **Online save** point.
 
-- A draft without photos is sealed on the device before its online save leaves with the draft's revision id. A success removes the draft, and a refusal from the server unseals it. A save whose answer is lost leaves it sealed, so nothing changes the draft until the device's send of the same revision is answered. The attach adopts the author's own revision only for content that was never changed after that save.
+- A draft without photos is sealed on the device before its online save leaves with the draft's revision id. A success removes the draft, and a refusal from the server unseals it. A save whose answer is lost leaves it sealed, so nothing changes the draft until the device's send of the same revision is answered. The attach adopts the author's own revision only for content that was never changed after that save. A save decides in one device transaction whether the draft goes online or with its own send, and the send seals only the state that save decided on: a draft another tab sealed or changed since is not sent from this form, and the form keeps its text.
 
 ## Amendment 2026-11-12: the draft marker of a revision
 

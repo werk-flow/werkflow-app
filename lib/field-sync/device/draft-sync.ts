@@ -37,7 +37,12 @@ export type DraftSendOutcome =
   /** The person lost access to the job; the draft is never sent again. */
   | 'no_access'
   /** Nothing was sent: the draft is gone, open in the editor, incomplete or past its limit. */
-  | 'skipped';
+  | 'skipped'
+  /**
+   * Nothing was sent: the save asked for one state of the draft, and another tab changed or sealed it
+   * since. The saving form keeps its text.
+   */
+  | 'changed';
 
 /** The photo upload running now: which draft, and how many of its photos storage already holds. */
 export type DraftSendProgress = { draftId: string; uploaded: number; total: number };
@@ -274,20 +279,30 @@ function knownOffline(): boolean {
   return typeof navigator !== 'undefined' && navigator.onLine === false;
 }
 
-async function uploadAndSeal(claim: SendClaim, first: StoredDraft): Promise<StoredDraft | DraftSendOutcome> {
+async function uploadAndSeal(
+  claim: SendClaim,
+  first: StoredDraft,
+  expected: string | null,
+): Promise<StoredDraft | DraftSendOutcome> {
   let draft = first;
+  let changed = false;
   for (let pass = 0; pass < UPLOAD_PASSES; pass += 1) {
     if (!stillHolder(claim) || knownOffline()) return 'waiting';
     const left = draft.sealed ? null : await uploadPhotos(claim, draft);
     if (left !== null) return left;
     if (!stillHolder(claim)) return 'waiting';
     // Sealed before the request leaves: from here the server may hold the draft, whatever answer arrives.
-    const current = await changeDraftOnDevice(claim.owner, draft.id, (stored) =>
-      stored && (stored.sealed || stored.photos.every((photo) => photo.documentId !== null))
+    const current = await changeDraftOnDevice(claim.owner, draft.id, (stored) => {
+      // A save that decided on one state of the draft never seals another tab's.
+      changed = expected !== null && stored !== null && stored.updatedAt !== expected;
+      return stored &&
+        !changed &&
+        (stored.sealed || stored.photos.every((photo) => photo.documentId !== null))
         ? { ...stored, sealed: true, refusal: null }
-        : stored,
-    );
+        : stored;
+    });
     if (!current) return 'skipped';
+    if (changed) return 'changed';
     if (current.sealed) return current;
     draft = current;
   }
@@ -295,15 +310,21 @@ async function uploadAndSeal(claim: SendClaim, first: StoredDraft): Promise<Stor
 }
 
 /** Sends one draft of the holder. `byPerson` is „Erneut senden“ or a save: it also sends a refused or old draft. */
-async function sendOne(claim: SendClaim, draftId: string, byPerson: boolean): Promise<DraftSendOutcome> {
+async function sendOne(
+  claim: SendClaim,
+  draftId: string,
+  byPerson: boolean,
+  expected: string | null = null,
+): Promise<DraftSendOutcome> {
   const { owner } = claim;
   const draft = (await listDraftsOnDevice(owner)).find((entry) => entry.id === draftId);
   if (!draft) return 'skipped';
+  if (expected !== null && draft.updatedAt !== expected) return 'changed';
   if (draft.refusal?.kind === 'no_access') return 'no_access';
   if (!draft.ready) return 'skipped';
   if (!byPerson && (openInEditor.has(draftId) || draft.refusal !== null || isPastUnsentLimit(draft)))
     return 'skipped';
-  const sealed = await uploadAndSeal(claim, draft);
+  const sealed = await uploadAndSeal(claim, draft, expected);
   if (typeof sealed === 'string') return sealed;
   // The seal's transaction can outlast a sign-in elsewhere: the claim is checked again right before the request.
   if (!stillHolder(claim)) return 'waiting';
@@ -375,9 +396,14 @@ function sendDrafts(): Promise<void> {
 }
 
 /** Sends one draft now because the person asked: „Erneut senden“ or a save in the editor. */
-export function sendDraft(owner: DraftHolder, draftId: string): Promise<DraftSendOutcome> {
+export function sendDraft(
+  owner: DraftHolder,
+  draftId: string,
+  /** The draft's last-change time the person's save decided on: another state is never sent. */
+  expected: string | null = null,
+): Promise<DraftSendOutcome> {
   const claim = claimFor(owner);
-  return enqueue(() => finishSend(() => sendOne(claim, draftId, true)));
+  return enqueue(() => finishSend(() => sendOne(claim, draftId, true, expected)));
 }
 
 /**

@@ -426,6 +426,37 @@ describe('what is sent by itself', () => {
   });
 });
 
+describe('a save sends the state of the draft it decided on', () => {
+  test('a draft another tab changed since the save decided is neither uploaded nor sealed, and the send answers changed', async () => {
+    const decided = draft({ updatedAt: '2026-11-09T07:30:00.000Z' });
+    // Another tab wrote its own text after this save read the draft.
+    await save({
+      ...decided,
+      content: { performedWork: 'Text aus dem anderen Fenster' },
+      updatedAt: NOW.toISOString(),
+    });
+    expect(await sendDraft(holder, DRAFT_ID, decided.updatedAt)).toBe('changed');
+    expect(uploads).toEqual([]);
+    expect(sent).toEqual([]);
+    expect((await stored())[0]).toMatchObject({ sealed: false, refusal: null });
+  });
+
+  test("a draft another tab sealed with its own state is not this save's to send", async () => {
+    const decided = draft({ photos: [], updatedAt: '2026-11-09T07:30:00.000Z' });
+    await save({ ...decided, sealed: true, updatedAt: NOW.toISOString() });
+    expect(await sendDraft(holder, DRAFT_ID, decided.updatedAt)).toBe('changed');
+    expect(sent).toEqual([]);
+  });
+
+  test('the state the save decided on is sent, also when this save sealed it itself', async () => {
+    const decided = draft({ photos: [], sealed: true });
+    await save(decided);
+    handlerAnswers = [results('accepted', 'accepted')];
+    expect(await sendDraft(holder, DRAFT_ID, decided.updatedAt)).toBe('sent');
+    expect(sent).toHaveLength(1);
+  });
+});
+
 describe('the end of a lost-access draft', () => {
   test("the next person's sync start deletes a former holder's draft seven days after its lost access, without anyone opening the list", async () => {
     const lostAt = new Date(NOW.getTime() - DRAFT_NO_ACCESS_KEPT_MS).toISOString();
