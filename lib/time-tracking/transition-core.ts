@@ -197,8 +197,10 @@ export async function recordTimeTransition(
   let { data, error } = await transition(capture);
   // The phone's online call carried this operation id and its page closed before the answer: the
   // ledger holds it under the online call's hash. Asked as that call asked, the same action replays
-  // its first result; the id is recorded, so this never records anything new.
-  if (error && capture && resent && error.message.includes('time_transition_idempotency_conflict'))
+  // its first result. The conflict itself proves the id is recorded, also when the online call
+  // committed after the read above, and the database function re-checks organization, employee and
+  // hash under its row lock: this can only replay or conflict, never record anything new.
+  if (error && capture && error.message.includes('time_transition_idempotency_conflict'))
     ({ data, error } = await transition(null));
 
   if (error) return { success: false, error: mapTransitionError(error, capture !== null) };

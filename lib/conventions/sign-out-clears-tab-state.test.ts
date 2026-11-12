@@ -128,14 +128,15 @@ describe('sign-out clears the tab state', () => {
     }
   });
 
-  // The wipe module imports nothing and every sign-out already loads it, so its session-end barrier costs no script.
+  // The wipe module imports nothing and every sign-out already loads it, so its session-end barrier costs no
+  // script; the wall-clock interval keeps a running end's barrier fresh.
   test('the unsent-work gate imports only the logging and the wipe module, and its one lazy load is caught', () => {
     const source = parseProductSource(UNSENT_GATE_MODULE);
     expect(
       source.statements
         .filter(ts.isImportDeclaration)
         .map((statement) => statement.moduleSpecifier.getText(source)),
-    ).toEqual(["'@/lib/field-sync/device/today-wipe'", "'@/lib/logging'"]);
+    ).toEqual(["'@/hooks/use-wall-clock-tick'", "'@/lib/field-sync/device/today-wipe'", "'@/lib/logging'"]);
     expect(source.text.match(/import\(/g)).toHaveLength(1);
     expect(source.text).toMatch(
       /try \{\s+const \{ settleUnsentWork \} = await import\('\.\/unsent-work-prompt'\);/,

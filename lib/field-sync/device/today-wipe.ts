@@ -27,7 +27,7 @@ export const TODAY_HOLDER_KEY = 'werkflow:today-holder';
  */
 const SESSION_ENDING_PREFIX = 'werkflow:session-ending:';
 
-/** How long an entry whose tab closed mid-check still blocks keeping. */
+/** How long an entry whose tab closed or froze mid-flow still blocks keeping; a live flow renews it each minute. */
 const SESSION_ENDING_MS = 10 * 60 * 1000;
 
 let sessionEnds = 0;
@@ -49,6 +49,20 @@ export function beginSessionEnd(): string {
     // best-effort: without localStorage no tab can keep an action either.
   }
   return flow;
+}
+
+/**
+ * Keeps this flow's barrier fresh, or puts it up again after it lapsed, and answers whether it still
+ * stood: false means another tab may have kept an action meanwhile, so the flow checks again.
+ */
+export function renewSessionEnd(flow: string): boolean {
+  try {
+    const since = Number(localStorage.getItem(SESSION_ENDING_PREFIX + flow));
+    localStorage.setItem(SESSION_ENDING_PREFIX + flow, String(Date.now()));
+    return since > 0 && Date.now() - since < SESSION_ENDING_MS;
+  } catch {
+    return false;
+  }
 }
 
 /** Lifts this flow's barrier, and no other flow's. */

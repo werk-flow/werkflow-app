@@ -9,8 +9,8 @@ import {
   storage,
 } from '@/lib/testing/fixtures/time-outbox';
 import { takeInKeptClockActions, untilCallAnswers, type KeptClockAction } from './kept-clock-actions';
-import { beginSessionEnd, endSessionEnd } from './today-wipe';
-import { callWhileKept, clockCallLock } from './unsent-mark';
+import { beginSessionEnd, endSessionEnd, mayKeepUnder, renewSessionEnd } from './today-wipe';
+import { callWhileKept, clockCallLock, keptActionsWait } from './unsent-mark';
 
 // The kept store of werk-flow/werkflow-planning#319 (decision record 0010, the time outbox's
 // invariants): an online call's action stays on the device until the server answered, a take-in
@@ -89,6 +89,43 @@ describe('an online call’s action on the device', () => {
   });
 });
 
+describe('an action this version cannot read', () => {
+  test('stops the take-in: nothing kept behind it moves to the outbox before it', async () => {
+    storage.set(
+      'werkflow:unsent:clock:001762844400000:1:from-a-newer-version',
+      '{"operationId":"x","kind":"new"}',
+    );
+    storage.set(
+      'werkflow:unsent:clock:001762844500000:1:50000000-0000-4000-8000-0000000000e5',
+      JSON.stringify({
+        ...onlineStart('50000000-0000-4000-8000-0000000000e5'),
+        triedOnline: false,
+        wipeGeneration: '',
+      }),
+    );
+
+    const taken = await takeInKeptClockActions(() => true);
+
+    expect(taken.moved).toBe(0);
+    expect(taken.unreadable).toBe(1);
+    // Both stay kept: the unreadable one, and the readable one behind it.
+    expect(keptEntries().map((entry) => entry.operationId)).toEqual([
+      'x',
+      '50000000-0000-4000-8000-0000000000e5',
+    ]);
+  });
+
+  test('makes a page keep a new tap behind it instead of sending it online', () => {
+    storage.set(
+      'werkflow:unsent:clock:001762844400000:1:from-a-newer-version',
+      '{"operationId":"x","kind":"new"}',
+    );
+    expect(keptActionsWait()).toBe(true);
+    storage.clear();
+    expect(keptActionsWait()).toBe(false);
+  });
+});
+
 describe('a take-in behind an open call', () => {
   test('counts an action it cannot read behind the call, so a session end fails closed', async () => {
     const answer = await pageHoldsCall('50000000-0000-4000-8000-0000000000e3');
@@ -143,6 +180,24 @@ describe('a take-in behind an open call', () => {
       expect(answered).toBe(true);
     } finally {
       timers.mockRestore();
+      setSystemTime();
+    }
+  });
+});
+
+describe('a session end’s barrier', () => {
+  test('one that lapsed is reported as lost, so the flow checks again, and stands again after the renewal', () => {
+    setSystemTime(new Date('2026-11-11T07:00:00.000Z'));
+    try {
+      const flow = beginSessionEnd();
+      expect(renewSessionEnd(flow)).toBe(true);
+      // The tab froze for eleven minutes: the barrier lapsed, and another tab could keep meanwhile.
+      setSystemTime(new Date('2026-11-11T07:11:00.000Z'));
+      expect(mayKeepUnder('')).toBe(true);
+      expect(renewSessionEnd(flow)).toBe(false);
+      expect(mayKeepUnder('')).toBe(false);
+      endSessionEnd(flow);
+    } finally {
       setSystemTime();
     }
   });

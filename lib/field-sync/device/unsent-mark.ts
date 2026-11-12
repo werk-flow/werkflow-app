@@ -25,11 +25,37 @@ export const KEPT_CLOCK_ACTION_PREFIX = `${UNSENT_MARK_PREFIX}clock:`;
 
 let keptOnThisPage = 0;
 
+/**
+ * Whether kept actions wait that the outbox has not taken in: one another tab's call holds, one this
+ * version cannot read, or one kept without signal. A new tap then goes behind them, never online
+ * ahead of them. True when the store cannot be read.
+ */
+export function keptActionsWait(): boolean {
+  return holdsKeyWith(KEPT_CLOCK_ACTION_PREFIX);
+}
+
+/**
+ * Whether the phone holds unsent time events: the time hint the outbox keeps, or a kept clock action
+ * it has not taken in. The page after a sign-out shows it (components/auth/unsent-time-landing-notice.tsx).
+ */
+export function deviceHoldsUnsentTime(): boolean {
+  try {
+    return localStorage.getItem(`${UNSENT_MARK_PREFIX}time`) !== null || keptActionsWait();
+  } catch {
+    return false;
+  }
+}
+
 /** Whether the app start should load the sync runner. True when the hint cannot be read. */
 export function deviceMayHoldUnsentWork(): boolean {
+  return holdsKeyWith(UNSENT_MARK_PREFIX);
+}
+
+/** Whether any localStorage key starts with `prefix`. True when the store cannot be read: a reader then assumes work waits. */
+function holdsKeyWith(prefix: string): boolean {
   try {
     for (let index = 0; index < localStorage.length; index += 1)
-      if (localStorage.key(index)?.startsWith(UNSENT_MARK_PREFIX)) return true;
+      if (localStorage.key(index)?.startsWith(prefix)) return true;
     return false;
   } catch {
     return true;

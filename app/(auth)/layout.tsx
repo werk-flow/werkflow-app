@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { TodayLandingWipe } from '@/components/auth/today-landing-wipe';
+import { UnsentTimeLandingNotice } from '@/components/auth/unsent-time-landing-notice';
 import { StandaloneScreen } from '@/components/shared/standalone-screen';
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
@@ -8,6 +9,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
     <StandaloneScreen>
       {/* Every sign-out lands here once its session ended: nothing of today stays on the phone. */}
       <TodayLandingWipe />
+      <UnsentTimeLandingNotice />
       <div className="w-full max-w-md">{children}</div>
     </StandaloneScreen>
   );

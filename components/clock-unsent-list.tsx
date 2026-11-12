@@ -21,7 +21,8 @@ const REFUSAL_REASONS: Partial<Record<string, string>> = {
   closed_period:
     'Der Monat dieser Zeiten ist bereits abgeschlossen. Ein Admin muss ihn zuerst wieder öffnen.',
   outside_recording_window: 'Diese Zeiten sind älter als 7 Tage und können nicht mehr übertragen werden.',
-  expired: 'Diese Zeiten sind älter als 7 Tage und können nicht mehr übertragen werden.',
+  expired:
+    'Diese Zeiten warten seit mehr als 7 Tagen. WerkFlow versucht weiter, sie zu senden. Du kannst eine Korrektur beantragen oder sie löschen.',
 };
 
 /** What changed on the server, by the conflict's code. */

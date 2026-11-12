@@ -240,6 +240,54 @@ test('a late event shows „Korrektur nötig“, opens the correction with its c
   expect(server.sent).toHaveLength(1);
 });
 
+test('a late chain that begins with a switch prefills the clock-in from the server’s running session', async ({
+  page,
+}) => {
+  const running = {
+    ...RUNNING_CLOCK_STATE,
+    clockInTime: '2026-11-09T07:00:00.000Z',
+    statusStartedAt: '2026-11-09T07:00:00.000Z',
+  };
+  await mountClock(page, running, () => undefined, { outcome: 'conflict', code: 'correction_required' });
+  await page.evaluate(
+    ({ userId, organizationId, base }) => {
+      [
+        ['switch', '2026-11-09T09:00:00.000Z'],
+        ['end', '2026-11-09T15:00:00.000Z'],
+      ].forEach(([action, capturedAt], index) => {
+        const operationId = `50000000-0000-4000-8000-00000000030${index}`;
+        localStorage.setItem(
+          `werkflow:unsent:clock:${String(Date.parse(capturedAt ?? '')).padStart(15, '0')}:1:${operationId}`,
+          JSON.stringify({
+            userId,
+            organizationId,
+            operationId,
+            action,
+            selection: action === 'end' ? null : { kind: 'break', allocationKind: 'none' },
+            expectedSessionId: base.sessionId,
+            expectedVersion: base.sessionVersion,
+            capturedAt,
+            triedOnline: false,
+            wipeGeneration: '',
+            base: index === 0 ? base : null,
+            readAt: index === 0 ? '2026-11-09T08:59:00.000Z' : null,
+          }),
+        );
+      });
+      window.dispatchEvent(new Event('online'));
+    },
+    { userId: CLOCK_USER_ID, organizationId: CLOCK_ORGANIZATION_ID, base: running },
+  );
+  await expect(unsentBadge(clockDock(page))).toHaveText('Korrektur nötig');
+  await page.getByRole('button', { name: 'Laufende Zeiterfassung öffnen', exact: true }).click();
+  await unsentSection(page).getByRole('button', { name: 'Korrektur beantragen', exact: true }).click();
+
+  // The session began at 08:00 Berlin, online, before the kept switch.
+  await expect(
+    page.getByRole('dialog', { name: 'Zeit nachtragen', exact: true }).getByLabel('Vorbelegung'),
+  ).toHaveText('9.11.2026 | 08:00 | 16:00');
+});
+
 test('a correction covers the first day only: the next day’s events stay on the phone, shown, and go on from the server’s clock', async ({
   page,
 }) => {

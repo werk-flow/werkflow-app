@@ -30,6 +30,9 @@ const world = installActionWorld({
     { id: employeeB, organization_id: ORGANIZATION_B, user_id: otherUserId },
   ],
   time_operations: [],
+  time_sessions: [
+    { id: '8e000000-0000-4000-8000-000000000010', organization_id: ORGANIZATION_A, user_id: CALLER_ID },
+  ],
 });
 
 type LedgerRow = {
@@ -134,13 +137,49 @@ assert.deepEqual(await send(captured(onlineId, ORGANIZATION_A)), {
 assert.equal(ledger.length, 1, 'the captured send recorded the action a second time');
 assert.equal(ledger[0]?.recorded_at, SERVER_TIME, 'the captured send moved the recorded time');
 
+// (i b) The online call commits after the transition core read the ledger and before the database
+// function checks it: the captured send still replays, the conflict itself proves the id is recorded.
+const lateId = '8e000000-0000-4000-8000-000000000102';
+await transitionTimeActivity({
+  organizationId: ORGANIZATION_A,
+  operationId: lateId,
+  action: 'end',
+  expectedSessionId: sessionId,
+  expectedVersion: 1,
+  selection: null,
+  acknowledgeLong: false,
+});
+// The core's own ledger read does not see the row yet.
+world.tables.time_operations = (world.tables.time_operations ?? []).filter((row) => row.id !== lateId);
+assert.deepEqual(
+  await send(
+    captured(lateId, ORGANIZATION_A, {
+      action: 'end',
+      expectedSessionId: sessionId,
+      expectedVersion: 1,
+      selection: null,
+    }),
+  ),
+  {
+    operationId: lateId,
+    outcome: 'replayed',
+    code: 'replayed',
+    state: { sessionId, segmentId: null, version: 1 },
+  },
+);
+assert.equal(
+  ledger.filter((row) => row.id === lateId).length,
+  1,
+  'the late captured send recorded the action again',
+);
+
 // (ii) The same id with another command is a different action: it stays the idempotency conflict.
 assert.deepEqual(await send(captured(onlineId, ORGANIZATION_A, { acknowledgeLong: true })), {
   operationId: onlineId,
   outcome: 'rejected',
   code: 'idempotency_conflict',
 });
-assert.equal(ledger.length, 1);
+assert.equal(ledger.length, 2);
 
 // (iii) Another organization's caller sending that id gets nothing of the first result.
 world.callerId = otherUserId;
@@ -149,4 +188,4 @@ world.activeOrganizationCookie = ORGANIZATION_B;
 const foreign = await send(captured(onlineId, ORGANIZATION_B));
 assert.deepEqual(foreign, { operationId: onlineId, outcome: 'rejected', code: 'idempotency_conflict' });
 assert.ok(!JSON.stringify(foreign).includes(sessionId), 'the foreign caller saw the first result');
-assert.equal(ledger.length, 1);
+assert.equal(ledger.length, 2);

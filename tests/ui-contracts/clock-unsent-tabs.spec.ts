@@ -241,3 +241,83 @@ test('a sign-out shows its question at once while it sends, and „Abbrechen“ 
   await expect(page.getByLabel('Abmeldung')).toHaveText('Sitzung bleibt');
   await expect(dialog).toHaveCount(0);
 });
+
+test('a tap with a kept action this version cannot read on the device waits behind it instead of going online', async ({
+  page,
+}) => {
+  const server = await mountClock(page, CLOCKED_OUT_STATE);
+  await page.evaluate(() =>
+    localStorage.setItem(
+      'werkflow:unsent:clock:000000000000001:1:from-a-newer-version',
+      '{"operationId":"x","kind":"new"}',
+    ),
+  );
+
+  await page.getByRole('button', { name: 'Zeiterfassung starten', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Arbeit starten', exact: true }).click();
+
+  await expect(unsentBadge(clockDock(page))).toBeVisible();
+  expect(await page.evaluate(() => window.clockContract.transitions)).toEqual([]);
+  expect(server.sent).toEqual([]);
+});
+
+test('a session end that runs longer than ten minutes keeps its barrier fresh, so no tab keeps behind its back', async ({
+  page,
+}) => {
+  await page.clock.install();
+  const server = await mountClock(page, CLOCKED_OUT_STATE);
+  await startWithoutNetwork(page, server);
+  await page.getByRole('button', { name: 'Abmelden prüfen', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Noch nicht übertragen', exact: true });
+  await expect(dialog).toBeVisible();
+
+  // The person thinks it over, or the flow waits on the network, for eleven minutes.
+  await page.clock.fastForward('11:00');
+
+  const ages = await page.evaluate(() =>
+    Object.keys(localStorage)
+      .filter((key) => key.startsWith('werkflow:session-ending:'))
+      .map((key) => Date.now() - Number(localStorage.getItem(key))),
+  );
+  expect(ages).toHaveLength(1);
+  expect(ages[0]).toBeLessThan(2 * 60 * 1000);
+  await dialog.getByRole('button', { name: 'Abbrechen', exact: true }).click();
+  await expect(page.getByLabel('Abmeldung')).toHaveText('Sitzung bleibt');
+});
+
+test('an event that waited more than seven days says it is still tried, and that a correction or a deletion settles it', async ({
+  page,
+}) => {
+  const server = await mountClock(page, CLOCKED_OUT_STATE);
+  await setNetwork(page, server, false);
+  await page.evaluate(
+    ({ userId, organizationId, base }) => {
+      const operationId = '50000000-0000-4000-8000-0000000000fb';
+      const capturedAt = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
+      const key = `werkflow:unsent:clock:${String(Date.parse(capturedAt)).padStart(15, '0')}:1:${operationId}`;
+      const value = JSON.stringify({
+        userId,
+        organizationId,
+        operationId,
+        action: 'start',
+        selection: { kind: 'work', allocationKind: 'unallocated', jobId: null },
+        expectedSessionId: null,
+        expectedVersion: null,
+        capturedAt,
+        triedOnline: false,
+        wipeGeneration: '',
+        base,
+        readAt: capturedAt,
+      });
+      localStorage.setItem(key, value);
+      window.dispatchEvent(new StorageEvent('storage', { key, newValue: value }));
+    },
+    { userId: CLOCK_USER_ID, organizationId: CLOCK_ORGANIZATION_ID, base: CLOCKED_OUT_STATE },
+  );
+  await expect(unsentBadge(clockDock(page))).toHaveText('Nicht übertragen');
+  await page.getByRole('button', { name: 'Zeiterfassung starten', exact: true }).click();
+
+  await expect(page.getByRole('region', { name: 'Noch nicht übertragen' })).toContainText(
+    'WerkFlow versucht weiter, sie zu senden',
+  );
+});

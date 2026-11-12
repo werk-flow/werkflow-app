@@ -1,6 +1,7 @@
 'use client';
 
-import { beginSessionEnd, endSessionEnd } from '@/lib/field-sync/device/today-wipe';
+import { startWallClockInterval } from '@/hooks/use-wall-clock-tick';
+import { beginSessionEnd, endSessionEnd, renewSessionEnd } from '@/lib/field-sync/device/today-wipe';
 import { logError } from '@/lib/logging';
 
 // What every sign-out and the organization switch ask before they end the
@@ -12,6 +13,9 @@ import { logError } from '@/lib/logging';
 
 const CHECK_FAILED =
   'Wir konnten nicht prüfen, ob auf diesem Gerät noch etwas nicht übertragen ist. Lade die Seite neu und versuche es dann erneut.';
+
+/** How often a running session end renews its barrier, well within the barrier's lapse. */
+const SESSION_END_HEARTBEAT_MS = 60 * 1000;
 
 type ShowBanner = (banner: {
   variant: 'error';
@@ -51,11 +55,18 @@ export async function endSessionAfterCheck(
   scope: 'session' | 'organization' = 'session',
 ): Promise<boolean> {
   const flow = beginSessionEnd();
+  // A live flow keeps its barrier fresh; only one whose tab closed or froze lets it lapse.
+  const stopHeartbeat = startWallClockInterval(() => renewSessionEnd(flow), SESSION_END_HEARTBEAT_MS);
   try {
-    if (!(await sessionMayEnd(showFailure, scope))) return false;
+    for (;;) {
+      if (!(await sessionMayEnd(showFailure, scope))) return false;
+      // The barrier stood the whole check: nothing was kept behind it. Otherwise ask again.
+      if (renewSessionEnd(flow)) break;
+    }
     await end();
     return true;
   } finally {
+    stopHeartbeat();
     endSessionEnd(flow);
   }
 }

@@ -61,3 +61,32 @@ test('a capture refused after another tab’s sign-out says so, also once no clo
   );
   await expect(clock.getByRole('group', { name: 'Nächste Aktion' })).toHaveCount(0);
 });
+
+for (const [held, shown] of [
+  [true, 1],
+  [false, 0],
+] as const)
+  test(`the page a sign-out lands on ${held ? 'says' : 'says nothing'} when unsent time ${held ? 'stays' : 'does not stay'} on the phone`, async ({
+    page,
+  }) => {
+    assertWorkspaceTestLock();
+    const bundle = process.env.WERKFLOW_UI_CONTRACT_BUNDLE;
+    if (!bundle) throw new Error('Run through bun tests/ui-contracts/run.ts.');
+    await page.route('http://localhost/ui-contracts**', (route) =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: '<html lang="de"><body><div id="root"></div></body></html>',
+      }),
+    );
+    await page.goto('http://localhost/ui-contracts');
+    await page.evaluate((holds) => {
+      window.uiContractFixture = 'unsent-time-landing';
+      if (holds) localStorage.setItem('werkflow:unsent:time', '1');
+    }, held);
+    await page.addScriptTag({ path: bundle });
+    await expect(page.getByRole('main').getByText('Anmelden')).toBeVisible();
+
+    await expect(
+      page.getByRole('alert').filter({ hasText: 'Auf diesem Gerät liegen noch nicht gesendete Zeiten.' }),
+    ).toHaveCount(shown);
+  });

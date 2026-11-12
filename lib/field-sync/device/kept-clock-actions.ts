@@ -95,13 +95,18 @@ export async function takeInKeptClockActions(
   markHeld: () => boolean,
 ): Promise<{ moved: number; unreadable: number; deferred: DeferredTakeIn | null }> {
   let moved = 0;
-  let unreadable = 0;
   const keys = keptActionKeys();
   for (const [index, key] of keys.entries()) {
     const kept = readKeptAction(key);
     if (!kept) {
-      unreadable += 1;
-      continue;
+      // A stop: what was kept after it waits behind it, and a session end fails closed on it.
+      const later = keys.slice(index + 1).map(readKeptAction);
+      const behind = later.filter((action): action is KeptClockAction => action !== null);
+      return {
+        moved,
+        unreadable: 1 + later.length - behind.length,
+        deferred: behind.length > 0 ? { actions: behind, recheckAt: null, lock: null } : null,
+      };
     }
     const {
       userId,
@@ -124,7 +129,7 @@ export async function takeInKeptClockActions(
       const behind = later.filter((action): action is KeptClockAction => action !== null);
       return {
         moved,
-        unreadable: unreadable + later.length - behind.length,
+        unreadable: later.length - behind.length,
         deferred: { actions: [kept, ...behind], recheckAt: call.recheckAt, lock: call.lock },
       };
     }
@@ -145,7 +150,7 @@ export async function takeInKeptClockActions(
     localStorage.removeItem(key);
     moved += 1;
   }
-  return { moved, unreadable, deferred: null };
+  return { moved, unreadable: 0, deferred: null };
 }
 
 /**

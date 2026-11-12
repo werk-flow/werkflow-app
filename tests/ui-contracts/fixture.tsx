@@ -37,7 +37,7 @@ import {
   TodayRefreshProfileContractFixture,
   TodayRefreshSwitchContractFixture,
 } from './today-refresh-boundaries';
-import { OfflineClockContractFixture } from './offline-clock-boundaries';
+import { OfflineClockContractFixture, UnsentTimeLandingContractFixture } from './offline-clock-boundaries';
 import { OfflineTodayContractFixture } from './offline-today-boundaries';
 import { WorkHandoverContractFixture } from './work-handover-boundaries';
 import { EditJobContractFixture } from './edit-job-boundaries';
@@ -638,6 +638,8 @@ createRoot(root).render(
     <OfflineTodayContractFixture />
   ) : window.uiContractFixture === 'offline-clock' ? (
     <OfflineClockContractFixture />
+  ) : window.uiContractFixture === 'unsent-time-landing' ? (
+    <UnsentTimeLandingContractFixture />
   ) : window.uiContractFixture === 'work-handover' ? (
     <WorkHandoverContractFixture />
   ) : window.uiContractFixture === 'edit-job' ? (

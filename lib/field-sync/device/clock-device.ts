@@ -74,8 +74,9 @@ function markTimeHeld(): boolean {
  * start-up hint in step with it: set while the device holds any person's event.
  */
 export async function outboxChanged(): Promise<void> {
-  const { events } = await readWholeTimeOutbox();
-  markUnsentWork(UNSENT_KIND, events.length > 0);
+  // Another person's record this version cannot read still holds the hint.
+  const { events, othersUnreadable } = await readWholeTimeOutbox(clockHolder()?.userId);
+  markUnsentWork(UNSENT_KIND, events.length + othersUnreadable > 0);
   try {
     localStorage.setItem(OUTBOX_CHANGED_KEY, String(Date.now()));
   } catch {
@@ -281,7 +282,7 @@ async function signedInUserId(): Promise<string | null> {
 }
 
 async function ownOrganizations(userId: string): Promise<string[]> {
-  const { events } = await readWholeTimeOutbox();
+  const { events } = await readWholeTimeOutbox(userId);
   return [...new Set(events.filter((event) => event.userId === userId).map((event) => event.organizationId))];
 }
 

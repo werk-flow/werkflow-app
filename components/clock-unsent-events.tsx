@@ -31,6 +31,7 @@ import {
 } from '@/lib/field-sync/device/clock-outbox';
 import { correctionScope, type ClockDeviceView } from '@/lib/field-sync/device/time-outbox';
 import { logError } from '@/lib/logging';
+import type { LiveClockState } from '@/lib/time-tracking/types';
 import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import { formatBerlinTime, parseIsoLocalDate } from '@/lib/utils';
 
@@ -90,13 +91,22 @@ function useOutboxAction() {
 }
 
 /** The correction the first day's kept events prefill: their day, its first start and its last end. */
-function correctionPrefill(day: ClockDeviceView['events']) {
+function correctionPrefill(day: ClockDeviceView['events'], confirmed: LiveClockState | null) {
   const first = day[0];
   const end = day.findLast((event) => event.action === 'end');
   if (!first) return {};
+  const date = formatBerlinLocalDate(first.capturedAt);
+  // A session that began online before the kept events: its clock-in is the server's, if on that day.
+  const startedOnline =
+    first.action !== 'start' &&
+    confirmed?.clockInTime &&
+    formatBerlinLocalDate(confirmed.clockInTime) === date
+      ? confirmed.clockInTime
+      : null;
+  const clockIn = first.action === 'start' ? first.capturedAt : startedOnline;
   return {
-    preselectedDate: parseIsoLocalDate(formatBerlinLocalDate(first.capturedAt)),
-    ...(first.action === 'start' ? { preselectedClockInTime: formatBerlinTime(first.capturedAt) } : {}),
+    preselectedDate: parseIsoLocalDate(date),
+    ...(clockIn ? { preselectedClockInTime: formatBerlinTime(clockIn) } : {}),
     ...(end ? { preselectedClockOutTime: formatBerlinTime(end.capturedAt) } : {}),
   };
 }
@@ -277,7 +287,7 @@ function UnsentPanel({ view }: { view: ClockDeviceView }) {
       <CorrectionDialog.Dialog
         open={correction !== null}
         onOpenChange={(open) => !open && setCorrection(null)}
-        {...correctionPrefill(correction ?? [])}
+        {...correctionPrefill(correction ?? [], confirmed)}
         preselectedUserId={holder?.userId}
         // The request is filed, and the form confirms it: only now do the session's kept events leave the phone,
         // and only for a request of this person on that day; an Admin or Büro may file one for someone else.

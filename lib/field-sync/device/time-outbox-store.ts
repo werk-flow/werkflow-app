@@ -72,7 +72,33 @@ export type StoredClock = z.infer<typeof storedClockSchema>;
 /** One person's unsent time events in an organization, in the order they are sent, and their clock. */
 export type TimeOutbox = { clock: StoredClock | null; events: StoredTimeEvent[] };
 
-type OutboxContents = { clocks: StoredClock[]; events: StoredTimeEvent[] };
+type OutboxContents = {
+  clocks: StoredClock[];
+  events: StoredTimeEvent[];
+  /** Records this version cannot read that surely belong to someone else; they still count as held. */
+  othersUnreadable: number;
+};
+
+/** Whose records a reader answers for: an unreadable record that could be theirs fails it closed. */
+type Reader = (record: unknown) => boolean;
+
+/** Every record could matter: a reader that knows no person, such as the offline page. */
+const EVERYONE: Reader = () => true;
+
+/** The field `name` of a stored record, when it is a string. */
+function field(record: unknown, name: string): string | null {
+  if (typeof record !== 'object' || record === null || !(name in record)) return null;
+  const value: unknown = Reflect.get(record, name);
+  return typeof value === 'string' ? value : null;
+}
+
+/** A reader for one person: an unreadable record of another person is theirs to settle. */
+function readerFor(userId: string): Reader {
+  return (record) => {
+    const owner = field(record, 'userId');
+    return owner === null || owner === userId;
+  };
+}
 
 function openOutbox(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -89,29 +115,38 @@ function openOutbox(): Promise<IDBDatabase> {
 /**
  * Everything the outbox holds, read inside `transaction`, then handed to `handle` while the
  * transaction is still active, so `handle` may queue its writes in it. A record this version cannot
- * read aborts the transaction: an unsent time event is never skipped or deleted unread.
+ * read that could belong to `concerns` aborts the transaction: an unsent time event is never skipped
+ * or deleted unread. Another person's unreadable record stays, unread and untouched.
  */
-function withContents(transaction: IDBTransaction, handle: (contents: OutboxContents) => void): void {
+function withContents(
+  transaction: IDBTransaction,
+  concerns: Reader,
+  handle: (contents: OutboxContents) => void,
+): void {
   const events = transaction.objectStore(EVENTS).getAll();
   const clocks = transaction.objectStore(CLOCKS).getAll();
   clocks.onsuccess = () => {
-    const parsed = z
-      .object({ events: z.array(storedTimeEventSchema), clocks: z.array(storedClockSchema) })
-      .safeParse({ events: events.result, clocks: clocks.result });
-    if (!parsed.success) {
-      transaction.abort();
-      return;
+    const contents: OutboxContents = { clocks: [], events: [], othersUnreadable: 0 };
+    for (const record of z.array(z.unknown()).parse(events.result)) {
+      const event = storedTimeEventSchema.safeParse(record);
+      if (event.success) contents.events.push(event.data);
+      else if (concerns(record)) return transaction.abort();
+      else contents.othersUnreadable += 1;
     }
-    handle({
-      clocks: parsed.data.clocks,
-      events: parsed.data.events.toSorted((left, right) => left.sequence - right.sequence),
-    });
+    for (const record of z.array(z.unknown()).parse(clocks.result)) {
+      const clock = storedClockSchema.safeParse(record);
+      if (clock.success) contents.clocks.push(clock.data);
+      else if (concerns(record)) return transaction.abort();
+    }
+    contents.events.sort((left, right) => left.sequence - right.sequence);
+    handle(contents);
   };
 }
 
 /** Runs one transaction over both stores and closes the connection. Rejects when it aborts or the store fails. */
 async function transact<Result>(
   mode: IDBTransactionMode,
+  concerns: Reader,
   run: (contents: OutboxContents, transaction: IDBTransaction) => Result,
 ): Promise<Result> {
   const database = await openOutbox();
@@ -124,7 +159,7 @@ async function transact<Result>(
         else reject(new Error('The time outbox answered nothing'));
       };
       transaction.onabort = () => reject(transaction.error ?? new Error('The time outbox could not be read'));
-      withContents(transaction, (contents) => {
+      withContents(transaction, concerns, (contents) => {
         result = { value: run(contents, transaction) };
       });
     });
@@ -144,7 +179,7 @@ function outboxOf(contents: OutboxContents, holder: OutboxHolder): TimeOutbox {
 
 /** The holder's unsent events and clock. Throws when the device storage fails or holds an unreadable record. */
 export function readTimeOutbox(holder: OutboxHolder): Promise<TimeOutbox> {
-  return transact('readonly', (contents) => outboxOf(contents, holder));
+  return transact('readonly', readerFor(holder.userId), (contents) => outboxOf(contents, holder));
 }
 
 /**
@@ -157,7 +192,7 @@ export function changeTimeOutbox(
   holder: OutboxHolder,
   change: (current: TimeOutbox) => TimeOutbox | null,
 ): Promise<{ outbox: TimeOutbox; deviceHoldsEvents: boolean }> {
-  return transact('readwrite', (contents, transaction) => {
+  return transact('readwrite', readerFor(holder.userId), (contents, transaction) => {
     const current = outboxOf(contents, holder);
     const next = change(current) ?? current;
     const events = transaction.objectStore(EVENTS);
@@ -167,12 +202,17 @@ export function changeTimeOutbox(
     const clocks = transaction.objectStore(CLOCKS);
     if (next.clock && next.clock !== current.clock) clocks.put(next.clock);
     if (!next.clock && current.clock) clocks.delete(current.clock.holder);
-    const others = contents.events.length - current.events.length;
+    const others = contents.events.length - current.events.length + contents.othersUnreadable;
     return { outbox: next, deviceHoldsEvents: others + next.events.length > 0 };
   });
 }
 
-/** Every person's events and clocks on the device: for a reader that knows no session, such as the offline page. */
-export function readWholeTimeOutbox(): Promise<{ clocks: StoredClock[]; events: StoredTimeEvent[] }> {
-  return transact('readonly', (contents) => contents);
+/**
+ * Every person's events and clocks on the device, for a reader that knows no session, such as the
+ * offline page. With `userId`, an unreadable record of another person does not fail the read.
+ */
+export function readWholeTimeOutbox(
+  userId?: string,
+): Promise<{ clocks: StoredClock[]; events: StoredTimeEvent[]; othersUnreadable: number }> {
+  return transact('readonly', userId ? readerFor(userId) : EVERYONE, (contents) => contents);
 }

@@ -17,6 +17,7 @@ import { useUserProfile } from '@/components/user/user-profile-context';
 import { useLiveView, type LiveViewState } from '@/hooks/use-live-view';
 import { useServerAction } from '@/hooks/use-server-action';
 import type { ClockDeviceView } from '@/lib/field-sync/device/time-outbox';
+import { keptActionsWait } from '@/lib/field-sync/device/unsent-mark';
 import { applyTransitionEcho } from '@/lib/time-tracking/clock-echo';
 import { fetchCurrentClockState } from '@/lib/time-tracking/state-client';
 import { isClockStateEventRelevant } from '@/lib/time-tracking/clock-state-events';
@@ -149,7 +150,8 @@ function useClockTransitionExecute({
         expectedVersion,
         selection,
       };
-      const standsOnUnsent = knownUnsent || unchecked.current;
+      // Kept actions the outbox has not taken in come first, also another tab's or one this version cannot read.
+      const standsOnUnsent = knownUnsent || unchecked.current || keptActionsWait();
       // A phone that reports no network asks no server.
       const triedOnline = !standsOnUnsent && navigator.onLine;
       let result: TimeTransitionResult | null = null;
