@@ -25,20 +25,21 @@ processes="$HOME/.ascii/processes"
 # Supabase CLI's traces hold the SQL a run sent, the heavy-command slots hold its locks, and Next.js
 # makes its telemetry folder with every build, an empty one even with NEXT_TELEMETRY_DISABLED.
 restored=(.supabase .cache/werkflow-heavy .config/nextjs-nodejs)
-# Coding-agent CLI folders: Boat's machine agent writes a skill and a small config into each when it
-# hands out a machine, the snapshot's base image included. They hold no login (no credential file by
-# any CLI's name), and no run uses an agent, but a machine keeps none of them (decision 15).
-agent_files=(.claude .claude.json .codex .gemini .cursor .pi .kimi-code .prime .vibe .config/opencode
-  .local/share/opencode .config/amp .local/share/amp)
+# Stores a machine keeps none of, though no run uses them: the coding-agent CLI folders, into which
+# Boat's machine agent writes a skill and a small config when it hands out a machine, the snapshot's
+# base image included (no credential file by any CLI's name, decision 15); and the desktop session's
+# keyring, which the session creates then, after `record`, with no daemon left running. A run's
+# browsers keep their secrets in Playwright's basic store, never there. Removed, then checked gone.
+unkept_stores=(.claude .claude.json .codex .gemini .cursor .pi .kimi-code .prime .vibe .config/opencode
+  .local/share/opencode .config/amp .local/share/amp .local/share/keyrings)
 # The only places in the home folder where a path may appear or change after `record` and stay: the
 # npm packages Bun installed (public), Boat's machine agent and its desktop driver (pid file and
 # version check), the snapshot's seed clone that Boat copies in while the run starts (a run only
-# clones from it), and the desktop session's own state, its Chrome profile and keyring included: a
-# run's browsers are Playwright's, with profiles under /tmp, and no run reads a keyring.
+# clones from it), and the desktop session's own state, its Chrome profile included: a run's browsers
+# are Playwright's, with profiles under /tmp.
 home_exceptions=(.bun/install/cache .ascii .cua-driver .cache/cua-driver werkflow-seed .cache/fontconfig
   .cache/openbox .cache/ibus .cache/dconf .config/sunshine .config/ibus .config/pulse .config/dconf
-  .config/systemd .config/google-chrome .local/share/keyrings .dbus .Xauthority .xsession-errors
-  .xsession-errors.old)
+  .config/systemd .config/google-chrome .dbus .Xauthority .xsession-errors .xsession-errors.old)
 
 fail() {
   printf '[boat] wipe failed: %s\n' "$1" >&2
@@ -58,7 +59,7 @@ spared_in() {
   spared=()
   case "$1" in
     "$HOME")
-      for path in "${home_exceptions[@]}" "${restored[@]}" "${agent_files[@]}"; do
+      for path in "${home_exceptions[@]}" "${restored[@]}" "${unkept_stores[@]}"; do
         spared+=(-path "$HOME/$path" -o)
       done
       spared+=(-false)
@@ -106,9 +107,9 @@ changed_into() {
     -newer "$marker" -print0 > "$into" || fail "cannot search $place"
 }
 
-remove_agent_files() {
+remove_unkept_stores() {
   local path
-  for path in "${agent_files[@]}"; do
+  for path in "${unkept_stores[@]}"; do
     sudo rm -rf -- "${HOME:?}/$path" || fail "cannot remove $path"
   done
 }
@@ -142,7 +143,7 @@ kill_earlier_commands() {
 }
 
 record() {
-  remove_agent_files
+  remove_unkept_stores
   sudo mkdir -p "$pristine" || fail "cannot create $pristine"
   sudo install -d -o "$(id -u)" "$work" || fail "cannot create $work"
   local place folder
@@ -211,12 +212,12 @@ wipe() {
     [ ! -e "$pristine/$HOME/$folder" ] || sudo cp -a "$pristine/$HOME/$folder" "$HOME/$folder" ||
       fail "cannot put back $folder"
   done
-  remove_agent_files
+  remove_unkept_stores
 
   # The check: no path added and no file changed since `record` remains outside the exceptions, the
   # home folder still holds the snapshot's files, and the stack is gone.
   local path shown
-  for path in "${agent_files[@]}"; do
+  for path in "${unkept_stores[@]}"; do
     [ ! -e "$HOME/$path" ] || fail "$path came back"
   done
   for folder in "${restored[@]}"; do
