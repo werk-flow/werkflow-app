@@ -212,9 +212,11 @@ function UnsentActions({
           Erneut senden
         </Button>
       )}
-      <Button type="button" variant="outline" className="min-h-11" disabled={busy} onClick={onCorrect}>
-        Korrektur beantragen
-      </Button>
+      {status !== 'unreadable' && (
+        <Button type="button" variant="outline" className="min-h-11" disabled={busy} onClick={onCorrect}>
+          Korrektur beantragen
+        </Button>
+      )}
       <Button
         type="button"
         variant="ghost"

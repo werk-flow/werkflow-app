@@ -48,7 +48,9 @@ type UnsentEventStatus =
   /** Too old to be recorded automatically; the person files a correction. */
   | 'correction'
   /** Stands on an event before it that was not recorded. */
-  | 'held';
+  | 'held'
+  /** A kept action this version cannot read (kept-clock-actions.ts): nothing after it is sent until it is gone. */
+  | 'unreadable';
 
 export type UnsentTimeEvent = Pick<StoredTimeEvent, 'operationId' | 'capturedAt' | 'action' | 'selection'> & {
   status: UnsentEventStatus;
@@ -134,6 +136,41 @@ export function clockDeviceView(outbox: TimeOutbox, now: Date): ClockDeviceView 
         code: null,
       })),
     ],
+  };
+}
+
+/**
+ * The view with the kept actions this version cannot read, each a stop at the time of its tap: an
+ * event after it waits, and the clock shows the server's state. Its id is its key, so the person's
+ * deletion removes exactly it.
+ */
+export function withUnreadable(
+  view: ClockDeviceView | null,
+  unreadable: readonly { key: string; capturedAt: string }[],
+): ClockDeviceView | null {
+  if (unreadable.length === 0) return view;
+  const stops: UnsentTimeEvent[] = unreadable.map(({ key, capturedAt }) => ({
+    operationId: key,
+    capturedAt,
+    action: 'switch',
+    selection: null,
+    status: 'unreadable',
+    code: null,
+  }));
+  const events = [...(view?.events ?? []), ...stops].toSorted(
+    (left, right) => Date.parse(left.capturedAt) - Date.parse(right.capturedAt),
+  );
+  const first = events.findIndex((event) => event.status !== 'pending');
+  const marked = events.map((event, index) =>
+    first !== -1 && index > first && event.status === 'pending'
+      ? { ...event, status: 'held' as const }
+      : event,
+  );
+  const stopped = marked[0]?.status !== 'pending';
+  return {
+    status: stopped ? 'stopped' : 'pending',
+    state: stopped ? null : (view?.state ?? null),
+    events: marked,
   };
 }
 

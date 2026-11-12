@@ -3,15 +3,20 @@
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import type { LiveClockState } from '@/lib/time-tracking/types';
 import {
+  removeUnreadableKeptActions,
+  stopFor,
   takeInKeptClockActions,
+  unreadableKeptActions,
   untilCallAnswers,
   type DeferredTakeIn,
   type KeptClockAction,
+  type KeptTakeIn,
 } from './kept-clock-actions';
 import {
   captureTimeEvent,
   clockDeviceView,
   removeTimeEvents,
+  withUnreadable,
   type ClockDeviceView,
   type TimeEventCapture,
 } from './time-outbox';
@@ -53,7 +58,10 @@ async function publish(): Promise<void> {
   const current = clockHolder();
   // A hold another tab's wipe ended was told so once; it hears nothing after.
   if (!current) return;
-  const view = clockDeviceView(await readTimeOutbox(current), new Date());
+  const view = withUnreadable(
+    clockDeviceView(await readTimeOutbox(current), new Date()),
+    unreadableKeptActions(current.userId),
+  );
   // A wipe or another holder while the device read: this answer is the former holder's, never shown.
   if (clockHolder() !== current) return;
   for (const listener of listeners) listener(view);
@@ -159,7 +167,11 @@ export async function removeShownTimeEvents(
   operationIds: readonly string[],
   resume: LiveClockState | null,
 ): ReturnType<typeof removeTimeEvents> {
-  return exclusively(SEND_LOCK, () => removeTimeEvents(holder, operationIds, resume));
+  return exclusively(SEND_LOCK, async () => {
+    // A kept action this version cannot read is shown under its key; the person deletes it here too.
+    removeUnreadableKeptActions(operationIds);
+    return removeTimeEvents(holder, operationIds, resume);
+  });
 }
 
 /**
@@ -171,12 +183,11 @@ export async function removeShownTimeEvents(
 export async function captureBehindKept(holder: OutboxHolder, capture: TimeEventCapture): Promise<void> {
   const taken = await exclusively(TAKE_IN_LOCK, async () => {
     const intake = await takeInKeptClockActions(markTimeHeld);
-    // Behind an open call or an action this version cannot read, a tap waits kept: it never passes them.
-    if (!intake.deferred && intake.stopAt === null)
-      await captureTimeEvent(holder, capture, { underSignal: true });
+    // Behind an open call, or a stop that holds this person, a tap waits kept: it never passes them.
+    if (!waitsBehind(intake, holder.userId)) await captureTimeEvent(holder, capture, { underSignal: true });
     return intake;
   });
-  if (taken.deferred || taken.stopAt !== null) {
+  if (waitsBehind(taken, holder.userId)) {
     const { command, base, readAt, capturedAt, triedOnline, wipeGeneration } = capture;
     const kept = keepClockAction(
       {
@@ -193,6 +204,18 @@ export async function captureBehindKept(holder: OutboxHolder, capture: TimeEvent
     if (taken.deferred) lookAgainLater(taken.deferred);
   }
   await outboxChanged();
+}
+
+/** Whether a new tap of `userId` waits kept behind what a take-in left: an open call, a stop that holds them, or their own held actions. */
+function waitsBehind(taken: KeptTakeIn, userId: string): boolean {
+  const { deferred } = taken;
+  if (stopFor(taken, userId) !== null) return true;
+  if (!deferred) return false;
+  return (
+    deferred.recheckAt !== null ||
+    deferred.lock !== null ||
+    deferred.actions.some((action) => action.userId === userId)
+  );
 }
 
 /**
@@ -261,7 +284,7 @@ async function holdersToSend(): Promise<OutboxHolder[]> {
 
 /** Sends the unsent events of this tab's holder, or of the session's person, as far as the server records them now. */
 export async function sendOwnTimeEvents(): Promise<void> {
-  const { stopAt } = await takeInKept();
+  const taken = await takeInKept();
   const hold = clockHolder();
   for (const holder of await holdersToSend())
     await exclusively(SEND_LOCK, () =>
@@ -273,7 +296,7 @@ export async function sendOwnTimeEvents(): Promise<void> {
           const session = clockHolder() === hold ? await readSession() : null;
           return session?.userId === holder.userId ? session.token : null;
         },
-        stopAt,
+        stopAt: stopFor(taken, holder.userId),
       }),
     );
   await outboxChanged();
@@ -342,19 +365,27 @@ async function takeInShownActions(scope: UnsentScope, ids: readonly string[]): P
 export const timeUnsentSource: UnsentSource = {
   name: UNSENT_KIND,
   async summarize(scope) {
-    // A kept action this version cannot read may be anyone's: no session ends over it unseen.
-    const { unreadable, deferred } = await takeInKept();
-    if (unreadable > 0) throw new Error(`${unreadable} kept clock actions cannot be read by this version`);
+    const { deferred } = await takeInKept();
     const ids: string[] = [];
     for (const holder of await holdersInScope(scope))
       ids.push(...(await readTimeOutbox(holder)).events.map((event) => event.operationId));
     // An online call still open, and what was kept behind it, are unsent too until the call answers.
     ids.push(...(await deferredInScope(deferred, scope ?? 'session')).map((action) => action.operationId));
-    return ids.length > 0 ? [{ label: 'Stempelzeiten', count: ids.length, ids }] : [];
+    // A kept action this version cannot read that may be the person's: no session ends over it unasked.
+    const unreadable = unreadableKeptActions(await signedInUserId()).map(({ key }) => key);
+    return [
+      { label: 'Stempelzeiten', count: ids.length, ids },
+      {
+        label: 'Stempelzeiten, die diese App-Version nicht lesen kann',
+        count: unreadable.length,
+        ids: unreadable,
+      },
+    ].filter((item) => item.count > 0);
   },
   flush: sendOwnTimeEvents,
   async discard(scope, ids) {
     await takeInShownActions(scope, ids);
+    removeUnreadableKeptActions(ids);
     // The session ends: no server state to go on from, and what stays is asked about again.
     for (const holder of await holdersInScope(scope)) await removeShownTimeEvents(holder, ids, null);
     await outboxChanged();

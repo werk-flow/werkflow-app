@@ -86,16 +86,61 @@ async function callState(kept: KeptClockAction): Promise<CallState> {
 /** What a take-in left kept: an online call still open and every action behind it, and when to look again. */
 export type DeferredTakeIn = { actions: KeptClockAction[]; recheckAt: number | null; lock: string | null };
 
+/** A kept action this version cannot read: its key, the time of its tap, and its person when that much reads. */
+export type UnreadableKeptAction = { key: string; capturedAt: string; userId: string | null };
+
+/** The person a stored value names, when it is JSON with a string `userId`. */
+function personNamedIn(key: string): string | null {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(key) ?? 'null');
+    if (typeof value !== 'object' || value === null || !('userId' in value)) return null;
+    const userId: unknown = value.userId;
+    return typeof userId === 'string' ? userId : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The kept actions this version cannot read that may be `userId`'s: theirs, or of a person the
+ * value does not name. They stop the take-in, so the clock shows them and the person can delete them.
+ */
+export function unreadableKeptActions(userId: string | null): UnreadableKeptAction[] {
+  return keptActionKeys()
+    .filter((key) => readKeptAction(key) === null)
+    .map((key) => ({ key, capturedAt: new Date(tapTimeOf(key)).toISOString(), userId: personNamedIn(key) }))
+    .filter((action) => action.userId === null || action.userId === userId);
+}
+
+/** Deletes the unreadable kept actions among `keys`, the ones the person was shown; one that reads now stays. */
+export function removeUnreadableKeptActions(keys: readonly string[]): void {
+  for (const key of keys)
+    if (key.startsWith(KEPT_CLOCK_ACTION_PREFIX) && readKeptAction(key) === null)
+      localStorage.removeItem(key);
+}
+
+/**
+ * A kept action this version cannot read, as a stop: nothing of `userId` tapped at or after `at`
+ * passes it. A stop without a person (`userId` null) holds everyone's.
+ */
+type KeptStop = { userId: string | null; at: number };
+
 /**
  * What a take-in did: how many actions it moved, how many it cannot read, what waits behind an open
- * online call, and the tap time of the first action it cannot read (`stopAt`), which nothing passes.
+ * online call or a stop, and the stops themselves.
  */
 export type KeptTakeIn = {
   moved: number;
   unreadable: number;
   deferred: DeferredTakeIn | null;
-  stopAt: number | null;
+  stops: KeptStop[];
 };
+
+/** The tap time from which nothing of `userId` passes, or null when no stop holds them. */
+export function stopFor({ stops }: Pick<KeptTakeIn, 'stops'>, userId: string): number | null {
+  const times = stops.filter((stop) => stop.userId === null || stop.userId === userId).map((stop) => stop.at);
+  return times.length > 0 ? Math.min(...times) : null;
+}
 
 /** The tap time an action's key names (unsent-mark.ts), or 0 for a key that names none: then nothing passes it. */
 function tapTimeOf(key: string): number {
@@ -117,19 +162,30 @@ export async function takeInKeptClockActions(
   markHeld: () => boolean,
 ): Promise<KeptTakeIn> {
   let moved = 0;
+  const stops: KeptStop[] = [];
+  /** Readable actions a stop of their person holds: they stay kept, and a session end counts them. */
+  const held: KeptClockAction[] = [];
   const keys = keptActionKeys();
   for (const [index, key] of keys.entries()) {
     const kept = readKeptAction(key);
     if (!kept) {
-      // A stop: what was kept after it waits behind it, and a session end fails closed on it.
+      const owner = personNamedIn(key);
+      stops.push({ userId: owner, at: tapTimeOf(key) });
+      // A stop of one person holds only that person's later actions; one without a person holds all.
+      if (owner !== null) continue;
       const later = keys.slice(index + 1).map(readKeptAction);
       const behind = later.filter((action): action is KeptClockAction => action !== null);
+      const waiting = [...held, ...behind];
       return {
         moved,
-        unreadable: 1 + later.length - behind.length,
-        deferred: behind.length > 0 ? { actions: behind, recheckAt: null, lock: null } : null,
-        stopAt: tapTimeOf(key),
+        unreadable: stops.length + later.length - behind.length,
+        deferred: waiting.length > 0 ? { actions: waiting, recheckAt: null, lock: null } : null,
+        stops,
       };
+    }
+    if (stops.some((stop) => stop.userId === kept.userId)) {
+      held.push(kept);
+      continue;
     }
     const { userId, organizationId, action, base, readAt, capturedAt, triedOnline, wipeGeneration } = kept;
     const { operationId, selection, expectedSessionId, expectedVersion, inFlight } = kept;
@@ -143,9 +199,9 @@ export async function takeInKeptClockActions(
       const behind = later.filter((action): action is KeptClockAction => action !== null);
       return {
         moved,
-        unreadable: later.length - behind.length,
-        deferred: { actions: [kept, ...behind], recheckAt: call.recheckAt, lock: call.lock },
-        stopAt: null,
+        unreadable: stops.length + later.length - behind.length,
+        deferred: { actions: [...held, kept, ...behind], recheckAt: call.recheckAt, lock: call.lock },
+        stops,
       };
     }
     await captureTimeEvent(
@@ -165,7 +221,12 @@ export async function takeInKeptClockActions(
     localStorage.removeItem(key);
     moved += 1;
   }
-  return { moved, unreadable: 0, deferred: null, stopAt: null };
+  return {
+    moved,
+    unreadable: stops.length,
+    deferred: held.length > 0 ? { actions: held, recheckAt: null, lock: null } : null,
+    stops,
+  };
 }
 
 /**

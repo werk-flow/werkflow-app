@@ -116,7 +116,11 @@ test('a field a later version added is ignored, never a reason to stop', async (
 test('a record of a version this code does not know is a stop, never read as something else', async () => {
   storage.set(KEPT_KEY, GOLDEN_KEPT_ACTION.replace('"version":1', '"version":2'));
   expect(await takeInKeptClockActions(() => true)).toEqual(
-    expect.objectContaining({ moved: 0, unreadable: 1, stopAt: Date.parse('2026-11-11T08:00:00.000Z') }),
+    expect.objectContaining({
+      moved: 0,
+      unreadable: 1,
+      stops: [{ userId: WORKER.userId, at: Date.parse('2026-11-11T08:00:00.000Z') }],
+    }),
   );
 
   await putOutboxRecords(GOLDEN_OUTBOX_EVENT.replace('"version":1', '"version":2'), GOLDEN_OUTBOX_CLOCK);

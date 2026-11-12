@@ -8,6 +8,7 @@ import {
   startWithoutNetwork,
   unsentBadge,
   unsentOnDevice,
+  unsentSection,
 } from './clock-unsent-support';
 
 // What one tab learns of another tab's clock actions (werk-flow/werkflow-planning#319): an action
@@ -245,7 +246,7 @@ test('a sign-out shows its question at once while it sends, and „Abbrechen“ 
   await expect(dialog).toHaveCount(0);
 });
 
-test('a tap with a kept action this version cannot read on the device waits behind it instead of going online', async ({
+test('a kept action this version cannot read is a stop the person sees with what to do; it holds every tap until they delete it, then the clock goes online again', async ({
   page,
 }) => {
   const server = await mountClock(page, CLOCKED_OUT_STATE);
@@ -259,9 +260,25 @@ test('a tap with a kept action this version cannot read on the device waits behi
   await page.getByRole('button', { name: 'Zeiterfassung starten', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Arbeit starten', exact: true }).click();
 
-  await expect(unsentBadge(clockDock(page))).toBeVisible();
+  await expect(unsentBadge(clockDock(page))).toHaveText('Nicht lesbar');
   expect(await page.evaluate(() => window.clockContract.transitions)).toEqual([]);
   expect(server.sent).toEqual([]);
+
+  await page.getByRole('button', { name: 'Zeiterfassung starten', exact: true }).click();
+  const section = unsentSection(page);
+  await expect(section).toContainText('kann hier nicht gelesen werden');
+  await expect(section.getByRole('listitem')).toHaveText(/^Nicht lesbare Stempelzeit/);
+  await expect(section.getByRole('button', { name: 'Korrektur beantragen', exact: true })).toHaveCount(0);
+  await section.getByRole('button', { name: 'Löschen', exact: true }).click();
+  await page
+    .getByRole('alertdialog', { name: 'Nicht übertragene Zeiten löschen?' })
+    .getByRole('button', { name: 'Endgültig löschen', exact: true })
+    .click();
+  await expect(section).toHaveCount(0);
+  expect(await unsentOnDevice(page)).toEqual([]);
+
+  await page.getByRole('dialog').getByRole('button', { name: 'Arbeit starten', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.clockContract.transitions.length)).toBe(1);
 });
 
 test('a session end that runs longer than ten minutes keeps its barrier fresh, so no tab keeps behind its back', async ({

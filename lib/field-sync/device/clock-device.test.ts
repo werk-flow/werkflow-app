@@ -104,6 +104,13 @@ async function isolatedTests(): Promise<void> {
   const { beginSessionEnd, endSessionEnd } = await import('./today-wipe');
   const { captureTimeEvent } = await import('./time-outbox');
 
+  /** The server's answer that records an event. */
+  const ACCEPTED = {
+    outcome: 'accepted',
+    code: 'accepted',
+    state: { sessionId: null, segmentId: null, version: 1 },
+  };
+
   let operations = 0;
   /** A clock start a page keeps without signal, under the operation id `operationId`. */
   const startAction = (operationId: string) => ({
@@ -248,18 +255,47 @@ async function isolatedTests(): Promise<void> {
       expect(sent[0]).not.toContain('50000000-0000-4000-8000-0000000000ff');
     });
 
-    test('an action this version cannot read stays kept, and the sign-out question fails instead of answering „nothing unsent“', async () => {
-      await holdClock(WORKER, () => undefined);
-      storage.set(
-        'werkflow:unsent:clock:000000000000001:1:from-a-newer-version',
-        '{"operationId":"x","kind":"new"}',
+    test('an action this version cannot read that names no person is a stop the person sees, is asked about, and deletes (F2)', async () => {
+      const key = 'werkflow:unsent:clock:000000000000001:1:from-a-newer-version';
+      storage.set(key, '{"operationId":"x","kind":"new"}');
+      const views: (ClockDeviceView | null)[] = [];
+      await holdClock(WORKER, (view) => views.push(view));
+
+      expect(await takeInKept()).toEqual({
+        moved: 0,
+        unreadable: 1,
+        deferred: null,
+        stops: [{ userId: null, at: 1 }],
+      });
+      expect(views.at(-1)?.events.map(({ status }) => status)).toEqual(['unreadable']);
+      // The sign-out question names it instead of failing, so the person can go on after deciding.
+      const items = await timeUnsentSource.summarize('session');
+      expect(items).toEqual([
+        { label: 'Stempelzeiten, die diese App-Version nicht lesen kann', count: 1, ids: [key] },
+      ]);
+
+      await timeUnsentSource.discard(
+        'session',
+        items.flatMap(({ ids }) => ids),
       );
+      expect(storage.has(key)).toBe(false);
+      expect(await timeUnsentSource.summarize('session')).toEqual([]);
+    });
 
-      expect(await takeInKept()).toEqual({ moved: 0, unreadable: 1, deferred: null, stopAt: 1 });
-      await expect(timeUnsentSource.summarize()).rejects.toThrow('cannot be read');
+    test('another person’s unreadable action holds only that person: this person’s taps are taken in and sent (F2)', async () => {
+      sessionUserId = WORKER.userId;
+      verdict = ACCEPTED;
+      const theirs = 'werkflow:unsent:clock:000000000000001:1:colleagues-newer-version';
+      storage.set(theirs, JSON.stringify({ userId: COLLEAGUE.userId, version: 2 }));
+      await holdClock(WORKER, () => undefined);
 
-      expect((await readTimeOutbox(WORKER)).events).toEqual([]);
-      expect(storage.has('werkflow:unsent:clock:000000000000001:1:from-a-newer-version')).toBe(true);
+      keepClockAction(startAction('50000000-0000-4000-8000-0000000000d7'), '');
+      await sendOwnTimeEvents();
+
+      expect(sent).toHaveLength(1);
+      expect(await timeUnsentSource.summarize('session')).toEqual([]);
+      expect(storage.has(theirs)).toBe(true);
+      verdict = null;
     });
 
     test('the page without signal takes the other tabs’ kept actions in before its own, so an earlier tap stays first', async () => {
@@ -445,11 +481,7 @@ async function isolatedTests(): Promise<void> {
 
     test('an action another tab kept is taken in and sent here, also when that tab closed before it sent', async () => {
       sessionUserId = WORKER.userId;
-      verdict = {
-        outcome: 'accepted',
-        code: 'accepted',
-        state: { sessionId: null, segmentId: null, version: 1 },
-      };
+      verdict = ACCEPTED;
       await holdClock(WORKER, () => undefined);
       keepClockAction(startAction('50000000-0000-4000-8000-0000000000b1'), '');
       const key = [...storage.keys()].find((stored) => stored.startsWith('werkflow:unsent:clock:')) ?? null;
@@ -534,11 +566,7 @@ async function isolatedTests(): Promise<void> {
 
     test('neither a tap nor a send passes a kept action this version cannot read (S24)', async () => {
       sessionUserId = WORKER.userId;
-      verdict = {
-        outcome: 'accepted',
-        code: 'accepted',
-        state: { sessionId: null, segmentId: null, version: 1 },
-      };
+      verdict = ACCEPTED;
       await holdClock(WORKER, () => undefined);
       // At 12:00 a newer version kept a break; 07:00 a start, and 13:00 an end an earlier path put into the outbox.
       storage.set('werkflow:unsent:clock:001794398400000:1:from-a-newer-version', '{"version":2}');
@@ -677,11 +705,7 @@ async function isolatedTests(): Promise<void> {
       inFlight = new Promise((resolve) => {
         release = resolve;
       });
-      verdict = {
-        outcome: 'accepted',
-        code: 'accepted',
-        state: { sessionId: null, segmentId: null, version: 1 },
-      };
+      verdict = ACCEPTED;
       try {
         const sending = sendOwnTimeEvents();
         await nextTask();
