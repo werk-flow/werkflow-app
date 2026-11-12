@@ -62,9 +62,9 @@ export function MemberActionsMenu({
   const { run: runRemove, isPending: isRemoving } = usePendingTask();
   const [showRemoveDialog, setShowRemoveDialog] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const roleChange = useConfirmedRoleChange(memberRole, (role) => {
-    void onRoleChange(memberId, role, memberFirstName, memberLastName);
-  });
+  const roleChange = useConfirmedRoleChange(memberRole, (role) =>
+    onRoleChange(memberId, role, memberFirstName, memberLastName),
+  );
 
   // Check if this is the current user's own row
   const isOwnRow = memberId === currentUserId;
@@ -132,6 +132,7 @@ export function MemberActionsMenu({
       <RoleEscalationConfirmDialog
         memberName={memberName}
         open={roleChange.confirmingRole !== null}
+        pending={roleChange.isPending}
         onCancel={roleChange.cancel}
         onConfirm={roleChange.confirm}
       />

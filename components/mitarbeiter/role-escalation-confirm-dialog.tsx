@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 
+import { usePendingTask } from '@/hooks/use-server-action';
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,39 +36,51 @@ export function roleEscalationCopy(memberName: string) {
 
 /**
  * A menu's role choice: an escalation to Büro waits for the confirmation,
- * every other role goes straight to `onRoleChange`.
+ * every other role goes straight to `onRoleChange`. A confirmed change keeps
+ * the dialog pending until it settles; its failure shows where the caller
+ * reports every role change (the list's banner, the detail header's error).
  */
-export function useConfirmedRoleChange(currentRole: OrgRole, onRoleChange: (role: OrgRole) => void) {
+export function useConfirmedRoleChange(currentRole: OrgRole, onRoleChange: (role: OrgRole) => Promise<void>) {
   const [confirmingRole, setConfirmingRole] = useState<OrgRole | null>(null);
+  const { run, isPending } = usePendingTask();
 
   const requestRoleChange = (role: OrgRole) => {
     if (escalatesToBuero(currentRole, role)) setConfirmingRole(role);
-    else onRoleChange(role);
+    else void onRoleChange(role);
   };
 
   const confirm = () => {
-    if (!confirmingRole) return;
-    setConfirmingRole(null);
-    onRoleChange(confirmingRole);
+    if (!confirmingRole || isPending) return;
+    void run(async () => {
+      try {
+        await onRoleChange(confirmingRole);
+      } finally {
+        setConfirmingRole(null);
+      }
+    });
   };
 
-  return { requestRoleChange, confirmingRole, cancel: () => setConfirmingRole(null), confirm };
+  return {
+    requestRoleChange,
+    confirmingRole,
+    isPending,
+    cancel: () => setConfirmingRole(null),
+    confirm,
+  };
 }
 
 type RoleEscalationConfirmDialogProps = {
   memberName: string;
   open: boolean;
+  pending: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 };
 
-/**
- * Closes on the confirmation: the caller's role change shows its own pending
- * state and failure at the row or the detail header.
- */
 export function RoleEscalationConfirmDialog({
   memberName,
   open,
+  pending,
   onCancel,
   onConfirm,
 }: RoleEscalationConfirmDialogProps) {
@@ -77,6 +91,7 @@ export function RoleEscalationConfirmDialog({
       onOpenChange={(next) => {
         if (!next) onCancel();
       }}
+      pending={pending}
     >
       <AlertDialogContent>
         <AlertDialogHeader>
@@ -84,8 +99,17 @@ export function RoleEscalationConfirmDialog({
           <AlertDialogDescription>{copy.description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm}>{copy.confirmLabel}</AlertDialogAction>
+          <AlertDialogCancel disabled={pending}>Abbrechen</AlertDialogCancel>
+          <AlertDialogAction
+            // Stays open until the role change settles (design skill, dialog close).
+            onClick={(event) => {
+              event.preventDefault();
+              onConfirm();
+            }}
+            pending={pending}
+          >
+            {copy.confirmLabel}
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

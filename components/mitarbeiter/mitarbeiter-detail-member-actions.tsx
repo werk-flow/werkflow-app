@@ -34,7 +34,7 @@ export function MitarbeiterDetailActionsMenu({
   onRoleChange,
   onRemoveRequest,
 }: MitarbeiterDetailActionsMenuProps) {
-  const roleChange = useConfirmedRoleChange(memberRole, (role) => void onRoleChange(role));
+  const roleChange = useConfirmedRoleChange(memberRole, onRoleChange);
 
   return (
     <>
@@ -77,6 +77,7 @@ export function MitarbeiterDetailActionsMenu({
       <RoleEscalationConfirmDialog
         memberName={memberName}
         open={roleChange.confirmingRole !== null}
+        pending={roleChange.isPending}
         onCancel={roleChange.cancel}
         onConfirm={roleChange.confirm}
       />

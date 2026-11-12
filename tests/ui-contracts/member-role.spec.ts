@@ -16,6 +16,15 @@ const ESCALATION_EFFECT =
 
 const roleChanges = (page: Page): Promise<string[]> => page.evaluate(() => window.uiContractRoleChanges);
 
+/** Settles the role change the fixture holds open. */
+async function settleRoleChange(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const settle = window.uiContractSettleRoleChange;
+    if (!settle) throw new Error('No role change is held open.');
+    settle();
+  });
+}
+
 async function chooseRole(page: Page, menuTrigger: Locator, role: string): Promise<void> {
   await menuTrigger.click();
   await page.getByRole('menuitem', { name: 'Rolle ändern', exact: true }).click();
@@ -40,9 +49,17 @@ test('an escalation from the list menu waits for the confirmation and a cancel c
   expect(await roleChanges(page)).toEqual([]);
 
   await chooseRole(page, trigger, 'Büro');
-  await confirmation.getByRole('button', { name: 'Zu Büro machen', exact: true }).click();
-  await expect(confirmation).toHaveCount(0);
+  const confirm = confirmation.getByRole('button', { name: 'Zu Büro machen', exact: true });
+  await confirm.click();
+  // The dialog stays open and busy while the change runs; Escape cannot close it.
+  await expect(confirm).toHaveAttribute('aria-busy', 'true');
+  await expect(confirmation.getByRole('button', { name: 'Abbrechen', exact: true })).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await expect(confirmation).toBeVisible();
   expect(await roleChanges(page)).toEqual(['list:contract-hanna:buero']);
+
+  await settleRoleChange(page);
+  await expect(confirmation).toHaveCount(0);
 });
 
 test('a downgrade from the list menu applies at once', async ({ page }) => {
@@ -50,7 +67,7 @@ test('a downgrade from the list menu applies at once', async ({ page }) => {
     .getByRole('region', { name: 'Zeile Bea Büro', exact: true })
     .getByRole('button', { name: 'Aktionen öffnen', exact: true });
   await chooseRole(page, trigger, 'Handwerker/in');
-  expect(await roleChanges(page)).toEqual(['list:contract-bea:employee']);
+  await expect.poll(() => roleChanges(page)).toEqual(['list:contract-bea:employee']);
   await expect(page.getByRole('alertdialog')).toHaveCount(0);
 });
 
@@ -64,8 +81,10 @@ test('an escalation from the detail header menu waits for the confirmation', asy
   expect(await roleChanges(page)).toEqual([]);
 
   await confirmation.getByRole('button', { name: 'Zu Büro machen', exact: true }).click();
-  await expect(confirmation).toHaveCount(0);
   expect(await roleChanges(page)).toEqual(['detail:contract-hanna:buero']);
+  await expect(confirmation).toBeVisible();
+  await settleRoleChange(page);
+  await expect(confirmation).toHaveCount(0);
 });
 
 test('an escalation from the profile role field waits for the confirmation', async ({ page }) => {
@@ -79,6 +98,7 @@ test('an escalation from the profile role field waits for the confirmation', asy
   expect(await roleChanges(page)).toEqual([]);
 
   await confirmation.getByRole('button', { name: 'Zu Büro machen', exact: true }).click();
-  await expect(confirmation).toHaveCount(0);
   await expect.poll(() => roleChanges(page)).toEqual(['profile:contract-hanna:buero']);
+  await settleRoleChange(page);
+  await expect(confirmation).toHaveCount(0);
 });

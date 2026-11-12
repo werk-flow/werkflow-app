@@ -11,6 +11,8 @@ declare global {
   interface Window {
     /** Each role change a surface handed on, as "<surface>:<member>:<role>". */
     uiContractRoleChanges: string[];
+    /** Settles the held role change; set while one is open. */
+    uiContractSettleRoleChange: (() => void) | null;
   }
 }
 
@@ -18,9 +20,15 @@ const ADMIN_ID = 'contract-admin';
 const HANNA = { id: 'contract-hanna', firstName: 'Hanna', lastName: 'Handwerk' };
 const BEA = { id: 'contract-bea', firstName: 'Bea', lastName: 'Büro' };
 
+/** Records the change and holds it open until the spec settles it, as the server would. */
 function record(surface: string, memberId: string, role: OrgRole): Promise<void> {
   window.uiContractRoleChanges.push(`${surface}:${memberId}:${role}`);
-  return Promise.resolve();
+  return new Promise((resolve) => {
+    window.uiContractSettleRoleChange = () => {
+      window.uiContractSettleRoleChange = null;
+      resolve();
+    };
+  });
 }
 
 function ListRowMenu({ member, role }: { member: typeof HANNA; role: OrgRole }): React.JSX.Element {
@@ -43,6 +51,7 @@ function ListRowMenu({ member, role }: { member: typeof HANNA; role: OrgRole }):
 
 export function MemberRoleContractFixture(): React.JSX.Element {
   window.uiContractRoleChanges ??= [];
+  window.uiContractSettleRoleChange ??= null;
   const hannaName = `${HANNA.firstName} ${HANNA.lastName}`;
   return (
     <BannerProvider>
