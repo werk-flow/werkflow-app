@@ -22,6 +22,9 @@ import {
 // is captured from the page a phone shows without signal, and with signal
 // again the server records one session at the captured times.
 
+// The reload and the restart without signal read what the service worker serves.
+test.use({ serviceWorkers: 'allow' });
+
 test('a clock start and end without signal are recorded once, at their captured times @AUDIT-SECURITY-OFFLINE-CLOCK', async ({
   employeePage: page,
   world,

@@ -161,6 +161,13 @@ Decided for werk-flow/werkflow-planning#318.
 - A claim names its tab: `userId:organizationId:token`, with a random token per tab. Readers compare only the person and organization; a claim without a token, from a tab open across a deployment, matches no reader, and the next start page replaces it. A refresh still owns the device only while the claim carries its own token. A tab that drops its claim after another tab's wipe removes it only if it still carries its own token, so a claim another tab made meanwhile, and that tab's day, stay. The static wipe removes the claim whatever it holds.
 - The page a person lands on after a session ends wipes the phone again. Every sign-out lands on an `(auth)` page once its session ended, so a day any tab saved while that session still answered is gone, whatever that tab does next.
 
+## Amendment 2026-11-12: owner-accepted residual exposure
+
+The owner accepted two residual exposures of the phone's stored day on 2026-11-12 (werk-flow/werkflow-planning#22). [Security](../technical/security.md#known-residual-exposure) lists them until they close.
+
+- **Access that ends while the phone has no signal.** A person the office removes or suspends, or whose session expires, keeps reading their own assignments of the current Berlin day on a phone without signal. The day goes at the next Berlin midnight at the latest, and at once when the phone is online: the server's refusal deletes it, and an ended session lands on a login page, which wipes. The alternative is no reading without signal.
+- **A sign-out that another tab races.** A start page stores the day in the milliseconds around another tab's sign-out and closes or freezes before it handles that tab's wipe signal, and the signing-out tab never reaches a login page, because it is closed first or its last sign-out request fails. Then the day of the person who signed out stays readable in that browser profile: customer and contact names and phone numbers, site addresses, access notes and instructions. It goes with the next wipe (any sign-out, any visit to a login page), with a start page of another person or organization, and at Berlin midnight. Closing it would need a session check on a read that must work without network.
+
 ## Amendment 2026-11-12: the time outbox
 
 Decided for werk-flow/werkflow-planning#319. Where the accepted text above differs, this section wins.

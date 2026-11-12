@@ -28,6 +28,7 @@ import {
   settingsSectionLink,
   taskListReady,
 } from '../support/lab-journeys';
+import { expectAtRest } from '../support/frames-at-rest';
 import { openLabSession, recordLabStep } from '../support/lab-recorder';
 import { ensureTypicalProfile, liveWeekStart, MEASURED_VISIT_TITLE } from '../support/performance-profile';
 import {
@@ -44,6 +45,12 @@ import {
 // on the typical profile at a laptop width. Each step id is registered in
 // lib/testing/lab-steps.ts; the runner compares every record with
 // lib/testing/lab-count-references.json.
+
+/** The pages LAB-O6 lets rest, by the lab step whose role and viewport open them. */
+const RESTING_PAGES: readonly { profileStep: string; paths: readonly string[] }[] = [
+  { profileStep: 'lab.office.job-open', paths: ['/aufgaben', '/kalender', '/auftraege'] },
+  { profileStep: 'lab.admin.settings-open', paths: ['/einstellungen/mitarbeiter'] },
+];
 
 test.describe('Lab counts of the office @AUDIT-LAB-OFFICE', () => {
   test('LAB-O1 the office opens a job from the list and goes back @AUDIT-LAB-O1', async ({
@@ -215,6 +222,26 @@ test.describe('Lab counts of the office @AUDIT-LAB-OFFICE', () => {
       });
     } finally {
       await lab.dispose();
+    }
+  });
+
+  // No lab step: frames are no exact count, so the test holds each page to one limit itself.
+  test("LAB-O6 the office's and the owner's pages rest @AUDIT-LAB-O6", async ({
+    browser,
+    baseURL,
+    world,
+  }) => {
+    await ensureTypicalProfile(world);
+    for (const { profileStep, paths } of RESTING_PAGES) {
+      const lab = await openLabSession({ browser, baseURL, world, profileStep });
+      try {
+        for (const path of paths) {
+          await lab.page.goto(path);
+          await expectAtRest(browser, lab.page, `${lab.role} ${path}`);
+        }
+      } finally {
+        await lab.dispose();
+      }
     }
   });
 });
