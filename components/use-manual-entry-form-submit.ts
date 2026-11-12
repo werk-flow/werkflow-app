@@ -39,6 +39,12 @@ const MANUAL_ENTRY_ERROR_MESSAGES: Readonly<Partial<Record<string, string | Fail
     'Für einen vergangenen Tag braucht die Freigabe einen Grund. Gib ihn an und speichere erneut.',
 };
 
+/** Whose time the filed request records, and on which day (`YYYY-MM-DD`). */
+type FiledManualTime = { userId: string; day: string };
+
+/** What the form reports once the server confirmed the request: the entries it answered, and whose time on which day. */
+export type ManualEntrySuccess = (entries: TimeEntry[], filed: FiledManualTime) => void | Promise<void>;
+
 type ManualEntrySubmitInput = ManualEntryFormValues & {
   activeOrgId: string | null;
   isAdmin: boolean;
@@ -47,7 +53,7 @@ type ManualEntrySubmitInput = ManualEntryFormValues & {
   selectedJobId: string;
   /** The timeline own time of an earlier day carries; null until its section loaded. */
   timelineRef: { current: CorrectionTimelineHandle | null };
-  onSuccess: ((entries: TimeEntry[]) => void | Promise<void>) | undefined;
+  onSuccess: ManualEntrySuccess | undefined;
 };
 
 /**
@@ -147,7 +153,7 @@ async function saveManualEntries({
         ? 'Antrag wurde zur Genehmigung eingereicht.'
         : 'Eintrag erfolgreich erstellt!',
     });
-    await onSuccess?.(result.entries);
+    await onSuccess?.(result.entries, { userId: targetUserId, day: dateIso });
   } else {
     setError(describeManualEntryFailure(result, targetUserId, currentUserId));
   }
@@ -156,6 +162,7 @@ async function saveManualEntries({
 /** Own time of an earlier day goes in as a correction with its timeline and reason; a refusal stays in the form. */
 async function savePastDayTime({
   organizationId,
+  userId,
   dateIso,
   facts,
   reason,
@@ -165,6 +172,8 @@ async function savePastDayTime({
   onSuccess,
 }: {
   organizationId: string;
+  /** The person whose own earlier day this is. */
+  userId: string;
   dateIso: string;
   facts: (employeeRecordId: string) => TimelineFact[];
   reason: string;
@@ -187,7 +196,8 @@ async function savePastDayTime({
     return;
   }
   showBanner({ variant: 'success', message: 'Die Korrektur wurde zur Prüfung eingereicht.' });
-  await onSuccess?.([]);
+  // The correction applies once the office approved it, so it answers no entries yet.
+  await onSuccess?.([], { userId, day: dateIso });
 }
 
 /** Validates the manual entry form, saves the entries and reports the outcome. */
@@ -241,10 +251,7 @@ export function useManualEntrySubmit(input: ManualEntrySubmitInput): {
     }
 
     const targetUserId = isAdminOrManager ? selectedUserId : currentUserId;
-    if (!targetUserId) {
-      setError('Keine Benutzerinformation verfügbar.');
-      return;
-    }
+    if (!targetUserId) return setError('Keine Benutzerinformation verfügbar.');
 
     void runPendingTask(async () => {
       try {
@@ -253,6 +260,7 @@ export function useManualEntrySubmit(input: ManualEntrySubmitInput): {
           if (!timelineCheck?.valid) return;
           await savePastDayTime({
             organizationId: activeOrgId,
+            userId: targetUserId,
             dateIso: plan.dateIso,
             facts: timelineCheck.facts,
             reason: plan.reason,

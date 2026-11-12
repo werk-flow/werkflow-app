@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ComponentProps } from 'react';
 import {
   ArrowLeftRight,
   BriefcaseBusiness,
@@ -11,10 +11,9 @@ import {
   Square,
 } from 'lucide-react';
 
-import { JobPickerModal } from '@/components/job-picker-modal';
 import { useClockState } from '@/components/clock-state-provider';
-import { TimeActivityDialog } from '@/components/time-activity-dialog';
-import { TimeActivityStatusNotice } from '@/components/time-activity-fields';
+import { lazyDialog } from '@/components/shared/lazy-dialog';
+import { TimeActivityStatusNotice } from '@/components/time-activity-status-notice';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
@@ -40,6 +39,24 @@ const ICONS: Record<ClockActionIcon, typeof Play> = {
   end: Square,
   more: SlidersHorizontal,
 };
+
+// The dock sits on every page, and most clock actions need neither a job choice nor a rarer
+// activity, so no cold start carries their dialogs. A load that fails, as without signal, closes
+// the dialog with an error banner; the next tap tries again.
+const ClockJobPicker = lazyDialog(() =>
+  import('@/components/job-picker-modal').then(({ JobPickerModal }) => {
+    function ClockJobPickerModal({
+      onOpenChange,
+      ...props
+    }: Omit<ComponentProps<typeof JobPickerModal>, 'onClose'> & { onOpenChange: (open: boolean) => void }) {
+      return <JobPickerModal {...props} onClose={() => onOpenChange(false)} />;
+    }
+    return ClockJobPickerModal;
+  }),
+);
+const MoreActivities = lazyDialog(() =>
+  import('@/components/time-activity-dialog').then((loaded) => loaded.TimeActivityDialog),
+);
 
 /** Runs one clock transition at a time and reports its answer: inline, as a banner, or by settling. */
 function useClockTransitionRunner(
@@ -149,7 +166,15 @@ function useClockActionChoices({
     );
   }
 
-  return { pickerMode, setPickerMode, moreOpen, setMoreOpen, recovery, activate, confirmPickedJob };
+  return {
+    pickerMode,
+    setPickerMode,
+    moreOpen,
+    setMoreOpen,
+    recovery,
+    activate,
+    confirmPickedJob,
+  };
 }
 
 /**
@@ -159,6 +184,13 @@ function useClockActionChoices({
  * `TimeActivityDialog`. The clock button's sheet and the Zeiterfassung
  * dashboard render this same list.
  */
+/** True from the first render where `value` was true on. */
+function useOnceTrue(value: boolean): boolean {
+  const [seen, setSeen] = useState(value);
+  if (value && !seen) setSeen(true);
+  return seen || value;
+}
+
 export function ClockActionList({
   organizationId,
   onSettled,
@@ -183,6 +215,9 @@ export function ClockActionList({
   );
   const { pickerMode, setPickerMode, moreOpen, setMoreOpen, recovery, activate, confirmPickedJob } =
     useClockActionChoices({ clock, initialPickerMode, perform, setError });
+  // Each dialog mounts with its first opening and stays for its closing; no clock action renders it before.
+  const pickerUsed = useOnceTrue(pickerMode !== null);
+  const moreUsed = useOnceTrue(moreOpen);
   const actions = deriveClockActions(state);
   const busy = !isReady || isPending || isRunning;
 
@@ -192,24 +227,33 @@ export function ClockActionList({
       <ClockActionButtons actions={actions} busy={busy} pendingId={pendingId} onActivate={activate} />
       <TimeActivityStatusNotice isReady={isReady} statusError={statusError} onRetry={() => void refresh()} />
       <ErrorText>{error}</ErrorText>
+      {clock.deviceFailed && (
+        <ErrorText>
+          Der Speicher deines Geräts antwortet nicht. Ohne Netz kann die Uhr gerade nichts aufbewahren.
+        </ErrorText>
+      )}
 
-      <JobPickerModal
-        open={pickerMode !== null}
-        onClose={() => setPickerMode(null)}
-        onConfirm={confirmPickedJob}
-        organizationId={organizationId}
-        mode={pickerMode ?? 'clock_in'}
-        currentJobId={state?.activeJobId ?? null}
-        isPending={isPending || isRunning}
-        isStatusLoading={!isReady}
-      />
-      <TimeActivityDialog
-        open={moreOpen}
-        onOpenChange={setMoreOpen}
-        onSettled={onSettled}
-        organizationId={organizationId}
-        preferredJobId={state?.activeJobId ?? state?.resumeActivity?.jobId ?? null}
-      />
+      {pickerUsed && (
+        <ClockJobPicker.Dialog
+          open={pickerMode !== null}
+          onOpenChange={(open) => !open && setPickerMode(null)}
+          onConfirm={confirmPickedJob}
+          organizationId={organizationId}
+          mode={pickerMode ?? 'clock_in'}
+          currentJobId={state?.activeJobId ?? null}
+          isPending={isPending || isRunning}
+          isStatusLoading={!isReady}
+        />
+      )}
+      {moreUsed && (
+        <MoreActivities.Dialog
+          open={moreOpen}
+          onOpenChange={setMoreOpen}
+          onSettled={onSettled}
+          organizationId={organizationId}
+          preferredJobId={state?.activeJobId ?? state?.resumeActivity?.jobId ?? null}
+        />
+      )}
     </div>
   );
 }

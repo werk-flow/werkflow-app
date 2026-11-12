@@ -13,10 +13,10 @@ import {
 import { Button } from '@/components/ui/button';
 import { ManualEntryFormContent } from '@/components/manual-entry-form-content';
 import { useOrganization } from '@/components/organization/organization-context';
-import type { TimeEntry } from '@/lib/time-tracking/types';
+import type { ManualEntrySuccess } from '@/components/use-manual-entry-form-submit';
 
 interface ManualEntryDialogProps {
-  onSuccess?: ((entries: TimeEntry[]) => void | Promise<void>) | undefined;
+  onSuccess?: ManualEntrySuccess | undefined;
   preselectedUserId?: string | undefined;
   preselectedDate?: Date | undefined;
   trigger?: React.ReactNode | undefined;
@@ -90,8 +90,8 @@ export function ManualEntryDialog({
           preselectedClockOutTime={preselectedClockOutTime}
           lockEntryMode={lockEntryMode}
           onPendingChange={setIsSaving}
-          onSuccess={async (entries) => {
-            await onSuccess?.(entries);
+          onSuccess={async (entries, filed) => {
+            await onSuccess?.(entries, filed);
             // Close-then-banner: the form shows the success banner.
             setOpen(false);
           }}

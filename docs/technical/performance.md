@@ -126,6 +126,7 @@ Tier 3 defaults. Diverge after the owner tried the alternative.
 - Enable viewport prefetch for a sidebar link, or prefetch a route's dynamic data on intent.
 - Report a speedup as a percentage alone.
 - Re-export a library's whole namespace from a module the client imports. A namespace object keeps everything the library exports; name the members, as `lib/zod-members.ts` does.
+- Import `react-dom/client` in product code. Next's bootstrap owns it, and a second importer, even a lazy one, makes the bundler cut React's DOM renderer out of the start-up chunk: one more script on every cold start. Render into a host a layout mounts (`components/shared/unsent-work-host.tsx`).
 - Render a client component inside a server primitive every page uses (`PageShell`, `PageBody`, the page headers). Its client reference and the route's chunk list ride in every route payload. Run page-wide client behavior once in the app shell.
 
 ## Verify your work
