@@ -6,16 +6,15 @@ import { computeBreakdownForSettings } from '@/lib/time-tracking/settings';
 import { formatDuration } from '@/lib/time-tracking/helpers';
 import { sumTargetMinutes, type DailyTarget } from '@/lib/personnel/targets';
 import type { DayData } from '@/hooks/use-weekly-time-data';
-import type { OrgBreakMode } from '@/lib/time-tracking/settings';
+import type { BreakPolicyValues } from '@/lib/time-tracking/settings';
 
 interface WeeklyHoursChartProps {
   weekData: DayData[];
   todayIndex: number;
   liveTodayMinutes?: number;
   liveTodayBreakMinutes?: number;
-  liveTodayBreakMode?: OrgBreakMode;
-  liveAutoBreakThresholdMinutes?: number;
-  liveAutoBreakDurationMinutes?: number;
+  /** Today's break rule; without one, today counts as manual breaks. */
+  liveTodayBreakPolicy?: BreakPolicyValues;
   narrowBars?: boolean;
   weekLabel?: { dateRange: string; kw: string };
   /** Monday-first resolved daily targets (P1-04) for the shown week. */
@@ -189,9 +188,7 @@ export function WeeklyHoursChart({
   todayIndex,
   liveTodayMinutes,
   liveTodayBreakMinutes,
-  liveTodayBreakMode,
-  liveAutoBreakThresholdMinutes,
-  liveAutoBreakDurationMinutes,
+  liveTodayBreakPolicy,
   narrowBars = false,
   weekLabel,
   weekTargets,
@@ -204,27 +201,14 @@ export function WeeklyHoursChart({
         const bd = computeBreakdownForSettings(
           liveTodayMinutes,
           liveTodayBreakMinutes ?? 0,
-          {
-            breakMode: liveTodayBreakMode ?? 'manual',
-            autoBreakThresholdMinutes: liveAutoBreakThresholdMinutes ?? 360,
-            autoBreakDurationMinutes: liveAutoBreakDurationMinutes ?? 30,
-          },
+          liveTodayBreakPolicy,
           weekTargets?.[i]?.targetMinutes,
         );
         return { ...day, ...bd, totalMinutes: liveTodayMinutes };
       }
       return day;
     });
-  }, [
-    weekData,
-    todayIndex,
-    liveAutoBreakDurationMinutes,
-    liveAutoBreakThresholdMinutes,
-    liveTodayBreakMinutes,
-    liveTodayBreakMode,
-    liveTodayMinutes,
-    weekTargets,
-  ]);
+  }, [weekData, todayIndex, liveTodayBreakMinutes, liveTodayBreakPolicy, liveTodayMinutes, weekTargets]);
 
   const weeklyTargetMinutes = useMemo(
     () => (weekTargets ? sumTargetMinutes(weekTargets) : null),

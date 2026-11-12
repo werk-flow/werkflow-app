@@ -48,6 +48,7 @@ declare global {
       | 'sidebar'
       | 'lazy-dialog'
       | 'clock'
+      | 'break-rule-week'
       | 'live-view'
       | 'route-refresh'
       | 'customer'
