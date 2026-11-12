@@ -128,6 +128,57 @@ function inContainer(args: readonly string[], input?: string | Buffer) {
   });
 }
 
+/** psql in the stack's database container, as `user` on the database `target`. */
+function psql(user: string, target: string, sql: string | Buffer, stop = true) {
+  return inContainer(
+    ['psql', '-U', user, '-d', target, '-q', ...(stop ? ['-v', 'ON_ERROR_STOP=1'] : [])],
+    sql,
+  );
+}
+
+/** A step that failed in the private database, with the first line of its error. */
+function failed(step: string, result: { stderr: Buffer | string }): { unavailable: string } {
+  return {
+    unavailable: `${step} failed in the private database: ${result.stderr.toString().trim().split('\n')[0] ?? 'no output'}`,
+  };
+}
+
+/**
+ * Creates the private database afresh and fills it with the shared database's schema and ledger.
+ * Answers why not when a step fails or the restore is not faithful.
+ */
+function fillCopy(database: string): { unavailable: string } | undefined {
+  const created = psql(
+    'postgres',
+    'postgres',
+    `drop database if exists ${database} with (force);\ncreate database ${database};`,
+  );
+  if (created.status !== 0) return failed('creating it', created);
+  const schema = inContainer(['pg_dump', '-U', 'postgres', '-d', 'postgres', '--schema-only']);
+  if (schema.status !== 0) return failed('the schema dump', schema);
+  // As the stack's superuser, so ownership, default privileges and platform schemas restore.
+  const restored = psql('supabase_admin', database, schema.stdout, false);
+  const unexpected = restored.stderr
+    .toString()
+    .split('\n')
+    .find((line) => line.includes('ERROR:') && !EXPECTED_RESTORE_ERROR.test(line));
+  if (restored.status !== 0 || unexpected)
+    return { unavailable: `the schema copy is not faithful: ${unexpected ?? 'psql failed'}` };
+  const ledger = inContainer([
+    'pg_dump',
+    '-U',
+    'postgres',
+    '-d',
+    'postgres',
+    '--data-only',
+    '--table',
+    'supabase_migrations.schema_migrations',
+  ]);
+  if (ledger.status !== 0) return failed('the ledger dump', ledger);
+  const loaded = psql('supabase_admin', database, `${DROP_LEDGER_TRIGGERS}\n${ledger.stdout.toString()}`);
+  return loaded.status === 0 ? undefined : failed('the ledger copy', loaded);
+}
+
 /**
  * Runs `work` with the URL of a private database that holds the shared database's schema and this
  * tree's pending migrations, then drops it. The name is fixed per checkout, so a killed run's
@@ -152,42 +203,10 @@ export async function withStackCopy<T>(
   ).db;
   const database = `werkflow_types_${createHash('sha256').update(repository).digest('hex').slice(0, 12)}`;
   const url = `postgresql://postgres:postgres@127.0.0.1:${port}/${database}`;
-  const psql = (user: string, target: string, sql: string | Buffer, stop = true) =>
-    inContainer(['psql', '-U', user, '-d', target, '-q', ...(stop ? ['-v', 'ON_ERROR_STOP=1'] : [])], sql);
   const drop = () => psql('postgres', 'postgres', `drop database if exists ${database} with (force);`);
-  const failed = (step: string, result: { stderr: Buffer | string }) => ({
-    unavailable: `${step} failed in the private database: ${result.stderr.toString().trim().split('\n')[0] ?? 'no output'}`,
-  });
   const attempt = async (): Promise<{ result: T } | { unavailable: string }> => {
-    const created = psql(
-      'postgres',
-      'postgres',
-      `drop database if exists ${database} with (force);\ncreate database ${database};`,
-    );
-    if (created.status !== 0) return failed('creating it', created);
-    const schema = inContainer(['pg_dump', '-U', 'postgres', '-d', 'postgres', '--schema-only']);
-    if (schema.status !== 0) return failed('the schema dump', schema);
-    // As the stack's superuser, so ownership, default privileges and platform schemas restore.
-    const restored = psql('supabase_admin', database, schema.stdout, false);
-    const unexpected = restored.stderr
-      .toString()
-      .split('\n')
-      .find((line) => line.includes('ERROR:') && !EXPECTED_RESTORE_ERROR.test(line));
-    if (restored.status !== 0 || unexpected)
-      return { unavailable: `the schema copy is not faithful: ${unexpected ?? 'psql failed'}` };
-    const ledger = inContainer([
-      'pg_dump',
-      '-U',
-      'postgres',
-      '-d',
-      'postgres',
-      '--data-only',
-      '--table',
-      'supabase_migrations.schema_migrations',
-    ]);
-    if (ledger.status !== 0) return failed('the ledger dump', ledger);
-    const loaded = psql('supabase_admin', database, `${DROP_LEDGER_TRIGGERS}\n${ledger.stdout.toString()}`);
-    if (loaded.status !== 0) return failed('the ledger copy', loaded);
+    const filled = fillCopy(database);
+    if (filled) return filled;
     // Both dumps must show one moment: the copy lacks exactly the tree's pending migrations.
     const copied = readMigrationDrift(repository, database);
     if (!copied || !sameNames(copied.treeOnly, drift.treeOnly) || driftsBeyondPending(copied))
