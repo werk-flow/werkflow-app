@@ -2,31 +2,89 @@ import { isAbsolute, relative, resolve, sep } from 'node:path';
 
 import { type ShellWord, SCRIPT_FLAG, SHELLS, program, readShell } from './shell-words';
 
-// Only the process that calls Boat reads the workstation's Boat API key
-// (docs/technical/environments.md, "Credentials"). The PreToolUse hook
-// .claude/hooks/refuse-boat-key-reads.ts refuses an agent's call that would
-// read, print or search the key file or the Boat CLI's config, whose `token`
-// holds a key in plain text after `boat login`, for Claude Code and Codex alike.
+// Only the process that uses a workstation secret reads it
+// (docs/technical/environments.md, "Credentials"): the Boat API key, and the
+// problem-report hand-out secret that report threads reach the hand-out with.
+// The PreToolUse hook .claude/hooks/refuse-boat-key-reads.ts refuses an
+// agent's call that would read, print, copy or search one of these files, for
+// Claude Code and Codex alike.
 //
-// Threat model: the guard stops accidental and habitual reads. Agents run as
-// the owner's OS user, so deliberate evasion is a rule violation it does not
-// claim to catch.
+// Threat model: the guard stops accidental and habitual reads, and a read that
+// a report's text prompts a report thread to make. Agents run as the owner's
+// OS user, so deliberate evasion is a rule violation it does not claim to catch.
 
-/** The files that hold a Boat key, relative to the home folder. */
-const SECRET_FILES = ['.config/werkflow/boat-api-key', '.config/ascii/boat/config.json'] as const;
+/** A secret no agent reads, and who reads it instead. */
+type GuardedSecret = {
+  /** Its files, relative to the home folder. */
+  files: readonly string[];
+  /** What the files hold, as a refusal names it. */
+  holds: string;
+  /**
+   * Text that names a file however a command spells its folder. It is matched
+   * on the raw text, so a variable, a nested quote or a heredoc the reader
+   * cannot follow still refuses.
+   */
+  mention: RegExp;
+  instead: string;
+};
 
-/**
- * Text that names a secret file however a command spells its folder: the key
- * file under any name but its expiry file, and the Boat CLI's config folder.
- * It is matched on the raw text, so a variable, a nested quote or a heredoc
- * the reader cannot follow still refuses.
- */
-const SECRET_MENTION = /boat-api-key(?!\.expires(?![\w.*?[-]))|ascii\/boat\b|\bboat\/config\.json/;
+const GUARDED_SECRETS: readonly GuardedSecret[] = [
+  {
+    // The key file, and the Boat CLI's config, whose `token` holds a key in plain text after `boat login`.
+    files: ['.config/werkflow/boat-api-key', '.config/ascii/boat/config.json'],
+    holds: 'a Boat API key',
+    // The key file under any name but its expiry file, and the CLI's config folder.
+    mention: /boat-api-key(?!\.expires(?![\w.*?[-]))|ascii\/boat\b|\bboat\/config\.json/,
+    instead:
+      'Only the process that calls Boat reads the Boat API key: `bun run test:verify` reads it itself. ' +
+      'The expiry date is in ~/.config/werkflow/boat-api-key.expires ' +
+      '(docs/technical/environments.md, "Credentials").',
+  },
+  {
+    // Read by scripts/report-thread.ts and werkflow-planning's ops/report-dispatch.py.
+    files: ['.config/werkflow/problem-report-handout.env'],
+    holds: 'the problem-report hand-out secret',
+    mention: /problem-report-handout\.env/,
+    instead:
+      'Only `bun scripts/report-thread.ts` and the report dispatcher read the hand-out secret: ' +
+      'run the helper for the hand-out, the screenshot or the write-back ' +
+      '(.claude/skills/report-thread/SKILL.md).',
+  },
+];
 
-const INSTEAD =
-  'Only the process that calls Boat reads the Boat API key: `bun run test:verify` reads it itself. ' +
-  'The expiry date is in ~/.config/werkflow/boat-api-key.expires ' +
-  '(docs/technical/environments.md, "Credentials").';
+/** Each guarded file, resolved in the home folder, with its secret. */
+function secretFiles(home: string): { path: string; secret: GuardedSecret }[] {
+  return GUARDED_SECRETS.flatMap((secret) =>
+    secret.files.map((file) => ({ path: resolve(home, file), secret })),
+  );
+}
+
+/** Why a call is refused, and the secrets it would read; none when the guard cannot tell. */
+type Refusal = { why: string; secrets: readonly GuardedSecret[] };
+
+/** The refusal's text: what to do instead for its secrets, or for every secret when the guard cannot tell. */
+function refusalText({ why, secrets }: Refusal): string {
+  const instead = (secrets.length ? secrets : GUARDED_SECRETS).map((secret) => secret.instead);
+  return `Refused: ${why} ${instead.join(' ')}`;
+}
+
+/** The secrets with a file in `folder`, each once. */
+function secretsUnder(
+  files: readonly { path: string; secret: GuardedSecret }[],
+  folder: string,
+): GuardedSecret[] {
+  return [...new Set(files.filter((file) => within(file.path, folder)).map((file) => file.secret))];
+}
+
+/** What the secrets hold, as one phrase: "a Boat API key and the problem-report hand-out secret". */
+function held(secrets: readonly GuardedSecret[]): string {
+  return secrets.map((secret) => secret.holds).join(' and ');
+}
+
+/** "a file that holds X" for one secret, "files that hold X and Y" for several. */
+function holding(secrets: readonly GuardedSecret[]): string {
+  return `${secrets.length > 1 ? 'files that hold' : 'a file that holds'} ${held(secrets)}`;
+}
 
 /** Search tools, which read every file under a folder operand or the working folder. */
 const SEARCHERS = new Set(['grep', 'egrep', 'fgrep', 'zgrep', 'ugrep', 'rg', 'ag', 'ack']);
@@ -200,28 +258,43 @@ function lineRefusal(
   start: readonly string[],
   home: string,
   depth: number,
-): string | undefined {
-  const secrets = SECRET_FILES.map((file) => resolve(home, file));
+): Refusal | undefined {
+  const secrets = secretFiles(home);
   const reading = readShell(command);
   if (!reading)
     return /\.config\b/.test(command)
-      ? 'the guard cannot read this command, and it names a config folder.'
+      ? { why: 'the guard cannot read this command, and it names a config folder.', secrets: [] }
       : undefined;
   const commands = reading.commands;
   const folders = lineFolders(commands, start, home);
-  if (!folders) return 'the guard cannot follow this many folder changes in one command.';
+  if (!folders)
+    return { why: 'the guard cannot follow this many folder changes in one command.', secrets: [] };
   // A `find` whose file list another command may consume: through xargs, a pipe, or a command
   // or process substitution.
   const viaXargs =
     /[|`]|[$<>]\(/.test(command) ||
     commands.some((words) => innerCommand(words)?.viaXargs || program(words)?.name === 'xargs');
+  // Every read the line would make, so the refusal names each secret, not only the first.
+  const refusals: Refusal[] = [];
   for (const words of commands) {
     // Every word, redirection targets included: `cat < config.json` reads the file too.
     for (const word of words) {
       for (const path of pathsOf(word.text, folders, home)) {
-        if (secrets.includes(path)) return 'the command names a file that holds a Boat API key.';
-        if (word.globs && secrets.some((secret) => new Bun.Glob(path).match(secret)))
-          return `the pattern ${word.raw} matches a file that holds a Boat API key.`;
+        const named = secrets.find((file) => file.path === path);
+        if (named)
+          refusals.push({
+            why: `the command names a file that holds ${named.secret.holds}.`,
+            secrets: [named.secret],
+          });
+        const matched = word.globs
+          ? [
+              ...new Set(
+                secrets.filter((file) => new Bun.Glob(path).match(file.path)).map((file) => file.secret),
+              ),
+            ]
+          : [];
+        if (matched.length)
+          refusals.push({ why: `the pattern ${word.raw} matches ${holding(matched)}.`, secrets: matched });
       }
     }
     const run = innerCommand(words);
@@ -231,7 +304,7 @@ function lineRefusal(
       const script = flag === -1 ? undefined : run.args[flag + 1]?.text;
       const inner =
         script !== undefined && depth < 4 ? lineRefusal(script, folders, home, depth + 1) : undefined;
-      if (inner) return inner;
+      if (inner) refusals.push(inner);
     }
     if (!readsRecursively(run.name, run.args, run.viaXargs || viaXargs)) continue;
     // Any word may be a folder operand, and a reader given none reads where it runs.
@@ -241,29 +314,49 @@ function lineRefusal(
         pathsOf(arg.text, folders, home).map((path) => (arg.globs ? globRoot(path) : path)),
       ),
     ];
-    const ancestor = roots.find((folder) => secrets.some((secret) => within(secret, folder)));
-    if (ancestor)
-      return `${run.name} would read every file under ${ancestor === home ? '~' : ancestor.replace(home + sep, '~/')}, a Boat API key included.`;
+    for (const folder of roots) {
+      const inside = secretsUnder(secrets, folder);
+      if (inside.length)
+        refusals.push({
+          why: `${run.name} would read every file under ${folder === home ? '~' : folder.replace(home + sep, '~/')}, ${held(inside)} included.`,
+          secrets: inside,
+        });
+    }
   }
-  return undefined;
+  return merged(refusals);
+}
+
+/** One refusal for several, naming every secret once; undefined for none. */
+function merged(refusals: readonly Refusal[]): Refusal | undefined {
+  const [first] = refusals;
+  if (!first) return undefined;
+  const secrets = [...new Set(refusals.flatMap((refusal) => refusal.secrets))];
+  const also = secrets.filter((secret) => !first.secrets.includes(secret));
+  return {
+    why: also.length ? `${first.why} It would also read ${holding(also)}.` : first.why,
+    secrets,
+  };
 }
 
 /**
- * Why a shell command may not run because it would read a Boat key, or
+ * Why a shell command may not run because it would read a guarded secret, or
  * undefined when it may. It refuses a command whose text names a secret file in
  * any spelling, an operand or glob that resolves to one, and a recursive read
  * of a folder that holds one, through launchers and `bash -c` scripts. A
  * command it cannot read refuses when it names a config folder.
  */
 export function boatKeyCommandRefusal(command: string, context: Context): string | undefined {
-  const why = SECRET_MENTION.test(command)
-    ? 'the command names a file that holds a Boat API key.'
-    : lineRefusal(command, [context.cwd], context.home, 0);
-  return why && `Refused: ${why} ${INSTEAD}`;
+  const mentioned = GUARDED_SECRETS.filter((secret) => secret.mention.test(command));
+  const line = lineRefusal(command, [context.cwd], context.home, 0);
+  const refusal = merged([
+    ...(mentioned.length ? [{ why: `the command names ${holding(mentioned)}.`, secrets: mentioned }] : []),
+    ...(line ? [line] : []),
+  ]);
+  return refusal && refusalText(refusal);
 }
 
 /**
- * Why an agent's file tool call may not run because it would read a Boat key:
+ * Why an agent's file tool call may not run because it would read a guarded secret:
  * a read of a secret file, or a content search of a folder that holds one.
  */
 export function boatKeyToolRefusal(
@@ -276,15 +369,19 @@ export function boatKeyToolRefusal(
     const value: unknown = Reflect.get(input, name);
     return typeof value === 'string' ? resolve(cwd, value.replace(/^~(?=\/|$)/, home)) : undefined;
   };
-  const secrets = SECRET_FILES.map((file) => resolve(home, file));
+  const secrets = secretFiles(home);
   if (call.tool_name === 'Read') {
     const path = field('file_path');
-    if (path && secrets.includes(path)) return `Refused: the file holds a Boat API key. ${INSTEAD}`;
+    const read = secrets.find((file) => file.path === path);
+    if (read) return refusalText({ why: `the file holds ${read.secret.holds}.`, secrets: [read.secret] });
   }
   if (call.tool_name === 'Grep') {
-    const path = field('path') ?? cwd;
-    if (secrets.some((secret) => within(secret, path)))
-      return `Refused: the search would read a file that holds a Boat API key. ${INSTEAD}`;
+    const searched = secretsUnder(secrets, field('path') ?? cwd);
+    if (searched.length)
+      return refusalText({
+        why: `the search would read files that hold ${held(searched)}.`,
+        secrets: searched,
+      });
   }
   return undefined;
 }

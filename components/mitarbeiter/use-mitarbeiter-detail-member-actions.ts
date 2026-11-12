@@ -77,16 +77,14 @@ export function useMitarbeiterDetailMemberActions({
     return assignable.map((r) => ({ value: r, label: ROLE_LABELS[r] }));
   }, [canManage, currentUserRole]);
 
-  const handleRoleChange = async (newRole: OrgRole) => {
-    if (isUpdatingRole) return;
+  /** Resolves with the failure sentence for the caller's point of action, or `null` once saved. */
+  const handleRoleChange = async (newRole: OrgRole): Promise<string | null> => {
     setActionError(null);
     // A thrown action (network loss) reads as the generic failure instead of a stuck control.
     const result = await runRoleUpdate(member.userId, newRole).catch(() => null);
-    if (result?.success) {
-      router.refresh();
-    } else {
-      setActionError(getMemberActionErrorMessage(result));
-    }
+    if (!result?.success) return getMemberActionErrorMessage(result);
+    router.refresh();
+    return null;
   };
 
   const handleRemove = async () => {
@@ -117,6 +115,7 @@ export function useMitarbeiterDetailMemberActions({
     isUpdatingRole,
     actionError,
     handleRoleChange,
+    showActionError: setActionError,
     handleRemove,
   };
 }

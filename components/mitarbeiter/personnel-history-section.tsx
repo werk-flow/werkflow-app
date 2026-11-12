@@ -8,7 +8,7 @@ import { isJsonRecord } from '@/lib/supabase/json';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { SectionTitle } from '@/components/shared/section-title';
 import { EmptyState } from '@/components/ui/empty-state';
-import { formatBerlin, formatBerlinDateTime } from '@/lib/utils';
+import { formatBerlinDateTime, formatGermanDate } from '@/lib/utils';
 
 const EVENT_LABELS: Record<string, string> = {
   created: 'Personalakte angelegt',
@@ -72,7 +72,7 @@ function formatValue(field: string, value: unknown): string {
     return employmentTypeLabel(value);
   }
   if (DATE_FIELDS.has(field) && typeof value === 'string') {
-    return Number.isNaN(new Date(value).getTime()) ? value : formatBerlin(value, 'numericDate');
+    return Number.isNaN(new Date(value).getTime()) ? value : formatGermanDate(value);
   }
   if (typeof value === 'boolean') return value ? 'Ja' : 'Nein';
   if (typeof value === 'number') {
