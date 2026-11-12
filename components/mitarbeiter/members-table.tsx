@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { ListRow, ListRowActions } from '@/components/ui/list-row';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ColumnsTableHeader, SkeletonList, SkeletonRows } from '@/components/ui/skeleton-table';
+import { ColumnsTableHeader } from '@/components/ui/skeleton-table';
 import { MemberActionsMenu } from './member-actions-menu';
 import { STATUS_SKELETON, PROGRESS_SKELETON, memberColumns } from './members-table-columns';
 import { StatusBadge } from './status-badge';
@@ -75,36 +75,6 @@ type MemberRowProps = {
   personnel?: PersonnelListEntry | undefined;
   removalBlockedMessage?: string | undefined;
 };
-
-/** Same frame as the loaded list; rows hover because loaded rows navigate. */
-export function MembersTableSkeleton({ count, showActions }: { count: number; showActions: boolean }) {
-  const columns = memberColumns(showActions);
-  return (
-    <>
-      <SkeletonList count={count} interactive className="md:hidden">
-        <div className="flex-1 min-w-0 space-y-1">
-          <div className="flex items-center gap-2">
-            <Skeleton className="h-[20px] w-[120px]" />
-            <Skeleton className="h-[18px] w-[70px] rounded-full" />
-          </div>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <Skeleton className="h-[16px] w-[160px]" />
-            <Skeleton className="h-[16px] w-[100px]" />
-          </div>
-        </div>
-        {showActions && <Skeleton className="size-8 rounded shrink-0" />}
-      </SkeletonList>
-      <div className="hidden md:block">
-        <Table>
-          <ColumnsTableHeader columns={columns} />
-          <TableBody>
-            <SkeletonRows columns={columns} rows={count} interactive />
-          </TableBody>
-        </Table>
-      </div>
-    </>
-  );
-}
 
 type MemberStatusProps = Pick<MemberRowProps, 'status' | 'isStatusLoading' | 'statusVisibility' | 'target'>;
 
