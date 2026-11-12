@@ -15,6 +15,7 @@ import type {
   WorkBillingParties,
 } from '@/lib/billing-parties/types';
 import {
+  partyLinks,
   resolveBillingVersions,
   standInsByRead,
   type ResolvedBillingVersion,
@@ -33,6 +34,11 @@ const SOURCE_LABELS: Readonly<Record<BillingPartySource, string>> = {
   buero: 'Vom Büro gewählt',
 };
 
+/** A party's name, linked to its customer only where the page does not link it already. */
+export function partyName(party: { id: string; name: string }, linked: boolean): React.ReactNode {
+  return linked ? <TextLink href={`/kunden/${party.id}`}>{party.name}</TextLink> : party.name;
+}
+
 /** One labelled fact: a plain element, so the section adds no component per fact (lab.office.job-open). */
 function partyFact(label: string, value: React.ReactNode): React.ReactNode {
   return (
@@ -44,10 +50,10 @@ function partyFact(label: string, value: React.ReactNode): React.ReactNode {
 }
 
 /** The recipient as it was copied onto the work, and why and when. */
-export function RecipientFact({ current }: { current: ResolvedBillingVersion }) {
+export function RecipientFact({ current, linked }: { current: ResolvedBillingVersion; linked: boolean }) {
   return (
     <>
-      <TextLink href={`/kunden/${current.recipient.id}`}>{current.recipient.name}</TextLink>
+      {partyName(current.recipient, linked)}
       {current.recipient.address && (
         <span className="block whitespace-pre-line text-muted-foreground">{current.recipient.address}</span>
       )}
@@ -81,19 +87,20 @@ function partyFacts(
   parties: WorkBillingParties,
   current: ResolvedBillingVersion | undefined,
   site: WorkBillingParties['site'],
+  workClientId: string | null,
 ): React.ReactNode {
   const siteAddress = site ? formatSiteAddress(site) : '';
+  const links = current ? partyLinks(current, workClientId) : null;
   return (
     <dl className="mt-3 grid gap-3 sm:grid-cols-2">
       {partyFact(
         'Auftraggeber',
-        current ? (
-          <TextLink href={`/kunden/${current.auftraggeber.id}`}>{current.auftraggeber.name}</TextLink>
-        ) : (
-          '—'
-        ),
+        current && links ? partyName(current.auftraggeber, links.auftraggeber) : '—',
       )}
-      {partyFact('Rechnungsempfänger', current ? <RecipientFact current={current} /> : '—')}
+      {partyFact(
+        'Rechnungsempfänger',
+        current && links ? <RecipientFact current={current} linked={links.recipient} /> : '—',
+      )}
       {partyFact(
         'Einsatzort',
         site ? (
@@ -130,6 +137,7 @@ function billingCard(input: {
   parties: WorkBillingParties;
   versions: ResolvedBillingVersion[];
   site: WorkBillingParties['site'];
+  workClientId: string | null;
   stale: boolean;
   onEdit: () => void;
 }): React.ReactNode {
@@ -161,7 +169,7 @@ function billingCard(input: {
         )}
       </div>
       {parties.hasClient ? (
-        partyFacts(parties, input.versions[0], input.site)
+        partyFacts(parties, input.versions[0], input.site, input.workClientId)
       ) : (
         <p className="mt-3 text-sm text-muted-foreground">Ordne zuerst einen Kunden zu.</p>
       )}
@@ -181,6 +189,7 @@ export function WorkBillingPartiesSection({
   initialParties,
   site,
   workClient = null,
+  workClientId,
   className = '',
 }: {
   kind: Exclude<BillingWorkKind, 'request'>;
@@ -191,6 +200,8 @@ export function WorkBillingPartiesSection({
   site?: WorkBillingParties['site'] | undefined;
   /** The job's customer, which stands in for a party the job's read left out. */
   workClient?: BillingRecipient | null | undefined;
+  /** The work's own customer, which the page links already. */
+  workClientId: string | null;
   className?: string;
 }) {
   const view = useWorkBillingParties(kind, id, initialParties);
@@ -210,8 +221,16 @@ export function WorkBillingPartiesSection({
     () =>
       parties === undefined
         ? null
-        : billingCard({ id, parties, versions, site: shownSite, stale: view.isStale, onEdit: openEditor }),
-    [id, parties, versions, shownSite, view.isStale, openEditor],
+        : billingCard({
+            id,
+            parties,
+            versions,
+            site: shownSite,
+            workClientId,
+            stale: view.isStale,
+            onEdit: openEditor,
+          }),
+    [id, parties, versions, shownSite, workClientId, view.isStale, openEditor],
   );
   if (parties === undefined) {
     return view.isLoading ? null : (

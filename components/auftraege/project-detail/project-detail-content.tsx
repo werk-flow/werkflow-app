@@ -235,6 +235,11 @@ type ProjectDetailSectionProps = {
   state: ProjectDetailState;
 };
 
+/** The office's Auftraggeber and Rechnungsempfänger of the project; its customer card links the customer already. */
+function projectBillingSection(projectId: string, clientId: string | null) {
+  return <WorkBillingPartiesSection kind="project" id={projectId} workClientId={clientId} />;
+}
+
 export function ProjectDetailContent(content: ProjectDetailContentProps) {
   const {
     project,
@@ -296,7 +301,7 @@ export function ProjectDetailContent(content: ProjectDetailContentProps) {
               onAssignClient={isAdminOrManager ? () => dialogState.setShowClientDialog(true) : undefined}
             />
 
-            {isAdminOrManager && <WorkBillingPartiesSection kind="project" id={liveProject.id} />}
+            {isAdminOrManager && projectBillingSection(liveProject.id, liveClient?.id ?? null)}
           </div>
 
           {/* Right Column: Progress + Jobs + Placeholders */}

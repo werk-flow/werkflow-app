@@ -167,6 +167,7 @@ function jobBillingSection(liveJob: JobWithDetails, billingParties: WorkBillingP
       initialParties={billingParties}
       site={liveJob.site ?? null}
       workClient={liveJob.client}
+      workClientId={liveJob.client?.id ?? null}
     />
   );
 }

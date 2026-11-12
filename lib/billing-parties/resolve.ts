@@ -45,3 +45,18 @@ export function standInsByRead(): StandInsByRead {
     },
   };
 }
+
+/**
+ * Which party names the card links to their customer: a party that is the
+ * work's own customer is linked by the page already, and a recipient that is
+ * the Auftraggeber is linked once, on the Auftraggeber.
+ */
+export function partyLinks(
+  version: ResolvedBillingVersion,
+  workClientId: string | null,
+): { auftraggeber: boolean; recipient: boolean } {
+  return {
+    auftraggeber: version.auftraggeber.id !== workClientId,
+    recipient: version.recipient.id !== workClientId && version.recipient.id !== version.auftraggeber.id,
+  };
+}

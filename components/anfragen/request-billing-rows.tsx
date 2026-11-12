@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Pencil } from 'lucide-react';
 
-import { RecipientFact } from '@/components/auftraege/shared/work-billing-parties-section';
+import { RecipientFact, partyName } from '@/components/auftraege/shared/work-billing-parties-section';
 import { lazyWorkBillingPartiesDialog } from '@/components/auftraege/shared/work-billing-parties-lazy-dialog';
 import {
   WORK_BILLING_PARTIES_LOAD_FAILED,
@@ -11,9 +11,8 @@ import {
 } from '@/components/auftraege/shared/use-work-billing-parties';
 import { Button } from '@/components/ui/button';
 import { SectionError } from '@/components/ui/section-error';
-import { TextLink } from '@/components/ui/text-link';
 import type { WorkBillingParties } from '@/lib/billing-parties/types';
-import { resolveBillingVersions } from '@/lib/billing-parties/resolve';
+import { partyLinks, resolveBillingVersions } from '@/lib/billing-parties/resolve';
 
 /**
  * The request's Auftraggeber and Rechnungsempfänger as rows of its Details
@@ -22,10 +21,12 @@ import { resolveBillingVersions } from '@/lib/billing-parties/resolve';
  */
 export function RequestBillingRows({
   requestId,
+  clientId,
   initialParties,
   isEditable,
 }: {
   requestId: string;
+  clientId: string | null;
   initialParties: WorkBillingParties | undefined;
   isEditable: boolean;
 }) {
@@ -43,22 +44,20 @@ export function RequestBillingRows({
   }
   // A request's read names both parties in every version.
   const [current = null] = resolveBillingVersions(parties.versions, null);
+  // The customer card links the request's customer already.
+  const links = current ? partyLinks(current, clientId) : null;
   return (
     <>
       <div className="flex gap-2">
         <dt className="w-28 shrink-0 text-muted-foreground">Auftraggeber</dt>
         <dd className="min-w-0">
-          {current ? (
-            <TextLink href={`/kunden/${current.auftraggeber.id}`}>{current.auftraggeber.name}</TextLink>
-          ) : (
-            '—'
-          )}
+          {current && links ? partyName(current.auftraggeber, links.auftraggeber) : '—'}
         </dd>
       </div>
       <div className="flex gap-2">
         <dt className="w-28 shrink-0 text-muted-foreground">Rechnung an</dt>
         <dd className="min-w-0 flex-1">
-          {current ? <RecipientFact current={current} /> : '—'}
+          {current && links ? <RecipientFact current={current} linked={links.recipient} /> : '—'}
           {isEditable && parties.hasClient && (
             <Button
               type="button"

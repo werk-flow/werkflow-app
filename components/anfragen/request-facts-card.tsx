@@ -60,7 +60,12 @@ export function RequestFactsCard({
             )}
           </dd>
         </div>
-        <RequestBillingRows requestId={request.id} initialParties={billingParties} isEditable={isEditable} />
+        <RequestBillingRows
+          requestId={request.id}
+          clientId={request.clientId}
+          initialParties={billingParties}
+          isEditable={isEditable}
+        />
         <div className="flex gap-2">
           <dt className="w-28 shrink-0 text-muted-foreground">Kategorie</dt>
           <dd>{REQUEST_CATEGORY_LABELS[request.category]}</dd>

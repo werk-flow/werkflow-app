@@ -243,7 +243,7 @@ export function ServiceCaseDetailSidebar({
         </p>
         {item.contactName && <p className="mt-2 text-sm">Ansprechpartner: {item.contactName}</p>}
       </section>
-      <WorkBillingPartiesSection kind="service_case" id={item.id} />
+      <WorkBillingPartiesSection kind="service_case" id={item.id} workClientId={item.clientId} />
       <ServiceCaseEquipmentCard item={item} />
       <ServiceCaseJobCard item={item} />
       <section className="rounded-lg border p-4 shadow-xs" data-testid="service-case-follow-up">
