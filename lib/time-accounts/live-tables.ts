@@ -26,6 +26,7 @@ const PERIOD_SCHOOL_MINUTE_LIVE_TABLES = [
   'organization_settings',
   'organization_closure_days',
   'time_account_policies',
+  'time_account_policy_assignments',
 ] as const satisfies readonly RealtimeTable[];
 
 /**

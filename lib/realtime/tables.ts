@@ -11,6 +11,7 @@ export const REALTIME_TABLES = [
   'entry_change_requests',
   'time_correction_requests',
   'time_account_policies',
+  'time_account_policy_assignments',
   'time_accounts',
   'time_account_adjustment_requests',
   'time_periods',

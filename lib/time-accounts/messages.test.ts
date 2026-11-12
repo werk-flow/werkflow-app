@@ -141,8 +141,8 @@ describe('period page live tables', () => {
 
   test('the detail re-reads its Berufsschule minutes when any of their sources changes', () => {
     // A school day, a vacation or sickness over it, a schedule, a condition,
-    // the holiday region, a closure day, an entry or exit date and the absence
-    // policy each change the minutes (werk-flow/werkflow-planning#165).
+    // the holiday region, a closure day, an entry or exit date, the absence
+    // policy and its assignment each change the minutes (werk-flow/werkflow-planning#165).
     for (const table of [
       'school_days',
       'vacation_requests',
@@ -153,6 +153,7 @@ describe('period page live tables', () => {
       'organization_settings',
       'organization_closure_days',
       'time_account_policies',
+      'time_account_policy_assignments',
     ] as const)
       expect(TIME_PERIOD_DETAIL_LIVE_TABLES).toContain(table);
   });

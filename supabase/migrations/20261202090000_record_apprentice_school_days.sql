@@ -170,6 +170,19 @@ create trigger emit_realtime_deletion
   for each row execute function app_private.emit_realtime_deletion();
 alter publication supabase_realtime add table public.school_days;
 
+-- The period review shows each person's school minutes, read live from the
+-- school days and the person's absence policy. Assigning a person another
+-- policy writes only time_account_policy_assignments, so it is published too
+-- (Admin and Büro already read it); an open review then re-reads.
+create unique index time_account_policy_assignments_replident_idx
+  on public.time_account_policy_assignments (id, organization_id);
+alter table public.time_account_policy_assignments
+  replica identity using index time_account_policy_assignments_replident_idx;
+create trigger emit_realtime_deletion
+  after delete on public.time_account_policy_assignments
+  for each row execute function app_private.emit_realtime_deletion();
+alter publication supabase_realtime add table public.time_account_policy_assignments;
+
 -- A period's calculation depends on its school days, so its fingerprint
 -- includes them: a school day recorded after the preparation makes the close
 -- refuse with stale_calculation. The fingerprint hashes the effective school
