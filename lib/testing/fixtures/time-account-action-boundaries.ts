@@ -11,7 +11,7 @@
 // nothing changes. Only the proposer withdraws an open request. A period
 // preparation takes its source fingerprint before it reads a source.
 import assert from 'node:assert/strict';
-import { mock } from 'bun:test';
+import { mock, setSystemTime } from 'bun:test';
 import {
   CALLER_ID,
   ORGANIZATION_A,
@@ -22,6 +22,9 @@ import {
 } from './action-boundary-world';
 import { payrollCodesByKey } from '@/lib/time-accounts/payroll-mapping';
 import { assertCallerScopedCalls, databaseSnapshot } from './workforce-boundary-support';
+
+// The forms below are dated November 2026; the opening's ten-year bound reads today.
+setSystemTime(new Date('2026-11-12T10:00:00.000Z'));
 
 const ownRecordId = '84000000-0000-4000-8000-000000000001';
 const foreignRecordId = '84000000-0000-4000-8000-000000000002';
