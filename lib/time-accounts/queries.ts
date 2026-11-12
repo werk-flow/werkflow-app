@@ -342,7 +342,7 @@ type PeriodDetailRows = {
 };
 
 async function readTimePeriodDetail(
-  context: ReaderContext,
+  context: ReaderContext & { isManagerOrAbove: boolean },
   periodId: string,
 ): Promise<TimePeriodDetail | null> {
   const admin = createSupabaseAdminClient();
@@ -382,12 +382,18 @@ async function readTimePeriodDetail(
       rows.findings.map((finding) => finding.id),
     ),
     readDecidableRecordIds(context, findingRecordIds),
-    readPeriodSchoolMinutes(
-      admin,
-      context.orgId,
-      { start: period.period_start_date, end: period.period_end_date },
-      rows.results.map((result) => result.employee_record_id),
-    ),
+    // School days are personal data that only Admin, Büro and the apprentice
+    // read (werk-flow/werkflow-planning#165). A time-approval holder outside
+    // the office sees the period without them, so no event their RLS
+    // withholds can leave a note stale.
+    context.isManagerOrAbove
+      ? readPeriodSchoolMinutes(
+          admin,
+          context.orgId,
+          { start: period.period_start_date, end: period.period_end_date },
+          rows.results.map((result) => result.employee_record_id),
+        )
+      : new Map<string, number>(),
   ]);
   return toTimePeriodDetail({
     period,

@@ -174,6 +174,7 @@ alter publication supabase_realtime add table public.school_days;
 -- school days and the person's absence policy. Assigning a person another
 -- policy writes only time_account_policy_assignments, so it is published too
 -- (Admin and Büro already read it); an open review then re-reads.
+-- @destructive: after release acce7e96: id is the primary key, so (id, organization_id) is unique for every row that build writes and the index refuses none of them
 create unique index time_account_policy_assignments_replident_idx
   on public.time_account_policy_assignments (id, organization_id);
 alter table public.time_account_policy_assignments
