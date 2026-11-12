@@ -5,6 +5,7 @@ import {
   workArtifactEntry,
   workArtifactField,
 } from '../../golden/support/spec-helpers/work-artifact-dialog';
+import { openPage } from '../../golden/support/streamed-content';
 import { bypassHttpCache, setNetwork, waitForOfflineShell } from '../support/offline-shell';
 import {
   deviceDrafts,
@@ -85,7 +86,7 @@ test('a report with two photos written without signal survives a reload and arri
 
   await test.step('after a restart with the signal back, the job page sends the draft', async () => {
     await setNetwork(page, 'online');
-    const restarted = await page.context().newPage();
+    const restarted = await openPage(page.context());
     await restarted.setViewportSize({ width: 375, height: 812 });
     await restarted.goto(`/auftraege/${jobNumber}`);
     await expect(deviceDrafts(restarted)).toBeHidden();

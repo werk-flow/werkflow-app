@@ -107,6 +107,8 @@ export type SaveWorkArtifactInput = {
   correctionReason?: string;
   submit: boolean;
   submitActionId?: string;
+  /** The device's last-change time of the draft this save comes from, when it comes from one. */
+  draftChangedAt?: string;
 };
 
 export type WorkArtifactActionInput = {
