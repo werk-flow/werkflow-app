@@ -108,9 +108,7 @@ async function isolatedTests(): Promise<void> {
 
   const CLOCKED_OUT: LiveClockState = {
     organizationId: WORKER.organizationId,
-    breakMode: 'manual',
-    autoBreakThresholdMinutes: 360,
-    autoBreakDurationMinutes: 30,
+    breakPolicy: { breakMode: 'manual', autoBreakThresholdMinutes: 360, autoBreakDurationMinutes: 30 },
     status: 'clocked_out',
     isClockedIn: false,
     isOnBreak: false,
