@@ -1203,8 +1203,8 @@
           "rows": null
         },
         "script": {
-          "requests": { "reference": 36, "tolerance": 1 },
-          "encodedBytes": { "reference": 581215, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "requests": { "reference": 37, "tolerance": 1 },
+          "encodedBytes": { "reference": 576417, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         },
@@ -1447,6 +1447,24 @@
           },
           "runKeys": ["2026-11-12T065056958Z-ac2af3"],
           "reason": "The app shell gained the report button, its recorder and its launcher, which the owner accepted on #329 (2026-11-10). CI passed both lab groups on 82a9e350 (run 43092771815) and main passes alone; the merged tree reads 581,215 B, over the 580,887 B ceiling by 328 B, because main's shell changes since then used the remaining room. The field cold start needs no accept: #348's ceiling-accept already covers it."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 36, "tolerance": 1 },
+            "encodedBytes": { "reference": 581215, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 37, "tolerance": 1 },
+            "encodedBytes": { "reference": 576417, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-12T144621481Z-30fc47"],
+          "reason": "The offline page's clock and the unsent-work question outside the app shell share the outbox code with the app layout, which moves the layout's lazy-loader stubs into their own 1.1 KB file; +1 script request, total bytes below main's reference."
         }
       ]
     },
