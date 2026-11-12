@@ -204,3 +204,13 @@ Decided in the CI overhaul under owner decision 21 (werk-flow/werkflow-planning#
 Measured on 2026-11-12: all 13 groups passed on Boat with the 1,222 images of the sets before the split, under unchanged names. Replayed on the last 30 commits of `main`, 9 selected the old group; 4 of them now run 58 to 130 captures, and the 5 that change an inventory, the capture fixture or the run reporter still run all 319. A change that only adds a set runs the 58 captures of `sets`. A change to `tests/golden/support/steps/work.ts` runs 5 groups with 122 captures.
 
 Known limit: the dialog inventory is one file that every group imports, so a change that adds a dialog still selects every group.
+
+## Amendment 2026-11-12: a layout sweep runs when what it audits changed
+
+Decided in the CI overhaul under owner decision 21 (werk-flow/werkflow-planning#29). On 2026-11-12 werk-flow/werkflow-app#393 changed where the job edit dialog puts the focus. `audit:layout:job` refuses that, but neither the PR's plan nor the push to `main` selected the group, because the first 2026-10-29 amendment runs the layout sweeps only in release mode, CI's full runs and for their own test code. The failure surfaced an hour later on unrelated PRs whose plans did select the group, and held them. Of the last 60 merged PRs, 20 changed a page or dialog a sweep audits, and 8 of them ran a plan without any layout sweep.
+
+1. A change plan, in CI and locally, also selects `audit:layout:<area>` when a product file under `app/`, `components/` or `hooks/` changed that its audited pages, tabs or dialogs render: the page and loading files of its routes, the components of its dialogs, and what they import (`lib/testing/selection/surface-closure.ts`). This supersedes, in that amendment, the change-plan rule for these groups; the other sweeps (`audit:layout`, `audit:layout:viewports`, `audit:layout:standalone`) keep it.
+2. A file that more than five areas render is a shared control or shell: it selects no sweep, and the nightly full run checks it. An audited page or dialog always selects its own sweeps.
+3. A rule test fails when an audited page or dialog does not select the sweep that audits it.
+
+Measured on the same 60 PRs: 7 of the 32 that planned by diff gain sweeps, 18 sweep runs and 3 shards in all, at most 4 sweeps on one PR. Known limit: a change to a shared control or to the data layer surfaces in the nightly run, as before.

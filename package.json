@@ -19,8 +19,9 @@
     "ajv": "6.14.0"
   },
   "scripts": {
-    "test:plan": "bun scripts/verify.ts plan",
-    "test:verify": "bun scripts/verify.ts run",
+    "postinstall": "bun scripts/stamp-dependencies.ts",
+    "test:plan": "bun --preload ./scripts/require-installed-dependencies.ts scripts/verify.ts plan",
+    "test:verify": "bun --preload ./scripts/require-installed-dependencies.ts scripts/verify.ts run",
     "boat:snapshot": "bun scripts/boat/build-snapshot.ts",
     "test:coverage": "bun scripts/check-test-coverage.ts",
     "dev": "bun scripts/dev-server.ts",
@@ -29,7 +30,7 @@
     "start": "next start",
     "lint": "bun scripts/lint.ts",
     "typecheck": "bun scripts/heavy.ts -- node node_modules/typescript7/bin/tsc --noEmit --incremental false",
-    "check:changed": "bun scripts/check-changed.ts",
+    "check:changed": "bun --preload ./scripts/require-installed-dependencies.ts scripts/check-changed.ts",
     "room": "bun scripts/room.ts",
     "review": "bun scripts/run-coderabbit-review.ts",
     "review:doctor": "bun scripts/run-coderabbit-review.ts --doctor",
