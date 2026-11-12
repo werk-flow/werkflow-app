@@ -25,7 +25,12 @@ import {
 import { ErrorText } from '@/components/ui/error-text';
 import { usePendingTask } from '@/hooks/use-server-action';
 import '@/lib/field-sync/device/registrations';
-import { discardUnsentWork, flushUnsentWork, type UnsentWorkItem } from '@/lib/field-sync/device/unsent-work';
+import {
+  discardUnsentWork,
+  flushUnsentWork,
+  type UnsentScope,
+  type UnsentWorkItem,
+} from '@/lib/field-sync/device/unsent-work';
 import { logError } from '@/lib/logging';
 
 // The question a sign-out or an organization switch asks about unsent work
@@ -93,7 +98,11 @@ function UnsentItems({ items }: { items: readonly UnsentWorkItem[] }) {
 }
 
 /** Carries out „Jetzt senden“ and „Verwerfen“, one at a time, and keeps what is still unsent. */
-function useUnsentChoice(initialItems: UnsentWorkItem[], onSettled: (mayEnd: boolean) => void) {
+function useUnsentChoice(
+  initialItems: UnsentWorkItem[],
+  onSettled: (mayEnd: boolean) => void,
+  scope: UnsentScope,
+) {
   const { run, isPending } = usePendingTask();
   const [items, setItems] = useState(initialItems);
   const [running, setRunning] = useState<'send' | 'discard' | null>(null);
@@ -105,11 +114,11 @@ function useUnsentChoice(initialItems: UnsentWorkItem[], onSettled: (mayEnd: boo
     void run(async () => {
       try {
         if (action === 'discard') {
-          await discardUnsentWork();
+          await discardUnsentWork(scope);
           onSettled(true);
           return;
         }
-        const left = await flushUnsentWork();
+        const left = await flushUnsentWork(scope);
         if (left.length === 0) {
           onSettled(true);
           return;
@@ -137,15 +146,18 @@ function useUnsentChoice(initialItems: UnsentWorkItem[], onSettled: (mayEnd: boo
 /** Names what is still unsent and offers to send it, to discard it, or to stay. */
 function UnsentWorkDialog({
   initialItems,
+  scope,
   onSettled,
 }: {
   initialItems: UnsentWorkItem[];
+  scope: UnsentScope;
   /** True: nothing is unsent any more, the session may end. False: the person stays. */
   onSettled: (mayEnd: boolean) => void;
 }) {
   const { items, isSending, isDiscarding, isPending, error, perform } = useUnsentChoice(
     initialItems,
     onSettled,
+    scope,
   );
   const [confirming, setConfirming] = useState(false);
 
@@ -199,7 +211,7 @@ function UnsentWorkDialog({
 }
 
 /** Shows the dialog and resolves with the person's choice once it is carried out. */
-function askAboutUnsentWork(items: UnsentWorkItem[]): Promise<boolean> {
+function askAboutUnsentWork(items: UnsentWorkItem[], scope: UnsentScope): Promise<boolean> {
   return new Promise((resolve) => {
     // The root is gone before the dialog could hand the focus back, so this does it.
     const opener = document.activeElement;
@@ -209,6 +221,7 @@ function askAboutUnsentWork(items: UnsentWorkItem[]): Promise<boolean> {
     root.render(
       <UnsentWorkDialog
         initialItems={items}
+        scope={scope}
         onSettled={(mayEnd) => {
           root.unmount();
           host.remove();
@@ -221,11 +234,11 @@ function askAboutUnsentWork(items: UnsentWorkItem[]): Promise<boolean> {
 }
 
 /**
- * Sends what the device holds unsent for the signed-in person. With something left, the person
+ * Sends what the device holds unsent in the scope. With something left, the person
  * decides: true once nothing is unsent or it was discarded, false when the person stays. Throws
  * when the device storage cannot say what is left: the session must not end then.
  */
-export async function settleUnsentWork(): Promise<boolean> {
-  const left = await flushUnsentWork();
-  return left.length === 0 || askAboutUnsentWork(left);
+export async function settleUnsentWork(scope: UnsentScope): Promise<boolean> {
+  const left = await flushUnsentWork(scope);
+  return left.length === 0 || askAboutUnsentWork(left, scope);
 }

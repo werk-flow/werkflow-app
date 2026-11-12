@@ -12,14 +12,21 @@ import { logError } from '@/lib/logging';
 /** One line of what is still unsent, such as „Zeitereignisse“ with their number. */
 export type UnsentWorkItem = { label: string; count: number };
 
+/**
+ * Whose work a flow asks about. `session`: the signed-in person's in every organization, before a
+ * sign-out ends them all (the default). `organization`: only the active organization's, before a
+ * switch leaves it; the other organizations' work is sent once the person works there.
+ */
+export type UnsentScope = 'session' | 'organization';
+
 export type UnsentSource = {
   name: string;
-  /** What this source still holds for the signed-in person and organization; no entry when nothing. */
-  summarize(): Promise<UnsentWorkItem[]>;
+  /** What this source still holds in the scope; no entry when nothing. */
+  summarize(scope?: UnsentScope): Promise<UnsentWorkItem[]>;
   /** Sends what it can now. What the server did not accept stays. */
   flush(): Promise<void>;
-  /** Deletes what this source holds for the signed-in person and organization. */
-  discard(): Promise<void>;
+  /** Deletes what this source holds in the scope. */
+  discard(scope?: UnsentScope): Promise<void>;
 };
 
 const sources: UnsentSource[] = [];
@@ -36,15 +43,15 @@ export function registerUnsentSource(source: UnsentSource): void {
  * read its store: a flow that cannot tell whether work is left must not end
  * the session.
  */
-async function summarizeUnsentWork(): Promise<UnsentWorkItem[]> {
+async function summarizeUnsentWork(scope: UnsentScope): Promise<UnsentWorkItem[]> {
   const items: UnsentWorkItem[] = [];
   for (const source of [...sources])
-    items.push(...(await source.summarize()).filter((item) => item.count > 0));
+    items.push(...(await source.summarize(scope)).filter((item) => item.count > 0));
   return items;
 }
 
 /** Sends what every source can send now and answers what is left. A failed send leaves its work unsent. */
-export async function flushUnsentWork(): Promise<UnsentWorkItem[]> {
+export async function flushUnsentWork(scope: UnsentScope = 'session'): Promise<UnsentWorkItem[]> {
   for (const source of [...sources]) {
     try {
       await source.flush();
@@ -53,10 +60,10 @@ export async function flushUnsentWork(): Promise<UnsentWorkItem[]> {
       logError('unsent work: flush failed', { source: source.name, error });
     }
   }
-  return summarizeUnsentWork();
+  return summarizeUnsentWork(scope);
 }
 
 /** Deletes every source's unsent work, after the person chose „Verwerfen“. Throws when a source cannot delete. */
-export async function discardUnsentWork(): Promise<void> {
-  for (const source of [...sources]) await source.discard();
+export async function discardUnsentWork(scope: UnsentScope = 'session'): Promise<void> {
+  for (const source of [...sources]) await source.discard(scope);
 }

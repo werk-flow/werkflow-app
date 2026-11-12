@@ -316,6 +316,23 @@ async function isolatedTests(): Promise<void> {
       expect(storage.get('werkflow:unsent:time')).toBe('1');
     });
 
+    test('a switch asks only about the organization it leaves, so the other organization’s events stay for when the person works there', async () => {
+      await keepStart(OTHER_COMPANY);
+      // The tab works in WORKER's organization; the person also has an unsent event in another one.
+      await keepStart(WORKER);
+
+      expect(await timeUnsentSource.summarize('organization')).toEqual([
+        { label: 'Stempelzeiten', count: 1 },
+      ]);
+      await timeUnsentSource.discard('organization');
+
+      expect((await readTimeOutbox(WORKER)).events).toEqual([]);
+      expect((await readTimeOutbox(OTHER_COMPANY)).events).toHaveLength(1);
+      expect(await timeUnsentSource.summarize('organization')).toEqual([]);
+      // A sign-out still names it, since it ends every organization's session.
+      expect(await timeUnsentSource.summarize()).toEqual([{ label: 'Stempelzeiten', count: 1 }]);
+    });
+
     // Last: a wipe ends this module's hold for the rest of the process, as for the rest of a tab's life.
     test('another tab’s sign-out ends the hold, also during a read: the tab shows nothing and sends nothing without the person’s session', async () => {
       const views: (ClockDeviceView | null)[] = [];

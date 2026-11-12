@@ -192,7 +192,7 @@ async function switchMayStart(
   refreshMemberships: () => Promise<void>,
 ): Promise<boolean> {
   pendingOrgIdRef.current = orgId;
-  if (await mayEndSession(withReload(showBanner))) return true;
+  if (await mayEndSession(withReload(showBanner), 'organization')) return true;
   pendingOrgIdRef.current = null;
   void refreshMemberships();
   return false;

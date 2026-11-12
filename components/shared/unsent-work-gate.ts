@@ -25,10 +25,14 @@ type ShowBanner = (banner: {
  * tab left open across a deployment, `showFailure` gets the sentence that says so and the session
  * stays: a reload brings the current code.
  */
-export async function mayEndSession(showFailure: (message: string) => void): Promise<boolean> {
+export async function mayEndSession(
+  showFailure: (message: string) => void,
+  /** `organization` for a switch, which leaves only the active organization (unsent-work.ts, UnsentScope). */
+  scope: 'session' | 'organization' = 'session',
+): Promise<boolean> {
   try {
     const { settleUnsentWork } = await import('./unsent-work-prompt');
-    return await settleUnsentWork();
+    return await settleUnsentWork(scope);
   } catch (error) {
     logError('unsent work: the check before the session ends failed', error);
     showFailure(CHECK_FAILED);

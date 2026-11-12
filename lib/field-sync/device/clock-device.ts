@@ -8,7 +8,7 @@ import { readTimeOutbox, readWholeTimeOutbox, type OutboxHolder } from './time-o
 import { TODAY_WIPE_KEY } from './today-wipe';
 import { markUnsentWork } from './sync-runner';
 import { KEPT_CLOCK_ACTION_PREFIX } from './unsent-mark';
-import type { UnsentSource } from './unsent-work';
+import type { UnsentScope, UnsentSource } from './unsent-work';
 
 // This tab's hold on the time outbox: whose unsent events it shows and sends.
 // The holder comes from the page the server rendered for the signed-in person
@@ -166,27 +166,37 @@ async function ownOrganizations(userId: string): Promise<string[]> {
 }
 
 /**
- * The time events as unsent work (unsent-work.ts): the signed-in person's own, in every
- * organization, because a sign-out ends them all. Only the active organization's can be sent.
+ * The holders whose events a flow asks about: the signed-in person's in every organization for a
+ * sign-out, only this tab's holder for a switch, which leaves just the active organization. Without
+ * a hold a switch asks as a sign-out does.
+ */
+async function holdersInScope(scope: UnsentScope = 'session'): Promise<OutboxHolder[]> {
+  const current = clockHolder();
+  if (scope === 'organization' && current) return [current];
+  const userId = await signedInUserId();
+  if (!userId) return [];
+  return (await ownOrganizations(userId)).map((organizationId) => ({ userId, organizationId }));
+}
+
+/**
+ * The time events as unsent work (unsent-work.ts). Only the active organization's can be sent; a
+ * sign-out still names and discards the person's events of every organization, because it ends them
+ * all, and a switch only the organization it leaves.
  */
 export const timeUnsentSource: UnsentSource = {
   name: UNSENT_KIND,
-  async summarize() {
+  async summarize(scope) {
     // A kept action this version cannot read may be anyone's: no session ends over it unseen.
     const { unreadable } = await takeInKept();
     if (unreadable > 0) throw new Error(`${unreadable} kept clock actions cannot be read by this version`);
-    const userId = await signedInUserId();
-    const { events } = await readWholeTimeOutbox();
-    const count = events.filter((event) => event.userId === userId).length;
+    let count = 0;
+    for (const holder of await holdersInScope(scope)) count += (await readTimeOutbox(holder)).events.length;
     return count > 0 ? [{ label: 'Stempelzeiten', count }] : [];
   },
   flush: sendOwnTimeEvents,
-  async discard() {
-    const userId = await signedInUserId();
-    if (!userId) return;
+  async discard(scope) {
     await takeInKept();
-    for (const organizationId of await ownOrganizations(userId))
-      await discardTimeEvents({ userId, organizationId });
+    for (const holder of await holdersInScope(scope)) await discardTimeEvents(holder);
     await outboxChanged();
   },
 };

@@ -194,3 +194,11 @@ Decided for werk-flow/werkflow-planning#319 on its outside review. Where the ame
 - **An online call that reached the server.** `idempotency_conflict` for an event tried online first no longer counts as recorded: the id may hold the action or only a recovery the server answered instead. The chain stops as a conflict, and the person checks the clock, then deletes the kept events or files a correction.
 - **Another organization.** An event for an organization that is not the active one, as after a switch in another tab, waits instead of failing; the server still refuses it under any other organization.
 - **Whose events.** A session that cannot be read sends nothing. Another tab's wipe ends a tab's hold also while it reads the outbox. A page without a hold, such as the password reset, sends the session person's chains; the server accepts only the active organization's.
+
+## Amendment 2026-11-12: what a sign-out and a switch ask about
+
+Decided for werk-flow/werkflow-planning#319 on the lead's review.
+
+- **Sign-out.** It ends the person's session in every organization, so it names the person's unsent events of every organization. „Jetzt senden“ sends only the active organization's; the server refuses the others there, and they stay waiting. „Verwerfen“ deletes the person's events of every organization after its confirmation. „Abbrechen“ deletes nothing and keeps the session; the person can switch to the other organization, whose page sends them.
+- **Organization switch.** It leaves only the active organization, so it names and sends only that organization's events. „Verwerfen“ deletes only those. The other organizations' events stay untouched and are sent once the person works there.
+- The question's seam takes the scope (`UnsentScope` in `lib/field-sync/device/unsent-work.ts`); a source that ignores it answers for the whole session, which asks more, never less.
