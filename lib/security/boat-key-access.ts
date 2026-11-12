@@ -81,6 +81,11 @@ function held(secrets: readonly GuardedSecret[]): string {
   return secrets.map((secret) => secret.holds).join(' and ');
 }
 
+/** "a file that holds X" for one secret, "files that hold X and Y" for several. */
+function holding(secrets: readonly GuardedSecret[]): string {
+  return `${secrets.length > 1 ? 'files that hold' : 'a file that holds'} ${held(secrets)}`;
+}
+
 /** Search tools, which read every file under a folder operand or the working folder. */
 const SEARCHERS = new Set(['grep', 'egrep', 'fgrep', 'zgrep', 'ugrep', 'rg', 'ag', 'ack']);
 /** Search tools that recurse without a flag. */
@@ -269,22 +274,27 @@ function lineRefusal(
   const viaXargs =
     /[|`]|[$<>]\(/.test(command) ||
     commands.some((words) => innerCommand(words)?.viaXargs || program(words)?.name === 'xargs');
+  // Every read the line would make, so the refusal names each secret, not only the first.
+  const refusals: Refusal[] = [];
   for (const words of commands) {
     // Every word, redirection targets included: `cat < config.json` reads the file too.
     for (const word of words) {
       for (const path of pathsOf(word.text, folders, home)) {
         const named = secrets.find((file) => file.path === path);
         if (named)
-          return {
+          refusals.push({
             why: `the command names a file that holds ${named.secret.holds}.`,
             secrets: [named.secret],
-          };
-        const matched = word.globs ? secrets.find((file) => new Bun.Glob(path).match(file.path)) : undefined;
-        if (matched)
-          return {
-            why: `the pattern ${word.raw} matches a file that holds ${matched.secret.holds}.`,
-            secrets: [matched.secret],
-          };
+          });
+        const matched = word.globs
+          ? [
+              ...new Set(
+                secrets.filter((file) => new Bun.Glob(path).match(file.path)).map((file) => file.secret),
+              ),
+            ]
+          : [];
+        if (matched.length)
+          refusals.push({ why: `the pattern ${word.raw} matches ${holding(matched)}.`, secrets: matched });
       }
     }
     const run = innerCommand(words);
@@ -294,7 +304,7 @@ function lineRefusal(
       const script = flag === -1 ? undefined : run.args[flag + 1]?.text;
       const inner =
         script !== undefined && depth < 4 ? lineRefusal(script, folders, home, depth + 1) : undefined;
-      if (inner) return inner;
+      if (inner) refusals.push(inner);
     }
     if (!readsRecursively(run.name, run.args, run.viaXargs || viaXargs)) continue;
     // Any word may be a folder operand, and a reader given none reads where it runs.
@@ -307,13 +317,25 @@ function lineRefusal(
     for (const folder of roots) {
       const inside = secretsUnder(secrets, folder);
       if (inside.length)
-        return {
+        refusals.push({
           why: `${run.name} would read every file under ${folder === home ? '~' : folder.replace(home + sep, '~/')}, ${held(inside)} included.`,
           secrets: inside,
-        };
+        });
     }
   }
-  return undefined;
+  return merged(refusals);
+}
+
+/** One refusal for several, naming every secret once; undefined for none. */
+function merged(refusals: readonly Refusal[]): Refusal | undefined {
+  const [first] = refusals;
+  if (!first) return undefined;
+  const secrets = [...new Set(refusals.flatMap((refusal) => refusal.secrets))];
+  const also = secrets.filter((secret) => !first.secrets.includes(secret));
+  return {
+    why: also.length ? `${first.why} It would also read ${holding(also)}.` : first.why,
+    secrets,
+  };
 }
 
 /**
@@ -324,10 +346,12 @@ function lineRefusal(
  * command it cannot read refuses when it names a config folder.
  */
 export function boatKeyCommandRefusal(command: string, context: Context): string | undefined {
-  const mentioned = GUARDED_SECRETS.find((secret) => secret.mention.test(command));
-  const refusal = mentioned
-    ? { why: `the command names a file that holds ${mentioned.holds}.`, secrets: [mentioned] }
-    : lineRefusal(command, [context.cwd], context.home, 0);
+  const mentioned = GUARDED_SECRETS.filter((secret) => secret.mention.test(command));
+  const line = lineRefusal(command, [context.cwd], context.home, 0);
+  const refusal = merged([
+    ...(mentioned.length ? [{ why: `the command names ${holding(mentioned)}.`, secrets: mentioned }] : []),
+    ...(line ? [line] : []),
+  ]);
   return refusal && refusalText(refusal);
 }
 

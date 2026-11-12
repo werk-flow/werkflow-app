@@ -29,6 +29,7 @@ test('a command that names the key file or the CLI config in any spelling is ref
 });
 
 test('a glob that matches a secret file is refused', () => {
+  // `~/.config/werkflow/*` matches the hand-out file too, so its refusal names both secrets.
   for (const command of [
     'cat ~/.config/werkflow/*',
     'head ~/.config/werkflow/boat-api-*',
@@ -37,7 +38,7 @@ test('a glob that matches a secret file is refused', () => {
     'cd ~/.config/werkflow; tail -n1 *',
     'cat ../../.config/werkflow/b*',
   ])
-    expect(refused(command), command).toContain('matches a file that holds a Boat API key');
+    expect(refused(command), command).toMatch(/matches (?:a file that holds|files that hold) a Boat API key/);
 });
 
 test('a recursive read of a folder that holds a secret file is refused', () => {
@@ -200,6 +201,28 @@ test('the Read and Grep tools refuse the hand-out file and a search of its folde
     boatKeyToolRefusal({ tool_name, tool_input }, context);
   expect(call('Read', { file_path: '~/.config/werkflow/problem-report-handout.env' })).toContain(HANDOUT);
   expect(call('Grep', { pattern: 'SECRET', path: '/home/agent/.config/werkflow' })).toContain(HANDOUT);
+});
+
+test('a command that would read both secrets names both and what to do instead for each', () => {
+  const both =
+    /a Boat API key[^]*the problem-report hand-out secret[^]*`bun run test:verify`[^]*report-thread/;
+  for (const command of [
+    // One glob over the folder of both files.
+    'cat ~/.config/werkflow/*',
+    // Two operands, each naming one file by its path.
+    'cat ~/.config/werkflow/b"oat-api-key" ~/.config/werkflow/problem-report-"handout".env',
+    // Two raw mentions in one text.
+    'F=~/.config/werkflow/boat-api-key; G=~/.config/werkflow/problem-report-handout.env; cat "$F" "$G"',
+    // A recursive read of a folder that holds both.
+    'grep -r SECRET ~/.config/werkflow',
+  ])
+    expect(refused(command), command).toMatch(both);
+  // A mention of one and a path to the other in the same line.
+  const mixed = refused(
+    'cat ~/.config/werkflow/boat-api-key ~/.config/werkflow/problem-report-"handout".env',
+  );
+  expect(mixed).toContain('a Boat API key');
+  expect(mixed).toContain(HANDOUT);
 });
 
 test('the helper and the dispatcher, which read the hand-out secret themselves, run', () => {
