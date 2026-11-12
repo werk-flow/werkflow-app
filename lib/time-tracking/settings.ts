@@ -336,9 +336,10 @@ const ONLY_BLOCK_OF_THE_DAY: BreakDayPosition = {
 /**
  * Where a block's automatic break lies. Each step the day reaches adds its
  * share of the total as a span of the day's shown counted presence that ends
- * at the step's threshold, or at the end of the shown presence when blocks
- * too short to show carried the day past it: beyond nine hours, 30 minutes up
- * to six hours and 15 more up to nine. The block shows the part of each span
+ * at the step's threshold, or earlier where the shown presence or the next
+ * share begins (blocks too short to show can carry the day past a
+ * threshold): beyond nine hours, 30 minutes up to six hours and 15 more up
+ * to nine. The block shows the part of each span
  * that falls in its own presence, so the blocks of a day add up to the break
  * the totals deduct, however the day is split.
  */
@@ -362,19 +363,30 @@ export function getAutomaticBreakRanges(
   const blockFrom = position.beforeMinutes;
   const blockTo = blockFrom + (endMs - startMs) / 60000;
   const shownDayMinutes = blockTo + position.afterMinutes;
-  const ranges: AutomaticBreakRange[] = [];
+  const reachedDayMinutes = shownDayMinutes + position.hiddenMinutes;
+  // Each reached step's share of the total, in threshold order.
+  const shares: Array<{ thresholdMinutes: number; shareMinutes: number }> = [];
   let previousDuration = 0;
-  let previousSpanTo = 0;
   for (const step of breakSteps(settings)) {
-    if (shownDayMinutes + position.hiddenMinutes < step.thresholdMinutes) break;
+    if (reachedDayMinutes < step.thresholdMinutes) break;
     const shareMinutes = step.durationMinutes - previousDuration;
     previousDuration = Math.max(previousDuration, step.durationMinutes);
-    if (shareMinutes <= 0) continue;
-    const dayTo = Math.min(step.thresholdMinutes, shownDayMinutes);
-    const dayFrom = Math.max(dayTo - shareMinutes, previousSpanTo, 0);
-    previousSpanTo = dayTo;
-    const spanFrom = Math.max(blockFrom, dayFrom);
-    const spanTo = Math.min(blockTo, dayTo);
+    if (shareMinutes > 0) shares.push({ thresholdMinutes: step.thresholdMinutes, shareMinutes });
+  }
+  // Laid out from the last share back: each ends at its threshold, or where
+  // the shown presence or the next share begins, so no minute is lost.
+  const spans: Array<{ from: number; to: number }> = [];
+  let nextFrom = shownDayMinutes;
+  for (const share of [...shares].reverse()) {
+    const to = Math.min(share.thresholdMinutes, nextFrom);
+    const from = Math.max(to - share.shareMinutes, 0);
+    spans.unshift({ from, to });
+    nextFrom = from;
+  }
+  const ranges: AutomaticBreakRange[] = [];
+  for (const span of spans) {
+    const spanFrom = Math.max(blockFrom, span.from);
+    const spanTo = Math.min(blockTo, span.to);
     if (spanTo <= spanFrom) continue;
     ranges.push({
       breakStart: new Date(startMs + (spanFrom - blockFrom) * 60000),

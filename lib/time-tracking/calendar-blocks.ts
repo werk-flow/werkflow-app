@@ -493,8 +493,11 @@ function withBreakDayPositions(blocks: CalendarWorkBlock[], now = Date.now()): C
     const day = days.get(dayOf(block)) ?? { shownMinutes: 0, hiddenMinutes: 0, lastEntryAt: block.start };
     if (isShown(block)) day.shownMinutes += countedMinutes(block);
     else day.hiddenMinutes += countedMinutes(block);
-    // The totals resolve the day's rule at its last entry; an open block's last entry is its start.
-    const lastEntryAt = block.end ?? block.start;
+    // The totals resolve the day's rule at its last entry, a break start in an open block included.
+    const lastEntryAt = [
+      block.end ?? block.start,
+      ...block.sourceEntries.map((entry) => entry.timestamp),
+    ].reduce((latest, timestamp) => (Date.parse(timestamp) > Date.parse(latest) ? timestamp : latest));
     if (Date.parse(lastEntryAt) > Date.parse(day.lastEntryAt)) day.lastEntryAt = lastEntryAt;
     days.set(dayOf(block), day);
   }

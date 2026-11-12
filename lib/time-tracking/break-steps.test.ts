@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, setSystemTime, test } from 'bun:test';
 
 import {
   breakPolicyFormValues,
@@ -233,5 +233,61 @@ describe('a day split across blocks', () => {
       ]),
     };
     expect(breaks(day([{ minutes: 540 }, { minutes: 60 }]), rule)).toEqual({ shown: 45, deducted: 45 });
+  });
+
+  test('a second step whose threshold the hidden blocks reach keeps its share', () => {
+    const rule = { ...settings, secondStep: { thresholdMinutes: 361, durationMinutes: 31 } };
+    expect(breaks(day([{ minutes: 360 }, { minutes: 0.5 }, { minutes: 0.5 }]), rule)).toEqual({
+      shown: 31,
+      deducted: 31,
+    });
+  });
+
+  test("a break started after the switch puts the day's whole presence under the new rule", () => {
+    // Nine hours on one job, then another job from 16:00 Berlin, the second step from 16:05
+    // and a stamped break from 16:10; it is 16:11.
+    setSystemTime(new Date(at(551)));
+    try {
+      const rule: OrganizationTimeTrackingSettings = {
+        ...settings,
+        breakPolicyHistory: parseBreakPolicyHistory([
+          { ...ONE_STEP, effectiveFrom: '2026-01-01T00:00:00.000Z' },
+          { ...TWO_STEPS, effectiveFrom: at(545) },
+        ]),
+      };
+      const later = (id: string, entryType: TimeEntry['entryType'], minutes: number): TimeEntry => ({
+        id,
+        userId: 'worker',
+        organizationId: 'org',
+        entryType,
+        timestamp: at(minutes),
+        isManual: false,
+        jobId: 'job-later',
+        status: 'approved',
+        reviewedBy: null,
+        reviewedAt: null,
+        createdAt: at(minutes),
+        updatedAt: at(minutes),
+      });
+      const entries = [
+        ...day([{ minutes: 540 }]),
+        later('later-in', 'clock_in', 540),
+        later('later-break', 'break_start', 550),
+      ];
+      const automaticMinutes = calculateCalendarWorkBlocks(entries)
+        .flatMap((block) => getCalendarBlockDisplaySegments(block, new Date(at(551)), rule))
+        .filter((segment) => segment.type === 'break' && segment.id.includes('-auto-break'))
+        .reduce(
+          (total, segment) => total + (Date.parse(segment.end ?? '') - Date.parse(segment.start)) / 60_000,
+          0,
+        );
+      const [, tuesday] = buildWeeklyTimeData(entries, new Date('2026-10-04T22:00:00.000Z'), rule);
+      expect({ shown: automaticMinutes, deducted: tuesday?.breakMinutes }).toEqual({
+        shown: 45,
+        deducted: 45,
+      });
+    } finally {
+      setSystemTime();
+    }
   });
 });
