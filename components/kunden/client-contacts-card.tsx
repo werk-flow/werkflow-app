@@ -122,7 +122,7 @@ function ClientContactRow({
               </Badge>
             )}
             {contact.siteRole && (
-              <Badge variant="outline" className="text-xs">
+              <Badge variant="outline" className="max-w-full shrink whitespace-normal text-xs wrap-anywhere">
                 {SITE_CONTACT_ROLE_LABELS[contact.siteRole]}
                 {site ? ` · ${site.name}` : ''}
               </Badge>

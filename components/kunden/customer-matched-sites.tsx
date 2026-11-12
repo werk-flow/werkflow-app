@@ -63,7 +63,7 @@ export function CustomerMatchedSites({ client }: { client: CustomerListItem }) {
   if (sites.length === 0) return null;
   const more = (client.matchedSiteTotal ?? sites.length) - sites.length;
   return (
-    <ul className="space-y-2" aria-label={`Gefundene Einsatzorte von ${client.name}`}>
+    <ul className="space-y-2 wrap-anywhere" aria-label={`Gefundene Einsatzorte von ${client.name}`}>
       {sites.map((site) => {
         const address = formatSiteAddress(site);
         return (
