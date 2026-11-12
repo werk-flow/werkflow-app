@@ -31,7 +31,7 @@ import type { InventoryLocation, InventoryPickerOption, ProjectMaterialSummary }
 import type { WorkHandoverWorkspace } from '@/lib/work-handover/types';
 import { ProjectDetailChildJobsCard } from './project-detail-child-jobs-card';
 import { ProjectDetailClientCard } from './project-detail-client-card';
-import { WorkBillingPartiesSection } from '../shared/work-billing-parties-section';
+import { WorkBillingPartiesSection } from '../shared/work-billing-parties-loaders';
 import { ProjectDetailDialogs } from './project-detail-dialogs';
 import { ProjectDetailHeader } from './project-detail-header';
 import { ProjectDetailManagerSections } from './project-detail-manager-sections';

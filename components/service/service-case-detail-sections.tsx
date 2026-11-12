@@ -14,7 +14,7 @@ import {
 } from '@/lib/service-cases/types';
 import { formatBerlinDateTime } from '@/lib/utils';
 import { Fact } from './fact';
-import { WorkBillingPartiesSection } from '@/components/auftraege/shared/work-billing-parties-section';
+import { WorkBillingPartiesSection } from '@/components/auftraege/shared/work-billing-parties-loaders';
 
 const EVENT_LABELS: Readonly<Record<ServiceCaseDetail['events'][number]['eventType'], string>> = {
   created: 'Servicefall erfasst',

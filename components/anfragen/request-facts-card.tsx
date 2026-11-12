@@ -6,7 +6,7 @@ import { SectionTitle } from '@/components/shared/section-title';
 import { TextLink } from '@/components/ui/text-link';
 import { CallbackOverdueBadge } from './request-badges';
 import { useCallbackOverdue } from './use-callback-overdue';
-import { RequestBillingRows } from './request-billing-rows';
+import { RequestBillingRows } from '@/components/auftraege/shared/work-billing-parties-loaders';
 import type { WorkBillingParties } from '@/lib/billing-parties/types';
 
 interface RequestFactsCardProps {

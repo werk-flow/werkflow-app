@@ -28,11 +28,12 @@ const SOURCE_LABELS: Readonly<Record<BillingPartySource, string>> = {
   buero: 'Vom Büro gewählt',
 };
 
-function PartyFact({ label, children }: { label: string; children: React.ReactNode }) {
+/** One labelled fact: a plain element, so the section adds no component per fact (lab.office.job-open). */
+function partyFact(label: string, value: React.ReactNode): React.ReactNode {
   return (
     <div className="min-w-0">
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="mt-0.5 break-words text-sm">{children}</dd>
+      <dd className="mt-0.5 break-words text-sm">{value}</dd>
     </div>
   );
 }
@@ -52,8 +53,8 @@ export function RecipientFact({ current }: { current: WorkBillingPartyVersion })
   );
 }
 
-/** The earlier choices, newest first. */
-function BillingPartiesHistory({ versions }: { versions: WorkBillingPartyVersion[] }) {
+/** The earlier choices, newest first; nothing while there are none. */
+function earlierPartiesList(versions: WorkBillingPartyVersion[]): React.ReactNode {
   if (versions.length === 0) return null;
   return (
     <div className="mt-3 border-t pt-3">
@@ -70,42 +71,42 @@ function BillingPartiesHistory({ versions }: { versions: WorkBillingPartyVersion
   );
 }
 
-function BillingPartiesFacts({ parties, showPlace }: { parties: WorkBillingParties; showPlace: boolean }) {
+/** Auftraggeber, recipient, Einsatzort and access contacts. */
+function partyFacts(parties: WorkBillingParties): React.ReactNode {
   const [current] = parties.versions;
   const siteAddress = parties.site ? formatSiteAddress(parties.site) : '';
   return (
     <dl className="mt-3 grid gap-3 sm:grid-cols-2">
-      <PartyFact label="Auftraggeber">
-        {current ? <TextLink href={`/kunden/${current.clientId}`}>{current.clientName}</TextLink> : '—'}
-      </PartyFact>
-      <PartyFact label="Rechnungsempfänger">{current ? <RecipientFact current={current} /> : '—'}</PartyFact>
-      {showPlace && (
-        <>
-          <PartyFact label="Einsatzort">
-            {parties.site ? (
-              <>
-                {parties.site.name}
-                {siteAddress && <span className="block text-muted-foreground">{siteAddress}</span>}
-              </>
-            ) : (
-              '—'
-            )}
-          </PartyFact>
-          <PartyFact label="Zugangskontakt">
-            {parties.accessContacts.length > 0 ? (
-              <ul className="space-y-0.5">
-                {parties.accessContacts.map((contact) => (
-                  <li key={contact.id}>
-                    {contact.name}
-                    {contact.phone && <span className="text-muted-foreground"> · {contact.phone}</span>}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              '—'
-            )}
-          </PartyFact>
-        </>
+      {partyFact(
+        'Auftraggeber',
+        current ? <TextLink href={`/kunden/${current.clientId}`}>{current.clientName}</TextLink> : '—',
+      )}
+      {partyFact('Rechnungsempfänger', current ? <RecipientFact current={current} /> : '—')}
+      {partyFact(
+        'Einsatzort',
+        parties.site ? (
+          <>
+            {parties.site.name}
+            {siteAddress && <span className="block text-muted-foreground">{siteAddress}</span>}
+          </>
+        ) : (
+          '—'
+        ),
+      )}
+      {partyFact(
+        'Zugangskontakt',
+        parties.accessContacts.length > 0 ? (
+          <ul className="space-y-0.5">
+            {parties.accessContacts.map((contact) => (
+              <li key={contact.id}>
+                {contact.name}
+                {contact.phone && <span className="text-muted-foreground"> · {contact.phone}</span>}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          '—'
+        ),
       )}
     </dl>
   );
@@ -171,11 +172,11 @@ export function WorkBillingPartiesSection({
           )}
         </div>
         {parties.hasClient ? (
-          <BillingPartiesFacts parties={parties} showPlace />
+          partyFacts(parties)
         ) : (
           <p className="mt-3 text-sm text-muted-foreground">Ordne zuerst einen Kunden zu.</p>
         )}
-        <BillingPartiesHistory versions={earlier} />
+        {earlierPartiesList(earlier)}
       </section>
       <lazyWorkBillingPartiesDialog.Dialog
         open={editing}

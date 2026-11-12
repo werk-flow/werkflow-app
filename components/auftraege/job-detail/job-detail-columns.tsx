@@ -12,7 +12,7 @@ import { JobMaterialsSection } from '@/components/inventar/job-materials-section
 import { ApplyWorkTemplateCard } from '@/components/arbeitsvorlagen/apply-work-template-card';
 import type { WorkArtifactSummary } from '@/lib/work-artifacts/types';
 import type { WorkBillingParties } from '@/lib/billing-parties/types';
-import { WorkBillingPartiesSection } from '../shared/work-billing-parties-section';
+import { WorkBillingPartiesSection } from '../shared/work-billing-parties-loaders';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { recordedVisitWindow } from '@/lib/work-artifacts/visit-window';
 import {
