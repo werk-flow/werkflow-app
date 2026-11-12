@@ -67,21 +67,25 @@ export function clockCallLock(operationId: string): string {
  * a page that closes or loses its signal mid-call leaves it for the next start. The entry goes when
  * the server answered or the call failed; a failed call is then kept as usual.
  */
-export async function callWhileKept<T>(
+export function callWhileKept<T>(
   action: Omit<KeptClockAction, 'wipeGeneration'>,
   pageSignal: string | null,
   call: () => Promise<T>,
 ): Promise<T> {
-  const run = async (): Promise<T> => {
-    const key = pageSignal === null ? null : storeKept({ ...action, inFlight: true }, pageSignal);
-    try {
-      return await call();
-    } finally {
-      if (key) localStorage.removeItem(key);
-    }
-  };
-  if (typeof navigator.locks?.request !== 'function') return run();
-  return await navigator.locks.request(clockCallLock(action.operationId), run);
+  const key = pageSignal === null ? null : storeKept({ ...action, inFlight: true }, pageSignal);
+  // The call starts in the tap's own task, so its feedback stays in the first frame.
+  const answered = call().finally(() => {
+    if (key) localStorage.removeItem(key);
+  });
+  // The lock tells other tabs the page still waits; a take-in also leaves a fresh entry alone until it is granted.
+  if (key && typeof navigator.locks?.request === 'function')
+    void navigator.locks.request(clockCallLock(action.operationId), () =>
+      answered.then(
+        () => undefined,
+        () => undefined,
+      ),
+    );
+  return answered;
 }
 
 /**

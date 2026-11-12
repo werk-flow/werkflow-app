@@ -56,10 +56,14 @@ function readKeptAction(key: string): KeptClockAction | null {
 /** How long, without Web Locks, an entry written before an online call counts as its page's still. */
 const CALL_WITHOUT_LOCKS_MS = 2 * 60 * 1000;
 
+/** How long an entry counts as its page's while that page's call lock may not be granted yet. */
+const CALL_LOCK_GRANT_MS = 10 * 1000;
+
 /** Whether the page that wrote this entry before its online call still holds that call open. */
 async function callStillRuns(kept: KeptClockAction): Promise<boolean> {
-  if (typeof navigator.locks?.request !== 'function')
-    return Date.now() - Date.parse(kept.capturedAt) < CALL_WITHOUT_LOCKS_MS;
+  const age = Date.now() - Date.parse(kept.capturedAt);
+  if (typeof navigator.locks?.request !== 'function') return age < CALL_WITHOUT_LOCKS_MS;
+  if (age < CALL_LOCK_GRANT_MS) return true;
   return navigator.locks.request(
     clockCallLock(kept.operationId),
     { ifAvailable: true },

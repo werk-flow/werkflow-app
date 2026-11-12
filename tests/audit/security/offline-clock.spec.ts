@@ -119,6 +119,8 @@ test('an online clock call whose page closed before the answer is recorded once,
   });
 
   const next = await openPage(page.context());
+  // The phone opens the app again a little later, once the closed page's call can no longer be waiting.
+  await next.clock.install({ time: new Date(Date.now() + 15_000) });
   await test.step('the next start sends the kept action under the same operation id: one session, no conflict', async () => {
     await next.goto('/dashboard');
     await expect(clockStatus(next)).toHaveText(UNSENT_COPY.working);
@@ -145,6 +147,7 @@ test('an online clock call whose page closed before the answer is recorded once,
 
   await test.step('the next start sends the end: the session is ended once', async () => {
     const last = await openPage(page.context());
+    await last.clock.install({ time: new Date(Date.now() + 15_000) });
     await last.goto('/dashboard');
     await expect(clockInLauncher(last)).toBeEnabled();
     await expectTimeEventsOnDevice(last, []);
