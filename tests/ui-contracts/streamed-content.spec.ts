@@ -133,3 +133,17 @@ test('a streamed container that never reveals fails reload the same way', async 
   revealStreamedContentAfterEachLoad(page);
   await expect(page.reload()).rejects.toThrow(/still hidden: S:2 "Kundenliste"/);
 });
+
+test('a client-side redirect during the wait has happened when goto returns', async ({ context }) => {
+  const page = await openPage(context);
+  await serve(page, { clientRendered: true });
+  const loaded = page.waitForEvent('load');
+  const going = page.goto(fixtureUrl);
+  await loaded;
+  // The page redirects after hydration, as a redirect from inside a streamed boundary does (/einstellungen).
+  await page.evaluate(() => history.replaceState(null, '', '/kunden/profil'));
+  await reveal(page);
+  await going;
+  // The step after goto sees the page the app ended on, not the URL it asked for.
+  await expect(page).toHaveURL('http://localhost/kunden/profil');
+});
