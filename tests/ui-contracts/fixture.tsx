@@ -31,6 +31,13 @@ import {
 } from './document-upload-boundaries';
 import { OrganizationContractFixture } from './organization-boundaries';
 import { OrganizationExportContractFixture } from './organization-export-boundaries';
+import {
+  TodayRefreshContractFixture,
+  TodayRefreshFallbackContractFixture,
+  TodayRefreshProfileContractFixture,
+  TodayRefreshSwitchContractFixture,
+} from './today-refresh-boundaries';
+import { OfflineTodayContractFixture } from './offline-today-boundaries';
 import { CalendarContractFixture } from './calendar-boundaries';
 import { FeedbackContractFixture, isFeedbackFixture } from './feedback-boundaries';
 import { mountHydrationFixture } from './hydration-boundaries';
@@ -597,6 +604,16 @@ createRoot(root).render(
     <OrganizationContractFixture />
   ) : window.uiContractFixture === 'organization-export' ? (
     <OrganizationExportContractFixture />
+  ) : window.uiContractFixture === 'today-refresh' ? (
+    <TodayRefreshContractFixture />
+  ) : window.uiContractFixture === 'today-refresh-switch' ? (
+    <TodayRefreshSwitchContractFixture />
+  ) : window.uiContractFixture === 'today-refresh-profile' ? (
+    <TodayRefreshProfileContractFixture />
+  ) : window.uiContractFixture === 'today-refresh-fallback' ? (
+    <TodayRefreshFallbackContractFixture />
+  ) : window.uiContractFixture === 'offline-today' ? (
+    <OfflineTodayContractFixture />
   ) : window.uiContractFixture === 'calendar-board' ? (
     <CalendarBoardContractFixture />
   ) : window.uiContractFixture === 'calendar-day' ? (

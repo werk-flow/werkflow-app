@@ -66,6 +66,11 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
       'runFieldSyncOperations',
     ],
   },
+  'app/api/field-sync/v1/today/route.ts': {
+    authorization:
+      "verified identity from an Authorization bearer token or, after the same-origin JSON guard, the cookie session; an identity check that cannot complete answers retry; the active organization from the current memberships, an organization hint naming another refused; reads only the caller's own scheduled visits on the Berlin day of jobs the caller is assigned to, with named field columns, every read scoped to that organization; private no-store responses",
+    mustCall: ['identifyFieldSyncCaller', 'resolveActiveContextForUser', 'readFieldSyncToday'],
+  },
   'app/api/csp-report/route.ts': {
     authorization:
       'unauthenticated by design: receives the browser reports of the enforced script policy, reads and writes nothing, bounds the body, and logs a redacted summary without script samples or query strings',
