@@ -18,7 +18,11 @@ import { ErrorText } from '@/components/ui/error-text';
 import { SectionError } from '@/components/ui/section-error';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useClientRead } from '@/hooks/use-client-read';
-import { listUnreadableDraftsOnDevice, type StoredDraft } from '@/lib/field-sync/device/draft-store';
+import {
+  deleteUnreadableDraftOnDevice,
+  listUnreadableDraftsOnDevice,
+  type StoredDraft,
+} from '@/lib/field-sync/device/draft-store';
 import type { DraftSendProgress } from '@/lib/field-sync/device/draft-sync';
 import { logError } from '@/lib/logging';
 import { formatBerlin } from '@/lib/utils';
@@ -138,7 +142,7 @@ type DeviceDraftListProps = {
 export function DeviceDraftList(props: DeviceDraftListProps) {
   const { device, onOpen } = props;
   const { run, isBusy, anyBusy } = useBusyIds();
-  const [deleting, setDeleting] = useState<StoredDraft | null>(null);
+  const [deleting, setDeleting] = useState<DraftDeletion | null>(null);
   const [error, setError] = useState<string | null>(null);
   const unreadable = useUnreadableDrafts(device, props.drafts);
   const rows = listedDrafts(props);
@@ -174,23 +178,42 @@ export function DeviceDraftList(props: DeviceDraftListProps) {
             disabled={anyBusy}
             onOpen={() => onOpen(openedDraft(row.draft))}
             onSend={() => send(row.draft)}
-            onDelete={() => setDeleting(row.draft)}
+            onDelete={() =>
+              setDeleting({
+                title: `Entwurf „${row.draft.title.trim() || 'Ohne Titel'}“ löschen?`,
+                consequence:
+                  'Der Entwurf und seine Fotos sind nur auf diesem Gerät gespeichert. Nach dem Löschen sind sie nicht wiederherstellbar.',
+                remove: async () => {
+                  await device.change(row.draft.id, () => null);
+                  device.changed();
+                },
+              })
+            }
           />
         ))}
         {unreadableDrafts.map((draft) => (
-          <UnreadableDraftRow key={draft.id} here={draft.jobId === null || draft.jobId === props.jobId} />
+          <UnreadableDraftRow
+            key={draft.id}
+            here={draft.jobId === null || draft.jobId === props.jobId}
+            disabled={anyBusy}
+            onDelete={() =>
+              setDeleting({
+                title: 'Nicht lesbaren Entwurf löschen?',
+                consequence:
+                  'Diese Version der App kann ihn nicht öffnen. Er ist nur auf diesem Gerät gespeichert, und nach dem Löschen ist er mit allem, was du darin erfasst hast, weg.',
+                remove: async () => {
+                  await deleteUnreadableDraftOnDevice(device.holder, draft.id);
+                  unreadable.reload();
+                  device.changed();
+                },
+              })
+            }
+          />
         ))}
       </ul>
       {unreadable.failure && <SectionError failure={unreadable.failure} />}
       <ErrorText>{error}</ErrorText>
-      <DeviceDraftDeleteDialog
-        draft={deleting}
-        onClose={() => setDeleting(null)}
-        onDelete={async (draft) => {
-          await device.change(draft.id, () => null);
-          device.changed();
-        }}
-      />
+      <DeviceDraftDeleteDialog deletion={deleting} onClose={() => setDeleting(null)} />
     </div>
   );
 }
@@ -216,7 +239,15 @@ function useUnreadableDrafts(device: DraftDevice, drafts: readonly StoredDraft[]
 }
 
 /** A draft this version of the app cannot read: the person knows it exists and that it waits. */
-function UnreadableDraftRow({ here }: { here: boolean }) {
+function UnreadableDraftRow({
+  here,
+  disabled,
+  onDelete,
+}: {
+  here: boolean;
+  disabled: boolean;
+  onDelete: () => void;
+}) {
   return (
     <li className="space-y-2 px-3 py-2" data-draft-unreadable="">
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
@@ -230,6 +261,11 @@ function UnreadableDraftRow({ here }: { here: boolean }) {
         Diese Version der App kann den Entwurf nicht lesen. Er bleibt auf diesem Gerät gespeichert und wird
         nicht übertragen.
       </p>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={onDelete}>
+          Löschen
+        </Button>
+      </div>
     </li>
   );
 }
@@ -298,23 +334,24 @@ function DeviceDraftRow({
   );
 }
 
+/** A draft the person asked to delete: what the confirmation says, and the deletion itself. */
+type DraftDeletion = { title: string; consequence: string; remove: () => Promise<void> };
+
 /** The confirmation before a draft and its photos leave the device for good. */
 function DeviceDraftDeleteDialog({
-  draft,
+  deletion,
   onClose,
-  onDelete,
 }: {
-  draft: StoredDraft | null;
+  deletion: DraftDeletion | null;
   onClose: () => void;
-  onDelete: (draft: StoredDraft) => Promise<void>;
 }) {
   const { run, anyBusy } = useBusyIds();
   const [error, setError] = useState<string | null>(null);
 
-  function remove(target: StoredDraft) {
+  function remove(target: DraftDeletion) {
     void run('delete', async () => {
       try {
-        await onDelete(target);
+        await target.remove();
         onClose();
       } catch (failed) {
         logError('DeviceDraftDeleteDialog: delete failed', failed);
@@ -325,7 +362,7 @@ function DeviceDraftDeleteDialog({
 
   return (
     <AlertDialog
-      open={draft !== null}
+      open={deletion !== null}
       pending={anyBusy}
       onOpenChange={(open) => {
         if (open) return;
@@ -335,11 +372,8 @@ function DeviceDraftDeleteDialog({
     >
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Entwurf „{draft?.title.trim() || 'Ohne Titel'}“ löschen?</AlertDialogTitle>
-          <AlertDialogDescription>
-            Der Entwurf und seine Fotos sind nur auf diesem Gerät gespeichert. Nach dem Löschen sind sie nicht
-            wiederherstellbar.
-          </AlertDialogDescription>
+          <AlertDialogTitle>{deletion?.title}</AlertDialogTitle>
+          <AlertDialogDescription>{deletion?.consequence}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter error={error}>
           <AlertDialogCancel disabled={anyBusy}>Abbrechen</AlertDialogCancel>
@@ -349,7 +383,7 @@ function DeviceDraftDeleteDialog({
             onClick={(event) => {
               // The primitive closes on click; stay open until the device answered.
               event.preventDefault();
-              if (draft) remove(draft);
+              if (deletion) remove(deletion);
             }}
           >
             Endgültig löschen

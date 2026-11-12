@@ -6,6 +6,7 @@ import { isJsonRecord } from '@/lib/supabase/json';
 import {
   DRAFT_NO_ACCESS_KEPT_MS,
   changeDraftOnDevice,
+  deleteUnreadableDraftOnDevice,
   listDraftsOnDevice,
   listUnreadableDraftsOnDevice,
   sweepExpiredDraftsOnDevice,
@@ -278,6 +279,41 @@ describe('a record this version cannot read stays on the device and shows to its
     expect(await changeDraftOnDevice(holder, cases.text.id, () => null)).toBeNull();
     expect(await changeDraftOnDevice(holder, cases.text.id, () => cases.text)).toBeNull();
     expect(await listUnreadableDraftsOnDevice(holder)).toHaveLength(2);
+  });
+
+  test('the holder deletes an unreadable draft by its id, and nothing else goes', async () => {
+    const otherOrganization: DraftHolder = {
+      ...holder,
+      organizationId: '9c000000-0000-4000-8000-0000000000a2',
+    };
+    await storeRecord(broken);
+    await storeRecord(later);
+    await storeRecord(revived(latest.sealed));
+    storage.set('werkflow:drafts-on-device', '1');
+
+    // Another person or organization removes nothing, also under the record's own id.
+    expect(await deleteUnreadableDraftOnDevice(otherPerson, cases.text.id)).toBe(false);
+    expect(await deleteUnreadableDraftOnDevice(otherOrganization, cases.text.id)).toBe(false);
+    // A readable draft never goes this way: it has its own delete.
+    expect(await deleteUnreadableDraftOnDevice(holder, cases.sealed.id)).toBe(false);
+    expect(await storedRecords()).toHaveLength(3);
+
+    expect(await deleteUnreadableDraftOnDevice(holder, cases.text.id)).toBe(true);
+    expect(await listUnreadableDraftsOnDevice(holder)).toEqual([
+      { id: cases.noAccess.id, jobId: cases.noAccess.jobId },
+    ]);
+    expect((await listDraftsOnDevice(holder, NOW)).map((entry) => entry.id)).toEqual([cases.sealed.id]);
+    expect(storage.get('werkflow:drafts-on-device')).toBe('1');
+  });
+
+  test('deleting the last unreadable draft removes the device mark once a fresh count finds none', async () => {
+    await storeRecord(later);
+    storage.set('werkflow:drafts-on-device', '1');
+    expect(await deleteUnreadableDraftOnDevice(holder, cases.noAccess.id)).toBe(true);
+    for (let turn = 0; turn < 100 && storage.has('werkflow:drafts-on-device'); turn += 1)
+      await new Promise((resolve) => setImmediate(resolve));
+    expect(storage.has('werkflow:drafts-on-device')).toBe(false);
+    expect(await storedRecords()).toEqual([]);
   });
 
   test('a record whose job this version cannot read still shows to its person, without a job', async () => {

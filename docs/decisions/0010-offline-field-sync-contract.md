@@ -209,4 +209,4 @@ Decided by the E7 lead for werk-flow/werkflow-planning#320. It completes the **O
 
 ## Amendment 2026-11-12: stored records stay readable
 
-Decided by the E7 lead for werk-flow/werkflow-planning#402. A device record of an earlier version is always readable by every later release, and a record a release cannot read stays on the device, is never sent and shows to its person; the golden records beside each store's reader (`lib/field-sync/device/draft-store.golden.json`) are the mechanism (Tier 2).
+Decided by the E7 lead for werk-flow/werkflow-planning#402. A device record of an earlier version is always readable by every later release, and a record a release cannot read is never sent, shows to its person and stays on the device until that person deletes it; the golden records beside each store's reader (`lib/field-sync/device/draft-store.golden.json`) are the mechanism (Tier 2).

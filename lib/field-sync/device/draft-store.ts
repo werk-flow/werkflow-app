@@ -326,6 +326,27 @@ export async function changeDraftOnDevice(
   return stored;
 }
 
+/**
+ * Deletes one record of the holder that this version cannot read, after the person confirmed it,
+ * in one transaction. A readable draft, or a record of another person or organization, stays.
+ * Answers whether it deleted the record.
+ */
+export async function deleteUnreadableDraftOnDevice(holder: DraftHolder, id: string): Promise<boolean> {
+  let deleted = false;
+  await inDraftStore('readwrite', (store) => {
+    const request = store.get(id);
+    request.addEventListener('success', () => {
+      const held = heldRecordSchema.safeParse(request.result);
+      if (!held.success || !belongsTo(held.data, holder) || storedDraft(request.result)) return;
+      store.delete(id);
+      markWhatRemains(store);
+      deleted = true;
+    });
+    return request;
+  });
+  return deleted;
+}
+
 /** Deletes every draft of the holder, after the person chose to discard their unsent work. */
 export async function deleteDraftsOnDevice(holder: DraftHolder): Promise<void> {
   await inDraftStore('readwrite', (store) => {
