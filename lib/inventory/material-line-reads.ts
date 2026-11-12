@@ -380,6 +380,9 @@ function toConsumptionLines(
  * and every use event with its cost snapshot, corrections included, oldest
  * first. A project covers its own lines and those of its jobs. Admin and Büro
  * only, because the events carry purchase costs. It decides no billability.
+ * The billable review of werk-flow/werkflow-planning#16 is its first caller;
+ * until it lands, only the boundary test calls it.
+ * @internal
  */
 export async function readJobMaterialConsumption(
   rawTarget: ConsumptionTarget,
