@@ -160,17 +160,28 @@ function watchLongAbsence(registry: ListenerRegistry): () => void {
   };
 }
 
-export function RealtimeProvider({ children }: { children: ReactNode }) {
-  const { activeOrgId } = useOrganization();
-  const channelRef = useRef<RealtimeChannel | null>(null);
-  const [registry] = useState(createListenerRegistry);
+type ChannelOpener = (options: {
+  supabase: ReturnType<typeof createSupabaseBrowserClient>;
+  registry: ListenerRegistry;
+  isCancelled: () => boolean;
+  dispatch: (event: RealtimeChangeEvent) => void;
+}) => RealtimeChannel;
 
+/**
+ * The one channel of a provider: opened with the session's token, renewed on
+ * a token change, caught up after a long absence, removed on unmount. `key`
+ * names the scope; null opens nothing.
+ */
+function useProviderChannel(key: string | null, open: ChannelOpener, registry: ListenerRegistry): void {
+  const openRef = useRef(open);
   useEffect(() => {
-    if (!activeOrgId) return;
-    const organizationId = activeOrgId;
-
+    openRef.current = open;
+  });
+  useEffect(() => {
+    if (key === null) return;
     const supabase = createSupabaseBrowserClient();
     let cancelled = false;
+    let channel: RealtimeChannel | null = null;
 
     // Preserve every event identity. The two read/refresh hooks coalesce
     // their complete table set once, with the shared 150 ms guard.
@@ -189,13 +200,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         void supabase.realtime.setAuth(session.access_token);
       }
 
-      channelRef.current = subscribeOrganizationChannel({
-        supabase,
-        organizationId,
-        registry,
-        isCancelled: () => cancelled,
-        dispatch,
-      });
+      channel = openRef.current({ supabase, registry, isCancelled: () => cancelled, dispatch });
     }
 
     // A failed session read leaves the page without live updates; the log keeps it.
@@ -218,15 +223,74 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       delete document.documentElement.dataset.realtimePostgresState;
       authListener.unsubscribe();
       stopWatchingAbsence();
-      if (channelRef.current) {
-        void supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
+      if (channel) {
+        void supabase.removeChannel(channel);
+        channel = null;
       }
     };
-  }, [activeOrgId, registry]);
+  }, [key, registry]);
+}
 
+export function RealtimeProvider({ children }: { children: ReactNode }) {
+  const { activeOrgId } = useOrganization();
+  const [registry] = useState(createListenerRegistry);
+  useProviderChannel(
+    activeOrgId,
+    (options) => subscribeOrganizationChannel({ ...options, organizationId: activeOrgId ?? '' }),
+    registry,
+  );
   const ctxValue = useMemo<RealtimeContextValue>(() => ({ subscribe: registry.subscribe }), [registry]);
+  return <RealtimeContext.Provider value={ctxValue}>{children}</RealtimeContext.Provider>;
+}
 
+/**
+ * WerkFlow support's channel: support belongs to no organization, so its one
+ * binding is its own user's report signals (problem_report_signals), which
+ * the select-own policy delivers to nobody else. Every other table stays off
+ * this channel.
+ */
+function subscribeSupportChannel({
+  supabase,
+  userId,
+  registry,
+  isCancelled,
+  dispatch,
+}: Parameters<ChannelOpener>[0] & { userId: string }): RealtimeChannel {
+  const table = 'problem_report_signals' satisfies RealtimeTable;
+  return supabase
+    .channel(`support-${userId}`)
+    .on('system', {}, (payload: unknown) => {
+      handleSystemPayload(payload, registry, isCancelled);
+    })
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table, filter: `user_id=eq.${userId}` },
+      (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
+        if (payload.eventType === 'DELETE') return;
+        dispatch({ table, eventType: payload.eventType, new: payload.new, old: payload.old });
+      },
+    )
+    .subscribe((status: string, err?: Error) => {
+      if (isCancelled()) return;
+      document.documentElement.dataset.realtimeState = status.toLowerCase();
+      if (err) logError('realtime.subscription_error', err);
+      if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
+        registry.leave();
+        delete document.documentElement.dataset.realtimePostgresState;
+        logError('realtime.channel_interrupted', status);
+      }
+    });
+}
+
+/** The provider of WerkFlow support's area, for the verified support user. */
+export function SupportRealtimeProvider({ userId, children }: { userId: string; children: ReactNode }) {
+  const [registry] = useState(createListenerRegistry);
+  useProviderChannel(
+    `support-${userId}`,
+    (options) => subscribeSupportChannel({ ...options, userId }),
+    registry,
+  );
+  const ctxValue = useMemo<RealtimeContextValue>(() => ({ subscribe: registry.subscribe }), [registry]);
   return <RealtimeContext.Provider value={ctxValue}>{children}</RealtimeContext.Provider>;
 }
 

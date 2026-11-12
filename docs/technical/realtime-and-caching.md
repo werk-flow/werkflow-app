@@ -20,7 +20,7 @@ Wrong turn: a button that waits for the server, or pending state from a router t
 ### Add Realtime data
 
 1. Confirm that the UI needs live updates and that a route refresh does not serve better.
-2. In the migration: add the table to the `supabase_realtime` publication, publish INSERT and UPDATE only, create the unique `(id, organization_id)` index `<table>_replident_idx` (unless a unique constraint provides one), set `REPLICA IDENTITY USING INDEX` on it, and add the `emit_realtime_deletion` trigger as `20260907010200_private_realtime_deletions.sql` does.
+2. In the migration: add the table to the `supabase_realtime` publication, publish INSERT and UPDATE only, create the unique `(id, organization_id)` index `<table>_replident_idx` (unless a unique constraint provides one), set `REPLICA IDENTITY USING INDEX` on it, and add the `emit_realtime_deletion` trigger as `20260907010200_private_realtime_deletions.sql` does. A table whose rows each belong to one person, read through a select-own policy, gets no trigger: a notice reaches every member. List it in `OWN_USER_REALTIME_TABLES`.
 3. Add the table to `REALTIME_TABLES` in `lib/realtime/tables.ts`. Run `bun run realtime:check`; it fails until the migration and the list agree.
 
 Wrong turn: publishing a ledger or a link table. Publish the mutable owning root, so one row signals one authoritative read.
@@ -124,7 +124,7 @@ A picker receives its whole list only when the list is bounded by nature: the me
 
 ## Realtime model
 
-- The transport is `postgres_changes` on one channel per organization. `components/realtime/realtime-provider.tsx` owns the channel and binds every table in `REALTIME_TABLES`.
+- The transport is `postgres_changes` on one channel per organization. `components/realtime/realtime-provider.tsx` owns the channel and binds every table in `REALTIME_TABLES`. WerkFlow support belongs to no organization: its area's provider (`SupportRealtimeProvider`) binds only the user's own rows of `problem_report_signals`.
 - Events are invalidation signals that never authorize a record read. A client-supplied organization filter is no authorization boundary.
 - Published tables use `REPLICA IDENTITY USING INDEX` on `(id, organization_id)`. `realtime:check` rejects FULL identity.
 - An INSERT or UPDATE event reaches a receiver only while it may select the primary key, and carries only the columns it may select. A published table with column grants keeps `id`, `organization_id` and `updated_at` granted.

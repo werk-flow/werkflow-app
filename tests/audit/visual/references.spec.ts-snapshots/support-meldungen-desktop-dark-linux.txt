@@ -1,0 +1,10 @@
+WerkFlow Support
+Meldungen
+Die Meldungen aller Organisationen, die älteste zuerst.
+Meldung aufnehmen
+Status
+Abgelehnt
+Einordnung
+Blocker
+Keine Meldungen gefunden
+Zu diesen Filtern gibt es keine Meldung. Wähle einen anderen Status oder eine andere Einordnung.
