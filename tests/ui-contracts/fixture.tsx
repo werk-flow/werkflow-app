@@ -11,6 +11,7 @@ import {
   SicknessRecordContractFixture,
 } from './absence-boundaries';
 import { ClockContractFixture } from './clock-boundaries';
+import { BreakRuleWeekFixture } from './break-rule-week-boundaries';
 import { ClockStateProvider } from '@/components/clock-state-provider';
 import { SidebarContractFixture } from './sidebar-boundaries';
 import { initializeLazyDialogBoundary, LazyDialogContractFixture } from './lazy-dialog-boundaries';
@@ -613,6 +614,8 @@ createRoot(root).render(
     </main>
   ) : window.uiContractFixture === 'clock' ? (
     <ClockContractFixture />
+  ) : window.uiContractFixture === 'break-rule-week' ? (
+    <BreakRuleWeekFixture />
   ) : window.uiContractFixture === 'sidebar' ? (
     <SidebarContractFixture />
   ) : window.uiContractFixture === 'lazy-dialog' ? (

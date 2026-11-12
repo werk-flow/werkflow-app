@@ -1,11 +1,7 @@
 import type { TimeEntry, WeeklyTimeDataPoint, WeeklyTimeLabel } from './types';
 import type { DailyTarget } from '@/lib/personnel/targets';
 import { calculateBreakMinutes, calculateTotalMinutes, groupEntriesByDate } from './helpers';
-import {
-  computeBreakdownForSettings,
-  resolveBreakPolicyAtTimestamp,
-  type OrganizationTimeTrackingSettings,
-} from './settings';
+import { computeBreakdownForSettings, resolveBreakPolicyAtTimestamp, type BreakPolicy } from './settings';
 import { calculateBreakSessions, calculateWorkSessions } from './work-sessions';
 import {
   addLocalDays,
@@ -62,7 +58,7 @@ export function computeWeekLabel(monday: Date): WeeklyTimeLabel {
 export function buildWeeklyTimeData(
   entries: TimeEntry[],
   monday: Date,
-  settings: OrganizationTimeTrackingSettings,
+  settings: BreakPolicy,
   // Monday-first resolved targets (P1-04); joined by index so a server/client
   // date-key drift can never mis-assign a day's target.
   weekTargets?: DailyTarget[],

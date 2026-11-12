@@ -46,7 +46,7 @@ export function describeActivity(selection: TimeActivitySelection, job: ClockJob
 }
 
 function breakAction(state: LiveClockState): ClockAction[] {
-  return state.breakMode === 'manual'
+  return state.breakPolicy.breakMode === 'manual'
     ? [
         {
           id: 'break',
