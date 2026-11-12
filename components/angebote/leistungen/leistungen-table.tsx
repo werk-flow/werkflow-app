@@ -7,39 +7,13 @@ import { InlinePending } from '@/components/ui/inline-pending';
 import { ListRow, ListRowActions } from '@/components/ui/list-row';
 import { PlainButton } from '@/components/ui/plain-button';
 import { RowActionsMenu, type RowActionMenuItem } from '@/components/ui/row-actions-menu';
-import { Skeleton } from '@/components/ui/skeleton';
-import { ColumnsTableHeader, hiddenHeader, type SkeletonColumn } from '@/components/ui/skeleton-table';
+import { ColumnsTableHeader } from '@/components/ui/skeleton-table';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { INVENTORY_UNITS } from '@/lib/inventory/units';
 import { formatEuroCents, formatTaxRate } from '@/lib/document-rendering/format';
 import { LEISTUNG_KIND_LABELS, type LeistungListEntry } from '@/lib/price-catalog/types';
 import { formatGermanDate } from '@/lib/utils';
-
-// One column definition for the loaded table and its skeleton.
-export const LEISTUNG_COLUMNS: readonly SkeletonColumn[] = [
-  { id: 'number', header: 'Nr.', className: 'w-[110px]', skeleton: <Skeleton className="h-4 w-14" /> },
-  { id: 'name', header: 'Leistung', skeleton: <Skeleton className="h-4 w-2/3" /> },
-  { id: 'kind', header: 'Art', className: 'w-[130px]', skeleton: <Skeleton className="h-4 w-20" /> },
-  {
-    id: 'price',
-    header: 'Verkaufspreis',
-    className: 'w-[180px] text-right',
-    skeleton: <Skeleton className="ml-auto h-4 w-24" />,
-  },
-  {
-    id: 'cost',
-    header: 'Kostensatz',
-    className: 'w-[150px] text-right',
-    skeleton: <Skeleton className="ml-auto h-4 w-20" />,
-  },
-  { id: 'tax', header: 'MwSt.', className: 'w-[80px]', skeleton: <Skeleton className="h-4 w-10" /> },
-  {
-    id: 'actions',
-    header: hiddenHeader('Aktionen'),
-    className: 'w-[56px]',
-    skeleton: <Skeleton className="h-8 w-8" />,
-  },
-];
+import { LEISTUNG_COLUMNS } from './leistungen-columns';
 
 export type LeistungRowActions = {
   onOpenPrices: (entry: LeistungListEntry) => void;

@@ -2,7 +2,7 @@
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { SkeletonList, SkeletonTable } from '@/components/ui/skeleton-table';
-import { LEISTUNG_COLUMNS } from './leistungen-table';
+import { LEISTUNG_COLUMNS } from './leistungen-columns';
 
 // Content-only skeletons: the Angebote layout keeps the h1 and the area nav
 // on screen. Client module because the columns live in the client table.
