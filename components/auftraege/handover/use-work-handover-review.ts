@@ -158,7 +158,7 @@ export function useWorkHandoverReview(initialWorkspace: WorkHandoverWorkspace) {
       : initialWorkspace.packageVersion;
   const canEdit =
     initialWorkspace.executionState === 'execution_complete' && initialWorkspace.packageState !== 'released';
-  const canPreview = canEdit && packageVersion > 0 && !dirty && selectedKeys.length > 0;
+  const canPreview = canEdit && selectedKeys.length > 0;
 
   return {
     refreshRoute,

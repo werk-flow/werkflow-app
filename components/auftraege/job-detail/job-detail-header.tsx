@@ -1,6 +1,7 @@
 'use client';
 
 import { MoreVertical, Pencil, Trash2 } from 'lucide-react';
+import { useRef } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -97,6 +98,15 @@ function JobDetailActionsMenu({
 }: Pick<JobDetailHeaderProps, 'showEditDialog' | 'handleEditDialogOpenChange' | 'setShowDeleteDialog'>) {
   // The trigger shows a spinner while the edit form downloads.
   const editWaiting = lazyEditJobDialog.useWaiting(showEditDialog);
+  // An item that opens a dialog keeps the menu from returning focus to its
+  // trigger: that focus left the open dialog, and the dialog's focus trap took
+  // it back with the field's whole value selected, so one keystroke replaced it.
+  // A menu closed without a choice still returns focus to the trigger.
+  const openedDialog = useRef(false);
+  const openDialog = (open: () => void): void => {
+    openedDialog.current = true;
+    open();
+  };
 
   return (
     <DropdownMenu
@@ -115,15 +125,22 @@ function JobDetailActionsMenu({
           <MoreVertical className="size-4" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={() => handleEditDialogOpenChange(true)}>
+      <DropdownMenuContent
+        align="end"
+        onCloseAutoFocus={(event) => {
+          if (!openedDialog.current) return;
+          openedDialog.current = false;
+          event.preventDefault();
+        }}
+      >
+        <DropdownMenuItem onClick={() => openDialog(() => handleEditDialogOpenChange(true))}>
           <Pencil className="mr-2 size-4" />
           Bearbeiten
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           className="text-destructive focus:text-destructive"
-          onClick={() => setShowDeleteDialog(true)}
+          onClick={() => openDialog(() => setShowDeleteDialog(true))}
         >
           <Trash2 className="mr-2 size-4" />
           Auftrag löschen
