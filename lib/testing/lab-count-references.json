@@ -74,7 +74,7 @@
         },
         "script": {
           "requests": { "reference": 43, "tolerance": 1 },
-          "encodedBytes": { "reference": 686629, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 672846, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         },
@@ -316,6 +316,24 @@
           },
           "runKeys": ["2026-11-09T215315624Z-b68a0c"],
           "reason": "Tailwind no longer scans tests and test support (lint examples became shipped utilities), and the unused .hide-time-picker block and duplicate ::selection rules are gone; every dropped utility appears only in an excluded test file, and audit:visual, audit:layout and audit:layout:viewports pass on the same tree"
+        },
+        {
+          "kind": "floor-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 43, "tolerance": 1 },
+            "encodedBytes": { "reference": 686629, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 43, "tolerance": 1 },
+            "encodedBytes": { "reference": 672846, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-12T001919175Z-93bafd"],
+          "reason": "The Arbeitsnachweis dialog (form, detail, action panel, customer decision, signature pad) and the report-draft code now download on the dialog's first open through components/shared/lazy-dialog.tsx instead of with the job page, whose code the job list prefetches. Same build measured against the base commit 8028f170 on Boat: 689,612 B before, 672,846 B after, 43 script requests both times; golden p1-15 to p1-17, the field and work layout audits and the offline draft journey open and use the dialog on this build."
         }
       ]
     },
