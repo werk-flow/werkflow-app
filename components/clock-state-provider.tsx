@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type RefObject,
 } from 'react';
 
 import { useOrganization } from '@/components/organization/organization-context';
@@ -84,8 +85,8 @@ type ClockOutboxState = {
    * The device held unsent work when the page started, and the outbox has not shown it yet, as
    * without signal. Read when an action starts; it renders nothing.
    */
-  unchecked: () => boolean;
-  keep: (action: Parameters<typeof keepClockAction>[0]) => boolean;
+  unchecked: RefObject<boolean>;
+  keep: (action: Parameters<typeof keepClockAction>[0]) => TimeTransitionResult;
 };
 
 /**
@@ -111,12 +112,12 @@ function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promise<void
       setKept(false);
     };
     /** Hands what pages kept to the outbox; without its code the actions stay kept and marked until the next `online`. */
+    /** Hands what pages kept to the outbox; without its code the actions stay kept and marked until the next `online`. */
     const attach = async (): Promise<void> => {
       try {
         const outbox = await loadClockOutbox();
-        const stop = await outbox.attachClockOutbox(holder, onView, () => void refresh());
-        detach = stop;
-        if (ended) stop();
+        detach = await outbox.attachClockOutbox(holder, onView, () => void refresh());
+        if (ended) detach();
       } catch {
         // best-effort: no signal is the expected case here; the actions stay kept and marked, and `online` or the next start tries again.
       }
@@ -140,15 +141,24 @@ function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promise<void
     };
   }, [holder, refresh]);
 
-  const keep = useCallback<ClockOutboxState['keep']>((action) => {
-    const signal = signalRef.current;
-    if (signal === null || !keepClockAction(action, signal)) return false;
-    setKept(true);
-    attachRef.current?.();
-    return true;
-  }, []);
-  const unchecked = useCallback(() => uncheckedRef.current, []);
-  return { view, kept, unchecked, keep };
+  /**
+   * Keeps a start, a switch or an end on the phone and answers as the accepted action would. Every
+   * other action needs the server's answer first, and events that wait for the person's decision
+   * carry nothing new: an action kept behind them would never be sent.
+   */
+  const stopped = view?.status === 'stopped';
+  const keep = useCallback<ClockOutboxState['keep']>(
+    (action) => {
+      const signal = signalRef.current;
+      const waits = action.action === 'start' || action.action === 'switch' || action.action === 'end';
+      if (stopped || !waits || signal === null || !keepClockAction(action, signal)) return FAILED;
+      setKept(true);
+      attachRef.current?.();
+      return { ...KEPT, outcome: action.action === 'end' ? 'ended' : 'active' };
+    },
+    [stopped],
+  );
+  return { view, kept, unchecked: uncheckedRef, keep };
 }
 
 /**
@@ -157,26 +167,6 @@ function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promise<void
  */
 function keptBase(serverState: LiveClockState | null): LiveClockState | null {
   return serverState && { ...serverState, activeJobInfo: null, resumeJobInfo: null };
-}
-
-type KeptAction = Parameters<ClockOutboxState['keep']>[0];
-
-/**
- * Keeps a start, a switch or an end on the phone and answers as the accepted action would. Every
- * other action needs the server's answer first, and events that wait for the person's decision
- * carry nothing new: an action kept behind them would never be sent.
- */
-function useKeepOnPhone(outbox: ClockOutboxState): (action: KeptAction) => TimeTransitionResult {
-  const stopped = outbox.view?.status === 'stopped';
-  const { keep } = outbox;
-  return useCallback(
-    (action) => {
-      const waits = action.action === 'start' || action.action === 'switch' || action.action === 'end';
-      if (stopped || !waits || !keep(action)) return FAILED;
-      return { ...KEPT, outcome: action.action === 'end' ? 'ended' : 'active' };
-    },
-    [keep, stopped],
-  );
 }
 
 /** Echoes an accepted or kept action first, so no in-flight read overwrites it, then reads fresh. */
@@ -225,7 +215,7 @@ function useClockTransitionExecute({
   setData: ClockLiveView['setData'];
 }): ClockTransitionExecute {
   const { activeOrgId, userId } = holder;
-  const keepOnPhone = useKeepOnPhone(outbox);
+  const { keep } = outbox;
   const settle = useSettleTransition(invalidate, setData, refresh);
   // Unsent actions go first: one captured after them must never reach the server before them.
   const knownUnsent = outbox.kept || outbox.view?.status === 'pending';
@@ -250,7 +240,7 @@ function useClockTransitionExecute({
         expectedVersion,
         selection,
       };
-      const standsOnUnsent = knownUnsent || unchecked();
+      const standsOnUnsent = knownUnsent || unchecked.current;
       // A phone that reports no network asks no server.
       const triedOnline = !standsOnUnsent && navigator.onLine;
       let result: TimeTransitionResult | null = null;
@@ -264,7 +254,7 @@ function useClockTransitionExecute({
       if (!result) {
         if (!userId) return FAILED;
         const base = keptBase(standsOnUnsent ? null : serverState);
-        result = keepOnPhone({
+        result = keep({
           ...command,
           userId,
           organizationId: activeOrgId,
@@ -276,7 +266,7 @@ function useClockTransitionExecute({
       await settle(result, selection);
       return result;
     },
-    [activeOrgId, userId, isReady, keepOnPhone, knownUnsent, run, serverState, settle, unchecked],
+    [activeOrgId, userId, isReady, keep, knownUnsent, run, serverState, settle, unchecked],
   );
 }
 
