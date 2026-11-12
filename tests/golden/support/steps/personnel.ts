@@ -588,7 +588,7 @@ export async function addWorkScheduleViaDialog(
 
 /** The holiday-region select on the time settings. */
 export function holidayRegionSelect(page: Page): Locator {
-  return page.getByLabel('Bundesland');
+  return page.getByRole('combobox', { name: 'Bundesland' });
 }
 
 /** The holiday-region save button on the time settings. */
@@ -598,9 +598,9 @@ export function saveHolidayRegionButton(page: Page): Locator {
 
 export async function setHolidayRegionViaSettings(page: Page, regionLabel: string): Promise<void> {
   await page.goto('/einstellungen/zeiterfassung');
-  await selectFromSearchable(page, page.locator('#holiday-region'), regionLabel);
+  await selectFromSearchable(page, holidayRegionSelect(page), regionLabel);
   await saveHolidayRegionButton(page).click();
-  await expect(page.getByText('Der Feiertagskalender wurde gespeichert.')).toBeVisible();
+  await expect(visibleText(page, 'Der Feiertagskalender wurde gespeichert.')).toBeVisible();
 }
 
 const CLOSURE_DATE_FIELD = 'Datum der Betriebsruhe';
@@ -610,13 +610,18 @@ function closureDaySubmitButton(page: Page): Locator {
   return page.getByRole('button', { name: 'Eintragen' });
 }
 
+/** The optional label field of the closure-day form. */
+function closureDayLabelField(page: Page): Locator {
+  return page.getByRole('textbox', { name: 'Bezeichnung (optional)' });
+}
+
 /** Fills and submits the closure-day form without asserting the outcome (for a refused date). */
 export async function submitClosureDayForm(
   page: Page,
   options: { dateDigits: string; label: string },
 ): Promise<void> {
   await typeIntoDatePicker(page.getByRole('main'), CLOSURE_DATE_FIELD, options.dateDigits);
-  await page.getByLabel('Bezeichnung (optional)').fill(options.label);
+  await closureDayLabelField(page).fill(options.label);
   await closureDaySubmitButton(page).click();
 }
 
@@ -625,13 +630,13 @@ export async function addClosureDayViaSettings(
   options: { dateDigits: string; label?: string; beforeSubmit?: () => Promise<void> },
 ): Promise<void> {
   await page.goto('/einstellungen/zeiterfassung');
-  await typeIntoDatePicker(page.locator('body'), CLOSURE_DATE_FIELD, options.dateDigits);
+  await typeIntoDatePicker(page.getByRole('main'), CLOSURE_DATE_FIELD, options.dateDigits);
   if (options.label !== undefined) {
-    await page.locator('#closure-label').fill(options.label);
+    await closureDayLabelField(page).fill(options.label);
   }
   await options.beforeSubmit?.();
   await closureDaySubmitButton(page).click();
-  await expect(page.getByText('Der Betriebsruhe-Tag wurde eingetragen.')).toBeVisible();
+  await expect(visibleText(page, 'Der Betriebsruhe-Tag wurde eingetragen.')).toBeVisible();
 }
 
 // dateLabel: dd.mm.yyyy — the aria-label also contains the weekday, so match
@@ -649,7 +654,7 @@ export async function removeClosureDayViaSettings(
       name: new RegExp(`Betriebsruhe am .*${escaped} entfernen`),
     })
     .click();
-  await expect(page.getByText('Der Betriebsruhe-Tag wurde entfernt.')).toBeVisible();
+  await expect(visibleText(page, 'Der Betriebsruhe-Tag wurde entfernt.')).toBeVisible();
 }
 
 // P1-05: scoped responsibilities, effective previews, and substitutions.
