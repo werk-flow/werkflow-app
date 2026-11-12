@@ -133,12 +133,28 @@ async function countDraftsOnPage(page: Page): Promise<number> {
   }, DRAFT_DATABASE);
 }
 
-/** Waits until the job page loaded the report dialog's code, which a first open without signal needs. */
-export async function expectReportCodeLoaded(page: Page): Promise<void> {
-  await expect(page.getByTestId('work-artifacts-section').filter({ visible: true })).toHaveAttribute(
-    'data-artifact-code',
-    'ready',
-  );
+/** Counts the page's requests that have not ended yet, from now on. */
+export function trackRequestsInFlight(page: Page): () => number {
+  let inFlight = 0;
+  page.on('request', () => {
+    inFlight += 1;
+  });
+  const ended = (): void => {
+    inFlight -= 1;
+  };
+  page.on('requestfinished', ended);
+  page.on('requestfailed', ended);
+  return () => inFlight;
+}
+
+/**
+ * Waits until the page loaded, had an idle moment, and every request it started meanwhile ended:
+ * what the page fetches once idle is on the page, whatever it is.
+ */
+export async function waitUntilPageIdle(page: Page, inFlight: () => number): Promise<void> {
+  await page.waitForLoadState('networkidle');
+  await page.evaluate(() => new Promise<void>((resolve) => requestIdleCallback(() => resolve())));
+  await expect.poll(inFlight).toBe(0);
 }
 
 /** One Arbeitsnachweis on the server: its state, and how many revisions, photo links and draft operations wrote it. */

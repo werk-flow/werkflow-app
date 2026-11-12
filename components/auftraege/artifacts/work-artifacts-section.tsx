@@ -79,8 +79,6 @@ export function WorkArtifactsSection({
     <section
       id="arbeitsnachweise"
       data-testid="work-artifacts-section"
-      // Whether the dialog's code is on the page: a first open without signal needs it loaded.
-      data-artifact-code={code ? 'ready' : 'pending'}
       className="rounded-lg border bg-card p-4 shadow-xs sm:p-5"
     >
       <WorkArtifactsSectionHeader readOnly={readOnly} isManager={isManager} onCreate={open.create} />

@@ -11,10 +11,11 @@ import {
   draftOnDevice,
   expectAttachedReports,
   expectDraftsOnDevice,
-  expectReportCodeLoaded,
   photoButton,
   savedOnDeviceBanner,
   takeSyntheticPhoto,
+  trackRequestsInFlight,
+  waitUntilPageIdle,
 } from '../support/offline-drafts';
 import {
   offlineStand,
@@ -47,9 +48,10 @@ test('a report with two photos written without signal survives a reload and arri
     await page.goto('/dashboard');
     await waitForTodayOnDevice(page, [jobTitle]);
     await waitForOfflineShell(page);
+    const inFlight = trackRequestsInFlight(page);
     await page.goto(`/auftraege/${jobNumber}`);
-    // The report dialog's code loads once the page is idle, before anyone opens it.
-    await expectReportCodeLoaded(page);
+    // Nothing opens the report yet: what the page loads once idle is all the phone will have.
+    await waitUntilPageIdle(page, inFlight);
   });
 
   const dialog = await test.step('the signal goes: the first open of the report still works', async () => {
