@@ -40,7 +40,7 @@ export function AufgabenContent() {
       <div className="mx-auto max-w-3xl space-y-8" data-testid="aufgaben-content" data-loaded="true">
         <PersonnelOwnActionsSection />
         <StaleRegion stale={view.isStale} onRetry={view.refresh} className="space-y-8">
-          <AufgabenTaskSection tasks={overview.tasks} onTaskDecided={view.refresh} />
+          <AufgabenTaskSection tasks={overview.tasks} />
 
           <AufgabenNotificationsSection
             notifications={overview.notifications}

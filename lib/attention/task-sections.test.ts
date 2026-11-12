@@ -20,15 +20,11 @@ const TASK_OF_EVERY_KIND: AttentionTask[] = [
   {
     sourceType: 'site_access_proposal',
     sourceId: 'access-1',
-    jobNumber: 'A-1',
-    jobTitle: 'Bad',
+    clientId: 'client-1',
     siteName: 'Haus Lindenstraße',
-    siteAddress: 'Lindenstraße 5, 10115 Berlin',
-    currentAccessNotes: null,
+    jobNumber: 'A-1',
     proposerName: 'Max Muster',
     proposedAt: '2026-11-10T08:00:00Z',
-    values: { contactName: 'Erika Musterfrau', contactPhone: '', contactNote: '', accessNotes: '' },
-    accessContacts: [],
   },
   {
     sourceType: 'planning_visit_replan',

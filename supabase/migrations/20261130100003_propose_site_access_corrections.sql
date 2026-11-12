@@ -382,7 +382,7 @@ grant execute on function public.reject_site_access_proposal(uuid, uuid, uuid, t
 -- One read of the pending office sets a manager's attention derivation
 -- needs, so the new task kind adds no backend request: the open requests as
 -- list_open_request_attention (20261129100001) returns them, and the open
--- access proposals. Each array holds at most p_limit + 1 rows, so the caller
+-- access proposals without their proposed values (the review reads those). Each array holds at most p_limit + 1 rows, so the caller
 -- sees an overflow instead of a cut. list_open_request_attention stays for
 -- the previous build; a later release drops it
 -- (KEPT_FOR_DEPLOYED_BUILD in lib/security/retired-functions.test.ts).
@@ -420,8 +420,7 @@ as $$
       select jsonb_agg(to_jsonb(open_proposal) order by open_proposal.proposed_at, open_proposal.id)
       from (
         select
-          proposal.id, proposal.job_id, proposal.site_id, proposal.proposed_by, proposal.proposed_at,
-          proposal.contact_name, proposal.contact_phone, proposal.contact_note, proposal.access_notes
+          proposal.id, proposal.job_id, proposal.site_id, proposal.proposed_by, proposal.proposed_at
         from public.site_access_proposals proposal
         where proposal.organization_id = p_organization_id
           and proposal.status = 'open'

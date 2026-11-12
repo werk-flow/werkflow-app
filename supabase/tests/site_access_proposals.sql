@@ -183,7 +183,7 @@ begin
   values ('46000000-0000-0000-0000-000000000010', 'Heizung kalt', '46000000-0000-0000-0000-000000000002');
   v_sets := public.read_manager_attention_sets('46000000-0000-0000-0000-000000000010', 100);
   if jsonb_array_length(v_sets -> 'access_proposals') <> 1
-    or v_sets #>> '{access_proposals,0,contact_name}' <> 'Frau Neumann'
+    or (v_sets -> 'access_proposals' -> 0) ? 'contact_name'
     or (v_sets -> 'requests') <> (
       select jsonb_agg(to_jsonb(request) order by request.received_at, request.id)
       from public.list_open_request_attention('46000000-0000-0000-0000-000000000010') request

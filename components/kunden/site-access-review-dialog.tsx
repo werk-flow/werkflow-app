@@ -20,16 +20,18 @@ import { Textarea } from '@/components/ui/textarea';
 import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import type { ActionResult } from '@/lib/action-result';
-import type { AttentionTask } from '@/lib/attention/types';
 import { acceptSiteAccessProposal, rejectSiteAccessProposal } from '@/lib/site-access-proposals/actions';
-import { SITE_ACCESS_LIMITS } from '@/lib/site-access-proposals/types';
+import {
+  SITE_ACCESS_LIMITS,
+  type SiteAccessReview,
+  type SiteAccessReviewRead,
+} from '@/lib/site-access-proposals/types';
 import { focusFirstInvalidField, REASON_MIN_3_MESSAGE } from '@/lib/ui/field-validation';
 import { formatGermanDate } from '@/lib/utils';
 
-// Loaded on a manager's intent through components/shared/lazy-dialog.tsx, so
-// no Aufgaben cold start carries the review or its actions.
-
-type SiteAccessTask = Extract<AttentionTask, { sourceType: 'site_access_proposal' }>;
+// Loaded through components/shared/lazy-dialog.tsx only when the customer page
+// opens with `?zugang=` (components/kunden/site-access-review.tsx), so no cold
+// start carries the review or its actions.
 
 const NEW_CONTACT = 'neu';
 /** A raw Select holds at most nine options: „Neuer Zugangskontakt“ and eight to correct. */
@@ -51,26 +53,26 @@ type Runner<Input> = {
 type AcceptRunner = Runner<{ proposalId: string; contactId: string | null }>;
 type RejectRunner = Runner<{ proposalId: string; reason: string }>;
 
-function initialContactChoice(task: SiteAccessTask): string {
-  if (task.accessContacts.length === 0) return NEW_CONTACT;
+function initialContactChoice(review: SiteAccessReview): string {
+  if (review.accessContacts.length === 0) return NEW_CONTACT;
   // One Zugangskontakt is the one the worker corrects; with several the office chooses.
-  return task.accessContacts.length === 1 ? (task.accessContacts[0]?.id ?? '') : '';
+  return review.accessContacts.length === 1 ? (review.accessContacts[0]?.id ?? '') : '';
 }
 
 /** The review's state and its submit: accept with the chosen contact, or reject with a reason. */
 function useSiteAccessDecision(
-  task: SiteAccessTask,
+  review: SiteAccessReview,
   accept: AcceptRunner,
   reject: RejectRunner,
   onClose: () => void,
 ) {
   const { showBanner } = useBanner();
   const [mode, setMode] = useState<'review' | 'reject'>('review');
-  const [contactChoice, setContactChoice] = useState(() => initialContactChoice(task));
+  const [contactChoice, setContactChoice] = useState(() => initialContactChoice(review));
   const [reason, setReason] = useState('');
   const [attempted, setAttempted] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
-  const hasContact = task.values.contactName !== '';
+  const hasContact = review.values.contactName !== '';
   const contactChoiceError =
     hasContact && contactChoice === '' ? 'Wähle, welchen Zugangskontakt der Hinweis ersetzt.' : undefined;
   const reasonError = reason.trim().length < 3 ? REASON_MIN_3_MESSAGE : undefined;
@@ -99,13 +101,16 @@ function useSiteAccessDecision(
     setAttempted(true);
     if (mode === 'reject') {
       if (focusFirstInvalidField({ [REASON_ID]: reasonError })) return;
-      decide(reject.run({ proposalId: task.sourceId, reason: reason.trim() }), 'Der Hinweis ist abgelehnt.');
+      decide(
+        reject.run({ proposalId: review.proposalId, reason: reason.trim() }),
+        'Der Hinweis ist abgelehnt.',
+      );
       return;
     }
     if (focusFirstInvalidField({ [CONTACT_CHOICE_ID]: contactChoiceError })) return;
     const contactId = hasContact && contactChoice !== NEW_CONTACT ? contactChoice : null;
     decide(
-      accept.run({ proposalId: task.sourceId, contactId }),
+      accept.run({ proposalId: review.proposalId, contactId }),
       'Der Zugang ist beim Einsatzort gespeichert.',
     );
   };
@@ -130,78 +135,110 @@ function useSiteAccessDecision(
   };
 }
 
-/** The office review of one proposal; it loads when a manager reaches for its task row. */
+/** The review the customer page opens for `?zugang=`, or why there is none to decide. */
 export function SiteAccessReviewDialog({
   open,
   onOpenChange,
-  task,
-  onDecided,
+  read,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  task: SiteAccessTask;
-  /** Reads the Aufgaben overview again after the decision. */
-  onDecided: () => Promise<void>;
+  read: SiteAccessReviewRead | 'failed';
 }): ReactElement {
-  const accept = useServerAction(acceptSiteAccessProposal, { settle: onDecided });
-  const reject = useServerAction(rejectSiteAccessProposal, { settle: onDecided });
-  const decision = useSiteAccessDecision(task, accept, reject, () => onOpenChange(false));
+  const review = read !== 'failed' && read.state === 'open' ? read.review : null;
+  const accept = useServerAction(acceptSiteAccessProposal);
+  const reject = useServerAction(rejectSiteAccessProposal);
   const pending = accept.isPending || reject.isPending;
+  const title = review ? `Zugang zu ${review.siteName} prüfen` : 'Zugangshinweis';
   return (
     <Dialog open={open} onOpenChange={onOpenChange} pending={pending}>
-      <DialogContent>
-        <form onSubmit={decision.submit} className="contents" noValidate>
-          <DialogHeader>
-            <DialogTitle>Zugang zu {task.siteName} prüfen</DialogTitle>
-            <DialogDescription>
-              {task.proposerName} hat am {formatGermanDate(task.proposedAt)} beim Auftrag{' '}
-              {task.jobNumber ? `${task.jobNumber} ` : ''}„{task.jobTitle}“ einen anderen Zugang gemeldet.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogBody className="space-y-4 py-1 text-sm wrap-anywhere">
-            {task.siteAddress && <p className="text-muted-foreground">{task.siteAddress}</p>}
-            <ProposedContact task={task} decision={decision} />
-            <ProposedAccessNotes task={task} />
-            {decision.mode === 'reject' && (
-              <Field
-                label="Begründung"
-                htmlFor={REASON_ID}
-                required
-                description={`${task.proposerName} sieht die Begründung beim Auftrag. Der gemeldete Kontakt wird nicht gespeichert.`}
-                error={decision.reasonError}
-              >
-                <Textarea
-                  value={decision.reason}
-                  onChange={(event) => decision.setReason(event.target.value)}
-                  maxLength={SITE_ACCESS_LIMITS.reason}
-                  rows={3}
-                />
-              </Field>
-            )}
-            <ErrorText>{decision.failure}</ErrorText>
-          </DialogBody>
-          <ReviewFooter
-            mode={decision.mode}
-            onSwitch={decision.switchMode}
-            pending={pending}
-            acceptPending={accept.isPending}
-            rejectPending={reject.isPending}
+      <DialogContent size={review ? 'lg' : 'md'}>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>
+            {review
+              ? `${review.proposerName} hat am ${formatGermanDate(review.proposedAt)} beim Auftrag ${review.jobNumber ? `${review.jobNumber} ` : ''}„${review.jobTitle}“ einen anderen Zugang gemeldet.`
+              : read === 'failed'
+                ? 'Der Zugangshinweis konnte gerade nicht geladen werden. Öffne ihn in einem Moment erneut aus den Aufgaben.'
+                : 'Dieser Zugangshinweis ist schon entschieden.'}
+          </DialogDescription>
+        </DialogHeader>
+        {review ? (
+          <SiteAccessReviewForm
+            review={review}
+            accept={accept}
+            reject={reject}
+            onClose={() => onOpenChange(false)}
           />
-        </form>
+        ) : (
+          <DialogFooter>
+            <Button type="button" onClick={() => onOpenChange(false)}>
+              Schließen
+            </Button>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );
 }
 
+function SiteAccessReviewForm({
+  review,
+  accept,
+  reject,
+  onClose,
+}: {
+  review: SiteAccessReview;
+  accept: AcceptRunner;
+  reject: RejectRunner;
+  onClose: () => void;
+}): ReactElement {
+  const decision = useSiteAccessDecision(review, accept, reject, onClose);
+  const pending = accept.isPending || reject.isPending;
+  return (
+    <form onSubmit={decision.submit} className="contents" noValidate>
+      <DialogBody className="space-y-4 py-1 text-sm wrap-anywhere">
+        {review.siteAddress && <p className="text-muted-foreground">{review.siteAddress}</p>}
+        <ProposedContact review={review} decision={decision} />
+        <ProposedAccessNotes review={review} />
+        {decision.mode === 'reject' && (
+          <Field
+            label="Begründung"
+            htmlFor={REASON_ID}
+            required
+            description={`${review.proposerName} sieht die Begründung beim Auftrag. Der gemeldete Kontakt wird nicht gespeichert.`}
+            error={decision.reasonError}
+          >
+            <Textarea
+              value={decision.reason}
+              onChange={(event) => decision.setReason(event.target.value)}
+              maxLength={SITE_ACCESS_LIMITS.reason}
+              rows={3}
+            />
+          </Field>
+        )}
+        <ErrorText>{decision.failure}</ErrorText>
+      </DialogBody>
+      <ReviewFooter
+        mode={decision.mode}
+        onSwitch={decision.switchMode}
+        pending={pending}
+        acceptPending={accept.isPending}
+        rejectPending={reject.isPending}
+      />
+    </form>
+  );
+}
+
 /** The proposed Zugangskontakt and, while reviewing, which contact it becomes. */
 function ProposedContact({
-  task,
+  review,
   decision,
 }: {
-  task: SiteAccessTask;
+  review: SiteAccessReview;
   decision: ReturnType<typeof useSiteAccessDecision>;
 }): ReactElement | null {
-  const { values } = task;
+  const { values } = review;
   if (values.contactName === '') return null;
   return (
     <section className="space-y-2" aria-labelledby="site-access-contact-heading">
@@ -221,7 +258,7 @@ function ProposedContact({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={NEW_CONTACT}>Neuer Zugangskontakt</SelectItem>
-              {task.accessContacts.slice(0, MAX_CORRECTABLE_CONTACTS).map((contact) => (
+              {review.accessContacts.slice(0, MAX_CORRECTABLE_CONTACTS).map((contact) => (
                 <SelectItem key={contact.id} value={contact.id}>
                   Ersetzt {contact.name}
                   {contact.phone ? ` (${contact.phone})` : ''}
@@ -231,7 +268,7 @@ function ProposedContact({
           </Select>
         </Field>
       )}
-      {decision.mode === 'review' && task.accessContacts.length > MAX_CORRECTABLE_CONTACTS && (
+      {decision.mode === 'review' && review.accessContacts.length > MAX_CORRECTABLE_CONTACTS && (
         <p className="text-muted-foreground">
           Hier stehen die ersten {MAX_CORRECTABLE_CONTACTS} Zugangskontakte. Einen anderen korrigierst du beim
           Kunden.
@@ -242,17 +279,17 @@ function ProposedContact({
 }
 
 /** The proposed access notes beside the Einsatzort's current ones. */
-function ProposedAccessNotes({ task }: { task: SiteAccessTask }): ReactElement | null {
-  if (task.values.accessNotes === '') return null;
+function ProposedAccessNotes({ review }: { review: SiteAccessReview }): ReactElement | null {
+  if (review.values.accessNotes === '') return null;
   return (
     <section className="space-y-1" aria-labelledby="site-access-notes-heading">
       <h3 id="site-access-notes-heading" className="font-medium">
         Zugangshinweis
       </h3>
       <p className="text-muted-foreground">
-        {task.currentAccessNotes ? `Bisher: ${task.currentAccessNotes}` : 'Bisher ohne Zugangshinweis.'}
+        {review.currentAccessNotes ? `Bisher: ${review.currentAccessNotes}` : 'Bisher ohne Zugangshinweis.'}
       </p>
-      <p className="whitespace-pre-wrap">Neu: {task.values.accessNotes}</p>
+      <p className="whitespace-pre-wrap">Neu: {review.values.accessNotes}</p>
     </section>
   );
 }

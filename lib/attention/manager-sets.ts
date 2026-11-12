@@ -35,10 +35,6 @@ const openProposalRowSchema = z.object({
   site_id: uuidSchema,
   proposed_by: uuidSchema.nullable(),
   proposed_at: z.string(),
-  contact_name: z.string().nullable(),
-  contact_phone: z.string().nullable(),
-  contact_note: z.string().nullable(),
-  access_notes: z.string().nullable(),
 });
 
 // Each set holds at most LIST_ROW_CAP + 1 rows; one more than the cap is an overflow.

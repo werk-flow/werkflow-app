@@ -6,7 +6,6 @@ import 'server-only';
 // reads with the open requests; never stored. Without an open proposal it
 // sends no request of its own.
 
-import { formatSiteRowAddress } from '@/lib/clients/types';
 import { logError } from '@/lib/logging';
 import { formatProfileName } from '@/lib/members/profile-name';
 import type { ActionContext } from '@/lib/org/action-context';
@@ -15,7 +14,7 @@ import { readInBatches } from '@/lib/supabase/query-batches';
 import type { ManagerAttentionSetsRead, OpenProposalRow } from './manager-sets';
 import type { AttentionTask } from './types';
 
-/** The jobs, Einsatzorte, active Zugangskontakte and proposers the open proposals name. */
+/** The jobs, Einsatzorte and proposers the open proposals name. */
 async function readProposalReferences(
   admin: AdminClient,
   orgId: string,
@@ -24,31 +23,20 @@ async function readProposalReferences(
   const jobIds = [...new Set(proposals.map((row) => row.job_id))];
   const siteIds = [...new Set(proposals.map((row) => row.site_id))];
   const proposerIds = [...new Set(proposals.flatMap((row) => (row.proposed_by ? [row.proposed_by] : [])))];
-  const [jobs, sites, contacts, profiles] = await Promise.all([
+  const [jobs, sites, profiles] = await Promise.all([
     readInBatches(jobIds, (batch) =>
       admin
         .from('jobs')
-        .select('id, job_number, title')
+        .select('id, job_number')
         .eq('organization_id', orgId)
         .in('id', [...batch]),
     ),
     readInBatches(siteIds, (batch) =>
       admin
         .from('client_sites')
-        .select('id, name, street, postal_code, city, access_notes')
+        .select('id, name, client_id')
         .eq('organization_id', orgId)
         .in('id', [...batch]),
-    ),
-    readInBatches(siteIds, (batch) =>
-      admin
-        .from('client_contacts')
-        .select('id, site_id, name, phone')
-        .eq('organization_id', orgId)
-        .eq('site_role', 'zugangskontakt')
-        .eq('is_active', true)
-        .in('site_id', [...batch])
-        .order('name')
-        .order('id'),
     ),
     readInBatches(proposerIds, (batch) =>
       admin
@@ -57,7 +45,7 @@ async function readProposalReferences(
         .in('id', [...batch]),
     ),
   ]);
-  const error = jobs.error ?? sites.error ?? contacts.error ?? profiles.error;
+  const error = jobs.error ?? sites.error ?? profiles.error;
   if (error) return { error, references: null };
   return {
     error: null,
@@ -65,7 +53,6 @@ async function readProposalReferences(
       jobById: new Map(jobs.data.map((job) => [job.id, job])),
       siteById: new Map(sites.data.map((site) => [site.id, site])),
       profileById: new Map(profiles.data.map((profile) => [profile.id, profile])),
-      contacts: contacts.data,
     },
   };
 }
@@ -81,22 +68,11 @@ function toTask(row: OpenProposalRow, references: ProposalReferences): Attention
     {
       sourceType: 'site_access_proposal',
       sourceId: row.id,
-      jobNumber: job.job_number,
-      jobTitle: job.title,
+      clientId: site.client_id,
       siteName: site.name,
-      siteAddress: formatSiteRowAddress(site),
-      currentAccessNotes: site.access_notes,
+      jobNumber: job.job_number,
       proposerName: proposer ? formatProfileName(proposer) : 'Unbekannt',
       proposedAt: row.proposed_at,
-      values: {
-        contactName: row.contact_name ?? '',
-        contactPhone: row.contact_phone ?? '',
-        contactNote: row.contact_note ?? '',
-        accessNotes: row.access_notes ?? '',
-      },
-      accessContacts: references.contacts
-        .filter((contact) => contact.site_id === row.site_id)
-        .map((contact) => ({ id: contact.id, name: contact.name, phone: contact.phone })),
     },
   ];
 }

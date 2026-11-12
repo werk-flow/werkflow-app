@@ -79,4 +79,25 @@ export function fieldSiteAccess(siteId: string, read: JobSiteAccessProposalRead)
 }
 
 /** A Zugangskontakt of the Einsatzort that an acceptance can correct. */
-export type SiteAccessContactOption = { id: string; name: string; phone: string | null };
+type SiteAccessContactOption = { id: string; name: string; phone: string | null };
+
+/** An open proposal as the office reviews it on the customer's page. */
+export type SiteAccessReview = {
+  proposalId: string;
+  jobNumber: string | null;
+  jobTitle: string;
+  siteName: string;
+  siteAddress: string;
+  currentAccessNotes: string | null;
+  proposerName: string;
+  proposedAt: string;
+  values: SiteAccessProposalValues;
+  /** The Einsatzort's active Zugangskontakte, which an acceptance can correct. */
+  accessContacts: SiteAccessContactOption[];
+};
+
+/** What the customer page opens for `?zugang=`: the review, or that the proposal is no longer open. */
+export type SiteAccessReviewRead = { state: 'open'; review: SiteAccessReview } | { state: 'decided' };
+
+/** The customer page's search parameter that opens a proposal's review. */
+export const SITE_ACCESS_REVIEW_PARAM = 'zugang';

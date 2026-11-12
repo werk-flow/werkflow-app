@@ -824,7 +824,7 @@ function siteAccessCaptures(): AcceptanceSet {
         id: 'buero-aufgaben-zugang-pruefen',
         role: 'buero',
         route: '/aufgaben',
-        view: { kind: 'dialog', opener: 'work.site-access-review' },
+        view: { kind: 'dialog', opener: 'customers.site-access-review' },
         record: 'site-access-tasks',
         ...desktop,
       },

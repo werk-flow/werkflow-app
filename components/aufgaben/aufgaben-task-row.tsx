@@ -1,7 +1,5 @@
 import Link from 'next/link';
-import { lazy, Suspense, type ComponentType } from 'react';
 
-import { ErrorText } from '@/components/ui/error-text';
 import { ListRow } from '@/components/ui/list-row';
 import type { AttentionTask } from '@/lib/attention/types';
 import { formatVacationDays } from '@/lib/vacation/balance';
@@ -10,29 +8,6 @@ import { WORK_ARTIFACT_KIND_LABELS } from '@/lib/work-artifacts/types';
 import { CALENDAR_DISPATCH_STATE_LABELS } from '@/lib/calendar/board';
 import { formatOpenSince } from '@/lib/attention/task-sections';
 import { formatGermanDate, formatGermanDateRange, formatBerlinDateTime } from '@/lib/utils';
-
-// The access proposal row and its review load on their own: every page's cold
-// start carries the Aufgaben code (lab.field.cold-start). A failed download
-// shows in the row; a reload tries again.
-type SiteAccessRowProps = {
-  task: Extract<AttentionTask, { sourceType: 'site_access_proposal' }>;
-  onDecided: () => Promise<void>;
-};
-
-function SiteAccessRowLoadError() {
-  return (
-    <ListRow variant="plain">
-      <ErrorText>Dieser Zugangshinweis konnte nicht geladen werden. Lade die Seite neu.</ErrorText>
-    </ListRow>
-  );
-}
-
-const SiteAccessTaskRow = lazy<ComponentType<SiteAccessRowProps>>(() =>
-  import('./site-access-review').then(
-    (mod) => ({ default: mod.SiteAccessTaskRow }),
-    () => ({ default: SiteAccessRowLoadError }),
-  ),
-);
 
 type AttentionApprovalTask = Extract<
   AttentionTask,
@@ -64,8 +39,7 @@ type AttentionClientTask = Extract<
   { sourceType: 'client_follow_up' | 'client_request_open' | 'client_request_callback_overdue' }
 >;
 
-/** One task; `onDecided` reads the overview again after a decision taken in its row. */
-export function TaskRow({ task, onDecided }: { task: AttentionTask; onDecided: () => Promise<void> }) {
+export function TaskRow({ task }: { task: AttentionTask }) {
   switch (task.sourceType) {
     case 'time_session_approval':
     case 'time_change_request_approval':
@@ -115,12 +89,20 @@ export function TaskRow({ task, onDecided }: { task: AttentionTask; onDecided: (
             {` · Abwesend · Einsatz ${CALENDAR_DISPATCH_STATE_LABELS[task.dispatchState]}`}
           </p>
         </TaskLink>
-      ); // A field worker's access proposal: decided in its own dialog.
+      ); // The review opens on the customer page of the Einsatzort, beside its contacts.
     case 'site_access_proposal':
       return (
-        <Suspense fallback={<ListRow skeleton variant="plain" className="min-h-14" />}>
-          <SiteAccessTaskRow task={task} onDecided={onDecided} />
-        </Suspense>
+        <TaskLink
+          href={`/kunden/${task.clientId}?zugang=${task.sourceId}#einsatzorte`}
+          ariaLabel={`Zugangshinweis von ${task.proposerName} zu ${task.siteName} prüfen`}
+          sourceId={task.sourceId}
+        >
+          <p className="truncate text-sm font-medium">{task.siteName}</p>
+          <p className="text-xs text-muted-foreground tabular-nums">
+            {task.proposerName} · {formatGermanDate(task.proposedAt)}
+            {task.jobNumber ? ` · ${task.jobNumber}` : ''}
+          </p>
+        </TaskLink>
       );
   }
 }

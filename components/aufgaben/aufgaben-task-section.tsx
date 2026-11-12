@@ -103,14 +103,7 @@ const SECTION_PRESENTATION: Record<
   },
 };
 
-export function AufgabenTaskSection({
-  tasks,
-  onTaskDecided,
-}: {
-  tasks: AttentionTask[];
-  /** Reads the overview again after a task was decided in its row. */
-  onTaskDecided: () => Promise<void>;
-}) {
+export function AufgabenTaskSection({ tasks }: { tasks: AttentionTask[] }) {
   return (
     <section className="space-y-4" aria-labelledby="aufgaben-heading">
       <h2 id="aufgaben-heading" className="text-sm font-semibold">
@@ -120,7 +113,7 @@ export function AufgabenTaskSection({
       {tasks.length === 0 && <EmptyState size="compact" title="Keine offenen Aufgaben." />}
 
       {groupAttentionTasks(tasks).map((section) => (
-        <TaskGroup key={section.key} section={section} onTaskDecided={onTaskDecided} />
+        <TaskGroup key={section.key} section={section} />
       ))}
     </section>
   );
@@ -130,13 +123,7 @@ function taskKey(task: AttentionTask): string {
   return `${task.sourceType}:${task.sourceId}`;
 }
 
-function TaskGroup({
-  section,
-  onTaskDecided,
-}: {
-  section: AttentionTaskSection;
-  onTaskDecided: () => Promise<void>;
-}) {
+function TaskGroup({ section }: { section: AttentionTaskSection }) {
   const { icon, title, testId, previewRows } = SECTION_PRESENTATION[section.key];
   const [showAll, setShowAll] = useState(false);
   const restId = useId();
@@ -155,13 +142,13 @@ function TaskGroup({
       </h3>
       <Card className="gap-0 divide-y py-0">
         {preview.map((task) => (
-          <TaskRow key={taskKey(task)} task={task} onDecided={onTaskDecided} />
+          <TaskRow key={taskKey(task)} task={task} />
         ))}
         {rest.length > 0 && (
           <>
             <div id={restId} hidden={!showAll} className="divide-y">
               {rest.map((task) => (
-                <TaskRow key={taskKey(task)} task={task} onDecided={onTaskDecided} />
+                <TaskRow key={taskKey(task)} task={task} />
               ))}
             </div>
             <div className="flex items-center justify-between gap-2 px-4 py-2">

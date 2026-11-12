@@ -2,7 +2,6 @@ import type { Database } from '@/lib/supabase/database.types';
 import type { VacationDayPortion } from '@/lib/vacation/types';
 import type { RequestStatus, RequestUrgency } from '@/lib/requests/types';
 import type { CalendarDispatchState } from '@/lib/calendar/board';
-import type { SiteAccessContactOption, SiteAccessProposalValues } from '@/lib/site-access-proposals/types';
 
 // ============================================
 // Item identity (P1-07 pattern contract)
@@ -231,20 +230,17 @@ export type AttentionTask =
       dispatchState: CalendarDispatchState;
     }
   // A field worker's open proposal for the access to their job's Einsatzort.
-  // Every manager decides it in Aufgaben; the proposal is the identity.
+  // Every manager decides it on the customer page of its Einsatzort; the
+  // proposal is the identity.
   | {
       sourceType: 'site_access_proposal';
       sourceId: string;
-      jobNumber: string | null;
-      jobTitle: string;
+      /** The customer the Einsatzort is filed under: its page holds the review. */
+      clientId: string;
       siteName: string;
-      siteAddress: string;
-      currentAccessNotes: string | null;
+      jobNumber: string | null;
       proposerName: string;
       proposedAt: string;
-      values: SiteAccessProposalValues;
-      /** The Einsatzort's active Zugangskontakte, which an acceptance can correct. */
-      accessContacts: SiteAccessContactOption[];
     };
 
 // Informational notices, deduplicated per source record: a domain state

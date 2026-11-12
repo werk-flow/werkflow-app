@@ -467,10 +467,9 @@ export const DIALOG_INVENTORY = {
   'components/auftraege/work-pack/field-site-access-dialog.tsx#SiteAccessProposalDialog|Zugang korrigieren': {
     audits: [{ route: '/auftraege/[jobNumber]', role: 'employee', opener: 'field.site-access' }],
   },
-  'components/aufgaben/site-access-review-dialog.tsx#SiteAccessReviewDialog|Zugang zu {task.siteName} prüfen':
-    {
-      audits: [{ route: '/aufgaben', role: 'admin', opener: 'work.site-access-review' }],
-    },
+  'components/kunden/site-access-review-dialog.tsx#SiteAccessReviewDialog|{title}': {
+    audits: [{ route: '/aufgaben', role: 'admin', opener: 'customers.site-access-review' }],
+  },
   "components/auftraege/artifacts/work-artifacts-section.tsx#WorkArtifactDialog|{detail ? (currentRevision?.title ?? 'Arbeitsnachweis') : 'Arbeitsnachweis erstellen'}":
     {
       audits: [

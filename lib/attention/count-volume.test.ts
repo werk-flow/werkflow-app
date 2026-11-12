@@ -281,31 +281,10 @@ function requestRows(pending: number, history: number): Record<string, Row[]> {
         status: isOpen ? 'open' : 'accepted',
         proposed_by: COLLEAGUE,
         proposed_at: isOpen ? RECENT : OLD,
-        contact_name: isOpen ? 'Erika Musterfrau' : null,
-        contact_phone: null,
-        contact_note: null,
-        access_notes: null,
       }),
     ),
     client_sites: open.map((index) =>
-      scoped({
-        id: uuid(28, index),
-        name: `Haus ${index}`,
-        street: null,
-        postal_code: null,
-        city: null,
-        access_notes: null,
-      }),
-    ),
-    client_contacts: open.map((index) =>
-      scoped({
-        id: uuid(29, index),
-        site_id: uuid(28, index),
-        site_role: 'zugangskontakt',
-        is_active: true,
-        name: `Hausmeister ${index}`,
-        phone: null,
-      }),
+      scoped({ id: uuid(28, index), name: `Haus ${index}`, client_id: uuid(13, index) }),
     ),
     organization_join_requests: both((index, isOpen) =>
       scoped({
@@ -670,11 +649,11 @@ function historyProblems(nextRole: Role, growth: Record<string, number>): string
 // werk-flow/werkflow-planning#267 added the approved vacations ahead with their visits: the office reads
 // their visits once per 15 vacations plus dispatches and names, and own approvals add a marker read.
 // werk-flow/werkflow-planning#329 added the open access proposals: they come with the open requests in one
-// read, so without any the requests stay as before; with them, their job, Einsatzort and Zugangskontakte (a
-// row each per proposal) and the proposers' names add four requests.
+// read, so without any the requests stay as before; with them, their job and Einsatzort (a row each per
+// proposal) and the proposers' names add three requests.
 const ROW_BUDGET: Readonly<Record<Role, { fixed: number; perPendingItem: number; requests: number }>> = {
-  admin: { fixed: 35, perPendingItem: 37, requests: 79 },
-  buero: { fixed: 34, perPendingItem: 36, requests: 76 },
+  admin: { fixed: 35, perPendingItem: 36, requests: 78 },
+  buero: { fixed: 34, perPendingItem: 35, requests: 75 },
   employee: { fixed: 13, perPendingItem: 17, requests: 31 },
 };
 
