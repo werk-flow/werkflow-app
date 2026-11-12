@@ -29,8 +29,7 @@ export async function openLayerAt(
   const trigger = await opener.trigger(context);
   await expect(trigger, offScreenTriggerMessage(plan.openAt.width)).toBeVisible();
   await options.beforeOpen?.();
-  await trigger.focus();
-  await pressKey(page, 'Enter');
+  await pressKey(page, 'Enter', { into: trigger });
   const layer = opener.layer(page);
   await expect(layer, 'Enter on the trigger opens the dialog').toBeVisible();
   if (options.settleLayer ?? true) await settled(layer);

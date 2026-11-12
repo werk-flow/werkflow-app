@@ -3,7 +3,7 @@ import type { BrowserContext, Page } from '@playwright/test';
 import { test as sharedTest, expect } from '../../golden/support/fixtures';
 import { resetPersistedPreferences } from '../../golden/support/preferences-reset';
 import { attachWorldToRun, currentRunKey, updateRunManifest } from '../../golden/support/run-state';
-import { createRolePage } from '../../golden/support/sessions';
+import { openRolePage } from '../../golden/support/streamed-content';
 import { loadWorld, saveWorld, type TestRole } from '../../golden/support/world';
 
 // One file owns one world until the parent qualifies all assertions and measurements.
@@ -37,7 +37,7 @@ export const test = sharedTest.extend<{
   rolePage: async ({ browser, baseURL }, provide) => {
     const sessions: BrowserContext[] = [];
     await provide(async (role) => {
-      const { context, page } = await createRolePage({ browser, baseUrl: baseURL, world: loadWorld(), role });
+      const { context, page } = await openRolePage({ browser, baseUrl: baseURL, world: loadWorld(), role });
       sessions.push(context);
       return page;
     });

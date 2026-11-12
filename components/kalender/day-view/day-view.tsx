@@ -45,7 +45,6 @@ export type DayViewProps = {
   parkingContexts: ReadonlyMap<string, JobParkingContext> | null;
   onParkedContextMissing: () => void;
   onSessionClick: (session: InteractiveCalendarSession) => void;
-  highlightMemberId: string | null;
   verticalScroller: () => HTMLElement | null;
   phone?: boolean;
 };
@@ -142,7 +141,7 @@ function useDayViewState(props: DayViewProps) {
  */
 export function DayView(props: DayViewProps): React.JSX.Element {
   const { organizationSettings, currentUserId, currentUserRole, changeRequestMap, actions } = props;
-  const { onSessionClick, highlightMemberId, phone = false } = props;
+  const { onSessionClick, phone = false } = props;
   const state = useDayViewState(props);
   const { rootRef, highlightRef, startDrag, dateIso, nowTick, hourWidth, rows } = state;
   const { headerLabel, canCreate, createDrag, nowMinutes } = state;
@@ -191,12 +190,7 @@ export function DayView(props: DayViewProps): React.JSX.Element {
       <TimelineHeader hourWidth={hourWidth} label={headerLabel} />
       <div role="rowgroup" className="relative flex flex-1 flex-col">
         {rows.map((row) => (
-          <DayTimelineRow
-            key={row.model.key}
-            {...timeline}
-            row={row}
-            highlighted={highlightMemberId !== null && highlightMemberId === row.model.userId}
-          />
+          <DayTimelineRow key={row.model.key} {...timeline} row={row} />
         ))}
         {rows.length === 0 && (
           <EmptyState title="Keine Mitarbeiter für diese Auswahl" description="Prüfe Filter und Suche." />
