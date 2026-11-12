@@ -116,14 +116,15 @@ Between releases, merged migrations wait on DEV. `migrations:check`, `types:chec
 
 ## Work in a worktree
 
-T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts` in the background. It writes `.t3/setup-running`, then `.t3/setup-done` or `.t3/setup-failed` with the failing output.
+Each thread's worktree runs `scripts/setup-worktree.ts` in the background. It writes `.t3/setup-running`, then `.t3/setup-done` or `.t3/setup-failed` with the output.
 
-- Wait for `.t3/setup-done` before you run any command. On `.t3/setup-failed`, repair the cause and rerun `bun scripts/setup-worktree.ts`.
+- Wait for `.t3/setup-done`. On `.t3/setup-failed`, fix the cause, then rerun `bun scripts/setup-worktree.ts`.
+- After `bun.lock` changes, run `bun install --frozen-lockfile`; until then `check:changed` and `test:verify` refuse.
 - A checkout keeps its own `.next`, workspace lock, `.agent-logs/` and ports (`lib/testing/runner/app-port.ts`).
-- Every worktree shares one local stack. Browser groups of several worktrees run side by side, except one that measures or restarts a stack service: it holds the stack alone (`lib/testing/runner/stack-lock.ts`).
+- Every worktree shares one local stack. Browser groups of several worktrees run side by side; one that measures or restarts a stack service holds it alone (`lib/testing/runner/stack-lock.ts`).
 - `bun run check:changed`, `test:verify`, `typecheck`, `build` (a test server's too) and a `lint` over 150 files take a machine-wide slot (`lib/testing/runner/heavy-slot.ts`): the first unless the machine is blocked, further ones with measured room (`bun run room`). Serving and CI take none. A hook refuses a direct whole-repository `tsc`, wider `eslint` or `next build` and names the slot command (`lib/testing/runner/heavy-command.ts`). Other heavy work: `bun scripts/heavy.ts -- <command>`.
-- `supabase db reset` and `supabase stop` affect every worktree: the edit guard refuses them while any worktree holds the stack. A hook refuses a second stack (`lib/testing/runner/second-stack.ts`).
-- Another worktree's unmerged migration may sit in the shared stack ([recurring traps](testing.md#recurring-traps)).
+- `supabase db reset` and `supabase stop` affect every worktree: the edit guard refuses them while a worktree holds the stack. A hook refuses a second stack (`lib/testing/runner/second-stack.ts`).
+- The shared stack may hold another worktree's unmerged migration ([recurring traps](testing.md#recurring-traps)).
 
 ## Set up a new machine
 
