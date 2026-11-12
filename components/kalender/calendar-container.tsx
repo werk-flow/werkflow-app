@@ -206,7 +206,7 @@ function useCalendarCommandKeys(
 
 /**
  * The second half of the scoped calendar's hooks, built on the reads: the
- * optimistic owner, the manual-entry bridge, the highlight, the shortcuts, the
+ * optimistic owner, the manual-entry bridge, the shortcuts, the
  * view scope, the park flow, the surface actions and the readiness marker.
  */
 function useScopedCalendarFlows(
@@ -294,7 +294,7 @@ function useScopedCalendarFlows(
  * One organization, user and role's calendar. The hooks run in a fixed order
  * that the effects depend on: scope, view state, the range owner and the
  * Parkplatz reads, the optimistic owner, then the manual-entry bridge, the
- * highlight, the shortcuts and the readiness marker.
+ * shortcuts and the readiness marker.
  */
 function ScopedCalendarContainer(props: CalendarContainerProps) {
   const { organizationId, currentUserId, currentUserRole, isAdminOrManager, members } = props;
