@@ -7,7 +7,7 @@ Regeln & Export
 Zeitregeln & Lohnexport
 Jede Änderung gilt ab einem Datum. Frühere Versionen bleiben nachvollziehbar.
 Arbeitszeitregel
-Der Startsatz nutzt die sechs Aktivitätsarten und 0, 50 oder 100 Prozent. Weitere Sätze und Prozentwerte können später ergänzt werden.
+Der Startsatz nutzt die sechs Aktivitätsarten und 0, 50 oder 100 Prozent. Weitere Sätze und Prozentwerte können später ergänzt werden. Jeder Tag gilt nach der Version mit dem spätesten Beginn bis zu diesem Tag.
 Name
 *
 Pflichtfeld

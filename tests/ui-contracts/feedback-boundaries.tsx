@@ -15,6 +15,7 @@ import { BannerProvider } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { PendingApprovals } from '@/components/zeiterfassung/pending-approvals';
 import { OpeningDateCorrections } from '@/components/zeiterfassung/time-account-opening-corrections';
+import { MissingTimeAccountsCard } from '@/components/zeiterfassung/time-account-opening-form';
 import { TimeCorrectionRequests } from '@/components/zeiterfassung/time-correction-requests';
 import { CorrectionTimelineFields } from '@/components/zeiterfassung/time-correction-dialog-timeline';
 import { useCorrectionTimeline } from '@/components/zeiterfassung/time-correction-dialog-timeline-state';
@@ -43,6 +44,7 @@ const FEEDBACK_FIXTURES = [
   'team-qualifications',
   'service-evidence-link',
   'time-account-opening',
+  'time-account-bulk-opening',
   'work-artifact-report',
   'correction-timeline',
   'work-artifact-customer-decision',
@@ -75,6 +77,23 @@ const readTimeAccounts = () => structuredClone(window.uiContractTimeAccounts);
 function TimeAccountOpeningHost(): React.JSX.Element {
   const accounts = useRouteProps(readTimeAccounts);
   return <OpeningDateCorrections accounts={accounts} suggestedStartDate="2026-09-01" />;
+}
+
+const readMissingAccounts = () => structuredClone(window.uiContractMissingAccounts);
+
+function TimeAccountBulkOpeningHost(): React.JSX.Element {
+  const missingAccounts = useRouteProps(readMissingAccounts);
+  return (
+    <MissingTimeAccountsCard
+      settings={{
+        openAccountCount: 2 - missingAccounts.length,
+        employeeCount: 2,
+        missingAccounts,
+        accounts: [],
+        suggestedStartDate: '2026-09-01',
+      }}
+    />
+  );
 }
 
 const orphanClockIn: WorkSession = {
@@ -348,6 +367,8 @@ function FeedbackSurface({ name }: { name: FeedbackFixtureName }): React.JSX.Ele
       return <ServiceEvidenceHost />;
     case 'time-account-opening':
       return <TimeAccountOpeningHost />;
+    case 'time-account-bulk-opening':
+      return <TimeAccountBulkOpeningHost />;
     case 'correction-timeline':
       return <CorrectionTimelineHost />;
     case 'work-artifact-report':
