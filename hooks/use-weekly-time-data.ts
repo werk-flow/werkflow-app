@@ -52,6 +52,25 @@ interface UseWeeklyTimeDataOptions {
   initialWeekTargets?: DailyTarget[] | undefined;
 }
 
+/**
+ * The rule with its versions, read again when it is saved (join catch-up
+ * included): a day after the page's render resolves against the version that
+ * applied to it, and the week reads again with it.
+ */
+function useLiveBreakPolicy(organizationId: string, breakPolicy: BreakPolicy, enabled: boolean) {
+  const view = useLiveView<BreakPolicy>({
+    tables: ['organization_settings'],
+    read: async ({ signal }): Promise<LiveViewResult<BreakPolicy>> => {
+      const result = await readInBackground('break-policy', { organizationId }, signal);
+      return result.success ? { ok: true, data: result.breakPolicy } : { ok: false, error: result.error };
+    },
+    initialData: breakPolicy,
+    enabled: enabled && Boolean(organizationId),
+    resetKey: `${organizationId}:${breakPolicyKey(breakPolicy)}`,
+  });
+  return { livePolicy: view.data ?? breakPolicy, policyStale: view.isStale };
+}
+
 export function useWeeklyTimeData({
   organizationId,
   userId,
@@ -67,6 +86,8 @@ export function useWeeklyTimeData({
   // fallback while the entries fetch succeeded.
   const lastKnownTargetsRef = useRef<DailyTarget[] | undefined>(initialWeekTargets);
 
+  const { livePolicy, policyStale } = useLiveBreakPolicy(organizationId, breakPolicy, enabled);
+
   const view = useLiveView<WeekSnapshot>({
     tables: [
       'time_entries',
@@ -77,7 +98,6 @@ export function useWeeklyTimeData({
       'work_schedules',
       'employment_conditions',
       'organization_closure_days',
-      'organization_settings',
     ],
     read: async ({ signal }): Promise<LiveViewResult<WeekSnapshot>> => {
       // Recompute week bounds fresh on every read so we never use stale dates
@@ -108,7 +128,7 @@ export function useWeeklyTimeData({
       const nextTargets = targetsResult.success ? targetsResult.targets : lastKnownTargetsRef.current;
       lastKnownTargetsRef.current = nextTargets;
 
-      const weekData = buildWeeklyTimeData(result.entries || [], monday, breakPolicy, nextTargets);
+      const weekData = buildWeeklyTimeData(result.entries || [], monday, livePolicy, nextTargets);
       return { ok: true, data: weekSnapshotOf(weekData, nextTargets, monday, !targetsResult.success) };
     },
     initialData: initialWeekData
@@ -121,7 +141,7 @@ export function useWeeklyTimeData({
         }
       : undefined,
     enabled,
-    resetKey: `${organizationId}:${userId}:${breakPolicyKey(breakPolicy)}`,
+    resetKey: `${organizationId}:${userId}:${breakPolicyKey(livePolicy)}`,
   });
 
   return {
@@ -132,7 +152,7 @@ export function useWeeklyTimeData({
     weekLabel: view.data?.weekLabel ?? computeWeekLabel(getWeekBounds().monday),
     isLoading: view.isLoading,
     /** A refresh failed: the week is last-known. */
-    isStale: view.isStale,
+    isStale: view.isStale || policyStale,
     error: view.error,
     refetch: view.refresh,
   };

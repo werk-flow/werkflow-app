@@ -156,6 +156,9 @@ mock.module('@/lib/time-corrections/read-actions', () => ({
 mock.module('@/lib/time-corrections/planned-visit-reads', () => ({
   getPlannedCorrectionVisits: seam('time-correction-planned-visits'),
 }));
+mock.module('@/lib/time-tracking/break-policy-read', () => ({
+  getBreakPolicy: seam('break-policy'),
+}));
 mock.module('@/lib/time-tracking/closed-period-reads', () => ({
   getClosedTimePeriods: seam('closed-time-periods'),
 }));
@@ -413,6 +416,7 @@ const inputs: Record<string, unknown> = {
   'time-correction-form-options': { organizationId },
   'time-correction-planned-visits': { organizationId, localDate: '2026-10-26', employeeRecordId: jobId },
   'closed-time-periods': { organizationId },
+  'break-policy': { organizationId },
   'time-approval-holder': { organizationId },
   'time-entries-for-job': { jobId },
   'job-dispatch-cards': { jobId },
@@ -478,6 +482,7 @@ const readerArguments: Record<string, unknown> = {
   'time-correction-history': [organizationId, 2],
   'time-correction-form-options': organizationId,
   'closed-time-periods': organizationId,
+  'break-policy': organizationId,
   'time-approval-holder': organizationId,
   'time-entries-for-job': jobId,
   'job-dispatch-cards': jobId,

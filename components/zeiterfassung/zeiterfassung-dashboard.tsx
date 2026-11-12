@@ -4,7 +4,6 @@ import { StaleRegion } from '@/components/shared/stale-region';
 import { ErrorText } from '@/components/ui/error-text';
 import { ClockActionList } from '@/components/clock-action-list';
 import { getTargetSourceHint } from '@/lib/personnel/targets';
-import dynamic from 'next/dynamic';
 import { useWeeklyTimeData } from '@/hooks/use-weekly-time-data';
 import { useClockState } from '@/components/clock-state-provider';
 import { VacationSection } from './vacation-section';
@@ -14,13 +13,6 @@ import { useZeiterfassungLiveTime } from './use-zeiterfassung-dashboard-live-tim
 import { ZeiterfassungDashboardHero } from './zeiterfassung-dashboard-hero';
 import { computeZeiterfassungLiveTotals } from './zeiterfassung-dashboard-live-totals';
 import { ZeiterfassungDashboardStatusCard } from './zeiterfassung-dashboard-status-card';
-
-// Loaded on its own: in the page's first bundle it regroups the chunks that
-// other routes share, and their payloads grow (lab counts).
-const LiveRouteRefresh = dynamic(
-  () => import('@/components/shared/live-route-refresh').then((mod) => mod.LiveRouteRefresh),
-  { ssr: false },
-);
 
 interface ZeiterfassungDashboardProps {
   organizationId: string;
@@ -67,9 +59,6 @@ export function ZeiterfassungDashboard({
 
   return (
     <div className="space-y-6 pb-32">
-      {/* A saved break rule renders the page again, so the week resolves its
-          past days against the new versions without a remount (catch-up included). */}
-      <LiveRouteRefresh tables={['organization_settings']} />
       {/* Hero Section */}
       <ZeiterfassungDashboardHero
         effectiveState={effectiveState}
