@@ -7,6 +7,7 @@ import {
   changeDraftOnDevice,
   deleteDraftsOnDevice,
   listDraftsOnDevice,
+  sweepExpiredDraftsOnDevice,
   type DraftHolder,
   type StoredDraft,
 } from './draft-store';
@@ -138,5 +139,41 @@ describe('report drafts on the device', () => {
     await save(draft({ refusal: { kind: 'failed', at: '2026-11-09T07:45:00.000Z' } }));
     const muchLater = new Date('2027-03-01T00:00:00.000Z');
     expect((await listDraftsOnDevice(holder, muchLater)).length).toBe(1);
+  });
+});
+
+describe('the end of a lost-access draft, whoever starts the app next', () => {
+  // The localStorage key without a person that says the phone may hold drafts (draft-expiry.ts).
+  const DEVICE_MARK = 'werkflow:drafts-on-device';
+  const storage = new Map<string, string>();
+  Object.assign(globalThis, {
+    localStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => void storage.set(key, value),
+      removeItem: (key: string) => void storage.delete(key),
+    },
+  });
+  const expiredId = '9c000000-0000-4000-8000-000000000060';
+
+  test("the sweep deletes another person's lost-access draft past seven days and leaves every live draft", async () => {
+    storage.clear();
+    const lostAt = new Date(NOW.getTime() - DRAFT_NO_ACCESS_KEPT_MS).toISOString();
+    await save(draft({ id: expiredId, refusal: { kind: 'no_access', at: lostAt } }));
+    await save(draft());
+    expect(storage.get(DEVICE_MARK)).toBe('1');
+
+    await sweepExpiredDraftsOnDevice(NOW);
+
+    expect(await listDraftsOnDevice(holder, new Date(0))).toEqual([draft()]);
+    expect(await listDraftsOnDevice(otherPerson, new Date(0))).toEqual([]);
+    expect(storage.get(DEVICE_MARK)).toBe('1');
+  });
+
+  test('the device mark is set with the first draft and goes with the last one', async () => {
+    storage.clear();
+    await save(draft());
+    expect(storage.get(DEVICE_MARK)).toBe('1');
+    await changeDraftOnDevice(holder, draft().id, () => null);
+    expect(storage.has(DEVICE_MARK)).toBe(false);
   });
 });

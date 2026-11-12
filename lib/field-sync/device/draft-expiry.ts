@@ -13,7 +13,7 @@ import { logError } from '@/lib/logging';
 // itself loads lazily.
 
 /** Set while the device may hold a draft of anyone; never names a person. */
-export const DRAFTS_ON_DEVICE_KEY = 'werkflow:drafts-on-device';
+const DRAFTS_ON_DEVICE_KEY = 'werkflow:drafts-on-device';
 
 /** Sets or removes the device mark; the draft store calls it with every write. */
 export function markDraftsOnDevice(held: boolean): void {
@@ -37,11 +37,10 @@ function deviceMayHoldDrafts(): boolean {
  * Deletes every lost-access draft past its seven days, of every holder, when the device mark says
  * the phone may hold drafts. It never sends, lists or changes a live draft.
  */
-export async function sweepDraftsOfDevice(): Promise<'swept' | 'no_drafts'> {
-  if (!deviceMayHoldDrafts()) return 'no_drafts';
+async function sweepDraftsOfDevice(): Promise<void> {
+  if (!deviceMayHoldDrafts()) return;
   const { sweepExpiredDraftsOnDevice } = await import('./draft-store');
   await sweepExpiredDraftsOnDevice();
-  return 'swept';
 }
 
 /** Runs the sweep once per mount; a failure is logged and the next start tries again. */
