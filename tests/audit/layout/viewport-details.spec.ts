@@ -1,4 +1,5 @@
 import type { Locator } from '@playwright/test';
+import { DEFAULT_SETTINGS_SECTION_SLUG, getSettingsHref } from '../../../lib/settings/sections';
 import { expect, test } from '../support/fixtures';
 import {
   DYNAMIC_PHONE_ROUTES,
@@ -123,7 +124,9 @@ test.describe('@AUDIT-LAYOUT the clock dock never covers a control', () => {
       const pack = await detailDestination('/auftraege/[jobNumber]', adminPage, world, businessDate);
       await employeePage.setViewportSize(viewport);
       const expectFieldPagesClear = async (state: string, launcher: Locator): Promise<void> => {
-        for (const destination of [pack, { route: '/zeiterfassung' }, { route: '/einstellungen' }]) {
+        // /einstellungen redirects to its default section once the client router runs; open that page.
+        const settings = { route: getSettingsHref(DEFAULT_SETTINGS_SECTION_SLUG) };
+        for (const destination of [pack, { route: '/zeiterfassung' }, settings]) {
           await openSurface(employeePage, destination);
           await expect(launcher).toBeEnabled();
           await expectNoControlUnderClock(employeePage, `${state}, ${destination.route}`);

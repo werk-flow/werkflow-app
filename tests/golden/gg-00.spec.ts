@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
 
 import { expect, test } from './support/fixtures';
+import { openPage } from './support/streamed-content';
 import { getInventoryLedgerState } from './support/db/inventory';
 import { getPendingInviteCode } from './support/db/shared';
 import { seedJob, seedJobAssignment } from './support/db/work';
@@ -149,7 +150,7 @@ test.describe('GG-00 Bestandsfunktionen @GG-00', () => {
       const inviteCode = await getPendingInviteCode(world.orgId, world.invitee.email);
       const context = await browser.newContext({ locale: 'de-DE' });
       try {
-        const page = await context.newPage();
+        const page = await openPage(context);
         await joinOrganizationViaInviteLink(page, inviteCode, world.invitee, world.orgId);
         // Role-appropriate surface: the new Büro member reaches the manager-only
         // document library (employees are redirected away from it).
@@ -171,7 +172,7 @@ test.describe('GG-00 Bestandsfunktionen @GG-00', () => {
     await test.step('Die neue Person meldet sich an und ab', async () => {
       const context = await browser.newContext({ locale: 'de-DE' });
       try {
-        const page = await context.newPage();
+        const page = await openPage(context);
         await loginViaUi(page, world.invitee);
         await signOutViaUi(page);
       } finally {
