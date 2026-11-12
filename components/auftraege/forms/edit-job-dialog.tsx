@@ -87,7 +87,7 @@ export function EditJobDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange} pending={isLoading}>
-        <DialogContent onOpenAutoFocus={focusTitle}>
+        <DialogContent onOpenAutoFocus={focusTitle} startControlId="edit-job-title">
           <DialogHeader>
             <DialogTitle>Auftrag bearbeiten</DialogTitle>
             <DialogDescription>Ändere die Daten des Auftrags.</DialogDescription>
