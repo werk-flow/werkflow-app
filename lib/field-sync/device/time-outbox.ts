@@ -130,8 +130,14 @@ export function isOfflineClockAction(action: string): action is StoredTimeEvent[
 /** One clock action as it was captured: when, on which confirmed clock, and under which wipe signal. */
 export type TimeEventCapture = {
   command: OfflineClockCommand & { action: StoredTimeEvent['action'] };
-  /** The clock the server last confirmed, for the first event of a chain; null for one that stands on another. */
+  /** The clock the server last confirmed, as the page read it; null when the page holds none. */
   base: LiveClockState | null;
+  /**
+   * The page knew of unsent work before this action, or could not yet rule it out. The event then
+   * expects what the person's chain left, and `base` only fills a clock the chain does not hold:
+   * the work the page waited for may be another person's or organization's.
+   */
+  standsOnUnsent: boolean;
   capturedAt: Date;
   triedOnline: boolean;
   /** The wipe signal when the person acted (today-store.ts): the page without signal shows the clock only under the current one. */
@@ -165,10 +171,11 @@ export function captureTimeEvent(
       verdict: null,
     };
     if (last) return { clock: current.clock, events: [...current.events, event] };
-    if (base) return { clock: clockToKeep(holder, base, capture.wipeGeneration), events: [event] };
+    const kept = base && clockToKeep(holder, base, capture.wipeGeneration);
+    if (kept && !capture.standsOnUnsent) return { clock: kept, events: [event] };
     // Kept behind events the outbox has sent since: it expects what the last of them left.
     const after = current.clock?.after;
-    return { clock: current.clock, events: [after ? { ...event, expected: after } : event] };
+    return { clock: current.clock ?? kept, events: [after ? { ...event, expected: after } : event] };
   });
 }
 

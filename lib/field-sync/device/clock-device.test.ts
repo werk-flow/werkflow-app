@@ -141,6 +141,7 @@ async function isolatedTests(): Promise<void> {
         selection: { kind: 'work', allocationKind: 'unallocated', jobId: null },
         base: { ...CLOCKED_OUT, organizationId: holder.organizationId },
         triedOnline: false,
+        standsOnUnsent: false,
         capturedAt: '2026-11-11T07:00:00.000Z',
       },
       '',
@@ -211,6 +212,7 @@ async function isolatedTests(): Promise<void> {
           selection: { kind: 'work', allocationKind: 'unallocated', jobId: null },
           base: CLOCKED_OUT,
           triedOnline: false,
+          standsOnUnsent: false,
           capturedAt: '2026-11-11T07:01:00.000Z',
         },
         '',
@@ -250,8 +252,9 @@ async function isolatedTests(): Promise<void> {
           kind === 'end'
             ? null
             : { kind: 'work' as const, allocationKind: 'unallocated' as const, jobId: null },
-        base: kind === 'start' ? CLOCKED_OUT : null,
+        base: CLOCKED_OUT,
         triedOnline: false,
+        standsOnUnsent: kind !== 'start',
         capturedAt,
       });
       // The later tap is written first, as another tab's write can land first.
@@ -288,6 +291,7 @@ async function isolatedTests(): Promise<void> {
             selection: { kind: 'work', allocationKind: 'unallocated', jobId: null },
             base: CLOCKED_OUT,
             triedOnline: false,
+            standsOnUnsent: false,
             capturedAt: '2026-11-11T07:00:00.000Z',
           },
           signal,

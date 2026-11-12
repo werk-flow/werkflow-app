@@ -118,6 +118,7 @@ function useOfflineCapture(clock: OfflineClock | null, reload: () => void) {
           },
           // Every event here stands on the one before it; the page holds no confirmed clock of its own.
           base: null,
+          standsOnUnsent: true,
           capturedAt: new Date(),
           triedOnline: false,
           wipeGeneration: generation,

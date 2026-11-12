@@ -41,8 +41,7 @@ export function deviceMayHoldUnsentWork(): boolean {
  * and answers as the accepted action would, or null when it keeps nothing. Only a start, a switch
  * and an end can wait for signal. Nothing is kept when the device cannot store it, or when a
  * sign-out or switch in another tab wiped since then: this page's person may no longer be the one
- * signed in. The first kept action stands on `base`, the clock the server confirmed, which is kept
- * without job, customer and project names.
+ * signed in. `base`, the clock the server confirmed, is kept without job, customer and project names.
  */
 export function keepClockAction(
   action: Omit<KeptClockAction, 'wipeGeneration'>,

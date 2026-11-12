@@ -127,7 +127,12 @@ function command(
 async function capture(
   holder: OutboxHolder,
   kept: OfflineClockCommand,
-  options: { base?: LiveClockState | null; at?: string; triedOnline?: boolean } = {},
+  options: {
+    base?: LiveClockState | null;
+    at?: string;
+    triedOnline?: boolean;
+    standsOnUnsent?: boolean;
+  } = {},
 ) {
   if (!isOfflineClockAction(kept.action)) throw new Error(`${kept.action} cannot be captured without signal`);
   return captureTimeEvent(holder, {
@@ -135,6 +140,7 @@ async function capture(
     base: options.base === undefined ? CLOCKED_OUT : options.base,
     capturedAt: new Date(options.at ?? '2026-11-11T07:00:00.000Z'),
     triedOnline: options.triedOnline ?? false,
+    standsOnUnsent: options.standsOnUnsent ?? false,
     wipeGeneration: 'signal-1',
   });
 }
@@ -636,6 +642,46 @@ describe('capturing', () => {
     const { received, options } = accepting();
     await sendTimeOutbox(WORKER, options);
     expect(received).toHaveLength(1);
+  });
+
+  test('an action kept while unsent work of someone else may wait still keeps the confirmed clock, and expects it', async () => {
+    // The start-up hint covers the whole device: here the waiting work is a colleague's.
+    await capture(COLLEAGUE, command('start'));
+    await capture(WORKER, command('end', { expectedSessionId: SESSION_ID, expectedVersion: 3 }), {
+      base: WORKING,
+      standsOnUnsent: true,
+    });
+
+    const outbox = await readTimeOutbox(WORKER);
+    expect(outbox.clock?.base).toEqual(expect.objectContaining({ isClockedIn: true, sessionId: SESSION_ID }));
+    expect(outbox.events.map((event) => event.expected)).toEqual([{ sessionId: SESSION_ID, version: 3 }]);
+    expect(clockDeviceView(outbox, new Date('2026-11-11T09:00:00.000Z'))?.state).toEqual(
+      expect.objectContaining({ isClockedIn: false }),
+    );
+  });
+
+  test('an action kept behind the person’s own sent chain expects what it left, not the clock the page had read', async () => {
+    await capture(WORKER, command('start'), { at: '2026-11-11T07:00:00.000Z' });
+    const { received, options } = server((envelope) =>
+      result(envelope, {
+        outcome: 'accepted',
+        code: 'accepted',
+        state: { sessionId: SESSION_ID, segmentId: null, version: 1 },
+      }),
+    );
+    await sendTimeOutbox(WORKER, options);
+
+    await capture(WORKER, command('end'), {
+      base: CLOCKED_OUT,
+      standsOnUnsent: true,
+      at: '2026-11-11T07:30:00.000Z',
+    });
+    await sendTimeOutbox(WORKER, options);
+
+    expect(received.map((envelope) => envelope.payload)).toEqual([
+      expect.objectContaining({ action: 'start' }),
+      expect.objectContaining({ action: 'end', expectedSessionId: SESSION_ID, expectedVersion: 1 }),
+    ]);
   });
 
   test('the same action captured twice is kept once', async () => {

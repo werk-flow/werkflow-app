@@ -26,8 +26,10 @@ const keptClockActionSchema = z.object({
   triedOnline: z.boolean(),
   /** The wipe signal when the person acted (today-wipe.ts). */
   wipeGeneration: z.string(),
-  /** The clock the server last confirmed, for the first action a page keeps; null for the ones after it. */
+  /** The clock the server last confirmed, as the page read it; null when the page held none. */
   base: clockStateSchema.nullable(),
+  /** The page knew of unsent work before this action, or could not yet rule it out (time-outbox.ts). */
+  standsOnUnsent: z.boolean(),
 });
 
 /** One clock action as a page keeps it when it meets no network. */
@@ -64,14 +66,24 @@ export async function takeInKeptClockActions(): Promise<{ moved: number; unreada
       unreadable += 1;
       continue;
     }
-    const { userId, organizationId, action, base, capturedAt, triedOnline, wipeGeneration, ...command } =
-      kept;
+    const {
+      userId,
+      organizationId,
+      action,
+      base,
+      standsOnUnsent,
+      capturedAt,
+      triedOnline,
+      wipeGeneration,
+      ...command
+    } = kept;
     if (!isOfflineClockAction(action)) continue;
     await captureTimeEvent(
       { userId, organizationId },
       {
         command: { ...command, action },
         base,
+        standsOnUnsent,
         capturedAt: new Date(capturedAt),
         triedOnline,
         wipeGeneration,

@@ -474,6 +474,15 @@ test('while the outbox of a device that holds unsent work has not answered yet, 
   await expect(unsentBadge(clockDock(page))).toHaveText('Wartet auf Netz');
   expect(await page.evaluate(() => window.clockContract.transitions)).toEqual([]);
   expect(server.sent).toEqual([]);
+  // The waiting work may be another person's: the action keeps the clock the server confirmed.
+  const kept = await page.evaluate(() =>
+    Object.keys(localStorage)
+      .filter((key) => key.startsWith('werkflow:unsent:clock:'))
+      .map((key) => JSON.parse(localStorage.getItem(key) ?? 'null')),
+  );
+  expect(kept).toEqual([
+    expect.objectContaining({ standsOnUnsent: true, base: expect.objectContaining({ isClockedIn: false }) }),
+  ]);
 });
 
 test('a sign-out with unsent events names them and offers to send, to discard or to stay; it ends only once nothing is unsent', async ({
@@ -551,6 +560,7 @@ test('a sign-out is not asked about another person’s events, which stay on the
           triedOnline: false,
           wipeGeneration: '',
           base,
+          standsOnUnsent: false,
         }),
       );
     },

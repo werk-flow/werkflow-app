@@ -217,13 +217,13 @@ function useClockTransitionExecute({
       }
       if (!result) {
         if (!userId) return FAILED;
-        const base = standsOnUnsent ? null : serverState;
         result = keep({
           ...command,
           userId,
           organizationId: activeOrgId,
           triedOnline,
-          base,
+          base: serverState,
+          standsOnUnsent,
           capturedAt,
         });
       }
