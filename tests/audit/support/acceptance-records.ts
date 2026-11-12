@@ -3,6 +3,8 @@ import { worldName } from '../../../lib/testing/seed-world-plan';
 import { berlinDateAtOffset } from '../../golden/support/date-ownership';
 import { seedCustomer } from '../../golden/support/db/customers';
 import { seedRequest } from '../../golden/support/db/requests';
+import { seedJob, seedProject } from '../../golden/support/db/work';
+import { rpcArgs } from '../../../lib/supabase/rpc-args';
 import { createAdminClient } from '../../golden/support/db/shared';
 import type { TestWorld } from '../../golden/support/world';
 import type { AcceptanceRecord } from './acceptance-sets';
@@ -229,6 +231,120 @@ async function callbackOverdueTasks(world: TestWorld): Promise<SurfaceDestinatio
   return { route: '/aufgaben', heading: 'Rückruf überfällig' };
 }
 
+/**
+ * A Hausverwaltung with two sites and an open request at Lindenhof 1. Unless
+ * `none`, the customer has an open job at that site, and an open job and a
+ * project at Lindenhof 7, so the attach dialog lists the request's site
+ * first. `attached` seeds its own customer, work and request, so attaching
+ * that request leaves the open request of `work` open in the same world.
+ */
+async function seedAttachableRequest(
+  world: TestWorld,
+  variant: 'work' | 'none' | 'attached',
+): Promise<{ requestId: string; summary: string; jobNumber: string; jobTitle: string }> {
+  const suffix = variant.toUpperCase();
+  const withWork = variant !== 'none';
+  const summary = worldName(
+    withWork ? 'Heizkörper im Bad wird nicht warm' : 'Wasserhahn tropft',
+    world.runId,
+  );
+  const jobNumber = `A-${world.runId}-${suffix}`;
+  const jobTitle = worldName('Heizungswartung Lindenhof 1', world.runId);
+  const requestId = await surfaceFixture(world, `acceptance.attachable-request-${suffix}`, async () => {
+    const customer = await seedCustomer({
+      orgId: world.orgId,
+      actorId: world.users.admin.id,
+      name: worldName(withWork ? 'Hausverwaltung Lindenhof GmbH' : 'Erika Musterfrau', world.runId),
+      sites: [
+        { name: 'Lindenhof 1', street: 'Lindenstraße 1', postalCode: '10115', city: 'Berlin' },
+        { name: 'Lindenhof 7', street: 'Lindenstraße 7', postalCode: '10115', city: 'Berlin' },
+      ],
+    });
+    const siteId = customer.siteIds.get('Lindenhof 1');
+    const otherSiteId = customer.siteIds.get('Lindenhof 7');
+    if (!siteId || !otherSiteId) throw new Error('seedAttachableRequest: the sites were not seeded');
+    if (withWork) {
+      const owner = { orgId: world.orgId, actorId: world.users.admin.id, clientId: customer.clientId };
+      await seedJob({ ...owner, jobNumber, title: jobTitle, siteId });
+      await seedJob({
+        ...owner,
+        jobNumber: `A-${world.runId}-${suffix}-STRANG`,
+        title: worldName('Strangsanierung Lindenhof 7', world.runId),
+        siteId: otherSiteId,
+      });
+      await seedProject({
+        ...owner,
+        projectNumber: `P-${world.runId}-${suffix}-BAD`,
+        name: worldName('Badsanierung Lindenhof 7', world.runId),
+        siteId: otherSiteId,
+      });
+    }
+    return seedRequest({
+      orgId: world.orgId,
+      actorId: world.users.admin.id,
+      summary,
+      details: 'Seit gestern Abend, Wohnung 3 links. Die Mieterin ist ab 16 Uhr zu Hause.',
+      requestNumber: `ANF-${world.runId}-${suffix}`,
+      clientId: customer.clientId,
+      siteId,
+    });
+  });
+  return { requestId, summary, jobNumber, jobTitle };
+}
+
+async function attachableRequest(world: TestWorld): Promise<SurfaceDestination> {
+  const { requestId, summary } = await seedAttachableRequest(world, 'work');
+  return { route: `/anfragen/${requestId}`, heading: summary };
+}
+
+async function requestWithoutOpenWork(world: TestWorld): Promise<SurfaceDestination> {
+  const { requestId, summary } = await seedAttachableRequest(world, 'none');
+  return { route: `/anfragen/${requestId}`, heading: summary };
+}
+
+/** A request of its own, added by the Büro to the open job at its site. */
+async function seedAttachedRequest(
+  world: TestWorld,
+): Promise<{ requestId: string; summary: string; jobNumber: string; jobTitle: string }> {
+  const seeded = await seedAttachableRequest(world, 'attached');
+  await surfaceFixture(world, 'acceptance.attached-request', async () => {
+    const admin = createAdminClient();
+    const { data: job } = await admin
+      .from('jobs')
+      .select('id')
+      .eq('organization_id', world.orgId)
+      .eq('job_number', seeded.jobNumber)
+      .single()
+      .throwOnError();
+    await admin
+      .rpc(
+        'attach_client_request_to_work',
+        rpcArgs('attach_client_request_to_work', {
+          p_organization_id: world.orgId,
+          p_actor_id: world.users.buero.id,
+          p_request_id: seeded.requestId,
+          p_job_id: job.id,
+          p_project_id: null,
+          p_service_case_id: null,
+          p_attempt_key: randomUUID(),
+        }),
+      )
+      .throwOnError();
+    return job.id;
+  });
+  return seeded;
+}
+
+async function attachedRequest(world: TestWorld): Promise<SurfaceDestination> {
+  const { requestId, summary } = await seedAttachedRequest(world);
+  return { route: `/anfragen/${requestId}`, heading: summary };
+}
+
+async function jobWithAttachedRequest(world: TestWorld): Promise<SurfaceDestination> {
+  const { jobNumber, jobTitle } = await seedAttachedRequest(world);
+  return { route: `/auftraege/${encodeURIComponent(jobNumber)}`, heading: jobTitle };
+}
+
 /** Each record an acceptance capture opens instead of its route's layout record, seeded once per world. */
 export const ACCEPTANCE_RECORDS: Record<AcceptanceRecord, (world: TestWorld) => Promise<SurfaceDestination>> =
   {
@@ -239,4 +355,8 @@ export const ACCEPTANCE_RECORDS: Record<AcceptanceRecord, (world: TestWorld) => 
     'archived-customer-list': archivedCustomerList,
     'callback-overdue-request': callbackOverdueRequest,
     'callback-overdue-tasks': callbackOverdueTasks,
+    'attachable-request': attachableRequest,
+    'request-without-open-work': requestWithoutOpenWork,
+    'attached-request': attachedRequest,
+    'job-with-attached-request': jobWithAttachedRequest,
   };

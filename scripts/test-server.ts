@@ -7,7 +7,6 @@ import { subscribeForDatabaseReadiness } from './realtime-probe';
 import { runSessionCommand, withTestSession } from '../lib/testing/local-stack/test-session';
 import { workspacePorts } from '../lib/testing/runner/app-port';
 import { withWorkspaceTestLock } from '../lib/testing/runner/workspace-test-lock';
-import { acquireHeavySlot } from '../lib/testing/runner/heavy-slot';
 
 const target = process.argv[2];
 const prebuiltArgument = process.argv[3];
@@ -169,13 +168,8 @@ await withTestSession(async (signal) => {
     await run([process.execPath, 'run', 'test:preflight', 'backend', target]);
     if (prebuilt) await run([process.execPath, 'run', 'test:preflight', 'build', target]);
     else {
-      // The build holds a heavy slot; serving does not, so three idle servers never block verification.
-      const slot = target === 'local' ? await acquireHeavySlot('test:server local build', signal) : null;
-      try {
-        await run([process.execPath, 'run', 'build']);
-      } finally {
-        slot?.release();
-      }
+      // The build takes a heavy slot itself (scripts/build.ts); serving takes none, so idle servers never block verification.
+      await run([process.execPath, 'run', 'build']);
     }
   });
   const releaseRealtimeWarmUp = target === 'local' ? await keepRealtimeWarm() : null;

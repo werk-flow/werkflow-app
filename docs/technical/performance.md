@@ -24,7 +24,7 @@ A journey is a step one role repeats many times a day, measured from the user's 
 5. **Change, rebuild, measure again.** State the result as absolute numbers before and after, for count and time. A percentage appears only beside the numbers (`bun scripts/lab-counts.ts report --runs <run keys>`).
 6. **Refuse complexity for a tiny win.** When the gain is a few milliseconds or bytes and the code grows, drop the change and record the decision.
 7. **Lower the reference.** Run `bun scripts/lab-counts.ts ratchet --run <run key>` and commit the file with the change. An unlowered win is room for the next regression.
-8. **Have a person feel it.** A user-visible change counts as accepted only after the owner tried it on staging on a phone and a laptop. Record device and verdict.
+8. **Let the owner feel it.** For a user-visible change, name the journey and where to try it on staging under "For the owner to look at" ([Decide or ask](../../AGENTS.md#decide-or-ask)). The entry blocks no merge.
 
 ### Read a lab table
 
@@ -39,7 +39,7 @@ Each lab group prints one table per step with reference, value, ceiling, floor a
 ### Change a lab reference
 
 1. A lower count needs no reason: `ratchet` lowers it.
-2. A higher count, a larger payload or a smaller one needs `accept` with a reason a reviewer can check.
+2. A higher count, a larger payload or a smaller one needs `accept` with a reason a reviewer can check. The lead decides it, or the PR's own thread outside an epic, and lists it under "For the owner to look at" ([Decide or ask](../../AGENTS.md#decide-or-ask)). The reason names the intended behavior change. A `regressed` count is never accepted to pass.
 3. A changed lab test, recorder module or workload file orphans its references: [move them to the new digest](#move-a-reference-to-a-new-digest).
 4. `gate` and `reject` move a metric in or out of the gate with its evidence. A count that takes two values on one step leaves that step with `ungate`; never widen its tolerance. `calibrate` keeps that ungate; only `gate --step <id>` with new stability evidence from that step reverses it.
 
@@ -63,7 +63,7 @@ The check sees edits to digest inputs. A change elsewhere that alters what a see
 
 ## What each instrument proves
 
-- **Wall-clock scenarios** (`audit:performance:*`) are a manual tool for one machine. They hold every sample to its budget and compare the median with a reference recorded on that machine, and run alone. No schedule judges their timing. CI's nightly run and the release gate run them with `--untimed`: each step must complete and confirm every sample, while deadlines, budgets and reference comparisons are only recorded, because a shared runner's load makes wall clock noise. A UI change that breaks a scenario's step thus reaches `CI alert: nightly` the next morning. A pull request never runs them. `bun run test:verify --group audit:performance:<name> --untimed` runs the same check on Boat. A moved digest fails on its PR. A change to what the reference records about the machine, such as its memory or CPU, shows only at the next `--fresh` run, as "no reviewed baseline"; recalibrate then. Without `--fresh`, a run can reuse an earlier pass. Anything it does not record shows as slower readings and no warning: a laptop on battery runs far slower and breaks budgets, so measure on mains power.
+- **Wall-clock scenarios** (`audit:performance:*`) are a manual tool for one machine. They hold every sample to its budget and compare the median with a reference recorded on that machine, and run alone. No schedule judges their timing. CI's nightly run, the release gate and the [date look-ahead](recovery-and-incidents.md#monitoring) run them with `--untimed`: each step must complete and confirm every sample, while deadlines, budgets and reference comparisons are only recorded, because a shared runner's load makes wall clock noise. A UI change that breaks a scenario's step thus reaches `CI alert: nightly` the next morning. A pull request never runs them. `bun run test:verify --group audit:performance:<name> --untimed` runs the same check on Boat. Boat cannot judge timing either: its machines share hosts, and on one build and one CPU model whole groups ran 1.6 to 2.3 times slower on some runs, past any useful tolerance. Lab counts catch a slowdown from more work instead. A moved digest fails on its PR. A change to what the reference records about the machine, such as its memory or CPU, shows only at the next `--fresh` run, as "no reviewed baseline"; recalibrate then. Without `--fresh`, a run can reuse an earlier pass. Anything it does not record shows as slower readings and no warning: a laptop on battery runs far slower and breaks budgets, so measure on mains power.
 - **Lab counts** (`audit:lab:*`) prove a step does the same work as its reference. A count does not show when a page became usable, and it counts background reads that cost the user nothing. Read it with the wall-clock time. Every change plan that touches product code runs them ([selection](testing.md#how-selection-works)), so a regression fails its own PR.
 - **Payload budgets**: the ceiling catches growth, the floor lost data.
 

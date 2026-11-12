@@ -119,7 +119,7 @@ export function JobPickerOptionList({
 }
 
 /** The radio circle of one option, filled with a check when it is chosen. */
-function JobPickerRadioMark({ checked }: { checked: boolean }) {
+export function JobPickerRadioMark({ checked }: { checked: boolean }) {
   return (
     <div
       className={cn(
