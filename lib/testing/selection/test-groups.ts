@@ -280,6 +280,7 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['layout:people', 'layout/surfaces-people.spec.ts', ['personnel']],
   ['layout:personnel', 'layout/surfaces-personnel.spec.ts', ['personnel', 'documents']],
   ['layout:personnel-absence', 'layout/surfaces-personnel-absence.spec.ts', ['personnel', 'time']],
+  ['layout:personnel-records', 'layout/surfaces-personnel-records.spec.ts', ['personnel', 'time']],
   ['layout:settings', 'layout/surfaces-settings.spec.ts', ['attention', 'personnel']],
   ['layout:documents', 'layout/surfaces-documents.spec.ts', ['documents']],
   ['layout:inventory', 'layout/surfaces-inventory.spec.ts', ['inventory']],

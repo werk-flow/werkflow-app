@@ -1,6 +1,5 @@
 'use client';
 
-import { useCallback, useState } from 'react';
 import { CalendarCheck, GraduationCap, MoreVertical, Plus, XCircle } from 'lucide-react';
 
 import { StaleRegion } from '@/components/shared/stale-region';
@@ -16,7 +15,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
-import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -28,25 +26,18 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { SectionError } from '@/components/ui/section-error';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useBusyIds } from '@/hooks/use-busy-id';
-import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
-import { describeFailure } from '@/lib/action-messages';
-import { readInBackground } from '@/lib/data/background-read-client';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
-import { logError } from '@/lib/logging';
-import { cancelSchoolDay } from '@/lib/personnel/school-day-actions';
-import { describeSchoolDay, SCHOOL_DAY_ERROR_MESSAGES, type SchoolDay } from '@/lib/personnel/school-days';
+import { describeSchoolDay, type SchoolDay } from '@/lib/personnel/school-days';
 import type { EmploymentCondition } from '@/lib/personnel/types';
 
 import { AddSchoolDayDialog, EndSchoolDayDialog } from './school-day-dialogs';
+import { useSchoolDays } from './use-school-days';
 
 // The office's Berufsschule section of an apprentice's personnel record
 // (werk-flow/werkflow-planning#165). A school day is credited with the day's
 // normal target; the apprentice sees it in Zeiterfassung and the calendar.
 
-type DialogState = { mode: 'closed' } | { mode: 'add' } | { mode: 'end'; schoolDay: SchoolDay };
-
-/** Shown for a record that is or was in an apprenticeship; rows of a later record type stay visible. */
+/** Shown for a record that is or was in an apprenticeship. */
 export function SchoolDaysSection({
   recordId,
   conditions,
@@ -59,53 +50,8 @@ export function SchoolDaysSection({
 }
 
 function SchoolDaysList({ recordId }: { recordId: string }) {
-  const [dialogState, setDialogState] = useState<DialogState>({ mode: 'closed' });
-  const [cancelTarget, setCancelTarget] = useState<SchoolDay | null>(null);
-  const { showBanner } = useBanner();
-  const busy = useBusyIds();
-
-  const view = useLiveView<SchoolDay[]>({
-    tables: ['school_days'],
-    read: async ({ signal }): Promise<LiveViewResult<SchoolDay[]>> => {
-      const result = await readInBackground('school-days-for-record', { employeeRecordId: recordId }, signal);
-      return result.success ? { ok: true, data: result.schoolDays } : { ok: false };
-    },
-    resetKey: recordId,
-  });
-  const { refresh } = view;
-
-  const closeDialog = useCallback(
-    (saved: boolean) => {
-      setDialogState({ mode: 'closed' });
-      if (saved) void refresh();
-    },
-    [refresh],
-  );
-
-  const cancel = async (schoolDay: SchoolDay) => {
-    try {
-      const result = await busy.run(schoolDay.id, () => cancelSchoolDay(schoolDay.id));
-      if (result.success) {
-        showBanner({ variant: 'success', message: 'Die Berufsschule wurde storniert.' });
-        await refresh();
-      } else {
-        showBanner({
-          variant: 'error',
-          message: describeFailure(
-            result.error,
-            SCHOOL_DAY_ERROR_MESSAGES,
-            'Die Stornierung ist fehlgeschlagen.',
-          ),
-        });
-      }
-    } catch (error) {
-      logError('SchoolDaysSection: cancel failed', error);
-      showBanner({ variant: 'error', message: 'Die Stornierung ist fehlgeschlagen.' });
-    }
-  };
-
-  const active = (view.data ?? []).filter((schoolDay) => schoolDay.cancelledAt === null);
-  const cancelled = (view.data ?? []).filter((schoolDay) => schoolDay.cancelledAt !== null);
+  const state = useSchoolDays(recordId);
+  const { view, dialogState, setDialogState, closeDialog } = state;
 
   return (
     <section className="space-y-3" data-testid="school-days-section">
@@ -129,30 +75,12 @@ function SchoolDaysList({ recordId }: { recordId: string }) {
       {view.isLoading ? (
         <Skeleton className="h-16 w-full" />
       ) : view.data === undefined ? (
-        <SectionError onRetry={() => void refresh()} retryPending={view.isRefreshing}>
+        <SectionError onRetry={() => void view.refresh()} retryPending={view.isRefreshing}>
           Die Berufsschultage konnten nicht geladen werden.
         </SectionError>
       ) : (
-        <StaleRegion stale={view.isStale} onRetry={refresh}>
-          {view.data.length === 0 ? (
-            <EmptyState
-              size="compact"
-              title="Noch keine Berufsschule erfasst."
-              description="Trag einen festen Schultag pro Woche oder einen Blockunterricht ein."
-            />
-          ) : (
-            <ul className="grid gap-2">
-              {[...active, ...cancelled].map((schoolDay) => (
-                <SchoolDayRow
-                  key={schoolDay.id}
-                  schoolDay={schoolDay}
-                  busy={busy.isBusy(schoolDay.id)}
-                  onEnd={() => setDialogState({ mode: 'end', schoolDay })}
-                  onCancel={() => setCancelTarget(schoolDay)}
-                />
-              ))}
-            </ul>
-          )}
+        <StaleRegion stale={view.isStale} onRetry={view.refresh}>
+          <SchoolDayRows schoolDays={view.data} state={state} />
         </StaleRegion>
       )}
 
@@ -160,31 +88,69 @@ function SchoolDaysList({ recordId }: { recordId: string }) {
       {dialogState.mode === 'end' && (
         <EndSchoolDayDialog schoolDay={dialogState.schoolDay} onClose={closeDialog} />
       )}
-
-      <AlertDialog open={cancelTarget !== null} onOpenChange={(open) => !open && setCancelTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Berufsschule stornieren?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {cancelTarget ? `${describeSchoolDay(cancelTarget)}. ` : ''}
-              Die Tage zählen danach wieder mit dem normalen Tagesziel. Der Eintrag bleibt als storniert
-              sichtbar.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              onClick={() => {
-                if (cancelTarget) void cancel(cancelTarget);
-              }}
-            >
-              Stornieren
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <CancelSchoolDayDialog state={state} />
     </section>
+  );
+}
+
+type SchoolDaysState = ReturnType<typeof useSchoolDays>;
+
+/** Active rules first, then the cancelled ones, which stay visible as history. */
+function SchoolDayRows({ schoolDays, state }: { schoolDays: SchoolDay[]; state: SchoolDaysState }) {
+  if (schoolDays.length === 0) {
+    return (
+      <EmptyState
+        size="compact"
+        title="Noch keine Berufsschule erfasst."
+        description="Trag einen festen Schultag pro Woche oder einen Blockunterricht ein."
+      />
+    );
+  }
+  const ordered = [
+    ...schoolDays.filter((schoolDay) => schoolDay.cancelledAt === null),
+    ...schoolDays.filter((schoolDay) => schoolDay.cancelledAt !== null),
+  ];
+  return (
+    <ul className="grid gap-2">
+      {ordered.map((schoolDay) => (
+        <SchoolDayRow
+          key={schoolDay.id}
+          schoolDay={schoolDay}
+          busy={state.busy.isBusy(schoolDay.id)}
+          onEnd={() => state.setDialogState({ mode: 'end', schoolDay })}
+          onCancel={() => state.setCancelTarget(schoolDay)}
+        />
+      ))}
+    </ul>
+  );
+}
+
+function CancelSchoolDayDialog({ state }: { state: SchoolDaysState }) {
+  const { cancelTarget, setCancelTarget, cancel } = state;
+  return (
+    <AlertDialog open={cancelTarget !== null} onOpenChange={(open) => !open && setCancelTarget(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Berufsschule stornieren?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {cancelTarget ? `${describeSchoolDay(cancelTarget)}. ` : ''}
+            Die Tage zählen danach wieder mit dem normalen Tagesziel. Der Eintrag bleibt als storniert
+            sichtbar.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            onClick={() => {
+              if (cancelTarget) void cancel(cancelTarget);
+            }}
+          >
+            Stornieren
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 

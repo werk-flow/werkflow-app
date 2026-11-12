@@ -23,7 +23,7 @@ import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { logError } from '@/lib/logging';
-import { addSchoolDay, endSchoolDay } from '@/lib/personnel/school-day-actions';
+import { endSchoolDay } from '@/lib/personnel/school-day-actions';
 import {
   describeSchoolDay,
   SCHOOL_DAY_ERROR_MESSAGES,
@@ -34,15 +34,15 @@ import { WEEKDAY_LABELS } from '@/lib/personnel/schedule';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { toLocalDateString } from '@/lib/utils';
 
-const KIND_LABELS = { weekday: 'Fester Schultag pro Woche', block: 'Blockunterricht' } as const;
-type Kind = keyof typeof KIND_LABELS;
+import {
+  SCHOOL_DAY_KIND_LABELS,
+  useAddSchoolDayForm,
+  type AddSchoolDayForm,
+  type SchoolDayFormKind,
+} from './use-add-school-day-form';
 
-function isKind(value: string): value is Kind {
-  return Object.hasOwn(KIND_LABELS, value);
-}
-
-function toPickerDate(value: string): Date | undefined {
-  return value ? new Date(`${value}T00:00:00`) : undefined;
+function isKind(value: string): value is SchoolDayFormKind {
+  return Object.hasOwn(SCHOOL_DAY_KIND_LABELS, value);
 }
 
 function SchoolDateField({
@@ -64,11 +64,32 @@ function SchoolDateField({
     <Field label={label} htmlFor={id} required error={error}>
       <DatePicker
         ariaLabel={label}
-        value={toPickerDate(value)}
+        value={value ? new Date(`${value}T00:00:00`) : undefined}
         onChange={(date) => onChange(date ? toLocalDateString(date) : '')}
         disabled={disabled}
       />
     </Field>
+  );
+}
+
+function DialogActions({
+  isPending,
+  label,
+  onCancel,
+}: {
+  isPending: boolean;
+  label: string;
+  onCancel: () => void;
+}) {
+  return (
+    <DialogFooter>
+      <Button type="button" variant="outline" onClick={onCancel} disabled={isPending}>
+        Abbrechen
+      </Button>
+      <Button pending={isPending} type="submit" disabled={isPending}>
+        {isPending ? 'Wird gespeichert…' : label}
+      </Button>
+    </DialogFooter>
   );
 }
 
@@ -80,65 +101,9 @@ export function AddSchoolDayDialog({
   recordId: string;
   onClose: (saved: boolean) => void;
 }) {
-  const { showBanner } = useBanner();
-  const [kind, setKind] = useState<Kind>('weekday');
-  const [weekday, setWeekday] = useState<number>(0);
-  const [startDate, setStartDate] = useState(getBusinessTodayIso());
-  const [endKnown, setEndKnown] = useState(false);
-  const [endDate, setEndDate] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<{ start?: string | undefined; end?: string | undefined }>(
-    {},
-  );
-  const { run, isPending } = useServerAction(addSchoolDay);
-  const needsEnd = kind === 'block' || endKnown;
-
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (isPending) return;
-    setError(null);
-    const nextErrors = {
-      start: startDate ? undefined : 'Bitte wähle ein Datum aus.',
-      end: !needsEnd
-        ? undefined
-        : !endDate
-          ? 'Bitte wähle ein Datum aus.'
-          : endDate < startDate
-            ? SCHOOL_DAY_ERROR_MESSAGES.invalid_range
-            : undefined,
-    };
-    setFieldErrors(nextErrors);
-    if (focusFirstInvalidField({ 'school-day-start': nextErrors.start, 'school-day-end': nextErrors.end }))
-      return;
-
-    try {
-      const result = await run({
-        employeeRecordId: recordId,
-        kind,
-        weekday: kind === 'weekday' ? weekday : null,
-        startDate,
-        endDate: needsEnd ? endDate : null,
-      });
-      if (result.success) {
-        showBanner({ variant: 'success', message: 'Die Berufsschule wurde eingetragen.' });
-        onClose(true);
-        return;
-      }
-      setError(
-        describeFailure(
-          result.error,
-          SCHOOL_DAY_ERROR_MESSAGES,
-          'Die Berufsschule konnte nicht gespeichert werden.',
-        ),
-      );
-    } catch (submitError) {
-      logError('AddSchoolDayDialog: save failed', submitError);
-      setError('Die Berufsschule konnte nicht gespeichert werden.');
-    }
-  };
-
+  const form = useAddSchoolDayForm(recordId, onClose);
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose(false)} pending={isPending}>
+    <Dialog open onOpenChange={(open) => !open && onClose(false)} pending={form.isPending}>
       <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Berufsschule erfassen</DialogTitle>
@@ -146,101 +111,112 @@ export function AddSchoolDayDialog({
             An diesen Tagen gilt das normale Tagesziel als erfüllt. Abgeschlossene Monate bleiben unverändert.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
+        <form onSubmit={form.handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
           <DialogBody className="grid gap-4 py-4">
-            <Field label="Art" htmlFor="school-day-kind">
-              <Select
-                value={kind}
-                onValueChange={(next) => {
-                  if (isKind(next)) setKind(next);
-                }}
-                disabled={isPending}
-              >
-                <SelectTrigger id="school-day-kind" aria-label="Art">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(KIND_LABELS).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-
-            {kind === 'weekday' && (
-              <Field label="Wochentag" htmlFor="school-day-weekday">
-                <Select
-                  value={String(weekday)}
-                  onValueChange={(next) => setWeekday(Number(next))}
-                  disabled={isPending}
-                >
-                  <SelectTrigger id="school-day-weekday" aria-label="Wochentag">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SCHOOL_WEEKDAYS.map((day) => (
-                      <SelectItem key={day} value={String(day)}>
-                        {WEEKDAY_LABELS[day]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-            )}
-
-            <SchoolDateField
-              id="school-day-start"
-              label={kind === 'block' ? 'Erster Schultag' : 'Ab'}
-              value={startDate}
-              onChange={setStartDate}
-              error={fieldErrors.start}
-              disabled={isPending}
-            />
-
-            {kind === 'weekday' && (
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="school-day-end-known"
-                  checked={endKnown}
-                  onCheckedChange={(checked) => setEndKnown(checked === true)}
-                  disabled={isPending}
-                />
-                <Label htmlFor="school-day-end-known" className="text-sm font-normal">
-                  Enddatum ist schon bekannt
-                </Label>
-              </div>
-            )}
-
-            {needsEnd ? (
-              <SchoolDateField
-                id="school-day-end"
-                label={kind === 'block' ? 'Letzter Schultag' : 'Bis'}
-                value={endDate}
-                onChange={setEndDate}
-                error={fieldErrors.end}
-                disabled={isPending}
-              />
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Ohne Enddatum gilt der Schultag jede Woche bis auf Weiteres.
-              </p>
-            )}
-
-            <ErrorText>{error}</ErrorText>
+            <SchoolDayKindFields form={form} />
+            <SchoolDayPeriodFields form={form} />
+            <ErrorText>{form.error}</ErrorText>
           </DialogBody>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onClose(false)} disabled={isPending}>
-              Abbrechen
-            </Button>
-            <Button pending={isPending} type="submit" disabled={isPending}>
-              {isPending ? 'Wird gespeichert…' : 'Berufsschule speichern'}
-            </Button>
-          </DialogFooter>
+          <DialogActions
+            isPending={form.isPending}
+            label="Berufsschule speichern"
+            onCancel={() => onClose(false)}
+          />
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function SchoolDayKindFields({ form }: { form: AddSchoolDayForm }) {
+  const { kind, setKind, weekday, setWeekday, isPending } = form;
+  return (
+    <>
+      <Field label="Art" htmlFor="school-day-kind">
+        <Select
+          value={kind}
+          onValueChange={(next) => {
+            if (isKind(next)) setKind(next);
+          }}
+          disabled={isPending}
+        >
+          <SelectTrigger id="school-day-kind" aria-label="Art">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(SCHOOL_DAY_KIND_LABELS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      {kind === 'weekday' && (
+        <Field label="Wochentag" htmlFor="school-day-weekday">
+          <Select
+            value={String(weekday)}
+            onValueChange={(next) => setWeekday(Number(next))}
+            disabled={isPending}
+          >
+            <SelectTrigger id="school-day-weekday" aria-label="Wochentag">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SCHOOL_WEEKDAYS.map((day) => (
+                <SelectItem key={day} value={String(day)}>
+                  {WEEKDAY_LABELS[day]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+      )}
+    </>
+  );
+}
+
+function SchoolDayPeriodFields({ form }: { form: AddSchoolDayForm }) {
+  const { kind, startDate, setStartDate, endKnown, setEndKnown, endDate, setEndDate, needsEnd } = form;
+  const { fieldErrors, isPending } = form;
+  return (
+    <>
+      <SchoolDateField
+        id="school-day-start"
+        label={kind === 'block' ? 'Erster Schultag' : 'Ab'}
+        value={startDate}
+        onChange={setStartDate}
+        error={fieldErrors.start}
+        disabled={isPending}
+      />
+      {kind === 'weekday' && (
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="school-day-end-known"
+            checked={endKnown}
+            onCheckedChange={(checked) => setEndKnown(checked === true)}
+            disabled={isPending}
+          />
+          <Label htmlFor="school-day-end-known" className="text-sm font-normal">
+            Enddatum ist schon bekannt
+          </Label>
+        </div>
+      )}
+      {needsEnd ? (
+        <SchoolDateField
+          id="school-day-end"
+          label={kind === 'block' ? 'Letzter Schultag' : 'Bis'}
+          value={endDate}
+          onChange={setEndDate}
+          error={fieldErrors.end}
+          disabled={isPending}
+        />
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Ohne Enddatum gilt der Schultag jede Woche bis auf Weiteres.
+        </p>
+      )}
+    </>
   );
 }
 
@@ -268,18 +244,18 @@ export function EndSchoolDayDialog({
     if (focusFirstInvalidField({ 'school-day-last': endError })) return;
     try {
       const result = await run({ schoolDayId: schoolDay.id, endDate });
-      if (result.success) {
-        showBanner({ variant: 'success', message: 'Das Enddatum wurde gespeichert.' });
-        onClose(true);
+      if (!result.success) {
+        setError(
+          describeFailure(
+            result.error,
+            SCHOOL_DAY_ERROR_MESSAGES,
+            'Das Enddatum konnte nicht gespeichert werden.',
+          ),
+        );
         return;
       }
-      setError(
-        describeFailure(
-          result.error,
-          SCHOOL_DAY_ERROR_MESSAGES,
-          'Das Enddatum konnte nicht gespeichert werden.',
-        ),
-      );
+      showBanner({ variant: 'success', message: 'Das Enddatum wurde gespeichert.' });
+      onClose(true);
     } catch (submitError) {
       logError('EndSchoolDayDialog: save failed', submitError);
       setError('Das Enddatum konnte nicht gespeichert werden.');
@@ -305,14 +281,7 @@ export function EndSchoolDayDialog({
             />
             <ErrorText>{error}</ErrorText>
           </DialogBody>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onClose(false)} disabled={isPending}>
-              Abbrechen
-            </Button>
-            <Button pending={isPending} type="submit" disabled={isPending}>
-              {isPending ? 'Wird gespeichert…' : 'Enddatum speichern'}
-            </Button>
-          </DialogFooter>
+          <DialogActions isPending={isPending} label="Enddatum speichern" onCancel={() => onClose(false)} />
         </form>
       </DialogContent>
     </Dialog>

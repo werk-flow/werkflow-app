@@ -86,17 +86,17 @@ begin
 
   insert into public.school_days (id, organization_id, employee_record_id, kind, weekday, start_date, created_by)
   values
-    ('3c650000-0000-0000-0000-000000000020', v_org, v_apprentice, 'weekday', 0, '2026-09-07',
+    ('3c650000-0000-0000-0000-000000000020', v_org, v_apprentice, 'weekday', 0, '2037-09-07',
       '3c650000-0000-0000-0000-000000000002'),
-    ('3c650000-0000-0000-0000-000000000022', v_foreign, v_foreign_record, 'weekday', 1, '2026-09-08',
+    ('3c650000-0000-0000-0000-000000000022', v_foreign, v_foreign_record, 'weekday', 1, '2037-09-08',
       '3c650000-0000-0000-0000-000000000005');
   insert into public.school_days (id, organization_id, employee_record_id, kind, start_date, end_date, created_by)
   values
-    ('3c650000-0000-0000-0000-000000000021', v_org, v_colleague, 'block', '2026-12-07', '2026-12-18',
+    ('3c650000-0000-0000-0000-000000000021', v_org, v_colleague, 'block', '2037-12-07', '2037-12-18',
       '3c650000-0000-0000-0000-000000000002');
 
   insert into public.time_periods (organization_id, period_start_date, period_end_date, prepared_by, state)
-  values (v_org, '2026-10-01', '2026-10-31', '3c650000-0000-0000-0000-000000000001', 'closed');
+  values (v_org, '2037-10-01', '2037-10-31', '3c650000-0000-0000-0000-000000000001', 'closed');
 end;
 $$;
 
@@ -175,7 +175,7 @@ begin
   -- A new row in a closed month is refused.
   begin
     insert into public.school_days (organization_id, employee_record_id, kind, start_date, end_date, created_by)
-    values (v_org, v_apprentice, 'block', '2026-10-12', '2026-10-16', v_buero);
+    values (v_org, v_apprentice, 'block', '2037-10-12', '2037-10-16', v_buero);
     raise exception 'a new school day in a closed month was accepted';
   exception when sqlstate 'WFP01' then null;
   end;
@@ -183,7 +183,7 @@ begin
   -- A new open-ended rule that starts before a closed month is refused.
   begin
     insert into public.school_days (organization_id, employee_record_id, kind, weekday, start_date, created_by)
-    values (v_org, v_apprentice, 'weekday', 3, '2026-09-03', v_buero);
+    values (v_org, v_apprentice, 'weekday', 3, '2037-09-03', v_buero);
     raise exception 'a weekly rule reaching into a closed month was accepted';
   exception when sqlstate 'WFP01' then null;
   end;
@@ -191,7 +191,7 @@ begin
   -- A record of another organization is refused.
   begin
     insert into public.school_days (organization_id, employee_record_id, kind, start_date, end_date, created_by)
-    values (v_org, v_foreign_record, 'block', '2027-01-11', '2027-01-15', v_buero);
+    values (v_org, v_foreign_record, 'block', '2038-01-11', '2038-01-15', v_buero);
     raise exception 'a school day for another organization''s record was accepted';
   exception when raise_exception then
     if sqlerrm <> 'school_day_record_organization_mismatch' then raise; end if;
@@ -200,7 +200,7 @@ begin
   -- A second active rule on the same weekday is refused.
   begin
     insert into public.school_days (organization_id, employee_record_id, kind, weekday, start_date, created_by)
-    values (v_org, v_apprentice, 'weekday', 0, '2027-01-04', v_buero);
+    values (v_org, v_apprentice, 'weekday', 0, '2038-01-04', v_buero);
     raise exception 'an overlapping weekly rule was accepted';
   exception when exclusion_violation then null;
   end;
@@ -214,21 +214,21 @@ begin
 
   -- An end date inside the closed month removes closed days and is refused.
   begin
-    update public.school_days set end_date = '2026-10-19', ended_at = now(), ended_by = v_buero where id = v_rule;
+    update public.school_days set end_date = '2037-10-19', ended_at = now(), ended_by = v_buero where id = v_rule;
     raise exception 'an end date reaching into a closed month was accepted';
   exception when sqlstate 'WFP01' then null;
   end;
 
   -- An end date after the closed month removes only open days and passes,
   -- although the rule itself covers the closed month.
-  update public.school_days set end_date = '2026-11-30', ended_at = now(), ended_by = v_buero where id = v_rule;
-  if (select end_date from public.school_days where id = v_rule) <> '2026-11-30' then
+  update public.school_days set end_date = '2037-11-30', ended_at = now(), ended_by = v_buero where id = v_rule;
+  if (select end_date from public.school_days where id = v_rule) <> '2037-11-30' then
     raise exception 'ending a weekly rule after the closed month was refused';
   end if;
 
   -- A later end date is refused: that is a new rule.
   begin
-    update public.school_days set end_date = '2026-12-31', ended_at = now(), ended_by = v_buero where id = v_rule;
+    update public.school_days set end_date = '2037-12-31', ended_at = now(), ended_by = v_buero where id = v_rule;
     raise exception 'a later end date was accepted';
   exception when raise_exception then
     if sqlerrm <> 'school_day_end_not_earlier' then raise; end if;
@@ -236,7 +236,7 @@ begin
 
   -- Every other column stays.
   begin
-    update public.school_days set start_date = '2026-11-02' where id = v_rule;
+    update public.school_days set start_date = '2037-11-02' where id = v_rule;
     raise exception 'a start date was changed';
   exception when raise_exception then
     if sqlerrm <> 'school_day_immutable' then raise; end if;
@@ -286,16 +286,16 @@ declare
 begin
   select employee_record_id into v_apprentice from public.school_days
     where id = '3c650000-0000-0000-0000-000000000020';
-  v_before := app_private.compute_p1_23_source_fingerprint(v_org, '2027-02-01', '2027-02-28');
+  v_before := app_private.compute_p1_23_source_fingerprint(v_org, '2038-02-01', '2038-02-28');
   insert into public.school_days (organization_id, employee_record_id, kind, start_date, end_date, created_by)
-  values (v_org, v_apprentice, 'block', '2027-03-08', '2027-03-12', '3c650000-0000-0000-0000-000000000002');
-  v_after_outside := app_private.compute_p1_23_source_fingerprint(v_org, '2027-02-01', '2027-02-28');
+  values (v_org, v_apprentice, 'block', '2038-03-08', '2038-03-12', '3c650000-0000-0000-0000-000000000002');
+  v_after_outside := app_private.compute_p1_23_source_fingerprint(v_org, '2038-02-01', '2038-02-28');
   if v_after_outside <> v_before then
     raise exception 'a school day outside the period changed its fingerprint';
   end if;
   insert into public.school_days (organization_id, employee_record_id, kind, start_date, end_date, created_by)
-  values (v_org, v_apprentice, 'block', '2027-02-08', '2027-02-12', '3c650000-0000-0000-0000-000000000002');
-  v_after_inside := app_private.compute_p1_23_source_fingerprint(v_org, '2027-02-01', '2027-02-28');
+  values (v_org, v_apprentice, 'block', '2038-02-08', '2038-02-12', '3c650000-0000-0000-0000-000000000002');
+  v_after_inside := app_private.compute_p1_23_source_fingerprint(v_org, '2038-02-01', '2038-02-28');
   if v_after_inside = v_before then
     raise exception 'a school day inside the period left its fingerprint unchanged';
   end if;

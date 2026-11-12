@@ -121,37 +121,34 @@ export function CalendarBody({
   );
 }
 
+/** What the week board, the day view and the month all take. */
+function everyViewProps(
+  props: Pick<
+    CalendarSurfaceProps,
+    'todayIso' | 'viewScope' | 'data' | 'mutations' | 'surfaceActions' | 'parkFlow' | 'verticalScroller'
+  >,
+) {
+  return {
+    todayIso: props.todayIso,
+    jobs: props.viewScope.filteredJobs,
+    holidays: props.data.range.holidays,
+    mutations: props.mutations,
+    actions: props.surfaceActions,
+    parkingContexts: props.data.parkingContexts,
+    onParkedContextMissing: props.parkFlow.handleParkedContextMissing,
+    verticalScroller: props.verticalScroller,
+  };
+}
+
 /** The week board, the day view or the month, fed by the one range owner and the one optimistic owner. */
-function CalendarSurface({
-  viewState,
-  viewScope,
-  data,
-  mutations,
-  surfaceActions,
-  parkFlow,
-  phone,
-  organizationSettings,
-  currentUserId,
-  currentUserRole,
-  isAdminOrManager,
-  onSessionClick,
-  verticalScroller,
-  todayIso,
-}: CalendarSurfaceProps): React.JSX.Element {
+function CalendarSurface(props: CalendarSurfaceProps): React.JSX.Element {
+  const { viewState, viewScope, data, phone, organizationSettings, currentUserId, currentUserRole } = props;
+  const { isAdminOrManager, onSessionClick } = props;
   const { currentDate, view, preferences } = viewState;
-  const { board, entries, vacation, sickness, holidays, changeRequestMap } = data.range;
+  const { board, entries, vacation, sickness, changeRequestMap } = data.range;
   // The Berufsschule days come with the board's capacity days, so they need no read of their own.
   const school = schoolCalendarEntries(board);
-  const everyView = {
-    todayIso,
-    jobs: viewScope.filteredJobs,
-    holidays,
-    mutations,
-    actions: surfaceActions,
-    parkingContexts: data.parkingContexts,
-    onParkedContextMissing: parkFlow.handleParkedContextMissing,
-    verticalScroller,
-  };
+  const everyView = everyViewProps(props);
   if (view === 'week')
     return (
       <Plantafel

@@ -32,6 +32,7 @@ export const SURFACE_GROUPS = [
   'people',
   'personnel',
   'personnel-absence',
+  'personnel-records',
   'settings',
   'documents',
   'inventory',
@@ -99,7 +100,7 @@ const MANAGER_GROUPS: Readonly<Record<InventoriedRoute, Exclude<SurfaceGroup, Fi
 const PART_GROUPS: Readonly<Partial<Record<InventoriedRoute, readonly SurfaceGroup[]>>> = {
   '/auftraege/[jobNumber]': ['job', 'job-actions', 'job-lifecycle'],
   '/kalender': ['planning', 'planning-board'],
-  '/mitarbeiter/[userId]': ['personnel', 'personnel-absence'],
+  '/mitarbeiter/[userId]': ['personnel', 'personnel-absence', 'personnel-records'],
 };
 
 /** The field worker's pages by group; every other employee page is in `field`. */

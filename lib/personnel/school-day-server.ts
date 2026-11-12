@@ -39,7 +39,7 @@ export async function loadSchoolDaysForRecord(
  * The active school rules intersecting a window, cancelled ones excluded;
  * null when the read fails: "no school day" would silently raise a target.
  */
-export async function loadActiveSchoolDays(
+async function loadActiveSchoolDays(
   organizationId: string,
   windowStartIso: string,
   windowEndIso: string,
