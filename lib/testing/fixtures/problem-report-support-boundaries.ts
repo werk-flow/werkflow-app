@@ -17,6 +17,7 @@ import {
   signInAs,
   tableRows,
 } from './action-boundary-world';
+import { z } from '@/lib/zod';
 
 const reporterId = '33500000-0000-4000-8000-000000000002';
 const otherSupportId = '33500000-0000-4000-8000-000000000003';
@@ -30,6 +31,8 @@ const screenshotId = '33500000-0000-4000-8000-000000000030';
 const attachmentId = '33500000-0000-4000-8000-000000000031';
 const uploadId = '33500000-0000-4000-8000-000000000032';
 const newReportId = '33500000-0000-4000-8000-000000000040';
+/** An allowlisted id whose account was deleted: no profile. */
+const goneSupportId = '33500000-0000-4000-8000-0000000000ff';
 
 const ORIGINAL_TEXT = 'Bei Familie Beispiel in der Musterstraße 1 speichert der Auftrag nicht.';
 const SCRUBBED_TEXT = 'Bei [Kunde] in [Adresse] speichert der Auftrag nicht.';
@@ -124,6 +127,7 @@ const world = installActionWorld(
  * history entry, unless the history cannot be written; the writes answer
  * success, and a filing its number.
  */
+const fieldValues = z.record(z.string(), z.unknown());
 const supportFunctions: typeof world.rpc = ({ name, args }) => {
   if (name === 'record_problem_report_opening') {
     if (world.failingTables.has('problem_report_events'))
@@ -137,12 +141,18 @@ const supportFunctions: typeof world.rpc = ({ name, args }) => {
     });
     return { data: null, error: null };
   }
-  assert.ok(
-    name === 'triage_problem_report' ||
-      name === 'file_problem_report_for_caller' ||
-      name === 'register_problem_report_file',
-    name,
-  );
+  if (name === 'triage_problem_report') {
+    // As the database function: a changed field must still hold the value its page showed.
+    const row = world.tables.problem_reports?.find((candidate) => candidate.id === args.p_report_id);
+    const changes = fieldValues.parse(args.p_changes);
+    const expected = fieldValues.parse(args.p_expected);
+    if (row === undefined) return { data: null, error: { code: 'P0001', message: 'report_not_found' } };
+    if (Object.keys(changes).some((field) => row[field] !== expected[field]))
+      return { data: null, error: { code: 'P0001', message: 'triage_conflict' } };
+    Object.assign(row, changes);
+    return { data: null, error: null };
+  }
+  assert.ok(name === 'file_problem_report_for_caller' || name === 'register_problem_report_file', name);
   return { data: name === 'file_problem_report_for_caller' ? 4 : null, error: null };
 };
 world.rpc = supportFunctions;
@@ -210,7 +220,12 @@ const everyAction: Array<[string, () => Promise<{ success: boolean; error?: stri
   ['readSupportProblemReport', () => support.readSupportProblemReport(scrubbedReportId)],
   [
     'triageProblemReport',
-    () => support.triageProblemReport({ reportId: scrubbedReportId, changes: { bucket: 'fehler' } }),
+    () =>
+      support.triageProblemReport({
+        reportId: scrubbedReportId,
+        changes: { bucket: 'fehler' },
+        expected: { bucket: null },
+      }),
   ],
   ['openProblemReportOriginal', () => support.openProblemReportOriginal(scrubbedReportId)],
   [
@@ -317,6 +332,15 @@ assert.deepEqual(
   detail.report.assignees.map((assignee) => assignee.name),
   ['Sina Support', 'Timo Support'],
 );
+// An allowlisted id whose account is gone names nobody a report can point to: it is no assignee.
+process.env.SUPPORT_USER_IDS = `${otherSupportId}, ${CALLER_ID}, ${goneSupportId}`;
+const withGoneId = await support.readSupportProblemReport(scrubbedReportId);
+assert.ok(withGoneId.success);
+assert.deepEqual(
+  withGoneId.report.assignees.map((assignee) => assignee.userId),
+  [CALLER_ID, otherSupportId],
+);
+process.env.SUPPORT_USER_IDS = `${otherSupportId}, ${CALLER_ID.toUpperCase()}`;
 const pending = await support.readSupportProblemReport(pendingReportId);
 assert.ok(pending.success);
 assert.equal(pending.report.scrubbedDescription, null);
@@ -333,15 +357,36 @@ assert.equal(events().length, 0, 'reading a report page wrote history');
 // of the allowlist; the call is scoped by the report's own organization and
 // names only the fields the input names.
 assert.deepEqual(
-  await support.triageProblemReport({ reportId: unknownReportId, changes: { status: 'erledigt' } }),
+  await support.triageProblemReport({
+    reportId: unknownReportId,
+    changes: { status: 'erledigt' },
+    expected: { status: 'eingegangen' },
+  }),
   { success: false, error: 'report_not_found' },
 );
 assert.deepEqual(
-  await support.triageProblemReport({ reportId: scrubbedReportId, changes: { assigneeId: reporterId } }),
+  await support.triageProblemReport({
+    reportId: scrubbedReportId,
+    changes: { assigneeId: reporterId },
+    expected: { assigneeId: null },
+  }),
   { success: false, error: 'assignee_not_support' },
 );
 assert.deepEqual(
-  await support.triageProblemReport({ reportId: 'keine-meldung', changes: { bucket: 'fehler' } }),
+  await support.triageProblemReport({
+    reportId: 'keine-meldung',
+    changes: { bucket: 'fehler' },
+    expected: { bucket: null },
+  }),
+  { success: false, error: 'invalid_input' },
+);
+// A save names what it was based on for exactly the fields it changes.
+assert.deepEqual(
+  await support.triageProblemReport({
+    reportId: scrubbedReportId,
+    changes: { bucket: 'fehler' },
+    expected: {},
+  }),
   { success: false, error: 'invalid_input' },
 );
 assert.equal(world.rpcCalls.length, 0);
@@ -349,6 +394,7 @@ assert.deepEqual(
   await support.triageProblemReport({
     reportId: scrubbedReportId,
     changes: { status: 'erledigt', assigneeId: otherSupportId, response: '  Behoben, ab morgen live.  ' },
+    expected: { status: 'eingegangen', assigneeId: null, response: null },
   }),
   { success: true },
 );
@@ -359,16 +405,57 @@ assert.deepEqual(world.rpcCalls.at(-1), {
     p_report_id: scrubbedReportId,
     p_actor_id: CALLER_ID,
     p_changes: { status: 'erledigt', assignee_id: otherSupportId, response: 'Behoben, ab morgen live.' },
+    p_expected: { status: 'eingegangen', assignee_id: null, response: null },
     // The other support persons of the allowlist; the caller's own page reads again itself.
     p_support_ids: [otherSupportId],
   },
 });
 // An emptied answer clears it.
-await support.triageProblemReport({ reportId: scrubbedReportId, changes: { response: '   ' } });
+await support.triageProblemReport({
+  reportId: scrubbedReportId,
+  changes: { response: '   ' },
+  expected: { response: 'Behoben, ab morgen live.' },
+});
 assert.deepEqual(world.rpcCalls.at(-1)?.args.p_changes, { response: null });
+// Two saves from the same state: the first is saved, the second is refused and
+// changes nothing, so a late save never replaces the newer answer.
+const sameState = { response: null };
+assert.deepEqual(
+  await support.triageProblemReport({
+    reportId: scrubbedReportId,
+    changes: { response: 'Erste Antwort' },
+    expected: sameState,
+  }),
+  { success: true },
+);
+assert.deepEqual(
+  await support.triageProblemReport({
+    reportId: scrubbedReportId,
+    changes: { response: 'Zweite Antwort' },
+    expected: sameState,
+  }),
+  { success: false, error: 'triage_conflict' },
+);
+assert.equal(
+  world.tables.problem_reports?.find((row) => row.id === scrubbedReportId)?.response,
+  'Erste Antwort',
+);
+world.rpc = () => ({ data: null, error: { code: 'P0001', message: 'assignee_not_support' } });
+assert.deepEqual(
+  await support.triageProblemReport({
+    reportId: scrubbedReportId,
+    changes: { assigneeId: otherSupportId },
+    expected: { assigneeId: otherSupportId },
+  }),
+  { success: false, error: 'assignee_not_support' },
+);
 world.rpc = () => ({ data: null, error: { code: 'P0001', message: 'report_not_found' } });
 assert.deepEqual(
-  await support.triageProblemReport({ reportId: scrubbedReportId, changes: { bucket: 'wunsch' } }),
+  await support.triageProblemReport({
+    reportId: scrubbedReportId,
+    changes: { bucket: 'wunsch' },
+    expected: { bucket: null },
+  }),
   { success: false, error: 'report_not_found' },
 );
 

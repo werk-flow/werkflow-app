@@ -3,13 +3,23 @@ import { useEffect, useState, type ReactElement } from 'react';
 import { SupportReportDetail } from '@/components/support/support-report-detail';
 import { BannerProvider } from '@/components/ui/banner';
 import type { ActionResult } from '@/lib/action-result';
-import type { TriageProblemReportInput } from '@/lib/problem-reports/schemas';
-import type { ProblemReportOriginalResult, SupportReport } from '@/lib/problem-reports/types';
+import type {
+  FileProblemReportForCallerInput,
+  TriageProblemReportInput,
+} from '@/lib/problem-reports/schemas';
+import type {
+  ProblemReportFileUploadTicketResult,
+  ProblemReportOriginalResult,
+  SubmitProblemReportResult,
+  SupportReport,
+} from '@/lib/problem-reports/types';
 import { holdWrite } from './held-write-boundary';
 import { ROUTE_REFRESH_EVENT } from './lifecycle-boundaries';
 
 // Support's report page for its contract: the real triage form and original
 // section run against stand-ins of `@/lib/problem-reports/support-actions`.
+// The filing form's contract (support-filing-boundaries.tsx) files through
+// the same stand-ins.
 // A triage stays open until the spec answers it; a route refresh brings the
 // report as the accepted writes and openings left it.
 
@@ -25,8 +35,12 @@ type SupportContractState = {
 declare global {
   interface Window {
     uiContractSupport: SupportContractState;
+    /** Every report the filing form saved, in order. */
+    uiContractSupportFilings: FileProblemReportForCallerInput[];
   }
 }
+
+window.uiContractSupportFilings = [];
 
 window.uiContractSupport = {
   failNextRequest: false,
@@ -78,6 +92,24 @@ export async function triageProblemReport(input: TriageProblemReportInput): Prom
     ...(response === undefined ? {} : { response: response?.trim() || null }),
   };
   return { success: true };
+}
+
+export async function fileProblemReportForCaller(
+  input: FileProblemReportForCallerInput,
+): Promise<SubmitProblemReportResult> {
+  failIfAsked();
+  window.uiContractSupportFilings.push(input);
+  return { success: true, reportId: input.reportId, number: window.uiContractSupportFilings.length };
+}
+
+export async function createSupportReportFileUploadTicket(): Promise<ProblemReportFileUploadTicketResult> {
+  failIfAsked();
+  return { success: false, error: 'upload_failed' };
+}
+
+export async function finalizeSupportReportFileUpload(): Promise<ActionResult> {
+  failIfAsked();
+  return { success: false, error: 'upload_failed' };
 }
 
 export async function openProblemReportOriginal(): Promise<ProblemReportOriginalResult> {

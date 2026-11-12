@@ -80,7 +80,12 @@ grant execute on function app_private.signal_problem_report_users(uuid, uuid[]) 
 
 -- Applies support's changes to one report: the keys `status`, `bucket`,
 -- `assignee_id` and `response` of p_changes, each optional, so two support
--- persons who change different fields overwrite nothing of each other. Every
+-- persons who change different fields overwrite nothing of each other.
+-- p_expected holds, for the same keys, the values the support person's page
+-- showed when they began the change: a field that holds another value by now
+-- refuses the whole write as `triage_conflict`, so a late write never
+-- replaces a newer one unseen. A new assignee must still have an account
+-- (`assignee_not_support`). Every
 -- field that really changes writes one history entry with the actor; the
 -- answer's text stays out of the history. Closing sets the closing time,
 -- reopening clears it. A changed status or answer signals the reporter; any
@@ -92,6 +97,7 @@ create function public.triage_problem_report(
   p_report_id uuid,
   p_actor_id uuid,
   p_changes jsonb,
+  p_expected jsonb,
   p_support_ids uuid[]
 )
 returns void
@@ -109,18 +115,34 @@ begin
   if p_changes is null or jsonb_typeof(p_changes) <> 'object'
     or p_changes - array['status', 'bucket', 'assignee_id', 'response'] <> '{}'::jsonb
     or (p_changes ? 'status' and jsonb_typeof(p_changes -> 'status') <> 'string')
+    or p_expected is null or jsonb_typeof(p_expected) <> 'object'
+    or (select coalesce(array_agg(field order by field), '{}') from jsonb_object_keys(p_changes) field)
+      is distinct from
+      (select coalesce(array_agg(field order by field), '{}') from jsonb_object_keys(p_expected) field)
   then raise exception 'invalid_triage'; end if;
 
   select * into v_report from public.problem_reports report
   where report.id = p_report_id and report.organization_id = p_organization_id
   for update;
   if not found then raise exception 'report_not_found'; end if;
+  if exists (
+    select 1 from jsonb_object_keys(p_changes) field
+    where jsonb_build_object(
+        'status', v_report.status,
+        'bucket', v_report.bucket,
+        'assignee_id', v_report.assignee_id,
+        'response', v_report.response
+      ) -> field is distinct from p_expected -> field
+  ) then raise exception 'triage_conflict'; end if;
 
   v_status := case when p_changes ? 'status' then p_changes ->> 'status' else v_report.status end;
   v_bucket := case when p_changes ? 'bucket' then p_changes ->> 'bucket' else v_report.bucket end;
   v_assignee_id := case when p_changes ? 'assignee_id'
     then (p_changes ->> 'assignee_id')::uuid else v_report.assignee_id end;
   v_response := case when p_changes ? 'response' then p_changes ->> 'response' else v_report.response end;
+  if v_assignee_id is distinct from v_report.assignee_id and v_assignee_id is not null
+    and not exists (select 1 from public.profiles profile where profile.id = v_assignee_id)
+  then raise exception 'assignee_not_support'; end if;
 
   update public.problem_reports report
   set status = v_status,
@@ -155,9 +177,9 @@ begin
 end;
 $$;
 
-revoke all on function public.triage_problem_report(uuid, uuid, uuid, jsonb, uuid[])
+revoke all on function public.triage_problem_report(uuid, uuid, uuid, jsonb, jsonb, uuid[])
   from public, anon, authenticated;
-grant execute on function public.triage_problem_report(uuid, uuid, uuid, jsonb, uuid[]) to service_role;
+grant execute on function public.triage_problem_report(uuid, uuid, uuid, jsonb, jsonb, uuid[]) to service_role;
 
 -- Stores a report support files for a member who phoned: the member is the
 -- reporter, the support person the filer, and the report has no captured

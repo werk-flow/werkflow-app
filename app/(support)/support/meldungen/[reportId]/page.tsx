@@ -52,7 +52,6 @@ async function ReportData({ params }: { params: ReportParams }) {
         actions={<RefreshButton label="Meldung aktualisieren" />}
       />
       <PageBody>
-        <ProblemReportSignalsLive />
         <SupportReportDetail key={report.id} report={report} />
       </PageBody>
     </PageShell>
@@ -61,8 +60,12 @@ async function ReportData({ params }: { params: ReportParams }) {
 
 export default function SupportReportPage({ params }: { params: ReportParams }) {
   return (
-    <Suspense fallback={<SupportReportPageSkeleton />}>
-      <ReportData params={params} />
-    </Suspense>
+    <>
+      {/* Outside the report's read, so a later signal still reads a failed report again. */}
+      <ProblemReportSignalsLive />
+      <Suspense fallback={<SupportReportPageSkeleton />}>
+        <ReportData params={params} />
+      </Suspense>
+    </>
   );
 }

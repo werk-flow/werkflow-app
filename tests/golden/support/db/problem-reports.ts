@@ -116,12 +116,22 @@ export async function seedTriagedProblemReport(input: {
   createdAt: string;
 }): Promise<string> {
   const reportId = await seedProblemReport(input);
-  await createAdminClient()
+  const admin = createAdminClient();
+  // The triage names what it is based on: the report as it is now.
+  const { data: current } = await admin
+    .from('problem_reports')
+    .select('status, bucket, assignee_id')
+    .eq('organization_id', input.orgId)
+    .eq('id', reportId)
+    .single()
+    .throwOnError();
+  await admin
     .rpc('triage_problem_report', {
       p_organization_id: input.orgId,
       p_report_id: reportId,
       p_actor_id: TEST_SUPPORT_USER.id,
       p_changes: { status: 'in_bearbeitung', bucket: 'fehler', assignee_id: TEST_SUPPORT_USER.id },
+      p_expected: current,
       p_support_ids: [],
     })
     .throwOnError();

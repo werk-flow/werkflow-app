@@ -11,6 +11,7 @@
 -- reporter's row moves on a status or answer change and a report filed for
 -- them, not on a bucket or assignee change; the named support persons' rows
 -- move on every change, filing and opening, skipping an id without a profile.
+-- A write from an outdated state of a field it changes is refused.
 begin;
 
 insert into auth.users (
@@ -53,7 +54,7 @@ declare
   v_role text;
 begin
   foreach v_role in array array['anon', 'authenticated'] loop
-    if has_function_privilege(v_role, 'public.triage_problem_report(uuid, uuid, uuid, jsonb, uuid[])', 'EXECUTE')
+    if has_function_privilege(v_role, 'public.triage_problem_report(uuid, uuid, uuid, jsonb, jsonb, uuid[])', 'EXECUTE')
       or has_function_privilege(v_role,
         'public.file_problem_report_for_caller(uuid, uuid, uuid, uuid, text, uuid[])', 'EXECUTE')
       or has_function_privilege(v_role,
@@ -85,7 +86,8 @@ declare
 begin
   -- Bucket and assignee change nothing the reporter reads: no signal.
   perform public.triage_problem_report(v_org, v_report, v_support,
-    jsonb_build_object('bucket', 'fehler', 'assignee_id', v_support), array[v_colleague, v_ghost]);
+    jsonb_build_object('bucket', 'fehler', 'assignee_id', v_support),
+    jsonb_build_object('bucket', null, 'assignee_id', null), array[v_colleague, v_ghost]);
   select * into v_row from public.problem_reports where id = v_report;
   if v_row.bucket <> 'fehler' or v_row.assignee_id <> v_support or v_row.status <> 'eingegangen' then
     raise exception 'a triage did not set bucket and assignee alone';
@@ -113,6 +115,7 @@ begin
 
   -- The same values again change nothing and write nothing.
   perform public.triage_problem_report(v_org, v_report, v_support,
+    jsonb_build_object('bucket', 'fehler', 'assignee_id', v_support),
     jsonb_build_object('bucket', 'fehler', 'assignee_id', v_support), null);
   if (select count(*) from public.problem_report_events where report_id = v_report) <> 2 then
     raise exception 'an unchanged field wrote a history entry';
@@ -120,7 +123,8 @@ begin
 
   -- Closing with an answer: the closing time is set, the reporter is signalled.
   perform public.triage_problem_report(v_org, v_report, v_support,
-    jsonb_build_object('status', 'erledigt', 'response', 'Behoben, ab morgen live.'), null);
+    jsonb_build_object('status', 'erledigt', 'response', 'Behoben, ab morgen live.'),
+    jsonb_build_object('status', 'eingegangen', 'response', null), null);
   select * into v_row from public.problem_reports where id = v_report;
   if v_row.status <> 'erledigt' or v_row.closed_at is null or v_row.response <> 'Behoben, ab morgen live.'
     or v_row.bucket <> 'fehler' then
@@ -141,7 +145,8 @@ begin
 
   -- Reopening clears the closing time; clearing the assignee is a change too.
   perform public.triage_problem_report(v_org, v_report, v_support,
-    jsonb_build_object('status', 'in_bearbeitung', 'assignee_id', null), null);
+    jsonb_build_object('status', 'in_bearbeitung', 'assignee_id', null),
+    jsonb_build_object('status', 'erledigt', 'assignee_id', v_support), null);
   select * into v_row from public.problem_reports where id = v_report;
   if v_row.status <> 'in_bearbeitung' or v_row.closed_at is not null or v_row.assignee_id is not null then
     raise exception 'reopening a report did not clear its closing time and assignee';
@@ -163,38 +168,98 @@ declare
   v_events constant bigint := (select count(*) from public.problem_report_events);
 begin
   begin
-    perform public.triage_problem_report(v_org, gen_random_uuid(), v_support, '{"bucket":"wunsch"}', null);
+    perform public.triage_problem_report(v_org, gen_random_uuid(), v_support, '{"bucket":"wunsch"}',
+      '{"bucket":null}', null);
     raise exception 'a triage of an unknown report was accepted';
   exception when raise_exception then
     if sqlerrm <> 'report_not_found' then raise; end if;
   end;
   begin
     perform public.triage_problem_report('33500000-0000-0000-0000-000000000011', v_report, v_support,
-      '{"bucket":"wunsch"}', null);
+      '{"bucket":"wunsch"}', '{"bucket":null}', null);
     raise exception 'a triage reached a report through another organization';
   exception when raise_exception then
     if sqlerrm <> 'report_not_found' then raise; end if;
   end;
   begin
-    perform public.triage_problem_report(v_org, v_report, v_support, '{"description":"geändert"}', null);
+    perform public.triage_problem_report(v_org, v_report, v_support, '{"description":"geändert"}',
+      '{"description":"Speichern geht nicht"}', null);
     raise exception 'a triage changed a field outside its four';
   exception when raise_exception then
     if sqlerrm <> 'invalid_triage' then raise; end if;
   end;
   begin
-    perform public.triage_problem_report(v_org, v_report, v_support, '{"status":null}', null);
+    perform public.triage_problem_report(v_org, v_report, v_support, '{"status":null}',
+      '{"status":"in_bearbeitung"}', null);
     raise exception 'a triage emptied the status';
   exception when raise_exception then
     if sqlerrm <> 'invalid_triage' then raise; end if;
   end;
   begin
-    perform public.triage_problem_report(v_org, v_report, v_support, '{"bucket":"dringend"}', null);
+    perform public.triage_problem_report(v_org, v_report, v_support, '{"bucket":"dringend"}',
+      '{"bucket":"fehler"}', null);
     raise exception 'a bucket outside the four was accepted';
   exception when check_violation then null;
   end;
   if (select count(*) from public.problem_report_events) <> v_events then
     raise exception 'a refused triage wrote history';
   end if;
+end;
+$$;
+
+-- A write names the values its page showed for the fields it changes. Two
+-- writes from the same state: the first is saved, the second is refused as
+-- `triage_conflict` and writes nothing, so it never replaces the newer answer.
+-- A change of another field from that state is no conflict. A write whose
+-- expected values name other fields than its changes, and a new assignee
+-- without an account, are refused.
+do $$
+declare
+  v_org constant uuid := '33500000-0000-0000-0000-000000000010';
+  v_report constant uuid := '33500000-0000-0000-0000-000000000020';
+  v_support constant uuid := '33500000-0000-0000-0000-000000000003';
+  v_colleague constant uuid := '33500000-0000-0000-0000-000000000006';
+  v_seen constant jsonb := jsonb_build_object('response', 'Behoben, ab morgen live.');
+  v_events bigint;
+begin
+  perform public.triage_problem_report(v_org, v_report, v_support,
+    jsonb_build_object('response', 'Erste Antwort'), v_seen, null);
+  v_events := (select count(*) from public.problem_report_events);
+  begin
+    perform public.triage_problem_report(v_org, v_report, v_colleague,
+      jsonb_build_object('response', 'Zweite Antwort'), v_seen, null);
+    raise exception 'a write from an outdated state replaced a newer answer';
+  exception when raise_exception then
+    if sqlerrm <> 'triage_conflict' then raise; end if;
+  end;
+  if (select response from public.problem_reports where id = v_report) <> 'Erste Antwort'
+    or (select count(*) from public.problem_report_events) <> v_events then
+    raise exception 'a refused write changed the report or its history';
+  end if;
+
+  perform public.triage_problem_report(v_org, v_report, v_colleague,
+    jsonb_build_object('bucket', 'wunsch'), jsonb_build_object('bucket', 'fehler'), null);
+  if (select bucket from public.problem_reports where id = v_report) <> 'wunsch' then
+    raise exception 'a change of another field from the same state was refused';
+  end if;
+
+  begin
+    perform public.triage_problem_report(v_org, v_report, v_support,
+      jsonb_build_object('bucket', 'fehler'), '{}'::jsonb, null);
+    raise exception 'a write without its expected values was accepted';
+  exception when raise_exception then
+    if sqlerrm <> 'invalid_triage' then raise; end if;
+  end;
+  begin
+    perform public.triage_problem_report(v_org, v_report, v_support,
+      jsonb_build_object('assignee_id', '33500000-0000-0000-0000-0000000000ff'),
+      jsonb_build_object('assignee_id', null), null);
+    raise exception 'an assignee without an account was accepted';
+  exception when raise_exception then
+    if sqlerrm <> 'assignee_not_support' then raise; end if;
+  end;
+  perform public.triage_problem_report(v_org, v_report, v_support,
+    jsonb_build_object('bucket', 'fehler'), jsonb_build_object('bucket', 'wunsch'), null);
 end;
 $$;
 
@@ -352,7 +417,7 @@ declare
 begin
   perform public.triage_problem_report('33500000-0000-0000-0000-000000000010',
     '33500000-0000-0000-0000-000000000020', '33500000-0000-0000-0000-000000000003',
-    jsonb_build_object('assignee_id', v_leaver), null);
+    jsonb_build_object('assignee_id', v_leaver), jsonb_build_object('assignee_id', null), null);
   perform app_private.signal_problem_report_users('33500000-0000-0000-0000-000000000011', array[v_leaver]);
   delete from auth.users where id = v_leaver;
   if (select assignee_id from public.problem_reports where id = '33500000-0000-0000-0000-000000000020') is not null then

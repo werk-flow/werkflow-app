@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { AttachmentsField } from '@/components/problem-reports/attachments-field';
@@ -21,18 +21,20 @@ import {
   finalizeSupportReportFileUpload,
 } from '@/lib/problem-reports/support-actions';
 import { supportFailureMessage } from '@/lib/problem-reports/support-messages';
+import { supportReportHref } from '@/lib/problem-reports/support-queue-query';
 import {
   PROBLEM_REPORT_DESCRIPTION_MAX_LENGTH,
   type SupportFilingOptions,
 } from '@/lib/problem-reports/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
-import { supportReportHref } from './support-queue';
 
 // A report support files for a member who phoned. The member is the
 // reporter and sees it in „Meine Meldungen“; support is the filer and adds
 // the attachments. The report saves first, once, under an id this form
 // chose; a file that fails keeps the saved report, and the next press sends
-// only what is missing.
+// only what is missing. A completed filing leaves for the report's page; the
+// router keeps this page hidden with its state (`cacheComponents`), so the
+// next visit starts a fresh form.
 
 const ORGANIZATION_ID = 'support-filing-organization';
 const MEMBER_ID = 'support-filing-member';
@@ -60,7 +62,7 @@ type SavedFiling = { reportId: string; number: number };
  * may have stored the report, whatever its answer: from then on its
  * organization, member and description stay as sent (`frozen`).
  */
-function useSupportFiling() {
+function useSupportFiling(onCompleted: () => void) {
   const router = useRouter();
   const { showBanner } = useBanner();
   const { run, isPending } = usePendingTask();
@@ -117,6 +119,7 @@ function useSupportFiling() {
           variant: 'success',
           message: `Die Meldung Nr. ${report.number} ist aufgenommen. Die Person sieht sie in „Meine Meldungen“.`,
         });
+        onCompleted();
         router.push(supportReportHref(report.reportId));
         await untilPageLeaves();
       } catch (thrown) {
@@ -209,16 +212,45 @@ function CallerFields({
   );
 }
 
-export function SupportFilingForm({
-  options,
-  organizationId,
-}: {
+type SupportFilingFormProps = {
   options: SupportFilingOptions;
   /** The chosen organization, from the address; null while none is chosen. */
   organizationId: string | null;
-}) {
-  const filing = useSupportFiling();
-  const [memberId, setMemberId] = useState('');
+};
+
+/**
+ * The filing form, fresh after each completed filing: when the page that
+ * filed goes out of view, its pending task and its saved report go with the
+ * form, and the next visit files a new report.
+ */
+export function SupportFilingForm(props: SupportFilingFormProps) {
+  const [generation, setGeneration] = useState(0);
+  const [completed, setCompleted] = useState(false);
+  useEffect(() => {
+    if (!completed) return;
+    // A hidden page's effects end, and so does an unmounted one's.
+    return () => {
+      setCompleted(false);
+      setGeneration((current) => current + 1);
+    };
+  }, [completed]);
+  return <FilingForm key={generation} {...props} onCompleted={() => setCompleted(true)} />;
+}
+
+/** A member chosen for one organization; another organization shows no member. */
+type MemberChoice = { organizationId: string; memberId: string };
+
+function FilingForm({
+  options,
+  organizationId,
+  onCompleted,
+}: SupportFilingFormProps & { onCompleted: () => void }) {
+  const filing = useSupportFiling(onCompleted);
+  const [memberChoice, setMemberChoice] = useState<MemberChoice | null>(null);
+  const memberId =
+    memberChoice && memberChoice.organizationId === organizationId ? memberChoice.memberId : '';
+  const setMemberId = (next: string): void =>
+    setMemberChoice(organizationId && next ? { organizationId, memberId: next } : null);
   const [description, setDescription] = useState('');
   const [attachments, setAttachments] = useState<ChosenAttachment[]>([]);
   const [errors, setErrors] = useState<Errors>({});

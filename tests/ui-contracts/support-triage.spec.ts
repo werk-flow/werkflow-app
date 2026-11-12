@@ -6,13 +6,17 @@ import { assertWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-loc
 // only the changed fields and confirms only after the server accepted it; a
 // refusal and a failed request keep what was typed and say what happened;
 // unsaved fields survive the refresh that „Original öffnen“ starts; a
-// failed opening shows nothing of the original; and a report shows its
-// scrubbed context, or says in words that no text is left.
+// failed opening shows nothing of the original; a save refused because
+// someone else changed the field keeps the input, shows what is saved and
+// saves over it on the next press; and a report shows its scrubbed context,
+// or says in words that no text is left.
 
 const ANSWER = 'Behoben, ab morgen live.';
 const ORIGINAL = 'Bei Familie Beispiel speichert der Auftrag nicht.';
 const REQUEST_FAILED = 'Das hat gerade nicht geklappt. Prüfe deine Verbindung und versuche es erneut.';
 const SAVED = 'Gespeichert. Die Person sieht es in „Meine Meldungen“.';
+const CONFLICT =
+  'Jemand anderes hat diese Meldung inzwischen geändert. Unter deinen Eingaben steht, was jetzt gespeichert ist. Drücke noch einmal auf „Speichern“, wenn deine Eingaben es ersetzen sollen.';
 
 test.beforeEach(async ({ page }) => {
   assertWorkspaceTestLock();
@@ -62,7 +66,11 @@ test('a save shows its pending state in the first frame, sends only the changed 
   expect(await page.evaluate(() => window.uiContractWrites.calls)).toEqual([
     {
       kind: 'triage',
-      input: { reportId: '33500000-0000-4000-8000-000000000020', changes: { response: ANSWER } },
+      input: {
+        reportId: '33500000-0000-4000-8000-000000000020',
+        changes: { response: ANSWER },
+        expected: { response: null },
+      },
     },
   ]);
 });
@@ -132,7 +140,11 @@ test("a field set back to its loaded value takes a colleague's later change, and
   await answerOpenSave(page, null);
   await expect(savedBanner(page)).toBeVisible();
   expect(await page.evaluate(() => window.uiContractWrites.calls.map((call) => call.input))).toEqual([
-    { reportId: '33500000-0000-4000-8000-000000000020', changes: { response: ANSWER } },
+    {
+      reportId: '33500000-0000-4000-8000-000000000020',
+      changes: { response: ANSWER },
+      expected: { response: null },
+    },
   ]);
 });
 
@@ -165,4 +177,40 @@ test('the page shows the scrubbed context, and a report whose original went befo
   ).toBeVisible();
   await expect(main.getByText('App-Version', { exact: true })).toHaveCount(0);
   await expect(openOriginalButton(page)).toHaveCount(0);
+});
+
+test('a save refused because someone else changed the answer keeps the input, shows what is saved and saves over it on the next press', async ({
+  page,
+}) => {
+  const colleagueAnswer = 'Ist schon behoben.';
+  await answerField(page).fill(ANSWER);
+  // A colleague saves an answer before this page heard of it.
+  await page.evaluate((response) => {
+    const state = window.uiContractSupport;
+    state.report = { ...state.report, response };
+  }, colleagueAnswer);
+  await saveButton(page).click();
+  await answerOpenSave(page, 'triage_conflict');
+
+  const main = page.getByRole('main');
+  await expect(main.getByText(CONFLICT)).toBeVisible();
+  await expect(main.getByText(`Inzwischen gespeichert: „${colleagueAnswer}“`)).toBeVisible();
+  await expect(answerField(page)).toHaveValue(ANSWER);
+  await expect(savedBanner(page)).toHaveCount(0);
+
+  await saveButton(page).click();
+  await answerOpenSave(page, null);
+  await expect(savedBanner(page)).toBeVisible();
+  expect(await page.evaluate(() => window.uiContractWrites.calls.map((call) => call.input))).toEqual([
+    {
+      reportId: '33500000-0000-4000-8000-000000000020',
+      changes: { response: ANSWER },
+      expected: { response: null },
+    },
+    {
+      reportId: '33500000-0000-4000-8000-000000000020',
+      changes: { response: ANSWER },
+      expected: { response: colleagueAnswer },
+    },
+  ]);
 });

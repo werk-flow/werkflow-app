@@ -137,7 +137,9 @@ export const finalizeProblemReportFileUploadInputSchema = z.strictObject({
 export type FinalizeProblemReportFileUploadInput = z.input<typeof finalizeProblemReportFileUploadInputSchema>;
 
 // Support's actions (docs/features/problem-reports.md, "Support"). A triage
-// names only the fields it changes; an empty answer clears it.
+// names only the fields it changes; an empty answer clears it. It also names,
+// for exactly those fields, the values the page showed when the change began,
+// and the database refuses it when a field holds another value by now.
 
 export const SUPPORT_QUEUE_STATUS_FILTERS = ['offen', ...PROBLEM_REPORT_STATUSES, 'alle'] as const;
 export type SupportQueueStatusFilter = (typeof SUPPORT_QUEUE_STATUS_FILTERS)[number];
@@ -151,22 +153,38 @@ export const supportQueueQuerySchema = z.strictObject({
 });
 export type SupportQueueQuery = z.infer<typeof supportQueueQuerySchema>;
 
-export const triageProblemReportInputSchema = z.strictObject({
-  reportId: uuidSchema,
-  changes: z
-    .strictObject({
-      status: z.enum(PROBLEM_REPORT_STATUSES),
-      bucket: z.enum(PROBLEM_REPORT_BUCKETS).nullable(),
-      assigneeId: uuidSchema.nullable(),
-      response: z
-        .string()
-        .trim()
-        .max(PROBLEM_REPORT_RESPONSE_MAX_LENGTH)
-        .transform((text) => text || null)
-        .nullable(),
-    })
-    .partial(),
-});
+const triageExpectedSchema = z
+  .strictObject({
+    status: z.enum(PROBLEM_REPORT_STATUSES),
+    bucket: z.enum(PROBLEM_REPORT_BUCKETS).nullable(),
+    assigneeId: uuidSchema.nullable(),
+    response: z.string().max(PROBLEM_REPORT_RESPONSE_MAX_LENGTH).nullable(),
+  })
+  .partial();
+
+const sameFields = (left: object, right: object): boolean =>
+  Object.keys(left).sort().join() === Object.keys(right).sort().join();
+
+export const triageProblemReportInputSchema = z
+  .strictObject({
+    reportId: uuidSchema,
+    changes: z
+      .strictObject({
+        status: z.enum(PROBLEM_REPORT_STATUSES),
+        bucket: z.enum(PROBLEM_REPORT_BUCKETS).nullable(),
+        assigneeId: uuidSchema.nullable(),
+        response: z
+          .string()
+          .trim()
+          .max(PROBLEM_REPORT_RESPONSE_MAX_LENGTH)
+          .transform((text) => text || null)
+          .nullable(),
+      })
+      .partial(),
+    /** The values the page showed for the changed fields when the change began. */
+    expected: triageExpectedSchema,
+  })
+  .refine((input) => sameFields(input.changes, input.expected));
 export type TriageProblemReportInput = z.input<typeof triageProblemReportInputSchema>;
 
 export const openProblemReportAttachmentInputSchema = z.strictObject({

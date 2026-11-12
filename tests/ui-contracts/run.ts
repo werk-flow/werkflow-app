@@ -160,7 +160,8 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve({ filter: /^next\/navigation$/ }, (args) => {
               if (
                 args.importer.endsWith('use-list-navigation.ts') ||
-                args.importer.endsWith('use-document-library-navigation.ts')
+                args.importer.endsWith('use-document-library-navigation.ts') ||
+                args.importer.endsWith('support-filing-form.tsx')
               )
                 return { path: join(import.meta.dir, 'list-navigation-service-boundaries.ts') };
             });
