@@ -8715,6 +8715,7 @@ export type Database = {
           proposed_at: string;
           proposed_by: string | null;
           rejection_reason: string | null;
+          revision: number;
           site_id: string;
           status: string;
           updated_at: string;
@@ -8736,6 +8737,7 @@ export type Database = {
           proposed_at?: string;
           proposed_by?: string | null;
           rejection_reason?: string | null;
+          revision?: number;
           site_id: string;
           status?: string;
           updated_at?: string;
@@ -8757,6 +8759,7 @@ export type Database = {
           proposed_at?: string;
           proposed_by?: string | null;
           rejection_reason?: string | null;
+          revision?: number;
           site_id?: string;
           status?: string;
           updated_at?: string;
@@ -13771,6 +13774,7 @@ export type Database = {
           p_contact_id?: string;
           p_organization_id: string;
           p_proposal_id: string;
+          p_revision: number;
         };
         Returns: {
           access_notes: string | null;
@@ -13789,6 +13793,7 @@ export type Database = {
           proposed_at: string;
           proposed_by: string | null;
           rejection_reason: string | null;
+          revision: number;
           site_id: string;
           status: string;
           updated_at: string;
@@ -16796,6 +16801,7 @@ export type Database = {
           proposed_at: string;
           proposed_by: string | null;
           rejection_reason: string | null;
+          revision: number;
           site_id: string;
           status: string;
           updated_at: string;
@@ -17025,6 +17031,7 @@ export type Database = {
           p_organization_id: string;
           p_proposal_id: string;
           p_reason: string;
+          p_revision: number;
         };
         Returns: {
           access_notes: string | null;
@@ -17043,6 +17050,7 @@ export type Database = {
           proposed_at: string;
           proposed_by: string | null;
           rejection_reason: string | null;
+          revision: number;
           site_id: string;
           status: string;
           updated_at: string;

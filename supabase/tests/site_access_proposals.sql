@@ -107,8 +107,8 @@ begin
     or has_column_privilege('authenticated', 'public.site_access_proposals', 'rejection_reason', 'SELECT')
   then raise exception 'a browser session can read a proposed value'; end if;
   if has_function_privilege('authenticated', 'public.propose_site_access(uuid,uuid,uuid,uuid,text,text,text,text)', 'EXECUTE')
-    or has_function_privilege('authenticated', 'public.accept_site_access_proposal(uuid,uuid,uuid,uuid)', 'EXECUTE')
-    or has_function_privilege('authenticated', 'public.reject_site_access_proposal(uuid,uuid,uuid,text)', 'EXECUTE')
+    or has_function_privilege('authenticated', 'public.accept_site_access_proposal(uuid,uuid,uuid,integer,uuid)', 'EXECUTE')
+    or has_function_privilege('authenticated', 'public.reject_site_access_proposal(uuid,uuid,uuid,integer,text)', 'EXECUTE')
     or has_function_privilege('anon', 'public.propose_site_access(uuid,uuid,uuid,uuid,text,text,text,text)', 'EXECUTE')
     or has_function_privilege('authenticated', 'public.read_manager_attention_sets(uuid,integer)', 'EXECUTE')
   then raise exception 'a browser role can run an access proposal function'; end if;
@@ -195,22 +195,58 @@ begin
 end;
 $$;
 
+-- A decision names the revision its manager reviewed: a replacement since
+-- then is refused and changes nothing.
+do $$
+declare
+  v_reviewed public.site_access_proposals;
+begin
+  select * into v_reviewed from public.site_access_proposals
+  where job_id = '46000000-0000-0000-0000-000000000030' and status = 'open';
+  perform public.propose_site_access('46000000-0000-0000-0000-000000000003',
+    '46000000-0000-0000-0000-000000000010', '46000000-0000-0000-0000-000000000030',
+    '46000000-0000-0000-0000-000000000040', 'Frau Neumann', '0171 556', 'Klingel 3', 'Seiteneingang, Code beim Büro');
+  if (select revision from public.site_access_proposals where id = v_reviewed.id) <> v_reviewed.revision + 1
+  then raise exception 'a replacement kept the revision'; end if;
+  begin
+    perform public.accept_site_access_proposal('46000000-0000-0000-0000-000000000002',
+      '46000000-0000-0000-0000-000000000010', v_reviewed.id, v_reviewed.revision, null);
+    raise exception 'accepting a replaced proposal was not refused';
+  exception when others then
+    if sqlerrm <> 'proposal_changed' then raise; end if;
+  end;
+  begin
+    perform public.reject_site_access_proposal('46000000-0000-0000-0000-000000000002',
+      '46000000-0000-0000-0000-000000000010', v_reviewed.id, v_reviewed.revision, 'Passt nicht');
+    raise exception 'rejecting a replaced proposal was not refused';
+  exception when others then
+    if sqlerrm <> 'proposal_changed' then raise; end if;
+  end;
+  if (select status from public.site_access_proposals where id = v_reviewed.id) <> 'open'
+    or exists (select 1 from public.client_contacts where name = 'Frau Neumann')
+  then raise exception 'a refused stale decision changed a row'; end if;
+end;
+$$;
+
 -- Only a manager of the organization decides; a contact of another
 -- Einsatzort is refused and nothing changes.
 select pg_temp.expect_refusal('the proposing employee accepting',
   $sql$select public.accept_site_access_proposal('46000000-0000-0000-0000-000000000003',
     '46000000-0000-0000-0000-000000000010',
-    (select id from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030'), null)$sql$,
+    (select id from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030'),
+    (select revision from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030'), null)$sql$,
   'not_authorized');
 select pg_temp.expect_refusal('another organization''s admin rejecting',
   $sql$select public.reject_site_access_proposal('46000000-0000-0000-0000-000000000005',
     '46000000-0000-0000-0000-000000000011',
-    (select id from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030'), 'Passt nicht')$sql$,
+    (select id from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030'),
+    (select revision from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030'), 'Passt nicht')$sql$,
   'proposal_not_found');
 select pg_temp.expect_refusal('correcting another Einsatzort''s Zugangskontakt',
   $sql$select public.accept_site_access_proposal('46000000-0000-0000-0000-000000000002',
     '46000000-0000-0000-0000-000000000010',
     (select id from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030'),
+    (select revision from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030'),
     '46000000-0000-0000-0000-000000000051')$sql$,
   'contact_not_found');
 reset role;
@@ -233,6 +269,7 @@ begin
   v_proposal := public.accept_site_access_proposal('46000000-0000-0000-0000-000000000002',
     '46000000-0000-0000-0000-000000000010',
     (select id from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030'),
+    (select revision from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030'),
     '46000000-0000-0000-0000-000000000050');
   select * into v_contact from public.client_contacts where id = '46000000-0000-0000-0000-000000000050';
   if v_contact.name <> 'Frau Neumann' or v_contact.phone <> '0171 556' or v_contact.notes <> 'Klingel 3'
@@ -257,7 +294,8 @@ $$;
 select pg_temp.expect_refusal('a second decision',
   $sql$select public.reject_site_access_proposal('46000000-0000-0000-0000-000000000002',
     '46000000-0000-0000-0000-000000000010',
-    (select id from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030'), 'Zu spät')$sql$,
+    (select id from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030'),
+    (select revision from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030'), 'Zu spät')$sql$,
   'proposal_already_decided');
 
 -- Without a contact to correct, acceptance adds a new Zugangskontakt at the
@@ -273,6 +311,8 @@ begin
   v_proposal := public.accept_site_access_proposal('46000000-0000-0000-0000-000000000001',
     '46000000-0000-0000-0000-000000000010',
     (select id from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030'
+      and status = 'open'),
+    (select revision from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030'
       and status = 'open'), null);
   select * into v_contact from public.client_contacts where id = v_proposal.applied_contact_id;
   if v_contact.client_id <> '46000000-0000-0000-0000-000000000020'
@@ -287,6 +327,8 @@ begin
   v_proposal := public.accept_site_access_proposal('46000000-0000-0000-0000-000000000002',
     '46000000-0000-0000-0000-000000000010',
     (select id from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030'
+      and status = 'open'),
+    (select revision from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030'
       and status = 'open'), null);
   if v_proposal.applied_contact_id is not null or not v_proposal.applied_access_notes
     or (select count(*) from public.client_contacts where site_id = '46000000-0000-0000-0000-000000000040') <> 2
@@ -303,6 +345,8 @@ select pg_temp.expect_refusal('a rejection without a reason',
   $sql$select public.reject_site_access_proposal('46000000-0000-0000-0000-000000000002',
     '46000000-0000-0000-0000-000000000010',
     (select id from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030'
+      and status = 'open'),
+    (select revision from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030'
       and status = 'open'), ' x ')$sql$,
   'invalid_input');
 do $$
@@ -312,6 +356,8 @@ begin
   v_proposal := public.reject_site_access_proposal('46000000-0000-0000-0000-000000000002',
     '46000000-0000-0000-0000-000000000010',
     (select id from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030'
+      and status = 'open'),
+    (select revision from public.site_access_proposals where job_id = '46000000-0000-0000-0000-000000000030'
       and status = 'open'), ' Die Nachbarin hat keinen Schlüssel. ');
   if v_proposal.status <> 'rejected' or v_proposal.rejection_reason <> 'Die Nachbarin hat keinen Schlüssel.'
     or v_proposal.proposed_by <> '46000000-0000-0000-0000-000000000003'

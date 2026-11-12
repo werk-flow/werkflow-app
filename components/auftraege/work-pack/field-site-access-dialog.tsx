@@ -57,7 +57,10 @@ export function SiteAccessProposalDialog({
   settle: () => Promise<void>;
 }): ReactElement {
   const { showBanner } = useBanner();
-  const { run, isPending } = useServerAction(proposeSiteAccess, { settle });
+  // Only a saved proposal changes the page; a refused one keeps it as it was.
+  const { run, isPending } = useServerAction(proposeSiteAccess, {
+    settle: (result) => (result.success ? settle() : Promise.resolve()),
+  });
   const onClose = () => onOpenChange(false);
   const [values, setValues] = useState(initialValues);
   const [attempted, setAttempted] = useState(false);

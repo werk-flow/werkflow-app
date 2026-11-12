@@ -61,8 +61,9 @@ const propose = (jobId: string, site: string) => () =>
 const accept =
   (id: string, contactId: string | null = null) =>
   () =>
-    acceptSiteAccessProposal({ proposalId: id, contactId });
-const reject = (id: string) => () => rejectSiteAccessProposal({ proposalId: id, reason: 'Stimmt nicht' });
+    acceptSiteAccessProposal({ proposalId: id, revision: 1, contactId });
+const reject = (id: string) => () =>
+  rejectSiteAccessProposal({ proposalId: id, revision: 1, reason: 'Stimmt nicht' });
 
 // Signed out, nothing reaches the database.
 signInAs(world, null);
@@ -151,8 +152,11 @@ assert.equal(world.rpcCalls.at(-1)?.args.p_actor_id, CALLER_ID);
 await assertRefused(
   world,
   [
-    ['rejectSiteAccessProposal', () => rejectSiteAccessProposal({ proposalId, reason: ' a ' })],
-    ['acceptSiteAccessProposal', () => acceptSiteAccessProposal({ proposalId: 'kein-id', contactId: null })],
+    ['rejectSiteAccessProposal', () => rejectSiteAccessProposal({ proposalId, revision: 1, reason: ' a ' })],
+    [
+      'acceptSiteAccessProposal',
+      () => acceptSiteAccessProposal({ proposalId: 'kein-id', revision: 1, contactId: null }),
+    ],
   ],
   { success: false, error: 'invalid_input' },
   'none',

@@ -40,6 +40,9 @@ create table public.site_access_proposals (
   -- Null once the account is deleted: the proposal stays, the person does not.
   proposed_by uuid references auth.users (id) on delete set null,
   proposed_at timestamptz not null default now(),
+  -- Raised by every replacement of the open proposal; a decision names the
+  -- revision its manager reviewed.
+  revision integer not null default 1,
   contact_name text,
   contact_phone text,
   contact_note text,
@@ -59,6 +62,7 @@ create table public.site_access_proposals (
   constraint site_access_proposals_site_fk foreign key (site_id, client_id, organization_id)
     references public.client_sites (id, client_id, organization_id) on delete cascade,
   constraint site_access_proposals_status_check check (status in ('open', 'accepted', 'rejected')),
+  constraint site_access_proposals_revision_check check (revision >= 1),
   constraint site_access_proposals_text_check check (
     (contact_name is null or (contact_name = btrim(contact_name) and length(contact_name) between 1 and 200))
     and (contact_phone is null or (contact_phone = btrim(contact_phone) and length(contact_phone) between 1 and 50))
@@ -132,6 +136,7 @@ begin
       or new.site_id is distinct from old.site_id
       or new.client_id is distinct from old.client_id
       or new.proposed_at is distinct from old.proposed_at
+      or new.revision is distinct from old.revision
       or new.decided_at is distinct from old.decided_at
       or new.rejection_reason is distinct from old.rejection_reason
       or new.applied_access_notes is distinct from old.applied_access_notes
@@ -219,6 +224,7 @@ begin
     client_id = excluded.client_id,
     proposed_by = excluded.proposed_by,
     proposed_at = now(),
+    revision = site_access_proposals.revision + 1,
     contact_name = excluded.contact_name,
     contact_phone = excluded.contact_phone,
     contact_note = excluded.contact_note,
@@ -232,14 +238,16 @@ revoke all on function public.propose_site_access(uuid, uuid, uuid, uuid, text, 
 grant execute on function public.propose_site_access(uuid, uuid, uuid, uuid, text, text, text, text)
   to service_role;
 
--- Locks an open proposal of the organization and the actor's manager
--- membership, and names the actor for the master-data history. Refusals as
--- lock_client_for_master_write, and proposal_not_found and
--- proposal_already_decided.
+-- Locks an open proposal of the organization in the revision its manager
+-- reviewed, and the actor's manager membership, and names the actor for the
+-- master-data history. Refusals as lock_client_for_master_write, and
+-- proposal_not_found, proposal_already_decided and proposal_changed (a
+-- worker replaced it since the review read it).
 create function app_private.lock_open_site_access_proposal(
   p_actor_id uuid,
   p_organization_id uuid,
-  p_proposal_id uuid
+  p_proposal_id uuid,
+  p_revision integer
 )
 returns public.site_access_proposals
 language plpgsql
@@ -249,7 +257,7 @@ as $$
 declare
   v_proposal public.site_access_proposals;
 begin
-  if p_actor_id is null or p_organization_id is null or p_proposal_id is null then
+  if p_actor_id is null or p_organization_id is null or p_proposal_id is null or p_revision is null then
     raise exception 'invalid_input';
   end if;
   select * into v_proposal from public.site_access_proposals proposal
@@ -262,12 +270,15 @@ begin
   if v_proposal.status <> 'open' then
     raise exception 'proposal_already_decided';
   end if;
+  if v_proposal.revision <> p_revision then
+    raise exception 'proposal_changed';
+  end if;
   return v_proposal;
 end;
 $$;
-revoke all on function app_private.lock_open_site_access_proposal(uuid, uuid, uuid)
+revoke all on function app_private.lock_open_site_access_proposal(uuid, uuid, uuid, integer)
   from public, anon, authenticated;
-grant execute on function app_private.lock_open_site_access_proposal(uuid, uuid, uuid) to service_role;
+grant execute on function app_private.lock_open_site_access_proposal(uuid, uuid, uuid, integer) to service_role;
 
 -- Applies an open proposal to its Einsatzort. A proposed contact corrects
 -- p_contact_id, an active Zugangskontakt of that Einsatzort, or with null
@@ -279,6 +290,7 @@ create function public.accept_site_access_proposal(
   p_actor_id uuid,
   p_organization_id uuid,
   p_proposal_id uuid,
+  p_revision integer,
   p_contact_id uuid default null
 )
 returns public.site_access_proposals
@@ -290,7 +302,7 @@ declare
   v_proposal public.site_access_proposals;
   v_contact_id uuid;
 begin
-  v_proposal := app_private.lock_open_site_access_proposal(p_actor_id, p_organization_id, p_proposal_id);
+  v_proposal := app_private.lock_open_site_access_proposal(p_actor_id, p_organization_id, p_proposal_id, p_revision);
   if v_proposal.contact_name is null and p_contact_id is not null then
     raise exception 'invalid_input';
   end if;
@@ -337,8 +349,9 @@ begin
   return v_proposal;
 end;
 $$;
-revoke all on function public.accept_site_access_proposal(uuid, uuid, uuid, uuid) from public, anon, authenticated;
-grant execute on function public.accept_site_access_proposal(uuid, uuid, uuid, uuid) to service_role;
+revoke all on function public.accept_site_access_proposal(uuid, uuid, uuid, integer, uuid)
+  from public, anon, authenticated;
+grant execute on function public.accept_site_access_proposal(uuid, uuid, uuid, integer, uuid) to service_role;
 
 -- Rejects an open proposal with a reason of 3 to 500 characters and clears
 -- the proposed values in the same statement. Refusals as
@@ -347,6 +360,7 @@ create function public.reject_site_access_proposal(
   p_actor_id uuid,
   p_organization_id uuid,
   p_proposal_id uuid,
+  p_revision integer,
   p_reason text
 )
 returns public.site_access_proposals
@@ -361,7 +375,7 @@ begin
   if v_reason is null or length(v_reason) not between 3 and 500 then
     raise exception 'invalid_input';
   end if;
-  v_proposal := app_private.lock_open_site_access_proposal(p_actor_id, p_organization_id, p_proposal_id);
+  v_proposal := app_private.lock_open_site_access_proposal(p_actor_id, p_organization_id, p_proposal_id, p_revision);
   update public.site_access_proposals proposal set
     status = 'rejected',
     decided_by = p_actor_id,
@@ -376,8 +390,9 @@ begin
   return v_proposal;
 end;
 $$;
-revoke all on function public.reject_site_access_proposal(uuid, uuid, uuid, text) from public, anon, authenticated;
-grant execute on function public.reject_site_access_proposal(uuid, uuid, uuid, text) to service_role;
+revoke all on function public.reject_site_access_proposal(uuid, uuid, uuid, integer, text)
+  from public, anon, authenticated;
+grant execute on function public.reject_site_access_proposal(uuid, uuid, uuid, integer, text) to service_role;
 
 -- One read of the pending office sets a manager's attention derivation
 -- needs, so the new task kind adds no backend request: the open requests as

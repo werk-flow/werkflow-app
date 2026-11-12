@@ -94,6 +94,7 @@ export async function seedSiteAccessJob(world: TestWorld, state: SiteAccessJobSt
           p_actor_id: world.users.admin.id,
           p_organization_id: world.orgId,
           p_proposal_id: proposal.id,
+          p_revision: proposal.revision,
           p_reason: 'Herr Albrecht ist weiter zuständig, Frau Musterfrau vertritt ihn nur im Urlaub.',
         })
         .throwOnError();

@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useState, type ReactElement } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
@@ -15,7 +16,7 @@ import {
 } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
 import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
@@ -33,13 +34,24 @@ import { formatGermanDate } from '@/lib/utils';
 // no other page's cold start carries the review or its actions.
 
 const NEW_CONTACT = 'neu';
-/** A raw Select holds at most nine options: „Neuer Zugangskontakt“ and eight to correct. */
-const MAX_CORRECTABLE_CONTACTS = 8;
 const CONTACT_CHOICE_ID = 'site-access-contact-choice';
+
+function contactOptions(review: SiteAccessReview): SearchableSelectOption[] {
+  return [
+    { value: NEW_CONTACT, label: 'Neuer Zugangskontakt' },
+    ...review.accessContacts.map((contact) => ({
+      value: contact.id,
+      label: `Ersetzt ${contact.name}`,
+      description: contact.phone ?? undefined,
+    })),
+  ];
+}
 const REASON_ID = 'site-access-reason';
 
 const DECISION_FAILURES = {
-  proposal_already_decided: 'Dieser Hinweis wurde schon entschieden. Die Aufgaben werden neu geladen.',
+  proposal_already_decided: 'Dieser Hinweis wurde schon entschieden.',
+  proposal_changed:
+    'Der Hinweis wurde gerade geändert. Hier steht jetzt die neue Fassung; prüfe sie und entscheide erneut.',
   proposal_not_found: 'Diesen Hinweis gibt es nicht mehr.',
   contact_not_found: 'Der gewählte Zugangskontakt ist nicht mehr am Einsatzort. Wähle einen anderen.',
   client_not_found: 'Den Kunden dieses Einsatzorts gibt es nicht mehr.',
@@ -49,8 +61,8 @@ type Runner<Input> = {
   run: (input: Input) => Promise<ActionResult>;
   isPending: boolean;
 };
-type AcceptRunner = Runner<{ proposalId: string; contactId: string | null }>;
-type RejectRunner = Runner<{ proposalId: string; reason: string }>;
+type AcceptRunner = Runner<{ proposalId: string; revision: number; contactId: string | null }>;
+type RejectRunner = Runner<{ proposalId: string; revision: number; reason: string }>;
 
 function initialContactChoice(review: SiteAccessReview): string {
   if (review.accessContacts.length === 0) return NEW_CONTACT;
@@ -66,6 +78,7 @@ function useSiteAccessDecision(
   onClose: () => void,
 ) {
   const { showBanner } = useBanner();
+  const router = useRouter();
   const [mode, setMode] = useState<'review' | 'reject'>('review');
   const [contactChoice, setContactChoice] = useState(() => initialContactChoice(review));
   const [reason, setReason] = useState('');
@@ -81,6 +94,8 @@ function useSiteAccessDecision(
     void (async () => {
       const result = await outcome;
       if (!result.success) {
+        // A replaced proposal: the page reads it again, and the review shows the new revision.
+        if (result.error === 'proposal_changed') router.refresh();
         setFailure(
           describeFailure(
             result.error,
@@ -101,7 +116,7 @@ function useSiteAccessDecision(
     if (mode === 'reject') {
       if (focusFirstInvalidField({ [REASON_ID]: reasonError })) return;
       decide(
-        reject.run({ proposalId: review.proposalId, reason: reason.trim() }),
+        reject.run({ proposalId: review.proposalId, revision: review.revision, reason: reason.trim() }),
         'Der Hinweis ist abgelehnt.',
       );
       return;
@@ -109,7 +124,7 @@ function useSiteAccessDecision(
     if (focusFirstInvalidField({ [CONTACT_CHOICE_ID]: contactChoiceError })) return;
     const contactId = hasContact && contactChoice !== NEW_CONTACT ? contactChoice : null;
     decide(
-      accept.run({ proposalId: review.proposalId, contactId }),
+      accept.run({ proposalId: review.proposalId, revision: review.revision, contactId }),
       'Der Zugang ist beim Einsatzort gespeichert.',
     );
   };
@@ -251,27 +266,16 @@ function ProposedContact({
       {values.contactNote && <p className="text-muted-foreground">{values.contactNote}</p>}
       {decision.mode === 'review' && (
         <Field label="Speichern als" htmlFor={CONTACT_CHOICE_ID} error={decision.contactChoiceError}>
-          <Select value={decision.contactChoice} onValueChange={decision.setContactChoice}>
-            <SelectTrigger>
-              <SelectValue placeholder="Bitte wählen" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NEW_CONTACT}>Neuer Zugangskontakt</SelectItem>
-              {review.accessContacts.slice(0, MAX_CORRECTABLE_CONTACTS).map((contact) => (
-                <SelectItem key={contact.id} value={contact.id}>
-                  Ersetzt {contact.name}
-                  {contact.phone ? ` (${contact.phone})` : ''}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {/* Every Zugangskontakt of the Einsatzort, searchable: any of them can be corrected. */}
+          <SearchableSelect
+            id={CONTACT_CHOICE_ID}
+            value={decision.contactChoice}
+            onChange={decision.setContactChoice}
+            options={contactOptions(review)}
+            placeholder="Bitte wählen"
+            searchPlaceholder="Zugangskontakt suchen…"
+          />
         </Field>
-      )}
-      {decision.mode === 'review' && review.accessContacts.length > MAX_CORRECTABLE_CONTACTS && (
-        <p className="text-muted-foreground">
-          Hier stehen die ersten {MAX_CORRECTABLE_CONTACTS} Zugangskontakte. Einen anderen korrigierst du beim
-          Kunden.
-        </p>
       )}
     </section>
   );

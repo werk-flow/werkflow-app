@@ -26,6 +26,7 @@ const proposalRefusal = writeRefusalFor(
     'client_not_found',
     'proposal_not_found',
     'proposal_already_decided',
+    'proposal_changed',
     'contact_not_found',
   ]),
 );
@@ -39,10 +40,18 @@ const proposeInputSchema = z.object({
   accessNotes: z.string().max(SITE_ACCESS_LIMITS.accessNotes),
 });
 
-const acceptInputSchema = z.object({ proposalId: uuidSchema, contactId: uuidSchema.nullable() });
+// The revision the manager reviewed: a worker's replacement since then refuses the decision.
+const revisionSchema = z.number().int().min(1);
+
+const acceptInputSchema = z.object({
+  proposalId: uuidSchema,
+  revision: revisionSchema,
+  contactId: uuidSchema.nullable(),
+});
 
 const rejectInputSchema = z.object({
   proposalId: uuidSchema,
+  revision: revisionSchema,
   reason: z.string().trim().min(3).max(SITE_ACCESS_LIMITS.reason),
 });
 
@@ -122,6 +131,7 @@ export async function acceptSiteAccessProposal(
       p_actor_id: userId,
       p_organization_id: orgId,
       p_proposal_id: parsed.data.proposalId,
+      p_revision: parsed.data.revision,
       // No contact to correct leaves p_contact_id null: a new Zugangskontakt.
       ...(parsed.data.contactId === null ? {} : { p_contact_id: parsed.data.contactId }),
     });
@@ -150,6 +160,7 @@ export async function rejectSiteAccessProposal(
       p_actor_id: userId,
       p_organization_id: orgId,
       p_proposal_id: parsed.data.proposalId,
+      p_revision: parsed.data.revision,
       p_reason: parsed.data.reason,
     });
     if (error || !data) return proposalRefusal(error, 'save_failed', 'rejectSiteAccessProposal: save failed');

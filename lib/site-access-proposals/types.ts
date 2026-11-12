@@ -84,6 +84,8 @@ type SiteAccessContactOption = { id: string; name: string; phone: string | null 
 /** An open proposal as the office reviews it on the customer's page. */
 export type SiteAccessReview = {
   proposalId: string;
+  /** The proposal's revision this review shows; a decision on an older one is refused. */
+  revision: number;
   jobNumber: string | null;
   jobTitle: string;
   siteName: string;
