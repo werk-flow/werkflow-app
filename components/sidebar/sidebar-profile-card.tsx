@@ -2,7 +2,7 @@
 
 import { PlainButton } from '@/components/ui/plain-button';
 import { usePathname, useRouter } from 'next/navigation';
-import { LogOut, Settings, User } from 'lucide-react';
+import { LogOut, MessageSquareWarning, Settings, User } from 'lucide-react';
 import { useState } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -32,6 +32,22 @@ function ProfileCardSkeleton() {
   );
 }
 
+/** The account menu's pages: the settings and the person's own problem reports. */
+function ProfileMenuLinks({ onNavigate }: { onNavigate: (href: string) => void }) {
+  return (
+    <>
+      <DropdownMenuItem onSelect={() => onNavigate('/einstellungen')} className="cursor-pointer">
+        <Settings className="size-4" />
+        Einstellungen
+      </DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => onNavigate('/meldungen')} className="cursor-pointer">
+        <MessageSquareWarning className="size-4" />
+        Meine Meldungen
+      </DropdownMenuItem>
+    </>
+  );
+}
+
 export function SidebarProfileCard() {
   const { profile, isLoading: profileLoading } = useUserProfile();
   const pathname = usePathname();
@@ -45,8 +61,10 @@ export function SidebarProfileCard() {
 
   const fullName = `${profile.firstName} ${profile.lastName}`.trim() || 'Benutzerkonto';
   const initials = `${profile.firstName?.[0] ?? ''}${profile.lastName?.[0] ?? ''}`.trim();
-  const isSettingsRoute = pathname === '/einstellungen' || pathname.startsWith('/einstellungen/');
-  const isActive = isSettingsRoute || isMenuOpen;
+  const isOwnedRoute = ['/einstellungen', '/meldungen'].some(
+    (section) => pathname === section || pathname.startsWith(`${section}/`),
+  );
+  const isActive = isOwnedRoute || isMenuOpen;
 
   return (
     <div className="mx-2 my-2">
@@ -85,16 +103,12 @@ export function SidebarProfileCard() {
             </span>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onSelect={() => {
+          <ProfileMenuLinks
+            onNavigate={(href) => {
               setIsMenuOpen(false);
-              router.push('/einstellungen');
+              router.push(href);
             }}
-            className="cursor-pointer"
-          >
-            <Settings className="size-4" />
-            Einstellungen
-          </DropdownMenuItem>
+          />
           <DropdownMenuItem
             onSelect={(event) => {
               event.preventDefault();

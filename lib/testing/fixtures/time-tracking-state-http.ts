@@ -63,9 +63,11 @@ mock.module('@/lib/supabase/admin', () => ({
 
 const state: LiveClockState = {
   organizationId,
-  breakMode: 'manual',
-  autoBreakThresholdMinutes: 360,
-  autoBreakDurationMinutes: 30,
+  breakPolicy: {
+    breakMode: 'manual',
+    autoBreakThresholdMinutes: 360,
+    autoBreakDurationMinutes: 30,
+  },
   status: 'working',
   isClockedIn: true,
   isOnBreak: false,

@@ -14,6 +14,7 @@ const CLIENT_SAVE_ERROR_MESSAGES: Record<string, string> = {
   name_required: 'Bitte gib einen Namen ein.',
   client_not_found: 'Der Kunde wurde nicht gefunden.',
   customer_number_taken: 'Diese Kundennummer ist bereits vergeben.',
+  source_number_taken: 'Diese Kundennummer im Altsystem hat schon ein anderer Kunde.',
 };
 
 type SaveClientField = (input: UpdateClientInput) => Promise<void>;
@@ -23,8 +24,12 @@ const clientTypeOptions: { value: string; label: string }[] = [
   { value: 'gewerblich', label: CLIENT_TYPE_LABELS.gewerblich },
 ];
 
-/** The name, type and customer number rows. */
-function clientIdentityFields(client: Client, saveClientField: SaveClientField): MetadataField[] {
+/** The name, type, customer number and source number rows. */
+function clientIdentityFields(
+  client: Client,
+  sourceNumber: string | null,
+  saveClientField: SaveClientField,
+): MetadataField[] {
   return [
     {
       label: 'Name',
@@ -60,6 +65,16 @@ function clientIdentityFields(client: Client, saveClientField: SaveClientField):
         currentValue: client.customerNumber ?? '',
         onSave: (v) => saveClientField({ customerNumber: v }),
         placeholder: 'z. B. K-1001',
+      },
+    },
+    {
+      label: 'Kundennummer im Altsystem',
+      value: sourceNumber || '—',
+      editableConfig: {
+        type: 'text',
+        currentValue: sourceNumber ?? '',
+        onSave: (v) => saveClientField({ sourceNumber: v }),
+        placeholder: 'Nummer aus dem bisherigen Programm',
       },
     },
   ];
@@ -112,7 +127,7 @@ function clientContactFields(client: Client, saveClientField: SaveClientField): 
 }
 
 /** The editable master-data rows of the customer detail page. */
-export function buildClientMetadataFields(client: Client): MetadataField[] {
+export function buildClientMetadataFields(client: Client, sourceNumber: string | null): MetadataField[] {
   // A rejected save must surface in the field (MetadataSection catches the
   // throw); a discarded result would close the editor over unsaved data.
   const saveClientField: SaveClientField = async (input) => {
@@ -129,7 +144,7 @@ export function buildClientMetadataFields(client: Client): MetadataField[] {
   };
 
   return [
-    ...clientIdentityFields(client, saveClientField),
+    ...clientIdentityFields(client, sourceNumber, saveClientField),
     ...clientContactFields(client, saveClientField),
     {
       label: 'Erstellt am',

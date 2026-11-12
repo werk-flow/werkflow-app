@@ -40,6 +40,12 @@ export const DIALOG_INVENTORY = {
   "components/clock-fab.tsx#ClockFAB|{isClockedIn ? 'Laufende Zeiterfassung' : 'Zeiterfassung starten'}": {
     audits: [{ route: '/dashboard', role: 'employee', opener: 'field.clock' }],
   },
+  'components/problem-reports/problem-report-dialog.tsx#ProblemReportDialog|Problem melden': {
+    audits: [
+      { route: '/dashboard', role: 'employee', opener: 'reports.field' },
+      { route: '/auftraege', role: 'admin', opener: 'reports.office' },
+    ],
+  },
   'components/job-picker-modal.tsx#JobPickerModal|{title}': {
     audits: [{ route: '/dashboard', role: 'employee', opener: 'field.job-picker' }],
   },
@@ -219,6 +225,9 @@ export const DIALOG_INVENTORY = {
     {
       audits: [{ route: '/kunden/[clientId]', role: 'admin', opener: 'customers.site' }],
     },
+  'components/kunden/client-site-roles-dialog.tsx#ClientSiteRolesDialog|Rollen am Einsatzort': {
+    audits: [{ route: '/kunden/[clientId]', role: 'admin', opener: 'customers.site-roles' }],
+  },
   'components/kunden/communication-preference-dialog.tsx#CommunicationPreferenceDialog|Kontaktpräferenz festhalten':
     {
       audits: [{ route: '/kunden/[clientId]', role: 'admin', opener: 'customers.preference' }],

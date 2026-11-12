@@ -67,6 +67,10 @@ const ALLOWED_SEPARATE_WRITES: Readonly<Record<string, string>> = {
     'Independent housekeeping: the rate-limit attempt must persist when the subscription activation fails.',
   'lib/org-export/actions.ts::buildOrganizationExportPart':
     'Ordered around storage: claim_organization_export_part_build queues the part’s archive for the purge before the archive is stored, and one call records the result after, because a storage write cannot join a transaction; an archive whose result is lost is deleted with the claim’s entry.',
+  'lib/problem-reports/actions.ts::submitProblemReport':
+    'Independent by design: submit_problem_report saves the report in one call before the answer; the scrubbed copy is derived from the saved report after the answer and written in its own call (record_problem_report_scrub), because a failed scrub must leave the report and its receipt as they are. The daily run scrubs a report whose scrub never ran.',
+  'lib/problem-reports/support-actions.ts::fileProblemReportForCaller':
+    'Independent by design, as submitProblemReport: file_problem_report_for_caller saves the report and its signals in one call before the answer; the scrubbed copy is derived from the saved report after the answer and written in its own call (record_problem_report_scrub), because a failed scrub must leave the report as it is. The daily run scrubs a report whose scrub never ran.',
   'lib/documents/actions.ts::linkDocumentsToTarget':
     'Independent by design: each document is authorized and linked by its own update_document_links call, and the result reports linked and failed counts as partial_update; a refused document keeps the links of the others.',
 };

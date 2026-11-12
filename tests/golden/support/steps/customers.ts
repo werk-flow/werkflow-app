@@ -64,6 +64,8 @@ const CUSTOMER_COPY = {
   rowEdit: 'Bearbeiten',
   editTitle: 'Kunde bearbeiten',
   addSite: 'Einsatzort hinzufügen',
+  siteRoles: 'Rollen verwalten',
+  siteRolesTitle: 'Rollen am Einsatzort',
   editCommunicationSettings: 'Allgemein bearbeiten',
   communicationSettingsTitle: 'Allgemeine Kontaktvorgaben',
   preferenceTitle: 'Kontaktpräferenz festhalten',
@@ -319,6 +321,16 @@ export function customerContactDialog(page: Page): Locator {
 
 export function addSiteButton(page: Page): Locator {
   return page.getByRole('button', { name: CUSTOMER_COPY.addSite, exact: true });
+}
+
+/** The „Rollen verwalten“ button of the first work site. */
+export function siteRolesButton(page: Page): Locator {
+  return page.getByRole('button', { name: CUSTOMER_COPY.siteRoles, exact: true }).first();
+}
+
+/** The dialog with the owner, Hausverwaltung and Rechnungsempfänger of one work site. */
+export function siteRolesDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: CUSTOMER_COPY.siteRolesTitle, exact: true });
 }
 
 /** The dialog that adds a work site to the customer. */

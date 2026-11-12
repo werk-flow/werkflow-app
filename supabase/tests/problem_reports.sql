@@ -1,11 +1,17 @@
 -- Problem reports (20261128090002_store_problem_reports_privately.sql,
--- werk-flow/werkflow-planning#331). Client roles read and write no report
--- table and execute none of its functions. The history refuses UPDATE and
--- DELETE, also for the service role, and leaves only with its report. A
+-- werk-flow/werkflow-planning#331, and 20261130100000_report_problems_from_the_app.sql,
+-- #334). Client roles read and write no report table and execute none of its
+-- functions. Each organization numbers its reports from 1, and a number never
+-- changes. A report saves once under its device's id. A file registers only
+-- for the report's filer while its originals exist. The history refuses UPDATE
+-- and DELETE, also for the service role, and leaves only with its report. A
 -- report leaves only through the retention run or a cascade, and its
 -- originals change only there. The retention run deletes only due originals,
 -- keeps the scrubbed copy, and queues every file path; 24 months after
--- closing it deletes the report.
+-- closing it deletes the report. The scrub outcome
+-- (20261201100001_keep_the_scrubbed_copy_of_a_problem_report.sql, #332)
+-- writes both parts of the copy with the state in one call, only inside the
+-- report's organization, and never changes a written copy.
 begin;
 
 insert into auth.users (
@@ -40,31 +46,31 @@ insert into public.organization_members (organization_id, user_id, role) values
 -- 26: support filed it for 4, whose account is deleted below.
 insert into public.problem_reports (
   id, organization_id, reporter_id, filed_by_id, created_at, status, closed_at,
-  description, context, originals_deleted_at, scrubbed_description, scrub_state
+  description, context, originals_deleted_at, scrubbed_description, scrubbed_context, scrub_state
 ) values
 ('33100000-0000-0000-0000-000000000020', '33100000-0000-0000-0000-000000000010',
  '33100000-0000-0000-0000-000000000002', '33100000-0000-0000-0000-000000000002',
  now() - interval '13 months', 'eingegangen', null, 'Speichern geht nicht', '{"routeTemplate":"/auftraege"}',
- null, 'Speichern geht nicht', 'bereinigt'),
+ null, 'Speichern geht nicht', '{"routeTemplate":"/auftraege"}', 'bereinigt'),
 ('33100000-0000-0000-0000-000000000021', '33100000-0000-0000-0000-000000000010',
  '33100000-0000-0000-0000-000000000002', '33100000-0000-0000-0000-000000000002',
- now() - interval '4 months', 'erledigt', now() - interval '91 days', 'Liste leer', '{}', null, null, 'ausstehend'),
+ now() - interval '4 months', 'erledigt', now() - interval '91 days', 'Liste leer', '{}', null, null, null, 'ausstehend'),
 ('33100000-0000-0000-0000-000000000022', '33100000-0000-0000-0000-000000000010',
  '33100000-0000-0000-0000-000000000002', '33100000-0000-0000-0000-000000000002',
- now() - interval '4 months', 'abgelehnt', now() - interval '30 days', 'Bitte dunkler', '{}', null, null, 'ausstehend'),
+ now() - interval '4 months', 'abgelehnt', now() - interval '30 days', 'Bitte dunkler', '{}', null, null, null, 'ausstehend'),
 ('33100000-0000-0000-0000-000000000023', '33100000-0000-0000-0000-000000000010',
  '33100000-0000-0000-0000-000000000002', '33100000-0000-0000-0000-000000000002',
- now() - interval '6 months', 'in_bearbeitung', null, 'Knopf fehlt', '{}', null, null, 'ausstehend'),
+ now() - interval '6 months', 'in_bearbeitung', null, 'Knopf fehlt', '{}', null, null, null, 'ausstehend'),
 ('33100000-0000-0000-0000-000000000024', '33100000-0000-0000-0000-000000000010',
  '33100000-0000-0000-0000-000000000002', '33100000-0000-0000-0000-000000000002',
  now() - interval '26 months', 'erledigt', now() - interval '25 months', null, null,
- now() - interval '22 months', 'Alt', 'bereinigt'),
+ now() - interval '22 months', 'Alt', '{}', 'bereinigt'),
 ('33100000-0000-0000-0000-000000000025', '33100000-0000-0000-0000-000000000011',
  '33100000-0000-0000-0000-000000000002', '33100000-0000-0000-0000-000000000002',
- now(), 'eingegangen', null, 'Andere Firma', '{}', null, null, 'ausstehend'),
+ now(), 'eingegangen', null, 'Andere Firma', '{}', null, null, null, 'ausstehend'),
 ('33100000-0000-0000-0000-000000000026', '33100000-0000-0000-0000-000000000010',
  '33100000-0000-0000-0000-000000000004', '33100000-0000-0000-0000-000000000003',
- now(), 'eingegangen', null, 'Angerufen', '{}', null, null, 'ausstehend');
+ now(), 'eingegangen', null, 'Angerufen', '{}', null, null, null, 'ausstehend');
 
 insert into public.problem_report_files (
   id, organization_id, report_id, kind, storage_path, file_name, mime_type, size_bytes
@@ -114,6 +120,11 @@ begin
   foreach v_role in array array['anon', 'authenticated'] loop
     if has_function_privilege(v_role, 'public.apply_problem_report_retention(uuid, uuid)', 'EXECUTE')
       or has_function_privilege(v_role, 'public.list_problem_reports_due_for_retention(integer, uuid)', 'EXECUTE')
+      or has_function_privilege(v_role,
+        'public.register_problem_report_file(uuid, uuid, uuid, uuid, text, text, text, text, bigint, integer)',
+        'EXECUTE')
+      or has_function_privilege(v_role, 'public.submit_problem_report(uuid, uuid, uuid, text, jsonb)', 'EXECUTE')
+      or has_function_privilege(v_role, 'public.record_problem_report_scrub(uuid, uuid, text, jsonb)', 'EXECUTE')
       or has_function_privilege(v_role,
         'app_private.problem_report_retention_step(timestamptz, timestamptz, timestamptz)', 'EXECUTE')
     then raise exception '% executes a report function', v_role; end if;
@@ -220,6 +231,126 @@ begin
 end;
 $$;
 
+-- Each organization numbers its reports from 1 in sending order, and a
+-- number never changes.
+do $$
+declare
+  v_org constant uuid := '33100000-0000-0000-0000-000000000010';
+  v_next integer;
+begin
+  if (select number from public.problem_reports where id = '33100000-0000-0000-0000-000000000025') <> 1 then
+    raise exception 'an organization does not number its reports from 1';
+  end if;
+  v_next := (select max(number) + 1 from public.problem_reports where organization_id = v_org);
+  insert into public.problem_reports (id, organization_id, reporter_id, filed_by_id, description, context)
+  values ('33100000-0000-0000-0000-000000000027', v_org, '33100000-0000-0000-0000-000000000002',
+    '33100000-0000-0000-0000-000000000002', 'Neu', '{}');
+  if (select number from public.problem_reports where id = '33100000-0000-0000-0000-000000000027') <> v_next then
+    raise exception 'a new report did not take the next number of its organization';
+  end if;
+  insert into public.problem_reports (id, organization_id, reporter_id, filed_by_id, description, context, number)
+  values ('33100000-0000-0000-0000-000000000028', v_org, '33100000-0000-0000-0000-000000000002',
+    '33100000-0000-0000-0000-000000000002', 'Eigene Nummer', '{}', 1);
+  if (select number from public.problem_reports where id = '33100000-0000-0000-0000-000000000028') <> v_next + 1 then
+    raise exception 'a report kept a number the writer chose';
+  end if;
+  begin
+    update public.problem_reports set number = 999 where id = '33100000-0000-0000-0000-000000000027';
+    raise exception 'a report number change was accepted';
+  exception when raise_exception then
+    if sqlerrm <> 'problem_report_identity_immutable' then raise; end if;
+  end;
+end;
+$$;
+
+-- A report saves once under its device's id: a retry gets the same number,
+-- and an id of another person's or another organization's report conflicts.
+do $$
+declare
+  v_org constant uuid := '33100000-0000-0000-0000-000000000010';
+  v_worker constant uuid := '33100000-0000-0000-0000-000000000002';
+  v_report constant uuid := '33100000-0000-0000-0000-000000000029';
+  v_first integer;
+begin
+  v_first := public.submit_problem_report(v_report, v_org, v_worker, 'Einmal', '{}');
+  if public.submit_problem_report(v_report, v_org, v_worker, 'Noch einmal', '{}') <> v_first
+    or (select count(*) from public.problem_reports where id = v_report) <> 1
+    or (select description from public.problem_reports where id = v_report) <> 'Einmal'
+  then raise exception 'a retried report save did not find its own report'; end if;
+  begin
+    perform public.submit_problem_report(v_report, v_org, '33100000-0000-0000-0000-000000000001', 'Fremd', '{}');
+    raise exception 'another person reached a report through its id';
+  exception when raise_exception then
+    if sqlerrm <> 'report_conflict' then raise; end if;
+  end;
+  begin
+    perform public.submit_problem_report(v_report, '33100000-0000-0000-0000-000000000011', v_worker, 'Fremd', '{}');
+    raise exception 'a report id reached another organization';
+  exception when raise_exception then
+    if sqlerrm <> 'report_conflict' then raise; end if;
+  end;
+end;
+$$;
+
+-- A file registers only for the report's own filer while its originals
+-- exist: one screenshot, and attachments up to the given limit.
+do $$
+declare
+  v_org constant uuid := '33100000-0000-0000-0000-000000000010';
+  v_report constant uuid := '33100000-0000-0000-0000-000000000023';
+  v_worker constant uuid := '33100000-0000-0000-0000-000000000002';
+  v_prefix constant text := '33100000-0000-0000-0000-000000000010/problem-reports/33100000-0000-0000-0000-000000000023/';
+begin
+  begin
+    perform public.register_problem_report_file('33100000-0000-0000-0000-000000000001', v_org, v_report,
+      gen_random_uuid(), 'anhang', v_prefix || 'a/anhang', 'x.pdf', 'application/pdf', 1, 2);
+    raise exception 'another member registered a file';
+  exception when raise_exception then
+    if sqlerrm <> 'report_not_found' then raise; end if;
+  end;
+  begin
+    perform public.register_problem_report_file(v_worker, '33100000-0000-0000-0000-000000000011', v_report,
+      gen_random_uuid(), 'anhang', v_prefix || 'b/anhang', 'x.pdf', 'application/pdf', 1, 2);
+    raise exception 'a file registered under a foreign organization';
+  exception when raise_exception then
+    if sqlerrm <> 'report_not_found' then raise; end if;
+  end;
+  perform public.register_problem_report_file(v_worker, v_org, v_report,
+    '33100000-0000-0000-0000-000000000034', 'screenshot', v_prefix || 'f34/screenshot', 'bild.png', 'image/png', 1, 2);
+  begin
+    perform public.register_problem_report_file(v_worker, v_org, v_report,
+      gen_random_uuid(), 'screenshot', v_prefix || 'c/screenshot', 'bild.png', 'image/png', 1, 2);
+    raise exception 'a second screenshot registered';
+  exception when raise_exception then
+    if sqlerrm <> 'screenshot_exists' then raise; end if;
+  end;
+  begin
+    perform public.register_problem_report_file(v_worker, v_org, v_report,
+      '33100000-0000-0000-0000-000000000034', 'anhang', v_prefix || 'd/anhang', 'x.pdf', 'application/pdf', 1, 2);
+    raise exception 'a finalized file registered again';
+  exception when raise_exception then
+    if sqlerrm <> 'already_finalized' then raise; end if;
+  end;
+  perform public.register_problem_report_file(v_worker, v_org, v_report,
+    gen_random_uuid(), 'anhang', v_prefix || 'e/anhang', 'x.pdf', 'application/pdf', 1, 1);
+  begin
+    perform public.register_problem_report_file(v_worker, v_org, v_report,
+      gen_random_uuid(), 'anhang', v_prefix || 'g/anhang', 'y.pdf', 'application/pdf', 1, 1);
+    raise exception 'an attachment beyond the limit registered';
+  exception when raise_exception then
+    if sqlerrm <> 'too_many_attachments' then raise; end if;
+  end;
+  begin
+    perform public.register_problem_report_file(v_worker, v_org, '33100000-0000-0000-0000-000000000024',
+      gen_random_uuid(), 'anhang', v_org || '/problem-reports/33100000-0000-0000-0000-000000000024/h/anhang',
+      'x.pdf', 'application/pdf', 1, 2);
+    raise exception 'a file registered after the originals were deleted';
+  exception when raise_exception then
+    if sqlerrm <> 'report_originals_deleted' then raise; end if;
+  end;
+end;
+$$;
+
 -- A report keeps one screenshot, and a file key lies inside its report.
 do $$
 begin
@@ -307,6 +438,67 @@ $$;
 drop table pg_temp.cascade_probe;
 set local role service_role;
 
+-- The scrub outcome writes both parts of the copy and the state in one call.
+-- No copy is the failed state, and a later scrub may still succeed. A written
+-- copy never changes: not through a failed run beside it, not through a
+-- second copy. A report named under another organization is not found, half
+-- a copy is refused, and the original stays as it was.
+do $$
+declare
+  v_org constant uuid := '33100000-0000-0000-0000-000000000010';
+  v_report constant uuid := '33100000-0000-0000-0000-000000000022';
+begin
+  begin
+    perform public.record_problem_report_scrub('33100000-0000-0000-0000-000000000011', v_report, 'Kopie', '{}');
+    raise exception 'a scrub wrote a report named under another organization';
+  exception when raise_exception then
+    if sqlerrm <> 'report_not_found' then raise; end if;
+  end;
+  begin
+    perform public.record_problem_report_scrub(v_org, v_report, 'Kopie', null);
+    raise exception 'half a scrubbed copy was accepted';
+  exception when raise_exception then
+    if sqlerrm <> 'scrubbed_copy_incomplete' then raise; end if;
+  end;
+  if (select scrub_state from public.problem_reports where id = v_report) <> 'ausstehend'
+  then raise exception 'a refused scrub changed the report'; end if;
+
+  if public.record_problem_report_scrub(v_org, v_report, null, null) <> 'nicht_bereinigbar'
+  then raise exception 'a failed scrub did not answer the failed state'; end if;
+  if not exists (
+    select 1 from public.problem_reports
+    where id = v_report and scrub_state = 'nicht_bereinigbar'
+      and scrubbed_description is null and scrubbed_context is null
+  ) then raise exception 'a failed scrub left a copy or the wrong state'; end if;
+  if public.record_problem_report_scrub(v_org, v_report, 'Bitte [Person 1] dunkler', '{"offline":false}')
+    <> 'bereinigt'
+  then raise exception 'a scrub after a failed one was not written'; end if;
+  if public.record_problem_report_scrub(v_org, v_report, null, null) <> 'bereinigt'
+    or public.record_problem_report_scrub(v_org, v_report, 'Andere Kopie', '{}') <> 'bereinigt'
+  then raise exception 'a report with its copy did not answer `bereinigt`'; end if;
+  if not exists (
+    select 1 from public.problem_reports
+    where id = v_report and scrub_state = 'bereinigt' and description = 'Bitte dunkler'
+      and scrubbed_description = 'Bitte [Person 1] dunkler' and scrubbed_context = '{"offline":false}'
+  ) then raise exception 'a written scrubbed copy changed, or the scrub changed the original'; end if;
+
+  -- The state and both parts of the copy agree, whoever writes the row.
+  begin
+    update public.problem_reports set scrub_state = 'bereinigt', scrubbed_description = 'Kopie'
+    where id = '33100000-0000-0000-0000-000000000023';
+    raise exception 'a scrubbed state without the scrubbed context was accepted';
+  exception when check_violation then null;
+  end;
+  begin
+    update public.problem_reports
+    set scrub_state = 'bereinigt', scrubbed_description = 'Kopie', scrubbed_context = '[]'
+    where id = '33100000-0000-0000-0000-000000000023';
+    raise exception 'a scrubbed context that is no object was accepted';
+  exception when check_violation then null;
+  end;
+end;
+$$;
+
 -- Only the due reports are listed, in id order and after the given id.
 do $$
 begin
@@ -346,9 +538,19 @@ begin
   ) then raise exception 'retention kept an original text'; end if;
   if exists (select 1 from public.problem_report_files where report_id = '33100000-0000-0000-0000-000000000020')
   then raise exception 'retention kept a file row'; end if;
-  if (select scrubbed_description from public.problem_reports where id = '33100000-0000-0000-0000-000000000020')
-    is distinct from 'Speichern geht nicht'
-  then raise exception 'retention removed the scrubbed copy'; end if;
+  -- A due report without a scrubbed copy loses its originals on time too: the
+  -- deletion periods bind, and the daily run marks it nicht_bereinigbar.
+  if not exists (
+    select 1 from public.problem_reports
+    where id = '33100000-0000-0000-0000-000000000021' and originals_deleted_at is not null
+      and description is null and context is null
+      and scrubbed_description is null and scrubbed_context is null
+  ) then raise exception 'retention waited for a scrubbed copy'; end if;
+  if not exists (
+    select 1 from public.problem_reports
+    where id = '33100000-0000-0000-0000-000000000020' and scrubbed_description = 'Speichern geht nicht'
+      and scrubbed_context = '{"routeTemplate":"/auftraege"}'
+  ) then raise exception 'retention removed the scrubbed copy'; end if;
   if not exists (select 1 from public.problem_report_events where id = '33100000-0000-0000-0000-000000000040')
   then raise exception 'retention removed the history of a kept report'; end if;
   if (select array_agg(storage_path order by storage_path) from public.storage_purge_queue

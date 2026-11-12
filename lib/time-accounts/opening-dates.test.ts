@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { canCorrectOpeningDate, suggestTimeAccountStartDate } from './opening-dates';
+import { canCorrectOpeningDate, earliestOpeningDate, suggestTimeAccountStartDate } from './opening-dates';
 
 describe('the proposed start of rules and time accounts', () => {
   test('is the first day of the oldest month with recorded time while no month is closed', () => {
@@ -50,5 +50,15 @@ describe('an opening date correction', () => {
   test('is locked once a closed period ends on or after the opening date', () => {
     expect(canCorrectOpeningDate('2026-08-31', '2026-08-31')).toBe(false);
     expect(canCorrectOpeningDate('2026-08-03', '2026-09-30')).toBe(false);
+  });
+});
+
+describe('earliestOpeningDate: an opening lies at most ten years back', () => {
+  test('the same day ten years earlier', () => {
+    expect(earliestOpeningDate('2026-11-12')).toBe('2016-11-12');
+  });
+
+  test('a 29 February maps to the 28th, as Postgres subtracts ten years', () => {
+    expect(earliestOpeningDate('2028-02-29')).toBe('2018-02-28');
   });
 });

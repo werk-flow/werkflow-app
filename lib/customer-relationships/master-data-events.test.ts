@@ -57,4 +57,46 @@ describe('the chronology names each master-data change with its old and new valu
       detail: null,
     });
   });
+
+  test('a role on an Einsatzort names its kind, holder and day, and a contact’s role its German name', () => {
+    const payload = {
+      role: 'hausverwaltung',
+      holder_client_id: 'holder',
+      holder_name: 'Hausverwaltung Lindenhof GmbH',
+      site_client_id: 'owner',
+      site_name: 'Haus Lindenstraße',
+      starts_on: null,
+      ends_on: '2026-06-30',
+    };
+    expect(
+      describeMasterDataEvent(customerEvent({ eventType: 'role_ended', isSite: true, payload })),
+    ).toEqual({
+      reference: 'Hausverwaltung für Haus Lindenstraße beendet',
+      detail: 'Hausverwaltung Lindenhof GmbH, letzter Tag 30.06.2026',
+    });
+    expect(
+      describeMasterDataEvent(
+        customerEvent({
+          eventType: 'role_started',
+          isSite: true,
+          payload: { ...payload, role: 'eigentuemer', starts_on: '2026-07-01', ends_on: null },
+        }),
+      ),
+    ).toEqual({
+      reference: 'Eigentümer für Haus Lindenstraße eingetragen',
+      detail: 'Hausverwaltung Lindenhof GmbH, ab 01.07.2026',
+    });
+    expect(
+      describeMasterDataEvent(
+        customerEvent({
+          isContact: true,
+          contactName: 'Max Mieter',
+          payload: { field: 'site_role', old: 'mieter', new: 'zugangskontakt' },
+        }),
+      ),
+    ).toEqual({
+      reference: 'Ansprechpartner Max Mieter: Rolle am Einsatzort geändert',
+      detail: '„Mieter“ → „Zugangskontakt“',
+    });
+  });
 });

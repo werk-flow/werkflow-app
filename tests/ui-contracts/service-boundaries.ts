@@ -8,6 +8,7 @@ import {
 } from './time-approval-boundaries';
 import { createJobMaterialLineContract } from './material-boundaries';
 import { CONTRACT_SUPABASE_URL } from './supabase-contract-env';
+import { FIELD_SYNC_TODAY_PATH } from '@/lib/field-sync/today-snapshot';
 import type { InventoryLocation, InventoryLocationType } from '@/lib/inventory/types';
 // Keep framework redirect/error classification real; only navigation and
 // external services are substituted by this fixture.
@@ -56,11 +57,30 @@ export function initializeServiceBoundaries(): void {
       ) {
         return browserFetch(input, init);
       }
+      // The start page refresh contract answers the day's GET at Playwright's network boundary.
+      if (
+        (window.uiContractFixture === 'today-refresh-switch' ||
+          window.uiContractFixture === 'today-refresh-profile' ||
+          window.uiContractFixture === 'today-refresh-fallback') &&
+        typeof input === 'string' &&
+        input.startsWith(`${FIELD_SYNC_TODAY_PATH}?`) &&
+        (init?.method ?? 'GET') === 'GET'
+      ) {
+        return browserFetch(input, init);
+      }
       // The auth URL contracts record every Auth request at Playwright's network boundary.
       if (
         (window.uiContractFixture === 'auth-url-session' ||
           window.uiContractFixture === 'auth-url-reset-form') &&
         String(input instanceof Request ? input.url : input).startsWith(CONTRACT_SUPABASE_URL)
+      ) {
+        return browserFetch(input, init);
+      }
+      // The report dialog's contract answers its storage PUTs at Playwright's network boundary.
+      if (
+        window.uiContractFixture === 'problem-report' &&
+        init?.method === 'PUT' &&
+        String(input instanceof Request ? input.url : input).startsWith('http://localhost/storage/')
       ) {
         return browserFetch(input, init);
       }

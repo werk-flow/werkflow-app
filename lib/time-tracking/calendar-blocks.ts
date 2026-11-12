@@ -336,9 +336,7 @@ export function createSessionFromCalendarBlock(
     calendarBlockId: block.id,
     sourceEntries: block.sourceEntries,
     breaks: getCalendarBlockDisplayBreaks(block, referenceDate, settings),
-    breakMode: displayPolicy?.breakMode,
-    autoBreakThresholdMinutes: displayPolicy?.autoBreakThresholdMinutes,
-    autoBreakDurationMinutes: displayPolicy?.autoBreakDurationMinutes,
+    ...(displayPolicy ? { breakPolicy: displayPolicy } : {}),
     isCompositeBlock: block.isComposite,
     isOnBreakBlock: block.isOnBreak,
   };

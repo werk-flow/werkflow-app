@@ -50,6 +50,8 @@ test('customer page transport retains cancellation and rejects malformed or fore
           notes: null,
           createdAt: '',
           updatedAt: '',
+          matchedSites: [],
+          matchedSiteTotal: 0,
         },
       ],
       total: 1,

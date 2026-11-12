@@ -68,8 +68,8 @@
         },
         "route:/auftraege": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 9861, "tolerance": { "relative": 0.9589, "absolute": 512 } },
-          "decodedBytes": { "reference": 27705, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 7517, "tolerance": { "relative": 0.9589, "absolute": 512 } },
+          "decodedBytes": { "reference": 27113, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "script": {
@@ -334,6 +334,24 @@
           },
           "runKeys": ["2026-11-12T004607647Z-ed5cc5"],
           "reason": "main before #358 measured 690986 B, inside the old ceiling; two features then add script to the field cold start, which prefetches the work pack's route chunk: #358 (werk-flow/werkflow-planning#162, the work pack's completion-gate list) adds 1646 B (690986 before it, 692632 after, Boat runs of dedb9e84 and 034e1a62), and #348 (werk-flow/werkflow-planning#158, the „Meine Zeit“ rows: activity pairing and their labels, which the work pack renders on its first load) adds 930 B (693562 on 0b354338, after moving the Verlauf's day grouping out of that chunk, which saved 122 B)"
+        },
+        {
+          "kind": "floor-accept",
+          "target": "route:/auftraege",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 9861, "tolerance": { "relative": 0.9589, "absolute": 512 } },
+            "decodedBytes": { "reference": 27705, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 7517, "tolerance": { "relative": 0.9589, "absolute": 512 } },
+            "decodedBytes": { "reference": 27113, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-09T191958859Z-6ffc80"],
+          "reason": "The route payload names one script chunk fewer (cold-start script requests 43 to 42): the app shell now imports lazyDialog for the report dialog, so /auftraege no longer references it as a chunk of its own. Rows and route renders are unchanged; nothing is missing."
         }
       ]
     },
@@ -369,8 +387,8 @@
         },
         "route:/auftraege/[jobNumber]": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 1101, "tolerance": { "relative": 1, "absolute": 512 } },
-          "decodedBytes": { "reference": 17263, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 1234, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 17871, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         }
       },
@@ -458,6 +476,24 @@
           "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
           "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
           "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "route:/auftraege/[jobNumber]",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 1101, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 17263, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 1234, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 17871, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-12T143746833Z-bb55cf"],
+          "reason": "werk-flow/werkflow-planning#369: the job page's navigation payload grew 608 B (17263 to 17871, the same in two runs) with identical backendByPath and rows. The change adds the client module lib/inventory/units.ts, which lib/inventory/types.ts (formatInventoryQuantity, used by the job material rows) now imports, so the payload's client references name one more chunk. No data was added; the response body stayed on Boat and was not opened."
         }
       ]
     },
@@ -1177,8 +1213,8 @@
           "rows": null
         },
         "script": {
-          "requests": { "reference": 37, "tolerance": 1 },
-          "encodedBytes": { "reference": 575135, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "requests": { "reference": 36, "tolerance": 1 },
+          "encodedBytes": { "reference": 581215, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         },
@@ -1403,6 +1439,24 @@
           },
           "runKeys": ["2026-11-09T215315624Z-23af99"],
           "reason": "Tailwind no longer scans tests and test support (lint examples became shipped utilities), and the unused .hide-time-picker block and duplicate ::selection rules are gone; every dropped utility appears only in an excluded test file, and audit:visual, audit:layout and audit:layout:viewports pass on the same tree"
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 37, "tolerance": 1 },
+            "encodedBytes": { "reference": 575135, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 36, "tolerance": 1 },
+            "encodedBytes": { "reference": 581215, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-12T065056958Z-ac2af3"],
+          "reason": "The app shell gained the report button, its recorder and its launcher, which the owner accepted on #329 (2026-11-10). CI passed both lab groups on 82a9e350 (run 43092771815) and main passes alone; the merged tree reads 581,215 B, over the 580,887 B ceiling by 328 B, because main's shell changes since then used the remaining room. The field cold start needs no accept: #348's ceiling-accept already covers it."
         }
       ]
     },

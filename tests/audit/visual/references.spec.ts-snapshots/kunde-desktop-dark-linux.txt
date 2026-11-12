@@ -15,6 +15,8 @@ Service
 Arbeitsvorlagen
 Mitarbeiter
 Kunden
+Problem melden
+F2
 MK
 Martin Krämer
 martin.kraemer@haustechnik-kraemer.de
@@ -28,6 +30,8 @@ Familie Hoffmann
 Typ
 Privat
 Kundennummer
+—
+Kundennummer im Altsystem
 —
 E-Mail
 —
@@ -53,6 +57,8 @@ Hauptstandort
 Lindenstraße 4, 71032 Böblingen
 Jürgen Hoffmann
 Heizungsraum im Keller, Schlüssel bei den Nachbarn (Nr. 6).
+Rollen nicht eingetragen
+Rollen verwalten
 Anlagen & Geräte
 Gas-Brennwerttherme
 ·
@@ -69,7 +75,4 @@ Bezahlte Rechnungen
 Offene Beträge
 —
 Finanzübersicht wird verfügbar, sobald Rechnungen und Verträge eingerichtet sind.
-Dokumente
-Verknüpfen
-Hochladen
 Nicht eingestempelt

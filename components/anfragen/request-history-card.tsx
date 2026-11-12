@@ -1,6 +1,7 @@
 import { History } from 'lucide-react';
 
 import { formatBerlinDateTime as formatDateTime } from '@/lib/utils';
+import { REQUEST_ATTACHED_LABEL } from '@/lib/requests/types';
 import type { RequestEventEntry } from './request-detail-content';
 import { SectionTitle } from '@/components/shared/section-title';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -13,7 +14,7 @@ const EVENT_LABELS: Record<string, string> = {
   promoted: 'Als neuer Kunde angelegt',
   converted_to_service_case: 'Als Servicefall übernommen',
   converted: 'Umgewandelt',
-  attached: 'Zu bestehender Arbeit hinzugefügt',
+  attached: REQUEST_ATTACHED_LABEL,
   closed: 'Geschlossen',
   reopened: 'Wieder geöffnet',
 };

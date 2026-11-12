@@ -65,6 +65,7 @@ import {
   passedSinceSelection,
   selectionBaseline,
 } from '../lib/testing/selection/group-selection';
+import { renderedSurfaceFiles, surfaceRoots } from '../lib/testing/selection/surface-closure';
 import { calculateCandidateFingerprint } from '../lib/testing/evidence/candidate-identity';
 import {
   browserGroupReuseProblem,
@@ -342,6 +343,7 @@ async function main(): Promise<void> {
     .filter((result) => result.status !== 'passed')
     .map((result) => result.groupId);
   unresolved.push(...unresolvedBrowserGroupIds(browserHistory, options.target));
+  const rendered = renderedSurfaceFiles(qualification.graph, surfaceRoots(repository));
   const selections = groupSelections({
     mode: options.mode,
     groups: qualified.map((entry) => ({
@@ -350,6 +352,7 @@ async function main(): Promise<void> {
       scopes: entry.group.scopes,
       executionInputs: entry.executionInputs,
       trigger: entry.group.changeTrigger,
+      renderedFiles: rendered.get(entry.group.id),
     })),
     changedFiles: changed,
     unresolvedGroupIds: unresolved,
@@ -491,7 +494,6 @@ async function main(): Promise<void> {
           hasDiagnosis: (reportId) => existsSync(resolve(archive, reportId, RELEASE_DIAGNOSIS_FILE)),
         })
       : undefined,
-    freshBrowserEntries.length ? browserStorageProblem(repository) : undefined,
     unclassifiedFailureProblem({
       groupIds: freshBrowserEntries.map((entry) => entry.group.id),
       target: options.target,
@@ -509,8 +511,12 @@ async function main(): Promise<void> {
     }),
   ].filter((refusal): refusal is string => Boolean(refusal));
   for (const refusal of refusals) console.log(`[verify] refused: ${refusal}`);
+  // Free disk space is this machine's own, and a Boat machine has its own disk: only the refusals
+  // above, which the evidence history decides, stop a run before Boat starts a machine for it.
+  const storage = freshBrowserEntries.length ? browserStorageProblem(repository) : undefined;
+  if (storage) console.log(`[verify] refused on this machine: ${storage}`);
   if (!options.execute) return;
-  if (refusals.length) throw new Error(refusals.join('\n'));
+  if (refusals.length || storage) throw new Error([...refusals, storage].filter(Boolean).join('\n'));
   await withWorkspaceTestLock({ operation: 'independent verification groups' }, async () => {
     if (changedInputs(snapshot, captureInputSnapshot(repository)).length)
       throw new Error('Inputs changed after planning. Re-plan before executing or reusing results.');

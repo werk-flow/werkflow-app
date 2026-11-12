@@ -38,9 +38,17 @@ declare global {
       | 'calendar-month'
       | 'organization'
       | 'organization-export'
+      | 'today-refresh'
+      | 'today-refresh-switch'
+      | 'today-refresh-profile'
+      | 'today-refresh-fallback'
+      | 'offline-today'
+      | 'work-handover'
+      | 'edit-job'
       | 'sidebar'
       | 'lazy-dialog'
       | 'clock'
+      | 'break-rule-week'
       | 'live-view'
       | 'route-refresh'
       | 'customer'
@@ -50,6 +58,10 @@ declare global {
       | 'sickness-record'
       | 'absence-picker'
       | 'schedule-parked-picker'
+      | 'problem-report'
+      | 'support-triage'
+      | 'support-filing'
+      | 'inventory-unit'
       | AuthUrlFixtureName
       | FeedbackFixtureName;
     uiContractLifecycle: LifecycleBoundaryState;

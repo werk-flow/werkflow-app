@@ -2,7 +2,7 @@
 
 This catalog lists the user flows that a test, a golden journey in `lib/testing/journeys.ts` or a code comment cites by id. `static:coverage` (`scripts/check-test-coverage.ts`) checks each flow against `lib/testing/selection/coverage-map.json`. Each mapping names the test titles that prove the flow, and the map holds a hash of each bullet.
 
-- Each bullet has one stable id in inline code. `BASE-*` ids describe the app before Phase 1. `P1-XX-FNN` ids belong to a slice. Never reuse a retired id. Wave 1 test titles spell `P1-00a` as `P1-00A`. Both spellings name the same flows.
+- Each bullet has one stable id in inline code. `BASE-*` ids describe the app before Phase 1. `P1-XX-FNN` ids belong to a slice, `EN-FNN` ids to an epic of the switchover plan. Never reuse a retired id. Wave 1 test titles spell `P1-00a` as `P1-00A`. Both spellings name the same flows.
 - Write the flow in natural German after the id. Name the acting role first: `Büro/Admin`, `Admin`, `Handwerker`, `Alle`.
 - A mapping covers every clause of its bullet, not only the headline.
 - To change a bullet, recheck the assertions that prove it, then update its hash in the coverage map.
@@ -183,3 +183,12 @@ This catalog lists the user flows that a test, a golden journey in `lib/testing/
 
 - `P1-24a-F10` — Büro/Admin: Eine Karte in eine andere Zeile ziehen besetzt den Termin um, mit denselben Dialogen wie bisher (Qualifikation, Kapazität, Einsatz-Ablösung, Kundenzusage). In eine andere Spalte ziehen verschiebt das Datum; Uhrzeit und Dauer bleiben. Ein Ziel auf einem Urlaubstag oder einem arbeitsfreien Tag wird schon beim Ziehen mit Satz abgelehnt; mit gedrückter Umschalttaste ist die Ablage trotzdem möglich und öffnet den Hinweis-Dialog. Ein Ziel außerhalb der Beschäftigung bleibt abgelehnt.
 - `P1-24a-F15` — Alle: Jede Ablage wirkt sofort in der Ansicht; nach dem Speichern erscheint ein grüner Hinweis mit „Rückgängig“; schlägt das Speichern fehl, springt die Karte zurück und der Hinweis nennt die Regel und den nächsten Schritt; schlägt „Rückgängig“ fehl, sagt der Hinweis das mit derselben Regel.
+
+## Switchover
+
+### `E6` Problemmeldungen
+
+- `E6-F01` — Alle: melden auf jeder Seite über „Problem melden“ (am Handy oben in der Kopfzeile, am Desktop unten in der Seitenleiste oder mit F2) ein Problem. Das Gerät erstellt einen Screenshot, in dem Kundendaten durch Platzhalter ersetzt sind; die Person sieht ihn vorab, schwärzt Bereiche mit Rechtecken oder schickt die Meldung ohne Bild. Eine leere Beschreibung wird markiert und fokussiert. Nach dem Senden nennt ein Hinweis die Nummer der Meldung.
+- `E6-F02` — Alle: sehen unter „Meine Meldungen“ nur ihre eigenen Meldungen mit Nummer, Datum, Status und der Antwort vom Support.
+- `E6-F03` — WerkFlow-Support: sieht unter `/support` die Meldungen aller Organisationen, die älteste zuerst, mit der bereinigten Fassung und ohne Originaltext. Ordnet eine Meldung ein (Blocker, Fehler, Unklarheit, Wunsch), setzt Status und Zuständigkeit und schreibt eine Antwort; die meldende Person sieht Status und Antwort sofort in „Meine Meldungen“. „Original öffnen“ zeigt den Originaltext und die Anhänge, und jedes Öffnen steht im Verlauf. Alle anderen sehen statt des Bereichs „Seite nicht gefunden“.
+- `E6-F04` — WerkFlow-Support: nimmt für eine Person, die angerufen hat, eine Meldung auf: Organisation und Person auswählen, beschreiben, Dateien anhängen. Die Person findet die Meldung in „Meine Meldungen“.

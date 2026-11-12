@@ -101,10 +101,11 @@ test.describe('@AUDIT-VISUAL rendered references of every page family', () => {
   for (const family of STANDALONE_FAMILIES) {
     test(`${family.id} matches its references`, async ({ browser, baseURL, world }) => {
       const screen = standaloneScreen(family.screen);
-      const { context, page, email } = await openStandaloneScreen({ browser, baseURL, world, screen });
+      const opened = await openStandaloneScreen({ browser, baseURL, world, screen });
+      const { context, page, email, path } = opened;
       try {
         const replacements = [...(await visualReplacements(world)), ...standaloneReplacements(world, email)];
-        await expectStandaloneFamily(page, family, screen.path, replacements);
+        await expectStandaloneFamily(page, family, path, replacements);
       } finally {
         await context.close();
       }

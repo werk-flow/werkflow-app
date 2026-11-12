@@ -2,11 +2,12 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { ACCEPTANCE_SETS } from '../../../tests/audit/support/acceptance-sets';
+import { acceptanceSets } from '../../../tests/audit/support/acceptance-sets';
 import {
   interceptsRequest,
   isTargetPrefetch,
   navigationStart,
+  standaloneTarget,
   stateCapturePlan,
   stateCaptureId,
   type ObservedRequest,
@@ -67,6 +68,23 @@ test('a loading capture holds the navigation of its target and every client read
   expect(interceptsRequest(plan, request('GET', '/api/csp-report'), TARGET)).toBeNull();
 });
 
+test('a standalone loading capture navigates to the address it records, and its held navigation still matches', () => {
+  const target = standaloneTarget('/support', '?status=abgelehnt&einordnung=blocker');
+  expect(target).toEqual({ address: '/support?status=abgelehnt&einordnung=blocker', path: '/support' });
+  expect(standaloneTarget('/support/meldungen/abc?seite=2', undefined)).toEqual({
+    address: '/support/meldungen/abc?seite=2',
+    path: '/support/meldungen/abc',
+  });
+  const filteredNavigation = request('GET', `${target.address}&_rsc=abc`, {
+    rsc: '1',
+    'next-router-state-tree': '[]',
+  });
+  const plan = stateCapturePlan('loading', 'page');
+  expect(interceptsRequest(plan, filteredNavigation, { origin: ORIGIN, path: target.path })).toBe(
+    'navigation',
+  );
+});
+
 test('an error capture fails only client reads of the app', () => {
   const plan = stateCapturePlan('error', 'page');
   expect(interceptsRequest(plan, ACTION, TARGET)).toBe('reads');
@@ -84,7 +102,7 @@ test('a loading capture starts on another route, and a state capture names its s
 });
 
 test('every state capture of an open set names its state in its id', () => {
-  const captures = ACCEPTANCE_SETS.flatMap((set) => set.captures);
+  const captures = acceptanceSets().flatMap((set) => set.captures);
   expect(captures.some((capture) => capture.state)).toBe(true);
   for (const capture of captures) if (capture.state) expect(capture.id).toEndWith(`-${capture.state}`);
 });

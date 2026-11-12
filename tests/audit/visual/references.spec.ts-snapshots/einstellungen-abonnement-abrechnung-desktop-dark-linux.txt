@@ -15,6 +15,8 @@ Service
 Arbeitsvorlagen
 Mitarbeiter
 Kunden
+Problem melden
+F2
 MK
 Martin Krämer
 martin.kraemer@haustechnik-kraemer.de
@@ -33,6 +35,8 @@ Dashboard
 Startansicht und Widgets
 Organisation
 Allgemeine Organisationsdaten
+Dokumente & Briefpapier
+Angebote als PDF
 Kalender
 Kalenderansichten und Regeln
 Zeiterfassung

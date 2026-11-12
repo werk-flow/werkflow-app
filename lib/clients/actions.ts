@@ -7,6 +7,7 @@ import { logReadFailure } from '@/lib/data/read-request-cache';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { contactEmailSchema } from '@/lib/clients/contact-email';
 import { requireManagerAndClient } from '@/lib/clients/manager-access';
+import { siteContactRoleSchema, type SiteContactRole } from '@/lib/clients/site-roles';
 import {
   type Client,
   type ClientType,
@@ -22,10 +23,9 @@ import {
   type ClientMatchList,
   type ClientRelationsResult,
   type ClientSiteResult,
-  toClientContact,
   toClientMatch,
-  toClientSite,
 } from '@/lib/clients/types';
+import { toClientContact, toClientSite } from '@/lib/clients/relation-rows';
 import { logError } from '@/lib/logging';
 import { Constants, type Json } from '@/lib/supabase/database.types';
 import { writeRefusalFor } from '@/lib/supabase/write-refusal';
@@ -40,6 +40,8 @@ export type CreateClientInput = {
   name: string;
   clientType: ClientType;
   customerNumber?: string;
+  /** The number the previous system gave the customer. */
+  sourceNumber?: string;
   email?: string;
   phone?: string;
   address?: string;
@@ -56,6 +58,7 @@ const clientFieldsSchema = z.object({
   name: z.string().max(300),
   clientType: z.enum(Constants.public.Enums.client_type),
   customerNumber: nullableClientText(100),
+  sourceNumber: nullableClientText(100),
   email: nullableClientText(320),
   phone: nullableClientText(100),
   address: nullableClientText(1000),
@@ -75,6 +78,9 @@ const contactFieldsSchema = z.object({
   email: contactEmailSchema,
   phone: nullableClientText(100),
   notes: nullableClientText(10000),
+  // The contact's Objekt and its role there come together or not at all.
+  siteId: uuidSchema.nullish(),
+  siteRole: siteContactRoleSchema.nullish(),
   isPrimary: z.boolean().optional(),
 });
 
@@ -83,16 +89,25 @@ const siteFieldsSchema = z.object({
   street: nullableClientText(300),
   postalCode: nullableClientText(20),
   city: nullableClientText(200),
+  sourceNumber: nullableClientText(100),
   accessNotes: nullableClientText(10000),
   notes: nullableClientText(10000),
   primaryContactId: uuidSchema.or(z.literal('')).nullish(),
   isPrimary: z.boolean().optional(),
 });
 
-const createContactArgumentsSchema = z.object({ clientId: uuidSchema, input: contactFieldsSchema });
+const hasWholeSiteLink = (input: {
+  siteId?: string | null | undefined;
+  siteRole?: string | null | undefined;
+}): boolean =>
+  (input.siteId === undefined) === (input.siteRole === undefined) && !input.siteId === !input.siteRole;
+const createContactArgumentsSchema = z.object({
+  clientId: uuidSchema,
+  input: contactFieldsSchema.refine(hasWholeSiteLink),
+});
 const updateContactArgumentsSchema = z.object({
   contactId: uuidSchema,
-  input: contactFieldsSchema.partial().extend({ isActive: z.boolean().optional() }),
+  input: contactFieldsSchema.partial().extend({ isActive: z.boolean().optional() }).refine(hasWholeSiteLink),
 });
 const createSiteArgumentsSchema = z.object({ clientId: uuidSchema, input: siteFieldsSchema });
 const updateSiteArgumentsSchema = z.object({
@@ -117,11 +132,17 @@ const clientDeletionSchema = z.object({
     maintenance: linkCount,
     documents: linkCount,
     follow_ups: linkCount,
+    site_roles: linkCount,
   }),
 });
 
 // The refusals the customer write functions raise under their lock
 // (supabase/migrations/20261130090001_archive_customers_and_keep_master_data_history.sql).
+/** A source number another customer or Objekt of the organization already has. */
+function isSourceNumberTaken(error: { code?: string; message?: string } | null): boolean {
+  return error?.code === '23505' && (error.message ?? '').includes('source_number_per_org');
+}
+
 const masterWriteRefusal = writeRefusalFor(
   new Set([
     'client_not_found',
@@ -216,6 +237,7 @@ export async function createClient(
         name: input.name.trim(),
         client_type: input.clientType,
         customer_number: input.customerNumber?.trim() || null,
+        source_number: input.sourceNumber?.trim() || null,
         email: input.email?.trim() || null,
         phone: input.phone?.trim() || null,
         address: input.address?.trim() || null,
@@ -226,6 +248,7 @@ export async function createClient(
 
     if (error || !data) {
       logError('Error creating client:', error);
+      if (isSourceNumberTaken(error)) return { success: false, error: 'source_number_taken' };
       if (error?.code === '23505') {
         return { success: false, error: 'customer_number_taken' };
       }
@@ -255,6 +278,7 @@ export async function updateClient(
     if (input.name !== undefined) changes.name = input.name.trim();
     if (input.clientType !== undefined) changes.client_type = input.clientType;
     if (input.customerNumber !== undefined) changes.customer_number = input.customerNumber?.trim() || null;
+    if (input.sourceNumber !== undefined) changes.source_number = input.sourceNumber?.trim() || null;
     if (input.email !== undefined) changes.email = input.email?.trim() || null;
     if (input.phone !== undefined) changes.phone = input.phone?.trim() || null;
     if (input.address !== undefined) changes.address = input.address?.trim() || null;
@@ -271,6 +295,7 @@ export async function updateClient(
       p_client_id: clientId,
       p_changes: changes,
     });
+    if (isSourceNumberTaken(error)) return { success: false, error: 'source_number_taken' };
     if (error?.code === '23505') return { success: false, error: 'customer_number_taken' };
     if (error || !data) return masterWriteRefusal(error, 'update_failed', 'updateClient: save failed');
 
@@ -353,10 +378,10 @@ export async function restoreClient(rawClientId: string): Promise<ClientArchiveR
   return setClientArchived(clientId.data, false);
 }
 
-/** The customer and its archive mark: null while it is active. */
+/** The customer, its archive mark (null while it is active) and its source number. */
 export async function getClientDetail(
   rawClientId: string,
-): Promise<ActionResult<{ client: Client; archivedAt: string | null }>> {
+): Promise<ActionResult<{ client: Client; archivedAt: string | null; sourceNumber: string | null }>> {
   const parsedClientId = uuidSchema.safeParse(rawClientId);
   if (!parsedClientId.success) return { success: false, error: 'not_found' };
   const clientId = parsedClientId.data;
@@ -385,7 +410,12 @@ export async function getClientDetail(
     }
     if (!data) return { success: false, error: 'not_found' };
 
-    return { success: true, client: toClient(data), archivedAt: data.archived_at };
+    return {
+      success: true,
+      client: toClient(data),
+      archivedAt: data.archived_at,
+      sourceNumber: data.source_number,
+    };
   } catch (error) {
     logError('Unexpected error in getClientDetail:', error);
     return { success: false, error: 'unexpected_error' };
@@ -396,12 +426,31 @@ export async function getClientDetail(
 // Contacts And Work Sites
 // ============================================
 
+/** The Objekt a contact is linked to: one of the organization's, of the given customer when named. */
+async function findOwnSite(
+  admin: AdminClient,
+  orgId: string,
+  siteId: string,
+  clientId?: string,
+): Promise<ActionResult> {
+  let query = admin.from('client_sites').select('id').eq('id', siteId).eq('organization_id', orgId);
+  if (clientId) query = query.eq('client_id', clientId);
+  const { data, error } = await query.maybeSingle();
+  if (error) {
+    logReadFailure('findOwnSite: site read failed', error);
+    return { success: false, error: 'load_failed' };
+  }
+  return data ? { success: true } : { success: false, error: 'site_not_found' };
+}
+
 export type SaveClientContactInput = {
   name: string;
   role?: string;
   email?: string;
   phone?: string;
   notes?: string;
+  siteId?: string | null;
+  siteRole?: SiteContactRole | null;
   isPrimary?: boolean;
 };
 
@@ -410,6 +459,7 @@ export type SaveClientSiteInput = {
   street?: string;
   postalCode?: string;
   city?: string;
+  sourceNumber?: string;
   accessNotes?: string;
   notes?: string;
   primaryContactId?: string | null;
@@ -435,6 +485,10 @@ export async function createClientContact(
     }
 
     const admin = createSupabaseAdminClient();
+    if (input.siteId) {
+      const site = await findOwnSite(admin, orgId, input.siteId, clientId);
+      if (!site.success) return site;
+    }
     const { data, error } = await admin
       .from('client_contacts')
       .insert({
@@ -445,6 +499,8 @@ export async function createClientContact(
         email: input.email ?? null,
         phone: input.phone?.trim() || null,
         notes: input.notes?.trim() || null,
+        site_id: input.siteId ?? null,
+        site_role: input.siteRole ?? null,
         is_primary: input.isPrimary ?? false,
         created_by: userId,
       })
@@ -488,6 +544,8 @@ export async function updateClientContact(
     if (input.email !== undefined) changes.email = input.email;
     if (input.phone !== undefined) changes.phone = input.phone?.trim() || null;
     if (input.notes !== undefined) changes.notes = input.notes?.trim() || null;
+    if (input.siteId !== undefined) changes.site_id = input.siteId ?? null;
+    if (input.siteRole !== undefined) changes.site_role = input.siteRole ?? null;
     if (input.isPrimary !== undefined) changes.is_primary = input.isPrimary;
     if (input.isActive !== undefined) changes.is_active = input.isActive;
 
@@ -496,8 +554,13 @@ export async function updateClientContact(
     }
 
     // The function finds the contact in the caller's organization and writes
-    // one history entry per changed identity field and for archiving.
+    // one history entry per changed identity field and for archiving. The
+    // database refuses an Objekt of another customer.
     const admin = createSupabaseAdminClient();
+    if (input.siteId) {
+      const site = await findOwnSite(admin, orgId, input.siteId);
+      if (!site.success) return site;
+    }
     const { data, error } = await admin.rpc('update_client_contact', {
       p_actor_id: userId,
       p_organization_id: orgId,
@@ -539,6 +602,7 @@ export async function createClientSite(
         street: input.street?.trim() || null,
         postal_code: input.postalCode?.trim() || null,
         city: input.city?.trim() || null,
+        source_number: input.sourceNumber?.trim() || null,
         access_notes: input.accessNotes?.trim() || null,
         notes: input.notes?.trim() || null,
         primary_contact_id: input.primaryContactId || null,
@@ -549,6 +613,7 @@ export async function createClientSite(
       .single();
 
     if (error || !data) {
+      if (isSourceNumberTaken(error)) return { success: false, error: 'source_number_taken' };
       logError('Error creating client site:', error);
       return { success: false, error: 'create_failed' };
     }
@@ -584,6 +649,7 @@ export async function updateClientSite(
     if (input.street !== undefined) changes.street = input.street?.trim() || null;
     if (input.postalCode !== undefined) changes.postal_code = input.postalCode?.trim() || null;
     if (input.city !== undefined) changes.city = input.city?.trim() || null;
+    if (input.sourceNumber !== undefined) changes.source_number = input.sourceNumber?.trim() || null;
     if (input.accessNotes !== undefined) changes.access_notes = input.accessNotes?.trim() || null;
     if (input.notes !== undefined) changes.notes = input.notes?.trim() || null;
     if (input.primaryContactId !== undefined) changes.primary_contact_id = input.primaryContactId || null;
@@ -603,6 +669,7 @@ export async function updateClientSite(
       p_site_id: siteId,
       p_changes: changes,
     });
+    if (isSourceNumberTaken(error)) return { success: false, error: 'source_number_taken' };
     if (error || !data) return masterWriteRefusal(error, 'update_failed', 'updateClientSite: save failed');
 
     return { success: true, site: toClientSite(data) };
