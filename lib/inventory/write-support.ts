@@ -205,7 +205,9 @@ const nullableNumber = z
   .optional()
   .transform((value) => value ?? null);
 
-// A reason a newer release names reads as `failed`.
+// A reason a newer release names reads as `failed`. `code` is the SQLSTATE of
+// a row that failed for a reason the import does not name; it stays on the
+// server for the log and never reaches the browser.
 const importRowOutcomeSchema = z
   .object({
     index: z.number(),
@@ -219,9 +221,14 @@ const importRowOutcomeSchema = z
     quantity_after: nullableNumber,
     reason: z.enum(IMPORT_REJECTIONS).catch('failed').optional(),
     item_unit: nullableText,
+    code: z
+      .string()
+      .regex(/^[0-9A-Z]{5}$/)
+      .catch('XXXXX')
+      .optional(),
   })
-  .transform(
-    (row): ImportRowOutcome => ({
+  .transform((row): { outcome: ImportRowOutcome; code: string | null } => ({
+    outcome: {
       index: row.index,
       outcome: row.outcome,
       matchedBy: row.matched_by ?? null,
@@ -233,12 +240,38 @@ const importRowOutcomeSchema = z
       quantityAfter: row.quantity_after,
       reason: row.outcome === 'rejected' ? (row.reason ?? 'failed') : null,
       itemUnit: row.item_unit,
-    }),
-  );
+    },
+    code: row.outcome === 'rejected' ? (row.code ?? null) : null,
+  }));
 
-/** The answer of preview_inventory_import and book_inventory_import. */
-export const importAnswerSchema = z.object({
-  batch_id: z.string().optional(),
-  already_booked: z.boolean().optional(),
-  rows: z.array(importRowOutcomeSchema),
-});
+/**
+ * The answer of preview_inventory_import and book_inventory_import: the rows
+ * for the browser, and how many rows failed with each unnamed SQLSTATE.
+ */
+export const importAnswerSchema = z
+  .object({
+    batch_id: z.string().optional(),
+    already_booked: z.boolean().optional(),
+    rows: z.array(importRowOutcomeSchema),
+  })
+  .transform((answer) => {
+    const failureCodes = new Map<string, number>();
+    for (const { code } of answer.rows) {
+      if (code !== null) failureCodes.set(code, (failureCodes.get(code) ?? 0) + 1);
+    }
+    return {
+      batchId: answer.batch_id ?? null,
+      alreadyBooked: answer.already_booked ?? false,
+      rows: answer.rows.map((row) => row.outcome),
+      failureCodes,
+    };
+  });
+
+/**
+ * Logs each SQLSTATE that failed rows of one preview or booking carry, once,
+ * with the number of rows as its name. No cell value and no message reaches
+ * the log; the codes reach neither the browser nor the report.
+ */
+export function logUnexpectedRowFailures(label: string, failureCodes: ReadonlyMap<string, number>): void {
+  for (const [code, rows] of failureCodes) logError(label, { name: `rows:${rows}`, code });
+}

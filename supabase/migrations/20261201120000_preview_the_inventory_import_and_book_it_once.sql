@@ -244,6 +244,8 @@ declare
   v_index bigint;
   v_outcome jsonb;
   v_detail text;
+  v_state text;
+  v_reason text;
   v_results jsonb := '[]'::jsonb;
 begin
   for v_row, v_index in
@@ -258,18 +260,25 @@ begin
           v_row->>'category_name', v_row->>'supplier_name', v_row->>'location_name', v_row->>'barcode',
           (v_row->>'quantity')::numeric, p_reason, p_mode, true
         );
+      -- One handler for every row failure: the savepoint must isolate any of
+      -- them so the other rows still book. The named refusals all raise
+      -- SQLSTATE P0001 and differ only by message, so condition names cannot
+      -- tell them apart. Any other failure keeps only its SQLSTATE (`code`),
+      -- never its message or detail, which can quote row values; the action
+      -- logs it. query_canceled is no OTHERS condition and fails the call.
       exception when others then
-        get stacked diagnostics v_detail = pg_exception_detail;
+        get stacked diagnostics v_detail = pg_exception_detail, v_state = returned_sqlstate;
+        v_reason := case
+          when sqlerrm in ('unit_mismatch', 'barcode_taken', 'invalid_input') then sqlerrm
+          when sqlerrm = 'inventory item is not available for stock movement' then 'stock_not_tracked'
+          else 'failed'
+        end;
         v_outcome := jsonb_build_object(
           'outcome', 'rejected',
-          'reason', case
-            when sqlerrm in ('unit_mismatch', 'barcode_taken', 'invalid_input') then sqlerrm
-            when sqlerrm = 'inventory item is not available for stock movement' then 'stock_not_tracked'
-            else 'failed'
-          end,
+          'reason', v_reason,
           'unit', v_row->'item'->>'unit',
-          'item_unit', case when sqlerrm = 'unit_mismatch' then v_detail end
-        );
+          'item_unit', case when v_reason = 'unit_mismatch' then v_detail end
+        ) || case when v_reason = 'failed' then jsonb_build_object('code', v_state) else '{}'::jsonb end;
       end;
     end if;
     v_results := v_results || jsonb_build_array(v_outcome || jsonb_build_object('index', v_index));

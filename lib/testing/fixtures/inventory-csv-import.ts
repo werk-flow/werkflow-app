@@ -177,3 +177,37 @@ assert.deepEqual(
 assert.ok(booking.success, 'the booking must succeed');
 assert.equal(booking.alreadyBooked, true);
 assert.equal(booking.rows[0]?.matchedBy, 'barcode');
+
+// 5. A row that failed for a reason the import does not name carries its
+//    SQLSTATE from the database. The action logs each distinct code once, with
+//    a fixed label and the number of rows, and returns no code to the caller;
+//    a repeated confirm logs nothing again.
+const unexpectedRows = [
+  { index: 0, outcome: 'booked', matched_by: null, unit: 'piece', quantity: 6 },
+  { index: 1, outcome: 'rejected', reason: 'failed', code: '23514', unit: 'piece' },
+  { index: 2, outcome: 'rejected', reason: 'failed', code: '23514', unit: 'piece' },
+  { index: 3, outcome: 'rejected', reason: 'failed', code: '40P01', unit: 'meter' },
+  { index: 4, outcome: 'rejected', reason: 'barcode_taken', unit: 'piece' },
+];
+logged.length = 0;
+answer = { data: { batch_id: batchId, rows: unexpectedRows }, error: null };
+const unexpectedPreview = await previewRows([{}, {}, {}, {}, {}]);
+answer = { data: { already_booked: false, rows: unexpectedRows }, error: null };
+const unexpectedBooking = await bookInventoryImport({ batchId });
+answer = { data: { already_booked: true, rows: unexpectedRows }, error: null };
+await bookInventoryImport({ batchId });
+assert.deepEqual(logged, [
+  ['previewInventoryImport: rows failed unexpectedly', { name: 'rows:2', code: '23514' }],
+  ['previewInventoryImport: rows failed unexpectedly', { name: 'rows:1', code: '40P01' }],
+  ['bookInventoryImport: rows failed unexpectedly', { name: 'rows:2', code: '23514' }],
+  ['bookInventoryImport: rows failed unexpectedly', { name: 'rows:1', code: '40P01' }],
+]);
+assert.ok(unexpectedPreview.success && unexpectedBooking.success, 'both answers must succeed');
+for (const result of [unexpectedPreview, unexpectedBooking]) {
+  assert.deepEqual(
+    result.rows.map((row) => row.reason),
+    [null, 'failed', 'failed', 'failed', 'barcode_taken'],
+  );
+  assert.ok(!JSON.stringify(result).includes('23514'), 'the code must not reach the caller');
+  assert.ok(!JSON.stringify(result).includes('40P01'), 'the code must not reach the caller');
+}

@@ -22,6 +22,7 @@ import {
   importAnswerSchema,
   invalidateInventory,
   inventoryWriteFailure,
+  logUnexpectedRowFailures,
   stagedImportRows,
 } from './write-support';
 
@@ -104,11 +105,12 @@ export async function previewInventoryImport(
   );
   if (error) return inventoryWriteFailure('previewInventoryImport: preview failed', error, 'save_failed');
   const answer = importAnswerSchema.safeParse(data);
-  if (!answer.success || !answer.data.batch_id) {
+  if (!answer.success || !answer.data.batchId) {
     logError('previewInventoryImport: unexpected answer shape');
     return { success: false, error: 'save_failed' };
   }
-  return { success: true, batchId: answer.data.batch_id, rows: answer.data.rows };
+  logUnexpectedRowFailures('previewInventoryImport: rows failed unexpectedly', answer.data.failureCodes);
+  return { success: true, batchId: answer.data.batchId, rows: answer.data.rows };
 }
 
 /**
@@ -140,6 +142,10 @@ export async function bookInventoryImport(
     return { success: false, error: 'save_failed' };
   }
 
+  // A repeated confirm answers the stored rows; the first booking logged them.
+  if (!answer.data.alreadyBooked) {
+    logUnexpectedRowFailures('bookInventoryImport: rows failed unexpectedly', answer.data.failureCodes);
+  }
   invalidateInventory();
-  return { success: true, alreadyBooked: answer.data.already_booked ?? false, rows: answer.data.rows };
+  return { success: true, alreadyBooked: answer.data.alreadyBooked, rows: answer.data.rows };
 }

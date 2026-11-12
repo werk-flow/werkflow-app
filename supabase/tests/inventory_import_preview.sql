@@ -276,6 +276,49 @@ begin
 end;
 $$;
 
+-- 4c. A row that fails for a reason the rule does not name carries its
+--     SQLSTATE and nothing else, the other rows still book, and the preview
+--     answers the same as the booking.
+do $$
+declare
+  v_org constant uuid := '99200000-0000-4000-8000-000000000010';
+  v_admin constant uuid := '99200000-0000-4000-8000-000000000001';
+  v_rows constant jsonb := jsonb_build_array(
+    -- An item type outside the table's check constraint: a check violation (23514).
+    jsonb_build_object('item', jsonb_build_object('name', 'Unbekannter Typ', 'item_type', 'gadget',
+      'unit', 'piece', 'internal_sku', 'NR-GADGET', 'is_billable', true, 'global_minimum_stock', 0),
+      'location_name', 'Hauptlager', 'quantity', 1),
+    jsonb_build_object('item', jsonb_build_object('name', 'Rotguss-Bogen 15 mm', 'item_type', 'material',
+      'unit', 'piece', 'internal_sku', 'NR-BOGEN-15', 'is_billable', true, 'global_minimum_stock', 0),
+      'location_name', 'Hauptlager', 'quantity', 6)
+  );
+  v_preview jsonb;
+  v_booking jsonb;
+begin
+  v_preview := public.preview_inventory_import(v_org, v_admin, 'unerwartet.csv', '{}'::jsonb, null, 'stock', v_rows);
+  v_booking := public.book_inventory_import(v_org, v_admin, (v_preview->>'batch_id')::uuid);
+  if v_booking->'rows' is distinct from v_preview->'rows' then
+    raise exception 'the preview must answer an unexpected row failure as the booking does: % against %',
+      v_preview->'rows', v_booking->'rows';
+  end if;
+  if v_booking->'rows'->0 @> '{"outcome":"rejected","reason":"failed","code":"23514"}' is not true
+    or (v_booking->'rows'->0) ?| array['message', 'detail']
+    or v_booking->'rows'->1 @> '{"outcome":"booked","quantity_after":6}' is not true
+    or exists (select 1 from public.inventory_items where organization_id = v_org and internal_sku = 'NR-GADGET')
+  then
+    raise exception 'an unexpected row failure must carry its SQLSTATE, leave nothing behind and let the other rows book: %',
+      v_booking->'rows';
+  end if;
+  -- A named refusal carries no code: its reason says it all.
+  if exists (
+    select 1 from public.inventory_import_batches batch, jsonb_array_elements(batch.result_payload) result
+    where batch.organization_id = v_org and result.value->>'reason' <> 'failed' and result.value ? 'code'
+  ) then
+    raise exception 'a named refusal must carry no SQLSTATE';
+  end if;
+end;
+$$;
+
 -- 5. Only a manager of the batch's organization previews or books it.
 select pg_temp.expect_refusal('a preview by an employee', $sql$
   select public.preview_inventory_import(
