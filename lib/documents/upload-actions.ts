@@ -143,8 +143,9 @@ export async function finalizeDocumentUpload(rawInput: FinalizeDocumentUploadInp
 
   // Identity stays with the session: the expected uploader only refuses. A phone that started the
   // upload for one person must not register it under another person who signed in meanwhile. The
-  // staging object stays where the browser put it: the author's next try registers exactly those
-  // bytes under the author's own session, and no other finalize can reach that staging key.
+  // staging object stays where the browser put it, for the author's next try under the author's own
+  // session. A finalize that names no expected uploader is not bound to the staging object's
+  // creator; that server-side binding is tracked in werk-flow/werkflow-planning#364.
   if (input.expectedUploaderId !== undefined && input.expectedUploaderId !== auth.context.userId) {
     return { success: false, error: 'uploader_changed' };
   }
