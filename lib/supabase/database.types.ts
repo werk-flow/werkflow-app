@@ -11903,6 +11903,110 @@ export type Database = {
           },
         ];
       };
+      work_billing_parties: {
+        Row: {
+          client_id: string;
+          created_at: string;
+          id: string;
+          job_id: string | null;
+          organization_id: string;
+          project_id: string | null;
+          recipient_address: string | null;
+          recipient_client_id: string;
+          recipient_name: string;
+          request_id: string | null;
+          service_case_id: string | null;
+          set_by: string | null;
+          source: string;
+          version: number;
+          work_id: string | null;
+        };
+        Insert: {
+          client_id: string;
+          created_at?: string;
+          id?: string;
+          job_id?: string | null;
+          organization_id: string;
+          project_id?: string | null;
+          recipient_address?: string | null;
+          recipient_client_id: string;
+          recipient_name: string;
+          request_id?: string | null;
+          service_case_id?: string | null;
+          set_by?: string | null;
+          source: string;
+          version: number;
+          work_id?: string | null;
+        };
+        Update: {
+          client_id?: string;
+          created_at?: string;
+          id?: string;
+          job_id?: string | null;
+          organization_id?: string;
+          project_id?: string | null;
+          recipient_address?: string | null;
+          recipient_client_id?: string;
+          recipient_name?: string;
+          request_id?: string | null;
+          service_case_id?: string | null;
+          set_by?: string | null;
+          source?: string;
+          version?: number;
+          work_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "work_billing_parties_client_fk";
+            columns: ["client_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "work_billing_parties_job_id_fkey";
+            columns: ["job_id"];
+            isOneToOne: false;
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "work_billing_parties_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "work_billing_parties_project_id_fkey";
+            columns: ["project_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "work_billing_parties_recipient_fk";
+            columns: ["recipient_client_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "work_billing_parties_request_id_fkey";
+            columns: ["request_id"];
+            isOneToOne: false;
+            referencedRelation: "client_requests";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "work_billing_parties_service_case_fk";
+            columns: ["service_case_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "service_cases";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
       work_blocker_events: {
         Row: {
           after_state: Json | null;
@@ -15958,6 +16062,10 @@ export type Database = {
         Returns: string[];
       };
       get_user_org_ids: { Args: { p_user_id: string }; Returns: string[] };
+      get_work_billing_parties: {
+        Args: { p_kind: string; p_organization_id: string; p_work_id: string };
+        Returns: Json;
+      };
       get_work_handover_gate_snapshot: {
         Args: {
           p_actor_id: string;
@@ -18088,6 +18196,39 @@ export type Database = {
         SetofOptions: {
           from: "*";
           to: "sickness_reports";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      set_work_billing_parties: {
+        Args: {
+          p_actor_id: string;
+          p_client_id: string;
+          p_kind: string;
+          p_organization_id: string;
+          p_recipient_client_id: string;
+          p_work_id: string;
+        };
+        Returns: {
+          client_id: string;
+          created_at: string;
+          id: string;
+          job_id: string | null;
+          organization_id: string;
+          project_id: string | null;
+          recipient_address: string | null;
+          recipient_client_id: string;
+          recipient_name: string;
+          request_id: string | null;
+          service_case_id: string | null;
+          set_by: string | null;
+          source: string;
+          version: number;
+          work_id: string | null;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "work_billing_parties";
           isOneToOne: true;
           isSetofReturn: false;
         };
