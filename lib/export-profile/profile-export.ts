@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { extname } from 'node:path';
 import { newRunSalt, type ColumnProfile } from './column-statistics';
-import { datanormTables } from './datanorm';
+import { datanormReaderNote, datanormTables } from './datanorm';
 import { delimitedRows, detectDelimiter, hasUnquotedDelimiter, type Delimiter } from './delimited-text';
 import { DocumentInventory, type DocumentGroup, type FolderShape } from './document-inventory';
 import { readWorkbook } from './excel-workbook';
@@ -152,7 +152,7 @@ function profileFile(run: Run, file: ExportFile, segments: readonly string[]): v
       case 'xml':
         return profileXml(run, file, label);
       case 'datanorm':
-        return profileDatanorm(run, file, label);
+        return profileDatanorm(run, file, label, name);
       case 'document':
       case 'photo':
         return countDocument(run, file, category.kind, segments);
@@ -297,14 +297,16 @@ function profileXml(run: Run, file: ExportFile, label: string): void {
   run.counts.tableFiles += 1;
 }
 
-function profileDatanorm(run: Run, file: ExportFile, label: string): void {
-  const decoded = decodeText(readFileSync(file.path));
+function profileDatanorm(run: Run, file: ExportFile, label: string, name: string): void {
+  const bytes = readFileSync(file.path);
+  const decoded = decodeText(bytes);
   const tables = datanormTables(decoded.text, run.salt);
+  const readerNote = datanormReaderNote(name, bytes);
   run.counts.tableFiles += 1;
   for (const { recordType, fixedWidth, table } of tables) {
     const note = fixedWidth
       ? 'fixed-width lines (DATANORM 3): reading the fields needs the DATANORM 3 field layout'
-      : null;
+      : readerNote;
     const source: TableSource = {
       file: label,
       table: `record type ${recordType}`,

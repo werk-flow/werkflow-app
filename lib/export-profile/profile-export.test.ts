@@ -136,6 +136,12 @@ describe('export profile: tables', () => {
     expect(tableNamed('Artikel/DATANORM.001', 'record type V').rows).toBe(1);
   });
 
+  test('a DATANORM table names, by code and count only, what the import reader refuses in its file', () => {
+    expect(tableNamed('Artikel/DATANORM.001', 'record type A').note).toBe(
+      'the DATANORM 4 reader, reading this file alone, refuses: version_unsupported 1',
+    );
+  });
+
   test('a DATANORM line whose first field is not a record letter names no table', () => {
     expect(
       profile.tables.filter((table) => table.file === 'Artikel/DATANORM.002').map((table) => table.table),
