@@ -30,10 +30,12 @@ export function useWorkBillingParties(
 ) {
   const { activeOrgId } = useOrganization();
   return useLiveView<WorkBillingParties>({
-    tables: [WORK_TABLE[kind], 'client_contacts'],
+    tables: [WORK_TABLE[kind], 'clients', 'client_sites', 'client_contacts'],
     initialData: initialParties,
-    // Another work's change leaves this one as it is; a contact may be an access contact here.
-    eventFilter: (event) => event.table === 'client_contacts' || isEventForRow(event, id),
+    // Another work's change leaves this one as it is. The read also shows the
+    // Auftraggeber's current name, the site and its access contacts, so a
+    // customer, site or contact edit reads again; the frozen recipient stays.
+    eventFilter: (event) => event.table !== WORK_TABLE[kind] || isEventForRow(event, id),
     read: async ({ signal }): Promise<LiveViewResult<WorkBillingParties>> => {
       const result = await readInBackground(
         'work-billing-parties',

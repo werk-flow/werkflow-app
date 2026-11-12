@@ -11967,11 +11967,11 @@ export type Database = {
             referencedColumns: ["id", "organization_id"];
           },
           {
-            foreignKeyName: "work_billing_parties_job_id_fkey";
-            columns: ["job_id"];
+            foreignKeyName: "work_billing_parties_job_fk";
+            columns: ["job_id", "organization_id"];
             isOneToOne: false;
             referencedRelation: "jobs";
-            referencedColumns: ["id"];
+            referencedColumns: ["id", "organization_id"];
           },
           {
             foreignKeyName: "work_billing_parties_organization_id_fkey";
@@ -11981,11 +11981,11 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "work_billing_parties_project_id_fkey";
-            columns: ["project_id"];
+            foreignKeyName: "work_billing_parties_project_fk";
+            columns: ["project_id", "organization_id"];
             isOneToOne: false;
             referencedRelation: "projects";
-            referencedColumns: ["id"];
+            referencedColumns: ["id", "organization_id"];
           },
           {
             foreignKeyName: "work_billing_parties_recipient_fk";
@@ -11995,11 +11995,11 @@ export type Database = {
             referencedColumns: ["id", "organization_id"];
           },
           {
-            foreignKeyName: "work_billing_parties_request_id_fkey";
-            columns: ["request_id"];
+            foreignKeyName: "work_billing_parties_request_fk";
+            columns: ["request_id", "organization_id"];
             isOneToOne: false;
             referencedRelation: "client_requests";
-            referencedColumns: ["id"];
+            referencedColumns: ["id", "organization_id"];
           },
           {
             foreignKeyName: "work_billing_parties_service_case_fk";

@@ -37,9 +37,9 @@
 create table public.work_billing_parties (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations (id) on delete cascade,
-  request_id uuid references public.client_requests (id) on delete cascade,
-  job_id uuid references public.jobs (id) on delete cascade,
-  project_id uuid references public.projects (id) on delete cascade,
+  request_id uuid,
+  job_id uuid,
+  project_id uuid,
   service_case_id uuid,
   work_id uuid generated always as (coalesce(request_id, job_id, project_id, service_case_id)) stored,
   -- 1 for the first version of a work, one more for each change.
@@ -63,6 +63,14 @@ create table public.work_billing_parties (
     source in ('objekt', 'auftraggeber', 'projekt', 'anfrage', 'buero')
   ),
   constraint work_billing_parties_version_check check (version >= 1),
+  -- Each work reference carries the organization, so a version never belongs
+  -- to another organization's work.
+  constraint work_billing_parties_request_fk foreign key (request_id, organization_id)
+    references public.client_requests (id, organization_id) on delete cascade,
+  constraint work_billing_parties_job_fk foreign key (job_id, organization_id)
+    references public.jobs (id, organization_id) on delete cascade,
+  constraint work_billing_parties_project_fk foreign key (project_id, organization_id)
+    references public.projects (id, organization_id) on delete cascade,
   constraint work_billing_parties_service_case_fk foreign key (service_case_id, organization_id)
     references public.service_cases (id, organization_id) on delete cascade,
   -- A customer named here is linked (app_private.client_links), so the delete
@@ -74,9 +82,12 @@ create table public.work_billing_parties (
   constraint work_billing_parties_one_version unique (work_id, version)
 );
 
-create index work_billing_parties_request_idx on public.work_billing_parties (request_id) where request_id is not null;
-create index work_billing_parties_job_idx on public.work_billing_parties (job_id) where job_id is not null;
-create index work_billing_parties_project_idx on public.work_billing_parties (project_id) where project_id is not null;
+create index work_billing_parties_request_idx
+  on public.work_billing_parties (request_id, organization_id) where request_id is not null;
+create index work_billing_parties_job_idx
+  on public.work_billing_parties (job_id, organization_id) where job_id is not null;
+create index work_billing_parties_project_idx
+  on public.work_billing_parties (project_id, organization_id) where project_id is not null;
 create index work_billing_parties_service_case_idx
   on public.work_billing_parties (service_case_id, organization_id) where service_case_id is not null;
 create index work_billing_parties_client_idx on public.work_billing_parties (client_id, organization_id);
@@ -113,7 +124,9 @@ revoke all on function app_private.current_work_billing_parties(uuid) from publi
 grant execute on function app_private.current_work_billing_parties(uuid) to service_role;
 
 -- Records a new version of one work's parties unless it names the same
--- Auftraggeber and recipient with the same copy as the current one. Without
+-- Auftraggeber and recipient with the same copy as the current one and is,
+-- like it, a default or a choice: confirming the default pair records it as a
+-- choice, so a later site change keeps it. Without
 -- p_recipient_name the copy is taken from the recipient customer now; a
 -- recipient outside the organization records nothing.
 create function app_private.record_work_billing_parties(
@@ -153,6 +166,7 @@ begin
     and v_current.recipient_client_id = p_recipient_client_id
     and v_current.recipient_name is not distinct from v_name
     and v_current.recipient_address is not distinct from v_address
+    and (v_current.source in ('objekt', 'auftraggeber')) = (p_source in ('objekt', 'auftraggeber'))
   then
     return v_current;
   end if;

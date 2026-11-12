@@ -183,7 +183,7 @@ export function WorkBillingPartiesSection({
   id: string;
   /** Undefined: the page's read failed, and the section reads after mount. */
   initialParties?: WorkBillingParties | undefined;
-  /** The Einsatzort the page already holds (the job's); otherwise the read's. */
+  /** The Einsatzort the page already holds (the job's), until the section's own read names it. */
   site?: WorkBillingParties['site'] | undefined;
   /** The job's customer, which stands in for a party the job's read left out. */
   workClient?: BillingRecipient | null | undefined;
@@ -193,7 +193,8 @@ export function WorkBillingPartiesSection({
   const [editing, setEditing] = useState(false);
   const openEditor = useCallback(() => setEditing(true), []);
   const parties = view.data;
-  const shownSite = site === undefined ? (parties?.site ?? null) : site;
+  // The job's own read leaves the site out; a later read of the section names it.
+  const shownSite = parties?.site ?? site ?? null;
   const versions = useMemo(
     () => (parties ? resolveBillingVersions(parties.versions, workClient) : []),
     [parties, workClient],

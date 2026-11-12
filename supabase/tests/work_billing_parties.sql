@@ -256,6 +256,28 @@ begin
 end;
 $$;
 
+-- Confirming the default pair is a choice: it is recorded once, as the
+-- office's, so a later site change keeps it.
+do $$
+declare
+  v_party public.work_billing_parties;
+begin
+  v_party := public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
+    '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000052',
+    '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000020');
+  if v_party.version <> 2 or v_party.source <> 'buero'
+  then raise exception 'confirming the default pair was not recorded as the office''s choice: %', to_jsonb(v_party); end if;
+  v_party := public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
+    '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000052',
+    '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000020');
+  if v_party.version <> 2 then raise exception 'confirming the chosen pair again wrote a version'; end if;
+  update public.jobs set site_id = '32700000-0000-0000-0000-000000000040'
+  where id = '32700000-0000-0000-0000-000000000052';
+  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000052')).source <> 'buero'
+  then raise exception 'a changed site replaced a confirmed default'; end if;
+end;
+$$;
+
 -- A changed site keeps a chosen recipient and derives defaults again; a
 -- changed customer always derives them again.
 do $$
@@ -374,6 +396,30 @@ begin
     return;
   end;
   raise exception 'a privileged role rewrote a frozen recipient';
+end;
+$$;
+
+-- A version always belongs to its work's organization, for every kind of work.
+do $$
+declare
+  v_kind text;
+begin
+  foreach v_kind in array array['job_id', 'request_id', 'project_id'] loop
+    begin
+      execute format(
+        'insert into public.work_billing_parties (organization_id, %I, version, client_id, recipient_client_id,
+           recipient_name, source) values ($1, $2, 99, $3, $3, $4, ''buero'')', v_kind)
+      using '32700000-0000-0000-0000-000000000011'::uuid,
+        case v_kind
+          when 'job_id' then '32700000-0000-0000-0000-000000000051'::uuid
+          when 'request_id' then '32700000-0000-0000-0000-000000000060'::uuid
+          else '32700000-0000-0000-0000-000000000080'::uuid end,
+        '32700000-0000-0000-0000-000000000029'::uuid, 'Fremde Verwaltung';
+    exception when foreign_key_violation then
+      continue;
+    end;
+    raise exception 'a version of another organization was attached to its % work', v_kind;
+  end loop;
 end;
 $$;
 
