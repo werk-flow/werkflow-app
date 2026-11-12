@@ -102,6 +102,7 @@ const INVENTORY_ROW_ACTIONS = {
 /** The material line actions on a job and the dialog each one opens. */
 export const JOB_MATERIAL_ACTIONS = {
   take: { trigger: 'Entnahme buchen', heading: 'Entnahme buchen', submit: 'Entnahme buchen' },
+  use: { trigger: 'Verbraucht', heading: 'Verbrauch buchen', submit: 'Verbrauch buchen' },
   return: { trigger: 'Zurücklegen', heading: 'Material zurücklegen', submit: 'Zurücklegen' },
 } as const;
 type JobMaterialAction = keyof typeof JOB_MATERIAL_ACTIONS;
@@ -295,19 +296,19 @@ export function takeFromStockButton(scope: Page | Locator): Locator {
   return scope.getByRole('button', { name: INVENTORY_LABELS.takeFromStock });
 }
 
-/** What a job material row keeps at the job once something came back: „Beim Auftrag: 0 Stück“. */
-export function materialAtJobText(quantity: number, unit = 'piece'): string {
-  return `Beim Auftrag: ${formatInventoryQuantity(quantity, unit)}`;
-}
-
 /** A material row's taken quantity: „2 Stück entnommen“. */
 export function materialTakenText(quantity: number, unit = 'piece'): string {
   return `${formatInventoryQuantity(quantity, unit)} entnommen`;
 }
 
-/** A material row's returned quantity: „1 Stück zurückgelegt“. */
+/** A material row's used quantity: „1 Stück verbraucht“. */
+export function materialUsedText(quantity: number, unit = 'piece'): string {
+  return `${formatInventoryQuantity(quantity, unit)} verbraucht`;
+}
+
+/** A material row's returned quantity: „1 Stück zurück“. */
 export function materialReturnedText(quantity: number, unit = 'piece'): string {
-  return `${formatInventoryQuantity(quantity, unit)} zurückgelegt`;
+  return `${formatInventoryQuantity(quantity, unit)} zurück`;
 }
 
 export function jobMaterialLine(page: Page, itemName: string): Locator {

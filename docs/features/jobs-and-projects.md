@@ -29,4 +29,4 @@ Admin and Büro create and steer jobs and projects from request handoff through 
 
 - A request cannot update existing work.
 - Site evidence is not a handover package, commercial acceptance, invoice basis or qualified electronic signature.
-- Not built: customer delivery of a handover package, material consumption, a planned-versus-actual or profitability view, offers, contracts, invoices, payments, accounting, offline work beyond reading today's assignments, the React Native app.
+- Not built: customer delivery of a handover package, a planned-versus-actual or profitability view, offers, contracts, invoices, payments, accounting, offline work beyond reading today's assignments, the React Native app.

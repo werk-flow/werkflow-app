@@ -31,6 +31,14 @@ import {
 import { MaterialDialogRowCard } from './job-material-dialog-row';
 import { MaterialItemPicker } from './job-material-item-picker';
 
+const SUBMIT_LABELS: Record<MaterialDialogMode, string> = {
+  plan: 'Speichern',
+  take: 'Entnahme buchen',
+  use: 'Verbrauch buchen',
+  return: 'Zurücklegen',
+  edit: 'Speichern',
+};
+
 type MaterialSelectionDialogProps = {
   dialog: MaterialDialogState | null;
   setDialog: (dialog: MaterialDialogState | null) => void;
@@ -145,7 +153,7 @@ function MaterialDialogFooter({
         Abbrechen
       </Button>
       <Button pending={isSaving} type="submit" disabled={isSaving}>
-        {mode === 'take' ? 'Entnahme buchen' : mode === 'return' ? 'Zurücklegen' : 'Speichern'}
+        {SUBMIT_LABELS[mode]}
       </Button>
     </DialogFooter>
   );
@@ -185,7 +193,7 @@ export function MaterialSelectionDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && setDialog(null)} pending={isSaving}>
-      <DialogContent size={catalog === 'collapsed' ? 'lg' : '4xl'}>
+      <DialogContent size={catalog === 'collapsed' || catalog === 'single' ? 'lg' : '4xl'}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
@@ -202,7 +210,8 @@ export function MaterialSelectionDialog({
           <DialogBody
             className={cn(
               'grid grid-cols-1 gap-5 py-1',
-              catalog !== 'collapsed' && 'lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]',
+              (catalog === 'catalog' || catalog === 'locked') &&
+                'lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]',
             )}
           >
             {catalog === 'catalog' && (

@@ -49,6 +49,7 @@ export function buildPlannedMaterialLineDraft(
     ...target,
     ...planFields(plan),
     takenQuantity: 0,
+    usedQuantity: 0,
     returnedQuantity: 0,
     billableQuantity: 0,
     isUnplanned: false,

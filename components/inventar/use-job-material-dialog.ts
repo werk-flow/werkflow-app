@@ -245,6 +245,22 @@ export function useJobMaterialDialog({
 
   async function openDialog(mode: MaterialDialogMode, line?: JobMaterialLine) {
     setSectionError(null);
+    // A use books on the line itself: no Lager, so no catalog to read.
+    if (mode === 'use' && line) {
+      const item = itemFromLine(line);
+      // The row names its article and unit from the picker; keep a richer entry when one is loaded.
+      catalog.setPickerItems((current) =>
+        current.some((entry) => entry.id === item.id) ? current : [...current, item],
+      );
+      setDialog({
+        mode,
+        rows: [buildDialogRow(item, [], mode, line)],
+        search: '',
+        error: null,
+        catalogOpen: false,
+      });
+      return;
+    }
     const picker = await catalog.loadPickerOptions();
     if (!picker) return;
 

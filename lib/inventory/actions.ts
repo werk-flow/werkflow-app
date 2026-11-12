@@ -644,7 +644,9 @@ export async function returnJobMaterial(
     return { success: false, error: 'line_not_found' };
   }
 
-  const stillOut = toNumber(line.taken_quantity) - toNumber(line.returned_quantity);
+  // Used material is built in; only what is neither used nor returned comes back.
+  const stillOut =
+    toNumber(line.taken_quantity) - toNumber(line.used_quantity) - toNumber(line.returned_quantity);
   if (quantity > stillOut) {
     return { success: false, error: 'return_exceeds_taken' };
   }

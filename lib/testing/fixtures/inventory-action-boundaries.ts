@@ -14,6 +14,9 @@ const foreignProjectId = '90000000-0000-4000-8000-000000000004';
 const foreignItemId = '90000000-0000-4000-8000-000000000005';
 const foreignLineId = '90000000-0000-4000-8000-000000000006';
 const foreignLocationId = '90000000-0000-4000-8000-000000000007';
+const ownItemId = '90000000-0000-4000-8000-000000000008';
+const ownJobLineId = '90000000-0000-4000-8000-000000000009';
+const ownProjectLineId = '90000000-0000-4000-8000-00000000000a';
 
 const world = installActionWorld({
   jobs: [
@@ -25,7 +28,10 @@ const world = installActionWorld({
     { id: foreignProjectId, organization_id: ORGANIZATION_B },
   ],
   job_assignments: [],
-  inventory_items: [{ id: foreignItemId, organization_id: ORGANIZATION_B }],
+  inventory_items: [
+    { id: foreignItemId, organization_id: ORGANIZATION_B },
+    { id: ownItemId, organization_id: ORGANIZATION_A },
+  ],
   inventory_locations: [{ id: foreignLocationId, organization_id: ORGANIZATION_B }],
   job_material_lines: [
     {
@@ -36,6 +42,29 @@ const world = installActionWorld({
       item_id: foreignItemId,
       taken_quantity: 2,
       returned_quantity: 0,
+    },
+    // Own lines with taken material: one on an unassigned job, one on the project itself.
+    {
+      id: ownJobLineId,
+      organization_id: ORGANIZATION_A,
+      job_id: ownJobId,
+      project_id: null,
+      item_id: ownItemId,
+      taken_quantity: 2,
+      used_quantity: 0,
+      returned_quantity: 0,
+      status: 'taken',
+    },
+    {
+      id: ownProjectLineId,
+      organization_id: ORGANIZATION_A,
+      job_id: null,
+      project_id: ownProjectId,
+      item_id: ownItemId,
+      taken_quantity: 2,
+      used_quantity: 0,
+      returned_quantity: 0,
+      status: 'taken',
     },
   ],
 });
@@ -56,6 +85,9 @@ const {
   returnJobMaterial,
   importInventoryRows,
 } = await import('@/lib/inventory/actions');
+const { recordJobMaterialUse } = await import('@/lib/inventory/material-use-actions');
+const { readJobMaterialConsumption } = await import('@/lib/inventory/material-line-reads');
+const use = { quantity: 1, note: null };
 
 const take = { locationId: foreignLocationId, quantity: 1 };
 const upsert = [
@@ -130,9 +162,32 @@ await assertRefused(
 );
 await assertRefused(
   world,
-  [['returnJobMaterial', () => returnJobMaterial({ ...take, lineId: foreignLineId })]],
+  [
+    ['returnJobMaterial', () => returnJobMaterial({ ...take, lineId: foreignLineId })],
+    ['recordJobMaterialUse', () => recordJobMaterialUse({ ...use, lineId: foreignLineId })],
+  ],
   { success: false, error: 'line_not_found' },
   'reads',
+);
+// Use on an own line: the job needs the worker's assignment, a project's own line stays with the office.
+await assertRefused(
+  world,
+  [
+    ['recordJobMaterialUse', () => recordJobMaterialUse({ ...use, lineId: ownJobLineId })],
+    ['recordJobMaterialUse', () => recordJobMaterialUse({ ...use, lineId: ownProjectLineId })],
+  ],
+  { success: false, error: 'not_authorized' },
+  'reads',
+);
+// The consumption facts carry purchase costs: a field worker is refused before any database access.
+await assertRefused(
+  world,
+  [
+    ['readJobMaterialConsumption', () => readJobMaterialConsumption({ jobId: ownJobId })],
+    ['readJobMaterialConsumption', () => readJobMaterialConsumption({ projectId: ownProjectId })],
+  ],
+  { success: false, error: 'not_authorized' },
+  'none',
 );
 await assertRefused(
   world,
@@ -169,8 +224,21 @@ await assertRefused(
       () => takeProjectMaterial({ ...take, projectId: ownProjectId, lineId: foreignLineId }),
     ],
     ['returnJobMaterial', () => returnJobMaterial({ ...take, lineId: foreignLineId })],
+    ['recordJobMaterialUse', () => recordJobMaterialUse({ ...use, lineId: foreignLineId })],
   ],
   { success: false, error: 'line_not_found' },
+  'reads',
+);
+await assertRefused(
+  world,
+  [['readJobMaterialConsumption', () => readJobMaterialConsumption({ jobId: foreignJobId })]],
+  { success: false, error: 'job_not_found' },
+  'reads',
+);
+await assertRefused(
+  world,
+  [['readJobMaterialConsumption', () => readJobMaterialConsumption({ projectId: foreignProjectId })]],
+  { success: false, error: 'project_not_found' },
   'reads',
 );
 

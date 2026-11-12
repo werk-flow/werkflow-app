@@ -3690,6 +3690,7 @@ export type Database = {
           item_id: string;
           job_id?: string | null;
           notes?: string | null;
+          used_quantity: number;
           organization_id: string;
           planned_quantity?: number;
           preferred_location_id?: string | null;
@@ -3711,6 +3712,7 @@ export type Database = {
           item_id?: string;
           job_id?: string | null;
           notes?: string | null;
+          used_quantity?: number;
           organization_id?: string;
           planned_quantity?: number;
           preferred_location_id?: string | null;
@@ -3732,6 +3734,7 @@ export type Database = {
           },
           {
             foreignKeyName: "job_material_lines_item_id_fkey";
+          used_quantity?: number;
             columns: ["item_id"];
             isOneToOne: false;
             referencedRelation: "inventory_items";
@@ -3793,6 +3796,107 @@ export type Database = {
           organization_id: string;
           override_reason: string | null;
           requirements_snapshot: Json;
+      job_material_use_events: {
+        Row: {
+          actor_id: string;
+          corrects_event_id: string | null;
+          cost_amount_cents: number | null;
+          cost_price_quantity: number | null;
+          created_at: string;
+          id: string;
+          item_id: string;
+          job_id: string | null;
+          job_material_line_id: string;
+          note: string | null;
+          organization_id: string;
+          project_id: string | null;
+          quantity: number;
+          unit: string;
+        };
+        Insert: {
+          actor_id: string;
+          corrects_event_id?: string | null;
+          cost_amount_cents?: number | null;
+          cost_price_quantity?: number | null;
+          created_at?: string;
+          id?: string;
+          item_id: string;
+          job_id?: string | null;
+          job_material_line_id: string;
+          note?: string | null;
+          organization_id: string;
+          project_id?: string | null;
+          quantity: number;
+          unit: string;
+        };
+        Update: {
+          actor_id?: string;
+          corrects_event_id?: string | null;
+          cost_amount_cents?: number | null;
+          cost_price_quantity?: number | null;
+          created_at?: string;
+          id?: string;
+          item_id?: string;
+          job_id?: string | null;
+          job_material_line_id?: string;
+          note?: string | null;
+          organization_id?: string;
+          project_id?: string | null;
+          quantity?: number;
+          unit?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "job_material_use_events_actor_id_fkey";
+            columns: ["actor_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "job_material_use_events_corrects_event_id_fkey";
+            columns: ["corrects_event_id"];
+            isOneToOne: false;
+            referencedRelation: "job_material_use_events";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "job_material_use_events_item_id_fkey";
+            columns: ["item_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_items";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "job_material_use_events_job_id_fkey";
+            columns: ["job_id"];
+            isOneToOne: false;
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "job_material_use_events_job_material_line_id_fkey";
+            columns: ["job_material_line_id"];
+            isOneToOne: false;
+            referencedRelation: "job_material_lines";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "job_material_use_events_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "job_material_use_events_project_id_fkey";
+            columns: ["project_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
           selected_employee_record_ids: string[];
           selected_user_ids: string[];
           team_source_id: string | null;
@@ -16832,6 +16936,17 @@ export type Database = {
           p_actor_id: string;
           p_artifact_id: string;
           p_comment: string;
+      record_job_material_use: {
+        Args: {
+          p_actor_id: string;
+          p_corrects_event_id?: string;
+          p_job_material_line_id: string;
+          p_note?: string;
+          p_organization_id: string;
+          p_quantity: number;
+        };
+        Returns: number;
+      };
           p_customer_context: Json;
           p_expected_version: number;
           p_organization_id: string;

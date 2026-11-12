@@ -39,6 +39,7 @@ const FEEDBACK_FIXTURES = [
   'time-approvals',
   'entry-details',
   'material-plan',
+  'material-use',
   'request-list',
   'client-relations',
   'team-qualifications',
@@ -354,6 +355,7 @@ function FeedbackSurface({ name }: { name: FeedbackFixtureName }): React.JSX.Ele
     case 'entry-details':
       return <EntryDetailsHost />;
     case 'material-plan':
+    case 'material-use':
       return <MaterialPlanHost />;
     case 'request-list':
       return <RequestListHost />;
