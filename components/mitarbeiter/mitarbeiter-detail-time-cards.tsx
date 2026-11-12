@@ -9,7 +9,7 @@ import { StatusBadge } from './status-badge';
 import { WeeklyHoursChart } from '@/components/zeiterfassung/weekly-hours-chart';
 import { formatDuration } from '@/lib/time-tracking/helpers';
 import { getNoTargetReason } from '@/lib/personnel/targets';
-import type { OrgBreakMode } from '@/lib/time-tracking/settings';
+import type { BreakPolicyValues } from '@/lib/time-tracking/settings';
 import { cn, formatBerlinTime } from '@/lib/utils';
 import type { MitarbeiterDetailLiveTime } from './use-mitarbeiter-detail-live-time';
 import { SectionTitle } from '@/components/shared/section-title';
@@ -23,18 +23,11 @@ function NoWeekData() {
 
 type MitarbeiterDetailTimeCardsProps = {
   liveTime: MitarbeiterDetailLiveTime;
-  breakMode: OrgBreakMode;
-  autoBreakThresholdMinutes: number;
-  autoBreakDurationMinutes: number;
+  breakPolicy: BreakPolicyValues;
 };
 
 /** The live status card and the weekly hours card of the left column. */
-export function MitarbeiterDetailTimeCards({
-  liveTime,
-  breakMode,
-  autoBreakThresholdMinutes,
-  autoBreakDurationMinutes,
-}: MitarbeiterDetailTimeCardsProps) {
+export function MitarbeiterDetailTimeCards({ liveTime, breakPolicy }: MitarbeiterDetailTimeCardsProps) {
   const { status, statusError, statusStale, refetchStatus, memberBreakdown, todayTarget } = liveTime;
 
   return (
@@ -100,25 +93,14 @@ export function MitarbeiterDetailTimeCards({
         )}
       </div>
 
-      <MitarbeiterDetailWeekCard
-        liveTime={liveTime}
-        breakMode={breakMode}
-        autoBreakThresholdMinutes={autoBreakThresholdMinutes}
-        autoBreakDurationMinutes={autoBreakDurationMinutes}
-      />
+      <MitarbeiterDetailWeekCard liveTime={liveTime} breakPolicy={breakPolicy} />
     </>
   );
 }
 
 /** The week's attendance and hours, or the failure of its read with a retry. */
-function MitarbeiterDetailWeekCard({
-  liveTime,
-  breakMode,
-  autoBreakThresholdMinutes,
-  autoBreakDurationMinutes,
-}: MitarbeiterDetailTimeCardsProps) {
-  const { status, weekData, weekStale, weekError, refetchWeek, weekTargets, todayIndex, weekLabel } =
-    liveTime;
+function MitarbeiterDetailWeekCard({ liveTime, breakPolicy }: MitarbeiterDetailTimeCardsProps) {
+  const { weekData, weekStale, weekError, refetchWeek, weekTargets, todayIndex, weekLabel } = liveTime;
   const { liveTotalMinutes, memberBreakdown } = liveTime;
   const liveBreakMinutes = memberBreakdown.breakMinutes;
 
@@ -139,9 +121,7 @@ function MitarbeiterDetailWeekCard({
             todayIndex={todayIndex}
             liveTodayMinutes={liveTotalMinutes}
             liveTodayBreakMinutes={liveBreakMinutes}
-            liveTodayBreakMode={status?.breakMode ?? breakMode}
-            liveAutoBreakThresholdMinutes={status?.autoBreakThresholdMinutes ?? autoBreakThresholdMinutes}
-            liveAutoBreakDurationMinutes={status?.autoBreakDurationMinutes ?? autoBreakDurationMinutes}
+            liveTodayBreakPolicy={breakPolicy}
             weekLabel={weekLabel}
             weekTargets={weekTargets}
           />

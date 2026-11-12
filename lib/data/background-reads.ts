@@ -68,6 +68,7 @@ import {
   getTimeEntryAuditEvents,
 } from '@/lib/time-tracking/entry-read-actions';
 import { getPendingChangeRequests, getPendingSessions } from '@/lib/time-tracking/review-actions';
+import { getBreakPolicy } from '@/lib/time-tracking/break-policy-read';
 import { getClosedTimePeriods } from '@/lib/time-tracking/closed-period-reads';
 import { getTimeApprovalHolder } from '@/lib/time-tracking/approval-holder-reads';
 import { getJobsForPicker } from '@/lib/time-tracking/picker-actions';
@@ -194,6 +195,8 @@ export const BACKGROUND_READS = {
   ),
   // The closed periods every surface that edits recorded time asks before it offers an edit.
   'closed-time-periods': defineRead(organizationInput, (input) => getClosedTimePeriods(input.organizationId)),
+  // The break rule with its versions, read again by an open week when the rule is saved.
+  'break-policy': defineRead(organizationInput, (input) => getBreakPolicy(input.organizationId)),
   // The caller's own time_approval holder, which every surface that offers a time review asks.
   'time-approval-holder': defineRead(organizationInput, (input) =>
     getTimeApprovalHolder(input.organizationId),

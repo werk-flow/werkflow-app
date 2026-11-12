@@ -48,6 +48,7 @@ declare global {
       | 'sidebar'
       | 'lazy-dialog'
       | 'clock'
+      | 'break-rule-week'
       | 'live-view'
       | 'route-refresh'
       | 'customer'
@@ -58,6 +59,8 @@ declare global {
       | 'absence-picker'
       | 'schedule-parked-picker'
       | 'problem-report'
+      | 'support-triage'
+      | 'support-filing'
       | 'inventory-unit'
       | AuthUrlFixtureName
       | FeedbackFixtureName;

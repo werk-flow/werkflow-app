@@ -52,6 +52,20 @@ export function navigationStart(targetPath: string): string {
   return targetPath === '/dashboard' ? '/aufgaben' : '/dashboard';
 }
 
+/** Where a capture of a screen outside the app shell goes: the address it records and navigates to, and its path. */
+export type StandaloneTarget = { address: string; path: string };
+
+/**
+ * The target of a standalone capture: the opened address, or the same route
+ * with the capture's own query. A loading capture navigates to this address,
+ * so its image shows the screen the capture records; its held navigation is
+ * matched by the path alone.
+ */
+export function standaloneTarget(openedPath: string, query: string | undefined): StandaloneTarget {
+  const path = openedPath.split('?')[0] ?? openedPath;
+  return { address: query === undefined ? openedPath : `${path}${query}`, path };
+}
+
 export type ObservedRequest = { method: string; url: string; headers: RequestHeaders };
 
 /** The CSP report is the browser's, not a read of the screen. */

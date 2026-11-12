@@ -533,12 +533,16 @@ export async function visualReplacements(world: TestWorld): Promise<[string, str
 
 /**
  * The run-specific strings of a screen outside the app shell: the address the
- * signup page created and the name of the organization the prestart member
- * joins, with constant stand-ins.
+ * signup page created, the name of the organization the prestart member
+ * joins and the name of the organization a support screen shows, with
+ * constant stand-ins.
  */
 export function standaloneReplacements(world: TestWorld, email: string | null): [string, string][] {
   return [
     ...(email ? [[email, 'lena.neumann@beispiel.de'] satisfies [string, string]] : []),
     [world.outsider.orgName, 'Sanitär Becker GmbH'],
+    // Support's report page names the reporting organization: the visual
+    // world's own name, whether or not an app family renamed it already.
+    [world.orgName, VISUAL_ORGANIZATION],
   ];
 }
