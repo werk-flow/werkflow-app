@@ -114,7 +114,8 @@ grant execute on function app_private.current_work_billing_parties(uuid) to serv
 
 -- Records a new version of one work's parties unless it names the same
 -- Auftraggeber and recipient with the same copy as the current one. Without
--- p_recipient_name the copy is taken from the recipient customer now.
+-- p_recipient_name the copy is taken from the recipient customer now; a
+-- recipient outside the organization records nothing.
 create function app_private.record_work_billing_parties(
   p_organization_id uuid,
   p_kind text,
@@ -141,6 +142,11 @@ begin
     select recipient.name, recipient.address into v_name, v_address
     from public.clients recipient
     where recipient.id = p_recipient_client_id and recipient.organization_id = p_organization_id;
+    -- A customer outside the work's organization: the writing function
+    -- refuses it with its own code, so the default records nothing.
+    if not found then
+      return v_current;
+    end if;
   end if;
   if v_current.id is not null
     and v_current.client_id = p_client_id
@@ -194,7 +200,12 @@ declare
   v_recipient_id uuid;
   v_actor_id uuid;
 begin
-  if new.client_id is null then
+  -- No customer yet, or one outside the work's organization that the
+  -- writing function refuses with its own code: nothing to record.
+  if new.client_id is null or not exists (
+    select 1 from public.clients client
+    where client.id = new.client_id and client.organization_id = new.organization_id
+  ) then
     return null;
   end if;
   if tg_op = 'UPDATE' then

@@ -28,7 +28,7 @@ const SOURCE_LABELS: Readonly<Record<BillingPartySource, string>> = {
   buero: 'Vom Büro gewählt',
 };
 
-function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+function PartyFact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
       <dt className="text-xs text-muted-foreground">{label}</dt>
@@ -75,13 +75,13 @@ function BillingPartiesFacts({ parties, showPlace }: { parties: WorkBillingParti
   const siteAddress = parties.site ? formatSiteAddress(parties.site) : '';
   return (
     <dl className="mt-3 grid gap-3 sm:grid-cols-2">
-      <Fact label="Auftraggeber">
+      <PartyFact label="Auftraggeber">
         {current ? <TextLink href={`/kunden/${current.clientId}`}>{current.clientName}</TextLink> : '—'}
-      </Fact>
-      <Fact label="Rechnungsempfänger">{current ? <RecipientFact current={current} /> : '—'}</Fact>
+      </PartyFact>
+      <PartyFact label="Rechnungsempfänger">{current ? <RecipientFact current={current} /> : '—'}</PartyFact>
       {showPlace && (
         <>
-          <Fact label="Einsatzort">
+          <PartyFact label="Einsatzort">
             {parties.site ? (
               <>
                 {parties.site.name}
@@ -90,8 +90,8 @@ function BillingPartiesFacts({ parties, showPlace }: { parties: WorkBillingParti
             ) : (
               '—'
             )}
-          </Fact>
-          <Fact label="Zugangskontakt">
+          </PartyFact>
+          <PartyFact label="Zugangskontakt">
             {parties.accessContacts.length > 0 ? (
               <ul className="space-y-0.5">
                 {parties.accessContacts.map((contact) => (
@@ -104,7 +104,7 @@ function BillingPartiesFacts({ parties, showPlace }: { parties: WorkBillingParti
             ) : (
               '—'
             )}
-          </Fact>
+          </PartyFact>
         </>
       )}
     </dl>
