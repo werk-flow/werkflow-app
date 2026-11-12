@@ -8,7 +8,9 @@
       "Read(~/.config/werkflow/boat-api-key)",
       "Read(~/.config/ascii/boat/**)",
       "Edit(~/.config/werkflow/boat-api-key)",
-      "Edit(~/.config/ascii/boat/**)"
+      "Edit(~/.config/ascii/boat/**)",
+      "Read(~/.config/werkflow/problem-report-handout.env)",
+      "Edit(~/.config/werkflow/problem-report-handout.env)"
     ]
   },
   "hooks": {

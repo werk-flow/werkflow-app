@@ -64,6 +64,8 @@ const SQL_CALLERS: Readonly<Record<string, string>> = {
 const KEPT_FOR_DEPLOYED_BUILD: Readonly<Record<string, string>> = {
   import_inventory_row:
     'the deployed production build books CSV rows through it; drop it in the first migration after the release that ships book_inventory_import (werk-flow/werkflow-planning#371)',
+  list_open_request_attention:
+    'the deployed production build reads open requests through it; read_manager_attention_sets replaced it, so drop it in the first migration after the next production release',
   renew_employee_capability:
     'the deployed production build still calls it; drop it in the first migration after the next production release',
 };

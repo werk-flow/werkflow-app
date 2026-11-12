@@ -7,8 +7,10 @@ import type { AttentionTask } from './types';
  * The Aufgaben sections, most urgent first. An overdue callback leads: the
  * promise to the customer is already broken. Time-bound decisions follow: time
  * approvals (MiLoG timeliness), vacation requests, the visits an approved
- * vacation takes a planned person away from, and open Anfragen. The
- * handover backlog comes last, because it waits without a deadline.
+ * vacation takes a planned person away from, and open Anfragen. A field
+ * worker's access proposal follows the join requests: both wait for one
+ * office decision. The handover backlog comes last, because it waits without
+ * a deadline.
  */
 const ATTENTION_TASK_SECTION_ORDER = [
   'callback',
@@ -17,6 +19,7 @@ const ATTENTION_TASK_SECTION_ORDER = [
   'visitReplan',
   'request',
   'joinRequest',
+  'siteAccess',
   'dispatchAcknowledgement',
   'dispatchChallenge',
   'parkingReview',
@@ -36,6 +39,7 @@ const SECTION_OF_TASK_KIND = {
   time_correction_approval: 'time',
   vacation_request_approval: 'vacation',
   planning_visit_replan: 'visitReplan',
+  site_access_proposal: 'siteAccess',
   client_request_open: 'request',
   client_request_callback_overdue: 'callback',
   organization_join_request: 'joinRequest',
