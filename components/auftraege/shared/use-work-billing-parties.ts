@@ -10,6 +10,8 @@ import type { BillingWorkKind, WorkBillingParties } from '@/lib/billing-parties/
 
 export const WORK_BILLING_PARTIES_LOAD_FAILED =
   'Auftraggeber und Rechnungsempfänger konnten nicht geladen werden.';
+export const WORK_BILLING_PARTIES_STALE =
+  'Auftraggeber und Rechnungsempfänger konnten nicht aktualisiert werden und sind eventuell nicht mehr aktuell.';
 
 // A change of the parties touches the work's own row, so the work's table signals it.
 const WORK_TABLE: Readonly<Record<BillingWorkKind, RealtimeTable>> = {

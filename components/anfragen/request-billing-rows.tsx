@@ -7,6 +7,7 @@ import { RecipientFact, partyName } from '@/components/auftraege/shared/work-bil
 import { lazyWorkBillingPartiesDialog } from '@/components/auftraege/shared/work-billing-parties-lazy-dialog';
 import {
   WORK_BILLING_PARTIES_LOAD_FAILED,
+  WORK_BILLING_PARTIES_STALE,
   useWorkBillingParties,
 } from '@/components/auftraege/shared/use-work-billing-parties';
 import { Button } from '@/components/ui/button';
@@ -48,6 +49,14 @@ export function RequestBillingRows({
   const links = current ? partyLinks(current, clientId) : null;
   return (
     <>
+      {view.isStale && (
+        // A failed refresh keeps the last parties; say so and offer the read again.
+        <div className="py-1">
+          <SectionError onRetry={() => void view.refresh()} retryPending={view.isRefreshing}>
+            {WORK_BILLING_PARTIES_STALE}
+          </SectionError>
+        </div>
+      )}
       <div className="flex gap-2">
         <dt className="w-28 shrink-0 text-muted-foreground">Auftraggeber</dt>
         <dd className="min-w-0">
