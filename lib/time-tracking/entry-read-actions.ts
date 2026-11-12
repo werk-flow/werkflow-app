@@ -23,7 +23,7 @@ import {
   toTimeEntries,
 } from './types';
 import { canViewEntries } from './helpers';
-import { getEffectiveTimeEntries } from './effective-entries';
+import { jobIntervalEntries } from './activity-intervals';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { formatBerlinLocalDate, getLocalDayEnd, getLocalDayStart } from '@/lib/date-time/berlin';
 import { getCanonicalTimeEntries } from './canonical-entries';
@@ -417,11 +417,10 @@ async function readSpanJobDays(
 
 /**
  * One job's corrected entries the caller may see: its canonical entries and,
- * on each day one of its own clock-ins opens, the stretch that clock-in
- * starts. A break or clock-out that names no job (a same-day manual entry)
- * belongs to the job whose clock-in precedes it, so the stretch runs until
- * the next clock-in or an entry of another job. The days are walked after
- * the approved corrections, so a corrected end still closes the stretch.
+ * on each day one of its own clock-ins opens, each start of the job with the
+ * event that ends it, whatever job that event names (`jobIntervalEntries`).
+ * The days are paired after the approved corrections, so a corrected end
+ * still closes the job's time.
  */
 function jobTimeEntries(
   scope: JobReadScope,
@@ -438,12 +437,10 @@ function jobTimeEntries(
   const jobDayKeys = new Set(job.clockIns.map(userDayKey));
   for (const [dayKey, dayEntries] of entriesByUserDay) {
     if (!jobDayKeys.has(dayKey)) continue;
-    // The projection adds every correction's facts; the walk takes this day's.
-    const day = getEffectiveTimeEntries(project(dayEntries).filter((entry) => userDayKey(entry) === dayKey));
-    let inJobStretch = false;
-    for (const entry of day) {
-      if (entry.jobId !== null || entry.entryType === 'clock_in') inJobStretch = entry.jobId === job.jobId;
-      if (inJobStretch) jobEntries.set(entry.id, entry);
+    // The projection adds every correction's facts; the pairing takes this day's.
+    const day = project(dayEntries).filter((entry) => userDayKey(entry) === dayKey);
+    for (const entry of jobIntervalEntries(day, job.jobId, new Date(scope.projectionTime))) {
+      jobEntries.set(entry.id, entry);
     }
   }
 
