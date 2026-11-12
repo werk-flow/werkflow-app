@@ -5,6 +5,8 @@ import { useState, type ReactElement } from 'react';
 
 import { lazyDialog } from '@/components/shared/lazy-dialog';
 import { Button } from '@/components/ui/button';
+import { useRouterRefresh } from '@/components/ui/refresh-button';
+import { SectionError } from '@/components/ui/section-error';
 import { useSettleOnChange } from '@/hooks/use-settle-on-change';
 import type { SiteAccessProposalValues } from '@/lib/site-access-proposals/types';
 
@@ -30,6 +32,7 @@ export function FieldSiteAccessButton({
   siteId,
   stateKey,
   ownOpenValues,
+  failed,
 }: {
   jobId: string;
   siteId: string;
@@ -37,12 +40,24 @@ export function FieldSiteAccessButton({
   stateKey: string;
   /** The worker's own open proposal, which the form edits. */
   ownOpenValues?: SiteAccessProposalValues;
+  /** The proposal could not be read; the block says so and offers a retry. */
+  failed?: true;
 }): ReactElement {
   const [open, setOpen] = useState(false);
   const settle = useSettleOnChange(stateKey);
   const waiting = lazyProposalDialog.useWaiting(open);
+  const retry = useRouterRefresh();
   return (
     <>
+      {failed && (
+        <SectionError
+          title="Zugangshinweis nicht geladen"
+          onRetry={retry.refresh}
+          retryPending={retry.isPending}
+        >
+          Ob das Büro deinen Hinweis zum Zugang schon geprüft hat, ist gerade nicht bekannt.
+        </SectionError>
+      )}
       <Button
         type="button"
         variant="outline"

@@ -1,6 +1,5 @@
 import type { ReactElement } from 'react';
 
-import { FieldWorkPackLoadError } from '@/components/auftraege/work-pack/field-work-pack-load-error';
 import type {
   FieldSiteAccess,
   JobSiteAccessProposal,
@@ -21,19 +20,13 @@ export function FieldSiteAccess({ jobId, access }: { jobId: string; access: Fiel
   const ownOpenValues = proposal?.status === 'open' ? proposal.values : null;
   return (
     <div className="mt-3 space-y-2" data-testid="field-site-access">
-      {access.failed ? (
-        <FieldWorkPackLoadError
-          title="Zugangshinweis nicht geladen"
-          description="Ob das Büro deinen Hinweis zum Zugang schon geprüft hat, ist gerade nicht bekannt."
-        />
-      ) : (
-        <SiteAccessProposalState proposal={proposal} />
-      )}
+      {!access.failed && <SiteAccessProposalState proposal={proposal} />}
       <FieldSiteAccessButton
         jobId={jobId}
         siteId={access.siteId}
         // Changes with every sent or decided proposal, so the button's save can wait for it.
         stateKey={proposal ? `${proposal.id}:${proposal.status}:${proposal.proposedAt}` : ''}
+        {...(access.failed ? { failed: true } : {})}
         {...(ownOpenValues ? { ownOpenValues } : {})}
       />
     </div>
