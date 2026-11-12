@@ -251,10 +251,8 @@ function ClockFabButton({
       size="icon"
       className={cn(
         'size-14 rounded-full shadow-lg [&>[data-slot=spinner]]:size-6',
-        isClockedIn &&
-          !isOnBreak &&
-          'bg-success/90 text-success-foreground hover:bg-success animate-green-glow',
-        isOnBreak && 'bg-warning/90 text-warning-foreground hover:bg-warning animate-yellow-glow',
+        isClockedIn && !isOnBreak && 'bg-success/90 text-success-foreground hover:bg-success',
+        isOnBreak && 'bg-warning/90 text-warning-foreground hover:bg-warning',
       )}
       onClick={onOpen}
       pending={pending}
