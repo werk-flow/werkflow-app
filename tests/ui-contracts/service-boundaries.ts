@@ -49,7 +49,7 @@ export function initializeServiceBoundaries(): void {
         return browserFetch(input, init);
       }
       if (
-        window.uiContractFixture === 'clock' &&
+        (window.uiContractFixture === 'clock' || window.uiContractFixture === 'lifecycle-field') &&
         typeof input === 'string' &&
         input.startsWith('/api/time-tracking-state?') &&
         (init?.method ?? 'GET') === 'GET'

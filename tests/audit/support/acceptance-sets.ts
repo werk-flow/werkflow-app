@@ -28,7 +28,11 @@ export type AcceptanceRecord =
   | 'archived-customer'
   | 'archived-customer-list'
   | 'callback-overdue-request'
-  | 'callback-overdue-tasks';
+  | 'callback-overdue-tasks'
+  | 'attachable-request'
+  | 'request-without-open-work'
+  | 'attached-request'
+  | 'job-with-attached-request';
 
 export type CaptureSpec = {
   /** Unique within its set; part of the image name and the citation token. */
@@ -690,6 +694,89 @@ function requestCallbackCaptures(): AcceptanceSet {
   };
 }
 
+/**
+ * werk-flow/werkflow-planning#328 of 2026-11-09: the request detail with
+ * „Zu Arbeit hinzufügen“, the attach dialog with and without open work, the
+ * attached request, and its entry in the job's „Hinzugefügte Anfragen“.
+ */
+function requestAttachCaptures(): AcceptanceSet {
+  const both = { widths: [1280, 375], schemes: ['light', 'dark'] } as const;
+  const request = { role: 'buero', route: '/anfragen/[requestId]' } as const;
+  const attachDialog = { kind: 'dialog', opener: 'requests.attach-to-work' } as const;
+  return {
+    id: 'request-attach-2026-11-09',
+    captures: [
+      {
+        id: 'buero-anfrage-offen',
+        ...request,
+        view: { kind: 'page' },
+        record: 'attachable-request',
+        ...both,
+      },
+      {
+        id: 'buero-anfrage-hinzufuegen',
+        ...request,
+        view: attachDialog,
+        record: 'attachable-request',
+        ...both,
+      },
+      {
+        id: 'buero-anfrage-hinzufuegen-leer',
+        ...request,
+        view: attachDialog,
+        record: 'request-without-open-work',
+        ...both,
+      },
+      {
+        id: 'buero-anfrage-hinzugefuegt',
+        ...request,
+        view: { kind: 'page' },
+        record: 'attached-request',
+        ...both,
+      },
+      {
+        id: 'buero-auftrag-hinzugefuegte-anfrage',
+        role: 'buero',
+        route: '/auftraege/[jobNumber]',
+        view: { kind: 'page' },
+        record: 'job-with-attached-request',
+        reveal: 'Hinzugefügte Anfragen',
+        ...both,
+      },
+    ],
+    standalone: [],
+  };
+}
+
+/**
+ * werk-flow/werkflow-planning#159 of 2026-11-10: the access and employment
+ * dialogs offer only the steps that fit, each with its effect, and the
+ * member list's login chips.
+ */
+function lifecycleStepCaptures(): AcceptanceSet {
+  const both = { widths: [1280, 375], schemes: ['light', 'dark'] } as const;
+  const member = { role: 'admin', route: '/mitarbeiter/[userId]' } as const;
+  return {
+    id: 'lifecycle-steps-2026-11-10',
+    captures: [
+      {
+        id: 'admin-mitarbeiter-userId-dialog-people-lifecycle-access',
+        ...member,
+        view: { kind: 'dialog', opener: 'people.lifecycle-access' },
+        ...both,
+      },
+      {
+        id: 'admin-mitarbeiter-userId-dialog-people-lifecycle-transition',
+        ...member,
+        view: { kind: 'dialog', opener: 'people.lifecycle-transition' },
+        ...both,
+      },
+      { id: 'admin-mitarbeiter', role: 'admin', route: '/mitarbeiter', view: { kind: 'page' }, ...both },
+    ],
+    standalone: [],
+  };
+}
+
 export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   uiRoundCaptures(),
   fieldTargetCaptures(),
@@ -712,4 +799,6 @@ export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   offlineShellCaptures(),
   requestCallbackCaptures(),
   leaverHandoverCaptures(),
+  requestAttachCaptures(),
+  lifecycleStepCaptures(),
 ];

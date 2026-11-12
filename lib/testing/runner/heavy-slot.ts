@@ -2,6 +2,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { homedir, totalmem } from 'node:os';
 import { join } from 'node:path';
+import { runSessionCommand, withTestSession } from '../local-stack/test-session';
 import { errorCode } from './error-code';
 
 // One shared machine runs many worktrees' agents at once. `check:changed`,
@@ -154,4 +155,22 @@ export async function acquireHeavySlot(label: string, signal?: AbortSignal): Pro
       signal?.addEventListener('abort', stop, { once: true });
     });
   }
+}
+
+/**
+ * Runs one command inside a heavy slot when `heavy` holds, and resolves with
+ * its exit code. The command leads its own process group: Ctrl+C, a closed
+ * terminal or SIGTERM stop its whole tree before the slot frees
+ * (lib/testing/local-stack/test-session.ts). `scripts/heavy.ts` and
+ * `scripts/lint.ts` use it.
+ */
+export function runInHeavySlot(command: readonly string[], heavy = true): Promise<number> {
+  return withTestSession(async (signal) => {
+    const slot = heavy ? await acquireHeavySlot(command.join(' ').slice(0, 80), signal) : null;
+    try {
+      return await runSessionCommand(command, { signal, stdio: 'inherit' });
+    } finally {
+      slot?.release();
+    }
+  });
 }

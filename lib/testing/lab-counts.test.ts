@@ -7,18 +7,16 @@ import {
   compareLabStep,
   countTolerance,
   formatLabTable,
-  gateLabMetric,
   initialLabReference,
   isFailingRow,
   labReferenceProblems,
   legacyLabReferencesSchema,
   migrateLabReferences,
   ratchetLabReference,
-  rejectLabMetric,
-  ungateLabMetric,
   type LabReferences,
   type LabStepReference,
 } from './lab-counts';
+import { calibrateLabStep, gateLabMetric, rejectLabMetric, ungateLabMetric } from './lab-gate';
 import { LAB_MEASUREMENT_VERSION, type LabObservation } from './lab-record';
 import { LAB_METRICS, type LabMetric, type LabStep } from './lab-steps';
 
@@ -522,6 +520,82 @@ describe('lab reference history', () => {
     });
     expect(written?.counts).toEqual({});
     expect(labReferenceProblems(references, [STEP])).toEqual([]);
+  });
+
+  // Rule test: five calibration runs cannot show a count's rare second value, so only a step's gate returns an ungated count.
+  describe('a recalibration keeps the step ungate', () => {
+    const ungatedStep = ungateLabMetric({
+      reference: reference(),
+      metric: 'routeRenders',
+      runKeys: ['r9'],
+      reason: 'took 1 and 2',
+    });
+    const calibrate = (references: LabReferences) =>
+      calibrateLabStep(references, {
+        step: STEP,
+        observations: FIVE_RUNS.map(() => observation()),
+        runKeys: FIVE_RUNS,
+        buildId: 'build',
+        reason: REASON,
+      });
+    const evidence: LabReferences['gatedMetrics'][number] = {
+      metric: 'routeRenders',
+      stability: 'one value in 40 runs of this step',
+      relevance: 'r',
+      runKeys: ['r20'],
+    };
+
+    test('a count the step ungated stays ungated through every later calibration', () => {
+      const once = calibrate(file(ungatedStep));
+      const twice = calibrate(once.references);
+      for (const result of [once, twice]) {
+        expect(result.references.steps).toHaveLength(1);
+        expect(result.references.steps[0]?.counts).toEqual({ requests: { reference: 3, tolerance: 0 } });
+        expect(result.ungated).toEqual([{ metric: 'routeRenders', runKeys: ['r9'], reason: 'took 1 and 2' }]);
+        expect(labReferenceProblems(result.references, [STEP])).toEqual([]);
+      }
+    });
+
+    test('a gate that names the step after its ungate returns the count at the next calibration; a gate without the step does not', () => {
+      const unscoped = gateLabMetric(file(ungatedStep), evidence);
+      expect(calibrate(unscoped).references.steps[0]?.counts.routeRenders).toBeUndefined();
+      const regated = gateLabMetric(file(ungatedStep), evidence, STEP.id);
+      expect(regated.steps[0]?.history.at(-1)).toEqual({
+        kind: 'gate',
+        target: 'routeRenders',
+        runKeys: ['r20'],
+        reason: 'one value in 40 runs of this step',
+      });
+      expect(labReferenceProblems(regated, [STEP])).toEqual([]);
+      expect(calibrate(regated).references.steps[0]?.counts.routeRenders).toEqual({
+        reference: 1,
+        tolerance: 0,
+      });
+      expect(() => gateLabMetric(regated, evidence, STEP.id)).toThrow(
+        'routeRenders is not ungated on this step',
+      );
+    });
+
+    test('a reference that bounds a count its step keeps ungated fails', () => {
+      const base = reference();
+      const forged: LabStepReference = {
+        ...base,
+        history: [
+          {
+            kind: 'initial',
+            runKeys: FIVE_RUNS,
+            reason: REASON,
+            context: CONTEXT,
+            counts: base.counts,
+            payloads: base.payloads,
+            ungated: [{ metric: 'requests', runKeys: ['r9'], reason: 'took 3 and 4' }],
+          },
+        ],
+      };
+      expect(problemsOf(forged)).toEqual([
+        `${STEP.id}: counts.requests is bounded, but the step keeps it ungated`,
+      ]);
+    });
   });
 
   test('the one-time migration snapshots the stored bounds and keeps the entries it replaced', () => {

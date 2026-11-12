@@ -127,14 +127,26 @@ test('a missing or malformed origin is omitted, never written as undefined', () 
     expect(policy).toContain("connect-src 'self';");
     expect(policy).toContain("img-src 'self' data: blob:;");
     expect(policy).toContain("frame-src 'none';");
-    expect(buildReportOnlyContentSecurityPolicy(env)).toContain("img-src 'self';");
+    expect(buildReportOnlyContentSecurityPolicy(env)).toContain("img-src 'self' data:;");
   }
+});
+
+// The problem report's screenshot redraw draws an SVG foreignObject from a
+// data: image on every report press (docs/technical/problem-report-scrubbing.md,
+// rule 8): a report-only violation for it proves nothing and hides real ones.
+test('the report-only policy allows data: images for the screenshot redraw and still probes blob:', () => {
+  const imageSources = buildReportOnlyContentSecurityPolicy(cloud)
+    .split('; ')
+    .find((directive) => directive.startsWith('img-src '))
+    ?.split(' ');
+  expect(imageSources).toContain('data:');
+  expect(imageSources).not.toContain('blob:');
 });
 
 test('the report-only policy probes the unproven tightening on the same endpoint', () => {
   expect(buildReportOnlyContentSecurityPolicy(cloud)).toBe(
     [
-      "img-src 'self' https://project.supabase.co https://account.eu.r2.cloudflarestorage.com",
+      "img-src 'self' data: https://project.supabase.co https://account.eu.r2.cloudflarestorage.com",
       "media-src 'none'",
       'report-uri /api/csp-report',
     ].join('; '),
