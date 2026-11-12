@@ -5,6 +5,7 @@ import { workspaceAppOrigin } from '../../../lib/testing/runner/app-port';
 import { testBusinessDate } from '../../../lib/testing/runner/business-date';
 import { createRolePage, type SessionRole } from './sessions';
 import { resetPersistedPreferences } from './preferences-reset';
+import { revealStreamedContentBeforeEachStep } from './streamed-content';
 import { loadWorld, type TestWorld } from './world';
 
 type GoldenFixtures = {
@@ -38,6 +39,7 @@ async function rolePage(
   });
   let provideError: unknown;
   try {
+    await revealStreamedContentBeforeEachStep(page);
     await provide(page);
   } catch (error) {
     provideError = error;
@@ -70,6 +72,10 @@ export const test = base.extend<GoldenFixtures>({
   },
   businessDate: async ({}, provide) => {
     await provide(testBusinessDate());
+  },
+  page: async ({ page }, provide) => {
+    await revealStreamedContentBeforeEachStep(page);
+    await provide(page);
   },
   freshPreferences: [
     async ({}, provide) => {

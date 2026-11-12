@@ -4,6 +4,7 @@ import {
   EMPLOYMENT_TYPE_LABELS,
 } from '../../lib/personnel/types';
 import { expect, test } from './support/fixtures';
+import { openPage } from './support/streamed-content';
 import { getEmployeeRecordStateByUser } from './support/db/personnel';
 import { getPendingInviteCode } from './support/db/shared';
 import { joinOrganizationViaInviteLink, removeMemberFromDetail } from './support/steps/organization';
@@ -148,7 +149,7 @@ test.describe('P1-03 Personalidentität und Konditionen @P1-03', () => {
       const inviteCode = await getPendingInviteCode(world.orgId, world.personnelInvitee.email);
       const context = await browser.newContext({ locale: 'de-DE' });
       try {
-        const page = await context.newPage();
+        const page = await openPage(context);
         await joinOrganizationViaInviteLink(page, inviteCode, world.personnelInvitee, world.orgId);
       } finally {
         await context.close();

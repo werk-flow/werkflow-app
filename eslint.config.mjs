@@ -1245,6 +1245,45 @@ const eslintConfig = defineConfig([
       'playwright-spec/visible-page-lookup': 'error',
     },
   },
+  // Streamed copies after a load (docs/technical/integrated-test-state.md):
+  // every page a browser test drives waits for React's reveal before each
+  // step. The fixtures install it on their pages; a page opened by hand goes
+  // through openPage. The measured pages stay as their references measured
+  // them: the performance sessions and the two measured openings of P1-11.
+  {
+    files: ['tests/golden/**/*.ts', 'tests/audit/**/*.ts', 'tests/canary/**/*.ts'],
+    ignores: [
+      'tests/golden/support/streamed-content.ts',
+      'tests/golden/support/fixtures.ts',
+      'tests/golden/support/sessions.ts',
+      'tests/audit/support/performance-steps.ts',
+      'tests/audit/performance/planning-benchmark.spec.ts',
+      'tests/golden/p1-11.spec.ts',
+    ],
+    rules: {
+      'no-restricted-properties': [
+        'error',
+        {
+          property: 'newPage',
+          message:
+            'Open the page through openPage (tests/golden/support/streamed-content.ts): its steps then wait for React to reveal the content it streamed after a load.',
+        },
+      ],
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/support/sessions'],
+              importNames: ['createRolePage'],
+              message:
+                'Take a role page from the fixtures (adminPage, bueroPage, employeePage, outsiderPage): their steps wait for React to reveal the content it streamed after a load.',
+            },
+          ],
+        },
+      ],
+    },
+  },
   // Failures in support modules (docs/technical/testing.md): no `.catch` or
   // `catch` turns a failure into a constant. A timed-out wait branches through
   // settledBeforeTimeout, and a genuine best effort names its reason in a
