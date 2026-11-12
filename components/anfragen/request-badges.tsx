@@ -50,3 +50,16 @@ export function CallbackOverdueBadge() {
 export function RequestUrgencyBadge({ urgency }: { urgency: RequestUrgency }) {
   return <RequestPill tone={URGENCY_CLASSES[urgency]} label={REQUEST_URGENCY_LABELS[urgency]} />;
 }
+
+/**
+ * The detail header's status and urgency, kept on one line: `PageHeader`
+ * wraps each top-level badge on its own, so this group wraps as a whole.
+ */
+export function RequestHeaderBadges({ status, urgency }: { status: RequestStatus; urgency: RequestUrgency }) {
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      <RequestStatusBadge status={status} />
+      <RequestUrgencyBadge urgency={urgency} />
+    </span>
+  );
+}
