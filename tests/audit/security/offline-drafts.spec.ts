@@ -5,7 +5,7 @@ import {
   workArtifactEntry,
   workArtifactField,
 } from '../../golden/support/spec-helpers/work-artifact-dialog';
-import { setNetwork } from '../support/offline-shell';
+import { bypassHttpCache, setNetwork, waitForOfflineShell } from '../support/offline-shell';
 import {
   deviceDrafts,
   draftOnDevice,
@@ -15,18 +15,23 @@ import {
   savedOnDeviceBanner,
   takeSyntheticPhoto,
 } from '../support/offline-drafts';
-import { seedTodayAssignment, todayJobNumber } from '../support/offline-today';
+import {
+  offlineStand,
+  seedTodayAssignment,
+  todayJobNumber,
+  waitForTodayOnDevice,
+} from '../support/offline-today';
+
+// The offline reload reads the app shell the service worker serves.
+test.use({ serviceWorkers: 'allow' });
 
 // A report with photos survives signal loss and a restart
 // (werk-flow/werkflow-planning#320; decision record 0010, the report draft
 // amendment): the field worker writes it without signal, the phone keeps the
-// text and both photos when the page goes, and with the signal back the next
-// page sends them: the server gets one draft revision with two photos, never a
-// second. Browser tests run without the service worker (#365), so the restart
-// is the tab leaving the app while offline and a new load once the signal is
-// back, not an offline reload.
+// text and both photos across a reload and a new page, and with the signal
+// back the server gets one draft revision with two photos, never a second.
 
-test('a report with two photos written without signal survives a restart and arrives once @AUDIT-SECURITY-OFFLINE-DRAFTS', async ({
+test('a report with two photos written without signal survives a reload and arrives once @AUDIT-SECURITY-OFFLINE-DRAFTS', async ({
   employeePage: page,
   world,
 }) => {
@@ -37,6 +42,9 @@ test('a report with two photos written without signal survives a restart and arr
   const jobNumber = todayJobNumber(world);
 
   const dialog = await test.step('the field worker opens the job and starts a report', async () => {
+    await page.goto('/dashboard');
+    await waitForTodayOnDevice(page, [jobTitle]);
+    await waitForOfflineShell(page);
     await page.goto(`/auftraege/${jobNumber}`);
     return beginWorkArtifact(page, {
       kind: 'work_report',
@@ -49,6 +57,7 @@ test('a report with two photos written without signal survives a restart and arr
   await test.step('the signal goes: the report and two photos are saved on the phone', async () => {
     // The dialog keeps its draft on the device from here on.
     await expect(photoButton(dialog)).toBeVisible();
+    await bypassHttpCache(page);
     await setNetwork(page, 'offline');
     await workArtifactField(dialog, 'performedWork').fill('Brenner gereinigt, Druck geprüft.');
     await takeSyntheticPhoto(dialog, 1);
@@ -59,18 +68,22 @@ test('a report with two photos written without signal survives a restart and arr
     await expectAttachedReports(world, reportTitle, []);
   });
 
-  await test.step('the tab leaves the app without signal; the phone keeps the draft', async () => {
-    await page.goto('about:blank');
+  await test.step('a reload without network keeps the draft on the phone', async () => {
+    await page.reload();
+    await expect(offlineStand(page)).toBeVisible();
     await expectDraftsOnDevice(page, 1);
   });
 
-  await test.step('after the restart with the signal back, the job page sends the draft', async () => {
+  await test.step('after a restart with the signal back, the job page sends the draft', async () => {
     await setNetwork(page, 'online');
-    await page.goto(`/auftraege/${jobNumber}`);
-    await expectDraftsOnDevice(page, 0);
-    await page.reload();
-    await expect(workArtifactEntry(page, reportTitle)).toBeVisible();
-    await expect(deviceDrafts(page)).toBeHidden();
+    const restarted = await page.context().newPage();
+    await restarted.setViewportSize({ width: 375, height: 812 });
+    await restarted.goto(`/auftraege/${jobNumber}`);
+    await expect(deviceDrafts(restarted)).toBeHidden();
+    await expectDraftsOnDevice(restarted, 0);
+    await restarted.reload();
+    await expect(workArtifactEntry(restarted, reportTitle)).toBeVisible();
+    await restarted.close();
   });
 
   await test.step('the server holds one draft revision with two photos', async () => {
