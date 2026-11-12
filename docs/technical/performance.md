@@ -76,6 +76,7 @@ Wrong turn: an EXPLAIN check that the read uses an index. The Plantafel week see
 - **Lab counts** (`audit:lab:*`) prove a step does the same work as its reference. A count does not show when a page became usable, and it counts background reads that cost the user nothing. Read it with the wall-clock time. Every change plan that touches product code runs them ([selection](testing.md#how-selection-works)), so a regression fails its own PR.
 - **Payload budgets**: the ceiling catches growth, the floor lost data.
 - **Hot read volume** (`sql:hot-read-volume`) proves a read touches no more rows when its organization gains history. A read that drops its organization filter is a tenant leak, which the SQL security and list-page groups prove. It sees index entries returned, not walked past, so it also requires a whole (not partial) index that leads with `organization_id` on each table a read bounds.
+- **Frames at rest** (`tests/audit/support/frames-at-rest.ts`, one test in each lab group) prove that a settled page stops drawing: the field worker's pages while the clock runs, and the office's and the owner's. The test counts the frames the browser produced in three seconds, so it sees what no lab count shows: an animation without end, a transition a timer restarts, a `requestAnimationFrame` loop. A running clock stays far under the limit, and an endless animation exceeds it tenfold, so the limit is absolute and has no reference. Its control starts an endless animation and fails when the count misses it.
 
 A metric earns its gate by two jobs: it repeats across five runs within tolerance, and moving it in a recorded experiment moved the time the user waits.
 
@@ -101,7 +102,7 @@ A prefetch loads a route's static shell, loading state and code before the click
 
 - A cold start renders its route twice: the document and the join catch-up's refresh, which covers writes made before the database listener was ready.
 - The clock button shows „—“ until it hydrates; a guess would flash a false state.
-- The idle glow (`animate-live`) stays: its lab step records no request, commit or long task.
+- The live pulse (`animate-live`, `animate-ping`) stays where a block, a person or a job runs right now. The browser draws every frame while one shows, on the compositor alone. No page of the frames-at-rest test shows one.
 - There is no real-user telemetry. It needs the owner's consent for the analytics it implies.
 
 ## Taste defaults
@@ -119,6 +120,7 @@ Tier 3 defaults. Diverge after the owner tried the alternative.
 
 - Lower a count by removing, delaying or throttling a read that keeps shown data current.
 - Raise a reference, a ceiling, a budget or a tolerance to make a run pass.
+- Leave an animation running on a page at rest, or put a transition on a value a timer changes. The clock redraws once a second; a 500 ms transition on its ring repainted half of every second.
 - Gate on a metric that failed the stability or relevance job.
 - Add a client cache of server data that outlives a navigation without an unconfirmed marker and a read on every load.
 - Enable viewport prefetch for a sidebar link, or prefetch a route's dynamic data on intent.
