@@ -182,6 +182,23 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               if (args.importer.endsWith('use-work-artifact-customer-actions.ts'))
                 return { path: join(import.meta.dir, 'work-artifact-boundaries.ts') };
             });
+            // The job edit dialog's save, which its focus contract never reaches,
+            // and the job header's handle on the lazily loaded dialog.
+            builder.onResolve(
+              { filter: /^(@\/lib\/jobs\/actions|\.\/job-detail-content-dialogs)$/ },
+              (args) => {
+                if (
+                  args.importer.endsWith('use-edit-job-submit.ts') ||
+                  args.importer.endsWith('job-detail-header.tsx')
+                )
+                  return { path: join(import.meta.dir, 'edit-job-service-boundaries.ts') };
+              },
+            );
+            // The handover review saves its draft and previews through these held stand-ins.
+            builder.onResolve({ filter: /^@\/lib\/(work-handover|documents)\/actions$/ }, (args) => {
+              if (args.importer.includes('/components/auftraege/handover/'))
+                return { path: join(import.meta.dir, 'work-handover-service-boundaries.ts') };
+            });
             builder.onResolve({ filter: /^@\/lib\/qualifications\/actions$/ }, () => ({
               path: join(import.meta.dir, 'qualification-service-boundaries.ts'),
             }));
