@@ -3,7 +3,8 @@ import { assertWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-loc
 
 // Support files a report for a member who phoned (docs/features/problem-reports.md,
 // "Filed for a caller"): after a completed filing the page that Next.js keeps
-// hidden comes back as a fresh form that files a new report, and a member
+// hidden comes back as a fresh form that files a new report, also when the
+// filing completed while the page was out of view, and a member
 // chosen under one organization is never filed under another one the address
 // changed to.
 
@@ -57,6 +58,12 @@ async function chooseMember(page: Page, name: string): Promise<void> {
   await expect(memberField(page)).toHaveText(name);
 }
 
+/** Answers the held filing: `null` saves it, a code refuses it. */
+async function answerFiling(page: Page, refusal: string | null): Promise<void> {
+  await expect.poll(() => page.evaluate(() => window.uiContractWrites.answer !== null)).toBe(true);
+  await page.evaluate((code) => window.uiContractWrites.answer?.(code), refusal);
+}
+
 async function setPageHidden(page: Page, hidden: boolean, event: string): Promise<void> {
   await page.evaluate(
     ([isHidden, name]) => {
@@ -74,6 +81,7 @@ test('after a completed filing the page comes back as a fresh form that files a 
   await chooseMember(page, 'Rita Melder');
   await descriptionField(page).fill(DESCRIPTION);
   await submitButton(page).click();
+  await answerFiling(page, null);
   await expect
     .poll(() => page.evaluate(() => window.listNavigationContract.requests))
     .toEqual([expect.stringMatching(/^\/support\/meldungen\//u)]);
@@ -91,10 +99,31 @@ test('after a completed filing the page comes back as a fresh form that files a 
   await chooseMember(page, 'Ben Beispiel');
   await descriptionField(page).fill(`${DESCRIPTION} Zweiter Anruf.`);
   await submitButton(page).click();
+  await answerFiling(page, null);
   await expect.poll(() => page.evaluate(() => window.uiContractSupportFilings.length)).toBe(2);
   const [first, second] = await page.evaluate(() => window.uiContractSupportFilings);
   expect(second?.reportId).not.toBe(first?.reportId);
   expect(second?.reporterId).toBe('33500000-0000-4000-8000-000000000102');
+});
+
+test('a filing that completes while the page is out of view leaves a fresh form for the return', async ({
+  page,
+}) => {
+  await showOrganization(page, ORGANIZATION_A);
+  await chooseMember(page, 'Rita Melder');
+  await descriptionField(page).fill(DESCRIPTION);
+  await submitButton(page).click();
+  await expect(submitButton(page)).toBeDisabled();
+  // Support leaves while the save runs; it completes on the hidden page.
+  await setPageHidden(page, true, PAGE_VISIBILITY_EVENT);
+  await expect(submitButton(page)).toBeHidden();
+  await answerFiling(page, null);
+  await expect.poll(() => page.evaluate(() => window.uiContractSupportFilings.length)).toBe(1);
+  await setPageHidden(page, false, PAGE_VISIBILITY_EVENT);
+
+  await expect(submitButton(page)).toBeEnabled();
+  await expect(descriptionField(page)).toHaveValue('');
+  await expect(memberField(page)).toHaveText('Person auswählen');
 });
 
 test('a member chosen under one organization is not filed under the next one the address names', async ({

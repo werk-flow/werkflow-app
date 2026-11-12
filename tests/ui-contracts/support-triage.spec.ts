@@ -214,3 +214,25 @@ test('a save refused because someone else changed the answer keeps the input, sh
     },
   ]);
 });
+
+test('a refresh whose read fails after a refused save keeps the input for the page that comes back', async ({
+  page,
+}) => {
+  await answerField(page).fill(ANSWER);
+  await page.evaluate(() => {
+    const state = window.uiContractSupport;
+    state.report = { ...state.report, response: 'Ist schon behoben.' };
+    state.failNextRead = true;
+  });
+  await saveButton(page).click();
+  await answerOpenSave(page, 'triage_conflict');
+  // The refresh after the refusal failed: the retry stands where the report was.
+  await expect(page.getByRole('main').getByText('Die Meldung konnte nicht geladen werden.')).toBeVisible();
+  await expect(answerField(page)).toHaveCount(0);
+
+  await page.evaluate(() => window.dispatchEvent(new Event('ui-contract:route-refresh')));
+  await expect(answerField(page)).toHaveValue(ANSWER);
+  await expect(
+    page.getByRole('main').getByText('Inzwischen gespeichert: „Ist schon behoben.“'),
+  ).toBeVisible();
+});

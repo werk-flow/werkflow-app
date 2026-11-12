@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactElement } from 'react';
 
 import { SupportReportDetail } from '@/components/support/support-report-detail';
+import { TriageDraftProvider } from '@/components/support/support-triage-form';
 import { BannerProvider } from '@/components/ui/banner';
 import type { ActionResult } from '@/lib/action-result';
 import type {
@@ -30,6 +31,8 @@ type SupportContractState = {
   report: SupportReport;
   /** The next action call fails as a lost connection does, before any answer. */
   failNextRequest: boolean;
+  /** The next route refresh fails its read, and the page shows the retry in place of the report. */
+  failNextRead: boolean;
 };
 
 declare global {
@@ -44,6 +47,7 @@ window.uiContractSupportFilings = [];
 
 window.uiContractSupport = {
   failNextRequest: false,
+  failNextRead: false,
   report: {
     id: '33500000-0000-4000-8000-000000000020',
     number: 7,
@@ -98,6 +102,8 @@ export async function fileProblemReportForCaller(
   input: FileProblemReportForCallerInput,
 ): Promise<SubmitProblemReportResult> {
   failIfAsked();
+  const refusal = await holdWrite('filing', input);
+  if (refusal) return { success: false, error: refusal };
   window.uiContractSupportFilings.push(input);
   return { success: true, reportId: input.reportId, number: window.uiContractSupportFilings.length };
 }
@@ -146,16 +152,28 @@ export async function openProblemReportAttachment(): Promise<ActionResult<{ url:
 /** The report page's content, with the report a route refresh brings. */
 export function SupportTriageContractFixture(): ReactElement {
   const [report, setReport] = useState(() => window.uiContractSupport.report);
+  const [readFailed, setReadFailed] = useState(false);
   useEffect(() => {
-    const adopt = (): void => setReport(window.uiContractSupport.report);
+    const adopt = (): void => {
+      setReadFailed(window.uiContractSupport.failNextRead);
+      window.uiContractSupport.failNextRead = false;
+      setReport(window.uiContractSupport.report);
+    };
     window.addEventListener(ROUTE_REFRESH_EVENT, adopt);
     return () => window.removeEventListener(ROUTE_REFRESH_EVENT, adopt);
   }, []);
+  // The page's read region: a failed read shows its retry in place of the report, as the route does.
   return (
     <BannerProvider>
       <main>
         <h1>Komponentenverträge</h1>
-        <SupportReportDetail report={report} />
+        <TriageDraftProvider>
+          {readFailed ? (
+            <p>Die Meldung konnte nicht geladen werden.</p>
+          ) : (
+            <SupportReportDetail report={report} />
+          )}
+        </TriageDraftProvider>
       </main>
     </BannerProvider>
   );

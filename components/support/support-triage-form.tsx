@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { createContext, useContext, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
@@ -171,20 +171,44 @@ function TriageFields({ report, draft, notes, onChange, disabled, responseError 
   );
 }
 
+type DraftStore = {
+  edits: Readonly<Record<string, Edits>>;
+  update: (reportId: string, next: (current: Edits) => Edits) => void;
+};
+
+const TriageDraftContext = createContext<DraftStore | null>(null);
+
+/**
+ * Holds the unsaved triage edits of support's report pages above the region
+ * that reads the report. A read that fails replaces the form with its retry;
+ * the form that comes back takes the edits up again.
+ */
+export function TriageDraftProvider({ children }: { children: ReactNode }) {
+  const [edits, setEdits] = useState<Readonly<Record<string, Edits>>>({});
+  const store = useMemo<DraftStore>(
+    () => ({
+      edits,
+      update: (reportId, next) => setEdits((all) => ({ ...all, [reportId]: next(all[reportId] ?? {}) })),
+    }),
+    [edits],
+  );
+  return <TriageDraftContext value={store}>{children}</TriageDraftContext>;
+}
+
 /**
  * The form's fields: the loaded report with the support person's unsaved
  * edits on top. A refresh that brings the report anew, such as the one after
- * „Original öffnen“, keeps the edits. They leave when the save that sent them
- * shows in the report.
+ * „Original öffnen“, keeps the edits, and so does a failed read that replaced
+ * the form for a while. They leave when the save that sent them shows in the
+ * report.
  */
 function useTriageDraft(report: SupportReport) {
-  const [edits, setEdits] = useState<Edits>({});
-  // The report a save was accepted on: the next report is that save's result.
-  const [savedOn, setSavedOn] = useState<SupportReport | null>(null);
-  if (savedOn !== null && savedOn !== report) {
-    setSavedOn(null);
-    setEdits({});
-  }
+  const store = useContext(TriageDraftContext);
+  if (store === null) throw new Error('SupportTriageForm renders inside TriageDraftProvider.');
+  // What an accepted save sent shows until the report it saved arrives; the store forgets it at once.
+  const [sent, setSent] = useState<{ edits: Edits; on: SupportReport } | null>(null);
+  if (sent !== null && sent.on !== report) setSent(null);
+  const edits = sent !== null && sent.on === report ? sent.edits : (store.edits[report.id] ?? {});
   const loaded = draftOf(report);
   const draft: Draft = { ...loaded };
   const notes: Partial<Record<DraftField, string>> = {};
@@ -201,8 +225,11 @@ function useTriageDraft(report: SupportReport) {
     /** The loaded value an edit of the field began from. */
     basisOf: (field: DraftField): string => edits[field]?.basis ?? loaded[field],
     change: (change: Partial<Draft>) =>
-      setEdits((current) => withoutUnchanged(report, withChange(current, change, loaded))),
-    markSaved: () => setSavedOn(report),
+      store.update(report.id, (current) => withoutUnchanged(report, withChange(current, change, loaded))),
+    markSaved: () => {
+      setSent({ edits, on: report });
+      store.update(report.id, () => ({}));
+    },
   };
 }
 

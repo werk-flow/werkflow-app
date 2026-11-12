@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { AttachmentsField } from '@/components/problem-reports/attachments-field';
@@ -221,20 +221,33 @@ type SupportFilingFormProps = {
 /**
  * The filing form, fresh after each completed filing: when the page that
  * filed goes out of view, its pending task and its saved report go with the
- * form, and the next visit files a new report.
+ * form, and the next visit files a new report. A filing that completes while
+ * the page is already out of view starts the fresh form at once.
  */
 export function SupportFilingForm(props: SupportFilingFormProps) {
   const [generation, setGeneration] = useState(0);
   const [completed, setCompleted] = useState(false);
+  // A hidden page's effects end, and so does an unmounted one's; a layout
+  // effect ends within the commit that hides the page.
+  const inView = useRef(false);
+  useLayoutEffect(() => {
+    inView.current = true;
+    return () => {
+      inView.current = false;
+    };
+  }, []);
   useEffect(() => {
     if (!completed) return;
-    // A hidden page's effects end, and so does an unmounted one's.
     return () => {
       setCompleted(false);
       setGeneration((current) => current + 1);
     };
   }, [completed]);
-  return <FilingForm key={generation} {...props} onCompleted={() => setCompleted(true)} />;
+  const onCompleted = (): void => {
+    if (inView.current) setCompleted(true);
+    else setGeneration((current) => current + 1);
+  };
+  return <FilingForm key={generation} {...props} onCompleted={onCompleted} />;
 }
 
 /** A member chosen for one organization; another organization shows no member. */

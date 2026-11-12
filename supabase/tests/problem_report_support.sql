@@ -260,6 +260,16 @@ begin
   end;
   perform public.triage_problem_report(v_org, v_report, v_support,
     jsonb_build_object('bucket', 'fehler'), jsonb_build_object('bucket', 'wunsch'), null);
+
+  -- An assignee is compared as an id, whatever the case of its spelling.
+  perform public.triage_problem_report(v_org, v_report, v_support,
+    jsonb_build_object('assignee_id', v_support), jsonb_build_object('assignee_id', null), null);
+  perform public.triage_problem_report(v_org, v_report, v_support,
+    jsonb_build_object('assignee_id', null),
+    jsonb_build_object('assignee_id', upper(v_support::text)), null);
+  if (select assignee_id from public.problem_reports where id = v_report) is not null then
+    raise exception 'an assignee spelled in upper case read as a conflict';
+  end if;
 end;
 $$;
 

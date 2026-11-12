@@ -125,15 +125,12 @@ begin
   where report.id = p_report_id and report.organization_id = p_organization_id
   for update;
   if not found then raise exception 'report_not_found'; end if;
-  if exists (
-    select 1 from jsonb_object_keys(p_changes) field
-    where jsonb_build_object(
-        'status', v_report.status,
-        'bucket', v_report.bucket,
-        'assignee_id', v_report.assignee_id,
-        'response', v_report.response
-      ) -> field is distinct from p_expected -> field
-  ) then raise exception 'triage_conflict'; end if;
+  if (p_changes ? 'status' and v_report.status is distinct from p_expected ->> 'status')
+    or (p_changes ? 'bucket' and v_report.bucket is distinct from p_expected ->> 'bucket')
+    or (p_changes ? 'assignee_id'
+      and v_report.assignee_id is distinct from (p_expected ->> 'assignee_id')::uuid)
+    or (p_changes ? 'response' and v_report.response is distinct from p_expected ->> 'response')
+  then raise exception 'triage_conflict'; end if;
 
   v_status := case when p_changes ? 'status' then p_changes ->> 'status' else v_report.status end;
   v_bucket := case when p_changes ? 'bucket' then p_changes ->> 'bucket' else v_report.bucket end;
