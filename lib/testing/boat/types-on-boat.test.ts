@@ -58,7 +58,10 @@ test("CI's file is accepted only for the tree it was generated from", () => {
     write('bun.lock', '{}\n');
     write('.prettierrc.json', '{}\n');
     write('scripts/generate-supabase-types.ts', '// generator\n');
-    write('lib/supabase/database.types.ts', 'export type Database = {};\n');
+    write(
+      'lib/supabase/database.types.ts',
+      'export type Database = {\n  // Allows to automatically instantiate createClient with right options\n  __InternalSupabase: {\n    PostgrestVersion: "13";\n  };\n  public: {};\n};\n',
+    );
     writeFileSync(join(artifact, 'database.types.ts'), 'export type Database = { generated: true };\n');
     expect(acceptedCiTypes(artifact, repository)).toEqual({
       unavailable: "CI's database-types artifact is incomplete.",
@@ -78,6 +81,15 @@ test("CI's file is accepted only for the tree it was generated from", () => {
     expect(typesInputDigest(repository)).not.toBe(before);
     write('supabase/migrations/20260101000000_first.sql', 'select 1;\n');
     write('bun.lock', '{"changed": true}\n');
+    expect(typesInputDigest(repository)).not.toBe(before);
+    write('bun.lock', '{}\n');
+    // A generation rewrites the types below the header: the check that follows takes the same file.
+    write(
+      'lib/supabase/database.types.ts',
+      'export type Database = {\n  // Allows to automatically instantiate createClient with right options\n  __InternalSupabase: {\n    PostgrestVersion: "13";\n  };\n  public: { generated: true };\n};\n',
+    );
+    expect(typesInputDigest(repository)).toBe(before);
+    write('lib/supabase/database.types.ts', 'export type Database = { public: {} };\n');
     expect(typesInputDigest(repository)).not.toBe(before);
   } finally {
     rmSync(repository, { recursive: true, force: true });
