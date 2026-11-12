@@ -140,6 +140,20 @@ export async function addSchoolDay(rawInput: AddSchoolDayInput): Promise<SchoolD
       return { success: false, error: 'load_failed' };
     }
     if (!record) return { success: false, error: 'record_not_found' };
+    // School days belong to an apprenticeship: the section shows only there, and
+    // a rule elsewhere would lower a target nobody sees the reason for.
+    const { data: apprenticeship, error: conditionError } = await admin
+      .from('employment_conditions')
+      .select('id')
+      .eq('organization_id', orgId)
+      .eq('employee_record_id', record.id)
+      .eq('employment_type', 'ausbildung')
+      .limit(1);
+    if (conditionError) {
+      logError('addSchoolDay: employment condition read failed', conditionError);
+      return { success: false, error: 'load_failed' };
+    }
+    if (apprenticeship.length === 0) return { success: false, error: 'not_an_apprentice' };
 
     const { data, error } = await admin
       .from('school_days')

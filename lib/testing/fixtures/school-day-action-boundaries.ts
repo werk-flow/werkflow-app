@@ -17,6 +17,7 @@ const apprenticeRecordId = '87000000-0000-4000-8000-000000000001';
 const foreignRecordId = '87000000-0000-4000-8000-000000000002';
 const ownSchoolDayId = '87000000-0000-4000-8000-000000000003';
 const foreignSchoolDayId = '87000000-0000-4000-8000-000000000004';
+const journeymanRecordId = '87000000-0000-4000-8000-000000000005';
 
 const weeklyRule = (id: string, organizationId: string, employeeRecordId: string) => ({
   id,
@@ -38,6 +39,21 @@ const world = installActionWorld({
   employee_records: [
     { id: apprenticeRecordId, organization_id: ORGANIZATION_A, user_id: null },
     { id: foreignRecordId, organization_id: ORGANIZATION_B, user_id: null },
+    { id: journeymanRecordId, organization_id: ORGANIZATION_A, user_id: null },
+  ],
+  employment_conditions: [
+    {
+      id: '87000000-0000-4000-8000-000000000006',
+      organization_id: ORGANIZATION_A,
+      employee_record_id: apprenticeRecordId,
+      employment_type: 'ausbildung',
+    },
+    {
+      id: '87000000-0000-4000-8000-000000000007',
+      organization_id: ORGANIZATION_A,
+      employee_record_id: journeymanRecordId,
+      employment_type: 'vollzeit',
+    },
   ],
   school_days: [
     weeklyRule(ownSchoolDayId, ORGANIZATION_A, apprenticeRecordId),
@@ -76,7 +92,8 @@ await assertRefused(
   'none',
 );
 
-// Büro does not find another organization's record or school day.
+// Büro does not find another organization's record or school day, and
+// records none for a person outside an apprenticeship.
 signInAs(world, 'buero');
 await assertRefused(
   world,
@@ -91,6 +108,14 @@ await assertRefused(
   'reads',
 );
 assert.deepEqual(await getSchoolDaysForRecord(foreignRecordId), { success: true, schoolDays: [] });
+
+// A person who never was an apprentice gets no school day.
+await assertRefused(
+  world,
+  [writesOn(ownSchoolDayId, journeymanRecordId)[0]],
+  { success: false, error: 'not_an_apprentice' },
+  'reads',
+);
 
 // Büro records, ends and cancels a school day of its own organization.
 const added = await addSchoolDay(block(apprenticeRecordId));

@@ -116,6 +116,7 @@ export const SCHOOL_DAY_ERROR_MESSAGES: Readonly<Record<string, string>> = {
   block_needs_end: 'Ein Blockunterricht braucht ein Enddatum.',
   weekday_required: 'Bitte wähle einen Wochentag aus.',
   record_not_found: 'Die Personalakte wurde nicht gefunden.',
+  not_an_apprentice: 'Berufsschule lässt sich nur für Personen in Ausbildung eintragen.',
   school_day_overlap: 'Für diese Tage ist schon Berufsschule eingetragen.',
   school_day_not_found:
     'Der Eintrag wurde inzwischen geändert. Lade die Seite neu und versuche es noch einmal.',
