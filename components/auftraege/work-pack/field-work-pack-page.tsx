@@ -17,6 +17,8 @@ import { FieldWorkPackContextSources, FieldWorkPackEquipmentSource } from './fie
 import { loadFieldWorkPackData, type FieldWorkPackData } from './field-work-pack-data';
 import type { FieldWorkPackJob } from '@/lib/jobs/field-work-pack';
 import { jobDetailHref } from '@/lib/jobs/routes';
+import { fieldSiteAccess } from '@/lib/site-access-proposals/types';
+import { fieldSiteAccessSlots } from './field-site-access';
 import { FieldWorkPackRecordSources, FieldWorkPackTimeAndMaterials } from './field-work-pack-record-sources';
 
 export async function FieldWorkPackPage({
@@ -62,7 +64,18 @@ export async function FieldWorkPackPage({
       <PageBody maxWidth="wide">
         {/* The test id scopes the pack's body content; the specs never reach the header through it. */}
         <div data-testid="field-work-pack" className="space-y-4 sm:space-y-6">
-          <FieldWorkPackOverview job={fieldJob} />
+          {/* A job without an Einsatzort passes no access prop at all: the job page's payload is measured. */}
+          <FieldWorkPackOverview
+            job={fieldJob}
+            {...(job.siteId
+              ? {
+                  siteAccess: fieldSiteAccessSlots(
+                    job.id,
+                    fieldSiteAccess(job.siteId, data.siteAccessProposalRead),
+                  ),
+                }
+              : {})}
+          />
           <FieldWorkPackContextSources job={job} data={data} />
           <FieldWorkPackExecutionSection
             key={job.id}
