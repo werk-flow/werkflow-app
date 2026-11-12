@@ -1,5 +1,6 @@
 // Actual time-account form actions over the in-memory database: rules,
 // account openings and their date corrections, period reopening and the payroll mapping are Admin-only,
+// a bulk opening refuses its whole list when one person is foreign,
 // adjustments need Admin or Büro, the period and decision actions need a
 // manager or a time-approval holder, and an Admin of organization A reaches
 // no employee, account, request, finding, period or export of organization B.
@@ -10,7 +11,7 @@
 // nothing changes. Only the proposer withdraws an open request. A period
 // preparation takes its source fingerprint before it reads a source.
 import assert from 'node:assert/strict';
-import { mock } from 'bun:test';
+import { mock, setSystemTime } from 'bun:test';
 import {
   CALLER_ID,
   ORGANIZATION_A,
@@ -19,7 +20,11 @@ import {
   signInAs,
   tableRows,
 } from './action-boundary-world';
+import { payrollCodesByKey } from '@/lib/time-accounts/payroll-mapping';
 import { assertCallerScopedCalls, databaseSnapshot } from './workforce-boundary-support';
+
+// The forms below are dated November 2026; the opening's ten-year bound reads today.
+setSystemTime(new Date('2026-11-12T10:00:00.000Z'));
 
 const ownRecordId = '84000000-0000-4000-8000-000000000001';
 const foreignRecordId = '84000000-0000-4000-8000-000000000002';
@@ -132,7 +137,21 @@ const targets: Readonly<Record<string, readonly [string, string, string | typeof
   close_time_period: ['time_periods', 'p_period_id', 'period_not_found'],
   reopen_time_period: ['time_periods', 'p_period_id', 'period_not_found'],
 };
+// The bulk opening loads every person of its list inside the organization it is given.
+const isOwnRecord = (opening: unknown, organizationId: unknown): boolean =>
+  typeof opening === 'object' &&
+  opening !== null &&
+  'employee_record_id' in opening &&
+  tableRows(world, 'employee_records').some(
+    (row) => row.id === opening.employee_record_id && row.organization_id === organizationId,
+  );
 world.rpc = ({ name, args }) => {
+  if (name === 'open_time_accounts') {
+    const openings: unknown[] = Array.isArray(args.p_openings) ? args.p_openings : [];
+    return openings.every((opening) => isOwnRecord(opening, args.p_organization_id))
+      ? { data: openings.length, error: null }
+      : { data: null, error: { code: 'P0001', message: 'employee_not_found' } };
+  }
   const target = targets[name];
   if (!target) return { data: null, error: { code: 'P0001', message: `unexpected_function_${name}` } };
   const [table, idArgument, refusal] = target;
@@ -158,14 +177,14 @@ const {
   assignEmployeeTimePolicy,
   closeTimePeriod,
   correctTimeAccountOpeningDate,
-  createDefaultPayrollMapping,
   createStarterTimePolicy,
   downloadPayrollExport,
   generatePayrollExport,
   getTimeAccountAccess,
-  openMissingTimeAccounts,
+  openTimeAccounts,
   prepareTimePeriod,
   reopenTimePeriod,
+  savePayrollMapping,
   submitTimeAccountAdjustment,
 } = await import('@/lib/time-accounts/actions');
 const { decidePeriodFinding, decideTimeAccountAdjustment, withdrawTimeAccountAdjustment } = await import(
@@ -181,8 +200,6 @@ const forms = {
   policy: () => form({ effectiveFrom: '2026-11-01', name: 'Standard-Arbeitszeit' }),
   assign: (employeeRecordId: string) =>
     form({ employeeRecordId, policyId, validFrom: '2026-11-01', reason: 'Teilzeitregel' }),
-  open: (employeeRecordId: string) =>
-    form({ employeeRecordId, openingMinutes: '0', openedOn: '2026-11-01', reason: 'Einführung' }),
   correctOpening: (accountId: string) =>
     form({ accountId, openedOn: '2026-08-01', reason: 'Falsches Eröffnungsdatum' }),
   adjust: (accountId: string) =>
@@ -203,6 +220,12 @@ const forms = {
   reopen: (periodId: string) => form({ periodId, reason: 'Korrektur erforderlich' }),
   download: (exportId: string) => form({ exportId }),
 };
+const openings = (...people: ReadonlyArray<readonly [string, string]>) => ({
+  openedOn: '2026-11-01',
+  reason: 'Einführung',
+  openings: people.map(([employeeRecordId, openingBalance]) => ({ employeeRecordId, openingBalance })),
+});
+const mappingCodes = { codes: payrollCodesByKey(null), basedOnVersion: null };
 const forbidden = { success: false, error: 'forbidden' };
 // The responsibility state reads the caller's role from the organization's members.
 const callerMembership = tableRows(world, 'organization_members').find((row) => row.user_id === CALLER_ID);
@@ -289,10 +312,10 @@ delete world.tables.organization_responsibility_assignments;
 signInWithRole('buero');
 assert.deepEqual(await createStarterTimePolicy(forms.policy()), forbidden);
 assert.deepEqual(await assignEmployeeTimePolicy(forms.assign(ownRecordId)), forbidden);
-assert.deepEqual(await openMissingTimeAccounts(forms.open(ownRecordId)), forbidden);
+assert.deepEqual(await openTimeAccounts(openings([ownRecordId, '0:00'])), forbidden);
 assert.deepEqual(await correctTimeAccountOpeningDate(forms.correctOpening(foreignAccountId)), forbidden);
 assert.deepEqual(await reopenTimePeriod(forms.reopen(foreignPeriodId)), forbidden);
-assert.deepEqual(await createDefaultPayrollMapping(), forbidden);
+assert.deepEqual(await savePayrollMapping(mappingCodes), forbidden);
 assert.equal(world.rpcCalls.length, 0);
 
 // Büro decides neither its own proposal nor a matter of another Büro member.
@@ -330,7 +353,12 @@ assertCallerScopedCalls(world);
 signInWithRole('admin');
 for (const [write, expected] of [
   [() => assignEmployeeTimePolicy(forms.assign(foreignRecordId)), 'assignment_failed'],
-  [() => openMissingTimeAccounts(forms.open(foreignRecordId)), 'employee_not_found'],
+  [() => openTimeAccounts(openings([foreignRecordId, '0:00'])), 'employee_not_found'],
+  // „Alle eröffnen“ with one foreign person in the list opens nobody: the one call refuses it.
+  [
+    () => openTimeAccounts(openings([ownRecordId, '+12:30'], [foreignRecordId, '0:00'])),
+    'employee_not_found',
+  ],
   [() => correctTimeAccountOpeningDate(forms.correctOpening(foreignAccountId)), 'account_not_found'],
   [() => submitTimeAccountAdjustment(forms.adjust(foreignAccountId)), 'account_not_found'],
   [() => closeTimePeriod(forms.period(foreignPeriodId)), 'period_not_found'],
@@ -341,6 +369,43 @@ for (const [write, expected] of [
   assert.equal(world.rpcCalls.length, 1, `${expected}: a refused write made a second call`);
   assertCallerScopedCalls(world);
 }
+
+// A balance that is no „±HH:MM“ or an incomplete code table is refused before any call; a
+// valid list reaches the bulk function once, with the caller's organization and the parsed minutes.
+world.rpcCalls.length = 0;
+assert.deepEqual(await openTimeAccounts(openings([ownRecordId, '750'])), {
+  success: false,
+  error: 'invalid_balance',
+});
+assert.deepEqual(
+  await savePayrollMapping({ ...mappingCodes, codes: { ...mappingCodes.codes, overtime: ' ' } }),
+  {
+    success: false,
+    error: 'invalid_code',
+  },
+);
+assert.deepEqual(await openTimeAccounts({ ...openings([ownRecordId, '0:00']), openedOn: '2000-01-01' }), {
+  success: false,
+  error: 'opening_date_too_old',
+});
+assert.equal(world.rpcCalls.length, 0, 'a refused balance, date or code reached the database');
+assert.deepEqual(await openTimeAccounts(openings([ownRecordId, '+12:30'], [colleagueRecordId, '-3:15'])), {
+  success: true,
+});
+assert.deepEqual(
+  world.rpcCalls.map((call) => [call.name, call.args.p_actor_id, call.args.p_openings]),
+  [
+    [
+      'open_time_accounts',
+      CALLER_ID,
+      [
+        { employee_record_id: ownRecordId, opening_minutes: 750 },
+        { employee_record_id: colleagueRecordId, opening_minutes: -195 },
+      ],
+    ],
+  ],
+);
+assertCallerScopedCalls(world);
 
 // A decision or withdrawal loads its request or finding in the caller's organization first, so a foreign id never reaches the database.
 world.rpcCalls.length = 0;

@@ -37,15 +37,19 @@ async function terminateTree(child: ChildProcess): Promise<void> {
     if (errorCode(error) === 'ESRCH') return;
     throw error;
   }
+  // A member nobody reaps stays visible after it stopped; the cancellation itself stays the outcome.
+  if (!(await groupGone(groupId)))
+    console.warn(`[werkflow-test] Process group ${groupId} is still listed 5 s after SIGKILL.`);
+}
+
+/** Resolves once no process of the group is left, or with false after 5 s. */
+export async function groupGone(groupId: number): Promise<boolean> {
   const deadline = Date.now() + 5_000;
   while (groupExists(groupId)) {
-    // A member nobody reaps stays visible after it stopped; the cancellation itself stays the outcome.
-    if (Date.now() > deadline) {
-      console.warn(`[werkflow-test] Process group ${groupId} is still listed 5 s after SIGKILL.`);
-      return;
-    }
+    if (Date.now() > deadline) return false;
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 20));
   }
+  return true;
 }
 
 /** Each command leads its own process group, so cancellation stops the whole tree it started. */
