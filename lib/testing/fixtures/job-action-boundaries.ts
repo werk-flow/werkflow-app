@@ -251,7 +251,7 @@ assert.equal(managerDetails.job.assignments[1]?.email, 'max@example.test');
 // The office reads the job's frozen recipient with the job; the field read above carries no such field.
 const managerByNumber = await actions.getJobByNumber('A-2026-001');
 assert.ok(managerByNumber.success);
-assert.equal(managerByNumber.billingParties?.versions[0]?.recipientName, 'Hausverwaltung Lindenhof GmbH');
+assert.equal(managerByNumber.billingParties?.versions[0]?.recipient?.name, 'Hausverwaltung Lindenhof GmbH');
 
 // A manager of organization A reaches no job of organization B by id or by number.
 assert.deepEqual(await actions.getJobDetails(foreignJobId), jobNotFound);

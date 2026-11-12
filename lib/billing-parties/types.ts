@@ -11,15 +11,20 @@ export type BillingWorkKind = (typeof BILLING_WORK_KINDS)[number];
 export const BILLING_PARTY_SOURCES = ['objekt', 'auftraggeber', 'projekt', 'anfrage', 'buero'] as const;
 export type BillingPartySource = (typeof BILLING_PARTY_SOURCES)[number];
 
+export type BillingParty = { id: string; name: string };
+export type BillingRecipient = BillingParty & { address: string | null };
+
 export type WorkBillingPartyVersion = {
   version: number;
   source: BillingPartySource;
-  clientId: string;
-  clientName: string;
-  recipientClientId: string;
-  recipientName: string;
-  recipientAddress: string | null;
   setAt: string;
+  /** The Auftraggeber; null in a job's own read when it is the job's customer. */
+  auftraggeber: BillingParty | null;
+  /**
+   * The frozen Rechnungsempfänger; null in a job's own read when it is the
+   * job's customer with the name and address it has now.
+   */
+  recipient: BillingRecipient | null;
 };
 
 /** Every version of one work, newest first, with its Einsatzort and the Objekt's access contacts. */

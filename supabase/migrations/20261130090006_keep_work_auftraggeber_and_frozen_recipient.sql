@@ -513,11 +513,11 @@ as $$
     'hasClient', work.client_id is not null,
     'versions', coalesce((
       select jsonb_agg(jsonb_build_object(
-        'version', party.version, 'source', party.source,
-        'clientId', party.client_id, 'clientName', auftraggeber.name,
-        'recipientClientId', party.recipient_client_id,
-        'recipientName', party.recipient_name, 'recipientAddress', party.recipient_address,
-        'setAt', party.created_at
+        'version', party.version, 'source', party.source, 'setAt', party.created_at,
+        'auftraggeber', jsonb_build_object('id', party.client_id, 'name', auftraggeber.name),
+        'recipient', jsonb_build_object(
+          'id', party.recipient_client_id, 'name', party.recipient_name, 'address', party.recipient_address
+        )
       ) order by party.version desc)
       from public.work_billing_parties party
       join public.clients auftraggeber

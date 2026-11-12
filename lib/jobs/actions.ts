@@ -507,7 +507,7 @@ async function readJobDetails(input: {
   return {
     success: true,
     job,
-    billingParties: officeBillingParties(input.billingParties, effectiveClientId, siteContacts),
+    billingParties: officeBillingParties(input.billingParties, client, siteContacts),
   };
 }
 
@@ -517,13 +517,12 @@ async function readJobDetails(input: {
  */
 function officeBillingParties(
   embedded: unknown,
-  clientId: string | null,
+  client: Client | null,
   siteContacts: unknown,
 ): WorkBillingParties | undefined {
   if (embedded === undefined) return undefined;
-  return (
-    jobBillingPartiesFrom({ hasClient: clientId !== null, versions: embedded, siteContacts }) ?? undefined
-  );
+  const workClient = client ? { id: client.id, name: client.name, address: client.address } : null;
+  return jobBillingPartiesFrom({ workClient, versions: embedded, siteContacts }) ?? undefined;
 }
 
 /** The job form's reader: the job with its details and its scheduled visits. */

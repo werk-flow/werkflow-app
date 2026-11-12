@@ -22,7 +22,8 @@ import { Field } from '@/components/ui/field';
 import { usePendingTask } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { setWorkBillingParties } from '@/lib/billing-parties/actions';
-import type { BillingWorkKind, WorkBillingPartyVersion } from '@/lib/billing-parties/types';
+import type { BillingWorkKind } from '@/lib/billing-parties/types';
+import type { ResolvedBillingVersion } from '@/lib/billing-parties/resolve';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -41,7 +42,7 @@ const RECIPIENT_FIELD_ID = 'billing-parties-recipient';
 type FormProps = {
   kind: BillingWorkKind;
   workId: string;
-  current: WorkBillingPartyVersion | null;
+  current: ResolvedBillingVersion | null;
   /** The dialog's save task: the dialog stays open while a save runs. */
   task: ReturnType<typeof usePendingTask>;
   onClose: () => void;
@@ -50,12 +51,8 @@ type FormProps = {
 
 function useBillingPartiesForm({ kind, workId, current, task, onSaved }: FormProps) {
   const { showBanner } = useBanner();
-  const [client, setClient] = useState<ClientSelectItem | null>(
-    current ? { id: current.clientId, name: current.clientName } : null,
-  );
-  const [recipient, setRecipient] = useState<ClientSelectItem | null>(
-    current ? { id: current.recipientClientId, name: current.recipientName } : null,
-  );
+  const [client, setClient] = useState<ClientSelectItem | null>(current ? current.auftraggeber : null);
+  const [recipient, setRecipient] = useState<ClientSelectItem | null>(current ? current.recipient : null);
   const [clientError, setClientError] = useState<string | null>(null);
   const [recipientError, setRecipientError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -116,7 +113,7 @@ export type WorkBillingPartiesDialogProps = {
   onOpenChange: (open: boolean) => void;
   kind: BillingWorkKind;
   workId: string;
-  current: WorkBillingPartyVersion | null;
+  current: ResolvedBillingVersion | null;
   /** Resolves once the card shows the saved parties. */
   onSaved: () => Promise<void>;
 };

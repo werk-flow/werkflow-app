@@ -346,7 +346,7 @@ declare
     '32700000-0000-0000-0000-000000000051');
 begin
   if jsonb_array_length(v_read -> 'versions') <> 2
-    or v_read -> 'versions' -> 0 ->> 'recipientName' <> 'Lindenhof Immobilien GmbH'
+    or v_read -> 'versions' -> 0 -> 'recipient' ->> 'name' <> 'Lindenhof Immobilien GmbH'
     or v_read -> 'site' ->> 'name' <> 'Haus Lindenstraße'
     or v_read -> 'accessContacts' -> 0 ->> 'name' <> 'Max Hausmeister'
   then raise exception 'the office read is incomplete: %', v_read; end if;

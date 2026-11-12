@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { SectionError } from '@/components/ui/section-error';
 import { TextLink } from '@/components/ui/text-link';
 import type { WorkBillingParties } from '@/lib/billing-parties/types';
+import { resolveBillingVersions } from '@/lib/billing-parties/resolve';
 
 /**
  * The request's Auftraggeber and Rechnungsempfänger as rows of its Details
@@ -40,13 +41,18 @@ export function RequestBillingRows({
       </div>
     );
   }
-  const [current = null] = parties.versions;
+  // A request's read names both parties in every version.
+  const [current = null] = resolveBillingVersions(parties.versions, null);
   return (
     <>
       <div className="flex gap-2">
         <dt className="w-28 shrink-0 text-muted-foreground">Auftraggeber</dt>
         <dd className="min-w-0">
-          {current ? <TextLink href={`/kunden/${current.clientId}`}>{current.clientName}</TextLink> : '—'}
+          {current ? (
+            <TextLink href={`/kunden/${current.auftraggeber.id}`}>{current.auftraggeber.name}</TextLink>
+          ) : (
+            '—'
+          )}
         </dd>
       </div>
       <div className="flex gap-2">

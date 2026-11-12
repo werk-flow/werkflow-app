@@ -158,6 +158,19 @@ function JobDetailClientCard({ client, isAdminOrManager, setShowClientDialog }: 
   );
 }
 
+/** The office's Auftraggeber and Rechnungsempfänger, with the site and customer the job already holds. */
+function jobBillingSection(liveJob: JobWithDetails, billingParties: WorkBillingParties | undefined) {
+  return (
+    <WorkBillingPartiesSection
+      kind="job"
+      id={liveJob.id}
+      initialParties={billingParties}
+      site={liveJob.site ?? null}
+      workClient={liveJob.client}
+    />
+  );
+}
+
 /** Left column: details, instructions, work evidence, customer and assigned employees. */
 export function JobDetailMainColumn({
   liveJob,
@@ -226,14 +239,7 @@ export function JobDetailMainColumn({
         setShowClientDialog={setShowClientDialog}
       />
 
-      {isAdminOrManager && (
-        <WorkBillingPartiesSection
-          kind="job"
-          id={liveJob.id}
-          initialParties={billingParties}
-          site={liveJob.site ?? null}
-        />
-      )}
+      {isAdminOrManager && jobBillingSection(liveJob, billingParties)}
 
       {/* Assigned Employees */}
       <JobDetailAssigneesCard

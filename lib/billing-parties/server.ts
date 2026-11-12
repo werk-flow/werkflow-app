@@ -6,17 +6,19 @@ import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { logError } from '@/lib/logging';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { z } from '@/lib/zod';
-import { BILLING_PARTY_SOURCES, type BillingWorkKind, type WorkBillingParties } from './types';
+import {
+  BILLING_PARTY_SOURCES,
+  type BillingRecipient,
+  type BillingWorkKind,
+  type WorkBillingParties,
+} from './types';
 
 const versionSchema = z.object({
   version: z.number(),
   source: z.enum(BILLING_PARTY_SOURCES),
-  clientId: z.string(),
-  clientName: z.string(),
-  recipientClientId: z.string(),
-  recipientName: z.string(),
-  recipientAddress: z.string().nullable(),
   setAt: z.string(),
+  auftraggeber: z.object({ id: z.string(), name: z.string() }),
+  recipient: z.object({ id: z.string(), name: z.string(), address: z.string().nullable() }),
 });
 
 const accessContactSchema = z.object({ id: z.string(), name: z.string(), phone: z.string().nullable() });
@@ -66,14 +68,16 @@ const embeddedContactsSchema = z.array(
 
 /**
  * The parties of a job from its own read: the embedded versions and the
- * site's embedded contacts. Null when an embed is
- * malformed, so the section reads them itself.
+ * site's embedded contacts. A party that is the job's customer, as the job
+ * read already returns it, is left out (lab.office.job-open). Null when an
+ * embed is malformed, so the section reads them itself.
  */
 export function jobBillingPartiesFrom(input: {
-  hasClient: boolean;
+  workClient: BillingRecipient | null;
   versions: unknown;
   siteContacts: unknown;
 }): WorkBillingParties | null {
+  const { workClient } = input;
   const versions = embeddedVersionsSchema.safeParse(input.versions);
   const contacts = embeddedContactsSchema.safeParse(input.siteContacts ?? []);
   if (!versions.success || !contacts.success) {
@@ -81,18 +85,21 @@ export function jobBillingPartiesFrom(input: {
     return null;
   }
   return {
-    hasClient: input.hasClient,
+    hasClient: workClient !== null,
     versions: versions.data
       .toSorted((a, b) => b.version - a.version)
       .map((row) => ({
         version: row.version,
         source: row.source,
-        clientId: row.client_id,
-        clientName: row.auftraggeber.name,
-        recipientClientId: row.recipient_client_id,
-        recipientName: row.recipient_name,
-        recipientAddress: row.recipient_address,
         setAt: row.created_at,
+        auftraggeber:
+          row.client_id === workClient?.id ? null : { id: row.client_id, name: row.auftraggeber.name },
+        recipient:
+          row.recipient_client_id === workClient?.id &&
+          row.recipient_name === workClient.name &&
+          row.recipient_address === workClient.address
+            ? null
+            : { id: row.recipient_client_id, name: row.recipient_name, address: row.recipient_address },
       })),
     // The job page passes the site the job carries.
     site: null,

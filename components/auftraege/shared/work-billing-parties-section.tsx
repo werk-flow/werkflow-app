@@ -10,10 +10,11 @@ import { SectionError } from '@/components/ui/section-error';
 import { TextLink } from '@/components/ui/text-link';
 import type {
   BillingPartySource,
+  BillingRecipient,
   BillingWorkKind,
   WorkBillingParties,
-  WorkBillingPartyVersion,
 } from '@/lib/billing-parties/types';
+import { resolveBillingVersions, type ResolvedBillingVersion } from '@/lib/billing-parties/resolve';
 import { formatSiteAddress } from '@/lib/clients/types';
 import { formatBerlinDateTime } from '@/lib/utils';
 import { lazyWorkBillingPartiesDialog } from './work-billing-parties-lazy-dialog';
@@ -39,12 +40,12 @@ function partyFact(label: string, value: React.ReactNode): React.ReactNode {
 }
 
 /** The recipient as it was copied onto the work, and why and when. */
-export function RecipientFact({ current }: { current: WorkBillingPartyVersion }) {
+export function RecipientFact({ current }: { current: ResolvedBillingVersion }) {
   return (
     <>
-      <TextLink href={`/kunden/${current.recipientClientId}`}>{current.recipientName}</TextLink>
-      {current.recipientAddress && (
-        <span className="block whitespace-pre-line text-muted-foreground">{current.recipientAddress}</span>
+      <TextLink href={`/kunden/${current.recipient.id}`}>{current.recipient.name}</TextLink>
+      {current.recipient.address && (
+        <span className="block whitespace-pre-line text-muted-foreground">{current.recipient.address}</span>
       )}
       <span className="block text-xs text-muted-foreground">
         {SOURCE_LABELS[current.source]} · {formatBerlinDateTime(current.setAt)}
@@ -54,7 +55,7 @@ export function RecipientFact({ current }: { current: WorkBillingPartyVersion })
 }
 
 /** The earlier choices, newest first; nothing while there are none. */
-function earlierPartiesList(versions: WorkBillingPartyVersion[]): React.ReactNode {
+function earlierPartiesList(versions: ResolvedBillingVersion[]): React.ReactNode {
   if (versions.length === 0) return null;
   return (
     <div className="mt-3 border-t pt-3">
@@ -62,7 +63,7 @@ function earlierPartiesList(versions: WorkBillingPartyVersion[]): React.ReactNod
       <ul className="mt-1 space-y-1 text-xs text-muted-foreground">
         {versions.map((version) => (
           <li key={version.version}>
-            Rechnung an {version.recipientName}, Auftraggeber {version.clientName} ·{' '}
+            Rechnung an {version.recipient.name}, Auftraggeber {version.auftraggeber.name} ·{' '}
             {formatBerlinDateTime(version.setAt)}
           </li>
         ))}
@@ -72,14 +73,21 @@ function earlierPartiesList(versions: WorkBillingPartyVersion[]): React.ReactNod
 }
 
 /** Auftraggeber, recipient, Einsatzort and access contacts. */
-function partyFacts(parties: WorkBillingParties, site: WorkBillingParties['site']): React.ReactNode {
-  const [current] = parties.versions;
+function partyFacts(
+  parties: WorkBillingParties,
+  current: ResolvedBillingVersion | undefined,
+  site: WorkBillingParties['site'],
+): React.ReactNode {
   const siteAddress = site ? formatSiteAddress(site) : '';
   return (
     <dl className="mt-3 grid gap-3 sm:grid-cols-2">
       {partyFact(
         'Auftraggeber',
-        current ? <TextLink href={`/kunden/${current.clientId}`}>{current.clientName}</TextLink> : '—',
+        current ? (
+          <TextLink href={`/kunden/${current.auftraggeber.id}`}>{current.auftraggeber.name}</TextLink>
+        ) : (
+          '—'
+        ),
       )}
       {partyFact('Rechnungsempfänger', current ? <RecipientFact current={current} /> : '—')}
       {partyFact(
@@ -116,6 +124,7 @@ function partyFacts(parties: WorkBillingParties, site: WorkBillingParties['site'
 function billingCard(input: {
   id: string;
   parties: WorkBillingParties;
+  versions: ResolvedBillingVersion[];
   site: WorkBillingParties['site'];
   stale: boolean;
   onEdit: () => void;
@@ -148,11 +157,11 @@ function billingCard(input: {
         )}
       </div>
       {parties.hasClient ? (
-        partyFacts(parties, input.site)
+        partyFacts(parties, input.versions[0], input.site)
       ) : (
         <p className="mt-3 text-sm text-muted-foreground">Ordne zuerst einen Kunden zu.</p>
       )}
-      {earlierPartiesList(parties.versions.slice(1))}
+      {earlierPartiesList(input.versions.slice(1))}
     </section>
   );
 }
@@ -167,6 +176,7 @@ export function WorkBillingPartiesSection({
   id,
   initialParties,
   site,
+  workClient = null,
   className = '',
 }: {
   kind: Exclude<BillingWorkKind, 'request'>;
@@ -175,6 +185,8 @@ export function WorkBillingPartiesSection({
   initialParties?: WorkBillingParties | undefined;
   /** The Einsatzort the page already holds (the job's); otherwise the read's. */
   site?: WorkBillingParties['site'] | undefined;
+  /** The job's customer, which stands in for a party the job's read left out. */
+  workClient?: BillingRecipient | null | undefined;
   className?: string;
 }) {
   const view = useWorkBillingParties(kind, id, initialParties);
@@ -182,12 +194,16 @@ export function WorkBillingPartiesSection({
   const openEditor = useCallback(() => setEditing(true), []);
   const parties = view.data;
   const shownSite = site === undefined ? (parties?.site ?? null) : site;
+  const versions = useMemo(
+    () => (parties ? resolveBillingVersions(parties.versions, workClient) : []),
+    [parties, workClient],
+  );
   const card = useMemo(
     () =>
       parties === undefined
         ? null
-        : billingCard({ id, parties, site: shownSite, stale: view.isStale, onEdit: openEditor }),
-    [id, parties, shownSite, view.isStale, openEditor],
+        : billingCard({ id, parties, versions, site: shownSite, stale: view.isStale, onEdit: openEditor }),
+    [id, parties, versions, shownSite, view.isStale, openEditor],
   );
   if (parties === undefined) {
     return view.isLoading ? null : (
@@ -210,7 +226,7 @@ export function WorkBillingPartiesSection({
           onOpenChange={setEditing}
           kind={kind}
           workId={id}
-          current={parties.versions[0] ?? null}
+          current={versions[0] ?? null}
           onSaved={view.refresh}
         />
       )}
