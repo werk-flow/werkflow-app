@@ -9,8 +9,10 @@ import { isUuid } from '@/lib/validation/uuid';
 
 // A report thread writes bucket, status and the answer to the reporter back
 // to a report it received (docs/features/problem-reports.md, "Hand-out to
-// report threads"). One database call writes the changes with history
-// entries of the Agent and moves the reporter's and support's live views.
+// report threads"). Each change names the value it was based on. One
+// database call writes the changes with history entries of the Agent and
+// moves the reporter's and support's live views; a field that changed since
+// answers `triage_conflict` with the report's state now, never its answer.
 // Only a caller with PROBLEM_REPORT_HANDOUT_SECRET writes.
 export async function POST(
   request: Request,
@@ -22,9 +24,14 @@ export async function POST(
   const { reportId } = await params;
   if (!isUuid(reportId)) return handoutError('report_not_found');
   const body: unknown = await request.json().catch(() => null);
-  const changes = problemReportWriteBackSchema.safeParse(body);
-  if (!changes.success) return handoutError('invalid_input');
-  const written = await writeBackProblemReport(createSupabaseAdminClient(), reportId, changes.data);
+  const writeBack = problemReportWriteBackSchema.safeParse(body);
+  if (!writeBack.success) return handoutError('invalid_input');
+  const written = await writeBackProblemReport(createSupabaseAdminClient(), reportId, writeBack.data);
+  if (!written.ok && written.error === 'triage_conflict')
+    return Response.json(
+      { error: written.error, current: written.current },
+      { status: 409, headers: HANDOUT_HEADERS },
+    );
   if (!written.ok) return handoutError(written.error);
   return new Response(null, { status: 204, headers: HANDOUT_HEADERS });
 }

@@ -7,7 +7,9 @@
 // seeded originals, no attachment, no name and no id but the report's own;
 // a report without a scrubbed copy, a closed one and one already handed out
 // are refused with their codes, and an unknown id answers like a malformed
-// one. The write-back refuses an invalid bucket or status, and its history
+// one. The write-back refuses an invalid bucket or status and a change
+// without the value it was based on; one based on an outdated state writes
+// nothing and answers the state now, never support's answer. Its history
 // reads as the Agent's in support's view and its answer as automatic in
 // „Meine Meldungen“. supabase/tests/problem_report_handout.sql proves the
 // database functions the stand-ins below answer for.
@@ -174,6 +176,7 @@ world.rpc = ({ name, args }) => {
         context: row.scrubbed_context,
         status: row.status,
         bucket: row.bucket,
+        has_answer: row.response !== null,
         has_screenshot: hasScreenshot,
       },
       error: null,
@@ -194,6 +197,8 @@ world.rpc = ({ name, args }) => {
   assert.equal(name, 'triage_problem_report');
   if (row.handed_out_at === null) return refused('report_not_handed_out');
   const changes = Object.entries(args.p_changes ?? {});
+  const expected = new Map(Object.entries(args.p_expected ?? {}));
+  if (changes.some(([field]) => row[field] !== expected.get(field))) return refused('triage_conflict');
   for (const [field, value] of changes) {
     row[field] = value;
     recordAgent(args, `${field}_changed`);
@@ -243,6 +248,8 @@ const request = (path: string, authorization: string | null, body?: unknown) =>
   });
 const params = (reportId: string) => ({ params: Promise.resolve({ reportId }) });
 const BEARER = `Bearer ${secret}`;
+/** A write-back that closes a report the thread received as new. */
+const CLOSE = { changes: { status: 'erledigt' }, expected: { status: 'eingegangen' } };
 
 const call = {
   waiting: (authorization: string | null) => waitingRoute.GET(request('', authorization)),
@@ -257,7 +264,7 @@ const everyHandler = (authorization: string | null): Array<[string, () => Promis
   ['waiting', () => call.waiting(authorization)],
   ['hand-out', () => call.handOut(waitingId, authorization)],
   ['screenshot', () => call.screenshot(waitingId, authorization)],
-  ['write-back', () => call.writeBack(waitingId, { status: 'erledigt' }, authorization)],
+  ['write-back', () => call.writeBack(waitingId, CLOSE, authorization)],
 ];
 
 /** Every handler answers `status` with no-store, and nothing reached the database, the history or storage. */
@@ -330,6 +337,7 @@ assert.deepEqual(JSON.parse(handOutBody), {
   context: SCRUBBED_CONTEXT,
   status: 'eingegangen',
   bucket: null,
+  hasAnswer: false,
   screenshot: `/api/problem-reports/v1/reports/${waitingId}/screenshot`,
 });
 for (const original of [
@@ -387,7 +395,7 @@ const unknown = await refusal(call.handOut(unknownId));
 assert.deepEqual(unknown, [404, { error: 'report_not_found' }]);
 assert.deepEqual(await refusal(call.handOut('not-a-report')), unknown);
 assert.deepEqual(await refusal(call.screenshot(unknownId)), unknown);
-assert.deepEqual(await refusal(call.writeBack(unknownId, { status: 'erledigt' })), unknown);
+assert.deepEqual(await refusal(call.writeBack(unknownId, CLOSE)), unknown);
 
 // The screenshot leaves only a report a thread received, as the redrawn
 // image's bytes through this server, with its own history entry.
@@ -402,15 +410,20 @@ assert.deepEqual(storageReads, [filePath(waitingId, screenshotId, 'screenshot')]
 assert.equal(events().at(-1)?.event_type, 'screenshot_handed_out');
 
 // The write-back refuses an invalid bucket or status, an assignee, an empty
-// answer and an empty change, before any database call.
+// answer, an empty change, a change without the value it was based on, and
+// expected values for other fields than it changes, before any database call.
 const rpcsBefore = world.rpcCalls.length;
 for (const body of [
-  { bucket: 'egal' },
-  { status: 'vergessen' },
-  { assigneeId: assigneeId },
-  { response: '   ' },
-  { bucket: null },
-  {},
+  { changes: { bucket: 'egal' }, expected: { bucket: null } },
+  { changes: { status: 'vergessen' }, expected: { status: 'eingegangen' } },
+  { changes: { assigneeId: assigneeId }, expected: { assigneeId: null } },
+  { changes: { response: '   ' }, expected: { response: null } },
+  { changes: { bucket: null }, expected: { bucket: null } },
+  { changes: {}, expected: {} },
+  { changes: { status: 'erledigt' } },
+  { changes: { status: 'erledigt' }, expected: { bucket: null } },
+  { changes: { status: 'erledigt', bucket: 'fehler' }, expected: { status: 'eingegangen' } },
+  { status: 'erledigt' },
   'erledigt',
 ]) {
   assert.deepEqual(
@@ -421,17 +434,37 @@ for (const body of [
 }
 assert.equal(world.rpcCalls.length, rpcsBefore, 'an invalid write-back reached the database');
 // A report no thread received takes no write-back.
-assert.deepEqual(await refusal(call.writeBack(pendingId, { status: 'erledigt' })), [
-  409,
-  { error: 'report_not_handed_out' },
-]);
+assert.deepEqual(await refusal(call.writeBack(pendingId, CLOSE)), [409, { error: 'report_not_handed_out' }]);
 
-// A valid write-back is one triage call without an actor, which signals every support person.
+// Support answered and took up a report after another thread received it:
+// that thread's write-back, based on the state it was handed, writes nothing
+// and gets the state now, with no word of support's answer.
+const SUPPORT_ANSWER = 'Wir rufen dich morgen an, Frau Sonnberg.';
+const claimed = reports().find((row) => row.id === claimedId);
+assert.ok(claimed);
+Object.assign(claimed, { status: 'in_bearbeitung', response: SUPPORT_ANSWER });
+const historyBeforeConflict = events().length;
+const conflict = await call.writeBack(claimedId, {
+  changes: { status: 'erledigt', response: 'Behoben.' },
+  expected: { status: 'eingegangen', response: null },
+});
+assert.equal(conflict.status, 409);
+assert.equal(conflict.headers.get('cache-control'), 'no-store');
+const conflictBody = await conflict.text();
+assert.deepEqual(JSON.parse(conflictBody), {
+  error: 'triage_conflict',
+  current: { status: 'in_bearbeitung', bucket: null, hasAnswer: true },
+});
+assert.ok(!conflictBody.includes('Sonnberg'), "a conflict carries support's answer");
+assert.equal(claimed.response, SUPPORT_ANSWER, "a conflicting write-back replaced support's answer");
+assert.equal(events().length, historyBeforeConflict, 'a conflicting write-back wrote history');
+
+// A valid write-back is one triage call without an actor, with the values it
+// was based on, which signals every support person.
 process.env.SUPPORT_USER_IDS = `${CALLER_ID},${assigneeId}`;
 const written = await call.writeBack(waitingId, {
-  bucket: 'fehler',
-  status: 'erledigt',
-  response: 'Behoben, ab morgen live.',
+  changes: { bucket: 'fehler', status: 'erledigt', response: 'Behoben, ab morgen live.' },
+  expected: { bucket: null, status: 'eingegangen', response: null },
 });
 assert.equal(written.status, 204);
 assert.equal(written.headers.get('cache-control'), 'no-store');
@@ -442,6 +475,7 @@ assert.deepEqual(triage?.args, {
   p_report_id: waitingId,
   p_actor_id: null,
   p_changes: { bucket: 'fehler', status: 'erledigt', response: 'Behoben, ab morgen live.' },
+  p_expected: { bucket: null, status: 'eingegangen', response: null },
   p_support_ids: [CALLER_ID, assigneeId],
 });
 
@@ -466,7 +500,13 @@ assert.deepEqual(
 
 // Logs carry codes and ids at most, never a report's text or a name.
 for (const line of logged) {
-  for (const original of [ORIGINAL_DESCRIPTION, SCRUBBED_DESCRIPTION, 'Behoben', ...PERSON_NAMES]) {
+  for (const original of [
+    ORIGINAL_DESCRIPTION,
+    SCRUBBED_DESCRIPTION,
+    'Behoben',
+    SUPPORT_ANSWER,
+    ...PERSON_NAMES,
+  ]) {
     assert.ok(!line.includes(original), `a log line carries ${original}`);
   }
 }

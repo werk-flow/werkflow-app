@@ -7,7 +7,8 @@
 -- organization are refused with their codes. The screenshot leaves only a
 -- report already handed out, with its own entry. The Agent's write-back is a
 -- triage without an actor: it changes only a report it received, sets no
--- assignee and clears no field, an invalid bucket or status is refused, its
+-- assignee and clears no field, an invalid bucket or status is refused, an
+-- answer support wrote after the hand-out is a conflict, its
 -- history entries carry no actor, its answer is marked, and it signals the
 -- reporter and support. Support's next answer clears the mark.
 begin;
@@ -88,7 +89,8 @@ declare
 begin
   v_copy := public.hand_out_problem_report(v_org, v_report, array[v_support]);
   if v_copy is distinct from jsonb_build_object('description', 'Bei [Person 1] speichert nichts',
-    'context', '{}'::jsonb, 'status', 'eingegangen', 'bucket', null, 'has_screenshot', true)
+    'context', '{}'::jsonb, 'status', 'eingegangen', 'bucket', null, 'has_answer', false,
+    'has_screenshot', true)
   then raise exception 'the hand-out answered the wrong copy: %', v_copy; end if;
   if (select handed_out_at from public.problem_reports where id = v_report) is null then
     raise exception 'the hand-out did not claim the report';
@@ -190,14 +192,16 @@ declare
   v_case record;
 begin
   for v_case in select * from (values
-    ('33600000-0000-0000-0000-000000000021'::uuid, '{"status": "in_bearbeitung"}'::jsonb, 'report_not_handed_out'),
-    ('33600000-0000-0000-0000-000000000020'::uuid, '{"assignee_id": "33600000-0000-0000-0000-000000000003"}'::jsonb, 'invalid_triage'),
-    ('33600000-0000-0000-0000-000000000020'::uuid, '{"bucket": null}'::jsonb, 'invalid_triage'),
-    ('33600000-0000-0000-0000-000000000020'::uuid, '{"response": null}'::jsonb, 'invalid_triage'),
-    ('33600000-0000-0000-0000-000000000020'::uuid, '{}'::jsonb, 'invalid_triage')
-  ) as refused (report_id, changes, code) loop
+    ('33600000-0000-0000-0000-000000000021'::uuid, '{"status": "in_bearbeitung"}'::jsonb,
+      '{"status": "eingegangen"}'::jsonb, 'report_not_handed_out'),
+    ('33600000-0000-0000-0000-000000000020'::uuid, '{"assignee_id": "33600000-0000-0000-0000-000000000003"}'::jsonb,
+      '{"assignee_id": null}'::jsonb, 'invalid_triage'),
+    ('33600000-0000-0000-0000-000000000020'::uuid, '{"bucket": null}'::jsonb, '{"bucket": null}'::jsonb, 'invalid_triage'),
+    ('33600000-0000-0000-0000-000000000020'::uuid, '{"response": null}'::jsonb, '{"response": null}'::jsonb, 'invalid_triage'),
+    ('33600000-0000-0000-0000-000000000020'::uuid, '{}'::jsonb, '{}'::jsonb, 'invalid_triage')
+  ) as refused (report_id, changes, expected, code) loop
     begin
-      perform public.triage_problem_report(v_org, v_case.report_id, null, v_case.changes, array[]::uuid[]);
+      perform public.triage_problem_report(v_org, v_case.report_id, null, v_case.changes, v_case.expected, array[]::uuid[]);
       raise exception 'the Agent''s change % was accepted', v_case.changes;
     exception when raise_exception then
       if sqlerrm <> v_case.code then
@@ -211,16 +215,45 @@ $$;
 -- An invalid bucket or status is refused.
 do $$
 declare
-  v_changes jsonb;
+  v_case record;
 begin
-  foreach v_changes in array array['{"bucket": "egal"}'::jsonb, '{"status": "vergessen"}'::jsonb] loop
+  for v_case in select * from (values
+    ('{"bucket": "egal"}'::jsonb, '{"bucket": null}'::jsonb),
+    ('{"status": "vergessen"}'::jsonb, '{"status": "eingegangen"}'::jsonb)
+  ) as refused (changes, expected) loop
     begin
       perform public.triage_problem_report('33600000-0000-0000-0000-000000000010',
-        '33600000-0000-0000-0000-000000000020', null, v_changes, array[]::uuid[]);
-      raise exception 'the change % was accepted', v_changes;
+        '33600000-0000-0000-0000-000000000020', null, v_case.changes, v_case.expected, array[]::uuid[]);
+      raise exception 'the change % was accepted', v_case.changes;
     exception when check_violation then null;
     end;
   end loop;
+end;
+$$;
+
+-- An answer support wrote after the hand-out is a conflict for the Agent,
+-- who expected none: nothing is written, and support's answer stays.
+do $$
+declare
+  v_org constant uuid := '33600000-0000-0000-0000-000000000010';
+  v_report constant uuid := '33600000-0000-0000-0000-000000000024';
+  v_support constant uuid := '33600000-0000-0000-0000-000000000003';
+begin
+  perform public.triage_problem_report(v_org, v_report, v_support,
+    jsonb_build_object('response', 'Wir melden uns.'), jsonb_build_object('response', null), array[]::uuid[]);
+  begin
+    perform public.triage_problem_report(v_org, v_report, null,
+      jsonb_build_object('status', 'erledigt', 'response', 'Behoben.'),
+      jsonb_build_object('status', 'eingegangen', 'response', null), array[]::uuid[]);
+    raise exception 'the Agent overwrote support''s answer';
+  exception when raise_exception then
+    if sqlerrm <> 'triage_conflict' then raise; end if;
+  end;
+  if (select response <> 'Wir melden uns.' or status <> 'eingegangen' or response_by_agent
+      from public.problem_reports where id = v_report)
+    or exists (select 1 from public.problem_report_events
+      where report_id = v_report and actor_id is null and event_type like '%_changed')
+  then raise exception 'a conflicting write-back wrote something'; end if;
 end;
 $$;
 
@@ -237,6 +270,7 @@ declare
 begin
   perform public.triage_problem_report(v_org, v_report, null,
     jsonb_build_object('status', 'erledigt', 'bucket', 'fehler', 'response', 'Behoben, ab morgen live.'),
+    jsonb_build_object('status', 'eingegangen', 'bucket', null, 'response', null),
     array[v_support]);
   select * into v_row from public.problem_reports where id = v_report;
   if v_row.status <> 'erledigt' or v_row.bucket <> 'fehler' or v_row.response <> 'Behoben, ab morgen live.'
@@ -250,12 +284,13 @@ begin
   then raise exception 'the write-back did not signal the reporter'; end if;
 
   perform public.triage_problem_report(v_org, v_report, v_support,
-    jsonb_build_object('status', 'in_bearbeitung'), array[]::uuid[]);
+    jsonb_build_object('status', 'in_bearbeitung'), jsonb_build_object('status', 'erledigt'), array[]::uuid[]);
   if not (select response_by_agent from public.problem_reports where id = v_report) then
     raise exception 'a status change cleared the Agent''s mark';
   end if;
   perform public.triage_problem_report(v_org, v_report, v_support,
-    jsonb_build_object('response', 'Wir schauen es uns an.'), array[]::uuid[]);
+    jsonb_build_object('response', 'Wir schauen es uns an.'),
+    jsonb_build_object('response', 'Behoben, ab morgen live.'), array[]::uuid[]);
   if (select response_by_agent from public.problem_reports where id = v_report) then
     raise exception 'support''s answer kept the Agent''s mark';
   end if;

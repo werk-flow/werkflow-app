@@ -46,7 +46,9 @@ alter table public.problem_report_events add constraint problem_report_events_ag
 
 -- Applies support's or the Agent's changes to one report: the keys `status`,
 -- `bucket`, `assignee_id` and `response` of p_changes, each optional, so two
--- writers who change different fields overwrite nothing of each other. Every
+-- writers who change different fields overwrite nothing of each other.
+-- p_expected names, for exactly those keys, the value each change was based
+-- on; a field that holds another value by now is `triage_conflict`. Every
 -- field that really changes writes one history entry with the actor; the
 -- answer's text stays out of the history. Closing sets the closing time,
 -- reopening clears it. A changed status or answer signals the reporter; any
@@ -60,6 +62,7 @@ create or replace function public.triage_problem_report(
   p_report_id uuid,
   p_actor_id uuid,
   p_changes jsonb,
+  p_expected jsonb,
   p_support_ids uuid[]
 )
 returns void
@@ -77,6 +80,10 @@ begin
   if p_changes is null or jsonb_typeof(p_changes) <> 'object'
     or p_changes - array['status', 'bucket', 'assignee_id', 'response'] <> '{}'::jsonb
     or (p_changes ? 'status' and jsonb_typeof(p_changes -> 'status') <> 'string')
+    or p_expected is null or jsonb_typeof(p_expected) <> 'object'
+    or (select coalesce(array_agg(field order by field), '{}') from jsonb_object_keys(p_changes) field)
+      is distinct from
+      (select coalesce(array_agg(field order by field), '{}') from jsonb_object_keys(p_expected) field)
     or (p_actor_id is null and (
       p_changes = '{}'::jsonb or p_changes ? 'assignee_id'
       or exists (select 1 from jsonb_each(p_changes) change where jsonb_typeof(change.value) <> 'string')
@@ -88,12 +95,21 @@ begin
   for update;
   if not found then raise exception 'report_not_found'; end if;
   if p_actor_id is null and v_report.handed_out_at is null then raise exception 'report_not_handed_out'; end if;
+  if (p_changes ? 'status' and v_report.status is distinct from p_expected ->> 'status')
+    or (p_changes ? 'bucket' and v_report.bucket is distinct from p_expected ->> 'bucket')
+    or (p_changes ? 'assignee_id'
+      and v_report.assignee_id is distinct from (p_expected ->> 'assignee_id')::uuid)
+    or (p_changes ? 'response' and v_report.response is distinct from p_expected ->> 'response')
+  then raise exception 'triage_conflict'; end if;
 
   v_status := case when p_changes ? 'status' then p_changes ->> 'status' else v_report.status end;
   v_bucket := case when p_changes ? 'bucket' then p_changes ->> 'bucket' else v_report.bucket end;
   v_assignee_id := case when p_changes ? 'assignee_id'
     then (p_changes ->> 'assignee_id')::uuid else v_report.assignee_id end;
   v_response := case when p_changes ? 'response' then p_changes ->> 'response' else v_report.response end;
+  if v_assignee_id is distinct from v_report.assignee_id and v_assignee_id is not null
+    and not exists (select 1 from public.profiles profile where profile.id = v_assignee_id)
+  then raise exception 'assignee_not_support'; end if;
 
   update public.problem_reports report
   set status = v_status,
@@ -133,7 +149,8 @@ $$;
 -- Hands one report's scrubbed copy to a report thread, once: the call claims
 -- the report and writes the hand-out into the history before it answers, and
 -- signals the support persons in p_support_ids. It answers one object: the
--- copy, the scrubbed context, status, bucket and whether a redrawn screenshot exists;
+-- copy, the scrubbed context, status, bucket, whether an answer exists (never
+-- its text, which support wrote unscrubbed) and whether a redrawn screenshot exists;
 -- never an original, a name or another id. A report without a scrubbed copy
 -- is `copy_pending` or `copy_unavailable`, a closed one `report_closed`, one
 -- already handed out `already_handed_out`, and a report of another
@@ -171,6 +188,7 @@ begin
     'context', v_report.scrubbed_context,
     'status', v_report.status,
     'bucket', v_report.bucket,
+    'has_answer', v_report.response is not null,
     'has_screenshot', exists (
       select 1 from public.problem_report_files file
       where file.report_id = p_report_id and file.organization_id = p_organization_id

@@ -50,12 +50,24 @@ export type HandedOutCopy = {
   context: ScrubbedProblemReportContext | null;
   status: ProblemReportStatus;
   bucket: ProblemReportBucket | null;
+  /** Whether the reporter has an answer; its text never leaves, since support writes it unscrubbed. */
+  hasAnswer: boolean;
   /** The address of the redrawn screenshot on this API, or null without one. */
   screenshot: string | null;
 };
 
+/** What a write-back that met a newer triage answers: the report's state now, without any text. */
+type CurrentReportState = Pick<HandedOutCopy, 'status' | 'bucket' | 'hasAnswer'>;
+export type WriteBackResult =
+  | HandoutResult<object>
+  | { ok: false; error: 'triage_conflict'; current: CurrentReportState };
+
 const FAILED = { ok: false, error: 'failed' } as const;
 const NOT_FOUND = { ok: false, error: 'report_not_found' } as const;
+
+function bucketOf(value: string | null): ProblemReportBucket | null {
+  return PROBLEM_REPORT_BUCKETS.find((bucket) => bucket === value) ?? null;
+}
 
 /** The path of a report's screenshot on this API: it names nothing but the report. */
 function handedOutScreenshotPath(reportId: string): string {
@@ -137,13 +149,14 @@ function handOutArguments(report: { id: string; organization_id: string }) {
 /** The arguments of the Agent's triage of one loaded report: no actor. */
 function writeBackArguments(
   report: { id: string; organization_id: string },
-  changes: ProblemReportWriteBack,
+  writeBack: ProblemReportWriteBack,
 ) {
   return rpcArgs('triage_problem_report', {
     p_organization_id: report.organization_id,
     p_report_id: report.id,
     p_actor_id: null,
-    p_changes: changes,
+    p_changes: writeBack.changes,
+    p_expected: writeBack.expected,
     p_support_ids: supportSignalIds(),
   });
 }
@@ -154,6 +167,7 @@ const handedOutRowSchema = z.strictObject({
   context: z.unknown(),
   status: z.string(),
   bucket: z.string().nullable(),
+  has_answer: z.boolean(),
   has_screenshot: z.boolean(),
 });
 const handedOutScreenshotSchema = z.strictObject({ path: z.string(), mime_type: z.string() });
@@ -185,7 +199,8 @@ export async function handOutProblemReport(
         description: row.description,
         context: parseScrubbedProblemReportContext(row.context),
         status: constrainedValue(PROBLEM_REPORT_STATUSES, row.status, 'problem_reports.status'),
-        bucket: PROBLEM_REPORT_BUCKETS.find((bucket) => bucket === row.bucket) ?? null,
+        bucket: bucketOf(row.bucket),
+        hasAnswer: row.has_answer,
         screenshot: row.has_screenshot ? handedOutScreenshotPath(loaded.report.id) : null,
       },
     };
@@ -222,24 +237,51 @@ export async function handOutProblemReportScreenshot(
   }
 }
 
+/** A report's status, bucket and whether it has an answer, after a write-back met a newer triage. */
+async function readCurrentState(
+  admin: AdminClient,
+  report: { id: string; organization_id: string },
+): Promise<CurrentReportState | null> {
+  const { data, error } = await loggedRead(
+    'writeBackProblemReport: state read failed',
+    admin
+      // tenant-scope: cross-organization-by-design — the one report a thread received, of any organization, by its id
+      .from('problem_reports')
+      .select('status, bucket, response')
+      .eq('id', report.id)
+      .maybeSingle(),
+  );
+  if (error || !data) return null;
+  return {
+    status: constrainedValue(PROBLEM_REPORT_STATUSES, data.status, 'problem_reports.status'),
+    bucket: bucketOf(data.bucket),
+    hasAnswer: data.response !== null,
+  };
+}
+
 /**
  * Writes a thread's bucket, status and answer to one report it received, in
  * one triage call without an actor: the history names the Agent, the answer
  * is marked as written automatically, and the reporter and support see the
- * change live.
+ * change live. Each change names the value it was based on; when a field
+ * holds another value by now, nothing is written and the thread gets the
+ * report's current state to decide again, never support's answer.
  */
 export async function writeBackProblemReport(
   admin: AdminClient,
   reportId: string,
-  changes: ProblemReportWriteBack,
-): Promise<HandoutResult<object>> {
+  writeBack: ProblemReportWriteBack,
+): Promise<WriteBackResult> {
   const loaded = await loadReport(admin, reportId);
   if (!loaded.ok) return loaded;
   const { error } = await admin.rpc(
     'triage_problem_report',
     // tenant-scope: cross-organization-by-design — a report thread answers a report of any organization; the loaded report's own organization scopes the call
-    writeBackArguments(loaded.report, changes),
+    writeBackArguments(loaded.report, writeBack),
   );
-  if (error) return refusalOf(error, 'writeBackProblemReport: write-back failed');
-  return { ok: true };
+  if (!error) return { ok: true };
+  if (error.message !== 'triage_conflict')
+    return refusalOf(error, 'writeBackProblemReport: write-back failed');
+  const current = await readCurrentState(admin, loaded.report);
+  return current ? { ok: false, error: 'triage_conflict', current } : FAILED;
 }

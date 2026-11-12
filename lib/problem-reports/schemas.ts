@@ -205,13 +205,21 @@ export type FileProblemReportForCallerInput = z.input<typeof fileProblemReportFo
 
 // A report thread's write-back (docs/features/problem-reports.md, "Hand-out
 // to report threads"): bucket, status and the answer to the reporter, each
-// optional, at least one. The thread sets no assignee and clears no field.
-export const problemReportWriteBackSchema = z
+// optional, at least one, with the value each change was based on under the
+// same keys. The thread never sees support's answer, so it expects no answer
+// (null) or the text it wrote itself. It sets no assignee and clears no field.
+const writeBackChangesSchema = z
   .strictObject({
     status: z.enum(PROBLEM_REPORT_STATUSES),
     bucket: z.enum(PROBLEM_REPORT_BUCKETS),
     response: z.string().trim().min(1).max(PROBLEM_REPORT_RESPONSE_MAX_LENGTH),
   })
-  .partial()
-  .refine((changes) => Object.keys(changes).length > 0);
+  .partial();
+
+export const problemReportWriteBackSchema = z
+  .strictObject({
+    changes: writeBackChangesSchema,
+    expected: triageExpectedSchema.omit({ assigneeId: true }),
+  })
+  .refine(({ changes, expected }) => Object.keys(changes).length > 0 && sameFields(changes, expected));
 export type ProblemReportWriteBack = z.infer<typeof problemReportWriteBackSchema>;

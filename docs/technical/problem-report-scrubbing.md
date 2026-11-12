@@ -92,7 +92,7 @@ The scrubber also replaces too much, which costs readability and never privacy. 
 The one door through which report content leaves WerkFlow. [Problem reports](../features/problem-reports.md#current-product-baseline) owns the four route handlers; `lib/problem-reports/handout.ts` holds what they read and write.
 
 - **Who receives it.** Report threads outside WerkFlow, which pull with the bearer secret `PROBLEM_REPORT_HANDOUT_SECRET`. WerkFlow sends nothing on its own: no webhook, no relay, no outbound call. Without the secret the hand-out is off.
-- **What leaves.** The report's own id, the scrubbed description, the scrubbed context, status, bucket, and the redrawn screenshot. Never an original, an attachment, its name or address, the organization's id or name, the reporter, the filer, the assignee, the number or another id.
+- **What leaves.** The report's own id, the scrubbed description, the scrubbed context, status, bucket, whether it has an answer, and the redrawn screenshot. Support's answer is unscrubbed, so its text never leaves, also not with a write-back's conflict. Never an original, an attachment, its name or address, the organization's id or name, the reporter, the filer, the assignee, the number or another id.
 - **Only a scrubbed copy.** A report whose state is not `bereinigt` is refused with a code; no other text stands in for the copy.
 - **Once, accounted.** The hand-out and the screenshot each write a history entry in the database call that answers them, before anything leaves. The first hand-out claims the report, so each copy leaves to one thread once.
 - **The screenshot goes through the server.** A signed storage address would carry the organization's id in its path, so the server reads the bytes and answers them itself.
