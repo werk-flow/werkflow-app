@@ -1,16 +1,13 @@
 import { worldName } from '../../../lib/testing/seed-world-plan';
-import { seedCustomer } from '../../golden/support/db/customers';
+import { getObjektCustomer, seedCustomer, type PersistedCustomer } from '../../golden/support/db/customers';
 import { seedInstalledEquipment } from '../../golden/support/db/service';
 import { createAdminClient } from '../../golden/support/db/shared';
 import type { TestWorld } from '../../golden/support/world';
 import { surfaceFixture } from './surface-fixtures';
-import type { SurfaceDestination } from './surface-routes';
 
 // The Objekt-role world of the site-roles acceptance set, also opened by the
 // customers layout audit: it lives apart from the set file, which only the
-// acceptance loader may load.
-
-type ManagedBuildings = { managerId: string; ownerId: string; sourcePrefix: string };
+// acceptance loader may load. Each consumer builds its own route.
 
 /**
  * A Hausverwaltung managing two buildings of other customers: a WEG's house
@@ -19,9 +16,9 @@ type ManagedBuildings = { managerId: string; ownerId: string; sourcePrefix: stri
  * with an access contact. Every write goes through the functions the
  * actions call, so the history shows them.
  */
-async function managedBuildings(world: TestWorld): Promise<ManagedBuildings> {
-  const sourcePrefix = `OBJ-${world.runId.slice(0, 6)}`;
-  const json = await surfaceFixture(world, 'acceptance.managed-buildings', async () => {
+export async function seedManagedBuildings(world: TestWorld): Promise<void> {
+  const sourcePrefix = managedBuildingsSourcePrefix(world);
+  await surfaceFixture(world, 'acceptance.managed-buildings', async () => {
     const orgId = world.orgId;
     const actor = world.users.buero.id;
     const admin = createAdminClient();
@@ -144,29 +141,25 @@ async function managedBuildings(world: TestWorld): Promise<ManagedBuildings> {
       siteId: ownerSite,
       name: 'Gasbrennwerttherme Keller',
     });
-    return JSON.stringify({ managerId: manager.clientId, ownerId: owner.clientId });
+    return 'seeded';
   });
-  const ids: unknown = JSON.parse(json);
-  if (
-    typeof ids !== 'object' ||
-    ids === null ||
-    !('managerId' in ids) ||
-    !('ownerId' in ids) ||
-    typeof ids.managerId !== 'string' ||
-    typeof ids.ownerId !== 'string'
-  )
-    throw new Error('managedBuildings: the fixture returned no customer ids.');
-  return { managerId: ids.managerId, ownerId: ids.ownerId, sourcePrefix };
 }
 
-export async function managingCustomer(world: TestWorld): Promise<SurfaceDestination> {
-  return { route: `/kunden/${(await managedBuildings(world)).managerId}` };
+/** The Objekt numbers of the two buildings start with this prefix. */
+export function managedBuildingsSourcePrefix(world: TestWorld): string {
+  return `OBJ-${world.runId.slice(0, 6)}`;
 }
 
-export async function managedBuilding(world: TestWorld): Promise<SurfaceDestination> {
-  return { route: `/kunden/${(await managedBuildings(world)).ownerId}` };
-}
-
-export async function managedBuildingSearch(world: TestWorld): Promise<SurfaceDestination> {
-  return { route: `/kunden?q=${encodeURIComponent((await managedBuildings(world)).sourcePrefix)}` };
+/**
+ * The Hausverwaltung (`manager`) or the WEG (`owner`) of the first building,
+ * seeded once and read back by its Objekt number: another set seeds a
+ * customer of the same name in the world.
+ */
+export async function managedBuildingCustomer(
+  world: TestWorld,
+  which: 'manager' | 'owner',
+): Promise<PersistedCustomer> {
+  await seedManagedBuildings(world);
+  const sourceNumber = `${managedBuildingsSourcePrefix(world)}-1`;
+  return getObjektCustomer(world.orgId, sourceNumber, which === 'manager' ? 'hausverwaltung' : undefined);
 }
