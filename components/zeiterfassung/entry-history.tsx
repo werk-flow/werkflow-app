@@ -39,7 +39,8 @@ import {
   type HistoryLayout,
   type ProfileNames,
 } from './entry-history-read';
-import { activityDays, intervalAnchor } from '@/lib/time-tracking/activity-intervals';
+import { activityDays } from '@/lib/time-tracking/activity-days';
+import { intervalAnchor } from '@/lib/time-tracking/activity-intervals';
 import { useWithdrawSubmission } from './use-withdraw-submission';
 
 // Settle key for a correction that adds time (no row yet); entry ids are UUIDs.

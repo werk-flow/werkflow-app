@@ -3,13 +3,9 @@
 // than a minute never shows as a „08:15–08:15“ row.
 import { expect, test } from 'bun:test';
 import { resolveBerlinWallTime } from '@/lib/date-time/berlin';
-import {
-  activityDays,
-  intervalMinutes,
-  isMomentary,
-  jobActivityIntervals,
-  jobIntervalEntries,
-} from './activity-intervals';
+import { isMomentary, jobActivityIntervals, jobIntervalEntries } from './activity-intervals';
+import { activityDays } from './activity-days';
+import { intervalDurationLabel } from './activity-interval-labels';
 import { projectTimeSegmentsToLegacyTransitions, type TimeSegmentFact } from './segments';
 import { calculateWorkSessions } from './work-sessions';
 import type { TimeEntry, TimeEntryStatus, TimeEntryType, TimeSegmentKind } from './types';
@@ -74,9 +70,9 @@ test('a legacy close without a job id ends the job time it follows, so the past 
 
   // The work pack pairs only the job's entries and still reads both stretches as closed.
   const intervals = jobActivityIntervals(jobEntries, jobX, NOW);
-  expect(intervals.map((interval) => [interval.state, intervalMinutes(interval, NOW)])).toEqual([
-    ['closed', 251],
-    ['closed', 251],
+  expect(intervals.map((interval) => [interval.state, intervalDurationLabel(interval)])).toEqual([
+    ['closed', '4 Std. 11 Min.'],
+    ['closed', '4 Std. 11 Min.'],
   ]);
 });
 
@@ -105,16 +101,18 @@ test('only an open start of today runs; an open start of an earlier day lacks it
     entry('yesterday', 'clock_in', '2026-09-17T06:57', jobX),
     entry('today', 'clock_in', '2026-09-18T07:30', jobX),
   ]);
-  expect(intervals.map((interval) => [interval.id, interval.state, intervalMinutes(interval, NOW)])).toEqual([
-    ['yesterday:open', 'unclosed', null],
-    ['today:open', 'running', 270],
-  ]);
+  expect(intervals.map((interval) => [interval.id, interval.state, intervalDurationLabel(interval)])).toEqual(
+    [
+      ['yesterday:open', 'unclosed', 'Ende fehlt'],
+      ['today:open', 'running', 'läuft'],
+    ],
+  );
 });
 
 test('an end without a start stays visible as an end whose start is missing', () => {
   const [interval] = activities([entry('out', 'clock_out', '2026-09-17T15:49', jobX)]);
   expect(interval?.state).toBe('unopened');
-  expect(interval && intervalMinutes(interval, NOW)).toBeNull();
+  expect(interval && intervalDurationLabel(interval)).toBe('Beginn fehlt');
 });
 
 test('a rejected entry never closes counted time', () => {

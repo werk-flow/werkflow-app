@@ -1,4 +1,4 @@
-import { formatBerlinLocalDate, isSameLocalDay } from '@/lib/date-time/berlin';
+import { isSameLocalDay } from '@/lib/date-time/berlin';
 import { getEffectiveTimeEntries, sortTimeEntries } from './effective-entries';
 import { isBreakEndFollowedByClockIn } from './transition-pairs';
 import type { TimeEntry, TimeEntryStatus, TimeSegmentKind } from './types';
@@ -6,8 +6,8 @@ import type { TimeEntry, TimeEntryStatus, TimeSegmentKind } from './types';
 // Recorded time as activity intervals: each start paired with the next event
 // that ends it on its Berlin day (a clock-out, a break start for work, a break
 // end for a break), whatever job that event names. The job time
-// reader, the Verlauf and the work pack's „Meine Zeit“ read time through it, and
-// the calendar's day hides what `isMomentary` names.
+// reader, the work pack's „Meine Zeit“ and the Verlauf's days (activity-days.ts)
+// read time through it, and the calendar's day hides what `isMomentary` names.
 
 type IntervalFacts = {
   id: string;
@@ -133,7 +133,7 @@ export function intervalAnchor(interval: ActivityInterval): TimeEntry {
  * pending entries pair together, as they count; rejected entries and pending
  * deletions each pair among themselves, so they never close counted time.
  */
-function pairActivityIntervals(entries: readonly TimeEntry[], now = new Date()): ActivityInterval[] {
+export function pairActivityIntervals(entries: readonly TimeEntry[], now = new Date()): ActivityInterval[] {
   const groups = new Map<string, { status: TimeEntryStatus; entries: TimeEntry[] }>();
   for (const entry of entries) {
     const status =
@@ -160,15 +160,9 @@ function pairActivityIntervals(entries: readonly TimeEntry[], now = new Date()):
     );
 }
 
-/** The minutes of a closed interval, or of a running one until now; null when an end or start is missing. */
-export function intervalMinutes(interval: ActivityInterval, now = new Date()): number | null {
-  if (interval.state === 'closed') {
-    return (Date.parse(interval.end.timestamp) - Date.parse(interval.start.timestamp)) / ONE_MINUTE_MS;
-  }
-  if (interval.state === 'running') {
-    return Math.max(0, now.getTime() - Date.parse(interval.start.timestamp)) / ONE_MINUTE_MS;
-  }
-  return null;
+/** The minutes of a closed interval; the views say „läuft“, „Ende fehlt“ or „Beginn fehlt“ for the others. */
+export function intervalMinutes(interval: Extract<ActivityInterval, { state: 'closed' }>): number {
+  return (Date.parse(interval.end.timestamp) - Date.parse(interval.start.timestamp)) / ONE_MINUTE_MS;
 }
 
 /**
@@ -180,7 +174,7 @@ export function isMomentary(start: string, end: string | null): boolean {
   return end !== null && Date.parse(end) - Date.parse(start) < ONE_MINUTE_MS;
 }
 
-function isMomentaryInterval(interval: ActivityInterval): boolean {
+export function isMomentaryInterval(interval: ActivityInterval): boolean {
   return interval.state === 'closed' && isMomentary(interval.start.timestamp, interval.end.timestamp);
 }
 
@@ -243,31 +237,4 @@ export function jobActivityIntervals(
   return pairActivityIntervals(entries, now).filter(
     (interval) => isCountedJobTime(interval, jobId) && !isMomentaryInterval(interval),
   );
-}
-
-/** One Berlin day of a person's history: its activities in time order. */
-export type ActivityDay = { date: string; intervals: ActivityInterval[] };
-
-/**
- * A person's history as days, newest first, each with its activities in time
- * order, momentary taps left out. A status keeps only the activities of that
- * status, so an approved start with a pending end reads as one pending
- * activity, never as two halves.
- */
-export function activityDays(
-  entries: readonly TimeEntry[],
-  now = new Date(),
-  status?: TimeEntryStatus,
-): ActivityDay[] {
-  const days = new Map<string, ActivityInterval[]>();
-  for (const interval of pairActivityIntervals(entries, now)) {
-    if (isMomentaryInterval(interval) || (status && interval.status !== status)) continue;
-    const date = formatBerlinLocalDate(intervalAnchor(interval).timestamp);
-    const day = days.get(date);
-    if (day) day.push(interval);
-    else days.set(date, [interval]);
-  }
-  return [...days]
-    .sort(([left], [right]) => right.localeCompare(left))
-    .map(([date, intervals]) => ({ date, intervals }));
 }

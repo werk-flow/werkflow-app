@@ -23,7 +23,7 @@ export function intervalSpanLabel(interval: ActivityInterval): string {
 export function intervalDurationLabel(interval: ActivityInterval): string {
   switch (interval.state) {
     case 'closed':
-      return formatDuration(Math.floor(intervalMinutes(interval) ?? 0));
+      return formatDuration(Math.floor(intervalMinutes(interval)));
     case 'running':
       return 'läuft';
     case 'unclosed':

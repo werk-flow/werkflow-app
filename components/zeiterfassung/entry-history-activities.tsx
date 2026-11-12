@@ -1,11 +1,8 @@
 'use client';
 
 import { ListRow } from '@/components/ui/list-row';
-import {
-  intervalAnchor,
-  type ActivityDay,
-  type ActivityInterval,
-} from '@/lib/time-tracking/activity-intervals';
+import type { ActivityDay } from '@/lib/time-tracking/activity-days';
+import { intervalAnchor, type ActivityInterval } from '@/lib/time-tracking/activity-intervals';
 import { intervalDurationLabel, intervalSpanLabel } from '@/lib/time-tracking/activity-interval-labels';
 import { TIME_ACTIVITY_LABELS, type TimeEntry } from '@/lib/time-tracking/types';
 import { isEntryInClosedPeriod } from '@/lib/time-tracking/closed-period-dates';

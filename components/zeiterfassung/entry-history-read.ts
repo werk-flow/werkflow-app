@@ -1,5 +1,5 @@
 import { readInBackground } from '@/lib/data/background-read-client';
-import type { ActivityDay } from '@/lib/time-tracking/activity-intervals';
+import type { ActivityDay } from '@/lib/time-tracking/activity-days';
 import type { TimeEntry, TimeEntryAuditEvent } from '@/lib/time-tracking/types';
 
 // What the Verlauf's read (entry-history.tsx) returns and the labels it adds:
