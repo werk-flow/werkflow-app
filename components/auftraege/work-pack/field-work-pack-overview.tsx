@@ -9,11 +9,8 @@ import { useBanner } from '@/components/ui/banner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { FieldWorkPackJob } from '@/lib/jobs/field-work-pack';
-import type { JobSiteAccessProposalRead } from '@/lib/site-access-proposals/types';
+import type { FieldSiteAccess } from '@/lib/site-access-proposals/types';
 import { FieldSiteAccessProposal } from './field-site-access-proposal';
-
-/** The job's Einsatzort and the latest access proposal for it; null without an Einsatzort. */
-type FieldSiteAccess = { siteId: string; read: JobSiteAccessProposalRead } | null;
 import { JOB_PRIORITY_LABELS } from '@/lib/jobs/types';
 
 function formatSchedule(job: FieldWorkPackJob): string {
@@ -32,7 +29,8 @@ export function FieldWorkPackOverview({
   siteAccess,
 }: {
   job: FieldWorkPackJob;
-  siteAccess: FieldSiteAccess;
+  /** The job's Einsatzort and its latest access proposal; null without an Einsatzort. */
+  siteAccess: FieldSiteAccess | null;
 }): ReactElement {
   const { showBanner } = useBanner();
   const overviewRef = useRef<HTMLElement>(null);
@@ -111,7 +109,8 @@ function FieldWorkPackOverviewFacts({
   siteAccess,
 }: {
   job: FieldWorkPackJob;
-  siteAccess: FieldSiteAccess;
+  /** The job's Einsatzort and its latest access proposal; null without an Einsatzort. */
+  siteAccess: FieldSiteAccess | null;
 }): ReactElement {
   const duration = formatDurationOrNull(job.plannedWorkingMinutes);
   return (
@@ -152,9 +151,7 @@ function FieldWorkPackOverviewFacts({
                 <span className="font-medium">Zugang:</span> {job.accessNotes}
               </p>
             )}
-            {siteAccess && (
-              <FieldSiteAccessProposal jobId={job.id} siteId={siteAccess.siteId} read={siteAccess.read} />
-            )}
+            {siteAccess && <FieldSiteAccessProposal jobId={job.id} access={siteAccess} />}
           </div>
         </div>
       </div>

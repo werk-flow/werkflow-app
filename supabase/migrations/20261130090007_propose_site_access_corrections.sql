@@ -385,7 +385,7 @@ grant execute on function public.reject_site_access_proposal(uuid, uuid, uuid, t
 -- access proposals. Each array holds at most p_limit + 1 rows, so the caller
 -- sees an overflow instead of a cut. list_open_request_attention stays for
 -- the previous build; a later release drops it
--- (docs/technical/enforcement-ladder-backlog.md).
+-- (KEPT_FOR_DEPLOYED_BUILD in lib/security/retired-functions.test.ts).
 create function public.read_manager_attention_sets(p_organization_id uuid, p_limit integer)
 returns jsonb
 language sql

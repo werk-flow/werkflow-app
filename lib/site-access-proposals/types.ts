@@ -66,5 +66,17 @@ export type JobSiteAccessProposal = {
 /** The field work pack's read of that proposal; a failed read is not „no proposal“. */
 export type JobSiteAccessProposalRead = { ok: true; proposal: JobSiteAccessProposal | null } | { ok: false };
 
+/**
+ * What the field work pack hands its client: the Einsatzort, and only the
+ * keys that hold something, because the job page's payload is measured
+ * (lab.field.job-open). No proposal sends the site id alone.
+ */
+export type FieldSiteAccess = { siteId: string; proposal?: JobSiteAccessProposal; failed?: true };
+
+export function fieldSiteAccess(siteId: string, read: JobSiteAccessProposalRead): FieldSiteAccess {
+  if (!read.ok) return { siteId, failed: true };
+  return read.proposal ? { siteId, proposal: read.proposal } : { siteId };
+}
+
 /** A Zugangskontakt of the Einsatzort that an acceptance can correct. */
 export type SiteAccessContactOption = { id: string; name: string; phone: string | null };

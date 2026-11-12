@@ -17,6 +17,7 @@ import { FieldWorkPackContextSources, FieldWorkPackEquipmentSource } from './fie
 import { loadFieldWorkPackData, type FieldWorkPackData } from './field-work-pack-data';
 import type { FieldWorkPackJob } from '@/lib/jobs/field-work-pack';
 import { jobDetailHref } from '@/lib/jobs/routes';
+import { fieldSiteAccess } from '@/lib/site-access-proposals/types';
 import { FieldWorkPackRecordSources, FieldWorkPackTimeAndMaterials } from './field-work-pack-record-sources';
 
 export async function FieldWorkPackPage({
@@ -64,7 +65,7 @@ export async function FieldWorkPackPage({
         <div data-testid="field-work-pack" className="space-y-4 sm:space-y-6">
           <FieldWorkPackOverview
             job={fieldJob}
-            siteAccess={job.siteId ? { siteId: job.siteId, read: data.siteAccessProposalRead } : null}
+            siteAccess={job.siteId ? fieldSiteAccess(job.siteId, data.siteAccessProposalRead) : null}
           />
           <FieldWorkPackContextSources job={job} data={data} />
           <FieldWorkPackExecutionSection

@@ -8,8 +8,8 @@ import { lazyDialog } from '@/components/shared/lazy-dialog';
 import { Button } from '@/components/ui/button';
 import { useSettleOnChange } from '@/hooks/use-settle-on-change';
 import type {
+  FieldSiteAccess,
   JobSiteAccessProposal,
-  JobSiteAccessProposalRead,
   SiteAccessProposalValues,
 } from '@/lib/site-access-proposals/types';
 import { formatGermanDate } from '@/lib/utils';
@@ -37,28 +37,27 @@ const EMPTY_VALUES: SiteAccessProposalValues = {
  */
 export function FieldSiteAccessProposal({
   jobId,
-  siteId,
-  read,
+  access,
 }: {
   jobId: string;
-  siteId: string;
-  read: JobSiteAccessProposalRead;
+  access: FieldSiteAccess;
 }): ReactElement {
   const [open, setOpen] = useState(false);
-  const proposal = read.ok ? read.proposal : null;
-  const settle = useSettleOnChange(read);
+  const { siteId } = access;
+  const proposal = access.proposal ?? null;
+  const settle = useSettleOnChange(access);
   const waiting = lazyProposalDialog.useWaiting(open);
   const ownOpenValues = proposal?.status === 'open' ? proposal.values : null;
 
   return (
     <div className="mt-3 space-y-2" data-testid="field-site-access">
-      {read.ok ? (
-        <SiteAccessProposalState proposal={proposal} />
-      ) : (
+      {access.failed ? (
         <FieldWorkPackLoadError
           title="Zugangshinweis nicht geladen"
           description="Ob das Büro deinen Hinweis zum Zugang schon geprüft hat, ist gerade nicht bekannt."
         />
+      ) : (
+        <SiteAccessProposalState proposal={proposal} />
       )}
       <Button
         type="button"
