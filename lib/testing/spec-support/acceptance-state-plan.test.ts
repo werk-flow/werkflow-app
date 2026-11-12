@@ -2,7 +2,7 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { ACCEPTANCE_SETS } from '../../../tests/audit/support/acceptance-sets';
+import { acceptanceSets } from '../../../tests/audit/support/acceptance-sets';
 import {
   interceptsRequest,
   isTargetPrefetch,
@@ -84,7 +84,7 @@ test('a loading capture starts on another route, and a state capture names its s
 });
 
 test('every state capture of an open set names its state in its id', () => {
-  const captures = ACCEPTANCE_SETS.flatMap((set) => set.captures);
+  const captures = acceptanceSets().flatMap((set) => set.captures);
   expect(captures.some((capture) => capture.state)).toBe(true);
   for (const capture of captures) if (capture.state) expect(capture.id).toEndWith(`-${capture.state}`);
 });
