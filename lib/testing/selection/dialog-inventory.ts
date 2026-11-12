@@ -270,6 +270,9 @@ export const DIALOG_INVENTORY = {
     {
       audits: [{ route: '/mitarbeiter', role: 'admin', opener: 'people.member-remove' }],
     },
+  'components/mitarbeiter/role-escalation-confirm-dialog.tsx#RoleEscalationConfirmDialog|{copy.title}': {
+    audits: [{ route: '/mitarbeiter', role: 'admin', opener: 'people.member-role-escalation' }],
+  },
   'components/mitarbeiter/personnel-invite-dialog.tsx#PersonnelInviteDialog|Zugang für {personName} einladen':
     {
       audits: [{ route: '/mitarbeiter/[userId]', role: 'admin', opener: 'people.personnel-invite' }],
