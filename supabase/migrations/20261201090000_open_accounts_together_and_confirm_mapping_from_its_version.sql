@@ -12,7 +12,7 @@
 -- Admin check, locks every person and every month from the opening date to
 -- today, and raises the action's failure code of the first refusal, so
 -- nothing is opened:
---   not_authorized, reason_required, invalid_input, employee_not_found,
+--   not_authorized, reason_required, invalid_input, opening_date_too_old, employee_not_found,
 --   account_already_open, opening_date_locked; the opening event trigger
 --   still raises period_closed for a date inside a closed month.
 --
@@ -52,8 +52,13 @@ begin
     raise exception 'not_authorized';
   end if;
   if nullif(btrim(p_reason), '') is null then raise exception 'reason_required'; end if;
-  -- Bounds the month locks below: no time account starts before 2000.
-  if p_opened_on is null or p_opened_on < date '2000-01-01' then raise exception 'invalid_input'; end if;
+  if p_opened_on is null then raise exception 'invalid_input'; end if;
+  -- Bounds the month locks below to 121: an opening date lies at most ten
+  -- years back (OPENING_YEARS_BACK, earliestOpeningDate in lib/time-accounts/opening-dates.ts).
+  -- A future date takes no month lock.
+  if p_opened_on < ((clock_timestamp() at time zone 'Europe/Berlin')::date - interval '10 years')::date then
+    raise exception 'opening_date_too_old';
+  end if;
   -- At most 500 people per call, OPENING_BATCH_LIMIT in lib/time-accounts/opening-dates.ts:
   -- far more than one organization's missing accounts, and the per-person
   -- locks below stay far below the server's lock table.

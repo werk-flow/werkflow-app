@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page, test } from '@playwright/test';
-import { textInDom } from '../golden/support/steps/shared';
+import { datePickerDigits, textInDom, typeIntoDatePicker } from '../golden/support/steps/shared';
 import { answerHeldWrite, expectHeldWrite, openContractFixture } from './open-fixture';
 
 // Missing time accounts open with one shared date and reason and one balance
@@ -107,4 +107,15 @@ test('a marked reason clears as soon as it is typed again', async ({ page }) => 
   await reason.fill('Einführung');
   await expect(reason).not.toHaveAttribute('aria-invalid', 'true');
   await expect(form(page)).not.toContainText('Gib einen Grund für die Eröffnung an.');
+});
+
+test('an opening date more than ten years back marks and focuses the date and sends nothing', async ({
+  page,
+}) => {
+  await typeIntoDatePicker(form(page), 'Eröffnungsdatum', datePickerDigits('2001-01-01'));
+  await openAll(page).click();
+  const date = form(page).getByRole('group', { name: 'Eröffnungsdatum' });
+  await expect(date).toBeFocused();
+  await expect(form(page)).toContainText('Das Eröffnungsdatum darf höchstens zehn Jahre zurückliegen.');
+  expect(await page.evaluate(() => window.uiContractWrites.calls.length)).toBe(0);
 });

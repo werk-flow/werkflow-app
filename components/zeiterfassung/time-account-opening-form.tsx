@@ -26,7 +26,8 @@ import {
   ZERO_BALANCE_INPUT,
 } from '@/lib/time-accounts/balance-input';
 import { getTimeAccountFailureMessage } from '@/lib/time-accounts/messages';
-import { startDateHint } from '@/lib/time-accounts/opening-dates';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
+import { earliestOpeningDate, OPENING_DATE_TOO_OLD, startDateHint } from '@/lib/time-accounts/opening-dates';
 import type { TimeAccountSettingsData } from '@/lib/time-accounts/queries';
 import { formatGermanDate, toLocalDateString } from '@/lib/utils';
 
@@ -141,15 +142,22 @@ type OpeningErrors = {
   balances: readonly string[];
 };
 
+/** Why the shared opening date cannot be sent: missing, or older than the bound. */
+function openedOnError(openedOn: Date | undefined, today: string): string | undefined {
+  if (!openedOn) return 'Wähle das Eröffnungsdatum.';
+  return toLocalDateString(openedOn) < earliestOpeningDate(today) ? OPENING_DATE_TOO_OLD : undefined;
+}
+
 /** What the submission lacks, and the controls to mark, in the order of the form. */
 function checkOpening(input: {
+  today: string;
   openedOn: Date | undefined;
   reason: string;
   people: readonly MissingAccount[];
   balanceOf: (employeeRecordId: string) => string;
 }): { errors: OpeningErrors; invalidControlIds: string[] } {
   const errors: OpeningErrors = {
-    ...(input.openedOn ? {} : { openedOn: 'Wähle das Eröffnungsdatum.' }),
+    openedOn: openedOnError(input.openedOn, input.today),
     ...(input.reason.trim() ? {} : { reason: 'Gib einen Grund für die Eröffnung an.' }),
     balances: input.people
       .map((employee) => employee.employeeRecordId)
@@ -207,7 +215,7 @@ function useOpenTimeAccounts(missingAccounts: readonly MissingAccount[], suggest
       target === OPEN_ALL
         ? missingAccounts
         : missingAccounts.filter((employee) => employee.employeeRecordId === target);
-    const check = checkOpening({ openedOn, reason, people, balanceOf });
+    const check = checkOpening({ today: getBusinessTodayIso(), openedOn, reason, people, balanceOf });
     setErrors(check.errors);
     if (!openedOn || check.invalidControlIds.length > 0) {
       focusFirstVisibleInvalid(check.invalidControlIds);

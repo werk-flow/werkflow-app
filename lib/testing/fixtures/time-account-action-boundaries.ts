@@ -381,7 +381,11 @@ assert.deepEqual(
     error: 'invalid_code',
   },
 );
-assert.equal(world.rpcCalls.length, 0, 'a refused balance or code reached the database');
+assert.deepEqual(await openTimeAccounts({ ...openings([ownRecordId, '0:00']), openedOn: '2000-01-01' }), {
+  success: false,
+  error: 'opening_date_too_old',
+});
+assert.equal(world.rpcCalls.length, 0, 'a refused balance, date or code reached the database');
 assert.deepEqual(await openTimeAccounts(openings([ownRecordId, '+12:30'], [colleagueRecordId, '-3:15'])), {
   success: true,
 });

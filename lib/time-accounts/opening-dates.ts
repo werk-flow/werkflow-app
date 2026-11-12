@@ -1,3 +1,4 @@
+import { isValidIsoDate } from '@/lib/calendar/date-range';
 import { addLocalDays } from '@/lib/date-time/berlin';
 import { formatGermanDate } from '@/lib/utils';
 
@@ -7,6 +8,23 @@ import { formatGermanDate } from '@/lib/utils';
  * the database's lock table. open_time_accounts refuses a longer list too.
  */
 export const OPENING_BATCH_LIMIT = 500;
+
+/**
+ * How far back an opening date may lie, in years. An opening locks every
+ * month from its date to today, so the bound keeps those locks to 121; real
+ * openings, imported history included, go back a few years at most.
+ * open_time_accounts refuses an older date too.
+ */
+const OPENING_YEARS_BACK = 10;
+
+/** The earliest opening date on `today`: the same day ten years earlier (28.02. for a 29.02.). */
+export function earliestOpeningDate(today: string): string {
+  const year = String(Number(today.slice(0, 4)) - OPENING_YEARS_BACK).padStart(4, '0');
+  const sameDay = `${year}${today.slice(4)}`;
+  return isValidIsoDate(sameDay) ? sameDay : `${year}-02-28`;
+}
+
+export const OPENING_DATE_TOO_OLD = 'Das Eröffnungsdatum darf höchstens zehn Jahre zurückliegen.';
 
 const monthStart = (localDate: string): string => `${localDate.slice(0, 7)}-01`;
 

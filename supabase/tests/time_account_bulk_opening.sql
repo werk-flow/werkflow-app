@@ -114,10 +114,17 @@ begin
     format($sql$select public.open_time_accounts(%L, %L, pg_temp.openings(array[%L]::uuid[], array[0]), '2026-08-01', '  ', repeat('a', 64))$sql$,
       v_admin, v_org, v_first),
     'reason_required');
-  perform pg_temp.expect_refusal('an opening before 2000 reached its month locks',
-    format($sql$select public.open_time_accounts(%L, %L, pg_temp.openings(array[%L]::uuid[], array[0]), '1999-12-31', 'Einführung', repeat('a', 64))$sql$,
+  -- At most ten years back, so the month locks stay at 121: the day before
+  -- the bound is refused, the bound itself passes the check (and then meets
+  -- the person, who is no member here: employee_not_found, not the date).
+  perform pg_temp.expect_refusal('an opening older than ten years reached its month locks',
+    format($sql$select public.open_time_accounts(%L, %L, pg_temp.openings(array[%L]::uuid[], array[0]), ((clock_timestamp() at time zone 'Europe/Berlin')::date - interval '10 years')::date - 1, 'Einführung', repeat('a', 64))$sql$,
       v_admin, v_org, v_first),
-    'invalid_input');
+    'opening_date_too_old');
+  perform pg_temp.expect_refusal('an opening exactly ten years back was refused for its date',
+    format($sql$select public.open_time_accounts(%L, %L, jsonb_build_array(jsonb_build_object('employee_record_id', gen_random_uuid(), 'opening_minutes', 0)), ((clock_timestamp() at time zone 'Europe/Berlin')::date - interval '10 years')::date, 'Einführung', repeat('a', 64))$sql$,
+      v_admin, v_org),
+    'employee_not_found');
   perform pg_temp.expect_refusal('an empty opening was accepted',
     format($sql$select public.open_time_accounts(%L, %L, '[]', '2026-08-01', 'Einführung', repeat('a', 64))$sql$,
       v_admin, v_org),
@@ -264,6 +271,8 @@ begin
       or strpos(prosrc, 'employee_not_found') > strpos(prosrc, ':time_account:')
       or strpos(prosrc, '> 500') = 0
       or strpos(prosrc, '> 500') > strpos(prosrc, ':time_account:')
+      or strpos(prosrc, 'opening_date_too_old') = 0
+      or strpos(prosrc, 'opening_date_too_old') > strpos(prosrc, ':time_account:')
     from pg_proc where oid = 'public.open_time_accounts(uuid,uuid,jsonb,date,text,text)'::regprocedure)
   then raise exception 'the bulk opening takes a person''s lock before it checks the list'; end if;
 end;

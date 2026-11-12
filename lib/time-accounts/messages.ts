@@ -1,6 +1,7 @@
 import { describeFailure } from '@/lib/action-messages';
 import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import { BALANCE_INPUT_ERROR } from './balance-input';
+import { OPENING_DATE_TOO_OLD } from './opening-dates';
 import { PAYROLL_CODE_MAX_LENGTH } from './payroll-mapping';
 
 /**
@@ -26,6 +27,7 @@ const FAILURE_CODES = {
     'employee_not_found',
     'account_already_open',
     'reason_required',
+    'opening_date_too_old',
     'opening_date_locked',
     'period_closed',
     'open_failed',
@@ -196,6 +198,7 @@ const MESSAGES: ActionMessages = {
       account_already_open:
         'Für mindestens eine Person ist das Zeitkonto inzwischen eröffnet. Lade die Seite neu und prüfe die Liste.',
       reason_required: 'Gib einen Grund für die Eröffnung an.',
+      opening_date_too_old: OPENING_DATE_TOO_OLD,
       opening_date_locked:
         'Ein abgeschlossener Monat endet an oder nach diesem Datum. Wähle ein Datum nach dem letzten abgeschlossenen Monat, oder öffne ihn zuerst wieder.',
     },

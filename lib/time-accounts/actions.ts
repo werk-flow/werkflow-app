@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { isValidIsoDate } from '@/lib/calendar/date-range';
 import { loggedRead } from '@/lib/data/read-request-cache';
 import { logError } from '@/lib/logging';
-import { addLocalDays } from '@/lib/date-time/berlin';
+import { addLocalDays, getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { putStorageObject, discardStorageObjects, createSignedDownloadUrl } from '@/lib/storage/r2';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { Constants } from '@/lib/supabase/database.types';
@@ -26,7 +26,7 @@ import {
 import { toPayrollCodeMappings } from './payroll-mapping';
 import { savePayrollMappingVersion } from './payroll-mapping-server';
 import { buildTimePeriodPreparation } from './period-preparation';
-import { OPENING_BATCH_LIMIT } from './opening-dates';
+import { earliestOpeningDate, OPENING_BATCH_LIMIT } from './opening-dates';
 import { getBerlinInstant, hashPayload } from './period-sources';
 import { readOpenPeriodSessions } from './queries';
 import { isValidOptionalIsoDateRange } from './validation';
@@ -264,6 +264,8 @@ export async function openTimeAccounts(input: unknown): Promise<TimeAccountActio
   if (context.role !== 'admin') return { success: false, error: 'forbidden' };
   const { openedOn, reason, openings } = parsed.data;
   if (!isValidIsoDate(openedOn)) return { success: false, error: 'invalid_input' };
+  if (openedOn < earliestOpeningDate(getBusinessTodayIso()))
+    return { success: false, error: 'opening_date_too_old' };
   if (!reason.trim()) return { success: false, error: 'reason_required' };
   const minutesByPerson: Array<{ employee_record_id: string; opening_minutes: number }> = [];
   for (const opening of openings) {
