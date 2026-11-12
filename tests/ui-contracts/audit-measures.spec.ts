@@ -91,12 +91,48 @@ test('the keyboard path fails when focus stays outside the dialog or Tab leaves 
   );
   await page.getByRole('button', { name: 'Öffnen' }).focus();
   await expect(expectKeyboardPath(page, dialog, 'outside', { soft: false })).rejects.toThrow(
-    /focus starts on the first control or the dialog/,
+    /focus starts on the first control, the declared start control or the dialog/,
   );
   await page.getByRole('textbox', { name: 'Name' }).focus();
   // Without a focus trap the third Tab leaves the plain dialog: the path fails there too.
   await expect(expectKeyboardPath(page, dialog, 'untrapped', { soft: false })).rejects.toThrow(
     /moved focus out of the dialog/,
+  );
+});
+
+// A dialog that traps Tab as the registry's does, with a third control after the declared start.
+const TRAPPED_DIALOG = (start: string) => `<div role="dialog" aria-label="Probe"${start}>
+  <input id="nummer" aria-label="Nummer"><input id="titel" aria-label="Titel"><input id="ort" aria-label="Ort">
+</div>
+<script>
+  const dialog = document.querySelector('[role=dialog]');
+  dialog.addEventListener('keydown', (event) => {
+    const controls = [...dialog.querySelectorAll('input')];
+    if (event.key === 'Tab' && document.activeElement === controls.at(-1)) {
+      event.preventDefault();
+      controls[0].focus();
+    }
+  });
+</script>`;
+
+test('the keyboard path accepts a declared start control, and only that one', async ({ page }) => {
+  const dialog = page.getByRole('dialog');
+  await show(page, TRAPPED_DIALOG(' data-dialog-start="titel"'));
+  await page.getByRole('textbox', { name: 'Titel' }).focus();
+  await expectKeyboardPath(page, dialog, 'declared start', { soft: false });
+
+  // Without the declaration a later control is a focus that landed by accident.
+  await show(page, TRAPPED_DIALOG(''));
+  await page.getByRole('textbox', { name: 'Titel' }).focus();
+  await expect(expectKeyboardPath(page, dialog, 'undeclared', { soft: false })).rejects.toThrow(
+    /not on input#titel/,
+  );
+
+  // The declaration names one control; focus on another still fails.
+  await show(page, TRAPPED_DIALOG(' data-dialog-start="titel"'));
+  await page.getByRole('textbox', { name: 'Ort' }).focus();
+  await expect(expectKeyboardPath(page, dialog, 'other control', { soft: false })).rejects.toThrow(
+    /not on input#ort/,
   );
 });
 

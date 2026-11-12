@@ -2,14 +2,15 @@ import { expect, type Locator, type Page } from '@playwright/test';
 import { pressKey } from '../../golden/support/steps/interaction';
 
 // The keyboard path of an open dialog, sheet or confirmation (werkflow-design,
-// "Checklist"): focus moves into the layer, starts on its first control, its
-// cancel action (a confirmation) or the layer itself, and Tab never leaves it.
+// "Add a form or a dialog"): focus moves into the layer, starts on its first
+// control, the start control it declares (`startControlId`), its cancel action
+// (a confirmation) or the layer itself, and Tab never leaves it.
 // Soft by default, so the surface audit names every defect of a page.
 
-/** Where focus sits in the layer: on its first control, its cancel action, the layer itself, or elsewhere. */
+/** Where focus sits in the layer: on its first control, its declared start, its cancel action, the layer itself, or elsewhere. */
 async function focusPosition(
   layer: Locator,
-): Promise<{ onFirst: boolean; onLayer: boolean; tabbables: number; focused: string }> {
+): Promise<{ onFirst: boolean; onStart: boolean; onLayer: boolean; tabbables: number; focused: string }> {
   return layer.evaluate((root) => {
     const candidates = Array.from(
       root.querySelectorAll<HTMLElement>(
@@ -29,8 +30,10 @@ async function focusPosition(
     const active = document.activeElement;
     const describe = (element: Element | null): string =>
       element
-        ? `${element.tagName.toLowerCase()} „${(element.getAttribute('aria-label') ?? element.textContent ?? '').trim().slice(0, 40)}“`
+        ? `${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ''} „${(element.getAttribute('aria-label') ?? element.textContent ?? '').trim().slice(0, 40)}“`
         : 'nothing';
+    // A dialog that moves focus to a later control names it (DialogContent's `startControlId`).
+    const declaredStart = root.getAttribute('data-dialog-start');
     return {
       // A destructive confirmation starts on its least destructive action
       // (werkflow-design, "Destructive confirmations").
@@ -38,6 +41,8 @@ async function focusPosition(
         active === candidates[0] ||
         (root.getAttribute('role') === 'alertdialog' &&
           active?.getAttribute('data-slot') === 'alert-dialog-cancel'),
+      onStart:
+        declaredStart !== null && active !== null && root.contains(active) && active.id === declaredStart,
       onLayer: active === root,
       tabbables: candidates.length,
       focused: describe(active),
@@ -50,8 +55,8 @@ async function focusInside(layer: Locator): Promise<boolean> {
 }
 
 /**
- * The keyboard path inside an open layer: focus starts on its first control or
- * on the layer itself, and Tab never leaves it.
+ * The keyboard path inside an open layer: focus starts on its first control,
+ * its declared start control or the layer itself, and Tab never leaves it.
  */
 export async function expectKeyboardPath(
   page: Page,
@@ -72,8 +77,8 @@ export async function expectKeyboardPath(
     .catch(() => undefined);
   const start = await focusPosition(layer);
   check(
-    start.onFirst || start.onLayer,
-    `${label}: focus starts on the first control or the dialog, not on ${start.focused}`,
+    start.onFirst || start.onStart || start.onLayer,
+    `${label}: focus starts on the first control, the declared start control or the dialog, not on ${start.focused}`,
   ).toBe(true);
   const presses = Math.min(start.tabbables + 1, 40);
   for (let press = 0; press < presses; press += 1) {
