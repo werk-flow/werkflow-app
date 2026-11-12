@@ -477,12 +477,16 @@ export const DIALOG_INVENTORY = {
   'components/zeiterfassung/vacation-section-request-dialog.tsx#OwnVacationRequestDialog|Urlaub beantragen': {
     audits: [{ route: '/zeiterfassung', role: 'employee', opener: 'field.vacation-request' }],
   },
-  "components/auftraege/artifacts/work-artifacts-section.tsx#WorkArtifactDialog|{detail ? (currentRevision?.title ?? 'Arbeitsnachweis') : 'Arbeitsnachweis erstellen'}":
+  "components/auftraege/artifacts/work-artifact-dialog.tsx#WorkArtifactDialog|{detail ? (currentRevision?.title ?? 'Arbeitsnachweis') : 'Arbeitsnachweis erstellen'}":
     {
       audits: [
         { route: '/auftraege/[jobNumber]', role: 'admin', opener: 'work.artifact' },
         { route: '/auftraege/[jobNumber]', role: 'employee', opener: 'field.artifact' },
       ],
+    },
+  "components/auftraege/artifacts/device-draft-list.tsx#DeviceDraftDeleteDialog|Entwurf „ {draft?.title.trim() || 'Ohne Titel'} “ löschen?":
+    {
+      audits: [{ route: '/auftraege/[jobNumber]', role: 'employee', opener: 'field.artifact-draft-delete' }],
     },
   'components/auftraege/forms/create-auftrag-project-dialog.tsx#CreateAuftragProjectDialog|Neuen Auftrag oder Projekt erstellen':
     {

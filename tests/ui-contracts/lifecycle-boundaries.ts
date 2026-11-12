@@ -39,6 +39,7 @@ declare global {
       | 'organization'
       | 'organization-export'
       | 'today-refresh'
+      | 'draft-landing'
       | 'today-refresh-switch'
       | 'today-refresh-profile'
       | 'today-refresh-fallback'

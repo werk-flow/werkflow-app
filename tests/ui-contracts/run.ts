@@ -187,6 +187,19 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve({ filter: /^@\/lib\/work-artifacts\/(?:customer-decision-)?actions$/ }, () => ({
               path: join(import.meta.dir, 'work-artifact-boundaries.ts'),
             }));
+            // The report drafts on a device: the active organization and the photo upload path.
+            builder.onResolve(
+              {
+                filter: /^@\/(components\/organization\/organization-context|lib\/documents\/upload-client)$/,
+              },
+              (args) => {
+                if (
+                  args.importer.endsWith('device-drafts.tsx') ||
+                  args.importer.endsWith('lib/field-sync/device/draft-sync.ts')
+                )
+                  return { path: join(import.meta.dir, 'device-draft-boundaries.ts') };
+              },
+            );
             // The customer decision's signature upload records the file instead of storing it.
             builder.onResolve({ filter: /^@\/lib\/documents\/upload-client$/ }, (args) => {
               if (args.importer.endsWith('use-work-artifact-customer-actions.ts'))
