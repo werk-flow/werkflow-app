@@ -135,17 +135,14 @@ function useClockActionChoices({
 }) {
   const [pickerMode, setPickerMode] = useState<ClockPickerMode | null>(initialPickerMode);
   const [moreOpen, setMoreOpen] = useState(false);
-  // A dialog that cannot load closes again and says why, so the next tap tries once more.
-  const pickerFailed = useCallback(() => {
+  // A dialog that cannot load, as without signal, closes again and says why; the next tap tries once more.
+  const loadFailed = useCallback(() => {
     setPickerMode(null);
-    setError('Die Aufträge konnten nicht geladen werden. Prüfe dein Netz und versuche es erneut.');
-  }, [setError]);
-  const moreFailed = useCallback(() => {
     setMoreOpen(false);
-    setError('Weitere Aktivitäten konnten nicht geladen werden. Prüfe dein Netz und versuche es erneut.');
+    setError('Das geht gerade nur mit Netz. Prüfe dein Netz und versuche es erneut.');
   }, [setError]);
-  const JobPicker = useDialogOnDemand(pickerMode !== null, loadJobPicker, pickerFailed);
-  const MoreDialog = useDialogOnDemand(moreOpen, loadMoreActivities, moreFailed);
+  const JobPicker = useDialogOnDemand(pickerMode !== null, loadJobPicker, loadFailed);
+  const MoreDialog = useDialogOnDemand(moreOpen, loadMoreActivities, loadFailed);
   const recovery = Boolean(state?.recoveryReason);
 
   function activate(action: ClockAction): void {
