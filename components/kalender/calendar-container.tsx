@@ -177,19 +177,6 @@ function useScopedCalendarMutations({
   });
 }
 
-/** A highlighted member fades after 1.5 s, counted from the moment the grid shows. */
-function useHighlightFade(
-  highlightMemberId: string | null,
-  isLoading: boolean,
-  setHighlightMemberId: (memberId: string | null) => void,
-): void {
-  useEffect(() => {
-    if (!highlightMemberId || isLoading) return;
-    const timer = window.setTimeout(() => setHighlightMemberId(null), 1500);
-    return () => window.clearTimeout(timer);
-  }, [highlightMemberId, isLoading, setHighlightMemberId]);
-}
-
 /** The keyboard commands of the scoped calendar; `c` creates only for a caller who may. */
 function useCalendarCommandKeys(
   viewState: CalendarViewState,
@@ -227,7 +214,7 @@ function useScopedCalendarFlows(
   reads: ScopedCalendarReads,
 ) {
   const { showBanner, viewState, overlays, data } = reads;
-  const { preferences, view, needed, highlightMemberId, setHighlightMemberId } = viewState;
+  const { preferences, view, needed } = viewState;
   const { range, handleOperationStart } = data;
   const { readiness } = range;
   // The skeleton replaces the grid only while no data exists at all (first
@@ -246,7 +233,6 @@ function useScopedCalendarFlows(
     setEntries: range.updateEntries,
   });
 
-  useHighlightFade(highlightMemberId, isLoading, setHighlightMemberId);
   useCalendarCommandKeys(viewState, overlays, mutations, isAdminOrManager);
 
   const viewScope = useCalendarViewScope({
