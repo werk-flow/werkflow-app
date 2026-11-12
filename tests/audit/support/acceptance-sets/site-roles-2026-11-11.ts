@@ -1,5 +1,24 @@
-import { managedBuilding, managedBuildingSearch, managingCustomer } from '../managed-buildings';
+import type { TestWorld } from '../../../golden/support/world';
+import {
+  managedBuildingCustomer,
+  managedBuildingsSourcePrefix,
+  seedManagedBuildings,
+} from '../managed-buildings';
+import type { SurfaceDestination } from '../surface-routes';
 import { acceptanceSet, type OpenSet } from '../acceptance-sets';
+
+async function managingCustomer(world: TestWorld): Promise<SurfaceDestination> {
+  return { route: `/kunden/${(await managedBuildingCustomer(world, 'manager')).clientId}` };
+}
+
+async function managedBuilding(world: TestWorld): Promise<SurfaceDestination> {
+  return { route: `/kunden/${(await managedBuildingCustomer(world, 'owner')).clientId}` };
+}
+
+async function managedBuildingSearch(world: TestWorld): Promise<SurfaceDestination> {
+  await seedManagedBuildings(world);
+  return { route: `/kunden?q=${encodeURIComponent(managedBuildingsSourcePrefix(world))}` };
+}
 
 /**
  * werk-flow/werkflow-planning#326 of 2026-11-11: a Hausverwaltung's two
