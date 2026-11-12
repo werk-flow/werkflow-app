@@ -1,5 +1,5 @@
 -- Problem reports (20261128090002_store_problem_reports_privately.sql,
--- werk-flow/werkflow-planning#331, and 20261130090004_report_problems_from_the_app.sql,
+-- werk-flow/werkflow-planning#331, and 20261130100000_report_problems_from_the_app.sql,
 -- #334). Client roles read and write no report table and execute none of its
 -- functions. Each organization numbers its reports from 1, and a number never
 -- changes. A report saves once under its device's id. A file registers only
