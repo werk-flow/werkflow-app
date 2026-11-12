@@ -90,23 +90,18 @@ function useOutboxAction() {
   return { perform, running, isPending, error };
 }
 
-/** The correction the first day's kept events prefill: their day, its first start and its last end. */
-function correctionPrefill(day: ClockDeviceView['events'], confirmed: LiveClockState | null) {
+/**
+ * The correction the first day's kept events prefill: their day, its first start and its last end. A
+ * chain whose session still runs on the server offers no correction (inOpenSession).
+ */
+function correctionPrefill(day: ClockDeviceView['events']) {
   const first = day[0];
   const end = day.findLast((event) => event.action === 'end');
   if (!first) return {};
   const date = formatBerlinLocalDate(first.capturedAt);
-  // A session that began online before the kept events: its clock-in is the server's, if on that day.
-  const startedOnline =
-    first.action !== 'start' &&
-    confirmed?.clockInTime &&
-    formatBerlinLocalDate(confirmed.clockInTime) === date
-      ? confirmed.clockInTime
-      : null;
-  const clockIn = first.action === 'start' ? first.capturedAt : startedOnline;
   return {
     preselectedDate: parseIsoLocalDate(date),
-    ...(clockIn ? { preselectedClockInTime: formatBerlinTime(clockIn) } : {}),
+    ...(first.action === 'start' ? { preselectedClockInTime: formatBerlinTime(first.capturedAt) } : {}),
     ...(end ? { preselectedClockOutTime: formatBerlinTime(end.capturedAt) } : {}),
   };
 }
@@ -121,8 +116,34 @@ function coversSession(
   return filed.userId === userId && filed.day === day;
 }
 
+/**
+ * Whether the stopped chain belongs to a session the server still holds open: a correction would
+ * add that time, and ending the open session later would count it again. The person deletes the
+ * events, ends the session through the clock, then files the correction (decision record 0010).
+ */
+function inOpenSession(view: ClockDeviceView, confirmed: LiveClockState | null): boolean {
+  const sessionId = view.events[0]?.expected?.sessionId;
+  return Boolean(sessionId && confirmed?.isClockedIn && confirmed.sessionId === sessionId);
+}
+
+/** The order that keeps the captured times and counts them once. */
+function OpenSessionSteps({ timesWhere }: { timesWhere: string }) {
+  return (
+    <div className="space-y-1 text-sm text-muted-foreground" data-clock-open-session>
+      <p>Diese Zeiten gehören zu einer Zeiterfassung, die noch läuft. So gehst du vor:</p>
+      <ol className="list-decimal space-y-0.5 pl-5">
+        <li>Notiere dir die Zeiten {timesWhere}.</li>
+        <li>Lösche sie hier.</li>
+        <li>Beende die laufende Zeiterfassung über die Uhr.</li>
+        <li>Beantrage dann eine Zeitkorrektur mit diesen Zeiten.</li>
+      </ol>
+    </div>
+  );
+}
+
 function DeleteUnsentDialog({
   count,
+  shown,
   open,
   onOpenChange,
   onConfirm,
@@ -130,6 +151,8 @@ function DeleteUnsentDialog({
   error,
 }: {
   count: number;
+  /** The events to delete with their times, when they belong to a session that still runs. */
+  shown: ClockDeviceView | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Answers whether the events were deleted: only then does the question close. */
@@ -148,6 +171,12 @@ function DeleteUnsentDialog({
               : `Die ${count} Stempelzeiten werden von diesem Gerät gelöscht und nicht erfasst.`}
           </AlertDialogDescription>
         </AlertDialogHeader>
+        {shown && (
+          <div className="space-y-3">
+            <UnsentEventList view={shown} />
+            <OpenSessionSteps timesWhere="oben" />
+          </div>
+        )}
         <AlertDialogFooter error={error}>
           <AlertDialogCancel>Abbrechen</AlertDialogCancel>
           <AlertDialogAction
@@ -174,10 +203,13 @@ function UnsentActions({
   busy,
   onSend,
   onResend,
+  canCorrect,
   onCorrect,
   onDelete,
 }: {
   status: ReturnType<typeof unsentChainStatus>;
+  /** False for an unreadable stop, or a chain whose session still runs: those are deleted, then corrected. */
+  canCorrect: boolean;
   running: string | null;
   busy: boolean;
   onSend: () => void;
@@ -212,7 +244,7 @@ function UnsentActions({
           Erneut senden
         </Button>
       )}
-      {status !== 'unreadable' && (
+      {canCorrect && (
         <Button type="button" variant="outline" className="min-h-11" disabled={busy} onClick={onCorrect}>
           Korrektur beantragen
         </Button>
@@ -240,6 +272,7 @@ function UnsentPanel({ view }: { view: ClockDeviceView }) {
   const [correction, setCorrection] = useState<ClockDeviceView['events'] | null>(null);
   const status = unsentChainStatus(view);
   const holder = clockHolder();
+  const openSession = status !== 'pending' && inOpenSession(view, confirmed);
 
   /** Deletes exactly `events`, the ones the person was shown; what stays goes on from the server's clock. */
   async function deleteEvents(events: ClockDeviceView['events']): Promise<boolean> {
@@ -261,12 +294,17 @@ function UnsentPanel({ view }: { view: ClockDeviceView }) {
         </h3>
         <UnsentStatusBadge view={view} />
       </div>
-      <p className="text-sm text-muted-foreground">{unsentChainReason(view)}</p>
+      {openSession ? (
+        <OpenSessionSteps timesWhere="unten" />
+      ) : (
+        <p className="text-sm text-muted-foreground">{unsentChainReason(view)}</p>
+      )}
       <UnsentEventList view={view} />
       <UnsentActions
         status={status}
         running={running}
         busy={isPending}
+        canCorrect={status !== 'unreadable' && !openSession}
         onSend={() => void perform('send', sendUnsentNow)}
         onResend={() =>
           void perform('resend', async () => {
@@ -280,6 +318,7 @@ function UnsentPanel({ view }: { view: ClockDeviceView }) {
       <ErrorText>{error}</ErrorText>
       <DeleteUnsentDialog
         count={deletion?.length ?? 0}
+        shown={openSession && deletion ? { ...view, events: deletion } : null}
         open={deletion !== null}
         onOpenChange={(open) => !open && setDeletion(null)}
         onConfirm={() => deleteEvents(deletion ?? [])}
@@ -289,7 +328,7 @@ function UnsentPanel({ view }: { view: ClockDeviceView }) {
       <CorrectionDialog.Dialog
         open={correction !== null}
         onOpenChange={(open) => !open && setCorrection(null)}
-        {...correctionPrefill(correction ?? [], confirmed)}
+        {...correctionPrefill(correction ?? [])}
         preselectedUserId={holder?.userId}
         // The request is filed, and the form confirms it: only now do the session's kept events leave the phone,
         // and only for a request of this person on that day; an Admin or Büro may file one for someone else.

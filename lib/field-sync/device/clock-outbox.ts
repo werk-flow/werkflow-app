@@ -1,6 +1,7 @@
 'use client';
 
 import './registrations';
+import { keptActionsWait } from './unsent-mark';
 import {
   holdClock,
   outboxChanged,
@@ -86,6 +87,6 @@ export async function deleteUnsentTimeEvents(
 ): Promise<void> {
   const { outbox } = await removeShownTimeEvents(holder, operationIds, resume);
   await outboxChanged();
-  // What stays is the person's next work to send.
-  if (outbox.events.length > 0) void sendUnsentNow();
+  // What stays is the person's next work to send, also a tap kept behind a stop the person just deleted.
+  if (outbox.events.length > 0 || keptActionsWait()) void sendUnsentNow();
 }

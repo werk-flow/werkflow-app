@@ -259,3 +259,7 @@ Decided for werk-flow/werkflow-planning#319 on its sixth review and the lead's d
 3. **Taking in**, sharpened. An action this version cannot read stops more than the take-in: nothing tapped after it is captured into the outbox or sent, and a new tap waits kept behind it.
 5. **A session end**, sharpened. A flow that finds its barrier lapsed checks again even when a later renewal stood the barrier again: another tab may have kept an action while it lapsed.
 8. **A stored record.** A record an earlier version wrote is always readable. Kept actions and outbox records have formats of their own with a `version`, not the live clock's type (`lib/field-sync/device/stored-clock.ts`). Reading ignores fields it does not know. A record of a newer version is a stop. A change that removes or reinterprets a field raises the version and adds a reader for the earlier one; `lib/field-sync/device/stored-records.test.ts` pins each version 1 record.
+
+## Amendment 2026-11-12: a late chain of a session that still runs
+
+Decided by the lead for werk-flow/werkflow-planning#319. A stopped chain whose events belong to a session the server still holds open offers no correction: an approved addition plus the later end of that session would count the time twice. The phone shows the captured times and the order that counts them once (note the times, delete them, end the running session through the clock, then file the correction), as a forgotten clock-out is settled today.

@@ -52,7 +52,10 @@ type UnsentEventStatus =
   /** A kept action this version cannot read (kept-clock-actions.ts): nothing after it is sent until it is gone. */
   | 'unreadable';
 
-export type UnsentTimeEvent = Pick<StoredTimeEvent, 'operationId' | 'capturedAt' | 'action' | 'selection'> & {
+export type UnsentTimeEvent = Pick<
+  StoredTimeEvent,
+  'operationId' | 'capturedAt' | 'action' | 'selection' | 'expected'
+> & {
   status: UnsentEventStatus;
   /** The server's code for a stopped event, `expired` for one the device gave up waiting for. */
   code: string | null;
@@ -154,6 +157,7 @@ export function withUnreadable(
     capturedAt,
     action: 'switch',
     selection: null,
+    expected: null,
     status: 'unreadable',
     code: null,
   }));

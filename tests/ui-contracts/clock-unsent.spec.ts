@@ -240,7 +240,7 @@ test('a late event shows „Korrektur nötig“, opens the correction with its c
   expect(server.sent).toHaveLength(1);
 });
 
-test('a late chain that begins with a switch prefills the clock-in from the server’s running session', async ({
+test('a late chain of a session the server still holds open offers no correction: the person keeps the times, deletes them, ends the session, then corrects', async ({
   page,
 }) => {
   const running = {
@@ -281,12 +281,23 @@ test('a late chain that begins with a switch prefills the clock-in from the serv
   );
   await expect(unsentBadge(clockDock(page))).toHaveText('Korrektur nötig');
   await page.getByRole('button', { name: 'Laufende Zeiterfassung öffnen', exact: true }).click();
-  await unsentSection(page).getByRole('button', { name: 'Korrektur beantragen', exact: true }).click();
+  const section = unsentSection(page);
 
-  // The session began at 08:00 Berlin, online, before the kept switch.
-  await expect(
-    page.getByRole('dialog', { name: 'Zeit nachtragen', exact: true }).getByLabel('Vorbelegung'),
-  ).toHaveText('9.11.2026 | 08:00 | 16:00');
+  // A correction would add 08:00 to 16:00, and ending the open session later would count it again.
+  await expect(section.getByRole('button', { name: 'Korrektur beantragen', exact: true })).toHaveCount(0);
+  await expect(section.locator('[data-clock-open-session]')).toContainText('Notiere dir die Zeiten unten.');
+  await expect(section.getByRole('listitem').filter({ hasText: 'Pause gestartet' })).toContainText('10:00');
+
+  await section.getByRole('button', { name: 'Löschen', exact: true }).click();
+  const confirmation = page.getByRole('alertdialog', { name: 'Nicht übertragene Zeiten löschen?' });
+  await expect(confirmation.getByRole('listitem').filter({ hasText: 'Erfassung beendet' })).toContainText(
+    '16:00',
+  );
+  await expect(confirmation.locator('[data-clock-open-session]')).toContainText(
+    'Beende die laufende Zeiterfassung über die Uhr.',
+  );
+  await confirmation.getByRole('button', { name: 'Abbrechen', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Zeit nachtragen', exact: true })).toHaveCount(0);
 });
 
 test('a correction covers the first day only: the next day’s events stay on the phone, shown, and go on from the server’s clock', async ({
