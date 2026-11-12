@@ -66,6 +66,9 @@ export const DIALOG_INVENTORY = {
     {
       audits: [{ route: '/dashboard', role: 'employee', opener: 'field.time-activity' }],
     },
+  'components/anfragen/attach-request-dialog.tsx#AttachRequestDialog|Zu bestehender Arbeit hinzufügen': {
+    audits: [{ route: '/anfragen/[requestId]', role: 'admin', opener: 'requests.attach-to-work' }],
+  },
   'components/anfragen/close-request-dialog.tsx#CloseRequestDialog|Anfrage ohne Auftrag schließen': {
     audits: [{ route: '/anfragen/[requestId]', role: 'admin', opener: 'requests.close' }],
   },
@@ -213,8 +216,13 @@ export const DIALOG_INVENTORY = {
   'components/kalender/schedule-parked-dialog.tsx#ScheduleParkedDialog|Auftrag einplanen': {
     audits: [{ route: '/kalender', role: 'admin', opener: 'calendar.schedule-parked' }],
   },
-  'components/kunden/client-actions-menu.tsx#ClientActionsMenu|Kunde löschen?': {
-    audits: [{ route: '/kunden', role: 'admin', opener: 'customers.list-delete' }],
+  'components/kunden/client-removal-dialog.tsx#ClientRemovalDialog|{title}': {
+    audits: [
+      { route: '/kunden', role: 'admin', opener: 'customers.list-delete' },
+      { route: '/kunden', role: 'admin', opener: 'customers.list-archive' },
+      { route: '/kunden/[clientId]', role: 'admin', opener: 'customers.delete' },
+      { route: '/kunden/[clientId]', role: 'admin', opener: 'customers.archive' },
+    ],
   },
   "components/kunden/client-contact-dialog.tsx#ClientContactDialog|{contactDialog?.contactId ? 'Ansprechpartner bearbeiten' : 'Ansprechpartner hinzufügen'}":
     {
@@ -239,9 +247,6 @@ export const DIALOG_INVENTORY = {
     {
       audits: [{ route: '/kunden/[clientId]', role: 'admin', opener: 'customers.follow-up' }],
     },
-  'components/kunden/delete-client-dialog.tsx#DeleteClientDialog|Kunde löschen?': {
-    audits: [{ route: '/kunden/[clientId]', role: 'admin', opener: 'customers.delete' }],
-  },
   'components/kunden/edit-client-dialog.tsx#EditClientDialog|Kunde bearbeiten': {
     audits: [{ route: '/kunden', role: 'admin', opener: 'customers.edit' }],
   },

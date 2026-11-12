@@ -22,6 +22,7 @@ const TIMELINE_LABELS: Record<TimelineItem['kind'], string> = {
   document_linked: 'Dokument verknüpft',
   follow_up_event: 'Nachfassaktion geändert',
   communication_preference_event: 'Kontaktvorgabe geändert',
+  master_data_event: 'Stammdaten geändert',
 };
 
 function sourceForTimelineItem(item: TimelineItem): FollowUpSource | null {

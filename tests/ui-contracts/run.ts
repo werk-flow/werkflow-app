@@ -64,6 +64,23 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               if (args.importer.endsWith('create-client-dialog.tsx'))
                 return { path: join(import.meta.dir, 'customer-service-boundaries.ts') };
             });
+            // The capture dialog saves and navigates through the request contract's stand-ins.
+            builder.onResolve({ filter: /^(@\/lib\/requests\/actions|next\/navigation)$/ }, (args) => {
+              if (args.importer.endsWith('use-create-request-form.ts'))
+                return { path: join(import.meta.dir, 'request-capture-boundaries.tsx') };
+            });
+            // The attach dialog writes and navigates through the attach contract's stand-ins.
+            builder.onResolve({ filter: /^(@\/lib\/requests\/attach-actions|next\/navigation)$/ }, (args) => {
+              if (args.importer.endsWith('attach-request-dialog.tsx'))
+                return { path: join(import.meta.dir, 'request-attach-boundaries.tsx') };
+            });
+            builder.onResolve({ filter: /^@\/components\/organization\/organization-context$/ }, (args) => {
+              if (
+                args.importer.endsWith('use-suggested-record-number.ts') ||
+                args.importer.endsWith('use-request-work-targets.ts')
+              )
+                return { path: join(import.meta.dir, 'calendar-service-boundaries.tsx') };
+            });
             builder.onResolve({ filter: /^@\/lib\/vacation\/actions$/ }, () => ({
               path: join(import.meta.dir, 'approval-service-boundaries.ts'),
             }));

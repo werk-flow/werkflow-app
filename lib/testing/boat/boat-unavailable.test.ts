@@ -123,14 +123,21 @@ const PLAN = [
   'audit:performance:calendar',
 ];
 
+const timedHeldBack = (id: string): boolean => heldBackHere(id, false);
+
 test('without Boat only the cheap and the wall-clock groups run here; lint and every browser group are held back', () => {
-  expect(PLAN.filter(heldBackHere)).toEqual([
+  expect(PLAN.filter(timedHeldBack)).toEqual([
     'static:lint',
     'ui:contracts',
     'golden:p1-01',
     'audit:lab:office',
     'audit:visual',
   ]);
+});
+
+test('an untimed wall-clock group is a browser group like any other and stays held back', () => {
+  expect(heldBackHere('audit:performance:calendar', true)).toBe(true);
+  expect(heldBackHere('unit:all', true)).toBe(false);
 });
 
 test('every unavailability names its reason, the held-back groups and their cost, and the deliberate local run', () => {
@@ -143,7 +150,7 @@ test('every unavailability names its reason, the held-back groups and their cost
     'the Boat machine ran out of memory.',
   ];
   for (const reason of reasons) {
-    const notice = unavailableNotice(reason, PLAN.filter(heldBackHere), ['--group', PLAN.join(',')]);
+    const notice = unavailableNotice(reason, PLAN.filter(timedHeldBack), ['--group', PLAN.join(',')]);
     expect(notice[1], reason).toBe(`BOAT IS UNAVAILABLE: ${reason}`);
     expect(notice, reason).toContain(
       '  static:lint: type-aware lint, 170 to 370 s at up to 4.1 GiB on an idle PC',
