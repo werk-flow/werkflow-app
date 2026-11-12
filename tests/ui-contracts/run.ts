@@ -107,6 +107,9 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               if (args.importer.endsWith('use-sickness-report-record-form.ts'))
                 return { path: join(import.meta.dir, 'absence-service-boundaries.ts') };
             });
+            builder.onResolve({ filter: /^@\/lib\/members\/actions$/ }, () => ({
+              path: join(import.meta.dir, 'member-role-service-boundaries.ts'),
+            }));
             builder.onResolve({ filter: /^@\/lib\/org\/join-request-actions$/ }, () => ({
               path: join(import.meta.dir, 'join-request-service-boundaries.ts'),
             }));
@@ -212,6 +215,10 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
                   return { path: join(import.meta.dir, 'edit-job-service-boundaries.ts') };
               },
             );
+            // The access proposal's form and office review write through held stand-ins.
+            builder.onResolve({ filter: /^@\/lib\/site-access-proposals\/actions$/ }, () => ({
+              path: join(import.meta.dir, 'site-access-boundaries.tsx'),
+            }));
             // The handover review saves its draft and previews through these held stand-ins.
             builder.onResolve({ filter: /^@\/lib\/(work-handover|documents)\/actions$/ }, (args) => {
               if (args.importer.includes('/components/auftraege/handover/'))

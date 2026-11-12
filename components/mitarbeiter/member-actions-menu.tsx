@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { MoreHorizontal, UserCog, UserMinus, ExternalLink } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { useBanner } from '@/components/ui/banner';
 import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import {
   DropdownMenu,
@@ -21,6 +22,7 @@ import type { OrgRole } from '@/lib/roles';
 import { bueroMayManage, ROLE_LABELS } from '@/lib/roles';
 import { getMemberActionErrorMessage } from '@/lib/members/errors';
 import { MemberRemoveConfirmDialog } from './member-actions-menu-remove-dialog';
+import { RoleEscalationConfirmDialog, useConfirmedRoleChange } from './role-escalation-confirm-dialog';
 import { loadDocument } from '@/lib/navigation/document-load';
 
 const ADMIN_ASSIGNABLE_ROLES: OrgRole[] = ['buero', 'employee'];
@@ -42,7 +44,12 @@ interface MemberActionsMenuProps {
    * The list owns the role change: optimistic role, the server call, the
    * rollback and the banner, so the row shows pending until props land.
    */
-  onRoleChange: (memberId: string, newRole: OrgRole, firstName: string, lastName: string) => Promise<void>;
+  onRoleChange: (
+    memberId: string,
+    newRole: OrgRole,
+    firstName: string,
+    lastName: string,
+  ) => Promise<string | null>;
 }
 
 export function MemberActionsMenu({
@@ -61,6 +68,12 @@ export function MemberActionsMenu({
   const { run: runRemove, isPending: isRemoving } = usePendingTask();
   const [showRemoveDialog, setShowRemoveDialog] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { showBanner } = useBanner();
+  const roleChange = useConfirmedRoleChange(
+    memberRole,
+    (role) => onRoleChange(memberId, role, memberFirstName, memberLastName),
+    (message) => showBanner({ variant: 'error', message }),
+  );
 
   // Check if this is the current user's own row
   const isOwnRow = memberId === currentUserId;
@@ -121,9 +134,11 @@ export function MemberActionsMenu({
         isLoading={isLoading}
         availableRoles={availableRoles}
         onShowDetails={() => router.push(`/mitarbeiter/${memberId}`)}
-        onRoleSelect={(role) => void onRoleChange(memberId, role, memberFirstName, memberLastName)}
+        onRoleSelect={roleChange.requestRoleChange}
         onRemove={() => setShowRemoveDialog(true)}
       />
+
+      <RoleEscalationConfirmDialog memberName={memberName} roleChange={roleChange} />
 
       <MemberRemoveConfirmDialog
         open={showRemoveDialog}

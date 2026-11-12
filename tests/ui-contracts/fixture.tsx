@@ -31,6 +31,7 @@ import {
   DocumentVersionUploadContractFixture,
 } from './document-upload-boundaries';
 import { OrganizationContractFixture } from './organization-boundaries';
+import { MemberRoleContractFixture } from './member-role-boundaries';
 import { OrganizationExportContractFixture } from './organization-export-boundaries';
 import {
   TodayRefreshContractFixture,
@@ -42,6 +43,7 @@ import AuthLayout from '@/app/(auth)/layout';
 import { OfflineTodayContractFixture } from './offline-today-boundaries';
 import { WorkHandoverContractFixture } from './work-handover-boundaries';
 import { EditJobContractFixture } from './edit-job-boundaries';
+import { SiteAccessProposalContractFixture, SiteAccessReviewContractFixture } from './site-access-boundaries';
 import { CalendarContractFixture } from './calendar-boundaries';
 import { FeedbackContractFixture, isFeedbackFixture } from './feedback-boundaries';
 import { mountHydrationFixture } from './hydration-boundaries';
@@ -642,6 +644,10 @@ createRoot(root).render(
     <WorkHandoverContractFixture />
   ) : window.uiContractFixture === 'edit-job' ? (
     <EditJobContractFixture />
+  ) : window.uiContractFixture === 'site-access-review' ? (
+    <SiteAccessReviewContractFixture />
+  ) : window.uiContractFixture === 'site-access-proposal' ? (
+    <SiteAccessProposalContractFixture />
   ) : window.uiContractFixture === 'calendar-board' ? (
     <CalendarBoardContractFixture />
   ) : window.uiContractFixture === 'calendar-day' ? (
@@ -712,6 +718,8 @@ createRoot(root).render(
         />
       </main>
     </BannerProvider>
+  ) : window.uiContractFixture === 'member-role' ? (
+    <MemberRoleContractFixture />
   ) : window.uiContractFixture === 'personnel' ? (
     <BannerProvider>
       <main>

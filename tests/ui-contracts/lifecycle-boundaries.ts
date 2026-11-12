@@ -24,6 +24,7 @@ declare global {
       | 'approvals'
       | 'personnel'
       | 'join-requests'
+      | 'member-role'
       | 'own-personnel'
       | 'task-sections'
       | 'calendar'
@@ -63,6 +64,8 @@ declare global {
       | 'support-triage'
       | 'support-filing'
       | 'inventory-unit'
+      | 'site-access-review'
+      | 'site-access-proposal'
       | AuthUrlFixtureName
       | FeedbackFixtureName;
     uiContractLifecycle: LifecycleBoundaryState;

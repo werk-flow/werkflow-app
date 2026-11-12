@@ -6,14 +6,14 @@ import { useMountedWallClockTick } from '@/hooks/use-wall-clock-tick';
 import { liveMinutes } from '@/lib/time-tracking/helpers';
 import { cn } from '@/lib/utils';
 import { getNoTargetReason, type DailyTarget } from '@/lib/personnel/targets';
+import { HIDDEN_STATUS_HINT, type StatusVisibility } from './member-status-visibility';
 
 interface HoursDisplayProps {
   status?: 'clocked_out' | 'working' | 'on_break' | undefined;
   isClockedIn: boolean;
   statusStartedAt: string | null;
   workMinutes: number;
-  /** Whether the viewer has permission to see this member's progress */
-  canViewStatus?: boolean | undefined;
+  visibility?: StatusVisibility | undefined;
   /** Resolved daily target (P1-04); without it the progress is unknown, never measured against 8h. */
   target?: DailyTarget | undefined;
 }
@@ -39,7 +39,7 @@ export function HoursDisplay({
   status,
   statusStartedAt,
   workMinutes,
-  canViewStatus = true,
+  visibility = 'visible',
   target,
 }: HoursDisplayProps) {
   const effectiveStatus = status ?? (isClockedIn ? 'working' : 'clocked_out');
@@ -71,13 +71,13 @@ export function HoursDisplay({
     return 'bg-brand-purple';
   };
 
-  // Show "Nicht verfügbar" for members the current user can't view
-  if (!canViewStatus) {
+  if (visibility !== 'visible') {
+    const hidden = visibility === 'hidden';
     return (
-      <div className="flex items-center gap-2 min-w-[100px]">
+      <div className="flex items-center gap-2 min-w-[100px]" title={hidden ? HIDDEN_STATUS_HINT : undefined}>
         <Progress
           value={0}
-          label="Tagesfortschritt nicht verfügbar"
+          label={hidden ? 'Tagesfortschritt nicht sichtbar' : 'Tagesfortschritt nicht geladen'}
           className="h-2 flex-1 bg-muted/30"
           indicatorClassName="bg-muted-foreground/30"
         />

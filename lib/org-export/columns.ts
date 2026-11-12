@@ -175,6 +175,7 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   service_cases: 'Servicefälle',
   sickness_report_events: 'Krankmeldungen_Ereignisse',
   sickness_reports: 'Krankmeldungen',
+  site_access_proposals: 'Kunden_Zugangsvorschläge',
   team_events: 'Teams_Ereignisse',
   team_memberships: 'Teams_Mitglieder',
   teams: 'Teams',

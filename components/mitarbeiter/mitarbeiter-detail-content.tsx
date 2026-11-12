@@ -118,6 +118,7 @@ function MitarbeiterDetailCards({
     <div className="grid grid-cols-1 gap-6 @[70rem]/detail:grid-cols-3 @7xl/detail:grid-cols-1">
       <MitarbeiterDetailProfileSection
         member={member}
+        fullName={fullName}
         canManage={canManage}
         roleOptions={roleOptions}
         onRoleChange={handleRoleChange}

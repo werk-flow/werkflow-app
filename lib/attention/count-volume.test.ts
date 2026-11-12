@@ -272,6 +272,20 @@ function requestRows(pending: number, history: number): Record<string, Row[]> {
       }),
     ),
     clients: open.map((index) => scoped({ id: uuid(13, index), name: `Kunde ${index}` })),
+    // A field worker's access proposal: open ones wait for the office, decided ones are history.
+    site_access_proposals: both((index, isOpen) =>
+      scoped({
+        id: uuid(27, index),
+        job_id: uuid(1, index),
+        site_id: uuid(28, index),
+        status: isOpen ? 'open' : 'accepted',
+        proposed_by: COLLEAGUE,
+        proposed_at: isOpen ? RECENT : OLD,
+      }),
+    ),
+    client_sites: open.map((index) =>
+      scoped({ id: uuid(28, index), name: `Haus ${index}`, client_id: uuid(13, index) }),
+    ),
     organization_join_requests: both((index, isOpen) =>
       scoped({
         id: uuid(14, index),
@@ -518,7 +532,7 @@ function handoverCandidates(organizationId: unknown): Row[] {
   return [...new Set(ids)].map((projectId) => ({ project_id: projectId }));
 }
 
-/** `list_open_request_attention` as migration 20261129100001 defines it, without a promised callback. */
+/** The open requests of `read_manager_attention_sets`, as migration 20261129100001 defines them, without a promised callback. */
 function openRequests(organizationId: unknown): Row[] {
   return (world.get('client_requests') ?? [])
     .filter(
@@ -528,8 +542,21 @@ function openRequests(organizationId: unknown): Row[] {
     .map((row) => ({ ...row, callback_due_at: null, callback_overdue: false, owner_is_manager: true }));
 }
 
+/** The open access proposals of `read_manager_attention_sets` (migration 20261201100004). */
+function openProposals(organizationId: unknown): Row[] {
+  return (world.get('site_access_proposals') ?? []).filter(
+    (row) => row.organization_id === organizationId && row.status === 'open',
+  );
+}
+
 /** The derivations' read functions, from the seeded world: whole vacation rows, and nobody has left. */
 function rpc(name: string, args: unknown) {
+  if (name === 'read_manager_attention_sets') {
+    const requests = openRequests(field(args, 'p_organization_id'));
+    const accessProposals = openProposals(field(args, 'p_organization_id'));
+    reads.push({ table: `rpc ${name}`, rows: requests.length + accessProposals.length });
+    return Promise.resolve({ data: { requests, access_proposals: accessProposals }, error: null });
+  }
   if (name === 'read_open_absences') {
     const today = String(field(args, 'p_today'));
     const open = termFilter(`or(status.eq.pending,and(status.eq.approved,end_date.gte.${today}))`);
@@ -545,9 +572,7 @@ function rpc(name: string, args: unknown) {
       ? pendingRecipients(field(args, 'p_organization_id'), field(args, 'p_employee_record_id'))
       : name === 'list_handover_candidate_projects'
         ? handoverCandidates(field(args, 'p_organization_id'))
-        : name === 'list_open_request_attention'
-          ? openRequests(field(args, 'p_organization_id'))
-          : [];
+        : [];
   // The readers page a function's result like a table read: .range(from, to).
   return {
     range: (from: number, to: number) => {
@@ -623,9 +648,12 @@ function historyProblems(nextRole: Role, growth: Record<string, number>): string
  */
 // werk-flow/werkflow-planning#267 added the approved vacations ahead with their visits: the office reads
 // their visits once per 15 vacations plus dispatches and names, and own approvals add a marker read.
+// werk-flow/werkflow-planning#329 added the open access proposals: they come with the open requests in one
+// read, so without any the requests stay as before; with them, their job and Einsatzort (a row each per
+// proposal) and the proposers' names add three requests.
 const ROW_BUDGET: Readonly<Record<Role, { fixed: number; perPendingItem: number; requests: number }>> = {
-  admin: { fixed: 34, perPendingItem: 33, requests: 75 },
-  buero: { fixed: 33, perPendingItem: 32, requests: 72 },
+  admin: { fixed: 35, perPendingItem: 36, requests: 78 },
+  buero: { fixed: 34, perPendingItem: 35, requests: 75 },
   employee: { fixed: 13, perPendingItem: 17, requests: 31 },
 };
 

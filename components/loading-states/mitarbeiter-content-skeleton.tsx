@@ -1,6 +1,6 @@
 'use client';
 
-import { MembersTableSkeleton } from '@/components/mitarbeiter/members-table';
+import { MembersTableSkeleton } from '@/components/mitarbeiter/members-table-columns';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export function MitarbeiterContentSkeleton() {
