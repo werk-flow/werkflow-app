@@ -508,7 +508,7 @@ async function jobWithAttachedRequest(world: TestWorld): Promise<SurfaceDestinat
 }
 
 /** The employee's job at an Einsatzort in the given proposal state. */
-function siteAccessJob(state: SiteAccessJobState) {
+function siteAccessJobRecord(state: SiteAccessJobState) {
   return async (world: TestWorld): Promise<SurfaceDestination> => {
     await seedSiteAccessJob(world, state);
     const { jobNumber, title } = siteAccessJob(world, state);
@@ -538,8 +538,8 @@ export const ACCEPTANCE_RECORDS: Record<AcceptanceRecord, (world: TestWorld) => 
     'request-without-open-work': requestWithoutOpenWork,
     'attached-request': attachedRequest,
     'job-with-attached-request': jobWithAttachedRequest,
-    'site-access-job': siteAccessJob('none'),
-    'site-access-open-job': siteAccessJob('open'),
-    'site-access-rejected-job': siteAccessJob('rejected'),
+    'site-access-job': siteAccessJobRecord('none'),
+    'site-access-open-job': siteAccessJobRecord('open'),
+    'site-access-rejected-job': siteAccessJobRecord('rejected'),
     'site-access-tasks': siteAccessTasks,
   };
