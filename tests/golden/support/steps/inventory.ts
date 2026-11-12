@@ -54,7 +54,6 @@ const INVENTORY_LABELS = {
   importDone: 'Fertig',
   importReport: 'Bericht herunterladen',
   importRepeatConfirm: 'Trotzdem fortfahren',
-  importFile: 'CSV-Datei auswählen',
 } as const;
 
 /** The /inventar dialogs, each named by its heading. */
@@ -179,9 +178,9 @@ export function csvImportButtonOf(
   return dialog.getByRole('button', { name: INVENTORY_LABELS[action], exact: true });
 }
 
-/** The button that chooses the import file, the dialog's first control. */
+/** The button that chooses the import file, the dialog's first control; its field label names it. */
 export function csvImportFileButton(dialog: Locator): Locator {
-  return dialog.getByRole('button', { name: INVENTORY_LABELS.importFile, exact: true });
+  return dialog.locator('#inventory-import-file');
 }
 
 /** The import dialog once the repeat check of its chosen file has answered (`clear`, `repeat` or `failed`). */
