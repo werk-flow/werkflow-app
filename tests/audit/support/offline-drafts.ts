@@ -135,7 +135,10 @@ async function countDraftsOnPage(page: Page): Promise<number> {
 
 /** Waits until the job page loaded the report dialog's code, which a first open without signal needs. */
 export async function expectReportCodeLoaded(page: Page): Promise<void> {
-  await expect(page.getByTestId('work-artifacts-section')).toHaveAttribute('data-artifact-code', 'ready');
+  await expect(page.getByTestId('work-artifacts-section').filter({ visible: true })).toHaveAttribute(
+    'data-artifact-code',
+    'ready',
+  );
 }
 
 /** One Arbeitsnachweis on the server: its state, and how many revisions, photo links and draft operations wrote it. */
