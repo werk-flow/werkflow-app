@@ -1,5 +1,5 @@
+import { test } from '../support/fixtures';
 import { captureAcceptance, settleAcceptanceEntries } from '../support/acceptance-captures';
-import { test } from '../support/acceptance-fixtures';
 import { ACCEPTANCE_RECORDS } from '../support/acceptance-records';
 import { ACCEPTANCE_SETS } from '../support/acceptance-sets';
 import { captureStandalone } from '../support/acceptance-standalone';

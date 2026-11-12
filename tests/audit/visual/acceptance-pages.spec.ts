@@ -1,5 +1,5 @@
+import { test } from '../support/fixtures';
 import { captureAcceptance, settleAcceptanceEntries } from '../support/acceptance-captures';
-import { test } from '../support/acceptance-fixtures';
 import { roundCaptures } from '../support/acceptance-rounds';
 
 // Rendered acceptance captures of the inventory rounds (tests/audit/support/acceptance-rounds.ts):
