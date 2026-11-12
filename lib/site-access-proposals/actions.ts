@@ -14,7 +14,7 @@ import { SITE_ACCESS_LIMITS } from './types';
 
 // The Server Actions of a field worker's access proposal and its office
 // review. The database functions of
-// supabase/migrations/20261130090007_propose_site_access_corrections.sql check
+// supabase/migrations/20261130100003_propose_site_access_corrections.sql check
 // the same again under lock and write in one call.
 
 const proposalRefusal = writeRefusalFor(

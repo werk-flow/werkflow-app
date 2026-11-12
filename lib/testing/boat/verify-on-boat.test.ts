@@ -48,7 +48,7 @@ test('change plans and ordinary groups may run on Boat', () => {
   // Lab counts repeat on any machine; every product change selects both lab groups.
   expect(localReason(['--group', 'audit:lab:office,audit:lab:field'], {})).toBeUndefined();
   // Layout checks computed boxes; visual groups render in the pinned image, whatever the machine.
-  for (const group of ['audit:visual', 'audit:visual:acceptance', 'audit:layout:field'])
+  for (const group of ['audit:visual', 'audit:visual:acceptance:sets', 'audit:layout:field'])
     expect(localReason(['--group', group], {}), group).toBeUndefined();
   // Untimed, a wall-clock group judges no timing, so its steps run on Boat too.
   expect(localReason(['--group', 'audit:performance:calendar', '--untimed'], {})).toBeUndefined();

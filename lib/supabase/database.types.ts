@@ -7925,6 +7925,7 @@ export type Database = {
           description: string | null;
           filed_by_id: string | null;
           id: string;
+          number: number;
           organization_id: string;
           originals_deleted_at: string | null;
           reporter_id: string;
@@ -7941,6 +7942,7 @@ export type Database = {
           description?: string | null;
           filed_by_id?: string | null;
           id?: string;
+          number?: number;
           organization_id: string;
           originals_deleted_at?: string | null;
           reporter_id: string;
@@ -7957,6 +7959,7 @@ export type Database = {
           description?: string | null;
           filed_by_id?: string | null;
           id?: string;
+          number?: number;
           organization_id?: string;
           originals_deleted_at?: string | null;
           reporter_id?: string;
@@ -17001,6 +17004,21 @@ export type Database = {
           org_name: string;
         }[];
       };
+      register_problem_report_file: {
+        Args: {
+          p_actor_id: string;
+          p_file_id: string;
+          p_file_name: string;
+          p_kind: string;
+          p_max_attachments: number;
+          p_mime_type: string;
+          p_organization_id: string;
+          p_report_id: string;
+          p_size_bytes: number;
+          p_storage_path: string;
+        };
+        Returns: undefined;
+      };
       reject_site_access_proposal: {
         Args: {
           p_actor_id: string;
@@ -18331,6 +18349,16 @@ export type Database = {
           p_organization_id: string;
         };
         Returns: string;
+      };
+      submit_problem_report: {
+        Args: {
+          p_actor_id: string;
+          p_context: Json;
+          p_description: string;
+          p_organization_id: string;
+          p_report_id: string;
+        };
+        Returns: number;
       };
       submit_time_account_adjustment: {
         Args: {

@@ -2,7 +2,7 @@ import 'server-only';
 
 // The pending office sets of a manager's attention derivation, read in one
 // call (read_manager_attention_sets, migration
-// 20261130090007_propose_site_access_corrections.sql): the open requests and
+// 20261130100003_propose_site_access_corrections.sql): the open requests and
 // the field workers' open access proposals. `./actions` starts the read once
 // per derivation and hands the promise to both derivations, so the access
 // proposal task adds no backend request (lab.office.cold-start).
