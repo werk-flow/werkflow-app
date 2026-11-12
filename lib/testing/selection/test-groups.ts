@@ -314,6 +314,8 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['problem-reports:redraw', 'problem-reports/screenshot-redraw.spec.ts', ['customers', 'work']],
   // Reporting a problem from the app shell, with a redacted screenshot, to „Meine Meldungen“.
   ['problem-reports:report', 'problem-reports/report-a-problem.spec.ts', ['*']],
+  // Support triages a report and answers, the reporter reads it live; support files a report for a caller.
+  ['problem-reports:support', 'problem-reports/support-queue.spec.ts', ['*']],
   ['list-pagination', 'pagination/list-pagination.spec.ts', ['inventory', 'documents', 'work']],
   // Measured navigation and view switches against the typical data profile (Step 2).
   [
@@ -411,7 +413,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['rate-limits', ['rate_limits.sql'], ['*']],
   ['organization-deletion', ['organization_deletion.sql'], ['*']],
   ['storage-purge', ['storage_purge.sql'], ['documents']],
-  ['problem-reports', ['problem_reports.sql'], ['*']],
+  ['problem-reports', ['problem_reports.sql', 'problem_report_support.sql'], ['*']],
   ['organization-export', ['organization_export.sql'], ['*']],
   ['record-numbers', ['record_numbers.sql'], ['work', 'customers', 'personnel', 'service']],
   ['hot-read-volume', ['hot_read_volume.sql'], ['planning', 'time', 'attention', 'work', 'documents']],

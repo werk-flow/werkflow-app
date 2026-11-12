@@ -45,6 +45,8 @@ import { CalendarContractFixture } from './calendar-boundaries';
 import { FeedbackContractFixture, isFeedbackFixture } from './feedback-boundaries';
 import { mountHydrationFixture } from './hydration-boundaries';
 import { initializeProblemReportBoundary, ProblemReportContractFixture } from './problem-report-boundaries';
+import { SupportFilingContractFixture } from './support-filing-boundaries';
+import { SupportTriageContractFixture } from './support-triage-boundaries';
 import { initializeInventoryUnitBoundary, InventoryUnitContractFixture } from './inventory-unit-boundaries';
 import { AuthUrlContractFixture } from './auth-url-boundaries';
 import { useEffect, useState } from 'react';
@@ -573,6 +575,10 @@ createRoot(root).render(
     </main>
   ) : window.uiContractFixture === 'problem-report' ? (
     <ProblemReportContractFixture />
+  ) : window.uiContractFixture === 'support-triage' ? (
+    <SupportTriageContractFixture />
+  ) : window.uiContractFixture === 'support-filing' ? (
+    <SupportFilingContractFixture />
   ) : window.uiContractFixture === 'inventory-unit' ? (
     <InventoryUnitContractFixture />
   ) : window.uiContractFixture === 'presentation' ? (

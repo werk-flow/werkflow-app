@@ -66,6 +66,16 @@ const DETAIL_PAGES: readonly DetailPage[] = [
   },
 ];
 
+/** Detail pages outside the app shell, which the phone route inventory of the shell does not hold. */
+const OUTSIDE_SHELL_DETAIL_PAGES: readonly (Omit<DetailPage, 'route'> & { route: string })[] = [
+  {
+    route: '/support/meldungen/[reportId]',
+    pages: ['components/support/support-report-detail.tsx'],
+    skeleton: 'components/loading-states/support-page-skeletons.tsx',
+  },
+];
+const ALL_DETAIL_PAGES = [...DETAIL_PAGES, ...OUTSIDE_SHELL_DETAIL_PAGES];
+
 /** Pages that render columns but share a route whose skeleton mirrors another variant, with the reason. */
 const VARIANT_PAGES: Readonly<Record<string, string>> = {
   'components/mitarbeiter/personnel-record-detail-content.tsx':
@@ -107,7 +117,7 @@ test('every detail route of the inventory has its columns paired or a reason for
 });
 
 test('a detail page and its skeleton name the same column layouts', () => {
-  for (const entry of DETAIL_PAGES) {
+  for (const entry of ALL_DETAIL_PAGES) {
     const skeleton = layoutsOf(read(entry.skeleton));
     expect(skeleton.length, `${entry.skeleton} renders DetailColumns`).toBeGreaterThan(0);
     for (const page of entry.pages)
@@ -118,7 +128,7 @@ test('a detail page and its skeleton name the same column layouts', () => {
 test('every file that renders DetailColumns is a paired page, its skeleton or a named variant', () => {
   const known = new Set([
     HOME,
-    ...DETAIL_PAGES.flatMap((entry) => [...entry.pages, entry.skeleton]),
+    ...ALL_DETAIL_PAGES.flatMap((entry) => [...entry.pages, entry.skeleton]),
     ...Object.keys(VARIANT_PAGES),
   ]);
   const unpaired = sourceFiles().filter((file) => !known.has(file) && read(file).includes('<DetailColumns'));
@@ -133,7 +143,7 @@ test('the detail container and the screen-width page columns have no other home'
     .filter((file) => read(file).includes('@container/detail'));
   expect(offenders).toEqual([]);
   for (const file of [
-    ...DETAIL_PAGES.flatMap((entry) => [...entry.pages, entry.skeleton]),
+    ...ALL_DETAIL_PAGES.flatMap((entry) => [...entry.pages, entry.skeleton]),
     ...Object.keys(VARIANT_PAGES),
   ])
     expect(read(file), file).not.toMatch(/(^|[\s"'`])(md|lg|xl|2xl):grid-cols-/);
