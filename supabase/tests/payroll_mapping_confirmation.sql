@@ -141,6 +141,16 @@ begin
   if (select prosecdef from pg_proc
       where oid = 'public.confirm_payroll_mapping_version(uuid,uuid,integer,jsonb,jsonb,uuid,text)'::regprocedure)
   then raise exception 'the mapping confirmation runs with its owner''s rights'; end if;
+  -- The version check holds only under the writer's own lock: a confirmation
+  -- and a direct create_payroll_mapping_version then never interleave.
+  if position(':p1-23-payroll-mapping' in (select prosrc from pg_proc
+      where oid = 'public.confirm_payroll_mapping_version(uuid,uuid,integer,jsonb,jsonb,uuid,text)'::regprocedure)) = 0
+    or position(':p1-23-payroll-mapping' in (select prosrc from pg_proc
+      where oid = 'public.create_payroll_mapping_version(uuid,uuid,jsonb,jsonb,uuid,text)'::regprocedure)) = 0
+  then raise exception 'the mapping confirmation and the mapping writer take different locks'; end if;
+  if (select strpos(prosrc, ':p1-23-payroll-mapping') > strpos(prosrc, 'current_version_id') from pg_proc
+      where oid = 'public.confirm_payroll_mapping_version(uuid,uuid,integer,jsonb,jsonb,uuid,text)'::regprocedure)
+  then raise exception 'the mapping confirmation reads the current version before it holds the lock'; end if;
 end;
 $$;
 

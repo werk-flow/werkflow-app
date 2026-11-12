@@ -157,8 +157,10 @@ grant execute on function public.open_time_accounts(uuid, uuid, jsonb, date, tex
 -- calls create_payroll_mapping_version, which is unchanged and writes the
 -- new version; an earlier version is never rewritten.
 --
--- One advisory lock per organization serializes the confirmations, so the
--- version read here is still current when the new one is written. Refusals:
+-- It takes the advisory lock of create_payroll_mapping_version before it
+-- reads the current version, so no writer, a direct call of that function by
+-- the previous build included, adds a version between the check and the
+-- write. Refusals:
 -- forbidden, stale_version, and those of create_payroll_mapping_version.
 
 create function public.confirm_payroll_mapping_version(
@@ -182,7 +184,7 @@ begin
     raise exception 'forbidden';
   end if;
   perform pg_advisory_xact_lock(hashtextextended(
-    p_organization_id::text || ':payroll-mapping', 0
+    p_organization_id::text || ':p1-23-payroll-mapping', 0
   ));
   select version.version into v_current_version
   from public.payroll_mapping_profiles profile
