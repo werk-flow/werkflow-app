@@ -1,5 +1,5 @@
 -- A field worker proposes a corrected access contact for office review
--- (migration 20261130100003_propose_site_access_corrections.sql).
+-- (migration 20261201090003_propose_site_access_corrections.sql).
 begin;
 
 -- 01 admin, 02 buero, 03 the assigned employee, 04 an unassigned employee,
