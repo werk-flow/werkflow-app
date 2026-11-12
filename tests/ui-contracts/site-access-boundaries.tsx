@@ -8,6 +8,7 @@ import { flushSync } from 'react-dom';
 import { SiteAccessProposalDialog } from '@/components/auftraege/work-pack/field-site-access-dialog';
 import { SiteAccessReviewDialog } from '@/components/kunden/site-access-review-dialog';
 import { BannerProvider } from '@/components/ui/banner';
+import { Button } from '@/components/ui/button';
 import { useSettleOnChange } from '@/hooks/use-settle-on-change';
 import type { ActionResult } from '@/lib/action-result';
 import type { SiteAccessReview } from '@/lib/site-access-proposals/types';
@@ -102,11 +103,12 @@ function useSiteAccessProps(): SiteAccessContractState {
 /** The office review the customer page opens for `?zugang=`. */
 export function SiteAccessReviewContractFixture(): React.JSX.Element {
   const { review } = useSiteAccessProps();
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   return (
     <BannerProvider>
       <main>
         <h1>Komponentenverträge</h1>
+        <Button onClick={() => setOpen(true)}>Zugangshinweis prüfen</Button>
         <SiteAccessReviewDialog open={open} onOpenChange={setOpen} read={{ state: 'open', review }} />
       </main>
     </BannerProvider>
@@ -117,12 +119,13 @@ export function SiteAccessReviewContractFixture(): React.JSX.Element {
 export function SiteAccessProposalContractFixture(): React.JSX.Element {
   const { stateKey } = useSiteAccessProps();
   const settle = useSettleOnChange(stateKey);
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   return (
     <BannerProvider>
       <main>
         <h1>Komponentenverträge</h1>
         <p>{stateKey === '' ? 'Kein Hinweis' : 'Hinweis beim Büro'}</p>
+        <Button onClick={() => setOpen(true)}>Zugang korrigieren</Button>
         {open && (
           <SiteAccessProposalDialog
             open={open}

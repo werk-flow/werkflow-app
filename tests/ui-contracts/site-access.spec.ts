@@ -7,7 +7,9 @@ import { answerHeldWrite, expectHeldWrite, openContractFixture } from './open-fi
 // keeps the dialog open with its input, and a saved proposal settles on the
 // render its action brings along.
 
-function reviewDialog(page: Page): Locator {
+async function openReview(page: Page): Promise<Locator> {
+  await openContractFixture(page, 'site-access-review');
+  await page.getByRole('button', { name: 'Zugangshinweis prüfen', exact: true }).click();
   return page.getByRole('dialog', { name: 'Zugang zu Haus Lindenstraße prüfen' });
 }
 
@@ -27,8 +29,7 @@ async function heldInput(page: Page): Promise<unknown> {
 test('a replaced proposal drops the choice and the reason made for the previous revision', async ({
   page,
 }) => {
-  await openContractFixture(page, 'site-access-review');
-  const dialog = reviewDialog(page);
+  const dialog = await openReview(page);
   await chooseContact(dialog, 'Herr Alt');
   await dialog.getByRole('button', { name: 'Ablehnen', exact: true }).click();
   const reason = dialog.getByRole('textbox', { name: /Begründung/ });
@@ -68,8 +69,7 @@ test('a replaced proposal drops the choice and the reason made for the previous 
 });
 
 test('a decision whose answer is lost keeps the review open with the choice', async ({ page }) => {
-  await openContractFixture(page, 'site-access-review');
-  const dialog = reviewDialog(page);
+  const dialog = await openReview(page);
   await chooseContact(dialog, 'Herr Alt');
   const accept = dialog.getByRole('button', { name: 'Übernehmen', exact: true });
   await accept.click();
@@ -82,7 +82,9 @@ test('a decision whose answer is lost keeps the review open with the choice', as
   await expect(accept).toBeEnabled();
 });
 
-function proposalDialog(page: Page): Locator {
+async function openProposal(page: Page): Promise<Locator> {
+  await openContractFixture(page, 'site-access-proposal');
+  await page.getByRole('button', { name: 'Zugang korrigieren', exact: true }).click();
   return page.getByRole('dialog', { name: 'Zugang korrigieren' });
 }
 
@@ -94,8 +96,7 @@ async function fillProposal(dialog: Locator): Promise<void> {
 }
 
 test('a proposal whose answer is lost keeps the form open with the input', async ({ page }) => {
-  await openContractFixture(page, 'site-access-proposal');
-  const dialog = proposalDialog(page);
+  const dialog = await openProposal(page);
   await fillProposal(dialog);
   await answerHeldWrite(page, 'transport');
   await expect(dialog.getByRole('alert')).toHaveText(
@@ -109,8 +110,7 @@ test('a proposal whose answer is lost keeps the form open with the input', async
 test('a saved proposal settles on the render its action brought along', async ({ page }) => {
   // Runs in real time; the settle timeout is moved past below.
   await page.clock.install();
-  await openContractFixture(page, 'site-access-proposal');
-  const dialog = proposalDialog(page);
+  const dialog = await openProposal(page);
   await fillProposal(dialog);
   await answerHeldWrite(page, null);
   await expect(dialog).toHaveCount(0);
