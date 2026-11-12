@@ -14,7 +14,7 @@ import { rememberPasswordResetAddress } from '@/lib/auth/actions';
 import { logError } from '@/lib/logging';
 import { clearServiceWorkerCaches } from '@/lib/offline/service-worker-caches';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
-import { mayEndSession } from '@/components/shared/unsent-work-gate';
+import { endSessionAfterCheck } from '@/components/shared/unsent-work-gate';
 import { clearTodayOnDevice } from '@/lib/field-sync/device/today-wipe';
 import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
 import {
@@ -224,28 +224,29 @@ async function redirectToPasswordReset(
   setFormError: (error: string | null) => void,
 ): Promise<void> {
   let knownAddress: boolean;
-  if (!(await mayEndSession(setFormError))) return;
-  try {
-    await clearEmailChangeChallengeQuietly();
-    // The address reaches the reset form in a cookie the server sets from the
-    // session, so this must run before the sign-out below.
-    knownAddress = await rememberResetAddress();
+  await endSessionAfterCheck(setFormError, async () => {
+    try {
+      await clearEmailChangeChallengeQuietly();
+      // The address reaches the reset form in a cookie the server sets from the
+      // session, so this must run before the sign-out below.
+      knownAddress = await rememberResetAddress();
 
-    // Global on purpose: a password change ends every existing session.
-    clearManualEntryBridge();
-    await clearServiceWorkerCaches();
-    await clearTodayOnDevice();
-    const { error } = await supabase.auth.signOut({ scope: 'global' });
-    if (error) throw error;
-  } catch (error) {
-    // A returned or thrown sign-out failure shows its error, so the person knows they are still signed in.
-    logError('redirectToPasswordReset: sign-out failed', error);
-    setFormError('Wir konnten dich nicht sicher abmelden. Bitte versuche es erneut.');
-    return;
-  }
+      // Global on purpose: a password change ends every existing session.
+      clearManualEntryBridge();
+      await clearServiceWorkerCaches();
+      await clearTodayOnDevice();
+      const { error } = await supabase.auth.signOut({ scope: 'global' });
+      if (error) throw error;
+    } catch (error) {
+      // A returned or thrown sign-out failure shows its error, so the person knows they are still signed in.
+      logError('redirectToPasswordReset: sign-out failed', error);
+      setFormError('Wir konnten dich nicht sicher abmelden. Bitte versuche es erneut.');
+      return;
+    }
 
-  window.location.replace(knownAddress ? '/forgot-password?source=settings' : '/forgot-password');
-  return untilPageLeaves();
+    window.location.replace(knownAddress ? '/forgot-password?source=settings' : '/forgot-password');
+    return untilPageLeaves();
+  });
 }
 
 /**

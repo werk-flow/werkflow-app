@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 
 import {
   CLOCKED_OUT,
+  accepting,
   SESSION_ID,
   WORKER,
   WORKING,
@@ -82,5 +83,20 @@ describe('removing events the person settled', () => {
     const outbox = await readTimeOutbox(WORKER);
     expect(outbox.events.map((event) => event.operationId)).toEqual([later.operationId]);
     expect(outbox.events[0]?.expected).toEqual({ sessionId: null, version: null });
+  });
+
+  test('removing the last queued event keeps the recorded ids, so a late copy of a sent action is not taken in', async () => {
+    const start = command('start');
+    await capture(WORKER, start, { at: '2026-11-11T07:00:00.000Z' });
+    const { options } = accepting();
+    await sendTimeOutbox(WORKER, options);
+    const end = command('end');
+    await capture(WORKER, end, { at: '2026-11-11T08:00:00.000Z' });
+    await removeTimeEvents(WORKER, [end.operationId], null);
+
+    // A take-in that read the start's kept copy before it was sent resumes now.
+    await capture(WORKER, start, { at: '2026-11-11T07:00:00.000Z' });
+
+    expect((await readTimeOutbox(WORKER)).events).toEqual([]);
   });
 });

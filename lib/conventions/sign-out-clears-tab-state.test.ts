@@ -21,7 +21,7 @@ import { listProductSources, parseProductSource } from './product-sources';
 // on a shared phone, and so does the organization switch (decision record
 // 0010, "Device data"; werk-flow/werkflow-planning#318).
 //
-// Before any of that, the same modules ask `mayEndSession`: unsent work on the
+// Before any of that, the same modules end through `endSessionAfterCheck`: unsent work on the
 // phone is the person's work, so it is sent, or the person decides about it,
 // before a session ends or the organization changes (decision record 0010,
 // the amendment "the time outbox"; werk-flow/werkflow-planning#319). The check
@@ -36,7 +36,7 @@ const CACHE_CLEAR_CALL = 'clearServiceWorkerCaches';
 const CLEAR_MODULE = 'lib/time-tracking/manual-entry-bridge-storage.ts';
 const TODAY_CLEAR_CALL = 'clearTodayOnDevice';
 const TODAY_CLEAR_MODULE = 'lib/field-sync/device/today-wipe.ts';
-const UNSENT_ASK_CALL = 'mayEndSession';
+const UNSENT_ASK_CALL = 'endSessionAfterCheck';
 const UNSENT_GATE_MODULE = 'components/shared/unsent-work-gate.ts';
 /** The modules that change the active organization in the browser. */
 const ORGANIZATION_SWITCH_MODULES = ['components/organization/organization-context.tsx'];
@@ -170,7 +170,7 @@ describe('sign-out clears the tab state', () => {
       signOutUse(
         'components/probe.ts',
         probe(
-          "if (!(await mayEndSession(report))) return; clearManualEntryBridge(); await clearServiceWorkerCaches(); await clearTodayOnDevice(); await supabase.auth.signOut({ scope: 'global' });",
+          "await endSessionAfterCheck(report, async () => { clearManualEntryBridge(); await clearServiceWorkerCaches(); await clearTodayOnDevice(); await supabase.auth.signOut({ scope: 'global' }); });",
         ),
       ),
     ).toEqual({

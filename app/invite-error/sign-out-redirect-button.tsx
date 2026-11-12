@@ -11,7 +11,7 @@ import { clearEmailChangeChallengeQuietly } from '@/hooks/use-sign-out';
 import { loadDocument } from '@/lib/navigation/document-load';
 import { clearServiceWorkerCaches } from '@/lib/offline/service-worker-caches';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
-import { mayEndSession } from '@/components/shared/unsent-work-gate';
+import { endSessionAfterCheck } from '@/components/shared/unsent-work-gate';
 import { clearTodayOnDevice } from '@/lib/field-sync/device/today-wipe';
 import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
 
@@ -35,20 +35,23 @@ export function SignOutAndRedirectButton({ inviteCode }: SignOutAndRedirectButto
 
     await runSignOut(async () => {
       try {
-        if (!(await mayEndSession(setError))) return;
-        await clearEmailChangeChallengeQuietly();
-        clearManualEntryBridge();
-        await clearServiceWorkerCaches();
-        await clearTodayOnDevice();
+        await endSessionAfterCheck(setError, async () => {
+          await clearEmailChangeChallengeQuietly();
+          clearManualEntryBridge();
+          await clearServiceWorkerCaches();
+          await clearTodayOnDevice();
 
-        // Sign out the current user (explicit global preserves the pre-existing
-        // default behavior of this flow).
-        const { error: signOutError } = await supabase.auth.signOut({ scope: 'global' });
-        if (signOutError) throw signOutError;
+          // Sign out the current user (explicit global preserves the pre-existing
+          // default behavior of this flow).
+          const { error: signOutError } = await supabase.auth.signOut({ scope: 'global' });
+          if (signOutError) throw signOutError;
 
-        // A full load so the next page starts without the old session in client state.
-        loadDocument(inviteCode === null ? '/login' : `/login?invite_code=${encodeURIComponent(inviteCode)}`);
-        return untilPageLeaves();
+          // A full load so the next page starts without the old session in client state.
+          loadDocument(
+            inviteCode === null ? '/login' : `/login?invite_code=${encodeURIComponent(inviteCode)}`,
+          );
+          return untilPageLeaves();
+        });
       } catch {
         setError('Die Abmeldung konnte nicht abgeschlossen werden. Bitte versuche es erneut.');
       }

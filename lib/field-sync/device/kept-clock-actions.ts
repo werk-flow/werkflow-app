@@ -59,17 +59,27 @@ const CALL_WITHOUT_LOCKS_MS = 2 * 60 * 1000;
 /** How long an entry counts as its page's while that page's call lock may not be granted yet. */
 const CALL_LOCK_GRANT_MS = 10 * 1000;
 
-/** Whether the page that wrote this entry before its online call still holds that call open. */
-async function callStillRuns(kept: KeptClockAction): Promise<boolean> {
-  const age = Date.now() - Date.parse(kept.capturedAt);
-  if (typeof navigator.locks?.request !== 'function') return age < CALL_WITHOUT_LOCKS_MS;
-  if (age < CALL_LOCK_GRANT_MS) return true;
-  return navigator.locks.request(
-    clockCallLock(kept.operationId),
-    { ifAvailable: true },
-    (lock) => lock === null,
-  );
+/**
+ * Whether the page that wrote this entry before its online call may still hold that call open, and
+ * when to look again: at `recheckAt` for an entry too young to judge, or once `lock` is free.
+ */
+type CallState = { runs: false } | { runs: true; recheckAt: number | null; lock: string | null };
+
+async function callState(kept: KeptClockAction): Promise<CallState> {
+  const capturedAt = Date.parse(kept.capturedAt);
+  const age = Date.now() - capturedAt;
+  if (typeof navigator.locks?.request !== 'function')
+    return age < CALL_WITHOUT_LOCKS_MS
+      ? { runs: true, recheckAt: capturedAt + CALL_WITHOUT_LOCKS_MS, lock: null }
+      : { runs: false };
+  if (age < CALL_LOCK_GRANT_MS) return { runs: true, recheckAt: capturedAt + CALL_LOCK_GRANT_MS, lock: null };
+  const lock = clockCallLock(kept.operationId);
+  const held = await navigator.locks.request(lock, { ifAvailable: true }, (granted) => granted === null);
+  return held ? { runs: true, recheckAt: null, lock } : { runs: false };
 }
+
+/** What a take-in left kept: an online call still open and every action behind it, and when to look again. */
+export type DeferredTakeIn = { actions: KeptClockAction[]; recheckAt: number | null; lock: string | null };
 
 /**
  * Moves every kept clock action into its person's outbox, in the order of the taps, and answers
@@ -78,12 +88,16 @@ async function callStillRuns(kept: KeptClockAction): Promise<boolean> {
  * device storage fails; the actions then stay kept.
  */
 export async function takeInKeptClockActions(
-  /** Marks the device as holding unsent work; runs before a key goes, so a tab closed mid-intake never hides the event. */
-  markHeld: () => void,
-): Promise<{ moved: number; unreadable: number }> {
+  /**
+   * Marks the device as holding unsent work and answers whether the mark is written; runs before a
+   * key goes, so a tab closed mid-intake never hides the event.
+   */
+  markHeld: () => boolean,
+): Promise<{ moved: number; unreadable: number; deferred: DeferredTakeIn | null }> {
   let moved = 0;
   let unreadable = 0;
-  for (const key of keptActionKeys()) {
+  const keys = keptActionKeys();
+  for (const [index, key] of keys.entries()) {
     const kept = readKeptAction(key);
     if (!kept) {
       unreadable += 1;
@@ -102,8 +116,16 @@ export async function takeInKeptClockActions(
       ...command
     } = kept;
     if (!isOfflineClockAction(action)) continue;
-    // Its page still waits for the server's answer; what was kept after it waits behind it.
-    if (inFlight && (await callStillRuns(kept))) break;
+    // Its page may still wait for the server's answer; what was kept after it waits behind it.
+    const call = inFlight ? await callState(kept) : { runs: false as const };
+    if (call.runs) {
+      const behind = keys.slice(index + 1).flatMap((later) => readKeptAction(later) ?? []);
+      return {
+        moved,
+        unreadable,
+        deferred: { actions: [kept, ...behind], recheckAt: call.recheckAt, lock: call.lock },
+      };
+    }
     await captureTimeEvent(
       { userId, organizationId },
       {
@@ -116,9 +138,10 @@ export async function takeInKeptClockActions(
       },
     );
     // Only after the outbox holds it and the start-up hint says so; a second take-in keeps it once there.
-    markHeld();
+    // A full storage: the key stays, and the next take-in finds the action in the outbox already.
+    if (!markHeld()) throw new Error('the start-up hint for unsent work cannot be written');
     localStorage.removeItem(key);
     moved += 1;
   }
-  return { moved, unreadable };
+  return { moved, unreadable, deferred: null };
 }

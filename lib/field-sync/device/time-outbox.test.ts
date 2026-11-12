@@ -395,15 +395,16 @@ describe('whose events', () => {
     expect((await readTimeOutbox(COLLEAGUE)).clock?.userId).toBe(COLLEAGUE.userId);
   });
 
-  test('discarding deletes the holder’s events and clock, and says when the device holds none at all', async () => {
+  test('discarding deletes the holder’s events and the clock they stood on, and says when the device holds none at all', async () => {
     await capture(WORKER, command('start'));
     await capture(WORKER, command('end'));
 
-    expect(await removeTimeEvents(WORKER, await keptIds(WORKER), null)).toEqual({
-      outbox: { clock: null, events: [] },
-      deviceHoldsEvents: false,
-    });
-    expect(await readWholeTimeOutbox()).toEqual({ clocks: [], events: [] });
+    const { outbox, deviceHoldsEvents } = await removeTimeEvents(WORKER, await keptIds(WORKER), null);
+    expect(outbox.events).toEqual([]);
+    // The record stays without a clock, for the ids it remembers as recorded.
+    expect(outbox.clock?.base).toBeNull();
+    expect(deviceHoldsEvents).toBe(false);
+    expect((await readWholeTimeOutbox()).events).toEqual([]);
   });
 
   test('the wipe of the stored day leaves the unsent events on the phone', async () => {
@@ -618,6 +619,9 @@ describe('what the clock shows', () => {
       at: '2026-11-11T00:00:00.000Z',
     });
     await capture(WORKER, command('end'), { at: '2026-11-11T01:00:00.000Z' });
+    const now = new Date('2026-11-11T09:00:00.000Z');
+    // Before any answer the replay already counts only the new day.
+    expect(clockDeviceView(await readTimeOutbox(WORKER), now)?.state?.todayMinutes).toBe(120);
     let version = 0;
     const { options } = server((envelope, call) =>
       call <= 2

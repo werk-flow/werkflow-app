@@ -4,7 +4,7 @@ import { formatBerlinLocalDate, getLocalDayStart, isSameLocalDay } from '@/lib/d
 import { applyTransitionEcho } from '@/lib/time-tracking/clock-echo';
 import type { LiveClockState, TimeActivitySelection } from '@/lib/time-tracking/types';
 import { todayHolderKey } from './today-store';
-import { sharedWipeGeneration } from './today-wipe';
+import { mayKeepUnder } from './today-wipe';
 import {
   changeTimeOutbox,
   type OutboxHolder,
@@ -185,8 +185,8 @@ export function captureTimeEvent(
 ): ReturnType<typeof changeTimeOutbox> {
   const { command, base } = capture;
   return changeTimeOutbox(holder, (current) => {
-    if (underSignal && sharedWipeGeneration() !== capture.wipeGeneration)
-      throw new Error('another tab ended the session since the page started');
+    if (underSignal && !mayKeepUnder(capture.wipeGeneration))
+      throw new Error('another tab ended the session, or is ending it, since the page started');
     if (current.events.some((kept) => kept.operationId === command.operationId)) return null;
     if (current.clock?.recorded?.includes(command.operationId)) return null;
     const last = current.events.at(-1);
@@ -309,7 +309,8 @@ export function removeTimeEvents(
     const left = current.events.filter((event) => !operationIds.includes(event.operationId));
     if (left.length === current.events.length) return null;
     const [head, ...behind] = left;
-    if (!head) return { clock: null, events: [] };
+    // No event stays, but the clock record keeps the recorded ids against a late copy of a sent action.
+    if (!head) return { clock: current.clock && { ...current.clock, base: null }, events: [] };
     if (head.operationId === current.events[0]?.operationId) return { clock: current.clock, events: left };
     const wipeGeneration = current.clock?.wipeGeneration ?? 'unreadable';
     return {

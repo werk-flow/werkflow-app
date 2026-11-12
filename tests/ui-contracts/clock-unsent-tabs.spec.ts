@@ -78,3 +78,18 @@ test('after another tab’s sign-out ended this tab’s hold, a tap never reache
   expect(server.sent.every((envelope) => waiting.includes(envelope.operationId))).toBe(true);
   await setNetwork(page, server, false);
 });
+
+test('a session end that fails after its check lifts its own barrier, so keeping works again', async ({
+  page,
+}) => {
+  await mountClock(page, CLOCKED_OUT_STATE);
+
+  await page.getByRole('button', { name: 'Abmelden mit Fehler', exact: true }).click();
+
+  await expect(page.getByLabel('Abmeldung')).toHaveText('Abmeldung fehlgeschlagen');
+  expect(
+    await page.evaluate(() =>
+      Object.keys(localStorage).filter((key) => key.startsWith('werkflow:session-ending:')),
+    ),
+  ).toEqual([]);
+});

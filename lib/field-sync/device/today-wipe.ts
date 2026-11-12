@@ -20,33 +20,66 @@ export const TODAY_WIPE_KEY = 'werkflow:today-wiped';
 export const TODAY_HOLDER_KEY = 'werkflow:today-holder';
 
 /**
- * Set while a sign-out or switch makes its last check for unsent work, with the time it began: no
- * tab keeps a clock action from then on, so the check sees everything the session leaves. The
- * person staying clears it, and so does the wipe that ends the session.
+ * One entry per session end that makes its last check for unsent work, owned by its flow and holding
+ * the time it began: no tab keeps a clock action while one stands, so the check sees everything the
+ * session leaves. The flow lifts only its own entry, on every exit (unsent-work-gate.ts); the wipe
+ * that ends a session lifts them all, since its new signal keeps every older page from keeping.
  */
-const SESSION_ENDING_KEY = 'werkflow:session-ending';
+const SESSION_ENDING_PREFIX = 'werkflow:session-ending:';
 
-/** How long a session end that never finished (a closed tab) still blocks keeping. */
+/** How long an entry whose tab closed mid-check still blocks keeping. */
 const SESSION_ENDING_MS = 10 * 60 * 1000;
 
-/** Starts or ends the barrier the last check needs; best-effort without localStorage. */
-export function markSessionEnding(ending: boolean): void {
+let sessionEnds = 0;
+
+/** The session-ending entries of every tab, as localStorage keys. */
+function sessionEndingKeys(): string[] {
+  return Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index) ?? '').filter(
+    (key) => key.startsWith(SESSION_ENDING_PREFIX),
+  );
+}
+
+/** Puts up this flow's barrier and answers its id, which `endSessionEnd` takes. */
+export function beginSessionEnd(): string {
+  sessionEnds += 1;
+  const flow = `${Date.now()}-${sessionEnds}-${Math.random().toString(36).slice(2)}`;
   try {
-    if (ending) localStorage.setItem(SESSION_ENDING_KEY, String(Date.now()));
-    else localStorage.removeItem(SESSION_ENDING_KEY);
+    localStorage.setItem(SESSION_ENDING_PREFIX + flow, String(Date.now()));
   } catch {
     // best-effort: without localStorage no tab can keep an action either.
+  }
+  return flow;
+}
+
+/** Lifts this flow's barrier, and no other flow's. */
+export function endSessionEnd(flow: string): void {
+  try {
+    localStorage.removeItem(SESSION_ENDING_PREFIX + flow);
+  } catch {
+    // best-effort: the entry lapses after SESSION_ENDING_MS.
   }
 }
 
 /** Whether a session end in any tab of the origin is making its last check. */
-export function sessionEnding(): boolean {
+function sessionEnding(): boolean {
   try {
-    const since = Number(localStorage.getItem(SESSION_ENDING_KEY));
-    return since > 0 && Date.now() - since < SESSION_ENDING_MS;
+    return sessionEndingKeys().some((key) => {
+      const since = Number(localStorage.getItem(key));
+      return since > 0 && Date.now() - since < SESSION_ENDING_MS;
+    });
   } catch {
     return true;
   }
+}
+
+/**
+ * Whether a page started under the wipe signal `pageSignal` may keep a new clock action now: the
+ * signal is still the shared one, and no session end is making its last check. Every path that
+ * keeps a new action asks this (unsent-mark.ts, time-outbox.ts); a take-in of an action kept before
+ * does not, since that action was kept already.
+ */
+export function mayKeepUnder(pageSignal: string): boolean {
+  return sharedWipeGeneration() === pageSignal && !sessionEnding();
 }
 
 let wipes = 0;
@@ -96,7 +129,7 @@ export function clearTodayOnDevice(): Promise<void> {
     // The claim goes first: a signal that cannot be written (a full quota) still leaves no reader a day.
     localStorage.removeItem(TODAY_HOLDER_KEY);
     localStorage.setItem(TODAY_WIPE_KEY, `${Date.now()}-${wipes}`);
-    localStorage.removeItem(SESSION_ENDING_KEY);
+    for (const key of sessionEndingKeys()) localStorage.removeItem(key);
   } catch {
     // best-effort: other tabs then learn of the wipe only from their next read, which finds no day.
   }

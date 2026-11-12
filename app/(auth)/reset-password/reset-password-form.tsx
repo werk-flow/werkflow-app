@@ -12,7 +12,7 @@ import { clearEmailChangeChallengeQuietly } from '@/hooks/use-sign-out';
 import { clearServiceWorkerCaches } from '@/lib/offline/service-worker-caches';
 import { logError } from '@/lib/logging';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
-import { mayEndSession } from '@/components/shared/unsent-work-gate';
+import { endSessionAfterCheck } from '@/components/shared/unsent-work-gate';
 import { clearTodayOnDevice } from '@/lib/field-sync/device/today-wipe';
 import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
 import {
@@ -139,63 +139,64 @@ async function resetPasswordAndLeave({
   setFormError: (message: string | null) => void;
 }): Promise<void> {
   // Before the password changes: this ends every session, and what the phone holds unsent could not be sent after it.
-  if (!(await mayEndSession(setFormError))) return;
-  try {
-    // Update the user's password
-    const { error: updateError } = await supabase.auth.updateUser({
-      password: values.password,
-    });
-
-    if (updateError) {
-      // Check for specific error types
-      if (updateError.message?.includes('expired') || updateError.message?.includes('invalid')) {
-        setFormError('Der Link ist abgelaufen oder ungültig. Bitte fordere einen neuen Link an.');
-      } else {
-        // Translate password errors to user-friendly German messages
-        const friendly = translateSupabasePasswordError(updateError);
-        setFormError(friendly);
-      }
-      return;
-    }
-
-    // Mark that we're redirecting to prevent token state updates
-    // Use ref instead of state to avoid closure issues in the auth listener
-    isRedirectingRef.current = true;
-
-    await clearEmailChangeChallengeQuietly();
-    clearManualEntryBridge();
-    await clearServiceWorkerCaches();
-    await clearTodayOnDevice();
-
-    // Immediately sign out the user for security — global on purpose: a
-    // password reset must end every existing session.
-    await supabase.auth.signOut({ scope: 'global' });
-
-    let loginRedirectHref = '/login';
-
+  await endSessionAfterCheck(setFormError, async () => {
     try {
-      await fetch('/auth/flash', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: 'password-reset-success',
-        }),
+      // Update the user's password
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: values.password,
       });
-    } catch (error) {
-      // The query parameter carries the message instead of the flash cookie.
-      logError('auth.flash.store_failed', error);
-      loginRedirectHref = '/login?message=password_reset_success';
-    }
 
-    // Redirect to login with a one-time server-side flash message
-    router.push(loginRedirectHref);
-    // The submit stays pending until the login page replaces this one.
-    await untilPageLeaves();
-  } catch {
-    setFormError('Ein unerwarteter Fehler ist aufgetreten. Bitte versuche es erneut.');
-  }
+      if (updateError) {
+        // Check for specific error types
+        if (updateError.message?.includes('expired') || updateError.message?.includes('invalid')) {
+          setFormError('Der Link ist abgelaufen oder ungültig. Bitte fordere einen neuen Link an.');
+        } else {
+          // Translate password errors to user-friendly German messages
+          const friendly = translateSupabasePasswordError(updateError);
+          setFormError(friendly);
+        }
+        return;
+      }
+
+      // Mark that we're redirecting to prevent token state updates
+      // Use ref instead of state to avoid closure issues in the auth listener
+      isRedirectingRef.current = true;
+
+      await clearEmailChangeChallengeQuietly();
+      clearManualEntryBridge();
+      await clearServiceWorkerCaches();
+      await clearTodayOnDevice();
+
+      // Immediately sign out the user for security — global on purpose: a
+      // password reset must end every existing session.
+      await supabase.auth.signOut({ scope: 'global' });
+
+      let loginRedirectHref = '/login';
+
+      try {
+        await fetch('/auth/flash', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            message: 'password-reset-success',
+          }),
+        });
+      } catch (error) {
+        // The query parameter carries the message instead of the flash cookie.
+        logError('auth.flash.store_failed', error);
+        loginRedirectHref = '/login?message=password_reset_success';
+      }
+
+      // Redirect to login with a one-time server-side flash message
+      router.push(loginRedirectHref);
+      // The submit stays pending until the login page replaces this one.
+      await untilPageLeaves();
+    } catch {
+      setFormError('Ein unerwarteter Fehler ist aufgetreten. Bitte versuche es erneut.');
+    }
+  });
 }
 
 export function ResetPasswordForm() {

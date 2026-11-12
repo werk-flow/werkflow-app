@@ -2,7 +2,7 @@
 
 import type { TimeTransitionResult } from '@/lib/time-tracking/types';
 import type { KeptClockAction } from './kept-clock-actions';
-import { sessionEnding, sharedWipeGeneration } from './today-wipe';
+import { mayKeepUnder } from './today-wipe';
 
 // What every page carries of the phone's unsent work, so this module imports
 // only the static wipe signal (today-wipe.ts) and stays a few lines: the read of the hint that decides at the app
@@ -39,10 +39,7 @@ export function deviceMayHoldUnsentWork(): boolean {
 /** Writes one kept action; answers its key, or null when nothing may or can be kept. */
 function storeKept(action: Omit<KeptClockAction, 'wipeGeneration'>, pageSignal: string): string | null {
   const kind = action.action;
-  if ((kind !== 'start' && kind !== 'switch' && kind !== 'end') || sharedWipeGeneration() !== pageSignal)
-    return null;
-  // A sign-out or switch makes its last check: what it does not see must not be kept after it.
-  if (sessionEnding()) return null;
+  if ((kind !== 'start' && kind !== 'switch' && kind !== 'end') || !mayKeepUnder(pageSignal)) return null;
   const base = action.base && { ...action.base, activeJobInfo: null, resumeJobInfo: null };
   keptOnThisPage += 1;
   const key = `${KEPT_CLOCK_ACTION_PREFIX}${String(Date.parse(action.capturedAt)).padStart(15, '0')}:${keptOnThisPage}:${action.operationId}`;
@@ -72,6 +69,9 @@ export function callWhileKept<T>(
   pageSignal: string | null,
   call: () => Promise<T>,
 ): Promise<T> {
+  // Another tab ended the session, or is making its last check: no action leaves this page without its trace.
+  if (pageSignal !== null && !mayKeepUnder(pageSignal))
+    return Promise.reject(new Error('another tab ended the session, or is ending it'));
   const key = pageSignal === null ? null : storeKept({ ...action, inFlight: true }, pageSignal);
   // The call starts in the tap's own task, so its feedback stays in the first frame.
   const answered = call().finally(() => {

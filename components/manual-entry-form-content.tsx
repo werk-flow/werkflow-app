@@ -10,7 +10,6 @@ import { SectionError } from '@/components/ui/section-error';
 import { DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { useOrganization } from '@/components/organization/organization-context';
 import type { CalendarEntryDialogJobOption, CalendarEntryDialogMember } from '@/lib/jobs/types';
-import type { TimeEntry } from '@/lib/time-tracking/types';
 import { useUserProfile } from '@/components/user/user-profile-context';
 import type { CalendarEntryDraft } from '@/components/kalender/calendar-entry-draft';
 import { useManualEntryDraftReport, type ManualEntryMode } from '@/components/use-manual-entry-form-draft';
@@ -21,7 +20,7 @@ import {
 } from '@/components/manual-entry-form-content-fields';
 import { isBeforeToday } from '@/components/manual-entry-submission';
 import { useManualEntryMembers } from '@/components/use-manual-entry-form-members';
-import { useManualEntrySubmit } from '@/components/use-manual-entry-form-submit';
+import { useManualEntrySubmit, type ManualEntrySuccess } from '@/components/use-manual-entry-form-submit';
 import { useClosedTimePeriods } from '@/components/zeiterfassung/use-closed-time-periods';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { CorrectionTimelineHandle } from '@/components/zeiterfassung/time-correction-dialog-timeline-section';
@@ -31,7 +30,7 @@ type OrgMember = CalendarEntryDialogMember;
 type JobOption = CalendarEntryDialogJobOption;
 
 export interface ManualEntryFormContentProps {
-  onSuccess?: ((entries: TimeEntry[]) => void | Promise<void>) | undefined;
+  onSuccess?: ManualEntrySuccess | undefined;
   preselectedUserId?: string | undefined;
   preselectedDate?: Date | undefined;
   preselectedClockInTime?: string | undefined;

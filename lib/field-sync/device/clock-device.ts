@@ -2,7 +2,7 @@
 
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import type { LiveClockState } from '@/lib/time-tracking/types';
-import { takeInKeptClockActions } from './kept-clock-actions';
+import { takeInKeptClockActions, type DeferredTakeIn, type KeptClockAction } from './kept-clock-actions';
 import {
   captureTimeEvent,
   clockDeviceView,
@@ -14,7 +14,7 @@ import { sendTimeOutbox } from './time-outbox-send';
 import { readTimeOutbox, readWholeTimeOutbox, type OutboxHolder } from './time-outbox-store';
 import { TODAY_WIPE_KEY } from './today-wipe';
 import { markUnsentWork } from './sync-runner';
-import { KEPT_CLOCK_ACTION_PREFIX } from './unsent-mark';
+import { KEPT_CLOCK_ACTION_PREFIX, UNSENT_MARK_PREFIX, keepClockAction } from './unsent-mark';
 import type { UnsentScope, UnsentSource } from './unsent-work';
 
 // This tab's hold on the time outbox: whose unsent events it shows and sends.
@@ -54,9 +54,14 @@ async function publish(): Promise<void> {
   for (const listener of listeners) listener(view);
 }
 
-/** Sets the start-up hint for time events before a kept action's key goes (kept-clock-actions.ts). */
-function markTimeHeld(): void {
+/** Sets the start-up hint for time events before a kept action's key goes, and answers whether it is written. */
+function markTimeHeld(): boolean {
   markUnsentWork(UNSENT_KIND, true);
+  try {
+    return localStorage.getItem(UNSENT_MARK_PREFIX + UNSENT_KIND) !== null;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -99,13 +104,44 @@ async function takeInAndSend(): Promise<void> {
  * time: a second tab that took in the same list after the first one already sent an event would
  * put that event back with the expectation of the page that kept it, not of the answer before it.
  */
-export async function takeInKept(): Promise<{ moved: number; unreadable: number }> {
-  let taken = { moved: 0, unreadable: 0 };
-  await exclusively(TAKE_IN_LOCK, async () => {
-    taken = await takeInKeptClockActions(markTimeHeld);
-  });
+export async function takeInKept(): Promise<Awaited<ReturnType<typeof takeInKeptClockActions>>> {
+  const taken = await exclusively(TAKE_IN_LOCK, () => takeInKeptClockActions(markTimeHeld));
   if (taken.moved > 0) await outboxChanged();
+  if (taken.deferred) lookAgainLater(taken.deferred);
   return taken;
+}
+
+/** The deferred looks this tab has scheduled, so each runs once. */
+let recheckScheduled = false;
+const locksAwaited = new Set<string>();
+
+/**
+ * Takes in again once a deferred online call can be judged: when its entry is old enough, or when
+ * its page let go of the call's lock. Without this a page that closed mid-call would wait for the
+ * next trigger, which may be the next app start.
+ */
+function lookAgainLater({ recheckAt, lock }: DeferredTakeIn): void {
+  if (recheckAt !== null && !recheckScheduled) {
+    recheckScheduled = true;
+    setTimeout(
+      () => {
+        recheckScheduled = false;
+        // eslint-disable-next-line no-restricted-syntax -- the action stays kept; the next trigger takes it in
+        void takeInAndSend().catch(() => undefined);
+      },
+      Math.max(0, recheckAt - Date.now()),
+    );
+  }
+  if (lock !== null && !locksAwaited.has(lock) && typeof navigator.locks?.request === 'function') {
+    locksAwaited.add(lock);
+    void navigator.locks
+      .request(lock, async () => undefined)
+      .then(() => {
+        locksAwaited.delete(lock);
+        return takeInAndSend();
+      })
+      .catch(() => locksAwaited.delete(lock));
+  }
 }
 
 /**
@@ -123,13 +159,31 @@ export async function removeShownTimeEvents(
 /**
  * Keeps one clock action of the page without signal behind every action other tabs kept before it:
  * those are taken in first, under the same lock, so an earlier tap never ends up behind a later one.
- * Throws when the device storage fails.
+ * When an online call is still open, the action joins the kept store behind it instead. Throws when
+ * the device storage fails, or when the action may not be kept now (another tab's wipe or session end).
  */
 export async function captureBehindKept(holder: OutboxHolder, capture: TimeEventCapture): Promise<void> {
-  await exclusively(TAKE_IN_LOCK, async () => {
-    await takeInKeptClockActions(markTimeHeld);
-    await captureTimeEvent(holder, capture, { underSignal: true });
+  const deferred = await exclusively(TAKE_IN_LOCK, async () => {
+    const taken = await takeInKeptClockActions(markTimeHeld);
+    if (!taken.deferred) await captureTimeEvent(holder, capture, { underSignal: true });
+    return taken.deferred;
   });
+  if (deferred) {
+    const { command, base, readAt, capturedAt, triedOnline, wipeGeneration } = capture;
+    const kept = keepClockAction(
+      {
+        ...holder,
+        ...command,
+        base,
+        readAt: readAt === null ? null : readAt.toISOString(),
+        capturedAt: capturedAt.toISOString(),
+        triedOnline,
+      },
+      wipeGeneration,
+    );
+    if (!kept) throw new Error('the clock action may not be kept now');
+    lookAgainLater(deferred);
+  }
   await outboxChanged();
 }
 
@@ -239,6 +293,40 @@ async function holdersInScope(scope: UnsentScope = 'session'): Promise<OutboxHol
   return (await ownOrganizations(userId)).map((organizationId) => ({ userId, organizationId }));
 }
 
+/** The deferred actions a flow in `scope` asks about: the signed-in person's, and for a switch only this tab's organization's. */
+async function deferredInScope(
+  deferred: DeferredTakeIn | null,
+  scope: UnsentScope,
+): Promise<KeptClockAction[]> {
+  if (!deferred) return [];
+  const current = clockHolder();
+  const userId = await signedInUserId();
+  return deferred.actions.filter(
+    (action) =>
+      action.userId === userId &&
+      (scope !== 'organization' || !current || action.organizationId === current.organizationId),
+  );
+}
+
+/**
+ * Takes in every shown action that still waits behind an open online call, once that call answered,
+ * so a discard deletes it from the outbox. Throws when a shown action cannot be taken in yet: the
+ * session then stays, and the person is asked again.
+ */
+async function takeInShownActions(scope: UnsentScope, ids: readonly string[]): Promise<void> {
+  for (;;) {
+    const { deferred } = await takeInKept();
+    const shown = (await deferredInScope(deferred, scope)).filter((action) =>
+      ids.includes(action.operationId),
+    );
+    if (shown.length === 0) return;
+    if (!deferred?.lock || typeof navigator.locks?.request !== 'function')
+      throw new Error('an online clock call is still open on this device');
+    // The page's call answers, then its entry goes or becomes a kept action this take-in moves.
+    await navigator.locks.request(deferred.lock, async () => undefined);
+  }
+}
+
 /**
  * The time events as unsent work (unsent-work.ts). Only the active organization's can be sent; a
  * sign-out still names and discards the person's events of every organization, because it ends them
@@ -248,16 +336,18 @@ export const timeUnsentSource: UnsentSource = {
   name: UNSENT_KIND,
   async summarize(scope) {
     // A kept action this version cannot read may be anyone's: no session ends over it unseen.
-    const { unreadable } = await takeInKept();
+    const { unreadable, deferred } = await takeInKept();
     if (unreadable > 0) throw new Error(`${unreadable} kept clock actions cannot be read by this version`);
     const ids: string[] = [];
     for (const holder of await holdersInScope(scope))
       ids.push(...(await readTimeOutbox(holder)).events.map((event) => event.operationId));
+    // An online call still open, and what was kept behind it, are unsent too until the call answers.
+    ids.push(...(await deferredInScope(deferred, scope ?? 'session')).map((action) => action.operationId));
     return ids.length > 0 ? [{ label: 'Stempelzeiten', count: ids.length, ids }] : [];
   },
   flush: sendOwnTimeEvents,
   async discard(scope, ids) {
-    await takeInKept();
+    await takeInShownActions(scope, ids);
     // The session ends: no server state to go on from, and what stays is asked about again.
     for (const holder of await holdersInScope(scope)) await removeShownTimeEvents(holder, ids, null);
     await outboxChanged();

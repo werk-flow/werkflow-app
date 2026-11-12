@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ClockStateProvider, useClockState } from '@/components/clock-state-provider';
 import { ClockFAB } from '@/components/clock-fab';
 import { TimeActivityDialog } from '@/components/time-activity-dialog';
-import { mayEndSession } from '@/components/shared/unsent-work-gate';
+import { endSessionAfterCheck } from '@/components/shared/unsent-work-gate';
 import { BannerProvider } from '@/components/ui/banner';
 import { OpenDialogProvider } from '@/components/ui/open-dialog-context';
 import { CLOCK_ORGANIZATION_ID } from './clock-state-fixture';
@@ -18,13 +18,29 @@ function ClockCallerProbe() {
         type="button"
         onClick={async () => {
           setSessionEnd('');
-          const mayEnd = await mayEndSession((message) =>
-            setSessionEnd(`Prüfung fehlgeschlagen: ${message}`),
+          const ended = await endSessionAfterCheck(
+            (message) => setSessionEnd(`Prüfung fehlgeschlagen: ${message}`),
+            async () => undefined,
           );
-          setSessionEnd((failure) => failure || (mayEnd ? 'Sitzung darf enden' : 'Sitzung bleibt'));
+          setSessionEnd((failure) => failure || (ended ? 'Sitzung darf enden' : 'Sitzung bleibt'));
         }}
       >
         Abmelden prüfen
+      </button>
+      <button
+        type="button"
+        onClick={async () => {
+          setSessionEnd('');
+          // A flow that fails after the check, as a clock-out the server refuses.
+          await endSessionAfterCheck(
+            (message) => setSessionEnd(`Prüfung fehlgeschlagen: ${message}`),
+            async () => {
+              throw new Error('the clock-out failed');
+            },
+          ).catch(() => setSessionEnd('Abmeldung fehlgeschlagen'));
+        }}
+      >
+        Abmelden mit Fehler
       </button>
       <output aria-label="Zeitstatus">{isReady ? `Bereit: ${state?.sessionVersion}` : 'Nicht bereit'}</output>
       <button
