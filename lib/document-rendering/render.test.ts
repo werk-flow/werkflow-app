@@ -3,13 +3,9 @@ import { deflateSync } from 'node:zlib';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { getDocumentProxy } from 'unpdf';
 
-import type {
-  BusinessDocument,
-  DocumentImage,
-  DocumentPosition,
-  DocumentSection,
-  StationeryPage,
-} from './model';
+import type { BusinessDocument, DocumentImage, DocumentPosition, DocumentSection } from './model';
+
+type StationeryPage = NonNullable<BusinessDocument['stationery']>['firstPage'];
 
 mock.module('server-only', () => ({}));
 const { renderBusinessDocument } = await import('./render');

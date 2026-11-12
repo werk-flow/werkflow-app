@@ -12,7 +12,7 @@ export type StationeryFile = DocumentImage | { format: 'pdf'; bytes: Uint8Array 
 /** Distances from the paper's edges, in millimetres, that the content keeps clear. */
 export type PageMargins = { topMm: number; rightMm: number; bottomMm: number; leftMm: number };
 
-export type StationeryPage = { file: StationeryFile; margins: PageMargins };
+type StationeryPage = { file: StationeryFile; margins: PageMargins };
 
 type DocumentStationery = {
   firstPage: StationeryPage;
