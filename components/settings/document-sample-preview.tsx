@@ -9,20 +9,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { SectionError } from '@/components/ui/section-error';
 import { useClientRead } from '@/hooks/use-client-read';
 import type { ActionFailure } from '@/lib/action-result';
-import { formatFileSize } from '@/lib/documents/format';
 
 /** The route handler that renders the Musterangebot for Admin and Büro. */
 const SAMPLE_OFFER_PATH = '/api/musterangebot';
 
-type SampleOfferRead = { success: true; url: string; sizeBytes: number } | ActionFailure<'load_failed'>;
+type SampleOfferRead = { success: true; url: string } | ActionFailure<'load_failed'>;
 
 /** Renders the Musterangebot once and keeps its bytes, so opening and downloading show the same file. */
 async function readSampleOffer(signal: AbortSignal): Promise<SampleOfferRead> {
   try {
     const response = await fetch(SAMPLE_OFFER_PATH, { signal, cache: 'no-store' });
     if (!response.ok) return { success: false, error: 'load_failed' };
-    const file = await response.blob();
-    return { success: true, url: URL.createObjectURL(file), sizeBytes: file.size };
+    return { success: true, url: URL.createObjectURL(await response.blob()) };
   } catch {
     // A lost connection is the same failure as a refused render: the retry asks again.
     return { success: false, error: 'load_failed' };
@@ -57,7 +55,7 @@ export function DocumentSamplePreview() {
               <FileText className="size-8 shrink-0 text-muted-foreground" aria-hidden />
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">Musterangebot.pdf</p>
-                <p className="text-sm text-muted-foreground">PDF · {formatFileSize(sample.data.sizeBytes)}</p>
+                <p className="text-sm text-muted-foreground">PDF-Datei, wie dein Kunde sie bekommt</p>
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
