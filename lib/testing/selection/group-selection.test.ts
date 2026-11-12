@@ -466,3 +466,22 @@ test('changed-spec-first: a group whose own spec or test support changed is tier
   expect(changedTestTier(inputs, ['components/ui/dialog.tsx'])).toBe(1);
   expect(changedTestTier(undefined, ['tests/golden/p1-13.spec.ts'])).toBe(1);
 });
+
+test('a layout sweep runs when a product file its audited surfaces render changed, never for docs or tests', () => {
+  const sweep = {
+    ...browser('audit:layout:job', 'release-only', ['work'], ['tests/audit/layout/surfaces-job.spec.ts']),
+    renderedFiles: ['components/auftraege/job-detail/job-detail-header.tsx'],
+  };
+  const plan = (changedFiles: string[]) =>
+    groupSelections({ mode: 'change', groups: [sweep], changedFiles, unresolvedGroupIds: [] });
+  // #393 changed the job header and its edit dialog; its plan ran no layout sweep.
+  expect(
+    plan(['components/auftraege/job-detail/job-detail-header.tsx', 'docs/README.md']).get(sweep.id),
+  ).toEqual({
+    reason: 'Audited surface changed',
+    changedFiles: ['components/auftraege/job-detail/job-detail-header.tsx'],
+  });
+  expect(
+    plan(['components/ui/button.tsx', 'docs/README.md', 'tests/golden/p1-01.spec.ts']).has(sweep.id),
+  ).toBe(false);
+});
