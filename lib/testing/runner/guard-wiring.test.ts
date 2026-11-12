@@ -102,7 +102,7 @@ test('both agent tools run the second-stack guard before every shell call', () =
   expect(guardedTools('.codex/hooks.json', ['Bash'], SECOND_STACK_GUARD)).toEqual(['Bash']);
 });
 
-test('Claude denies its file tools the Boat API key and the Boat CLI config', () => {
+test('Claude denies its file tools the Boat API key, the Boat CLI config and the hand-out secret', () => {
   const settings = z
     .object({ permissions: z.object({ deny: z.array(z.string()) }) })
     .parse(JSON.parse(readFileSync(resolve(repositoryRoot, '.claude/settings.json'), 'utf8')));
@@ -111,6 +111,8 @@ test('Claude denies its file tools the Boat API key and the Boat CLI config', ()
     'Read(~/.config/ascii/boat/**)',
     'Edit(~/.config/werkflow/boat-api-key)',
     'Edit(~/.config/ascii/boat/**)',
+    'Read(~/.config/werkflow/problem-report-handout.env)',
+    'Edit(~/.config/werkflow/problem-report-handout.env)',
   ])
     expect(settings.permissions.deny).toContain(rule);
 });
