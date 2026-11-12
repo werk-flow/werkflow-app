@@ -111,14 +111,16 @@ export async function focusedOnBoat(
     console.info(`[verify] ${drift} Boat runs this focused run on a fresh stack at this tree's migrations.`);
   }
   const script = kind === 'reference-update' ? 'test:audit:update-references' : `test:${suite}:focused`;
-  return withBoatKey(reason, readKey, async (key, signal) => {
+  return withBoatKey(reason, readKey, (key, signal) => {
     const before = updateFolders(repository);
-    const outcome = await withRunFolder(repository, signal, `focused run on Boat`, (folder) =>
-      runOnBoat({ args: [script, ...args], repository, folder, key, signal }),
-    );
-    return kind === 'reference-update' && typeof outcome === 'number'
-      ? placeReferenceUpdates(repository, before, outcome)
-      : outcome;
+    // The references change inside the workspace lock the run holds, so no other test operation
+    // starts between the run and the files it rewrote.
+    return withRunFolder(repository, signal, `focused run on Boat`, async (folder) => {
+      const outcome = await runOnBoat({ args: [script, ...args], repository, folder, key, signal });
+      return kind === 'reference-update' && typeof outcome === 'number'
+        ? placeReferenceUpdates(repository, before, outcome)
+        : outcome;
+    });
   });
 }
 
