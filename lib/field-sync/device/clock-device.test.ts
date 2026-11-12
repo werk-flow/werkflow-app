@@ -69,7 +69,12 @@ async function isolatedTests(): Promise<void> {
     createSupabaseBrowserClient: () => ({
       auth: {
         getSession: async () => ({
-          data: { session: sessionUserId && !sessionUnreadable ? { user: { id: sessionUserId } } : null },
+          data: {
+            session:
+              sessionUserId && !sessionUnreadable
+                ? { user: { id: sessionUserId }, access_token: `token-of-${sessionUserId}` }
+                : null,
+          },
           error: sessionUnreadable ? new Error('The session could not be refreshed.') : null,
         }),
       },

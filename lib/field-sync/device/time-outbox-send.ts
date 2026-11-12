@@ -18,10 +18,12 @@ export type TimeOutboxSendOptions = {
   fetch: (url: string, init: RequestInit) => Promise<Response>;
   now: () => Date;
   /**
-   * Whether the browser's session still is the holder's. The envelope names no person, so the
-   * server would record a former user's event for whoever is signed in now.
+   * The access token of the browser's session when that session is the holder's, else null. The
+   * request carries it as its bearer token, so the server records the event for exactly the person
+   * checked here, whatever another tab does to the shared cookies meanwhile. The envelope names no
+   * person.
    */
-  sessionIsHolders: () => Promise<boolean>;
+  holdersToken: () => Promise<string | null>;
 };
 
 function envelopeOf(event: StoredTimeEvent, sentAt: Date): Record<string, unknown> {
@@ -88,15 +90,18 @@ function answerOf(response: { status: number; body: unknown }, event: StoredTime
   return null;
 }
 
-async function sendEvent(event: StoredTimeEvent, options: TimeOutboxSendOptions): Promise<HeadAnswer | null> {
+async function sendEvent(
+  event: StoredTimeEvent,
+  token: string,
+  options: TimeOutboxSendOptions,
+): Promise<HeadAnswer | null> {
   let response: Response;
   try {
     response = await options.fetch(OPERATIONS_PATH, {
       method: 'POST',
       cache: 'no-store',
       credentials: 'same-origin',
-      // The handler's same-origin guard for a cookie request.
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
       body: JSON.stringify({ operations: [envelopeOf(event, options.now())] }),
     });
   } catch {
@@ -123,8 +128,9 @@ export async function sendTimeOutbox(holder: OutboxHolder, options: TimeOutboxSe
     const [head] = (await readTimeOutbox(holder)).events;
     if (!head || head.verdict) return;
     // Checked before every send: the session can end, or change its person, between two events.
-    if (!(await options.sessionIsHolders())) return;
-    const answer = await sendEvent(head, options);
+    const token = await options.holdersToken();
+    if (!token) return;
+    const answer = await sendEvent(head, token, options);
     if (!answer) return;
     await settleFirstTimeEvent(holder, head.operationId, answer);
     if (answer.kind === 'stopped') return;

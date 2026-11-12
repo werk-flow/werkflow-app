@@ -107,10 +107,14 @@ export async function holdClock(next: OutboxHolder, listener: ViewListener): Pro
  * The person of the browser's session, or null when nobody is signed in. Throws when the session
  * cannot be read: whoever asks then knows nothing, and neither sends nor ends a session over it.
  */
-async function sessionUserId(): Promise<string | null> {
+async function readSession(): Promise<{ userId: string; token: string } | null> {
   const { data, error } = await createSupabaseBrowserClient().auth.getSession();
   if (error) throw error;
-  return data.session?.user.id ?? null;
+  return data.session ? { userId: data.session.user.id, token: data.session.access_token } : null;
+}
+
+async function sessionUserId(): Promise<string | null> {
+  return (await readSession())?.userId ?? null;
 }
 
 /** Runs `work` while no other tab of the origin holds `lock`; a browser without Web Locks relies on the server recording each event once. */
@@ -142,7 +146,10 @@ export async function sendOwnTimeEvents(): Promise<void> {
         fetch: (url, init) => fetch(url, init),
         now: () => new Date(),
         // Checked before every send: the hold and the session can change between two events.
-        sessionIsHolders: async () => clockHolder() === hold && (await sessionUserId()) === holder.userId,
+        holdersToken: async () => {
+          const session = clockHolder() === hold ? await readSession() : null;
+          return session?.userId === holder.userId ? session.token : null;
+        },
       }),
     );
   await outboxChanged();

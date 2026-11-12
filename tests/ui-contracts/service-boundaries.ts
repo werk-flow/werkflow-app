@@ -123,7 +123,10 @@ export function createSupabaseBrowserClient() {
   return {
     auth: {
       // The browser's session, as the time outbox reads it before a send or a sign-out question.
-      getSession: async () => ({ data: { session: { user: { id: CLOCK_USER_ID } } }, error: null }),
+      getSession: async () => ({
+        data: { session: { user: { id: CLOCK_USER_ID }, access_token: 'contract-access-token' } },
+        error: null,
+      }),
       signOut: async () => {
         const failure = window.uiContractServices.authFailure;
         if (failure === 'thrown') throw new Error('Simulated auth connection failure.');

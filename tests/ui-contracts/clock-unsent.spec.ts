@@ -50,7 +50,15 @@ type Verdict = {
 };
 
 /** The server's side of the contract: the clock it answers, the envelopes it got, and its verdict. */
-type Server = { state: LiveClockState; sent: Envelope[]; verdict: Verdict; status: number; online: boolean };
+type Server = {
+  state: LiveClockState;
+  sent: Envelope[];
+  /** The bearer token of each send: the person the server records for. */
+  authorization: string[];
+  verdict: Verdict;
+  status: number;
+  online: boolean;
+};
 
 const ACCEPTED: Verdict = {
   outcome: 'accepted',
@@ -66,7 +74,14 @@ async function mountClock(
   assertWorkspaceTestLock();
   const bundle = process.env.WERKFLOW_UI_CONTRACT_BUNDLE;
   if (!bundle) throw new Error('Run through bun tests/ui-contracts/run.ts.');
-  const server: Server = { state: initial, sent: [], verdict: ACCEPTED, status: 200, online: true };
+  const server: Server = {
+    state: initial,
+    sent: [],
+    authorization: [],
+    verdict: ACCEPTED,
+    status: 200,
+    online: true,
+  };
   await page.route('http://localhost/ui-contracts**', (route) =>
     route.fulfill({
       contentType: 'text/html',
@@ -84,6 +99,7 @@ async function mountClock(
     }
     const body = z.object({ operations: z.array(envelopeSchema) }).parse(route.request().postDataJSON());
     server.sent.push(...body.operations);
+    server.authorization.push(route.request().headers()['authorization'] ?? '');
     await route.fulfill({
       status: server.status,
       json: {
@@ -207,6 +223,7 @@ test('a clock action without network is kept on the phone, shows the running clo
   await setNetwork(page, server, true);
 
   await expect.poll(() => server.sent.length).toBe(1);
+  expect(server.authorization).toEqual(['Bearer contract-access-token']);
   const [envelope] = server.sent;
   expect(envelope).toMatchObject({
     operationId: kept?.operationId,

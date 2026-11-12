@@ -160,6 +160,8 @@ type SentEnvelope = z.infer<typeof sentBodySchema>['operations'][number];
 /** The server's side of the sends: every envelope it got, and the answer it gives to each. */
 function server(answer: (envelope: SentEnvelope, call: number) => Response | Error) {
   const received: SentEnvelope[] = [];
+  /** The bearer token of each request: the identity the server records the event for. */
+  const tokens: string[] = [];
   let sends = 0;
   const options: TimeOutboxSendOptions = {
     fetch: async (_url, init) => {
@@ -168,14 +170,15 @@ function server(answer: (envelope: SentEnvelope, call: number) => Response | Err
       const [envelope] = body.operations;
       if (!envelope || body.operations.length !== 1) throw new Error('one event per request');
       received.push(envelope);
+      tokens.push(new Headers(init.headers).get('authorization') ?? '');
       const response = answer(envelope, received.length);
       if (response instanceof Error) throw response;
       return response;
     },
     now: () => new Date(Date.parse('2026-11-11T09:00:00.000Z') + sends * 1_000),
-    sessionIsHolders: async () => true,
+    holdersToken: async () => 'token-of-the-holder',
   };
-  return { received, options };
+  return { received, tokens, options };
 }
 
 function result(envelope: SentEnvelope, verdict: Record<string, unknown>, status = 200): Response {
@@ -510,10 +513,20 @@ describe('whose events', () => {
     await capture(WORKER, command('start'));
     const { received, options } = accepting();
 
-    await sendTimeOutbox(WORKER, { ...options, sessionIsHolders: async () => false });
+    await sendTimeOutbox(WORKER, { ...options, holdersToken: async () => null });
 
     expect(received).toEqual([]);
     expect((await readTimeOutbox(WORKER)).events).toHaveLength(1);
+  });
+
+  test('every request carries the verified holder’s token, so another tab’s cookies never decide whose event it is', async () => {
+    await capture(WORKER, command('start'));
+    await capture(WORKER, command('end'));
+    const { tokens, options } = accepting();
+
+    await sendTimeOutbox(WORKER, options);
+
+    expect(tokens).toEqual(['Bearer token-of-the-holder', 'Bearer token-of-the-holder']);
   });
 
   test('a session that changes its person between two events stops the chain there', async () => {
@@ -524,9 +537,9 @@ describe('whose events', () => {
 
     await sendTimeOutbox(WORKER, {
       ...options,
-      sessionIsHolders: async () => {
+      holdersToken: async () => {
         checks += 1;
-        return checks === 1;
+        return checks === 1 ? 'token-of-the-holder' : null;
       },
     });
 
