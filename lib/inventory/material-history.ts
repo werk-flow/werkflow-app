@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { logError } from '@/lib/logging';
 import type { AdminClient } from '@/lib/supabase/admin';
 
 // Material history makes work undeletable: a stock movement and a recorded use
@@ -27,7 +28,10 @@ export async function hasMaterialHistory(
   const { count, error } = await ('jobId' in target
     ? lines.eq('job_id', target.jobId)
     : lines.eq('project_id', target.projectId));
-  if (error) return { error: true };
+  if (error) {
+    logError('hasMaterialHistory: job_material_lines read failed', error);
+    return { error: true };
+  }
   return { error: false, exists: (count ?? 0) > 0 };
 }
 
