@@ -22,7 +22,9 @@ async function mountBreakRuleWeek(page: Page): Promise<void> {
 }
 
 function dayBar(page: Page, region: string, day: string) {
-  return page.getByRole('region', { name: region, exact: true }).getByLabel(new RegExp(`^${day}: Anwesenheit`));
+  return page
+    .getByRole('region', { name: region, exact: true })
+    .getByLabel(new RegExp(`^${day}: Anwesenheit`));
 }
 
 for (const region of ['Zeiterfassung', 'Mitarbeiter']) {
