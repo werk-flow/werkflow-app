@@ -63,3 +63,56 @@ test('Zeiterfassung: a rule saved in another session rebuilds the open week, als
   );
   await expect(dayBar(page, region, 'Mo')).toHaveAttribute('aria-label', /, Pause 0 Min\.,/);
 });
+
+/** Another session saves the rule: the provider joins, then organization_settings changes. */
+async function saveRuleElsewhere(page: Page, saved: 'switched-on' | 'read-fails'): Promise<void> {
+  await page.evaluate((outcome) => {
+    const version = { autoBreakThresholdMinutes: 360, autoBreakDurationMinutes: 30 };
+    window.breakRuleWeekContract.policy =
+      outcome === 'read-fails'
+        ? null
+        : {
+            breakMode: 'automatic',
+            ...version,
+            breakPolicyHistory: [
+              { breakMode: 'manual', ...version, effectiveFrom: '1970-01-01T00:00:00.000Z' },
+              { breakMode: 'automatic', ...version, effectiveFrom: '2026-09-08T04:00:00.000Z' },
+            ],
+          };
+    window.calendarContract.system({ extension: 'postgres_changes', status: 'ok' });
+    window.calendarContract.emit('organization_settings', { organization_id: 'org-a' });
+  }, saved);
+}
+
+test('Zeiterfassung: a rule saved in another session reaches the open week through its own read', async ({
+  page,
+}) => {
+  await mountBreakRuleWeek(page);
+  const region = 'Zeiterfassung live';
+  await expect(dayBar(page, region, 'Di')).toHaveAttribute('aria-label', /, Pause 0 Min\.,/);
+
+  await saveRuleElsewhere(page, 'switched-on');
+
+  // The page's server data stays as it was; the week read the saved rule itself.
+  await expect(dayBar(page, region, 'Di')).toHaveAttribute(
+    'aria-label',
+    `Di: Anwesenheit ${formatDuration(600)}, Arbeitszeit ${formatDuration(480)}, Pause ${formatDuration(30)}, Überstunden ${formatDuration(90)}`,
+  );
+  await expect(dayBar(page, region, 'Mo')).toHaveAttribute('aria-label', /, Pause 0 Min\.,/);
+  await expect(page.getByRole('region', { name: region, exact: true }).getByLabel('Wochenstand')).toHaveText(
+    'aktuell',
+  );
+});
+
+test('Zeiterfassung: a failed read of the saved rule marks the open week stale', async ({ page }) => {
+  await mountBreakRuleWeek(page);
+  const region = 'Zeiterfassung live';
+  await expect(dayBar(page, region, 'Di')).toHaveAttribute('aria-label', /, Pause 0 Min\.,/);
+
+  await saveRuleElsewhere(page, 'read-fails');
+
+  await expect(page.getByRole('region', { name: region, exact: true }).getByLabel('Wochenstand')).toHaveText(
+    'veraltet',
+  );
+  await expect(dayBar(page, region, 'Di')).toHaveAttribute('aria-label', /, Pause 0 Min\.,/);
+});
