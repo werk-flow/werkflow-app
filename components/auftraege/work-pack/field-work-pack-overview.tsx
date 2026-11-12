@@ -9,6 +9,7 @@ import { useBanner } from '@/components/ui/banner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { FieldWorkPackJob } from '@/lib/jobs/field-work-pack';
+import { contactCustomerLine } from './contact-customer-line';
 import type { FieldSiteAccessSlots } from './field-site-access';
 import { JOB_PRIORITY_LABELS } from '@/lib/jobs/types';
 
@@ -112,6 +113,7 @@ function FieldWorkPackOverviewFacts({
   siteAccess: FieldSiteAccessSlots | undefined;
 }): ReactElement {
   const duration = formatDurationOrNull(job.plannedWorkingMinutes);
+  const customerLine = contactCustomerLine(job.contactName, job.customerName);
   return (
     <div className="mt-3 grid gap-3 sm:mt-4 sm:grid-cols-2 sm:gap-4">
       <div className="space-y-3">
@@ -131,9 +133,7 @@ function FieldWorkPackOverviewFacts({
               {job.contactName ?? job.customerName ?? 'Nicht hinterlegt'}
             </p>
             {job.contactRole && <p className="text-xs text-muted-foreground">{job.contactRole}</p>}
-            {job.contactName && job.customerName && (
-              <p className="text-xs text-muted-foreground">{job.customerName}</p>
-            )}
+            {customerLine && <p className="text-xs text-muted-foreground">{customerLine}</p>}
           </div>
         </div>
       </div>
