@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { expect, type Browser, type Locator, type Page, type TestInfo } from '@playwright/test';
+import { expect, type Locator, type Page, type TestInfo } from '@playwright/test';
 import type { DialogOpenerId } from '../../../lib/testing/selection/dialog-inventory';
 import { z } from '../../../lib/zod';
 import { browserTestIdentity } from '../../../lib/testing/evidence/test-evidence';
@@ -16,7 +16,6 @@ import {
   runningClockLauncher,
 } from '../../golden/support/steps/time-tracking';
 import { currentRunKey } from '../../golden/support/run-state';
-import { createRolePage } from '../../golden/support/sessions';
 import type { TestWorld } from '../../golden/support/world';
 import type { CaptureSpec } from './acceptance-rounds';
 import { stateCapturePlan, type CaptureState } from './acceptance-state-plan';
@@ -213,49 +212,30 @@ function openedView(capture: CaptureSpec, openers: CaptureSources['openers']): O
 }
 
 /**
- * Captures one spec of a set at each of its widths and schemes in a session
- * of its role: the page, one of its tabs, or one of its dialogs opened the
- * way the layout audit opens it.
+ * Captures one spec of a set at each of its widths and schemes: the page, one
+ * of its tabs, or one of its dialogs opened the way the layout audit opens it.
  */
 export async function captureAcceptance(
-  input: {
-    browser: Browser;
-    baseURL: string | undefined;
-    world: TestWorld;
-    businessDate: string;
-    testInfo: TestInfo;
-  },
+  input: { page: Page; world: TestWorld; businessDate: string; testInfo: TestInfo },
   set: string,
   capture: CaptureSpec,
   sources: CaptureSources,
 ): Promise<void> {
-  const { world, businessDate, testInfo } = input;
+  const { page, world, businessDate, testInfo } = input;
   const view = openedView(capture, sources.openers);
-  const { context: session, page } = await createRolePage({
-    browser: input.browser,
-    baseUrl: input.baseURL,
-    world,
-    role: capture.role,
-  });
+  await page.setViewportSize(DESKTOP);
+  const destination = sources.destination
+    ? await sources.destination(world)
+    : await surfaceDestination(capture.route, page, world, businessDate);
+  if (capture.state) {
+    await captureState(input, set, { ...capture, state: capture.state }, view, destination.route);
+    return;
+  }
+  const context = { page, role: capture.role, world, businessDate, route: destination.route };
   // Later captures in the same world expect a stopped clock, so a failed
   // capture still clocks out once the clock-in went through.
   let clockedIn = false;
   try {
-    await page.setViewportSize(DESKTOP);
-    const destination = sources.destination
-      ? await sources.destination(world)
-      : await surfaceDestination(capture.route, page, world, businessDate);
-    if (capture.state) {
-      await captureState(
-        { page, world, businessDate, testInfo },
-        set,
-        { ...capture, state: capture.state },
-        view,
-        destination.route,
-      );
-      return;
-    }
-    const context = { page, role: capture.role, world, businessDate, route: destination.route };
     if (capture.clockedIn) {
       await prepareLayoutDetails(world);
       await clockInOnJob(page, layoutNames(world).job);
@@ -294,6 +274,5 @@ export async function captureAcceptance(
   } finally {
     await page.emulateMedia({ colorScheme: 'light' });
     if (clockedIn) await clockOut(page);
-    await session.close();
   }
 }

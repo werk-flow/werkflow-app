@@ -1,5 +1,5 @@
-import { test } from '../support/fixtures';
 import { captureAcceptance, settleAcceptanceEntries } from '../support/acceptance-captures';
+import { test } from '../support/acceptance-fixtures';
 import { roundCaptures } from '../support/acceptance-rounds';
 import { PEOPLE_OPENERS } from '../support/dialog-openers/people';
 
@@ -15,8 +15,9 @@ test.afterEach(async ({}, testInfo) => {
 for (const set of roundCaptures('people')) {
   test.describe(`@AUDIT-VISUAL-ACCEPT @ACCEPT ${set.id}`, () => {
     for (const capture of set.captures)
-      test(`@ACCEPT ${set.id} ${capture.id}`, async ({ browser, baseURL, world, businessDate }, testInfo) => {
-        await captureAcceptance({ browser, baseURL, world, businessDate, testInfo }, set.id, capture, {
+      test(`@ACCEPT ${set.id} ${capture.id}`, async ({ rolePage, world, businessDate }, testInfo) => {
+        const page = await rolePage(capture.role);
+        await captureAcceptance({ page, world, businessDate, testInfo }, set.id, capture, {
           openers: PEOPLE_OPENERS,
         });
       });

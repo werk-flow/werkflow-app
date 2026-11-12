@@ -11,7 +11,8 @@ import {
   type AcceptanceSet,
 } from '../../../tests/audit/support/acceptance-rounds';
 import { ACCEPTANCE_SETS } from '../../../tests/audit/support/acceptance-sets';
-import { sourceImportGraph } from '../evidence/group-evidence';
+import { sourceImportGraph, UNKNOWN_IMPORT_DEPENDENCY } from '../evidence/group-evidence';
+import { isTestInput } from '../selection/group-selection';
 import { getTestGroups } from '../selection/test-groups';
 
 const ROOT = resolve(import.meta.dir, '../../..');
@@ -25,19 +26,34 @@ function titles(sets: readonly AcceptanceSet[]): string[] {
   );
 }
 
-/** The test support a spec reaches through its imports, type-only imports included, as selection reads them. */
-function supportReachedBy(spec: string): Set<string> {
-  const files = [...new Glob('**/*.ts').scanSync({ cwd: join(ROOT, 'tests'), onlyFiles: true })].map(
-    (file) => `tests/${file.replaceAll('\\', '/')}`,
-  );
-  const graph = sourceImportGraph(ROOT, files, [spec]);
+const SPECS = [...ROUND_GROUPS, 'sets'].map(specOf);
+/** Every source file, so an import resolves as it does for selection; only what the specs reach is parsed. */
+const GRAPH = sourceImportGraph(
+  ROOT,
+  ['app', 'components', 'hooks', 'lib', 'tests', 'scripts', 'supabase', 'public', 'eslint-rules'].flatMap(
+    (directory) =>
+      [...new Glob('**/*').scanSync({ cwd: join(ROOT, directory), onlyFiles: true })].map(
+        (file) => `${directory}/${file.replaceAll('\\', '/')}`,
+      ),
+  ),
+  SPECS,
+);
+
+/**
+ * The test code a spec executes, by selection's own rule (group-qualification.ts): its imports,
+ * type-only ones included, followed through test inputs and never into product code.
+ */
+function executionInputs(spec: string): Set<string> {
   const reached = new Set<string>();
   const pending = [spec];
   while (pending.length) {
     const file = pending.pop();
     if (file === undefined || reached.has(file)) continue;
+    // An import selection cannot resolve widens a group to all test support.
+    expect(file, `${spec} reaches an unresolved import`).not.toBe(UNKNOWN_IMPORT_DEPENDENCY);
+    if (!isTestInput(file)) continue;
     reached.add(file);
-    pending.push(...(graph.get(file) ?? []));
+    pending.push(...(GRAPH.get(file) ?? []));
   }
   return reached;
 }
@@ -63,9 +79,20 @@ test('every capture of an inventory round runs in exactly one group, and no titl
   expect(new Set(all).size).toBe(all.length);
 });
 
+test('the group without openers reaches only the step modules every page needs', () => {
+  // A step module added here reaches every group again, as `steps/work.ts` did through time-tracking and personnel.
+  const steps = 'tests/golden/support/steps/';
+  expect(
+    [...executionInputs(specOf('pages'))]
+      .filter((file) => file.startsWith(steps))
+      .map((file) => file.slice(steps.length))
+      .toSorted(),
+  ).toEqual(['interaction.ts', 'service.ts', 'shared.ts', 'time-tracking.ts']);
+});
+
 test('a group reaches only the opener module of its name, which holds every opener it captures', () => {
   for (const group of ROUND_GROUPS) {
-    const reached = supportReachedBy(specOf(group));
+    const reached = executionInputs(specOf(group));
     const own = OPENER_GROUPS.some((candidate) => candidate === group)
       ? [`${SUPPORT}/dialog-openers/${group}.ts`]
       : [];
