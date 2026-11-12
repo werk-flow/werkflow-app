@@ -60,6 +60,17 @@ const problemReportContextSchema = z.strictObject({
 });
 export type ProblemReportContext = z.infer<typeof problemReportContextSchema>;
 
+/**
+ * A stored context: the whole capture, or null for the empty object of a
+ * report filed without one. Any other shape throws, a part of a capture too.
+ */
+export function parseStoredProblemReportContext(value: unknown): ProblemReportContext | null {
+  const capture = problemReportContextSchema.safeParse(value);
+  if (capture.success) return capture.data;
+  z.strictObject({}).parse(value);
+  return null;
+}
+
 export const submitProblemReportInputSchema = z.strictObject({
   organizationId: uuidSchema,
   /** Chosen by the device once per report, so a retry after a lost answer saves nothing twice. */
