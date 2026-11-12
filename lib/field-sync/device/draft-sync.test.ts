@@ -24,6 +24,7 @@ const uploads: UploadCall[] = [];
 type UploadAnswer =
   | { status: 'saved'; saved: { id: string } | null }
   | { status: 'failed'; reason: string; transferred: unknown };
+const uploadSignals: Array<AbortSignal | null> = [];
 let uploadAnswers: Array<() => UploadAnswer | Promise<UploadAnswer>> = [];
 let accessAnswer: { success: true } | { success: false; error: string } = { success: true };
 const accessReads: unknown[] = [];
@@ -38,7 +39,9 @@ mock.module('@/lib/documents/upload-client', () => ({
     target: { kind: string; jobId?: string };
     category?: string;
     transferred: unknown;
+    signal?: AbortSignal;
   }) => {
+    uploadSignals.push(input.signal ?? null);
     const call = {
       name: input.file.name,
       jobId: input.target.jobId ?? null,
@@ -139,7 +142,8 @@ const sentOperationSchema = z.object({
 });
 const sent: z.infer<typeof sentOperationSchema>[] = [];
 let handlerAnswers: Array<() => Response | Promise<Response>> = [];
-let onOnline: (() => void) | null = null;
+let onOnline: ((event: { key: string | null }) => void) | null = null;
+let onStorage: ((event: { key: string | null }) => void) | null = null;
 const realFetch = globalThis.fetch;
 
 function results(outcome: string, code: string): () => Response {
@@ -150,6 +154,7 @@ beforeEach(async () => {
   setSystemTime(NOW);
   storage.clear();
   uploads.length = 0;
+  uploadSignals.length = 0;
   accessReads.length = 0;
   sent.length = 0;
   uploadAnswers = [];
@@ -157,8 +162,12 @@ beforeEach(async () => {
   accessAnswer = { success: true };
   Object.assign(globalThis, {
     window: {
-      addEventListener: (type: string, listener: () => void) => {
+      addEventListener: (type: string, listener: (event: { key: string | null }) => void) => {
         if (type === 'online') onOnline = listener;
+        if (type === 'storage') onStorage = listener;
+      },
+      removeEventListener: (type: string) => {
+        if (type === 'storage') onStorage = null;
       },
     },
     fetch: (url: string, init: RequestInit) => {
@@ -373,7 +382,7 @@ describe('what is sent by itself', () => {
 
     // The signal returns: the `online` event sends what waited.
     handlerAnswers = [results('replayed', 'replayed'), results('accepted', 'accepted')];
-    onOnline?.();
+    onOnline?.({ key: null });
     await send();
     expect(await stored()).toEqual([]);
   });
@@ -490,5 +499,54 @@ describe('the draft belongs to its author and its sending', () => {
     expect(await sendDraft(holder, DRAFT_ID)).toBe('waiting');
     expect(await sendDraft(holder, DRAFT_ID)).toBe('waiting');
     expect((await stored())[0]?.sealed).toBe(true);
+  });
+});
+
+describe('round 2: a send never strands or splits a draft', () => {
+  test('a photo another tab adds during an upload is uploaded too before the seal, and the draft goes with all its photos', async () => {
+    const [firstPhoto, secondPhoto] = draft().photos;
+    if (!firstPhoto || !secondPhoto) throw new Error('The fixture draft holds two photos.');
+    await save(draft({ photos: [firstPhoto] }));
+    let releaseFirst = (): void => undefined;
+    uploadAnswers = [
+      () =>
+        new Promise<UploadAnswer>((resolve) => {
+          releaseFirst = () => resolve(savedAs('doc-1'));
+        }),
+      () => savedAs('doc-2'),
+    ];
+    handlerAnswers = [results('accepted', 'accepted')];
+    const sending = sendDraft(holder, DRAFT_ID);
+    await until(() => uploads.length === 1);
+    // Another tab's dialog takes a second photo meanwhile.
+    await changeDraftOnDevice(holder, DRAFT_ID, (current) =>
+      current ? { ...current, photos: [...current.photos, secondPhoto] } : null,
+    );
+    releaseFirst();
+    expect(await sending).toBe('sent');
+    expect(sent[0]?.payload.photos).toEqual([
+      { linkId: '9d000000-0000-4000-8000-000000000031', documentId: 'doc-1' },
+      { linkId: '9d000000-0000-4000-8000-000000000032', documentId: 'doc-2' },
+    ]);
+  });
+
+  test('a sign-out or sign-in in another tab during an upload aborts the transfer, and nothing is attached', async () => {
+    await save(draft());
+    let failUpload = (): void => undefined;
+    uploadAnswers = [
+      () =>
+        new Promise<UploadAnswer>((resolve) => {
+          failUpload = () => resolve({ status: 'failed', reason: 'interrupted', transferred: null });
+        }),
+    ];
+    const sending = sendDraft(holder, DRAFT_ID);
+    await until(() => uploads.length === 1);
+    storage.set(TODAY_WIPE_KEY, 'coworker-sign-in');
+    onStorage?.({ key: TODAY_WIPE_KEY });
+    expect(uploadSignals[0]?.aborted).toBe(true);
+    failUpload();
+    expect(await sending).toBe('waiting');
+    expect(uploads.length).toBe(1);
+    expect(sent).toEqual([]);
   });
 });

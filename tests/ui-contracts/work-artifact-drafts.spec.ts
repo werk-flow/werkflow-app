@@ -309,3 +309,32 @@ test('a save right after a photo waits until the device stored the photo, and th
     draftRow(page, 'Wartung Heizung').getByText('Arbeitsbericht · 1 Foto', { exact: true }),
   ).toBeVisible();
 });
+
+test('a save that cannot read the draft on the device saves nothing and keeps the draft with its photo', async ({
+  page,
+}) => {
+  await openContractFixture(page, 'work-artifact-report');
+  const dialog = await (async () => {
+    await page.getByRole('button', { name: 'Neu', exact: true }).click();
+    return page.getByRole('dialog', { name: 'Arbeitsnachweis erstellen', exact: true });
+  })();
+  await dialog.getByRole('textbox', { name: 'Titel', exact: true }).fill('Wartung Heizung');
+  await dialog.getByRole('textbox', { name: 'Ausgeführte Arbeiten', exact: true }).fill('Brenner gereinigt');
+  await dialog
+    .getByTestId('artifact-photo-input')
+    .setInputFiles({ name: 'foto-1.png', mimeType: 'image/png', buffer: PHOTO });
+  await expect(dialog.getByRole('img', { name: 'Foto 1', exact: true })).toBeVisible();
+  // From here the device cannot read its draft store.
+  await page.evaluate(() => {
+    IDBObjectStore.prototype.get = () => {
+      throw new DOMException('The device refused the read.', 'UnknownError');
+    };
+  });
+  await page.getByRole('button', { name: 'Als Entwurf speichern', exact: true }).click();
+
+  await expect(
+    dialog.getByText(/Der Entwurf konnte nicht auf diesem Gerät gespeichert werden/),
+  ).toBeVisible();
+  expect(await page.evaluate(() => window.uiContractWorkArtifacts.saves)).toEqual([]);
+  await expect(dialog.getByRole('img', { name: 'Foto 1', exact: true })).toBeVisible();
+});

@@ -95,6 +95,8 @@ export function useWorkArtifactSave({
     const onDevice = deviceDraft.current;
     // Photos reach the server only with the draft the device holds.
     const photos = onDevice ? await onDevice.committedPhotoCount() : 0;
+    // The device could not say whether the draft has photos: a text-only save could lose them.
+    if (photos === null) return;
     const result = photos > 0 ? 'no_answer' : await saveOnServer(submit, onDevice !== null);
     if (result === 'no_answer') {
       const sent = (await onDevice?.save(submit)) ?? null;

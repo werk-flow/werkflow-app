@@ -13,7 +13,7 @@ import {
   type DraftRefusal,
   type StoredDraft,
 } from './draft-store';
-import { todayWipeGeneration } from './today-wipe';
+import { TODAY_WIPE_KEY, todayWipeGeneration } from './today-wipe';
 
 // Sends the report drafts a phone keeps (decision record 0010, the report
 // draft amendment). Each photo goes to storage through the document upload
@@ -166,6 +166,13 @@ async function uploadPhotos(owner: DraftHolder, draft: StoredDraft): Promise<Dra
   for (const photo of draft.photos) {
     if (photo.documentId !== null) continue;
     if (!stillHolder()) return 'waiting';
+    // A sign-out or a sign-in page in another tab during the transfer aborts it: the photo must not
+    // be registered with the next person's session.
+    const transfer = new AbortController();
+    const abortOnWipe = (event: StorageEvent): void => {
+      if (event.key === TODAY_WIPE_KEY || event.key === null) transfer.abort();
+    };
+    window.addEventListener('storage', abortOnWipe);
     progress = { draftId: draft.id, uploaded, total: draft.photos.length };
     notify();
     const result = await uploadDocumentDirect({
@@ -173,7 +180,9 @@ async function uploadPhotos(owner: DraftHolder, draft: StoredDraft): Promise<Dra
       target: { kind: 'job', jobId: draft.jobId },
       category: 'photo',
       transferred: photo.transferred,
-    });
+      signal: transfer.signal,
+    }).finally(() => window.removeEventListener('storage', abortOnWipe));
+    if (!stillHolder()) return 'waiting';
     // A saved upload whose answer names no document was registered by an earlier try's lost answer.
     const documentId =
       result.status === 'saved' ? (result.saved?.id ?? photo.transferred?.documentId ?? null) : null;
@@ -211,6 +220,37 @@ async function markRefused(owner: DraftHolder, draftId: string, kind: DraftRefus
   );
 }
 
+/** How often one send uploads photos another tab added meanwhile before it leaves the rest for the next send. */
+const UPLOAD_PASSES = 3;
+
+/**
+ * Uploads the draft's photos and seals it, checked in the seal's own transaction: a photo another
+ * tab added meanwhile is uploaded in the next pass, so a sealed draft always names every photo.
+ * Answers the sealed draft, or what the draft is left as.
+ */
+async function uploadAndSeal(
+  owner: DraftHolder,
+  first: StoredDraft,
+): Promise<StoredDraft | DraftSendOutcome> {
+  let draft = first;
+  for (let pass = 0; pass < UPLOAD_PASSES; pass += 1) {
+    if (!stillHolder()) return 'waiting';
+    const left = draft.sealed ? null : await uploadPhotos(owner, draft);
+    if (left !== null) return left;
+    if (!stillHolder()) return 'waiting';
+    // Sealed before the request leaves: from here the server may hold the draft, whatever answer arrives.
+    const current = await changeDraftOnDevice(owner, draft.id, (stored) =>
+      stored && (stored.sealed || stored.photos.every((photo) => photo.documentId !== null))
+        ? { ...stored, sealed: true, refusal: null }
+        : stored,
+    );
+    if (!current) return 'skipped';
+    if (current.sealed) return current;
+    draft = current;
+  }
+  return 'waiting';
+}
+
 /** Sends one draft of the holder. `byPerson` is „Erneut senden“ or a save: it also sends a refused or old draft. */
 async function sendOne(owner: DraftHolder, draftId: string, byPerson: boolean): Promise<DraftSendOutcome> {
   const draft = (await listDraftsOnDevice(owner)).find((entry) => entry.id === draftId);
@@ -219,15 +259,8 @@ async function sendOne(owner: DraftHolder, draftId: string, byPerson: boolean): 
   if (!draft.ready) return 'skipped';
   if (!byPerson && (openInEditor.has(draftId) || draft.refusal !== null || isPastUnsentLimit(draft)))
     return 'skipped';
-  if (!stillHolder()) return 'waiting';
-  const left = draft.sealed ? null : await uploadPhotos(owner, draft);
-  if (left !== null) return left;
-  if (!stillHolder()) return 'waiting';
-  // Sealed before the request leaves: from here the server may hold the draft, whatever answer arrives.
-  const sealed = await changeDraftOnDevice(owner, draftId, (current) =>
-    current ? { ...current, sealed: true, refusal: null } : null,
-  );
-  if (!sealed || sealed.photos.some((photo) => photo.documentId === null)) return 'skipped';
+  const sealed = await uploadAndSeal(owner, draft);
+  if (typeof sealed === 'string') return sealed;
   const verdict = await attach(sealed);
   if (verdict === null) return 'waiting';
   if (verdict.outcome === 'accepted' || verdict.outcome === 'replayed') {

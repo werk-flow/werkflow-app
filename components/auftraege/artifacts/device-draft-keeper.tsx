@@ -246,7 +246,8 @@ export function DeviceDraftKeeper(props: DeviceDraftKeeperProps) {
       // An unchanged write waits behind every queued one: a photo just taken counts once it is stored.
       committedPhotoCount: async () => {
         const stored = await write((current) => current);
-        return stored === null || stored === 'not_stored' ? 0 : stored.photos.length;
+        if (stored === 'not_stored') return null;
+        return stored === null ? 0 : stored.photos.length;
       },
       save,
       discard: async () => void (await write(() => null)),
