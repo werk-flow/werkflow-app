@@ -111,7 +111,7 @@ function marginDraft(margins: CompanyProfileDetails['firstPageMargins']): Margin
   };
 }
 
-export function draftOf(details: CompanyProfileDetails): ProfileDraft {
+export function profileDraftOf(details: CompanyProfileDetails): ProfileDraft {
   return {
     ...details,
     offerValidityDays: String(details.offerValidityDays),

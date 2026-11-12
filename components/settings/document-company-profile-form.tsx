@@ -25,7 +25,7 @@ import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import {
   MARGIN_SIDES,
   TEXT_FIELD_SECTIONS,
-  draftOf,
+  profileDraftOf,
   fieldId,
   parseDraft,
   type MarginPage,
@@ -201,7 +201,7 @@ function MarginFields({
 function useProfileSave({ organizationId, version, details }: Omit<FormProps, 'stationery'>) {
   const { showBanner } = useBanner();
   const { run, isPending } = useServerAction(saveCompanyDocumentProfile);
-  const [draft, setDraft] = useState(() => draftOf(details));
+  const [draft, setDraft] = useState(() => profileDraftOf(details));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [failure, setFailure] = useState<string | null>(null);
   const update = (change: Partial<ProfileDraft>) => setDraft((current) => ({ ...current, ...change }));
