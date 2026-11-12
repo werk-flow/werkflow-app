@@ -37,12 +37,13 @@ export async function hasMaterialHistory(
 
 /**
  * Whether a delete failed because it would remove material history: the
- * ledger guard refused clearing a movement's line, or a use event still
- * references the line.
+ * ledger guard refused clearing a movement's line, the line guard refused
+ * deleting a line with use events, or a use event still references the line.
  */
 export function isMaterialHistoryRefusal(error: { code?: string; message?: string }): boolean {
   return (
     error.message === 'inventory_ledger_append_only' ||
+    error.message === 'material_use_recorded' ||
     (error.code === '23503' && (error.message ?? '').includes('job_material_use_events'))
   );
 }

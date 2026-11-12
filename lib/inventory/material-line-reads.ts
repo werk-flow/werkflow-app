@@ -294,14 +294,15 @@ function toMaterialUseEvent(row: UseEventRow): MaterialUseEvent {
 
 type ConsumptionTarget = { jobId: string } | { projectId: string };
 
-/** The target's lines, a cancelled one only when something was used before, oldest first. */
+/** The target's lines without the cancelled ones, oldest first. */
 function readConsumptionLineRows(admin: AdminClient, orgId: string, target: ConsumptionTarget) {
   return readCompleteRows((from, to) => {
     const lines = admin
       .from('job_material_lines')
       .select('*')
       .eq('organization_id', orgId)
-      .or('status.neq.cancelled,used_quantity.gt.0');
+      // A line with uses is never cancelled (its database guard), so a cancelled line holds none.
+      .neq('status', 'cancelled');
     return ('jobId' in target ? lines.eq('job_id', target.jobId) : lines.eq('project_id', target.projectId))
       .order('created_at', { ascending: true })
       .order('id')

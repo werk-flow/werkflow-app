@@ -28,6 +28,11 @@
 --    used quantity never sums two units.
 --    An insert trigger keeps every event's line, article, job, project and
 --    corrected event inside the event's organization and line.
+-- 5. A line with use events is never cancelled or deleted, also after its uses
+--    were corrected back to 0, outside an organization deletion. A trigger on
+--    the line enforces it: it runs after the cancelling update or the delete
+--    holds the line's row lock, so a use that held the lock first has committed
+--    its events, and the trigger's read sees them.
 -- 4. record_inventory_movement refuses a return beyond taken minus used. Its
 --    signature, result and grants stay as before.
 --
@@ -124,6 +129,41 @@ revoke all on function app_private.validate_job_material_use_event() from public
 create trigger validate_job_material_use_event
 before insert on public.job_material_use_events
 for each row execute function app_private.validate_job_material_use_event();
+
+create function app_private.guard_job_material_line_with_use()
+returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  if tg_op = 'DELETE'
+    and old.organization_id::text = any(string_to_array(coalesce(
+      current_setting('app.deleting_organization_ids', true), ''
+    ), ','))
+  then return old; end if;
+  if exists (
+    select 1 from public.job_material_use_events event
+    where event.job_material_line_id = old.id
+  ) then
+    raise exception 'material_use_recorded';
+  end if;
+  if tg_op = 'DELETE' then return old; end if;
+  return new;
+end;
+$$;
+
+revoke all on function app_private.guard_job_material_line_with_use() from public, anon, authenticated;
+
+create trigger guard_job_material_line_cancel_with_use
+before update of status on public.job_material_lines
+for each row
+when (new.status = 'cancelled' and old.status is distinct from 'cancelled')
+execute function app_private.guard_job_material_line_with_use();
+
+create trigger guard_job_material_line_delete_with_use
+before delete on public.job_material_lines
+for each row execute function app_private.guard_job_material_line_with_use();
 
 create trigger guard_job_material_use_events_append_only
 before update or delete on public.job_material_use_events

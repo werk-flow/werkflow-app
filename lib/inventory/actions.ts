@@ -426,6 +426,9 @@ export async function deleteJobMaterialLine(lineIdInput: string): Promise<Action
         .select('id');
 
   if (result.error) {
+    // A use and its full correction committed after the check above: the line guard refuses.
+    if (result.error.message === 'material_use_recorded')
+      return { success: false, error: 'material_use_recorded' };
     logError('Error deleting job material line:', result.error);
     return { success: false, error: 'delete_failed' };
   }

@@ -253,6 +253,43 @@ begin
   end if;
 end $$;
 
+-- A line with use events is history: corrected back to 0, it still can be
+-- neither cancelled nor deleted, whichever writer read the line before.
+do $$
+declare
+  v_org constant uuid := '37000000-0000-4000-8000-000000000010';
+  v_actor constant uuid := '37000000-0000-4000-8000-000000000001';
+  v_fitting_line constant uuid := '37000000-0000-4000-8000-000000000051';
+  v_event uuid;
+  v_refusal text;
+  v_line_row public.job_material_lines%rowtype;
+begin
+  select id into v_event from public.job_material_use_events where job_material_line_id = v_fitting_line;
+  perform public.record_job_material_use(v_org, v_actor, v_fitting_line, -1, 'Doch nicht verbaut', v_event);
+  begin
+    update public.job_material_lines set status = 'cancelled' where id = v_fitting_line;
+    v_refusal := null;
+  exception when raise_exception then
+    v_refusal := sqlerrm;
+  end;
+  if v_refusal is distinct from 'material_use_recorded' then
+    raise exception 'a line with use events corrected back to 0 must not be cancelled, got %', v_refusal;
+  end if;
+  begin
+    delete from public.job_material_lines where id = v_fitting_line;
+    v_refusal := null;
+  exception when raise_exception then
+    v_refusal := sqlerrm;
+  end;
+  if v_refusal is distinct from 'material_use_recorded' then
+    raise exception 'a line with use events must not be deleted, got %', v_refusal;
+  end if;
+  select * into v_line_row from public.job_material_lines where id = v_fitting_line;
+  if v_line_row.used_quantity <> 0 or v_line_row.status = 'cancelled' then
+    raise exception 'a refused cancel or delete must leave the line as it was';
+  end if;
+end $$;
+
 -- An event's references stay inside its organization and line, also for a
 -- direct service-role insert that bypasses the function.
 do $$
