@@ -95,8 +95,13 @@ begin
     ('3c650000-0000-0000-0000-000000000021', v_org, v_colleague, 'block', '2037-12-07', '2037-12-18',
       '3c650000-0000-0000-0000-000000000002');
 
-  insert into public.time_periods (organization_id, period_start_date, period_end_date, prepared_by, state)
-  values (v_org, '2037-10-01', '2037-10-31', '3c650000-0000-0000-0000-000000000001', 'closed');
+  -- The close version is a placeholder: the foreign key is deferred to commit,
+  -- and this file rolls back (closed_period_writes.sql closes a month through
+  -- the real workflow).
+  insert into public.time_periods
+    (organization_id, period_start_date, period_end_date, prepared_by, state, current_close_version_id)
+  values (v_org, '2037-10-01', '2037-10-31', '3c650000-0000-0000-0000-000000000001', 'closed',
+    '3c650000-0000-0000-0000-000000000040');
 end;
 $$;
 

@@ -15,7 +15,7 @@ const SCHOOL_DAY_MENU_ITEMS = {
 
 /** The section's action that opens the add dialog. */
 export function addSchoolDayButton(page: Page): Locator {
-  return page.getByTestId('school-days-section').getByRole('button', { name: SCHOOL_DAY_DIALOG_TITLES.add });
+  return page.getByRole('main').getByRole('button', { name: SCHOOL_DAY_DIALOG_TITLES.add, exact: true });
 }
 
 export function schoolDayDialog(page: Page, dialog: keyof typeof SCHOOL_DAY_DIALOG_TITLES): Locator {
