@@ -484,4 +484,24 @@ test('a layout sweep runs when a product file its audited surfaces render change
   expect(
     plan(['components/ui/button.tsx', 'docs/README.md', 'tests/golden/p1-01.spec.ts']).has(sweep.id),
   ).toBe(false);
+  // With its own test changed too, the test reason stays, and a pass still counts only on the current component.
+  const both = plan([
+    'tests/audit/layout/surfaces-job.spec.ts',
+    'components/auftraege/job-detail/job-detail-header.tsx',
+  ]);
+  expect(both.get(sweep.id)).toEqual({
+    reason: 'Test execution dependency changed',
+    changedFiles: [
+      'tests/audit/layout/surfaces-job.spec.ts',
+      'components/auftraege/job-detail/job-detail-header.tsx',
+    ],
+  });
+  const spec = { 'tests/audit/layout/surfaces-job.spec.ts': 'spec' };
+  expect(
+    passedSinceSelection({
+      then: { ...spec, 'components/auftraege/job-detail/job-detail-header.tsx': 'focus on the title' },
+      now: { ...spec, 'components/auftraege/job-detail/job-detail-header.tsx': 'focus on the first control' },
+      selection: both.get(sweep.id),
+    }),
+  ).toBe(false);
 });

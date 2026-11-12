@@ -171,8 +171,12 @@ export function groupSelections(input: {
       const testChanges = ownTestChanges(group, input.changedFiles);
       // A layout sweep also runs when a page, tab or dialog it audits, or a file only a few sweeps render, changed.
       const surfaceChanges = input.changedFiles.filter((file) => group.renderedFiles?.includes(file));
+      // A pass counts only on the current content of every file that selected the group, product files included.
       if (testChanges.length && !group.id.startsWith(MEASURED_GROUP_PREFIX))
-        selections.set(group.id, { reason: 'Test execution dependency changed', changedFiles: testChanges });
+        selections.set(group.id, {
+          reason: 'Test execution dependency changed',
+          changedFiles: [...testChanges, ...surfaceChanges],
+        });
       else if (surfaceChanges.length)
         selections.set(group.id, { reason: 'Audited surface changed', changedFiles: surfaceChanges });
     } else if (group.id === ADVISORY_GROUP_ID) {
