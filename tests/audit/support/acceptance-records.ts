@@ -3,8 +3,12 @@ import { worldName } from '../../../lib/testing/seed-world-plan';
 import { berlinDateAtOffset } from '../../golden/support/date-ownership';
 import { seedCustomer } from '../../golden/support/db/customers';
 import { seedRequest } from '../../golden/support/db/requests';
-import { seedInstalledEquipment } from '../../golden/support/db/service';
-import { seedJob, seedProject } from '../../golden/support/db/work';
+import {
+  seedInstalledEquipment,
+  seedServiceCase,
+  seedServiceCaseJobLink,
+} from '../../golden/support/db/service';
+import { seedJob, seedJobAssignment, seedProject } from '../../golden/support/db/work';
 import { rpcArgs } from '../../../lib/supabase/rpc-args';
 import { createAdminClient } from '../../golden/support/db/shared';
 import type { TestWorld } from '../../golden/support/world';
@@ -506,6 +510,68 @@ async function jobWithAttachedRequest(world: TestWorld): Promise<SurfaceDestinat
   return { route: `/auftraege/${encodeURIComponent(jobNumber)}`, heading: jobTitle };
 }
 
+/**
+ * A job and a Servicefall at the WEG's house, whose Rechnungsempfänger role
+ * the Hausverwaltung holds, with an access contact at the house. The job is
+ * the employee's and linked to the Servicefall, so its work pack shows what a
+ * field worker sees of the same work.
+ */
+async function seedBilledWork(world: TestWorld): Promise<{ jobNumber: string; caseNumber: string }> {
+  const { ownerId } = await managedBuildings(world);
+  const jobNumber = `A-${world.runId}-RECHNUNG`;
+  const caseNumber = await surfaceFixture(world, 'acceptance.billed-work', async () => {
+    const orgId = world.orgId;
+    const actorId = world.users.buero.id;
+    const admin = createAdminClient();
+    const { data: site } = await admin
+      .from('client_sites')
+      .select('id')
+      .eq('organization_id', orgId)
+      .eq('client_id', ownerId)
+      .single()
+      .throwOnError();
+    await admin
+      .from('client_contacts')
+      .insert({
+        organization_id: orgId,
+        client_id: ownerId,
+        name: 'Karl Hausmeister',
+        phone: '0171 5555555',
+        site_id: site.id,
+        site_role: 'zugangskontakt',
+      })
+      .throwOnError();
+    const jobId = await seedJob({
+      orgId,
+      actorId,
+      jobNumber,
+      title: worldName('Heizung entlüften Lindenstraße 5', world.runId),
+      clientId: ownerId,
+      siteId: site.id,
+    });
+    await seedJobAssignment({ orgId, actorId, jobId, userId: world.users.employee.id });
+    const serviceCase = await seedServiceCase({
+      orgId,
+      actorId,
+      clientId: ownerId,
+      siteId: site.id,
+      summary: worldName('Therme im Keller tropft', world.runId),
+      statement: 'Unter der Therme steht Wasser.',
+    });
+    await seedServiceCaseJobLink({ orgId, actorId, serviceCaseId: serviceCase.id, jobId });
+    return serviceCase.caseNumber;
+  });
+  return { jobNumber, caseNumber };
+}
+
+async function billedJob(world: TestWorld): Promise<SurfaceDestination> {
+  return { route: `/auftraege/${encodeURIComponent((await seedBilledWork(world)).jobNumber)}` };
+}
+
+async function billedServiceCase(world: TestWorld): Promise<SurfaceDestination> {
+  return { route: `/service/faelle/${encodeURIComponent((await seedBilledWork(world)).caseNumber)}` };
+}
+
 /** Each record an acceptance capture opens instead of its route's layout record, seeded once per world. */
 export const ACCEPTANCE_RECORDS: Record<AcceptanceRecord, (world: TestWorld) => Promise<SurfaceDestination>> =
   {
@@ -523,4 +589,6 @@ export const ACCEPTANCE_RECORDS: Record<AcceptanceRecord, (world: TestWorld) => 
     'request-without-open-work': requestWithoutOpenWork,
     'attached-request': attachedRequest,
     'job-with-attached-request': jobWithAttachedRequest,
+    'billed-job': billedJob,
+    'billed-service-case': billedServiceCase,
   };

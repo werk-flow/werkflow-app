@@ -35,7 +35,9 @@ export type AcceptanceRecord =
   | 'attachable-request'
   | 'request-without-open-work'
   | 'attached-request'
-  | 'job-with-attached-request';
+  | 'job-with-attached-request'
+  | 'billed-job'
+  | 'billed-service-case';
 
 export type CaptureSpec = {
   /** Unique within its set; part of the image name and the citation token. */
@@ -797,6 +799,56 @@ function siteRoleCaptures(): AcceptanceSet {
   };
 }
 
+/**
+ * werk-flow/werkflow-planning#327 of 2026-11-12: the Auftraggeber, the frozen
+ * Rechnungsempfänger, the Einsatzort and its access contact on a job and a
+ * Servicefall for the Büro; the same job's work pack for the employee, which
+ * shows no recipient; the request's Details rows and the choice dialog.
+ */
+function billingPartyCaptures(): AcceptanceSet {
+  const both = { widths: [1280, 375], schemes: ['light', 'dark'] } as const;
+  return {
+    id: 'billing-parties-2026-11-12',
+    captures: [
+      {
+        id: 'buero-auftrag',
+        role: 'buero',
+        route: '/auftraege/[jobNumber]',
+        view: { kind: 'page' },
+        record: 'billed-job',
+        reveal: 'Auftraggeber und Rechnung',
+        ...both,
+      },
+      {
+        id: 'employee-auftrag',
+        role: 'employee',
+        route: '/auftraege/[jobNumber]',
+        view: { kind: 'page' },
+        record: 'billed-job',
+        ...both,
+      },
+      {
+        id: 'buero-servicefall',
+        role: 'buero',
+        route: '/service/faelle/[caseNumber]',
+        view: { kind: 'page' },
+        record: 'billed-service-case',
+        reveal: 'Auftraggeber und Rechnung',
+        ...both,
+      },
+      { id: 'buero-anfrage', role: 'buero', route: '/anfragen/[requestId]', view: { kind: 'page' }, ...both },
+      {
+        id: 'buero-anfrage-rechnung-dialog',
+        role: 'buero',
+        route: '/anfragen/[requestId]',
+        view: { kind: 'dialog', opener: 'requests.billing-parties' },
+        ...both,
+      },
+    ],
+    standalone: [],
+  };
+}
+
 export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   uiRoundCaptures(),
   fieldTargetCaptures(),
@@ -821,4 +873,5 @@ export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   requestAttachCaptures(),
   lifecycleStepCaptures(),
   siteRoleCaptures(),
+  billingPartyCaptures(),
 ];
