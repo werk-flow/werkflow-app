@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 
+import { AutomaticAnswerBadge } from '@/components/problem-reports/automatic-answer-badge';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
@@ -113,7 +114,12 @@ function TriageFields({ report, draft, onChange, disabled, responseError }: Tria
         />
       </Field>
       <Field
-        label="Antwort an die Person"
+        label={
+          <>
+            Antwort an die Person
+            {report.responseByAgent ? <AutomaticAnswerBadge className="ml-2 align-middle" /> : null}
+          </>
+        }
         htmlFor={RESPONSE_ID}
         description="Sie liest das in „Meine Meldungen“, zum Beispiel „Behoben, ab morgen live“ oder warum es so bleibt."
         error={responseError}

@@ -71,6 +71,31 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
       "verified identity from an Authorization bearer token or, after the same-origin JSON guard, the cookie session; an identity check that cannot complete answers retry; the active organization from the current memberships, an organization hint naming another refused; reads only the caller's own scheduled visits on the Berlin day of jobs the caller is assigned to, with named field columns, every read scoped to that organization; private no-store responses",
     mustCall: ['identifyFieldSyncCaller', 'resolveActiveContextForUser', 'readFieldSyncToday'],
   },
+  'app/api/problem-reports/v1/reports/route.ts': {
+    authorization:
+      'report threads send the dedicated PROBLEM_REPORT_HANDOUT_SECRET as a bearer token, compared in constant time, never a user session; without a configured secret the handler reads nothing and answers 503, a missing or wrong one 401; answers only the ids of open reports with a scrubbed copy not yet handed out, no-store',
+    mustCall: ['problemReportHandoutAccess', 'listWaitingProblemReportIds'],
+  },
+  'app/api/problem-reports/v1/reports/[reportId]/hand-out/route.ts': {
+    authorization:
+      'the hand-out secret as above before any read; the id is the only input; one database call claims the report and writes the hand-out into its history before the scrubbed copy leaves; a report without a scrubbed copy, closed or already handed out is refused with its code; never an original, an attachment, a name or another id, no-store',
+    mustCall: ['problemReportHandoutAccess', 'isUuid', 'handOutProblemReport'],
+  },
+  'app/api/problem-reports/v1/reports/[reportId]/screenshot/route.ts': {
+    authorization:
+      'the hand-out secret as above before any read; only a report already handed out, and the history entry is written before the server reads the redrawn screenshot; the bytes go through the server so no storage key with the organization id leaves, no-store',
+    mustCall: ['problemReportHandoutAccess', 'isUuid', 'handOutProblemReportScreenshot'],
+  },
+  'app/api/problem-reports/v1/reports/[reportId]/write-back/route.ts': {
+    authorization:
+      'the hand-out secret as above before any read; a strict body of bucket, status and answer; one triage call without an actor writes only a report already handed out, with history entries of the Agent, and signals the reporter and support; no assignee, no-store',
+    mustCall: [
+      'problemReportHandoutAccess',
+      'isUuid',
+      'problemReportWriteBackSchema',
+      'writeBackProblemReport',
+    ],
+  },
   'app/api/csp-report/route.ts': {
     authorization:
       'unauthenticated by design: receives the browser reports of the enforced script policy, reads and writes nothing, bounds the body, and logs a redacted summary without script samples or query strings',

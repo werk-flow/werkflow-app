@@ -8,7 +8,7 @@ Postgres holds metadata: folders, documents, links, categories, trash state, ver
 
 - Metadata and bytes target the same environment.
 - `documents.storage_bucket` keeps the logical label `organization-documents`, not the bucket name.
-- The server authorizes a transfer and signs a short-lived URL; the browser moves the bytes. Server-generated files (artifact exports, handover packages, payroll exports) are the one exception: the server writes them with `putStorageObject`.
+- The server authorizes a transfer and signs a short-lived URL; the browser moves the bytes. Two exceptions: the server writes server-generated files (artifact exports, handover packages, payroll exports) with `putStorageObject`, and it reads a report's redrawn screenshot for the [hand-out](problem-report-scrubbing.md#hand-out), because a signed address names the organization.
 - `lib/documents/storage-path.ts` builds an upload's path, `{organizationId}/{documentId}/{sanitizedFileName}`, or for a new version `{organizationId}/{documentId}/versions/{uploadId}/{versionNumber}-…` with a fresh id per version ticket. Finalize registers a copy beside it whose file name starts with a fresh id per attempt. A registered path never changes; rename and move update metadata only.
 - Each attempt that writes a key a row will reference writes a key of its own with a fresh id (as `attemptStoragePath` builds), and deletes it only when it fails before calling the registration, when the database refused its registration (`isConfirmedWriteRefusal`), or when it answered it as a replay. A key two attempts share lets one attempt's cleanup remove the file the other registered.
 - `lib/storage/r2.ts` refuses a key outside the given organization, and a copy, put, delete or list whose keys do not share one organization prefix.
@@ -96,7 +96,7 @@ A legacy original keeps its source system (`source_system`) and the number that 
 A problem report's screenshot and attachments lie in the same private bucket; [problem reports](../features/problem-reports.md) owns who reads them.
 
 - The key is `{organizationId}/problem-reports/{reportId}/{fileId}/{kind}`, and a check constraint refuses a key outside its report. A key holds no file name, so no name a person chose reaches a key, the purge queue or a log; the row keeps the name.
-- No customer role reads a report file, not even an Admin of the organization. WerkFlow support reads one through a signed address the server issues after it wrote the opening into the report's history.
+- No customer role reads a report file, not even an Admin of the organization. WerkFlow support reads one through a signed address the server issues after it wrote the opening into the report's history. A report thread receives only the redrawn screenshot, through the server, after its hand-out entry; an attachment never leaves.
 - Every deleted file row queues its object for the [purge](#storage-cleanup) in the same transaction, whichever path deleted it: the retention run, an organization deletion or an account deletion.
 
 ## Storage cleanup

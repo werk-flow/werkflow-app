@@ -408,7 +408,11 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['rate-limits', ['rate_limits.sql'], ['*']],
   ['organization-deletion', ['organization_deletion.sql'], ['*']],
   ['storage-purge', ['storage_purge.sql'], ['documents']],
-  ['problem-reports', ['problem_reports.sql', 'problem_report_support.sql'], ['*']],
+  [
+    'problem-reports',
+    ['problem_reports.sql', 'problem_report_support.sql', 'problem_report_handout.sql'],
+    ['*'],
+  ],
   ['organization-export', ['organization_export.sql'], ['*']],
   ['record-numbers', ['record_numbers.sql'], ['work', 'customers', 'personnel', 'service']],
   ['hot-read-volume', ['hot_read_volume.sql'], ['planning', 'time', 'attention', 'work', 'documents']],

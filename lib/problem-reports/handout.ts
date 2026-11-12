@@ -1,0 +1,245 @@
+import 'server-only';
+
+import { loggedRead } from '@/lib/data/read-request-cache';
+import { logError } from '@/lib/logging';
+import { readStorageObject } from '@/lib/storage/r2';
+import type { AdminClient } from '@/lib/supabase/admin';
+import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
+import { rpcArgs } from '@/lib/supabase/rpc-args';
+import { supportUserIds } from '@/lib/support/allowlist';
+import { constrainedValue } from '@/lib/validation/constrained-value';
+import { z } from '@/lib/zod';
+import {
+  parseScrubbedProblemReportContext,
+  type ProblemReportWriteBack,
+  type ScrubbedProblemReportContext,
+} from './schemas';
+import {
+  PROBLEM_REPORT_BUCKETS,
+  PROBLEM_REPORT_STATUSES,
+  type ProblemReportBucket,
+  type ProblemReportStatus,
+} from './types';
+
+// What report threads receive of a problem report, and what they write back
+// (docs/features/problem-reports.md, "Hand-out to report threads"). The
+// route handlers under app/api/problem-reports/v1/ checked the hand-out
+// secret first; nothing here knows a user. A thread receives only the
+// scrubbed copy: never an original, an attachment, a name, the organization
+// or an id other than the report's own. Each hand-out enters the report's
+// history in the database call that answers it, before anything leaves.
+
+/** The refusals a thread reads as codes; every other failure is `failed`. */
+const HANDOUT_REFUSALS = [
+  'report_not_found',
+  'copy_pending',
+  'copy_unavailable',
+  'report_closed',
+  'already_handed_out',
+  'report_not_handed_out',
+  'no_screenshot',
+] as const;
+export type HandoutRefusal = (typeof HANDOUT_REFUSALS)[number];
+export type HandoutResult<Data> = ({ ok: true } & Data) | { ok: false; error: HandoutRefusal | 'failed' };
+
+/** The scrubbed copy a thread receives. */
+export type HandedOutCopy = {
+  reportId: string;
+  description: string;
+  /** Null for a report support filed for a caller, which has no captured context. */
+  context: ScrubbedProblemReportContext | null;
+  status: ProblemReportStatus;
+  bucket: ProblemReportBucket | null;
+  /** The address of the redrawn screenshot on this API, or null without one. */
+  screenshot: string | null;
+};
+
+const FAILED = { ok: false, error: 'failed' } as const;
+const NOT_FOUND = { ok: false, error: 'report_not_found' } as const;
+
+/** The path of a report's screenshot on this API: it names nothing but the report. */
+function handedOutScreenshotPath(reportId: string): string {
+  return `/api/problem-reports/v1/reports/${reportId}/screenshot`;
+}
+
+/** Every support person, whose open queue and report pages follow a hand-out live. */
+function supportSignalIds(): string[] {
+  return [...(supportUserIds() ?? [])];
+}
+
+/** A refusal the database raised, by its code; anything else is logged and `failed`. */
+function refusalOf(
+  error: { message: string },
+  logLabel: string,
+): { ok: false; error: HandoutRefusal | 'failed' } {
+  const refusal = HANDOUT_REFUSALS.find((code) => code === error.message);
+  if (refusal) return { ok: false, error: refusal };
+  logError(logLabel, error);
+  return FAILED;
+}
+
+/**
+ * The ids of the reports waiting for a thread, oldest first: with a scrubbed
+ * copy, not handed out and still open. Ids only.
+ */
+export async function listWaitingProblemReportIds(
+  admin: AdminClient,
+): Promise<HandoutResult<{ reportIds: string[] }>> {
+  const { data, error } = await readCompleteRows(
+    (from, to) =>
+      admin
+        // tenant-scope: cross-organization-by-design — report threads take the waiting reports of every organization, by id only
+        .from('problem_reports')
+        .select('id')
+        .eq('scrub_state', 'bereinigt')
+        .is('handed_out_at', null)
+        .is('closed_at', null)
+        .order('created_at')
+        .order('id')
+        .range(from, to),
+    LIST_ROW_CAP,
+  );
+  if (error) {
+    logError('listWaitingProblemReportIds: report read failed', error);
+    return FAILED;
+  }
+  return { ok: true, reportIds: data.map((row) => row.id) };
+}
+
+/** The organization of one report, which scopes every call about it. */
+async function loadReport(
+  admin: AdminClient,
+  reportId: string,
+): Promise<HandoutResult<{ report: { id: string; organization_id: string } }>> {
+  const { data, error } = await loggedRead(
+    'problem report hand-out: report read failed',
+    admin
+      // tenant-scope: cross-organization-by-design — a report thread names a report of any organization by its id
+      .from('problem_reports')
+      .select('id, organization_id')
+      .eq('id', reportId)
+      .maybeSingle(),
+  );
+  if (error) return FAILED;
+  if (!data) return NOT_FOUND;
+  return { ok: true, report: data };
+}
+
+/** The arguments of a hand-out call about one loaded report. */
+function handOutArguments(report: { id: string; organization_id: string }) {
+  return {
+    p_organization_id: report.organization_id,
+    p_report_id: report.id,
+    p_support_ids: supportSignalIds(),
+  };
+}
+
+/** The arguments of the Agent's triage of one loaded report: no actor. */
+function writeBackArguments(
+  report: { id: string; organization_id: string },
+  changes: ProblemReportWriteBack,
+) {
+  return rpcArgs('triage_problem_report', {
+    p_organization_id: report.organization_id,
+    p_report_id: report.id,
+    p_actor_id: null,
+    p_changes: changes,
+    p_support_ids: supportSignalIds(),
+  });
+}
+
+// What the hand-out functions answer; any other shape fails the hand-out.
+const handedOutRowSchema = z.strictObject({
+  description: z.string(),
+  context: z.unknown(),
+  status: z.string(),
+  bucket: z.string().nullable(),
+  has_screenshot: z.boolean(),
+});
+const handedOutScreenshotSchema = z.strictObject({ path: z.string(), mime_type: z.string() });
+
+/**
+ * Hands one report's scrubbed copy to a thread, once. The database call
+ * claims the report and writes the hand-out into its history before it
+ * answers; a report without a scrubbed copy, a closed one and one already
+ * handed out are refused with their codes.
+ */
+export async function handOutProblemReport(
+  admin: AdminClient,
+  reportId: string,
+): Promise<HandoutResult<{ copy: HandedOutCopy }>> {
+  const loaded = await loadReport(admin, reportId);
+  if (!loaded.ok) return loaded;
+  const { data, error } = await admin.rpc(
+    'hand_out_problem_report',
+    // tenant-scope: cross-organization-by-design — a report thread takes a report of any organization; the loaded report's own organization scopes the call
+    rpcArgs('hand_out_problem_report', handOutArguments(loaded.report)),
+  );
+  if (error) return refusalOf(error, 'handOutProblemReport: hand-out failed');
+  try {
+    const row = handedOutRowSchema.parse(data);
+    return {
+      ok: true,
+      copy: {
+        reportId: loaded.report.id,
+        description: row.description,
+        context: parseScrubbedProblemReportContext(row.context),
+        status: constrainedValue(PROBLEM_REPORT_STATUSES, row.status, 'problem_reports.status'),
+        bucket: PROBLEM_REPORT_BUCKETS.find((bucket) => bucket === row.bucket) ?? null,
+        screenshot: row.has_screenshot ? handedOutScreenshotPath(loaded.report.id) : null,
+      },
+    };
+  } catch (thrown) {
+    logError('handOutProblemReport: the scrubbed copy has an unknown shape', thrown);
+    return FAILED;
+  }
+}
+
+/**
+ * The redrawn screenshot of a report whose copy a thread received. The
+ * database call writes this hand-out into the history before the server
+ * reads the bytes.
+ */
+export async function handOutProblemReportScreenshot(
+  admin: AdminClient,
+  reportId: string,
+): Promise<HandoutResult<{ bytes: Uint8Array<ArrayBuffer>; mimeType: string }>> {
+  const loaded = await loadReport(admin, reportId);
+  if (!loaded.ok) return loaded;
+  const { data, error } = await admin.rpc(
+    'hand_out_problem_report_screenshot',
+    // tenant-scope: cross-organization-by-design — a report thread takes a report of any organization; the loaded report's own organization scopes the call
+    rpcArgs('hand_out_problem_report_screenshot', handOutArguments(loaded.report)),
+  );
+  if (error) return refusalOf(error, 'handOutProblemReportScreenshot: hand-out failed');
+  try {
+    const row = handedOutScreenshotSchema.parse(data);
+    const bytes = await readStorageObject({ organizationId: loaded.report.organization_id, path: row.path });
+    return { ok: true, bytes: new Uint8Array(bytes), mimeType: row.mime_type };
+  } catch (thrown) {
+    logError('handOutProblemReportScreenshot: screenshot read failed', thrown);
+    return FAILED;
+  }
+}
+
+/**
+ * Writes a thread's bucket, status and answer to one report it received, in
+ * one triage call without an actor: the history names the Agent, the answer
+ * is marked as written automatically, and the reporter and support see the
+ * change live.
+ */
+export async function writeBackProblemReport(
+  admin: AdminClient,
+  reportId: string,
+  changes: ProblemReportWriteBack,
+): Promise<HandoutResult<object>> {
+  const loaded = await loadReport(admin, reportId);
+  if (!loaded.ok) return loaded;
+  const { error } = await admin.rpc(
+    'triage_problem_report',
+    // tenant-scope: cross-organization-by-design — a report thread answers a report of any organization; the loaded report's own organization scopes the call
+    writeBackArguments(loaded.report, changes),
+  );
+  if (error) return refusalOf(error, 'writeBackProblemReport: write-back failed');
+  return { ok: true };
+}

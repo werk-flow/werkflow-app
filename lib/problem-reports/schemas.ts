@@ -184,3 +184,16 @@ export const fileProblemReportForCallerInputSchema = z.strictObject({
   description: descriptionSchema,
 });
 export type FileProblemReportForCallerInput = z.input<typeof fileProblemReportForCallerInputSchema>;
+
+// A report thread's write-back (docs/features/problem-reports.md, "Hand-out
+// to report threads"): bucket, status and the answer to the reporter, each
+// optional, at least one. The thread sets no assignee and clears no field.
+export const problemReportWriteBackSchema = z
+  .strictObject({
+    status: z.enum(PROBLEM_REPORT_STATUSES),
+    bucket: z.enum(PROBLEM_REPORT_BUCKETS),
+    response: z.string().trim().min(1).max(PROBLEM_REPORT_RESPONSE_MAX_LENGTH),
+  })
+  .partial()
+  .refine((changes) => Object.keys(changes).length > 0);
+export type ProblemReportWriteBack = z.infer<typeof problemReportWriteBackSchema>;

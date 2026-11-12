@@ -7836,7 +7836,7 @@ export type Database = {
       };
       problem_report_events: {
         Row: {
-          actor_id: string;
+          actor_id: string | null;
           created_at: string;
           event_type: string;
           id: string;
@@ -7845,7 +7845,7 @@ export type Database = {
           report_id: string;
         };
         Insert: {
-          actor_id: string;
+          actor_id?: string | null;
           created_at?: string;
           event_type: string;
           id?: string;
@@ -7854,7 +7854,7 @@ export type Database = {
           report_id: string;
         };
         Update: {
-          actor_id?: string;
+          actor_id?: string | null;
           created_at?: string;
           event_type?: string;
           id?: string;
@@ -7961,12 +7961,14 @@ export type Database = {
           created_at: string;
           description: string | null;
           filed_by_id: string | null;
+          handed_out_at: string | null;
           id: string;
           number: number;
           organization_id: string;
           originals_deleted_at: string | null;
           reporter_id: string;
           response: string | null;
+          response_by_agent: boolean;
           scrub_state: string;
           scrubbed_context: Json | null;
           scrubbed_description: string | null;
@@ -7980,12 +7982,14 @@ export type Database = {
           created_at?: string;
           description?: string | null;
           filed_by_id?: string | null;
+          handed_out_at?: string | null;
           id?: string;
           number?: number;
           organization_id: string;
           originals_deleted_at?: string | null;
           reporter_id: string;
           response?: string | null;
+          response_by_agent?: boolean;
           scrub_state?: string;
           scrubbed_context?: Json | null;
           scrubbed_description?: string | null;
@@ -7999,12 +8003,14 @@ export type Database = {
           created_at?: string;
           description?: string | null;
           filed_by_id?: string | null;
+          handed_out_at?: string | null;
           id?: string;
           number?: number;
           organization_id?: string;
           originals_deleted_at?: string | null;
           reporter_id?: string;
           response?: string | null;
+          response_by_agent?: boolean;
           scrub_state?: string;
           scrubbed_context?: Json | null;
           scrubbed_description?: string | null;
@@ -16048,6 +16054,22 @@ export type Database = {
           p_organization_id: string;
           p_target_id: string;
           p_target_type: string;
+        };
+        Returns: Json;
+      };
+      hand_out_problem_report: {
+        Args: {
+          p_organization_id: string;
+          p_report_id: string;
+          p_support_ids: string[];
+        };
+        Returns: Json;
+      };
+      hand_out_problem_report_screenshot: {
+        Args: {
+          p_organization_id: string;
+          p_report_id: string;
+          p_support_ids: string[];
         };
         Returns: Json;
       };

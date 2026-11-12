@@ -37,7 +37,7 @@ Each rule has a test that fails without it: `tests/ui-contracts/problem-report-r
 
 ## Text scrubbing
 
-The server keeps a scrubbed copy of each report's description and context beside the originals. Only this copy may leave WerkFlow as text. Nothing hands it out yet.
+The server keeps a scrubbed copy of each report's description and context beside the originals. Only this copy may leave WerkFlow as text, and only through the [hand-out](#hand-out).
 
 `lib/problem-reports/scrub/` holds the scrubber. `scrubStoredProblemReport(organizationId, reportId)` is its one entry. It reads the report inside that organization, reads the organization's dictionary, and writes the copy with its state through `record_problem_report_scrub` in one call. `submitProblemReport` runs it after its answer, so the receipt never waits for the scrub or fails with it. The daily run (`/api/problem-report-retention`) runs it for every report that has its originals and no copy, before it deletes anything: a report saved before the scrubber existed, one whose scrub never ran, and one whose last scrub failed. The deletion periods bind, so the run deletes a due report's originals whether or not it has a copy. A report without one then keeps no text at all, and the next run sets it `nicht_bereinigbar`.
 
@@ -81,11 +81,21 @@ The owner accepted these limits on 2026-11-12 (werk-flow/werkflow-planning#21). 
 - a word of a site's name alone, and a site named with one UI word;
 - a street of one word without a street ending and without its number.
 
-The owner also accepted on 2026-11-12 that a scrubbed copy, once handed out, outlives WerkFlow's deletion periods in the receiving thread's transcript and at its model provider. The owner's position is that the scrubbed copy counts as anonymous. Nothing hands a copy out yet.
+The owner also accepted on 2026-11-12 that a scrubbed copy, once handed out, outlives WerkFlow's deletion periods in the receiving thread's transcript and at its model provider. The owner's position is that the scrubbed copy counts as anonymous. These limits now apply to a real recipient: every report thread that pulls a copy through the hand-out, and the model provider behind it. Removing the hand-out secret stops every further transfer at once; it recalls no copy already handed out.
 
 A report whose scrub fails until its deletion date keeps no text at all, neither original nor copy, because the owner's deletion periods bind before a copy exists.
 
 The scrubber also replaces too much, which costs readability and never privacy. A name that is an ordinary word and no UI word replaces that word everywhere, such as a customer called „Klein“. A lower-case word after „frau“ or „herr“ that is no name is replaced too, such as „sagte“. A date written `07-11-2026` has a phone number's shape.
+
+## Hand-out
+
+The one door through which report content leaves WerkFlow. [Problem reports](../features/problem-reports.md#current-product-baseline) owns the four route handlers; `lib/problem-reports/handout.ts` holds what they read and write.
+
+- **Who receives it.** Report threads outside WerkFlow, which pull with the bearer secret `PROBLEM_REPORT_HANDOUT_SECRET`. WerkFlow sends nothing on its own: no webhook, no relay, no outbound call. Without the secret the hand-out is off.
+- **What leaves.** The report's own id, the scrubbed description, the scrubbed context, status, bucket, and the redrawn screenshot. Never an original, an attachment, its name or address, the organization's id or name, the reporter, the filer, the assignee, the number or another id.
+- **Only a scrubbed copy.** A report whose state is not `bereinigt` is refused with a code; no other text stands in for the copy.
+- **Once, accounted.** The hand-out and the screenshot each write a history entry in the database call that answers them, before anything leaves. The first hand-out claims the report, so each copy leaves to one thread once.
+- **The screenshot goes through the server.** A signed storage address would carry the organization's id in its path, so the server reads the bytes and answers them itself.
 
 ## How to work
 
@@ -115,9 +125,10 @@ Wrong turn: keeping a text because it looks harmless. A rule that keeps by patte
 - Load an image, a font from another origin, or a frame into the clone.
 - Import the redraw or the catalog statically from a page or a shared component.
 - Store, show or hand out a text as scrubbed that the scrubber did not write.
+- Hand out a field the [hand-out](#hand-out) does not list, or push a report out of WerkFlow.
 - Keep a dictionary across scrubs, or read it without the organization filter.
 - Log a report's text, a name or a dictionary entry.
 
 ## Verify your work
 
-Run `bun run test:unit lib/problem-reports`. For the redraw, also run `bun run test:ui problem-report-redraw` and the `audit:problem-reports:redraw` group. For the text scrubber, also run `bun run test:verify --group sql:problem-reports`.
+Run `bun run test:unit lib/problem-reports`. For the hand-out, also run `bun run test:verify --group sql:problem-reports`. For the redraw, also run `bun run test:ui problem-report-redraw` and the `audit:problem-reports:redraw` group. For the text scrubber, also run `bun run test:verify --group sql:problem-reports`.
