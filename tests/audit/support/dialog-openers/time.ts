@@ -17,6 +17,7 @@ import {
   workArtifactCreateDialog,
 } from '../../../golden/support/spec-helpers/work-artifact-dialog';
 import { hydratedAndSettled } from '../../../golden/support/steps/interaction';
+import { problemReportButton, problemReportDialog } from '../../../golden/support/steps/problem-reports';
 import { ownEvidenceUploadButton, ownEvidenceUploadDialog } from '../../../golden/support/steps/personnel';
 import {
   ownSicknessCancelButton,
@@ -197,6 +198,11 @@ export const TIME_OPENERS = {
     },
     layer: vacationRejectDialog,
   },
+  // The report dialog opens from the app shell on every page, like the clock button: the
+  // phone header's icon, the desktop sidebar's row. One opener per audit, the field
+  // worker's and the office's.
+  'reports.field': { trigger: async ({ page }) => problemReportButton(page), layer: problemReportDialog },
+  'reports.office': { trigger: async ({ page }) => problemReportButton(page), layer: problemReportDialog },
   'field.clock': {
     trigger: async ({ page }) => enabled(clockInLauncher(page)),
     layer: clockStartSheet,

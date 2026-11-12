@@ -3,7 +3,8 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { resolveActiveOrgId } from '@/lib/org/cookies';
-import { getCachedUser, getCachedMemberCount } from '@/lib/data/cached';
+import { getCachedUser, getCachedMemberCount, getCachedMemberships } from '@/lib/data/cached';
+import { TodayRefreshOnStart } from '@/components/auftraege/work-pack/today-refresh-on-start';
 import { UrlFlashBanner } from '@/components/ui/banner';
 import { OrgInfoCard } from '@/components/dashboard/org-info-card';
 import { DashboardContentSkeleton } from '@/components/loading-states/dashboard-content-skeleton';
@@ -30,10 +31,17 @@ export default async function DashboardPage() {
     redirect('/login');
   }
 
-  const activeOrgId = await resolveActiveOrgId(cookieStore, user.id);
+  const [activeOrgId, memberships] = await Promise.all([
+    resolveActiveOrgId(cookieStore, user.id),
+    getCachedMemberships(user.id),
+  ]);
+  // The start page of every role: a field worker's phone refreshes the day it keeps for signal loss here.
+  // Only the gate is rendered here; the refresh takes person and organization from the client contexts.
+  const keepsToday = memberships.some((entry) => entry.orgId === activeOrgId && entry.role === 'employee');
 
   return (
     <PageShell>
+      {keepsToday && <TodayRefreshOnStart />}
       <PageHeader title="Dashboard" />
 
       <Suspense fallback={null}>

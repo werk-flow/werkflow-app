@@ -126,3 +126,44 @@ Decided by the E7 lead on the review of werk-flow/werkflow-planning#317.
 
 - **Recorded time.** A `capturedAt` up to 5 minutes after receipt is recorded at the receipt time, because nothing happens after the server receives it. A later transition then never ends a segment before it started. The operation keeps the device's `capturedAt` and `sentAt`, and the window, the closed period and the order rule still check that `capturedAt`.
 - **Blocked job.** A start or switch onto a job the office blocked meanwhile, by an open blocker or start dependency, answers `conflict` with `office_changed`, never `retry`.
+
+## Amendment 2026-11-09: the today snapshot
+
+Decided for werk-flow/werkflow-planning#318.
+
+- **Read.** `GET /api/field-sync/v1/today` answers the caller's own scheduled job visits on the current Berlin day, limited to jobs the caller is assigned to, with the field facts of the work pack before work starts: schedule, customer and contact with phone, site with address and access, goal and instructions. Every field is named; nothing the online work pack hides from its assignee is in it. `lib/field-sync/today-snapshot.ts` owns the JSON shape.
+- **Freshness.** The snapshot names its Berlin day and `validUntil`, the next Berlin midnight, so a device drops it by comparing instants and never computes a Berlin date. It carries a content `version`, also its `ETag`. A request whose `If-None-Match` names it gets `304`, and the device moves its „Stand“ to that time.
+- **Organization.** An optional `organizationId` query value is a hint, refused with `organization_mismatch` when it is not the active organization, as for an operation.
+- **Device.** The answer's outcome decides, never its status. A `rejected` answer with `forbidden` or `organization_mismatch` deletes the device's day: the person lost access. A `retry` answer, a `rejected` `invalid` answer (a fault of the client, not an access change) and a body that is no refusal keep it. The web device refreshes on the field worker's start page, where the app opens, and on `online`; a return to the visible app is the Realtime provider's catch-up for the page on screen, so the stored day can be older than that page. The „Stand“ says how old.
+
+## Amendment 2026-11-10: a wipe that cannot finish
+
+Decided for werk-flow/werkflow-planning#318.
+
+- A wipe (sign-out, organization switch, a lost membership) deletes the database and signals every tab. The stored day names the wipe signal it was saved under, and every reader refuses a day saved before the latest one, so a deletion that fails or waits for another tab exposes nothing. A sign-out waits only until the browser reports the deletion done, failed or blocked by another tab, never for a blocked deletion to finish.
+- Readers fail closed: a device that cannot read the wipe signal shows no stored day, and the page stays „Gerade kein Netz“.
+- The wipe does not also empty the record before the delete. That second layer would protect only a browser without localStorage, which now shows nothing anyway, and it cost about 100 B of every cold start, because the wipe sits in a startup chunk.
+
+## Amendment 2026-11-10: a sign-out never hangs on the wipe, and a lost claim ends the shown day
+
+Decided for werk-flow/werkflow-planning#318.
+
+- A sign-out waits at most 1.5 seconds for the deletion, because a deletion queued behind one another tab blocks reports nothing until that one ends. Readers already refuse the day by then.
+- The wipe removes the device claim before it writes the signal, and a tab drops its shown day at either change. A signal that cannot be written, such as on a full quota, still ends the day in every tab.
+
+## Amendment 2026-11-11: when a start page may claim the device
+
+Decided for werk-flow/werkflow-planning#318.
+
+- The start page takes the person and the active organization from the app's client state, not from its server props, so the clock actions' responses carry no ids.
+- It claims the device only under the wipe signal it loaded with. Only an explicit organization switch in the same tab renews that signal, to the one its own wipe wrote before it shows the new organization. A person known only later, or an organization a membership fallback chose, keeps the old signal. Any other wipe since then, a sign-out's in another tab during the switch included, blocks the claim until the next start page.
+- A start page that sees another tab's wipe signal, or another tab clearing all of localStorage (a `storage` event, which never fires for a tab's own writes), drops its claim at once and claims nothing more until the next start page, also when its refresh code finishes loading after the event. A refresh in flight then no longer owns the device, and no reader shows a day saved under the dropped claim. It never writes the wipe signal itself, so two tabs cannot answer each other's signal forever.
+- A claim names its tab: `userId:organizationId:token`, with a random token per tab. Readers compare only the person and organization; a claim without a token, from a tab open across a deployment, matches no reader, and the next start page replaces it. A refresh still owns the device only while the claim carries its own token. A tab that drops its claim after another tab's wipe removes it only if it still carries its own token, so a claim another tab made meanwhile, and that tab's day, stay. The static wipe removes the claim whatever it holds.
+- The page a person lands on after a session ends wipes the phone again. Every sign-out lands on an `(auth)` page once its session ended, so a day any tab saved while that session still answered is gone, whatever that tab does next.
+
+## Amendment 2026-11-12: owner-accepted residual exposure
+
+The owner accepted two residual exposures of the phone's stored day on 2026-11-12 (werk-flow/werkflow-planning#22). [Security](../technical/security.md#known-residual-exposure) lists them until they close.
+
+- **Access that ends while the phone has no signal.** A person the office removes or suspends, or whose session expires, keeps reading their own assignments of the current Berlin day on a phone without signal. The day goes at the next Berlin midnight at the latest, and at once when the phone is online: the server's refusal deletes it, and an ended session lands on a login page, which wipes. The alternative is no reading without signal.
+- **A sign-out that another tab races.** A start page stores the day in the milliseconds around another tab's sign-out and closes or freezes before it handles that tab's wipe signal, and the signing-out tab never reaches a login page, because it is closed first or its last sign-out request fails. Then the day of the person who signed out stays readable in that browser profile: customer and contact names and phone numbers, site addresses, access notes and instructions. It goes with the next wipe (any sign-out, any visit to a login page), with a start page of another person or organization, and at Berlin midnight. Closing it would need a session check on a read that must work without network.

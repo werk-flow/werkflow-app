@@ -21,6 +21,7 @@ Each visual and interaction finding needs an explicit disposition. Visual polish
 
 - Run `bun run test:audit:focused --grep "@ACCEPT <set>"` over a set in `tests/audit/support/acceptance-sets.ts`. The fixture writes an image only of a ready screen. On an app page that includes the live reads that land after the page body without a skeleton, such as the nav's badge counts (`settleLiveShell`); a visual reference waits the same way.
 - With a Boat key the capture runs on a Boat machine and brings its images back to the same folder; start no test server for it. To capture on the workstation on purpose, run `bun run test:server local`, then the capture with `WERKFLOW_VERIFY_LOCAL=1` ([captures on Boat](boat-verification.md#captures-on-boat)).
+- The rounds over the whole inventory (`tests/audit/support/acceptance-rounds.ts`) run as one group per dialog opener module, plus `pages` and `standalone`: `bun run test:verify --group audit:visual:acceptance:customers`. A focused run takes one spec file, so `--grep` a round with a capture id.
 - A capture id ending in `-loading` or `-error` captures that state.
 - Capture a changed screen before and after the change, so the reviewer judges a pair.
 - Images land under `.agent-logs/playwright-runs/<run>/acceptance/<set>/`. Only a capture whose entry in `acceptance/index.json` says `passed` is evidence. Cite it as `` `capture:<run-key>/<set>/<capture>-<width>-<scheme>` ``.

@@ -192,3 +192,15 @@ The owner decided this on 2026-11-08 (werk-flow/werkflow-planning#222). On 2026-
 3. The wall-clock `audit:performance:*` groups stay out of every change plan. The lab gate itself, its references, ceilings and digests, is unchanged.
 
 Rules and commands: [testing.md](../technical/testing.md#how-selection-works).
+
+## Amendment 2026-11-12: the acceptance captures are groups by what a capture drives
+
+Decided in the CI overhaul under owner decision 21 (werk-flow/werkflow-planning#294, #29). `audit:visual:acceptance` was one group of 319 captures whose spec imported every dialog opener. A change to its own test support selects a release-only group, so a one-line edit to a step helper reran every capture: 232 minutes on the loaded workstation on 2026-11-09, 22 minutes in a CI shard of its own since. In 70 CI runs of 2026-11-10 and 2026-11-11, 13 selected the group by diff: 6 through a new capture set, 4 through the capture fixture or a seeded record, 3 through a step helper or fixture.
+
+1. The group is split by what a capture drives. The inventory rounds run as `audit:visual:acceptance:<group>`: one group per dialog opener module, `pages` for every page and tab, `standalone` for the screens outside the app shell. The open sets of single changes are the group `sets`. A group's spec imports only the openers it captures, so the 2026-10-29 rule, a change to a group's own test support selects it, now selects the captures that use the changed file. A rule test proves that every capture runs in exactly one group and that no group reaches another's openers.
+2. Release mode and CI's full runs still run every capture. The amendments above that name `audit:visual:acceptance` apply to every `audit:visual:acceptance:*` group.
+3. In CI the visual groups share shards of their own instead of one shard each.
+
+Measured on 2026-11-12: all 13 groups passed on Boat with the 1,222 images of the sets before the split, under unchanged names. Replayed on the last 30 commits of `main`, 9 selected the old group; 4 of them now run 58 to 130 captures, and the 5 that change an inventory, the capture fixture or the run reporter still run all 319. A change that only adds a set runs the 58 captures of `sets`. A change to `tests/golden/support/steps/work.ts` runs 5 groups with 122 captures.
+
+Known limit: the dialog inventory is one file that every group imports, so a change that adds a dialog still selects every group.

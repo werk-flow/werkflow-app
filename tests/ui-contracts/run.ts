@@ -44,6 +44,7 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
         'process.env.NODE_ENV': JSON.stringify('production'),
         'process.env.NEXT_PUBLIC_SUPABASE_URL': JSON.stringify(CONTRACT_SUPABASE_URL),
         'process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY': JSON.stringify(CONTRACT_SUPABASE_PUBLISHABLE_KEY),
+        'process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA': JSON.stringify('contract-build'),
       },
       plugins: [
         {
@@ -60,6 +61,20 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve({ filter: /^@\/lib\/billing-parties\/actions$/ }, () => ({
               path: join(import.meta.dir, 'billing-parties-service-boundaries.ts'),
             }));
+            // The report dialog's contract runs the real launcher, dialog and upload
+            // client against stub actions, router, organization and redraw.
+            builder.onResolve(
+              {
+                filter:
+                  /^(?:@\/lib\/problem-reports\/(?:actions|screenshot\/(?:redraw-screenshot|load-ui-string-catalog))|\.\/file-actions|@\/components\/organization\/organization-context|next\/(?:navigation|link))$/,
+              },
+              (args) => {
+                const reportModule =
+                  args.importer.includes('/components/problem-reports/') ||
+                  args.importer.endsWith('lib/problem-reports/upload-client.ts');
+                if (reportModule) return { path: join(import.meta.dir, 'problem-report-boundaries.tsx') };
+              },
+            );
             builder.onResolve({ filter: /^@\/lib\/clients\/(site-role-)?actions$/ }, () => ({
               path: join(import.meta.dir, 'customer-service-boundaries.ts'),
             }));
@@ -129,7 +144,8 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
                 args.importer.endsWith('reset-password-form.tsx') ||
                 args.importer.endsWith('aufgaben-task-row.tsx') ||
                 args.importer.endsWith('text-link.tsx') ||
-                args.importer.endsWith('client-duplicate-matches.tsx')
+                args.importer.endsWith('client-duplicate-matches.tsx') ||
+                args.importer.endsWith('standalone-screen.tsx')
               )
                 return { path: join(import.meta.dir, 'day-view-link-boundary.tsx') };
             });
@@ -179,6 +195,33 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve({ filter: /^next\/navigation$/ }, (args) => {
               if (args.importer.endsWith('use-export-builder.ts'))
                 return { path: join(import.meta.dir, 'organization-export-service-boundaries.ts') };
+            });
+            builder.onResolve({ filter: /^next\/image$/ }, (args) => {
+              if (args.importer.endsWith('standalone-screen.tsx'))
+                return { path: join(import.meta.dir, 'standalone-image-boundary.tsx') };
+            });
+            // The offline view's device read, held until the spec answers it.
+            builder.onResolve({ filter: /^@\/lib\/field-sync\/device\/today-store$/ }, (args) => {
+              if (args.importer.endsWith('offline-today.tsx'))
+                return { path: join(import.meta.dir, 'offline-today-service-boundaries.ts') };
+            });
+            // The pathname of the `(auth)` layout's landing wipe, moved by the spec.
+            builder.onResolve({ filter: /^next\/navigation$/ }, (args) => {
+              if (args.importer.endsWith('today-landing-wipe.tsx'))
+                return { path: join(import.meta.dir, 'today-landing-boundaries.ts') };
+            });
+            // The profile and memberships the start page refresh fixtures read in the browser.
+            builder.onResolve({ filter: /^@\/lib\/supabase\/client$/ }, (args) => {
+              if (
+                args.importer.endsWith('user-profile-context.tsx') ||
+                args.importer.endsWith('organization-context.tsx')
+              )
+                return { path: join(import.meta.dir, 'today-refresh-session-boundaries.ts') };
+            });
+            // The start page's refresh code, as a chunk that is gone after a deployment.
+            builder.onResolve({ filter: /^@\/lib\/field-sync\/device\/today-refresh$/ }, (args) => {
+              if (args.importer.endsWith('today-refresh-on-start.tsx'))
+                return { path: join(import.meta.dir, 'today-refresh-service-boundaries.ts') };
             });
             builder.onResolve({ filter: /^@\/lib\/time-accounts\/actions$/ }, () => ({
               path: join(import.meta.dir, 'time-account-boundaries.ts'),
