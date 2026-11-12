@@ -39,30 +39,49 @@ function isDocumentElementSelector(argument) {
   return DOCUMENT_ELEMENT_SELECTOR.test(argument.quasis.map((quasi) => quasi.value.cooked).join('x'));
 }
 
-/** A selector whose every alternative carries Playwright's `:visible`. */
+/**
+ * A selector whose every alternative ends in Playwright's `:visible`, so the
+ * selected element itself is shown. `body:visible #id` and `#id:not(:visible)`
+ * are not such selectors.
+ */
 function selectsShownOnly(argument) {
   return (
     argument?.type === 'Literal' &&
     typeof argument.value === 'string' &&
-    argument.value.split(',').every((alternative) => alternative.includes(':visible'))
+    argument.value.split(',').every((alternative) => alternative.trim().endsWith(':visible'))
   );
 }
 
-/** `.filter({ visible: true })` */
-function isVisibleFilter(call) {
-  if (call.callee.property.name !== 'filter') return false;
-  const [options] = call.arguments;
+/** An options object that sets the named option to `true`. */
+function setsTrue(options, name) {
   return (
     options?.type === 'ObjectExpression' &&
     options.properties.some(
       (property) =>
         property.type === 'Property' &&
         property.key.type === 'Identifier' &&
-        property.key.name === 'visible' &&
+        property.key.name === name &&
         property.value.type === 'Literal' &&
         property.value.value === true,
     )
   );
+}
+
+/** `.filter({ visible: true })` */
+function isVisibleFilter(call) {
+  return call.callee.property.name === 'filter' && setsTrue(call.arguments[0], 'visible');
+}
+
+function isLookup(call) {
+  return /^(?:locator|getBy[A-Z]\w*)$/.test(call.callee.property.name);
+}
+
+/** A lookup that can land on hidden content: a blind one, or a role lookup that asks for hidden elements. */
+function matchesHidden(call) {
+  const method = call.callee.property.name;
+  if (method === 'getByRole') return setsTrue(call.arguments[1], 'includeHidden');
+  if (!VISIBILITY_BLIND_LOOKUPS.has(method)) return false;
+  return !(method === 'locator' && selectsShownOnly(call.arguments[0]));
 }
 
 /** Every later call of the lookup's chain (`.filter(…).first()`), and the chain's outermost call. */
@@ -111,10 +130,12 @@ function narrowsAnotherLookup(top) {
  *
  * A lookup by text, label, placeholder, test id, title or CSS selector matches
  * both copies, so a strict action or assertion fails on two elements, and only
- * when the timing puts the copy there. The rule accepts a lookup by role, a
- * lookup inside a located region, `.filter({ visible: true })` anywhere in the
- * chain, a `:visible` selector, a `has`/`hasNot`/`.and(…)` operand, the
- * document element, and the named whole-DOM helpers.
+ * when the timing puts the copy there. A role lookup with `includeHidden`
+ * matches both too. The rule accepts a lookup by role, a lookup inside a
+ * region located by role, `.filter({ visible: true })` after the chain's last
+ * such lookup, a selector that ends in `:visible`, a `has`/`hasNot`/`.and(…)`
+ * operand, an operation on the document element, and the named whole-DOM
+ * helpers.
  */
 export const visiblePageLookupRule = {
   meta: {
@@ -122,7 +143,7 @@ export const visiblePageLookupRule = {
     schema: [],
     messages: {
       blind:
-        'page.{{method}}(…) also matches a hidden copy of the content: the streamed boundary React reveals after a load, or a route Next.js keeps mounted. Look up by role, start from a located region, or add .filter({ visible: true }) (docs/technical/integrated-test-state.md, "Keep the page stable during a step").',
+        'page.{{method}}(…) also matches a hidden copy of the content: the streamed boundary React reveals after a load, or a route Next.js keeps mounted. Look up by role, start from a region located by role, or end the lookup with .filter({ visible: true }) (docs/technical/integrated-test-state.md, "Keep the page stable during a step").',
     },
   },
   create(context) {
@@ -132,13 +153,18 @@ export const visiblePageLookupRule = {
       CallExpression(node) {
         pages.recordTestFixturePages(node);
         const method = pages.pageMethodOf(node);
-        if (method === null || !VISIBILITY_BLIND_LOOKUPS.has(method)) return;
-        const [selector] = node.arguments;
-        if (method === 'locator' && (isDocumentElementSelector(selector) || selectsShownOnly(selector)))
-          return;
+        if (method === null) return;
         const { later, top } = chainOf(node);
-        if (later.some(isVisibleFilter) || narrowsAnotherLookup(top) || insideWholeDomHelper(node)) return;
-        context.report({ node, messageId: 'blind', data: { method } });
+        // The document element stands for the page: the first lookup below it is one on the whole page.
+        const isDocumentElement = method === 'locator' && isDocumentElementSelector(node.arguments[0]);
+        const chain = isDocumentElement ? later.slice(later.findIndex(isLookup)) : [node, ...later];
+        const [first] = chain;
+        // Below the document element without a lookup, `slice(-1)` leaves a call that is no lookup.
+        if (!first || !matchesHidden(first)) return;
+        // Only a filter after the last such lookup holds for the element the chain ends on.
+        if (chain.slice(chain.findLastIndex(matchesHidden) + 1).some(isVisibleFilter)) return;
+        if (narrowsAnotherLookup(top) || insideWholeDomHelper(node)) return;
+        context.report({ node, messageId: 'blind', data: { method: first.callee.property.name } });
       },
     };
   },
