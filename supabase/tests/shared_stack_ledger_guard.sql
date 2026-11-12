@@ -68,8 +68,29 @@ $$;
 set local werkflow.stack_sync = 'main';
 insert into supabase_migrations.schema_migrations (version, name, statements)
 values ('20991231000000', 'main_probe', array['select 1']);
+do $$
+begin
+  if not exists (select 1 from supabase_migrations.schema_migrations where version = '20991231000000' and name = 'main_probe') then
+    raise exception 'the sync''s insert did not reach the ledger';
+  end if;
+end;
+$$;
 update supabase_migrations.schema_migrations set name = 'main_probe_renamed' where version = '20991231000000';
+do $$
+begin
+  if not exists (select 1 from supabase_migrations.schema_migrations where version = '20991231000000' and name = 'main_probe_renamed') then
+    raise exception 'the sync''s update did not reach the ledger';
+  end if;
+end;
+$$;
 delete from supabase_migrations.schema_migrations where version = '20991231000000';
+do $$
+begin
+  if exists (select 1 from supabase_migrations.schema_migrations where version = '20991231000000') then
+    raise exception 'the sync''s delete did not reach the ledger';
+  end if;
+end;
+$$;
 truncate supabase_migrations.schema_migrations;
 do $$
 begin

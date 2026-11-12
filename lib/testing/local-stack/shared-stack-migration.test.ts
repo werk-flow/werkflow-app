@@ -58,6 +58,8 @@ test('a migration file never reaches psql on this machine', () => {
     // An include in a heredoc psql reads (CodeRabbit on #363).
     `psql -h localhost -p 54322 -U postgres <<'SQL'\n\\i ${file}\nSQL`,
     `docker exec -i supabase_db_werkflow-app psql -U postgres <<SQL\n\\ir ${file}\nSQL`,
+    // A nested shell's psql inherits the outer heredoc (sol-loop on CodeRabbit's fix, S6).
+    `bash -lc 'psql -h localhost -p 54322 -U postgres' <<'SQL'\n\\i ${file}\nSQL`,
   ]) {
     const refusal = sharedStackMigrationRefusal(command);
     expect(refusal, command).toContain(`\`psql\` with ${file}`);

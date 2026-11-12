@@ -151,20 +151,30 @@ function reachesLocalDatabase(call: Started): boolean {
  * --local`, `migration repair --local`, `db reset`), or feed a migration file to `psql` on this
  * machine. A mention inside a search, a message or a string is no call.
  */
-export function sharedStackMigrationRefusal(command: string, depth = 0): string | undefined {
+export function sharedStackMigrationRefusal(command: string): string | undefined {
+  return readCommand(command, 0).refusal;
+}
+
+/**
+ * The refusal of a command line, and whether it starts a psql on this machine, itself or in a
+ * nested `sh -c` script: a heredoc on the outer line is that psql's input too.
+ */
+function readCommand(command: string, depth: number): { refusal?: string; localPsql: boolean } {
   const reading = readShell(command);
-  if (!reading) return undefined;
+  if (!reading) return { localPsql: false };
   const calls: Started[] = [];
+  let nestedPsql = false;
   for (const words of reading.commands)
     for (const entry of started(words)) {
       if ('script' in entry) {
-        const nested = depth < 4 ? sharedStackMigrationRefusal(entry.script, depth + 1) : undefined;
-        if (nested) return nested;
+        const nested = depth < 4 ? readCommand(entry.script, depth + 1) : { localPsql: false };
+        if (nested.refusal) return nested;
+        nestedPsql ||= nested.localPsql;
       } else calls.push(entry);
     }
   for (const call of calls) {
     const refusal = call.name === 'supabase' ? supabaseRefusal(call.args) : undefined;
-    if (refusal) return refusal;
+    if (refusal) return { refusal, localPsql: false };
   }
   const psql = calls.filter(
     (call) =>
@@ -172,18 +182,23 @@ export function sharedStackMigrationRefusal(command: string, depth = 0): string 
       (call.name === 'docker' && call.args.includes('exec') && call.args.includes('psql')),
   );
   const local = psql.filter(reachesLocalDatabase);
+  const localPsql = local.length > 0 || nestedPsql;
   // The file reaches psql as `-f` or as its input, through a `cat` piped into it, or as an include
-  // (`\i`, `\ir`) in a heredoc psql reads. A `cat` that only prints the file beside a psql call
-  // feeds nothing. A heredoc on the line of a local psql counts as its input whoever reads it: the
-  // reader cannot tell a heredoc's reader in every pipeline, and a false refusal costs one retry.
-  const piped = local.length ? CAT_INTO_PSQL.exec(command)?.[1] : undefined;
-  const bodies = local.length ? [...reading.dataBodies, ...reading.unknownBodies] : [];
+  // (`\i`, `\ir`) in a heredoc psql reads, its own or one a nested shell's psql inherits. A `cat`
+  // that only prints the file beside a psql call feeds nothing. A heredoc on a line with a local
+  // psql counts as its input whoever reads it: the reader cannot tell a heredoc's reader in every
+  // pipeline, and a false refusal costs one retry.
+  const piped = localPsql ? CAT_INTO_PSQL.exec(command)?.[1] : undefined;
+  const bodies = localPsql ? [...reading.dataBodies, ...reading.unknownBodies] : [];
   const fed = [
     ...local.flatMap((call) => call.words.flatMap((word) => MIGRATION_FILE.exec(word.text)?.[0] ?? [])),
     ...(piped ? [piped] : []),
     ...bodies.flatMap((body) => MIGRATION_FILE.exec(body)?.[0] ?? []),
   ];
-  return fed[0]
-    ? `Refused: \`psql\` with ${fed[0]} would run this tree's migration in the local stack, which every worktree shares and which holds only main's ${RULE}. ${INSTEAD}`
-    : undefined;
+  return {
+    refusal: fed[0]
+      ? `Refused: \`psql\` with ${fed[0]} would run this tree's migration in the local stack, which every worktree shares and which holds only main's ${RULE}. ${INSTEAD}`
+      : undefined,
+    localPsql,
+  };
 }
