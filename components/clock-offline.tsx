@@ -11,7 +11,7 @@ import { usePendingTask } from '@/hooks/use-server-action';
 import { outboxChanged, takeInKept } from '@/lib/field-sync/device/clock-device';
 import { captureTimeEvent, clockDeviceView, type ClockDeviceView } from '@/lib/field-sync/device/time-outbox';
 import { readWholeTimeOutbox, type OutboxHolder } from '@/lib/field-sync/device/time-outbox-store';
-import { sharedWipeGeneration } from '@/lib/field-sync/device/today-store';
+import { sharedWipeGeneration } from '@/lib/field-sync/device/today-wipe';
 import { TODAY_WIPE_KEY } from '@/lib/field-sync/device/today-wipe';
 import { logError } from '@/lib/logging';
 import { deriveClockActions, describeActivity, type ClockAction } from '@/lib/time-tracking/clock-actions';

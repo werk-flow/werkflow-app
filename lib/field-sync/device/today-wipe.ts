@@ -38,6 +38,20 @@ export function todayWipeGeneration(): string {
 }
 
 /**
+ * The latest wipe signal any tab of the origin gave, or null when localStorage cannot be read:
+ * then no reader can show that what it holds is from after the latest wipe, and none shows it.
+ * The stored day (today-store.ts) and the clock's kept actions (unsent-mark.ts) both check it.
+ */
+export function sharedWipeGeneration(): string | null {
+  try {
+    return localStorage.getItem(TODAY_WIPE_KEY) ?? '';
+  } catch {
+    // Fails closed: a reader without the signal shows nothing.
+    return null;
+  }
+}
+
+/**
  * Deletes the today snapshot. It resolves once the browser deleted it, or
  * queued the deletion behind a connection still open in another tab, which
  * closes itself on the version change, and after `WIPE_WAIT_MS` at the

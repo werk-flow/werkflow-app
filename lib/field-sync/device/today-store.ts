@@ -2,7 +2,7 @@
 
 import { fieldSyncTodaySchema, type FieldSyncToday } from '@/lib/field-sync/today-snapshot';
 import { z } from '@/lib/zod';
-import { TODAY_DATABASE, TODAY_HOLDER_KEY, TODAY_WIPE_KEY } from './today-wipe';
+import { TODAY_DATABASE, TODAY_HOLDER_KEY, sharedWipeGeneration } from './today-wipe';
 
 // The web half of the today snapshot on a phone (decision record 0010,
 // "Device data"): one IndexedDB record with the latest snapshot of the
@@ -84,19 +84,6 @@ export async function readTodayOnDevice(now: Date = new Date()): Promise<StoredT
     return request;
   });
   return currentDay(value, now);
-}
-
-/**
- * The latest wipe signal any tab of the origin gave (today-wipe.ts), or null when localStorage
- * cannot be read: then no stored day can be shown to be from after the latest wipe.
- */
-export function sharedWipeGeneration(): string | null {
-  try {
-    return localStorage.getItem(TODAY_WIPE_KEY) ?? '';
-  } catch {
-    // Fails closed: the reader shows no stored day, and the page stays „Gerade kein Netz“.
-    return null;
-  }
 }
 
 /** The `TODAY_HOLDER_KEY` value of a person and organization. */

@@ -2,10 +2,10 @@
 
 import type { TimeTransitionResult } from '@/lib/time-tracking/types';
 import type { KeptClockAction } from './kept-clock-actions';
-import { TODAY_WIPE_KEY } from './today-wipe';
+import { sharedWipeGeneration } from './today-wipe';
 
 // What every page carries of the phone's unsent work, so this module imports
-// no code and stays a few lines: the read of the hint that decides at the app
+// only the static wipe signal (today-wipe.ts) and stays a few lines: the read of the hint that decides at the app
 // start whether the sync runner's code loads at all (sync-runner.ts sets the
 // hint), and the one write a clock action needs when the signal is already
 // gone and no code can load any more. The outbox (time-outbox.ts) takes such a
@@ -36,15 +36,6 @@ export function deviceMayHoldUnsentWork(): boolean {
   }
 }
 
-/** The latest wipe signal of the origin (today-wipe.ts), or null when localStorage cannot be read. */
-export function wipeSignal(): string | null {
-  try {
-    return localStorage.getItem(TODAY_WIPE_KEY) ?? '';
-  } catch {
-    return null;
-  }
-}
-
 /**
  * Keeps one clock action on the device under the wipe signal `pageSignal` the page started with,
  * and answers as the accepted action would, or null when it keeps nothing. Only a start, a switch
@@ -58,7 +49,8 @@ export function keepClockAction(
   pageSignal: string,
 ): Extract<TimeTransitionResult, { success: true }> | null {
   const kind = action.action;
-  if ((kind !== 'start' && kind !== 'switch' && kind !== 'end') || wipeSignal() !== pageSignal) return null;
+  if ((kind !== 'start' && kind !== 'switch' && kind !== 'end') || sharedWipeGeneration() !== pageSignal)
+    return null;
   const base = action.base && { ...action.base, activeJobInfo: null, resumeJobInfo: null };
   keptOnThisPage += 1;
   const order = `${String(Date.parse(action.capturedAt)).padStart(15, '0')}:${keptOnThisPage}`;

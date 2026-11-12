@@ -18,7 +18,8 @@ import { useLiveView, type LiveViewState } from '@/hooks/use-live-view';
 import { useServerAction } from '@/hooks/use-server-action';
 import type { ClockDeviceView } from '@/lib/field-sync/device/time-outbox';
 import type { OutboxHolder } from '@/lib/field-sync/device/time-outbox-store';
-import { deviceMayHoldUnsentWork, keepClockAction, wipeSignal } from '@/lib/field-sync/device/unsent-mark';
+import { sharedWipeGeneration } from '@/lib/field-sync/device/today-wipe';
+import { deviceMayHoldUnsentWork, keepClockAction } from '@/lib/field-sync/device/unsent-mark';
 import { applyTransitionEcho } from '@/lib/time-tracking/clock-echo';
 import { fetchCurrentClockState } from '@/lib/time-tracking/state-client';
 import { isClockStateEventRelevant } from '@/lib/time-tracking/clock-state-events';
@@ -101,7 +102,7 @@ function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promise<void
     };
     const attachNow = (): void => void attach();
     attachRef.current = attachNow;
-    signalRef.current = wipeSignal();
+    signalRef.current = sharedWipeGeneration();
     // Until the outbox shows what waits, a new action goes behind it, never past it to the server.
     uncheckedRef.current = deviceMayHoldUnsentWork();
     if (uncheckedRef.current) attachNow();
