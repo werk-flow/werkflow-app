@@ -21,6 +21,10 @@ import {
 // from that store with its „Stand“, a restart reads it again, a changed office
 // instruction arrives with the next refresh, and sign-out leaves nothing.
 
+// Every other browser test blocks service workers (playwright.audit.config.ts); this one reloads
+// without network and reads the day through the shell the worker serves.
+test.use({ serviceWorkers: 'allow' });
+
 test("today's work pack reads without signal and leaves the phone on sign-out @AUDIT-SECURITY-OFFLINE-TODAY", async ({
   employeePage: page,
   world,
