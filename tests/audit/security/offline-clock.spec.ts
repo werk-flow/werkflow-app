@@ -12,7 +12,7 @@ import {
   UNSENT_COPY,
   expectOneSessionAtCapturedTimes,
   meineZeitActivity,
-  sessionsSince,
+  expectSessionsSince,
   expectTimeEventsOnDevice,
   offlineClock,
   offlineClockAction,
@@ -126,7 +126,7 @@ test('an online clock call whose page closed before the answer is recorded once,
     await expect(clockStatus(next)).toHaveText(UNSENT_COPY.working);
     await expectTimeEventsOnDevice(next, []);
     await expect(unsentBadge(next, UNSENT_COPY.refused)).toHaveCount(0);
-    expect(await sessionsSince(world, before)).toHaveLength(1);
+    await expectSessionsSince(world, before, [expect.objectContaining({ endedAt: null })]);
   });
 
   await test.step('an end never reaches the server, and the page closes while it waits', async () => {
@@ -151,9 +151,7 @@ test('an online clock call whose page closed before the answer is recorded once,
     await last.goto('/dashboard');
     await expect(clockInLauncher(last)).toBeEnabled();
     await expectTimeEventsOnDevice(last, []);
-    await expect
-      .poll(() => sessionsSince(world, before))
-      .toEqual([expect.objectContaining({ endedAt: expect.any(Number) })]);
+    await expectSessionsSince(world, before, [expect.objectContaining({ endedAt: expect.any(Number) })]);
     await last.close();
   });
 });

@@ -204,9 +204,17 @@ async function recordedSessions(world: TestWorld): Promise<RecordedSession[]> {
   }));
 }
 
-/** The employee's sessions on the server that started at `since` or later. */
-export async function sessionsSince(world: TestWorld, since: number): Promise<RecordedSession[]> {
-  return (await recordedSessions(world)).filter((session) => session.startedAt >= since);
+/** Waits until the employee's sessions on the server that started at `since` or later match `expected`. */
+export async function expectSessionsSince(
+  world: TestWorld,
+  since: number,
+  expected: unknown[],
+): Promise<void> {
+  await expect
+    .poll(async () => (await recordedSessions(world)).filter((session) => session.startedAt >= since), {
+      message: 'The server holds the sessions the phone sent, each once',
+    })
+    .toEqual(expected);
 }
 
 /**
