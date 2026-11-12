@@ -44,5 +44,8 @@ export async function readInBackground(kind: string, input: unknown, signal?: Ab
   if (kind === 'own-personnel-actions') return getOwnPersonnelActions();
   if (kind === 'personnel-lifecycle' && input && typeof input === 'object' && 'employeeRecordId' in input)
     return getPersonnelLifecycle(String(input.employeeRecordId));
+  // The job edit dialog's assignment reads stay in flight: its focus contract
+  // asserts the dialog as it opens, before they answer.
+  if (kind === 'job-details' || kind === 'assignment-team-options') return new Promise(() => undefined);
   throw new Error(`Unexpected background read in the UI fixture: ${kind} ${JSON.stringify(input)}`);
 }

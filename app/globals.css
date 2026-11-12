@@ -369,20 +369,6 @@ body {
   animation: banner-fade-out 0.15s ease-in forwards;
 }
 
-/* Row highlight animation (calendar day view after a jump from the board) */
-@keyframes row-highlight {
-  0% {
-    background-color: color-mix(in oklab, var(--brand-purple) 25%, transparent);
-  }
-  100% {
-    background-color: transparent;
-  }
-}
-
-.animate-row-highlight {
-  animation: row-highlight 1.5s ease-out forwards;
-}
-
 /* The calendar drag engine (P1-24a) sets this while a card is held: one
    cursor everywhere, no text selection, and the ghost stays the only thing
    that moves. */

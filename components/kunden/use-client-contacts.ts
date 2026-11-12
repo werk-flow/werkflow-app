@@ -16,6 +16,7 @@ import {
   EMPTY_CONTACT,
   clientRelationErrorMessage,
   getRelationId,
+  provisionalRelationId,
   type ContactDialogState,
 } from './client-relation-drafts';
 import { toggleRelationActive } from './toggle-relation-active';
@@ -55,6 +56,8 @@ function contactEditorDialogState(contact: ClientContact): ContactDialogState {
       email: contact.email ?? '',
       phone: contact.phone ?? '',
       notes: contact.notes ?? '',
+      siteId: contact.siteId,
+      siteRole: contact.siteRole,
       isPrimary: contact.isPrimary,
     },
     error: null,
@@ -102,7 +105,7 @@ export function useClientContacts({
     }
     const { contactId, draft } = contactDialog;
     const stored = contacts.find((contact) => contact.id === contactId);
-    const echoId = stored?.id ?? `pending-${crypto.randomUUID()}`;
+    const echoId = stored?.id ?? provisionalRelationId();
     const echo = buildContactEcho(stored ?? { id: echoId, clientId }, draft);
     if (stored) contactList.update(echoId, echo);
     else contactList.insert(echoId, echo);

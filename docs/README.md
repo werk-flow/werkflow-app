@@ -8,7 +8,8 @@ Start with `AGENTS.md`, then read only the entries whose condition applies. A ta
 
 - [architecture.md](technical/architecture.md): runtime shape, Supabase access, auth and organization context, deployment.
 - [data-model.md](technical/data-model.md): tenant boundary, roles, concept ownership, history rules.
-- [environments.md](technical/environments.md): Supabase, env files, R2, credentials, migrations, worktrees, new machines, releases.
+- [environments.md](technical/environments.md): Supabase, env files, R2, credentials, migrations, worktrees, releases.
+- [machine-setup.md](technical/machine-setup.md): new machines, background jobs.
 - [security.md](technical/security.md): a new route handler, Server Action, table, privileged function, storage path or provider setting.
 - [realtime-and-caching.md](technical/realtime-and-caching.md): cache tags, Realtime, list readers, freshness.
 - [performance.md](technical/performance.md): daily journeys, lab tables, skeletons, faster flows.
@@ -25,7 +26,7 @@ Start with `AGENTS.md`, then read only the entries whose condition applies. A ta
 
 ### Feature specifications (`docs/features/`)
 
-Read the spec you change and the specs it touches. Planned scope lives in `werk-flow/werkflow-planning`.
+Read the spec you change and those it touches. Planned scope lives in `werk-flow/werkflow-planning`.
 
 - [customers-and-crm.md](features/customers-and-crm.md): Kunden, contacts, sites, Anfragen.
 - [jobs-and-projects.md](features/jobs-and-projects.md): Aufträge, Projekte, lifecycle, Arbeitsvorlagen, handovers.
@@ -36,7 +37,7 @@ Read the spec you change and the specs it touches. Planned scope lives in `werk-
 - [inventory.md](features/inventory.md): Lager, stock movements, job material.
 - [service-and-maintenance.md](features/service-and-maintenance.md): Anlagen, Servicefälle, Wartungspläne.
 - [commercial-and-finance.md](features/commercial-and-finance.md): prices, billable quantities, handover readiness.
-- [ai-automations.md](features/ai-automations.md): the AI direction and its foundations.
+- [ai-automations.md](features/ai-automations.md): AI direction and foundations.
 - [problem-reports.md](features/problem-reports.md): reports to WerkFlow support, access, deletion.
 
 ### Product (`docs/product/`)
@@ -55,7 +56,7 @@ Read the spec you change and the specs it touches. Planned scope lives in `werk-
 - [0007](decisions/0007-independent-test-groups.md): independent test groups.
 - [0008](decisions/0008-development-workflow.md): release by push, superseded by 0009.
 - [0009](decisions/0009-pull-requests-and-ci.md): a PR per task, `Check` as the gate.
-- [0010](decisions/0010-offline-field-sync-contract.md): the offline field sync contract, iOS limits.
+- [0010](decisions/0010-offline-field-sync-contract.md): offline field sync contract, iOS limits.
 
 ## How to work
 

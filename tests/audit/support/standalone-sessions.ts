@@ -6,6 +6,7 @@ import type {
 import { createAdminClient } from '../../golden/support/db/shared';
 import { goldenTestEmail } from '../../golden/support/seed';
 import { settled } from '../../golden/support/steps/interaction';
+import { openPage } from '../../golden/support/streamed-content';
 import { simulatedPaymentButton, signUpViaUi } from '../../golden/support/steps/organization';
 import type { TestWorld } from '../../golden/support/world';
 
@@ -108,7 +109,7 @@ export async function openStandaloneScreen(input: {
     timezoneId: 'Europe/Berlin',
   });
   try {
-    const page = await context.newPage();
+    const page = await openPage(context);
     const email = await prepareSession(page, input.world, input.screen.session);
     if (input.screen.cookie) {
       if (!input.baseURL) throw new Error(`${input.screen.route} needs a base URL for its cookie`);

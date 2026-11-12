@@ -10,6 +10,8 @@ Typ
 Privat
 Kundennummer
 —
+Kundennummer im Altsystem
+—
 E-Mail
 —
 Telefon
@@ -23,7 +25,4 @@ Erstellt am
 Ansprechpartner
 Ansprechpartner hinzufügen
 Jürgen Hoffmann
-Hauptkontakt
-Ansprechpartner bearbeiten
-Ansprechpartner archivieren
 Nicht eingestempelt

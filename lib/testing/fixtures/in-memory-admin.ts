@@ -166,6 +166,9 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
   lt(column: string, value: string): this {
     return this.where((row) => String(row[column]) < value);
   }
+  gt(column: string, value: string): this {
+    return this.where((row) => String(row[column]) > value);
+  }
   /** SQL `like` with `%` as its only wildcard. */
   like(column: string, pattern: string): this {
     const parts = pattern.split('%');
