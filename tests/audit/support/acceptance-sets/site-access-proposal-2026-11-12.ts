@@ -1,5 +1,22 @@
 import { acceptanceSet, type OpenSet } from '../acceptance-sets';
-import { siteAccessJobDestination, siteAccessTasks } from '../site-access-fixtures';
+import type { TestWorld } from '../../../golden/support/world';
+import { seedSiteAccessJob, siteAccessJob, type SiteAccessJobState } from '../site-access-fixtures';
+import type { SurfaceDestination } from '../surface-routes';
+
+/** The employee's job at an Einsatzort in the given proposal state. */
+function siteAccessJobDestination(state: SiteAccessJobState) {
+  return async (world: TestWorld): Promise<SurfaceDestination> => {
+    await seedSiteAccessJob(world, state);
+    const { jobNumber, title } = siteAccessJob(world, state);
+    return { route: `/auftraege/${encodeURIComponent(jobNumber)}`, heading: title };
+  };
+}
+
+/** The office's Aufgaben with one open access proposal. */
+async function siteAccessTasks(world: TestWorld): Promise<SurfaceDestination> {
+  await seedSiteAccessJob(world, 'open');
+  return { route: '/aufgaben', heading: 'Zugang prüfen' };
+}
 
 /**
  * werk-flow/werkflow-planning#329 of 2026-11-12: the field worker's „Zugang
