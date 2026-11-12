@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { assertWorkspaceTestLock } from '../../lib/testing/runner/workspace-test-lock';
 import {
+  expectStreamedContentRevealed,
   openPage,
   revealStreamedContentBeforeEachStep,
   STREAMED_SEGMENT,
@@ -20,7 +21,7 @@ const fixtureUrl = 'http://localhost/kunden';
 function documentAfterLoad(options: { clientRendered: boolean }): string {
   return `<!doctype html><html lang="de"><body>
     <main>${options.clientRendered ? searchField : '<p>Kunden werden geladen …</p>'}</main>
-    <div hidden id="S:2">${searchField}</div>
+    <div hidden id="S:2"><h2>Kundenliste</h2>${searchField}</div>
   </body></html>`;
 }
 
@@ -114,4 +115,21 @@ test('with the wait, a step started before the client render is held through it 
   await shown;
   expect(passedAt).toBeGreaterThanOrEqual(revealedAt);
   await expect(search(page)).toHaveCount(1);
+});
+
+test('a streamed container that never reveals fails the check, naming the container and its text', async ({
+  page,
+}) => {
+  await open(page, { clientRendered: true });
+  await expect(expectStreamedContentRevealed(page)).rejects.toThrow(/still hidden: S:2 "Kundenliste"/);
+});
+
+test('a step held on a page whose streamed container never reveals fails before the test timeout', async ({
+  page,
+}) => {
+  // Expected to fail, and only as failed: a step that passed, or hung into the test timeout, breaks this test.
+  test.fail();
+  await revealStreamedContentBeforeEachStep(page);
+  await open(page, { clientRendered: true });
+  await expect(search(page)).toBeVisible({ timeout: 10_000 });
 });

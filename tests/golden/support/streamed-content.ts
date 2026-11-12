@@ -23,14 +23,36 @@ export const STREAMED_SEGMENT = 'div[hidden][id^="S:"]';
  * page while a streamed container is left, from any navigation that loads a
  * document. A one-shot read (`count`, `getAttribute`, `textContent`,
  * `evaluate`) does not trigger it.
+ *
+ * A container that stays (a boundary that never resolves, an error boundary
+ * that replaced its content, a container React left behind) fails the test
+ * after STREAMED_REVEAL_TIMEOUT_MS with a message that names each container
+ * and the start of its text. The held step then fails at its own timeout: it
+ * never passes on such a page.
  */
 export async function revealStreamedContentBeforeEachStep(page: Page): Promise<void> {
-  await page.addLocatorHandler(page.locator(`body:has(${STREAMED_SEGMENT})`), async () => {
-    await expect(
-      page.locator(STREAMED_SEGMENT),
-      'React reveals the content it streamed after the load',
-    ).toHaveCount(0);
-  });
+  await page.addLocatorHandler(page.locator(`body:has(${STREAMED_SEGMENT})`), () =>
+    expectStreamedContentRevealed(page),
+  );
+}
+
+/**
+ * React reveals streamed content up to 300 ms after its boundary completes;
+ * both failed runs showed the reveal within 350 ms of the load. Half the
+ * configured expect timeout, so a held step's default wait outlasts it.
+ */
+const STREAMED_REVEAL_TIMEOUT_MS = 5_000;
+
+/** Fails, naming each container and the start of its text, when React has not revealed every streamed container in time. */
+export async function expectStreamedContentRevealed(page: Page): Promise<void> {
+  const segments = page.locator(STREAMED_SEGMENT);
+  const pending = await segments.evaluateAll((elements) =>
+    elements.map((element) => `${element.id} "${(element.textContent ?? '').trim().slice(0, 60)}"`),
+  );
+  await expect(
+    segments,
+    `React reveals the content it streamed after the load; still hidden: ${pending.join(', ')}`,
+  ).toHaveCount(0, { timeout: STREAMED_REVEAL_TIMEOUT_MS });
 }
 
 /** A new page of the context whose steps wait for React's reveal after every load. */
