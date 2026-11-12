@@ -148,6 +148,7 @@ export async function seedRefusedTimeEvent(page: Page, world: TestWorld): Promis
         // One stopped chain, also when a capture runs again in the same browser context.
         transaction.objectStore('events').clear();
         transaction.objectStore('events').put({
+          version: 1,
           operationId: crypto.randomUUID(),
           userId,
           organizationId,
@@ -160,6 +161,7 @@ export async function seedRefusedTimeEvent(page: Page, world: TestWorld): Promis
           verdict: { outcome: 'rejected', code: 'closed_period' },
         });
         transaction.objectStore('clocks').put({
+          version: 1,
           holder: `${userId}:${organizationId}`,
           userId,
           organizationId,

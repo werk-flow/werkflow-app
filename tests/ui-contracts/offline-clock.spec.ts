@@ -40,6 +40,7 @@ test('a capture refused after another tab’s sign-out says so, also once no clo
           expectedVersion: null,
           capturedAt: new Date().toISOString(),
           triedOnline: false,
+          version: 1,
           wipeGeneration: '',
           base,
           readAt: new Date().toISOString(),

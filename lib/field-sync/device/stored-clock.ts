@@ -48,6 +48,9 @@ const storedClockFactsSchema = z.object({
   sessionId: text.nullable(),
   sessionVersion: z.number().nullable(),
   currentSegmentId: text.nullable(),
+  // A selection stays strict, unlike the record around it: it becomes a command (the resumed
+  // activity after a break), and dropping a field there could send another action. A selection
+  // with a field this code does not know is a stop.
   currentActivity: timeActivitySelectionSchema.nullable(),
   resumeActivity: timeActivitySelectionSchema.nullable(),
   recoveryReason: text.nullable(),
