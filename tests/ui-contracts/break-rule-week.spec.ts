@@ -22,7 +22,7 @@ async function mountBreakRuleWeek(page: Page): Promise<void> {
 }
 
 function dayBar(page: Page, region: string, day: string) {
-  return page.getByRole('region', { name: region }).getByLabel(new RegExp(`^${day}: Anwesenheit`));
+  return page.getByRole('region', { name: region, exact: true }).getByLabel(new RegExp(`^${day}: Anwesenheit`));
 }
 
 for (const region of ['Zeiterfassung', 'Mitarbeiter']) {
@@ -43,3 +43,21 @@ for (const region of ['Zeiterfassung', 'Mitarbeiter']) {
     );
   });
 }
+
+test('Zeiterfassung: a rule saved in another session rebuilds the open week, also without earlier versions', async ({
+  page,
+}) => {
+  await mountBreakRuleWeek(page);
+  const region = 'Zeiterfassung offen';
+  await expect(dayBar(page, region, 'Di')).toHaveAttribute('aria-label', /, Pause 0 Min\.,/);
+
+  // The page's server data arrives again with the saved rule; the week is not remounted.
+  await page.getByRole('button', { name: 'Neue Regel übernehmen' }).click();
+
+  // Tuesday ran under the rule switched on that morning; Monday keeps the manual rule.
+  await expect(dayBar(page, region, 'Di')).toHaveAttribute(
+    'aria-label',
+    `Di: Anwesenheit ${formatDuration(600)}, Arbeitszeit ${formatDuration(480)}, Pause ${formatDuration(30)}, Überstunden ${formatDuration(90)}`,
+  );
+  await expect(dayBar(page, region, 'Mo')).toHaveAttribute('aria-label', /, Pause 0 Min\.,/);
+});

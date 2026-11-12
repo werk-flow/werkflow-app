@@ -1,3 +1,4 @@
+import { useState } from 'react';
 // The week views under a break rule that changed midweek: the Zeiterfassung
 // week chart and the Mitarbeiter detail read the week on the client and must
 // resolve each day against the rule version that applied to it.
@@ -71,14 +72,46 @@ export function readBreakRuleWeekEntries(input: unknown): { success: true; entri
   };
 }
 
-function ZeiterfassungWeek() {
+/** Manual breaks, saved before the history existed: no recorded versions. */
+const MANUAL_WITHOUT_VERSIONS: BreakPolicy = {
+  breakMode: 'manual',
+  autoBreakThresholdMinutes: 360,
+  autoBreakDurationMinutes: 30,
+  breakPolicyHistory: [],
+};
+
+/**
+ * The page's server data after another session switched the automatic break
+ * on, Tuesday 06:00 Berlin: the first save recorded the manual rule first.
+ */
+const SAVED_ON_TUESDAY: BreakPolicy = {
+  breakMode: 'automatic',
+  autoBreakThresholdMinutes: 360,
+  autoBreakDurationMinutes: 30,
+  breakPolicyHistory: [
+    {
+      breakMode: 'manual',
+      autoBreakThresholdMinutes: 360,
+      autoBreakDurationMinutes: 30,
+      effectiveFrom: '1970-01-01T00:00:00.000Z',
+    },
+    {
+      breakMode: 'automatic',
+      autoBreakThresholdMinutes: 360,
+      autoBreakDurationMinutes: 30,
+      effectiveFrom: '2026-09-08T04:00:00.000Z',
+    },
+  ],
+};
+
+function ZeiterfassungWeek({ breakPolicy, label }: { breakPolicy: BreakPolicy; label: string }) {
   const { weekData, todayIndex, weekLabel, weekTargets } = useWeeklyTimeData({
     organizationId: ORGANIZATION_ID,
     userId: USER_ID,
-    breakPolicy: RULE_CHANGED_ON_TUESDAY,
+    breakPolicy,
   });
   return (
-    <section aria-label="Zeiterfassung">
+    <section aria-label={label}>
       <WeeklyHoursChart
         weekData={weekData}
         todayIndex={todayIndex}
@@ -103,11 +136,25 @@ function MitarbeiterDetailWeek() {
   );
 }
 
+/** The week of a page that stays open while another session saves the rule. */
+function ZeiterfassungWeekAcrossASave() {
+  const [breakPolicy, setBreakPolicy] = useState(MANUAL_WITHOUT_VERSIONS);
+  return (
+    <>
+      <ZeiterfassungWeek breakPolicy={breakPolicy} label="Zeiterfassung offen" />
+      <button type="button" onClick={() => setBreakPolicy(SAVED_ON_TUESDAY)}>
+        Neue Regel übernehmen
+      </button>
+    </>
+  );
+}
+
 export function BreakRuleWeekFixture() {
   return (
     <>
-      <ZeiterfassungWeek />
+      <ZeiterfassungWeek breakPolicy={RULE_CHANGED_ON_TUESDAY} label="Zeiterfassung" />
       <MitarbeiterDetailWeek />
+      <ZeiterfassungWeekAcrossASave />
     </>
   );
 }
