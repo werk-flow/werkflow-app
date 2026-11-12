@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page } from '@playwright/test';
+import { expect, type Locator, type Page, type Request } from '@playwright/test';
 
 import { createAdminClient } from '../../golden/support/db/shared';
 import { getJobIdByNumber } from '../../golden/support/db/work';
@@ -133,18 +133,16 @@ async function countDraftsOnPage(page: Page): Promise<number> {
   }, DRAFT_DATABASE);
 }
 
-/** Counts the page's requests that have not ended yet, from now on. */
+/** Counts the page's requests started from now on that have not ended yet; earlier ones never count. */
 export function trackRequestsInFlight(page: Page): () => number {
-  let inFlight = 0;
-  page.on('request', () => {
-    inFlight += 1;
-  });
-  const ended = (): void => {
-    inFlight -= 1;
+  const inFlight = new Set<Request>();
+  page.on('request', (request) => inFlight.add(request));
+  const ended = (request: Request): void => {
+    inFlight.delete(request);
   };
   page.on('requestfinished', ended);
   page.on('requestfailed', ended);
-  return () => inFlight;
+  return () => inFlight.size;
 }
 
 /**
