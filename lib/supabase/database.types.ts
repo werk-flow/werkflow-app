@@ -13826,7 +13826,7 @@ export type Database = {
           p_actor_id: string;
           p_holder_client_id: string;
           p_organization_id: string;
-          p_replace: boolean;
+          p_replaced_role_id?: string;
           p_role: string;
           p_site_id: string;
           p_starts_on?: string;

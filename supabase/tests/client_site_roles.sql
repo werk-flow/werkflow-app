@@ -87,7 +87,7 @@ begin
     or has_table_privilege('authenticated', 'public.client_site_roles', 'UPDATE')
     or has_table_privilege('service_role', 'public.client_site_roles', 'DELETE')
   then raise exception 'a role can write or delete Objekt roles outside the write functions'; end if;
-  if has_function_privilege('authenticated', 'public.assign_client_site_role(uuid,uuid,uuid,text,uuid,boolean,date)', 'EXECUTE')
+  if has_function_privilege('authenticated', 'public.assign_client_site_role(uuid,uuid,uuid,text,uuid,uuid,date)', 'EXECUTE')
     or has_function_privilege('authenticated', 'public.end_client_site_role(uuid,uuid,uuid,date)', 'EXECUTE')
     or has_function_privilege('authenticated', 'public.list_client_site_roles(uuid,uuid)', 'EXECUTE')
   then raise exception 'a browser role can run an Objekt role function'; end if;
@@ -100,32 +100,32 @@ set local role service_role;
 select pg_temp.expect_refusal('a role on another organization''s Objekt',
   $sql$select public.assign_client_site_role('45000000-0000-0000-0000-000000000002',
     '45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000049', 'hausverwaltung',
-    '45000000-0000-0000-0000-000000000021', false, null)$sql$,
+    '45000000-0000-0000-0000-000000000021', null, null)$sql$,
   'site_not_found');
 select pg_temp.expect_refusal('another organization''s customer as holder',
   $sql$select public.assign_client_site_role('45000000-0000-0000-0000-000000000002',
     '45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000040', 'hausverwaltung',
-    '45000000-0000-0000-0000-000000000029', false, null)$sql$,
+    '45000000-0000-0000-0000-000000000029', null, null)$sql$,
   'holder_not_found');
 select pg_temp.expect_refusal('a field worker recording a role',
   $sql$select public.assign_client_site_role('45000000-0000-0000-0000-000000000003',
     '45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000040', 'hausverwaltung',
-    '45000000-0000-0000-0000-000000000021', false, null)$sql$,
+    '45000000-0000-0000-0000-000000000021', null, null)$sql$,
   'not_authorized');
 select pg_temp.expect_refusal('an outsider recording a role',
   $sql$select public.assign_client_site_role('45000000-0000-0000-0000-000000000004',
     '45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000040', 'hausverwaltung',
-    '45000000-0000-0000-0000-000000000021', false, null)$sql$,
+    '45000000-0000-0000-0000-000000000021', null, null)$sql$,
   'not_authorized');
 select pg_temp.expect_refusal('an archived customer as new holder',
   $sql$select public.assign_client_site_role('45000000-0000-0000-0000-000000000002',
     '45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000040', 'hausverwaltung',
-    '45000000-0000-0000-0000-000000000023', false, null)$sql$,
+    '45000000-0000-0000-0000-000000000023', null, null)$sql$,
   'holder_archived');
 select pg_temp.expect_refusal('an unknown role kind',
   $sql$select public.assign_client_site_role('45000000-0000-0000-0000-000000000002',
     '45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000040', 'mieter',
-    '45000000-0000-0000-0000-000000000021', false, null)$sql$,
+    '45000000-0000-0000-0000-000000000021', null, null)$sql$,
   'invalid_input');
 reset role;
 do $$
@@ -148,16 +148,16 @@ declare
 begin
   v_role := public.assign_client_site_role('45000000-0000-0000-0000-000000000002',
     '45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000040', 'hausverwaltung',
-    '45000000-0000-0000-0000-000000000021', false, null);
+    '45000000-0000-0000-0000-000000000021', null, null);
   if v_role.client_id <> '45000000-0000-0000-0000-000000000020' or v_role.starts_on is not null
     or v_role.created_by <> '45000000-0000-0000-0000-000000000002'
   then raise exception 'the recorded role does not name its Objekt''s customer and actor: %', v_role; end if;
   perform public.assign_client_site_role('45000000-0000-0000-0000-000000000002',
     '45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000040', 'eigentuemer',
-    '45000000-0000-0000-0000-000000000020', false, '2020-01-01');
+    '45000000-0000-0000-0000-000000000020', null, '2020-01-01');
   perform public.assign_client_site_role('45000000-0000-0000-0000-000000000002',
     '45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000040', 'rechnungsempfaenger',
-    '45000000-0000-0000-0000-000000000020', false, '2020-01-01');
+    '45000000-0000-0000-0000-000000000020', null, '2020-01-01');
 end;
 $$;
 
@@ -166,7 +166,7 @@ $$;
 select pg_temp.expect_refusal('a second Hausverwaltung at the same time',
   $sql$select public.assign_client_site_role('45000000-0000-0000-0000-000000000002',
     '45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000040', 'hausverwaltung',
-    '45000000-0000-0000-0000-000000000022', false, '2026-07-01')$sql$,
+    '45000000-0000-0000-0000-000000000022', null, '2026-07-01')$sql$,
   'role_overlaps');
 reset role;
 do $$
@@ -191,7 +191,8 @@ declare
 begin
   v_new := public.assign_client_site_role('45000000-0000-0000-0000-000000000002',
     '45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000040', 'hausverwaltung',
-    '45000000-0000-0000-0000-000000000022', true, '2026-07-01');
+    '45000000-0000-0000-0000-000000000022', (select id from public.client_site_roles where site_id = '45000000-0000-0000-0000-000000000040'
+      and role = 'hausverwaltung' and ends_on is null), '2026-07-01');
   select * into v_old from public.client_site_roles
   where site_id = '45000000-0000-0000-0000-000000000040' and role = 'hausverwaltung'
     and holder_client_id = '45000000-0000-0000-0000-000000000021';
@@ -213,20 +214,73 @@ begin
       where event_type = 'role_started' and event_payload ->> 'holder_name' = 'Hausverwaltung Birkenhain GmbH'
         and client_id in ('45000000-0000-0000-0000-000000000020', '45000000-0000-0000-0000-000000000022')) <> 2
     or (select count(*) from public.client_master_events
-      where event_type = 'role_started' and event_payload ->> 'role' = 'eigentuemer') <> 1
+      where organization_id = '45000000-0000-0000-0000-000000000010'
+        and site_id = '45000000-0000-0000-0000-000000000040'
+        and event_type = 'role_started' and event_payload ->> 'role' = 'eigentuemer') <> 1
   then raise exception 'a role change wrote no history for the Objekt''s customer and both holders'; end if;
 end;
 $$;
 select pg_temp.expect_refusal('changing to the current holder',
   $sql$select public.assign_client_site_role('45000000-0000-0000-0000-000000000002',
     '45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000040', 'hausverwaltung',
-    '45000000-0000-0000-0000-000000000022', true, '2026-08-01')$sql$,
+    '45000000-0000-0000-0000-000000000022', (select id from public.client_site_roles where site_id = '45000000-0000-0000-0000-000000000040'
+      and role = 'hausverwaltung' and ends_on is null), '2026-08-01')$sql$,
   'holder_unchanged');
 select pg_temp.expect_refusal('a change dated before the current role started',
   $sql$select public.assign_client_site_role('45000000-0000-0000-0000-000000000002',
     '45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000040', 'hausverwaltung',
-    '45000000-0000-0000-0000-000000000021', true, '2026-07-01')$sql$,
+    '45000000-0000-0000-0000-000000000021', (select id from public.client_site_roles where site_id = '45000000-0000-0000-0000-000000000040'
+      and role = 'hausverwaltung' and ends_on is null), '2026-07-01')$sql$,
   'role_starts_before_current');
+select pg_temp.expect_refusal('a change of a role that is no longer the open one',
+  $sql$select public.assign_client_site_role('45000000-0000-0000-0000-000000000002',
+    '45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000040', 'hausverwaltung',
+    '45000000-0000-0000-0000-000000000020', (select id from public.client_site_roles
+      where site_id = '45000000-0000-0000-0000-000000000040' and role = 'hausverwaltung'
+        and holder_client_id = '45000000-0000-0000-0000-000000000021'), '2026-09-01')$sql$,
+  'role_changed');
+select pg_temp.expect_refusal('a first entry overlapping the same holder''s role from another day',
+  $sql$select public.assign_client_site_role('45000000-0000-0000-0000-000000000002',
+    '45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000040', 'eigentuemer',
+    '45000000-0000-0000-0000-000000000020', null, '2021-01-01')$sql$,
+  'role_overlaps');
+
+-- A retried assignment returns the recorded role and writes nothing: the
+-- repeated change and the repeated first entry.
+do $$
+declare
+  v_changed public.client_site_roles;
+  v_owner public.client_site_roles;
+  v_events bigint := (select count(*) from public.client_master_events
+    where organization_id = '45000000-0000-0000-0000-000000000010'
+      and site_id = '45000000-0000-0000-0000-000000000040');
+begin
+  v_changed := public.assign_client_site_role('45000000-0000-0000-0000-000000000002',
+    '45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000040', 'hausverwaltung',
+    '45000000-0000-0000-0000-000000000022', (select id from public.client_site_roles
+      where site_id = '45000000-0000-0000-0000-000000000040' and role = 'hausverwaltung'
+        and holder_client_id = '45000000-0000-0000-0000-000000000021'), '2026-07-01');
+  v_owner := public.assign_client_site_role('45000000-0000-0000-0000-000000000002',
+    '45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000040', 'eigentuemer',
+    '45000000-0000-0000-0000-000000000020', null, '2020-01-01');
+  if v_changed.holder_client_id <> '45000000-0000-0000-0000-000000000022'
+    or v_changed.starts_on <> '2026-07-01'::date or v_changed.ends_on is not null
+    or v_owner.holder_client_id <> '45000000-0000-0000-0000-000000000020'
+  then raise exception 'a retried assignment did not return the recorded role: % %', v_changed, v_owner; end if;
+  if (select count(*) from public.client_site_roles where site_id = '45000000-0000-0000-0000-000000000040'
+      and role = 'hausverwaltung') <> 2
+    or (select count(*) from public.client_site_roles where site_id = '45000000-0000-0000-0000-000000000040'
+      and role = 'eigentuemer') <> 1
+    or (select ends_on from public.client_site_roles where site_id = '45000000-0000-0000-0000-000000000040'
+      and role = 'hausverwaltung' and holder_client_id = '45000000-0000-0000-0000-000000000021')
+      <> '2026-06-30'::date
+  then raise exception 'a retried assignment wrote a role or moved an end'; end if;
+  if (select count(*) from public.client_master_events
+      where organization_id = '45000000-0000-0000-0000-000000000010'
+        and site_id = '45000000-0000-0000-0000-000000000040') <> v_events
+  then raise exception 'a retried assignment wrote a second history event'; end if;
+end;
+$$;
 
 -- Ending a role keeps it as history; it ends once.
 do $$
@@ -234,6 +288,7 @@ declare
   v_owner uuid := (select id from public.client_site_roles
     where site_id = '45000000-0000-0000-0000-000000000040' and role = 'eigentuemer');
   v_role public.client_site_roles;
+  v_events bigint;
 begin
   perform pg_temp.expect_refusal('an end before the start',
     format($sql$select public.end_client_site_role('45000000-0000-0000-0000-000000000002',
@@ -251,6 +306,18 @@ begin
     '45000000-0000-0000-0000-000000000010', v_owner, '2037-12-31');
   if v_role.ends_on <> '2037-12-31'::date or v_role.holder_client_id <> '45000000-0000-0000-0000-000000000020'
   then raise exception 'ending a role did not keep it with its end: %', v_role; end if;
+  -- A retried end returns the role and writes no second event.
+  v_events := (select count(*) from public.client_master_events
+    where organization_id = '45000000-0000-0000-0000-000000000010'
+      and site_id = '45000000-0000-0000-0000-000000000040');
+  v_role := public.end_client_site_role('45000000-0000-0000-0000-000000000002',
+    '45000000-0000-0000-0000-000000000010', v_owner, '2037-12-31');
+  if v_role.id <> v_owner or v_role.ends_on <> '2037-12-31'::date
+  then raise exception 'a retried end did not return the ended role: %', v_role; end if;
+  if (select count(*) from public.client_master_events
+      where organization_id = '45000000-0000-0000-0000-000000000010'
+        and site_id = '45000000-0000-0000-0000-000000000040') <> v_events
+  then raise exception 'a retried end wrote a second history event'; end if;
   perform pg_temp.expect_refusal('ending an ended role',
     format($sql$select public.end_client_site_role('45000000-0000-0000-0000-000000000002',
       '45000000-0000-0000-0000-000000000010', %L, '2038-01-31')$sql$, v_owner),
@@ -384,7 +451,7 @@ begin
   then raise exception 'deleting a former Hausverwaltung did not refuse with its role: %', v_result; end if;
   perform public.assign_client_site_role('45000000-0000-0000-0000-000000000002',
     '45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000041', 'eigentuemer',
-    '45000000-0000-0000-0000-000000000024', false, null);
+    '45000000-0000-0000-0000-000000000024', null, null);
   insert into public.client_contacts (organization_id, client_id, name, site_id, site_role) values
   ('45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000024', 'Petra Zugang',
    '45000000-0000-0000-0000-000000000041', 'zugangskontakt');

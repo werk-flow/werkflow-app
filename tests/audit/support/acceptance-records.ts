@@ -213,23 +213,24 @@ async function managedBuildings(world: TestWorld): Promise<ManagedBuildings> {
       kind: 'eigentuemer' | 'hausverwaltung' | 'rechnungsempfaenger',
       holderId: string,
       startsOn: string | null,
-      replace = false,
-    ): Promise<void> => {
-      await admin
+      replacedRoleId?: string,
+    ): Promise<string> => {
+      const { data } = await admin
         .rpc('assign_client_site_role', {
           p_actor_id: actor,
           p_organization_id: orgId,
           p_site_id: siteId,
           p_role: kind,
           p_holder_client_id: holderId,
-          p_replace: replace,
+          ...(replacedRoleId ? { p_replaced_role_id: replacedRoleId } : {}),
           ...(startsOn ? { p_starts_on: startsOn } : {}),
         })
         .throwOnError();
+      return data.id;
     };
     await role(ownerSite, 'eigentuemer', owner.clientId, null);
-    await role(ownerSite, 'hausverwaltung', former.clientId, '2019-01-01');
-    await role(ownerSite, 'hausverwaltung', manager.clientId, '2025-01-01', true);
+    const formerManagement = await role(ownerSite, 'hausverwaltung', former.clientId, '2019-01-01');
+    await role(ownerSite, 'hausverwaltung', manager.clientId, '2025-01-01', formerManagement);
     await role(ownerSite, 'rechnungsempfaenger', manager.clientId, '2025-01-01');
     await role(privateSite, 'eigentuemer', privateOwner.clientId, null);
     await role(privateSite, 'hausverwaltung', manager.clientId, '2023-07-01');

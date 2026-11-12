@@ -48,7 +48,8 @@ export type ClientSiteRole = {
   endsOn: string | null;
 };
 
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+// A real calendar day: `2026-02-30` is refused, not rolled over.
+const dateSchema = z.iso.date();
 
 export const clientSiteRoleRowSchema = z.object({
   id: uuidSchema,

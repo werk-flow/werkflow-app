@@ -26,6 +26,7 @@ const roleWriteRefusal = writeRefusalFor(
     'site_not_found',
     'holder_not_found',
     'holder_archived',
+    'role_changed',
     'holder_unchanged',
     'role_starts_before_current',
     'role_overlaps',
@@ -41,10 +42,11 @@ const assignArgumentsSchema = z
     role: siteRoleKindSchema,
     holderClientId: uuidSchema,
     startsOn: siteRoleDateSchema.nullable(),
-    // Ends the open role of this kind the day before startsOn.
-    replace: z.boolean(),
+    // The open role of this kind the change ends the day before startsOn;
+    // refused when it is no longer the open one.
+    replacesRoleId: uuidSchema.nullable(),
   })
-  .refine((input) => !input.replace || input.startsOn !== null);
+  .refine((input) => input.replacesRoleId === null || input.startsOn !== null);
 
 const endArgumentsSchema = z.object({ roleId: uuidSchema, endsOn: siteRoleDateSchema });
 
@@ -109,9 +111,9 @@ export async function getClientSiteRoles(
 }
 
 /**
- * Records a role on an Objekt. With `replace`, the open role of that kind
- * ends the day before in the same database call: a change of owner,
- * Hausverwaltung or Rechnungsempfänger.
+ * Records a role on an Objekt. With `replacesRoleId`, that role ends the day
+ * before in the same database call: a change of owner, Hausverwaltung or
+ * Rechnungsempfänger. A repeat of a recorded assignment returns its role.
  */
 export async function assignClientSiteRole(
   rawInput: AssignClientSiteRoleInput,
@@ -136,7 +138,7 @@ export async function assignClientSiteRole(
       p_holder_client_id: input.holderClientId,
       // An unknown start leaves p_starts_on at its default, null.
       ...(input.startsOn === null ? {} : { p_starts_on: input.startsOn }),
-      p_replace: input.replace,
+      ...(input.replacesRoleId === null ? {} : { p_replaced_role_id: input.replacesRoleId }),
     });
     if (error || !data) return roleWriteRefusal(error, 'save_failed', 'assignClientSiteRole: save failed');
     return { success: true, roleId: data.id };
@@ -146,7 +148,7 @@ export async function assignClientSiteRole(
   }
 }
 
-/** Ends a role on its last day; the role stays as history. */
+/** Ends a role on its last day; the role stays as history. A repeat of a recorded end succeeds. */
 export async function endClientSiteRole(rawInput: EndClientSiteRoleInput): Promise<ActionResult> {
   const parsed = endArgumentsSchema.safeParse(rawInput);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
