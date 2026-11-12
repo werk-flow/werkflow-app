@@ -5,6 +5,7 @@ import { getEffectiveTimeEntries } from './effective-entries';
 import { isBreakEndFollowedByClockIn } from './transition-pairs';
 import {
   getAutomaticBreakRanges,
+  type BreakDayPosition,
   resolveBreakPolicyAtTimestamp,
   type OrganizationTimeTrackingSettings,
 } from './settings';
@@ -33,11 +34,11 @@ export type CalendarWorkBlock = {
   isComposite: boolean;
   isPending: boolean;
   /**
-   * The person's presence earlier the same Berlin day, in earlier blocks: the
-   * automatic break steps count the whole day, as the totals do. Absent for
-   * the day's first block.
+   * Where the block sits in its Berlin day's presence that counts toward the
+   * automatic break: the steps count the whole day, as the totals do. Absent
+   * when the block is the day's only counting presence.
    */
-  presenceBeforeMinutes?: number;
+  breakDayPosition?: BreakDayPosition;
 };
 
 type OpenBlockState = {
@@ -227,7 +228,7 @@ function getCalendarBlockDisplayBreaks(
   const displayPolicy = resolveDisplayBreakPolicy(block, referenceDate, settings);
   const displayEnd = block.end ? new Date(block.end) : referenceDate;
 
-  return getAutomaticBreakRanges(block.start, displayEnd, displayPolicy, block.presenceBeforeMinutes).map(
+  return getAutomaticBreakRanges(block.start, displayEnd, displayPolicy, block.breakDayPosition).map(
     (range, index) => ({
       breakStart: buildSyntheticBreakEntry(
         block,
@@ -267,7 +268,7 @@ function blockSegments(
     block.start,
     displayEnd,
     displayPolicy,
-    block.presenceBeforeMinutes,
+    block.breakDayPosition,
   );
 
   if (automaticBreaks.length === 0) {
@@ -351,7 +352,7 @@ export function createSessionFromCalendarBlock(
     sourceEntries: block.sourceEntries,
     breaks: getCalendarBlockDisplayBreaks(block, referenceDate, settings),
     ...(displayPolicy ? { breakPolicy: displayPolicy } : {}),
-    ...(block.presenceBeforeMinutes ? { presenceBeforeMinutes: block.presenceBeforeMinutes } : {}),
+    ...(block.breakDayPosition ? { breakDayPosition: block.breakDayPosition } : {}),
     isCompositeBlock: block.isComposite,
     isOnBreakBlock: block.isOnBreak,
   };
@@ -454,17 +455,37 @@ export function calculateCalendarWorkBlocks(entries: TimeEntry[]): CalendarWorkB
     }
   }
 
-  return withPresenceBefore(blocks.filter((block) => !isMomentary(block.start, block.end)));
+  return withBreakDayPositions(blocks.filter((block) => !isMomentary(block.start, block.end)));
 }
 
-/** Each block with the presence of the same person's earlier blocks that day. */
-function withPresenceBefore(blocks: CalendarWorkBlock[]): CalendarWorkBlock[] {
-  const presenceByDay = new Map<string, number>();
+/** Standby counts as presence but not toward the automatic break, as in the totals. */
+function countsTowardBreak(block: CalendarWorkBlock): boolean {
+  return block.startEntry.activityKind !== 'standby';
+}
+
+/** Each block with its place in the same person's counted presence that day. */
+function withBreakDayPositions(blocks: CalendarWorkBlock[], now = Date.now()): CalendarWorkBlock[] {
+  const dayOf = (block: CalendarWorkBlock) =>
+    `${block.userId}:${formatBerlinLocalDate(new Date(block.start))}`;
+  const countedMinutes = (block: CalendarWorkBlock) =>
+    countsTowardBreak(block)
+      ? Math.max(
+          0,
+          ((block.end ? new Date(block.end).getTime() : now) - new Date(block.start).getTime()) / 60000,
+        )
+      : 0;
+  const dayMinutes = new Map<string, number>();
+  for (const block of blocks)
+    dayMinutes.set(dayOf(block), (dayMinutes.get(dayOf(block)) ?? 0) + countedMinutes(block));
+  const beforeByDay = new Map<string, number>();
   return blocks.map((block) => {
-    const day = `${block.userId}:${formatBerlinLocalDate(new Date(block.start))}`;
-    const before = presenceByDay.get(day) ?? 0;
-    const endMs = block.end ? new Date(block.end).getTime() : new Date(block.start).getTime();
-    presenceByDay.set(day, before + Math.max(0, (endMs - new Date(block.start).getTime()) / 60000));
-    return before > 0 ? { ...block, presenceBeforeMinutes: before } : block;
+    const day = dayOf(block);
+    const beforeMinutes = beforeByDay.get(day) ?? 0;
+    const ownMinutes = countedMinutes(block);
+    beforeByDay.set(day, beforeMinutes + ownMinutes);
+    const afterMinutes = (dayMinutes.get(day) ?? 0) - beforeMinutes - ownMinutes;
+    const counts = countsTowardBreak(block);
+    if (counts && beforeMinutes === 0 && afterMinutes === 0) return block;
+    return { ...block, breakDayPosition: { countsTowardBreak: counts, beforeMinutes, afterMinutes } };
   });
 }

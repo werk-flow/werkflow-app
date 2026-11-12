@@ -80,6 +80,7 @@ const MANUAL_WITHOUT_VERSIONS: BreakPolicy = {
   breakMode: 'manual',
   autoBreakThresholdMinutes: 360,
   autoBreakDurationMinutes: 30,
+  secondStep: null,
   breakPolicyHistory: [],
 };
 
@@ -91,17 +92,20 @@ const SAVED_ON_TUESDAY: BreakPolicy = {
   breakMode: 'automatic',
   autoBreakThresholdMinutes: 360,
   autoBreakDurationMinutes: 30,
+  secondStep: null,
   breakPolicyHistory: [
     {
       breakMode: 'manual',
       autoBreakThresholdMinutes: 360,
       autoBreakDurationMinutes: 30,
+      secondStep: null,
       effectiveFrom: '1970-01-01T00:00:00.000Z',
     },
     {
       breakMode: 'automatic',
       autoBreakThresholdMinutes: 360,
       autoBreakDurationMinutes: 30,
+      secondStep: null,
       effectiveFrom: '2026-09-08T04:00:00.000Z',
     },
   ],

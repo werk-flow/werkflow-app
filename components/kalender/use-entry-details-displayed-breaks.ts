@@ -68,7 +68,7 @@ export function useEntryDetailsDisplayedBreaks(
       blockStart,
       blockEnd,
       interactiveSession.breakPolicy,
-      interactiveSession.presenceBeforeMinutes,
+      interactiveSession.breakDayPosition,
     );
     return automaticEditableBreaks(automaticBreaks, entryUserId, entryOrganizationId);
   }, [
@@ -79,7 +79,7 @@ export function useEntryDetailsDisplayedBreaks(
     entryOrganizationId,
     entryUserId,
     interactiveSession.breakPolicy,
-    interactiveSession.presenceBeforeMinutes,
+    interactiveSession.breakDayPosition,
     isAutomaticBreakMode,
   ]);
   const displayedBreaks = isAutomaticBreakMode ? automaticDisplayBreaks : editedBreaks;

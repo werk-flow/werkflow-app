@@ -313,21 +313,34 @@ export function computeBreakdownForSettings(
 export type AutomaticBreakRange = { breakStart: Date; breakEnd: Date };
 
 /**
- * Where a block's automatic break lies. The steps count the person's presence
- * that day, including `presenceBeforeMinutes` from earlier blocks, as the
- * totals do. Each step reached in this block adds its share of the total and
- * ends where the day reaches its threshold, so beyond nine hours a 30-minute
- * break ends at six hours and 15 more minutes end at nine. A share that would
- * start before the block, or before the previous share ends, starts there
- * instead; one that would not end inside the block is left out.
+ * Where a block sits in its day's presence that counts toward the automatic
+ * break: the totals count the day's work without standby, and so does the
+ * calendar. The minutes of the same person's earlier and later blocks that
+ * day; a block that does not count (standby) shows no automatic break.
+ */
+export type BreakDayPosition = { countsTowardBreak: boolean; beforeMinutes: number; afterMinutes: number };
+
+const ONLY_BLOCK_OF_THE_DAY: BreakDayPosition = {
+  countsTowardBreak: true,
+  beforeMinutes: 0,
+  afterMinutes: 0,
+};
+
+/**
+ * Where a block's automatic break lies. Each step the day reaches adds its
+ * share of the total as a span of the day's counted presence that ends at the
+ * step's threshold: beyond nine hours, 30 minutes up to six hours and 15 more
+ * up to nine. The block shows the part of each span that falls in its own
+ * presence, so the blocks of a day add up to the break the totals deduct,
+ * however the day is split across jobs.
  */
 export function getAutomaticBreakRanges(
   start: string | Date | null | undefined,
   end: string | Date | null | undefined,
   settings: BreakPolicyValues | null | undefined,
-  presenceBeforeMinutes = 0,
+  position: BreakDayPosition = ONLY_BLOCK_OF_THE_DAY,
 ): AutomaticBreakRange[] {
-  if (!start || !end || !settings || settings.breakMode !== 'automatic') {
+  if (!start || !end || !settings || settings.breakMode !== 'automatic' || !position.countsTowardBreak) {
     return [];
   }
 
@@ -338,23 +351,23 @@ export function getAutomaticBreakRanges(
     return [];
   }
 
-  const blockMinutes = (endMs - startMs) / 60000;
+  const blockFrom = position.beforeMinutes;
+  const blockTo = blockFrom + (endMs - startMs) / 60000;
+  const dayMinutes = blockTo + position.afterMinutes;
   const ranges: AutomaticBreakRange[] = [];
   let previousDuration = 0;
-  let notBeforeMs = startMs;
   for (const step of breakSteps(settings)) {
-    const reachedAfterMinutes = step.thresholdMinutes - presenceBeforeMinutes;
+    if (dayMinutes < step.thresholdMinutes) break;
     const shareMinutes = step.durationMinutes - previousDuration;
     previousDuration = Math.max(previousDuration, step.durationMinutes);
-    // Reached in an earlier block, which shows its share.
-    if (reachedAfterMinutes <= 0) continue;
-    if (blockMinutes < reachedAfterMinutes) break;
     if (shareMinutes <= 0) continue;
-    const breakStartMs = Math.max(notBeforeMs, startMs + (reachedAfterMinutes - shareMinutes) * 60000);
-    const breakEndMs = breakStartMs + shareMinutes * 60000;
-    if (breakEndMs > endMs) continue;
-    ranges.push({ breakStart: new Date(breakStartMs), breakEnd: new Date(breakEndMs) });
-    notBeforeMs = breakEndMs;
+    const spanFrom = Math.max(blockFrom, step.thresholdMinutes - shareMinutes, 0);
+    const spanTo = Math.min(blockTo, step.thresholdMinutes);
+    if (spanTo <= spanFrom) continue;
+    ranges.push({
+      breakStart: new Date(startMs + (spanFrom - blockFrom) * 60000),
+      breakEnd: new Date(startMs + (spanTo - blockFrom) * 60000),
+    });
   }
   return ranges;
 }

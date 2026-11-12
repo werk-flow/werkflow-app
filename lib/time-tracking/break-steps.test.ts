@@ -169,41 +169,38 @@ describe('the settings form', () => {
   });
 });
 
-describe('a day split across jobs', () => {
-  const entry = (
-    id: string,
-    entryType: TimeEntry['entryType'],
-    timestamp: string,
-    jobId: string,
-  ): TimeEntry => ({
-    id,
-    userId: 'worker',
-    organizationId: 'org',
-    entryType,
-    timestamp,
-    isManual: false,
-    jobId,
-    status: 'approved',
-    reviewedBy: null,
-    reviewedAt: null,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  });
-  // Seven hours on one job, then three on another, on Tuesday 6 October 2026.
-  const entries = [
-    entry('1', 'clock_in', '2026-10-06T05:00:00.000Z', 'job-a'),
-    entry('2', 'clock_out', '2026-10-06T12:00:00.000Z', 'job-a'),
-    entry('3', 'clock_in', '2026-10-06T12:00:00.000Z', 'job-b'),
-    entry('4', 'clock_out', '2026-10-06T15:00:00.000Z', 'job-b'),
-  ];
+describe('a day split across blocks', () => {
+  const at = (minutesAfterSeven: number) =>
+    new Date(Date.parse('2026-10-06T05:00:00.000Z') + minutesAfterSeven * 60_000).toISOString();
+  /** Back-to-back blocks from 07:00 Berlin on Tuesday 6 October 2026, one job (or standby) each. */
+  const day = (blocks: Array<{ minutes: number; standby?: boolean }>): TimeEntry[] => {
+    let offset = 0;
+    return blocks.flatMap((block, index) => {
+      const entry = (entryType: TimeEntry['entryType'], minutes: number): TimeEntry => ({
+        id: `${index}-${entryType}`,
+        userId: 'worker',
+        organizationId: 'org',
+        entryType,
+        timestamp: at(minutes),
+        isManual: false,
+        jobId: `job-${index}`,
+        status: 'approved',
+        reviewedBy: null,
+        reviewedAt: null,
+        createdAt: at(minutes),
+        updatedAt: at(minutes),
+        ...(block.standby ? { activityKind: 'standby' as const } : {}),
+      });
+      const blockEntries = [entry('clock_in', offset), entry('clock_out', offset + block.minutes)];
+      offset += block.minutes;
+      return blockEntries;
+    });
+  };
   const settings = { organizationId: 'org', ...TWO_STEPS, breakPolicyHistory: [] };
-
-  test('the calendar shows the break the totals deduct, counting the whole day', () => {
-    const blocks = calculateCalendarWorkBlocks(entries);
-    expect(blocks).toHaveLength(2);
-    const shownBreakMinutes = blocks
+  const breaks = (entries: TimeEntry[]) => {
+    const shown = calculateCalendarWorkBlocks(entries)
       .flatMap((block) =>
-        getCalendarBlockDisplaySegments(block, new Date('2026-10-06T16:00:00.000Z'), settings),
+        getCalendarBlockDisplaySegments(block, new Date('2026-10-06T20:00:00.000Z'), settings),
       )
       .filter((segment) => segment.type === 'break')
       .reduce(
@@ -211,7 +208,18 @@ describe('a day split across jobs', () => {
         0,
       );
     const [, tuesday] = buildWeeklyTimeData(entries, new Date('2026-10-04T22:00:00.000Z'), settings);
-    expect(tuesday?.breakMinutes).toBe(45);
-    expect(shownBreakMinutes).toBe(45);
+    return { shown, deducted: tuesday?.breakMinutes };
+  };
+
+  test.each([
+    ['seven hours on one job and three on another', [{ minutes: 420 }, { minutes: 180 }], 45],
+    [
+      'a block too short for its share: 8:55, 0:10 and 0:55',
+      [{ minutes: 535 }, { minutes: 10 }, { minutes: 55 }],
+      45,
+    ],
+    ['three hours of standby before seven of work', [{ minutes: 180, standby: true }, { minutes: 420 }], 30],
+  ])('%s: the calendar shows the break the totals deduct', (_label, blocks, breakMinutes) => {
+    expect(breaks(day(blocks))).toEqual({ shown: breakMinutes, deducted: breakMinutes });
   });
 });

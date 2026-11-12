@@ -1,7 +1,7 @@
 import type { ActionFailure } from '@/lib/action-result';
 import type { ProfileReference } from '@/lib/profile-reference';
 import type { OrgRole } from '@/lib/roles';
-import type { BreakPolicy, BreakPolicyValues } from '@/lib/time-tracking/settings';
+import type { BreakDayPosition, BreakPolicy, BreakPolicyValues } from '@/lib/time-tracking/settings';
 import type { TimeValidationCode, TimeValidationFailure } from '@/lib/time-tracking/validation-messages';
 import type { Database } from '@/lib/supabase/database.types';
 import { constrainedValue } from '@/lib/validation/constrained-value';
@@ -230,8 +230,8 @@ export type InteractiveCalendarSession = WorkSession & {
   breaks?: WorkSessionBreak[];
   /** The break rule that applied to the block's day. */
   breakPolicy?: BreakPolicyValues | undefined;
-  /** The person's presence earlier that day, which the automatic break steps count. */
-  presenceBeforeMinutes?: number | undefined;
+  /** Where the block sits in its day's presence that counts toward the automatic break. */
+  breakDayPosition?: BreakDayPosition | undefined;
   isCompositeBlock?: boolean;
   isOnBreakBlock?: boolean;
   employeeName?: string | null;
