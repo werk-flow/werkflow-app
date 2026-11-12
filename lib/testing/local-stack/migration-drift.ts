@@ -123,6 +123,24 @@ export function sqlStatements(sql: string): string[] {
   return statements.map((pieces) => pieces.join('').trim()).filter(Boolean);
 }
 
+/** A dollar-quoted piece of sqlShape: its tag and the text between the two tags. */
+const DOLLAR_BODY = /^(\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$)([\s\S]*)\1$/;
+
+/**
+ * The text a guard scans for what the SQL would run: sqlShape, with every dollar-quoted body shaped
+ * the same way in turn, so a block comment inside a function body cannot part two words of one
+ * statement. A body is shaped as SQL whatever its language; that only drops comments and
+ * collapses whitespace, never text a statement holds.
+ */
+export function sqlCode(sql: string): string {
+  return shapePieces(sql)
+    .map((piece) => {
+      const body = DOLLAR_BODY.exec(piece)?.[2];
+      return body === undefined ? piece : ` ${sqlCode(body)} `;
+    })
+    .join('');
+}
+
 /**
  * The pieces of sqlShape: each token, with a ' ' or ';' between them. A ';' piece is always a
  * statement end: a literal or a body starts with its quote, and plain tokens hold no semicolon.

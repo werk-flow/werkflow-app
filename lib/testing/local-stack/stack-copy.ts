@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 
 import { z } from '../../zod';
 
-import { type MigrationDrift, readMigrationDrift, sqlShape, sqlStatements } from './migration-drift';
+import { type MigrationDrift, readMigrationDrift, sqlCode, sqlStatements } from './migration-drift';
 
 // The types of a tree whose own migration the shared local stack lacks, without a second stack and
 // without touching the shared database: a private database in the same Postgres server takes a
@@ -33,13 +33,22 @@ const EXPECTED_RESTORE_ERROR =
  * reaches files.
  */
 const DATABASE_LOCAL = [
-  /^create (?:or replace )?(?:table|(?:unique )?index|function|procedure|(?:constraint )?trigger|type|policy|sequence|(?:materialized )?view|schema|domain)\b/,
+  /^create (?:or replace )?(?:table|(?:unique )?index|function|procedure|(?:constraint )?trigger|type|policy|sequence|view|schema|domain)\b/,
   /^alter (?:table|index|function|procedure|type|policy|sequence|(?:materialized )?view|publication|schema|domain|trigger)\b/,
   /^drop (?:table|index|function|procedure|trigger|type|policy|sequence|(?:materialized )?view|domain)\b/,
   /^comment on (?!role\b|database\b|tablespace\b)/,
   /^(?:grant|revoke) .* on (?!database\b|tablespace\b|foreign\b)/,
   /^alter default privileges\b/,
   /^(?:begin|commit|set|reset)\b/,
+];
+/**
+ * DATABASE_LOCAL forms that still run code or hide it: `create table ... as` runs its query, which
+ * may call any function, and a function whose body is a quoted literal keeps that body out of
+ * sqlCode's reach. (`create materialized view` is not DATABASE_LOCAL at all: it runs its query.)
+ */
+const RUNS_OR_HIDES = [
+  /^create (?:or replace )?table [^(]*\bas\b/,
+  /^create (?:or replace )?(?:function|procedure)\b(?![\s\S]*(?:\$[a-z0-9_]*\$|\bbegin atomic\b))/,
 ];
 /**
  * Text that changes the cluster beyond one database, wherever it stands, function bodies included:
@@ -53,11 +62,13 @@ const CHANGES_THE_CLUSTER = [
 ];
 /**
  * Text in a pending migration the copy cannot run: dynamic SQL, whose statement no guard reads,
- * pg_cron, which the copy lacks, and calls that reach other databases, sessions or files.
+ * pg_cron, which the copy lacks, a C or internal function, and calls that reach other databases,
+ * sessions or files.
  */
 const OUTSIDE_THE_COPY = [
   /\bexecute\b(?!\s+(?:function|procedure|on)\b)/i,
   /\b(?:cron\.|pg_cron\b)/i,
+  /\blanguage\s+'?(?:c|internal)\b/i,
   /\bdblink|_fdw\b|\b(?:security\s+label|lo_import|lo_export|pg_terminate_backend|pg_cancel_backend|pg_reload_conf)\b/i,
 ];
 
@@ -89,17 +100,22 @@ export function copyRefusal(
   const shown = (text: string) => text.slice(0, 80);
   const statement = pendingSql
     .flatMap((sql) => sqlStatements(sql))
-    .find((text) => !DATABASE_LOCAL.some((form) => form.test(text.toLowerCase())));
+    .find((text) => {
+      const lower = text.toLowerCase();
+      return (
+        !DATABASE_LOCAL.some((form) => form.test(lower)) || RUNS_OR_HIDES.some((form) => form.test(lower))
+      );
+    });
   if (statement !== undefined)
     return `a pending statement runs code or reaches past a private database: ${shown(statement)}`;
   const outside = pendingSql
-    .map((sql) => sqlShape(sql))
+    .map((sql) => sqlCode(sql))
     .flatMap((text) =>
       [...OUTSIDE_THE_COPY, ...CHANGES_THE_CLUSTER].flatMap((rule) => rule.exec(text)?.[0] ?? []),
     );
   if (outside[0]) return `a pending migration reaches past a private database: ${shown(outside[0])}`;
   const cluster = treeSql
-    .map((sql) => sqlShape(sql))
+    .map((sql) => sqlCode(sql))
     .flatMap((text) => CHANGES_THE_CLUSTER.flatMap((rule) => rule.exec(text)?.[0] ?? []));
   return cluster[0]
     ? `a migration of this tree changes the cluster (${shown(cluster[0])}), so a function the pending DDL calls might too.`

@@ -62,6 +62,10 @@ test('a pending statement that runs code or is no database-local DDL goes to a f
     'alter system set max_connections = 200;',
     "alter database postgres set timezone to 'Europe/Berlin';",
     'grant connect on database postgres to anon;',
+    // A query at creation may call any function, and a quoted body is out of the scan's reach.
+    'create table public.probe_result as select public.probe();',
+    'create materialized view public.counts as select public.probe();',
+    "create function public.f() returns int language sql as 'select 1';",
     'comment on role authenticator is $$x$$;',
   ])
     expect(copyRefusal(pending, [sql], []), sql).toContain('runs code or reaches past a private database');
@@ -75,15 +79,41 @@ test('a function body that changes the cluster or runs dynamic SQL goes to a fre
     'execute v_statement;',
     "perform cron.schedule('purge', '0 3 * * *', 'select 1');",
     "perform dblink_exec('host=x', 'select 1');",
+    // A comment inside a body cannot part two words (sol-loop round 3, S3).
+    'create/**/role copy_escape;',
+    'create -- a comment\n role copy_escape;',
+    'create /* nested /* comment */ */ role copy_escape;',
   ]) {
     const sql = `create function public.f() returns void language plpgsql as $$ begin ${body} end $$;`;
     expect(copyRefusal(pending, [sql], []), body).toContain('reaches past a private database');
   }
 });
 
+test('a body nested in a body is read too', () => {
+  const sql = `create function public.f() returns void language plpgsql as $outer$
+    begin
+      execute $inner$ select 1 $inner$;
+    end $outer$;`;
+  expect(copyRefusal(pending, [sql], [])).toContain('reaches past a private database');
+  const hidden = `create function public.g() returns void language plpgsql as $outer$
+    begin
+      perform $inner$ create/**/role nested $inner$;
+    end $outer$;`;
+  expect(copyRefusal(pending, [hidden], [])).toContain('reaches past a private database');
+});
+
+test('a C function and a dollar body that is no code still go through the scan', () => {
+  expect(
+    copyRefusal(pending, ['create function public.f() returns int language c as $$lib$$, $$f$$;'], []),
+  ).toContain('reaches past a private database');
+  expect(
+    copyRefusal(pending, ['comment on table public.jobs is $$-- a note, not code$$;'], []),
+  ).toBeUndefined();
+});
+
 test("a tree whose migrations change the cluster lends the copy none of its functions' calls", () => {
   const tree = [
-    'create function public.provision() returns void language plpgsql as $$ begin create role reporting; end $$;',
+    'create function public.provision() returns void language plpgsql as $$ begin create/**/role reporting; end $$;',
   ];
   expect(copyRefusal(pending, ['create index jobs_state on public.jobs (state);'], tree)).toContain(
     'a migration of this tree changes the cluster',
