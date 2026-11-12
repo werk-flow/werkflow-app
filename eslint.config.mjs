@@ -554,6 +554,7 @@ const floatingSelectors = [
 const floatingLayerFiles = [
   'components/clock-fab.tsx',
   'components/sidebar/app-shell.tsx',
+  'components/sidebar/mobile-drawer.tsx',
   'components/kalender/dispatch-panel.tsx',
   'components/kalender/parkplatz-panel.tsx',
   'components/kalender/drag-engine/drag-engine.tsx',

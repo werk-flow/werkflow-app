@@ -107,7 +107,7 @@ function tscProject(args: readonly string[]): string | undefined {
 }
 
 /** Operands of an argument list: words that are no flags and no flag values the guard knows. */
-function operands(args: readonly string[], valueFlags: ReadonlySet<string>): string[] {
+export function operands(args: readonly string[], valueFlags: ReadonlySet<string>): string[] {
   const found: string[] = [];
   for (let index = 0; index < args.length; index++) {
     const arg = args[index] ?? '';
@@ -166,8 +166,16 @@ const SLOT = 'outside the machine-wide heavy slots (lib/testing/runner/heavy-slo
 const DELIBERATE =
   'For other deliberate heavy work, wrap the command: `bun scripts/heavy.ts -- <command>` waits for a slot.';
 
+/** A program a shell command starts, past its launchers, in the folder it starts in, with the words of its simple command. */
+/**
+ * `assignments` are the `NAME=value` words in force when it starts, oldest first: those of the shells
+ * around it, an earlier `export` or bare assignment of its own script, and its own prefix or `env` words.
+ */
+export type StartedProgram = { name: string; args: string[]; folder: string; assignments: readonly string[] };
+
 /** The refusal of one started program, or undefined when it is light or sanctioned. */
-function programRefusal(started: { name: string; args: string[] }, cwd: string): string | undefined {
+function programRefusal(started: StartedProgram): string | undefined {
+  const cwd = started.folder;
   const { name, args } = started;
   const shown = [name, ...args].join(' ').slice(0, 100);
   if (name === 'tsc' || name === 'tsgo') {
@@ -216,9 +224,29 @@ function programRefusal(started: { name: string; args: string[] }, cwd: string):
  * knows. Deliberate evasion (an alias, a script file, an interpreter) is a rule
  * violation it does not claim to catch, and a command it cannot read passes.
  */
-export function heavyCommandRefusal(command: string, cwd: string, depth = 0): string | undefined {
+export function heavyCommandRefusal(command: string, cwd: string): string | undefined {
+  return startedProgramRefusal(command, cwd, programRefusal);
+}
+
+/**
+ * The first refusal `judge` gives a program the shell command starts from `cwd`:
+ * through any launcher, env prefix, chain or `sh -c` script, and from every
+ * folder a `cd` may have reached. The walk of the heavy command guard, shared
+ * with the second-stack guard (second-stack.ts). `inherited` are the
+ * assignments of the shells around a nested script.
+ */
+export function startedProgramRefusal(
+  command: string,
+  cwd: string,
+  judge: (started: StartedProgram) => string | undefined,
+  inherited: readonly string[] = [],
+  depth = 0,
+): string | undefined {
   const reading = readShell(command);
   if (!reading) return undefined;
+  // An `export NAME=value` or a bare `NAME=value` holds for the commands after it. As with `cd`,
+  // one inside a subshell may not apply outside it; the walk keeps it either way.
+  const exported: string[] = [];
   // The reader does not keep a subshell's scope, so with one a `cd` may or may not have
   // applied: the guard keeps every folder the shell may be in and judges from each.
   const scoped = SUBSHELL.test(command);
@@ -234,12 +262,19 @@ export function heavyCommandRefusal(command: string, cwd: string, depth = 0): st
       folders = new Set(scoped ? [...folders, ...moved] : moved);
       continue;
     }
+    const own = words.map((word) => word.text).filter((word) => ASSIGNMENT.test(word));
+    if (!call || call.name === 'export') {
+      exported.push(...own);
+      continue;
+    }
+    const assignments = [...inherited, ...exported, ...own];
     for (const started of startedPrograms(words))
       for (const folder of folders) {
         let reason: string | undefined;
         // A nested shell's script starts from this folder, and its own cd stays inside it.
-        if (!('script' in started)) reason = programRefusal(started, folder);
-        else if (depth < 4) reason = heavyCommandRefusal(started.script, folder, depth + 1);
+        if (!('script' in started)) reason = judge({ ...started, folder, assignments });
+        else if (depth < 4)
+          reason = startedProgramRefusal(started.script, folder, judge, assignments, depth + 1);
         if (reason) return reason;
       }
   }

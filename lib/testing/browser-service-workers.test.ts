@@ -1,18 +1,22 @@
-// Rule test: browser tests run without the app's service worker, except the offline-shell audit.
+// Rule test: browser tests run without the app's service worker, except the audits of offline behavior.
 //
 // A live service worker made Chromium drop a browser context at teardown on CI runners: the
 // role page's context.close() failed with "Target page, context or browser has been closed"
 // although the test's own steps passed (werk-flow/werkflow-planning#356). Every Playwright config
 // blocks service workers in its `use` block, and the runner applies that to every context a
-// fixture creates with browser.newContext(). Only the spec that tests the worker opts back in.
+// fixture creates with browser.newContext(). Only a spec whose steps need the worker opts back in:
+// one that reloads or navigates without network and reads what the worker serves.
 import { describe, expect, test } from 'bun:test';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 const ROOT = join(import.meta.dir, '../..');
 const CONFIGS = ['playwright.config.ts', 'playwright.audit.config.ts', 'playwright.canary.config.ts'];
-/** The one spec that tests the service worker itself. */
-const OFFLINE_SHELL_SPEC = 'tests/audit/security/offline-shell.spec.ts';
+/** The specs whose steps need the worker: the shell it serves, and the day read through that shell. */
+const OFFLINE_SPECS = [
+  'tests/audit/security/offline-shell.spec.ts',
+  'tests/audit/security/offline-today.spec.ts',
+];
 
 function sourceFiles(directory: string): string[] {
   return readdirSync(join(ROOT, directory), { recursive: true, withFileTypes: true })
@@ -25,10 +29,10 @@ describe('browser tests and the service worker', () => {
     expect(readFileSync(join(ROOT, config), 'utf8')).toMatch(/\n {4}serviceWorkers: 'block',\n/);
   });
 
-  test('only the offline-shell audit lets the service worker run', () => {
+  test('only the offline audits let the service worker run', () => {
     const optIns = sourceFiles('tests').filter((file) =>
       /serviceWorkers:\s*'allow'/.test(readFileSync(join(ROOT, file), 'utf8')),
     );
-    expect(optIns).toEqual([OFFLINE_SHELL_SPEC]);
+    expect(optIns.sort()).toEqual(OFFLINE_SPECS);
   });
 });

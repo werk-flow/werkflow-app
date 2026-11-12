@@ -38,6 +38,11 @@ declare global {
       | 'calendar-month'
       | 'organization'
       | 'organization-export'
+      | 'today-refresh'
+      | 'today-refresh-switch'
+      | 'today-refresh-profile'
+      | 'today-refresh-fallback'
+      | 'offline-today'
       | 'sidebar'
       | 'lazy-dialog'
       | 'clock'
@@ -50,6 +55,7 @@ declare global {
       | 'sickness-record'
       | 'absence-picker'
       | 'schedule-parked-picker'
+      | 'problem-report'
       | AuthUrlFixtureName
       | FeedbackFixtureName;
     uiContractLifecycle: LifecycleBoundaryState;
