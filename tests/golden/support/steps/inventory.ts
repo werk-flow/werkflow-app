@@ -180,7 +180,7 @@ export function csvImportButtonOf(
 
 /** One row of the import preview or result, found by the article name it shows. */
 export function csvImportRow(dialog: Locator, text: string): Locator {
-  return dialog.getByTestId('inventory-import-row').filter({ hasText: text });
+  return confirmed(dialog.getByTestId('inventory-import-row').filter({ hasText: text }));
 }
 
 export function inventoryTab(page: Page, view: InventoryView): Locator {
