@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # Runs on a Boat machine started from the verification snapshot, for lib/testing/boat/verify-on-boat.ts.
 # Usage: remote-verify.sh <repository path> <HEAD commit> <main|linked> <test:verify arguments...>
-#    or: remote-verify.sh <repository path> <HEAD commit> <main|linked> test:audit:focused <arguments...>
+#    or: remote-verify.sh <repository path> <HEAD commit> <main|linked> <focused script> <arguments...>
 #
 # It rebuilds the workstation's checkout at the same absolute path, so every path in a report or a
 # run manifest is the workstation's, starts the stack and, when the plan runs a browser group, the
 # test server, as CI does, then runs `bun run test:verify` with the same arguments. A leading
-# `test:audit:focused` runs that focused capture instead (lib/testing/boat/capture-on-boat.ts),
-# always with the test server. It packs the evidence the run wrote into ~/results.tgz. Exit 90
-# means setup failed before the run started.
+# `test:audit:focused` or `test:golden:focused` runs that focused run instead
+# (lib/testing/boat/focused-on-boat.ts), always with the test server; `test:audit:update-references`
+# is the audit one with WERKFLOW_UPDATE_VISUAL_REFERENCES=1, and the references it rewrote or wrote
+# join the evidence (lib/testing/boat/reference-updates.ts). It packs the evidence the run wrote into
+# ~/results.tgz. Exit 90 means setup failed before the run started.
 set -uo pipefail
 
 repo="$1"
@@ -16,10 +18,19 @@ head="$2"
 form="$3"
 shift 3
 script=test:verify
-if [ "${1:-}" = test:audit:focused ]; then
-  script=test:audit:focused
-  shift
-fi
+update=0
+case "${1:-}" in
+  test:audit:focused | test:golden:focused)
+    script="$1"
+    shift
+    ;;
+  test:audit:update-references)
+    script=test:audit:focused
+    update=1
+    export WERKFLOW_UPDATE_VISUAL_REFERENCES=1
+    shift
+    ;;
+esac
 export PATH="$HOME/.bun/bin:$PATH"
 export PLAYWRIGHT_BROWSERS_PATH="$HOME/.local/share/ms-playwright"
 # Marks this machine as Boat's, so test:verify here never asks Boat again.
@@ -132,6 +143,8 @@ if [ "$serve" = 1 ]; then
 fi
 
 phase "running $script $*"
+[ "$update" = 0 ] || bun scripts/boat/reference-updates.ts record "$HOME/references-before.json" ||
+  setup_failed "hashing the visual references"
 # The machine's peak memory use, so the run's size can be judged against its 16 GB.
 while :; do free -m | awk '/^Mem:/ { print $3 }'; sleep 5; done > "$HOME/memory.log" &
 sampler=$!
@@ -141,6 +154,10 @@ kill "$sampler" 2> /dev/null
 phase "$script exited $code; peak memory in use $(sort -n "$HOME/memory.log" | tail -n 1) MiB"
 
 # The run's own evidence: every report and run folder that did not exist before, and the server log.
+if [ "$update" = 1 ] && ! bun scripts/boat/reference-updates.ts collect "$HOME/references-before.json" \
+  ".agent-logs/visual-reference-updates/$(date -u +%Y-%m-%dT%H%M%SZ)"; then
+  printf '[boat] collecting the rewritten visual references failed; none come back.\n'
+fi
 find .agent-logs -mindepth 2 -maxdepth 2 -type d | sort > "$HOME/evidence-after.txt"
 comm -13 "$HOME/evidence-before.txt" "$HOME/evidence-after.txt" > "$HOME/evidence-new.txt"
 # A failed browser group's retained world dies with this machine: clean it here, so its manifest
