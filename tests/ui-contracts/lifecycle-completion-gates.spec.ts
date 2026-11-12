@@ -202,7 +202,9 @@ test('own running time ended without signal waits on the phone and completes not
   const endAndComplete = page.getByTestId('field-primary-next-action');
   await endAndComplete.click();
 
-  await expect(page.locator('[data-banner-id]')).toContainText(
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'Deine Zeit ist auf dem Gerät beendet' }),
+  ).toContainText(
     'Deine Zeit ist auf dem Gerät beendet und wird gesendet, sobald du Netz hast. Schließe danach ab.',
   );
   expect(await page.evaluate(() => window.clockContract.transitions)).toEqual([]);
