@@ -105,14 +105,16 @@ const TRAPPED_DIALOG = (start: string) => `<div role="dialog" aria-label="Probe"
   <input id="nummer" aria-label="Nummer"><input id="titel" aria-label="Titel"><input id="ort" aria-label="Ort">
 </div>
 <script>
-  const dialog = document.querySelector('[role=dialog]');
-  dialog.addEventListener('keydown', (event) => {
-    const controls = [...dialog.querySelectorAll('input')];
-    if (event.key === 'Tab' && document.activeElement === controls.at(-1)) {
-      event.preventDefault();
-      controls[0].focus();
-    }
-  });
+  (() => {
+    const dialog = document.querySelector('[role=dialog]');
+    dialog.addEventListener('keydown', (event) => {
+      const controls = [...dialog.querySelectorAll('input')];
+      if (event.key === 'Tab' && document.activeElement === controls.at(-1)) {
+        event.preventDefault();
+        controls[0].focus();
+      }
+    });
+  })();
 </script>`;
 
 test('the keyboard path accepts a declared start control, and only that one', async ({ page }) => {
@@ -133,6 +135,13 @@ test('the keyboard path accepts a declared start control, and only that one', as
   await page.getByRole('textbox', { name: 'Ort' }).focus();
   await expect(expectKeyboardPath(page, dialog, 'other control', { soft: false })).rejects.toThrow(
     /not on input#ort/,
+  );
+
+  // Focus that falls back to the first control means the declared start no longer works.
+  await show(page, TRAPPED_DIALOG(' data-dialog-start="titel"'));
+  await page.getByRole('textbox', { name: 'Nummer' }).focus();
+  await expect(expectKeyboardPath(page, dialog, 'fallback to first', { soft: false })).rejects.toThrow(
+    /not on input#nummer/,
   );
 });
 
