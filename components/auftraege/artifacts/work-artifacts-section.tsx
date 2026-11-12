@@ -13,7 +13,6 @@ import { Button } from '@/components/ui/button';
 import { useLiveView } from '@/hooks/use-live-view';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import { readInBackground } from '@/lib/data/background-read-client';
-import { useDraftSweepOfDevice } from '@/lib/field-sync/device/draft-expiry';
 import {
   WORK_ARTIFACT_KIND_LABELS,
   WORK_ARTIFACT_STATUS_LABELS,
@@ -67,8 +66,6 @@ export function WorkArtifactsSection({
   // prefetches that code, so a dialog in it would count toward the field cold start. A field
   // worker's page loads it once idle, so a first open without signal finds it.
   const { code, failure } = useArtifactCode(currentUserId, editing, !isManager && !readOnly);
-  // Any person's job page deletes the device's lost-access drafts past their seven days.
-  useDraftSweepOfDevice();
   const view = useWorkArtifactsLiveView({
     targetType,
     targetId,

@@ -8,11 +8,12 @@ import { logError } from '@/lib/logging';
 // 0010, the report draft amendment): one localStorage key without a person
 // that says the device may hold a draft of anyone. The start of any person's
 // app reads it and only then loads the draft store, which deletes every
-// lost-access draft past its seven days, of every holder. This module is
-// what the `(auth)` landing page and a job page load statically; the store
-// itself loads lazily.
+// lost-access draft past its seven days, of every holder. The `(auth)`
+// landing page loads this module statically and the store lazily; a job page
+// reads the same key itself (use-device-drafts.ts) and then loads the draft
+// code, whose send pass deletes the same drafts.
 
-/** Set while the device may hold a draft of anyone; never names a person. */
+/** Set while the device may hold a draft of anyone; never names a person. use-device-drafts.ts reads it by this key. */
 const DRAFTS_ON_DEVICE_KEY = 'werkflow:drafts-on-device';
 
 /** Sets or removes the device mark; the draft store calls it with every write. */

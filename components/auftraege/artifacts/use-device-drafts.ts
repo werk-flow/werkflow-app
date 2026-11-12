@@ -83,10 +83,21 @@ function draftHintPrefix(userId: string): string {
   return `werkflow:drafts:${userId}:`;
 }
 
+/**
+ * The device mark of `lib/field-sync/device/draft-expiry.ts`: set while the phone holds a draft of
+ * anyone. Read here by its key, not through that module: the `(auth)` layout loads that module, and
+ * a module both load would become a chunk of its own in the job list's cold start.
+ */
+const DEVICE_DRAFTS_MARK = 'werkflow:drafts-on-device';
+
+/**
+ * Whether the person may hold a draft here, or the phone holds anyone's: then the draft code loads,
+ * and its send pass deletes every lost-access draft past its seven days, of every holder.
+ */
 function mayHoldDrafts(userId: string): boolean {
   try {
     const prefix = draftHintPrefix(userId);
-    return Object.keys(localStorage).some((key) => key.startsWith(prefix));
+    return Object.keys(localStorage).some((key) => key.startsWith(prefix) || key === DEVICE_DRAFTS_MARK);
   } catch {
     // best-effort: without localStorage the device is asked itself.
     return true;
