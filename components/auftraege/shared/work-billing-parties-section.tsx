@@ -14,7 +14,11 @@ import type {
   BillingWorkKind,
   WorkBillingParties,
 } from '@/lib/billing-parties/types';
-import { resolveBillingVersions, type ResolvedBillingVersion } from '@/lib/billing-parties/resolve';
+import {
+  resolveBillingVersions,
+  standInsByRead,
+  type ResolvedBillingVersion,
+} from '@/lib/billing-parties/resolve';
 import { formatSiteAddress } from '@/lib/clients/types';
 import { formatBerlinDateTime } from '@/lib/utils';
 import { lazyWorkBillingPartiesDialog } from './work-billing-parties-lazy-dialog';
@@ -195,9 +199,12 @@ export function WorkBillingPartiesSection({
   const parties = view.data;
   // The job's own read leaves the site out; a later read of the section names it.
   const shownSite = parties?.site ?? site ?? null;
+  // A job read's left-out parties are its own customer of that read (S4).
+  const [standIns] = useState(standInsByRead);
+  if (initialParties) standIns.remember(initialParties, workClient);
   const versions = useMemo(
-    () => (parties ? resolveBillingVersions(parties.versions, workClient) : []),
-    [parties, workClient],
+    () => (parties ? resolveBillingVersions(parties.versions, standIns.clientFor(parties)) : []),
+    [parties, standIns],
   );
   const card = useMemo(
     () =>

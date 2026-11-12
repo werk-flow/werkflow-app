@@ -21,3 +21,27 @@ export function resolveBillingVersions(
     return auftraggeber && recipient ? [{ ...version, auftraggeber, recipient }] : [];
   });
 }
+
+/** The customers of the job reads a section has seen, by read. */
+export type StandInsByRead = {
+  remember: (parties: object, client: BillingRecipient | null) => void;
+  clientFor: (parties: object) => BillingRecipient | null;
+};
+
+/**
+ * The job's customer as each job read returned it beside its parties. A
+ * read's versions are filled from the customer of the same read, never from
+ * a later one, so a customer change does not rewrite an earlier pair while
+ * the section's own read is pending or failed.
+ */
+export function standInsByRead(): StandInsByRead {
+  const clients = new WeakMap<object, BillingRecipient | null>();
+  return {
+    remember(parties: object, client: BillingRecipient | null): void {
+      if (!clients.has(parties)) clients.set(parties, client);
+    },
+    clientFor(parties: object): BillingRecipient | null {
+      return clients.get(parties) ?? null;
+    },
+  };
+}

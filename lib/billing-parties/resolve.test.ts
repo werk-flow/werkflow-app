@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { resolveBillingVersions } from './resolve';
+import { resolveBillingVersions, standInsByRead } from './resolve';
 
 const customer = { id: 'c1', name: 'WEG Lindenstraße 5', address: 'Lindenstraße 5, 10115 Berlin' };
 const manager = { id: 'c2', name: 'Hausverwaltung Lindenhof GmbH', address: 'Hofweg 1, 10117 Berlin' };
@@ -28,4 +28,16 @@ test('a left-out party without a job customer to stand in drops the version', ()
       null,
     ),
   ).toEqual([]);
+});
+
+test('a read keeps the customer it came with, also after a later read names another', () => {
+  const standIns = standInsByRead();
+  const firstRead = { versions: [] };
+  const laterRead = { versions: [] };
+  standIns.remember(firstRead, customer);
+  standIns.remember(firstRead, manager);
+  standIns.remember(laterRead, manager);
+  expect(standIns.clientFor(firstRead)).toEqual(customer);
+  expect(standIns.clientFor(laterRead)).toEqual(manager);
+  expect(standIns.clientFor({ versions: [] })).toBeNull();
 });
