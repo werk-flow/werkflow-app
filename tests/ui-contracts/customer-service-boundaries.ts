@@ -56,6 +56,12 @@ export async function updateClient(): Promise<never> {
 export async function deleteClient(): Promise<never> {
   throw new Error('Unexpected customer mutation in read contract');
 }
+export async function archiveClient(): Promise<never> {
+  throw new Error('Unexpected customer mutation in read contract');
+}
+export async function restoreClient(): Promise<never> {
+  throw new Error('Unexpected customer mutation in read contract');
+}
 
 // The customer's contact and work-site rows archive through these two writes.
 export const updateClientContact = updateClientContactContract;

@@ -309,7 +309,7 @@ begin
   foreach v_function in array array[
     'public.create_client_request(uuid, uuid, text, text, text, uuid, uuid, uuid, text, text, text, text, '
       || 'public.request_category, public.request_urgency, public.request_source, uuid, timestamptz, '
-      || 'timestamptz, uuid)',
+      || 'timestamptz, uuid, uuid)',
     'public.update_client_request(uuid, uuid, uuid, jsonb)',
     'public.close_client_request(uuid, uuid, uuid, public.request_close_reason, text)',
     'public.reopen_client_request(uuid, uuid, uuid)'

@@ -22,7 +22,9 @@ test('customer page transport retains cancellation and rejects malformed or fore
   let body: unknown = { clients: [], total: 61 };
   globalThis.fetch = Object.assign(
     async (input: string | URL | Request, init?: RequestInit) => {
-      expect(new URL(String(input), 'http://localhost').searchParams.get('search')).toBe('Kontakt & Ort');
+      const params = new URL(String(input), 'http://localhost').searchParams;
+      expect(params.get('search')).toBe('Kontakt & Ort');
+      expect(params.get('view')).toBe('archiviert');
       expect(init?.signal).toBe(controller.signal);
       expect(init?.cache).toBe('no-store');
       return Response.json(body);
@@ -30,7 +32,7 @@ test('customer page transport retains cancellation and rejects malformed or fore
     { preconnect: originalFetch.preconnect },
   );
   try {
-    const input = { organizationId, page: 2, search: 'Kontakt & Ort' };
+    const input = { organizationId, page: 2, search: 'Kontakt & Ort', view: 'archiviert' as const };
     expect(await fetchCustomerPage(input, controller.signal)).toEqual({ clients: [], total: 61 });
     body = { clients: [], total: -1 };
     await expect(fetchCustomerPage(input, controller.signal)).rejects.toThrow();

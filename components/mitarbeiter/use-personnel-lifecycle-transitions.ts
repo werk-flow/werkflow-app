@@ -22,15 +22,43 @@ import { logError } from '@/lib/logging';
 
 export type PersonnelLifecycleTransitions = ReturnType<typeof usePersonnelLifecycleTransitions>;
 
-/** The open state and fields of both transition dialogs; both share one reason text. */
-function usePersonnelTransitionFields() {
-  const [accessOpen, setAccessOpen] = useState(false);
-  const [employmentOpen, setEmploymentOpen] = useState(false);
-  const [accessKind, setAccessKind] = useState<PersonnelAccessTransitionKind>('schedule_activation');
+/** The chosen step while it still fits the person's state; none once a refresh took it away. */
+function fittingStep<Kind extends string>(chosen: Kind | null, steps: readonly Kind[]): Kind | undefined {
+  return chosen !== null && steps.includes(chosen) ? chosen : undefined;
+}
+
+/** The step a dialog opens with: the kept choice while it still fits, otherwise the first step that fits. */
+function openingStep<Kind extends string>(chosen: Kind | null, steps: readonly Kind[]): Kind | null {
+  return fittingStep(chosen, steps) ?? steps[0] ?? null;
+}
+
+/**
+ * The open state and fields of both transition dialogs; both share one reason
+ * text. A step is chosen only among the steps that fit (`data.steps`). Opening
+ * a dialog pins its step: the kept choice, or the first step that fits. A
+ * refresh while it is open never swaps in another step: a step that no longer
+ * fits leaves none chosen, and the save asks for one. Date and reason stay, so
+ * the admin reviews them against the step they pick.
+ */
+function usePersonnelTransitionFields(steps: PersonnelLifecycleController['data']['steps']) {
+  const [accessOpen, setAccessDialogOpen] = useState(false);
+  const [employmentOpen, setEmploymentDialogOpen] = useState(false);
+  const [accessChoice, setAccessKind] = useState<PersonnelAccessTransitionKind | null>(null);
   const [accessAt, setAccessAt] = useState(defaultAccessDateTime);
-  const [employmentKind, setEmploymentKind] = useState<PersonnelEmploymentTransitionKind>('record_notice');
+  const [employmentChoice, setEmploymentKind] = useState<PersonnelEmploymentTransitionKind | null>(null);
   const [employmentDate, setEmploymentDate] = useState<Date | undefined>(todayDate());
   const [reason, setReason] = useState('');
+  const accessKind = fittingStep(accessChoice, steps.access);
+  const employmentKind = fittingStep(employmentChoice, steps.employment);
+
+  function setAccessOpen(open: boolean): void {
+    if (open) setAccessKind(openingStep(accessChoice, steps.access));
+    setAccessDialogOpen(open);
+  }
+  function setEmploymentOpen(open: boolean): void {
+    if (open) setEmploymentKind(openingStep(employmentChoice, steps.employment));
+    setEmploymentDialogOpen(open);
+  }
 
   return {
     accessOpen,
@@ -66,17 +94,19 @@ async function saveAccessTransition(
     reconcileMutation,
     failureMessage,
   } = lifecycle;
-  const { accessKind, accessAt, reason, setAccessOpen, setReason } = fields;
+  const { accessKind, accessAt, reason, setAccessOpen, setAccessKind, setReason } = fields;
   if (mutationDisabled) return;
   setError(null);
-  const instant = isScheduledAccessTransition(accessKind)
-    ? parseBerlinDateTimeInput(accessAt)?.toISOString()
-    : new Date().toISOString();
+  const instant =
+    accessKind && isScheduledAccessTransition(accessKind)
+      ? parseBerlinDateTimeInput(accessAt)?.toISOString()
+      : new Date().toISOString();
   const nextErrors: Record<string, string> = {};
+  if (!accessKind) nextErrors['access-transition-kind'] = 'Bitte wähle einen Übergang.';
   if (!instant) nextErrors['access-transition-date'] = 'Bitte gib einen Zeitpunkt an.';
   if (reason.trim().length < 2) nextErrors['access-reason'] = 'Bitte gib einen Grund an.';
   setFieldErrors(nextErrors);
-  if (focusFirstInvalidField(nextErrors)) return;
+  if (focusFirstInvalidField(nextErrors) || !accessKind) return;
   try {
     await run(async () => {
       const result = await setPersonnelAccessTransition({
@@ -92,6 +122,7 @@ async function saveAccessTransition(
         return;
       }
       setAccessOpen(false);
+      setAccessKind(null);
       setReason('');
       showBanner({
         variant: 'success',
@@ -119,14 +150,15 @@ async function saveEmploymentTransition(
     reconcileMutation,
     failureMessage,
   } = lifecycle;
-  const { employmentKind, employmentDate, reason, setEmploymentOpen, setReason } = fields;
+  const { employmentKind, employmentDate, reason, setEmploymentOpen, setEmploymentKind, setReason } = fields;
   if (mutationDisabled) return;
   setError(null);
   const nextErrors: Record<string, string> = {};
+  if (!employmentKind) nextErrors['employment-transition-kind'] = 'Bitte wähle einen Übergang.';
   if (!employmentDate) nextErrors['employment-date'] = 'Bitte gib ein Datum an.';
   if (reason.trim().length < 2) nextErrors['employment-reason'] = 'Bitte gib einen Grund an.';
   setFieldErrors(nextErrors);
-  if (focusFirstInvalidField(nextErrors) || !employmentDate) return;
+  if (focusFirstInvalidField(nextErrors) || !employmentDate || !employmentKind) return;
   try {
     await run(async () => {
       const result = await setPersonnelEmploymentTransition({
@@ -142,6 +174,7 @@ async function saveEmploymentTransition(
         return;
       }
       setEmploymentOpen(false);
+      setEmploymentKind(null);
       setReason('');
       showBanner({
         variant: 'success',
@@ -164,7 +197,7 @@ export function usePersonnelLifecycleTransitions(
   lifecycle: PersonnelLifecycleController,
   openHandover: (from?: string) => void,
 ) {
-  const fields = usePersonnelTransitionFields();
+  const fields = usePersonnelTransitionFields(lifecycle.data.steps);
 
   return {
     ...fields,

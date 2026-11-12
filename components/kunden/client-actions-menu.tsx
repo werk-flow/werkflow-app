@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { MoreHorizontal, ExternalLink, Pencil, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, MoreHorizontal, ExternalLink, Pencil, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -12,33 +12,32 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { EditClientDialog } from './edit-client-dialog';
+import type { ClientRemoval } from './client-removal-dialog';
 import type { Client } from '@/lib/jobs/types';
+
+/** What a row of the customer list can do beyond opening and editing. */
+export type ClientRowActions = {
+  /** The list shows archived customers: a row offers restoring instead of archiving. */
+  isArchivedView: boolean;
+  /** An edit was confirmed by the server; the list keeps the row marked until props land. */
+  onSaved: (clientId: string) => void;
+  /** Opens the list's one archive or delete dialog for this customer. */
+  onRequestRemoval: (client: Client, removal: ClientRemoval) => void;
+  /** The list owns the optimistic removal from the archived view, its rollback and the feedback. */
+  onRestore: (client: Client) => Promise<void>;
+};
 
 interface ClientActionsMenuProps {
   client: Client;
-  /** The row has a change in flight (edit settling, delete running). */
+  /** The row has a change in flight (edit settling, restore running). */
   isBusy?: boolean;
-  /** An edit was confirmed by the server; the list keeps the row marked until props land. */
-  onSaved: (clientId: string) => void;
-  /** The list owns the optimistic removal, its rollback, and the feedback. */
-  onDelete: (client: Client) => Promise<void>;
+  actions: ClientRowActions;
 }
 
-export function ClientActionsMenu({ client, isBusy = false, onSaved, onDelete }: ClientActionsMenuProps) {
+export function ClientActionsMenu({ client, isBusy = false, actions }: ClientActionsMenuProps) {
   const router = useRouter();
   const [showEditDialog, setShowEditDialog] = useState(false);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   return (
     <>
@@ -59,7 +58,18 @@ export function ClientActionsMenu({ client, isBusy = false, onSaved, onDelete }:
             Bearbeiten
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" onClick={() => setShowDeleteDialog(true)}>
+          {actions.isArchivedView ? (
+            <DropdownMenuItem onClick={() => void actions.onRestore(client)}>
+              <ArchiveRestore className="size-4" />
+              Wiederherstellen
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem onClick={() => actions.onRequestRemoval(client, 'archive')}>
+              <Archive className="size-4" />
+              Archivieren
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem variant="destructive" onClick={() => actions.onRequestRemoval(client, 'delete')}>
             <Trash2 className="size-4" />
             Löschen
           </DropdownMenuItem>
@@ -70,28 +80,8 @@ export function ClientActionsMenu({ client, isBusy = false, onSaved, onDelete }:
         client={client}
         open={showEditDialog}
         onOpenChange={setShowEditDialog}
-        onSaved={() => onSaved(client.id)}
+        onSaved={() => actions.onSaved(client.id)}
       />
-
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Kunde löschen?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Bist du sicher, dass du <span className="font-medium">{client.name}</span> löschen möchtest?
-              Bestehende Aufträge und Projekte verlieren die Zuordnung zu diesem Kunden.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-            {/* The row leaves the list at once; the list rolls it back and
-                reports a failure, so the confirm can close immediately. */}
-            <AlertDialogAction onClick={() => void onDelete(client)} variant="destructive">
-              Löschen
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   );
 }

@@ -13,7 +13,6 @@ Three independent Git repositories share the parent `Code` directory.
 | [werkflow-website](../werkflow-website/AGENTS.md) | Public website and campaign pages | Marketing pages |
 
 - Work in the repository that owns the task. Read a sibling's `AGENTS.md` and index before you use its context; reading never authorizes a change there. Report missing context, never invent it. The [workspace workflow](../werkflow-business/docs/workflow.md) owns source freshness and machine setup.
-- Business work uses the [Hormozi advisor](../werkflow-business/.agents/skills/hormozi-advisor/SKILL.md) and its [baseline](../werkflow-business/docs/library/baseline.md); customer-facing copy adds [copywriting](../werkflow-business/.agents/skills/copywriting/SKILL.md) and the [copy standard](../werkflow-business/docs/copy-standard.md). Routine engineering loads neither.
 
 ## Product
 
@@ -112,12 +111,16 @@ Before UI work is done, check each surface and name in the PR the ones that appl
 
 ## Decide or ask
 
-- Do whatever your tools allow. The owner supplies only their passwords, tokens and account settings.
-- Commit, push, merge and release on your own once a change is low-risk and its required checks passed.
-- The owner decides business scope, money and paid services, analytics or new personal data, and what a virtue demands. Decide everything else as you would recommend; record why in the commit body, or the owning doc for a lasting rule.
-- Ask through the ask-user tool when scope, acceptance or an edge case is ambiguous, and end your turn so T3 Code flags the thread. Never invent business strategy or bury an owner action in a status message.
-- Legal questions never block work: decide on researched evidence, preferring less data and easy undo; record them in `werkflow-planning`'s legal register.
-- **The Willert rule.** When a wrong SHK assumption would make a decision expensive to rebuild, ask the owner through the question tool, proposing a concrete question for a named role at Willert Haustechnik, the beta partner.
+- **Decide, don't ask.** Take the clearly better or planned option and keep working. Record it on the epic issue under "Decided without the owner", outside an epic in the commit body.
+- Only three kinds go to the owner:
+  1. Money, paid services, new personal data or analytics, business scope, commercial promises.
+  2. A step only the owner can take: their accounts, credentials and vendor settings, the `approved: list growth` label, the read and merge of a "full stop" or `AGENTS.md` PR.
+  3. A high-risk or hard-to-undo decision without a clearly better option, such as a residual security exposure that touches personal or customer data.
+- An owner item never stops other work. Post it once under "Owner queue", recommendation first. Use the ask-user tool only when nothing else can move.
+- Plan kind 3 before the build, for the owner's approval. Mid-build it is a planning defect.
+- The lead accepts screens and copy that follow the design system and the spec. The captures go under "For the owner to look at" and block no merge.
+- Decide a legal question on researched evidence, preferring less data and easy undo; record it in `werkflow-planning`'s legal register.
+- **The Willert rule.** Where a wrong SHK assumption would be expensive to rebuild, the plan gives the owner a concrete question for a named role at Willert Haustechnik, the beta partner.
 - Tamay owns product and offer; John owns sales and customers. A business ambition never adds a feature, entitlement or analytics by itself; sales positioning stays out of feature logic.
 
 ## Pull requests
@@ -125,13 +128,13 @@ Before UI work is done, check each surface and name in the PR the ones that appl
 A task is a worktree, a branch and one small PR per problem ([decision 0009](docs/decisions/0009-pull-requests-and-ci.md)). Never commit to `main`. [Reviews](docs/technical/coderabbit.md) owns the levels, babysitting and the merge gate.
 
 - Level 0, no behavior effect (docs, comments, agent instructions): your own read.
-- Level 1, behavior (product code, tests, CI, scripts), the default: `sol-loop`.
-- Level 2, security, auth, RLS, a migration, personal data, deletion, time or payroll: `sol-loop`, then one CodeRabbit review from the `needs-coderabbit` queue.
+- Level 1, behavior, the default: `sol-loop`.
+- Level 2, security, auth, RLS, a migration, personal data, deletion, time or payroll: `sol-loop`, then one CodeRabbit review.
 
-1. Run `bun run check:changed`. For level 1 and 2, run `sol-loop`.
-2. Push, and open the PR with the `file-pr` skill, naming the level and its reason.
+1. Run `bun run check:changed`, then the level's `sol-loop`.
+2. Push, and open the PR with the `file-pr` skill.
 3. Call `watch_pull_request`, end your turn, and babysit until [the merge gate](docs/technical/coderabbit.md#the-merge-gate) holds.
-4. Once the PR meets the merge gate, its own thread squash-merges it. A "full stop" PR, or one that changes `AGENTS.md`, waits for the owner's read and merge.
+4. Its own thread then squash-merges it, unless the merge is the owner's.
 
 ## Language
 

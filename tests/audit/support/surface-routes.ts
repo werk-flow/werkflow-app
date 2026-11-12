@@ -124,7 +124,7 @@ export async function detailDestination(
  */
 export async function openSurface(page: Page, destination: SurfaceDestination): Promise<void> {
   await page.goto(destination.route);
-  await expect(page).toHaveURL((url) => decodeURIComponent(url.pathname) === destination.route);
+  await expect(page).toHaveURL((url) => decodeURIComponent(url.pathname + url.search) === destination.route);
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   const content = page.getByRole('main').locator('[data-page-body]');
   await expect(content).toBeVisible();

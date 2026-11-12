@@ -1,7 +1,9 @@
 // Actual customer actions over the in-memory database: a field worker creates,
-// changes, deletes and opens no customer and lists none of its contacts and
-// sites before any database access, even for the customer of an own assigned
-// job; a customer or contact of another organization is not found, and its row stays as it was.
+// changes, archives, restores, deletes and opens no customer and lists none of
+// its contacts and sites before any database access, even for the customer of
+// an own assigned job; a customer or contact of another organization is not
+// found, and its row stays as it was. Deleting a linked customer answers what
+// links to it.
 // Creating a customer lists only likely duplicates of the caller's own
 // organization and saves nothing while one matches, unless confirmed.
 import assert from 'node:assert/strict';
@@ -13,7 +15,7 @@ import {
   signInAs,
   tableRows,
 } from './action-boundary-world';
-import { assertRefused } from './operations-boundary-refusals';
+import { assertRefused, refuseForeignIds } from './operations-boundary-refusals';
 
 const foreignClientId = '8d000000-0000-4000-8000-000000000001';
 const foreignContactId = '8d000000-0000-4000-8000-000000000002';
@@ -38,8 +40,16 @@ const world = installActionWorld({
     },
   ],
 });
-const { createClient, updateClient, deleteClient, getClientDetail, updateClientContact, getClientRelations } =
-  await import('@/lib/clients/actions');
+const {
+  archiveClient,
+  createClient,
+  deleteClient,
+  getClientDetail,
+  getClientRelations,
+  restoreClient,
+  updateClient,
+  updateClientContact,
+} = await import('@/lib/clients/actions');
 
 const managerCalls = [
   ['createClient', () => createClient({ name: 'Neukunde', clientType: 'privat' })],
@@ -47,6 +57,8 @@ const managerCalls = [
   ['deleteClient', () => deleteClient(foreignClientId)],
   ['getClientDetail', () => getClientDetail(foreignClientId)],
   ['updateClientContact', () => updateClientContact(foreignContactId, { name: 'Umbenannt' })],
+  ['archiveClient', () => archiveClient(foreignClientId)],
+  ['restoreClient', () => restoreClient(foreignClientId)],
 ] as const;
 const relations = [
   ['getClientRelations', () => getClientRelations(ownClientId)],
@@ -66,14 +78,32 @@ await assertRefused(
 signInAs(world, 'buero');
 await assertRefused(
   world,
-  [managerCalls[1], managerCalls[2]],
+  [managerCalls[1], managerCalls[2], managerCalls[5], managerCalls[6]],
   { success: false, error: 'client_not_found' },
   'reads',
 );
-await assertRefused(world, [managerCalls[4]], { success: false, error: 'contact_not_found' }, 'reads');
+// The contact is found by update_client_contact inside the caller's organization only.
+refuseForeignIds(world, new Map([[foreignContactId, 'contact_not_found']]));
+await assertRefused(world, [managerCalls[4]], { success: false, error: 'contact_not_found' }, 'one-call');
 await assertRefused(world, [managerCalls[3]], { success: false, error: 'not_found' }, 'reads');
 // Another organization's customer lists none of its contacts or sites.
 assert.deepEqual(await getClientRelations(foreignClientId), { success: true, contacts: [], sites: [] });
+
+// An own customer with work stays, and the refusal names its links
+// (delete_unlinked_client in supabase/tests/client_archive_history.sql).
+world.rpc = ({ name, args }) =>
+  name === 'delete_unlinked_client' &&
+  args.p_client_id === ownClientId &&
+  args.p_organization_id === ORGANIZATION_A
+    ? { data: { deleted: false, links: { jobs: 1 } }, error: null }
+    : { data: null, error: { message: 'unexpected call' } };
+const beforeLinkedDelete = JSON.stringify(world.tables);
+assert.deepEqual(await deleteClient(ownClientId), {
+  success: false,
+  error: 'client_has_history',
+  links: { jobs: 1 },
+});
+assert.equal(JSON.stringify(world.tables), beforeLinkedDelete);
 
 // find_client_duplicates as supabase/tests/client_duplicates.sql proves it,
 // reduced to an equal phone: only the passed organization's customers compare.

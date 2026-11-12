@@ -11,6 +11,7 @@ import { formatBerlinDateTimeInput, parseBerlinDateTimeInput } from '@/lib/date-
 import { createClientRequest, type CreateClientRequestInput } from '@/lib/requests/actions';
 import type { RequestCategory, RequestSource, RequestUrgency } from '@/lib/requests/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
+import { useAttemptKey } from './use-attempt-key';
 
 export const SUMMARY_REQUIRED_MESSAGE = 'Bitte beschreibe kurz das Anliegen.';
 export const INVALID_RECEIVED_AT_MESSAGE = 'Bitte gib eine gültige Eingangszeit ein.';
@@ -345,6 +346,8 @@ export function useCreateRequestForm(currentUserId: string): CreateRequestForm {
   const { run: runCreate, isPending: isLoading } = useServerAction(createClientRequest);
   const [error, setError] = useState<string | null>(null);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
+  // One capture per opening: a retry after a lost answer returns its request.
+  const { attemptKey, renewAttemptKey } = useAttemptKey();
 
   // Suggest the next free number when the dialog opens; the field stays
   // editable. The suggestion must never overwrite a number the user has
@@ -355,6 +358,7 @@ export function useCreateRequestForm(currentUserId: string): CreateRequestForm {
     resetFields();
     setHasAttemptedSubmit(false);
     setError(null);
+    renewAttemptKey();
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -384,7 +388,7 @@ export function useCreateRequestForm(currentUserId: string): CreateRequestForm {
     try {
       const input = createRequestInput(fields, checks.receivedAtDate, checks.callbackDueAtDate);
 
-      const result = await runCreate(input);
+      const result = await runCreate(input, attemptKey);
       if (!result.success) {
         setError(describeFailure(result.error, ERROR_MESSAGES, 'Unbekannter Fehler'));
         return;

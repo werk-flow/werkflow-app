@@ -358,6 +358,7 @@ assert.deepEqual(world.rpcCalls, [
       p_received_at: null,
       p_callback_due_at: null,
       p_equipment_id: null,
+      p_attempt_key: null,
     },
   },
   {
@@ -482,9 +483,28 @@ assert.deepEqual(world.rpcCalls, [
       p_received_at: null,
       p_callback_due_at: callbackDueAt,
       p_equipment_id: foreignEquipmentId,
+      p_attempt_key: null,
     },
   },
 ]);
+// The dialog's attempt key reaches create_client_request as sent, which
+// answers a repeated key with its first request
+// (supabase/tests/request_retry_results.sql); a key that is no uuid is refused.
+const captureKey = '61000000-0000-4000-8000-000000000001';
+world.rpcCalls.length = 0;
+world.rpc = () => ({ data: { ...savedRequest }, error: null });
+for (let press = 0; press < 2; press += 1) {
+  const captured = await actions.createClientRequest({ summary: 'Kessel stört' }, captureKey);
+  assert.equal(captured.success && captured.request.id, savedRequest.id);
+}
+assert.deepEqual(
+  world.rpcCalls.map(({ args }) => ('p_attempt_key' in args ? args.p_attempt_key : undefined)),
+  [captureKey, captureKey],
+);
+assert.deepEqual(await actions.createClientRequest({ summary: 'Kessel stört' }, 'not-a-uuid'), {
+  success: false,
+  error: 'invalid_input',
+});
 assert.deepEqual(await actions.updateClientRequest(openRequestId, { callbackDueAt: 'morgen' }), {
   success: false,
   error: 'invalid_callback_due_at',
@@ -528,7 +548,7 @@ world.rpc = ({ name, args }) => {
 const promoted = await actions.promoteCallerToClient(promotedRequestId);
 assert.ok(promoted.success);
 assert.equal(promoted.request.clientId, promotedClientId);
-const promoteArgs = (requestId: string, name: string) => ({
+const promoteArgs = (requestId: string, name: string, attemptKey: string | null = null) => ({
   name: 'promote_client_request_caller',
   args: {
     p_actor_id: CALLER_ID,
@@ -536,6 +556,7 @@ const promoteArgs = (requestId: string, name: string) => ({
     p_request_id: requestId,
     p_name: name,
     p_client_type: 'privat',
+    p_attempt_key: attemptKey,
   },
 });
 const lookupArgs = (requestId: string) => ({
@@ -551,6 +572,19 @@ assert.deepEqual(await actions.promoteCallerToClient(promotedRequestId), {
   error: 'already_matched',
 });
 assert.equal(tableRows(world, 'clients').length, 7);
+// A matched request pressed again under an attempt key may be the retry of
+// its promotion: it skips the match lookup and goes to
+// promote_client_request_caller, which answers its own key with the request
+// and refuses another (supabase/tests/request_retry_results.sql).
+const promotionKey = '61000000-0000-4000-8000-000000000002';
+const promoteCaller = world.rpc;
+world.rpcCalls.length = 0;
+world.rpc = ({ args }) => ({ data: { ...requestById(String(args.p_request_id)) }, error: null });
+const retriedPromotion = await actions.promoteCallerToClient(promotedRequestId, undefined, promotionKey);
+assert.equal(retriedPromotion.success && retriedPromotion.request.clientId, promotedClientId);
+assert.deepEqual(world.rpcCalls, [promoteArgs(promotedRequestId, 'Erika Muster', promotionKey)]);
+assert.equal(tableRows(world, 'clients').length, 7);
+world.rpc = promoteCaller;
 
 // A caller who matches a customer is promoted only when the user confirmed
 // after seeing the match; an unconfirmed press creates nothing.
@@ -590,10 +624,13 @@ assert.deepEqual(await actions.promoteCallerToClient(racedRequestId, { createDes
 assert.equal(tableRows(world, 'clients').length, 8);
 
 // A conversion is one call of convert_client_request_to_project with
-// server-resolved values only; the stub applies the claim as the SQL test
-// proves it (supabase/tests/work_creation_writes.sql). A converted request
-// refuses a second conversion before any call.
+// server-resolved values only; the stub applies the claim and its history row
+// as the SQL tests prove them (supabase/tests/work_creation_writes.sql,
+// request_retry_results.sql). A converted request answers a retry under the
+// conversion's attempt key with its project and refuses any other conversion,
+// both before any call.
 const convertedProjectId = '90000000-0000-4000-8000-0000000000c1';
+const conversionKey = '61000000-0000-4000-8000-000000000003';
 world.rpcCalls.length = 0;
 world.rpc = ({ name, args }) => {
   if (name !== 'convert_client_request_to_project')
@@ -603,13 +640,24 @@ world.rpc = ({ name, args }) => {
     converted_project_id: convertedProjectId,
     converted_by: args.p_actor_id,
   });
+  world.tables.client_request_events?.push({
+    organization_id: args.p_organization_id,
+    request_id: args.p_request_id,
+    event_type: 'converted',
+    event_payload: {
+      target: 'project',
+      projectId: convertedProjectId,
+      projectNumber: 'P-2026-001',
+      attemptKey: args.p_attempt_key,
+    },
+  });
   return { data: { id: convertedProjectId, project_number: 'P-2026-001' }, error: null };
 };
-const converted = await actions.convertRequestToProject(openRequestId, {
-  name: ' Heizungstausch ',
-  clientId: secondClientId,
-  projectNumber: 'P-2026-001',
-});
+const converted = await actions.convertRequestToProject(
+  openRequestId,
+  { name: ' Heizungstausch ', clientId: secondClientId, projectNumber: 'P-2026-001' },
+  conversionKey,
+);
 assert.deepEqual(converted, {
   success: true,
   target: 'project',
@@ -634,17 +682,25 @@ assert.deepEqual(world.rpcCalls, [
         planned_end_date: null,
       },
       p_template_version_id: null,
+      p_attempt_key: conversionKey,
     },
   },
 ]);
+const retriedConversion = { name: 'Heizungstausch', clientId: secondClientId, projectNumber: 'P-2026-002' };
 assert.deepEqual(
-  await actions.convertRequestToProject(openRequestId, {
-    name: 'Heizungstausch',
-    clientId: secondClientId,
-    projectNumber: 'P-2026-002',
-  }),
-  { success: false, error: 'already_converted' },
+  await actions.convertRequestToProject(openRequestId, retriedConversion, conversionKey),
+  converted,
 );
+for (const refused of [
+  actions.convertRequestToProject(openRequestId, retriedConversion),
+  actions.convertRequestToProject(openRequestId, retriedConversion, '61000000-0000-4000-8000-000000000009'),
+  actions.convertRequestToJob(
+    openRequestId,
+    { title: 'Heizungstausch', clientId: secondClientId },
+    conversionKey,
+  ),
+])
+  assert.deepEqual(await refused, { success: false, error: 'already_converted' });
 assert.equal(world.rpcCalls.length, 1);
 assert.deepEqual(await actions.updateClientRequest(openRequestId, { summary: 'Nachtrag' }), {
   success: false,

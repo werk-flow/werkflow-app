@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 
 import { expect, test } from '../support/fixtures';
 import { standaloneScreen } from '../../../lib/testing/selection/standalone-route-inventory';
+import { settleLiveShell } from '../support/performance-steps';
 import { openStandaloneScreen } from '../support/standalone-sessions';
 import {
   APP_FAMILY_RUN_ORDER,
@@ -56,6 +57,8 @@ async function expectAppFamily(
     await expect(main.getByRole('heading', { level: 1, name: family.heading, exact: true })).toBeVisible();
     if (family.title)
       await expect(main.getByRole('heading', { level: 2, name: family.title, exact: true })).toBeVisible();
+    // The shell's live reads land after the page body, some without a skeleton (the nav's badge counts).
+    await settleLiveShell(page);
     await settlePage(page, pageBody(main));
   };
   await expectFamilyReferences(page, family.id, open, replacements, {

@@ -1,7 +1,9 @@
 name: Nightly
 
 # Every browser group on main once a night, so a date- or data-dependent
-# failure surfaces without a change. GitHub starts this repository's scheduled runs up
+# failure surfaces without a change. The wall-clock `audit:performance:*` groups
+# run their steps without their timing gate, so a change that breaks a step
+# surfaces the next morning (lib/testing/selection/ci-plan.ts). GitHub starts this repository's scheduled runs up
 # to 10 hours late, least so in the evening: this cron line starts a run between about
 # 19:45 and 00:30 Berlin. One that meets the midnight window waits it out in ci.yml's
 # `midnight` job. It shares the release's cron line, so both usually see one commit,

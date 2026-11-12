@@ -395,8 +395,8 @@ begin
   foreach v_function in array array[
     'public.create_job_with_assignments(uuid, uuid, jsonb, uuid[], date, uuid[], jsonb, jsonb, text, text, uuid, boolean, uuid, boolean)',
     'public.create_project_with_template(uuid, uuid, jsonb, uuid)',
-    'public.convert_client_request_to_job(uuid, uuid, uuid, jsonb, uuid[], date, uuid[], jsonb, jsonb, text, text, uuid, boolean, uuid, boolean)',
-    'public.convert_client_request_to_project(uuid, uuid, uuid, jsonb, uuid)',
+    'public.convert_client_request_to_job(uuid, uuid, uuid, jsonb, uuid[], date, uuid[], jsonb, jsonb, text, text, uuid, boolean, uuid, boolean, uuid)',
+    'public.convert_client_request_to_project(uuid, uuid, uuid, jsonb, uuid, uuid)',
     'public.create_maintenance_visit_job(uuid, uuid, uuid[], bigint[], text, uuid, jsonb, uuid[], date, uuid[], jsonb, jsonb, text, text, uuid, boolean, uuid, boolean)'
   ] loop
     if not has_function_privilege('service_role', v_function, 'execute') then
@@ -413,7 +413,7 @@ begin
     'app_private.apply_template_to_new_work(uuid, uuid, uuid, uuid, uuid, boolean, date, uuid[], uuid[], jsonb, jsonb, text, text, uuid)',
     'app_private.create_project_record(uuid, uuid, jsonb, uuid)',
     'app_private.link_request_documents_to_work(uuid, uuid, uuid, uuid, uuid)',
-    'app_private.lock_request_for_conversion(uuid, uuid)'
+    'app_private.lock_request_for_conversion(uuid, uuid, uuid, text)'
   ] loop
     foreach v_role in array array['anon', 'authenticated', 'service_role'] loop
       if has_function_privilege(v_role, v_function, 'execute') then
