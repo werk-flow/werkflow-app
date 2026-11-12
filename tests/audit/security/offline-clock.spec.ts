@@ -9,6 +9,7 @@ import { bypassHttpCache, setNetwork, waitForOfflineShell } from '../support/off
 import {
   UNSENT_COPY,
   expectOneSessionAtCapturedTimes,
+  meineZeitActivity,
   expectTimeEventsOnDevice,
   offlineClock,
   offlineClockAction,
@@ -30,6 +31,9 @@ test('a clock start and end without signal are recorded once, at their captured 
   world,
 }) => {
   await page.setViewportSize({ width: 375, height: 812 });
+  // The phone's clock runs a few minutes behind the server, so the session is long enough to show
+  // in „Meine Zeit“, which hides spans shorter than a minute, and still lies before its receipt.
+  await page.clock.install({ time: new Date(Date.now() - 4 * 60_000) });
 
   await test.step('the phone opens the app with signal, clocked out', async () => {
     await page.goto('/dashboard');
@@ -63,6 +67,7 @@ test('a clock start and end without signal are recorded once, at their captured 
   });
 
   await test.step('the end without signal is kept behind the start', async () => {
+    await page.clock.fastForward(2 * 60_000);
     await offlineClockAction(page, UNSENT_COPY.end).click();
     await expect(offlineClock(page)).toContainText(UNSENT_COPY.clockedOut);
     await expectTimeEventsOnDevice(page, ['start', 'end']);
@@ -76,5 +81,9 @@ test('a clock start and end without signal are recorded once, at their captured 
     await expectTimeEventsOnDevice(page, []);
     await expect(clockInLauncher(page)).toBeEnabled();
     await expect(unsentBadge(page, UNSENT_COPY.waiting)).toHaveCount(0);
+  });
+
+  await test.step('„Meine Zeit“ shows the session as work at the captured times', async () => {
+    await expect(await meineZeitActivity(page, world)).toBeVisible();
   });
 });

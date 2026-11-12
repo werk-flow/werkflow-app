@@ -1,3 +1,4 @@
+import type { DialogOpenerId } from '../../../lib/testing/selection/dialog-inventory';
 import type { InventoriedRoute } from '../../../lib/testing/selection/mobile-route-inventory';
 import {
   inventoryCaptures,

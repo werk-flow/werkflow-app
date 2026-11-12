@@ -1,6 +1,8 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
+import { formatBerlinTime } from '../../../lib/utils';
 import { createAdminClient } from '../../golden/support/db/shared';
+import { timeHistoryPanel } from '../../golden/support/steps/time-tracking';
 import type { TestWorld } from '../../golden/support/world';
 
 // The time outbox a phone keeps without signal
@@ -25,6 +27,8 @@ export const UNSENT_COPY = {
   cancel: 'Abbrechen',
   offlineClock: 'Zeiterfassung',
   startWork: 'Arbeit starten',
+  /** The activity label of work in „Meine Zeit“. */
+  work: 'Arbeit',
   end: 'Erfassung beenden',
   clockedOut: 'Nicht eingestempelt',
   /** The dock's status line while work runs. */
@@ -216,4 +220,19 @@ export async function expectOneSessionAtCapturedTimes(
       message: 'The server holds one session at the times the phone captured',
     })
     .toEqual([{ startedAt, endedAt: Date.parse(end?.capturedAt ?? '') }]);
+}
+
+/**
+ * Opens „Meine Zeit“ (the history of /zeiterfassung) and answers the activity row of the
+ * employee's latest recorded session: work, from its start to its end in Berlin time.
+ */
+export async function meineZeitActivity(page: Page, world: TestWorld): Promise<Locator> {
+  const [session] = (await recordedSessions(world)).toReversed();
+  if (!session?.endedAt) throw new Error('The employee has no ended session to look for.');
+  await page.goto('/zeiterfassung?tab=history');
+  const span = `${formatBerlinTime(new Date(session.startedAt))}–${formatBerlinTime(new Date(session.endedAt))}`;
+  return timeHistoryPanel(page)
+    .locator('[data-time-entry]')
+    .filter({ hasText: UNSENT_COPY.work })
+    .filter({ hasText: span });
 }
