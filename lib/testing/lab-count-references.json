@@ -74,7 +74,7 @@
         },
         "script": {
           "requests": { "reference": 43, "tolerance": 1 },
-          "encodedBytes": { "reference": 686629, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 693562, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         },
@@ -316,6 +316,24 @@
           },
           "runKeys": ["2026-11-09T215315624Z-b68a0c"],
           "reason": "Tailwind no longer scans tests and test support (lint examples became shipped utilities), and the unused .hide-time-picker block and duplicate ::selection rules are gone; every dropped utility appears only in an excluded test file, and audit:visual, audit:layout and audit:layout:viewports pass on the same tree"
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 43, "tolerance": 1 },
+            "encodedBytes": { "reference": 686629, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 43, "tolerance": 1 },
+            "encodedBytes": { "reference": 693562, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-12T004607647Z-ed5cc5"],
+          "reason": "main before #358 measured 690986 B, inside the old ceiling; two features then add script to the field cold start, which prefetches the work pack's route chunk: #358 (werk-flow/werkflow-planning#162, the work pack's completion-gate list) adds 1646 B (690986 before it, 692632 after, Boat runs of dedb9e84 and 034e1a62), and #348 (werk-flow/werkflow-planning#158, the „Meine Zeit“ rows: activity pairing and their labels, which the work pack renders on its first load) adds 930 B (693562 on 0b354338, after moving the Verlauf's day grouping out of that chunk, which saved 122 B)"
         },
         {
           "kind": "floor-accept",
