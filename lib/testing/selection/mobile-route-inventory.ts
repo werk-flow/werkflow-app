@@ -25,6 +25,7 @@ export const MANAGER_PHONE_ROUTES = [
   '/einstellungen/zeiterfassung',
   '/einstellungen/kunden',
   '/einstellungen/datenexport',
+  '/einstellungen/dokumente',
   '/einstellungen/dashboard',
   '/einstellungen/kalender',
   '/einstellungen/konto-sicherheit',
