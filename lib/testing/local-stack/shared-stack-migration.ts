@@ -52,6 +52,9 @@ const SUPABASE_VALUE_FLAGS = new Set([
 const LOCAL_HOST = /^(?:127\.0\.0\.1|localhost|\[?::1\]?|host\.docker\.internal)$/;
 /** A committed migration file, however the command spells its folder. */
 const MIGRATION_FILE = /supabase\/migrations\/[^\s'"]*\.sql\b/;
+/** A `cat` of a migration file whose output a pipe carries into `psql`, within one pipeline. */
+const CAT_INTO_PSQL =
+  /\bcat\b[^|;&\n]*?(supabase\/migrations\/[^\s'"|;&]*\.sql)\b[^|;&\n]*\|[^;&\n]*\bpsql\b/;
 
 type Started = { name: string; args: string[]; words: ShellWord[] };
 
@@ -82,7 +85,8 @@ function started(words: ShellWord[]): (Started | { script: string })[] {
     }
     const head = args[index];
     if (!head) break;
-    name = head.slice(head.lastIndexOf('/') + 1);
+    // `bunx supabase@2.116.0` names the package with its version.
+    name = head.slice(head.lastIndexOf('/') + 1).replace(/@[^/]*$/, '');
     args = args.slice(index + 1);
   }
   return [{ name, args, words }];
@@ -168,10 +172,13 @@ export function sharedStackMigrationRefusal(command: string, depth = 0): string 
       (call.name === 'docker' && call.args.includes('exec') && call.args.includes('psql')),
   );
   const local = psql.filter(reachesLocalDatabase);
-  // The file reaches psql as `-f`, as its input, or through a `cat` beside it on the line.
-  const fed = [...local, ...(local.length ? calls.filter((call) => call.name === 'cat') : [])].flatMap(
-    (call) => call.words.flatMap((word) => MIGRATION_FILE.exec(word.text)?.[0] ?? []),
-  );
+  // The file reaches psql as `-f` or as its input, or through a `cat` piped into it. A `cat` that
+  // only prints the file beside a psql call feeds nothing.
+  const piped = local.length ? CAT_INTO_PSQL.exec(command)?.[1] : undefined;
+  const fed = [
+    ...local.flatMap((call) => call.words.flatMap((word) => MIGRATION_FILE.exec(word.text)?.[0] ?? [])),
+    ...(piped ? [piped] : []),
+  ];
   return fed[0]
     ? `Refused: \`psql\` with ${fed[0]} would run this tree's migration in the local stack, which every worktree shares and which holds only main's ${RULE}. ${INSTEAD}`
     : undefined;

@@ -15,7 +15,7 @@ import {
   syncDecision,
 } from '../lib/testing/local-stack/stack-sync';
 import { CHANGED_CHECK_BASE } from '../lib/testing/runner/changed-check';
-import { readStackLockHolders, stackLockDirectory, withStackLock } from '../lib/testing/runner/stack-lock';
+import { StackHeldError, withStackLock } from '../lib/testing/runner/stack-lock';
 import { withWorkspaceTestLock } from '../lib/testing/runner/workspace-test-lock';
 
 // `bun run stack:sync` and `bun run stack:reset`: the two commands that write the migration ledger
@@ -48,18 +48,18 @@ if (process.env.CI === 'true' || process.env.WERKFLOW_BOAT_MACHINE === '1') {
   process.exit(0);
 }
 
-/** A git call in this checkout; a fetch that hangs on a dead network ends after 30 s. */
+/** A git call in this checkout; a fetch that hangs on a dead network ends after 30 s, and none prompts. */
 function git(args: readonly string[]): ReturnType<typeof spawnSync> {
   return spawnSync('git', args, {
     cwd: repositoryRoot,
-    env: gitEnvironment(),
+    env: { ...gitEnvironment(), GIT_TERMINAL_PROMPT: '0' },
     maxBuffer: 512 * 1024 * 1024,
     timeout: 30_000,
   });
 }
 
 /** Runs SQL in the stack's database as the CLI's own role; undefined when the stack cannot be reached. */
-function sql(text: string, options?: string): string | undefined {
+function sql(text: string, options?: string, quiet = false): string | undefined {
   const result = spawnSync(
     'docker',
     [
@@ -79,7 +79,7 @@ function sql(text: string, options?: string): string | undefined {
     { input: text, encoding: 'utf8', timeout: 60_000 },
   );
   if (result.status !== 0) {
-    if (result.stderr.trim()) console.error(result.stderr.trim());
+    if (!quiet && result.stderr.trim()) console.error(result.stderr.trim());
     return undefined;
   }
   return result.stdout.trim();
@@ -134,6 +134,11 @@ function refuseAhead(drift: MigrationDrift): boolean {
 }
 
 async function sync(wait: boolean): Promise<number> {
+  // Before any fetch: a machine without Docker or a running stack has nothing to sync.
+  if (sql('select 1', '-c default_transaction_read_only=on', true) === undefined) {
+    say('The local stack is not running; nothing to sync.');
+    return 0;
+  }
   return withMain(async (folder, commit) => {
     const drift = readMigrationDrift(folder);
     if (!drift) {
@@ -148,28 +153,30 @@ async function sync(wait: boolean): Promise<number> {
       return 0;
     }
     if (decision.kind !== 'behind') return 1;
-    const holders = wait ? [] : readStackLockHolders(stackLockDirectory(repositoryRoot));
-    const [holder] = holders;
-    if (holder) {
-      say(
-        `Main has ${decision.pending.length} migrations the shared stack lacks. "${holder.operation}" holds the stack (${holder.workspace}), so the next sync applies them.`,
-      );
-      return 0;
-    }
-    return withStackLock({ mode: 'exclusive', operation: 'stack sync', repositoryRoot }, async () => {
-      // Another worktree's sync may have applied them while this one waited.
-      const now = readMigrationDrift(folder);
-      if (!now || refuseAhead(now)) return 1;
-      if (now.treeOnly.length) {
-        say(`Applying main's ${now.treeOnly.length} pending migrations (${commit}).`);
-        if (!supabase(folder, ['migration', 'up'])) {
-          console.error(
-            `[stack] Applying main's migrations failed; the output is above. A ledger that holds a version main lacks needs the reset (bun run stack:reset -- ${RESET_CONFIRMATION}).`,
-          );
-          return 1;
+    const apply = withStackLock(
+      { mode: 'exclusive', operation: 'stack sync', repositoryRoot, wait },
+      async () => {
+        // Another worktree's sync may have applied them while this one waited.
+        const now = readMigrationDrift(folder);
+        if (!now || refuseAhead(now)) return 1;
+        if (now.treeOnly.length) {
+          say(`Applying main's ${now.treeOnly.length} pending migrations (${commit}).`);
+          if (!supabase(folder, ['migration', 'up'])) {
+            console.error(
+              `[stack] Applying main's migrations failed; the output is above. A ledger that holds a version main lacks needs the reset (bun run stack:reset -- ${RESET_CONFIRMATION}).`,
+            );
+            return 1;
+          }
         }
-      }
-      say(`The shared stack is at main (${commit}).`);
+        say(`The shared stack is at main (${commit}).`);
+        return 0;
+      },
+    );
+    return apply.catch((error: unknown) => {
+      if (!(error instanceof StackHeldError)) throw error;
+      say(
+        `Main has ${decision.pending.length} migrations the shared stack lacks. ${error.message} The next sync applies them.`,
+      );
       return 0;
     });
   });
@@ -180,13 +187,8 @@ async function reset(confirmed: boolean): Promise<number> {
     for (const line of RESET_WARNING) console.error(line);
     return 1;
   }
-  const holders = readStackLockHolders(stackLockDirectory(repositoryRoot));
-  if (holders.length) {
-    for (const line of resetRefusal(holders)) console.error(line);
-    return 1;
-  }
-  return withWorkspaceTestLock({ operation: 'stack reset', repositoryRoot }, () =>
-    withStackLock({ mode: 'exclusive', operation: 'stack reset', repositoryRoot }, () =>
+  const rebuilt = withWorkspaceTestLock({ operation: 'stack reset', repositoryRoot }, () =>
+    withStackLock({ mode: 'exclusive', operation: 'stack reset', repositoryRoot, wait: false }, () =>
       withMain(async (folder, commit) => {
         say(`Rebuilding the shared stack's database from main's migrations (${commit}).`);
         if (!supabase(folder, ['db', 'reset'])) return 1;
@@ -204,6 +206,12 @@ async function reset(confirmed: boolean): Promise<number> {
       }),
     ),
   );
+  // A reset never queues behind a run: its world would be gone when it resumes.
+  return rebuilt.catch((error: unknown) => {
+    if (!(error instanceof StackHeldError)) throw error;
+    for (const line of resetRefusal(error.holders)) console.error(line);
+    return 1;
+  });
 }
 
 process.exit(action === 'sync' ? await sync(!flags.includes('--no-wait')) : await reset(flags.length > 0));

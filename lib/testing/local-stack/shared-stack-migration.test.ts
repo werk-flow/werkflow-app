@@ -21,6 +21,8 @@ test('the Supabase CLI never applies a tree migration to the local stack', () =>
     'bash -lc "cd /work/app && supabase migration up"',
     'SUPABASE_INTERNAL_IMAGE_REGISTRY=ghcr.io timeout 300 bunx supabase migration up',
     'node_modules/.bin/supabase --workdir /work/app migration up',
+    'bunx supabase@2.116.0 migration up',
+    'npx -y supabase@latest migration up --local',
     'supabase migration down --last 1',
     'supabase db push --local',
     'supabase db push --include-all --local',
@@ -36,7 +38,12 @@ test('the Supabase CLI never applies a tree migration to the local stack', () =>
 });
 
 test('a raw reset is refused, because it replays this tree, and names the sanctioned reset', () => {
-  for (const command of ['supabase db reset', 'bunx supabase db reset --local', 'sudo supabase db reset'])
+  for (const command of [
+    'supabase db reset',
+    'bunx supabase db reset --local',
+    'sudo supabase db reset',
+    'bunx supabase@2.101.0 db reset',
+  ])
     expect(sharedStackMigrationRefusal(command), command).toContain('bun run stack:reset');
 });
 
@@ -75,6 +82,9 @@ test('reads, mentions, other targets and the sanctioned commands pass', () => {
     "git commit -m 'refuse supabase migration up on the shared stack'",
     "cat >> notes.md <<'EOF'\nnever supabase migration up here\nEOF",
     'cat supabase/migrations/20261130090003_add_a_table.sql',
+    // Printing a migration beside a psql call feeds psql nothing.
+    'cat supabase/migrations/20261130090003_add_a_table.sql && docker exec supabase_db_werkflow-app psql -U postgres -c "select 1"',
+    'cat supabase/migrations/20261130090003_add_a_table.sql | head -n 20; docker exec supabase_db_werkflow-app psql -U postgres -c "select 1"',
     'docker exec supabase_db_werkflow-app psql -U postgres -c "select count(*) from public.jobs"',
     `psql ${DEV_URL} -f supabase/migrations/20261130090003_add_a_table.sql`,
     'docker exec -i supabase_db_werkflow-app psql -U postgres < supabase/tests/problem_reports.sql',
