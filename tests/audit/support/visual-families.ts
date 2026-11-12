@@ -158,6 +158,13 @@ export const APP_FAMILIES: readonly AppFamily[] = [
   },
   { id: 'inventar', role: 'admin', covers: ['/inventar'], route: fixed('/inventar'), heading: 'Inventar' },
   {
+    id: 'angebote-leistungen',
+    role: 'admin',
+    covers: ['/angebote/leistungen'],
+    route: fixed('/angebote/leistungen'),
+    heading: 'Angebote',
+  },
+  {
     id: 'qualifikationen',
     role: 'admin',
     covers: ['/qualifikationen'],

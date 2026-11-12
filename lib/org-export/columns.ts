@@ -101,6 +101,8 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   job_material_lines: 'Aufträge_Material',
   job_qualification_assessments: 'Aufträge_Qualifikationsprüfungen',
   jobs: 'Aufträge',
+  leistung_price_versions: 'Leistungen_Preise',
+  leistungen: 'Leistungen',
   maintenance_coverage_events: 'Wartungsverträge_Ereignisse',
   maintenance_coverages: 'Wartungsverträge',
   maintenance_due_evidence_links: 'Wartungen_Nachweisverknüpfungen',

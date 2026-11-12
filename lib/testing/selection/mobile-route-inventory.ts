@@ -17,6 +17,7 @@ export const MANAGER_PHONE_ROUTES = [
   '/arbeitsvorlagen',
   '/dokumente',
   '/inventar',
+  '/angebote/leistungen',
   '/service/faelle',
   '/service/anlagen',
   '/service/wartung',
