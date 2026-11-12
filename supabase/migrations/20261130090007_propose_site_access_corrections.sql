@@ -19,8 +19,12 @@
 -- identity, organization and role, and for a proposal that the caller is
 -- assigned to the job. The functions check the same under lock and write.
 --
+-- 4. One read returns the open requests and the open proposals for a
+--    manager's attention derivation.
+--
 -- Expand-only: the previous release reads and writes none of the new objects;
--- the attention source-type checks keep every earlier value.
+-- the attention source-type checks keep every earlier value, and
+-- list_open_request_attention stays.
 --
 -- Prevention: Tier 1 (constraints, the decision guard and the functions'
 -- checks), Tier 2 supabase/tests/site_access_proposals.sql and
@@ -375,15 +379,70 @@ $$;
 revoke all on function public.reject_site_access_proposal(uuid, uuid, uuid, text) from public, anon, authenticated;
 grant execute on function public.reject_site_access_proposal(uuid, uuid, uuid, text) to service_role;
 
+-- One read of the pending office sets a manager's attention derivation
+-- needs, so the new task kind adds no backend request: the open requests as
+-- list_open_request_attention (20261129100001) returns them, and the open
+-- access proposals. Each array holds at most p_limit + 1 rows, so the caller
+-- sees an overflow instead of a cut. list_open_request_attention stays for
+-- the previous build; a later release drops it
+-- (docs/technical/enforcement-ladder-backlog.md).
+create function public.read_manager_attention_sets(p_organization_id uuid, p_limit integer)
+returns jsonb
+language sql
+stable
+security invoker
+set search_path to ''
+as $$
+  select jsonb_build_object(
+    'requests', coalesce((
+      select jsonb_agg(to_jsonb(open_request) order by open_request.received_at, open_request.id)
+      from (
+        select
+          request.id, request.request_number, request.summary, request.status, request.urgency,
+          request.assigned_to, request.received_at, request.callback_due_at,
+          coalesce(request.callback_due_at < now(), false) as callback_overdue,
+          exists (
+            select 1 from public.organization_members member
+            where member.organization_id = p_organization_id
+              and member.user_id = request.assigned_to
+              and member.role in ('admin', 'buero')
+              -- A suspended or ended manager keeps the membership row but cannot act.
+              and app_private.p1_24_has_effective_access(member.organization_id, member.user_id)
+          ) as owner_is_manager
+        from public.client_requests request
+        where request.organization_id = p_organization_id
+          and request.status in ('offen', 'in_klaerung')
+        order by request.received_at, request.id
+        limit p_limit + 1
+      ) open_request
+    ), '[]'::jsonb),
+    'access_proposals', coalesce((
+      select jsonb_agg(to_jsonb(open_proposal) order by open_proposal.proposed_at, open_proposal.id)
+      from (
+        select
+          proposal.id, proposal.job_id, proposal.site_id, proposal.proposed_by, proposal.proposed_at,
+          proposal.contact_name, proposal.contact_phone, proposal.contact_note, proposal.access_notes
+        from public.site_access_proposals proposal
+        where proposal.organization_id = p_organization_id
+          and proposal.status = 'open'
+        order by proposal.proposed_at, proposal.id
+        limit p_limit + 1
+      ) open_proposal
+    ), '[]'::jsonb)
+  );
+$$;
+revoke all on function public.read_manager_attention_sets(uuid, integer) from public, anon, authenticated;
+grant execute on function public.read_manager_attention_sets(uuid, integer) to service_role;
+
 -- The attention identity union in lib/attention/types.ts and these checks stay
 -- in step: an open access proposal waiting for a manager
 -- (site_access_proposal). Expand-only: every earlier value stays allowed.
 -- not valid: every existing row holds an earlier value, so no table scan runs
 -- under the lock; new writes are checked as before.
--- @destructive: after release c9646653: the constraint returns below with every earlier source type and one new one
+-- @destructive: after release acce7e96: the constraint returns below with every earlier source type and one new one
 alter table public.attention_read_states
   drop constraint attention_read_states_source_type_check;
--- @destructive: after release c9646653: that build writes only source types this list keeps
+-- @destructive: after release acce7e96: that build writes only source types this list keeps
 alter table public.attention_read_states
   add constraint attention_read_states_source_type_check check (
     source_type = any (array[
@@ -398,10 +457,10 @@ alter table public.attention_read_states
       'client_request_callback_overdue', 'site_access_proposal'
     ])
   ) not valid;
--- @destructive: after release c9646653: the constraint returns below with every earlier source type and one new one
+-- @destructive: after release acce7e96: the constraint returns below with every earlier source type and one new one
 alter table public.attention_events
   drop constraint attention_events_source_type_check;
--- @destructive: after release c9646653: that build writes only source types this list keeps
+-- @destructive: after release acce7e96: that build writes only source types this list keeps
 alter table public.attention_events
   add constraint attention_events_source_type_check check (
     source_type = any (array[

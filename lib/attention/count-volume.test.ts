@@ -553,7 +553,7 @@ function handoverCandidates(organizationId: unknown): Row[] {
   return [...new Set(ids)].map((projectId) => ({ project_id: projectId }));
 }
 
-/** `list_open_request_attention` as migration 20261129100001 defines it, without a promised callback. */
+/** The open requests of `read_manager_attention_sets`, as migration 20261129100001 defines them, without a promised callback. */
 function openRequests(organizationId: unknown): Row[] {
   return (world.get('client_requests') ?? [])
     .filter(
@@ -563,8 +563,21 @@ function openRequests(organizationId: unknown): Row[] {
     .map((row) => ({ ...row, callback_due_at: null, callback_overdue: false, owner_is_manager: true }));
 }
 
+/** The open access proposals of `read_manager_attention_sets` (migration 20261130090007). */
+function openProposals(organizationId: unknown): Row[] {
+  return (world.get('site_access_proposals') ?? []).filter(
+    (row) => row.organization_id === organizationId && row.status === 'open',
+  );
+}
+
 /** The derivations' read functions, from the seeded world: whole vacation rows, and nobody has left. */
 function rpc(name: string, args: unknown) {
+  if (name === 'read_manager_attention_sets') {
+    const requests = openRequests(field(args, 'p_organization_id'));
+    const accessProposals = openProposals(field(args, 'p_organization_id'));
+    reads.push({ table: `rpc ${name}`, rows: requests.length + accessProposals.length });
+    return Promise.resolve({ data: { requests, access_proposals: accessProposals }, error: null });
+  }
   if (name === 'read_open_absences') {
     const today = String(field(args, 'p_today'));
     const open = termFilter(`or(status.eq.pending,and(status.eq.approved,end_date.gte.${today}))`);
@@ -580,9 +593,7 @@ function rpc(name: string, args: unknown) {
       ? pendingRecipients(field(args, 'p_organization_id'), field(args, 'p_employee_record_id'))
       : name === 'list_handover_candidate_projects'
         ? handoverCandidates(field(args, 'p_organization_id'))
-        : name === 'list_open_request_attention'
-          ? openRequests(field(args, 'p_organization_id'))
-          : [];
+        : [];
   // The readers page a function's result like a table read: .range(from, to).
   return {
     range: (from: number, to: number) => {
@@ -658,11 +669,12 @@ function historyProblems(nextRole: Role, growth: Record<string, number>): string
  */
 // werk-flow/werkflow-planning#267 added the approved vacations ahead with their visits: the office reads
 // their visits once per 15 vacations plus dispatches and names, and own approvals add a marker read.
-// werk-flow/werkflow-planning#329 added the open access proposals: one read without any, and with them
-// their job, Einsatzort and Zugangskontakte (a row each per proposal) and the proposers' names.
+// werk-flow/werkflow-planning#329 added the open access proposals: they come with the open requests in one
+// read, so without any the requests stay as before; with them, their job, Einsatzort and Zugangskontakte (a
+// row each per proposal) and the proposers' names add four requests.
 const ROW_BUDGET: Readonly<Record<Role, { fixed: number; perPendingItem: number; requests: number }>> = {
-  admin: { fixed: 35, perPendingItem: 37, requests: 80 },
-  buero: { fixed: 34, perPendingItem: 36, requests: 77 },
+  admin: { fixed: 35, perPendingItem: 37, requests: 79 },
+  buero: { fixed: 34, perPendingItem: 36, requests: 76 },
   employee: { fixed: 13, perPendingItem: 17, requests: 31 },
 };
 

@@ -878,7 +878,7 @@ function siteAccessCaptures(): AcceptanceSet {
         ...job,
         view: { kind: 'page' },
         record: 'site-access-rejected-job',
-        reveal: 'nicht übernommen',
+        reveal: 'Zugang stimmt nicht?',
         ...phone,
       },
       {

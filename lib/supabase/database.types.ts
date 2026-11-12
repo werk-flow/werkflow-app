@@ -16844,6 +16844,10 @@ export type Database = {
         Args: { p_organization_id: string; p_paths: string[] };
         Returns: undefined;
       };
+      read_manager_attention_sets: {
+        Args: { p_limit: number; p_organization_id: string };
+        Returns: Json;
+      };
       read_open_absences: {
         Args: { p_organization_id: string; p_today: string };
         Returns: Json;

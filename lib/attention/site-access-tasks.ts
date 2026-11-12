@@ -2,48 +2,25 @@ import 'server-only';
 
 // The managers' „Zugang prüfen“ tasks behind the attention Server Actions in
 // `./actions`: a field worker's open proposal for the access to their job's
-// Einsatzort. Derived live from the open proposals; never stored. The steady
-// state, no open proposal, costs one indexed read.
+// Einsatzort. Derived live from the open proposals that `./manager-sets`
+// reads with the open requests; never stored. Without an open proposal it
+// sends no request of its own.
 
 import { formatSiteRowAddress } from '@/lib/clients/types';
 import { logError } from '@/lib/logging';
 import { formatProfileName } from '@/lib/members/profile-name';
 import type { ActionContext } from '@/lib/org/action-context';
 import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
-import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
+import { readInBatches } from '@/lib/supabase/query-batches';
+import type { ManagerAttentionSetsRead, OpenProposalRow } from './manager-sets';
 import type { AttentionTask } from './types';
 
-type OpenProposal = {
-  id: string;
-  job_id: string;
-  site_id: string;
-  proposed_by: string | null;
-  proposed_at: string;
-  contact_name: string | null;
-  contact_phone: string | null;
-  contact_note: string | null;
-  access_notes: string | null;
-};
-
-function readOpenProposals(admin: AdminClient, orgId: string) {
-  return readCompleteRows(
-    (from, to) =>
-      admin
-        .from('site_access_proposals')
-        .select(
-          'id, job_id, site_id, proposed_by, proposed_at, contact_name, contact_phone, contact_note, access_notes',
-        )
-        .eq('organization_id', orgId)
-        .eq('status', 'open')
-        .order('proposed_at')
-        .order('id')
-        .range(from, to),
-    LIST_ROW_CAP,
-  );
-}
-
 /** The jobs, Einsatzorte, active Zugangskontakte and proposers the open proposals name. */
-async function readProposalReferences(admin: AdminClient, orgId: string, proposals: readonly OpenProposal[]) {
+async function readProposalReferences(
+  admin: AdminClient,
+  orgId: string,
+  proposals: readonly OpenProposalRow[],
+) {
   const jobIds = [...new Set(proposals.map((row) => row.job_id))];
   const siteIds = [...new Set(proposals.map((row) => row.site_id))];
   const proposerIds = [...new Set(proposals.flatMap((row) => (row.proposed_by ? [row.proposed_by] : [])))];
@@ -95,7 +72,7 @@ async function readProposalReferences(admin: AdminClient, orgId: string, proposa
 
 type ProposalReferences = NonNullable<Awaited<ReturnType<typeof readProposalReferences>>['references']>;
 
-function toTask(row: OpenProposal, references: ProposalReferences): AttentionTask[] {
+function toTask(row: OpenProposalRow, references: ProposalReferences): AttentionTask[] {
   const job = references.jobById.get(row.job_id);
   const site = references.siteById.get(row.site_id);
   if (!job || !site) return [];
@@ -126,19 +103,20 @@ function toTask(row: OpenProposal, references: ProposalReferences): AttentionTas
 
 export async function deriveSiteAccessProposalTasks(
   context: ActionContext,
+  managerSets: ManagerAttentionSetsRead,
 ): Promise<{ tasks: AttentionTask[]; failed: boolean }> {
   if (context.role !== 'admin' && context.role !== 'buero') return { tasks: [], failed: false };
-  const admin = createSupabaseAdminClient();
-  const proposals = await readOpenProposals(admin, context.orgId);
-  if (proposals.error) {
-    logError('Failed to load open site access proposals', proposals.error);
-    return { tasks: [], failed: true };
-  }
-  if (proposals.data.length === 0) return { tasks: [], failed: false };
-  const { error, references } = await readProposalReferences(admin, context.orgId, proposals.data);
+  const sets = await managerSets;
+  if (sets.failed) return { tasks: [], failed: true };
+  if (sets.accessProposals.length === 0) return { tasks: [], failed: false };
+  const { error, references } = await readProposalReferences(
+    createSupabaseAdminClient(),
+    context.orgId,
+    sets.accessProposals,
+  );
   if (error || !references) {
     logError('Failed to resolve site access proposal references', error);
     return { tasks: [], failed: true };
   }
-  return { tasks: proposals.data.flatMap((row) => toTask(row, references)), failed: false };
+  return { tasks: sets.accessProposals.flatMap((row) => toTask(row, references)), failed: false };
 }

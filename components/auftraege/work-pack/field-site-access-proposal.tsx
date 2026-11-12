@@ -1,6 +1,6 @@
 'use client';
 
-import { DoorOpen } from 'lucide-react';
+import { UserRound } from 'lucide-react';
 import { useState, type ReactElement } from 'react';
 
 import { FieldWorkPackLoadError } from '@/components/auftraege/work-pack/field-work-pack-load-error';
@@ -69,7 +69,7 @@ export function FieldSiteAccessProposal({
         onFocus={lazyProposalDialog.preload}
         onClick={() => setOpen(true)}
       >
-        <DoorOpen className="size-4" />
+        <UserRound className="size-4" />
         {ownOpenValues ? 'Hinweis ändern' : 'Zugang stimmt nicht?'}
       </Button>
       {open && (

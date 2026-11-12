@@ -110,6 +110,7 @@ begin
     or has_function_privilege('authenticated', 'public.accept_site_access_proposal(uuid,uuid,uuid,uuid)', 'EXECUTE')
     or has_function_privilege('authenticated', 'public.reject_site_access_proposal(uuid,uuid,uuid,text)', 'EXECUTE')
     or has_function_privilege('anon', 'public.propose_site_access(uuid,uuid,uuid,uuid,text,text,text,text)', 'EXECUTE')
+    or has_function_privilege('authenticated', 'public.read_manager_attention_sets(uuid,integer)', 'EXECUTE')
   then raise exception 'a browser role can run an access proposal function'; end if;
 end;
 $$;
@@ -169,6 +170,28 @@ begin
       <> 'Schlüssel beim Hausmeister'
     or (select name from public.client_contacts where id = '46000000-0000-0000-0000-000000000050') <> 'Herr Alt'
   then raise exception 'a proposal changed the Einsatzort by itself'; end if;
+end;
+$$;
+
+-- One read returns the open requests as list_open_request_attention does and
+-- the open proposals, for the organization only.
+do $$
+declare
+  v_sets jsonb;
+begin
+  insert into public.client_requests (organization_id, summary, created_by)
+  values ('46000000-0000-0000-0000-000000000010', 'Heizung kalt', '46000000-0000-0000-0000-000000000002');
+  v_sets := public.read_manager_attention_sets('46000000-0000-0000-0000-000000000010', 100);
+  if jsonb_array_length(v_sets -> 'access_proposals') <> 1
+    or v_sets #>> '{access_proposals,0,contact_name}' <> 'Frau Neumann'
+    or (v_sets -> 'requests') <> (
+      select jsonb_agg(to_jsonb(request) order by request.received_at, request.id)
+      from public.list_open_request_attention('46000000-0000-0000-0000-000000000010') request
+    )
+  then raise exception 'the combined read differs from the open requests and proposals: %', v_sets; end if;
+  if jsonb_array_length(public.read_manager_attention_sets('46000000-0000-0000-0000-000000000011', 100) -> 'access_proposals') <> 0
+    or jsonb_array_length(public.read_manager_attention_sets('46000000-0000-0000-0000-000000000010', 0) -> 'requests') <> 1
+  then raise exception 'the combined read crosses the organization or cuts below its limit plus one'; end if;
 end;
 $$;
 
