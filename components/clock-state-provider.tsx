@@ -62,23 +62,24 @@ function useSettleTransition(
   invalidate: ClockLiveView['invalidate'],
   setData: ClockLiveView['setData'],
   refresh: ClockLiveView['refresh'],
-  /** Takes the server's answer into the confirmed clock and notes when (useClockServerView). */
-  confirm: ClockConfirmed['confirm'],
+  /** Notes that the clock state now holds the server's answer (useClockServerView). */
+  stamp: () => void,
 ): (result: TimeTransitionResult, selection: TimeActivitySelection | null, at: Date) => Promise<void> {
   return useCallback(
     async (result, selection, at) => {
       if (result.success) {
         invalidate();
         // A kept action stands at its tap, also when the online call failed much later; it is no server answer.
-        const echo = (previous: LiveClockState) =>
-          applyTransitionEcho(previous, selection, result, result.kept ? at : undefined);
-        setData((previous) => previous && echo(previous));
-        if (!result.kept) confirm((previous) => previous && echo(previous));
+        setData(
+          (previous) =>
+            previous && applyTransitionEcho(previous, selection, result, result.kept ? at : undefined),
+        );
+        if (!result.kept) stamp();
       }
       // A kept action has no server state to read yet.
       if (result.success ? !result.kept : result.error === 'time_transition_stale_version') await refresh();
     },
-    [confirm, invalidate, refresh, setData],
+    [invalidate, refresh, setData, stamp],
   );
 }
 
@@ -124,7 +125,7 @@ function useClockTransitionExecute({
 }: ClockExecuteInput): ClockTransitionExecute {
   const { activeOrgId, userId } = holder;
   const { keep, holderNow, callKept } = outbox;
-  const settle = useSettleTransition(invalidate, setData, refresh, readTimes.confirm);
+  const settle = useSettleTransition(invalidate, setData, refresh, readTimes.stamp);
   // Unsent actions go first: one captured after them must never reach the server before them.
   const knownUnsent = outbox.kept || outbox.view?.status === 'pending';
   const { unchecked } = outbox;
@@ -174,6 +175,8 @@ function useClockTransitionExecute({
         if (!toKeep) return CLOCK_ACTION_FAILED;
         result = keep(toKeep);
       }
+      // A kept echo is no server answer: the clock the server confirmed stays apart until the next read.
+      if (result.success && result.kept) readTimes.hold(serverState);
       await settle(result, selection, new Date(capturedAt));
       return result;
     },
@@ -241,11 +244,13 @@ function useClockTransitionCommands(
 }
 
 /**
- * The clock as the server confirmed it, apart from a kept action's echo: `confirm` takes a server
- * answer in, `last` says when the server was last read or answered.
+ * When the server last answered, and the clock it confirmed while a kept action's echo stands:
+ * `stamp` notes a server answer, `hold` keeps the confirmed clock before a kept echo, `last` reads
+ * the time.
  */
 type ClockConfirmed = {
-  confirm: (update: (previous: LiveClockState | null) => LiveClockState | null) => void;
+  stamp: () => void;
+  hold: (confirmed: LiveClockState | null) => void;
   last: () => string | null;
 };
 
@@ -256,7 +261,8 @@ function useClockServerView(activeOrgId: string | null, initialState: LiveClockS
   const activeJobIdRef = useRef<string | null>(null);
   const readAtRef = useRef<string | null>(null);
   const initialData = initialState && initialState.organizationId === activeOrgId ? initialState : null;
-  const [confirmed, setConfirmed] = useState<LiveClockState | null>(initialData);
+  // Set only while a kept action's echo stands in the clock state; a server read ends it.
+  const [held, setHeld] = useState<{ confirmed: LiveClockState | null } | null>(null);
   const view = useLiveView<LiveClockState | null>({
     tables: ['time_entries', 'time_sessions', 'time_segments', 'jobs'],
     eventFilter: (event) => isClockStateEventRelevant(event, activeJobIdRef.current),
@@ -266,7 +272,7 @@ function useClockServerView(activeOrgId: string | null, initialState: LiveClockS
       const result = await fetchCurrentClockState(activeOrgId, signal);
       if (result.success) {
         readAtRef.current = startedAt;
-        setConfirmed(result.state);
+        setHeld(null);
       }
       return result.success ? { ok: true, data: result.state } : { ok: false, error: result.error };
     },
@@ -279,15 +285,16 @@ function useClockServerView(activeOrgId: string | null, initialState: LiveClockS
   }, [serverState?.activeJobId]);
   const readTimes = useMemo<ClockConfirmed>(
     () => ({
-      confirm: (update) => {
+      stamp: () => {
         readAtRef.current = new Date().toISOString();
-        setConfirmed(update);
       },
+      hold: (confirmed) => setHeld((previous) => previous ?? { confirmed }),
       last: () => readAtRef.current,
     }),
     [],
   );
-  const confirmedState = confirmed?.organizationId === activeOrgId ? confirmed : null;
+  const heldState = held?.confirmed?.organizationId === activeOrgId ? held.confirmed : null;
+  const confirmedState = held ? heldState : serverState;
   // The clock owns its failure contract (lib/conventions/live-view-stale.test.ts): a failed read shows statusError.
   const { isLoading, error, refresh, invalidate, setData } = view;
   return {
