@@ -11,7 +11,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { SectionError } from '@/components/ui/section-error';
 import { usePendingTask } from '@/hooks/use-server-action';
 import type { ClockDeviceView } from '@/lib/field-sync/device/time-outbox';
-import { logError } from '@/lib/logging';
 import {
   deriveClockActions,
   describeActivity,
@@ -25,15 +24,12 @@ import { useBanner } from '@/components/ui/banner';
 import { cn, formatBerlinTime } from '@/lib/utils';
 
 /** The events this phone holds unsent, as a badge in the dock and a section in the sheet; loaded only while some exist. */
-const ClockUnsentEvents = lazy(async () => {
-  try {
-    return await import('@/components/clock-unsent-events');
-  } catch (error) {
+const ClockUnsentEvents = lazy(() =>
+  import('@/components/clock-unsent-events').catch(() => ({
     // The events stay on the phone, and a sign-out still asks about them; a reload brings their view back.
-    logError('ClockFAB: unsent events failed to load', error);
-    return { default: () => <>Nicht übertragene Zeiten: Bitte lade die Seite neu.</> };
-  }
-});
+    default: () => <>Nicht übertragene Zeiten: Bitte lade die Seite neu.</>,
+  })),
+);
 
 /**
  * The phone's unsent clock events at one place of the clock, or nothing while it holds none. A

@@ -26,6 +26,17 @@ import { createActivitySelection } from '@/lib/time-tracking/segments';
 import type { LiveClockState, TimeActivitySelection, TimeTransitionResult } from '@/lib/time-tracking/types';
 
 const FAILED: TimeTransitionResult = { success: false, error: 'time_transition_failed' };
+/** The clock's answer for an action kept on the phone: what the server would answer once it accepts it. */
+const KEPT = {
+  success: true,
+  kept: true,
+  sessionId: null,
+  segmentId: null,
+  version: null,
+  recoveryReason: null,
+  replayed: false,
+  legacyBridged: false,
+} as const;
 
 type ClockStateContextValue = {
   /** The clock as it stands: the server's state, with the phone's unsent events applied while they wait. */
@@ -57,23 +68,22 @@ type ClockTransitionExecute = (
 ) => Promise<TimeTransitionResult>;
 
 type ClockOutbox = typeof import('@/lib/field-sync/device/clock-outbox');
-type KeptAction = Parameters<typeof keepClockAction>[0];
+type ClockOutboxState = {
+  /** What the phone's outbox holds unsent for the person, once its code ran. */
+  view: ClockDeviceView | null;
+  /** This page kept an action the outbox does not show yet: its code could not load without signal. */
+  kept: boolean;
+  keep: (action: Parameters<typeof keepClockAction>[0]) => boolean;
+};
 
 /**
  * The phone's time outbox for the signed-in person (decision record 0010). Its code loads only
- * when the device may hold unsent work: at the app start, on `online`, and after a clock action
- * met no network. `view` is what the outbox holds unsent. `kept` counts the actions this page
- * kept since then that no view shows yet, because the outbox code could not load without signal.
+ * when the device may hold unsent work at the app start, on `online`, and after a clock action
+ * met no network, so no cold start pays for it.
  */
-function useClockOutbox(
-  holder: OutboxHolder | null,
-  refresh: () => Promise<void>,
-): { view: ClockDeviceView | null; kept: number; keep: (action: KeptAction) => boolean } {
-  // Kept with its holder: after an organization switch the former holder's events show nowhere.
-  const [watched, setWatched] = useState<{ holder: OutboxHolder; view: ClockDeviceView | null } | null>(null);
-  const [kept, setKept] = useState(0);
-  // The same count for the `online` listener, which must not wait for a render to learn of a kept action.
-  const keptRef = useRef(0);
+function useClockOutbox(holder: OutboxHolder | null, refresh: () => Promise<void>): ClockOutboxState {
+  const [view, setView] = useState<ClockDeviceView | null>(null);
+  const [kept, setKept] = useState(false);
   const takeInRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (!holder) return;
@@ -84,13 +94,12 @@ function useClockOutbox(
     const load = async (): Promise<ClockOutbox> => {
       try {
         const outbox = await import('@/lib/field-sync/device/clock-outbox');
-        const stopWatching = await outbox.watchClockOutbox(holder, (view) => {
-          setWatched({ holder, view });
-          keptRef.current = 0;
-          setKept(0);
+        const stopWatching = await outbox.watchClockOutbox(holder, (next) => {
+          setView(next);
+          setKept(false);
           // The chain was sent or stopped: the server's state stands again, so read it.
-          if (wasPending && view?.status !== 'pending') void refresh();
-          wasPending = view?.status === 'pending';
+          if (wasPending && next?.status !== 'pending') void refresh();
+          wasPending = next?.status === 'pending';
         });
         if (ended) stopWatching();
         else stop = stopWatching;
@@ -101,79 +110,35 @@ function useClockOutbox(
         throw error;
       }
     };
-    /** Hands what pages kept to the outbox; without its code the actions stay kept, marked as waiting, until `online`. */
+    /** Hands what pages kept to the outbox; without its code the actions stay kept and marked until the next `online`. */
     const takeIn = (): void => {
       (watching ??= load())
         .then((outbox) => outbox.takeInKeptClockAction())
         // eslint-disable-next-line no-restricted-syntax -- no signal is the expected case here; the actions stay kept and marked, and `online` or the next start tries again
         .catch(() => undefined);
     };
-    // Also for an action this page kept and another tab took in and sent since: the outbox then says nothing waits.
-    const whenOnline = (): void => {
-      if (keptRef.current > 0 || deviceMayHoldUnsentWork()) takeIn();
-    };
     takeInRef.current = takeIn;
-    whenOnline();
-    window.addEventListener('online', whenOnline);
+    if (deviceMayHoldUnsentWork()) takeIn();
+    // Every return of the network asks the outbox: another tab may have sent what this page kept.
+    window.addEventListener('online', takeIn);
     return () => {
       ended = true;
       takeInRef.current = null;
-      window.removeEventListener('online', whenOnline);
+      window.removeEventListener('online', takeIn);
       stop?.();
+      // The next person or organization never sees these events, also when its own outbox is never asked.
+      setView(null);
+      setKept(false);
     };
   }, [holder, refresh]);
 
-  const keep = useCallback((action: KeptAction): boolean => {
+  const keep = useCallback<ClockOutboxState['keep']>((action) => {
     if (!keepClockAction(action)) return false;
-    keptRef.current += 1;
-    setKept(keptRef.current);
+    setKept(true);
     takeInRef.current?.();
     return true;
   }, []);
-  return { view: watched?.holder === holder ? watched.view : null, kept, keep };
-}
-
-/**
- * Keeps a clock action on the phone and echoes it as the accepted action would show. Only a start,
- * a switch and an end can wait for signal: a recovery or legacy action needs the server's answer
- * first. The first kept action stands on `base`, the clock the server confirmed, kept without the
- * job's, customer's and project's names; one after it passes null and stands on the action before it.
- */
-function useKeepOnPhone({
-  userId,
-  keep,
-  invalidate,
-  setData,
-}: {
-  userId: string | null;
-  keep: ReturnType<typeof useClockOutbox>['keep'];
-  invalidate: ClockLiveView['invalidate'];
-  setData: ClockLiveView['setData'];
-}): (input: TimeTransitionInput, base: LiveClockState | null, triedOnline: boolean) => TimeTransitionResult {
-  return useCallback(
-    (input, base, triedOnline) => {
-      const { organizationId, operationId, action, expectedSessionId, expectedVersion, selection } = input;
-      const command = { operationId, action, expectedSessionId, expectedVersion, selection };
-      const offline = action === 'start' || action === 'switch' || action === 'end';
-      const clock = base && { ...base, activeJobInfo: null, resumeJobInfo: null };
-      if (!offline || !userId || !keep({ ...command, userId, organizationId, triedOnline, base: clock }))
-        return FAILED;
-      const result: TimeTransitionResult = {
-        success: true,
-        outcome: action === 'end' ? 'ended' : 'active',
-        sessionId: null,
-        segmentId: null,
-        version: null,
-        recoveryReason: null,
-        replayed: false,
-        legacyBridged: false,
-      };
-      invalidate();
-      setData((previous) => (previous ? applyTransitionEcho(previous, selection, result) : previous));
-      return result;
-    },
-    [invalidate, keep, setData, userId],
-  );
+  return { view, kept, keep };
 }
 
 /**
@@ -197,15 +162,15 @@ function useClockTransitionExecute({
   isReady: boolean;
   run: (input: TimeTransitionInput) => Promise<TimeTransitionResult>;
   serverState: LiveClockState | null;
-  outbox: ReturnType<typeof useClockOutbox>;
+  outbox: ClockOutboxState;
   invalidate: ClockLiveView['invalidate'];
   refresh: ClockLiveView['refresh'];
   setData: ClockLiveView['setData'];
 }): ClockTransitionExecute {
   const { activeOrgId, userId } = holder;
-  const keepOnPhone = useKeepOnPhone({ userId, keep: outbox.keep, invalidate, setData });
+  const { keep } = outbox;
   // Unsent actions go first: one captured after them must never reach the server before them.
-  const standsOnUnsent = outbox.kept > 0 || outbox.view?.status === 'pending';
+  const standsOnUnsent = outbox.kept || outbox.view?.status === 'pending';
   // Events that wait for the person's decision carry nothing new: an action kept behind them would never be sent.
   const stopped = outbox.view?.status === 'stopped';
   return useCallback(
@@ -217,42 +182,52 @@ function useClockTransitionExecute({
       if (!activeOrgId) return { success: false, error: 'no_active_org' };
       // Never infer a new session from an unknown or failed initial read.
       if (!isReady) return FAILED;
-      const input: TimeTransitionInput = {
-        organizationId: activeOrgId,
+      const command = {
         operationId: crypto.randomUUID(),
         action,
         expectedSessionId: serverState?.sessionId ?? null,
         expectedVersion: serverState?.sessionVersion ?? null,
         selection,
-        acknowledgeLong,
       };
-      // The first kept action stands on the clock the server confirmed; the ones after it stand on it.
-      const keepIt = (triedOnline: boolean): TimeTransitionResult =>
-        stopped ? FAILED : keepOnPhone(input, standsOnUnsent ? null : serverState, triedOnline);
       // A phone that reports no network asks no server.
-      if (standsOnUnsent || !navigator.onLine) return keepIt(false);
-      let result: TimeTransitionResult;
-      try {
-        result = await run(input);
-      } catch {
-        // The call may have reached the server: the phone keeps the action under the same operation id, so it is recorded once.
-        return keepIt(true);
+      const triedOnline = !standsOnUnsent && navigator.onLine;
+      let result: TimeTransitionResult | null = null;
+      if (triedOnline) {
+        try {
+          result = await run({ ...command, organizationId: activeOrgId, acknowledgeLong });
+        } catch {
+          // best-effort: the call may have reached the server, so the phone keeps the action below under the same operation id and it is recorded once.
+        }
+      }
+      if (!result) {
+        // Only a start, a switch and an end can wait for signal. The first kept action stands on
+        // the clock the server confirmed, kept without job, customer and project names.
+        const base =
+          standsOnUnsent || !serverState
+            ? null
+            : { ...serverState, activeJobInfo: null, resumeJobInfo: null };
+        const waits = action === 'start' || action === 'switch' || action === 'end';
+        if (stopped || !waits || !userId) return FAILED;
+        if (!keep({ ...command, userId, organizationId: activeOrgId, triedOnline, base })) return FAILED;
+        result = { ...KEPT, outcome: action === 'end' ? 'ended' : 'active' };
       }
       if (result.success) {
         // Echo first so no in-flight read overwrites it, then read fresh.
+        const accepted = result;
         invalidate();
-        setData((previous) => (previous ? applyTransitionEcho(previous, selection, result) : previous));
+        setData((previous) => (previous ? applyTransitionEcho(previous, selection, accepted) : previous));
       }
-      if (result.success || (!result.success && result.error === 'time_transition_stale_version')) {
-        await refresh();
-      }
+      // A kept action has no server state to read yet.
+      const reads = result.success ? !result.kept : result.error === 'time_transition_stale_version';
+      if (reads) await refresh();
       return result;
     },
     [
       activeOrgId,
+      userId,
       invalidate,
       isReady,
-      keepOnPhone,
+      keep,
       refresh,
       run,
       serverState,
@@ -309,32 +284,6 @@ function useClockTransitionCommands(
   );
 }
 
-/** The signed-in person and the active organization: whose unsent clock events this tab shows and sends. */
-function useClockHolder(activeOrgId: string | null): { userId: string | null; outbox: OutboxHolder | null } {
-  const userId = useUserProfile().profile?.id ?? null;
-  const outbox = useMemo(
-    () => (userId && activeOrgId ? { userId, organizationId: activeOrgId } : null),
-    [userId, activeOrgId],
-  );
-  return { userId, outbox };
-}
-
-/**
- * Whether the clock can act, and the failed read it shows. Unsent actions carry the clock on their
- * own. A read that failed on a phone without network leaves the last confirmed clock usable, and
- * its next action is kept on the phone.
- */
-function clockReadiness(
-  view: Pick<ClockLiveView, 'isLoading' | 'error'>,
-  clock: { known: boolean; standsOnUnsent: boolean },
-): { isReady: boolean; statusError: string | null } {
-  const standsOnDevice = clock.standsOnUnsent || (Boolean(view.error) && !navigator.onLine);
-  return {
-    isReady: clock.known && !view.isLoading && (!view.error || standsOnDevice),
-    statusError: standsOnDevice ? null : (view.error ?? null),
-  };
-}
-
 export function ClockStateProvider({
   children,
   initialState = null,
@@ -343,6 +292,11 @@ export function ClockStateProvider({
   initialState?: LiveClockState | null;
 }) {
   const { activeOrgId } = useOrganization();
+  const userId = useUserProfile().profile?.id ?? null;
+  const outboxHolder = useMemo(
+    () => (userId && activeOrgId ? { userId, organizationId: activeOrgId } : null),
+    [userId, activeOrgId],
+  );
   // The running session's job, for the `jobs` event filter below; a ref so
   // the filter reads the latest value without re-registering.
   const activeJobIdRef = useRef<string | null>(null);
@@ -360,15 +314,15 @@ export function ClockStateProvider({
   const { run, isPending } = useServerAction(transitionTimeActivity);
   const { refresh, invalidate, setData } = view;
   const serverState = view.data?.organizationId === activeOrgId ? view.data : null;
-  const { userId, outbox: outboxHolder } = useClockHolder(activeOrgId);
   const outbox = useClockOutbox(outboxHolder, refresh);
   const unsent = outbox.view;
   // While the outbox shows unsent events, the clock stands where they left it; a stopped chain shows the server's state.
   const currentState = unsent?.state ?? serverState;
-  const { isReady, statusError } = clockReadiness(view, {
-    known: currentState !== null,
-    standsOnUnsent: Boolean(unsent?.state) || outbox.kept > 0,
-  });
+  // Unsent actions carry the clock on their own. A read that failed on a phone without network leaves
+  // the last confirmed clock usable: its next action is kept on the phone.
+  const standsOnDevice = Boolean(unsent?.state) || outbox.kept || (Boolean(view.error) && !navigator.onLine);
+  const isReady = currentState !== null && !view.isLoading && (!view.error || standsOnDevice);
+  const statusError = standsOnDevice ? null : (view.error ?? null);
   useEffect(() => {
     activeJobIdRef.current = serverState?.activeJobId ?? null;
   }, [serverState?.activeJobId]);
@@ -394,7 +348,7 @@ export function ClockStateProvider({
     () => ({
       state: currentState,
       unsent,
-      waitsForNetwork: outbox.kept > 0,
+      waitsForNetwork: outbox.kept,
       isLoading: view.isLoading,
       isReady,
       isPending,

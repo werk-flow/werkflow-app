@@ -1,6 +1,7 @@
 'use client';
 
 import { logError } from '@/lib/logging';
+import { UNSENT_MARK_PREFIX } from './unsent-mark';
 
 // Sends what a phone recorded without signal (decision record 0010, "Sync
 // triggers"): on app start, on `online` and on „Jetzt senden“. A return to
@@ -9,6 +10,20 @@ import { logError } from '@/lib/logging';
 // no polling. Each kind of unsent work registers one sender; a pass runs them
 // in the order they registered, one after the other, because a report can
 // depend on the time event before it.
+
+/**
+ * Records whether the device holds unsent work of this kind, of any person. While any kind is
+ * marked, a page loads this runner at the app start (unsent-mark.ts); without a mark no cold start
+ * pays for it. A sender sets its mark when it stores work and clears it when its store is empty.
+ */
+export function markUnsentWork(kind: string, holds: boolean): void {
+  try {
+    if (holds) localStorage.setItem(UNSENT_MARK_PREFIX + kind, '1');
+    else localStorage.removeItem(UNSENT_MARK_PREFIX + kind);
+  } catch {
+    // best-effort: without localStorage the app start does not send; the next clock action and every sign-out still read the outbox.
+  }
+}
 
 type Sender = { name: string; send: () => Promise<void> };
 

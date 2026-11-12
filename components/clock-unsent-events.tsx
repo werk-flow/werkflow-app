@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 
 import { useClockState } from '@/components/clock-state-provider';
 import {
@@ -9,7 +9,6 @@ import {
   unsentChainReason,
   unsentChainStatus,
 } from '@/components/clock-unsent-list';
-import { ManualEntryDialog } from '@/components/manual-entry-dialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,6 +36,14 @@ import { formatBerlinTime, parseIsoLocalDate } from '@/lib/utils';
 // The clock's view of the events this phone holds unsent (decision record
 // 0010, the 2026-11-11 amendment "the time outbox"). The clock dock and its
 // sheet load this file only while such events exist.
+
+/**
+ * The existing correction request, loaded when the person asks for it: its form is far larger than
+ * this view, and every page's start-up code lists the files this view needs.
+ */
+const ManualEntryDialog = lazy(() =>
+  import('@/components/manual-entry-dialog').then((loaded) => ({ default: loaded.ManualEntryDialog })),
+);
 
 const STORAGE_FAILED = 'Der Speicher deines Geräts hat nicht geantwortet. Bitte versuche es erneut.';
 
@@ -223,13 +230,17 @@ function UnsentPanel({ view }: { view: ClockDeviceView }) {
         onConfirm={deleteEvents}
         pending={running === 'delete'}
       />
-      <ManualEntryDialog
-        controlledOpen={correcting}
-        onOpenChange={setCorrecting}
-        {...correctionPrefill(view)}
-        // The request is filed, and the form confirms it: only now do the kept events leave the phone.
-        onSuccess={deleteEvents}
-      />
+      {correcting && (
+        <Suspense>
+          <ManualEntryDialog
+            controlledOpen={correcting}
+            onOpenChange={setCorrecting}
+            {...correctionPrefill(view)}
+            // The request is filed, and the form confirms it: only now do the kept events leave the phone.
+            onSuccess={deleteEvents}
+          />
+        </Suspense>
+      )}
     </section>
   );
 }

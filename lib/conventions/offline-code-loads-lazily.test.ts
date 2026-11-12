@@ -121,7 +121,19 @@ function calledOnlyCaught(source: ts.SourceFile, name: string): boolean {
   );
 }
 
+/** True when the load's own promise carries a `.catch(...)`, as a `lazy()` component's fallback does. */
+function catchChained(load: ts.CallExpression): boolean {
+  const access = load.parent;
+  return (
+    ts.isPropertyAccessExpression(access) &&
+    access.name.text === 'catch' &&
+    ts.isCallExpression(access.parent) &&
+    access.parent.expression === access
+  );
+}
+
 function caught(load: ts.CallExpression, source: ts.SourceFile): boolean {
+  if (catchChained(load)) return true;
   if (!awaitedOrReturned(load)) return false;
   if (ts.isAwaitExpression(load.parent) && insideCatchingTry(load)) return true;
   const declaration = enclosingFunctionDeclaration(load);
@@ -229,6 +241,10 @@ describe('offline code loads lazily', () => {
       "export async function out() { const m = await import('@/lib/offline/offline-data'); }",
     'components/probe-caught.ts':
       "export async function out() { try { await import('@/lib/offline/offline-data'); } catch {} }",
+    'components/probe-chained-catch.ts':
+      "export const View = lazy(() => import('@/lib/offline/offline-data').catch(() => ({ default: Fallback })));",
+    'components/probe-chained-then.ts':
+      "export const View = lazy(() => import('@/lib/offline/offline-data').then((loaded) => loaded));",
     'components/probe-caller.ts': [
       "async function load() { return import('@/lib/offline/offline-data'); }",
       'export async function out() { try { await load(); } catch {} }',
@@ -277,9 +293,14 @@ describe('offline code loads lazily', () => {
       'components/probe-unawaited.ts',
       'components/probe-nested.ts',
       'components/probe-unawaited-caller.ts',
+      'components/probe-chained-then.ts',
     ])
       expect(uncaughtOfflineLoads(file, host), file).toEqual([`${file}:1`]);
-    for (const file of ['components/probe-caught.ts', 'components/probe-caller.ts'])
+    for (const file of [
+      'components/probe-caught.ts',
+      'components/probe-caller.ts',
+      'components/probe-chained-catch.ts',
+    ])
       expect(uncaughtOfflineLoads(file, host), file).toEqual([]);
   });
 

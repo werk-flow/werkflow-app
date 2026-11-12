@@ -6,7 +6,8 @@ import { clockDeviceView, discardTimeEvents, type ClockDeviceView } from './time
 import { sendTimeOutbox } from './time-outbox-send';
 import { readTimeOutbox, readWholeTimeOutbox, type OutboxHolder } from './time-outbox-store';
 import { TODAY_WIPE_KEY } from './today-wipe';
-import { KEPT_CLOCK_ACTIONS_KEY, markUnsentWork } from './unsent-mark';
+import { markUnsentWork } from './sync-runner';
+import { KEPT_CLOCK_ACTIONS_KEY } from './unsent-mark';
 import type { UnsentSource } from './unsent-work';
 
 // This tab's hold on the time outbox: whose unsent events it shows and sends.

@@ -160,6 +160,8 @@ export type TimeTransitionResult =
       replayed: boolean;
       legacyBridged: boolean;
       notice?: 'sickness_reported_today';
+      /** The phone kept the action without the server's answer; it is not recorded yet (decision record 0010). */
+      kept?: true;
     }
   | ActionFailure<TimeTransitionError>;
 

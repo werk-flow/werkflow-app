@@ -167,6 +167,16 @@ function withoutSentAt(envelope: Envelope | undefined): Envelope | undefined {
   return envelope && { ...envelope, sentAt: '' };
 }
 
+test('a page whose device holds nothing unsent never runs the outbox code at its start', async ({ page }) => {
+  await mountClock(page, CLOCKED_OUT_STATE);
+  await expect(page.getByRole('button', { name: 'Zeiterfassung starten', exact: true })).toBeEnabled();
+
+  // The outbox opens its database with its first read: no database, no outbox code at the start.
+  const databases = await page.evaluate(async () => (await indexedDB.databases()).map((info) => info.name));
+  expect(databases).not.toContain('werkflow-time-outbox');
+  expect(await page.evaluate(() => Object.keys(localStorage))).toEqual([]);
+});
+
 test('a clock action without network is kept on the phone, shows the running clock as waiting, and is sent once at its captured time', async ({
   page,
 }) => {
