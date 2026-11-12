@@ -32,20 +32,19 @@ export function sampleOffer(organizationName: string, issuedOn: string): Busines
     issuedOn,
     sender: { name: organizationName, addressLines: [], logo: null },
     recipientLines: [
-      'Hausverwaltung Lindenhof GmbH',
-      'Erika Musterfrau',
-      'Lindenstraße 12',
-      '12345 Musterstadt',
+      'Hausverwaltung Ahornhof GmbH',
+      'Ahornweg 7',
+      '09876 Ahornstadt',
     ],
     title: 'Angebot: Austausch der Gasheizung',
     metaRows: [
       { label: 'Angebot', value: 'Muster' },
       { label: 'Datum', value: formatGermanDate(issuedOn) },
       { label: 'Gültig bis', value: formatGermanDate(addLocalDays(issuedOn, 30)) },
-      { label: 'Objekt', value: 'Lindenstraße 12, 12345 Musterstadt' },
+      { label: 'Objekt', value: 'Ahornweg 7, 09876 Ahornstadt' },
     ],
     openingText:
-      'Sehr geehrte Frau Musterfrau,\nvielen Dank für Ihre Anfrage. Gerne bieten wir Ihnen die folgenden Leistungen an.',
+      'Sehr geehrte Damen und Herren,\nvielen Dank für die Anfrage. Gerne bieten wir die folgenden Leistungen an.',
     sections: [
       {
         number: '1',
@@ -92,7 +91,7 @@ export function sampleOffer(organizationName: string, issuedOn: string): Busines
       vatCents: 123842,
       grossCents: 775642,
     },
-    closingText: `Wir freuen uns auf Ihren Auftrag. Bei Fragen erreichen Sie uns jederzeit.\n\nMit freundlichen Grüßen\n${organizationName}`,
+    closingText: `Wir freuen uns auf den Auftrag und stehen für Fragen jederzeit zur Verfügung.\n\nMit freundlichen Grüßen\n${organizationName}`,
     footerColumns: [],
     stationery: null,
   };
