@@ -80,9 +80,14 @@ function countingQuery(table: string) {
     queries.push(single ? `${table} (one row)` : table);
     if (table === failingTable)
       return Promise.resolve(resolve({ data: null, error: { code: '57014' }, count: 0 }));
-    // The one read function that answers an object: the open absences, here none.
+    // The read functions that answer an object: the open absences, here none.
     if (table === 'rpc read_open_absences')
       return Promise.resolve(resolve({ data: { vacations: [], leaverWindows: [] }, error: null, count: 0 }));
+    // The other one: the open requests and access proposals of the office, here none.
+    if (table === 'rpc read_manager_attention_sets')
+      return Promise.resolve(
+        resolve({ data: { requests: [], access_proposals: [] }, error: null, count: 0 }),
+      );
     const rows = rowsOf(table);
     return Promise.resolve(
       resolve({ data: single ? (rows[0] ?? null) : rows, error: null, count: rows.length }),
@@ -159,8 +164,8 @@ if (ISOLATED) {
     'profiles',
     'projects',
     'rpc list_handover_candidate_projects',
-    'rpc list_open_request_attention',
     'rpc list_pending_dispatch_recipients',
+    'rpc read_manager_attention_sets',
     'rpc read_open_absences',
     'sickness_reports',
     'time_correction_requests',

@@ -220,6 +220,10 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
                   return { path: join(import.meta.dir, 'edit-job-service-boundaries.ts') };
               },
             );
+            // The access proposal's form and office review write through held stand-ins.
+            builder.onResolve({ filter: /^@\/lib\/site-access-proposals\/actions$/ }, () => ({
+              path: join(import.meta.dir, 'site-access-boundaries.tsx'),
+            }));
             // The handover review saves its draft and previews through these held stand-ins.
             builder.onResolve({ filter: /^@\/lib\/(work-handover|documents)\/actions$/ }, (args) => {
               if (args.importer.includes('/components/auftraege/handover/'))

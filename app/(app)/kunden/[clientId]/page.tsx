@@ -14,10 +14,15 @@ import type { OrgMemberOption } from '@/components/auftraege/shared/employee-mul
 import { KundenDetailContent } from '@/components/kunden/kunden-detail-content';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { RouteRedirect } from '@/components/shared/route-redirect';
+import { SiteAccessReviewOpener } from '@/components/kunden/site-access-review';
+import { readSiteAccessReview } from '@/lib/site-access-proposals/review-read';
+import { SITE_ACCESS_REVIEW_PARAM } from '@/lib/site-access-proposals/types';
+import { uuidSchema } from '@/lib/validation/uuid';
 import KundenDetailLoading from './loading';
 
 interface KundenDetailPageProps {
   params: Promise<{ clientId: string }>;
+  searchParams: Promise<{ [SITE_ACCESS_REVIEW_PARAM]?: string | string[] }>;
 }
 
 /** Every read of the customer detail page, started together. */
@@ -126,8 +131,34 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
   );
 }
 
-export default async function KundenDetailPage({ params }: KundenDetailPageProps) {
-  const { clientId } = await params;
+/**
+ * The review of a field worker's access proposal that a „Zugang prüfen“ task
+ * links to with `?zugang=`. Without the parameter it reads nothing. It checks
+ * the manager role itself and reads the proposal only inside the caller's
+ * organization and this customer.
+ */
+async function SiteAccessReviewSlot({
+  clientId,
+  proposalParam,
+}: {
+  clientId: string;
+  proposalParam: unknown;
+}) {
+  const proposalId = uuidSchema.safeParse(proposalParam);
+  if (!proposalId.success) return null;
+  const { membership } = await resolvePageMembership();
+  if (!membership || !isManagerRole(membership.role)) return null;
+  const result = await readSiteAccessReview(membership.orgId, clientId, proposalId.data);
+  return <SiteAccessReviewOpener clientId={clientId} read={result.ok ? result.read : 'failed'} />;
+}
 
-  return <KundenDetailData clientId={clientId} />;
+export default async function KundenDetailPage({ params, searchParams }: KundenDetailPageProps) {
+  const [{ clientId }, query] = await Promise.all([params, searchParams]);
+
+  return (
+    <>
+      <KundenDetailData clientId={clientId} />
+      <SiteAccessReviewSlot clientId={clientId} proposalParam={query[SITE_ACCESS_REVIEW_PARAM]} />
+    </>
+  );
 }

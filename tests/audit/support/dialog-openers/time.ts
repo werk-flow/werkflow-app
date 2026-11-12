@@ -61,6 +61,7 @@ import {
   showOrganizationSwitcher,
   signOutMenuItem,
 } from '../../../golden/support/steps/organization';
+import { fieldPackSiteAccessButton, fieldPackSiteAccessDialog } from '../../../golden/support/steps/work';
 import type { TestWorld } from '../../../golden/support/world';
 import type { DialogOpener } from '../dialog-opener';
 import { prepareLayoutDetails } from '../layout-fixtures';
@@ -325,6 +326,11 @@ export const TIME_OPENERS = {
       return ownEvidenceUploadButton(page);
     },
     layer: ownEvidenceUploadDialog,
+  },
+  // The field worker's proposal from the pencil on the opened job's Einsatzort, in any proposal state.
+  'field.site-access': {
+    trigger: async ({ page }) => fieldPackSiteAccessButton(page),
+    layer: fieldPackSiteAccessDialog,
   },
   'field.artifact': {
     trigger: async ({ page }) => newWorkArtifactButton(page, { exact: true }),

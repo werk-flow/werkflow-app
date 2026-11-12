@@ -89,6 +89,20 @@ export function TaskRow({ task }: { task: AttentionTask }) {
             {` · Abwesend · Einsatz ${CALENDAR_DISPATCH_STATE_LABELS[task.dispatchState]}`}
           </p>
         </TaskLink>
+      ); // The review opens on the customer page of the Einsatzort, beside its contacts.
+    case 'site_access_proposal':
+      return (
+        <TaskLink
+          href={`/kunden/${task.clientId}?zugang=${task.sourceId}#einsatzorte`}
+          ariaLabel={`Zugangshinweis von ${task.proposerName} zu ${task.siteName} prüfen`}
+          sourceId={task.sourceId}
+        >
+          <p className="truncate text-sm font-medium">{task.siteName}</p>
+          <p className="text-xs text-muted-foreground tabular-nums">
+            {task.proposerName} · {formatGermanDate(task.proposedAt)}
+            {task.jobNumber ? ` · ${task.jobNumber}` : ''}
+          </p>
+        </TaskLink>
       );
   }
 }

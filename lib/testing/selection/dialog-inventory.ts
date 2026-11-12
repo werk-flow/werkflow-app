@@ -480,6 +480,12 @@ export const DIALOG_INVENTORY = {
   'components/zeiterfassung/vacation-section-request-dialog.tsx#OwnVacationRequestDialog|Urlaub beantragen': {
     audits: [{ route: '/zeiterfassung', role: 'employee', opener: 'field.vacation-request' }],
   },
+  'components/auftraege/work-pack/field-site-access-dialog.tsx#SiteAccessProposalDialog|Zugang korrigieren': {
+    audits: [{ route: '/auftraege/[jobNumber]', role: 'employee', opener: 'field.site-access' }],
+  },
+  'components/kunden/site-access-review-dialog.tsx#SiteAccessReviewDialog|{title}': {
+    audits: [{ route: '/aufgaben', role: 'admin', opener: 'customers.site-access-review' }],
+  },
   "components/auftraege/artifacts/work-artifact-dialog.tsx#WorkArtifactDialog|{detail ? (currentRevision?.title ?? 'Arbeitsnachweis') : 'Arbeitsnachweis erstellen'}":
     {
       audits: [
