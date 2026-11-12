@@ -1,7 +1,7 @@
 // Rule test: every rendered acceptance capture runs in exactly one registered group, every open set file is loaded into exactly one group, and a group's spec imports only the dialog openers its captures use.
 import { expect, test } from 'bun:test';
 import { Glob } from 'bun';
-import { readdirSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import {
   INVENTORY_ROUNDS,
@@ -10,7 +10,7 @@ import {
   roundCaptures,
   type AcceptanceSet,
 } from '../../../tests/audit/support/acceptance-rounds';
-import { ACCEPTANCE_SET_DIRECTORY, acceptanceSets } from '../../../tests/audit/support/acceptance-sets';
+import { acceptanceSetFiles, acceptanceSets } from '../../../tests/audit/support/acceptance-sets';
 import { sourceImportGraph, UNKNOWN_IMPORT_DEPENDENCY } from '../evidence/group-evidence';
 import { testExecutionClosure } from '../evidence/group-qualification';
 import { getTestGroups } from '../selection/test-groups';
@@ -27,7 +27,7 @@ function titles(sets: readonly AcceptanceSet[]): string[] {
 }
 
 const SPECS = [...ROUND_GROUPS, 'sets'].map(specOf);
-const SET_FILES = readdirSync(ACCEPTANCE_SET_DIRECTORY).map((file) => `${SUPPORT}/acceptance-sets/${file}`);
+const SET_FILES = acceptanceSetFiles().map((file) => `${SUPPORT}/acceptance-sets/${file}`);
 const FILES = [
   'app',
   'components',
@@ -125,4 +125,8 @@ test('every open set file holds one set named after it, and the sets group execu
       (GRAPH.get(file) ?? []).filter((dependency) => SET_FILES.includes(dependency)),
       `${file} imports another set`,
     ).toEqual([]);
+});
+
+test('without an open set, the directory is absent and the sets are empty', () => {
+  expect(acceptanceSetFiles(join(ROOT, 'tests/audit/support/no-such-directory'))).toEqual([]);
 });

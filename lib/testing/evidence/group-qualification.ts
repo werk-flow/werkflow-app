@@ -9,7 +9,7 @@ import {
   type InputSnapshot,
 } from './group-evidence';
 import { TEST_SCOPE_PREFIXES, type TestGroup } from '../selection/test-groups';
-import { isTestInput, runnerPilotInputs } from '../selection/group-selection';
+import { isTestInput, RUNTIME_LOADED_SUPPORT, runnerPilotInputs } from '../selection/group-selection';
 import type { PlaywrightTarget } from '../runner/run-policy';
 import { BROWSER_INPUT_DRIFT_MESSAGE } from './test-evidence';
 
@@ -44,15 +44,6 @@ const BROWSER_DEPENDENCY_INPUTS: readonly string[] = ['bun.lock', 'package.json'
 const GROUP_OWNED_PREFIXES: Readonly<Record<string, readonly string[]>> = {
   'static:lint': ['eslint-rules/'],
   'static:format': ['.prettierignore', '.editorconfig'],
-};
-
-/**
- * Test support a module loads by directory at run time, which no import names: the open
- * acceptance sets, one file each (tests/audit/support/acceptance-sets.ts). A group that reaches
- * the module executes every file of the directory.
- */
-const RUNTIME_LOADED_SUPPORT: Readonly<Record<string, string>> = {
-  'tests/audit/support/acceptance-sets.ts': 'tests/audit/support/acceptance-sets/',
 };
 
 /**

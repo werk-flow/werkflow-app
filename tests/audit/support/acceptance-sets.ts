@@ -1,4 +1,4 @@
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import type { TestWorld } from '../../golden/support/world';
@@ -24,7 +24,12 @@ type SetCapture = CaptureSpec & { destination?: (world: TestWorld) => Promise<Su
 export type OpenSet = AcceptanceSet<SetCapture>;
 
 /** The directory of the set files, which selection reads as inputs of every group that reaches this module. */
-export const ACCEPTANCE_SET_DIRECTORY = join(__dirname, 'acceptance-sets');
+const ACCEPTANCE_SET_DIRECTORY = join(__dirname, 'acceptance-sets');
+
+/** The set files in file-name order. Git keeps no empty directory, so without an open set it is absent. */
+export function acceptanceSetFiles(directory = ACCEPTANCE_SET_DIRECTORY): string[] {
+  return existsSync(directory) ? readdirSync(directory).toSorted() : [];
+}
 
 const registered: OpenSet[] = [];
 
@@ -43,7 +48,7 @@ let loaded: readonly OpenSet[] | undefined;
 export function acceptanceSets(): readonly OpenSet[] {
   if (loaded) return loaded;
   const load = createRequire(__filename);
-  for (const file of readdirSync(ACCEPTANCE_SET_DIRECTORY).toSorted()) {
+  for (const file of acceptanceSetFiles()) {
     const before = registered.length;
     load(join(ACCEPTANCE_SET_DIRECTORY, file));
     const set = registered.at(-1);

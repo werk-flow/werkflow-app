@@ -65,6 +65,12 @@ const groups = [
     ['tests/audit/performance/calendar.spec.ts'],
   ),
   browser('audit:visual', 'release-only', ['*'], ['tests/audit/visual/references.spec.ts']),
+  browser(
+    'audit:visual:acceptance:sets',
+    'release-only',
+    ['*'],
+    ['tests/audit/visual/acceptance-sets.spec.ts', 'tests/audit/support/acceptance-sets.ts'],
+  ),
 ];
 const CRITICAL = ['golden:gg-00', 'golden:p1-21'];
 const CHEAP = ['static:docs', 'static:dependencies', 'unit:all', 'ui:contracts', 'sql:p1-21'];
@@ -249,6 +255,13 @@ test('visual references run in release mode only, even when shared controls or t
     'audit:wave-2:p1-13',
   ]);
   expect(select([], [], 'release')).toContain('audit:visual');
+});
+
+test('a set file selects the group that loads its directory, also when the change deletes it', () => {
+  // No import names a set file, so a deleted one is in no group's execution inputs.
+  const closed = 'tests/audit/support/acceptance-sets/closed-set-2026-10-01.ts';
+  expect(select([closed])).toContain('audit:visual:acceptance:sets');
+  expect(select([closed])).not.toContain('audit:visual');
 });
 
 test('a browser pass counts only when it ran on the current content of the files that selected it', () => {
