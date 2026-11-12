@@ -67,6 +67,48 @@ test('replacements animate with only one live actionable banner; stale dismissal
 });
 
 for (const width of [375, 1280]) {
+  test(`a banner action stacks below its full-width message on a phone and stays beside it from sm up at width ${width}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 812 });
+    await page.getByRole('button', { name: 'Langer Hinweis', exact: true }).click();
+    const banner = page.getByRole('alert');
+    const message = banner.getByText(
+      'Deine Einsätze von heute sind auf diesem Gerät nicht für offline gespeichert.',
+    );
+    const messageBox = await message.boundingBox();
+    const actionBox = await banner.getByRole('button', { name: 'Für offline neu laden' }).boundingBox();
+    const closeBox = await banner.getByRole('button', { name: 'Hinweis schließen' }).boundingBox();
+    if (!messageBox || !actionBox || !closeBox) throw new Error('Missing banner geometry');
+    if (width < 640) {
+      expect(messageBox.width).toBeGreaterThanOrEqual(200);
+      expect(actionBox.y).toBeGreaterThanOrEqual(messageBox.y + messageBox.height);
+      expect(Math.abs(actionBox.x - messageBox.x)).toBeLessThan(1);
+      expect(closeBox.x).toBeGreaterThanOrEqual(messageBox.x + messageBox.width);
+      expect(closeBox.y).toBeLessThanOrEqual(messageBox.y);
+    } else {
+      expect(actionBox.x).toBeGreaterThanOrEqual(messageBox.x + messageBox.width);
+      expect(actionBox.y).toBeLessThan(messageBox.y + messageBox.height);
+    }
+    // The surface hides the page header beneath it: its fill carries no transparency.
+    const fill = await banner
+      .locator(':scope > div')
+      .evaluate((surface) => getComputedStyle(surface).backgroundColor);
+    expect(fill).toMatch(/^rgb\(\d+, \d+, \d+\)$/);
+  });
+}
+
+test('a banner message with a long unbroken name wraps inside the banner on a phone', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.getByRole('button', { name: 'Langer Name', exact: true }).click();
+  const banner = page.getByRole('alert');
+  const messageBox = await banner.getByText('archiviert', { exact: false }).boundingBox();
+  const closeBox = await banner.getByRole('button', { name: 'Hinweis schließen' }).boundingBox();
+  if (!messageBox || !closeBox) throw new Error('Missing banner geometry');
+  expect(messageBox.x + messageBox.width).toBeLessThanOrEqual(closeBox.x);
+});
+
+for (const width of [375, 1280]) {
   test(`dialog actions stay separated at viewport width ${width}`, async ({ page }) => {
     await page.setViewportSize({ width, height: 812 });
     await page.getByRole('button', { name: 'Formular öffnen' }).click();

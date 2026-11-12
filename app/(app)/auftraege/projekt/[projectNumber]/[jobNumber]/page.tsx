@@ -17,6 +17,7 @@ import { RegionLoadError } from '@/components/shared/region-load-error';
 import { RouteRedirect } from '@/components/shared/route-redirect';
 import { getWorkLifecycleSnapshot } from '@/lib/work-lifecycle/actions';
 import { getWorkArtifacts } from '@/lib/work-artifacts/actions';
+import { getWorkRequestEntries } from '@/lib/requests/work-attach-server';
 import { getEffectiveResponsibilityHolderForActor } from '@/lib/responsibilities/server';
 import { getWorkHandoverWorkspace } from '@/lib/work-handover/actions';
 import NestedJobDetailLoading from './loading';
@@ -63,6 +64,10 @@ async function loadNestedJobDetailReads({
   const handoverWorkspacePromise = jobResultPromise.then((result) =>
     result.success ? getWorkHandoverWorkspace({ targetType: 'job', targetId: result.job.id }) : null,
   );
+  // The attached requests arrive with the page, so the section opens without a read of its own.
+  const requestEntriesPromise = jobResultPromise.then((result) =>
+    result.success ? getWorkRequestEntries({ kind: 'job', id: result.job.id }) : null,
+  );
 
   const [
     projectResult,
@@ -76,6 +81,7 @@ async function loadNestedJobDetailReads({
     artifactsResult,
     approvalHolder,
     handoverWorkspaceResult,
+    requestEntriesResult,
   ] = await Promise.all([
     getProjectByNumber(decodeURIComponent(projectNumber)),
     jobResultPromise,
@@ -88,6 +94,7 @@ async function loadNestedJobDetailReads({
     artifactsResultPromise,
     approvalHolderPromise,
     handoverWorkspacePromise,
+    requestEntriesPromise,
   ]);
   return {
     projectResult,
@@ -101,6 +108,7 @@ async function loadNestedJobDetailReads({
     artifactsResult,
     approvalHolder,
     handoverWorkspaceResult,
+    requestEntriesResult,
   };
 }
 
@@ -115,6 +123,7 @@ function nestedJobDetailRegions(
     artifactsResult,
     approvalHolder,
     handoverWorkspaceResult,
+    requestEntriesResult,
   }: Awaited<ReturnType<typeof loadNestedJobDetailReads>>,
   memberRows: readonly OrgMemberInfo[],
 ) {
@@ -148,6 +157,7 @@ function nestedJobDetailRegions(
     inventoryLocations,
     lifecycleSnapshot: lifecycleResult?.success ? lifecycleResult.snapshot : null,
     handoverWorkspace,
+    requestEntries: requestEntriesResult?.success ? requestEntriesResult.entries : undefined,
   } satisfies Partial<ComponentProps<typeof JobDetailContent>>;
 }
 

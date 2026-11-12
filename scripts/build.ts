@@ -4,12 +4,16 @@ import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'n
 import { resolve } from 'node:path';
 import { calculateBuildInputs, type BuildReceipt } from '../lib/testing/evidence/build-identity';
 import { assertAppPortFree, workspacePorts } from '../lib/testing/runner/app-port';
+import { acquireHeavySlot } from '../lib/testing/runner/heavy-slot';
 import { withWorkspaceTestLock } from '../lib/testing/runner/workspace-test-lock';
 
 // The one local production build (`bun run build`). It records the build the
 // test server serves; Vercel runs plain `next build` (vercel.json buildCommand).
+// It holds one of the machine's heavy slots until it exits (lib/testing/runner/heavy-slot.ts);
+// inside `bun run test:server`, it reuses the server's slot.
 const repositoryRoot = realpathSync(resolve(import.meta.dir, '..'));
 await withWorkspaceTestLock({ operation: 'production build', repositoryRoot }, async () => {
+  await acquireHeavySlot('build');
   const ports = workspacePorts(repositoryRoot);
   for (const port of new Set([ports.app, ports.dev])) await assertAppPortFree(port);
   const receiptPath = resolve(repositoryRoot, '.next/werkflow-build-receipt.json');

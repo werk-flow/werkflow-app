@@ -640,8 +640,8 @@ export async function convertRequestToJob(
       return await convertedWorkOf(admin, request, 'job', attemptKey);
     }
 
-    // Attaching a request to existing work is a later triage capability
-    // (service slices).
+    // A conversion creates new work; existing work takes a request through
+    // attachRequestToWork.
     if (input.projectId) {
       return { success: false, error: 'standalone_job_only' };
     }

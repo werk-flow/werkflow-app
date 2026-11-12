@@ -1,5 +1,5 @@
 -- An Objekt knows its owner, manager, payer and access contacts over time
--- (migration 20261130090003_record_dated_objekt_roles.sql).
+-- (migration 20261130090004_record_dated_objekt_roles.sql).
 begin;
 
 insert into auth.users (

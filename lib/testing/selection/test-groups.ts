@@ -344,6 +344,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['request-history-writes', ['request_history_writes.sql'], ['customers']],
   ['request-caller-matches', ['request_caller_matches.sql'], ['customers']],
   ['request-retry-results', ['request_retry_results.sql'], ['customers', 'work', 'service']],
+  ['request-attach-to-work', ['request_attach_to_work.sql'], ['customers', 'work', 'service', 'documents']],
   ['client-duplicates', ['client_duplicates.sql'], ['customers']],
   ['client-archive-history', ['client_archive_history.sql'], ['customers']],
   ['client-site-roles', ['client_site_roles.sql'], ['customers', 'service']],

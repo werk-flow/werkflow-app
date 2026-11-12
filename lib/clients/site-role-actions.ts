@@ -18,7 +18,7 @@ import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 
 // The refusals assign_client_site_role and end_client_site_role raise
-// (supabase/migrations/20261130090003_record_dated_objekt_roles.sql).
+// (supabase/migrations/20261130090004_record_dated_objekt_roles.sql).
 const roleWriteRefusal = writeRefusalFor(
   new Set([
     'not_authorized',
