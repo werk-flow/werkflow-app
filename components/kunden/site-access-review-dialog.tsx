@@ -29,9 +29,8 @@ import {
 import { focusFirstInvalidField, REASON_MIN_3_MESSAGE } from '@/lib/ui/field-validation';
 import { formatGermanDate } from '@/lib/utils';
 
-// Loaded through components/shared/lazy-dialog.tsx only when the customer page
-// opens with `?zugang=` (components/kunden/site-access-review.tsx), so no cold
-// start carries the review or its actions.
+// Part of the customer page only (components/kunden/site-access-review.tsx):
+// no other page's cold start carries the review or its actions.
 
 const NEW_CONTACT = 'neu';
 /** A raw Select holds at most nine options: „Neuer Zugangskontakt“ and eight to correct. */

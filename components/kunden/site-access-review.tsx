@@ -3,18 +3,14 @@
 import { useRouter } from 'next/navigation';
 import { useState, type ReactElement } from 'react';
 
-import { lazyDialog } from '@/components/shared/lazy-dialog';
+import { SiteAccessReviewDialog } from './site-access-review-dialog';
 import type { SiteAccessReviewRead } from '@/lib/site-access-proposals/types';
-
-const lazyReviewDialog = lazyDialog<{
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  read: SiteAccessReviewRead | 'failed';
-}>(() => import('./site-access-review-dialog').then((mod) => mod.SiteAccessReviewDialog));
 
 /**
  * The review of a field worker's access proposal, open from the first frame
- * of a customer page reached with `?zugang=` (the „Zugang prüfen“ task).
+ * of a customer page reached with `?zugang=` (the „Zugang prüfen“ task). It
+ * ships with the customer page itself: a lazy import of it made Turbopack cut
+ * the shared (app) layout group into two more chunks for every page.
  * Closing it, or deciding, drops the parameter, so the page renders as usual
  * and the Einsatzorte card shows the result.
  */
@@ -28,7 +24,7 @@ function SiteAccessReview({
   const router = useRouter();
   const [open, setOpen] = useState(true);
   return (
-    <lazyReviewDialog.Dialog
+    <SiteAccessReviewDialog
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
