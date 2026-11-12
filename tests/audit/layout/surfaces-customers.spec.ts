@@ -1,6 +1,6 @@
 import { test } from '../support/fixtures';
 import { surfaceTests } from '../../../lib/testing/selection/surface-groups';
-import { ACCEPTANCE_RECORDS } from '../support/acceptance-records';
+import { managedBuilding, managedBuildingSearch } from '../support/managed-buildings';
 import { expectNoSidewaysOverflow, expectPhoneMeasures } from '../support/layout-measure';
 import { auditSurfaceTest } from '../support/surface-audit';
 import { openSurface } from '../support/surface-routes';
@@ -20,9 +20,12 @@ test.describe('@AUDIT-LAYOUT-SURFACES customers: tabs and dialogs fit, pass axe 
   // The golden world has no Objekt roles and the list opens without a search,
   // so the default views never render the role lines. These open them with
   // the worst-case unbroken names of `worldName`.
-  for (const record of ['managed-building-search', 'managed-building'] as const) {
+  for (const [record, open] of [
+    ['managed-building-search', managedBuildingSearch],
+    ['managed-building', managedBuilding],
+  ] as const) {
     test(`${record}: every Objekt and role line wraps inside its card`, async ({ adminPage, world }) => {
-      const destination = await ACCEPTANCE_RECORDS[record](world);
+      const destination = await open(world);
       await adminPage.setViewportSize({ width: 375, height: 812 });
       await openSurface(adminPage, destination);
       await expectPhoneMeasures(adminPage, `${destination.route} at 375 px`);

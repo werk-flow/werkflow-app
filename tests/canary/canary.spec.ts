@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
 
 import { expect, test } from '../golden/support/fixtures';
+import { openPage } from '../golden/support/streamed-content';
 import { seedCustomer } from '../golden/support/db/customers';
 import { getDocumentStoragePathByName } from '../golden/support/db/documents';
 import { seedJob } from '../golden/support/db/work';
@@ -39,7 +40,7 @@ test.describe('Cloud-Canary @CANARY', () => {
   test('C1: Login und Session-Refresh über geschützte Navigationen', async ({ browser, world }) => {
     const context = await browser.newContext({ locale: 'de-DE' });
     try {
-      const page = await context.newPage();
+      const page = await openPage(context);
       await loginViaUi(page, {
         email: world.users.admin.email,
         password: world.users.admin.password,
@@ -121,7 +122,7 @@ test.describe('Cloud-Canary @CANARY', () => {
     const inviteCode = await getPendingInviteCode(world.orgId, world.invitee.email);
     const context = await browser.newContext({ locale: 'de-DE' });
     try {
-      const page = await context.newPage();
+      const page = await openPage(context);
       await joinOrganizationViaInviteLink(
         page,
         inviteCode,
@@ -184,7 +185,7 @@ test.describe('Cloud-Canary @CANARY', () => {
   test('C8: HIBP-Ablehnung kompromittierter Passwörter mit deutscher Meldung', async ({ browser, world }) => {
     const context = await browser.newContext({ locale: 'de-DE' });
     try {
-      const page = await context.newPage();
+      const page = await openPage(context);
       await page.goto('/signup');
       await page.waitForLoadState('networkidle');
       await submitSignupForm(page, {
