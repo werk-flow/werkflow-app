@@ -99,7 +99,7 @@ const runtimeChoices: Record<string, string> = {
     'Allowed transitions are bounded by the lifecycle test below.',
   'components/service/equipment-form-dialog.tsx:subtypeOptions':
     'Category chooses one of the fixed equipment subtype enums.',
-  'components/aufgaben/site-access-review.tsx:task.accessContacts.slice(0, MAX_CORRECTABLE_CONTACTS)':
+  'components/aufgaben/site-access-review-dialog.tsx:task.accessContacts.slice(0, MAX_CORRECTABLE_CONTACTS)':
     'At most eight Zugangskontakte of one Einsatzort beside „Neuer Zugangskontakt“; the dialog names the rest.',
   'components/shared/metadata-section.tsx:config.options':
     'The primitive uses SearchableSelect above eight; current owners supply fixed customer type, priority and role enums.',

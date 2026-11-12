@@ -458,13 +458,13 @@ export const DIALOG_INVENTORY = {
   'components/zeiterfassung/vacation-section-request-dialog.tsx#OwnVacationRequestDialog|Urlaub beantragen': {
     audits: [{ route: '/zeiterfassung', role: 'employee', opener: 'field.vacation-request' }],
   },
-  'components/auftraege/work-pack/field-site-access-proposal.tsx#SiteAccessProposalDialog|Zugang korrigieren':
-    {
-      audits: [{ route: '/auftraege/[jobNumber]', role: 'employee', opener: 'field.site-access' }],
-    },
-  'components/aufgaben/site-access-review.tsx#SiteAccessReviewDialog|Zugang zu {task.siteName} prüfen': {
-    audits: [{ route: '/aufgaben', role: 'admin', opener: 'work.site-access-review' }],
+  'components/auftraege/work-pack/field-site-access-dialog.tsx#SiteAccessProposalDialog|Zugang korrigieren': {
+    audits: [{ route: '/auftraege/[jobNumber]', role: 'employee', opener: 'field.site-access' }],
   },
+  'components/aufgaben/site-access-review-dialog.tsx#SiteAccessReviewDialog|Zugang zu {task.siteName} prüfen':
+    {
+      audits: [{ route: '/aufgaben', role: 'admin', opener: 'work.site-access-review' }],
+    },
   "components/auftraege/artifacts/work-artifacts-section.tsx#WorkArtifactDialog|{detail ? (currentRevision?.title ?? 'Arbeitsnachweis') : 'Arbeitsnachweis erstellen'}":
     {
       audits: [
