@@ -1,6 +1,5 @@
 {
   "tests/audit/support/a1-steps.ts": 2,
-  "tests/audit/support/a2-steps.ts": 2,
   "tests/audit/support/a4-steps.ts": 1,
   "tests/audit/support/a5-steps.ts": 4,
   "tests/audit/support/a7-steps.ts": 1,
@@ -26,6 +25,5 @@
   "tests/golden/support/steps/shared.ts": 5,
   "tests/golden/support/steps/sickness.ts": 1,
   "tests/golden/support/steps/time-tracking.ts": 7,
-  "tests/golden/support/steps/vacation.ts": 1,
-  "tests/golden/support/steps/work.ts": 3
+  "tests/golden/support/steps/work.ts": 2
 }

@@ -67,21 +67,26 @@ function setsTrue(options, name) {
   );
 }
 
-/** `.filter({ visible: true })` */
-function isVisibleFilter(call) {
-  return call.callee.property.name === 'filter' && setsTrue(call.arguments[0], 'visible');
-}
-
 function isLookup(call) {
   return /^(?:locator|getBy[A-Z]\w*)$/.test(call.callee.property.name);
+}
+
+/** A role lookup that leaves hidden elements out: what it finds is shown, and so is the region it locates. */
+function locatesShownRegion(call) {
+  return call.callee.property.name === 'getByRole' && !setsTrue(call.arguments[1], 'includeHidden');
+}
+
+/** A step whose result is shown: a role lookup, `.filter({ visible: true })` or a selector that ends in `:visible`. */
+function showsOnly(call) {
+  const method = call.callee.property.name;
+  if (method === 'filter') return setsTrue(call.arguments[0], 'visible');
+  return locatesShownRegion(call) || (method === 'locator' && selectsShownOnly(call.arguments[0]));
 }
 
 /** A lookup that can land on hidden content: a blind one, or a role lookup that asks for hidden elements. */
 function matchesHidden(call) {
   const method = call.callee.property.name;
-  if (method === 'getByRole') return setsTrue(call.arguments[1], 'includeHidden');
-  if (!VISIBILITY_BLIND_LOOKUPS.has(method)) return false;
-  return !(method === 'locator' && selectsShownOnly(call.arguments[0]));
+  return (VISIBILITY_BLIND_LOOKUPS.has(method) || method === 'getByRole') && !showsOnly(call);
 }
 
 /** Every later call of the lookup's chain (`.filter(…).first()`), and the chain's outermost call. */
@@ -131,11 +136,11 @@ function narrowsAnotherLookup(top) {
  * A lookup by text, label, placeholder, test id, title or CSS selector matches
  * both copies, so a strict action or assertion fails on two elements, and only
  * when the timing puts the copy there. A role lookup with `includeHidden`
- * matches both too. The rule accepts a lookup by role, a lookup inside a
- * region located by role, `.filter({ visible: true })` after the chain's last
- * such lookup, a selector that ends in `:visible`, a `has`/`hasNot`/`.and(…)`
- * operand, an operation on the document element, and the named whole-DOM
- * helpers.
+ * matches both too. The rule judges a chain up to its first region located
+ * by role and accepts it when a role lookup, `.filter({ visible: true })` or
+ * a selector that ends in `:visible` follows its last blind lookup. It also
+ * accepts a `has`/`hasNot`/`.and(…)` operand, an operation on the document
+ * element, and the named whole-DOM helpers.
  */
 export const visiblePageLookupRule = {
   meta: {
@@ -143,7 +148,7 @@ export const visiblePageLookupRule = {
     schema: [],
     messages: {
       blind:
-        'page.{{method}}(…) also matches a hidden copy of the content: the streamed boundary React reveals after a load, or a route Next.js keeps mounted. Look up by role, start from a region located by role, or end the lookup with .filter({ visible: true }) (docs/technical/integrated-test-state.md, "Keep the page stable during a step").',
+        '{{method}}(…) on the whole page also matches a hidden copy of the content: the streamed boundary React reveals after a load, or a route Next.js keeps mounted. Look up by role, start from a region located by role, or end the lookup with .filter({ visible: true }) (docs/technical/integrated-test-state.md, "Keep the page stable during a step").',
     },
   },
   create(context) {
@@ -158,13 +163,16 @@ export const visiblePageLookupRule = {
         // The document element stands for the page: the first lookup below it is one on the whole page.
         const isDocumentElement = method === 'locator' && isDocumentElementSelector(node.arguments[0]);
         const chain = isDocumentElement ? later.slice(later.findIndex(isLookup)) : [node, ...later];
-        const [first] = chain;
         // Below the document element without a lookup, `slice(-1)` leaves a call that is no lookup.
-        if (!first || !matchesHidden(first)) return;
-        // Only a filter after the last such lookup holds for the element the chain ends on.
-        if (chain.slice(chain.findLastIndex(matchesHidden) + 1).some(isVisibleFilter)) return;
+        // A region located by role ends the part on the whole page: the rule leaves lookups inside it alone.
+        const region = chain.findIndex(locatesShownRegion);
+        const onWholePage = region === -1 ? chain : chain.slice(0, region + 1);
+        // Only a step after the last blind lookup holds for the element that part ends on.
+        const lastBlind = onWholePage.findLastIndex(matchesHidden);
+        if (lastBlind === -1 || onWholePage.slice(lastBlind + 1).some(showsOnly)) return;
         if (narrowsAnotherLookup(top) || insideWholeDomHelper(node)) return;
-        context.report({ node, messageId: 'blind', data: { method: first.callee.property.name } });
+        const blind = onWholePage[lastBlind].callee.property.name;
+        context.report({ node, messageId: 'blind', data: { method: blind } });
       },
     };
   },
