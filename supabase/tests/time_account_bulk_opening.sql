@@ -135,6 +135,25 @@ begin
       v_admin, v_org, v_first),
     'invalid_input');
 
+  perform pg_temp.expect_refusal('one person was opened twice, once in capitals',
+    format($sql$select public.open_time_accounts(%L, %L, pg_temp.openings(array[%L, %L]::uuid[], array[0, 30]) || jsonb_build_array(jsonb_build_object('employee_record_id', upper(%L), 'opening_minutes', 0)), '2026-08-01', 'Einführung', repeat('a', 64))$sql$,
+      v_admin, v_org, v_first, v_second, v_first),
+    'invalid_input');
+  perform pg_temp.expect_refusal('an id that is no uuid reached the function body',
+    format($sql$select public.open_time_accounts(%L, %L, jsonb_build_array(jsonb_build_object('employee_record_id', 'kein-uuid', 'opening_minutes', 0)), '2026-08-01', 'Einführung', repeat('a', 64))$sql$,
+      v_admin, v_org),
+    'invalid_input');
+  -- A list longer than OPENING_BATCH_LIMIT (500) is refused before any lock.
+  perform pg_temp.expect_refusal('a list over the opening limit was accepted',
+    format($sql$select public.open_time_accounts(%L, %L, (select jsonb_agg(jsonb_build_object('employee_record_id', gen_random_uuid(), 'opening_minutes', 0)) from generate_series(1, 501)), '2026-08-01', 'Einführung', repeat('a', 64))$sql$,
+      v_admin, v_org),
+    'invalid_input');
+  -- Unknown people fail on membership, not on the lock table.
+  perform pg_temp.expect_refusal('a list of unknown people was not refused as unknown',
+    format($sql$select public.open_time_accounts(%L, %L, (select jsonb_agg(jsonb_build_object('employee_record_id', gen_random_uuid(), 'opening_minutes', 0)) from generate_series(1, 500)), '2026-08-01', 'Einführung', repeat('a', 64))$sql$,
+      v_admin, v_org),
+    'employee_not_found');
+
   -- All or nothing: a foreign person in the list opens nobody.
   perform pg_temp.expect_refusal('a foreign person was opened with the organization''s people',
     format($sql$select public.open_time_accounts(%L, %L, pg_temp.openings(array[%L, %L, %L]::uuid[], array[0, 0, 0]), '2026-08-01', 'Einführung', repeat('a', 64))$sql$,
@@ -237,6 +256,16 @@ begin
   if (select prosecdef from pg_proc
       where oid = 'public.open_time_accounts(uuid,uuid,jsonb,date,text,text)'::regprocedure)
   then raise exception 'the bulk opening runs with its owner''s rights'; end if;
+  -- The membership check comes before the first per-person lock, so a list of
+  -- unknown or foreign ids takes no lock. A refused call's locks end with its
+  -- subtransaction, so pg_locks cannot show this after the refusal; the order
+  -- in the function body is the guard.
+  if (select strpos(prosrc, 'employee_not_found') = 0
+      or strpos(prosrc, 'employee_not_found') > strpos(prosrc, ':time_account:')
+      or strpos(prosrc, '> 500') = 0
+      or strpos(prosrc, '> 500') > strpos(prosrc, ':time_account:')
+    from pg_proc where oid = 'public.open_time_accounts(uuid,uuid,jsonb,date,text,text)'::regprocedure)
+  then raise exception 'the bulk opening takes a person''s lock before it checks the list'; end if;
 end;
 $$;
 

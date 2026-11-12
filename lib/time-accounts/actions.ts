@@ -26,7 +26,8 @@ import {
 import { toPayrollCodeMappings } from './payroll-mapping';
 import { savePayrollMappingVersion } from './payroll-mapping-server';
 import { buildTimePeriodPreparation } from './period-preparation';
-import { getBerlinInstant, hashPayload, PERIOD_SOURCE_ROW_CAP } from './period-sources';
+import { OPENING_BATCH_LIMIT } from './opening-dates';
+import { getBerlinInstant, hashPayload } from './period-sources';
 import { readOpenPeriodSessions } from './queries';
 import { isValidOptionalIsoDateRange } from './validation';
 import { z } from '@/lib/zod';
@@ -56,7 +57,7 @@ const openTimeAccountsInputSchema = z.object({
   openings: z
     .array(z.object({ employeeRecordId: uuidSchema, openingBalance: z.string().max(20) }))
     .min(1)
-    .max(PERIOD_SOURCE_ROW_CAP),
+    .max(OPENING_BATCH_LIMIT),
 });
 const savePayrollMappingInputSchema = z.object({
   codes: z.record(z.string().max(80), z.string().max(200)),

@@ -53,12 +53,15 @@ export async function savePayrollMappingVersion(
   if (error) throw error;
 }
 
+/** The current mapping version with the code of each classification. */
+export type CurrentPayrollMapping = { version: number; confirmedAt: string; codes: PayrollCodeMapping[] };
+
 /** The current mapping version with its codes, or null before the first confirmation. A failed read throws. */
 export async function readCurrentPayrollMapping(
   admin: AdminClient,
   organizationId: string,
   currentVersionId: string | null,
-): Promise<{ version: number; confirmedAt: string; codes: PayrollCodeMapping[] } | null> {
+): Promise<CurrentPayrollMapping | null> {
   if (!currentVersionId) return null;
   const [version, codes] = await Promise.all([
     admin

@@ -935,7 +935,7 @@ export async function fillOpeningBalance(
   employeeName: string,
   input: { openedOn: string; balance: string },
 ): Promise<void> {
-  const form = settings.getByRole('form', { name: TIME_ACCOUNT_COPY.openingForm });
+  const form = settings.getByRole('region', { name: TIME_ACCOUNT_COPY.openingForm });
   await typeIntoDatePicker(form, TIME_ACCOUNT_COPY.openingDate, datePickerDigits(input.openedOn));
   await openingBalanceRow(settings, employeeName)
     .getByLabel(openingBalanceLabel(employeeName))

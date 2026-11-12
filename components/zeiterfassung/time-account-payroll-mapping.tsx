@@ -49,7 +49,7 @@ function PayrollCodeRowView({
       value={code}
       onChange={(event) => onChange(event.target.value)}
       autoComplete="off"
-      aria-label={layout === 'row' ? `Lohnart-Code für ${codeRow.label}` : undefined}
+      aria-label={`Lohnart-Code für ${codeRow.label}`}
       aria-invalid={error || undefined}
     />
   );

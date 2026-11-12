@@ -1,12 +1,14 @@
 'use client';
 
-import { useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { DatePicker } from '@/components/ui/date-picker';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
+import { InlinePending } from '@/components/ui/inline-pending';
 import { Input } from '@/components/ui/input';
 import { OpeningDateCorrections } from '@/components/zeiterfassung/time-account-opening-corrections';
 import {
@@ -33,11 +35,10 @@ type MissingAccount = TimeAccountSettingsData['missingAccounts'][number];
 const OPEN_ALL = 'all';
 const OPENED_ON_ID = 'open-accounts-opened-on';
 const REASON_ID = 'open-accounts-reason';
-// Several submit buttons: Enter in a text field would submit through the first one in the
-// DOM, a hidden phone card's „Eröffnen“, so every submission is a button the user clicked.
-function stopEnterSubmit(event: KeyboardEvent<HTMLInputElement>): void {
-  if (event.key === 'Enter') event.preventDefault();
-}
+// Each person's balance and „Eröffnen“ are one native form, so Enter in a
+// balance opens that person's account only. The shared date and reason sit
+// outside every form, and „Alle eröffnen“ is a plain button: no key ever
+// opens every account while other balances may still read 0:00.
 
 const balanceInputId = (layout: PersonLayout, employeeRecordId: string): string =>
   `opening-balance-${layout}-${employeeRecordId}`;
@@ -57,6 +58,7 @@ function MissingAccountRow({
   balance,
   invalid,
   onBalanceChange,
+  onSubmit,
   isPending,
   pendingValue,
 }: {
@@ -65,24 +67,27 @@ function MissingAccountRow({
   balance: string;
   invalid: boolean;
   onBalanceChange: (balance: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   isPending: boolean;
   pendingValue: string | null;
 }) {
   const hint = employmentHint(employee);
+  const formId = `open-account-${layout}-${employee.employeeRecordId}`;
   const balanceInput = (
     <Input
       id={balanceInputId(layout, employee.employeeRecordId)}
+      form={formId}
       value={balance}
       onChange={(event) => onBalanceChange(event.target.value)}
-      onKeyDown={stopEnterSubmit}
       autoComplete="off"
-      aria-label={layout === 'row' ? `Anfangssaldo für ${employee.employeeName}` : undefined}
+      aria-label={`Anfangssaldo für ${employee.employeeName}`}
       aria-invalid={invalid || undefined}
     />
   );
   // One button per person stays quiet, so orange keeps marking „Alle eröffnen“.
   const submit = (
     <TimeAccountSubmitButton
+      form={formId}
       value={employee.employeeRecordId}
       variant="outline"
       isPending={isPending}
@@ -102,7 +107,7 @@ function MissingAccountRow({
           {hint && <span className="block text-xs font-normal text-muted-foreground">{hint}</span>}
         </>
       }
-      form={null}
+      form={<form id={formId} onSubmit={onSubmit} noValidate className="contents" />}
       cells={[
         {
           key: 'balance',
@@ -129,7 +134,12 @@ function MissingAccountRow({
   );
 }
 
-type OpeningErrors = { openedOn?: string; reason?: string; balances: readonly string[] };
+// A field without an error holds undefined, so typing clears it.
+type OpeningErrors = {
+  openedOn?: string | undefined;
+  reason?: string | undefined;
+  balances: readonly string[];
+};
 
 /** What the submission lacks, and the controls to mark, in the order of the form. */
 function checkOpening(input: {
@@ -173,6 +183,15 @@ function useOpenTimeAccounts(missingAccounts: readonly MissingAccount[], suggest
   const { run, isPending } = useServerAction(openTimeAccounts);
   const balanceOf = (employeeRecordId: string): string => balances[employeeRecordId] ?? ZERO_BALANCE_INPUT;
 
+  const changeOpenedOn = (date: Date | undefined): void => {
+    setOpenedOn(date);
+    setErrors((previous) => ({ ...previous, openedOn: undefined }));
+  };
+  const changeReason = (text: string): void => {
+    setReason(text);
+    setErrors((previous) => ({ ...previous, reason: undefined }));
+  };
+
   const changeBalance = (employeeRecordId: string, balance: string): void => {
     setBalances((previous) => ({ ...previous, [employeeRecordId]: balance }));
     setErrors((previous) => ({
@@ -181,11 +200,9 @@ function useOpenTimeAccounts(missingAccounts: readonly MissingAccount[], suggest
     }));
   };
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  /** Opens one person's account, or every listed one for `OPEN_ALL`. */
+  const submit = async (target: string): Promise<void> => {
     setError(null);
-    const submitter = 'submitter' in event.nativeEvent ? event.nativeEvent.submitter : null;
-    const target = submitter instanceof HTMLButtonElement ? submitter.value : OPEN_ALL;
     const people =
       target === OPEN_ALL
         ? missingAccounts
@@ -220,15 +237,23 @@ function useOpenTimeAccounts(missingAccounts: readonly MissingAccount[], suggest
     }
   };
 
+  const submitPerson =
+    (employeeRecordId: string) =>
+    async (event: FormEvent<HTMLFormElement>): Promise<void> => {
+      event.preventDefault();
+      await submit(employeeRecordId);
+    };
+
   return {
-    shared: { openedOn, setOpenedOn, reason, setReason },
+    shared: { openedOn, changeOpenedOn, reason, changeReason },
     balanceOf,
     changeBalance,
     errors,
     error,
     isPending,
     pendingValue,
-    handleSubmit,
+    submitPerson,
+    submitAll: () => submit(OPEN_ALL),
   };
 }
 
@@ -244,20 +269,26 @@ function OpenTimeAccountsForm({
   missingAccounts: TimeAccountSettingsData['missingAccounts'];
   suggestedStartDate: string;
 }) {
-  const { shared, balanceOf, changeBalance, errors, error, isPending, pendingValue, handleSubmit } =
-    useOpenTimeAccounts(missingAccounts, suggestedStartDate);
+  const {
+    shared,
+    balanceOf,
+    changeBalance,
+    errors,
+    error,
+    isPending,
+    pendingValue,
+    submitPerson,
+    submitAll,
+  } = useOpenTimeAccounts(missingAccounts, suggestedStartDate);
+  const openingAll = isPending && pendingValue === OPEN_ALL;
   return (
-    <form onSubmit={handleSubmit} noValidate className="space-y-3" aria-label="Zeitkonten eröffnen">
+    <section className="space-y-3" aria-label="Zeitkonten eröffnen">
       <div className="flex flex-wrap items-start gap-3">
         <Field label="Eröffnungsdatum" htmlFor={OPENED_ON_ID} required error={errors.openedOn}>
-          <DatePicker value={shared.openedOn} onChange={shared.setOpenedOn} />
+          <DatePicker value={shared.openedOn} onChange={shared.changeOpenedOn} />
         </Field>
         <Field label="Grund" htmlFor={REASON_ID} required error={errors.reason} className="min-w-56 flex-1">
-          <Input
-            value={shared.reason}
-            onChange={(event) => shared.setReason(event.target.value)}
-            onKeyDown={stopEnterSubmit}
-          />
+          <Input value={shared.reason} onChange={(event) => shared.changeReason(event.target.value)} />
         </Field>
       </div>
       <p className="text-xs text-muted-foreground">{startDateHint(suggestedStartDate)}</p>
@@ -276,22 +307,19 @@ function OpenTimeAccountsForm({
               balance={balanceOf(employee.employeeRecordId)}
               invalid={errors.balances.includes(employee.employeeRecordId)}
               onBalanceChange={(balance) => changeBalance(employee.employeeRecordId, balance)}
+              onSubmit={submitPerson(employee.employeeRecordId)}
               isPending={isPending}
               pendingValue={pendingValue}
             />
           ))
         }
       />
-      <TimeAccountSubmitButton
-        value={OPEN_ALL}
-        isPending={isPending}
-        pendingValue={pendingValue}
-        pendingLabel="Zeitkonten werden eröffnet"
-      >
+      <Button type="button" onClick={submitAll} disabled={isPending} aria-busy={openingAll || undefined}>
+        <InlinePending active={openingAll} label="Zeitkonten werden eröffnet" />
         Alle eröffnen
-      </TimeAccountSubmitButton>
+      </Button>
       <ErrorText>{error}</ErrorText>
-    </form>
+    </section>
   );
 }
 

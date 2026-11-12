@@ -3,7 +3,8 @@ import { textInDom } from '../golden/support/steps/shared';
 import { answerHeldWrite, expectHeldWrite, openContractFixture } from './open-fixture';
 
 // Missing time accounts open with one shared date and reason and one balance
-// per person as „±HH:MM“. A balance that is no hours-and-minutes time marks
+// per person as „±HH:MM“. Enter in a balance opens that person's account only;
+// Enter in the shared reason opens nothing. A balance that is no hours-and-minutes time marks
 // and focuses its field and sends nothing. „Alle eröffnen“ shows its pending
 // state in the first frame and sends every listed person in one write; a
 // refusal stays at the form with the typed balances.
@@ -11,7 +12,7 @@ test.beforeEach(async ({ page }) => {
   await openContractFixture(page, 'time-account-bulk-opening');
 });
 
-const form = (page: Page): Locator => page.getByRole('form', { name: 'Zeitkonten eröffnen' });
+const form = (page: Page): Locator => page.getByRole('region', { name: 'Zeitkonten eröffnen' });
 // The fixture page shows the table and the phone cards at once; the contract reads the table.
 const rowOf = (page: Page, employeeName: string): Locator =>
   form(page).getByRole('row').filter({ hasText: employeeName });
@@ -78,4 +79,32 @@ test('a refused opening stays at the form with the typed balances', async ({ pag
   await expect(balanceOf(page, 'Anna Anfang')).toHaveValue('+12:30');
   await expect(balanceOf(page, 'Bernd Beginn')).toHaveValue('-3:15');
   await expect(openAll(page)).toBeEnabled();
+});
+
+test('Enter in a balance opens only that person, and Enter in the reason opens nobody', async ({ page }) => {
+  const reason = form(page).getByRole('textbox', { name: 'Grund', exact: true });
+  await reason.press('Enter');
+  expect(await page.evaluate(() => window.uiContractWrites.calls.length)).toBe(0);
+
+  await balanceOf(page, 'Bernd Beginn').fill('-3:15');
+  await balanceOf(page, 'Bernd Beginn').press('Enter');
+  await expect(openOne(page, 'Bernd Beginn')).toHaveAttribute('aria-busy', 'true');
+  await expect(openAll(page)).toBeDisabled();
+  await expectHeldWrite(page, 'open-time-accounts');
+  expect(await page.evaluate(() => window.uiContractWrites.calls[0]?.input)).toEqual({
+    openedOn: '2026-09-01',
+    reason: 'Einführung des Zeitkontos',
+    openings: [{ employeeRecordId: 'contract-missing-bernd', openingBalance: '-3:15' }],
+  });
+});
+
+test('a marked reason clears as soon as it is typed again', async ({ page }) => {
+  const reason = form(page).getByRole('textbox', { name: 'Grund', exact: true });
+  await reason.fill('');
+  await openAll(page).click();
+  await expect(reason).toBeFocused();
+  await expect(reason).toHaveAttribute('aria-invalid', 'true');
+  await reason.fill('Einführung');
+  await expect(reason).not.toHaveAttribute('aria-invalid', 'true');
+  await expect(form(page)).not.toContainText('Gib einen Grund für die Eröffnung an.');
 });

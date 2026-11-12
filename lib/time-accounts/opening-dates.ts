@@ -1,6 +1,13 @@
 import { addLocalDays } from '@/lib/date-time/berlin';
 import { formatGermanDate } from '@/lib/utils';
 
+/**
+ * The most people one opening call takes: far more than one organization's
+ * missing accounts, and few enough that its per-person locks stay far below
+ * the database's lock table. open_time_accounts refuses a longer list too.
+ */
+export const OPENING_BATCH_LIMIT = 500;
+
 const monthStart = (localDate: string): string => `${localDate.slice(0, 7)}-01`;
 
 /**

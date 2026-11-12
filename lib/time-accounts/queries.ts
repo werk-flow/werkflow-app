@@ -16,7 +16,7 @@ import {
 import { canCorrectOpeningDate } from './opening-dates';
 import { type OpeningDateCorrection, type OpeningDateFacts, readOpeningDateFacts } from './opening-reads';
 import { payrollCodesByKey } from './payroll-mapping';
-import { readCurrentPayrollMapping } from './payroll-mapping-server';
+import { type CurrentPayrollMapping, readCurrentPayrollMapping } from './payroll-mapping-server';
 import { type PeriodResultRow, toPeriodResultRows } from './period-results';
 import { describePolicyVersions, type PolicyVersionLine } from './policy-versions';
 import { getBerlinInstant, PERIOD_SOURCE_ROW_CAP, requirePeriodRows } from './period-sources';
@@ -526,7 +526,7 @@ type SettingsRows = {
 type SettingsDetails = {
   profiles: NamedProfile[];
   versions: Pick<Tables<'time_account_policy_versions'>, 'policy_id' | 'effective_from' | 'version'>[];
-  mapping: Awaited<ReturnType<typeof readCurrentPayrollMapping>>;
+  mapping: CurrentPayrollMapping | null;
   today: string;
   openingDates: OpeningDateFacts;
 };

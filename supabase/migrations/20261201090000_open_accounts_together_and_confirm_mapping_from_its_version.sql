@@ -54,13 +54,20 @@ begin
   if nullif(btrim(p_reason), '') is null then raise exception 'reason_required'; end if;
   -- Bounds the month locks below: no time account starts before 2000.
   if p_opened_on is null or p_opened_on < date '2000-01-01' then raise exception 'invalid_input'; end if;
-  if jsonb_typeof(p_openings) is distinct from 'array' or jsonb_array_length(p_openings) = 0 then
+  -- At most 500 people per call, OPENING_BATCH_LIMIT in lib/time-accounts/opening-dates.ts:
+  -- far more than one organization's missing accounts, and the per-person
+  -- locks below stay far below the server's lock table.
+  if jsonb_typeof(p_openings) is distinct from 'array'
+    or jsonb_array_length(p_openings) = 0
+    or jsonb_array_length(p_openings) > 500
+  then
     raise exception 'invalid_input';
   end if;
   if exists (
     select 1 from jsonb_array_elements(p_openings) opening
     where jsonb_typeof(opening) is distinct from 'object'
       or jsonb_typeof(opening->'employee_record_id') is distinct from 'string'
+      or not pg_input_is_valid(opening->>'employee_record_id', 'uuid')
       -- CASE, because SQL may evaluate the casts of an OR before its type check.
       or case when jsonb_typeof(opening->'opening_minutes') = 'number' then
         (opening->>'opening_minutes')::numeric <> trunc((opening->>'opening_minutes')::numeric)
@@ -71,9 +78,21 @@ begin
   end if;
   select count(*) into v_count from jsonb_array_elements(p_openings);
   if v_count <> (
-    select count(distinct opening->>'employee_record_id') from jsonb_array_elements(p_openings) opening
+    select count(distinct (opening->>'employee_record_id')::uuid) from jsonb_array_elements(p_openings) opening
   ) then
     raise exception 'invalid_input';
+  end if;
+  -- Every person belongs to the organization before any lock is taken, so a
+  -- list of unknown or foreign ids takes no lock at all.
+  if exists (
+    select 1 from jsonb_array_elements(p_openings) opening
+    where not exists (
+      select 1 from public.employee_records employee
+      where employee.organization_id = p_organization_id
+        and employee.id = (opening->>'employee_record_id')::uuid
+    )
+  ) then
+    raise exception 'employee_not_found';
   end if;
 
   -- The lock open_time_account takes per person, here for everyone first and
@@ -109,16 +128,6 @@ begin
     raise exception 'opening_date_locked';
   end if;
 
-  if exists (
-    select 1 from jsonb_array_elements(p_openings) opening
-    where not exists (
-      select 1 from public.employee_records employee
-      where employee.organization_id = p_organization_id
-        and employee.id = (opening->>'employee_record_id')::uuid
-    )
-  ) then
-    raise exception 'employee_not_found';
-  end if;
   if exists (
     select 1 from public.time_accounts account
     join jsonb_array_elements(p_openings) opening
