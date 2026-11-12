@@ -3,7 +3,13 @@ import { deflateSync } from 'node:zlib';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { getDocumentProxy } from 'unpdf';
 
-import type { BusinessDocument, DocumentPosition, DocumentSection, StationeryPage } from './model';
+import type {
+  BusinessDocument,
+  DocumentImage,
+  DocumentPosition,
+  DocumentSection,
+  StationeryPage,
+} from './model';
 
 mock.module('server-only', () => ({}));
 const { renderBusinessDocument } = await import('./render');
@@ -190,6 +196,8 @@ function stationeryPng(): Uint8Array {
   ]);
 }
 
+const logoPng: DocumentImage = { format: 'png', bytes: stationeryPng() };
+
 const firstStationery: StationeryPage = {
   file: { format: 'pdf', bytes: await stationeryPdf() },
   margins: { topMm: 30, rightMm: 30, bottomMm: 40, leftMm: 30 },
@@ -229,7 +237,11 @@ function expectKeepTogether(pages: TextLine[][], sections: DocumentSection[]) {
 
 describe('the business document renderer', () => {
   test('a service offer fits one page with negative lines, three-decimal quantities, prices per 100 and two tax rates', async () => {
-    const pages = await readPages(await renderBusinessDocument(serviceOffer));
+    const withLogo = { ...serviceOffer, sender: { ...serviceOffer.sender, logo: logoPng } };
+    const bytes = await renderBusinessDocument(withLogo);
+    // The plain letterhead draws the logo as an image.
+    expect(Buffer.from(bytes).includes('/Subtype /Image')).toBe(true);
+    const pages = await readPages(bytes);
     expect(pages).toHaveLength(1);
     const text = pages[0]?.map((line) => line.text) ?? [];
     expect(text).toContain('Haustechnik Sonnenberg GmbH');

@@ -14,7 +14,7 @@ export type PageMargins = { topMm: number; rightMm: number; bottomMm: number; le
 
 export type StationeryPage = { file: StationeryFile; margins: PageMargins };
 
-export type DocumentStationery = {
+type DocumentStationery = {
   firstPage: StationeryPage;
   /** Without it, the following pages get no underlay and the plain margins. */
   followingPages: StationeryPage | null;
@@ -41,7 +41,7 @@ export type DocumentSection = {
   subtotalCents: number;
 };
 
-export type TaxRateTotal = {
+type TaxRateTotal = {
   rateBasisPoints: number;
   netCents: number;
   vatCents: number;
