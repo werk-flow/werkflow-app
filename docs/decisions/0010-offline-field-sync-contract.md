@@ -206,3 +206,7 @@ Decided by the E7 lead for werk-flow/werkflow-planning#320. It completes the **O
 - `work_artifact_revisions.draft_changed_at` holds the device's last-change time of the draft a revision was written from. It is null for every revision not written from a device draft. The online save of a device draft writes it from the sealed draft, and the attach writes the envelope's `capturedAt` into it.
 - The attach adopts a revision that already exists under the draft's revision id, and answers `replayed`, only when its author, organization, Arbeitsnachweis and `draft_changed_at` all match the draft it was sent. Any mismatch, a null included, answers `conflict` with `version_conflict`: the draft stays on the phone as „Nicht übertragen“, and nothing is overwritten.
 - No client role reads the column: the server reads revisions with the service role, and the page's revision type leaves the column out.
+
+## Amendment 2026-11-12: stored records stay readable
+
+Decided by the E7 lead for werk-flow/werkflow-planning#402. A device record of an earlier version is always readable by every later release, and a record a release cannot read stays on the device, is never sent and shows to its person; the golden records beside each store's reader (`lib/field-sync/device/draft-store.golden.json`) are the mechanism (Tier 2).

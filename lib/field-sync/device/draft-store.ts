@@ -115,8 +115,37 @@ function isDraftContent(value: unknown): value is WorkArtifactContentInput {
   return isJsonRecord(value);
 }
 
-/** The record as a draft, or null for anything this version did not write. */
+/**
+ * The version of the records this code writes. A phone keeps a draft across releases, so every later
+ * version reads every earlier one: a change of what a record holds raises this number and adds an
+ * upgrade reader, and the records of each earlier version stay as golden fixtures
+ * (draft-store.golden.test.ts). A record without a version is version 1, as werk-flow/werkflow-app#379 wrote it.
+ */
+const DRAFT_RECORD_VERSION = 1;
+
+/** Whether this code reads the record's version; extra fields of the record are ignored. */
+function isReadableVersion(record: unknown): boolean {
+  return isJsonRecord(record) && (record.version ?? 1) === DRAFT_RECORD_VERSION;
+}
+
+/**
+ * Whose draft a record is and which job it belongs to. Every version keeps these fields as they
+ * are, so a record this code cannot read still shows to its person, never to anyone else.
+ */
+const heldRecordSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  organizationId: z.string(),
+  jobId: z.string().optional(),
+});
+
+/** A draft on the device that this version of the code cannot read: it is never sent, changed or deleted by itself. */
+type UnreadableDraft = { id: string; jobId: string | null };
+
+/** The record as a draft, or null when this version of the code cannot read it. */
 function storedDraft(record: unknown): StoredDraft | null {
+  // A record of a later version may hold fields this code would drop on a write: it stays as it is.
+  if (!isReadableVersion(record)) return null;
   const fields = storedFieldsSchema.safeParse(record);
   if (!fields.success || !isDraftContent(fields.data.content)) return null;
   const photos: DraftPhoto[] = [];
@@ -230,6 +259,20 @@ export async function listDraftsOnDevice(
 }
 
 /**
+ * The holder's records that this version of the code cannot read, such as a draft a later release
+ * wrote before the app went back to this one. The person sees that they exist; they stay on the
+ * device untouched and keep the device mark set. Throws when IndexedDB itself fails.
+ */
+export async function listUnreadableDraftsOnDevice(holder: DraftHolder): Promise<UnreadableDraft[]> {
+  const records: unknown[] = await inDraftStore('readonly', (store) => store.getAll());
+  return records.flatMap((record) => {
+    const held = heldRecordSchema.safeParse(record);
+    if (!held.success || !belongsTo(held.data, holder) || storedDraft(record)) return [];
+    return [{ id: held.data.id, jobId: held.data.jobId ?? null }];
+  });
+}
+
+/**
  * Changes one draft of the holder in a single transaction: `change` gets the stored draft, or
  * null when the holder has none under this id, and answers the draft to store, or null to delete
  * it. A read and its write never interleave with another tab's or the sender's. Returns what is
@@ -248,6 +291,8 @@ export async function changeDraftOnDevice(
       const request = store.get(id);
       request.addEventListener('success', () => {
         const current = storedDraft(request.result);
+        // A record this version cannot read is never replaced or deleted: a later version may read it.
+        if (request.result !== undefined && current === null) return;
         if (current && !belongsTo(current, holder)) return;
         const next = change(current);
         try {
@@ -261,7 +306,7 @@ export async function changeDraftOnDevice(
             // it committed, after a sweep of another tab that counted no draft before this one.
             markDraftsOnDevice(true);
             store.transaction.addEventListener('complete', () => markDraftsOnDevice(true));
-            store.put(next);
+            store.put({ ...next, version: DRAFT_RECORD_VERSION });
             stored = next;
           }
         } catch (error) {

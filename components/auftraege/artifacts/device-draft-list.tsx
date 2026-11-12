@@ -15,8 +15,10 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
+import { SectionError } from '@/components/ui/section-error';
 import { useBusyIds } from '@/hooks/use-busy-id';
-import type { StoredDraft } from '@/lib/field-sync/device/draft-store';
+import { useClientRead } from '@/hooks/use-client-read';
+import { listUnreadableDraftsOnDevice, type StoredDraft } from '@/lib/field-sync/device/draft-store';
 import type { DraftSendProgress } from '@/lib/field-sync/device/draft-sync';
 import { logError } from '@/lib/logging';
 import { formatBerlin } from '@/lib/utils';
@@ -138,8 +140,10 @@ export function DeviceDraftList(props: DeviceDraftListProps) {
   const { run, isBusy, anyBusy } = useBusyIds();
   const [deleting, setDeleting] = useState<StoredDraft | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const unreadable = useUnreadableDrafts(device);
   const rows = listedDrafts(props);
-  if (rows.length === 0) return null;
+  const unreadableDrafts = unreadable.data?.drafts ?? [];
+  if (rows.length === 0 && unreadableDrafts.length === 0 && !unreadable.failure) return null;
 
   function send(draft: StoredDraft) {
     setError(null);
@@ -173,7 +177,11 @@ export function DeviceDraftList(props: DeviceDraftListProps) {
             onDelete={() => setDeleting(row.draft)}
           />
         ))}
+        {unreadableDrafts.map((draft) => (
+          <UnreadableDraftRow key={draft.id} here={draft.jobId === null || draft.jobId === props.jobId} />
+        ))}
       </ul>
+      {unreadable.failure && <SectionError failure={unreadable.failure} />}
       <ErrorText>{error}</ErrorText>
       <DeviceDraftDeleteDialog
         draft={deleting}
@@ -184,6 +192,41 @@ export function DeviceDraftList(props: DeviceDraftListProps) {
         }}
       />
     </div>
+  );
+}
+
+/**
+ * The person's drafts on this device that this version of the app cannot read, such as one a
+ * later release stored before the app went back. They are never sent or deleted by themselves.
+ */
+function useUnreadableDrafts(device: DraftDevice) {
+  const { userId, organizationId } = device.holder;
+  return useClientRead({
+    read: async () => ({
+      success: true as const,
+      drafts: await listUnreadableDraftsOnDevice({ userId, organizationId }),
+    }),
+    deps: [userId, organizationId],
+    failureMessage: 'Die Entwürfe auf diesem Gerät konnten nicht gelesen werden.',
+  });
+}
+
+/** A draft this version of the app cannot read: the person knows it exists and that it waits. */
+function UnreadableDraftRow({ here }: { here: boolean }) {
+  return (
+    <li className="space-y-2 px-3 py-2" data-draft-unreadable="">
+      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+        <div className="min-w-0">
+          <p className="text-sm font-medium">Entwurf lässt sich nicht öffnen</p>
+          {!here && <p className="text-xs text-muted-foreground">Anderer Auftrag</p>}
+        </div>
+        <Badge variant="destructive">Nicht lesbar</Badge>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Diese Version der App kann den Entwurf nicht lesen. Er bleibt auf diesem Gerät gespeichert und wird
+        nicht übertragen.
+      </p>
+    </li>
   );
 }
 
