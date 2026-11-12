@@ -20,10 +20,12 @@ import { Field } from '@/components/ui/field';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { Input } from '@/components/ui/input';
 import { QuantityStepper } from '@/components/ui/quantity-stepper';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { SelectWithCreate } from '@/components/ui/select-with-create';
 import { Textarea } from '@/components/ui/textarea';
 import { useJobEntityOptions, type JobEntityOptionsState } from '@/hooks/use-job-entity-options';
-import type { InventoryLocation } from '@/lib/inventory/types';
+import { getInventoryUnitLabel, type InventoryLocation } from '@/lib/inventory/types';
+import { OFFERED_INVENTORY_UNITS } from '@/lib/inventory/units';
 import type { JobEntityOption } from '@/lib/jobs/option-types';
 import { formatDecimalDe, parseDecimalInput } from '@/lib/ui/decimal';
 import { cn } from '@/lib/utils';
@@ -205,7 +207,7 @@ function WorkTemplateMaterialLine({
             quantity={line.plannedQuantity}
             disabled={!editable}
             onQuantityChange={(plannedQuantity) => updateLine((item) => ({ ...item, plannedQuantity }))}
-            unitLabel={chosen?.unit}
+            unitLabel={chosen?.unit === undefined ? undefined : getInventoryUnitLabel(chosen.unit)}
           />
         </Field>
         <MaterialLineActions
@@ -359,6 +361,8 @@ function MaterialNotesField({
   );
 }
 
+const UNIT_OPTIONS = OFFERED_INVENTORY_UNITS.map((unit) => ({ value: unit.code, label: unit.label }));
+
 // Closes on submit; the editor selects the optimistic article on the line and reports the outcome.
 function CreateMaterialDialog({
   open,
@@ -370,13 +374,13 @@ function CreateMaterialDialog({
   onSubmit: (input: CreateInventoryItemInput) => void;
 }) {
   const [name, setName] = useState('');
-  const [unit, setUnit] = useState('Stk.');
+  const [unit, setUnit] = useState('piece');
   const [error, setError] = useState<string | null>(null);
   function submit(event: React.FormEvent) {
     event.preventDefault();
     event.stopPropagation();
-    if (!name.trim() || !unit.trim()) {
-      setError('Bitte gib Name und Einheit an.');
+    if (!name.trim()) {
+      setError('Bitte gib einen Namen an.');
       return;
     }
     onSubmit({ name, unit });
@@ -403,12 +407,12 @@ function CreateMaterialDialog({
               />
             </Field>
             <Field label="Einheit" htmlFor="quick-item-unit" required>
-              <Input
+              <SearchableSelect
+                options={UNIT_OPTIONS}
                 value={unit}
-                onChange={(event) => {
-                  setUnit(event.target.value);
-                  setError(null);
-                }}
+                onChange={setUnit}
+                searchPlaceholder="Einheit suchen …"
+                emptyMessage="Keine Einheit gefunden"
               />
             </Field>
             <ErrorText>{error}</ErrorText>
