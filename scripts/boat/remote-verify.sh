@@ -2,13 +2,16 @@
 # Runs on a Boat machine started from the verification snapshot, for lib/testing/boat/verify-on-boat.ts.
 # Usage: remote-verify.sh <repository path> <HEAD commit> <main|linked> <test:verify arguments...>
 #    or: remote-verify.sh <repository path> <HEAD commit> <main|linked> test:audit:focused <arguments...>
+#    or: remote-verify.sh <repository path> <HEAD commit> <main|linked> types:generate
 #
 # It rebuilds the workstation's checkout at the same absolute path, so every path in a report or a
 # run manifest is the workstation's, starts the stack and, when the plan runs a browser group, the
 # test server, as CI does, then runs `bun run test:verify` with the same arguments. A leading
 # `test:audit:focused` runs that focused capture instead (lib/testing/boat/capture-on-boat.ts),
-# always with the test server. It packs the evidence the run wrote into ~/results.tgz. Exit 90
-# means setup failed before the run started.
+# always with the test server. A leading `types:generate` writes the types of this tree's
+# migrations from the fresh stack instead (lib/testing/boat/types-on-boat.ts), without a server. It
+# packs the evidence the run wrote into ~/results.tgz. Exit 90 means setup failed before the run
+# started.
 set -uo pipefail
 
 repo="$1"
@@ -16,8 +19,8 @@ head="$2"
 form="$3"
 shift 3
 script=test:verify
-if [ "${1:-}" = test:audit:focused ]; then
-  script=test:audit:focused
+if [ "${1:-}" = test:audit:focused ] || [ "${1:-}" = types:generate ]; then
+  script="$1"
   shift
 fi
 export PATH="$HOME/.bun/bin:$PATH"
@@ -111,6 +114,7 @@ bash .github/actions/local-stack/wait-for-edge-runtime.sh > "$HOME/edge.log" 2>&
 # A focused capture has no plan and always needs the server. A plan is read whole first: grep -q on
 # a pipe would stop the writer, and pipefail would hide the match.
 serve=1
+[ "$script" = types:generate ] && serve=0
 if [ "$script" = test:verify ]; then
   bun run test:plan "$@" > "$HOME/plan.txt" 2> /dev/null || setup_failed "test:plan"
   grep -qE '^RUN +(golden|audit|canary):' "$HOME/plan.txt" || serve=0
@@ -135,7 +139,13 @@ phase "running $script $*"
 # The machine's peak memory use, so the run's size can be judged against its 16 GB.
 while :; do free -m | awk '/^Mem:/ { print $3 }'; sleep 5; done > "$HOME/memory.log" &
 sampler=$!
-bun run "$script" "$@"
+if [ "$script" = types:generate ]; then
+  # The file returns with the evidence, from the folder types-on-boat.ts reads.
+  bun run types:generate -- --local && mkdir -p .agent-logs/types/generated &&
+    cp lib/supabase/database.types.ts .agent-logs/types/generated/
+else
+  bun run "$script" "$@"
+fi
 code=$?
 kill "$sampler" 2> /dev/null
 phase "$script exited $code; peak memory in use $(sort -n "$HOME/memory.log" | tail -n 1) MiB"

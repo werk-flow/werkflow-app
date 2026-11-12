@@ -44,6 +44,13 @@ export type StandaloneCaptureSpec = {
   screen: StandaloneRoute;
   widths: CaptureSpec['widths'];
   schemes: CaptureSpec['schemes'];
+  /** Another query of the screen's route than its inventory address, such as `?status=alle`. */
+  query?: string;
+  /**
+   * Captures the route's `loading.tsx`: a client navigation from this address
+   * of the same area whose server render is held. The id ends in `-loading`.
+   */
+  loadingFrom?: string;
 };
 
 export type AcceptanceSet<Capture extends CaptureSpec = CaptureSpec> = {

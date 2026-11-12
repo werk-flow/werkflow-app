@@ -6,7 +6,11 @@ import { useMemberStatus, type MemberStatus } from '@/hooks/use-member-status';
 import { useWallClockTick } from '@/hooks/use-wall-clock-tick';
 import { useWeeklyTimeData } from '@/hooks/use-weekly-time-data';
 import { liveMinutes } from '@/lib/time-tracking/helpers';
-import { computeBreakdownForSettings, type OrgBreakMode } from '@/lib/time-tracking/settings';
+import {
+  computeBreakdownForSettings,
+  type BreakPolicy,
+  type BreakPolicyValues,
+} from '@/lib/time-tracking/settings';
 import { getTargetSourceHint, type DailyTarget } from '@/lib/personnel/targets';
 import type { WeeklyTimeDataPoint, WeeklyTimeLabel } from '@/lib/time-tracking/types';
 
@@ -21,27 +25,15 @@ export type MemberInitialWeek = {
 function computeLiveBreakMinutesForMember(
   status: MemberStatus | undefined,
   liveTotalMinutes: number,
-  defaultBreakMode: OrgBreakMode,
-  defaultAutoBreakThresholdMinutes: number,
-  defaultAutoBreakDurationMinutes: number,
+  breakPolicy: BreakPolicyValues,
   targetMinutes?: number,
 ) {
-  const effectiveBreakMode = status?.breakMode ?? defaultBreakMode;
   const trackedLiveBreakMinutes =
-    effectiveBreakMode === 'manual'
+    breakPolicy.breakMode === 'manual'
       ? liveMinutes(status?.breakMinutes ?? 0, status?.status === 'on_break' ? status.statusStartedAt : null)
       : (status?.breakMinutes ?? 0);
 
-  return computeBreakdownForSettings(
-    liveTotalMinutes,
-    trackedLiveBreakMinutes,
-    {
-      breakMode: effectiveBreakMode,
-      autoBreakThresholdMinutes: status?.autoBreakThresholdMinutes ?? defaultAutoBreakThresholdMinutes,
-      autoBreakDurationMinutes: status?.autoBreakDurationMinutes ?? defaultAutoBreakDurationMinutes,
-    },
-    targetMinutes,
-  );
+  return computeBreakdownForSettings(liveTotalMinutes, trackedLiveBreakMinutes, breakPolicy, targetMinutes);
 }
 
 /** Worked minutes as a share of the target, capped at 100; 0 without a target. */
@@ -63,9 +55,7 @@ function initialWeekOptions(initialWeek: MemberInitialWeek | null) {
 type MitarbeiterDetailLiveTimeInput = {
   organizationId: string;
   userId: string;
-  breakMode: OrgBreakMode;
-  autoBreakThresholdMinutes: number;
-  autoBreakDurationMinutes: number;
+  breakPolicy: BreakPolicy;
   /** Null when the server read failed: the week then loads on mount. */
   initialWeek: MemberInitialWeek | null;
 };
@@ -76,9 +66,7 @@ export type MitarbeiterDetailLiveTime = ReturnType<typeof useMitarbeiterDetailLi
 export function useMitarbeiterDetailLiveTime({
   organizationId,
   userId,
-  breakMode,
-  autoBreakThresholdMinutes,
-  autoBreakDurationMinutes,
+  breakPolicy,
   initialWeek,
 }: MitarbeiterDetailLiveTimeInput) {
   const memberIds = useMemo(() => [userId], [userId]);
@@ -91,9 +79,7 @@ export function useMitarbeiterDetailLiveTime({
   } = useMemberStatus({
     organizationId,
     memberIds,
-    breakMode,
-    autoBreakThresholdMinutes,
-    autoBreakDurationMinutes,
+    breakPolicy,
   });
   const status = statusMap[userId];
 
@@ -110,9 +96,7 @@ export function useMitarbeiterDetailLiveTime({
   } = useWeeklyTimeData({
     organizationId,
     userId,
-    breakMode,
-    autoBreakThresholdMinutes,
-    autoBreakDurationMinutes,
+    breakPolicy,
     ...initialWeekOptions(initialWeek),
   });
 
@@ -135,9 +119,7 @@ export function useMitarbeiterDetailLiveTime({
   const memberBreakdown = computeLiveBreakMinutesForMember(
     status,
     liveTotalMinutes,
-    breakMode,
-    autoBreakThresholdMinutes,
-    autoBreakDurationMinutes,
+    breakPolicy,
     // An unknown target owes no overtime: every worked minute stays work, never capped at 8 h.
     todayTarget?.targetMinutes ?? Number.POSITIVE_INFINITY,
   );

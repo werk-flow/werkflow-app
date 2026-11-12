@@ -22,6 +22,7 @@ Postgres holds metadata: folders, documents, links, categories, trash state, ver
 
 - Only the server writes a key a row references, and only the finalize attempt that registers it. A still-valid signed URL reaches only the staging key after finalize, and a second finalize of the same upload copies to another key, so the bytes of a registered file never change.
 - A new version's finalize recomputes its path from the ticket's upload id. When a version with the ticket's number is already saved, the finalize answers `already_finalized` only when the caller saved it from that upload's folder (`isOwnSavedVersion`), so a retry whose answer got lost reports its own save as saved, also after a filing or a category change. A version another upload saved, of another person or of the same person, stays a `version_conflict`, even with the same number and file name.
+- A finalize may name the person the upload is for (`expectedUploaderId`, as a phone's report draft does). It only refuses: under another person's session it answers `uploader_changed` before any copy, and the staging object stays for that person's next try. Identity stays with the session.
 - A finalize whose registration the database refused deletes its own copy. After an unknown outcome, such as a transport failure, the copy stays, since the registration may still commit. A finalize refused before the copy deletes the staging object.
 - `DOCUMENT_MAX_FILE_SIZE_BYTES` applies at the ticket and again to the copy.
 - Protected personnel uploads (`createPersonnelDocumentUploadTicket`, `finalizePersonnelDocumentUpload`) follow the same steps. A signed cleanup capability binds actor, organization, owner, document, file name, class and operation. The cleanup removes only the staging object, so it never removes a registered copy. A replay of a registered upload touches no storage.
@@ -106,7 +107,7 @@ A legacy original keeps its source system (`source_system`) and the number that 
 A problem report's screenshot and attachments lie in the same private bucket; [problem reports](../features/problem-reports.md) owns who reads them.
 
 - The key is `{organizationId}/problem-reports/{reportId}/{fileId}/{kind}`, and a check constraint refuses a key outside its report. A key holds no file name, so no name a person chose reaches a key, the purge queue or a log; the row keeps the name.
-- No customer role reads a report file, not even an Admin of the organization.
+- No customer role reads a report file, not even an Admin of the organization. WerkFlow support reads one through a signed address the server issues after it wrote the opening into the report's history.
 - Every deleted file row queues its object for the [purge](#storage-cleanup) in the same transaction, whichever path deleted it: the retention run, an organization deletion or an account deletion.
 
 ## Storage cleanup
