@@ -246,7 +246,7 @@ test('a sign-out shows its question at once while it sends, and „Abbrechen“ 
   await expect(dialog).toHaveCount(0);
 });
 
-test('a kept action this version cannot read is a stop the person sees with what to do; it holds every tap until they delete it, then the clock goes online again', async ({
+test('a kept action this version cannot read is a stop the person sees with what to do; a tap waits behind it and is sent once they delete it', async ({
   page,
 }) => {
   const server = await mountClock(page, CLOCKED_OUT_STATE);
@@ -275,10 +275,10 @@ test('a kept action this version cannot read is a stop the person sees with what
     .getByRole('button', { name: 'Endgültig löschen', exact: true })
     .click();
   await expect(section).toHaveCount(0);
-  expect(await unsentOnDevice(page)).toEqual([]);
 
-  await page.getByRole('dialog').getByRole('button', { name: 'Arbeit starten', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => window.clockContract.transitions.length)).toBe(1);
+  // The tap kept behind the stop was neither shown nor deleted: once the stop is gone it is sent, at its time.
+  await expect.poll(() => server.sent.map(({ payload }) => payload.action)).toEqual(['start']);
+  await expect.poll(async () => (await unsentOnDevice(page)).length).toBe(0);
 });
 
 test('a session end that runs longer than ten minutes keeps its barrier fresh, so no tab keeps behind its back', async ({
