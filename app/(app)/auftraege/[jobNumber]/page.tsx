@@ -18,6 +18,7 @@ import { getWorkLifecycleSnapshot } from '@/lib/work-lifecycle/actions';
 import { getWorkArtifacts } from '@/lib/work-artifacts/actions';
 import { getEffectiveResponsibilityHolderForActor } from '@/lib/responsibilities/server';
 import { getWorkHandoverWorkspace } from '@/lib/work-handover/actions';
+import { getWorkRequestEntries } from '@/lib/requests/work-attach-server';
 import { jobDetailHref } from '@/lib/jobs/routes';
 import JobDetailLoading from './loading';
 
@@ -57,6 +58,10 @@ function loadJobDetailReads(
   const handoverWorkspacePromise = jobResultPromise.then((result) =>
     result.success ? getWorkHandoverWorkspace({ targetType: 'job', targetId: result.job.id }) : null,
   );
+  // The attached requests arrive with the page, so the section opens without a read of its own.
+  const requestEntriesPromise = jobResultPromise.then((result) =>
+    result.success ? getWorkRequestEntries({ kind: 'job', id: result.job.id }) : null,
+  );
 
   // Origin request (P1-02): read through the RLS-enforced client, so only
   // managers (who may see requests) get the back-link.
@@ -82,6 +87,7 @@ function loadJobDetailReads(
     approvalHolderPromise,
     handoverWorkspacePromise,
     originRequestPromise,
+    requestEntriesPromise,
   ]);
 }
 
@@ -110,6 +116,15 @@ function originRequestLink(originRequest: OriginRequestRead) {
     : null;
 }
 
+function memberOptions(rows: Extract<JobDetailReads[1], { success: true }>['members']): OrgMemberOption[] {
+  return rows.map((member) => ({
+    userId: member.user_id,
+    firstName: member.first_name,
+    lastName: member.last_name,
+    role: member.role,
+  }));
+}
+
 async function JobDetailData({ jobNumber }: { jobNumber: string }) {
   const { user, membership } = await resolvePageMembership();
   if (!membership) redirect('/auftraege');
@@ -132,6 +147,7 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
     approvalHolder,
     handoverWorkspaceResult,
     originRequest,
+    requestEntriesResult,
   ] = await loadJobDetailReads(supabase, { jobNumber, activeOrgId, userId: user.id });
 
   // A missing or forbidden job leaves the page; a failed read must not look like one.
@@ -160,12 +176,7 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
   }
 
   const { job } = result;
-  const members: OrgMemberOption[] = membersResult.members.map((member) => ({
-    userId: member.user_id,
-    firstName: member.first_name,
-    lastName: member.last_name,
-    role: member.role,
-  }));
+  const members = memberOptions(membersResult.members);
 
   // A failed read stays null so that its region shows the failure instead of an empty list.
   const instructionItems = instructionItemsResult?.success ? instructionItemsResult.items : null;
@@ -194,6 +205,7 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
       inventoryLocations={inventoryLocations}
       currentUserId={user.id}
       originRequest={originRequestLink(originRequest)}
+      requestEntries={requestEntriesResult?.success ? requestEntriesResult.entries : undefined}
       lifecycleSnapshot={lifecycleResult?.success ? lifecycleResult.snapshot : null}
       handoverWorkspace={handoverWorkspace}
     />

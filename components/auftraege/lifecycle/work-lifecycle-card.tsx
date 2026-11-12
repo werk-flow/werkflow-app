@@ -265,6 +265,7 @@ export function WorkLifecycleCard({
         ownOwnerId={ownOwnerId}
         rowBusy={rowBusy}
         setDialog={setDialog}
+        completeExecution={() => state.transition({ toState: 'execution_complete', overrideGates: false })}
       />
       <WorkLifecycleCardDialogs
         dialog={dialog}

@@ -2,7 +2,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
 import { REQUEST_STATUS_LABELS } from '../../../../lib/requests/types';
 import { documentOpenButton, documentsRegion, uploadIntoDocumentsSection } from './documents';
 import { workTemplateSelect } from './work';
-import { settledBeforeTimeout } from './interaction';
+import { pressKey, settledBeforeTimeout } from './interaction';
 import { getRequestById, type PersistedRequest } from '../db/requests';
 import {
   assignDespiteQualificationWarning,
@@ -11,6 +11,7 @@ import {
   customerPickerSearch,
   expectBannerAfter,
   expectVisibleAfterSave,
+  openMenuItem,
   selectFromSearchable,
   SHARED_COPY,
   typeIntoDatePickerById,
@@ -42,6 +43,8 @@ const REQUEST_COPY = {
   matchCustomer: 'Vorhandenem Kunden zuordnen',
   matchTitle: 'Kunden zuordnen',
   match: 'Zuordnen',
+  /** The detail header's menu with the status steps and the close action. */
+  moreActions: 'Weitere Aktionen',
   close: 'Schließen',
   closeTitle: 'Anfrage ohne Auftrag schließen',
   closeReasonLabel: 'Grund *',
@@ -49,6 +52,8 @@ const REQUEST_COPY = {
   editTitle: 'Anfrage bearbeiten',
   convertToService: 'Als Servicefall übernehmen',
   convertToServiceTitle: 'Anfrage als Servicefall übernehmen?',
+  attachToWork: 'Zu Arbeit hinzufügen',
+  attachToWorkTitle: 'Zu bestehender Arbeit hinzufügen',
 } as const;
 
 /** The row actions of the request's contextual „Dokumente & Bilder“ frame. */
@@ -83,15 +88,20 @@ const REQUEST_STATUS_TABS = {
   alle: 'Alle',
 } as const;
 
-/** The detail's status actions, the banner each one confirms with, and the action it offers next. */
+/**
+ * The detail's status actions, where each sits (a header button or an item of
+ * „Weitere Aktionen“), the banner each one confirms with, and the menu item it offers next.
+ */
 const REQUEST_STATUS_ACTIONS = {
   clarify: {
     action: 'In Klärung setzen',
+    role: 'menuitem',
     banner: 'Anfrage ist jetzt in Klärung.',
     next: 'Zurück auf Offen',
   },
   reopen: {
     action: 'Wieder öffnen',
+    role: 'button',
     banner: 'Anfrage wurde wieder geöffnet.',
     next: 'In Klärung setzen',
   },
@@ -167,9 +177,19 @@ export function requestBacklink(page: Page, requestNumber: string): Locator {
   return page.getByRole('link', { name: `Anfrage ${requestNumber}` });
 }
 
-/** The detail's action that closes the request without work. */
-export function requestCloseButton(page: Page): Locator {
-  return page.getByRole('button', { name: REQUEST_COPY.close, exact: true });
+/** The detail header's „Weitere Aktionen“ menu button. */
+export function requestMoreActionsButton(page: Page): Locator {
+  return page.getByRole('button', { name: REQUEST_COPY.moreActions, exact: true });
+}
+
+/** Opens „Weitere Aktionen“ with the keyboard and returns its item of that name. */
+function openRequestMenuItem(page: Page, name: string): Promise<Locator> {
+  return openMenuItem(requestMoreActionsButton(page), page.getByRole('menuitem', { name, exact: true }));
+}
+
+/** Opens „Weitere Aktionen“ and returns its item that closes the request without work. */
+export function openRequestCloseItem(page: Page): Promise<Locator> {
+  return openRequestMenuItem(page, REQUEST_COPY.close);
 }
 
 /** The fields of the capture, close and conversion dialogs, by their DOM id. */
@@ -224,6 +244,16 @@ export function requestConvertToServiceButton(page: Page): Locator {
 /** The confirmation of the service-case takeover, named by its title. */
 export function requestConvertToServiceDialog(page: Page): Locator {
   return page.getByRole('dialog', { name: REQUEST_COPY.convertToServiceTitle, exact: true });
+}
+
+/** The detail header's action that adds a request with a customer to that customer's open work. */
+export function requestAttachToWorkButton(page: Page): Locator {
+  return page.getByRole('button', { name: REQUEST_COPY.attachToWork, exact: true });
+}
+
+/** The dialog that lists the customer's open work, named by its title. */
+export function requestAttachToWorkDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: REQUEST_COPY.attachToWorkTitle, exact: true });
 }
 
 /** The customer card's action that matches an unknown caller to an existing customer. */
@@ -470,19 +500,24 @@ export async function setRequestStatusFromDetail(
   page: Page,
   change: keyof typeof REQUEST_STATUS_ACTIONS,
 ): Promise<void> {
-  const { action, banner, next } = REQUEST_STATUS_ACTIONS[change];
+  const { action, role, banner, next } = REQUEST_STATUS_ACTIONS[change];
+  const control =
+    role === 'menuitem'
+      ? await openRequestMenuItem(page, action)
+      : page.getByRole(role, { name: action, exact: true });
   // The header shows the target status with the click; the banner confirms
   // the write, and only then is the reload below a read of persisted state.
-  await expectBannerAfter(page, banner, () =>
-    page.getByRole('button', { name: action, exact: true }).click(),
-  );
-  const expectedAction = page.getByRole('button', {
-    name: next,
-    exact: true,
-  });
-  await expect(expectedAction).toBeVisible();
+  await expectBannerAfter(page, banner, () => control.click());
+  await expectRequestMenuOffers(page, next);
   await page.reload();
-  await expect(expectedAction).toBeVisible();
+  await expectRequestMenuOffers(page, next);
+}
+
+/** „Weitere Aktionen“ offers the named item; the menu closes again so the next step starts from the page. */
+async function expectRequestMenuOffers(page: Page, name: string): Promise<void> {
+  const item = await openRequestMenuItem(page, name);
+  await pressKey(page, 'Escape');
+  await expect(item).toHaveCount(0);
 }
 
 export async function closeRequestViaDialog(page: Page, reasonLabel: string): Promise<void> {
@@ -499,7 +534,7 @@ export async function closeRequestViaDialog(page: Page, reasonLabel: string): Pr
       throw new Error('closeRequestViaDialog: detail route refreshed away');
     }
 
-    await requestCloseButton(page).click();
+    await (await openRequestCloseItem(page)).click();
     await expect(page.getByRole('heading', { name: REQUEST_COPY.closeTitle })).toBeVisible();
     const dialog = page.getByRole('dialog');
     try {

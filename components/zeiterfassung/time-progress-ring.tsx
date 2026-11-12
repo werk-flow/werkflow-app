@@ -11,8 +11,6 @@ interface TimeProgressRingProps {
   timelineSegments?: ClockTimelineSegment[] | undefined;
   /** Resolved daily target (P1-04); the overtime ring starts beyond it. */
   targetMinutes?: number | undefined;
-  isActive?: boolean | undefined;
-  glowVariant?: 'work' | 'break' | undefined;
   size?: number | undefined;
   strokeWidth?: number | undefined;
   children?: React.ReactNode | undefined;
@@ -92,7 +90,6 @@ function RingSegmentArcs({
         stroke={SEGMENT_COLORS[seg.type]}
         strokeDasharray={`${arcLength} ${mainCircumference - arcLength}`}
         strokeDashoffset={-offset}
-        className="transition-all duration-500 ease-out"
       />
     );
   });
@@ -111,7 +108,6 @@ function OvertimeArc({ overtimeFraction, geometry }: { overtimeFraction: number;
       stroke={OVERTIME_COLOR}
       strokeDasharray={`${overtimeFraction * overtimeCircumference} ${overtimeCircumference - overtimeFraction * overtimeCircumference}`}
       strokeDashoffset={0}
-      className="transition-all duration-500 ease-out"
     />
   );
 }
@@ -123,8 +119,6 @@ export function TimeProgressRing({
   targetMinutes,
   size = 260,
   strokeWidth = 14,
-  isActive = false,
-  glowVariant = 'work',
   children,
   className,
 }: TimeProgressRingProps) {
@@ -141,19 +135,13 @@ export function TimeProgressRing({
 
   return (
     <div className={cn('relative inline-flex', className)} style={{ width: size, height: size }}>
-      {/* Layer 1 (bottom): overtime empty track – sits BELOW the green glow */}
+      {/* Layer 1 (bottom): overtime empty track */}
       {overtimeFraction > 0 && <OvertimeTrack size={size} geometry={geometry} />}
 
-      {/* Layer 2 (middle): main ring + filled arcs + overtime progress – gets the green glow */}
-      <svg
-        width={size}
-        height={size}
-        viewBox={viewBox}
-        className={cn(
-          'absolute inset-0 -rotate-90',
-          isActive && (glowVariant === 'break' ? 'animate-yellow-glow' : 'animate-green-glow'),
-        )}
-      >
+      {/* Layer 2 (middle): main ring + filled arcs + overtime progress. The arcs follow the
+          running clock every second, so they carry no transition: one would repaint half of
+          every second (tests/audit/support/frames-at-rest.ts). */}
+      <svg width={size} height={size} viewBox={viewBox} className="absolute inset-0 -rotate-90">
         {/* Main ring background */}
         <circle
           cx={center}

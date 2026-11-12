@@ -18,6 +18,7 @@ import {
   jobListReady,
   seedChecklistPoints,
 } from '../support/lab-journeys';
+import { expectAtRest, expectEndlessAnimationCounted } from '../support/frames-at-rest';
 import { idleFrames, openLabSession, recordLabStep } from '../support/lab-recorder';
 import { ensureTypicalProfile, MEASURED_VISIT_TITLE } from '../support/performance-profile';
 import {
@@ -31,6 +32,12 @@ import {
 // typical profile at a phone width with a four-times slower CPU. Each step id
 // is registered in lib/testing/lab-steps.ts; the runner compares every record
 // with lib/testing/lab-count-references.json.
+
+/**
+ * The lab step whose role, viewport and CPU profile LAB-F5 opens. It is named
+ * here because a test that names a step id is part of that step's measured code.
+ */
+const RESTING_PROFILE = 'lab.field.clock-in';
 
 test.describe('Lab counts of the field worker @AUDIT-LAB-FIELD', () => {
   test("LAB-F1 the field worker opens today's job from the job list @AUDIT-LAB-F1", async ({
@@ -142,5 +149,34 @@ test.describe('Lab counts of the field worker @AUDIT-LAB-FIELD', () => {
     const { sessions } = await getTimeCaptureState(world.orgId, employee.id);
     expect(sessions.length).toBe(sessionsBefore + 1);
     expect(sessions.every((session) => session.ended_at !== null)).toBe(true);
+  });
+
+  // No lab step: frames are no exact count, so the test holds each page to one limit itself.
+  test("LAB-F5 the field worker's pages rest while the clock runs @AUDIT-LAB-F5", async ({
+    browser,
+    baseURL,
+    world,
+  }) => {
+    const { assignedJobNumber } = await ensureTypicalProfile(world);
+    const lab = await openLabSession({ browser, baseURL, world, profileStep: RESTING_PROFILE });
+    try {
+      const { page } = lab;
+      await page.goto('/dashboard');
+      await expect(clockStateTarget(page, 'out').locator).toBeVisible();
+      await settleLiveShell(page);
+      await openClockSheet(page, false);
+      await clockSheetAction(page, 'Arbeit starten').click();
+      await expect(clockStateTarget(page, 'in').locator).toBeVisible();
+      for (const path of ['/dashboard', '/zeiterfassung', '/auftraege', `/auftraege/${assignedJobNumber}`]) {
+        await page.goto(path);
+        await expectAtRest(browser, page, `employee ${path}, clock running`);
+      }
+      await openClockSheet(page, true);
+      await clockSheetAction(page, 'Erfassung beenden').click();
+      await expect(clockStateTarget(page, 'out').locator).toBeVisible();
+      await expectEndlessAnimationCounted(browser, page);
+    } finally {
+      await lab.dispose();
+    }
   });
 });
