@@ -22,6 +22,8 @@ type WorkArtifactSaveOptions = WorkArtifactTarget & {
 
 const SAVED_MESSAGE = 'Arbeitsnachweis wurde gespeichert.';
 const SUBMITTED_MESSAGE = 'Arbeitsnachweis wurde zur Prüfung eingereicht.';
+const SEALED_ELSEWHERE_MESSAGE =
+  'Dieser Entwurf wird gerade aus einem anderen Fenster gesendet. Deine Änderungen hier sind noch nicht gespeichert und bleiben im Formular.';
 
 /** Shows the draft the device just sent; a submit asks for its review now that the server holds it. */
 function useSentDraft(editor: WorkArtifactEditor, newArtifactId: string) {
@@ -98,18 +100,19 @@ export function useWorkArtifactSave({
 
   async function runSave(submit: boolean): Promise<void> {
     const onDevice = deviceDraft.current;
-    const draft = onDevice ? await onDevice.committed() : null;
+    const plan = onDevice ? await onDevice.prepareSave() : null;
     // The device could not say whether the draft has photos: a text-only save could lose them.
-    if (onDevice && draft === null) return;
-    // Photos reach the server only with the draft the device holds. A draft without photos is sealed
-    // before its online save leaves: if that save lands and its answer is lost, nothing changes the
-    // draft until the device's send of the same revision is answered.
-    const changedAt = onDevice && draft && draft.photoCount === 0 ? await onDevice.seal() : null;
-    if (draft && draft.photoCount === 0 && changedAt === null) return;
+    if (onDevice && plan === null) return;
+    // Another tab's save is on its way with the draft as it was: this form keeps what changed since.
+    if (plan?.kind === 'sealed_elsewhere')
+      return void showBanner({ variant: 'error', message: SEALED_ELSEWHERE_MESSAGE });
+    // Photos reach the server only with the draft the device holds. A draft without photos is now
+    // sealed: if its online save lands and the answer is lost, nothing changes the draft until the
+    // device's send of the same revision is answered.
     const result =
-      draft && draft.photoCount > 0
+      plan?.kind === 'device'
         ? 'no_answer'
-        : await saveOnServer(submit, draft && changedAt ? { revisionId: draft.revisionId, changedAt } : null);
+        : await saveOnServer(submit, plan?.kind === 'online' ? plan : null);
     if (result === 'no_answer') {
       const sent = (await onDevice?.save(submit)) ?? null;
       if (sent) await showSentDraft(submit, sent);

@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { z } from '@/lib/zod';
 import { openContractFixture } from './open-fixture';
+import { visibleText } from '../golden/support/steps/shared';
 
 // A new Arbeitsnachweis of a job is a draft on the device while the person
 // writes it (decision record 0010, the report draft amendment;
@@ -116,6 +117,95 @@ async function releaseHeldOpensNewestFirst(page: Page): Promise<void> {
     quiet = released ? 0 : quiet + 1;
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
   }
+}
+
+/** How many drafts the device holds, of anyone. */
+async function storedDraftCount(page: Page): Promise<number> {
+  return page.evaluate(async () => {
+    const opening = indexedDB.open('werkflow-drafts', 1);
+    opening.onupgradeneeded = () => opening.result.createObjectStore('drafts', { keyPath: 'id' });
+    const database = await new Promise<IDBDatabase>(
+      (resolve) => (opening.onsuccess = () => resolve(opening.result)),
+    );
+    if (!database.objectStoreNames.contains('drafts')) {
+      database.close();
+      return 0;
+    }
+    const counting = database.transaction('drafts').objectStore('drafts').count();
+    const count = await new Promise<number>(
+      (resolve) => (counting.onsuccess = () => resolve(counting.result)),
+    );
+    database.close();
+    return count;
+  });
+}
+
+/** Seals the one stored draft as another tab's online save does before it leaves. */
+async function sealStoredDraftElsewhere(page: Page): Promise<void> {
+  await expect.poll(() => storedDraftCount(page)).toBe(1);
+  await page.evaluate(async () => {
+    const opening = indexedDB.open('werkflow-drafts', 1);
+    opening.onupgradeneeded = () => opening.result.createObjectStore('drafts', { keyPath: 'id' });
+    const database = await new Promise<IDBDatabase>(
+      (resolve) => (opening.onsuccess = () => resolve(opening.result)),
+    );
+    const transaction = database.transaction('drafts', 'readwrite');
+    const store = transaction.objectStore('drafts');
+    const reading = store.getAll();
+    reading.onsuccess = () => {
+      for (const record of reading.result) store.put({ ...record, sealed: true });
+    };
+    await new Promise<void>((resolve) => (transaction.oncomplete = () => resolve()));
+    database.close();
+  });
+}
+
+/**
+ * From the save on, the second connection to the draft store first adds a photo to the unsealed
+ * draft, as another tab's photo field does, between two of this tab's transactions.
+ */
+async function addPhotoElsewhereBeforeSecondOpen(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const open = IDBFactory.prototype.open;
+    let opens = 0;
+    IDBFactory.prototype.open = function (this: IDBFactory, name: string, version?: number) {
+      const request = open.call(this, name, version);
+      if (name !== 'werkflow-drafts') return request;
+      opens += 1;
+      if (opens !== 2) return request;
+      request.addEventListener(
+        'success',
+        (event) => {
+          event.stopImmediatePropagation();
+          const transaction = request.result.transaction('drafts', 'readwrite');
+          const store = transaction.objectStore('drafts');
+          const reading = store.getAll();
+          reading.onsuccess = () => {
+            const records: unknown[] = reading.result;
+            for (const record of records) {
+              if (typeof record !== 'object' || record === null) continue;
+              if (Reflect.get(record, 'sealed') === true) continue;
+              const photos: unknown = Reflect.get(record, 'photos');
+              const blob = new Blob(['synthetic photo'], { type: 'image/png' });
+              const photo = {
+                id: crypto.randomUUID(),
+                name: 'foto-anderes-fenster.png',
+                blob,
+                transferred: null,
+                documentId: null,
+              };
+              const existing: unknown[] = Array.isArray(photos) ? photos : [];
+              store.put({ ...record, photos: [...existing, photo] });
+              Reflect.set(window, 'photoAddedElsewhere', true);
+            }
+          };
+          transaction.oncomplete = () => request.dispatchEvent(new Event('success'));
+        },
+        { once: true },
+      );
+      return request;
+    };
+  });
 }
 
 function draftRow(page: Page, title: string) {
@@ -447,6 +537,47 @@ test('a draft whose online save may have landed cannot be changed until its send
     sent.map(() => 'Brenner gereinigt'),
   );
   await expect(row).toBeHidden();
+});
+
+test("a save in a tab whose draft another tab's save already sealed sends nothing and keeps this form's text", async ({
+  page,
+}) => {
+  await openContractFixture(page, 'work-artifact-report');
+  const sent = await answerSync(page, () => 'offline');
+  await writeReport(page, 'Wartung Heizung', 0);
+  await sealStoredDraftElsewhere(page);
+  const dialog = page.getByRole('dialog', { name: 'Arbeitsnachweis erstellen', exact: true });
+  await dialog.getByRole('textbox', { name: 'Ausgeführte Arbeiten', exact: true }).fill('Brenner und Pumpe');
+  await page.getByRole('button', { name: 'Als Entwurf speichern', exact: true }).click();
+
+  await expect(
+    visibleText(page, 'Dieser Entwurf wird gerade aus einem anderen Fenster gesendet.'),
+  ).toBeVisible();
+  await expect(dialog.getByRole('textbox', { name: 'Ausgeführte Arbeiten', exact: true })).toHaveValue(
+    'Brenner und Pumpe',
+  );
+  expect(await page.evaluate(() => window.uiContractWorkArtifacts.saves)).toEqual([]);
+  expect(sent).toEqual([]);
+});
+
+test("another tab's photo that reaches the draft before the save decides goes with the draft's own send, never a text-only save", async ({
+  page,
+}) => {
+  await openContractFixture(page, 'work-artifact-report');
+  const sent = await answerSync(page, () => ({ outcome: 'accepted', code: 'accepted' }));
+  await writeReport(page, 'Wartung Heizung', 0);
+  await expect.poll(() => storedDraftCount(page)).toBe(1);
+  await addPhotoElsewhereBeforeSecondOpen(page);
+  await page.getByRole('button', { name: 'Als Entwurf speichern', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Arbeitsnachweis erstellen', exact: true })).toBeHidden();
+
+  // Whether the other tab's photo came in before the decision or was refused after the seal, no
+  // text-only save ever runs for a draft that holds a photo.
+  if (await page.evaluate(() => Reflect.get(window, 'photoAddedElsewhere') === true)) {
+    expect(await page.evaluate(() => window.uiContractWorkArtifacts.saves)).toEqual([]);
+    await expect.poll(() => sent.length).toBe(1);
+    expect(sent[0]?.payload.photos).toHaveLength(1);
+  }
 });
 
 test('a review request that fails after the device sent the draft says the draft is saved but not submitted', async ({

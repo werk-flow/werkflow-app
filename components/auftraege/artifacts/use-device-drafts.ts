@@ -55,21 +55,25 @@ export type RestoredDraft = {
   };
 };
 
+/** How the dialog's save of a device draft goes; see DeviceDraftHandle.prepareSave. */
+type DraftSavePlan =
+  | { kind: 'online'; revisionId: string; changedAt: string }
+  | { kind: 'device' }
+  | { kind: 'sealed_elsewhere' };
+
 /** What the dialog's save asks of the draft keeper once the device keeps the new Arbeitsnachweis. */
 export type DeviceDraftHandle = {
   /**
-   * The draft as the device holds it once every change made so far is written: its photo count
-   * and the revision id an online save of it uses, so a lost answer to that save and the later
-   * send are one write. Null when the device could not answer; the keeper then shows why.
+   * Writes every change made so far and decides, in that one transaction, how the save goes:
+   * - `online`: no photos; the draft is now sealed, so if its online save lands and the answer is
+   *   lost, the device's later send carries exactly the saved content. The save names the draft's
+   *   revision id and its last-change time, which the server compares.
+   * - `device`: the draft has photos, which reach the server only with the draft's own send.
+   * - `sealed_elsewhere`: another tab's save sealed the draft before; this editor's changes since
+   *   are not on the device and must stay in the form.
+   * Null when the device could not answer; the keeper then shows why.
    */
-  committed: () => Promise<{ photoCount: number; revisionId: string } | null>;
-  /**
-   * Seals the draft before its online save leaves with the draft's revision id: if that save lands
-   * and its answer is lost, the device's later send must carry exactly the saved content. Answers the
-   * sealed draft's last-change time, which the save carries so the server can tell that state
-   * apart, or null when the device could not seal it; the keeper then shows why.
-   */
-  seal: () => Promise<string | null>;
+  prepareSave: () => Promise<DraftSavePlan | null>;
   /** Unseals the draft after the server refused its online save: the server holds nothing of it. */
   unseal: () => Promise<void>;
   /**

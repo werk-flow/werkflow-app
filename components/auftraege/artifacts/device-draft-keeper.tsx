@@ -146,7 +146,12 @@ function useDraftPhotos(write: DraftWrite, withText: DraftChange, restored: read
       current.length < WORK_ARTIFACT_DRAFT_PHOTO_LIMIT ? [...current, photo] : current,
     );
     if (stored && !stored.some((entry) => entry.id === photo.id))
-      setPhotoError(`Ein Entwurf kann höchstens ${WORK_ARTIFACT_DRAFT_PHOTO_LIMIT} Fotos haben.`);
+      setPhotoError(
+        stored.length >= WORK_ARTIFACT_DRAFT_PHOTO_LIMIT
+          ? `Ein Entwurf kann höchstens ${WORK_ARTIFACT_DRAFT_PHOTO_LIMIT} Fotos haben.`
+          : // The draft is sealed: a save in another tab sends it as it was.
+            'Dieser Entwurf wird gerade gesendet. Das Foto wurde nicht angehängt.',
+      );
   }
 
   const removePhoto = async (photoId: string): Promise<void> => {
@@ -243,19 +248,24 @@ export function DeviceDraftKeeper(props: DeviceDraftKeeperProps) {
   // The dialog's save reaches the keeper of this render; without a keeper it saves on the server alone.
   useEffect(() => {
     onHandle({
-      // The text write waits behind every queued one: a photo just taken counts once it is stored.
-      committed: async () => {
-        const stored = await write(withText);
-        return stored === null || stored === 'not_stored'
-          ? null
-          : { photoCount: stored.photos.length, revisionId: stored.revisionId };
-      },
-      seal: async () => {
+      // The write waits behind every queued one, so a photo just taken counts once it is stored, and
+      // reads, writes and decides in one transaction: no other tab's photo or seal comes in between.
+      prepareSave: async () => {
+        const decided: { plan: 'online' | 'device' | 'sealed_elsewhere' } = { plan: 'device' };
         const stored = await write((current) => {
+          if (current?.sealed) {
+            decided.plan = 'sealed_elsewhere';
+            return current;
+          }
           const next = withText(current);
-          return next ? { ...next, sealed: true } : next;
+          if (next === null || next.photos.length > 0) return next;
+          decided.plan = 'online';
+          return { ...next, sealed: true };
         });
-        return stored !== null && stored !== 'not_stored' && stored.sealed ? stored.updatedAt : null;
+        if (stored === null || stored === 'not_stored') return null;
+        return decided.plan === 'online'
+          ? { kind: 'online', revisionId: stored.revisionId, changedAt: stored.updatedAt }
+          : { kind: decided.plan };
       },
       unseal: async () =>
         void (await write((current) => (current ? { ...current, sealed: false } : current))),
