@@ -133,10 +133,16 @@ async function countDraftsOnPage(page: Page): Promise<number> {
   }, DRAFT_DATABASE);
 }
 
-/** Counts the page's requests started from now on that have not ended yet; earlier ones never count. */
+/**
+ * Counts the page's script requests started from now on that have not ended yet; earlier ones never
+ * count. Only scripts: the page's live reads may stay open, and the code it loads is what an
+ * offline open needs.
+ */
 export function trackRequestsInFlight(page: Page): () => number {
   const inFlight = new Set<Request>();
-  page.on('request', (request) => inFlight.add(request));
+  page.on('request', (request) => {
+    if (request.resourceType() === 'script') inFlight.add(request);
+  });
   const ended = (request: Request): void => {
     inFlight.delete(request);
   };
@@ -146,7 +152,7 @@ export function trackRequestsInFlight(page: Page): () => number {
 }
 
 /**
- * Waits until the page loaded, had an idle moment, and every request it started meanwhile ended:
+ * Waits until the page loaded, had an idle moment, and every script it started meanwhile ended:
  * what the page fetches once idle is on the page, whatever it is.
  */
 export async function waitUntilPageIdle(page: Page, inFlight: () => number): Promise<void> {
