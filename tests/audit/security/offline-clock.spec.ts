@@ -1,4 +1,5 @@
 import { expect, test } from '../support/fixtures';
+import { openPage } from '../../golden/support/streamed-content';
 import {
   clockDock,
   clockInLauncher,
@@ -59,7 +60,7 @@ test('a clock start and end without signal are recorded once, at their captured 
   });
 
   await test.step('after a restart the phone still holds the start', async () => {
-    const restarted = await page.context().newPage();
+    const restarted = await openPage(page.context());
     await bypassHttpCache(restarted);
     await restarted.goto('/dashboard');
     await expect(offlineClock(restarted)).toContainText(UNSENT_COPY.workingSince);
