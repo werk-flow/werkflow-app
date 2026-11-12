@@ -1,8 +1,9 @@
 'use client';
 
 import { timeActivitySelectionSchema } from '@/lib/time-tracking/activity-selection-schema';
-import { clockStateSchema } from '@/lib/time-tracking/state-client';
 import { z } from '@/lib/zod';
+import { storedClockSchema, storedVersionSchema } from './stored-clock';
+import { storedClockFacts } from './stored-clock-facts';
 import { todayHolderKey } from './today-store';
 
 // The web half of the time outbox on a phone (decision record 0010, "Device
@@ -25,6 +26,8 @@ export type OutboxHolder = { userId: string; organizationId: string };
 const expectationSchema = z.object({ sessionId: z.string().nullable(), version: z.number().nullable() });
 
 const storedTimeEventSchema = z.object({
+  /** The stored format's version (stored-clock.ts). */
+  version: storedVersionSchema,
   /** The idempotency key, created once when the person acted. It never changes on a resend. */
   operationId: z.string(),
   userId: z.string(),
@@ -47,13 +50,15 @@ const storedTimeEventSchema = z.object({
 
 export type StoredTimeEvent = z.infer<typeof storedTimeEventSchema>;
 
-const storedClockSchema = z.object({
+const storedHolderClockSchema = z.object({
+  /** The stored format's version (stored-clock.ts). */
+  version: storedVersionSchema,
   /** `userId:organizationId`, the record's key. */
   holder: z.string(),
   userId: z.string(),
   organizationId: z.string(),
   /** The clock as the server last confirmed it, which the unsent events are applied to; null when unknown. */
-  base: clockStateSchema.nullable(),
+  base: storedClockSchema.nullable(),
   /**
    * What the next event expects once the events before it were recorded: the session and version
    * the last answer left. An action a page kept behind them is taken in later and expects this.
@@ -67,7 +72,7 @@ const storedClockSchema = z.object({
   wipeGeneration: z.string(),
 });
 
-export type StoredClock = z.infer<typeof storedClockSchema>;
+export type StoredClock = z.infer<typeof storedHolderClockSchema>;
 
 /** One person's unsent time events in an organization, in the order they are sent, and their clock. */
 export type TimeOutbox = { clock: StoredClock | null; events: StoredTimeEvent[] };
@@ -134,7 +139,7 @@ function withContents(
       else contents.othersUnreadable += 1;
     }
     for (const record of z.array(z.unknown()).parse(clocks.result)) {
-      const clock = storedClockSchema.safeParse(record);
+      const clock = storedHolderClockSchema.safeParse(record);
       if (clock.success) contents.clocks.push(clock.data);
       else if (concerns(record)) return transaction.abort();
     }
@@ -200,7 +205,8 @@ export function changeTimeOutbox(
     for (const event of current.events) if (!kept.has(event.operationId)) events.delete(event.operationId);
     for (const event of next.events) if (!current.events.includes(event)) events.put(event);
     const clocks = transaction.objectStore(CLOCKS);
-    if (next.clock && next.clock !== current.clock) clocks.put(next.clock);
+    if (next.clock && next.clock !== current.clock)
+      clocks.put({ ...next.clock, base: next.clock.base && storedClockFacts(next.clock.base) });
     if (!next.clock && current.clock) clocks.delete(current.clock.holder);
     const others = contents.events.length - current.events.length + contents.othersUnreadable;
     return { outbox: next, deviceHoldsEvents: others + next.events.length > 0 };

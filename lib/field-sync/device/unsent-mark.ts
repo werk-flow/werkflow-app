@@ -1,7 +1,9 @@
 'use client';
 
 import type { TimeTransitionResult } from '@/lib/time-tracking/types';
-import type { KeptClockAction } from './kept-clock-actions';
+import type { ClockActionToKeep, KeptClockAction } from './kept-clock-actions';
+import type { StoredClockFacts } from './stored-clock';
+import { STORED_RECORD_VERSION, storedClockFacts } from './stored-clock-facts';
 import { mayKeepUnder } from './today-wipe';
 
 // What every page carries of the phone's unsent work, so this module imports
@@ -62,14 +64,19 @@ function holdsKeyWith(prefix: string): boolean {
   }
 }
 
-/** A kept action as the store holds it: the clock without job, customer and project names. */
-function keptValue(action: Omit<KeptClockAction, 'wipeGeneration'>, pageSignal: string): string {
-  const base = action.base && { ...action.base, activeJobInfo: null, resumeJobInfo: null };
-  return JSON.stringify({ ...action, base, wipeGeneration: pageSignal } satisfies KeptClockAction);
+/** A kept action in its stored format (stored-clock.ts): the clock without job, customer and project names. */
+function keptValue(action: ClockActionToKeep, pageSignal: string): string {
+  const stored: Omit<KeptClockAction, 'base'> & { base: StoredClockFacts | null } = {
+    ...action,
+    version: STORED_RECORD_VERSION,
+    base: action.base && storedClockFacts(action.base),
+    wipeGeneration: pageSignal,
+  };
+  return JSON.stringify(stored);
 }
 
 /** Writes one kept action; answers its key, or null when nothing may or can be kept. */
-function storeKept(action: Omit<KeptClockAction, 'wipeGeneration'>, pageSignal: string): string | null {
+function storeKept(action: ClockActionToKeep, pageSignal: string): string | null {
   const kind = action.action;
   if ((kind !== 'start' && kind !== 'switch' && kind !== 'end') || !mayKeepUnder(pageSignal)) return null;
   keptOnThisPage += 1;
@@ -93,7 +100,7 @@ export function clockCallLock(operationId: string): string {
  * the server answered or the call failed; a failed call is then kept as usual.
  */
 export function callWhileKept<T>(
-  action: Omit<KeptClockAction, 'wipeGeneration'>,
+  action: ClockActionToKeep,
   pageSignal: string | null,
   call: () => Promise<T>,
 ): Promise<T | KeptClockResult> {
@@ -138,7 +145,7 @@ export function callWhileKept<T>(
  * signed in. `base`, the clock the server confirmed, is kept without job, customer and project names.
  */
 export function keepClockAction(
-  action: Omit<KeptClockAction, 'wipeGeneration'>,
+  action: ClockActionToKeep,
   pageSignal: string,
 ): Extract<TimeTransitionResult, { success: true }> | null {
   if (!storeKept(action, pageSignal)) return null;

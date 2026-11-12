@@ -55,13 +55,19 @@ export async function endSessionAfterCheck(
   scope: 'session' | 'organization' = 'session',
 ): Promise<boolean> {
   const flow = beginSessionEnd();
-  // A live flow keeps its barrier fresh; only one whose tab closed or froze lets it lapse.
-  const stopHeartbeat = startWallClockInterval(() => renewSessionEnd(flow), SESSION_END_HEARTBEAT_MS);
+  // A live flow keeps its barrier fresh; only one whose tab closed or froze lets it lapse. A lapse
+  // stays noted until a check that began after it ends: a later renewal stands again, but another
+  // tab may have kept an action meanwhile.
+  let lapsed = false;
+  const stopHeartbeat = startWallClockInterval(() => {
+    if (!renewSessionEnd(flow)) lapsed = true;
+  }, SESSION_END_HEARTBEAT_MS);
   try {
     for (;;) {
+      lapsed = false;
       if (!(await sessionMayEnd(showFailure, scope))) return false;
       // The barrier stood the whole check: nothing was kept behind it. Otherwise ask again.
-      if (renewSessionEnd(flow)) break;
+      if (renewSessionEnd(flow) && !lapsed) break;
     }
     await end();
     return true;

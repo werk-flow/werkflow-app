@@ -18,7 +18,7 @@ const clockJobInfoSchema = z.object({
   clientName: nullableText,
 });
 /** The clock state as the server answers it; the phone parses what it kept without signal with it too. */
-export const clockStateSchema = z.object({
+const clockStateSchema = z.object({
   organizationId: text,
   // Inline, not imported from ./settings: that module in the layout's client
   // bundle grows every route's payload by about 500 bytes (lab counts).

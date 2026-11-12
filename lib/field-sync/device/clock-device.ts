@@ -169,12 +169,14 @@ export async function removeShownTimeEvents(
  * the device storage fails, or when the action may not be kept now (another tab's wipe or session end).
  */
 export async function captureBehindKept(holder: OutboxHolder, capture: TimeEventCapture): Promise<void> {
-  const deferred = await exclusively(TAKE_IN_LOCK, async () => {
-    const taken = await takeInKeptClockActions(markTimeHeld);
-    if (!taken.deferred) await captureTimeEvent(holder, capture, { underSignal: true });
-    return taken.deferred;
+  const taken = await exclusively(TAKE_IN_LOCK, async () => {
+    const intake = await takeInKeptClockActions(markTimeHeld);
+    // Behind an open call or an action this version cannot read, a tap waits kept: it never passes them.
+    if (!intake.deferred && intake.stopAt === null)
+      await captureTimeEvent(holder, capture, { underSignal: true });
+    return intake;
   });
-  if (deferred) {
+  if (taken.deferred || taken.stopAt !== null) {
     const { command, base, readAt, capturedAt, triedOnline, wipeGeneration } = capture;
     const kept = keepClockAction(
       {
@@ -188,7 +190,7 @@ export async function captureBehindKept(holder: OutboxHolder, capture: TimeEvent
       wipeGeneration,
     );
     if (!kept) throw new Error('the clock action may not be kept now');
-    lookAgainLater(deferred);
+    if (taken.deferred) lookAgainLater(taken.deferred);
   }
   await outboxChanged();
 }
@@ -259,7 +261,7 @@ async function holdersToSend(): Promise<OutboxHolder[]> {
 
 /** Sends the unsent events of this tab's holder, or of the session's person, as far as the server records them now. */
 export async function sendOwnTimeEvents(): Promise<void> {
-  await takeInKept();
+  const { stopAt } = await takeInKept();
   const hold = clockHolder();
   for (const holder of await holdersToSend())
     await exclusively(SEND_LOCK, () =>
@@ -271,6 +273,7 @@ export async function sendOwnTimeEvents(): Promise<void> {
           const session = clockHolder() === hold ? await readSession() : null;
           return session?.userId === holder.userId ? session.token : null;
         },
+        stopAt,
       }),
     );
   await outboxChanged();

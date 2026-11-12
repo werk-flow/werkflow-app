@@ -24,6 +24,11 @@ export type TimeOutboxSendOptions = {
    * person.
    */
   holdersToken: () => Promise<string | null>;
+  /**
+   * The tap time of a kept action this version cannot read (kept-clock-actions.ts): no event tapped
+   * at or after it is sent, so nothing is recorded past an action the server never saw.
+   */
+  stopAt?: number | null;
 };
 
 function envelopeOf(event: StoredTimeEvent, sentAt: Date): Record<string, unknown> {
@@ -127,6 +132,7 @@ export async function sendTimeOutbox(holder: OutboxHolder, options: TimeOutboxSe
   for (;;) {
     const [head] = (await readTimeOutbox(holder)).events;
     if (!head || head.verdict) return;
+    if (Date.parse(head.capturedAt) >= (options.stopAt ?? Number.POSITIVE_INFINITY)) return;
     // Checked before every send: the session can end, or change its person, between two events.
     const token = await options.holdersToken();
     if (!token) return;

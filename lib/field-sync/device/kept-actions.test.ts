@@ -8,7 +8,7 @@ import {
   resetDevice,
   storage,
 } from '@/lib/testing/fixtures/time-outbox';
-import { takeInKeptClockActions, untilCallAnswers, type KeptClockAction } from './kept-clock-actions';
+import { takeInKeptClockActions, untilCallAnswers, type ClockActionToKeep } from './kept-clock-actions';
 import { beginSessionEnd, endSessionEnd, mayKeepUnder, renewSessionEnd } from './today-wipe';
 import { callWhileKept, clockCallLock, keptActionsWait } from './unsent-mark';
 
@@ -20,10 +20,7 @@ installTabLocks();
 beforeEach(resetDevice);
 
 /** A clock start as the provider writes it before its online call, tapped at `capturedAt`. */
-function onlineStart(
-  operationId: string,
-  capturedAt = '2026-11-11T07:00:00.000Z',
-): Omit<KeptClockAction, 'wipeGeneration'> {
+function onlineStart(operationId: string, capturedAt = '2026-11-11T07:00:00.000Z'): ClockActionToKeep {
   return {
     ...WORKER,
     operationId,
@@ -99,6 +96,7 @@ describe('an action this version cannot read', () => {
       'werkflow:unsent:clock:001762844500000:1:50000000-0000-4000-8000-0000000000e5',
       JSON.stringify({
         ...onlineStart('50000000-0000-4000-8000-0000000000e5'),
+        version: 1,
         triedOnline: false,
         wipeGeneration: '',
       }),
@@ -133,6 +131,7 @@ describe('a take-in behind an open call', () => {
       'werkflow:unsent:clock:001762844400000:1:50000000-0000-4000-8000-0000000000e3',
       JSON.stringify({
         ...onlineStart('50000000-0000-4000-8000-0000000000e3', '2026-11-01T07:00:00.000Z'),
+        version: 1,
         inFlight: true,
         wipeGeneration: '',
       }),
@@ -159,7 +158,12 @@ describe('a take-in behind an open call', () => {
       let answered = false;
       const waiting = untilCallAnswers({
         actions: [
-          { ...onlineStart('50000000-0000-4000-8000-0000000000e4'), inFlight: true, wipeGeneration: '' },
+          {
+            ...onlineStart('50000000-0000-4000-8000-0000000000e4'),
+            version: 1,
+            inFlight: true,
+            wipeGeneration: '',
+          },
         ],
         recheckAt: Date.parse('2026-11-11T07:00:10.000Z'),
         lock: null,

@@ -1,9 +1,9 @@
 'use client';
 
 import { timeActivitySelectionSchema } from '@/lib/time-tracking/activity-selection-schema';
-import { clockStateSchema } from '@/lib/time-tracking/state-client';
 import { z } from '@/lib/zod';
 import { captureTimeEvent, isOfflineClockAction } from './time-outbox';
+import { storedClockSchema, storedVersionSchema } from './stored-clock';
 import { KEPT_CLOCK_ACTION_PREFIX, clockCallLock } from './unsent-mark';
 
 // Takes the clock actions a page kept without signal (unsent-mark.ts) into the
@@ -13,6 +13,8 @@ import { KEPT_CLOCK_ACTION_PREFIX, clockCallLock } from './unsent-mark';
 // only after the outbox holds it.
 
 const keptClockActionSchema = z.object({
+  /** The stored format's version (stored-clock.ts). */
+  version: storedVersionSchema,
   userId: z.string(),
   organizationId: z.string(),
   /** Created when the person acted; the outbox and every send keep it. */
@@ -29,13 +31,16 @@ const keptClockActionSchema = z.object({
   /** The wipe signal when the person acted (today-wipe.ts). */
   wipeGeneration: z.string(),
   /** The clock the server last confirmed, as the page read it; null when the page held none. */
-  base: clockStateSchema.nullable(),
+  base: storedClockSchema.nullable(),
   /** When the page read `base` from the server (time-outbox.ts, TimeEventCapture). */
   readAt: z.string().nullable(),
 });
 
 /** One clock action as a page keeps it when it meets no network. */
 export type KeptClockAction = z.infer<typeof keptClockActionSchema>;
+
+/** What a page hands over to keep: the store adds the format's version and the wipe signal. */
+export type ClockActionToKeep = Omit<KeptClockAction, 'version' | 'wipeGeneration'>;
 
 /** The keys of the kept clock actions, in the order of their taps. */
 function keptActionKeys(): string[] {
@@ -82,6 +87,23 @@ async function callState(kept: KeptClockAction): Promise<CallState> {
 export type DeferredTakeIn = { actions: KeptClockAction[]; recheckAt: number | null; lock: string | null };
 
 /**
+ * What a take-in did: how many actions it moved, how many it cannot read, what waits behind an open
+ * online call, and the tap time of the first action it cannot read (`stopAt`), which nothing passes.
+ */
+export type KeptTakeIn = {
+  moved: number;
+  unreadable: number;
+  deferred: DeferredTakeIn | null;
+  stopAt: number | null;
+};
+
+/** The tap time an action's key names (unsent-mark.ts), or 0 for a key that names none: then nothing passes it. */
+function tapTimeOf(key: string): number {
+  const tapped = Number(key.slice(KEPT_CLOCK_ACTION_PREFIX.length).split(':')[0]);
+  return Number.isFinite(tapped) ? tapped : 0;
+}
+
+/**
  * Moves every kept clock action into its person's outbox, in the order of the taps, and answers
  * how many it moved and how many it cannot read. An action this version cannot read stays kept: it
  * is never dropped unread, and a session must not end over it (clock-device.ts). Throws when the
@@ -93,7 +115,7 @@ export async function takeInKeptClockActions(
    * key goes, so a tab closed mid-intake never hides the event.
    */
   markHeld: () => boolean,
-): Promise<{ moved: number; unreadable: number; deferred: DeferredTakeIn | null }> {
+): Promise<KeptTakeIn> {
   let moved = 0;
   const keys = keptActionKeys();
   for (const [index, key] of keys.entries()) {
@@ -106,20 +128,12 @@ export async function takeInKeptClockActions(
         moved,
         unreadable: 1 + later.length - behind.length,
         deferred: behind.length > 0 ? { actions: behind, recheckAt: null, lock: null } : null,
+        stopAt: tapTimeOf(key),
       };
     }
-    const {
-      userId,
-      organizationId,
-      action,
-      base,
-      readAt,
-      capturedAt,
-      triedOnline,
-      wipeGeneration,
-      inFlight,
-      ...command
-    } = kept;
+    const { userId, organizationId, action, base, readAt, capturedAt, triedOnline, wipeGeneration } = kept;
+    const { operationId, selection, expectedSessionId, expectedVersion, inFlight } = kept;
+    const command = { operationId, selection, expectedSessionId, expectedVersion };
     if (!isOfflineClockAction(action)) continue;
     // Its page may still wait for the server's answer; what was kept after it waits behind it.
     const call = inFlight ? await callState(kept) : { runs: false as const };
@@ -131,6 +145,7 @@ export async function takeInKeptClockActions(
         moved,
         unreadable: later.length - behind.length,
         deferred: { actions: [kept, ...behind], recheckAt: call.recheckAt, lock: call.lock },
+        stopAt: null,
       };
     }
     await captureTimeEvent(
@@ -150,7 +165,7 @@ export async function takeInKeptClockActions(
     localStorage.removeItem(key);
     moved += 1;
   }
-  return { moved, unreadable: 0, deferred: null };
+  return { moved, unreadable: 0, deferred: null, stopAt: null };
 }
 
 /**

@@ -2,11 +2,16 @@ import 'fake-indexeddb/auto';
 
 import { beforeEach, describe, expect, mock, setSystemTime, spyOn, test } from 'bun:test';
 
-import type { LiveClockState } from '@/lib/time-tracking/types';
 import { z } from '@/lib/zod';
 import type { ClockDeviceView } from './time-outbox';
 import { readTimeOutbox, type OutboxHolder } from './time-outbox-store';
-import { installTabLocks } from '@/lib/testing/fixtures/time-outbox';
+import {
+  CLOCKED_OUT,
+  COLLEAGUE,
+  OTHER_COMPANY,
+  WORKER,
+  installTabLocks,
+} from '@/lib/testing/fixtures/time-outbox';
 import { TODAY_WIPE_KEY } from './today-wipe';
 
 // This tab's hold on the time outbox (werk-flow/werkflow-planning#319): the
@@ -99,47 +104,10 @@ async function isolatedTests(): Promise<void> {
   const { beginSessionEnd, endSessionEnd } = await import('./today-wipe');
   const { captureTimeEvent } = await import('./time-outbox');
 
-  const WORKER: OutboxHolder = {
-    userId: '10000000-0000-4000-8000-00000000000a',
-    organizationId: '20000000-0000-4000-8000-00000000000a',
-  };
-  const COLLEAGUE: OutboxHolder = { ...WORKER, userId: '10000000-0000-4000-8000-00000000000b' };
-  const OTHER_COMPANY: OutboxHolder = { ...WORKER, organizationId: '20000000-0000-4000-8000-00000000000b' };
-
-  const CLOCKED_OUT: LiveClockState = {
-    organizationId: WORKER.organizationId,
-    breakPolicy: { breakMode: 'manual', autoBreakThresholdMinutes: 360, autoBreakDurationMinutes: 30 },
-    status: 'clocked_out',
-    isClockedIn: false,
-    isOnBreak: false,
-    clockInTime: null,
-    statusStartedAt: null,
-    breakStartTime: null,
-    todayMinutes: 0,
-    workMinutes: 0,
-    breakMinutes: 0,
-    timelineSegments: [],
-    activeJobId: null,
-    activeJobInfo: null,
-    captureModel: 'none',
-    sessionId: null,
-    sessionVersion: null,
-    currentSegmentId: null,
-    currentActivity: null,
-    resumeActivity: null,
-    resumeJobInfo: null,
-    recoveryReason: null,
-    legacyOpen: false,
-    standbyMinutes: 0,
-    travelMinutes: 0,
-    calloutMinutes: 0,
-    internalMinutes: 0,
-    fetchedAt: '2026-11-11T06:00:00.000Z',
-  };
-
   let operations = 0;
   /** A clock start a page keeps without signal, under the operation id `operationId`. */
   const startAction = (operationId: string) => ({
+    version: 1 as const,
     ...WORKER,
     operationId,
     action: 'start',
@@ -287,7 +255,7 @@ async function isolatedTests(): Promise<void> {
         '{"operationId":"x","kind":"new"}',
       );
 
-      expect(await takeInKept()).toEqual({ moved: 0, unreadable: 1, deferred: null });
+      expect(await takeInKept()).toEqual({ moved: 0, unreadable: 1, deferred: null, stopAt: 1 });
       await expect(timeUnsentSource.summarize()).rejects.toThrow('cannot be read');
 
       expect((await readTimeOutbox(WORKER)).events).toEqual([]);
@@ -562,6 +530,40 @@ async function isolatedTests(): Promise<void> {
       ).toEqual([expect.stringContaining('0000000000b4'), expect.stringContaining('0000000000b5')]);
       answer();
       await calling;
+    });
+
+    test('neither a tap nor a send passes a kept action this version cannot read (S24)', async () => {
+      sessionUserId = WORKER.userId;
+      verdict = {
+        outcome: 'accepted',
+        code: 'accepted',
+        state: { sessionId: null, segmentId: null, version: 1 },
+      };
+      await holdClock(WORKER, () => undefined);
+      // At 12:00 a newer version kept a break; 07:00 a start, and 13:00 an end an earlier path put into the outbox.
+      storage.set('werkflow:unsent:clock:001794398400000:1:from-a-newer-version', '{"version":2}');
+      const at = (time: string, id: string) =>
+        offlineCapture(
+          `50000000-0000-4000-8000-0000000000${id}`,
+          id === 'c1' ? 'start' : 'end',
+          `2026-11-11T${time}Z`,
+        );
+      await captureTimeEvent(WORKER, at('07:00', 'c1'));
+      await captureTimeEvent(WORKER, at('13:00', 'c2'));
+
+      await captureBehindKept(WORKER, at('14:00', 'c3'));
+      await sendOwnTimeEvents();
+
+      // Only the start before the stop is recorded: no span runs from 07:00 over the break the server never saw.
+      expect(sent.map((body) => body.includes('0000000000c1'))).toEqual([true]);
+      expect((await readTimeOutbox(WORKER)).events.map(({ operationId }) => operationId.slice(-2))).toEqual([
+        'c2',
+      ]);
+      expect([...storage.keys()].filter((key) => key.startsWith('werkflow:unsent:clock:'))).toEqual([
+        'werkflow:unsent:clock:001794398400000:1:from-a-newer-version',
+        expect.stringContaining('0000000000c3'),
+      ]);
+      verdict = null;
     });
 
     test('an entry of a page that closed mid-call and is still young is taken in once it ages out, without another trigger', async () => {

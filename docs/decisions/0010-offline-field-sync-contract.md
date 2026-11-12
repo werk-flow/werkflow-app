@@ -212,3 +212,11 @@ Decided for werk-flow/werkflow-planning#319 on the lead's review.
 - **Sign-out.** It ends the person's session in every organization, so it names the person's unsent events of every organization. „Jetzt senden“ sends only the active organization's; the server refuses the others there, and they stay waiting. „Verwerfen“ deletes the person's events of every organization after its confirmation. „Abbrechen“ deletes nothing and keeps the session; the person can switch to the other organization, whose page sends them.
 - **Organization switch.** It leaves only the active organization, so it names and sends only that organization's events. „Verwerfen“ deletes only those. The other organizations' events stay untouched and are sent once the person works there.
 - The question's seam takes the scope (`UnsentScope` in `lib/field-sync/device/unsent-work.ts`); a source that ignores it answers for the whole session, which asks more, never less.
+
+## Amendment 2026-11-12: stored records and the stops they make
+
+Decided for werk-flow/werkflow-planning#319 on its sixth review and the lead's decision on the stored format. It adds an eighth invariant to the time outbox's seven and sharpens the third and the fifth.
+
+3. **Taking in**, sharpened. An action this version cannot read stops more than the take-in: nothing tapped after it is captured into the outbox or sent, and a new tap waits kept behind it.
+5. **A session end**, sharpened. A flow that finds its barrier lapsed checks again even when a later renewal stood the barrier again: another tab may have kept an action while it lapsed.
+8. **A stored record.** A record an earlier version wrote is always readable. Kept actions and outbox records have formats of their own with a `version`, not the live clock's type (`lib/field-sync/device/stored-clock.ts`). Reading ignores fields it does not know. A record of a newer version is a stop. A change that removes or reinterprets a field raises the version and adds a reader for the earlier one; `lib/field-sync/device/stored-records.test.ts` pins each version 1 record.

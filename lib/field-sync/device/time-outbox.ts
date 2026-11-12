@@ -3,6 +3,7 @@
 import { formatBerlinLocalDate, getLocalDayStart, isSameLocalDay } from '@/lib/date-time/berlin';
 import { applyTransitionEcho } from '@/lib/time-tracking/clock-echo';
 import type { LiveClockState, TimeActivitySelection } from '@/lib/time-tracking/types';
+import { STORED_RECORD_VERSION } from './stored-clock-facts';
 import { todayHolderKey } from './today-store';
 import { mayKeepUnder } from './today-wipe';
 import {
@@ -139,6 +140,7 @@ export function clockDeviceView(outbox: TimeOutbox, now: Date): ClockDeviceView 
 /** The clock a phone keeps: without job, customer and project names, which no unsent event needs. */
 function clockToKeep(holder: OutboxHolder, base: LiveClockState, wipeGeneration: string): StoredClock {
   return {
+    version: STORED_RECORD_VERSION,
     holder: todayHolderKey(holder),
     ...holder,
     base: { ...base, activeJobInfo: null, resumeJobInfo: null },
@@ -191,6 +193,7 @@ export function captureTimeEvent(
     if (current.clock?.recorded?.includes(command.operationId)) return null;
     const last = current.events.at(-1);
     const event: StoredTimeEvent = {
+      version: STORED_RECORD_VERSION,
       operationId: command.operationId,
       ...holder,
       sequence: (last?.sequence ?? 0) + 1,
@@ -259,6 +262,7 @@ export function settleFirstTimeEvent(
       );
     return {
       clock: {
+        version: STORED_RECORD_VERSION,
         holder: todayHolderKey(holder),
         ...holder,
         base: base ?? null,
