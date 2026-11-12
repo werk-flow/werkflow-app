@@ -1,4 +1,4 @@
-import type { CompanyProfileDetails } from '@/lib/company-profile/profile';
+import { COMPANY_TEXT_LIMITS, type CompanyProfileDetails } from '@/lib/company-profile/profile';
 
 // The company details form's draft: every field as typed, and its parse into
 // the details the save sends. Numbers stay text while typed, so a half-typed
@@ -135,6 +135,11 @@ type ParsedDraft =
 /** The details of a valid draft, or the message of each invalid field by its control id. */
 export function parseDraft(draft: ProfileDraft): ParsedDraft {
   const errors: Record<string, string> = {};
+  // In the order of the form, so an invalid submit focuses the first marked field.
+  for (const { key } of TEXT_FIELD_SECTIONS.flatMap((section) => section.fields)) {
+    const limit = COMPANY_TEXT_LIMITS[key];
+    if (draft[key].trim().length > limit) errors[fieldId(key)] = `Höchstens ${limit} Zeichen.`;
+  }
   const validity = wholeNumber(draft.offerValidityDays, 1, 365);
   if (validity === null) errors[fieldId('offerValidityDays')] = 'Gib eine Zahl von 1 bis 365 ein.';
   const margins = (page: MarginPage) => {

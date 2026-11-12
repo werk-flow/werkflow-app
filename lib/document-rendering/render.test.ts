@@ -8,7 +8,7 @@ import type { BusinessDocument, DocumentImage, DocumentPosition, DocumentSection
 type StationeryPage = NonNullable<BusinessDocument['stationery']>['firstPage'];
 
 mock.module('server-only', () => ({}));
-const { renderBusinessDocument } = await import('./render');
+const { canEmbedFile, renderBusinessDocument } = await import('./render');
 const { sampleOffer } = await import('./sample-offer');
 const { offerLetterhead } = await import('@/lib/company-profile/letterhead');
 const { EMPTY_COMPANY_PROFILE_DETAILS } = await import('@/lib/company-profile/profile');
@@ -444,6 +444,18 @@ describe('the business document renderer', () => {
       (await readPages(await renderBusinessDocument({ ...installationOffer, footerColumns: roomy })))[0] ??
       [];
     expect(roomyText.some((line) => line.text.includes('IBAN DE00 0000 0000 0000 0000 00'))).toBe(true);
+  });
+
+  test('only a file the renderer can draw passes the embed check', async () => {
+    const blank = await PDFDocument.create({ updateMetadata: false });
+    blank.addPage();
+    const blankPdf = { format: 'pdf' as const, bytes: await blank.save() };
+    expect(await canEmbedFile(blankPdf, 'page')).toBe(false);
+    expect(await canEmbedFile({ format: 'png', bytes: new Uint8Array([1, 2, 3]) }, 'image')).toBe(false);
+    expect(await canEmbedFile(firstStationery.file, 'page')).toBe(true);
+    expect(await canEmbedFile(firstStationery.file, 'image')).toBe(false);
+    expect(await canEmbedFile(followingStationery.file, 'page')).toBe(true);
+    expect(await canEmbedFile(logoPng, 'image')).toBe(true);
   });
 
   test('a Bedarfs- or Alternativposition prints its amount in parentheses, with its mark below the text', async () => {

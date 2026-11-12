@@ -623,17 +623,21 @@ export function stationeryMarginsFit(margins: StationeryMargins): boolean {
   }
 }
 
-/** Whether the renderer can embed the file as a logo (`image`) or as stationery (`page`). */
+/**
+ * Whether the renderer can draw the file as a logo (`image`) or as stationery
+ * (`page`). pdf-lib embeds lazily, so the check draws the file on a page and
+ * saves, as a render does.
+ */
 export async function canEmbedFile(file: StationeryFile, use: 'image' | 'page'): Promise<boolean> {
+  if (file.format === 'pdf' && use === 'image') return false;
   try {
     const pdf = await PDFDocument.create({ updateMetadata: false });
-    if (file.format === 'pdf') {
-      if (use === 'image') return false;
-      await embedStationery(pdf, file);
-    } else await embedImage(pdf, file);
+    const page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+    drawUnderlay(page, await embedStationery(pdf, file));
+    await pdf.save();
     return true;
   } catch {
-    // A damaged, encrypted or mislabelled file cannot be embedded; the upload refuses it.
+    // A damaged, encrypted, empty or mislabelled file cannot be drawn; the upload refuses it.
     return false;
   }
 }

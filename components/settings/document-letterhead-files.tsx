@@ -79,7 +79,8 @@ function LetterheadFileRow({
   const perform = (task: () => Promise<ActionResult>, success: string, fallback: string) =>
     run(async () => {
       setFailure(null);
-      const result = await task();
+      // A lost connection rejects the call; it shows like a refused one.
+      const result = await task().catch((): ActionResult => ({ success: false, error: 'request_failed' }));
       if (result.success) showBanner({ variant: 'success', message: success });
       else setFailure(describeFailure(result.error, FILE_FAILURES, fallback));
     });

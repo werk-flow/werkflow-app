@@ -71,17 +71,19 @@ function MissingDetailsHint({ details }: { details: CompanyProfileDetails }) {
 function ProfileTextField({
   field,
   draft,
+  error,
   disabled,
   onChange,
 }: {
   field: TextFieldDefinition;
   draft: ProfileDraft;
+  error: string | undefined;
   disabled: boolean;
   onChange: (value: string) => void;
 }) {
   const id = fieldId(field.key);
   return (
-    <Field label={field.label} htmlFor={id} description={field.description}>
+    <Field label={field.label} htmlFor={id} description={field.description} error={error}>
       {field.multiline ? (
         <Textarea
           id={id}
@@ -214,7 +216,10 @@ function useProfileSave({ organizationId, version, details }: Omit<FormProps, 's
       return;
     }
     setErrors({});
-    const result = await run({ organizationId, expectedVersion: version, details: parsed.details });
+    // A lost connection rejects the call: the draft stays and the failure shows like a refusal.
+    const result = await run({ organizationId, expectedVersion: version, details: parsed.details }).catch(
+      () => ({ success: false, error: 'save_failed' }) as const,
+    );
     if (result.success) {
       // The answer renders the route with the saved profile, which remounts this form.
       showBanner({ variant: 'success', message: 'Die Firmenangaben wurden gespeichert.' });
@@ -266,6 +271,7 @@ export function DocumentCompanyProfileForm({ stationery, ...profile }: FormProps
                     key={field.key}
                     field={field}
                     draft={controls.draft}
+                    error={controls.errors[fieldId(field.key)]}
                     disabled={isPending}
                     onChange={(value) => controls.update({ [field.key]: value })}
                   />
