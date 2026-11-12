@@ -178,6 +178,26 @@ export function withUnreadable(
   };
 }
 
+/**
+ * Whether the stopped chain belongs to a session the server still holds open: the session its first
+ * event expects is the one `confirmed`, the server's clock, shows running.
+ */
+export function chainSessionRuns(view: ClockDeviceView, confirmed: LiveClockState | null): boolean {
+  const sessionId = view.events[0]?.expected?.sessionId;
+  return Boolean(sessionId && confirmed?.isClockedIn && confirmed.sessionId === sessionId);
+}
+
+/**
+ * Whether the person may file a correction for a stopped chain (decision record 0010, "a late chain
+ * of a session that still runs"). Not while its session runs on the server: the approved addition and
+ * the later end of that session would count the time twice. Not for an unreadable stop, which holds
+ * nothing to correct. Not without the server's clock: the device cannot tell whether the session runs.
+ */
+export function correctionOffered(view: ClockDeviceView, confirmed: LiveClockState | null): boolean {
+  if (view.status !== 'stopped' || view.events[0]?.status === 'unreadable' || !confirmed) return false;
+  return !chainSessionRuns(view, confirmed);
+}
+
 /** The clock a phone keeps: without job, customer and project names, which no unsent event needs. */
 function clockToKeep(holder: OutboxHolder, base: LiveClockState, wipeGeneration: string): StoredClock {
   return {

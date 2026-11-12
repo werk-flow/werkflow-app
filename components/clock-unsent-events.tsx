@@ -29,7 +29,12 @@ import {
   resendRefusedTimeEvent,
   sendUnsentNow,
 } from '@/lib/field-sync/device/clock-outbox';
-import { correctionScope, type ClockDeviceView } from '@/lib/field-sync/device/time-outbox';
+import {
+  chainSessionRuns,
+  correctionOffered,
+  correctionScope,
+  type ClockDeviceView,
+} from '@/lib/field-sync/device/time-outbox';
 import { logError } from '@/lib/logging';
 import type { LiveClockState } from '@/lib/time-tracking/types';
 import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
@@ -92,7 +97,7 @@ function useOutboxAction() {
 
 /**
  * The correction the first day's kept events prefill: their day, its first start and its last end. A
- * chain whose session still runs on the server offers no correction (inOpenSession).
+ * chain whose session still runs on the server offers no correction (correctionOffered, time-outbox.ts).
  */
 function correctionPrefill(day: ClockDeviceView['events']) {
   const first = day[0];
@@ -114,16 +119,6 @@ function coversSession(
 ): boolean {
   const day = session[0] && formatBerlinLocalDate(session[0].capturedAt);
   return filed.userId === userId && filed.day === day;
-}
-
-/**
- * Whether the stopped chain belongs to a session the server still holds open: a correction would
- * add that time, and ending the open session later would count it again. The person deletes the
- * events, ends the session through the clock, then files the correction (decision record 0010).
- */
-function inOpenSession(view: ClockDeviceView, confirmed: LiveClockState | null): boolean {
-  const sessionId = view.events[0]?.expected?.sessionId;
-  return Boolean(sessionId && confirmed?.isClockedIn && confirmed.sessionId === sessionId);
 }
 
 /** The order that keeps the captured times and counts them once. */
@@ -272,7 +267,7 @@ function UnsentPanel({ view }: { view: ClockDeviceView }) {
   const [correction, setCorrection] = useState<ClockDeviceView['events'] | null>(null);
   const status = unsentChainStatus(view);
   const holder = clockHolder();
-  const openSession = status !== 'pending' && inOpenSession(view, confirmed);
+  const openSession = status !== 'pending' && chainSessionRuns(view, confirmed);
 
   /** Deletes exactly `events`, the ones the person was shown; what stays goes on from the server's clock. */
   async function deleteEvents(events: ClockDeviceView['events']): Promise<boolean> {
@@ -294,17 +289,14 @@ function UnsentPanel({ view }: { view: ClockDeviceView }) {
         </h3>
         <UnsentStatusBadge view={view} />
       </div>
-      {openSession ? (
-        <OpenSessionSteps timesWhere="unten" />
-      ) : (
-        <p className="text-sm text-muted-foreground">{unsentChainReason(view)}</p>
-      )}
+      <p className="text-sm text-muted-foreground">{unsentChainReason(view)}</p>
+      {openSession && <OpenSessionSteps timesWhere="unten" />}
       <UnsentEventList view={view} />
       <UnsentActions
         status={status}
         running={running}
         busy={isPending}
-        canCorrect={status !== 'unreadable' && !openSession}
+        canCorrect={correctionOffered(view, confirmed)}
         onSend={() => void perform('send', sendUnsentNow)}
         onResend={() =>
           void perform('resend', async () => {
