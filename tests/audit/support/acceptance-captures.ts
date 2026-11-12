@@ -208,7 +208,7 @@ async function captureState(
 export type CaptureSources = {
   /** The openers of the group's dialogs, from its modules under dialog-openers/. */
   openers: Partial<Record<DialogOpenerId, DialogOpener>>;
-  /** Opens a seeded record instead of the route's layout record (acceptance-records.ts). */
+  /** Opens a record the set seeds instead of the route's layout record (acceptance-sets/). */
   destination?: ((world: TestWorld) => Promise<SurfaceDestination>) | undefined;
 };
 

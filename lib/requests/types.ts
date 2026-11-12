@@ -11,6 +11,7 @@ import type { PlanningWarningFailure } from '@/lib/planning/conflict-acknowledge
 import type { Database } from '@/lib/supabase/database.types';
 import { jsonRecordOrEmpty } from '@/lib/supabase/json';
 import { jobDetailHref, projectDetailHref } from '@/lib/jobs/routes';
+import { z } from '@/lib/zod';
 
 // ============================================
 // Database Row Aliases
@@ -270,6 +271,36 @@ export function requestWorkHref(work: { kind: WorkTargetKind; id: string; number
     case 'service_case':
       return `/service/faelle/${encodeURIComponent(work.number ?? work.id)}`;
   }
+}
+
+/** The history label of a request added to existing work whose work the event does not name. */
+export const REQUEST_ATTACHED_LABEL = 'Zu bestehender Arbeit hinzugefügt';
+
+const workNumberSchema = z.string().min(1).nullable().optional();
+const attachedPayloadSchema = z.discriminatedUnion('target', [
+  z.object({ target: z.literal('job'), workNumber: workNumberSchema, jobId: z.string().min(1) }),
+  z.object({ target: z.literal('project'), workNumber: workNumberSchema, projectId: z.string().min(1) }),
+  z.object({
+    target: z.literal('service_case'),
+    workNumber: workNumberSchema,
+    serviceCaseId: z.string().min(1),
+  }),
+]);
+
+/** The `attached` request event as one line naming the work, and that work's detail page. */
+export function describeAttachedRequestEvent(payload: unknown): { label: string; workHref: string | null } {
+  const parsed = attachedPayloadSchema.safeParse(payload);
+  if (!parsed.success) return { label: REQUEST_ATTACHED_LABEL, workHref: null };
+  const event = parsed.data;
+  const number = event.workNumber ?? null;
+  const id =
+    event.target === 'job' ? event.jobId : event.target === 'project' ? event.projectId : event.serviceCaseId;
+  return {
+    label: number
+      ? `Zu ${WORK_TARGET_KIND_LABELS[event.target]} ${number} hinzugefügt`
+      : REQUEST_ATTACHED_LABEL,
+    workHref: requestWorkHref({ kind: event.target, id, number }),
+  };
 }
 
 // ============================================

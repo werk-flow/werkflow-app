@@ -55,6 +55,27 @@ export function runnerPilotInputs(groupId: string, files: readonly string[]): st
   return RUNNER_PILOTS.has(groupId) ? files.filter(isRunnerInput) : [];
 }
 
+/**
+ * Test support a module loads by directory at run time, which no import names: the open
+ * acceptance sets, one file each (tests/audit/support/acceptance-sets.ts). A group that executes
+ * the module executes every file of the directory, and a changed path under it selects that
+ * group, a deleted file included.
+ */
+export const RUNTIME_LOADED_SUPPORT: Readonly<Record<string, string>> = {
+  'tests/audit/support/acceptance-sets.ts': 'tests/audit/support/acceptance-sets/',
+};
+
+/** Whether a group executes `file`: an execution input, or a path under a directory a module it executes loads. */
+function executes(group: SelectableGroup, file: string): boolean {
+  const inputs = group.executionInputs ?? [];
+  return (
+    inputs.includes(file) ||
+    Object.entries(RUNTIME_LOADED_SUPPORT).some(
+      ([loader, directory]) => file.startsWith(directory) && inputs.includes(loader),
+    )
+  );
+}
+
 export function isTestInput(file: string): boolean {
   return (
     file.startsWith('tests/') ||
@@ -93,9 +114,7 @@ function browserSelection(
   const criticalSupport =
     trigger === 'critical' && sharedSupport.has(file) ? 'Critical journey: test support changed' : undefined;
   const ownSupport =
-    isTestInput(file) && group.executionInputs?.includes(file)
-      ? 'Test execution dependency changed'
-      : undefined;
+    isTestInput(file) && executes(group, file) ? 'Test execution dependency changed' : undefined;
   // A shared fixture also runs the integration pilots; besides them only the critical journeys run,
   // and a lab group that imports it, because its counts are measured through the fixture.
   if (isRunnerInput(file)) return trigger === 'product' ? ownSupport : criticalSupport;
@@ -191,7 +210,7 @@ export function groupSelections(input: {
 
 /** The changed spec and test support files a browser group executes. */
 function ownTestChanges(group: SelectableGroup, changedFiles: readonly string[]): string[] {
-  return changedFiles.filter((file) => isTestInput(file) && group.executionInputs?.includes(file));
+  return changedFiles.filter((file) => isTestInput(file) && executes(group, file));
 }
 
 /**

@@ -292,7 +292,7 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['visual', 'visual/references.spec.ts', ['*']],
   // Rendered acceptance captures by what a capture drives, so a changed helper selects the groups that import it:
   // the inventory rounds' pages, dialogs per opener module and standalone screens
-  // (tests/audit/support/acceptance-rounds.ts), then the open sets (acceptance-sets.ts).
+  // (tests/audit/support/acceptance-rounds.ts), then the open sets (acceptance-sets/, one file each).
   ['visual:acceptance:pages', 'visual/acceptance-pages.spec.ts', ['*']],
   ['visual:acceptance:calendar', 'visual/acceptance-calendar.spec.ts', ['planning']],
   ['visual:acceptance:customers', 'visual/acceptance-customers.spec.ts', ['customers']],
@@ -342,7 +342,13 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['a1-time-history', ['a1_time_history.sql'], ['time', 'personnel']],
   [
     'p1-23',
-    ['p1_23_time_accounts.sql', 'time_account_approval_scope.sql', 'time_account_opening_correction.sql'],
+    [
+      'p1_23_time_accounts.sql',
+      'time_account_approval_scope.sql',
+      'time_account_opening_correction.sql',
+      'time_account_bulk_opening.sql',
+      'payroll_mapping_confirmation.sql',
+    ],
     ['time', 'personnel', 'work'],
   ],
   ['p1-24', ['p1_24_people_lifecycle.sql'], ['personnel', 'documents', 'time', 'work']],
@@ -364,6 +370,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['request-attach-to-work', ['request_attach_to_work.sql'], ['customers', 'work', 'service', 'documents']],
   ['client-duplicates', ['client_duplicates.sql'], ['customers']],
   ['client-archive-history', ['client_archive_history.sql'], ['customers']],
+  ['client-site-roles', ['client_site_roles.sql'], ['customers', 'service']],
   [
     'request-callback-and-equipment',
     ['request_callback_and_equipment.sql'],
