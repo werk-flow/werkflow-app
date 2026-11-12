@@ -61,6 +61,17 @@
         "hooks": [
           {
             "type": "command",
+            "command": "root=\"$(git rev-parse --show-toplevel)\" || exit 0; bun \"$root/.claude/hooks/refuse-second-stack.ts\"",
+            "timeout": 20,
+            "statusMessage": "Checking that the command starts no second Supabase stack"
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
             "command": "root=\"$(git rev-parse --show-toplevel)\" || exit 0; bun \"$root/.claude/hooks/refuse-shared-stack-migration.ts\"",
             "timeout": 20,
             "statusMessage": "Checking that no branch migration reaches the shared stack"

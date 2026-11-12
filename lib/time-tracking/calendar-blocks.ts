@@ -1,5 +1,6 @@
 import type { InteractiveCalendarSession, TimeEntry, WorkSessionBreak } from './types';
 import { getLocalDayEnd, isSameLocalDay } from '@/lib/date-time/berlin';
+import { isMomentary } from './activity-intervals';
 import { getEffectiveTimeEntries } from './effective-entries';
 import { isBreakEndFollowedByClockIn } from './transition-pairs';
 import {
@@ -232,10 +233,21 @@ function getCalendarBlockDisplayBreaks(
   return [{ breakStart: breakStartEntry, breakEnd: breakEndEntry }];
 }
 
+/** A block's work and break segments as the day shows them, without the momentary ones. */
 export function getCalendarBlockDisplaySegments(
   block: CalendarWorkBlock,
   referenceDate = new Date(),
   settings?: OrganizationTimeTrackingSettings | null,
+): CalendarBlockSegment[] {
+  return blockSegments(block, referenceDate, settings).filter(
+    (segment) => !isMomentary(segment.start, segment.end),
+  );
+}
+
+function blockSegments(
+  block: CalendarWorkBlock,
+  referenceDate: Date,
+  settings: OrganizationTimeTrackingSettings | null | undefined,
 ): CalendarBlockSegment[] {
   const actualBreaks = extractBreaks(block.sourceEntries);
   if (actualBreaks.length > 0) {
@@ -344,6 +356,7 @@ function dayEndClockOut(segmentStart: TimeEntry): TimeEntry {
   };
 }
 
+/** A person's recorded blocks; a block shorter than a minute is left out, as the day would show it as „08:15–08:15“. */
 export function calculateCalendarWorkBlocks(entries: TimeEntry[]): CalendarWorkBlock[] {
   const effectiveEntries = getEffectiveTimeEntries(entries);
   const blocks: CalendarWorkBlock[] = [];
@@ -428,5 +441,5 @@ export function calculateCalendarWorkBlocks(entries: TimeEntry[]): CalendarWorkB
     }
   }
 
-  return blocks;
+  return blocks.filter((block) => !isMomentary(block.start, block.end));
 }
