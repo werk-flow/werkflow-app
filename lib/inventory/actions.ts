@@ -408,6 +408,7 @@ export async function deleteJobMaterialLine(lineIdInput: string): Promise<Action
         .delete()
         .eq('id', lineId)
         .eq('organization_id', auth.context.orgId)
+        .eq('used_quantity', 0)
         .eq('taken_quantity', 0)
         .eq('returned_quantity', 0)
         .select('id');
