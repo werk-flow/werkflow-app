@@ -284,6 +284,8 @@ async function sendOne(claim: SendClaim, draftId: string, byPerson: boolean): Pr
     return 'skipped';
   const sealed = await uploadAndSeal(claim, draft);
   if (typeof sealed === 'string') return sealed;
+  // The seal's transaction can outlast a sign-in elsewhere: the claim is checked again right before the request.
+  if (!stillHolder(claim)) return 'waiting';
   const verdict = await attach(sealed);
   if (verdict === null) return 'waiting';
   if (verdict.outcome === 'accepted' || verdict.outcome === 'replayed') {
@@ -294,7 +296,8 @@ async function sendOne(claim: SendClaim, draftId: string, byPerson: boolean): Pr
   const retry =
     verdict.outcome === 'retry' ||
     (verdict.outcome !== 'rejected' && verdict.outcome !== 'conflict' && verdict.status >= 500);
-  if (retry) return 'waiting';
+  // A refusal that came while the tab changed hands may answer another person's session: it says nothing about the author.
+  if (retry || !stillHolder(claim)) return 'waiting';
   // The session's active organization moved on; the draft waits for its own, still sealed: an earlier
   // send may have arrived, and only a resend of the same content can learn that.
   if (verdict.outcome === 'rejected' && verdict.code === 'organization_mismatch') return 'waiting';

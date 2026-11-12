@@ -583,3 +583,38 @@ describe('round 3: a queued send stays with the person it was queued for', () =>
     }
   });
 });
+
+describe('round 4: an account switch around the seal or the attach', () => {
+  test('a switch while the seal is written sends nothing', async () => {
+    await save(draft({ photos: [] }));
+    const put = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (this: IDBObjectStore, value: unknown, key?: IDBValidKey) {
+      if (typeof value === 'object' && value !== null && Reflect.get(value, 'sealed') === true) {
+        storage.set(TODAY_WIPE_KEY, 'coworker-sign-in');
+        startDraftSync(otherPerson);
+      }
+      return put.call(this, value, key);
+    };
+    try {
+      expect(await sendDraft(holder, DRAFT_ID)).toBe('waiting');
+    } finally {
+      IDBObjectStore.prototype.put = put;
+    }
+    expect(sent).toEqual([]);
+  });
+
+  test("a refusal that answers another person's session never marks the author's draft as lost", async () => {
+    await save(draft({ photos: [] }));
+    handlerAnswers = [
+      () => {
+        // The coworker's sign-in lands while the attach is on its way.
+        storage.set(TODAY_WIPE_KEY, 'coworker-sign-in');
+        startDraftSync(otherPerson);
+        return Response.json({ outcome: 'rejected', code: 'forbidden' }, { status: 403 });
+      },
+    ];
+    expect(await sendDraft(holder, DRAFT_ID)).toBe('waiting');
+    startDraftSync(holder);
+    expect((await stored())[0]?.refusal).toBeNull();
+  });
+});
