@@ -12697,6 +12697,91 @@ export type Database = {
           },
         ];
       };
+      work_request_entries: {
+        Row: {
+          attempt_key: string;
+          created_at: string;
+          created_by: string | null;
+          details: string | null;
+          id: string;
+          job_id: string | null;
+          organization_id: string;
+          project_id: string | null;
+          request_id: string;
+          service_case_id: string | null;
+          summary: string;
+        };
+        Insert: {
+          attempt_key: string;
+          created_at?: string;
+          created_by?: string | null;
+          details?: string | null;
+          id?: string;
+          job_id?: string | null;
+          organization_id: string;
+          project_id?: string | null;
+          request_id: string;
+          service_case_id?: string | null;
+          summary: string;
+        };
+        Update: {
+          attempt_key?: string;
+          created_at?: string;
+          created_by?: string | null;
+          details?: string | null;
+          id?: string;
+          job_id?: string | null;
+          organization_id?: string;
+          project_id?: string | null;
+          request_id?: string;
+          service_case_id?: string | null;
+          summary?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "work_request_entries_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "work_request_entries_job_id_fkey";
+            columns: ["job_id"];
+            isOneToOne: false;
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "work_request_entries_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "work_request_entries_project_id_fkey";
+            columns: ["project_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "work_request_entries_request_id_fkey";
+            columns: ["request_id"];
+            isOneToOne: true;
+            referencedRelation: "client_requests";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "work_request_entries_service_case_id_organization_id_fkey";
+            columns: ["service_case_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "service_cases";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
       work_schedules: {
         Row: {
           created_at: string;
@@ -13663,6 +13748,36 @@ export type Database = {
           p_valid_until: string;
         };
         Returns: string;
+      };
+      attach_client_request_to_work: {
+        Args: {
+          p_actor_id: string;
+          p_attempt_key: string;
+          p_job_id: string;
+          p_organization_id: string;
+          p_project_id: string;
+          p_request_id: string;
+          p_service_case_id: string;
+        };
+        Returns: {
+          attempt_key: string;
+          created_at: string;
+          created_by: string | null;
+          details: string | null;
+          id: string;
+          job_id: string | null;
+          organization_id: string;
+          project_id: string | null;
+          request_id: string;
+          service_case_id: string | null;
+          summary: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "work_request_entries";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       batch_reschedule_planning_occurrences: {
         Args: {
@@ -16143,6 +16258,23 @@ export type Database = {
           p_status?: string;
         };
         Returns: Json;
+      };
+      list_request_work_targets: {
+        Args: {
+          p_limit: number;
+          p_organization_id: string;
+          p_request_id: string;
+          p_search: string;
+        };
+        Returns: {
+          at_request_site: boolean;
+          id: string;
+          kind: string;
+          number: string;
+          site_label: string;
+          title: string;
+          updated_at: string;
+        }[];
       };
       list_service_case_page: {
         Args: {
@@ -19362,7 +19494,12 @@ export type Database = {
         | "anderweitig_geloest"
         | "sonstiges";
       request_source: "telefon" | "email" | "vor_ort" | "sonstiges";
-      request_status: "offen" | "in_klaerung" | "umgewandelt" | "geschlossen";
+      request_status:
+        | "offen"
+        | "in_klaerung"
+        | "umgewandelt"
+        | "geschlossen"
+        | "hinzugefuegt";
       request_urgency: "niedrig" | "normal" | "hoch" | "notfall";
       responsibility_assignment_source: "role_default" | "direct";
       responsibility_configuration_mode: "role_default" | "selected";
@@ -20025,7 +20162,13 @@ export const Constants = {
         "sonstiges",
       ],
       request_source: ["telefon", "email", "vor_ort", "sonstiges"],
-      request_status: ["offen", "in_klaerung", "umgewandelt", "geschlossen"],
+      request_status: [
+        "offen",
+        "in_klaerung",
+        "umgewandelt",
+        "geschlossen",
+        "hinzugefuegt",
+      ],
       request_urgency: ["niedrig", "normal", "hoch", "notfall"],
       responsibility_assignment_source: ["role_default", "direct"],
       responsibility_configuration_mode: ["role_default", "selected"],

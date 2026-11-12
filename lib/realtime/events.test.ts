@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 
-import { shouldScheduleRealtimeRefresh, normalizeRealtimeDeletion, type RealtimeChangeEvent } from './events';
+import {
+  isEventForRow,
+  shouldScheduleRealtimeRefresh,
+  normalizeRealtimeDeletion,
+  type RealtimeChangeEvent,
+} from './events';
 
 function event(
   eventType: RealtimeChangeEvent['eventType'],
@@ -33,6 +38,22 @@ describe('Realtime refresh event handling', () => {
     expect(shouldScheduleRealtimeRefresh(event('DELETE', { client_id: 'client-1' }), clientFilter)).toBe(
       true,
     );
+  });
+});
+
+// A view of one row (a Servicefall's detail, a work's attached requests)
+// refreshes for that row, never for another row of the same table.
+describe('the view of one row', () => {
+  const forWork = (change: RealtimeChangeEvent) => isEventForRow(change, 'work-1');
+
+  test('an update of another row does not refresh it', () => {
+    expect(shouldScheduleRealtimeRefresh(event('UPDATE', { id: 'work-2' }), forWork)).toBe(false);
+    expect(shouldScheduleRealtimeRefresh(event('DELETE', { id: 'work-2' }), forWork)).toBe(false);
+  });
+
+  test('its own row and a change without a row id refresh it', () => {
+    expect(shouldScheduleRealtimeRefresh(event('UPDATE', { id: 'work-1' }), forWork)).toBe(true);
+    expect(shouldScheduleRealtimeRefresh(event('DELETE', { organization_id: 'org-1' }), forWork)).toBe(true);
   });
 });
 

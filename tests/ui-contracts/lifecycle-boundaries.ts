@@ -45,6 +45,7 @@ declare global {
       | 'customer'
       | 'customer-create'
       | 'request-capture'
+      | 'request-attach'
       | 'sickness-record'
       | 'absence-picker'
       | 'schedule-parked-picker'
