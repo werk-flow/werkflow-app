@@ -49,13 +49,15 @@ export type EmploymentInterval = {
 /**
  * Effective absence span feeding target resolution. Only EFFECTIVE absence
  * may ever reach this input: approved vacation (P1-06; pending requests are
- * provisional and never change targets) and active sickness reports (P1-08;
+ * provisional and never change targets), active sickness reports (P1-08;
  * a report is a fact and effective immediately, cancelled reports never
  * qualify, open-ended reports are clamped to the caller's window by the
- * loader). One union, one mechanism — no parallel absence pathway.
+ * loader) and an apprentice's Berufsschule days (werk-flow/werkflow-planning#165;
+ * always full days, see lib/personnel/school-days.ts). One union, one
+ * mechanism — no parallel absence pathway.
  */
 export type ApprovedAbsenceSpan = {
-  type: 'vacation' | 'sickness';
+  type: 'vacation' | 'sickness' | 'school';
   /** Inclusive ISO Berlin business dates. */
   startDate: string;
   endDate: string;
@@ -226,14 +228,19 @@ export function resolveDailyTarget({
   // is a real case). Coverage strength and attribution are separate concerns:
   // any full-day span makes the day fully absent — a half-day vacation must
   // never weaken a full-day sickness — and among equally strong spans
-  // vacation keeps the attribution, so days with a single span (all pre-P1-08
-  // data) behave bit-identically.
+  // vacation keeps the attribution, then sickness, then a school day, so days
+  // with a single span (all pre-P1-08 data) behave bit-identically. A school
+  // day is a full-day span: under a half-day vacation it makes the day fully
+  // absent, and the school day keeps the attribution.
   const coveringSpans = (absences ?? []).filter(
     (span) => span.startDate <= dateIso && dateIso <= span.endDate,
   );
   const fullSpans = coveringSpans.filter((span) => span.dayPortion === 'full');
   const strongestSpans = fullSpans.length > 0 ? fullSpans : coveringSpans;
-  const absenceSpan = strongestSpans.find((span) => span.type === 'vacation') ?? strongestSpans[0];
+  const absenceSpan =
+    strongestSpans.find((span) => span.type === 'vacation') ??
+    strongestSpans.find((span) => span.type === 'sickness') ??
+    strongestSpans[0];
   const absence: DailyTargetAbsence | null = absenceSpan
     ? { type: absenceSpan.type, portion: absenceSpan.dayPortion }
     : null;
@@ -241,7 +248,10 @@ export function resolveDailyTarget({
   // Zeroing order: a holiday/closure day already has no target, so absence on
   // such a day changes nothing (and costs no entitlement — see the vacation
   // day-counting rule). Otherwise a full absent day is 0 and a half day halves
-  // the base target.
+  // the base target. A school day is credited with the day's normal target
+  // (owner decision, werk-flow/werkflow-planning#14): the person owes nothing
+  // more that day, so its target is 0 and the Zeitkonto neither gains nor
+  // loses; time recorded on it counts on top.
   let targetMinutes: number;
   if (isHoliday || isClosureDay) {
     targetMinutes = 0;
@@ -340,6 +350,7 @@ export function getNoTargetReason(target: DailyTarget): string | null {
     return target.closureLabel ? `Betriebsruhe (${target.closureLabel})` : 'Betriebsruhe';
   if (target.absence?.type === 'vacation') return 'Urlaub';
   if (target.absence?.type === 'sickness') return 'Krankmeldung';
+  if (target.absence?.type === 'school') return 'Berufsschule';
   if (target.source === 'schedule') return 'Kein Arbeitstag laut Wochenplan';
   return 'Wochenende';
 }

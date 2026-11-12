@@ -34,6 +34,7 @@ export const REALTIME_TABLES = [
   'organization_closure_days',
   'vacation_requests',
   'sickness_reports',
+  'school_days',
   'teams',
   'team_memberships',
   'organization_capabilities',

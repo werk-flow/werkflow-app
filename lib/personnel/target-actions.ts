@@ -11,6 +11,7 @@ import { getBusinessWeekDates, toWorkSchedule } from '@/lib/personnel/schedule';
 import { resolveDailyTargets, type DailyTarget } from '@/lib/personnel/targets';
 import { loadApprovedVacationSpansByRecord } from '@/lib/vacation/server';
 import { loadActiveSicknessSpansByRecord } from '@/lib/sickness/server';
+import { loadSchoolDaySpansByRecord } from '@/lib/personnel/school-day-server';
 import { logError } from '@/lib/logging';
 import { z } from '@/lib/zod';
 import { uuidSchema } from '@/lib/validation/uuid';
@@ -81,21 +82,23 @@ export async function getWeeklyTargets(rawInput: { userId: string }): Promise<We
       };
     }
 
-    const [schedulesResult, conditionsResult, calendar, vacationSpans, sicknessSpans] = await Promise.all([
-      admin
-        .from('work_schedules')
-        .select('*')
-        .eq('organization_id', orgId)
-        .eq('employee_record_id', record.id),
-      admin
-        .from('employment_conditions')
-        .select('*')
-        .eq('organization_id', orgId)
-        .eq('employee_record_id', record.id),
-      calendarPromise,
-      loadApprovedVacationSpansByRecord(orgId, weekStart, weekEnd),
-      loadActiveSicknessSpansByRecord(orgId, weekStart, weekEnd, record.id),
-    ]);
+    const [schedulesResult, conditionsResult, calendar, vacationSpans, sicknessSpans, schoolSpans] =
+      await Promise.all([
+        admin
+          .from('work_schedules')
+          .select('*')
+          .eq('organization_id', orgId)
+          .eq('employee_record_id', record.id),
+        admin
+          .from('employment_conditions')
+          .select('*')
+          .eq('organization_id', orgId)
+          .eq('employee_record_id', record.id),
+        calendarPromise,
+        loadApprovedVacationSpansByRecord(orgId, weekStart, weekEnd),
+        loadActiveSicknessSpansByRecord(orgId, weekStart, weekEnd, record.id),
+        loadSchoolDaySpansByRecord(orgId, weekStart, weekEnd, record.id),
+      ]);
 
     if (schedulesResult.error || conditionsResult.error) {
       logError(
@@ -105,7 +108,7 @@ export async function getWeeklyTargets(rawInput: { userId: string }): Promise<We
       return { success: false, error: 'load_failed' };
     }
     // The span readers log their own failure; a missing span map is not "no absence".
-    if (!vacationSpans || !sicknessSpans) return { success: false, error: 'load_failed' };
+    if (!vacationSpans || !sicknessSpans || !schoolSpans) return { success: false, error: 'load_failed' };
 
     return {
       success: true,
@@ -116,7 +119,11 @@ export async function getWeeklyTargets(rawInput: { userId: string }): Promise<We
         employment: { entryDate: record.entry_date, exitDate: record.exit_date },
         // Vacation first: the resolver also prefers vacation attribution on
         // days covered by both span kinds.
-        absences: [...(vacationSpans.get(record.id) ?? []), ...(sicknessSpans.get(record.id) ?? [])],
+        absences: [
+          ...(vacationSpans.get(record.id) ?? []),
+          ...(sicknessSpans.get(record.id) ?? []),
+          ...(schoolSpans.get(record.id) ?? []),
+        ],
       }),
     };
   } catch (error) {
@@ -146,38 +153,46 @@ export async function getTodayTargetsForMembers(): Promise<MemberTodayTargetsRes
     const admin = createSupabaseAdminClient();
 
     const todayIso = getBusinessTodayIso();
-    const [recordsResult, schedulesResult, conditionsResult, calendar, vacationSpans, sicknessSpans] =
-      await Promise.all([
-        readCompleteRows(
-          (from, to) =>
-            admin
-              .from('employee_records')
-              .select('id, user_id, entry_date, exit_date')
-              .eq('organization_id', orgId)
-              .not('user_id', 'is', null)
-              .order('id')
-              .range(from, to),
-          LIST_ROW_CAP,
-        ),
-        readCompleteRows(
-          (from, to) =>
-            admin.from('work_schedules').select('*').eq('organization_id', orgId).order('id').range(from, to),
-          LIST_ROW_CAP,
-        ),
-        readCompleteRows(
-          (from, to) =>
-            admin
-              .from('employment_conditions')
-              .select('*')
-              .eq('organization_id', orgId)
-              .order('id')
-              .range(from, to),
-          LIST_ROW_CAP,
-        ),
-        getCachedOrganizationCalendar(orgId),
-        loadApprovedVacationSpansByRecord(orgId, todayIso, todayIso),
-        loadActiveSicknessSpansByRecord(orgId, todayIso, todayIso),
-      ]);
+    const [
+      recordsResult,
+      schedulesResult,
+      conditionsResult,
+      calendar,
+      vacationSpans,
+      sicknessSpans,
+      schoolSpans,
+    ] = await Promise.all([
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('employee_records')
+            .select('id, user_id, entry_date, exit_date')
+            .eq('organization_id', orgId)
+            .not('user_id', 'is', null)
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+      readCompleteRows(
+        (from, to) =>
+          admin.from('work_schedules').select('*').eq('organization_id', orgId).order('id').range(from, to),
+        LIST_ROW_CAP,
+      ),
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('employment_conditions')
+            .select('*')
+            .eq('organization_id', orgId)
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+      getCachedOrganizationCalendar(orgId),
+      loadApprovedVacationSpansByRecord(orgId, todayIso, todayIso),
+      loadActiveSicknessSpansByRecord(orgId, todayIso, todayIso),
+      loadSchoolDaySpansByRecord(orgId, todayIso, todayIso),
+    ]);
 
     if (recordsResult.error || schedulesResult.error || conditionsResult.error) {
       logReadFailure(
@@ -186,7 +201,7 @@ export async function getTodayTargetsForMembers(): Promise<MemberTodayTargetsRes
       );
       return { success: false, error: 'load_failed' };
     }
-    if (!vacationSpans || !sicknessSpans) return { success: false, error: 'load_failed' };
+    if (!vacationSpans || !sicknessSpans || !schoolSpans) return { success: false, error: 'load_failed' };
 
     const schedulesByRecord = Map.groupBy(
       schedulesResult.data.map(toWorkSchedule),
@@ -205,7 +220,11 @@ export async function getTodayTargetsForMembers(): Promise<MemberTodayTargetsRes
         conditions: conditionsByRecord.get(record.id) ?? [],
         calendar,
         employment: { entryDate: record.entry_date, exitDate: record.exit_date },
-        absences: [...(vacationSpans.get(record.id) ?? []), ...(sicknessSpans.get(record.id) ?? [])],
+        absences: [
+          ...(vacationSpans.get(record.id) ?? []),
+          ...(sicknessSpans.get(record.id) ?? []),
+          ...(schoolSpans.get(record.id) ?? []),
+        ],
       });
       if (!target) continue;
       targetsByUserId[record.user_id] = target;

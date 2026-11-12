@@ -44,14 +44,15 @@ export type CalendarBoardRowlessAssignee = Pick<
 >;
 
 type CalendarBoardAbsence = {
-  type: 'vacation' | 'sickness';
+  type: 'vacation' | 'sickness' | 'school';
   portion: 'full' | 'half_day';
 };
 
 /** An absence by its kind; a sickness reads „Abwesend“, so the board never names it. */
-const ABSENCE_LABELS: Record<CalendarBoardAbsence['type'], string> = {
+export const ABSENCE_LABELS: Record<CalendarBoardAbsence['type'], string> = {
   vacation: 'Urlaub',
   sickness: 'Abwesend',
+  school: 'Berufsschule',
 };
 
 /** One person-day from the planning owner's target resolution. */

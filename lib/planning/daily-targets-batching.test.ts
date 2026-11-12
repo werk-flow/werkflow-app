@@ -18,11 +18,15 @@ mock.module('@/lib/data/cached', () => ({
 // A span reader answers null for a failed read; the switches below simulate one.
 let vacationSpansFail = false;
 let sicknessSpansFail = false;
+let schoolSpansFail = false;
 mock.module('@/lib/vacation/server', () => ({
   loadApprovedVacationSpansByRecord: async () => (vacationSpansFail ? null : new Map()),
 }));
 mock.module('@/lib/sickness/server', () => ({
   loadActiveSicknessSpansByRecord: async () => (sicknessSpansFail ? null : new Map()),
+}));
+mock.module('@/lib/personnel/school-day-server', () => ({
+  loadSchoolDaySpansByRecord: async () => (schoolSpansFail ? null : new Map()),
 }));
 
 const { loadDailyTargetsByRecord } = await import('./server');
@@ -101,9 +105,13 @@ test('a failed absence span read fails the daily targets instead of reading as n
     vacationSpansFail = false;
     sicknessSpansFail = true;
     expect(await loadDailyTargetsByRecord(input)).toBeNull();
+    sicknessSpansFail = false;
+    schoolSpansFail = true;
+    expect(await loadDailyTargetsByRecord(input)).toBeNull();
   } finally {
     vacationSpansFail = false;
     sicknessSpansFail = false;
+    schoolSpansFail = false;
   }
 });
 

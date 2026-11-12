@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { computeBreakdownForSettings } from '@/lib/time-tracking/settings';
 import { formatDuration } from '@/lib/time-tracking/helpers';
 import { sumTargetMinutes, type DailyTarget } from '@/lib/personnel/targets';
+import { WEEKDAY_LABELS } from '@/lib/personnel/schedule';
 import type { DayData } from '@/hooks/use-weekly-time-data';
 import type { BreakPolicyValues } from '@/lib/time-tracking/settings';
 
@@ -250,6 +251,19 @@ export function WeeklyHoursChart({
       </div>
 
       <WeeklyHoursChartLegend />
+      <WeeklySchoolDays weekTargets={weekTargets} />
     </div>
+  );
+}
+
+/* The week's Berufsschule days: each counts with its normal target (werk-flow/werkflow-planning#165). */
+function WeeklySchoolDays({ weekTargets }: { weekTargets: DailyTarget[] | undefined }) {
+  const schoolDays = (weekTargets ?? []).filter((target) => target.absence?.type === 'school');
+  if (schoolDays.length === 0) return null;
+  return (
+    <p className="mt-2 text-center text-xs text-muted-foreground">
+      {`Berufsschule diese Woche: ${schoolDays.flatMap((target) => WEEKDAY_LABELS[target.weekday] ?? []).join(', ')}. `}
+      An diesen Tagen gilt dein Tagesziel als erfüllt.
+    </p>
   );
 }

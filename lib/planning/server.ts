@@ -22,6 +22,7 @@ import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admi
 import type { Database, Json, Tables } from '@/lib/supabase/database.types';
 import { toJson } from '@/lib/supabase/json';
 import { loadApprovedVacationSpansByRecord } from '@/lib/vacation/server';
+import { loadSchoolDaySpansByRecord } from '@/lib/personnel/school-day-server';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { fingerprintSnapshot } from './capacity';
 import { addLocalDays, resolveBerlinWallTime } from '@/lib/date-time/berlin';
@@ -150,8 +151,9 @@ function resolveTargetsByEmployeeDate(input: {
   calendar: OrganizationHolidayCalendar;
   vacationSpans: Map<string, ApprovedAbsenceSpan[]>;
   sicknessSpans: Map<string, ApprovedAbsenceSpan[]>;
+  schoolSpans: Map<string, ApprovedAbsenceSpan[]>;
 }): Map<string, DailyTarget> {
-  const { calendar, vacationSpans, sicknessSpans } = input;
+  const { calendar, vacationSpans, sicknessSpans, schoolSpans } = input;
   const schedulesByRecord = new Map<string, ReturnType<typeof toWorkSchedule>[]>();
   for (const row of input.scheduleRows) {
     const schedule = toWorkSchedule(row);
@@ -181,6 +183,7 @@ function resolveTargetsByEmployeeDate(input: {
           absences: [
             ...(vacationSpans.get(employeeRecordId) ?? []),
             ...(sicknessSpans.get(employeeRecordId) ?? []),
+            ...(schoolSpans.get(employeeRecordId) ?? []),
           ],
         }),
       );
@@ -191,8 +194,9 @@ function resolveTargetsByEmployeeDate(input: {
 
 /**
  * The per-person daily targets the planning assessment and the Plantafel read
- * share: schedules, employment conditions, holiday context, approved vacation
- * and sickness spans, plus the pending vacation requests that only warn.
+ * share: schedules, employment conditions, holiday context, approved vacation,
+ * sickness and Berufsschule spans, plus the pending vacation requests that
+ * only warn.
  * One home, so a board cell and a planning warning can never disagree.
  */
 export async function loadDailyTargetsByRecord(input: {
@@ -211,43 +215,51 @@ export async function loadDailyTargetsByRecord(input: {
   // Id lists are organization-sized here (every row of the Plantafel); one
   // query per 100 ids keeps each request under the gateway's URL limit (about
   // 200 ids in one request answer 414 URI too long).
-  const [schedulesResult, conditionsResult, calendar, vacationSpans, sicknessSpans, pendingVacationResult] =
-    await Promise.all([
-      readInBatches(employeeRecordIds, (ids) =>
-        input.admin
-          .from('work_schedules')
-          .select('*')
-          .eq('organization_id', input.orgId)
-          .in('employee_record_id', [...ids]),
-      ),
-      readInBatches(employeeRecordIds, (ids) =>
-        input.admin
-          .from('employment_conditions')
-          .select('*')
-          .eq('organization_id', input.orgId)
-          .in('employee_record_id', [...ids]),
-      ),
-      getCachedOrganizationCalendar(input.orgId),
-      loadApprovedVacationSpansByRecord(input.orgId, windowStart, windowEnd),
-      loadActiveSicknessSpansByRecord(input.orgId, windowStart, windowEnd),
-      readInBatches(employeeRecordIds, (ids) =>
-        input.admin
-          .from('vacation_requests')
-          .select('employee_record_id, start_date, end_date, day_portion')
-          .eq('organization_id', input.orgId)
-          .eq('status', 'pending')
-          .in('employee_record_id', [...ids])
-          .lte('start_date', windowEnd)
-          .gte('end_date', windowStart),
-      ),
-    ]);
+  const [
+    schedulesResult,
+    conditionsResult,
+    calendar,
+    vacationSpans,
+    sicknessSpans,
+    schoolSpans,
+    pendingVacationResult,
+  ] = await Promise.all([
+    readInBatches(employeeRecordIds, (ids) =>
+      input.admin
+        .from('work_schedules')
+        .select('*')
+        .eq('organization_id', input.orgId)
+        .in('employee_record_id', [...ids]),
+    ),
+    readInBatches(employeeRecordIds, (ids) =>
+      input.admin
+        .from('employment_conditions')
+        .select('*')
+        .eq('organization_id', input.orgId)
+        .in('employee_record_id', [...ids]),
+    ),
+    getCachedOrganizationCalendar(input.orgId),
+    loadApprovedVacationSpansByRecord(input.orgId, windowStart, windowEnd),
+    loadActiveSicknessSpansByRecord(input.orgId, windowStart, windowEnd),
+    loadSchoolDaySpansByRecord(input.orgId, windowStart, windowEnd),
+    readInBatches(employeeRecordIds, (ids) =>
+      input.admin
+        .from('vacation_requests')
+        .select('employee_record_id, start_date, end_date, day_portion')
+        .eq('organization_id', input.orgId)
+        .eq('status', 'pending')
+        .in('employee_record_id', [...ids])
+        .lte('start_date', windowEnd)
+        .gte('end_date', windowStart),
+    ),
+  ]);
   const failed = schedulesResult.error ?? conditionsResult.error ?? pendingVacationResult.error;
   if (failed) {
     logReadFailure('Failed to load daily targets', { code: 'code' in failed ? failed.code : 'unknown' });
     return null;
   }
   // The span readers log their own failure; a missing span map is not "no absence".
-  if (!vacationSpans || !sicknessSpans) return null;
+  if (!vacationSpans || !sicknessSpans || !schoolSpans) return null;
 
   const targetByEmployeeDate = resolveTargetsByEmployeeDate({
     employees: input.employees,
@@ -257,6 +269,7 @@ export async function loadDailyTargetsByRecord(input: {
     calendar,
     vacationSpans,
     sicknessSpans,
+    schoolSpans,
   });
   return { targetByEmployeeDate, pendingVacation: pendingVacationResult.data ?? [] };
 }

@@ -5,6 +5,7 @@ import { PageBody } from '@/components/shared/page-shell';
 import { ScrollRegion } from '@/components/ui/scroll-region';
 import { SectionError } from '@/components/ui/section-error';
 import type { CalendarBoardContext } from '@/lib/calendar/board';
+import { schoolCalendarEntries } from '@/lib/calendar/board-model';
 import type { OrgRole } from '@/lib/roles';
 import type { OrganizationTimeTrackingSettings } from '@/lib/time-tracking/settings';
 import type { WorkSession } from '@/lib/time-tracking/types';
@@ -139,6 +140,8 @@ function CalendarSurface({
 }: CalendarSurfaceProps): React.JSX.Element {
   const { currentDate, view, preferences } = viewState;
   const { board, entries, vacation, sickness, holidays, changeRequestMap } = data.range;
+  // The Berufsschule days come with the board's capacity days, so they need no read of their own.
+  const school = schoolCalendarEntries(board);
   const everyView = {
     todayIso,
     jobs: viewScope.filteredJobs,
@@ -160,6 +163,7 @@ function CalendarSurface({
         entries={entries}
         vacation={vacation}
         sickness={sickness}
+        school={school}
         onIsolateRow={(employeeRecordId) => isolateBoardRow(employeeRecordId, board, viewScope, viewState)}
         phone={phone}
       />
@@ -190,6 +194,7 @@ function CalendarSurface({
       members={viewScope.filteredMembers}
       vacation={vacation}
       sickness={sickness}
+      school={school}
       organizationSettings={organizationSettings}
       currentUserId={currentUserId}
       currentUserRole={currentUserRole}

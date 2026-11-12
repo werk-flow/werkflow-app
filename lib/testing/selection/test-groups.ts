@@ -393,6 +393,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ],
   ['sickness-report-writes', ['sickness_report_writes.sql'], ['personnel']],
   ['vacation-history-writes', ['vacation_history_writes.sql'], ['personnel']],
+  ['school-days', ['school_days.sql'], ['personnel', 'time']],
   [
     'planning',
     ['planning_occurrences.sql', 'planning_dispatch.sql', 'planning_operation_assessments.sql'],
