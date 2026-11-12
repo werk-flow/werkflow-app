@@ -1,6 +1,6 @@
 // Rule test: both agent tools run the edit guard before every tool call that can write a file,
-// Claude runs the delete guard before every shell call, and both run the Boat key guard and the
-// shared stack migration guard.
+// Claude runs the delete guard before every shell call, and both run the Boat key guard, the heavy
+// command guard and the shared stack migration guard.
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -12,6 +12,7 @@ const DELETE_GUARD = '.claude/hooks/refuse-unresolvable-delete.ts';
 const PRODUCTION_MCP_GUARD = '.claude/hooks/refuse-production-mcp.ts';
 const PRODUCTION_LOG_GUARD = '.claude/hooks/refuse-production-logs.ts';
 const BOAT_KEY_GUARD = '.claude/hooks/refuse-boat-key-reads.ts';
+const HEAVY_COMMAND_GUARD = '.claude/hooks/refuse-heavy-commands.ts';
 const STACK_MIGRATION_GUARD = '.claude/hooks/refuse-shared-stack-migration.ts';
 
 const hookFileSchema = z.object({
@@ -85,6 +86,13 @@ test('both agent tools run the Boat key guard before every call that can read a 
   const tools = ['Bash', 'Read', 'Grep'];
   expect(guardedTools('.claude/settings.json', tools, BOAT_KEY_GUARD)).toEqual(tools);
   expect(guardedTools('.codex/hooks.json', ['Bash'], BOAT_KEY_GUARD)).toEqual(['Bash']);
+});
+
+// A whole-repository tsc, a broad lint or a Next build runs only in a heavy slot or on Boat
+// (lib/testing/runner/heavy-command.ts); both tools name every shell call `Bash`.
+test('both agent tools run the heavy command guard before every shell call', () => {
+  expect(guardedTools('.claude/settings.json', ['Bash'], HEAVY_COMMAND_GUARD)).toEqual(['Bash']);
+  expect(guardedTools('.codex/hooks.json', ['Bash'], HEAVY_COMMAND_GUARD)).toEqual(['Bash']);
 });
 
 // No branch applies its own migration to the shared local stack

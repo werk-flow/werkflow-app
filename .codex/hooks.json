@@ -50,6 +50,17 @@
         "hooks": [
           {
             "type": "command",
+            "command": "root=\"$(git rev-parse --show-toplevel)\" || exit 0; bun \"$root/.claude/hooks/refuse-heavy-commands.ts\"",
+            "timeout": 20,
+            "statusMessage": "Checking that a heavy command runs in a heavy slot"
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
             "command": "root=\"$(git rev-parse --show-toplevel)\" || exit 0; bun \"$root/.claude/hooks/refuse-shared-stack-migration.ts\"",
             "timeout": 20,
             "statusMessage": "Checking that no branch migration reaches the shared stack"

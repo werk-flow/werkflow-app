@@ -47,6 +47,8 @@ const migratedReaders: Record<string, readonly string[]> = {
   'components/service/equipment-list-content.tsx': ['getInstalledEquipmentPage'],
   'components/service/service-case-list-content.tsx': ['getServiceCasePage'],
   'components/service/service-case-detail-content.tsx': ['getServiceCaseDetailByNumber'],
+  'components/anfragen/use-request-work-targets.ts': ['getRequestWorkTargets'],
+  'components/auftraege/shared/work-request-entries-section.tsx': ['getWorkRequestEntries'],
   'components/aufgaben/use-aufgaben-overview.ts': ['getAttentionOverview'],
   'components/mitarbeiter/personnel-own-actions-section.tsx': ['getOwnPersonnelActions'],
   'components/mitarbeiter/use-personnel-lifecycle-view.ts': ['getPersonnelLifecycle'],
