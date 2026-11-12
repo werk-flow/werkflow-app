@@ -14,10 +14,7 @@ import type { WorkArtifactContentDraft } from './work-artifact-content';
 // before: the job list prefetches a job page's code, so that code counts
 // toward the field cold start. Every other part (the device store, the
 // sender, the list, the photo field, the dialog's draft keeper, the active
-// organization) sits behind the one lazy load below.
-
-/** The two components of the lazily loaded draft code (device-draft-parts.tsx). */
-export type DraftParts = Pick<typeof import('./device-draft-parts'), 'DeviceDrafts' | 'DeviceDraftKeeper'>;
+// organization) loads with the dialog's module (work-artifact-dialog.tsx).
 
 /** What the artifact screens ask of the device, for the signed-in person in the active organization. */
 export type DraftDevice = {
@@ -92,26 +89,29 @@ function mayHoldDrafts(userId: string): boolean {
 }
 
 /**
- * The lazily loaded draft code of a job page, once this device may hold a draft of the person or
- * `wanted` is set, as when the dialog for a new Arbeitsnachweis opens. A load that fails carries
- * its retry.
+ * The list of the drafts this device keeps, loaded with the dialog's module once the device may
+ * hold a draft of the person or `wanted` is set, as when the dialog for a new Arbeitsnachweis
+ * opens. A load that fails carries its retry.
  */
-export function useDraftParts(
+export function useDeviceDrafts(
   currentUserId: string,
   wanted: boolean,
-): { parts: DraftParts | null; failure: ReadFailure | null } {
+): {
+  DeviceDrafts: typeof import('./work-artifact-dialog').DeviceDrafts | null;
+  failure: ReadFailure | null;
+} {
   // Once the dialog asked for the draft code, the section keeps it: a draft written since must show.
   const [everWanted, setEverWanted] = useState(wanted);
   if (wanted && !everWanted) setEverWanted(true);
   const [hinted] = useState(() => mayHoldDrafts(currentUserId));
   const load = useClientRead({
     read: async () => {
-      const { DeviceDrafts, DeviceDraftKeeper } = await import('./device-draft-parts');
-      return { success: true as const, parts: { DeviceDrafts, DeviceDraftKeeper } };
+      const { DeviceDrafts } = await import('./work-artifact-dialog');
+      return { success: true as const, DeviceDrafts };
     },
     deps: [currentUserId],
     enabled: everWanted || hinted,
     failureMessage: 'Die Entwürfe auf diesem Gerät konnten nicht geladen werden.',
   });
-  return { parts: load.data?.parts ?? null, failure: load.failure };
+  return { DeviceDrafts: load.data?.DeviceDrafts ?? null, failure: load.failure };
 }

@@ -25,12 +25,9 @@ import { noteDraftsOnDevice } from './device-draft-keeper';
 import { DeviceDraftList } from './device-draft-list';
 import type { DraftDevice, RestoredDraft } from './use-device-drafts';
 
-// Everything of the report drafts that a job page loads only when it needs
-// it (use-device-drafts.ts): the device store and its sender bound to one
-// person and organization, the list of the device's drafts, and the keeper
-// that stores a new Arbeitsnachweis while its dialog is open.
-
-export { DeviceDraftKeeper } from './device-draft-keeper';
+// The report drafts of a device for a job page, loaded with the dialog's
+// module (work-artifact-dialog.tsx): the device store and its sender bound to
+// one person and organization, and the list of the device's drafts.
 
 /** The device store and the sender, bound to the holder. */
 function createDraftDevice(holder: DraftHolder): DraftDevice {
