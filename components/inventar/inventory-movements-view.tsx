@@ -19,7 +19,11 @@ import type {
   InventoryMovementHistoryEntry,
   InventoryMovementPage,
 } from '@/lib/inventory/types';
-import { INVENTORY_HISTORY_KIND_LABELS, formatInventoryQuantity } from '@/lib/inventory/types';
+import {
+  INVENTORY_HISTORY_KIND_LABELS,
+  INVENTORY_STOCK_UNCHANGED_LABEL,
+  formatInventoryQuantity,
+} from '@/lib/inventory/types';
 import { LIST_PAGE_SIZE } from '@/lib/ui/list-pagination';
 import { cn, formatBerlinDateTime, parseIsoLocalDate, toLocalDateString } from '@/lib/utils';
 import { INVENTORY_MOVEMENT_COLUMNS } from './inventory-table-columns';
@@ -231,9 +235,6 @@ function MovementQuantity({ entry }: { entry: InventoryMovementHistoryEntry }) {
   );
 }
 
-/** A use and its correction move no stock; their rows say so at every width. */
-const STOCK_UNCHANGED = 'Bestand bleibt gleich';
-
 const formatStockQuantity = (quantity: number | null): string =>
   quantity === null ? '—' : quantity.toLocaleString('de-DE');
 
@@ -261,7 +262,7 @@ function MovementCards({ entries }: { entries: InventoryMovementHistoryEntry[] }
                 <p className="text-xs tabular-nums text-muted-foreground">
                   {movesStock(entry)
                     ? `Vorher ${formatStockQuantity(entry.quantityBefore)} · Danach ${formatStockQuantity(entry.quantityAfter)}`
-                    : STOCK_UNCHANGED}
+                    : INVENTORY_STOCK_UNCHANGED_LABEL}
                 </p>
                 {entry.actorName && <p className="text-xs text-muted-foreground">Von {entry.actorName}</p>}
                 {entry.reason && <p className="text-xs text-muted-foreground">Grund: {entry.reason}</p>}
@@ -310,7 +311,9 @@ function MovementsDesktopTable({ entries }: { entries: InventoryMovementHistoryE
                 <TableCell className="text-right whitespace-nowrap">
                   <MovementQuantity entry={entry} />
                   {!movesStock(entry) && (
-                    <span className="block text-xs text-muted-foreground">{STOCK_UNCHANGED}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {INVENTORY_STOCK_UNCHANGED_LABEL}
+                    </span>
                   )}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">

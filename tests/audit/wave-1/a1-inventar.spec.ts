@@ -5,6 +5,7 @@ import {
   INVENTORY_HISTORY_KIND_LABELS,
   INVENTORY_ITEM_TYPE_LABELS,
   INVENTORY_LOCATION_TYPE_LABELS,
+  INVENTORY_STOCK_UNCHANGED_LABEL,
   INVENTORY_MOVEMENT_TYPE_LABELS,
 } from '../../../lib/inventory/types';
 import { getInventoryLedgerState } from '../../golden/support/db/inventory';
@@ -155,7 +156,7 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     const useRow = inventoryRow(adminPage, jobNumber);
     await expect(useRow).toHaveCount(1);
     await expect(useRow).toContainText(INVENTORY_HISTORY_KIND_LABELS.job_use);
-    await expect(useRow).toContainText('Bestand bleibt gleich');
+    await expect(useRow).toContainText(INVENTORY_STOCK_UNCHANGED_LABEL);
     await expect(useRow.getByRole('link', { name: new RegExp(jobNumber) })).toHaveAttribute(
       'href',
       `/auftraege/projekt/${encodeURIComponent(projectNumber)}/${encodeURIComponent(jobNumber)}`,

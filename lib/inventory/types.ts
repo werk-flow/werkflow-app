@@ -295,6 +295,9 @@ export const INVENTORY_MOVEMENT_TYPE_LABELS: Record<InventoryMovementType, strin
   transfer_out: 'Umlagerung Ausgang',
 };
 
+/** A use and its correction move no stock; their history rows say so at every width. */
+export const INVENTORY_STOCK_UNCHANGED_LABEL = 'Bestand bleibt gleich';
+
 export const INVENTORY_HISTORY_KIND_LABELS: Record<InventoryHistoryKind, string> = {
   ...INVENTORY_MOVEMENT_TYPE_LABELS,
   job_use: 'Verbraucht',
