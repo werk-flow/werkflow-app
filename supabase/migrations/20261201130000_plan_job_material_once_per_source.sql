@@ -39,9 +39,9 @@ alter table public.job_material_lines
 -- @destructive: after release acce7e96d681d3b83ab86aa65c54bb3d8542f4be: that build never writes source_kind or source_id, which stay empty for its writes and satisfy both checks
 alter table public.job_material_lines
   add constraint job_material_lines_source_complete
-    check ((source_kind is null) = (source_id is null)),
+    check ((source_kind is null) = (source_id is null)) not valid,
   add constraint job_material_lines_source_kind_format
-    check (source_kind ~ '^[a-z][a-z0-9_]{0,62}$');
+    check (source_kind ~ '^[a-z][a-z0-9_]{0,62}$') not valid;
 
 -- @destructive: after release acce7e96d681d3b83ab86aa65c54bb3d8542f4be: that build never writes source_id, so none of its lines enters this partial index
 create unique index job_material_lines_source_idx
