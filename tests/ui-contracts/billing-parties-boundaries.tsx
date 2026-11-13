@@ -35,6 +35,9 @@ const saved: ResolvedBillingVersion = {
 
 /** How many of the next rereads fail, as a lost connection does. */
 let failingRereads = 0;
+/** A held reread waits here until the contract releases it, as a slow connection does. */
+let heldReread: Promise<void> | null = null;
+let releaseReread: (() => void) | null = null;
 
 export function BillingPartiesContractFixture(): React.JSX.Element {
   const [open, setOpen] = useState(false);
@@ -45,11 +48,21 @@ export function BillingPartiesContractFixture(): React.JSX.Element {
     const failNextReread = (): void => {
       failingRereads = 1;
     };
+    const holdNextReread = (): void => {
+      heldReread = new Promise((resolve) => {
+        releaseReread = resolve;
+      });
+    };
+    const release = (): void => releaseReread?.();
     window.addEventListener('contract-billing-newer', deliver);
     window.addEventListener('contract-billing-reread-fails', failNextReread);
+    window.addEventListener('contract-billing-reread-hold', holdNextReread);
+    window.addEventListener('contract-billing-reread-release', release);
     return () => {
       window.removeEventListener('contract-billing-newer', deliver);
       window.removeEventListener('contract-billing-reread-fails', failNextReread);
+      window.removeEventListener('contract-billing-reread-hold', holdNextReread);
+      window.removeEventListener('contract-billing-reread-release', release);
     };
   }, []);
   return (
@@ -69,6 +82,10 @@ export function BillingPartiesContractFixture(): React.JSX.Element {
             if (failingRereads > 0) {
               failingRereads -= 1;
               return false;
+            }
+            if (heldReread) {
+              await heldReread;
+              heldReread = null;
             }
             setCurrent(saved);
             return true;

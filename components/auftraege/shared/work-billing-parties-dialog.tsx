@@ -206,7 +206,8 @@ export function WorkBillingPartiesDialog({
 function WorkBillingPartiesForm(props: FormProps) {
   const { onClose } = props;
   const form = useBillingPartiesForm(props);
-  const isPending = props.task.isPending;
+  // A running retry may replace the pair, so the pickers wait for it too.
+  const isPending = props.task.isPending || form.reread.retry.isPending;
   return (
     <DialogContent size="md">
       <form onSubmit={form.submit} noValidate>

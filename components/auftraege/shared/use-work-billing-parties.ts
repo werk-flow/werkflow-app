@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 
 import { useOrganization } from '@/components/organization/organization-context';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
@@ -34,6 +34,8 @@ export function useWorkBillingParties(
   initialParties: WorkBillingParties | undefined,
 ) {
   const { activeOrgId } = useOrganization();
+  // Whether the live view's latest read landed, for the reread after a refused save.
+  const lastReadLanded = useRef<boolean | null>(null);
   const view = useLiveView<WorkBillingParties>({
     tables: [WORK_TABLE[kind], 'clients', 'client_sites', 'client_contacts'],
     initialData: initialParties,
@@ -47,6 +49,7 @@ export function useWorkBillingParties(
         { organizationId: activeOrgId ?? '', kind, id },
         signal,
       );
+      lastReadLanded.current = result.success;
       return result.success
         ? { ok: true, data: result.parties }
         : { ok: false, error: describeFailure(result.error, {}, WORK_BILLING_PARTIES_LOAD_FAILED) };
@@ -55,19 +58,14 @@ export function useWorkBillingParties(
     // An organization switch is a new scope too: it never keeps the previous one's parties.
     resetKey: billingPartiesScope(activeOrgId, kind, id),
   });
-  const { invalidate, setData } = view;
-  // The reread after a refused save says whether it landed: the dialog shows
-  // the newer pair only then, and a load error with a retry otherwise.
+  const { refresh } = view;
+  // The reread after a refused save runs the live view's own guarded read, so
+  // it never overwrites a fresher one and a failure marks the view stale; it
+  // says whether the read landed, for the dialog's notice or its retry.
   const reread = useCallback(async (): Promise<boolean> => {
-    invalidate();
-    const result = await readInBackground('work-billing-parties', {
-      organizationId: activeOrgId ?? '',
-      kind,
-      id,
-    }).catch(() => null);
-    if (!result?.success) return false;
-    setData(() => result.parties);
-    return true;
-  }, [activeOrgId, kind, id, invalidate, setData]);
+    lastReadLanded.current = null;
+    await refresh();
+    return lastReadLanded.current === true;
+  }, [refresh]);
   return { view, reread };
 }

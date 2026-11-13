@@ -75,3 +75,28 @@ test('a failed reread after a refused save keeps the choice and offers the read 
   await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
   await expect(dialog).toHaveCount(0);
 });
+
+test('the pickers wait while a retried reread runs, so nothing chosen then is overwritten', async ({
+  page,
+}) => {
+  await openContractFixture(page, 'billing-parties');
+  await page.getByRole('button', { name: 'Rechnung ändern', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Auftraggeber und Rechnungsempfänger' });
+  const auftraggeber = dialog.getByRole('combobox', { name: 'Auftraggeber', exact: true });
+  const recipient = dialog.getByRole('combobox', { name: 'Rechnungsempfänger', exact: true });
+  await page.evaluate(() => window.dispatchEvent(new Event('contract-billing-reread-fails')));
+  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expect(dialog.getByRole('alert')).toContainText('konnten nicht geladen werden');
+
+  // While the retried read runs, the pair it may bring cannot meet an edit.
+  await page.evaluate(() => window.dispatchEvent(new Event('contract-billing-reread-hold')));
+  await dialog.getByRole('button', { name: 'Erneut laden', exact: true }).click();
+  await expect(auftraggeber).toBeDisabled();
+  await expect(recipient).toBeDisabled();
+
+  await page.evaluate(() => window.dispatchEvent(new Event('contract-billing-reread-release')));
+  await expect(dialog.getByText(/Hier stehen jetzt die aktuellen Angaben/)).toBeVisible();
+  await expect(auftraggeber).toContainText('Hausverwaltung Birkenhain GmbH');
+  await expect(auftraggeber).toBeEnabled();
+  await expect(recipient).toBeEnabled();
+});
