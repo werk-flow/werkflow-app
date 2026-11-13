@@ -26,6 +26,8 @@ const SHIP_MINUTES = 10;
 
 const releaseWorkflow = readFileSync(join(repositoryRoot, '.github/workflows/release.yml'), 'utf8');
 const nightlyWorkflow = readFileSync(join(repositoryRoot, '.github/workflows/nightly.yml'), 'utf8');
+const mainFullRunWorkflow = readFileSync(join(repositoryRoot, '.github/workflows/main-full-run.yml'), 'utf8');
+const mainFullRunScript = readFileSync(join(repositoryRoot, '.github/scripts/main-full-run.sh'), 'utf8');
 
 let stub = '';
 
@@ -133,6 +135,27 @@ test('the nightly shares the release cron line, so the release usually reuses it
   const cronLine = (workflow: string) => /- cron: '(\d+ \d+) /.exec(workflow)?.[1];
   expect(cronLine(nightlyWorkflow)).toBe(cronLine(releaseWorkflow));
   expect(nightlyWorkflow).toMatch(/- cron: '\d+ \d+ \* \* \*'\n {6}timezone: Europe\/Berlin/);
+});
+
+test('main gets a full run every 3 hours from 06:00 to 20:00 Berlin, and each push asks too', () => {
+  // GitHub starts scheduled runs hours late (#184), so a push asks for the full run that is due.
+  const cron =
+    /- cron: '0 (\d+)-(\d+)\/(\d+) \* \* \*'\n {6}timezone: Europe\/Berlin\n {2}push:\n {4}branches: \[main\]\n/.exec(
+      mainFullRunWorkflow,
+    );
+  const [first, last, step] = cron?.slice(1).map(Number) ?? [];
+  expect([first, last, step]).toEqual([6, 18, 3]);
+  // The decision's window holds every scheduled start, and its interval is the cron's step.
+  const window = /readonly FIRST=(\d\d:\d\d) LAST=(\d\d:\d\d) INTERVAL=\$\(\((\d+) \* 3600\)\)/.exec(
+    mainFullRunScript,
+  );
+  expect(window?.slice(1)).toEqual(['06:00', '20:00', String(step)]);
+  expect((first ?? 0) * 60).toBe(minutesOf(window?.[1] ?? ''));
+  expect((last ?? 0) * 60).toBeLessThan(minutesOf(window?.[2] ?? ''));
+  // Two full runs on main never overlap: one run decides at a time, and none cancels another.
+  expect(mainFullRunWorkflow).toContain(
+    'group: main-full-run-${{ github.ref }}\n  cancel-in-progress: false\n',
+  );
 });
 
 test('a held run whose commit production already passed ends quietly with nothing to do', () => {

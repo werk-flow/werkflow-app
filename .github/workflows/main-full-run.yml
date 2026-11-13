@@ -1,0 +1,98 @@
+name: Full run on main
+
+# Every browser group on main every 3 hours from 06:00 to 20:00 Berlin, so a break that no change
+# plan selected shows within hours instead of at the nightly (werk-flow/werkflow-planning#413).
+# GitHub starts this repository's scheduled runs 4 to 10 hours late, so each push to main asks too.
+# .github/scripts/main-full-run.sh starts a full run only when main moved since the newest full run,
+# that run has ended, and it started 3 hours ago or more. The release reuses a green one on its commit.
+# A red run opens or updates the issue "CI alert: full run on main", which names the failed groups and
+# the commits since the last green full run; the next green run closes it.
+on:
+  schedule:
+    - cron: '0 6-18/3 * * *'
+      timezone: Europe/Berlin
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# The browser shards of ci.yml read the Build job's state.
+permissions:
+  contents: read
+  actions: read
+
+# One run decides at a time, so two pushes never start two full runs. A newer trigger replaces a
+# waiting one, which would have decided the same.
+concurrency:
+  group: main-full-run-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  decide:
+    name: Decide
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      checks: read # find the newest full run
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      # Only the script is read; no step needs the job token in .git/config.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - name: Decide whether main needs a full run
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/main-full-run.sh decide
+
+  full:
+    # The release reuses a green full run on the commit it ships by this check name,
+    # `Full run / Check` (.github/scripts/release-candidate.sh).
+    name: Full run
+    needs: decide
+    if: needs.decide.outputs.run == 'true'
+    # A called workflow gets no permission its caller lacks: ci.yml's Unit job asks for pull-requests.
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      full: Full run on main
+    secrets: inherit
+
+  alert:
+    name: Alert
+    needs: [decide, full]
+    # Only main speaks, and only a run that tested something or could not decide: a skipped full
+    # run proves nothing, so it neither opens nor closes the issue.
+    if: >-
+      !cancelled() && github.ref == 'refs/heads/main'
+      && (needs.decide.result == 'failure' || needs.decide.outputs.run == 'true')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read # name the failed jobs and read their logs
+      checks: read # find the last green full run
+      issues: write # open, update and close the alert issue
+    steps:
+      # Only the scripts are read; no step needs the job token in .git/config.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - name: Open, update or close the alert issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: 'CI alert: full run on main'
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          # The detail only adds to the report; an unreadable one never stops it.
+          detail="$(bash .github/scripts/main-full-run.sh context)" \
+            || detail='The failed groups and the commits since the last green full run could not be read.'
+          ALERT_DETAIL="$detail" bash .github/scripts/alert-issue.sh run "$TITLE" "$RESULTS"

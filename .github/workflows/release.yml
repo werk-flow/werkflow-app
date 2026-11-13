@@ -3,7 +3,7 @@ name: release
 # The owner's release (docs/technical/environments.md, "Release and rollback").
 # It decides each weekday at 03:30 Berlin, so PROD is live by 05:00, or by hand: gh workflow run release. It releases
 # the main commit it starts on, and only after a green full run on exactly that
-# commit: a nightly or manual one it finds, or its own. A scheduled run ends without
+# commit: one it finds from nightly.yml or main-full-run.yml, or its own. A scheduled run ends without
 # a change when main equals production or its newest full run is red
 # (.github/scripts/release-candidate.sh). A failed release, or a scheduled one that
 # stopped at a red full run, opens or updates the issue "CI alert: release"; the next
