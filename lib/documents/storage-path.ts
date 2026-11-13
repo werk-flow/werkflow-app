@@ -43,3 +43,15 @@ export function buildDocumentVersionStoragePath(input: {
 }): string {
   return `${buildDocumentVersionUploadFolder(input)}/${input.versionNumber}-${sanitizeDocumentStorageFileName(input.fileName)}`;
 }
+
+/**
+ * The key an upload ticket signs for `path`: the path with a folder of the
+ * person whose session created the ticket before its file name. Finalize
+ * recomputes it from its own session, so another person, of the same
+ * organization or another, finds no staged object there and never registers,
+ * copies or discards the creator's bytes.
+ */
+export function bindUploadPathToCreator(path: string, creatorId: string): string {
+  const nameStart = path.lastIndexOf('/') + 1;
+  return `${path.slice(0, nameStart)}${creatorId}/${path.slice(nameStart)}`;
+}

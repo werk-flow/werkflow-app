@@ -19,6 +19,7 @@ const ownJobLineId = '90000000-0000-4000-8000-000000000009';
 const ownProjectLineId = '90000000-0000-4000-8000-00000000000a';
 const ownUsedLineId = '90000000-0000-4000-8000-00000000000b';
 const ownCorrectedLineId = '90000000-0000-4000-8000-00000000000c';
+const ownLocationId = '90000000-0000-4000-8000-00000000000f';
 
 const world = installActionWorld({
   jobs: [
@@ -34,7 +35,10 @@ const world = installActionWorld({
     { id: foreignItemId, organization_id: ORGANIZATION_B },
     { id: ownItemId, organization_id: ORGANIZATION_A },
   ],
-  inventory_locations: [{ id: foreignLocationId, organization_id: ORGANIZATION_B }],
+  inventory_locations: [
+    { id: foreignLocationId, organization_id: ORGANIZATION_B },
+    { id: ownLocationId, organization_id: ORGANIZATION_A },
+  ],
   job_material_lines: [
     {
       id: foreignLineId,
@@ -108,9 +112,12 @@ const world = installActionWorld({
     },
   ],
 });
-const { getInventoryOverview, getInventoryLocationOptions, upsertInventoryItem } = await import(
-  '@/lib/inventory/catalog-actions'
-);
+const {
+  getInventoryOverview,
+  getInventoryMovementHistory,
+  getInventoryLocationOptions,
+  upsertInventoryItem,
+} = await import('@/lib/inventory/catalog-actions');
 const {
   getInventoryPickerPage,
   getInventoryPickerOptionsForJob,
@@ -170,6 +177,8 @@ const officeOnly = [
     () =>
       importInventoryRows({ fileName: 'inventar.csv', columnMapping: {}, rows: [{ name: 'Kupferrohr' }] }),
   ],
+  // The movement history names people and job material: office only.
+  ['getInventoryMovementHistory', () => getInventoryMovementHistory({ tab: 'movements' })],
 ] as const;
 
 // Field workers are refused the catalog and its writes before the service-role client exists.
@@ -245,16 +254,25 @@ signInAs(world, 'buero');
 await assertRefused(world, [officeOnly[3]], { success: false, error: 'location_not_found' }, 'reads');
 await assertRefused(world, [officeOnly[6]], { success: false, error: 'job_not_found' }, 'reads');
 await assertRefused(world, [officeOnly[7]], { success: false, error: 'project_not_found' }, 'reads');
+
+// The movement history refuses another organization's Lager before its reader
+// runs, and reads an own Lager's history for the caller's organization only.
 await assertRefused(
   world,
   [
     [
-      'createJobMaterialLine',
-      () => createJobMaterialLine({ jobId: ownJobId, itemId: foreignItemId, plannedQuantity: 2 }),
+      'getInventoryMovementHistory',
+      () => getInventoryMovementHistory({ tab: 'movements', location: foreignLocationId }),
     ],
   ],
-  { success: false, error: 'item_not_found' },
+  { success: false, error: 'location_not_found' },
   'reads',
+);
+world.rpcCalls.length = 0;
+await getInventoryMovementHistory({ tab: 'movements', location: ownLocationId });
+assert.deepEqual(
+  world.rpcCalls.map((call) => [call.name, call.args.p_organization_id]),
+  [['list_inventory_movement_page', ORGANIZATION_A]],
 );
 await assertRefused(
   world,
@@ -300,4 +318,21 @@ refuseForeignIds(world, new Map([[foreignItemId, 'item_not_found']]));
 await assertRefused(world, [upsert], { success: false, error: 'item_not_found' }, 'one-call');
 assert.equal(world.rpcCalls[0]?.args.p_organization_id, ORGANIZATION_A);
 await assertRefused(world, [adjust], { success: false, error: 'movement_failed' }, 'one-call');
+assert.equal(world.rpcCalls[0]?.args.p_organization_id, ORGANIZATION_A);
+// plan_job_material checks the article inside the caller's organization.
+await assertRefused(
+  world,
+  [
+    [
+      'createJobMaterialLine',
+      () => createJobMaterialLine({ jobId: ownJobId, itemId: foreignItemId, plannedQuantity: 2 }),
+    ],
+    [
+      'createProjectMaterialLine',
+      () => createProjectMaterialLine({ projectId: ownProjectId, itemId: foreignItemId, plannedQuantity: 2 }),
+    ],
+  ],
+  { success: false, error: 'item_not_found' },
+  'one-call',
+);
 assert.equal(world.rpcCalls[0]?.args.p_organization_id, ORGANIZATION_A);

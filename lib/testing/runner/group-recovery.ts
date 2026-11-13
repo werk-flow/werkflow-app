@@ -1,3 +1,4 @@
+import type { BuildInputs } from '../evidence/build-identity';
 import type { TraceStages } from '../runs/replay-checkpoint';
 
 /** Where a diagnostic ran: on the failed run's retained world, or on a world of its own. */
@@ -15,12 +16,37 @@ type RecoveryRun = {
   completedAt: string | null;
   target?: string | undefined;
   buildId?: string | null | undefined;
+  /** The served build's input digests; absent on manifests written before they were recorded. */
+  buildInputs?: BuildInputs | null | undefined;
+  /** Whether the run ran on a Boat machine, whose world dies with it; absent on older manifests. */
+  ranOnBoat?: boolean | undefined;
   /** Absent on manifests written before fresh-world diagnostics existed: those replayed the retained world. */
   diagnosticWorld?: DiagnosticWorld | undefined;
   selectedTestIds?: readonly string[] | undefined;
 };
 
 const time = (value: string | null): number => (value === null ? Number.NaN : Date.parse(value));
+
+/** Whether both builds are known to come from the same application inputs. */
+function sameInputs(left: BuildInputs | null | undefined, right: BuildInputs | null | undefined): boolean {
+  return (
+    !!left &&
+    !!right &&
+    left.sourceDigest === right.sourceDigest &&
+    left.environmentDigest === right.environmentDigest
+  );
+}
+
+/**
+ * Whether a diagnostic ran on the failed run's build. A replay on the retained world needs the same
+ * build id. A fresh-world replay may also run on another build of the same application inputs: a
+ * Boat machine, or a workstation under migration drift, rebuilds the tree, and every build gets a
+ * new id (scripts/build.ts).
+ */
+function sameBuild(failed: RecoveryRun, diagnostic: RecoveryRun): boolean {
+  if (diagnostic.buildId === failed.buildId) return true;
+  return diagnostic.diagnosticWorld === 'fresh' && sameInputs(failed.buildInputs, diagnostic.buildInputs);
+}
 
 /**
  * A fresh-world diagnostic counts only when it ran every test of the failed run and was the first
@@ -40,8 +66,9 @@ function qualifiesFresh(failed: RecoveryRun, diagnostic: RecoveryRun, runs: read
 /**
  * One bounded retry follows actual diagnosis, not a free-text override.
  * The diagnostic must run on the same served build (the preflight refuses a server whose receipt
- * no longer matches the application inputs, so an equal build id proves the application unchanged)
- * and the same target; the retry check separately proves the group's own inputs unchanged.
+ * no longer matches the application inputs, so an equal build id proves the application unchanged),
+ * a fresh-world one also on another build of equal application inputs (`sameBuild`), and on the same
+ * target; the retry check separately proves the group's own inputs unchanged.
  * A replay on the retained world must end before that world is cleaned. A test that wrote before
  * it failed leaves a world it cannot meet again, so for it the diagnosis is the first fresh-world
  * run of the whole failed group (`freshDiagnosisProblem` decides when one may start). Until
@@ -67,7 +94,7 @@ export function recoveredEnvironmentRuns(runs: readonly RecoveryRun[]): string[]
           diagnostic.sourceRunKey !== failed.runKey ||
           diagnostic.status !== 'diagnostic_passed' ||
           diagnostic.target !== failed.target ||
-          diagnostic.buildId !== failed.buildId ||
+          !sameBuild(failed, diagnostic) ||
           !(startedAt > failedAt) ||
           !(completedAt >= startedAt)
         )
@@ -91,12 +118,16 @@ export function failedTestsWroteWorld(stages: readonly (TraceStages | null)[]): 
 
 /**
  * Refuses a fresh-world diagnostic that could not qualify an environment retry: the source must be
- * a group run classified `environment`, on the build now served, not yet diagnosed on a fresh world,
- * and its failed tests must have written to their world (otherwise the retained replay stays the rule).
+ * a group run classified `environment`, on the build now served or one of equal application inputs,
+ * not yet diagnosed on a fresh world, and its failed tests must have written to their world
+ * (otherwise the retained replay stays the rule), unless the run ran on Boat: its world dies with its
+ * machine, through no choice of the thread, so the fresh world is its only replay. A local world
+ * cleaned before its diagnosis keeps no retry.
  */
 export function freshDiagnosisProblem(input: {
   source: RecoveryRun;
   servedBuildId: string | null;
+  servedBuildInputs: BuildInputs | null;
   runs: readonly RecoveryRun[];
   failedTestStages: readonly (TraceStages | null)[];
 }): string | undefined {
@@ -108,14 +139,17 @@ export function freshDiagnosisProblem(input: {
     return `${source.runKey} did not fail (status ${source.status}).`;
   if (source.classification !== 'environment')
     return `${source.runKey} is classified ${source.classification ?? 'not yet'}; only an environment failure has a diagnostic retry. Classify it first: bun run test:runs classify ${source.runKey} ...`;
-  if (!source.buildId || source.buildId !== input.servedBuildId)
-    return `${source.runKey} ran on build ${source.buildId ?? 'unknown'}, the served build is ${input.servedBuildId ?? 'unknown'}. Only a diagnostic on the same build can qualify the retry.`;
+  if (
+    !source.buildId ||
+    (source.buildId !== input.servedBuildId && !sameInputs(source.buildInputs, input.servedBuildInputs))
+  )
+    return `${source.runKey} ran on build ${source.buildId ?? 'unknown'}, the served build is ${input.servedBuildId ?? 'unknown'}, built from other application inputs. Only a diagnostic on the same build or one of equal inputs can qualify the retry.`;
   const earlier = input.runs.find(
     (run) => run.sourceRunKey === source.runKey && run.diagnosticWorld === 'fresh',
   );
   if (earlier)
     return `${earlier.runKey} already diagnosed ${source.runKey} on a fresh world (${earlier.status}). A second fresh-world diagnostic is a retry until green.`;
-  if (!failedTestsWroteWorld(input.failedTestStages))
+  if (!source.ranOnBoat && !failedTestsWroteWorld(input.failedTestStages))
     return `The failed test of ${source.runKey} failed before its body ran, so its retained world is the state it met. ${retainedReplay}`;
   return undefined;
 }

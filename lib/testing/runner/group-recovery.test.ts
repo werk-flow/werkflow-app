@@ -112,6 +112,7 @@ test('a fresh-world diagnosis starts only for an environment failure of a group 
   const ready: FreshInput = {
     source: failed,
     servedBuildId: 'build-a',
+    servedBuildInputs: null,
     runs: [failed],
     failedTestStages: [wrote],
   };
@@ -127,9 +128,61 @@ test('a fresh-world diagnosis starts only for an environment failure of a group 
     [{ runs: [failed, fresh] }, 'already diagnosed'],
     [{ runs: [failed, { ...fresh, status: 'failed' }] }, 'already diagnosed'],
     [{ failedTestStages: [hooksOnly] }, 'retained world'],
+    // A local world cleaned before its diagnosis is no reason for the easier fresh replay.
+    [{ source: { ...failed, cleanedAt: null }, failedTestStages: [hooksOnly] }, 'retained world'],
   ];
   for (const [change, message] of refusals)
     expect(freshDiagnosisProblem({ ...ready, ...change })).toContain(message);
   // A retained replay of the same run does not use up the fresh-world diagnosis.
   expect(freshDiagnosisProblem({ ...ready, runs: [failed, diagnostic] })).toBeUndefined();
+  // A Boat run's world dies with its machine: the fresh world is its only replay, written or not.
+  const onBoat = { ...failed, ranOnBoat: true };
+  expect(freshDiagnosisProblem({ ...ready, source: onBoat, failedTestStages: [hooksOnly] })).toBeUndefined();
+  expect(freshDiagnosisProblem({ ...ready, source: onBoat, failedTestStages: [wrote] })).toBeUndefined();
+});
+
+/** The application inputs of one build, as its receipt records them. */
+const inputs = { sourceDigest: 'source-1', environmentDigest: 'environment-1' };
+
+test('a fresh-world replay on another build of equal inputs qualifies; other inputs or a retained replay do not', () => {
+  // A Boat machine, or a workstation under migration drift, rebuilds the tree under a new build id.
+  const failedOnBoat = { ...failed, buildInputs: inputs };
+  const rebuilt = { ...fresh, buildId: 'build-b', buildInputs: inputs };
+  expect(recoveredEnvironmentRuns([failedOnBoat, rebuilt])).toEqual(['failed']);
+  for (const other of [
+    { ...inputs, sourceDigest: 'source-2' },
+    { ...inputs, environmentDigest: 'environment-2' },
+    null,
+    undefined,
+  ])
+    expect(recoveredEnvironmentRuns([failedOnBoat, { ...rebuilt, buildInputs: other }])).toEqual([]);
+  // A manifest written before the digests were recorded keeps the build id rule.
+  expect(recoveredEnvironmentRuns([failed, rebuilt])).toEqual([]);
+  // A replay on the retained world keeps the strict build id rule, equal inputs or not.
+  const retainedOnRebuild = { ...diagnostic, buildId: 'build-b', buildInputs: inputs };
+  expect(
+    recoveredEnvironmentRuns([{ ...failedOnBoat, cleanedAt: '2026-09-06T11:00:00Z' }, retainedOnRebuild]),
+  ).toEqual([]);
+  expect(recoveredEnvironmentRuns([failedOnBoat, { ...retainedOnRebuild, buildId: 'build-a' }])).toEqual([
+    'failed',
+  ]);
+});
+
+test('a fresh-world replay may start on another build only when its application inputs are equal', () => {
+  type FreshInput = Parameters<typeof freshDiagnosisProblem>[0];
+  const onBoat: FreshInput = {
+    source: { ...failed, buildInputs: inputs },
+    servedBuildId: 'build-b',
+    servedBuildInputs: inputs,
+    runs: [failed],
+    failedTestStages: [wrote],
+  };
+  expect(freshDiagnosisProblem(onBoat)).toBeUndefined();
+  for (const change of [
+    { servedBuildInputs: { ...inputs, sourceDigest: 'source-2' } },
+    { servedBuildInputs: { ...inputs, environmentDigest: 'environment-2' } },
+    { servedBuildInputs: null },
+    { source: failed },
+  ])
+    expect(freshDiagnosisProblem({ ...onBoat, ...change })).toContain('built from other application inputs');
 });
