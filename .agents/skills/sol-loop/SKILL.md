@@ -30,8 +30,19 @@ You own the change. GPT Sol reviews it in rounds until you agree or the budget e
 1. Call `orchestrator_capabilities`. Pick the newest `gpt-*-sol` model of the Codex provider unless the owner named one. Set `reasoningEffort: "high"` unless told otherwise.
 2. Call `delegate_task` with `role: "review"`, `mode: "async"`, `isolation: "worktree"`, the Codex `providerInstanceId`, the model, and `clientRequestId: "sol-loop-<branch>-r<round>"`.
 3. End your turn and wait for the round's completion notice. Do not poll, and do not edit the scoped files while a round runs. Only a delegated round wakes you this way; a shell run never does ([wait for a long run](../../../docs/technical/testing.md#wait-for-a-long-run)).
-4. A timeout, an error or silence is not approval. Cancel with `task_cancel`, confirm with `task_status`, and restart the round.
-5. A rate limit, or no listed Sol model, is an owner item ([Decide or ask](../../../AGENTS.md#decide-or-ask)). Never substitute another model.
+4. A timeout, an error or silence is not approval. Cancel with `task_cancel`, confirm with `task_status`, and restart the round. A Codex usage limit waits first (step 6).
+5. No listed Sol model is an owner item ([Decide or ask](../../../AGENTS.md#decide-or-ask)). Never substitute another model.
+6. A round that fails on a Codex usage limit gets one automatic retry:
+   1. Read the reset time from the error. Write it as ISO 8601 with an offset, such as `2026-11-13T15:40:00+01:00`; turn a relative time ("try again in 2 hours") into one from now.
+   2. Start one notified wait until a minute after it ([wait for a long run](../../../docs/technical/testing.md#wait-for-a-long-run)). It exits 2 when the time does not parse:
+
+      ```bash
+      bun scripts/run-notified.ts --began "[sol-loop] waiting until" -- bun -e 'const until = Date.parse(process.argv[1]); if (Number.isNaN(until)) process.exit(2); console.log(`[sol-loop] waiting until ${process.argv[1]}`); await Bun.sleep(Math.max(until - Date.now(), 0) + 60_000)' '<reset time>'
+      ```
+
+   3. Wait as that section says: a lead ends its turn after `began work`, a delegated child polls with the printed command. Never sleep in the foreground.
+   4. When the wait ends with exit code 0, restart the round with the same brief and `clientRequestId: "sol-loop-<branch>-r<round>-retry"`. The retry is the same round and uses no extra budget.
+   5. A second usage limit in the same round, an error without a reset time, or a wait that ends with another code, is an owner item. Never substitute another model.
 
 Round 1 brief:
 
