@@ -1,5 +1,5 @@
 -- The hand-out of scrubbed problem reports to report threads, and the
--- Agent's write-back (20261201110000_hand_out_scrubbed_problem_reports.sql,
+-- Agent's write-back (20261201120000_hand_out_scrubbed_problem_reports.sql,
 -- werk-flow/werkflow-planning#336). Client roles execute neither hand-out
 -- function. The first hand-out claims the report and writes one history
 -- entry without an actor in the same call; a second one is refused and writes
