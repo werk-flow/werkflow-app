@@ -1,4 +1,4 @@
-import { UnsentTimeLandingNotice } from '@/components/auth/unsent-time-landing-notice';
+import { UnsentWorkLandingNotice } from '@/components/auth/unsent-work-landing-notice';
 import { OfflineClock } from '@/components/clock-offline';
 
 /** The clock of the page without signal, over the browser's own device storage. */
@@ -14,7 +14,7 @@ export function OfflineClockContractFixture(): React.JSX.Element {
 export function UnsentTimeLandingContractFixture(): React.JSX.Element {
   return (
     <main>
-      <UnsentTimeLandingNotice />
+      <UnsentWorkLandingNotice />
       <p>Anmelden</p>
     </main>
   );

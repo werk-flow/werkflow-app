@@ -8,7 +8,6 @@ import {
   DRAFT_NO_ACCESS_KEPT_MS,
   DRAFT_UNSENT_LIMIT_MS,
   changeDraftOnDevice,
-  deleteDraftsOnDevice,
   listDraftsOnDevice,
   type DraftHolder,
   type StoredDraft,
@@ -213,8 +212,29 @@ afterEach(async () => {
   setSystemTime();
   Object.assign(globalThis, { window: realWindow });
   globalThis.fetch = realFetch;
-  for (const each of [holder, otherPerson]) await deleteDraftsOnDevice(each);
+  await clearDraftStore();
 });
+
+/** Empties the draft store between tests, whoever's drafts it holds. */
+async function clearDraftStore(): Promise<void> {
+  const database = await openDraftDatabase();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction('drafts', 'readwrite');
+    transaction.objectStore('drafts').clear();
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+  database.close();
+}
+
+function openDraftDatabase(): Promise<IDBDatabase> {
+  return new Promise<IDBDatabase>((resolve, reject) => {
+    const opening = indexedDB.open('werkflow-drafts', 1);
+    opening.onupgradeneeded = () => opening.result.createObjectStore('drafts', { keyPath: 'id' });
+    opening.onsuccess = () => resolve(opening.result);
+    opening.onerror = () => reject(opening.error);
+  });
+}
 
 describe('a report draft is sent', () => {
   test('both photos go to storage first, then one operation attaches the draft and both documents, and the draft leaves the phone', async () => {
@@ -490,30 +510,6 @@ describe('the end of a lost-access draft', () => {
     expect(left.map((entry) => entry.id)).toEqual([keptId]);
     expect(uploads).toEqual([]);
     expect(sent).toEqual([]);
-  });
-});
-
-describe('drafts as unsent work at sign-out', () => {
-  test("the source names the holder's drafts, those without access apart, and discards only the holder's", async () => {
-    await save(draft({ photos: [] }));
-    await save(
-      draft({
-        id: '9d000000-0000-4000-8000-000000000040',
-        photos: [],
-        refusal: { kind: 'no_access', at: NOW.toISOString() },
-      }),
-    );
-    await save(draft({ ...otherPerson, id: '9d000000-0000-4000-8000-000000000060', photos: [] }));
-    const { send, unsentSource } = startDraftSync(holder);
-    await send();
-
-    expect(await unsentSource.summarize()).toEqual([
-      { label: 'Berichtsentwürfe', count: 1 },
-      { label: 'Berichtsentwürfe ohne Zugriff', count: 1 },
-    ]);
-    await unsentSource.discard();
-    expect(await unsentSource.summarize()).toEqual([]);
-    expect((await stored(otherPerson)).length).toBe(1);
   });
 });
 

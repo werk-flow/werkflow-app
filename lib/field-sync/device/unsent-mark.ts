@@ -38,7 +38,7 @@ export function keptActionsWait(): boolean {
 
 /**
  * Whether the phone holds unsent time events: the time hint the outbox keeps, or a kept clock action
- * it has not taken in. The page after a sign-out shows it (components/auth/unsent-time-landing-notice.tsx).
+ * it has not taken in. The page after a sign-out shows it (components/auth/unsent-work-landing-notice.tsx).
  */
 export function deviceHoldsUnsentTime(): boolean {
   try {
