@@ -5496,6 +5496,8 @@ export type Database = {
       organization_settings: {
         Row: {
           auto_break_duration_minutes: number;
+          auto_break_second_duration_minutes: number | null;
+          auto_break_second_threshold_minutes: number | null;
           auto_break_threshold_minutes: number;
           break_mode: Database["public"]["Enums"]["time_tracking_break_mode"];
           break_policy_history: Json;
@@ -5507,6 +5509,8 @@ export type Database = {
         };
         Insert: {
           auto_break_duration_minutes?: number;
+          auto_break_second_duration_minutes?: number | null;
+          auto_break_second_threshold_minutes?: number | null;
           auto_break_threshold_minutes?: number;
           break_mode?: Database["public"]["Enums"]["time_tracking_break_mode"];
           break_policy_history?: Json;
@@ -5518,6 +5522,8 @@ export type Database = {
         };
         Update: {
           auto_break_duration_minutes?: number;
+          auto_break_second_duration_minutes?: number | null;
+          auto_break_second_threshold_minutes?: number | null;
           auto_break_threshold_minutes?: number;
           break_mode?: Database["public"]["Enums"]["time_tracking_break_mode"];
           break_policy_history?: Json;
@@ -19831,19 +19837,35 @@ export type Database = {
           isSetofReturn: false;
         };
       };
-      update_time_tracking_settings: {
-        Args: {
-          p_actor_id: string;
-          p_auto_break_duration_minutes: number;
-          p_auto_break_threshold_minutes: number;
-          p_break_ends: Json;
-          p_break_mode: string;
-          p_break_policy_history: Json;
-          p_expected_settings: Json;
-          p_organization_id: string;
-        };
-        Returns: undefined;
-      };
+      update_time_tracking_settings:
+        | {
+            Args: {
+              p_actor_id: string;
+              p_auto_break_duration_minutes: number;
+              p_auto_break_second_duration_minutes: number;
+              p_auto_break_second_threshold_minutes: number;
+              p_auto_break_threshold_minutes: number;
+              p_break_ends: Json;
+              p_break_mode: string;
+              p_break_policy_history: Json;
+              p_expected_settings: Json;
+              p_organization_id: string;
+            };
+            Returns: undefined;
+          }
+        | {
+            Args: {
+              p_actor_id: string;
+              p_auto_break_duration_minutes: number;
+              p_auto_break_threshold_minutes: number;
+              p_break_ends: Json;
+              p_break_mode: string;
+              p_break_policy_history: Json;
+              p_expected_settings: Json;
+              p_organization_id: string;
+            };
+            Returns: undefined;
+          };
       update_work_schedule: {
         Args: {
           p_actor_id: string;
