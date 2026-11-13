@@ -323,8 +323,9 @@ begin
     raise exception 'a failed part changed another part';
   end if;
   -- The failed build's archive, had it stored one, is still queued; the retry claims the part again.
-  if not exists (select 1 from public.storage_purge_queue where storage_path =
-      (select archive_path from public.organization_export_parts where id = v_part)) then
+  if not exists (select 1 from public.storage_purge_queue
+      where organization_id = '28700000-0000-0000-0000-000000000010'
+        and storage_path = (select archive_path from public.organization_export_parts where id = v_part)) then
     raise exception 'a failed build left its archive unqueued';
   end if;
   perform public.claim_organization_export_part_build('28700000-0000-0000-0000-000000000001',

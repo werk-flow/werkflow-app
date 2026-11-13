@@ -132,13 +132,16 @@ function neverNull(expression: readonly Token[]): boolean {
   if (groupAt < 0 || closing(tokens, groupAt) !== last) return false;
   if (groupAt === 0) {
     const inner = tokens.slice(1, last);
-    // A scalar count without grouping always returns one row.
-    if (inner[0]?.lower === 'select' && inner[1]?.lower === 'count')
-      return !inner.some((token) => token.lower === 'group');
+    // `select count(…) from …` without grouping or HAVING always returns one row.
+    if (inner[0]?.lower === 'select' && inner[1]?.lower === 'count' && inner[2]?.lower === '(')
+      return (
+        inner[closing(inner, 2) + 1]?.lower === 'from' &&
+        !inner.some((token) => token.lower === 'group' || token.lower === 'having')
+      );
     return neverNull(inner);
   }
   if (first.lower === 'exists' || first.lower === 'array' || first.lower === 'row') return true;
-  if (first.lower === 'coalesce') return neverNull(argumentsOf(tokens, 1, last).at(-1) ?? []);
+  if (first.lower === 'coalesce') return argumentsOf(tokens, 1, last).some(neverNull);
   return false;
 }
 
@@ -207,8 +210,13 @@ function nullableComparisons(source: string, tokens: readonly Token[]): Assertio
   );
 }
 
-/** A relation a select reads, and the index of its name token. */
-type Relation = { readonly schema: string | null; readonly name: string; readonly at: number };
+/** A relation a select reads, the index of its name token, and whether an `on` join restricts it. */
+type Relation = {
+  readonly schema: string | null;
+  readonly name: string;
+  readonly at: number;
+  readonly joinedOn: boolean;
+};
 
 /** The relations a select reads in its own FROM clause. */
 function relationsRead(select: readonly Token[]): Relation[] {
@@ -223,7 +231,14 @@ function relationsRead(select: readonly Token[]): Relation[] {
     const first = select[index + 1]?.lower ?? '';
     if (!/^[a-z_]/.test(first)) continue;
     const at = select[index + 2]?.lower === '.' ? index + 3 : index + 1;
-    relations.push({ schema: at > index + 1 ? first : null, name: select[at]?.lower ?? '', at });
+    // An inner `join … on` of a table, not a function: `cross join` and `left join` restrict nothing.
+    const kind = select[index - 1]?.lower;
+    const joinedOn =
+      token === 'join' &&
+      select[at + 1]?.lower !== '(' &&
+      (kind === 'inner' || !['cross', 'left', 'right', 'full', 'outer', 'natural'].includes(kind ?? '')) &&
+      select.slice(at + 1, at + 4).some((part) => part.lower === 'on');
+    relations.push({ schema: at > index + 1 ? first : null, name: select[at]?.lower ?? '', at, joinedOn });
   }
   return relations;
 }
@@ -231,18 +246,44 @@ function relationsRead(select: readonly Token[]): Relation[] {
 /** A variable or parameter that holds the test's organization. */
 const ORGANIZATION_VARIABLE = /^(?:[vp]_)?org(?:anization)?(?:_id)?$/;
 
+/** The select's own tokens after its first WHERE, without nested subqueries. */
+function ownFilter(select: readonly Token[]): Token[] {
+  const own: Token[] = [];
+  let depth = 0;
+  let filtering = false;
+  for (let index = 0; index < select.length; index += 1) {
+    const token = select[index];
+    if (!token) continue;
+    if (token.lower === '(' && select[index + 1]?.lower === 'select') {
+      index = closing(select, index);
+      continue;
+    }
+    if (OPEN.has(token.lower)) depth += 1;
+    if (CLOSE.has(token.lower)) depth -= 1;
+    if (depth === 0 && (token.lower === 'where' || token.lower === 'on')) filtering = true;
+    if (filtering) own.push(token);
+  }
+  return own;
+}
+
+const EQUALITY = new Set(['=', 'in', 'like']);
+
 /**
- * Whether the select keeps to the test's own rows: it names the organization,
- * a fixture id literal, or compares an id column for equality.
+ * Whether the select's own filter keeps to the test's rows: it compares an id
+ * column (`organization_id` included), an organization variable or a literal
+ * that starts with a fixture id for equality.
  */
 function scoped(select: readonly Token[]): boolean {
-  return select.some((token, index) => {
-    if (token.lower === 'organization_id' || ORGANIZATION_VARIABLE.test(token.lower)) return true;
-    // A string literal that starts with a fixture id, such as a storage path.
-    if (token.text.startsWith("'") && isUuid(token.text.slice(1, 37))) return true;
-    if (!/^(?:id|\w+_id|\w+_by)$/.test(token.lower)) return false;
-    const next = select[index + 1]?.lower;
-    return next === '=' || next === 'in' || select[index - 1]?.lower === '=';
+  const filter = ownFilter(select);
+  return filter.some((token, index) => {
+    const compared =
+      EQUALITY.has(filter[index + 1]?.lower ?? '') || EQUALITY.has(filter[index - 1]?.lower ?? '');
+    if (/^(?:id|\w+_id|\w+_by)$/.test(token.lower)) return compared;
+    // An organization variable or a fixture-id literal, such as a storage path, may sit in a list or a concatenation.
+    return (
+      ORGANIZATION_VARIABLE.test(token.lower) ||
+      (token.text.startsWith("'") && isUuid(token.text.slice(1, 37)))
+    );
   });
 }
 
@@ -262,7 +303,7 @@ function rolesAt(tokens: readonly Token[]): string[] {
           .slice(index, index + 4)
           .map((part) => part.lower)
           .join(' ')
-      : token.lower.startsWith("'")
+      : token.lower.startsWith("'") && tokens[index - 1]?.lower === 'execute'
         ? token.lower
         : '';
     for (const [, set, reset] of text.matchAll(ROLE_CHANGE)) role = reset ? 'postgres' : (set ?? role);
@@ -313,7 +354,8 @@ function unscopedReads(
     if (!tenant) return [];
     // A join with the test's own temporary rows keeps the read to them.
     const joinsOwnRows = relations.some(
-      ({ schema, name }) => (schema === null || schema === 'pg_temp') && !tenantTables.has(name),
+      ({ schema, name, joinedOn }) =>
+        joinedOn && (schema === null || schema === 'pg_temp') && !tenantTables.has(name),
     );
     if (joinsOwnRows || scoped(select)) return [];
     const line = lineOf(source, tokens[at]?.offset ?? 0);

@@ -11,11 +11,11 @@ import { sqlAssertionFindings } from './sql-test-assertions-scan';
 // 1. `if a <> b then raise` raises nothing when a or b is NULL: a missing key,
 //    row or field passes the check. Compare with `is distinct from` unless
 //    both sides can never be NULL (a literal, `sqlerrm`, a scalar
-//    `select count(*)`, `exists (…)`, `coalesce(…, <literal>)`).
+//    `select count(*)`, `exists (…)`, a `coalesce` with such an argument).
 // 2. Every worktree shares the local stack, and browser worlds commit rows in
 //    other organizations. A `count(*)` or `exists (select …)` over a table with
 //    an `organization_id` column filters by the organization, a fixture id or
-//    an id column, or joins the test's own temporary rows. A read under the
+//    an id column, or inner-joins the test's own temporary rows. A read under the
 //    `authenticated` or `anon` role is exempt: there it proves a policy, and a
 //    filter would hide a leak.
 // The scan cannot see a nullable `<`, `>` or `not`, or an id filter on a
@@ -71,6 +71,42 @@ test('the scan flags the flagged code of each real NULL finding and passes its f
     { rule: 'null-safe', line: 3 },
   ]);
   expect(findings(scope('is distinct from'))).toEqual([]);
+});
+
+test('a count is never NULL only as a bare scalar count, and coalesce with any literal is never NULL', () => {
+  expect(
+    findings(
+      [
+        assertion('(select count(*) + v_extra from public.jobs where id = v_job) <> 1'),
+        assertion('(select count(*) from public.jobs where id = v_job having false) <> 1'),
+        assertion('coalesce(v_total, 0, v_other) <> 1'),
+      ].join('\n'),
+    ).map(({ line, rule }) => ({ line, rule })),
+  ).toEqual([
+    { line: 2, rule: 'null-safe' },
+    { line: 5, rule: 'null-safe' },
+  ]);
+});
+
+test('only a restricting filter or an inner join with own rows scopes a read', () => {
+  expect(
+    findings(
+      [
+        assertion('(select count(organization_id) from public.jobs) <> 0'),
+        assertion(
+          'exists (select 1 from public.jobs where status in (select status from public.jobs where id = v_job))',
+        ),
+        assertion('exists (select 1 from public.jobs cross join generate_series(1, 2))'),
+        "select 'set role authenticated';",
+        assertion('exists (select 1 from public.jobs)'),
+      ].join('\n'),
+    ).map(({ line, rule }) => ({ line, rule })),
+  ).toEqual([
+    { line: 2, rule: 'org-scope' },
+    { line: 5, rule: 'org-scope' },
+    { line: 8, rule: 'org-scope' },
+    { line: 12, rule: 'org-scope' },
+  ]);
 });
 
 test('the scan reads an operator without spaces whole, as PostgreSQL does', () => {
