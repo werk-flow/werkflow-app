@@ -6,7 +6,7 @@ Rules for what a problem report may carry once it leaves WerkFlow: the screensho
 
 A report screenshot is never a picture of the page. The device redraws the visible page into a clone, rasterizes the clone, and only that image can leave the device. The redraw is default-deny: it keeps what it can prove belongs to the app and replaces everything else, so a new field can never slip through.
 
-`lib/problem-reports/screenshot/` holds the redraw. `redrawScreenshot` is its one entry; a caller imports it lazily, so neither the redraw nor the catalog rides in a cold start.
+`redrawScreenshot` in `lib/problem-reports/screenshot/` is the redraw's one entry, imported lazily.
 
 ### The UI string catalog
 
@@ -26,7 +26,7 @@ Each rule has a test that fails without it: `tests/ui-contracts/problem-report-r
 4. **Attributes.** Layout and state attributes (`class`, `role`, `type`, `checked`, SVG geometry) stay verbatim. Attributes that load or link (`href`, `src`, `srcset`, `poster`, `action`, event handlers) are dropped. Every other attribute (`title`, `aria-*`, `alt`, `placeholder`, `value`, `data-*`, `id`) follows the text rule. An inline style loses each declaration with a `url()`, an image function, a quoted string or a CSS escape, which could spell either.
 5. **Media.** Images, pictures, video, audio, canvas, embedded objects and every SVG with anything but shapes (text, an image, a foreign object, a reference) become neutral blocks of the same size. An icon drawn from shapes stays.
 6. **Frames.** Iframes, scripts, templates and style elements are dropped.
-7. **Styles.** A disabled sheet and a sheet for other media (print) stay out. A style sheet the build compiled from the source (same origin, under `/_next/static/`) stays verbatim, with its fonts inlined. Every other sheet, a style element included, may be written at runtime, so a detached copy of it gets the inline-style rule and loses its fonts. The live sheets never change.
+7. **Styles.** A disabled sheet and a sheet for other media (print) stay out. A build sheet (same origin, under `/_next/static/`) keeps its rules, with its fonts inlined. Every other sheet, a style element included, may be written at runtime, so its detached copy gets the inline-style rule and loses its fonts. Each media rule is settled as the live page answers it: the image might answer light on a dark page.
 8. **Rasterize on the device.** The clone and those styles become an SVG `foreignObject` drawn onto a canvas. An SVG drawn as an image loads nothing from the network. This needs `img-src data:` in the enforced content security policy (`lib/security/csp-report.ts`).
 
 ### Accepted limits of the redraw
