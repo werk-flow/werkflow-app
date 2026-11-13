@@ -35,7 +35,7 @@ const admitted = (start: StartKind, reading: RoomReading, heavy: readonly number
   ).admitted;
 
 // The watch sets the floor at 10 % of RAM and raises it to 20 % while its alert is open or swap fills
-// (werk-flow/werkflow-planning ops/workstation-load.py). The costs are this module's: 4, 0.1 and 0.5 GiB.
+// (werk-flow/werkflow-planning ops/workstation-load.py). The costs are this module's: 4, 0.1, 0.5 and 3.5 GiB.
 test('each machine admits a start exactly when its cost fits above the floor', () => {
   for (const [machine, floor] of [
     ['the PC, 15.6 GiB', 1.56],
@@ -53,6 +53,8 @@ test('each machine admits a start exactly when its cost fits above the floor', (
     expect([machine, admitted('setup', at(floor + 0.09))]).toEqual([machine, false]);
     expect([machine, admitted('thread', at(floor + 4.51))]).toEqual([machine, true]);
     expect([machine, admitted('thread', at(floor + 4.49))]).toEqual([machine, false]);
+    expect([machine, admitted('device', at(floor + 3.51))]).toEqual([machine, true]);
+    expect([machine, admitted('device', at(floor + 3.49))]).toEqual([machine, false]);
   }
 });
 
@@ -96,9 +98,19 @@ test('a running heavy command reserves only what it has not used yet, and a thre
   expect(admitted('thread', watched(2, 1.56), [4])).toBe(false);
 });
 
+test('the overload of 2026-11-13 replayed: no simulator boot on the Mac with 3.1 GB available', () => {
+  // werk-flow/werkflow-app#418: the boot took the Mac to load 122 and memory pressure warn.
+  const before = admission('device', watched(3.1, 1.8), []);
+  expect(before.admitted).toBe(false);
+  expect(before.reason).toContain('it needs 5.3: the floor of 1.8 and 3.5 for the device.');
+  // A running heavy command's unused reservation counts against a boot, as against a second command.
+  expect(admitted('device', watched(9.4, 1.8), [0])).toBe(true);
+  expect(admitted('device', watched(9.2, 1.8), [0])).toBe(false);
+});
+
 test('a blocked machine takes no start of any kind', () => {
   const blocked = watched(14, 1.56, 'the 5-minute load is 40.0 on 14 cores, above 35.0');
-  for (const start of ['heavy', 'setup', 'thread'] as const) {
+  for (const start of ['heavy', 'setup', 'thread', 'device'] as const) {
     const verdict = admission(start, blocked, []);
     expect(verdict.admitted).toBe(false);
     expect(verdict.reason).toBe(
@@ -107,7 +119,7 @@ test('a blocked machine takes no start of any kind', () => {
   }
 });
 
-test('a machine without the watch keeps a heavy command and a setup going and refuses a thread with the install command', () => {
+test('a machine without the watch keeps a heavy command, a setup and a device going and refuses a thread with the install command', () => {
   expect(admission('heavy', UNWATCHED, [])).toMatchObject({
     admitted: true,
     measured: false,
@@ -118,6 +130,7 @@ test('a machine without the watch keeps a heavy command and a setup going and re
     measured: false,
     unwatched: true,
   });
+  expect(admission('device', UNWATCHED, [])).toMatchObject({ admitted: true, unwatched: true });
   const thread = admission('thread', UNWATCHED, []);
   expect(thread).toMatchObject({ admitted: false, unwatched: true });
   expect(thread.reason).toBe(
@@ -256,7 +269,7 @@ test('a running heavy command is the whole process tree of the pid its slot file
   expect(runningHeavyCommands(join(directory, 'absent'), processes)).toEqual([]);
 });
 
-test('a start is one of the three kinds', () => {
-  expect(['heavy', 'setup', 'thread'].every(isStartKind)).toBe(true);
+test('a start is one of the four kinds', () => {
+  expect(['heavy', 'setup', 'thread', 'device'].every(isStartKind)).toBe(true);
   expect([undefined, 'build', 'toString', ''].some(isStartKind)).toBe(false);
 });

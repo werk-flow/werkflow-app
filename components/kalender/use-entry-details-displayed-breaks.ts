@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 
-import { getAutomaticBreakRange } from '@/lib/time-tracking/settings';
+import { getAutomaticBreakRanges, type AutomaticBreakRange } from '@/lib/time-tracking/settings';
 import {
   buildDraftEntry,
   buildEditableBreaks,
@@ -18,39 +18,25 @@ export type EntryDetailsDisplayedBreaks = {
   totalWorkMinutes: number | null;
 };
 
-/** The one automatic break as a break the dialog can show. */
+/** The automatic breaks as breaks the dialog can show. */
 function automaticEditableBreaks(
-  automaticBreak: { breakStart: Date; breakEnd: Date },
+  automaticBreaks: AutomaticBreakRange[],
   entryUserId: string | undefined,
   entryOrganizationId: string | null,
 ): EditableBreak[] {
-  const breakStartEntry = {
-    ...buildDraftEntry(
-      'auto-break-start',
-      'break_start',
-      automaticBreak.breakStart,
-      entryUserId,
-      entryOrganizationId ?? undefined,
-    ),
+  const automaticEntry = (id: string, entryType: 'break_start' | 'break_end', at: Date) => ({
+    ...buildDraftEntry(id, entryType, at, entryUserId, entryOrganizationId ?? undefined),
     isManual: false,
-  };
-  const breakEndEntry = {
-    ...buildDraftEntry(
-      'auto-break-end',
-      'break_end',
-      automaticBreak.breakEnd,
-      entryUserId,
-      entryOrganizationId ?? undefined,
-    ),
-    isManual: false,
-  };
-
-  return buildEditableBreaks([
-    {
-      breakStart: breakStartEntry,
-      breakEnd: breakEndEntry,
-    },
-  ]);
+  });
+  return buildEditableBreaks(
+    automaticBreaks.map((automaticBreak, index) => {
+      const suffix = index === 0 ? '' : `-${index + 1}`;
+      return {
+        breakStart: automaticEntry(`auto-break${suffix}-start`, 'break_start', automaticBreak.breakStart),
+        breakEnd: automaticEntry(`auto-break${suffix}-end`, 'break_end', automaticBreak.breakEnd),
+      };
+    }),
+  );
 }
 
 /**
@@ -78,13 +64,13 @@ export function useEntryDetailsDisplayedBreaks(
 
     const blockStart = editedClockIn ?? clockInDate;
     const blockEnd = editedClockOut ?? clockOutDate ?? (blockStart ? new Date() : null);
-    const automaticBreak = getAutomaticBreakRange(blockStart, blockEnd, interactiveSession.breakPolicy);
-
-    if (!automaticBreak) {
-      return [];
-    }
-
-    return automaticEditableBreaks(automaticBreak, entryUserId, entryOrganizationId);
+    const automaticBreaks = getAutomaticBreakRanges(
+      blockStart,
+      blockEnd,
+      interactiveSession.breakPolicy,
+      interactiveSession.breakDayPosition,
+    );
+    return automaticEditableBreaks(automaticBreaks, entryUserId, entryOrganizationId);
   }, [
     clockInDate,
     clockOutDate,
@@ -93,6 +79,7 @@ export function useEntryDetailsDisplayedBreaks(
     entryOrganizationId,
     entryUserId,
     interactiveSession.breakPolicy,
+    interactiveSession.breakDayPosition,
     isAutomaticBreakMode,
   ]);
   const displayedBreaks = isAutomaticBreakMode ? automaticDisplayBreaks : editedBreaks;

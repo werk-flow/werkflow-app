@@ -29,7 +29,7 @@ import { INVENTORY_PICKER_PAGE_SIZE, toInventoryLocation, toNumber } from './typ
 import { loadInventoryPickerOptions } from './catalog-reads';
 import { getJobContext, getProjectContext } from './job-project-access';
 import { hydrateJobMaterialLines, readProjectMaterialSummary } from './material-line-reads';
-import { insertMaterialLine, materialLineChanges } from './material-line-writes';
+import { materialLineChanges, planMaterialLine } from './material-line-writes';
 import {
   cleanText,
   ensureInventoryDefaults,
@@ -274,11 +274,10 @@ export async function createJobMaterialLine(
   const jobContext = await getJobContext(auth.context, input.jobId);
   if (!jobContext.success) return jobContext;
 
-  return insertMaterialLine(admin, auth.context, {
-    owner: { job_id: jobContext.job.id, project_id: jobContext.job.project_id },
+  return planMaterialLine(admin, auth.context, {
+    target: { jobId: jobContext.job.id, projectId: null },
     input,
-    readLabel: 'createJobMaterialLine: inventory_items read failed',
-    failureLabel: 'Error creating job material line:',
+    failureLabel: 'createJobMaterialLine: plan_job_material failed',
   });
 }
 
@@ -295,11 +294,10 @@ export async function createProjectMaterialLine(
   const projectContext = await getProjectContext(admin, auth.context, input.projectId);
   if (!projectContext.success) return projectContext;
 
-  return insertMaterialLine(admin, auth.context, {
-    owner: { job_id: null, project_id: projectContext.project.id },
+  return planMaterialLine(admin, auth.context, {
+    target: { jobId: null, projectId: projectContext.project.id },
     input,
-    readLabel: 'createProjectMaterialLine: inventory_items read failed',
-    failureLabel: 'Error creating project material line:',
+    failureLabel: 'createProjectMaterialLine: plan_job_material failed',
   });
 }
 

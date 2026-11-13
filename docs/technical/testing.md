@@ -106,7 +106,7 @@ bun run test:runs list|classify|cleanup|prune|recover-interrupted
 bun run test:verify --target cloud             # canary groups against DEV (after env:dev and test:server cloud)
 bun run test:golden:focused --grep "<titles>"  # focused fresh-world run; test:audit:focused likewise
 bun run test:diagnostic --grep "<title>" --reuse-run <run-key>   # replay on a retained world
-bun run test:diagnostic:audit --fresh-for <run-key>              # the failed group on a fresh world, same build
+bun run test:diagnostic:audit --fresh-for <run-key>              # the failed group on a fresh world
 WERKFLOW_UPDATE_VISUAL_REFERENCES=1 bun run test:audit:focused --grep "@AUDIT-VISUAL rendered references"
 bun run test:audit:focused --grep "@ACCEPT <set>"                # acceptance captures
 ```
@@ -174,7 +174,7 @@ Classes:
 - **authoring**: test code that never passed on its current content fails. Refused for test inputs that passed.
 - **accepted-change**: an accepted design made an `audit:visual` reference stale.
 
-Only `environment` allows one retry on unchanged inputs: a browser group's after a passing diagnostic and the cleanup, any other group's at once. The diagnostic replays the failed test on the retained world (`--reuse-run`). When that test wrote to its world before it failed, run the whole group on a fresh world on the same build instead (`--fresh-for`). A second failure on those inputs needs a change.
+Only `environment` allows one retry on unchanged inputs: a browser group's after a passing diagnostic and the cleanup, any other group's at once. A local run's diagnostic replays the failed test on its retained world (`--reuse-run`). If the test wrote to it, or ran on Boat, whose world dies with the machine, replay the group on a fresh world (`--fresh-for`). A second failure on those inputs needs a change.
 
 A preflight failure that creates no run, or a heavy group held back [without Boat](boat-verification.md#fallback), is blocked verification, not a product failure. If the host kills a run, confirm the lock owner is gone, then run `bun run test:runs recover-interrupted <run-key> "<observed interruption>"`.
 
