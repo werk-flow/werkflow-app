@@ -228,13 +228,19 @@ export async function expectAttachedReports(
   world: TestWorld,
   title: string,
   expected: readonly AttachedReport[],
+  /** The job the reports belong to; today's job of the world unless a test seeded its own. */
+  jobNumber: string = todayJobNumber(world),
 ): Promise<void> {
-  expect(await readAttachedReports(world, title)).toEqual(expected);
+  expect(await readAttachedReports(world, title, jobNumber)).toEqual(expected);
 }
 
-async function readAttachedReports(world: TestWorld, title: string): Promise<AttachedReport[]> {
+async function readAttachedReports(
+  world: TestWorld,
+  title: string,
+  jobNumber: string,
+): Promise<AttachedReport[]> {
   const admin = createAdminClient();
-  const jobId = await getJobIdByNumber(world.orgId, todayJobNumber(world));
+  const jobId = await getJobIdByNumber(world.orgId, jobNumber);
   const { data: revisions } = await admin
     .from('work_artifact_revisions')
     .select('id, artifact_id, performed_work, revision_number')

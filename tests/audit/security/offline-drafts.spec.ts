@@ -188,9 +188,12 @@ test('a sign-out names an unsent report draft with its photo, keeps it on „Abb
     await page.unroute(syncPath);
     await deviceDraftSendButton(page, reportTitle).click();
     await expectDraftsOnDevice(page, 0);
-    await expectAttachedReports(world, reportTitle, [
-      { status: 'draft', version: 2, revisions: 1, photos: 1, operations: 1, performedWork: [offlineText] },
-    ]);
+    await expectAttachedReports(
+      world,
+      reportTitle,
+      [{ status: 'draft', version: 2, revisions: 1, photos: 1, operations: 1, performedWork: [offlineText] }],
+      jobNumber,
+    );
   });
 
   await test.step('the next sign-out asks nothing and ends the session', async () => {
