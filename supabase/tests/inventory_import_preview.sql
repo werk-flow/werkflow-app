@@ -92,7 +92,7 @@ begin
   execute p_statement;
   raise exception '% was not refused', p_label;
 exception when others then
-  if sqlerrm <> p_code then
+  if sqlerrm is distinct from p_code then
     raise exception '% refused with "%" instead of %', p_label, sqlerrm, p_code;
   end if;
 end;
@@ -147,7 +147,7 @@ begin
     raise exception 'a preview must stage its rows on a draft batch with the file''s hash and mode';
   end if;
 
-  if jsonb_array_length(v_rows) <> 6
+  if jsonb_array_length(v_rows) is distinct from 6
     or v_rows->0 @> '{"index":0,"outcome":"booked","matched_by":null,"unit":"piece","location_name":"Hauptlager","location_created":false,"quantity":10,"quantity_before":0,"quantity_after":10}' is not true
     or v_rows->1 @> '{"index":1,"outcome":"booked","matched_by":"internal_sku","item_name":"Kupferrohr 15 mm","unit":"meter","quantity_before":0,"quantity_after":5}' is not true
     or v_rows->2 @> '{"index":2,"outcome":"booked","matched_by":"barcode","item_name":"Kupferrohr 15 mm","location_name":"Regal Nord","location_created":true,"quantity_after":2}' is not true
@@ -173,7 +173,7 @@ declare
   v_movements integer;
 begin
   v_booking := public.book_inventory_import(v_org, v_admin, v_batch);
-  if v_booking->>'already_booked' <> 'false' or v_booking->'rows' is distinct from v_preview->'rows' then
+  if v_booking->>'already_booked' is distinct from 'false' or v_booking->'rows' is distinct from v_preview->'rows' then
     raise exception 'the booking must agree with the preview on every row: % against %', v_booking->'rows', v_preview->'rows';
   end if;
   if not exists (
@@ -192,8 +192,8 @@ begin
 
   select count(*) into v_movements from public.inventory_movements where organization_id = v_org;
   v_repeat := public.book_inventory_import(v_org, v_admin, v_batch);
-  if v_repeat->>'already_booked' <> 'true' or v_repeat->'rows' is distinct from v_booking->'rows'
-    or (select count(*) from public.inventory_movements where organization_id = v_org) <> v_movements
+  if v_repeat->>'already_booked' is distinct from 'true' or v_repeat->'rows' is distinct from v_booking->'rows'
+    or (select count(*) from public.inventory_movements where organization_id = v_org) is distinct from v_movements
   then
     raise exception 'a confirm sent twice must book once and answer the first booking''s rows';
   end if;
@@ -208,7 +208,7 @@ begin
       where item_id = '99200000-0000-4000-8000-000000000030' and quantity_delta = 4)
     or exists (select 1 from public.inventory_categories
       where organization_id = '99200000-0000-4000-8000-000000000010' and name = 'Nur abgelehnt')
-    or (select unit from public.inventory_items where id = '99200000-0000-4000-8000-000000000030') <> 'meter'
+    or (select unit from public.inventory_items where id = '99200000-0000-4000-8000-000000000030') is distinct from 'meter'
   then
     raise exception 'a row with a differing unit must leave no movement, category or unit change behind';
   end if;
@@ -397,7 +397,7 @@ begin
     raise exception 'the booking must refuse a row whose match changed and keep a previewed rejection: %', v_booking->'rows';
   end if;
   if exists (select 1 from public.inventory_items where organization_id = v_org and internal_sku = 'NR-BOGEN-15')
-    or (select count(*) from public.inventory_movements where organization_id = v_org) <> v_movements + 1
+    or (select count(*) from public.inventory_movements where organization_id = v_org) is distinct from v_movements + 1
   then
     raise exception 'a row whose match changed or that the preview rejected must leave nothing behind';
   end if;

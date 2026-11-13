@@ -178,3 +178,18 @@ Sol rounds had no effective limit: from 2026-11-10 to 13, 77 PRs took 237 rounds
 4. The PR description no longer records Sol's usage. This supersedes item 3 of the amendment on review levels; the rule on a Sol rate limit stays.
 
 The `sol-loop` skill owns the procedure.
+
+## Amendment 2026-11-13: a merge queue
+
+Threads now merge in parallel. In the 24 hours before 2026-11-13 14:05 UTC, 40 PRs merged, 65 PR runs followed a merge of `main` into the branch, and `ci.yml` spent 771 job-minutes per merged PR. The owner decided on 2026-11-13 (werk-flow/werkflow-planning#426) that a GitHub merge queue lands every PR. This supersedes the merge-queue rejection under "What was considered and rejected" and "A merge queue stays rejected while one owner merges" in the amendment on merges without an up-to-date branch.
+
+1. The ruleset on `main` requires the merge queue, with squash merges. A thread runs `gh pr merge <n> --squash --auto` once the merge gate holds. The queue runs `ci.yml` on the PR on top of `main` and of the PRs ahead of it, and lands it when that run's `Check` passes. It replaces "merge `origin/main` and wait for green again" for a PR that does not conflict; a conflicting PR still merges `origin/main` first. [coderabbit.md](../technical/coderabbit.md#the-merge-gate) owns the procedure.
+2. The queue's run plans its browser groups by the diff against the queue's base. It is never a draft. Its Unit job takes the `approved: list growth` label of any PR in its group, because each PR's own `Check` already held its growth to its own label.
+3. A push to `main` whose tree equals the tree of a green queue run of `ci.yml` runs no browser group, because that run ran them on this tree. The trees match while the commits differ. When the lookup fails, the push plans by its diff as before. The nightly and release full runs are unchanged.
+4. The queue's sizes:
+   - Build concurrency 2. A queue run with browser shards takes about 30 minutes, and 40 merges a day reach about 3 an hour at peak. One run at a time would let the queue grow all afternoon; two clear 4 an hour.
+   - Two runs hold at most 30 of the 60 jobs GitHub Team runs at once (8 browser shards and 7 other jobs each), so PR runs keep half. A third run would leave PR runs about 15 jobs and doubles the runs a failure discards, since every entry behind a failed one builds again.
+   - Groups of 1 to 2 entries with no wait, so a lone PR never waits for company.
+   - `ALLGREEN`: each entry's own run must pass, so a failure names its PR, and no PR lands on a later entry's result.
+   - A check timeout of 150 minutes: the longest midnight hold (about 75 minutes), a browser shard's 45-minute timeout and the jobs before it.
+5. Revisit the sizes when the queue regularly waits over an hour (build concurrency 3), or when the weekly `CI queue` check fails (fewer).
