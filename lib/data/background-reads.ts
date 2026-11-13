@@ -45,6 +45,7 @@ import { getServiceCaseDetailByNumber, getServiceClientOption } from '@/lib/serv
 import { serviceCaseListQuerySchema } from '@/lib/service-cases/list-page';
 import { getServiceCasePage } from '@/lib/service-cases/list-page-server';
 import { getOwnSicknessReports, getSicknessReportsForRecord } from '@/lib/sickness/actions';
+import { getSchoolDaysForRecord } from '@/lib/personnel/school-day-actions';
 import { getMaintenanceEvidenceOptions, getMaintenanceWorkspace } from '@/lib/maintenance/actions';
 import { maintenanceWorkspaceQuerySchema } from '@/lib/maintenance/workspace-page';
 import { getAssignmentTeamOptions } from '@/lib/qualifications/actions';
@@ -268,6 +269,9 @@ export const BACKGROUND_READS = {
   ),
   'sickness-reports-for-record': defineRead(employeeRecordInput, (input) =>
     getSicknessReportsForRecord(input.employeeRecordId),
+  ),
+  'school-days-for-record': defineRead(employeeRecordInput, (input) =>
+    getSchoolDaysForRecord(input.employeeRecordId),
   ),
   'job-picker-jobs': defineRead(jobPickerRequestSchema, (input) => getJobsForPicker(input)),
   'maintenance-workspace': defineRead(

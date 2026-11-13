@@ -8532,6 +8532,69 @@ export type Database = {
           },
         ];
       };
+      school_days: {
+        Row: {
+          cancelled_at: string | null;
+          cancelled_by: string | null;
+          created_at: string;
+          created_by: string;
+          employee_record_id: string;
+          end_date: string | null;
+          ended_at: string | null;
+          ended_by: string | null;
+          id: string;
+          kind: string;
+          organization_id: string;
+          start_date: string;
+          weekday: number | null;
+        };
+        Insert: {
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          created_at?: string;
+          created_by: string;
+          employee_record_id: string;
+          end_date?: string | null;
+          ended_at?: string | null;
+          ended_by?: string | null;
+          id?: string;
+          kind: string;
+          organization_id: string;
+          start_date: string;
+          weekday?: number | null;
+        };
+        Update: {
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          created_at?: string;
+          created_by?: string;
+          employee_record_id?: string;
+          end_date?: string | null;
+          ended_at?: string | null;
+          ended_by?: string | null;
+          id?: string;
+          kind?: string;
+          organization_id?: string;
+          start_date?: string;
+          weekday?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "school_days_employee_record_id_fkey";
+            columns: ["employee_record_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "school_days_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       service_case_equipment_links: {
         Row: {
           created_at: string;

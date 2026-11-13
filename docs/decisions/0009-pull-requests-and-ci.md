@@ -167,3 +167,14 @@ PR runs of `ci.yml` took a median 31 minutes, and more than half of them were ca
 ## Amendment 2026-11-13: CodeRabbit reviews the draft while Sol's first round runs
 
 Sol reviewed before the PR opened and CodeRabbit only after, so CodeRabbit's fixes reran CI and Sol never saw them (on 2026-11-12 and 13, 127 pushes and 16,466 job-minutes came after a PR's first CodeRabbit review). During the CodeRabbit trial, a thread opens its draft before Sol's first round and labels it `needs-coderabbit` at once, so CodeRabbit reviews the draft while that round runs. The thread answers both reviewers' findings in one push. The queue asks CodeRabbit again only when the thread labels the PR again after a complete fix round, and the thread marks the PR ready once the reviews are done.
+
+## Amendment 2026-11-13: sol-loop has a hard budget of 3 rounds
+
+Sol rounds had no effective limit: from 2026-11-10 to 13, 77 PRs took 237 rounds, one took 16, and 19 went over their budget, mostly through extra rounds a lead granted. 36 of 38 Sol-approved PRs still got CodeRabbit findings afterwards. The owner decided on 2026-11-13 (werk-flow/werkflow-planning#431):
+
+1. Every PR gets at most 3 Sol rounds, at every level and in the CodeRabbit trial. This replaces level 2's 5 rounds and the trial's 1 round for level 1. No lead grants an extra round.
+2. Round 1 runs while CodeRabbit reviews the draft, one push answers both, round 2 confirms it, and round 3 runs only for a blocker or should that round 2 left open. A push that leaves the PR's own diff unchanged, such as a merge of `main`, gets no round.
+3. A finding still disputed after the last round goes to the owner through the question tool, with each side and a recommendation.
+4. The PR description no longer records Sol's usage. This supersedes item 3 of the amendment on review levels; the rule on a Sol rate limit stays.
+
+The `sol-loop` skill owns the procedure.
