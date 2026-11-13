@@ -8,12 +8,15 @@ import {
 import { openPage } from '../../golden/support/streamed-content';
 import { bypassHttpCache, setNetwork, waitForOfflineShell } from '../support/offline-shell';
 import {
+  deviceDraftSendButton,
   deviceDrafts,
   draftOnDevice,
   expectAttachedReports,
+  expectDraftNamedInQuestion,
   expectDraftsOnDevice,
   photoButton,
   savedOnDeviceBanner,
+  startSignOut,
   takeSyntheticPhoto,
   trackRequestsInFlight,
   waitUntilPageIdle,
@@ -24,6 +27,7 @@ import {
   todayJobNumber,
   waitForTodayOnDevice,
 } from '../support/offline-today';
+import { UNSENT_COPY, unsentWorkDialog } from '../support/time-outbox';
 
 // The offline reload reads the app shell the service worker serves.
 test.use({ serviceWorkers: 'allow' });
@@ -110,5 +114,81 @@ test('a report with two photos written without signal survives a reload and arri
     await expectAttachedReports(world, reportTitle, [
       { status: 'draft', version: 3, revisions: 1, photos: 2, operations: 1, performedWork: [offlineText] },
     ]);
+  });
+});
+
+// A session end asks about an unsent report draft too (werk-flow/werkflow-planning#403; decision
+// record 0010, the amendment "a session end asks about report drafts"). The draft is written without
+// signal; with the signal back the sync handler still does not answer, as on a weak connection, so
+// the draft is still on the phone when the person signs out. Without signal at all the question's
+// code cannot load yet (werk-flow/werkflow-planning#407); lib/ui/session-end-offline-check.test.ts pins that.
+
+test('a sign-out names an unsent report draft with its photo, keeps it on „Abbrechen“, and asks nothing once it is sent @AUDIT-SECURITY-OFFLINE-DRAFTS', async ({
+  employeePage: page,
+  world,
+}) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  const jobTitle = `Heizung prüfen ${world.runId}`;
+  const reportTitle = `Prüfbericht ${world.runId}`;
+  const offlineText = 'Ausdehnungsgefäß getauscht.';
+  await seedTodayAssignment(world, { title: jobTitle, instruction: `Druck prüfen ${world.runId}` });
+  const jobNumber = todayJobNumber(world);
+  const syncPath = '**/api/field-sync/v1/operations';
+
+  await test.step('the field worker opens the job while the phone has signal', async () => {
+    await page.goto('/dashboard');
+    await waitForTodayOnDevice(page, [jobTitle]);
+    await waitForOfflineShell(page);
+    const inFlight = trackRequestsInFlight(page);
+    await page.goto(`/auftraege/${jobNumber}`);
+    await waitUntilPageIdle(page, inFlight);
+  });
+
+  await test.step('without signal, the report and a photo are saved on the phone', async () => {
+    await bypassHttpCache(page);
+    await setNetwork(page, 'offline');
+    const dialog = await beginWorkArtifact(page, {
+      kind: 'work_report',
+      title: reportTitle,
+      summary: 'Heizung geprüft.',
+      strict: true,
+    });
+    await expect(photoButton(dialog)).toBeVisible();
+    await workArtifactField(dialog, 'performedWork').fill(offlineText);
+    await takeSyntheticPhoto(dialog, 1);
+    await workArtifactAction(dialog, 'saveDraft').click();
+    await expect(savedOnDeviceBanner(page)).toBeVisible();
+    await expect(draftOnDevice(page, reportTitle)).toBeVisible();
+  });
+
+  await test.step('the signal is back, but the sync handler does not answer yet', async () => {
+    await page.route(syncPath, (route) => route.abort('connectionfailed'));
+    await setNetwork(page, 'online');
+    await expectDraftsOnDevice(page, 1);
+  });
+
+  await test.step('the sign-out names the draft by its title, never its text; „Abbrechen“ keeps the session and the draft', async () => {
+    await startSignOut(page);
+    const question = unsentWorkDialog(page);
+    await expectDraftNamedInQuestion(question, reportTitle, offlineText);
+    await question.getByRole('button', { name: UNSENT_COPY.cancel, exact: true }).click();
+    await expect(question).toHaveCount(0);
+    await expect(page).toHaveURL(new RegExp(`/auftraege/${jobNumber}`));
+    await expectDraftsOnDevice(page, 1);
+  });
+
+  await test.step('with the handler answering, the person sends the draft', async () => {
+    await page.unroute(syncPath);
+    await deviceDraftSendButton(page, reportTitle).click();
+    await expectDraftsOnDevice(page, 0);
+    await expectAttachedReports(world, reportTitle, [
+      { status: 'draft', version: 2, revisions: 1, photos: 1, operations: 1, performedWork: [offlineText] },
+    ]);
+  });
+
+  await test.step('the next sign-out asks nothing and ends the session', async () => {
+    await startSignOut(page);
+    await page.waitForURL('**/login**');
+    await expect(unsentWorkDialog(page)).toHaveCount(0);
   });
 });

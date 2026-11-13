@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -89,13 +90,26 @@ function DiscardConfirmation({
   );
 }
 
+/** Each line with its number, and below it the pieces it names one by one, such as each report draft. */
 function UnsentItems({ items }: { items: readonly UnsentWorkItem[] }) {
   return (
     <ul className="divide-y rounded-md border text-sm" aria-label="Nicht übertragen">
       {items.map((item) => (
-        <li key={item.label} className="flex items-center justify-between gap-3 px-3 py-2">
-          <span className="font-medium">{item.label}</span>
-          <span className="text-muted-foreground tabular-nums">{item.count}</span>
+        <li key={item.label} className="space-y-2 px-3 py-2">
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-medium">{item.label}</span>
+            <span className="text-muted-foreground tabular-nums">{item.count}</span>
+          </div>
+          {item.entries && item.entries.length > 0 && (
+            <ul className="space-y-1.5" aria-label={item.label}>
+              {item.entries.map((entry) => (
+                <li key={entry.id} className="min-w-0">
+                  <p className="break-words">{entry.name}</p>
+                  <p className="text-xs text-muted-foreground">{entry.detail}</p>
+                </li>
+              ))}
+            </ul>
+          )}
         </li>
       ))}
     </ul>
@@ -194,13 +208,15 @@ function UnsentWorkDialog({
               weitermachst. Was du verwirfst, ist endgültig gelöscht.
             </DialogDescription>
           </DialogHeader>
-          <UnsentItems items={items} />
-          {isSending && (
-            <p role="status" className="text-sm text-muted-foreground">
-              Es wird gesendet …
-            </p>
-          )}
-          <ErrorText>{error}</ErrorText>
+          <DialogBody className="space-y-3">
+            <UnsentItems items={items} />
+            {isSending && (
+              <p role="status" className="text-sm text-muted-foreground">
+                Es wird gesendet …
+              </p>
+            )}
+            <ErrorText>{error}</ErrorText>
+          </DialogBody>
           <DialogFooter>
             <Button type="button" variant="outline" disabled={isDiscarding} onClick={() => onSettled(false)}>
               Abbrechen

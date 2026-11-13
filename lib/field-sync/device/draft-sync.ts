@@ -3,17 +3,26 @@
 import { readInBackground } from '@/lib/data/background-read-client';
 import { uploadDocumentDirect, type UploadFailureReason } from '@/lib/documents/upload-client';
 import { logError } from '@/lib/logging';
+import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { formatBerlin } from '@/lib/utils';
+import { WORK_ARTIFACT_KIND_LABELS } from '@/lib/work-artifacts/types';
 import { z } from '@/lib/zod';
 import {
   DRAFT_UNSENT_LIMIT_MS,
   changeDraftOnDevice,
-  deleteDraftsOnDevice,
+  deleteShownDraftsOnDevice,
+  listDraftsInScopeOnDevice,
   listDraftsOnDevice,
   type DraftHolder,
   type DraftRefusal,
+  type DraftScope,
+  type ShownDrafts,
   type StoredDraft,
+  type UnreadableDraft,
 } from './draft-store';
+import { readTodayOnDevice } from './today-store';
 import { TODAY_WIPE_KEY, todayWipeGeneration } from './today-wipe';
+import type { UnsentScope, UnsentSource, UnsentWorkItem } from './unsent-work';
 import { createListeners } from '@/lib/listeners';
 
 // Sends the report drafts a phone keeps (decision record 0010, the report
@@ -63,24 +72,31 @@ let holderGeneration: string | null = null;
 
 /**
  * A send's claim on the tab: the person it was queued for and the wipe signal of that moment. It
- * holds while no sign-out or sign-in page wrote a new signal and no page named another person.
+ * holds while no sign-out or sign-in page wrote a new signal and no page named another person. A
+ * claim `byPage` comes from the page that named the holder; otherwise a session end made it for the
+ * person its session read named, and it holds while no page of this tab names someone else.
  */
-type SendClaim = { owner: DraftHolder; generation: string | null };
+type SendClaim = { owner: DraftHolder; generation: string | null; byPage: boolean };
 
 function claimFor(owner: DraftHolder): SendClaim {
   const named =
     holder !== null && holder.userId === owner.userId && holder.organizationId === owner.organizationId;
-  return { owner, generation: named ? holderGeneration : null };
+  return { owner, generation: named ? holderGeneration : null, byPage: true };
 }
 
 function stillHolder(claim: SendClaim): boolean {
+  if (claim.generation === null || todayWipeGeneration() !== claim.generation) return false;
+  if (!claim.byPage) return holder === null || holder.userId === claim.owner.userId;
   return (
-    claim.generation !== null &&
     claim.generation === holderGeneration &&
-    todayWipeGeneration() === claim.generation &&
     holder?.userId === claim.owner.userId &&
     holder.organizationId === claim.owner.organizationId
   );
+}
+
+/** The holder the page of this tab named, while no sign-out or sign-in page wrote a wipe signal since. */
+function pageHolder(): DraftHolder | null {
+  return holderGeneration === todayWipeGeneration() ? holder : null;
 }
 
 /** The photo transfer running now: a page that names another person aborts it. */
@@ -279,9 +295,10 @@ async function uploadAndSeal(
   claim: SendClaim,
   first: StoredDraft,
   expected: string | null,
-): Promise<StoredDraft | DraftSendOutcome> {
+): Promise<{ sealed: StoredDraft; sealedHere: boolean } | DraftSendOutcome> {
   let draft = first;
   let changed = false;
+  let sealedHere = false;
   for (let pass = 0; pass < UPLOAD_PASSES; pass += 1) {
     if (!stillHolder(claim) || knownOffline()) return 'waiting';
     const left = draft.sealed ? null : await uploadPhotos(claim, draft);
@@ -291,25 +308,34 @@ async function uploadAndSeal(
     const current = await changeDraftOnDevice(claim.owner, draft.id, (stored) => {
       // A save that decided on one state of the draft never seals another tab's.
       changed = expected !== null && stored !== null && stored.updatedAt !== expected;
-      return stored &&
+      const seals =
+        stored !== null &&
         !changed &&
-        (stored.sealed || stored.photos.every((photo) => photo.documentId !== null))
-        ? { ...stored, sealed: true, refusal: null }
-        : stored;
+        (stored.sealed || stored.photos.every((photo) => photo.documentId !== null));
+      // Whether an attach of the draft may still be open from before: then only its answer unseals it.
+      sealedHere = seals && !stored.sealed;
+      return seals ? { ...stored, sealed: true, refusal: null } : stored;
     });
     if (!current) return 'skipped';
     if (changed) return 'changed';
-    if (current.sealed) return current;
+    if (current.sealed) return { sealed: current, sealedHere };
     draft = current;
   }
   return 'waiting';
 }
 
-/** Sends one draft of the holder. `byPerson` is „Erneut senden“ or a save: it also sends a refused or old draft. */
+/**
+ * Who asked for a send. `automatic`: a trigger, which sends only a draft that may go by itself.
+ * `session_end`: „Jetzt senden“ before a session ends, which also sends a draft unchanged for seven
+ * days. `person`: „Erneut senden“ or a save, which also sends a refused draft and one open in an editor.
+ */
+type SendPolicy = 'automatic' | 'session_end' | 'person';
+
+/** Sends one draft of the holder under `policy`. */
 async function sendOne(
   claim: SendClaim,
   draftId: string,
-  byPerson: boolean,
+  policy: SendPolicy,
   expected: string | null = null,
 ): Promise<DraftSendOutcome> {
   const { owner } = claim;
@@ -318,15 +344,21 @@ async function sendOne(
   if (expected !== null && draft.updatedAt !== expected) return 'changed';
   if (draft.refusal?.kind === 'no_access') return 'no_access';
   if (!draft.ready) return 'skipped';
-  if (!byPerson && (openInEditor.has(draftId) || draft.refusal !== null || isPastUnsentLimit(draft)))
+  if (
+    policy !== 'person' &&
+    (openInEditor.has(draftId) ||
+      draft.refusal !== null ||
+      (policy === 'automatic' && isPastUnsentLimit(draft)))
+  )
     return 'skipped';
-  const sealed = await uploadAndSeal(claim, draft, expected);
-  if (sealed === 'waiting' && expected !== null) {
+  const prepared = await uploadAndSeal(claim, draft, expected);
+  if (prepared === 'waiting' && expected !== null) {
     // A save that waits closes its form: only while the draft still holds what that save decided on.
     const now = (await listDraftsOnDevice(owner)).find((entry) => entry.id === draftId);
     if (now?.updatedAt !== expected) return 'changed';
   }
-  if (typeof sealed === 'string') return sealed;
+  if (typeof prepared === 'string') return prepared;
+  const { sealed, sealedHere } = prepared;
   // The seal's transaction can outlast a sign-in elsewhere: the claim is checked again right before the request.
   if (!stillHolder(claim)) return 'waiting';
   const verdict = await attach(sealed);
@@ -341,9 +373,16 @@ async function sendOne(
     (verdict.outcome !== 'rejected' && verdict.outcome !== 'conflict' && verdict.status >= 500);
   // A refusal that came while the tab changed hands may answer another person's session: it says nothing about the author.
   if (retry || !stillHolder(claim)) return 'waiting';
-  // The session's active organization moved on; the draft waits for its own, still sealed: an earlier
-  // send may have arrived, and only a resend of the same content can learn that.
-  if (verdict.outcome === 'rejected' && verdict.code === 'organization_mismatch') return 'waiting';
+  // The session's active organization is another one; the draft waits for its own. Still sealed when an
+  // earlier attach may have arrived, since only a resend of the same content can learn that; unsealed
+  // when this send sealed it, because the server refused this one before it wrote anything.
+  if (verdict.outcome === 'rejected' && verdict.code === 'organization_mismatch') {
+    if (sealedHere)
+      await changeDraftOnDevice(owner, draftId, (current) =>
+        current?.sealed && current.updatedAt === sealed.updatedAt ? { ...current, sealed: false } : current,
+      );
+    return 'waiting';
+  }
   const lost = verdict.outcome === 'rejected' && verdict.code === 'forbidden';
   await markRefused(owner, draftId, lost ? 'no_access' : 'failed');
   return lost ? 'no_access' : 'refused';
@@ -383,14 +422,18 @@ async function finishSend<T>(run: () => Promise<T>): Promise<T> {
  * editor, not refused and changed within the last seven days. It stops at the first draft that
  * gets no answer, so a phone without signal tries once, not once per draft.
  */
-function sendDrafts(): Promise<void> {
+export function sendDrafts(): Promise<void> {
   const owner = holder;
   if (!owner) return Promise.resolve();
-  const claim = claimFor(owner);
+  return sendEach(claimFor(owner), 'automatic');
+}
+
+/** Sends the claim's drafts one after the other under `policy`, until one gets no answer. */
+function sendEach(claim: SendClaim, policy: SendPolicy): Promise<void> {
   return enqueue(() =>
     finishSend(async () => {
-      for (const draft of await listDraftsOnDevice(owner)) {
-        if ((await sendOne(claim, draft.id, false)) === 'waiting') return;
+      for (const draft of await listDraftsOnDevice(claim.owner)) {
+        if ((await sendOne(claim, draft.id, policy)) === 'waiting') return;
       }
     }),
   );
@@ -404,43 +447,171 @@ export function sendDraft(
   expected: string | null = null,
 ): Promise<DraftSendOutcome> {
   const claim = claimFor(owner);
-  return enqueue(() => finishSend(() => sendOne(claim, draftId, true, expected)));
+  return enqueue(() => finishSend(() => sendOne(claim, draftId, 'person', expected)));
 }
 
 /**
- * The drafts as unsent work, for the sign-out and the organization switch (decision record 0010,
- * "Device data"): they name what is left, send it or delete it. It answers for the holder
- * `startDraftSync` named; a tab that never named one holds no draft it could show.
+ * The person whose drafts a session end asks about, and the organization when the flow leaves only
+ * one: the page's holder, else the person of the browser's session. A switch without a page that
+ * named the organization asks as a sign-out does, about every organization: more, never less.
+ * Throws when the session cannot be read: the session then stays.
  */
-const draftUnsentSource = {
+async function sessionScope(scope: UnsentScope): Promise<DraftScope | null> {
+  const page = pageHolder();
+  if (page) return { userId: page.userId, organizationId: scope === 'organization' ? page.organizationId : null };
+  const { data, error } = await createSupabaseBrowserClient().auth.getSession();
+  if (error) throw error;
+  return data.session ? { userId: data.session.user.id, organizationId: null } : null;
+}
+
+/** The labels of the person's jobs of today that the phone holds, by job id; empty when it holds none. */
+async function todaysJobLabels(userId: string): Promise<ReadonlyMap<string, string>> {
+  try {
+    const today = await readTodayOnDevice();
+    if (!today || today.snapshot.userId !== userId) return new Map();
+    return new Map(
+      today.snapshot.assignments.map((job) => [
+        job.jobId,
+        job.jobNumber ? `${job.jobNumber} ${job.title}` : job.title,
+      ]),
+    );
+  } catch {
+    // best-effort: a draft without its job's name is still named by its title.
+    return new Map();
+  }
+}
+
+function joined(parts: readonly (string | null)[]): string {
+  return parts.filter((part): part is string => part !== null).join(' · ');
+}
+
+/** What the question says of a readable draft: its title, state, kind, photos, last change and job. */
+function draftEntry(draft: StoredDraft, jobs: ReadonlyMap<string, string>): { name: string; detail: string } {
+  const photos = draft.photos.length;
+  const state =
+    draft.refusal?.kind === 'no_access'
+      ? 'Kein Zugriff mehr, wird nicht gesendet'
+      : draft.refusal !== null || isPastUnsentLimit(draft)
+        ? 'Nicht übertragen'
+        : draft.ready
+          ? null
+          : 'Unvollständig';
+  return {
+    name: draft.title.trim() || 'Ohne Titel',
+    detail: joined([
+      state,
+      WORK_ARTIFACT_KIND_LABELS[draft.kind],
+      photos === 0 ? null : `${photos} ${photos === 1 ? 'Foto' : 'Fotos'}`,
+      `geändert ${formatBerlin(draft.updatedAt, 'dateTime')}`,
+      jobs.get(draft.jobId) ?? null,
+    ]),
+  };
+}
+
+/** A shown draft's id: the draft and the state it was shown in, so a later change is asked about anew. */
+const SHOWN_DRAFT = 'draft:';
+const SHOWN_UNREADABLE = 'draft-unreadable:';
+
+function shownDraftId(draft: StoredDraft): string {
+  return `${SHOWN_DRAFT}${draft.id}:${draft.updatedAt}`;
+}
+
+/** The drafts among the ids a question showed; ids of other sources are ignored. */
+function shownDrafts(ids: readonly string[]): ShownDrafts {
+  const drafts = new Map<string, string>();
+  const unreadable = new Set<string>();
+  for (const id of ids) {
+    if (id.startsWith(SHOWN_UNREADABLE)) unreadable.add(id.slice(SHOWN_UNREADABLE.length));
+    if (!id.startsWith(SHOWN_DRAFT)) continue;
+    const shown = id.slice(SHOWN_DRAFT.length);
+    const separator = shown.indexOf(':');
+    if (separator > 0) drafts.set(shown.slice(0, separator), shown.slice(separator + 1));
+  }
+  return { drafts, unreadable };
+}
+
+function item(label: string, entries: readonly { id: string; name: string; detail: string }[]): UnsentWorkItem {
+  return {
+    label,
+    count: entries.length,
+    ids: entries.map((entry) => entry.id),
+    entries: entries.map(({ id, name, detail }) => ({ id, name, detail })),
+  };
+}
+
+function unreadableEntry(draft: UnreadableDraft, jobs: ReadonlyMap<string, string>) {
+  return {
+    id: `${SHOWN_UNREADABLE}${draft.id}`,
+    name: 'Entwurf lässt sich nicht öffnen',
+    detail: joined(['Nicht lesbar', draft.jobId === null ? null : (jobs.get(draft.jobId) ?? null)]),
+  };
+}
+
+/**
+ * The drafts as unsent work (unsent-work.ts) for every session end (decision record 0010, the
+ * amendment "a session end asks about report drafts"): the person's drafts in the flow's scope, each
+ * named by what the person recognizes, never by its text. A lost-access draft is named apart and
+ * never sent, and one this version cannot read is named as such.
+ */
+export const draftUnsentSource: UnsentSource = {
   name: 'report-drafts',
-  async summarize(): Promise<{ label: string; count: number }[]> {
-    if (!holder) return [];
-    const drafts = await listDraftsOnDevice(holder);
-    const withoutAccess = drafts.filter((draft) => draft.refusal?.kind === 'no_access').length;
+  async summarize(scope = 'session') {
+    const person = await sessionScope(scope);
+    if (!person) return [];
+    const { drafts, unreadable } = await listDraftsInScopeOnDevice(person);
+    if (drafts.length === 0 && unreadable.length === 0) return [];
+    const jobs = await todaysJobLabels(person.userId);
+    const named = drafts.map((draft) => ({ ...draftEntry(draft, jobs), id: shownDraftId(draft), draft }));
     return [
-      { label: 'Berichtsentwürfe', count: drafts.length - withoutAccess },
-      { label: 'Berichtsentwürfe ohne Zugriff', count: withoutAccess },
-    ].filter((item) => item.count > 0);
+      item(
+        'Berichtsentwürfe',
+        named.filter(({ draft }) => draft.refusal?.kind !== 'no_access'),
+      ),
+      item(
+        'Berichtsentwürfe ohne Zugriff',
+        named.filter(({ draft }) => draft.refusal?.kind === 'no_access'),
+      ),
+      item(
+        'Berichtsentwürfe, die diese App-Version nicht lesen kann',
+        unreadable.map((draft) => unreadableEntry(draft, jobs)),
+      ),
+    ].filter((entry) => entry.count > 0);
   },
-  flush: sendDrafts,
-  async discard(): Promise<void> {
-    if (!holder) return;
-    await deleteDraftsOnDevice(holder);
+  async flush() {
+    const person = await sessionScope('session');
+    if (!person) return;
+    const page = pageHolder();
+    const { drafts } = await listDraftsInScopeOnDevice(person);
+    // The page's organization first: it is the active one, whose drafts the server takes now.
+    const organizations = [...new Set(drafts.map((draft) => draft.organizationId))].sort(
+      (left, right) => Number(right === page?.organizationId) - Number(left === page?.organizationId),
+    );
+    for (const organizationId of organizations) {
+      const owner = { userId: person.userId, organizationId };
+      const named = page?.userId === owner.userId && page.organizationId === organizationId;
+      await sendEach(
+        named ? claimFor(owner) : { owner, generation: todayWipeGeneration(), byPage: false },
+        'session_end',
+      );
+    }
+  },
+  async discard(scope, ids) {
+    const shown = shownDrafts(ids);
+    if (shown.drafts.size === 0 && shown.unreadable.size === 0) return;
+    const person = await sessionScope(scope);
+    if (!person) return;
+    // After a send in flight, in this tab and every other: the server never gets a draft the person was told is gone.
+    await enqueue(() => deleteShownDraftsOnDevice(person, shown));
     notify();
   },
 };
 
 /**
  * Names the person and organization the drafts are sent for, sends now and again on every
- * `online`. It answers the sender and the unsent-work source of the drafts: once the sync runner
- * of the clock outbox is on `main` (werk-flow/werkflow-planning#319), that runner registers both
- * (`registerSender`, `registerUnsentSource`) and owns the triggers this function holds until then.
+ * `online`, and answers the send. The sync runner and the unsent-work seam reach the drafts through
+ * registrations.ts; a job page calls this, because the runner loads at the app start only for time.
  */
-export function startDraftSync(next: DraftHolder): {
-  send: () => Promise<void>;
-  unsentSource: typeof draftUnsentSource;
-} {
+export function startDraftSync(next: DraftHolder): { send: () => Promise<void> } {
   if (holder && (holder.userId !== next.userId || holder.organizationId !== next.organizationId))
     activeTransfer?.abort();
   holder = next;
@@ -450,5 +621,5 @@ export function startDraftSync(next: DraftHolder): {
     window.addEventListener('online', () => void sendDrafts());
   }
   void sendDrafts();
-  return { send: sendDrafts, unsentSource: draftUnsentSource };
+  return { send: sendDrafts };
 }

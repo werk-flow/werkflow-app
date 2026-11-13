@@ -10,10 +10,22 @@ import { logError } from '@/lib/logging';
 // it (lib/field-sync/device/unsent-work-gate.ts asks).
 
 /**
- * One line of what is still unsent, such as „Stempelzeiten“ with their number, and the ids of what
- * it names: a discard deletes exactly those, never what was kept after the question.
+ * One piece of a line that the question names on its own, such as a report draft: its id among the
+ * line's `ids`, and what the person recognizes it by, never its content.
  */
-export type UnsentWorkItem = { label: string; count: number; ids: readonly string[] };
+export type UnsentWorkEntry = { id: string; name: string; detail: string };
+
+/**
+ * One line of what is still unsent, such as „Stempelzeiten“ with their number, and the ids of what
+ * it names: a discard deletes exactly those, never what was kept after the question. `entries`
+ * names each piece when the person must recognize it to decide.
+ */
+export type UnsentWorkItem = {
+  label: string;
+  count: number;
+  ids: readonly string[];
+  entries?: readonly UnsentWorkEntry[];
+};
 
 /**
  * Whose work a flow asks about. `session`: the signed-in person's in every organization, before a

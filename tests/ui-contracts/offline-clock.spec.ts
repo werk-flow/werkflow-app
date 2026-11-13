@@ -63,11 +63,23 @@ test('a capture refused after another tab’s sign-out says so, also once no clo
   await expect(clock.getByRole('group', { name: 'Nächste Aktion' })).toHaveCount(0);
 });
 
-for (const [held, shown] of [
-  [true, 1],
-  [false, 0],
+// What stays on the phone after a session ended, and the one sentence the sign-in page says about it.
+for (const { marks, says } of [
+  {
+    marks: ['werkflow:unsent:time'],
+    says: 'Auf diesem Gerät liegen noch nicht gesendete Zeiten. Melde dich an, damit sie gesendet werden.',
+  },
+  {
+    marks: ['werkflow:drafts-on-device'],
+    says: 'Auf diesem Gerät liegen noch nicht gesendete Berichtsentwürfe. Melde dich an, damit sie gesendet werden.',
+  },
+  {
+    marks: ['werkflow:unsent:time', 'werkflow:drafts-on-device'],
+    says: 'Auf diesem Gerät liegen noch nicht gesendete Zeiten und Berichtsentwürfe. Melde dich an, damit sie gesendet werden.',
+  },
+  { marks: [], says: null },
 ] as const)
-  test(`the page a sign-out lands on ${held ? 'says' : 'says nothing'} when unsent time ${held ? 'stays' : 'does not stay'} on the phone`, async ({
+  test(`the page a sign-out lands on says ${says === null ? 'nothing when no unsent work stays' : `so when ${marks.join(' and ')} stays`} on the phone, naming no person, job or content`, async ({
     page,
   }) => {
     assertWorkspaceTestLock();
@@ -80,14 +92,16 @@ for (const [held, shown] of [
       }),
     );
     await page.goto('http://localhost/ui-contracts');
-    await page.evaluate((holds) => {
+    await page.evaluate((keys) => {
       window.uiContractFixture = 'unsent-time-landing';
-      if (holds) localStorage.setItem('werkflow:unsent:time', '1');
-    }, held);
+      for (const key of keys) localStorage.setItem(key, '1');
+    }, marks);
     await page.addScriptTag({ path: bundle });
     await expect(page.getByRole('main').getByText('Anmelden')).toBeVisible();
 
-    await expect(
-      page.getByRole('alert').filter({ hasText: 'Auf diesem Gerät liegen noch nicht gesendete Zeiten.' }),
-    ).toHaveCount(shown);
+    const notice = page.getByRole('alert').filter({ hasText: 'Auf diesem Gerät liegen' });
+    if (says === null) await expect(notice).toHaveCount(0);
+    else await expect(notice).toHaveText(says);
+    // The page reads only the marks: it opens no device database to say so.
+    expect(await page.evaluate(async () => (await indexedDB.databases()).map((info) => info.name))).toEqual([]);
   });
