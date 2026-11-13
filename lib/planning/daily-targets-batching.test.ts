@@ -19,6 +19,7 @@ mock.module('@/lib/data/cached', () => ({
 let vacationSpansFail = false;
 let sicknessSpansFail = false;
 let schoolSpansFail = false;
+let schoolReads = 0;
 mock.module('@/lib/vacation/server', () => ({
   loadApprovedVacationSpansByRecord: async () => (vacationSpansFail ? null : new Map()),
 }));
@@ -26,7 +27,10 @@ mock.module('@/lib/sickness/server', () => ({
   loadActiveSicknessSpansByRecord: async () => (sicknessSpansFail ? null : new Map()),
 }));
 mock.module('@/lib/personnel/school-day-server', () => ({
-  loadSchoolDaySpansByRecord: async () => (schoolSpansFail ? null : new Map()),
+  loadSchoolDaySpansByRecord: async () => {
+    schoolReads += 1;
+    return schoolSpansFail ? null : new Map();
+  },
 }));
 
 const { loadDailyTargetsByRecord } = await import('./server');
@@ -107,12 +111,52 @@ test('a failed absence span read fails the daily targets instead of reading as n
     expect(await loadDailyTargetsByRecord(input)).toBeNull();
     sicknessSpansFail = false;
     schoolSpansFail = true;
-    expect(await loadDailyTargetsByRecord(input)).toBeNull();
+    // An apprentice in the window reads the school days, and their failure fails the targets.
+    const apprentice = { ...input, admin: adminAnswering(apprenticeConditionRows) };
+    expect(await loadDailyTargetsByRecord(apprentice)).toBeNull();
   } finally {
     vacationSpansFail = false;
     sicknessSpansFail = false;
     schoolSpansFail = false;
   }
+});
+
+/** The employment condition read answers an Ausbildung version; every other read answers none. */
+function apprenticeConditionRows(url: URL): unknown[] {
+  return url.pathname.endsWith('/employment_conditions')
+    ? [
+        {
+          id: 'condition-0',
+          organization_id: 'org',
+          employee_record_id: 'record-0',
+          valid_from: '2026-01-01',
+          employment_type: 'ausbildung',
+          weekly_hours: 40,
+          vacation_days_per_year: 30,
+          note: null,
+          created_by: null,
+          created_at: '2026-01-01T00:00:00Z',
+          updated_at: '2026-01-01T00:00:00Z',
+        },
+      ]
+    : [];
+}
+
+// werk-flow/werkflow-planning#165: school days exist only for apprentices,
+// so a board or planning check without one pays no school-day request.
+test('the daily targets read school days only when the window holds an apprentice', async () => {
+  const input = {
+    orgId: 'org',
+    employees: [{ id: 'record-0', entry_date: null, exit_date: null }],
+    dates: ['2026-10-01'],
+  };
+  schoolReads = 0;
+  expect(await loadDailyTargetsByRecord({ ...input, admin: rowlessAdmin() })).not.toBeNull();
+  expect(schoolReads).toBe(0);
+  expect(
+    await loadDailyTargetsByRecord({ ...input, admin: adminAnswering(apprenticeConditionRows) }),
+  ).not.toBeNull();
+  expect(schoolReads).toBe(1);
 });
 
 // werk-flow/werkflow-planning#79: the Plantafel showed a target on the day

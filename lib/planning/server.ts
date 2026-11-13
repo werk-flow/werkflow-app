@@ -215,51 +215,53 @@ export async function loadDailyTargetsByRecord(input: {
   // Id lists are organization-sized here (every row of the Plantafel); one
   // query per 100 ids keeps each request under the gateway's URL limit (about
   // 200 ids in one request answer 414 URI too long).
-  const [
-    schedulesResult,
-    conditionsResult,
-    calendar,
-    vacationSpans,
-    sicknessSpans,
-    schoolSpans,
-    pendingVacationResult,
-  ] = await Promise.all([
-    readInBatches(employeeRecordIds, (ids) =>
-      input.admin
-        .from('work_schedules')
-        .select('*')
-        .eq('organization_id', input.orgId)
-        .in('employee_record_id', [...ids]),
-    ),
-    readInBatches(employeeRecordIds, (ids) =>
-      input.admin
-        .from('employment_conditions')
-        .select('*')
-        .eq('organization_id', input.orgId)
-        .in('employee_record_id', [...ids]),
-    ),
-    getCachedOrganizationCalendar(input.orgId),
-    loadApprovedVacationSpansByRecord(input.orgId, windowStart, windowEnd),
-    loadActiveSicknessSpansByRecord(input.orgId, windowStart, windowEnd),
-    loadSchoolDaySpansByRecord(input.orgId, windowStart, windowEnd),
-    readInBatches(employeeRecordIds, (ids) =>
-      input.admin
-        .from('vacation_requests')
-        .select('employee_record_id, start_date, end_date, day_portion')
-        .eq('organization_id', input.orgId)
-        .eq('status', 'pending')
-        .in('employee_record_id', [...ids])
-        .lte('start_date', windowEnd)
-        .gte('end_date', windowStart),
-    ),
-  ]);
+  const [schedulesResult, conditionsResult, calendar, vacationSpans, sicknessSpans, pendingVacationResult] =
+    await Promise.all([
+      readInBatches(employeeRecordIds, (ids) =>
+        input.admin
+          .from('work_schedules')
+          .select('*')
+          .eq('organization_id', input.orgId)
+          .in('employee_record_id', [...ids]),
+      ),
+      readInBatches(employeeRecordIds, (ids) =>
+        input.admin
+          .from('employment_conditions')
+          .select('*')
+          .eq('organization_id', input.orgId)
+          .in('employee_record_id', [...ids]),
+      ),
+      getCachedOrganizationCalendar(input.orgId),
+      loadApprovedVacationSpansByRecord(input.orgId, windowStart, windowEnd),
+      loadActiveSicknessSpansByRecord(input.orgId, windowStart, windowEnd),
+      readInBatches(employeeRecordIds, (ids) =>
+        input.admin
+          .from('vacation_requests')
+          .select('employee_record_id, start_date, end_date, day_portion')
+          .eq('organization_id', input.orgId)
+          .eq('status', 'pending')
+          .in('employee_record_id', [...ids])
+          .lte('start_date', windowEnd)
+          .gte('end_date', windowStart),
+      ),
+    ]);
   const failed = schedulesResult.error ?? conditionsResult.error ?? pendingVacationResult.error;
   if (failed) {
     logReadFailure('Failed to load daily targets', { code: 'code' in failed ? failed.code : 'unknown' });
     return null;
   }
   // The span readers log their own failure; a missing span map is not "no absence".
-  if (!vacationSpans || !sicknessSpans || !schoolSpans) return null;
+  if (!vacationSpans || !sicknessSpans) return null;
+  // School days exist only for apprentices (addSchoolDay refuses anyone
+  // without an Ausbildung condition), so a window without one reads none:
+  // every board and planning check would otherwise pay one more request.
+  const hasApprentice = (conditionsResult.data ?? []).some(
+    (condition) => condition.employment_type === 'ausbildung',
+  );
+  const schoolSpans = hasApprentice
+    ? await loadSchoolDaySpansByRecord(input.orgId, windowStart, windowEnd)
+    : new Map<string, ApprovedAbsenceSpan[]>();
+  if (!schoolSpans) return null;
 
   const targetByEmployeeDate = resolveTargetsByEmployeeDate({
     employees: input.employees,

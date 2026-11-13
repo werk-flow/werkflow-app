@@ -1,11 +1,10 @@
 'use client';
 
 import { useMemo } from 'react';
-import { cn } from '@/lib/utils';
+import { cn, formatBerlin } from '@/lib/utils';
 import { computeBreakdownForSettings } from '@/lib/time-tracking/settings';
 import { formatDuration } from '@/lib/time-tracking/helpers';
 import { sumTargetMinutes, type DailyTarget } from '@/lib/personnel/targets';
-import { WEEKDAY_LABELS } from '@/lib/personnel/schedule';
 import type { DayData } from '@/hooks/use-weekly-time-data';
 import type { BreakPolicyValues } from '@/lib/time-tracking/settings';
 
@@ -262,7 +261,7 @@ function WeeklySchoolDays({ weekTargets }: { weekTargets: DailyTarget[] | undefi
   if (schoolDays.length === 0) return null;
   return (
     <p className="mt-2 text-center text-xs text-muted-foreground">
-      {`Berufsschule diese Woche: ${schoolDays.flatMap((target) => WEEKDAY_LABELS[target.weekday] ?? []).join(', ')}. `}
+      {`Berufsschule diese Woche: ${schoolDays.map((target) => formatBerlin(`${target.date}T12:00:00Z`, 'weekdayDayMonth')).join(', ')}. `}
       An diesen Tagen gilt dein Tagesziel als erfüllt.
     </p>
   );
