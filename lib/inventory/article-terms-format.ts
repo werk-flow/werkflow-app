@@ -8,13 +8,14 @@ import { INVENTORY_UNITS } from '@/lib/inventory/units';
 // price quantity, a pack as a sentence, and the state of a recorded price.
 
 /** The short label of a unit, „m“, or the stored text for a unit outside the list. */
-export function unitShortLabel(unit: string): string {
+export function unitShortLabelOrStored(unit: string): string {
   return INVENTORY_UNITS.find((entry) => entry.code === unit)?.shortLabel ?? unit;
 }
 
 /** „4,12 € je m“, or „610,00 € je 100 m“ for a price per 100 base units. */
 export function formatArticlePrice(amountCents: number, priceQuantity: PriceQuantity, unit: string): string {
-  const per = priceQuantity === 1 ? unitShortLabel(unit) : `${priceQuantity} ${unitShortLabel(unit)}`;
+  const per =
+    priceQuantity === 1 ? unitShortLabelOrStored(unit) : `${priceQuantity} ${unitShortLabelOrStored(unit)}`;
   return `${formatEuroCents(amountCents)} je ${per}`;
 }
 

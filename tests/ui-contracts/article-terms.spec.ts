@@ -122,7 +122,8 @@ test('a failed read of the terms offers „Erneut laden“ in each tab, and the 
     await expect(retry).toBeVisible();
     await retry.click();
   }
-  expect(await page.evaluate(() => window.uiContractArticleTermsRefreshes)).toBe(2);
+  // The retry re-reads the route, through the shared navigation stand-in (service-boundaries.ts).
+  expect(await page.evaluate(() => window.uiContractServices.navigation)).toEqual(['refresh', 'refresh']);
 });
 
 // Captures of the tabs: filled, empty and failed, phone and desktop, light and dark.

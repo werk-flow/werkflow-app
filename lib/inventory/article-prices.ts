@@ -16,7 +16,7 @@ import { type InventoryUnitCode, isInventoryUnitCode } from './units';
 // type is the contract.
 //
 // The source is the article's dated prices: the database function
-// `inventory_item_prices_on_day` owns which price applies on a day, per kind
+// `read_inventory_item_prices_on_day` owns which price applies on a day, per kind
 // (migration 20261203090000). An archived article answers too, because offer
 // and order lines keep referencing it.
 
@@ -109,7 +109,7 @@ export async function readArticlePrices(
 
   const admin = createSupabaseAdminClient();
   const { data, error } = await readInBatches(parsed.data.articleIds, (batch) =>
-    admin.rpc('inventory_item_prices_on_day', {
+    admin.rpc('read_inventory_item_prices_on_day', {
       p_organization_id: auth.context.orgId,
       p_item_ids: [...batch],
       p_on_date: parsed.data.onDate,
@@ -117,7 +117,10 @@ export async function readArticlePrices(
   );
   const rows = z.array(priceRowSchema).safeParse(data);
   if (error || !rows.success) {
-    logError('readArticlePrices: inventory_item_prices_on_day failed', error ?? { code: 'malformed_result' });
+    logError(
+      'readArticlePrices: read_inventory_item_prices_on_day failed',
+      error ?? { code: 'malformed_result' },
+    );
     return { success: false, error: 'load_failed' };
   }
   return { success: true, prices: rows.data.map((row) => toArticlePrice(row, parsed.data.onDate)) };

@@ -13,22 +13,11 @@ import type { InventoryOverviewItem } from '@/lib/inventory/types';
 declare global {
   interface Window {
     uiContractArticleTermsWrites: Array<{ write: string; input: unknown }>;
-    uiContractArticleTermsRefreshes: number;
   }
 }
 
 export function initializeArticleTermsBoundary(): void {
   window.uiContractArticleTermsWrites = [];
-  window.uiContractArticleTermsRefreshes = 0;
-}
-
-/** Stand-in for `next/navigation` as the retry of a failed region sees it. */
-export function useRouter() {
-  return {
-    refresh: () => {
-      window.uiContractArticleTermsRefreshes += 1;
-    },
-  };
 }
 
 const PRICE_DATE = '2026-11-13';

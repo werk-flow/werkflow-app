@@ -84,7 +84,7 @@ begin
         end if;
       end loop;
     end loop;
-    if has_function_privilege(v_role, 'public.inventory_item_prices_on_day(uuid,uuid[],date)', 'EXECUTE')
+    if has_function_privilege(v_role, 'public.read_inventory_item_prices_on_day(uuid,uuid[],date)', 'EXECUTE')
       or has_function_privilege(v_role, 'public.add_inventory_item_price(uuid,uuid,uuid,text,text,integer,integer,date)', 'EXECUTE')
       or has_function_privilege(v_role, 'public.save_inventory_item_supplier(uuid,uuid,uuid,text,uuid,uuid,text,text,text,numeric,numeric,boolean)', 'EXECUTE')
       or has_function_privilege(v_role, 'public.remove_inventory_item_supplier(uuid,uuid,uuid)', 'EXECUTE') then
@@ -162,7 +162,7 @@ begin
       (v_today + 30, 700, 1, v_today + 30, 1500, 10)
     ) as cases (on_day, purchase, purchase_quantity, purchase_from, sale, sale_quantity)
   loop
-    select * into v_found from public.inventory_item_prices_on_day(
+    select * into v_found from public.read_inventory_item_prices_on_day(
       '48000000-0000-4000-8000-000000000010', array['48000000-0000-4000-8000-000000000020'::uuid], v_case.on_day
     );
     if v_found.purchase_amount_cents is distinct from v_case.purchase
@@ -204,12 +204,12 @@ declare
     '48000000-0000-4000-8000-000000000029'
   ]::uuid[];
 begin
-  if (select array_agg(item_id order by item_id) from public.inventory_item_prices_on_day(
+  if (select array_agg(item_id order by item_id) from public.read_inventory_item_prices_on_day(
         '48000000-0000-4000-8000-000000000010', v_ids, '2021-01-01'))
     is distinct from array['48000000-0000-4000-8000-000000000020', '48000000-0000-4000-8000-000000000022']::uuid[] then
     raise exception 'the price on a day must answer the organization''s articles, archived ones too, and no other';
   end if;
-  if exists (select 1 from public.inventory_item_prices_on_day(
+  if exists (select 1 from public.read_inventory_item_prices_on_day(
       '48000000-0000-4000-8000-000000000011', v_ids, '2021-01-01') where item_id <> '48000000-0000-4000-8000-000000000029') then
     raise exception 'another organization read this organization''s prices';
   end if;
@@ -237,7 +237,7 @@ select pg_temp.expect_refusal('an employee''s price read',
 select pg_temp.expect_refusal('an employee''s supplier reference read',
   'select * from public.inventory_item_suppliers', '42501');
 select pg_temp.expect_refusal('an employee''s price function call',
-  'select * from public.inventory_item_prices_on_day(''48000000-0000-4000-8000-000000000010'', array[''48000000-0000-4000-8000-000000000020''::uuid], current_date)',
+  'select * from public.read_inventory_item_prices_on_day(''48000000-0000-4000-8000-000000000010'', array[''48000000-0000-4000-8000-000000000020''::uuid], current_date)',
   '42501');
 reset role;
 set local role service_role;
@@ -462,7 +462,7 @@ declare
   v_refusal text;
 begin
   perform public.save_inventory_item(v_org, v_buero, v_fitting, v_base, null, null, null, 0);
-  select * into v_found from public.inventory_item_prices_on_day(v_org, array[v_fitting], (now() at time zone 'Europe/Berlin')::date);
+  select * into v_found from public.read_inventory_item_prices_on_day(v_org, array[v_fitting], (now() at time zone 'Europe/Berlin')::date);
   if v_found.unit is distinct from 'package' or v_found.purchase_amount_cents is not null
     or (select purchase_price_cents from public.inventory_items where id = v_fitting) is not null then
     raise exception 'a price stated per piece must not apply to the article counted in packages';

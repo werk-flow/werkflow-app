@@ -677,7 +677,7 @@ function readArticleTermRows(admin: AdminClient, orgId: string, itemIds: string[
       ),
     ),
     readInBatches(itemIds, (batch) =>
-      admin.rpc('inventory_item_prices_on_day', {
+      admin.rpc('read_inventory_item_prices_on_day', {
         p_organization_id: orgId,
         p_item_ids: [...batch],
         p_on_date: priceDate,
@@ -726,7 +726,7 @@ function toArticleTermsByItem(
 
 /**
  * The supplier references and every price of the listed articles, with the
- * prices that apply today (Berlin) marked by `inventory_item_prices_on_day`.
+ * prices that apply today (Berlin) marked by `read_inventory_item_prices_on_day`.
  * A failed or malformed read is `failed`, never an article without terms.
  */
 export async function loadArticleTermsPage(

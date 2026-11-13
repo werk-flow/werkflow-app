@@ -33,7 +33,7 @@ import {
   ARTICLE_PRICE_STATE_BADGES,
   articlePriceState,
   formatArticlePrice,
-  unitShortLabel,
+  unitShortLabelOrStored,
 } from '@/lib/inventory/article-terms-format';
 
 const KIND_LABELS: Record<ArticlePriceKind, string> = {
@@ -135,7 +135,13 @@ export function ArticlePricesPanel({
             <PriceHistory prices={prices} priceDate={priceDate} />
           </>
         )}
-        <NewPriceSection form={form} setForm={setForm} errors={shown} error={error} baseUnit={baseUnit} />
+        <ArticleNewPriceSection
+          form={form}
+          setForm={setForm}
+          errors={shown}
+          error={error}
+          baseUnit={baseUnit}
+        />
       </DialogBody>
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>
@@ -199,7 +205,7 @@ function PriceQuantityField({
         <SelectContent>
           {PRICE_QUANTITIES.map((quantity) => (
             <SelectItem key={quantity} value={String(quantity)}>
-              {quantity} {unitShortLabel(baseUnit)}
+              {quantity} {unitShortLabelOrStored(baseUnit)}
             </SelectItem>
           ))}
         </SelectContent>
@@ -209,7 +215,7 @@ function PriceQuantityField({
 }
 
 /** The form section of the next price: kind, first day, amount and price quantity. */
-function NewPriceSection({
+function ArticleNewPriceSection({
   form,
   setForm,
   errors,

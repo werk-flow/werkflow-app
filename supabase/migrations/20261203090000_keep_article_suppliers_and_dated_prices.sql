@@ -18,7 +18,7 @@
 --    a price in the earlier unit stays as history and no longer applies.
 --    The unit of an article whose supplier sells it in packs cannot change,
 --    because each pack conversion counts in that unit (unit_has_pack_sizes).
--- 3. One rule answers the price: public.inventory_item_prices_on_day picks per
+-- 3. One rule answers the price: public.read_inventory_item_prices_on_day picks per
 --    kind the row with the latest first day up to that day, and among rows of
 --    the same first day the latest recorded. The price reader of the app
 --    (readArticlePrices), the cost snapshot of record_job_material_use and the
@@ -170,7 +170,7 @@ where price.amount_cents is not null;
 -- article's current base unit applies. An article without such a row answers
 -- with empty columns of that kind; an id of another organization or
 -- of no article is left out. Archived articles answer too.
-create function public.inventory_item_prices_on_day(
+create function public.read_inventory_item_prices_on_day(
   p_organization_id uuid,
   p_item_ids uuid[],
   p_on_date date
@@ -210,8 +210,8 @@ create function public.inventory_item_prices_on_day(
     and item.id = any(coalesce(p_item_ids, '{}'))
   order by item.id;
 $$;
-revoke all on function public.inventory_item_prices_on_day(uuid, uuid[], date) from public, anon, authenticated;
-grant execute on function public.inventory_item_prices_on_day(uuid, uuid[], date) to service_role;
+revoke all on function public.read_inventory_item_prices_on_day(uuid, uuid[], date) from public, anon, authenticated;
+grant execute on function public.read_inventory_item_prices_on_day(uuid, uuid[], date) to service_role;
 
 -- 4. The previous release's price columns: today's price per one base unit
 -- where that is a whole cent. Writes only articles whose columns differ.
@@ -230,7 +230,7 @@ as $$
         then current_price.purchase_amount_cents / current_price.purchase_price_quantity end as purchase_per_unit,
       case when current_price.sale_amount_cents % current_price.sale_price_quantity = 0
         then current_price.sale_amount_cents / current_price.sale_price_quantity end as sale_per_unit
-    from public.inventory_item_prices_on_day(
+    from public.read_inventory_item_prices_on_day(
       p_organization_id, p_item_ids, (now() at time zone 'Europe/Berlin')::date
     ) current_price
   ) today
@@ -912,7 +912,7 @@ begin
 
   select current_price.unit, current_price.purchase_amount_cents, current_price.purchase_price_quantity
     into v_unit, v_price, v_price_quantity
-  from public.inventory_item_prices_on_day(
+  from public.read_inventory_item_prices_on_day(
     p_organization_id, array[v_line.item_id], (now() at time zone 'Europe/Berlin')::date
   ) current_price;
 

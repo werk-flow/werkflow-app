@@ -16893,28 +16893,6 @@ export type Database = {
         };
         Returns: string;
       };
-      inventory_item_prices_on_day: {
-        Args: {
-          p_item_ids: string[];
-          p_on_date: string;
-          p_organization_id: string;
-        };
-        Returns: {
-          item_id: string;
-          purchase_amount_cents: number;
-          purchase_price_id: string;
-          purchase_price_quantity: number;
-          purchase_source: string;
-          purchase_valid_from: string;
-          sale_amount_cents: number;
-          sale_price_id: string;
-          sale_price_quantity: number;
-          sale_source: string;
-          sale_valid_from: string;
-          tax_rate_basis_points: number;
-          unit: string;
-        }[];
-      };
       issue_planning_dispatch: {
         Args: {
           p_actor_id: string;
@@ -17695,6 +17673,28 @@ export type Database = {
       queue_storage_purge: {
         Args: { p_organization_id: string; p_paths: string[] };
         Returns: undefined;
+      };
+      read_inventory_item_prices_on_day: {
+        Args: {
+          p_item_ids: string[];
+          p_on_date: string;
+          p_organization_id: string;
+        };
+        Returns: {
+          item_id: string;
+          purchase_amount_cents: number;
+          purchase_price_id: string;
+          purchase_price_quantity: number;
+          purchase_source: string;
+          purchase_valid_from: string;
+          sale_amount_cents: number;
+          sale_price_id: string;
+          sale_price_quantity: number;
+          sale_source: string;
+          sale_valid_from: string;
+          tax_rate_basis_points: number;
+          unit: string;
+        }[];
       };
       read_manager_attention_sets: {
         Args: { p_limit: number; p_organization_id: string };

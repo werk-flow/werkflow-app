@@ -1,6 +1,7 @@
 'use client';
 
 import { useBanner } from '@/components/ui/banner';
+import { useServerAction } from '@/hooks/use-server-action';
 import { useSettleOnChange } from '@/hooks/use-settle-on-change';
 import type { ActionResult } from '@/lib/action-result';
 import { addArticlePrice, removeArticleSupplier, saveArticleSupplier } from '@/lib/inventory/catalog-actions';
@@ -22,6 +23,9 @@ export type ArticleTermWrites = {
 export function useArticleTerms(terms: ArticleTermsPage): ArticleTermWrites {
   const { showBanner } = useBanner();
   const waitForTerms = useSettleOnChange(terms);
+  const supplierSave = useServerAction(saveArticleSupplier);
+  const supplierRemoval = useServerAction(removeArticleSupplier);
+  const priceSave = useServerAction(addArticlePrice);
 
   async function settled<Result extends ActionResult<object>>(
     write: Promise<Result>,
@@ -36,9 +40,9 @@ export function useArticleTerms(terms: ArticleTermsPage): ArticleTermWrites {
   }
 
   return {
-    saveSupplier: (input) => settled(saveArticleSupplier(input), 'Der Lieferant wurde gespeichert.'),
+    saveSupplier: (input) => settled(supplierSave.run(input), 'Der Lieferant wurde gespeichert.'),
     removeSupplier: (referenceId: string) =>
-      settled(removeArticleSupplier({ referenceId }), 'Der Lieferant wurde entfernt.'),
-    addPrice: (input) => settled(addArticlePrice(input), 'Der Preis wurde gespeichert.'),
+      settled(supplierRemoval.run({ referenceId }), 'Der Lieferant wurde entfernt.'),
+    addPrice: (input) => settled(priceSave.run(input), 'Der Preis wurde gespeichert.'),
   };
 }

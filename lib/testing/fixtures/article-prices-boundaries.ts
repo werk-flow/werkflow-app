@@ -1,7 +1,7 @@
 // The real article price reader over the in-memory database: a field worker
 // is refused before any database access, Büro reads the prices of its own
 // organization's articles, archived ones included, through
-// `inventory_item_prices_on_day` with its own organization and the asked day,
+// `read_inventory_item_prices_on_day` with its own organization and the asked day,
 // and an article id of another organization is left out of the answer.
 // supabase/tests/inventory_article_prices.sql proves which price applies on a
 // day before, between and after two prices.
@@ -61,9 +61,9 @@ const world = installActionWorld({
   ],
 });
 
-/** `inventory_item_prices_on_day` from the world's tables, for the organization the call names. */
+/** `read_inventory_item_prices_on_day` from the world's tables, for the organization the call names. */
 world.rpc = ({ name, args }) => {
-  if (name !== 'inventory_item_prices_on_day')
+  if (name !== 'read_inventory_item_prices_on_day')
     return { data: null, error: { message: `unexpected ${name}` } };
   const ids = Array.isArray(args.p_item_ids) ? args.p_item_ids : [];
   const of = (itemId: unknown, kind: string) =>
