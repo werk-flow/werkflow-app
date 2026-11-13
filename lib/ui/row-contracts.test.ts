@@ -14,6 +14,10 @@ const productFiles = ['app', 'components']
 const sources = new Map(productFiles.map((file) => [file, readFileSync(join(ROOT, file), 'utf8')]));
 
 const PAIRS = [
+  [
+    'components/angebote/leistungen/leistungen-table.tsx',
+    'components/angebote/leistungen/leistungen-skeleton.tsx',
+  ],
   ['components/anfragen/anfragen-content.tsx'],
   [
     'components/auftraege/list/unified-auftraege-table.tsx',
@@ -27,10 +31,19 @@ const PAIRS = [
     'components/dokumente/document-library-mobile-list.tsx',
   ],
   ['components/dokumente/document-work-context-view.tsx'],
-  ['components/inventar/inventory-content.tsx', 'components/loading-states/inventar-page-skeleton.tsx'],
-  ['components/kunden/clients-table.tsx'],
-  ['components/mitarbeiter/members-table.tsx'],
+  [
+    'components/inventar/inventory-content.tsx',
+    'components/inventar/inventory-movements-view.tsx',
+    'components/loading-states/inventar-page-skeleton.tsx',
+  ],
+  ['components/kunden/clients-table.tsx', 'components/kunden/clients-table-frame.tsx'],
+  ['components/mitarbeiter/members-table.tsx', 'components/mitarbeiter/members-table-columns.tsx'],
+  [
+    'components/problem-reports/own-problem-report-list.tsx',
+    'components/problem-reports/own-problem-report-columns.tsx',
+  ],
   ['components/service/equipment-list-content.tsx', 'components/loading-states/equipment-page-skeleton.tsx'],
+  ['components/support/support-queue.tsx', 'components/support/support-queue-columns.tsx'],
   [
     'components/service/service-case-list-content.tsx',
     'components/loading-states/service-cases-page-skeleton.tsx',
@@ -54,6 +67,9 @@ const SYNCHRONOUS_TABLES = [
   // The Admins' own direct changes, rendered from the Verlauf's read in
   // entry-history.tsx, whose skeleton and failure cover the section.
   'components/zeiterfassung/own-entry-changes.tsx',
+  // The price history of one Leistung, rendered from the list page's payload
+  // inside its dialog; the list's skeleton and failure cover the read.
+  'components/angebote/leistungen/leistung-price-dialog.tsx',
 ];
 
 type Opening = ts.JsxOpeningElement | ts.JsxSelfClosingElement;

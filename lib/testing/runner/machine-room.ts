@@ -29,8 +29,11 @@ const GIB = 1024 ** 3;
  *   blocked machine or one at its floor, hardly ever for memory of its own.
  * - thread: one agent process with its MCP helpers. 18 on the PC held 4.4 GiB;
  *   8 `claude` processes on the Mac held 187 to 353 MB each.
+ * - device: booting an iOS Simulator or Android Emulator and opening the web app in it. On the
+ *   18 GB Mac on 2026-11-13 (werk-flow/werkflow-app#418) a boot and a sign-in took available
+ *   memory from 3.1 to 2.4 GB and swap from 5.0 to 7.9 GB, and the load to 122.
  */
-export const START_COST = { heavy: 4 * GIB, setup: 0.1 * GIB, thread: 0.5 * GIB } as const;
+export const START_COST = { heavy: 4 * GIB, setup: 0.1 * GIB, thread: 0.5 * GIB, device: 3.5 * GIB } as const;
 export type StartKind = keyof typeof START_COST;
 export const isStartKind = (value: unknown): value is StartKind =>
   typeof value === 'string' && Object.hasOwn(START_COST, value);
@@ -70,7 +73,7 @@ export const heavySlotDirectory = (environment: Environment): string =>
 const watchScript = (environment: Environment): string =>
   environment.WERKFLOW_LOAD_WATCH ?? join(homedir(), 'code/werkflow-planning/ops/workstation-load.py');
 
-/** How to install the watch on this machine (docs/technical/environments.md, "Set up a new machine"). */
+/** How to install the watch on this machine (docs/technical/machine-setup.md, "Set up a new machine"). */
 function watchFix(platform: NodeJS.Platform): string {
   const install =
     platform === 'darwin'
@@ -174,6 +177,8 @@ export function runningHeavyCommands(directory: string, processes: readonly Proc
   return use;
 }
 
+const START_NOUN = { heavy: 'command', setup: 'setup', device: 'device' } as const;
+
 const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? '' : 's'}`;
 
 /**
@@ -185,12 +190,12 @@ const plural = (count: number, noun: string): string => `${count} ${noun}${count
  * - heavy: the first one runs whenever the machine is not blocked, so a machine
  *   full of idle agents still verifies, one command at a time. Each further one
  *   needs its cost in room above the floor.
- * - setup: its cost in room above the floor.
+ * - setup and device: their cost in room above the floor.
  * - thread: the machine, heavy commands aside, must still fit one heavy command
  *   after the thread, because every implementation thread ends in `check:changed`.
  *   A thread that leaves no room for it only adds a waiter.
- * A machine without the watch admits a heavy command and a setup, which keep
- * their own limits, and refuses a thread.
+ * A machine without the watch admits a heavy command, a setup and a device,
+ * and refuses a thread.
  */
 export function admission(start: StartKind, reading: RoomReading, heavy: readonly number[]): Admission {
   if ('unwatched' in reading) {
@@ -220,7 +225,7 @@ export function admission(start: StartKind, reading: RoomReading, heavy: readonl
   }
   const reserved = heavy.reduce((sum, use) => sum + Math.max(0, START_COST.heavy - use), 0);
   const room = available - reserved;
-  const numbers = `${gib(room)} GiB of room (${gib(available)} available, ${gib(reserved)} still reserved, ${running}); it needs ${gib(floor + cost)}: the floor of ${gib(floor)} and ${gib(cost)} for the ${start === 'heavy' ? 'command' : 'setup'}.`;
+  const numbers = `${gib(room)} GiB of room (${gib(available)} available, ${gib(reserved)} still reserved, ${running}); it needs ${gib(floor + cost)}: the floor of ${gib(floor)} and ${gib(cost)} for the ${START_NOUN[start]}.`;
   const measured = room >= floor + cost;
   if (start === 'heavy' && heavy.length === 0 && !measured)
     return {

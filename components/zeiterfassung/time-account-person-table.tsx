@@ -5,11 +5,12 @@ import type { ReactNode } from 'react';
 import { ErrorText } from '@/components/ui/error-text';
 import { ListRow } from '@/components/ui/list-row';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 /** `row` renders inside the table from the tablet breakpoint, `card` is the phone card. */
 export type PersonLayout = 'row' | 'card';
 
-// Per-person forms of the time rules page are a table with one header row from
+// Per-person forms (and the payroll code rows) of the time rules page are a table with one header row from
 // the tablet breakpoint and one card per person on phones (owner decision
 // 2026-10-03). A table row cannot hold a form, so each person's form sits in
 // the name cell and the other cells' controls join it through the `form`
@@ -91,4 +92,14 @@ export function PersonTable({
       </div>
     </>
   );
+}
+
+/**
+ * Focuses the first invalid control the screen shows. `PersonTable` renders
+ * the phone cards and the table at once and CSS hides one, so each invalid
+ * entry names its control in both layouts, in table order.
+ */
+export function focusFirstVisibleInvalid(controlIds: readonly string[]): void {
+  const shown = controlIds.filter((id) => (document.getElementById(id)?.getClientRects().length ?? 0) > 0);
+  focusFirstInvalidField(Object.fromEntries(shown.map((id) => [id, 'invalid'])));
 }

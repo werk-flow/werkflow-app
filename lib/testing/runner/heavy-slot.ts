@@ -1,8 +1,8 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { totalmem } from 'node:os';
-import { join } from 'node:path';
-import { runSessionCommand, withTestSession } from '../local-stack/test-session';
+import { dirname, join } from 'node:path';
+import { groupGone, runSessionCommand, withTestSession } from '../local-stack/test-session';
 import { errorCode } from './error-code';
 import {
   admission,
@@ -70,12 +70,7 @@ type Environment = Readonly<Record<string, string | undefined>>;
 type HeavySlotSkip = 'ci' | 'nested' | 'no-flock' | undefined;
 const FLOCK_MISSING =
   'Refused: flock is missing, so nothing would limit the heavy commands on this machine. Install it (macOS: `brew install flock`; Linux: the util-linux package) and run the command again.';
-export type HeavySlot = {
-  readonly slot: number;
-  release(): void;
-  /** Settles once the slot is free again. */
-  readonly released: Promise<void>;
-};
+export type HeavySlot = HeldLock & { readonly slot: number };
 
 export const hasFlock = (): boolean => spawnSync('flock', ['--version'], { stdio: 'ignore' }).status === 0;
 
@@ -89,22 +84,24 @@ export function heavySlotSkip(
   return flockAvailable() ? undefined : 'no-flock';
 }
 
+/** A kernel lock held for a process: `released` settles once it is free again. */
+export type HeldLock = { release(): void; readonly released: Promise<void> };
+
 /**
- * Takes `slot` for the process `owner` unless another process holds it.
- * Resolves with the held slot, or null when it is taken. While it is held, the
- * slot file names the owner's pid, so the room counts what its process tree
- * has not used yet (runningHeavyCommands).
+ * Takes the kernel lock on `file` for the process `owner` unless another
+ * process holds it. Resolves with the held lock, or null when it is taken.
+ * The lock frees on release and within a second of the owner's exit, also when
+ * the owner is killed, so no holder is ever stale.
  */
-export function tryHeavySlot(directory: string, slot: number, owner: number): Promise<HeavySlot | null> {
-  mkdirSync(directory, { recursive: true });
-  const slotFile = join(directory, `slot-${slot}`);
+export function tryFlock(file: string, owner: number): Promise<HeldLock | null> {
+  mkdirSync(dirname(file), { recursive: true });
   const holder = spawn(
     'flock',
     [
       '--nonblock',
       '--conflict-exit-code',
       String(SLOT_TAKEN),
-      slotFile,
+      file,
       'sh',
       '-c',
       'echo held; while kill -0 "$1" 2>/dev/null; do sleep 1; done',
@@ -115,21 +112,18 @@ export function tryHeavySlot(directory: string, slot: number, owner: number): Pr
     { stdio: ['ignore', 'pipe', 'inherit'], detached: true },
   );
   const exited = new Promise<number | null>((resolveExit) => holder.once('exit', resolveExit));
-  return new Promise((resolveSlot, reject) => {
+  return new Promise((resolveLock, reject) => {
     holder.once('error', reject);
     void exited.then((code) => {
-      if (code === SLOT_TAKEN) resolveSlot(null);
-      else reject(new Error(`flock on heavy slot ${slot} exited ${code} before it held the slot.`));
+      if (code === SLOT_TAKEN) resolveLock(null);
+      else reject(new Error(`flock on ${file} exited ${code} before it held the lock.`));
     });
     holder.stdout.once('data', () => {
       // The holder outlives no owner and keeps no owner alive.
       holder.stdout.destroy();
       holder.unref();
-      writeFileSync(slotFile, `${owner}\n`);
       const release = (): void => {
         if (holder.pid === undefined) return;
-        // Cleared while the lock is still held, so the next holder's pid is never erased.
-        writeFileSync(slotFile, '');
         try {
           process.kill(-holder.pid, 'SIGTERM');
         } catch (error) {
@@ -137,9 +131,41 @@ export function tryHeavySlot(directory: string, slot: number, owner: number): Pr
           if (errorCode(error) !== 'ESRCH') throw error;
         }
       };
-      resolveSlot({ slot, release, released: exited.then(() => undefined) });
+      // flock's shell and its `sleep` hold the lock too, and can outlive flock's exit by a moment
+      // under load: the lock is free only once the whole group is gone.
+      const groupId = holder.pid;
+      const released = exited.then(async () => {
+        if (groupId !== undefined) await groupGone(groupId);
+      });
+      resolveLock({ release, released });
     });
   });
+}
+
+/**
+ * Takes `slot` for the process `owner` unless another process holds it.
+ * Resolves with the held slot, or null when it is taken. While it is held, the
+ * slot file names the owner's pid, so the room counts what its process tree
+ * has not used yet (runningHeavyCommands).
+ */
+export async function tryHeavySlot(
+  directory: string,
+  slot: number,
+  owner: number,
+): Promise<HeavySlot | null> {
+  const slotFile = join(directory, `slot-${slot}`);
+  const held = await tryFlock(slotFile, owner);
+  if (!held) return null;
+  writeFileSync(slotFile, `${owner}\n`);
+  return {
+    slot,
+    released: held.released,
+    release: () => {
+      // Cleared while the lock is still held, so the next holder's pid is never erased.
+      writeFileSync(slotFile, '');
+      held.release();
+    },
+  };
 }
 
 /**

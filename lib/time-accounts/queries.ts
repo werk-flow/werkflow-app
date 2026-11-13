@@ -15,7 +15,11 @@ import {
 } from './decision-reads';
 import { canCorrectOpeningDate } from './opening-dates';
 import { type OpeningDateCorrection, type OpeningDateFacts, readOpeningDateFacts } from './opening-reads';
+import { payrollCodesByKey } from './payroll-mapping';
+import { type CurrentPayrollMapping, readCurrentPayrollMapping } from './payroll-mapping-server';
 import { type PeriodResultRow, toPeriodResultRows } from './period-results';
+import { readPeriodSchoolMinutes } from './period-school-minutes';
+import { describePolicyVersions, type PolicyVersionLine } from './policy-versions';
 import { getBerlinInstant, PERIOD_SOURCE_ROW_CAP, requirePeriodRows } from './period-sources';
 import type {
   PayrollExportState,
@@ -94,15 +98,26 @@ export type TimeAccountSettingsData = {
     id: string;
     name: string;
     isDefault: boolean;
+    /** The highest version number, the one a new assignment names. */
     version: number;
-    effectiveFrom: string | null;
+    /** Every version, latest start first, with its span and its state today. */
+    versions: PolicyVersionLine[];
   }>;
   employeeCount: number;
   openAccountCount: number;
-  mappingVersion: number | null;
+  /** The current payroll mapping version; null before the first confirmation. */
+  payrollMapping: { version: number; confirmedAt: string } | null;
+  /** The code per mapping row: the current version's, or the proposal before the first one. */
+  payrollCodes: Record<string, string>;
   /** The first day of the oldest month without a closed period: the proposed rule and account start. */
   suggestedStartDate: string;
-  missingAccounts: Array<{ employeeRecordId: string; employeeName: string }>;
+  /** A period covers a person from the entry date to the exit date, each when recorded. */
+  missingAccounts: Array<{
+    employeeRecordId: string;
+    employeeName: string;
+    entryDate: string | null;
+    exitDate: string | null;
+  }>;
   employees: Array<{
     employeeRecordId: string;
     employeeName: string;
@@ -327,7 +342,7 @@ type PeriodDetailRows = {
 };
 
 async function readTimePeriodDetail(
-  context: ReaderContext,
+  context: ReaderContext & { isManagerOrAbove: boolean },
   periodId: string,
 ): Promise<TimePeriodDetail | null> {
   const admin = createSupabaseAdminClient();
@@ -356,7 +371,7 @@ async function readTimePeriodDetail(
       rows.findings.flatMap((finding) => (finding.employee_record_id ? [finding.employee_record_id] : [])),
     ),
   ];
-  const [nameByEmployee, decisionByFinding, decidableRecordIds] = await Promise.all([
+  const [nameByEmployee, decisionByFinding, decidableRecordIds, schoolMinutesByEmployee] = await Promise.all([
     readEmployeeNames(admin, context.orgId, [
       ...rows.results.map((result) => result.employee_record_id),
       ...findingRecordIds,
@@ -367,12 +382,25 @@ async function readTimePeriodDetail(
       rows.findings.map((finding) => finding.id),
     ),
     readDecidableRecordIds(context, findingRecordIds),
+    // School days are personal data that only Admin, Büro and the apprentice
+    // read (werk-flow/werkflow-planning#165). A time-approval holder outside
+    // the office sees the period without them, so no event their RLS
+    // withholds can leave a note stale.
+    context.isManagerOrAbove
+      ? readPeriodSchoolMinutes(
+          admin,
+          context.orgId,
+          { start: period.period_start_date, end: period.period_end_date },
+          rows.results.map((result) => result.employee_record_id),
+        )
+      : new Map<string, number>(),
   ]);
   return toTimePeriodDetail({
     period,
     calculation,
     rows,
     nameByEmployee,
+    schoolMinutesByEmployee,
     decisionByFinding,
     decidableRecordIds,
   });
@@ -431,6 +459,7 @@ function toTimePeriodDetail(input: {
   calculation: PeriodDetailCalculation | null;
   rows: PeriodDetailRows;
   nameByEmployee: Map<string, string>;
+  schoolMinutesByEmployee: ReadonlyMap<string, number>;
   decisionByFinding: Map<string, TimeFindingDecision>;
   decidableRecordIds: Set<string>;
 }): TimePeriodDetail {
@@ -449,7 +478,7 @@ function toTimePeriodDetail(input: {
           sourceFingerprint: calculation.source_fingerprint,
         }
       : null,
-    results: toPeriodResultRows(rows.results, rows.findings, nameByEmployee),
+    results: toPeriodResultRows(rows.results, rows.findings, nameByEmployee, input.schoolMinutesByEmployee),
     findings: rows.findings.map((finding) => ({
       id: finding.id,
       employeeRecordId: finding.employee_record_id,
@@ -477,7 +506,8 @@ const EMPTY_TIME_ACCOUNT_SETTINGS: Omit<TimeAccountSettingsData, 'suggestedStart
   policies: [],
   employeeCount: 0,
   openAccountCount: 0,
-  mappingVersion: null,
+  payrollMapping: null,
+  payrollCodes: {},
   missingAccounts: [],
   employees: [],
   accounts: [],
@@ -496,7 +526,7 @@ export async function getTimeAccountSettings(): Promise<TimeAccountRead<TimeAcco
 
 type SettingsRows = {
   policies: Pick<Tables<'time_account_policies'>, 'id' | 'name' | 'is_default' | 'version'>[];
-  employees: NamedEmployee[];
+  employees: Array<NamedEmployee & Pick<Tables<'employee_records'>, 'entry_date' | 'exit_date'>>;
   accounts: Pick<
     Tables<'time_accounts'>,
     'id' | 'employee_record_id' | 'current_balance_minutes' | 'version' | 'opened_on'
@@ -511,7 +541,8 @@ type SettingsRows = {
 type SettingsDetails = {
   profiles: NamedProfile[];
   versions: Pick<Tables<'time_account_policy_versions'>, 'policy_id' | 'effective_from' | 'version'>[];
-  mappingVersion: number | null;
+  mapping: CurrentPayrollMapping | null;
+  today: string;
   openingDates: OpeningDateFacts;
 };
 
@@ -519,7 +550,7 @@ async function readTimeAccountSettings(context: ReaderContext): Promise<TimeAcco
   const admin = createSupabaseAdminClient();
   const today = getBusinessTodayIso();
   const rows = await readSettingsRows(admin, context, today);
-  const [profiles, { data: versions }, mappingVersion, openingDates] = await Promise.all([
+  const [profiles, { data: versions }, mapping, openingDates] = await Promise.all([
     readProfiles(admin, rows.employees),
     readInBatches(
       rows.policies.map((policy) => policy.id),
@@ -537,19 +568,10 @@ async function readTimeAccountSettings(context: ReaderContext): Promise<TimeAcco
           PERIOD_SOURCE_ROW_CAP,
         ),
     ).then(requirePeriodRows),
-    rows.mapping?.current_version_id
-      ? admin
-          .from('payroll_mapping_versions')
-          .select('version')
-          .eq('organization_id', context.orgId)
-          .eq('id', rows.mapping.current_version_id)
-          .single()
-          .then(requireRead)
-          .then((version) => version.version)
-      : Promise.resolve(null),
+    readCurrentPayrollMapping(admin, context.orgId, rows.mapping?.current_version_id ?? null),
     readOpeningDateFacts(admin, context, today),
   ]);
-  return toTimeAccountSettings(rows, { profiles, versions, mappingVersion, openingDates });
+  return toTimeAccountSettings(rows, { profiles, versions, mapping, openingDates, today });
 }
 
 // The organization's policies, employees, accounts, mapping profile, today's
@@ -571,7 +593,7 @@ async function readSettingsRows(
         (from, to) =>
           admin
             .from('employee_records')
-            .select('id, user_id, first_name, last_name')
+            .select('id, user_id, first_name, last_name, entry_date, exit_date')
             .eq('organization_id', context.orgId)
             .order('id')
             .range(from, to),
@@ -613,7 +635,7 @@ async function readSettingsRows(
 
 function toTimeAccountSettings(rows: SettingsRows, details: SettingsDetails): TimeAccountSettingsData {
   const { policies, employees, accounts, assignments, pending } = rows;
-  const { profiles, versions, mappingVersion, openingDates } = details;
+  const { profiles, versions, mapping, openingDates, today } = details;
   const employeeNameById = mapEmployeeNames(employees, profiles);
   const nameOf = (id: string): string => employeeNameById.get(id) ?? 'Unbekannt';
   const employeesByName = byEmployeeName(employees, (employee) => employee.id, nameOf);
@@ -623,24 +645,32 @@ function toTimeAccountSettings(rows: SettingsRows, details: SettingsDetails): Ti
   for (const assignment of assignments)
     if (!assignedPolicyByEmployee.has(assignment.employee_record_id))
       assignedPolicyByEmployee.set(assignment.employee_record_id, assignment.policy_id);
-  const latestByPolicy = new Map<string, { effective_from: string; version: number }>();
-  for (const version of versions)
-    if (!latestByPolicy.has(version.policy_id)) latestByPolicy.set(version.policy_id, version);
+  const versionsByPolicy = Map.groupBy(versions, (version) => version.policy_id);
   return {
-    policies: policies.map((policy) => ({
-      id: policy.id,
-      name: policy.name,
-      isDefault: policy.is_default,
-      version: latestByPolicy.get(policy.id)?.version ?? policy.version,
-      effectiveFrom: latestByPolicy.get(policy.id)?.effective_from ?? null,
-    })),
+    policies: policies.map((policy) => {
+      const policyVersions = versionsByPolicy.get(policy.id) ?? [];
+      return {
+        id: policy.id,
+        name: policy.name,
+        isDefault: policy.is_default,
+        // The read orders by version, highest first.
+        version: policyVersions[0]?.version ?? policy.version,
+        versions: describePolicyVersions(policyVersions, today),
+      };
+    }),
     employeeCount: employees.length,
     openAccountCount: accounts.length,
-    mappingVersion,
+    payrollMapping: mapping ? { version: mapping.version, confirmedAt: mapping.confirmedAt } : null,
+    payrollCodes: payrollCodesByKey(mapping?.codes ?? null),
     suggestedStartDate: openingDates.suggestedStartDate,
     missingAccounts: employeesByName
       .filter((employee) => !openEmployeeIds.has(employee.id))
-      .map((employee) => ({ employeeRecordId: employee.id, employeeName: nameOf(employee.id) })),
+      .map((employee) => ({
+        employeeRecordId: employee.id,
+        employeeName: nameOf(employee.id),
+        entryDate: employee.entry_date,
+        exitDate: employee.exit_date,
+      })),
     employees: employeesByName.map((employee) => ({
       employeeRecordId: employee.id,
       employeeName: nameOf(employee.id),

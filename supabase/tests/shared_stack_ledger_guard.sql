@@ -15,11 +15,9 @@ begin
   raise exception 'Refused: this local stack is shared by every worktree and takes only main''s migrations, through bun run stack:sync. A branch migration never runs here: bun run types:generate -- --local writes its types and bun run test:verify tests it, and neither changes this database (docs/technical/environments.md, The migration rule).';
 end
 $guard$;
-drop trigger if exists werkflow_main_only on supabase_migrations.schema_migrations;
-create trigger werkflow_main_only before insert or update or delete on supabase_migrations.schema_migrations
+create or replace trigger werkflow_main_only before insert or update or delete on supabase_migrations.schema_migrations
   for each row execute function supabase_migrations.werkflow_main_only();
-drop trigger if exists werkflow_main_only_truncate on supabase_migrations.schema_migrations;
-create trigger werkflow_main_only_truncate before truncate on supabase_migrations.schema_migrations
+create or replace trigger werkflow_main_only_truncate before truncate on supabase_migrations.schema_migrations
   for each statement execute function supabase_migrations.werkflow_main_only();
 
 -- A branch's session, with no setting and with any other value: every kind of write is refused.
@@ -57,7 +55,7 @@ begin
       format('delete from supabase_migrations.schema_migrations where version = %L', oldest));
     perform pg_temp.expect_refused('truncate supabase_migrations.schema_migrations');
   end loop;
-  if (select count(*) from supabase_migrations.schema_migrations) <> ledger_rows
+  if (select count(*) from supabase_migrations.schema_migrations) is distinct from ledger_rows
     or exists (select 1 from supabase_migrations.schema_migrations where version = '20991231000000') then
     raise exception 'a refused write changed the ledger';
   end if;

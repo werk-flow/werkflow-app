@@ -102,8 +102,9 @@ function uploadPolicy(bytes: number): TransferPolicy {
 type Environment = Readonly<Record<string, string | undefined>>;
 
 /**
- * A Boat attempt's outcome: Boat's exit code, undefined when the plan belongs on this workstation
- * (CI, an explicit local run, a cheap or wall-clock plan), or Boat's unavailability.
+ * A Boat attempt's outcome: the run's exit code (Boat's, or 1 for a plan refused before it), undefined
+ * when the plan belongs on this workstation (CI, a local run asked for, a cheap or wall-clock plan),
+ * or Boat's unavailability.
  */
 export type BoatOutcome = number | undefined | BoatUnavailable;
 
@@ -188,17 +189,19 @@ export function withheldFile(untracked: readonly string[]): string | undefined {
 }
 
 /**
- * Why the plan these arguments select runs locally, from `test:plan` itself: a group that measures
- * this workstation's wall clock, a plan cheaper here than a Boat machine's setup, or a plan that
- * cannot be read. Undefined when Boat may run it.
+ * From `test:plan` itself: why the plan runs locally (a wall-clock group, cheaper here, unreadable),
+ * the refusal it ends with, decided once: a second plan could lose the refusal and run all here.
  */
-function planReason(repository: string, args: readonly string[]): string | undefined {
+function planReason(repository: string, args: readonly string[]): string | { refused: string } | undefined {
   const plan = spawnSync(process.execPath, ['scripts/verify.ts', 'plan', ...args], {
     cwd: repository,
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
   });
   if (plan.status !== 0) return 'the plan could not be read here; the local run reports why.';
+  // The evidence history's refusal, which Boat would print too; free disk space here is no refusal there.
+  const refused = /^\[verify\] refused: (.+)$/m.exec(plan.stdout)?.[1];
+  if (refused) return { refused };
   const measured = args.includes('--untimed') ? undefined : wallClockGroup(plan.stdout);
   if (measured) return `the plan runs ${measured}, which measures this machine's wall clock.`;
   return cheapLocalReason(plan.stdout, () => readMigrationDrift(repository));
@@ -487,6 +490,11 @@ export async function prepareAndRun(
 ): Promise<BoatOutcome> {
   const planned = planReason(repository, args);
   await honorInterrupt(signal);
+  if (typeof planned === 'object') {
+    console.info(`[verify] refused: ${planned.refused}`);
+    say('Nothing ran: test:verify refuses this plan, here as on Boat. This is not a pass.');
+    return 1;
+  }
   if (planned) {
     say(`Running locally: ${planned}`);
     return undefined;
@@ -588,7 +596,7 @@ export function copyResults(staging: string, repository: string): void {
  * folder, or an existing destination that is not a regular file or is a hard link, whose other names
  * a copy would change too. Checked for every file before the first write.
  */
-function destinationConflict(repository: string, files: readonly string[]): string | undefined {
+export function destinationConflict(repository: string, files: readonly string[]): string | undefined {
   for (const path of files) {
     const parts = path.split('/');
     const target = join(repository, path);
@@ -731,6 +739,7 @@ export async function runOnBoat(input: {
   folder: string;
   key: string;
   signal: AbortSignal;
+  remoteExit?: (code: number) => void;
 }): Promise<BoatOutcome> {
   const { args, repository, folder, signal } = input;
   const before = captureInputSnapshot(repository);
@@ -749,7 +758,7 @@ export async function runOnBoat(input: {
   if ('unavailable' in machine) return machine;
   // Only a run that returned its exit code leaves a machine worth wiping and keeping.
   const keep = async (outcome: BoatOutcome) =>
-    typeof outcome === 'number' && keepMachine(machine, { repository, form, signal });
+    typeof outcome === 'number' ? keepMachine(machine, { repository, form, signal }) : 'no exit code';
   return withMachine(
     machine,
     signal,
@@ -776,6 +785,7 @@ export async function runOnBoat(input: {
         // The machine pruned only its copy of the archive; the workstation's shrinks as after a local run.
         console.info(pruneRunArchive('prune'));
         code = result.exitCode;
+        input.remoteExit?.(code);
         if (changedInputs(before, captureInputSnapshot(repository)).length) {
           console.error('Inputs changed during verification; this report cannot qualify acceptance.');
           code = 1;

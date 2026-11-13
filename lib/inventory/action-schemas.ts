@@ -2,6 +2,7 @@ import { z } from '@/lib/zod';
 import { boundedText, nullableBoundedText } from '@/lib/validation/text';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { INVENTORY_IMPORT_MAX_ROWS } from '@/lib/inventory/action-inputs';
+import { INVENTORY_IMPORT_MODES } from '@/lib/inventory/csv-import';
 
 // Boundary schemas of the inventory Server Actions: types, ids and bounds.
 // The value rules inside the actions (names, units, quantities) keep their own
@@ -92,6 +93,17 @@ export const returnJobMaterialSchema = z.object({
   reason: nullableBoundedText(2000),
 });
 
+export const recordJobMaterialUseSchema = z.object({
+  lineId: uuidSchema,
+  quantity: amount,
+  note: nullableBoundedText(2000),
+});
+
+export const materialConsumptionTargetSchema = z.union([
+  z.object({ jobId: uuidSchema }),
+  z.object({ projectId: uuidSchema }),
+]);
+
 const importRowSchema = z.object({
   name: boundedText(300),
   itemType: boundedText(40).optional(),
@@ -112,10 +124,19 @@ const importRowSchema = z.object({
   notes: nullableBoundedText(5000),
 });
 
-export const importInventoryRowsSchema = z.object({
+const contentHashSchema = z.string().regex(/^[0-9a-f]{64}$/);
+
+export const previewInventoryImportSchema = z.object({
   fileName: boundedText(300),
+  // The SHA-256 of the file's bytes, which finds a repeated file.
+  contentHash: contentHashSchema,
+  mode: z.enum(INVENTORY_IMPORT_MODES),
   // Keyed by the row fields, so a client cannot send an unbounded mapping.
   columnMapping: z.partialRecord(importRowSchema.keyof(), boundedText(200)),
-  // One spreadsheet import; the dialog previews the same rows.
-  rows: z.array(importRowSchema).max(INVENTORY_IMPORT_MAX_ROWS),
+  // One spreadsheet import, every row of the file in its order.
+  rows: z.array(importRowSchema).min(1).max(INVENTORY_IMPORT_MAX_ROWS),
 });
+
+export const bookInventoryImportSchema = z.object({ batchId: uuidSchema });
+
+export const inventoryImportRepeatSchema = z.object({ contentHash: contentHashSchema });

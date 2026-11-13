@@ -133,7 +133,7 @@ begin
     perform pg_temp.expect_error(result, case when attempt < 5 then 'invalid_code' else 'too_many_attempts' end);
   end loop;
   if (select current_email_attempt_count from public.email_change_challenges
-    where user_id = '72000000-0000-4000-8000-000000000001') <> 5 then
+    where user_id = '72000000-0000-4000-8000-000000000001') is distinct from 5 then
     raise exception 'current attempt accounting did not saturate at five';
   end if;
   perform pg_temp.expect_error(pg_temp.change_email('verify_current'), 'too_many_attempts');
@@ -193,7 +193,7 @@ begin
       case when attempt < 5 then 'new_email_invalid_code' else 'new_email_too_many_attempts' end);
   end loop;
   if (select new_email_attempt_count from public.email_change_challenges
-    where user_id = '72000000-0000-4000-8000-000000000001') <> 5 then
+    where user_id = '72000000-0000-4000-8000-000000000001') is distinct from 5 then
     raise exception 'new attempt accounting did not saturate at five';
   end if;
   perform pg_temp.expect_error(pg_temp.change_email('verify_new', repeat('c', 64)), 'new_email_too_many_attempts');

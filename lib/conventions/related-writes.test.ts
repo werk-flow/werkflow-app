@@ -41,8 +41,6 @@ const EMAIL_CHANGE_STATE_RECOVERY =
 const ALLOWED_SEPARATE_WRITES: Readonly<Record<string, string>> = {
   'lib/time-tracking/clock-state-actions.ts::clockOutBeforeSignOut':
     'Independent by design: each organization’s open session is clocked out on its own, best effort before sign-out; one refusal must not keep the others running.',
-  'lib/inventory/actions.ts::importInventoryRows':
-    'Independent by design: each CSV row is booked by its own import_inventory_row call so a refused row keeps the rows before it; the batch row records the counts.',
   'lib/org/delete-action.ts::deleteOrganization':
     'Ordered around storage: delete_organization_with_files deletes the organization and queues its listed files in one transaction; only after it committed does a second listing find a late upload, which queue_storage_purge adds, because a storage listing cannot join a transaction.',
   'lib/org/join-request-actions.ts::requestOrganizationJoin':
@@ -67,6 +65,10 @@ const ALLOWED_SEPARATE_WRITES: Readonly<Record<string, string>> = {
     'Independent housekeeping: the rate-limit attempt must persist when the subscription activation fails.',
   'lib/org-export/actions.ts::buildOrganizationExportPart':
     'Ordered around storage: claim_organization_export_part_build queues the part’s archive for the purge before the archive is stored, and one call records the result after, because a storage write cannot join a transaction; an archive whose result is lost is deleted with the claim’s entry.',
+  'lib/problem-reports/actions.ts::submitProblemReport':
+    'Independent by design: submit_problem_report saves the report in one call before the answer; the scrubbed copy is derived from the saved report after the answer and written in its own call (record_problem_report_scrub), because a failed scrub must leave the report and its receipt as they are. The daily run scrubs a report whose scrub never ran.',
+  'lib/problem-reports/support-actions.ts::fileProblemReportForCaller':
+    'Independent by design, as submitProblemReport: file_problem_report_for_caller saves the report and its signals in one call before the answer; the scrubbed copy is derived from the saved report after the answer and written in its own call (record_problem_report_scrub), because a failed scrub must leave the report as it is. The daily run scrubs a report whose scrub never ran.',
   'lib/documents/actions.ts::linkDocumentsToTarget':
     'Independent by design: each document is authorized and linked by its own update_document_links call, and the result reports linked and failed counts as partial_update; a refused document keeps the links of the others.',
 };

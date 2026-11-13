@@ -17,6 +17,9 @@ import {
 
 /** Copy of the Lager area that no pure product module owns. Type and unit labels come from lib/inventory/types. */
 export const INVENTORY_COPY = {
+  importNewLocation: 'neues Lager',
+  importUnknownUnit: (unit: string) => `Unbekannte Einheit: „${unit}“.`,
+  importRepeatWarning: 'Diese Datei wurde schon am',
   rowActions: 'Aktionen',
   withdraw: 'Entnehmen',
   billable: 'Abrechenbar',
@@ -41,12 +44,17 @@ const INVENTORY_LABELS = {
   typeFilter: 'Nach Typ filtern',
   locationFilter: 'Nach Lager filtern',
   pendingLocation: 'Lager wird angelegt',
+  pendingMaterialLine: 'Wird gespeichert',
   newSupplier: 'Neuen Lieferanten anlegen',
   applySupplier: 'Übernehmen',
   planMaterial: 'Material planen',
   takeFromStock: 'Aus Lager entnehmen',
   importCsv: 'CSV importieren',
-  import: 'Importieren',
+  importPreview: 'Vorschau anzeigen',
+  importBook: 'Jetzt buchen',
+  importDone: 'Fertig',
+  importReport: 'Bericht herunterladen',
+  importRepeatConfirm: 'Trotzdem fortfahren',
 } as const;
 
 /** The /inventar dialogs, each named by its heading. */
@@ -102,6 +110,7 @@ const INVENTORY_ROW_ACTIONS = {
 /** The material line actions on a job and the dialog each one opens. */
 export const JOB_MATERIAL_ACTIONS = {
   take: { trigger: 'Entnahme buchen', heading: 'Entnahme buchen', submit: 'Entnahme buchen' },
+  use: { trigger: 'Verbraucht', heading: 'Verbrauch buchen', submit: 'Verbrauch buchen' },
   return: { trigger: 'Zurücklegen', heading: 'Material zurücklegen', submit: 'Zurücklegen' },
 } as const;
 type JobMaterialAction = keyof typeof JOB_MATERIAL_ACTIONS;
@@ -163,8 +172,27 @@ export function csvImportButton(page: Page): Locator {
   return page.getByRole('button', { name: INVENTORY_LABELS.importCsv });
 }
 
-export function csvImportSubmit(dialog: Locator): Locator {
-  return dialog.getByRole('button', { name: INVENTORY_LABELS.import });
+/** A step button of the import dialog: preview, book, done, the report download or the repeat decision. */
+export function csvImportButtonOf(
+  dialog: Locator,
+  action: 'importPreview' | 'importBook' | 'importDone' | 'importReport' | 'importRepeatConfirm',
+): Locator {
+  return dialog.getByRole('button', { name: INVENTORY_LABELS[action], exact: true });
+}
+
+/** The button that chooses the import file, the dialog's first control; its field label names it. */
+export function csvImportFileButton(dialog: Locator): Locator {
+  return dialog.locator('#inventory-import-file');
+}
+
+/** The import dialog once the repeat check of its chosen file has answered (`clear`, `repeat` or `failed`). */
+export function csvImportRepeatChecked(dialog: Locator): Locator {
+  return dialog.locator('[data-import-repeat-check="clear"], [data-import-repeat-check="repeat"]');
+}
+
+/** One row of the import preview or result, found by the article name it shows. */
+export function csvImportRow(dialog: Locator, text: string): Locator {
+  return confirmed(dialog.getByTestId('inventory-import-row').filter({ hasText: text }));
 }
 
 export function inventoryTab(page: Page, view: InventoryView): Locator {
@@ -187,6 +215,11 @@ export function itemLocationFilter(page: Page): Locator {
 /** The optimistic card of a location that is still being created. */
 export function pendingLocationStatus(page: Page): Locator {
   return page.getByRole('status', { name: INVENTORY_LABELS.pendingLocation });
+}
+
+/** The pending mark of a job material line whose booking is not confirmed yet. */
+export function materialLinePendingStatus(line: Locator): Locator {
+  return line.getByRole('status', { name: INVENTORY_LABELS.pendingMaterialLine, exact: true });
 }
 
 /** A table row on /inventar (items or movements) that mentions this text. */
@@ -295,19 +328,19 @@ export function takeFromStockButton(scope: Page | Locator): Locator {
   return scope.getByRole('button', { name: INVENTORY_LABELS.takeFromStock });
 }
 
-/** What a job material row keeps at the job once something came back: „Beim Auftrag: 0 Stück“. */
-export function materialAtJobText(quantity: number, unit = 'piece'): string {
-  return `Beim Auftrag: ${formatInventoryQuantity(quantity, unit)}`;
-}
-
 /** A material row's taken quantity: „2 Stück entnommen“. */
 export function materialTakenText(quantity: number, unit = 'piece'): string {
   return `${formatInventoryQuantity(quantity, unit)} entnommen`;
 }
 
-/** A material row's returned quantity: „1 Stück zurückgelegt“. */
+/** A material row's used quantity: „1 Stück verbraucht“. */
+export function materialUsedText(quantity: number, unit = 'piece'): string {
+  return `${formatInventoryQuantity(quantity, unit)} verbraucht`;
+}
+
+/** A material row's returned quantity: „1 Stück zurück“. */
 export function materialReturnedText(quantity: number, unit = 'piece'): string {
-  return `${formatInventoryQuantity(quantity, unit)} zurückgelegt`;
+  return `${formatInventoryQuantity(quantity, unit)} zurück`;
 }
 
 export function jobMaterialLine(page: Page, itemName: string): Locator {

@@ -374,7 +374,7 @@ const landmarkSelectors = [
   {
     selector: 'JSXOpeningElement[name.name="main"]',
     message:
-      'The app shell and StandaloneScreen own the one <main> landmark of a screen; render a <div> or <section> inside (werkflow-design skill: Density and layout).',
+      'The app shell, StandaloneScreen and SupportFrame own the one <main> landmark of a screen; render a <div> or <section> inside (werkflow-design skill: Density and layout).',
   },
 ];
 
@@ -554,6 +554,7 @@ const floatingSelectors = [
 const floatingLayerFiles = [
   'components/clock-fab.tsx',
   'components/sidebar/app-shell.tsx',
+  'components/sidebar/mobile-drawer.tsx',
   'components/kalender/dispatch-panel.tsx',
   'components/kalender/parkplatz-panel.tsx',
   'components/kalender/drag-engine/drag-engine.tsx',
@@ -795,6 +796,12 @@ const sonnerImportPath = {
   message:
     'Toasts are removed by the UI/UX consolidation — use the Banner primitive (components/ui/banner) per the feedback policy matrix.',
 };
+// Next's bootstrap owns React's DOM renderer (docs/technical/performance.md, "Never").
+const reactDomClientImportPath = {
+  name: 'react-dom/client',
+  message:
+    "Next's bootstrap owns react-dom/client: a second importer cuts React's DOM renderer out of the start-up chunk, one more script on every cold start. Render into a host a layout mounts, as components/shared/unsent-work-host.tsx does.",
+};
 const realtimeHookMessage =
   'Consume Realtime through useLiveView (hooks/use-live-view.ts) or useRealtimeRouterRefresh — they own debounce, generation guards, keep-last-known, dialog suspension, and catch-up (client freshness contract).';
 // Layering: lib/ is the domain and data layer that components build on; a
@@ -827,6 +834,7 @@ function importRestrictions({ realtimeHooks = true, libLayer = false, radixPrimi
     {
       paths: [
         sonnerImportPath,
+        reactDomClientImportPath,
         ...(realtimeHooks
           ? [
               {
@@ -1245,6 +1253,44 @@ const eslintConfig = defineConfig([
       'playwright-spec/visible-page-lookup': 'error',
     },
   },
+  // Streamed copies after a load (docs/technical/integrated-test-state.md):
+  // every goto and reload of a page a browser test drives waits for React's
+  // reveal. The fixtures install it on their pages; a page opened by hand goes
+  // through openPage. The measured pages stay as their references measured
+  // them: the performance sessions and the two measured openings of P1-11.
+  {
+    files: ['tests/golden/**/*.ts', 'tests/audit/**/*.ts', 'tests/canary/**/*.ts'],
+    ignores: [
+      'tests/golden/support/streamed-content.ts',
+      'tests/golden/support/sessions.ts',
+      'tests/audit/support/performance-steps.ts',
+      'tests/audit/performance/planning-benchmark.spec.ts',
+      'tests/golden/p1-11.spec.ts',
+    ],
+    rules: {
+      'no-restricted-properties': [
+        'error',
+        {
+          property: 'newPage',
+          message:
+            'Open the page through openPage (tests/golden/support/streamed-content.ts): its goto and reload then wait for React to reveal the content it streamed.',
+        },
+      ],
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/support/sessions', './sessions'],
+              importNames: ['createRolePage'],
+              message:
+                'Take a role page from the fixtures (adminPage, bueroPage, employeePage, outsiderPage, rolePage) or open it through openRolePage (tests/golden/support/streamed-content.ts): their goto and reload wait for React to reveal the content it streamed.',
+            },
+          ],
+        },
+      ],
+    },
+  },
   // Failures in support modules (docs/technical/testing.md): no `.catch` or
   // `catch` turns a failure into a constant. A timed-out wait branches through
   // settledBeforeTimeout, and a genuine best effort names its reason in a
@@ -1466,6 +1512,14 @@ const eslintConfig = defineConfig([
   },
   {
     files: ['components/sidebar/app-shell-skeleton.tsx'],
+    rules: {
+      'no-restricted-syntax': productRestrictions({ jsx: true, allow: landmarkSelectors }),
+    },
+  },
+  // WerkFlow support's area mounts no app shell: its frame owns the main
+  // landmark of every support page.
+  {
+    files: ['components/support/support-frame.tsx'],
     rules: {
       'no-restricted-syntax': productRestrictions({ jsx: true, allow: landmarkSelectors }),
     },

@@ -12,6 +12,8 @@ export type CiGroup = {
   executionInputs: readonly string[];
   /** The group's `changeTrigger`. */
   trigger?: ChangeTrigger | undefined;
+  /** A layout sweep's rendered product files (surface-closure.ts). */
+  renderedFiles?: readonly string[] | undefined;
 };
 
 type CiShard = { shard: number; groups: string };
@@ -65,17 +67,18 @@ export function runnerModules(graph: ReadonlyMap<string, readonly string[]>): st
   return [...reached].filter((file) => RUNNER_ENTRY_POINTS.includes(file) || RUNNER_FOLDER.test(file));
 }
 
-/** The visual groups drive a browser in the pinned Playwright image and run for many minutes, so each takes a shard of its own. */
+/** The visual groups render in the pinned Playwright image, which a runner pulls first, so they share shards of their own. */
 const VISUAL_GROUP = /^audit:visual(:|$)/;
+/** A visual shard holds about this many visual groups: a full selection's fourteen fill two. */
+const VISUAL_GROUPS_PER_SHARD = 7;
 
 /** A browser shard holds about this many groups; a typical change then finishes in one shard round. */
 const GROUPS_PER_SHARD = 4;
 /**
  * The account runs 40 jobs at once across every run (GitHub Pro), and a shard's setup takes about
  * as long as a typical shard's tests. A full selection fills this many shards, so it leaves the other pull
- * requests' runs most of the runners, and its six general shards (about 14 min of tests each) still
- * end before `audit:visual:acceptance` (about 19 min) alone in its own
- * (werk-flow/werkflow-planning#291). A diff selection of up to 24 groups is not capped.
+ * requests' runs most of the runners: six general shards and two visual ones, each with about 14 min
+ * of tests (werk-flow/werkflow-planning#291, #294). A diff selection of up to 24 groups is not capped.
  */
 export const MAX_SHARDS = 8;
 
@@ -146,6 +149,7 @@ function changeSelection(
       scopes: group.scopes,
       executionInputs: group.executionInputs,
       trigger: group.trigger,
+      renderedFiles: group.renderedFiles,
     })),
     changedFiles,
     unresolvedGroupIds: [],
@@ -158,18 +162,27 @@ function changeSelection(
   });
 }
 
+/** Deals the groups round-robin into `count` shards. */
+function deal(groupIds: readonly string[], count: number): string[][] {
+  const shards = Array.from({ length: count }, (): string[] => []);
+  groupIds.forEach((id, index) => shards[index % count]?.push(id));
+  return shards;
+}
+
 /**
- * A shard of its own for each visual group, then the other groups dealt round-robin into as few
- * shards as hold about GROUPS_PER_SHARD each, within the job budget.
+ * The visual groups in shards of their own, then the other groups, each kind dealt round-robin into
+ * as few shards as hold about its number per shard, the other groups within the job budget.
  */
 function shardsOf(groupIds: readonly string[]): CiShard[] {
   const visual = groupIds.filter((id) => VISUAL_GROUP.test(id));
   const rest = groupIds.filter((id) => !VISUAL_GROUP.test(id));
+  const visualCount = Math.ceil(visual.length / VISUAL_GROUPS_PER_SHARD);
   // At least one shard for the other groups, so a large visual selection can never drop them.
-  const count = rest.length
-    ? Math.max(1, Math.min(MAX_SHARDS - visual.length, Math.ceil(rest.length / GROUPS_PER_SHARD)))
+  const restCount = rest.length
+    ? Math.max(1, Math.min(MAX_SHARDS - visualCount, Math.ceil(rest.length / GROUPS_PER_SHARD)))
     : 0;
-  const shards = [...visual.map((id) => [id]), ...Array.from({ length: count }, (): string[] => [])];
-  rest.forEach((id, index) => shards[visual.length + (index % count)]?.push(id));
-  return shards.map((groups, index) => ({ shard: index + 1, groups: groups.join(',') }));
+  return [...deal(visual, visualCount), ...deal(rest, restCount)].map((groups, index) => ({
+    shard: index + 1,
+    groups: groups.join(','),
+  }));
 }

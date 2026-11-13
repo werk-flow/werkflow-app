@@ -1,7 +1,6 @@
 Menü öffnen
 Einstellungen
-Dashboard
-Organisation
+Dokumente & Briefpapier
 Kalender
 Zeiterfassung
 Zeiterfassung
@@ -20,5 +19,6 @@ Pflichtfeld
 Ab dieser gesamten Anwesenheitszeit wird die automatische Pause berücksichtigt.
 Automatische Pausendauer (Minuten)
 Diese Minuten werden automatisch abgezogen, sobald die Schwelle erreicht ist.
-Neue Regeln gelten sofort für offene und kommende Zeiterfassungen. Bereits abgeschlossene Historie wird nicht rückwirkend umgeschrieben.
+Zweite Stufe für lange Tage
+Ab der zweiten Schwelle gilt die längere Gesamtpause. Vorgabe nach ArbZG § 4: ab 9 Stunden insgesamt 45 Minuten.
 Nicht eingestempelt

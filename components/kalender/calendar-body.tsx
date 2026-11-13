@@ -5,6 +5,7 @@ import { PageBody } from '@/components/shared/page-shell';
 import { ScrollRegion } from '@/components/ui/scroll-region';
 import { SectionError } from '@/components/ui/section-error';
 import type { CalendarBoardContext } from '@/lib/calendar/board';
+import { schoolCalendarEntries } from '@/lib/calendar/board-model';
 import type { OrgRole } from '@/lib/roles';
 import type { OrganizationTimeTrackingSettings } from '@/lib/time-tracking/settings';
 import type { WorkSession } from '@/lib/time-tracking/types';
@@ -120,35 +121,34 @@ export function CalendarBody({
   );
 }
 
-/** The week board, the day view or the month, fed by the one range owner and the one optimistic owner. */
-function CalendarSurface({
-  viewState,
-  viewScope,
-  data,
-  mutations,
-  surfaceActions,
-  parkFlow,
-  phone,
-  organizationSettings,
-  currentUserId,
-  currentUserRole,
-  isAdminOrManager,
-  onSessionClick,
-  verticalScroller,
-  todayIso,
-}: CalendarSurfaceProps): React.JSX.Element {
-  const { currentDate, view, preferences } = viewState;
-  const { board, entries, vacation, sickness, holidays, changeRequestMap } = data.range;
-  const everyView = {
-    todayIso,
-    jobs: viewScope.filteredJobs,
-    holidays,
-    mutations,
-    actions: surfaceActions,
-    parkingContexts: data.parkingContexts,
-    onParkedContextMissing: parkFlow.handleParkedContextMissing,
-    verticalScroller,
+/** What the week board, the day view and the month all take. */
+function everyViewProps(
+  props: Pick<
+    CalendarSurfaceProps,
+    'todayIso' | 'viewScope' | 'data' | 'mutations' | 'surfaceActions' | 'parkFlow' | 'verticalScroller'
+  >,
+) {
+  return {
+    todayIso: props.todayIso,
+    jobs: props.viewScope.filteredJobs,
+    holidays: props.data.range.holidays,
+    mutations: props.mutations,
+    actions: props.surfaceActions,
+    parkingContexts: props.data.parkingContexts,
+    onParkedContextMissing: props.parkFlow.handleParkedContextMissing,
+    verticalScroller: props.verticalScroller,
   };
+}
+
+/** The week board, the day view or the month, fed by the one range owner and the one optimistic owner. */
+function CalendarSurface(props: CalendarSurfaceProps): React.JSX.Element {
+  const { viewState, viewScope, data, phone, organizationSettings, currentUserId, currentUserRole } = props;
+  const { isAdminOrManager, onSessionClick } = props;
+  const { currentDate, view, preferences } = viewState;
+  const { board, entries, vacation, sickness, changeRequestMap } = data.range;
+  // The Berufsschule days come with the board's capacity days, so they need no read of their own.
+  const school = schoolCalendarEntries(board);
+  const everyView = everyViewProps(props);
   if (view === 'week')
     return (
       <Plantafel
@@ -160,6 +160,7 @@ function CalendarSurface({
         entries={entries}
         vacation={vacation}
         sickness={sickness}
+        school={school}
         onIsolateRow={(employeeRecordId) => isolateBoardRow(employeeRecordId, board, viewScope, viewState)}
         phone={phone}
       />
@@ -180,7 +181,6 @@ function CalendarSurface({
         currentUserRole={currentUserRole}
         changeRequestMap={changeRequestMap}
         onSessionClick={onSessionClick}
-        highlightMemberId={viewState.highlightMemberId}
       />
     );
   return (
@@ -191,11 +191,12 @@ function CalendarSurface({
       members={viewScope.filteredMembers}
       vacation={vacation}
       sickness={sickness}
+      school={school}
       organizationSettings={organizationSettings}
       currentUserId={currentUserId}
       currentUserRole={currentUserRole}
       isAdminOrManager={isAdminOrManager}
-      onOpenDay={(date) => viewState.handleOpenDay(date, null)}
+      onOpenDay={viewState.handleOpenDay}
       onSessionClick={onSessionClick}
     />
   );

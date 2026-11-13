@@ -39,9 +39,9 @@ export function ZeiterfassungDashboard({
   } = useWeeklyTimeData({
     organizationId,
     userId,
-    breakMode: effectiveState.breakMode,
-    autoBreakThresholdMinutes: effectiveState.autoBreakThresholdMinutes,
-    autoBreakDurationMinutes: effectiveState.autoBreakDurationMinutes,
+    // The server's rule with its versions: past days resolve against them, and
+    // today's bar takes the live rule of the clock state.
+    breakPolicy: initialOverview.breakPolicy,
     initialWeekData: initialOverview.weekData,
     initialTodayIndex: initialOverview.todayIndex,
     initialWeekLabel: initialOverview.weekLabel,

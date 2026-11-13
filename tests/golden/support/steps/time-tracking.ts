@@ -13,8 +13,6 @@ import {
 } from '../../../../lib/time-tracking/types';
 import { expectReadyWithin, TIME_CORRECTION_READY_MS } from '../live';
 import { pressKey } from './interaction';
-import { memberDetailActionsButton } from './organization';
-import { openMemberDetailFromList } from './personnel';
 import {
   confirmed,
   datePickerDigits,
@@ -111,9 +109,6 @@ export const TIME_ENTRY_COPY = {
   approveAll: 'Alle genehmigen',
   approveAllConfirmation: 'Alle Zeiteinträge genehmigen?',
   entryApproved: 'Der Zeiteintrag wurde genehmigt.',
-  removalBlocked:
-    'Vor dem Entfernen muss die Verantwortung für Zeitfreigaben neu zugewiesen oder auf den Standard zurückgestellt werden.',
-  reassignFirst: 'Zuerst neu zuweisen',
 } as const;
 
 /** The status labels of a time entry in the history table and its filter. */
@@ -172,12 +167,12 @@ export const TIME_ACCOUNT_COPY = {
   confirmDefaultPolicy: 'Standardversion bestätigen',
   createExceptionPolicy: 'Neue Ausnahmeregel anlegen',
   openingDate: 'Eröffnungsdatum',
-  openAccount: 'Konto eröffnen',
+  openingForm: 'Zeitkonten eröffnen',
   newOpeningDate: 'Neues Eröffnungsdatum',
   correctOpeningDate: 'Datum korrigieren',
   openingDateLocked: 'Ein abgeschlossener Monat hängt von diesem Datum ab.',
   allAccountsOpen: 'Alle Zeitkonten sind eröffnet.',
-  confirmDefaultMapping: 'Standardzuordnung bestätigen',
+  confirmDefaultMapping: 'Zuordnung bestätigen',
   bueroMayRequest: 'Büro-Nutzer können Korrekturen',
   adjustmentMinutes: 'Minuten',
   adjustmentReason: SHARED_COPY.field.reason,
@@ -370,6 +365,12 @@ export async function clockInOnJob(page: Page, jobTitle?: string): Promise<void>
 
   await expect(sheet).toHaveCount(0);
   await expect(runningClockLauncher(page)).toBeVisible();
+}
+
+/** Taps „Erfassung beenden“ without waiting for its answer: a call that hangs keeps the sheet open. */
+export async function tapClockOut(page: Page): Promise<void> {
+  const sheet = await openRunningClockSheet(page);
+  await sheet.getByRole('button', { name: CLOCK_COPY.endCapture }).click();
 }
 
 export async function clockOut(page: Page): Promise<void> {
@@ -649,18 +650,6 @@ export async function approvePendingTimeEntry(
   await expect(card).toHaveCount(0);
 }
 
-export async function expectMemberRemovalBlockedByResponsibility(
-  page: Page,
-  memberName: string,
-): Promise<void> {
-  await openMemberDetailFromList(page, memberName);
-  await memberDetailActionsButton(page).click();
-  await page.getByRole('menuitem', { name: SHARED_COPY.action.remove }).click();
-  const dialog = page.getByRole('alertdialog');
-  await expect(dialog.getByText(TIME_ENTRY_COPY.removalBlocked)).toBeVisible();
-  await expect(dialog.getByRole('button', { name: TIME_ENTRY_COPY.reassignFirst })).toBeDisabled();
-}
-
 // ---------------------------------------------------------------------------
 // Rules of the organization (/einstellungen/zeiterfassung)
 
@@ -919,31 +908,33 @@ export async function createExceptionTimePolicy(
 }
 
 function openingBalanceLabel(employeeName: string): string {
-  return `Anfangssaldo in Minuten für ${employeeName}`;
+  return `Anfangssaldo für ${employeeName}`;
 }
 
-// One table row per person; its fields join the row's form by the form attribute.
+// One table row per person inside the one opening form.
 function openingBalanceRow(settings: Locator, employeeName: string): Locator {
   return confirmed(
     settings.getByRole('row').filter({ has: settings.page().getByLabel(openingBalanceLabel(employeeName)) }),
   );
 }
 
-/** Types the opening date and balance of one person's missing time account. */
+/** Types the shared opening date and one person's balance as „±HH:MM“. */
 export async function fillOpeningBalance(
   settings: Locator,
   employeeName: string,
-  input: { openedOn: string; minutes: number },
+  input: { openedOn: string; balance: string },
 ): Promise<void> {
-  const row = openingBalanceRow(settings, employeeName);
-  await typeIntoDatePicker(row, TIME_ACCOUNT_COPY.openingDate, datePickerDigits(input.openedOn));
-  await row.getByLabel(openingBalanceLabel(employeeName)).fill(String(input.minutes));
+  const form = settings.getByRole('region', { name: TIME_ACCOUNT_COPY.openingForm });
+  await typeIntoDatePicker(form, TIME_ACCOUNT_COPY.openingDate, datePickerDigits(input.openedOn));
+  await openingBalanceRow(settings, employeeName)
+    .getByLabel(openingBalanceLabel(employeeName))
+    .fill(input.balance);
 }
 
 /** The open action of one person's missing time account. */
 export function openAccountButton(settings: Locator, employeeName: string): Locator {
   return openingBalanceRow(settings, employeeName).getByRole('button', {
-    name: TIME_ACCOUNT_COPY.openAccount,
+    name: `Zeitkonto für ${employeeName} eröffnen`,
   });
 }
 
@@ -973,7 +964,7 @@ export function openingDateCorrectionText(previous: string, corrected: string, r
   return `Korrigiert von ${german(previous)} auf ${german(corrected)} · ${reason}`;
 }
 
-/** Confirms the default payroll mapping. */
+/** Confirms the proposed payroll codes as the first mapping version. */
 export function confirmDefaultMappingButton(settings: Locator): Locator {
   return settings.getByRole('button', { name: TIME_ACCOUNT_COPY.confirmDefaultMapping });
 }

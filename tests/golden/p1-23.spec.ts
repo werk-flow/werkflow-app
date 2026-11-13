@@ -63,7 +63,7 @@ test.describe('P1-23 time accounts and payroll handoff @P1-23 @GG-07', () => {
       // with „Zeitkonto fehlt“; the correction moves it to the month's start.
       const adminName = `${world.users.admin.firstName} ${world.users.admin.lastName}`;
       const wrongOpeningDate = testBusinessDate();
-      await fillOpeningBalance(settings, adminName, { openedOn: wrongOpeningDate, minutes: 15 });
+      await fillOpeningBalance(settings, adminName, { openedOn: wrongOpeningDate, balance: '+0:15' });
       const openAccount = openAccountButton(settings, adminName);
       await openAccount.click();
       // The form disappears only after the Server Action commits and its

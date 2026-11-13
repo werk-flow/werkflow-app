@@ -64,7 +64,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -224,7 +224,7 @@ alter table public.vacation_request_events disable trigger refuse_vacation_event
 
 do $$
 begin
-  if pg_temp.vacation_state() <> (select state from vacation_state_before) then
+  if pg_temp.vacation_state() is distinct from (select state from vacation_state_before) then
     raise exception 'a refused vacation write changed requests or history';
   end if;
 end;
@@ -246,10 +246,10 @@ declare
 begin
   v_created := public.create_vacation_request(v_employee, v_org, v_employee_record,
     '2027-01-04', '2027-01-05', 'full', '  Skiurlaub  ', '{"2027": 2}');
-  if v_created.organization_id <> v_org or v_created.employee_record_id <> v_employee_record
-    or v_created.requested_by <> v_employee or v_created.start_date <> '2027-01-04'
-    or v_created.end_date <> '2027-01-05' or v_created.day_portion <> 'full'
-    or v_created.status <> 'pending' or v_created.comment <> 'Skiurlaub'
+  if v_created.organization_id is distinct from v_org or v_created.employee_record_id is distinct from v_employee_record
+    or v_created.requested_by is distinct from v_employee or v_created.start_date is distinct from '2027-01-04'
+    or v_created.end_date is distinct from '2027-01-05' or v_created.day_portion is distinct from 'full'
+    or v_created.status is distinct from 'pending' or v_created.comment is distinct from 'Skiurlaub'
   then raise exception 'a request stored the wrong row: %', to_jsonb(v_created); end if;
   select string_agg(event_type || ':' || event_payload::text || ':' || created_by::text
     || ':' || employee_record_id::text, '|') into v_event
@@ -269,7 +269,7 @@ begin
   then raise exception 'a request without a preview recorded: %', v_event; end if;
 
   v_request := public.withdraw_vacation_request(v_employee, v_org, 'c3000000-0000-0000-0000-000000000040');
-  if v_request.status <> 'withdrawn' then raise exception 'a withdrawal kept the status %', v_request.status; end if;
+  if v_request.status is distinct from 'withdrawn' then raise exception 'a withdrawal kept the status %', v_request.status; end if;
   select string_agg(event_type || ':' || event_payload::text || ':' || created_by::text, '|') into v_event
   from public.vacation_request_events where vacation_request_id = 'c3000000-0000-0000-0000-000000000040';
   if v_event is distinct from 'withdrawn:{"end_date": "2026-11-04", "start_date": "2026-11-02"}:' || v_employee
@@ -277,8 +277,8 @@ begin
 
   v_request := public.decide_vacation_request(v_admin, v_org, 'c3000000-0000-0000-0000-000000000042',
     'approve', null, '{"2026": 1}');
-  if v_request.status <> 'approved' or v_request.decided_by <> v_admin or v_request.decided_at is null
-    or v_request.decision_comment is not null or v_request.approved_days_by_year <> '{"2026": 1}'
+  if v_request.status is distinct from 'approved' or v_request.decided_by is distinct from v_admin or v_request.decided_at is null
+    or v_request.decision_comment is not null or v_request.approved_days_by_year is distinct from '{"2026": 1}'
   then raise exception 'an approval stored the wrong row: %', to_jsonb(v_request); end if;
   select string_agg(event_type || ':' || event_payload::text || ':' || created_by::text, '|') into v_event
   from public.vacation_request_events where vacation_request_id = 'c3000000-0000-0000-0000-000000000042';
@@ -288,8 +288,8 @@ begin
   then raise exception 'an approval recorded the wrong history: %', v_event; end if;
 
   v_request := public.decide_vacation_request(v_buero, v_org, v_created.id, 'reject', ' Engpass ', '{"2027": 9}');
-  if v_request.status <> 'rejected' or v_request.decided_by <> v_buero
-    or v_request.decision_comment <> 'Engpass' or v_request.approved_days_by_year is not null
+  if v_request.status is distinct from 'rejected' or v_request.decided_by is distinct from v_buero
+    or v_request.decision_comment is distinct from 'Engpass' or v_request.approved_days_by_year is not null
   then raise exception 'a rejection stored the wrong row: %', to_jsonb(v_request); end if;
   select string_agg(event_type || ':' || event_payload::text || ':' || created_by::text, '|') into v_event
   from public.vacation_request_events where vacation_request_id = v_created.id and event_type = 'rejected';
@@ -299,8 +299,8 @@ begin
 
   v_request := public.cancel_approved_vacation_request(v_buero, v_org, 'c3000000-0000-0000-0000-000000000041',
     '  Baustelle vorgezogen ');
-  if v_request.status <> 'cancelled' or v_request.cancelled_by <> v_buero or v_request.cancelled_at is null
-    or v_request.cancellation_reason <> 'Baustelle vorgezogen'
+  if v_request.status is distinct from 'cancelled' or v_request.cancelled_by is distinct from v_buero or v_request.cancelled_at is null
+    or v_request.cancellation_reason is distinct from 'Baustelle vorgezogen'
   then raise exception 'a cancellation stored the wrong row: %', to_jsonb(v_request); end if;
   select string_agg(event_type || ':' || event_payload::text || ':' || created_by::text, '|') into v_event
   from public.vacation_request_events where vacation_request_id = 'c3000000-0000-0000-0000-000000000041';

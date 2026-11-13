@@ -58,8 +58,7 @@ async function libraryFileAction(
   // The menu opens from the keyboard: a mouse click opens a Radix menu on
   // press, and an item that renders under the pointer is chosen on release
   // (the phone card's menu chose "Löschen", 2026-10-23).
-  await documentFileActionsButton(page, AUDIT_DOCUMENT_NAME).focus();
-  await pressKey(page, 'Enter');
+  await pressKey(page, 'Enter', { into: documentFileActionsButton(page, AUDIT_DOCUMENT_NAME) });
   return documentFileActionItem(page, action);
 }
 

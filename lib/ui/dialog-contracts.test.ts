@@ -55,7 +55,7 @@ const exceptions: Record<string, DialogException> = {
     },
   'components/auftraege/shared/qualification-warning-dialog.tsx#QualificationWarningDialogContent|Zuweisung prüfen':
     { kind: 'command', reason: 'Reasoned qualification override requires deliberate acknowledgement.' },
-  "components/auftraege/artifacts/work-artifacts-section.tsx#WorkArtifactDialog|{detail ? (currentRevision?.title ?? 'Arbeitsnachweis') : 'Arbeitsnachweis erstellen'}":
+  "components/auftraege/artifacts/work-artifact-dialog.tsx#WorkArtifactDialog|{detail ? (currentRevision?.title ?? 'Arbeitsnachweis') : 'Arbeitsnachweis erstellen'}":
     {
       kind: 'multiple-actions',
       reason:
@@ -131,6 +131,11 @@ const exceptions: Record<string, DialogException> = {
     kind: 'destructive',
     reason: 'Lifecycle commands include termination; require deliberate confirmation.',
   },
+  'components/problem-reports/screenshot-redaction-view.tsx#ScreenshotRedactionView|Screenshot schwärzen': {
+    kind: 'widget',
+    reason:
+      'A drawing surface over the report dialog: each box edits the report form behind it, which alone sends; „Fertig“ only closes.',
+  },
   'components/settings/profile-avatar-section.tsx#ProfileAvatarSection|Profilbild anpassen': {
     kind: 'widget',
     reason: 'Interactive crop/zoom editor uses an explicit image-save action.',
@@ -179,7 +184,7 @@ const editingModes: Record<string, EditingMode> = {
     formId: 'correctionFormId',
     condition: "kind !== 'delete'",
   },
-  'components/auftraege/artifacts/work-artifacts-section.tsx#WorkArtifactDialog': {
+  'components/auftraege/artifacts/work-artifact-dialog.tsx#WorkArtifactDialog': {
     formId: 'artifactFormId',
     condition: '!readOnly && editing',
   },

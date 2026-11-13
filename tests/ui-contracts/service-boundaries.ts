@@ -6,8 +6,10 @@ import {
   reviewChangeRequestContract,
   reviewEntriesContract,
 } from './time-approval-boundaries';
-import { createJobMaterialLineContract } from './material-boundaries';
+import { createJobMaterialLineContract, recordJobMaterialUseContract } from './material-boundaries';
+import { CLOCK_USER_ID } from './clock-state-fixture';
 import { CONTRACT_SUPABASE_URL } from './supabase-contract-env';
+import { FIELD_SYNC_TODAY_PATH } from '@/lib/field-sync/today-snapshot';
 import type { InventoryLocation, InventoryLocationType } from '@/lib/inventory/types';
 // Keep framework redirect/error classification real; only navigation and
 // external services are substituted by this fixture.
@@ -56,11 +58,54 @@ export function initializeServiceBoundaries(): void {
       ) {
         return browserFetch(input, init);
       }
+      // The clock contract answers the time outbox's sends at Playwright's network boundary.
+      if (
+        window.uiContractFixture === 'clock' &&
+        input === '/api/field-sync/v1/operations' &&
+        init?.method === 'POST'
+      ) {
+        return browserFetch(input, init);
+      }
+      // The start page refresh contract answers the day's GET at Playwright's network boundary.
+      if (
+        (window.uiContractFixture === 'today-refresh-switch' ||
+          window.uiContractFixture === 'today-refresh-profile' ||
+          window.uiContractFixture === 'today-refresh-fallback') &&
+        typeof input === 'string' &&
+        input.startsWith(`${FIELD_SYNC_TODAY_PATH}?`) &&
+        (init?.method ?? 'GET') === 'GET'
+      ) {
+        return browserFetch(input, init);
+      }
       // The auth URL contracts record every Auth request at Playwright's network boundary.
       if (
         (window.uiContractFixture === 'auth-url-session' ||
           window.uiContractFixture === 'auth-url-reset-form') &&
         String(input instanceof Request ? input.url : input).startsWith(CONTRACT_SUPABASE_URL)
+      ) {
+        return browserFetch(input, init);
+      }
+      // The report draft contracts answer the sync handler at Playwright's network boundary.
+      if (
+        window.uiContractFixture === 'work-artifact-report' &&
+        input === '/api/field-sync/v1/operations' &&
+        init?.method === 'POST'
+      ) {
+        return browserFetch(input, init);
+      }
+      // The report dialog's contract answers its storage PUTs at Playwright's network boundary.
+      if (
+        window.uiContractFixture === 'problem-report' &&
+        init?.method === 'PUT' &&
+        String(input instanceof Request ? input.url : input).startsWith('http://localhost/storage/')
+      ) {
+        return browserFetch(input, init);
+      }
+      // The company letterhead contract answers the Musterangebot at Playwright's network boundary.
+      if (
+        window.uiContractFixture === 'company-letterhead' &&
+        input === '/api/musterangebot' &&
+        (init?.method ?? 'GET') === 'GET'
       ) {
         return browserFetch(input, init);
       }
@@ -101,6 +146,11 @@ export async function createInventoryLocation(input: {
 export function createSupabaseBrowserClient() {
   return {
     auth: {
+      // The browser's session, as the time outbox reads it before a send or a sign-out question.
+      getSession: async () => ({
+        data: { session: { user: { id: CLOCK_USER_ID }, access_token: 'contract-access-token' } },
+        error: null,
+      }),
       signOut: async () => {
         const failure = window.uiContractServices.authFailure;
         if (failure === 'thrown') throw new Error('Simulated auth connection failure.');
@@ -139,8 +189,9 @@ export const deleteEntriesBatch = unexpectedWrite;
 export const updateEntry = unexpectedWrite;
 export const addManualEntry = unexpectedWrite;
 
-// `@/lib/inventory/actions`: the job material section plans one line.
+// `@/lib/inventory/actions` and `material-use-actions`: the job material section plans one line and records a use.
 export const createJobMaterialLine = createJobMaterialLineContract;
+export const recordJobMaterialUse = recordJobMaterialUseContract;
 export const createProjectMaterialLine = unexpectedWrite;
 export const updateJobMaterialLine = unexpectedWrite;
 export const deleteJobMaterialLine = unexpectedWrite;

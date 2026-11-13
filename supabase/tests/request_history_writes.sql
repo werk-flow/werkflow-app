@@ -55,7 +55,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -224,7 +224,7 @@ alter table public.client_request_events disable trigger refuse_request_event;
 
 do $$
 begin
-  if pg_temp.request_state() <> (select state from request_state_before) then
+  if pg_temp.request_state() is distinct from (select state from request_state_before) then
     raise exception 'a refused request write changed requests or history';
   end if;
 end;
@@ -247,48 +247,48 @@ begin
   v_request := public.create_client_request(v_actor, v_org, 'Wasserhahn tropft', null, 'AN-3',
     v_client, v_site, null, 'Erika Muster', null, null, null, null, null, null,
     '41704000-0000-0000-0000-000000000003', null);
-  if v_request.organization_id <> v_org or v_request.summary <> 'Wasserhahn tropft'
-    or v_request.request_number <> 'AN-3' or v_request.client_id <> v_client or v_request.site_id <> v_site
-    or v_request.category <> 'sonstiges' or v_request.urgency <> 'normal' or v_request.source <> 'telefon'
-    or v_request.status <> 'offen' or v_request.assigned_to <> '41704000-0000-0000-0000-000000000003'
-    or v_request.created_by <> v_actor or v_request.received_at is null
+  if v_request.organization_id is distinct from v_org or v_request.summary is distinct from 'Wasserhahn tropft'
+    or v_request.request_number is distinct from 'AN-3' or v_request.client_id is distinct from v_client or v_request.site_id is distinct from v_site
+    or v_request.category is distinct from 'sonstiges' or v_request.urgency is distinct from 'normal' or v_request.source is distinct from 'telefon'
+    or v_request.status is distinct from 'offen' or v_request.assigned_to is distinct from '41704000-0000-0000-0000-000000000003'
+    or v_request.created_by is distinct from v_actor or v_request.received_at is null
   then raise exception 'a capture stored the wrong request: %', to_jsonb(v_request); end if;
   if (
     select array_agg(event_type || ':' || event_payload::text || ':' || created_by::text)
     from public.client_request_events where request_id = v_request.id
-  ) <> array['created:' || jsonb_build_object('summary', 'Wasserhahn tropft', 'category', 'sonstiges',
+  ) is distinct from array['created:' || jsonb_build_object('summary', 'Wasserhahn tropft', 'category', 'sonstiges',
     'urgency', 'normal', 'source', 'telefon', 'clientId', v_client)::text || ':' || v_actor::text]
   then raise exception 'a capture did not record its history row'; end if;
 
   v_request := public.update_client_request(v_actor, v_org, v_open,
     jsonb_build_object('client_id', v_client, 'site_id', v_site));
-  if v_request.client_id <> v_client or v_request.site_id <> v_site then
+  if v_request.client_id is distinct from v_client or v_request.site_id is distinct from v_site then
     raise exception 'matching a customer did not save it';
   end if;
   v_request := public.update_client_request(v_actor, v_org, v_open,
     jsonb_build_object('client_id', v_other_client, 'site_id', null, 'contact_id', null));
-  if v_request.client_id <> v_other_client or v_request.site_id is not null then
+  if v_request.client_id is distinct from v_other_client or v_request.site_id is not null then
     raise exception 'changing the customer kept the previous site';
   end if;
   v_request := public.update_client_request(v_actor, v_org, v_open, '{"status":"in_klaerung"}');
   v_request := public.update_client_request(v_actor, v_org, v_open, '{"request_number":"AN-1","details":"Keller"}');
-  if v_request.status <> 'in_klaerung' or v_request.request_number <> 'AN-1' or v_request.details <> 'Keller' then
+  if v_request.status is distinct from 'in_klaerung' or v_request.request_number is distinct from 'AN-1' or v_request.details is distinct from 'Keller' then
     raise exception 'an edit did not save its columns: %', to_jsonb(v_request);
   end if;
 
   v_request := public.close_client_request(v_actor, v_org, v_open, 'kein_bedarf', '  erledigt  ');
-  if v_request.status <> 'geschlossen' or v_request.closed_reason <> 'kein_bedarf'
-    or v_request.closed_note <> 'erledigt' or v_request.closed_by <> v_actor or v_request.closed_at is null
+  if v_request.status is distinct from 'geschlossen' or v_request.closed_reason is distinct from 'kein_bedarf'
+    or v_request.closed_note is distinct from 'erledigt' or v_request.closed_by is distinct from v_actor or v_request.closed_at is null
   then raise exception 'closing stored the wrong request: %', to_jsonb(v_request); end if;
   v_request := public.reopen_client_request(v_actor, v_org, v_open);
-  if v_request.status <> 'offen' or num_nonnulls(
+  if v_request.status is distinct from 'offen' or num_nonnulls(
     v_request.closed_reason, v_request.closed_note, v_request.closed_by, v_request.closed_at
-  ) <> 0 then raise exception 'reopening kept the closing facts: %', to_jsonb(v_request); end if;
+  ) is distinct from 0 then raise exception 'reopening kept the closing facts: %', to_jsonb(v_request); end if;
 
   select array_agg(event_type || ':' || event_payload::text order by event_type, event_payload::text)
   into v_events
   from public.client_request_events where request_id = v_open and created_by = v_actor;
-  if v_events <> array[
+  if v_events is distinct from array[
     'closed:' || '{"note": "erledigt", "reason": "kein_bedarf"}',
     'matched:' || '{"changedFields": ["client_id", "site_id"]}',
     'reopened:' || '{"previousNote": "erledigt", "previousReason": "kein_bedarf"}',

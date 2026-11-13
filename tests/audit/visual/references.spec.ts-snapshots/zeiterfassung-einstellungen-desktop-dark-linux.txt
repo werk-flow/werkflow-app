@@ -11,10 +11,13 @@ Anfragen
 Aufträge
 Dokumente
 Inventar
+Angebote
 Service
 Arbeitsvorlagen
 Mitarbeiter
 Kunden
+Problem melden
+F2
 MK
 Martin Krämer
 martin.kraemer@haustechnik-kraemer.de
@@ -26,7 +29,7 @@ Regeln & Export
 Zeitregeln & Lohnexport
 Jede Änderung gilt ab einem Datum. Frühere Versionen bleiben nachvollziehbar.
 Arbeitszeitregel
-Der Startsatz nutzt die sechs Aktivitätsarten und 0, 50 oder 100 Prozent. Weitere Sätze und Prozentwerte können später ergänzt werden.
+Der Startsatz nutzt die sechs Aktivitätsarten und 0, 50 oder 100 Prozent. Weitere Sätze und Prozentwerte können später ergänzt werden. Jeder Tag gilt nach der Version mit dem spätesten Beginn bis zu diesem Tag.
 Name
 *
 Pflichtfeld
@@ -48,25 +51,21 @@ Zeitkonten
 0
 von
 4
-Zeitkonten sind eröffnet. Jeder Anfangssaldo wird mit Datum und Grund ausdrücklich bestätigt.
+Zeitkonten sind eröffnet. Ein Monat umfasst jede Person, die in ihm beschäftigt ist: Eintritt spätestens an seinem letzten Tag, Austritt frühestens an seinem ersten. Jeder Anfangssaldo wird mit Datum und Grund ausdrücklich bestätigt.
+Eröffnungsdatum
+*
+Pflichtfeld
+01
+.
+01
+.
+2026
+Grund
+*
+Pflichtfeld
 Vorschlag 01.01.2026: der erste Tag des ältesten Monats ohne Abschluss. Ein Monat lässt sich nur abschließen, wenn Regel und Zeitkonto spätestens an seinem ersten Tag beginnen.
 Mitarbeiter
-Anfangssaldo (Minuten)
-Eröffnungsdatum
-Grund
+Anfangssaldo (Std:Min)
 Aktion
 Jonas Becker
-01
-.
-01
-.
-2026
-Konto eröffnen
-Kevin Schmid
-01
-.
-01
-.
-2026
-Konto eröffnen
 Nicht eingestempelt

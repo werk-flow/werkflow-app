@@ -75,6 +75,21 @@ function ClientSiteAddressFields({ siteDialog, onSiteDialogChange }: ClientSiteF
           />
         </Field>
       </div>
+      <Field
+        label="Objektnummer im Altsystem"
+        htmlFor="site-source-number"
+        description="Die Nummer, unter der das bisherige Programm den Einsatzort führt."
+      >
+        <Input
+          value={siteDialog.draft.sourceNumber ?? ''}
+          onChange={(e) =>
+            onSiteDialogChange({
+              ...siteDialog,
+              draft: { ...siteDialog.draft, sourceNumber: e.target.value },
+            })
+          }
+        />
+      </Field>
     </>
   );
 }

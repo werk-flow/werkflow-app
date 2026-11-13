@@ -11,6 +11,7 @@ import {
   SicknessRecordContractFixture,
 } from './absence-boundaries';
 import { ClockContractFixture } from './clock-boundaries';
+import { BreakRuleWeekFixture } from './break-rule-week-boundaries';
 import { ClockStateProvider } from '@/components/clock-state-provider';
 import { SidebarContractFixture } from './sidebar-boundaries';
 import { initializeLazyDialogBoundary, LazyDialogContractFixture } from './lazy-dialog-boundaries';
@@ -30,13 +31,44 @@ import {
   DocumentVersionUploadContractFixture,
 } from './document-upload-boundaries';
 import { OrganizationContractFixture } from './organization-boundaries';
+import { MemberRoleContractFixture } from './member-role-boundaries';
 import { OrganizationExportContractFixture } from './organization-export-boundaries';
+import {
+  CompanyLetterheadContractFixture,
+  CompanyProfileContractFixture,
+} from './company-profile-boundaries';
+import {
+  TodayRefreshContractFixture,
+  TodayRefreshFallbackContractFixture,
+  TodayRefreshProfileContractFixture,
+  TodayRefreshSwitchContractFixture,
+} from './today-refresh-boundaries';
+import AuthLayout from '@/app/(auth)/layout';
+import { OfflineClockContractFixture, UnsentTimeLandingContractFixture } from './offline-clock-boundaries';
+import { OfflineTodayContractFixture } from './offline-today-boundaries';
+import { WorkHandoverContractFixture } from './work-handover-boundaries';
+import { EditJobContractFixture } from './edit-job-boundaries';
+import { SiteAccessProposalContractFixture, SiteAccessReviewContractFixture } from './site-access-boundaries';
 import { CalendarContractFixture } from './calendar-boundaries';
 import { FeedbackContractFixture, isFeedbackFixture } from './feedback-boundaries';
 import { mountHydrationFixture } from './hydration-boundaries';
+import { initializeProblemReportBoundary, ProblemReportContractFixture } from './problem-report-boundaries';
+import { SupportFilingContractFixture } from './support-filing-boundaries';
+import { SupportTriageContractFixture } from './support-triage-boundaries';
+import {
+  initializeInventoryImportBoundary,
+  InventoryImportContractFixture,
+} from './inventory-import-boundaries';
+import { initializeInventoryUnitBoundary, InventoryUnitContractFixture } from './inventory-unit-boundaries';
+import {
+  initializeInventoryMovementsBoundary,
+  InventoryMovementsContractFixture,
+} from './inventory-movements-boundaries';
+import { initializeLeistungenBoundary, LeistungenContractFixture } from './leistungen-boundaries';
 import { AuthUrlContractFixture } from './auth-url-boundaries';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { UnsentWorkHost } from '@/components/shared/unsent-work-host';
 
 import { BannerProvider } from '@/components/ui/banner';
 import { LocationSelectWithCreate } from '@/components/inventar/location-select-with-create';
@@ -85,6 +117,11 @@ initializeServiceBoundaries();
 initializeLifecycleBoundary();
 initializeDocumentArchiveBoundary();
 initializeLazyDialogBoundary();
+initializeProblemReportBoundary();
+initializeInventoryUnitBoundary();
+initializeInventoryImportBoundary();
+initializeInventoryMovementsBoundary();
+initializeLeistungenBoundary();
 const personnelInitialData = initializePersonnelBoundary();
 
 /** The card as a manager's job page shows it, or with `fieldMode` as the assigned worker's work pack does. */
@@ -549,6 +586,10 @@ if (hydrationRoot)
       ? 'instruction-hydration'
       : 'auftraege-hydration',
   );
+// The root layout's host of the unsent-work question, which no fixture renders.
+const unsentWorkHost = document.createElement('div');
+document.body.append(unsentWorkHost);
+createRoot(unsentWorkHost).render(<UnsentWorkHost />);
 createRoot(root).render(
   hydrationRoot ? null : window.uiContractFixture === 'planning-options' ? (
     <PlanningOptionContractFixture />
@@ -557,6 +598,22 @@ createRoot(root).render(
       <h1>Komponentenverträge</h1>
       <PendingDialogFixture />
     </main>
+  ) : window.uiContractFixture === 'problem-report' ? (
+    <ProblemReportContractFixture />
+  ) : window.uiContractFixture === 'support-triage' ? (
+    <SupportTriageContractFixture />
+  ) : window.uiContractFixture === 'support-filing' ? (
+    <SupportFilingContractFixture />
+  ) : window.uiContractFixture === 'inventory-unit' ? (
+    <InventoryUnitContractFixture />
+  ) : window.uiContractFixture === 'inventory-import' ? (
+    <BannerProvider>
+      <InventoryImportContractFixture />
+    </BannerProvider>
+  ) : window.uiContractFixture === 'inventory-movements' ? (
+    <InventoryMovementsContractFixture />
+  ) : window.uiContractFixture === 'leistungen' ? (
+    <LeistungenContractFixture />
   ) : window.uiContractFixture === 'presentation' ? (
     <PresentationFixture />
   ) : window.uiContractFixture === 'customer' ? (
@@ -589,6 +646,8 @@ createRoot(root).render(
     </main>
   ) : window.uiContractFixture === 'clock' ? (
     <ClockContractFixture />
+  ) : window.uiContractFixture === 'break-rule-week' ? (
+    <BreakRuleWeekFixture />
   ) : window.uiContractFixture === 'sidebar' ? (
     <SidebarContractFixture />
   ) : window.uiContractFixture === 'lazy-dialog' ? (
@@ -597,6 +656,36 @@ createRoot(root).render(
     <OrganizationContractFixture />
   ) : window.uiContractFixture === 'organization-export' ? (
     <OrganizationExportContractFixture />
+  ) : window.uiContractFixture === 'company-profile' ? (
+    <CompanyProfileContractFixture />
+  ) : window.uiContractFixture === 'company-letterhead' ? (
+    <CompanyLetterheadContractFixture />
+  ) : window.uiContractFixture === 'draft-landing' ? (
+    <AuthLayout>
+      <h1>Komponentenverträge</h1>
+    </AuthLayout>
+  ) : window.uiContractFixture === 'today-refresh' ? (
+    <TodayRefreshContractFixture />
+  ) : window.uiContractFixture === 'today-refresh-switch' ? (
+    <TodayRefreshSwitchContractFixture />
+  ) : window.uiContractFixture === 'today-refresh-profile' ? (
+    <TodayRefreshProfileContractFixture />
+  ) : window.uiContractFixture === 'today-refresh-fallback' ? (
+    <TodayRefreshFallbackContractFixture />
+  ) : window.uiContractFixture === 'offline-today' ? (
+    <OfflineTodayContractFixture />
+  ) : window.uiContractFixture === 'offline-clock' ? (
+    <OfflineClockContractFixture />
+  ) : window.uiContractFixture === 'unsent-time-landing' ? (
+    <UnsentTimeLandingContractFixture />
+  ) : window.uiContractFixture === 'work-handover' ? (
+    <WorkHandoverContractFixture />
+  ) : window.uiContractFixture === 'edit-job' ? (
+    <EditJobContractFixture />
+  ) : window.uiContractFixture === 'site-access-review' ? (
+    <SiteAccessReviewContractFixture />
+  ) : window.uiContractFixture === 'site-access-proposal' ? (
+    <SiteAccessProposalContractFixture />
   ) : window.uiContractFixture === 'calendar-board' ? (
     <CalendarBoardContractFixture />
   ) : window.uiContractFixture === 'calendar-day' ? (
@@ -667,6 +756,8 @@ createRoot(root).render(
         />
       </main>
     </BannerProvider>
+  ) : window.uiContractFixture === 'member-role' ? (
+    <MemberRoleContractFixture />
   ) : window.uiContractFixture === 'personnel' ? (
     <BannerProvider>
       <main>

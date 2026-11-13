@@ -170,6 +170,7 @@ export function getInventoryActionErrorMessage(error: string): string {
   const messages: Record<string, string> = {
     name_required: 'Bitte gib einen Namen ein.',
     unit_required: 'Bitte wähle eine Einheit aus.',
+    unit_unknown: 'Diese Einheit steht nicht in der Liste. Bitte wähle eine Einheit aus.',
     location_required_for_initial_stock:
       'Bitte wähle zuerst ein Lager aus oder lege direkt in diesem Feld ein neues Lager an.',
     location_required: 'Bitte wähle ein Lager aus.',

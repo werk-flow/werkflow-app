@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
 import type { InventoryCategory, InventoryLocation } from '@/lib/inventory/types';
+import { isInventoryUnitCode } from '@/lib/inventory/units';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { getItemNumberFieldErrors, type ItemFormState } from './inventory-form-state';
 import {
@@ -37,10 +38,19 @@ type ItemDialogProps = {
   onSave: () => void;
 };
 
+/** An article saved before the unit list may carry a unit outside it; a save needs one from the list. */
+function unitFieldError(unit: string): string | undefined {
+  if (isInventoryUnitCode(unit)) return undefined;
+  return unit.trim()
+    ? `„${unit}“ ist keine Einheit aus der Liste. Bitte wähle eine Einheit aus.`
+    : 'Bitte wähle eine Einheit aus.';
+}
+
 /** The item form's errors, keyed by control id in visual order. */
 function itemFieldErrors(form: ItemFormState, initialQuantity: number) {
   return {
     'inventory-item-name': form.name.trim() ? undefined : 'Bitte gib einen Namen ein.',
+    'inventory-item-unit': unitFieldError(form.unit),
     'inventory-item-initial-location':
       !form.id && initialQuantity > 0 && !form.initialLocationId
         ? 'Wähle ein Lager für den Startbestand.'
@@ -98,6 +108,7 @@ export function ItemDialog({
               setForm={setForm}
               categories={categories}
               nameError={shownErrors['inventory-item-name']}
+              unitError={shownErrors['inventory-item-unit']}
             />
             <ItemStockFields
               form={form}

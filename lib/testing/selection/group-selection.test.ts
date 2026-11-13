@@ -65,6 +65,12 @@ const groups = [
     ['tests/audit/performance/calendar.spec.ts'],
   ),
   browser('audit:visual', 'release-only', ['*'], ['tests/audit/visual/references.spec.ts']),
+  browser(
+    'audit:visual:acceptance:sets',
+    'release-only',
+    ['*'],
+    ['tests/audit/visual/acceptance-sets.spec.ts', 'tests/audit/support/acceptance-sets.ts'],
+  ),
 ];
 const CRITICAL = ['golden:gg-00', 'golden:p1-21'];
 const CHEAP = ['static:docs', 'static:dependencies', 'unit:all', 'ui:contracts', 'sql:p1-21'];
@@ -249,6 +255,13 @@ test('visual references run in release mode only, even when shared controls or t
     'audit:wave-2:p1-13',
   ]);
   expect(select([], [], 'release')).toContain('audit:visual');
+});
+
+test('a set file selects the group that loads its directory, also when the change deletes it', () => {
+  // No import names a set file, so a deleted one is in no group's execution inputs.
+  const closed = 'tests/audit/support/acceptance-sets/closed-set-2026-10-01.ts';
+  expect(select([closed])).toContain('audit:visual:acceptance:sets');
+  expect(select([closed])).not.toContain('audit:visual');
 });
 
 test('a browser pass counts only when it ran on the current content of the files that selected it', () => {
@@ -452,4 +465,43 @@ test('changed-spec-first: a group whose own spec or test support changed is tier
   expect(changedTestTier(inputs, ['lib/testing/runner/run-policy.ts'])).toBe(1);
   expect(changedTestTier(inputs, ['components/ui/dialog.tsx'])).toBe(1);
   expect(changedTestTier(undefined, ['tests/golden/p1-13.spec.ts'])).toBe(1);
+});
+
+test('a layout sweep runs when a product file its audited surfaces render changed, never for docs or tests', () => {
+  const sweep = {
+    ...browser('audit:layout:job', 'release-only', ['work'], ['tests/audit/layout/surfaces-job.spec.ts']),
+    renderedFiles: ['components/auftraege/job-detail/job-detail-header.tsx'],
+  };
+  const plan = (changedFiles: string[]) =>
+    groupSelections({ mode: 'change', groups: [sweep], changedFiles, unresolvedGroupIds: [] });
+  // #393 changed the job header and its edit dialog; its plan ran no layout sweep.
+  expect(
+    plan(['components/auftraege/job-detail/job-detail-header.tsx', 'docs/README.md']).get(sweep.id),
+  ).toEqual({
+    reason: 'Audited surface changed',
+    changedFiles: ['components/auftraege/job-detail/job-detail-header.tsx'],
+  });
+  expect(
+    plan(['components/ui/button.tsx', 'docs/README.md', 'tests/golden/p1-01.spec.ts']).has(sweep.id),
+  ).toBe(false);
+  // With its own test changed too, the test reason stays, and a pass still counts only on the current component.
+  const both = plan([
+    'tests/audit/layout/surfaces-job.spec.ts',
+    'components/auftraege/job-detail/job-detail-header.tsx',
+  ]);
+  expect(both.get(sweep.id)).toEqual({
+    reason: 'Test execution dependency changed',
+    changedFiles: [
+      'tests/audit/layout/surfaces-job.spec.ts',
+      'components/auftraege/job-detail/job-detail-header.tsx',
+    ],
+  });
+  const spec = { 'tests/audit/layout/surfaces-job.spec.ts': 'spec' };
+  expect(
+    passedSinceSelection({
+      then: { ...spec, 'components/auftraege/job-detail/job-detail-header.tsx': 'focus on the title' },
+      now: { ...spec, 'components/auftraege/job-detail/job-detail-header.tsx': 'focus on the first control' },
+      selection: both.get(sweep.id),
+    }),
+  ).toBe(false);
 });

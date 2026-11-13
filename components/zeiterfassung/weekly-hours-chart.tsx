@@ -1,21 +1,20 @@
 'use client';
 
 import { useMemo } from 'react';
-import { cn } from '@/lib/utils';
+import { cn, formatBerlin } from '@/lib/utils';
 import { computeBreakdownForSettings } from '@/lib/time-tracking/settings';
 import { formatDuration } from '@/lib/time-tracking/helpers';
 import { sumTargetMinutes, type DailyTarget } from '@/lib/personnel/targets';
 import type { DayData } from '@/hooks/use-weekly-time-data';
-import type { OrgBreakMode } from '@/lib/time-tracking/settings';
+import type { BreakPolicyValues } from '@/lib/time-tracking/settings';
 
 interface WeeklyHoursChartProps {
   weekData: DayData[];
   todayIndex: number;
   liveTodayMinutes?: number;
   liveTodayBreakMinutes?: number;
-  liveTodayBreakMode?: OrgBreakMode;
-  liveAutoBreakThresholdMinutes?: number;
-  liveAutoBreakDurationMinutes?: number;
+  /** Today's break rule; without one, today counts as manual breaks. */
+  liveTodayBreakPolicy?: BreakPolicyValues;
   narrowBars?: boolean;
   weekLabel?: { dateRange: string; kw: string };
   /** Monday-first resolved daily targets (P1-04) for the shown week. */
@@ -189,9 +188,7 @@ export function WeeklyHoursChart({
   todayIndex,
   liveTodayMinutes,
   liveTodayBreakMinutes,
-  liveTodayBreakMode,
-  liveAutoBreakThresholdMinutes,
-  liveAutoBreakDurationMinutes,
+  liveTodayBreakPolicy,
   narrowBars = false,
   weekLabel,
   weekTargets,
@@ -204,27 +201,14 @@ export function WeeklyHoursChart({
         const bd = computeBreakdownForSettings(
           liveTodayMinutes,
           liveTodayBreakMinutes ?? 0,
-          {
-            breakMode: liveTodayBreakMode ?? 'manual',
-            autoBreakThresholdMinutes: liveAutoBreakThresholdMinutes ?? 360,
-            autoBreakDurationMinutes: liveAutoBreakDurationMinutes ?? 30,
-          },
+          liveTodayBreakPolicy,
           weekTargets?.[i]?.targetMinutes,
         );
         return { ...day, ...bd, totalMinutes: liveTodayMinutes };
       }
       return day;
     });
-  }, [
-    weekData,
-    todayIndex,
-    liveAutoBreakDurationMinutes,
-    liveAutoBreakThresholdMinutes,
-    liveTodayBreakMinutes,
-    liveTodayBreakMode,
-    liveTodayMinutes,
-    weekTargets,
-  ]);
+  }, [weekData, todayIndex, liveTodayBreakMinutes, liveTodayBreakPolicy, liveTodayMinutes, weekTargets]);
 
   const weeklyTargetMinutes = useMemo(
     () => (weekTargets ? sumTargetMinutes(weekTargets) : null),
@@ -266,6 +250,19 @@ export function WeeklyHoursChart({
       </div>
 
       <WeeklyHoursChartLegend />
+      <WeeklySchoolDays weekTargets={weekTargets} />
     </div>
+  );
+}
+
+/* The week's Berufsschule days: each counts with its normal target (werk-flow/werkflow-planning#165). */
+function WeeklySchoolDays({ weekTargets }: { weekTargets: DailyTarget[] | undefined }) {
+  const schoolDays = (weekTargets ?? []).filter((target) => target.absence?.type === 'school');
+  if (schoolDays.length === 0) return null;
+  return (
+    <p className="mt-2 text-center text-xs text-muted-foreground">
+      {`Berufsschule diese Woche: ${schoolDays.map((target) => formatBerlin(`${target.date}T12:00:00Z`, 'weekdayDayMonth')).join(', ')}. `}
+      An diesen Tagen gilt dein Tagesziel als erfüllt.
+    </p>
   );
 }

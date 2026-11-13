@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { contactMailtoHref } from '@/lib/clients/contact-email';
-import type { ClientContact } from '@/lib/clients/types';
+import type { ClientContact, ClientSite } from '@/lib/clients/types';
+import { SITE_CONTACT_ROLE_LABELS } from '@/lib/clients/site-roles';
 import { SectionTitle } from '@/components/shared/section-title';
 
 // tel: links work most reliably with digits and a leading + only.
@@ -24,6 +25,8 @@ export type ContactRequestHandler = (input: {
 
 interface ClientContactRowProps {
   contact: ClientContact;
+  /** The Einsatzort the contact lives at or opens; null when it has none. */
+  site: ClientSite | null;
   isAdminOrManager: boolean;
   isPendingRow: (id: string) => boolean;
   onRequestContact: ContactRequestHandler | undefined;
@@ -88,6 +91,7 @@ function ClientContactLinks({
 
 function ClientContactRow({
   contact,
+  site,
   isAdminOrManager,
   isPendingRow,
   onRequestContact,
@@ -115,6 +119,12 @@ function ClientContactRow({
             {contact.role && (
               <Badge variant="outline" className="text-xs">
                 {contact.role}
+              </Badge>
+            )}
+            {contact.siteRole && (
+              <Badge variant="outline" className="max-w-full shrink whitespace-normal text-xs wrap-anywhere">
+                {SITE_CONTACT_ROLE_LABELS[contact.siteRole]}
+                {site ? ` · ${site.name}` : ''}
               </Badge>
             )}
           </div>
@@ -154,13 +164,16 @@ function ClientContactRow({
   );
 }
 
-interface ClientContactsCardProps extends Omit<ClientContactRowProps, 'contact'> {
+interface ClientContactsCardProps extends Omit<ClientContactRowProps, 'contact' | 'site'> {
+  /** The customer's Einsatzorte, to name a contact's own. */
+  sites: ClientSite[];
   activeContacts: ClientContact[];
   inactiveContacts: ClientContact[];
   onAddContact: () => void;
 }
 
 export function ClientContactsCard({
+  sites,
   activeContacts,
   inactiveContacts,
   isAdminOrManager,
@@ -191,6 +204,7 @@ export function ClientContactsCard({
             <ClientContactRow
               key={contact.id}
               contact={contact}
+              site={sites.find((site) => site.id === contact.siteId) ?? null}
               isAdminOrManager={isAdminOrManager}
               isPendingRow={isPendingRow}
               onRequestContact={onRequestContact}

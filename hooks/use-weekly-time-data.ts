@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import type { WeeklyTimeDataPoint, WeeklyTimeLabel } from '@/lib/time-tracking/types';
@@ -11,7 +11,7 @@ import {
   getTodayIndex,
   getWeekBounds,
 } from '@/lib/time-tracking/weekly';
-import { normalizeTimeTrackingSettings, type OrgBreakMode } from '@/lib/time-tracking/settings';
+import { breakPolicyKey, type BreakPolicy } from '@/lib/time-tracking/settings';
 
 export type DayData = WeeklyTimeDataPoint;
 
@@ -43,9 +43,8 @@ function weekSnapshotOf(
 interface UseWeeklyTimeDataOptions {
   organizationId: string;
   userId: string;
-  breakMode: OrgBreakMode;
-  autoBreakThresholdMinutes: number;
-  autoBreakDurationMinutes: number;
+  /** The rule with its earlier versions: each day of the week keeps the version that applied to it. */
+  breakPolicy: BreakPolicy;
   enabled?: boolean;
   initialWeekData?: WeeklyTimeDataPoint[];
   initialTodayIndex?: number;
@@ -53,12 +52,29 @@ interface UseWeeklyTimeDataOptions {
   initialWeekTargets?: DailyTarget[] | undefined;
 }
 
+/**
+ * The rule with its versions, read again when it is saved (join catch-up
+ * included): a day after the page's render resolves against the version that
+ * applied to it, and the week reads again with it.
+ */
+function useLiveBreakPolicy(organizationId: string, breakPolicy: BreakPolicy, enabled: boolean) {
+  const view = useLiveView<BreakPolicy>({
+    tables: ['organization_settings'],
+    read: async ({ signal }): Promise<LiveViewResult<BreakPolicy>> => {
+      const result = await readInBackground('break-policy', { organizationId }, signal);
+      return result.success ? { ok: true, data: result.breakPolicy } : { ok: false, error: result.error };
+    },
+    initialData: breakPolicy,
+    enabled: enabled && Boolean(organizationId),
+    resetKey: `${organizationId}:${breakPolicyKey(breakPolicy)}`,
+  });
+  return { livePolicy: view.data ?? breakPolicy, policyStale: view.isStale, refreshPolicy: view.refresh };
+}
+
 export function useWeeklyTimeData({
   organizationId,
   userId,
-  breakMode,
-  autoBreakThresholdMinutes,
-  autoBreakDurationMinutes,
+  breakPolicy,
   enabled = true,
   initialWeekData,
   initialTodayIndex,
@@ -70,6 +86,8 @@ export function useWeeklyTimeData({
   // fallback while the entries fetch succeeded.
   const lastKnownTargetsRef = useRef<DailyTarget[] | undefined>(initialWeekTargets);
 
+  const { livePolicy, policyStale, refreshPolicy } = useLiveBreakPolicy(organizationId, breakPolicy, enabled);
+
   const view = useLiveView<WeekSnapshot>({
     tables: [
       'time_entries',
@@ -80,6 +98,9 @@ export function useWeeklyTimeData({
       'work_schedules',
       'employment_conditions',
       'organization_closure_days',
+      // A Berufsschule day the office records credits the day's target.
+      'school_days',
+      // The holiday region; a saved break rule also reads the week again through the policy view.
       'organization_settings',
     ],
     read: async ({ signal }): Promise<LiveViewResult<WeekSnapshot>> => {
@@ -111,13 +132,7 @@ export function useWeeklyTimeData({
       const nextTargets = targetsResult.success ? targetsResult.targets : lastKnownTargetsRef.current;
       lastKnownTargetsRef.current = nextTargets;
 
-      const settings = normalizeTimeTrackingSettings({
-        organizationId,
-        breakMode,
-        autoBreakThresholdMinutes,
-        autoBreakDurationMinutes,
-      });
-      const weekData = buildWeeklyTimeData(result.entries || [], monday, settings, nextTargets);
+      const weekData = buildWeeklyTimeData(result.entries || [], monday, livePolicy, nextTargets);
       return { ok: true, data: weekSnapshotOf(weekData, nextTargets, monday, !targetsResult.success) };
     },
     initialData: initialWeekData
@@ -130,8 +145,14 @@ export function useWeeklyTimeData({
         }
       : undefined,
     enabled,
-    resetKey: `${organizationId}:${userId}:${breakMode}:${autoBreakThresholdMinutes}:${autoBreakDurationMinutes}`,
+    resetKey: `${organizationId}:${userId}:${breakPolicyKey(livePolicy)}`,
   });
+
+  const { refresh: refreshWeek } = view;
+  // A retry reads the rule too: a failed rule read leaves the week stale as well.
+  const refetch = useCallback(async () => {
+    await Promise.all([refreshWeek(), refreshPolicy()]);
+  }, [refreshWeek, refreshPolicy]);
 
   return {
     weekData: view.data?.weekData ?? [],
@@ -141,8 +162,8 @@ export function useWeeklyTimeData({
     weekLabel: view.data?.weekLabel ?? computeWeekLabel(getWeekBounds().monday),
     isLoading: view.isLoading,
     /** A refresh failed: the week is last-known. */
-    isStale: view.isStale,
+    isStale: view.isStale || policyStale,
     error: view.error,
-    refetch: view.refresh,
+    refetch,
   };
 }

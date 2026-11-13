@@ -28,6 +28,7 @@ const SQL_CALLERS: Readonly<Record<string, string>> = {
   convert_client_request_to_job: 'convert_client_request_to_job_with_visit_assessment',
   create_maintenance_plan: 'create_maintenance_plan_with_due_work',
   delete_organization: 'delete_organization_with_files',
+  create_payroll_mapping_version: 'confirm_payroll_mapping_version',
   create_payroll_mapping_version_p1_23_base: 'create_payroll_mapping_version',
   fail_payroll_export_p1_23_base: 'fail_payroll_export',
   finalize_personnel_document_metadata_base: 'finalize_personnel_document_metadata',
@@ -38,6 +39,7 @@ const SQL_CALLERS: Readonly<Record<string, string>> = {
   get_user_admin_or_manager_org_ids: 'RLS policies',
   get_user_org_ids: 'RLS policies',
   link_maintenance_due_visit: 'create_maintenance_visit_job',
+  open_time_account: 'open_time_accounts',
   prepare_time_period_p1_23_base: 'prepare_time_period',
   publish_personnel_onboarding_template_base: 'publish_personnel_onboarding_template',
   record_work_artifact_action_p1_17_inner: 'record_work_artifact_action',
@@ -60,6 +62,10 @@ const SQL_CALLERS: Readonly<Record<string, string>> = {
 
 /** Function -> why it stays although the current build does not call it. */
 const KEPT_FOR_DEPLOYED_BUILD: Readonly<Record<string, string>> = {
+  import_inventory_row:
+    'the deployed production build books CSV rows through it; drop it in the first migration after the release that ships book_inventory_import (werk-flow/werkflow-planning#371)',
+  list_open_request_attention:
+    'the deployed production build reads open requests through it; read_manager_attention_sets replaced it, so drop it in the first migration after the next production release',
   renew_employee_capability:
     'the deployed production build still calls it; drop it in the first migration after the next production release',
 };

@@ -3,6 +3,10 @@
 -- a refused break end leaves the settings unchanged, a stale snapshot, a
 -- foreign organization, a field worker and a Büro member are refused, a save
 -- leaves a completed day as it was, and only the service role executes the function.
+-- The nine-hour step: an existing organization has it off, switching it on writes
+-- it with its version, the save refuses an inconsistent step, a save of the
+-- previous release keeps every version's step, and a new organization starts
+-- with it on.
 begin;
 
 insert into auth.users (
@@ -40,10 +44,49 @@ create table pg_temp.completed_day as
 select to_jsonb(entry) as entry from public.time_entries entry
 where organization_id = '26104154-0000-0000-0000-000000000010';
 grant select on pg_temp.completed_day to service_role;
+-- Today's open break of the same worker: a save ends it.
+insert into public.time_entries (id, organization_id, user_id, entry_type, timestamp, is_manual, status) values
+('26104154-0000-0000-0000-0000000000c3', '26104154-0000-0000-0000-000000000010',
+  '26104154-0000-0000-0000-000000000002', 'clock_in', now() - interval '2 hours', true, 'approved'),
+('26104154-0000-0000-0000-0000000000c4', '26104154-0000-0000-0000-000000000010',
+  '26104154-0000-0000-0000-000000000002', 'break_start', now() - interval '1 hour', true, 'approved');
 -- A job of the other organization: the work-start trigger refuses a break end on it.
 insert into public.jobs (id, organization_id, title, job_number, created_by) values
 ('26104154-0000-0000-0000-0000000000aa', '26104154-0000-0000-0000-000000000011', 'Foreign job',
   'TSET-FOREIGN', '26104154-0000-0000-0000-000000000003');
+-- A cancelled job of this organization and the Büro member's open break that
+-- would resume it: the work-start trigger refuses that break end. Seeded with
+-- triggers off (replica role), as the trigger would refuse the clock-in on a
+-- cancelled job too.
+insert into public.jobs (id, organization_id, title, job_number, created_by, execution_state) values
+('26104154-0000-0000-0000-0000000000ab', '26104154-0000-0000-0000-000000000010', 'Cancelled job',
+  'TSET-CANCELLED', '26104154-0000-0000-0000-000000000001', 'cancelled');
+set local session_replication_role = replica;
+insert into public.time_entries (id, organization_id, user_id, entry_type, timestamp, is_manual, status, job_id) values
+('26104154-0000-0000-0000-0000000000c5', '26104154-0000-0000-0000-000000000010',
+  '26104154-0000-0000-0000-000000000004', 'clock_in', now() - interval '2 hours', true, 'approved',
+  '26104154-0000-0000-0000-0000000000ab'),
+('26104154-0000-0000-0000-0000000000c6', '26104154-0000-0000-0000-000000000010',
+  '26104154-0000-0000-0000-000000000004', 'break_start', now() - interval '1 hour', true, 'approved', null);
+-- The admin's open break after a break end on job A and a clock-in on job B
+-- at one timestamp, the break end recorded later: the app orders a break end
+-- before a clock-in at one timestamp, so the break resumes job B.
+insert into public.jobs (id, organization_id, title, job_number, created_by) values
+('26104154-0000-0000-0000-0000000000ac', '26104154-0000-0000-0000-000000000010', 'Job A',
+  'TSET-A', '26104154-0000-0000-0000-000000000001'),
+('26104154-0000-0000-0000-0000000000ad', '26104154-0000-0000-0000-000000000010', 'Job B',
+  'TSET-B', '26104154-0000-0000-0000-000000000001');
+insert into public.time_entries (id, organization_id, user_id, entry_type, timestamp, is_manual, status, job_id, created_at) values
+('26104154-0000-0000-0000-0000000000c7', '26104154-0000-0000-0000-000000000010',
+  '26104154-0000-0000-0000-000000000001', 'break_end', now() - interval '50 minutes', true, 'approved',
+  '26104154-0000-0000-0000-0000000000ac', now()),
+('26104154-0000-0000-0000-0000000000c8', '26104154-0000-0000-0000-000000000010',
+  '26104154-0000-0000-0000-000000000001', 'clock_in', now() - interval '50 minutes', true, 'approved',
+  '26104154-0000-0000-0000-0000000000ad', now() - interval '1 minute'),
+('26104154-0000-0000-0000-0000000000c9', '26104154-0000-0000-0000-000000000010',
+  '26104154-0000-0000-0000-000000000001', 'break_start', now() - interval '40 minutes', true, 'approved',
+  null, now());
+set local session_replication_role = origin;
 insert into public.organization_settings (organization_id, break_policy_history) values
 ('26104154-0000-0000-0000-000000000010',
   '[{"breakMode":"manual","autoBreakThresholdMinutes":360,"autoBreakDurationMinutes":30,"effectiveFrom":"2026-01-01T00:00:00.000Z"}]');
@@ -62,7 +105,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -131,8 +174,8 @@ select pg_temp.expect_refusal('a break end the work-start trigger refuses', $sql
   select public.update_time_tracking_settings('26104154-0000-0000-0000-000000000001',
     '26104154-0000-0000-0000-000000000010', (select expected from pg_temp.settings_call),
     'automatic', 360, 45, (select history from pg_temp.settings_call),
-    '[{"user_id":"26104154-0000-0000-0000-000000000002","job_id":"26104154-0000-0000-0000-0000000000aa"}]')
-$sql$, 'work_time_start_job_not_found');
+    '[{"user_id":"26104154-0000-0000-0000-000000000004","job_id":null}]')
+$sql$, 'work_time_start_terminal');
 
 do $$
 begin
@@ -147,16 +190,23 @@ begin
   then raise exception 'a refused save changed the settings'; end if;
   if exists (
     select 1 from public.time_entries where organization_id = '26104154-0000-0000-0000-000000000010'
-      and id not in ('26104154-0000-0000-0000-0000000000c1', '26104154-0000-0000-0000-0000000000c2')
+      and id not in ('26104154-0000-0000-0000-0000000000c1', '26104154-0000-0000-0000-0000000000c2',
+        '26104154-0000-0000-0000-0000000000c3', '26104154-0000-0000-0000-0000000000c4',
+        '26104154-0000-0000-0000-0000000000c5', '26104154-0000-0000-0000-0000000000c6',
+        '26104154-0000-0000-0000-0000000000c7', '26104154-0000-0000-0000-0000000000c8',
+        '26104154-0000-0000-0000-0000000000c9')
   ) then raise exception 'a refused save ended a break'; end if;
 
   perform public.update_time_tracking_settings('26104154-0000-0000-0000-000000000001',
     '26104154-0000-0000-0000-000000000010', (select expected from pg_temp.settings_call),
     'automatic', 360, 45, (select history from pg_temp.settings_call),
-    '[{"user_id":"26104154-0000-0000-0000-000000000002","job_id":null}]');
+    -- A stale job from the caller (here one of another organization, which the
+    -- work-start trigger would refuse) is ignored: the break resumes the job
+    -- of the entry before it, read under lock.
+    '[{"user_id":"26104154-0000-0000-0000-000000000002","job_id":"26104154-0000-0000-0000-0000000000aa"}]');
   if (select break_mode::text || auto_break_duration_minutes || jsonb_array_length(break_policy_history)
       from public.organization_settings
-      where organization_id = '26104154-0000-0000-0000-000000000010') <> 'automatic452'
+      where organization_id = '26104154-0000-0000-0000-000000000010') is distinct from 'automatic452'
   then raise exception 'a clean save did not write the settings and the history'; end if;
   if (select count(*) from public.time_entries
       where organization_id = '26104154-0000-0000-0000-000000000010'
@@ -173,7 +223,11 @@ begin
   ) or (
     select count(*) from public.time_entries
     where organization_id = '26104154-0000-0000-0000-000000000010'
-      and id not in ('26104154-0000-0000-0000-0000000000c1', '26104154-0000-0000-0000-0000000000c2')
+      and id not in ('26104154-0000-0000-0000-0000000000c1', '26104154-0000-0000-0000-0000000000c2',
+        '26104154-0000-0000-0000-0000000000c3', '26104154-0000-0000-0000-0000000000c4',
+        '26104154-0000-0000-0000-0000000000c5', '26104154-0000-0000-0000-0000000000c6',
+        '26104154-0000-0000-0000-0000000000c7', '26104154-0000-0000-0000-0000000000c8',
+        '26104154-0000-0000-0000-0000000000c9')
   ) <> 1 then raise exception 'a saved break rule rewrote a completed day'; end if;
 
   -- The first save of an organization without a settings row creates it; a
@@ -182,7 +236,7 @@ begin
     '26104154-0000-0000-0000-000000000011', null,
     'automatic', 480, 30, '[{"breakMode":"automatic","autoBreakThresholdMinutes":480,"autoBreakDurationMinutes":30,"effectiveFrom":"2026-10-04T08:00:00.000Z"}]', '[]');
   if (select auto_break_threshold_minutes from public.organization_settings
-      where organization_id = '26104154-0000-0000-0000-000000000011') <> 480
+      where organization_id = '26104154-0000-0000-0000-000000000011') is distinct from 480
   then raise exception 'a first save did not create the settings row'; end if;
 end;
 $$;
@@ -193,7 +247,189 @@ select pg_temp.expect_refusal('a second first save', $sql$
     'manual', 360, 30, '[]', '[]')
 $sql$, 'settings_changed');
 
+-- The nine-hour step (migration 20261201120001_add_the_nine_hour_break_step.sql).
+-- An existing organization has it off until an admin switches it on.
+do $$
+begin
+  if (select auto_break_second_threshold_minutes is not null or auto_break_second_duration_minutes is not null
+      from public.organization_settings where organization_id = '26104154-0000-0000-0000-000000000010')
+  then raise exception 'an existing organization got the second step without switching it on'; end if;
+end;
+$$;
+
+create view pg_temp.second_step_call as
+select
+  jsonb_build_object(
+    'break_mode', settings.break_mode,
+    'auto_break_threshold_minutes', settings.auto_break_threshold_minutes,
+    'auto_break_duration_minutes', settings.auto_break_duration_minutes,
+    'auto_break_second_threshold_minutes', settings.auto_break_second_threshold_minutes,
+    'auto_break_second_duration_minutes', settings.auto_break_second_duration_minutes,
+    'break_policy_history', settings.break_policy_history) expected,
+  settings.break_policy_history || '[{"breakMode":"automatic","autoBreakThresholdMinutes":360,"autoBreakDurationMinutes":30,"secondStep":{"thresholdMinutes":540,"durationMinutes":45},"effectiveFrom":"2026-10-05T08:00:00.000Z"}]'::jsonb history
+from public.organization_settings settings
+where settings.organization_id = '26104154-0000-0000-0000-000000000010';
+grant select on pg_temp.second_step_call to service_role;
+
+-- The ten-argument save compares the second step too: a snapshot without it is stale.
+select pg_temp.expect_refusal('a snapshot without the second step', $sql$
+  select public.update_time_tracking_settings('26104154-0000-0000-0000-000000000001',
+    '26104154-0000-0000-0000-000000000010',
+    (select expected - 'auto_break_second_threshold_minutes' - 'auto_break_second_duration_minutes'
+     from pg_temp.second_step_call),
+    'automatic', 360, 30, 540, 45, (select history from pg_temp.second_step_call), '[]')
+$sql$, 'settings_changed');
+select pg_temp.expect_refusal('a second step with only a threshold', $sql$
+  select public.update_time_tracking_settings('26104154-0000-0000-0000-000000000001',
+    '26104154-0000-0000-0000-000000000010', (select expected from pg_temp.second_step_call),
+    'automatic', 360, 30, 540, null, (select history from pg_temp.second_step_call), '[]')
+$sql$, 'invalid_input');
+select pg_temp.expect_refusal('a second threshold before the first', $sql$
+  select public.update_time_tracking_settings('26104154-0000-0000-0000-000000000001',
+    '26104154-0000-0000-0000-000000000010', (select expected from pg_temp.second_step_call),
+    'automatic', 360, 30, 300, 45, (select history from pg_temp.second_step_call), '[]')
+$sql$, 'invalid_input');
+select pg_temp.expect_refusal('a second step shorter than the first', $sql$
+  select public.update_time_tracking_settings('26104154-0000-0000-0000-000000000001',
+    '26104154-0000-0000-0000-000000000010', (select expected from pg_temp.second_step_call),
+    'automatic', 360, 30, 540, 20, (select history from pg_temp.second_step_call), '[]')
+$sql$, 'invalid_input');
+
+do $$
+begin
+  perform public.update_time_tracking_settings('26104154-0000-0000-0000-000000000001',
+    '26104154-0000-0000-0000-000000000010', (select expected from pg_temp.second_step_call),
+    'automatic', 360, 30, 540, 45, (select history from pg_temp.second_step_call), '[]');
+  if (select auto_break_second_threshold_minutes::text || '/' || auto_break_second_duration_minutes
+        || '/' || jsonb_array_length(break_policy_history)
+      from public.organization_settings
+      where organization_id = '26104154-0000-0000-0000-000000000010') is distinct from '540/45/3'
+  then raise exception 'switching the second step on did not write it and its version'; end if;
+end;
+$$;
+
+-- A break that already ended is not ended again: the action read it open,
+-- but a transition (here the first save) ended it before this call. Both
+-- versions re-check the open break under the employee record's lock.
+do $$
+begin
+  perform public.update_time_tracking_settings('26104154-0000-0000-0000-000000000001',
+    '26104154-0000-0000-0000-000000000010', (select expected from pg_temp.second_step_call),
+    'automatic', 360, 30, 540, 45,
+    (select expected -> 'break_policy_history' from pg_temp.second_step_call),
+    '[{"user_id":"26104154-0000-0000-0000-000000000002","job_id":null,"break_start_id":"26104154-0000-0000-0000-0000000000c4"}]');
+  if (select count(*) from public.time_entries
+      where organization_id = '26104154-0000-0000-0000-000000000010'
+        and user_id = '26104154-0000-0000-0000-000000000002'
+        and entry_type = 'break_end') <> 1
+  then raise exception 'a save ended a break that was no longer open'; end if;
+end;
+$$;
+
+-- Same-timestamp entries before a break are ordered as the app orders them.
+do $$
+begin
+  perform public.update_time_tracking_settings('26104154-0000-0000-0000-000000000001',
+    '26104154-0000-0000-0000-000000000010', (select expected from pg_temp.second_step_call),
+    'automatic', 360, 30, 540, 45,
+    (select expected -> 'break_policy_history' from pg_temp.second_step_call),
+    '[{"user_id":"26104154-0000-0000-0000-000000000001","break_start_id":"26104154-0000-0000-0000-0000000000c9"}]');
+  if (select job_id from public.time_entries
+      where organization_id = '26104154-0000-0000-0000-000000000010'
+        and user_id = '26104154-0000-0000-0000-000000000001'
+        and entry_type = 'break_end' and timestamp = now()) is distinct from '26104154-0000-0000-0000-0000000000ad'
+  then raise exception 'a break resumed another job than the app orders before it'; end if;
+end;
+$$;
+
+-- A save of the previous release after a rollback: it sends the history back
+-- without secondStep and knows no second step.
+create view pg_temp.previous_release_call as
+select
+  jsonb_build_object(
+    'break_mode', settings.break_mode,
+    'auto_break_threshold_minutes', settings.auto_break_threshold_minutes,
+    'auto_break_duration_minutes', settings.auto_break_duration_minutes,
+    'break_policy_history', settings.break_policy_history) expected,
+  (select jsonb_agg(version - 'secondStep') from jsonb_array_elements(settings.break_policy_history) version)
+    || '[{"breakMode":"automatic","autoBreakThresholdMinutes":360,"autoBreakDurationMinutes":35,"effectiveFrom":"2026-10-06T08:00:00.000Z"}]'::jsonb
+    history
+from public.organization_settings settings
+where settings.organization_id = '26104154-0000-0000-0000-000000000010';
+grant select on pg_temp.previous_release_call to service_role;
+
+do $$
+declare
+  v_before jsonb := (select break_policy_history from public.organization_settings
+    where organization_id = '26104154-0000-0000-0000-000000000010');
+  v_after jsonb;
+begin
+  perform public.update_time_tracking_settings('26104154-0000-0000-0000-000000000001',
+    '26104154-0000-0000-0000-000000000010', (select expected from pg_temp.previous_release_call),
+    'automatic', 360, 35, (select history from pg_temp.previous_release_call), '[]');
+  select break_policy_history into v_after from public.organization_settings
+  where organization_id = '26104154-0000-0000-0000-000000000010';
+  -- Every earlier version keeps its step, so its days keep their break.
+  if (select jsonb_agg(version order by position)
+      from jsonb_array_elements(v_after) with ordinality as t(version, position)
+      where position <= jsonb_array_length(v_before)) is distinct from v_before
+  then raise exception 'a previous-release save took the step from earlier versions: %', v_after; end if;
+  -- The step that was on stays on, in the columns and in the added version.
+  if v_after -> 3 -> 'secondStep' is distinct from '{"thresholdMinutes":540,"durationMinutes":45}'::jsonb
+    or (select auto_break_second_threshold_minutes::text || '/' || auto_break_second_duration_minutes
+        from public.organization_settings
+        where organization_id = '26104154-0000-0000-0000-000000000010') is distinct from '540/45'
+  then raise exception 'a previous-release save turned the step off: %', v_after; end if;
+
+  -- A first step that no longer fits the second turns the step off.
+  perform public.update_time_tracking_settings('26104154-0000-0000-0000-000000000001',
+    '26104154-0000-0000-0000-000000000010', (select expected from pg_temp.previous_release_call),
+    'automatic', 600, 30,
+    (select jsonb_agg(version - 'secondStep') from jsonb_array_elements(v_after) version)
+      || '[{"breakMode":"automatic","autoBreakThresholdMinutes":600,"autoBreakDurationMinutes":30,"effectiveFrom":"2026-10-07T08:00:00.000Z"}]'::jsonb,
+    '[]');
+  if (select auto_break_second_threshold_minutes is not null or break_policy_history -> 4 ? 'secondStep'
+      or break_policy_history -> 3 -> 'secondStep' is distinct from '{"thresholdMinutes":540,"durationMinutes":45}'::jsonb
+      from public.organization_settings where organization_id = '26104154-0000-0000-0000-000000000010')
+  then raise exception 'a step that no longer fits stayed on, or an earlier version lost its step'; end if;
+end;
+$$;
+
 reset role;
+
+-- A new organization starts with the nine-hour step on, in its row and its first version.
+do $$
+declare
+  v_organization_id uuid;
+  v_settings public.organization_settings;
+begin
+  v_organization_id := public.create_organization_with_defaults(
+    '26104154-0000-0000-0000-000000000004', 'Neue Pausenregel SQL', 'TSETSQL3');
+  select * into strict v_settings from public.organization_settings where organization_id = v_organization_id;
+  if v_settings.auto_break_second_threshold_minutes is distinct from 540
+    or v_settings.auto_break_second_duration_minutes is distinct from 45
+    or v_settings.break_policy_history -> 0 -> 'secondStep'
+      is distinct from '{"thresholdMinutes":540,"durationMinutes":45}'::jsonb
+  then raise exception 'a new organization did not start with the nine-hour step: %', row_to_json(v_settings); end if;
+end;
+$$;
+
+do $$
+declare
+  v_function constant text :=
+    'public.update_time_tracking_settings(uuid, uuid, jsonb, text, integer, integer, integer, integer, jsonb, jsonb)';
+  v_role text;
+begin
+  if not has_function_privilege('service_role', v_function, 'execute') then
+    raise exception '% lost its service_role grant', v_function;
+  end if;
+  foreach v_role in array array['anon', 'authenticated'] loop
+    if has_function_privilege(v_role, v_function, 'execute') then
+      raise exception '% is executable by %', v_function, v_role;
+    end if;
+  end loop;
+end;
+$$;
 
 do $$
 declare

@@ -1,9 +1,12 @@
 import { existsSync } from 'node:fs';
+import { createServer, request as httpRequest } from 'node:http';
 import { join, resolve } from 'node:path';
 
-import { expect, type Locator, type Page } from '@playwright/test';
+import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 
-// Locators and cache reads of the installable app shell (public/sw.js). The
+import { serviceWorkerScript } from '../../../lib/offline/service-worker-script';
+
+// Locators and cache reads of the installable app shell (/sw.js). The
 // spec passes data; the copy and the cache inspection live here.
 
 const OFFLINE_COPY = {
@@ -11,11 +14,18 @@ const OFFLINE_COPY = {
   retry: 'Erneut versuchen',
 } as const;
 
+const REPOSITORY_ROOT = resolve(__dirname, '../../..');
+
 /** Where the app serves its static files from: a cached image is a shell file only if it exists here. */
 const PUBLIC_ROOT = resolve(__dirname, '../../../public');
 
 /** The prefix of every cache the service worker owns (lib/offline/service-worker-caches.ts). */
 const CACHE_PREFIX = 'werkflow-';
+
+/** The worker names its shell cache after the shell version (lib/offline/service-worker.js). */
+function shellCacheName(version: string): string {
+  return `${CACHE_PREFIX}shell-${version}`;
+}
 
 /** The offline fallback the service worker serves for a navigation without network. */
 export function offlineFallback(page: Page): Locator {
@@ -93,11 +103,7 @@ export async function expectOnlyShellFilesCached(
 
 /** Asserts that no cache the service worker owns is left. */
 export async function expectNoServiceWorkerCaches(page: Page): Promise<void> {
-  const names = await page.evaluate(
-    async (prefix) => (await caches.keys()).filter((name) => name.startsWith(prefix)),
-    CACHE_PREFIX,
-  );
-  expect(names).toEqual([]);
+  await expectServiceWorkerCaches(page, []);
 }
 
 /** A cache under the worker's prefix with one entry: the stand-in for a later data cache. */
@@ -117,4 +123,115 @@ export async function plantOwnedCache(page: Page, personalText: string): Promise
 /** Asserts that the cache `plantOwnedCache` filled is deleted. */
 export async function expectOwnedCacheDeleted(page: Page): Promise<void> {
   expect(await page.evaluate((name) => caches.has(name), PROBE_CACHE)).toBe(false);
+}
+
+/** The worker a production build with this build id serves. */
+function servedFor(buildId: string): string {
+  return serviceWorkerScript(REPOSITORY_ROOT, 'phase-production-build', { WERKFLOW_BUILD_ID: buildId });
+}
+
+/** The shell version the deployment behind `withDeployableOrigin` moves to. */
+const NEXT_BUILD = 'next-build';
+
+/**
+ * Asserts that `/sw.js` serves the worker lib/offline/service-worker-script.ts
+ * composes for the served build's id (the `x-werkflow-build` header of a
+ * cookie-free `/login`), cookie-free, and that the page's shell cache is named
+ * after that id.
+ */
+export async function expectShellOfServedBuild(page: Page, request: APIRequestContext): Promise<void> {
+  const login = await request.get('/login', { maxRedirects: 0 });
+  const buildId = login.headers()['x-werkflow-build'] ?? '';
+  expect(buildId, 'the recorded build names its id on /login').not.toBe('');
+  const worker = await request.get('/sw.js');
+  expect(worker.headers()['content-type']).toContain('javascript');
+  expect(worker.headers()['set-cookie']).toBeUndefined();
+  expect(await worker.text()).toBe(servedFor(buildId));
+  await expectServiceWorkerCaches(page, [shellCacheName(buildId)]);
+}
+
+/** Waits until the caches the service worker owns are exactly `names`. */
+async function expectServiceWorkerCaches(page: Page, names: readonly string[]): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          async (prefix) => (await caches.keys()).filter((name) => name.startsWith(prefix)),
+          CACHE_PREFIX,
+        ),
+      { message: 'The service worker owns exactly these caches' },
+    )
+    .toEqual(names);
+}
+
+/** An origin in front of the test server whose `/sw.js` moves to a later build on `deployNextBuild`. */
+type DeployableOrigin = { origin: string; deployNextBuild: () => void };
+
+/**
+ * Runs `run` against a pass-through proxy to the test server. Until
+ * `deployNextBuild`, every request, `/sw.js` included, reaches the served
+ * build unchanged; after it, `/sw.js` answers with the same source under
+ * another shell version, as the next deployment would. Playwright cannot
+ * route a browser's own update check of a worker script, so the second build
+ * sits behind this proxy. The session cookies of `localhost` hold on its port.
+ */
+export async function withDeployableOrigin(
+  appOrigin: string,
+  run: (deployment: DeployableOrigin) => Promise<void>,
+): Promise<void> {
+  const app = new URL(appOrigin);
+  let deployed: string | null = null;
+  const server = createServer((incoming, outgoing) => {
+    if (deployed !== null && new URL(incoming.url ?? '/', app).pathname === '/sw.js') {
+      outgoing.writeHead(200, {
+        'Content-Type': 'text/javascript; charset=utf-8',
+        'Cache-Control': 'no-cache',
+      });
+      outgoing.end(deployed);
+      return;
+    }
+    const upstream = httpRequest(
+      {
+        host: app.hostname,
+        port: app.port,
+        path: incoming.url,
+        method: incoming.method,
+        headers: incoming.headers,
+      },
+      (answer) => {
+        outgoing.writeHead(answer.statusCode ?? 502, answer.headers);
+        answer.pipe(outgoing);
+      },
+    );
+    upstream.once('error', () => outgoing.destroy());
+    incoming.pipe(upstream);
+  });
+  await new Promise<void>((ready) => server.listen(0, app.hostname, ready));
+  try {
+    const address = server.address();
+    if (address === null || typeof address === 'string') throw new Error('The proxy has no port.');
+    await run({
+      origin: `${app.protocol}//${app.hostname}:${address.port}`,
+      deployNextBuild: () => {
+        deployed = servedFor(NEXT_BUILD);
+      },
+    });
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((closed) => server.close(() => closed()));
+  }
+}
+
+/**
+ * Runs the update check a phone runs when it opens the app after a
+ * deployment, and waits until the next build's worker filled its shell and
+ * deleted every other cache.
+ */
+export async function expectNextBuildShellAfterUpdate(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const registration = await navigator.serviceWorker.getRegistration();
+    await registration?.update();
+  });
+  await expectServiceWorkerCaches(page, [shellCacheName(NEXT_BUILD)]);
+  await waitForOfflineShell(page);
 }

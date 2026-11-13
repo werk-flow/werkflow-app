@@ -1,0 +1,18 @@
+Menü öffnen
+Einstellungen
+Dashboard
+Organisation
+Dokumente & Briefpapier
+Dokumente & Briefpapier
+Firmenangaben, Logo und Briefpapier für deine Angebote, dazu ein Musterangebot als PDF.
+Gilt für Haustechnik Krämer GmbH
+Firmenangaben
+Diese Angaben stehen im Briefkopf und im Fuß jedes Angebots.
+Ein Geschäftsbrief nennt üblicherweise Firma mit Rechtsform, Anschrift, Registergericht und Registernummer, Geschäftsführung oder Inhaber, Steuernummer oder USt-IdNr. und eine Bankverbindung.
+Noch nicht hinterlegt:
+Firma mit Rechtsform, Anschrift, Registergericht und Registernummer, Geschäftsführung oder Inhaber, Steuernummer oder USt-IdNr., Bankverbindung
+.
+Firma und Anschrift
+Firma mit Rechtsform
+Straße und Hausnummer
+Nicht eingestempelt

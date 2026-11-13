@@ -126,10 +126,11 @@ Tier 3 defaults. Diverge after the owner tried the alternative.
 - Enable viewport prefetch for a sidebar link, or prefetch a route's dynamic data on intent.
 - Report a speedup as a percentage alone.
 - Re-export a library's whole namespace from a module the client imports. A namespace object keeps everything the library exports; name the members, as `lib/zod-members.ts` does.
+- Import `react-dom/client` in product code. Next's bootstrap owns it, and a second importer, even a lazy one, makes the bundler cut React's DOM renderer out of the start-up chunk: one more script on every cold start. Render into a host a layout mounts (`components/shared/unsent-work-host.tsx`).
 - Render a client component inside a server primitive every page uses (`PageShell`, `PageBody`, the page headers). Its client reference and the route's chunk list ride in every route payload. Run page-wide client behavior once in the app shell.
 
 ## Verify your work
 
 1. With `bun run test:server local` running, run `bun run test:verify`: its plan takes both lab groups for any product change. Run a wall-clock group the plan names with `--group audit:performance:<name>` on a quiet machine.
-2. For a page, skeleton or shared control, run `bun run test:verify --group audit:layout` and `--group audit:layout:<area>` for each changed area.
+2. A change plan runs `audit:layout:<area>` for each area whose pages or dialogs render a changed file. For a list page or a shared control that more areas render, run `bun run test:verify --group audit:layout` and `--group audit:layout:<area>` for each area it reaches.
 3. Commit the lowered or accepted references with the change. Record the journey decision, the numbers and the person's verdict in the slice record.

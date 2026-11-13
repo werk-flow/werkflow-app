@@ -44,7 +44,7 @@ export function computeZeiterfassungLiveTotals(
   })();
 
   const trackedLiveBreakMinutes =
-    effectiveState.breakMode === 'manual'
+    effectiveState.breakPolicy.breakMode === 'manual'
       ? liveMinutes(
           effectiveState.breakMinutes,
           effectiveState.status === 'on_break' ? runningSince : null,
@@ -55,7 +55,7 @@ export function computeZeiterfassungLiveTotals(
   const breakdown = computeBreakdownForSettings(
     liveTotalMinutes,
     trackedLiveBreakMinutes,
-    effectiveState,
+    effectiveState.breakPolicy,
     todayTargetMinutes,
   );
   const liveWorkMinutes = breakdown.workMinutes;
@@ -64,7 +64,8 @@ export function computeZeiterfassungLiveTotals(
     todayTargetMinutes !== undefined && todayTargetMinutes > 0
       ? Math.min(Math.round((liveWorkMinutes / todayTargetMinutes) * 100), 100)
       : null;
-  const ringTimelineSegments = effectiveState.breakMode === 'manual' ? liveTimelineSegments : undefined;
+  const ringTimelineSegments =
+    effectiveState.breakPolicy.breakMode === 'manual' ? liveTimelineSegments : undefined;
   const liveTravelMinutes =
     effectiveState.travelMinutes +
     (effectiveState.currentActivity?.kind === 'travel' ? currentActivityMinutes : 0);

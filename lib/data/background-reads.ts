@@ -45,6 +45,7 @@ import { getServiceCaseDetailByNumber, getServiceClientOption } from '@/lib/serv
 import { serviceCaseListQuerySchema } from '@/lib/service-cases/list-page';
 import { getServiceCasePage } from '@/lib/service-cases/list-page-server';
 import { getOwnSicknessReports, getSicknessReportsForRecord } from '@/lib/sickness/actions';
+import { getSchoolDaysForRecord } from '@/lib/personnel/school-day-actions';
 import { getMaintenanceEvidenceOptions, getMaintenanceWorkspace } from '@/lib/maintenance/actions';
 import { maintenanceWorkspaceQuerySchema } from '@/lib/maintenance/workspace-page';
 import { getAssignmentTeamOptions } from '@/lib/qualifications/actions';
@@ -66,6 +67,7 @@ import {
   getTimeEntryAuditEvents,
 } from '@/lib/time-tracking/entry-read-actions';
 import { getPendingChangeRequests, getPendingSessions } from '@/lib/time-tracking/review-actions';
+import { getBreakPolicy } from '@/lib/time-tracking/break-policy-read';
 import { getClosedTimePeriods } from '@/lib/time-tracking/closed-period-reads';
 import { getTimeApprovalHolder } from '@/lib/time-tracking/approval-holder-reads';
 import { getJobsForPicker } from '@/lib/time-tracking/picker-actions';
@@ -192,6 +194,8 @@ export const BACKGROUND_READS = {
   ),
   // The closed periods every surface that edits recorded time asks before it offers an edit.
   'closed-time-periods': defineRead(organizationInput, (input) => getClosedTimePeriods(input.organizationId)),
+  // The break rule with its versions, read again by an open week when the rule is saved.
+  'break-policy': defineRead(organizationInput, (input) => getBreakPolicy(input.organizationId)),
   // The caller's own time_approval holder, which every surface that offers a time review asks.
   'time-approval-holder': defineRead(organizationInput, (input) =>
     getTimeApprovalHolder(input.organizationId),
@@ -265,6 +269,9 @@ export const BACKGROUND_READS = {
   ),
   'sickness-reports-for-record': defineRead(employeeRecordInput, (input) =>
     getSicknessReportsForRecord(input.employeeRecordId),
+  ),
+  'school-days-for-record': defineRead(employeeRecordInput, (input) =>
+    getSchoolDaysForRecord(input.employeeRecordId),
   ),
   'job-picker-jobs': defineRead(jobPickerRequestSchema, (input) => getJobsForPicker(input)),
   'maintenance-workspace': defineRead(

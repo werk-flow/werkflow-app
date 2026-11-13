@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { createAdminClient } from './shared';
+import { createAdminClient, persisted, type Persisted } from './shared';
 
 export interface SeedCustomerContact {
   name: string;
@@ -258,4 +258,49 @@ export async function getCustomerRelationshipState(
       state: row.state,
     })),
   };
+}
+
+export type PersistedCustomer = Persisted<{ clientId: string; name: string }>;
+
+/**
+ * The customer an Objekt is filed under, or with `role` the holder of its
+ * open role of that kind, read back by the Objekt number, which is unique in
+ * the organization.
+ */
+export async function getObjektCustomer(
+  orgId: string,
+  sourceNumber: string,
+  role?: 'eigentuemer' | 'hausverwaltung' | 'rechnungsempfaenger',
+): Promise<PersistedCustomer> {
+  const admin = createAdminClient();
+  const site = await admin
+    .from('client_sites')
+    .select('id, client_id')
+    .eq('organization_id', orgId)
+    .eq('source_number', sourceNumber)
+    .single();
+  if (site.error) throw new Error(`Objekt ${sourceNumber} lookup failed: ${site.error.message}`);
+  let clientId = site.data.client_id;
+  if (role) {
+    const holder = await admin
+      .from('client_site_roles')
+      .select('holder_client_id')
+      .eq('organization_id', orgId)
+      .eq('site_id', site.data.id)
+      .eq('role', role)
+      .is('ends_on', null)
+      .single();
+    if (holder.error)
+      throw new Error(`Objekt ${sourceNumber} ${role} lookup failed: ${holder.error.message}`);
+    clientId = holder.data.holder_client_id;
+  }
+  const client = await admin
+    .from('clients')
+    .select('id, name')
+    .eq('organization_id', orgId)
+    .eq('id', clientId)
+    .single();
+  if (client.error)
+    throw new Error(`Customer of Objekt ${sourceNumber} lookup failed: ${client.error.message}`);
+  return persisted({ clientId: client.data.id, name: client.data.name });
 }

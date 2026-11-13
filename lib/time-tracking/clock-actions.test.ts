@@ -23,9 +23,12 @@ const job: ClockJobInfo = {
 function state(overrides: Partial<LiveClockState>): LiveClockState {
   return {
     organizationId: 'org',
-    breakMode: 'manual',
-    autoBreakThresholdMinutes: 360,
-    autoBreakDurationMinutes: 30,
+    breakPolicy: {
+      breakMode: 'manual',
+      autoBreakThresholdMinutes: 360,
+      autoBreakDurationMinutes: 30,
+      secondStep: null,
+    },
     status: 'working',
     isClockedIn: true,
     isOnBreak: false,
@@ -100,7 +103,12 @@ describe('clock actions per state', () => {
   test('hides the break under the automatic rule and asks to assign a job when unallocated', () => {
     const actions = deriveClockActions(
       state({
-        breakMode: 'automatic',
+        breakPolicy: {
+          breakMode: 'automatic',
+          autoBreakThresholdMinutes: 360,
+          autoBreakDurationMinutes: 30,
+          secondStep: null,
+        },
         activeJobId: null,
         activeJobInfo: null,
         currentActivity: createActivitySelection('work'),

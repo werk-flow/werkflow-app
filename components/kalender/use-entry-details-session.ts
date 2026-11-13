@@ -36,7 +36,7 @@ export type EntryDetailsSnapshot = {
 
 export function useEntryDetailsSession(session: WorkSession): EntryDetailsSnapshot {
   const interactiveSession: InteractiveCalendarSession = session;
-  const isAutomaticBreakMode = interactiveSession.breakMode === 'automatic';
+  const isAutomaticBreakMode = interactiveSession.breakPolicy?.breakMode === 'automatic';
 
   const sourceEntries = useMemo(() => {
     if (interactiveSession.sourceEntries?.length) {

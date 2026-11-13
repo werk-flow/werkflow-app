@@ -73,7 +73,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -109,19 +109,19 @@ begin
   v_result := public.delete_unlinked_client(
     '44000000-0000-0000-0000-000000000002', '44000000-0000-0000-0000-000000000010',
     '44000000-0000-0000-0000-000000000020');
-  if v_result <> '{"deleted": false, "links": {"jobs": 1, "projects": 1}}'::jsonb then
+  if v_result is distinct from '{"deleted": false, "links": {"jobs": 1, "projects": 1}}'::jsonb then
     raise exception 'deleting a customer with work did not refuse with its links: %', v_result;
   end if;
   v_result := public.delete_unlinked_client(
     '44000000-0000-0000-0000-000000000002', '44000000-0000-0000-0000-000000000010',
     '44000000-0000-0000-0000-000000000022');
-  if v_result -> 'links' <> '{"requests": 1}'::jsonb then
+  if v_result -> 'links' is distinct from '{"requests": 1}'::jsonb then
     raise exception 'deleting a customer with a request did not refuse: %', v_result;
   end if;
   v_result := public.delete_unlinked_client(
     '44000000-0000-0000-0000-000000000002', '44000000-0000-0000-0000-000000000010',
     '44000000-0000-0000-0000-000000000023');
-  if v_result -> 'links' <> '{"follow_ups": 1}'::jsonb then
+  if v_result -> 'links' is distinct from '{"follow_ups": 1}'::jsonb then
     raise exception 'deleting a customer with a follow-up did not refuse: %', v_result;
   end if;
 end;
@@ -175,7 +175,7 @@ begin
   v_result := public.delete_unlinked_client(
     '44000000-0000-0000-0000-000000000002', '44000000-0000-0000-0000-000000000010',
     '44000000-0000-0000-0000-000000000021');
-  if v_result <> '{"deleted": true, "links": {}}'::jsonb
+  if v_result is distinct from '{"deleted": true, "links": {}}'::jsonb
     or exists (select 1 from public.clients where id = '44000000-0000-0000-0000-000000000021')
     or exists (select 1 from public.client_contacts where id = '44000000-0000-0000-0000-000000000031')
   then raise exception 'an unlinked customer was not deleted: %', v_result; end if;
@@ -217,9 +217,9 @@ declare
     '44000000-0000-0000-0000-000000000010', 'Erika', 1, 50, true);
 begin
   if v_active -> 'clients' @> '[{"id": "44000000-0000-0000-0000-000000000020"}]'::jsonb
-    or (v_active ->> 'total')::integer <> 2
+    or (v_active ->> 'total')::integer is distinct from 2
   then raise exception 'an archived customer stayed in the default customer list: %', v_active; end if;
-  if (v_archived ->> 'total')::integer <> 1
+  if (v_archived ->> 'total')::integer is distinct from 1
     or not v_archived -> 'clients' @> '[{"id": "44000000-0000-0000-0000-000000000020"}]'::jsonb
   then raise exception 'the archived filter did not find the archived customer by its contact: %', v_archived; end if;
   if not exists (
@@ -263,7 +263,7 @@ begin
     '{"name": "Hausverwaltung Lindenhof GmbH & Co. KG", "phone": null, "notes": "Schlüssel beim Hausmeister", "client_type": "gewerblich"}');
   select count(*) into v_count from public.client_master_events event
   where event.client_id = '44000000-0000-0000-0000-000000000020' and event.event_type = 'changed';
-  if v_count <> 3 then raise exception 'a customer change wrote % field entries instead of 3', v_count; end if;
+  if v_count is distinct from 3 then raise exception 'a customer change wrote % field entries instead of 3', v_count; end if;
   if not exists (select 1 from public.client_master_events event
     where event.client_id = '44000000-0000-0000-0000-000000000020'
       and event.actor_id = '44000000-0000-0000-0000-000000000002'
@@ -276,7 +276,7 @@ begin
     where event.client_id = '44000000-0000-0000-0000-000000000020' and event.event_payload ->> 'field' = 'notes')
   then raise exception 'a note change was recorded as an identity change'; end if;
   if (select notes from public.clients where id = '44000000-0000-0000-0000-000000000020')
-    <> 'Schlüssel beim Hausmeister'
+    is distinct from 'Schlüssel beim Hausmeister'
   then raise exception 'the customer change did not save its note'; end if;
 end;
 $$;
@@ -356,7 +356,7 @@ begin
     '44000000-0000-0000-0000-000000000010', '44000000-0000-0000-0000-000000000042', '{"name": "Korrigiert"}');
   v_result := public.delete_unlinked_client('44000000-0000-0000-0000-000000000002',
     '44000000-0000-0000-0000-000000000010', '44000000-0000-0000-0000-000000000024');
-  if v_result ->> 'deleted' <> 'true'
+  if v_result ->> 'deleted' is distinct from 'true'
     or exists (select 1 from public.client_master_events where client_id = '44000000-0000-0000-0000-000000000024')
   then raise exception 'an unlinked customer with contact and site history was not deleted: %', v_result; end if;
 end;

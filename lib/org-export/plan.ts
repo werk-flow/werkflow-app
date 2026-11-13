@@ -12,10 +12,14 @@ export const PART_BYTE_LIMIT = 200 * 1024 * 1024;
 const FILES_ROOT = 'Dateien';
 const MAX_SEGMENT_LENGTH = 120;
 
-/** One stored original: a document's current file or one of its earlier versions. */
+/**
+ * One stored original: a document's current file or one of its earlier
+ * versions, or a file of the company document profile.
+ */
 export type ExportSourceFile = {
   sourcePath: string;
-  documentId: string;
+  /** Null for a file of the company document profile, which belongs to no document. */
+  documentId: string | null;
   /** Null for the current file. */
   versionNumber: number | null;
   fileBytes: number;
@@ -92,7 +96,7 @@ function nameExportFiles(files: readonly ExportSourceFile[]): Map<string, string
     ({ file, folder, stem, extension }) =>
       [
         `${folder}/${stem}${extension}`,
-        file.documentId,
+        file.documentId ?? '',
         String(file.versionNumber ?? 0).padStart(10, '0'),
         file.sourcePath,
       ].join('\u0000'),

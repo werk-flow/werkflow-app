@@ -20,6 +20,11 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
       'verified cookie identity, current manager role and active organization equality before the bounded shared customer reader; validated query and private no-store responses',
     mustCall: ['authenticateAndAuthorize', 'withReadRequest', 'customerPageInputSchema', 'readCustomerPage'],
   },
+  'app/api/musterangebot/route.ts': {
+    authorization:
+      'verified cookie identity and the active organization from the current memberships; Admin or Büro only, an employee and a signed-out caller get no bytes; renders a fixed sample with the organization name and no stored record; private no-store responses',
+    mustCall: ['resolveActionContext', 'getCachedMemberships', 'renderBusinessDocument'],
+  },
   'app/api/time-tracking-state/route.ts': {
     authorization:
       'verified cookie identity and matching active organization before delegating to existing self-clock and membership-checked active-job readers; validated kind/UUID, private no-store responses',
@@ -66,6 +71,41 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
       'runFieldSyncOperations',
     ],
   },
+  'app/api/field-sync/v1/today/route.ts': {
+    authorization:
+      "verified identity from an Authorization bearer token or, after the same-origin JSON guard, the cookie session; an identity check that cannot complete answers retry; the active organization from the current memberships, an organization hint naming another refused; reads only the caller's own scheduled visits on the Berlin day of jobs the caller is assigned to, with named field columns, every read scoped to that organization; private no-store responses",
+    mustCall: ['identifyFieldSyncCaller', 'resolveActiveContextForUser', 'readFieldSyncToday'],
+  },
+  'app/sw.js/route.ts': {
+    authorization:
+      'unauthenticated by design: serves the service worker script the build composed, the same bytes for everyone; reads no request, cookie or session, writes nothing, and proxy.ts does not run on it',
+    mustCall: [],
+  },
+  'app/api/problem-reports/v1/reports/route.ts': {
+    authorization:
+      'report threads send the dedicated PROBLEM_REPORT_HANDOUT_SECRET as a bearer token, compared in constant time, never a user session; without a configured secret the handler reads nothing and answers 503, a missing or wrong one 401; answers only the id and bucket of open reports with a scrubbed copy not yet handed out, no-store',
+    mustCall: ['problemReportHandoutAccess', 'listWaitingProblemReports'],
+  },
+  'app/api/problem-reports/v1/reports/[reportId]/hand-out/route.ts': {
+    authorization:
+      'the hand-out secret as above before any read; the id is the only input; one database call claims the report and writes the hand-out into its history before the scrubbed copy leaves; a report without a scrubbed copy, closed or already handed out is refused with its code; never an original, an attachment, a name or another id, no-store',
+    mustCall: ['problemReportHandoutAccess', 'isUuid', 'handOutProblemReport'],
+  },
+  'app/api/problem-reports/v1/reports/[reportId]/screenshot/route.ts': {
+    authorization:
+      'the hand-out secret as above before any read; only a report already handed out, and the history entry is written before the server reads the redrawn screenshot; the bytes go through the server so no storage key with the organization id leaves, no-store',
+    mustCall: ['problemReportHandoutAccess', 'isUuid', 'handOutProblemReportScreenshot'],
+  },
+  'app/api/problem-reports/v1/reports/[reportId]/write-back/route.ts': {
+    authorization:
+      'the hand-out secret as above before any read; a strict body of bucket, status and answer; one triage call without an actor writes only a report already handed out, with history entries of the Agent, and signals the reporter and support; no assignee, no-store',
+    mustCall: [
+      'problemReportHandoutAccess',
+      'isUuid',
+      'problemReportWriteBackSchema',
+      'writeBackProblemReport',
+    ],
+  },
   'app/api/csp-report/route.ts': {
     authorization:
       'unauthenticated by design: receives the browser reports of the enforced script policy, reads and writes nothing, bounds the body, and logs a redacted summary without script samples or query strings',
@@ -83,8 +123,8 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
   },
   'app/api/problem-report-retention/route.ts': {
     authorization:
-      'Vercel Cron sends the shared CRON_SECRET as a bearer token, compared in constant time; without a configured secret the handler runs nothing and answers 503, a wrong one 404; the run deletes only problem-report originals and reports whose period has passed, one database call per report, and their file rows queue the objects for the storage purge; the body holds counts only, no-store',
-    mustCall: ['cronRequestAccess', 'runProblemReportRetention'],
+      'Vercel Cron sends the shared CRON_SECRET as a bearer token, compared in constant time; without a configured secret the handler runs nothing and answers 503, a wrong one 404; the run first scrubs each report that has no scrubbed copy, inside the organization of that report, then deletes only problem-report originals and reports whose period has passed, one database call per report, and their file rows queue the objects for the storage purge; the body holds counts only, no-store',
+    mustCall: ['cronRequestAccess', 'scrubPendingProblemReports', 'runProblemReportRetention'],
   },
   'app/api/storage-purge/route.ts': {
     authorization:

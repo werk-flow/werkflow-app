@@ -10,13 +10,14 @@ import { logError } from '@/lib/logging';
 import { calculateWorkSessions } from '@/lib/time-tracking/work-sessions';
 import { readInBackground, type BackgroundReadFailure } from '@/lib/data/background-read-client';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
-import { computeBreakdownForSettings, type OrgBreakMode } from '@/lib/time-tracking/settings';
+import {
+  breakPolicyKey,
+  computeBreakdownForSettings,
+  type BreakPolicyValues,
+} from '@/lib/time-tracking/settings';
 import type { GetTimeEntriesParams, GetTimeEntriesResult, TimeEntry } from '@/lib/time-tracking/types';
 
 export type MemberStatus = {
-  breakMode: OrgBreakMode;
-  autoBreakThresholdMinutes: number;
-  autoBreakDurationMinutes: number;
   status: 'clocked_out' | 'working' | 'on_break';
   isClockedIn: boolean;
   isOnBreak: boolean;
@@ -39,8 +40,6 @@ function fetchTimeEntries(
   return readInBackground('time-entries', params, signal);
 }
 
-type BreakPolicy = Pick<MemberStatus, 'breakMode' | 'autoBreakThresholdMinutes' | 'autoBreakDurationMinutes'>;
-
 /** The member's most recent clock-in that still counts: pending included, rejected and pending_delete excluded. */
 function latestClockInEntry(memberEntries: TimeEntry[]): TimeEntry | undefined {
   return memberEntries
@@ -53,19 +52,14 @@ function latestClockInEntry(memberEntries: TimeEntry[]): TimeEntry | undefined {
 }
 
 /** One member's status today, from that member's entries of the day. */
-function memberStatusOf(memberEntries: TimeEntry[], policy: BreakPolicy): MemberStatus {
-  const { breakMode, autoBreakThresholdMinutes, autoBreakDurationMinutes } = policy;
+function memberStatusOf(memberEntries: TimeEntry[], breakPolicy: BreakPolicyValues): MemberStatus {
   const currentState = deriveCurrentClockState(memberEntries);
   const workSessions = calculateWorkSessions(memberEntries);
   const breakSessions = calculateBreakSessions(memberEntries);
   const trackedWorkMinutes = calculateTotalMinutes(workSessions);
   const trackedBreakMinutes = calculateBreakMinutes(breakSessions);
   const todayMinutes = trackedWorkMinutes + trackedBreakMinutes;
-  const breakdown = computeBreakdownForSettings(todayMinutes, trackedBreakMinutes, {
-    breakMode,
-    autoBreakThresholdMinutes,
-    autoBreakDurationMinutes,
-  });
+  const breakdown = computeBreakdownForSettings(todayMinutes, trackedBreakMinutes, breakPolicy);
 
   // If clocked in, find the last clock_in timestamp and check if it's pending
   let clockInTime: string | null = null;
@@ -78,9 +72,6 @@ function memberStatusOf(memberEntries: TimeEntry[], policy: BreakPolicy): Member
   }
 
   return {
-    breakMode,
-    autoBreakThresholdMinutes,
-    autoBreakDurationMinutes,
     status: currentState.status,
     isClockedIn: currentState.isClockedIn,
     isOnBreak: currentState.isOnBreak,
@@ -96,9 +87,8 @@ function memberStatusOf(memberEntries: TimeEntry[], policy: BreakPolicy): Member
 interface UseMemberStatusOptions {
   organizationId: string;
   memberIds: string[];
-  breakMode?: OrgBreakMode;
-  autoBreakThresholdMinutes?: number;
-  autoBreakDurationMinutes?: number;
+  /** Today's break rule: a member's status counts today only. */
+  breakPolicy: BreakPolicyValues;
   /** Enable or disable fetching. Default: true */
   enabled?: boolean;
 }
@@ -106,9 +96,7 @@ interface UseMemberStatusOptions {
 export function useMemberStatus({
   organizationId,
   memberIds,
-  breakMode = 'manual',
-  autoBreakThresholdMinutes = 360,
-  autoBreakDurationMinutes = 30,
+  breakPolicy,
   enabled = true,
 }: UseMemberStatusOptions): {
   statusMap: MemberStatusMap;
@@ -155,11 +143,7 @@ export function useMemberStatus({
         for (const memberId of memberIds) {
           const memberEntries = result.entries.filter((e) => e.userId === memberId);
 
-          newStatusMap[memberId] = memberStatusOf(memberEntries, {
-            breakMode,
-            autoBreakThresholdMinutes,
-            autoBreakDurationMinutes,
-          });
+          newStatusMap[memberId] = memberStatusOf(memberEntries, breakPolicy);
         }
 
         return { ok: true, data: newStatusMap };
@@ -171,7 +155,7 @@ export function useMemberStatus({
     enabled,
     // Membership or break-policy changes must discard the old map and read
     // fresh. The read then uses the current inputs through its closure.
-    resetKey: `${organizationId}:${[...memberIds].sort().join(',')}:${breakMode}:${autoBreakThresholdMinutes}:${autoBreakDurationMinutes}`,
+    resetKey: `${organizationId}:${[...memberIds].sort().join(',')}:${breakPolicyKey(breakPolicy)}`,
   });
 
   return {

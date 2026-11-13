@@ -38,11 +38,9 @@ begin
   raise exception '${REFUSAL.replaceAll("'", "''")}';
 end
 $guard$;
-drop trigger if exists ${GUARD_TRIGGERS[0]} on supabase_migrations.schema_migrations;
-create trigger ${GUARD_TRIGGERS[0]} before insert or update or delete on supabase_migrations.schema_migrations
+create or replace trigger ${GUARD_TRIGGERS[0]} before insert or update or delete on supabase_migrations.schema_migrations
   for each row execute function supabase_migrations.werkflow_main_only();
-drop trigger if exists ${GUARD_TRIGGERS[1]} on supabase_migrations.schema_migrations;
-create trigger ${GUARD_TRIGGERS[1]} before truncate on supabase_migrations.schema_migrations
+create or replace trigger ${GUARD_TRIGGERS[1]} before truncate on supabase_migrations.schema_migrations
   for each statement execute function supabase_migrations.werkflow_main_only();
 commit;
 `;

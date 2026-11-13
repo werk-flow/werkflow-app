@@ -43,6 +43,7 @@ const FAILURE_TEXT: Record<DocumentUploadFailure, string> = {
   version_conflict: 'Inzwischen wurde eine neuere Version gespeichert. Prüfe die Versionen.',
   document_filed: 'Die Datei wurde inzwischen festgeschrieben und nimmt keine neue Version mehr an.',
   folder_failed: 'Der Zielordner konnte nicht angelegt werden.',
+  uploader_changed: 'Inzwischen ist eine andere Person angemeldet. Die Datei wurde nicht gespeichert.',
 };
 
 /** A failure another try of the same file cannot fix. */

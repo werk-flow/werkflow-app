@@ -2,7 +2,9 @@ import { expect, type Locator } from '@playwright/test';
 import type { DialogOpenerId } from '../../../../lib/testing/selection/dialog-inventory';
 import { seedDoNotContactPolicy } from '../../../golden/support/db/customers';
 import { seedJob } from '../../../golden/support/db/work';
+import { hydratedAndSettled } from '../../../golden/support/steps/interaction';
 import { shiftIsoDate } from '../../../golden/support/plantafel';
+import { seedSiteAccessJob } from '../site-access-fixtures';
 import {
   addContactButton,
   addCustomerButton,
@@ -29,6 +31,8 @@ import {
   customerRowEditItem,
   customerSiteDialog,
   followUpDialog,
+  siteRolesButton,
+  siteRolesDialog,
 } from '../../../golden/support/steps/customers';
 import {
   detailActionsButton,
@@ -55,6 +59,19 @@ async function customerListMenuItem({ page, world }: SurfaceContext, item: Locat
 }
 
 export const CUSTOMERS_OPENERS = {
+  // The office review of an open access proposal: the „Zugang prüfen“ task in
+  // Aufgaben links to the customer page, which opens it. The opener's control
+  // stays behind on the Aufgaben page, so focus returns to the page.
+  'customers.site-access-review': {
+    trigger: async ({ page, world }) => {
+      await seedSiteAccessJob(world, 'open');
+      await page.reload();
+      await hydratedAndSettled(page);
+      return page.getByRole('link', { name: /^Zugangshinweis von .+ prüfen$/ }).first();
+    },
+    layer: (page) => page.getByRole('dialog', { name: /^Zugang zu .+ prüfen$/ }),
+    returnFocus: ({ page }) => page.locator('body'),
+  },
   'customers.create': {
     trigger: async ({ page }) => addCustomerButton(page),
     layer: customerCreateDialog,
@@ -98,6 +115,10 @@ export const CUSTOMERS_OPENERS = {
   'customers.site': {
     trigger: async ({ page }) => addSiteButton(page),
     layer: customerSiteDialog,
+  },
+  'customers.site-roles': {
+    trigger: async ({ page }) => siteRolesButton(page),
+    layer: siteRolesDialog,
   },
   'customers.communication-settings': {
     trigger: async ({ page }) => communicationSettingsButton(page),

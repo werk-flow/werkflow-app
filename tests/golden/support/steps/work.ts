@@ -1082,6 +1082,18 @@ export function workCreateTab(scope: Page | Locator, tab: WorkCreateTab): Locato
   return scope.getByRole('tab', { name: WORK_CREATE_COPY.tab[tab] });
 }
 
+/**
+ * Opens the job dialog's employee picker on /auftraege and returns its search
+ * field: the picker that a personnel record without login must never reach.
+ */
+export async function openJobEmployeePickerSearch(page: Page): Promise<Locator> {
+  await page.goto('/auftraege');
+  await workCreateButton(page).click();
+  await workCreateTab(page, 'job').click();
+  await employeeAssignmentPicker(page).click();
+  return employeeAssignmentSearch(page);
+}
+
 /** The submit of the open tab's form; it carries the tab's name. */
 export function workCreateSubmit(scope: Page | Locator, tab: WorkCreateTab): Locator {
   return scope.getByRole('button', { name: WORK_CREATE_COPY.tab[tab], exact: true });
@@ -1860,6 +1872,36 @@ export const FIELD_PACK_SECTION_ORDER = [
 /** The pack's primary next action, whichever control the product makes primary. */
 export function fieldPrimaryNextAction(pack: Locator): Locator {
   return pack.getByTestId('field-primary-next-action');
+}
+
+/**
+ * The pencil on the pack's Einsatzort that proposes a corrected access; with
+ * an open proposal its name ends in the state the badge shows.
+ */
+export function fieldPackSiteAccessButton(scope: Locator | Page, state?: 'open'): Locator {
+  return state === 'open'
+    ? scope.getByRole('button', { name: 'Zugang korrigieren (Hinweis beim Büro)', exact: true })
+    : scope.getByRole('button', { name: /^Zugang korrigieren/ });
+}
+
+/** The field worker's access proposal form. */
+export function fieldPackSiteAccessDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: 'Zugang korrigieren' });
+}
+
+/** Sends the office a corrected access contact and access notes from the pack's Einsatzort. */
+export async function proposeSiteAccessFromFieldPack(
+  page: Page,
+  pack: Locator,
+  values: { contactName: string; accessNotes: string },
+): Promise<void> {
+  await fieldPackSiteAccessButton(pack).click();
+  const dialog = fieldPackSiteAccessDialog(page);
+  await dialog.getByLabel('Wer lässt dich rein?').fill(values.contactName);
+  await dialog.getByLabel('Wie kommst du rein?').fill(values.accessNotes);
+  await dialog.getByRole('button', { name: 'An Büro senden' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(fieldPackSiteAccessButton(pack, 'open')).toBeVisible();
 }
 
 export function fieldPackHeading(pack: Locator, heading: keyof typeof FIELD_PACK_COPY.heading): Locator {

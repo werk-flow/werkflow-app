@@ -5,8 +5,9 @@ import { DetailPageHeader } from '@/components/shared/detail-page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import type { ActionFailure } from '@/lib/action-result';
+import { jobDetailHref, projectDetailHref } from '@/lib/jobs/routes';
 import type { WorkHandoverWorkspace } from '@/lib/work-handover/types';
-import { WorkHandoverSection } from './work-handover-section';
+import { WorkHandoverSection } from './work-handover-review';
 
 // The handover is not there for this caller: a bad route value, a missing target,
 // no handover review responsibility, or no session or organization.
@@ -33,6 +34,12 @@ export function WorkHandoverPage({
     );
   }
   const { workspace } = result;
+  const { targetType, targetId, targetSnapshot } = workspace;
+  // Built here on the server: the review's client graph stays off the shared route helper.
+  const workHref =
+    targetType === 'job'
+      ? jobDetailHref({ id: targetId, jobNumber: targetSnapshot.number })
+      : projectDetailHref({ id: targetId, projectNumber: targetSnapshot.number });
   return (
     <PageShell className="bg-muted/20">
       <DetailPageHeader
@@ -43,7 +50,7 @@ export function WorkHandoverPage({
         }
       />
       <PageBody maxWidth="wide">
-        <WorkHandoverSection initialWorkspace={workspace} />
+        <WorkHandoverSection initialWorkspace={workspace} workHref={workHref} />
       </PageBody>
     </PageShell>
   );

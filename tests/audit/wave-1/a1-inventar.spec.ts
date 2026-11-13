@@ -2,8 +2,10 @@ import { expect, test } from '../support/fixtures';
 import {
   formatInventoryQuantity,
   getInventoryUnitLabel,
+  INVENTORY_HISTORY_KIND_LABELS,
   INVENTORY_ITEM_TYPE_LABELS,
   INVENTORY_LOCATION_TYPE_LABELS,
+  INVENTORY_STOCK_UNCHANGED_LABEL,
   INVENTORY_MOVEMENT_TYPE_LABELS,
 } from '../../../lib/inventory/types';
 import { getInventoryLedgerState } from '../../golden/support/db/inventory';
@@ -15,7 +17,9 @@ import {
   createItemButton,
   createLocationButton,
   csvImportButton,
-  csvImportSubmit,
+  csvImportButtonOf,
+  csvImportRepeatChecked,
+  csvImportRow,
   INVENTORY_COPY,
   INVENTORY_VIEWS,
   inventoryDialog,
@@ -33,6 +37,8 @@ import {
   jobMaterialLineAction,
   materialReturnedText,
   materialTakenText,
+  materialLinePendingStatus,
+  materialUsedText,
   openItemRowAction,
   pendingLocationStatus,
   planMaterialOnDetailPage,
@@ -41,6 +47,7 @@ import {
 } from '../../golden/support/steps/inventory';
 import { projectQualificationSection } from '../../golden/support/steps/qualifications';
 import {
+  expectGone,
   SHARED_COPY,
   selectFromSearchable,
   testData,
@@ -48,7 +55,7 @@ import {
   visibleText,
 } from '../../golden/support/steps/shared';
 import { createJob, createProject } from '../../golden/support/steps/work';
-import { bookMaterialDialog } from '../support/a1-steps';
+import { bookMaterialDialog, bookMaterialUse } from '../support/a1-steps';
 
 test.describe('A1 Inventar @AUDIT-W1-A1', () => {
   test('A1-39/A1-42: Material planen, geplant und ungeplant entnehmen, Projekt summiert', async ({
@@ -91,6 +98,19 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
       JOB_MATERIAL_ACTIONS.take.heading,
       '2',
     );
+    // A use moves no stock: the material left the Lager at the take.
+    const stockBeforeUse = await getInventoryLedgerState(
+      world.orgId,
+      world.inventory.itemId,
+      world.inventory.locationId,
+    );
+    await bookMaterialUse(employeePage, jobMaterialLineAction(materialLine, 'use'), '1');
+    // The line shows the use at once; its pending mark clears only after the write and the fresh read.
+    await expectGone(materialLinePendingStatus(materialLine));
+    await expect(materialLine).toContainText(materialUsedText(1));
+    expect(
+      await getInventoryLedgerState(world.orgId, world.inventory.itemId, world.inventory.locationId),
+    ).toEqual(stockBeforeUse);
     await bookMaterialDialog(
       employeePage,
       jobMaterialLineAction(materialLine, 'return'),
@@ -131,6 +151,18 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     await expect(projectTotal).toContainText(materialTakenText(3));
     await expect(projectTotal).toContainText(materialReturnedText(1));
     await expect(projectTotal).toContainText(billableQuantityPattern(2));
+
+    // The office finds the worker's use in the movement history: its own kind,
+    // no stock effect, and a link to the job.
+    await adminPage.goto(`/inventar?tab=movements&kind=job_use&person=${world.users.employee.id}`);
+    const useRow = inventoryRow(adminPage, jobNumber);
+    await expect(useRow).toHaveCount(1);
+    await expect(useRow).toContainText(INVENTORY_HISTORY_KIND_LABELS.job_use);
+    await expect(useRow).toContainText(INVENTORY_STOCK_UNCHANGED_LABEL);
+    await expect(useRow.getByRole('link', { name: new RegExp(jobNumber) })).toHaveAttribute(
+      'href',
+      `/auftraege/projekt/${encodeURIComponent(projectNumber)}/${encodeURIComponent(jobNumber)}`,
+    );
   });
 
   test('A1-40/A1-44: Artikel und Lager per UI sowie alle Inventaransichten', async ({
@@ -291,19 +323,21 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     const inboundMovement = inventoryRow(adminPage, itemName).filter({
       hasText: INVENTORY_MOVEMENT_TYPE_LABELS.stock_in,
     });
-    // Whole-row cells in column order: Zeitpunkt, Artikel, Lager, Von, Nach,
-    // Bewegung, Vorher, Menge, Danach, Grund. Run id and time stay in their
-    // own cells, so a quantity cannot match them.
+    // Whole-row cells in column order: Zeitpunkt, Artikel, Von, Nach,
+    // Bewegung, Vorher, Menge, Danach, Person, Grund; „Von“ or „Nach“ names the Lager. Run id and time stay in
+    // their own cells, so a quantity cannot match them. The person is the
+    // signed-in admin, whatever the world names them; „—“ means nobody.
+    const bookedBySomeone = /^[^—]+$/;
     await expect(inboundMovement.getByRole('cell')).toHaveText([
       /\d{4}/,
       itemName,
-      locationName,
       INVENTORY_COPY.movementSource.external,
       locationName,
       INVENTORY_MOVEMENT_TYPE_LABELS.stock_in,
       '5',
-      '+2',
+      `+${formatInventoryQuantity(2, 'piece')}`,
       '7',
+      bookedBySomeone,
       inboundReason,
     ]);
     const outboundMovement = inventoryRow(adminPage, itemName).filter({
@@ -313,31 +347,36 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
       /\d{4}/,
       itemName,
       locationName,
-      locationName,
       INVENTORY_COPY.movementTarget.correctionOut,
       INVENTORY_MOVEMENT_TYPE_LABELS.stock_out,
       '7',
-      '-1',
+      formatInventoryQuantity(-1, 'piece'),
       '6',
+      bookedBySomeone,
       outboundReason,
     ]);
   });
 
-  test('A1-43: CSV-Spaltenzuordnung legt Stammdaten und Anfangsbewegung an', async ({ adminPage, world }) => {
+  test('A1-43: CSV-Import zeigt die Wirkung vor dem Buchen, lehnt eine unbekannte Einheit ab und warnt vor einer Wiederholung', async ({
+    adminPage,
+    world,
+  }) => {
     const importedItem = `A1 CSV Artikel ${world.runId}`;
+    const rejectedItem = `A1 CSV Fass ${world.runId}`;
     const importedLocation = `A1 CSV Lager ${world.runId}`;
     const importedCategory = testData`A1 Kategorie`;
     const importedSupplier = testData`A1 CSV Lieferant`;
-    await adminPage.goto('/inventar');
-    await csvImportButton(adminPage).click();
-    const dialog = inventoryDialog(adminPage, 'importCsv');
-    await inventoryImportFileInput(dialog).setInputFiles({
+    const file = {
       name: `a1-import-${world.runId}.csv`,
       mimeType: 'text/csv',
       buffer: Buffer.from(
-        `Bezeichnung;Gruppe;Ort;Anbieter;Menge;Einheit\n${importedItem};${importedCategory};${importedLocation};${importedSupplier};4;Stück`,
+        `Bezeichnung;Gruppe;Ort;Anbieter;Menge;Einheit\n${importedItem};${importedCategory};${importedLocation};${importedSupplier};4;Stück\n${rejectedItem};${importedCategory};${importedLocation};;2;Fass`,
       ),
-    });
+    };
+    await adminPage.goto('/inventar');
+    await csvImportButton(adminPage).click();
+    const dialog = inventoryDialog(adminPage, 'importCsv');
+    await inventoryImportFileInput(dialog).setInputFiles(file);
     const mappings = {
       name: 'Bezeichnung',
       categoryName: 'Gruppe',
@@ -349,7 +388,20 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     for (const [field, header] of Object.entries(mappings)) {
       await selectFromSearchable(adminPage, inventoryImportColumnPicker(dialog, field), header);
     }
-    await csvImportSubmit(dialog).click();
+    await expect(csvImportRepeatChecked(dialog)).toBeVisible();
+    await csvImportButtonOf(dialog, 'importPreview').click();
+    // The preview names each row's effect; nothing is booked yet.
+    const newItemRow = csvImportRow(dialog, importedItem);
+    await expect(newItemRow).toContainText(`+${formatInventoryQuantity(4, 'piece')} in ${importedLocation}`);
+    await expect(newItemRow).toContainText(INVENTORY_COPY.importNewLocation);
+    await expect(csvImportRow(dialog, rejectedItem)).toContainText(INVENTORY_COPY.importUnknownUnit('Fass'));
+    await csvImportButtonOf(dialog, 'importBook').click();
+    // The result keeps the rejected row and offers it as a report.
+    await expect(csvImportRow(dialog, rejectedItem)).toBeVisible();
+    const download = adminPage.waitForEvent('download');
+    await csvImportButtonOf(dialog, 'importReport').click();
+    expect((await download).suggestedFilename()).toBe(`a1-import-${world.runId}-hinweise.csv`);
+    await csvImportButtonOf(dialog, 'importDone').click();
     await expect(dialog).toHaveCount(0);
     const importedRow = inventoryRow(adminPage, importedItem);
     await expect(importedRow).toContainText(importedCategory);
@@ -369,7 +421,16 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     const initialMovement = inventoryRow(adminPage, importedItem);
     await expect(initialMovement).toContainText(INVENTORY_MOVEMENT_TYPE_LABELS.initial_count);
     await expect(initialMovement.getByRole('cell', { name: '0', exact: true })).toBeVisible();
-    await expect(initialMovement.getByRole('cell', { name: '+4', exact: true })).toBeVisible();
+    await expect(
+      initialMovement.getByRole('cell', { name: `+${formatInventoryQuantity(4, 'piece')}`, exact: true }),
+    ).toBeVisible();
     await expect(initialMovement.getByRole('cell', { name: '4', exact: true })).toBeVisible();
+
+    // The same file again warns before its preview, and the user decides.
+    await csvImportButton(adminPage).click();
+    const repeatDialog = inventoryDialog(adminPage, 'importCsv');
+    await inventoryImportFileInput(repeatDialog).setInputFiles(file);
+    await expect(repeatDialog).toContainText(INVENTORY_COPY.importRepeatWarning);
+    await expect(csvImportButtonOf(repeatDialog, 'importRepeatConfirm')).toBeVisible();
   });
 });

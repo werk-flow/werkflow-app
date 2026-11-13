@@ -1,6 +1,6 @@
 # Environments
 
-WerkFlow runs on two cloud backends ([decision 0003](../decisions/0003-dev-prod-environment-split.md)) and a local Supabase stack for the application tests ([decision 0006](../decisions/0006-testing-architecture.md)).
+WerkFlow runs on two cloud backends ([decision 0003](../decisions/0003-dev-prod-environment-split.md)) and a local Supabase stack for application tests ([decision 0006](../decisions/0006-testing-architecture.md)).
 
 ## The two cloud backends
 
@@ -13,9 +13,9 @@ WerkFlow runs on two cloud backends ([decision 0003](../decisions/0003-dev-prod-
 | Serves | The deployed app and real customers | Local development, the cloud canary, the partner preview, scoped provider checks |
 | Auth site URL | `https://app.werk-flow.app` | `http://localhost:3000` |
 
-Both projects deploy the edge functions from `supabase/functions/`. Each project's secret store holds its own Resend key; the production key never leaves production.
+Both projects deploy the edge functions from `supabase/functions/`. Each secret store holds its own Resend key; the production key never leaves production.
 
-Both run Micro compute, whose latency rises steeply with concurrency. The owner accepts this while one beta business is the only traffic. Cloud canary timings are no capacity proof.
+Both run Micro compute, whose latency rises steeply with concurrency, accepted while one beta business is the traffic. Cloud canary timings are no capacity proof.
 
 ### Vercel
 
@@ -23,7 +23,7 @@ Both run Micro compute, whose latency rises steeply with concurrency. The owner 
 - The staging URL is the branch alias of `main`, `https://werkflow-app-git-main-werkflows-projects.vercel.app`, behind Vercel Authentication. DEV's auth redirect list must allow it, or invite and password links break on staging.
 - The project builds production and staging only: the Git integration builds the `production` push of [release](#release-and-rollback); `.github/workflows/staging.yml` deploys `main` through the REST API after DEV's migrations.
 - The project's Ignored Build Step skips every other build, even on a branch without `vercel.json`, the second layer (`git.deploymentEnabled`). A skipped push ends Canceled, without failure mail. Change the setting and `.github/vercel/ignored-build-step.sh` together; the weekly `health` run fails while they differ.
-- `SUPABASE_ACCESS_TOKEN` is never on Vercel. Recheck the scopes when deployment configuration changes.
+- `SUPABASE_ACCESS_TOKEN` is never on Vercel. Recheck scopes when deployment settings change.
 
 ### Provider configuration
 
@@ -31,15 +31,16 @@ No migration carries auth settings, mail templates, SMTP or rate limits. Both pr
 
 - After every auth change on the production dashboard, run `bun scripts/sync-dev-auth-from-prod.ts`. It prints the difference; `--apply` copies the mail fields from PROD to DEV.
 - `bun run auth:check` compares DEV's Auth configuration with the reviewed posture in `lib/security/supabase-project-checks.ts`. Change a setting and its posture entry together.
-- Not adopted, each an owner decision: point-in-time recovery, database network restrictions, Supabase branching, the GitHub deploy integration. Signup CAPTCHA turns on when public sign-up opens.
-- Owner duties no API covers: MFA on the Supabase account and a second organization owner.
+- Not adopted, each an owner decision: point-in-time recovery, database network restrictions, Supabase branching, GitHub's deploy integration. Signup CAPTCHA turns on when public sign-up opens.
+- Owner duties no API covers: Supabase account MFA and a second organization owner.
 
 ## Credentials
 
-This table is the one home of every credential the deployments and workflows use. No check copies a secret elsewhere to test it.
+This table is the one home of every deployment and workflow credential. No check copies a secret to test it.
 
 - `.github/workflows/health.yml` checks every row in GitHub's reach each Monday with a read-only call where the value lives. A failed run fails the step named after the credential and opens or updates the issue "Weekly health check failed". Only a failed check marked `prod` assigns the owner ([monitoring](recovery-and-incidents.md#monitoring)); a run off `main` or with `break_check` reports on "… (proof)".
 - The app checks its runtime credentials at `GET /api/health`, each Supabase project at its `health` function. Both answer only a request with the header `x-health-check-token`. The answer names each check `ok` or `failed`, never a value.
+- Agents never read a workstation secret file. `.claude/hooks/refuse-boat-key-reads.ts` refuses a call that would read the Boat key or the hand-out file `~/.config/werkflow/problem-report-handout.env`, which only `bun scripts/report-thread.ts` and the report dispatcher read.
 
 | Credential | Lives in | Used by | Expires | Rotate |
 | --- | --- | --- | --- | --- |
@@ -47,7 +48,7 @@ This table is the one home of every credential the deployments and workflows use
 | `VERCEL_TOKEN` | GitHub repository secret | Staging deploys, release promotes | 2027-10-26 | Vercel account settings, Tokens, team-scoped; `gh secret set`. |
 | `werkflow app prod-watch` | The owner's PC: `~/.config/werkflow/prod-watch.env`, mode 600 | The [production watcher](recovery-and-incidents.md#monitoring), which checks it | 2027-11-07 | Vercel Tokens: same name, team-scoped (`werkflows-projects`, also werkflow-website), 1 year; set the file's `VERCEL_TOKEN=`. |
 | Boat API key | `~/.config/werkflow/boat-api-key`, [mode 600](boat-verification.md#the-key-contract) | [Boat](boat-verification.md) | `boat-api-key.expires` | [Renew](boat-verification.md#renew-the-key) |
-| `SIBLING_REPOSITORIES_TOKEN` | GitHub repository secret | CI clones werkflow-business for `docs:check` | 2027-10-26 | Fine-grained GitHub token, read access to werkflow-business contents; `gh secret set`. |
+| `SIBLING_REPOSITORIES_TOKEN` | GitHub repository secret | CI clones werkflow-business for `docs:check` | 2027-11-13 | Fine-grained GitHub token of an organization owner, resource owner the `werk-flow` organization, read access to werkflow-business contents; `gh secret set`. |
 | `DEV_DATABASE_URL` | GitHub repository secret | Staging: `supabase db push` | With its password | DEV Database settings: reset the password; `gh secret set` the new connection string. |
 | `PROD_DATABASE_URL` | GitHub environment `production` | Release: `supabase db push` | With its password | As for DEV, with `gh secret set --env production`. |
 | `PRODUCTION_DEPLOY_KEY` | GitHub environment `production`; its public half is a write deploy key of this repository | Release: advances `production` | Never | `ssh-keygen -t ed25519`, add the public key as a deploy key with write access, `gh secret set PRODUCTION_DEPLOY_KEY --env production`, delete the old deploy key. |
@@ -57,19 +58,21 @@ This table is the one home of every credential the deployments and workflows use
 | `SUPABASE_SECRET_KEY` | Vercel | Admin client, edge-function calls | Never | As above. The functions accept every secret key of their project. |
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | Vercel | Document storage | As set on the token | Cloudflare R2, Manage API tokens: one token scoped to the bucket; set both, redeploy, delete the old token. |
 | `CRON_SECRET` | Vercel, Production | Vercel Cron: [storage purge](document-storage-and-access.md#storage-cleanup) and [report deletion](../features/problem-reports.md#current-product-baseline) | Never | `openssl rand -hex 32`, then redeploy. |
+| `PROBLEM_REPORT_HANDOUT_SECRET` | Vercel; `~/.config/werkflow/problem-report-handout.env`, mode 600, with `PROBLEM_REPORT_HANDOUT_ORIGIN` and an optional `VERCEL_AUTOMATION_BYPASS_SECRET`, on each machine that runs report threads | The [hand-out](problem-report-scrubbing.md#hand-out): `report-dispatch`, `scripts/report-thread.ts` | Never | `openssl rand -hex 32` on Vercel and in each file, redeploy. |
+| `SUPPORT_USER_IDS` | Vercel, Production and Preview (PROD ids, DEV ids) | [Support allowlist](../features/problem-reports.md#current-product-baseline) | Never | Set, redeploy. |
 | `EMAIL_OTP_HASH_SECRET` | Vercel | Email-change code hashes and rate-limit subjects | Never | Only after a leak: a new value voids pending email-change codes and restarts every rate-limit window. |
 | `RESEND_API_KEY` | Supabase secrets, one key per project | The mail functions | Never | Resend, API keys: a sending key for the project, `supabase secrets set --project-ref <ref> RESEND_API_KEY`, delete the old key. |
 | `FROM_EMAIL` | Supabase secrets | The mail functions' sender | Never | `supabase secrets set`. |
 
-The platform injects `SUPABASE_SECRET_KEYS` into every function; `supabase_secret_keys` checks that the mail functions can read it. Not checked: the owner's local Supabase token and R2 admin token in the env backups.
+The platform injects `SUPABASE_SECRET_KEYS` into every function; `supabase_secret_keys` checks that the mail functions read it. Not checked: the owner's local Supabase and R2 admin tokens in the env backups.
 
 ## The local test stack
 
-The test groups run against the Supabase CLI's Docker composition: Docker Engine in WSL Ubuntu on Windows, Colima on macOS. `supabase/config.toml` owns ports, auth posture, storage bucket and mail capture.
+The test groups run against the Supabase CLI's Docker composition: Docker Engine in WSL Ubuntu, Colima on macOS. `supabase/config.toml` owns ports, auth posture, storage bucket and mail capture.
 
 - A workstation's stack holds only `main`'s merged migrations. `check:changed` fails while it holds another.
-- The keys are the CLI's shared local defaults, not secrets.
-- Auth mail lands in Mailpit. Cloud functions reject the local capture configuration.
+- The keys are the CLI's shared defaults, not secrets.
+- Auth mail lands in Mailpit. Cloud functions reject the local capture setup.
 - Analytics is off: Logflare filled the disk. The lab recorder reads Kong's access log through `docker logs`.
 - PostgREST truncates at its row limit without an error, locally and hosted. Read in pages ([add a list](realtime-and-caching.md#add-a-list)). Never raise the limit to hide the bound.
 - The stack answers on `http://127.0.0.1:54321`. `bun run env:local` writes that origin and this checkout's test-server origin into `.env.local`. Rebuild after a switch: `NEXT_PUBLIC_*` values are baked into the build.
@@ -79,7 +82,7 @@ The test groups run against the Supabase CLI's Docker composition: Docker Engine
 
 ## Env-file ownership
 
-`.env.local` (gitignored) selects the backend. Three gitignored backups sit beside it: `.env.local-stack-backup`, `.env.dev-backup`, `.env.live-backup`. Next.js loads none of the backups.
+`.env.local` (gitignored) selects the backend. Three gitignored backups sit beside it: `.env.local-stack-backup`, `.env.dev-backup`, `.env.live-backup`. Next.js loads none of them.
 
 ```bash
 bun run env:local  # .env.local -> the local Supabase stack (application tests)
@@ -96,10 +99,10 @@ Agents never read PROD data through any tool: every tool result goes to the mode
 | claude.ai Supabase connector | no | no | Organization-wide, so Claude Code denies it (`deniedMcpServers` in `~/.claude/settings.json`). |
 | MCP server `supabase` | never | read and write | `https://mcp.supabase.com/mcp?project_ref=mbkkzuqjbdvzelqvuzcn` |
 | Supabase CLI (`bunx supabase`) | never link or push | yes | The repository links to the DEV ref only. |
-| `bun run prod:inspect` | structure only | compared | Read-only query endpoint with the owner's token. Prints pending migration versions, objects that differ from DEV by name, and advisor findings. Run it from an up-to-date `main`. |
+| `bun run prod:inspect` | structure only | compared | Read-only query endpoint with the owner's token. Run it from an up-to-date `main`. |
 | Management API | through `prod:inspect` only | yes | DEV configuration and the `*:check` scripts. |
 | R2 tokens | prod bucket only | dev bucket only | Runtime tokens cannot manage bucket settings. `scripts/setup-r2-cors.ts` needs a bucket-admin token. |
-| Local stack | n/a | n/a | The Supabase CLI and psql through `docker exec`. MCP does not reach it. |
+| Local stack | n/a | n/a | The Supabase CLI and psql through `docker exec`. MCP cannot reach it. |
 
 ## The migration rule
 
@@ -107,7 +110,7 @@ Agents never read PROD data through any tool: every tool result goes to the mode
 2. A migration that creates a table follows [add a table](security.md#add-a-table).
 3. DEV receives a migration only when its PR merges to `main`: `.github/workflows/staging.yml` runs `supabase db push`, deploys the edge functions, then deploys that commit to staging. Never apply a migration to DEV by hand. `bun run migrations:check` and the canary fail when DEV's history diverges. `bun run advisors:check` fails on an advisor finding without a reviewed exception, and on an exception the advisor no longer reports.
 4. PROD receives migrations only through the `release` workflow ([Release and rollback](#release-and-rollback)). Never link, push or apply a migration to PROD by hand.
-5. Migrations are expand-only within a release, so the previous release's code works against the new schema and an Instant Rollback never meets a schema it cannot use. Add the replacement first. A drop or rename is a later release's step, after the build that used the object is replaced. `lib/security/destructive-migrations.test.ts` fails a statement the previous code may not survive unless the comment directly above it reads `-- @destructive: after release <production commit>: <reason>`. A changed signature or return shape of a called function is a review point.
+5. Migrations are expand-only within a release, so the previous release's code works against the new schema and an Instant Rollback never meets a schema it cannot use. Add the replacement first. A drop or rename is a later release's step, after the build that used the object is replaced. `lib/security/destructive-migrations.test.ts` fails a statement the previous code may not survive unless the comment directly above it reads `-- @destructive: after release <production commit>: <reason>`. A CHECK on an existing table is added `not valid`, so the push scans no rows that DEV or PROD may hold against it; the same test fails one without it. A changed signature or return shape of a called function is a review point.
 6. Product code tolerates values it does not know yet, such as an enum value a newer release writes. The [backlog](enforcement-ladder-backlog.md) lists the reads that do not yet. A release that writes a new value to one of them is not rollback-safe, and its PR says so.
 7. Never edit the `*baseline*` repair migrations.
 8. A Realtime transport change has no expand step: pause writes, drain requests from the old app, change the database, deploy the compatible app, make open tabs reload, verify an authorized receiver, then reopen writes.
@@ -116,44 +119,20 @@ Between releases, merged migrations wait on DEV. `migrations:check`, `types:chec
 
 ## Work in a worktree
 
-T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts` in the background. It writes `.t3/setup-running`, then `.t3/setup-done` or `.t3/setup-failed` with the failing output.
+T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts` in the background.
 
-- Wait for `.t3/setup-done` before you run any command. On `.t3/setup-failed`, repair the cause and rerun `bun scripts/setup-worktree.ts`.
+- Wait for `.t3/setup-done` before any command. While it waits for its turn or for room, `.t3/setup-running` says why (`lib/testing/runner/setup-turn.ts`). On `.t3/setup-failed`, repair the cause and rerun `bun scripts/setup-worktree.ts`.
+- After `bun.lock` changes, run `bun install --frozen-lockfile`; until then `check:changed` and `test:verify` refuse.
 - A checkout keeps its own `.next`, workspace lock, `.agent-logs/` and ports (`lib/testing/runner/app-port.ts`).
 - Every worktree shares one local stack. Browser groups of several worktrees run side by side, except one that measures or restarts a stack service: it holds the stack alone (`lib/testing/runner/stack-lock.ts`).
 - `bun run check:changed`, `test:verify`, `typecheck`, `build` (a test server's too) and a `lint` over 150 files take a machine-wide slot (`lib/testing/runner/heavy-slot.ts`): the first unless the machine is blocked, further ones with measured room (`bun run room`). Serving and CI take none. A hook refuses a direct whole-repository `tsc`, wider `eslint` or `next build` and names the slot command (`lib/testing/runner/heavy-command.ts`). Other heavy work: `bun scripts/heavy.ts -- <command>`.
+- A `device_open` that boots an iOS Simulator or Android Emulator here waits for measured room (`bun run room --wait device`); a hook refuses it without room (`lib/testing/runner/device-room.ts`). Shut the device down when its check ends: a booted one holds about 3.5 GiB.
 - `supabase stop` affects every worktree; the edit guard refuses it while one holds the stack. A hook refuses a second stack (`lib/testing/runner/second-stack.ts`). [Reset steps](../../.claude/skills/supabase-live-workflow/SKILL.md#reset-the-shared-stack).
-
-## Set up a new machine
-
-1. Install Bun, Node 22 or later, git, the GitHub CLI, Docker and the Supabase CLI. On Windows, clone and work inside WSL Ubuntu.
-   On an Apple Silicon Mac, run `softwareupdate --install-rosetta` and `brew install colima docker flock`, then `colima start --cpu 4 --memory 6 --disk 40 --vm-type vz --vz-rosetta --mount-type virtiofs` ([why Rosetta](standards-audit.md#keep-accepted-screens-as-visual-references)). Run the repository's pinned CLI with `bunx supabase`. Grow the VM only for a measured need. On AC power, `caffeinate -s` keeps the Mac awake for agents.
-2. Export the owner's Supabase personal access token as `SUPABASE_ACCESS_TOKEN`, with a copy in every env backup (a switch overwrites `.env.local`). Never commit or print it.
-3. Get the DEV `.env.local` from the owner's password manager and copy it to `.env.dev-backup`. Add `.env.live-backup` only for production sessions.
-4. Add the DEV MCP server `supabase` above to Claude Code (`claude mcp add --scope user --transport http supabase "<url>"`) and Codex (`[mcp_servers.supabase]` in `~/.codex/config.toml`). The owner signs in once per tool. Never add a server for PROD. The Vercel CLI, signed in as the owner, serves both.
-5. On `main`, run `bunx supabase start` and `bun run stack:sync`. Create `.env.local-stack-backup` from `supabase status`, then run `bun run env:local`.
-6. Run `bunx playwright install --with-deps chromium` once.
-7. CodeRabbit: `curl -fsSL https://cli.coderabbit.ai/install.sh | sh`. The owner signs in once with `coderabbit auth login`. `bun run review:doctor` confirms both. Agents install CodeRabbit only here.
-8. Install the [background jobs](#background-jobs); `bun run room` prints numbers.
-9. Verify: `bunx supabase projects list` shows both projects, `bun scripts/check-r2.ts` passes, and `WERKFLOW_VERIFY_LOCAL=1 bun run test:verify --group golden:gg-00` passes beside `bun run test:server local`.
-
-## Background jobs
-
-The `ops/` scripts of `werk-flow/werkflow-planning` run from `~/code/werkflow-planning`, as systemd user timers on Linux and launchd agents on the Mac (`ops/install-mac.py`).
-
-| Job | Runs on |
-| --- | --- |
-| `worktree-cleanup`, load watch | Each machine, for itself |
-| [CodeRabbit queue](coderabbit.md#the-coderabbit-queue), `ci-alert` | Both; only the lease holder acts |
-| [Production watcher](recovery-and-incidents.md#monitoring) | Where its [token](#credentials) is |
-| [Recovery rehearsal](recovery-and-incidents.md#recovery-rehearsal) | The PC, beside the stack |
-
-A lease is the ref `refs/leases/<job>` (`ops/lease.py`): its holder renews it every pass; another machine takes over once it lapses.
 
 ## Work on production
 
 - Reads: metadata only, through `bun run prod:inspect`. [Which tool reaches what](#which-tool-reaches-what) owns the rule.
-- A production-local session is the owner's: `bun run env:prod`, do the task, `bun run env:dev`. No tests and no bulk scripts in between.
+- A production-local session is the owner's: `bun run env:prod`, do the task, `bun run env:dev`. No tests or bulk scripts in between.
 - Owner demo data: `bun scripts/seed-demo-data.ts --target local|dev|prod` (PROD adds `--confirm-prod`) recreates the demo organizations, never the beta partner's; `local` also creates the owner. Each run generates the members' password. To sign in to `bun run dev` as one, seed DEV with your own `DEMO_MEMBER_PASSWORD` and run `bun run env:dev` first; PROD refuses one.
 
 ## Release and rollback

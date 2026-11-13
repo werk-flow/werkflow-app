@@ -16,6 +16,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { describeFailure } from '@/lib/action-messages';
+import { PROJECT_DELETE_HISTORY_MESSAGE, PROJECT_DELETE_MATERIAL_MESSAGE } from '@/lib/jobs/messages';
 import { deleteProject } from '@/lib/projects/actions';
 import { type Job, type Project, type ProjectWithDetails } from '@/lib/jobs/types';
 import { rowMenuActions } from './job-actions-menu-items';
@@ -27,6 +29,15 @@ const lazyEditProjectDialog = lazyDialog(() =>
 );
 
 export const PROJECT_DELETE_FAILED_MESSAGE = 'Das Projekt konnte nicht gelöscht werden.';
+
+const PROJECT_DELETE_ERROR_MESSAGES = {
+  material_history_exists: PROJECT_DELETE_MATERIAL_MESSAGE,
+  work_history_exists: PROJECT_DELETE_HISTORY_MESSAGE,
+} satisfies Record<string, string>;
+
+export function describeProjectDeleteError(error: string): string {
+  return describeFailure(error, PROJECT_DELETE_ERROR_MESSAGES, PROJECT_DELETE_FAILED_MESSAGE);
+}
 
 interface ProjectActionsMenuProps {
   project: ProjectWithDetails;
@@ -77,7 +88,7 @@ function useProjectActionsMenuState({
         const result = await deleteProject(project.id);
 
         if (!result.success) {
-          setError(PROJECT_DELETE_FAILED_MESSAGE);
+          setError(describeProjectDeleteError(result.error));
           return;
         }
 

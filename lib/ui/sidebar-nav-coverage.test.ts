@@ -11,9 +11,9 @@ import { isNavItemActive, navItemsFor } from '@/components/sidebar/sidebar-nav-i
 
 const appRoot = resolve(import.meta.dir, '../../app/(app)');
 
-// The settings area is reached through the profile card, which highlights
-// itself on these routes instead of a nav item.
-const PROFILE_CARD_SECTION = '/einstellungen';
+// The settings area and the own problem reports are reached through the
+// profile card, which highlights itself on these routes instead of a nav item.
+const PROFILE_CARD_SECTIONS = ['/einstellungen', '/meldungen'];
 
 const routes = readdirSync(appRoot, { recursive: true, encoding: 'utf8' })
   .map((name) => name.replaceAll('\\', '/'))
@@ -34,17 +34,17 @@ test('every authenticated route highlights exactly one sidebar entry', () => {
     const owners = navItemsFor('admin')
       .filter((item) => isNavItemActive(item, route))
       .map((item) => item.label);
-    const ownedByProfileCard = isNavItemActive({ href: PROFILE_CARD_SECTION }, route);
+    const ownedByProfileCard = PROFILE_CARD_SECTIONS.some((href) => isNavItemActive({ href }, route));
     const count = owners.length + (ownedByProfileCard ? 1 : 0);
     return count === 1 ? [] : [`${route}: ${count === 0 ? 'no entry' : owners.join(', ')}`];
   });
   expect(unmapped).toEqual([]);
 });
 
-test('the profile card still owns the settings highlight', () => {
+test('the profile card still owns the settings and report highlights', () => {
   const source = readFileSync(
     resolve(import.meta.dir, '../../components/sidebar/sidebar-profile-card.tsx'),
     'utf8',
   );
-  expect(source).toContain(`'${PROFILE_CARD_SECTION}'`);
+  for (const section of PROFILE_CARD_SECTIONS) expect(source).toContain(`'${section}'`);
 });

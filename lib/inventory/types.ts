@@ -1,6 +1,7 @@
 import type { Database } from '@/lib/supabase/database.types';
 import { constrainedValue } from '@/lib/validation/constrained-value';
-import type { InventoryPageQuery } from './list-page';
+import type { InventoryMovementPageRow, InventoryPageQuery } from './list-page';
+import { INVENTORY_UNITS } from './units';
 
 // The values the database check constraints allow for each text column.
 export const INVENTORY_ITEM_TYPES = ['material', 'consumable', 'tool', 'asset'] as const;
@@ -15,20 +16,26 @@ const INVENTORY_MOVEMENT_TYPES = [
   'transfer_in',
   'transfer_out',
 ] as const;
+/**
+ * The kinds of the material history: the stock movements, then a use of job
+ * material and its correction, which move no stock.
+ */
+export const INVENTORY_HISTORY_KINDS = [
+  ...INVENTORY_MOVEMENT_TYPES,
+  'job_use',
+  'job_use_correction',
+] as const;
 const JOB_MATERIAL_STATUSES = ['planned', 'partially_taken', 'taken', 'returned', 'cancelled'] as const;
 
 export type InventoryItemType = (typeof INVENTORY_ITEM_TYPES)[number];
 export type InventoryLocationType = (typeof INVENTORY_LOCATION_TYPES)[number];
 export type InventoryMovementType = (typeof INVENTORY_MOVEMENT_TYPES)[number];
+export type InventoryHistoryKind = (typeof INVENTORY_HISTORY_KINDS)[number];
 export type JobMaterialStatus = (typeof JOB_MATERIAL_STATUSES)[number];
 export type InventoryStockStatus = 'in_stock' | 'shortfall' | 'low_stock' | 'out_of_stock';
 
 export function toJobMaterialStatus(value: string): JobMaterialStatus {
   return constrainedValue(JOB_MATERIAL_STATUSES, value, 'job material status');
-}
-
-export function toInventoryMovementType(value: string): InventoryMovementType {
-  return constrainedValue(INVENTORY_MOVEMENT_TYPES, value, 'movement type');
 }
 
 type Tables = Database['public']['Tables'];
@@ -39,7 +46,6 @@ export type InventoryItemRow = Tables['inventory_items']['Row'];
 export type InventoryBarcodeRow = Tables['inventory_item_barcodes']['Row'];
 export type InventoryStockLevelRow = Tables['inventory_stock_levels']['Row'];
 export type JobMaterialLineRow = Tables['job_material_lines']['Row'];
-export type InventoryMovementRow = Tables['inventory_movements']['Row'];
 export type InventoryAssetInstanceRow = Tables['inventory_asset_instances']['Row'];
 
 export type InventoryCategory = {
@@ -114,25 +120,24 @@ export type InventoryOverviewItem = InventoryItem & {
   assetInstanceCount: number;
 };
 
-export type InventoryMovementListItem = {
-  id: string;
-  itemId: string;
-  itemName: string;
-  locationId: string;
-  locationName: string;
-  movementType: InventoryMovementType;
-  quantityDelta: number;
-  quantityBefore: number;
-  quantityAfter: number;
-  jobId: string | null;
-  jobTitle: string | null;
-  jobNumber: string | null;
-  projectId: string | null;
-  projectName: string | null;
-  projectNumber: string | null;
-  reason: string | null;
-  createdAt: string;
+/** One entry of the movement history; `actorName` is null when no person is recorded. */
+export type InventoryMovementHistoryEntry = Omit<InventoryMovementPageRow, 'actorId'> & {
+  actorName: string | null;
 };
+
+/** One page of the movement history, or the failure of its read. */
+export type InventoryMovementPage =
+  | {
+      status: 'loaded';
+      entries: InventoryMovementHistoryEntry[];
+      /** Entries that match the filters, before the page boundary. */
+      total: number;
+      /** False while the organization has no movement at all. */
+      hasAny: boolean;
+      /** Everyone who booked in the organization, for the person filter. */
+      people: Array<{ id: string; name: string }>;
+    }
+  | { status: 'failed' };
 
 export type InventoryOverview = {
   page: {
@@ -146,7 +151,6 @@ export type InventoryOverview = {
   locations: InventoryLocation[];
   suppliers: InventorySupplier[];
   items: InventoryOverviewItem[];
-  movements: InventoryMovementListItem[];
   summary: {
     totalItems: number;
     stockedItems: number;
@@ -191,6 +195,7 @@ export type JobMaterialLine = {
   preferredLocationName: string | null;
   plannedQuantity: number;
   takenQuantity: number;
+  usedQuantity: number;
   returnedQuantity: number;
   billableQuantity: number;
   isBillable: boolean;
@@ -214,14 +219,47 @@ export type ProjectMaterialSummary = {
     unit: string;
     plannedQuantity: number;
     takenQuantity: number;
+    usedQuantity: number;
     returnedQuantity: number;
     billableQuantity: number;
   }>;
 };
 
-export type InventoryUnitOption = {
-  value: string;
-  label: string;
+/**
+ * One recorded use of a material line, in the article's base unit. A
+ * correction has a negative quantity and names the event it corrects. The
+ * cost is the article's purchase price when the use was recorded, per
+ * `priceQuantity` base units, or null when the article had no price.
+ */
+export type MaterialUseEvent = {
+  id: string;
+  jobId: string | null;
+  projectId: string | null;
+  lineId: string;
+  itemId: string;
+  unit: string;
+  quantity: number;
+  cost: { amountCents: number; priceQuantity: number } | null;
+  correctsEventId: string | null;
+  note: string | null;
+  actorId: string;
+  createdAt: string;
+};
+
+/** The consumption facts of one material line for the office's billable review. */
+export type MaterialConsumptionLine = {
+  lineId: string;
+  jobId: string | null;
+  projectId: string | null;
+  itemId: string;
+  itemName: string;
+  unit: string;
+  plannedQuantity: number;
+  takenQuantity: number;
+  usedQuantity: number;
+  returnedQuantity: number;
+  isUnplanned: boolean;
+  events: MaterialUseEvent[];
 };
 
 export const INVENTORY_ITEM_TYPE_LABELS: Record<InventoryItemType, string> = {
@@ -257,6 +295,15 @@ export const INVENTORY_MOVEMENT_TYPE_LABELS: Record<InventoryMovementType, strin
   transfer_out: 'Umlagerung Ausgang',
 };
 
+/** A use and its correction move no stock; their history rows say so at every width. */
+export const INVENTORY_STOCK_UNCHANGED_LABEL = 'Bestand bleibt gleich';
+
+export const INVENTORY_HISTORY_KIND_LABELS: Record<InventoryHistoryKind, string> = {
+  ...INVENTORY_MOVEMENT_TYPE_LABELS,
+  job_use: 'Verbraucht',
+  job_use_correction: 'Verbrauch korrigiert',
+};
+
 export const JOB_MATERIAL_STATUS_LABELS: Record<JobMaterialStatus, string> = {
   planned: 'Geplant',
   partially_taken: 'Teilweise entnommen',
@@ -265,22 +312,6 @@ export const JOB_MATERIAL_STATUS_LABELS: Record<JobMaterialStatus, string> = {
   cancelled: 'Storniert',
 };
 
-export const INVENTORY_UNIT_OPTIONS: InventoryUnitOption[] = [
-  { value: 'piece', label: 'Stück' },
-  { value: 'meter', label: 'Meter' },
-  { value: 'roll', label: 'Rolle' },
-  { value: 'package', label: 'Packung' },
-  { value: 'box', label: 'Karton' },
-  { value: 'set', label: 'Set' },
-  { value: 'pair', label: 'Paar' },
-  { value: 'liter', label: 'Liter' },
-  { value: 'kilogram', label: 'Kilogramm' },
-  { value: 'sack', label: 'Sack' },
-  { value: 'cartridge', label: 'Kartusche' },
-  { value: 'bundle', label: 'Bund' },
-  { value: 'pallet', label: 'Palette' },
-];
-
 export function formatInventoryQuantity(quantity: number, unit: string, maximumFractionDigits = 2): string {
   const formatter = new Intl.NumberFormat('de-DE', {
     maximumFractionDigits,
@@ -288,8 +319,9 @@ export function formatInventoryQuantity(quantity: number, unit: string, maximumF
   return `${formatter.format(quantity)} ${getInventoryUnitLabel(unit)}`;
 }
 
+/** The long label of a unit, or the stored text itself for a unit outside the list. */
 export function getInventoryUnitLabel(unit: string): string {
-  return INVENTORY_UNIT_OPTIONS.find((option) => option.value === unit)?.label ?? unit;
+  return INVENTORY_UNITS.find((entry) => entry.code === unit)?.label ?? unit;
 }
 
 export function toNumber(value: number | string | null | undefined): number {

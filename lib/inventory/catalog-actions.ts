@@ -6,24 +6,28 @@ import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { upsertInventoryItemSchema } from './action-schemas';
-import { loadActiveInventoryLocations, loadInventoryOverviewLists } from './catalog-reads';
+import {
+  loadActiveInventoryLocations,
+  loadInventoryMovementPage,
+  loadInventoryOverviewLists,
+} from './catalog-reads';
 import { inventoryPageQuerySchema, inventoryPageResultSchema } from './list-page';
 import type { UpsertInventoryItemInput } from './action-inputs';
-import type { InventoryItem, InventoryLocation, InventoryOverview } from './types';
+import type { InventoryItem, InventoryLocation, InventoryMovementPage, InventoryOverview } from './types';
 import { toInventoryItem } from './types';
+import { normalizeInventoryUnitInput } from './units';
 import {
   cleanText,
   ensureInventoryDefaults,
   invalidateInventory,
   inventoryWriteFailure,
-  normalizeInventoryUnitInput,
   normalizePrice,
   normalizeQuantity,
 } from './write-support';
 
-// The office's catalog Server Actions: the inventory page, the storage
-// locations of the work-template editor, and an item's save. Each one is for
-// managers only.
+// The office's catalog Server Actions: the inventory page, its movement
+// history, the storage locations of the work-template editor, and an item's
+// save. Each one is for managers only.
 
 export async function getInventoryOverview(
   input: unknown = {},
@@ -37,25 +41,15 @@ export async function getInventoryOverview(
   const admin = createSupabaseAdminClient();
   const { orgId } = auth.context;
   await ensureInventoryDefaults(admin, auth.context);
-  const [pageResult, movementsResult] = await Promise.all([
-    admin.rpc('list_inventory_page', { p_organization_id: orgId, p_query: query }),
-    admin
-      .from('inventory_movements')
-      .select('*')
-      .eq('organization_id', orgId)
-      .order('created_at', { ascending: false })
-      .order('id')
-      .limit(40),
-  ]);
-  if (pageResult.error || movementsResult.error) {
-    logReadErrors('getInventoryOverview: read failed', pageResult.error, movementsResult.error);
+  const pageResult = await admin.rpc('list_inventory_page', { p_organization_id: orgId, p_query: query });
+  if (pageResult.error) {
+    logReadErrors('getInventoryOverview: read failed', pageResult.error);
     return { success: false, error: 'inventory_failed' };
   }
   const parsedPage = inventoryPageResultSchema.safeParse(pageResult.data);
   if (!parsedPage.success) return { success: false, error: 'inventory_failed' };
   const page = parsedPage.data;
-  const movements = movementsResult.data ?? [];
-  const lists = await loadInventoryOverviewLists(admin, orgId, page, movements);
+  const lists = await loadInventoryOverviewLists(admin, orgId, page);
   if (!lists.success) return lists;
 
   const summary = page.summary;
@@ -67,7 +61,6 @@ export async function getInventoryOverview(
       locations: lists.locations,
       suppliers: lists.suppliers,
       items: lists.items,
-      movements: lists.movements,
       summary,
       page: {
         query,
@@ -78,6 +71,37 @@ export async function getInventoryOverview(
       },
     },
   };
+}
+
+/**
+ * One page of the movement history of `/inventar` for the URL state `input`.
+ * A Lager filter must name a Lager of the caller's organization.
+ */
+export async function getInventoryMovementHistory(
+  input: unknown = {},
+): Promise<ActionResult<{ history: InventoryMovementPage }>> {
+  const auth = await authenticateAndAuthorize();
+  if (!auth.success) return { success: false, error: auth.error };
+  if (!auth.context.isManagerOrAbove) return { success: false, error: 'not_authorized' };
+  const parsedQuery = inventoryPageQuerySchema.safeParse(input);
+  if (!parsedQuery.success) return { success: false, error: 'invalid_input' };
+  const query = parsedQuery.data;
+  const admin = createSupabaseAdminClient();
+  const { orgId } = auth.context;
+  if (query.location !== 'all') {
+    const { data, error } = await admin
+      .from('inventory_locations')
+      .select('id')
+      .eq('organization_id', orgId)
+      .eq('id', query.location)
+      .maybeSingle();
+    if (error) {
+      logReadErrors('getInventoryMovementHistory: location read failed', error);
+      return { success: true, history: { status: 'failed' } };
+    }
+    if (!data) return { success: false, error: 'location_not_found' };
+  }
+  return { success: true, history: await loadInventoryMovementPage(admin, orgId, query) };
 }
 
 /**
@@ -109,7 +133,8 @@ export async function upsertInventoryItem(
 
   const name = cleanText(input.name);
   if (!name) return { success: false, error: 'name_required' };
-  if (!input.unit.trim()) return { success: false, error: 'unit_required' };
+  const unit = normalizeInventoryUnitInput(input.unit);
+  if (!unit) return { success: false, error: input.unit.trim() ? 'unit_unknown' : 'unit_required' };
 
   const initialQuantity = normalizeQuantity(input.initialQuantity ?? 0);
   const requestedInitialLocationId = input.id ? null : (input.initialLocationId ?? null);
@@ -123,7 +148,7 @@ export async function upsertInventoryItem(
     name,
     description: cleanText(input.description),
     category_id: cleanText(input.categoryId),
-    unit: normalizeInventoryUnitInput(input.unit),
+    unit,
     internal_sku: cleanText(input.internalSku),
     manufacturer: cleanText(input.manufacturer),
     supplier_id: cleanText(input.supplierId),

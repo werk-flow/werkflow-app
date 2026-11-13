@@ -7,11 +7,12 @@ import {
   interceptsRequest,
   isTargetPrefetch,
   navigationStart,
+  stateCapturePlan,
   type ObservedRequest,
+  type StandaloneTarget,
   type StatePlan,
 } from './acceptance-state-plan';
-import type { CaptureSpec } from './acceptance-sets';
-import { DIALOG_OPENERS } from './dialog-openers';
+import type { DialogOpener } from './dialog-opener';
 import { openLayerAt } from './open-layer';
 import { VIEWPORT_HEIGHT } from './open-layer-plan';
 import type { SurfaceContext } from './surface-fixtures';
@@ -20,6 +21,12 @@ import { openSurface } from './surface-routes';
 // The browser half of the state captures (acceptance-state-plan.ts owns the
 // plan): it reaches the planned state through the test's route interception
 // and proves that exactly that state is on screen before an image is written.
+
+/** A capture's view with the opener of its dialog, which the capturing group supplies. */
+export type OpenedView =
+  | { kind: 'page' }
+  | { kind: 'tab'; value: string }
+  | { kind: 'dialog'; opener: DialogOpener };
 
 type Interception = {
   /** Starts intercepting; until then every request passes. */
@@ -115,7 +122,7 @@ async function navigateHeld(page: Page, path: string, interception: Interception
  */
 async function reachState(
   context: SurfaceContext,
-  view: CaptureSpec['view'],
+  view: OpenedView,
   plan: StatePlan,
   width: number,
 ): Promise<{ scope: Locator; interception: Interception }> {
@@ -123,7 +130,7 @@ async function reachState(
   const main = page.getByRole('main');
   if (view.kind === 'dialog') {
     const interception = await interceptFor(page, plan, route);
-    const { layer } = await openLayerAt(context, DIALOG_OPENERS[view.opener], width, {
+    const { layer } = await openLayerAt(context, view.opener, width, {
       fresh: true,
       beforeOpen: interception.arm,
       settleLayer: plan.shows === 'failed-region',
@@ -193,7 +200,7 @@ async function expectState(
  */
 export async function withState(
   context: SurfaceContext,
-  view: CaptureSpec['view'],
+  view: OpenedView,
   plan: StatePlan,
   width: number,
   capture: (prove: () => Promise<void>) => Promise<void>,
@@ -201,6 +208,39 @@ export async function withState(
   const { scope, interception } = await reachState(context, view, plan, width);
   try {
     await capture(() => expectState(context.page, scope, plan, interception));
+  } finally {
+    await interception.release();
+  }
+}
+
+/**
+ * Runs `capture` while a screen outside the app shell shows the `loading.tsx`
+ * of `to`: the page opens `from`, another route of the same area, and
+ * navigates on the client while the target's server render gets no answer.
+ * The hold ends afterwards, a failed capture included.
+ */
+export async function withStandaloneLoading(
+  page: Page,
+  route: { from: string; to: StandaloneTarget },
+  capture: () => Promise<void>,
+): Promise<void> {
+  await page.goto(route.from);
+  await settled(page);
+  const interception = await interceptFor(page, stateCapturePlan('loading', 'page'), route.to.path);
+  try {
+    // A page of the area links to its other pages, so the target's loading
+    // boundary may be prefetched already and a second prefetch sends nothing:
+    // ask for it, then wait until the network is quiet instead of for a request.
+    await appRouter(page, 'prefetch', route.to.address);
+    await page.waitForLoadState('networkidle');
+    await interception.arm();
+    await appRouter(page, 'push', route.to.address);
+    await expect(
+      page.locator(SKELETON_SELECTOR).filter({ visible: true }).first(),
+      'the held navigation shows its skeleton',
+    ).toBeVisible();
+    expect(interception.heldNavigations(), 'the skeleton belongs to the held navigation').toBeGreaterThan(0);
+    await capture();
   } finally {
     await interception.release();
   }

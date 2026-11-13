@@ -1,10 +1,12 @@
 import type { InteractiveCalendarSession, TimeEntry, WorkSessionBreak } from './types';
-import { getLocalDayEnd, isSameLocalDay } from '@/lib/date-time/berlin';
+import { formatBerlinLocalDate, getLocalDayEnd, isSameLocalDay } from '@/lib/date-time/berlin';
 import { isMomentary } from './activity-intervals';
 import { getEffectiveTimeEntries } from './effective-entries';
 import { isBreakEndFollowedByClockIn } from './transition-pairs';
 import {
-  getAutomaticBreakRange,
+  getAutomaticBreakRanges,
+  type BreakDayPosition,
+  type BreakPolicyValues,
   resolveBreakPolicyAtTimestamp,
   type OrganizationTimeTrackingSettings,
 } from './settings';
@@ -32,6 +34,17 @@ export type CalendarWorkBlock = {
   isOnBreak: boolean;
   isComposite: boolean;
   isPending: boolean;
+  /**
+   * Where the block sits in its Berlin day's presence that counts toward the
+   * automatic break: the steps count the whole day, as the totals do. Absent
+   * when the block is the day's only counting presence.
+   */
+  breakDayPosition?: BreakDayPosition;
+  /**
+   * The time of the day's last entry: every block of the day resolves the
+   * break rule there, as the totals do. Absent: the block's own end.
+   */
+  breakPolicyAt?: string;
 };
 
 type OpenBlockState = {
@@ -187,6 +200,26 @@ function buildSyntheticBreakEntry(
   };
 }
 
+/**
+ * Whether a block shows the rule's automatic breaks instead of its stamped
+ * ones. Under the automatic rule the totals deduct the automatic break from
+ * the day's presence, stamped breaks counted as presence, and the entry
+ * dialog shows the automatic breaks too; under the manual rule the stamped
+ * breaks are the breaks.
+ */
+function showsAutomaticBreaks(policy: BreakPolicyValues | null): policy is BreakPolicyValues {
+  return policy?.breakMode === 'automatic';
+}
+
+/** The first automatic break keeps the ids it had before the second step existed. */
+function autoBreakId(edge: 'start' | 'end', index: number): string {
+  return index === 0 ? `auto-break-${edge}` : `auto-break-${index + 1}-${edge}`;
+}
+
+function autoSegmentId(blockId: string, part: 'work-before' | 'break', index: number): string {
+  return index === 0 ? `${blockId}-auto-${part}` : `${blockId}-auto-${part}-${index + 1}`;
+}
+
 function resolveDisplayBreakPolicy(
   block: CalendarWorkBlock,
   referenceDate: Date,
@@ -196,7 +229,10 @@ function resolveDisplayBreakPolicy(
     return null;
   }
 
-  return resolveBreakPolicyAtTimestamp(settings, block.end ? new Date(block.end) : referenceDate);
+  return resolveBreakPolicyAtTimestamp(
+    settings,
+    block.breakPolicyAt ?? (block.end ? new Date(block.end) : referenceDate),
+  );
 }
 
 function getCalendarBlockDisplayBreaks(
@@ -204,33 +240,23 @@ function getCalendarBlockDisplayBreaks(
   referenceDate = new Date(),
   settings?: OrganizationTimeTrackingSettings | null,
 ): WorkSessionBreak[] {
-  const actualBreaks = extractBreaks(block.sourceEntries);
-  if (actualBreaks.length > 0) {
-    return actualBreaks;
-  }
-
   const displayPolicy = resolveDisplayBreakPolicy(block, referenceDate, settings);
-  const displayEnd = block.end ? new Date(block.end) : referenceDate;
-  const automaticBreak = getAutomaticBreakRange(block.start, displayEnd, displayPolicy);
-
-  if (!automaticBreak) {
-    return [];
+  if (!showsAutomaticBreaks(displayPolicy)) {
+    return extractBreaks(block.sourceEntries);
   }
+  const displayEnd = block.end ? new Date(block.end) : referenceDate;
 
-  const breakStartEntry = buildSyntheticBreakEntry(
-    block,
-    'break_start',
-    automaticBreak.breakStart,
-    'auto-break-start',
+  return getAutomaticBreakRanges(block.start, displayEnd, displayPolicy, block.breakDayPosition).map(
+    (range, index) => ({
+      breakStart: buildSyntheticBreakEntry(
+        block,
+        'break_start',
+        range.breakStart,
+        autoBreakId('start', index),
+      ),
+      breakEnd: buildSyntheticBreakEntry(block, 'break_end', range.breakEnd, autoBreakId('end', index)),
+    }),
   );
-  const breakEndEntry = buildSyntheticBreakEntry(
-    block,
-    'break_end',
-    automaticBreak.breakEnd,
-    'auto-break-end',
-  );
-
-  return [{ breakStart: breakStartEntry, breakEnd: breakEndEntry }];
 }
 
 /** A block's work and break segments as the day shows them, without the momentary ones. */
@@ -249,45 +275,52 @@ function blockSegments(
   referenceDate: Date,
   settings: OrganizationTimeTrackingSettings | null | undefined,
 ): CalendarBlockSegment[] {
-  const actualBreaks = extractBreaks(block.sourceEntries);
-  if (actualBreaks.length > 0) {
-    return block.segments;
-  }
-
   const displayPolicy = resolveDisplayBreakPolicy(block, referenceDate, settings);
+  if (!showsAutomaticBreaks(displayPolicy)) {
+    return block.segments;
+  }
   const displayEnd = block.end ? new Date(block.end) : referenceDate;
-  const automaticBreak = getAutomaticBreakRange(block.start, displayEnd, displayPolicy);
+  const automaticBreaks = getAutomaticBreakRanges(
+    block.start,
+    displayEnd,
+    displayPolicy,
+    block.breakDayPosition,
+  );
 
-  if (!automaticBreak) {
+  // Without an automatic share a block keeps its own segments, unless it holds
+  // a stamped break: under the automatic rule that is presence, not a break.
+  if (automaticBreaks.length === 0 && extractBreaks(block.sourceEntries).length === 0) {
     return block.segments;
   }
 
-  const blockStart = new Date(block.start);
+  // Work, then each automatic break in order, then the work after the last one.
   const segments: CalendarBlockSegment[] = [];
-
-  if (blockStart < automaticBreak.breakStart) {
+  let workStart = new Date(block.start);
+  for (const [index, automaticBreak] of automaticBreaks.entries()) {
+    if (workStart < automaticBreak.breakStart) {
+      segments.push({
+        id: autoSegmentId(block.id, 'work-before', index),
+        type: 'work',
+        start: workStart.toISOString(),
+        end: automaticBreak.breakStart.toISOString(),
+        jobId: block.jobId,
+      });
+    }
     segments.push({
-      id: `${block.id}-auto-work-before`,
-      type: 'work',
-      start: block.start,
-      end: automaticBreak.breakStart.toISOString(),
+      id: autoSegmentId(block.id, 'break', index),
+      type: 'break',
+      start: automaticBreak.breakStart.toISOString(),
+      end: automaticBreak.breakEnd.toISOString(),
       jobId: block.jobId,
     });
+    workStart = automaticBreak.breakEnd;
   }
 
-  segments.push({
-    id: `${block.id}-auto-break`,
-    type: 'break',
-    start: automaticBreak.breakStart.toISOString(),
-    end: automaticBreak.breakEnd.toISOString(),
-    jobId: block.jobId,
-  });
-
-  if (displayEnd > automaticBreak.breakEnd) {
+  if (displayEnd > workStart) {
     segments.push({
       id: `${block.id}-auto-work-after`,
       type: 'work',
-      start: automaticBreak.breakEnd.toISOString(),
+      start: workStart.toISOString(),
       end: block.end,
       jobId: block.jobId,
     });
@@ -336,9 +369,8 @@ export function createSessionFromCalendarBlock(
     calendarBlockId: block.id,
     sourceEntries: block.sourceEntries,
     breaks: getCalendarBlockDisplayBreaks(block, referenceDate, settings),
-    breakMode: displayPolicy?.breakMode,
-    autoBreakThresholdMinutes: displayPolicy?.autoBreakThresholdMinutes,
-    autoBreakDurationMinutes: displayPolicy?.autoBreakDurationMinutes,
+    ...(displayPolicy ? { breakPolicy: displayPolicy } : {}),
+    ...(block.breakDayPosition ? { breakDayPosition: block.breakDayPosition } : {}),
     isCompositeBlock: block.isComposite,
     isOnBreakBlock: block.isOnBreak,
   };
@@ -441,5 +473,59 @@ export function calculateCalendarWorkBlocks(entries: TimeEntry[]): CalendarWorkB
     }
   }
 
-  return blocks.filter((block) => !isMomentary(block.start, block.end));
+  return withBreakDayPositions(blocks);
+}
+
+/** Standby counts as presence but not toward the automatic break, as in the totals. */
+function countsTowardBreak(block: CalendarWorkBlock): boolean {
+  return block.startEntry.activityKind !== 'standby';
+}
+
+/**
+ * The shown blocks, a block shorter than a minute left out, each with its
+ * place in the same person's counted presence that day and the time the day's
+ * rule is resolved at. The left-out blocks still count toward the steps.
+ */
+function withBreakDayPositions(blocks: CalendarWorkBlock[], now = Date.now()): CalendarWorkBlock[] {
+  const dayOf = (block: CalendarWorkBlock) =>
+    `${block.userId}:${formatBerlinLocalDate(new Date(block.start))}`;
+  const countedMinutes = (block: CalendarWorkBlock) =>
+    countsTowardBreak(block)
+      ? Math.max(
+          0,
+          ((block.end ? new Date(block.end).getTime() : now) - new Date(block.start).getTime()) / 60000,
+        )
+      : 0;
+  const isShown = (block: CalendarWorkBlock) => !isMomentary(block.start, block.end);
+  type DayTotals = { shownMinutes: number; hiddenMinutes: number; lastEntryAt: string };
+  const days = new Map<string, DayTotals>();
+  for (const block of blocks) {
+    const day = days.get(dayOf(block)) ?? { shownMinutes: 0, hiddenMinutes: 0, lastEntryAt: block.start };
+    if (isShown(block)) day.shownMinutes += countedMinutes(block);
+    else day.hiddenMinutes += countedMinutes(block);
+    // The totals resolve the day's rule at its last entry, a break start in an open block included.
+    const lastEntryAt = [
+      block.end ?? block.start,
+      ...block.sourceEntries.map((entry) => entry.timestamp),
+    ].reduce((latest, timestamp) => (Date.parse(timestamp) > Date.parse(latest) ? timestamp : latest));
+    if (Date.parse(lastEntryAt) > Date.parse(day.lastEntryAt)) day.lastEntryAt = lastEntryAt;
+    days.set(dayOf(block), day);
+  }
+  const beforeByDay = new Map<string, number>();
+  return blocks.filter(isShown).map((block) => {
+    const day = days.get(dayOf(block)) ?? { shownMinutes: 0, hiddenMinutes: 0, lastEntryAt: block.start };
+    const beforeMinutes = beforeByDay.get(dayOf(block)) ?? 0;
+    const ownMinutes = countedMinutes(block);
+    beforeByDay.set(dayOf(block), beforeMinutes + ownMinutes);
+    return {
+      ...block,
+      breakDayPosition: {
+        countsTowardBreak: countsTowardBreak(block),
+        beforeMinutes,
+        afterMinutes: day.shownMinutes - beforeMinutes - ownMinutes,
+        hiddenMinutes: day.hiddenMinutes,
+      },
+      breakPolicyAt: day.lastEntryAt,
+    };
+  });
 }

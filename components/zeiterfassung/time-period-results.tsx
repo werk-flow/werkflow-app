@@ -4,6 +4,7 @@ import { SkeletonList, SkeletonTable } from '@/components/ui/skeleton-table';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { PeriodResultRow, PeriodResultValues } from '@/lib/time-accounts/period-results';
 import { FINDING_LABELS, formatMinutes } from '@/lib/time-accounts/presentation';
+import { formatDuration } from '@/lib/time-tracking/helpers';
 import { TIME_PERIOD_RESULT_COLUMNS } from './time-period-result-columns';
 
 const VALUE_TERMS: ReadonlyArray<{ key: keyof PeriodResultValues; term: string }> = [
@@ -34,6 +35,16 @@ function UncomputedCause({ result }: { result: PeriodResultRow }) {
   );
 }
 
+/** Why a Soll is lower: the Berufsschule days, each credited with its normal target. */
+function SchoolNote({ result }: { result: PeriodResultRow }) {
+  if (result.schoolMinutes === 0) return null;
+  return (
+    <span className="block text-sm text-muted-foreground">
+      Berufsschule: {formatDuration(result.schoolMinutes)} als Tagesziel angerechnet
+    </span>
+  );
+}
+
 function targetSourceLabel(result: PeriodResultRow): string {
   return result.authoritativeTargets ? 'Arbeitsplan' : 'Ersatzwert';
 }
@@ -48,6 +59,7 @@ export function TimePeriodResults({ results }: { results: readonly PeriodResultR
             <div>
               <p className="break-words font-medium">{result.employeeName}</p>
               <UncomputedCause result={result} />
+              <SchoolNote result={result} />
             </div>
             <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
               {VALUE_TERMS.map(({ key, term }) => (
@@ -81,6 +93,7 @@ export function TimePeriodResults({ results }: { results: readonly PeriodResultR
                 <TableCell>
                   <span className="block font-medium">{result.employeeName}</span>
                   <UncomputedCause result={result} />
+                  <SchoolNote result={result} />
                 </TableCell>
                 {VALUE_TERMS.map(({ key }) => (
                   <TableCell key={key} className="tabular-nums">

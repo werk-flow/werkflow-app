@@ -16,7 +16,7 @@
         "backend": "local"
       },
       "counts": {
-        "requests": { "reference": 59, "tolerance": 1 },
+        "requests": { "reference": 57, "tolerance": 1 },
         "routeRenders": { "reference": 1, "tolerance": 0 },
         "echoRenders": { "reference": 1, "tolerance": 0 },
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
@@ -68,13 +68,13 @@
         },
         "route:/auftraege": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 9861, "tolerance": { "relative": 0.9589, "absolute": 512 } },
-          "decodedBytes": { "reference": 27705, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 7517, "tolerance": { "relative": 0.9589, "absolute": 512 } },
+          "decodedBytes": { "reference": 27113, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "script": {
-          "requests": { "reference": 43, "tolerance": 1 },
-          "encodedBytes": { "reference": 693562, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "requests": { "reference": 42, "tolerance": 1 },
+          "encodedBytes": { "reference": 671539, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         },
@@ -334,6 +334,50 @@
           },
           "runKeys": ["2026-11-12T004607647Z-ed5cc5"],
           "reason": "main before #358 measured 690986 B, inside the old ceiling; two features then add script to the field cold start, which prefetches the work pack's route chunk: #358 (werk-flow/werkflow-planning#162, the work pack's completion-gate list) adds 1646 B (690986 before it, 692632 after, Boat runs of dedb9e84 and 034e1a62), and #348 (werk-flow/werkflow-planning#158, the „Meine Zeit“ rows: activity pairing and their labels, which the work pack renders on its first load) adds 930 B (693562 on 0b354338, after moving the Verlauf's day grouping out of that chunk, which saved 122 B)"
+        },
+        {
+          "kind": "floor-accept",
+          "target": "route:/auftraege",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 9861, "tolerance": { "relative": 0.9589, "absolute": 512 } },
+            "decodedBytes": { "reference": 27705, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 7517, "tolerance": { "relative": 0.9589, "absolute": 512 } },
+            "decodedBytes": { "reference": 27113, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-09T191958859Z-6ffc80"],
+          "reason": "The route payload names one script chunk fewer (cold-start script requests 43 to 42): the app shell now imports lazyDialog for the report dialog, so /auftraege no longer references it as a chunk of its own. Rows and route renders are unchanged; nothing is missing."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 43, "tolerance": 1 },
+            "encodedBytes": { "reference": 693562, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 42, "tolerance": 1 },
+            "encodedBytes": { "reference": 671539, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-12T164516903Z-805d1e"],
+          "reason": "werk-flow/werkflow-app#393 on main removed one start-up script and about 6.1 KB (main alone measured 687,435 B against its 693,562 B reference, 42 requests); together with this PR's lazy dialog the sum is 671,539 B here (671,304 B before #400), below main's floor. Request shapes match main's and the job-open step is unchanged. Replayed after merging main 43262e0e (#400)."
+        },
+        {
+          "kind": "ratchet",
+          "target": "requests",
+          "from": { "reference": 59, "tolerance": 1 },
+          "to": { "reference": 57, "tolerance": 1 },
+          "runKeys": ["2026-11-13T073843350Z-d01ff1"],
+          "reason": "Merged with main 5100c6de, the field cold start loads 41 script files instead of 43 (main alone: 42, 58 requests); the five job prefetches stay. Every other request shape (the API and Supabase reads, route, document, fonts, images, stylesheets) and every backend read by path match main 8783c979 and this branch before the merge (c0ea3439). The /auftraege entry chunks of the three builds name both files: one goes with main's own start-up, which since #382 (decision 13) loads the activity fields and their alarm-clock icon on first use and since #405 keeps the member-removal dialog out; the other is bundling: all 564 start-up modules of main 5100c6de stay in the start-up, and Turbopack packs five of main's (app) layout chunks with this PR's two Leistungen skeleton modules (the org-switch overlay's map) into four (1,740,600 to 1,743,228 B over all entry files)."
         }
       ]
     },
@@ -352,13 +396,13 @@
         "backend": "local"
       },
       "counts": {
-        "requests": { "reference": 1, "tolerance": 0 },
+        "requests": { "reference": 3, "tolerance": 0 },
         "routeRenders": { "reference": 1, "tolerance": 0 },
         "echoRenders": { "reference": 0, "tolerance": 0 },
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 31, "tolerance": 1 },
-        "componentRenders": { "reference": 536, "tolerance": 10 }
+        "componentRenders": { "reference": 587, "tolerance": 10 }
       },
       "payloads": {
         "prefetch:/auftraege": {
@@ -369,8 +413,14 @@
         },
         "route:/auftraege/[jobNumber]": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 1101, "tolerance": { "relative": 1, "absolute": 512 } },
-          "decodedBytes": { "reference": 17263, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 1234, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 17871, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": null
+        },
+        "script": {
+          "requests": { "reference": 2, "tolerance": 0 },
+          "encodedBytes": { "reference": 28808, "tolerance": { "relative": 0.05, "absolute": 512 } },
+          "decodedBytes": null,
           "rows": null
         }
       },
@@ -458,6 +508,53 @@
           "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
           "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
           "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "route:/auftraege/[jobNumber]",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 1101, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 17263, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 1234, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 17871, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-11-12T143746833Z-bb55cf"],
+          "reason": "werk-flow/werkflow-planning#369: the job page's navigation payload grew 608 B (17263 to 17871, the same in two runs) with identical backendByPath and rows. The change adds the client module lib/inventory/units.ts, which lib/inventory/types.ts (formatInventoryQuantity, used by the job material rows) now imports, so the payload's client references name one more chunk. No data was added; the response body stayed on Boat and was not opened."
+        },
+        {
+          "kind": "raise",
+          "target": "requests",
+          "from": { "reference": 1, "tolerance": 0 },
+          "to": { "reference": 3, "tolerance": 0 },
+          "runKeys": ["2026-11-12T164516903Z-805d1e"],
+          "reason": "The report dialog loads after the job page is idle so a first open without signal works (werk-flow/werkflow-planning#320, CodeRabbit r4547677458; lead decision). Replayed on the tree merged with main 43262e0e (#400), whose reference file this branch took whole. Job-open requests 1 -> 3: the two chunks of the dialog module the idle load fetches."
+        },
+        {
+          "kind": "raise",
+          "target": "componentRenders",
+          "from": { "reference": 536, "tolerance": 10 },
+          "to": { "reference": 587, "tolerance": 10 },
+          "runKeys": ["2026-11-12T164516903Z-805d1e"],
+          "reason": "The report dialog loads after the job page is idle so a first open without signal works (werk-flow/werkflow-planning#320, CodeRabbit r4547677458; lead decision). Replayed on the tree merged with main 43262e0e (#400), whose reference file this branch took whole. Job-open component renders 536 -> 587: the loaded drafts list and the closed dialog host mount. #329 puts the problem-report control on every page, and the dialog chunk shares code with it."
+        },
+        {
+          "kind": "shape-accept",
+          "target": "script",
+          "from": null,
+          "to": {
+            "requests": { "reference": 2, "tolerance": 0 },
+            "encodedBytes": { "reference": 28808, "tolerance": { "relative": 0.05, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-12T164516903Z-805d1e"],
+          "reason": "The report dialog loads after the job page is idle so a first open without signal works (werk-flow/werkflow-planning#320, CodeRabbit r4547677458; lead decision). Replayed on the tree merged with main 43262e0e (#400), whose reference file this branch took whole. New script shape, 2 requests, 28,808 B: the dialog module's chunks, which the field worker loads on the job page instead of at the app start. #329 puts the problem-report control on every page, and the dialog chunk shares code with it."
         }
       ]
     },
@@ -732,7 +829,7 @@
         "actionRoundTrips": { "reference": 1, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 22, "tolerance": 1 },
-        "componentRenders": { "reference": 708, "tolerance": 13 }
+        "componentRenders": { "reference": 656, "tolerance": 13 }
       },
       "payloads": {
         "action:/dashboard": {
@@ -850,6 +947,14 @@
           },
           "runKeys": ["2026-11-08T112625699Z-6f644d"],
           "reason": "The dashboard's clock action response lists fewer client chunks now that the app shell no longer imports the Auftraege table, its row menus and their edit forms (AuftraegeTableSkeleton has its own module): about 617 decoded bytes less, rows unchanged."
+        },
+        {
+          "kind": "ratchet",
+          "target": "componentRenders",
+          "from": { "reference": 708, "tolerance": 13 },
+          "to": { "reference": 656, "tolerance": 13 },
+          "runKeys": ["2026-11-12T193422901Z-d6057f"],
+          "reason": null
         }
       ]
     },
@@ -1125,7 +1230,7 @@
         "backend": "local"
       },
       "counts": {
-        "requests": { "reference": 53, "tolerance": 1 },
+        "requests": { "reference": 51, "tolerance": 1 },
         "routeRenders": { "reference": 1, "tolerance": 0 },
         "echoRenders": { "reference": 1, "tolerance": 0 },
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
@@ -1177,8 +1282,8 @@
           "rows": null
         },
         "script": {
-          "requests": { "reference": 37, "tolerance": 1 },
-          "encodedBytes": { "reference": 575135, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "requests": { "reference": 36, "tolerance": 1 },
+          "encodedBytes": { "reference": 573760, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         },
@@ -1403,6 +1508,50 @@
           },
           "runKeys": ["2026-11-09T215315624Z-23af99"],
           "reason": "Tailwind no longer scans tests and test support (lint examples became shipped utilities), and the unused .hide-time-picker block and duplicate ::selection rules are gone; every dropped utility appears only in an excluded test file, and audit:visual, audit:layout and audit:layout:viewports pass on the same tree"
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 37, "tolerance": 1 },
+            "encodedBytes": { "reference": 575135, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 36, "tolerance": 1 },
+            "encodedBytes": { "reference": 581215, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-12T065056958Z-ac2af3"],
+          "reason": "The app shell gained the report button, its recorder and its launcher, which the owner accepted on #329 (2026-11-10). CI passed both lab groups on 82a9e350 (run 43092771815) and main passes alone; the merged tree reads 581,215 B, over the 580,887 B ceiling by 328 B, because main's shell changes since then used the remaining room. The field cold start needs no accept: #348's ceiling-accept already covers it."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 36, "tolerance": 1 },
+            "encodedBytes": { "reference": 581215, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 36, "tolerance": 1 },
+            "encodedBytes": { "reference": 573760, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-12T221701408Z-cb4509"],
+          "reason": "Merged with main 0a645ab9 (#405, #391), the office cold start loads 36 script files (main alone 7635410d: 37; this branch alone 6cfc656d: 37) and 573,760 B (main before #405 7ef4b95c: 581,060; main alone: 578,033; branch alone: 579,387). Module comparison of the captured start-up chunks: the branch's lazy-loader stubs chunk 250d7s622ddpd.js (456 B, loaders 986332, 210572, 777462) now shares a chunk with layout module 537416 again, as on main; every module of main's and of the branch's start-up is present, except the activity fields and their alarm-clock icon (decision 13, loaded on first use) and #405's five Mitarbeiter member-removal modules, absent from main's start-up too. Lead's decision of 2026-11-12."
+        },
+        {
+          "kind": "ratchet",
+          "target": "requests",
+          "from": { "reference": 53, "tolerance": 1 },
+          "to": { "reference": 51, "tolerance": 1 },
+          "runKeys": ["2026-11-13T073843350Z-996ca3"],
+          "reason": "Merged with main 5100c6de, the office cold start loads 35 script files instead of 37 (main alone: 36, 52 requests). Every other request shape (the API and Supabase reads, route, document, fonts, images, stylesheets) and every backend read by path match main 8783c979; against this branch before the merge (c0ea3439) one read differs by main's #391: two read_manager_attention_sets calls replace two list_open_request_attention calls. The /auftraege entry chunks of the three builds name both files: one goes with main's own start-up, which since #382 (decision 13) loads the activity fields and their alarm-clock icon on first use and since #405 keeps the member-removal dialog out; the other is bundling: all 564 start-up modules of main 5100c6de stay in the start-up, and Turbopack packs five of main's (app) layout chunks with this PR's two Leistungen skeleton modules (the org-switch overlay's map) into four (1,740,600 to 1,743,228 B over all entry files)."
         }
       ]
     },
@@ -2432,7 +2581,7 @@
         },
         "script": {
           "requests": { "reference": 4, "tolerance": 0 },
-          "encodedBytes": { "reference": 37609, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 38150, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         }
@@ -2644,6 +2793,24 @@
           },
           "runKeys": ["2026-11-08T142527257Z-73e286"],
           "reason": "werk-flow/werkflow-app#276 adds the employee's „Zeit nachtragen“ flow to /zeiterfassung (earlier-day Zeitkorrektur, withdrawal confirmation, extended „Vorgemerkte Zeit“). The Aufgaben step prefetches that route from the sidebar, so its script grew by about 2.5 kB over main's 35153; the Aufgaben route and its reads are unchanged."
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 4, "tolerance": 0 },
+            "encodedBytes": { "reference": 37609, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 4, "tolerance": 0 },
+            "encodedBytes": { "reference": 38150, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-13T120348256Z-ff99fd"],
+          "reason": "Berufsschule days (werk-flow/werkflow-planning#165, #431): the prefetched Zeiterfassung chunks carry the apprentice's school-day note. Production builds of 8f304a90 and this branch differ in two chunks only: the weekly hours chart gains WeeklySchoolDays (347 raw bytes) with its call (29) and the week view's school_days live table (14), +154 gzip; the dashboard hero gains its school sentence, +82 raw, +38 gzip. next/dynamic for both measured larger (loader stubs of 134 and about 290 raw bytes, gzip 15 bytes more), so they stay inline. Accepted by the E0 lead under decision 21."
         }
       ]
     },
@@ -2668,7 +2835,7 @@
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 11, "tolerance": 1 },
-        "componentRenders": { "reference": 471, "tolerance": 9 }
+        "componentRenders": { "reference": 484, "tolerance": 9 }
       },
       "payloads": {
         "route:/einstellungen/mitarbeiter": {
@@ -2804,6 +2971,14 @@
           },
           "runKeys": ["2026-11-09T122231468Z-966927"],
           "reason": "The customer picker loads its create dialog through lazyDialog (werk-flow/werkflow-app#312), so the settings page's script chunk no longer carries modules it shared with the dialog; CI measured 8184 (run 42617438000), this run 8186; requests and renders unchanged"
+        },
+        {
+          "kind": "raise",
+          "target": "componentRenders",
+          "from": { "reference": 471, "tolerance": 9 },
+          "to": { "reference": 484, "tolerance": 9 },
+          "runKeys": ["2026-11-12T203332260Z-8a8d37"],
+          "reason": "The office sidebar gains the Angebote entry (werk-flow/werkflow-planning#379); each sidebar re-render while settings opens renders its link and icon once more"
         }
       ]
     }

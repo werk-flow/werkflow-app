@@ -10,9 +10,8 @@ import { useCalendarPreferences } from './use-calendar-preferences';
 /**
  * What the calendar shows: the saved preferences, the view (itself a
  * preference), the anchor date and the read window that follows them (PF-01),
- * the navigation handlers, the day zoom and the working-hours toggle. Opening
- * a day from the month highlights the member row it came from. "Heute" and
- * the fallback anchor use the container's one `todayIso`, never the clock.
+ * the navigation handlers, the day zoom and the working-hours toggle. "Heute"
+ * and the fallback anchor use the container's one `todayIso`, never the clock.
  */
 export function useCalendarViewState({
   organizationId,
@@ -44,7 +43,6 @@ export function useCalendarViewState({
   );
   const [showWorkingHours, setShowWorkingHours] = useState(false);
   const [dayZoom, setDayZoom] = useState(1);
-  const [highlightMemberId, setHighlightMemberId] = useState<string | null>(null);
 
   // The read window follows the selected date, view and horizon (PF-01).
   const needed = useMemo(
@@ -62,9 +60,8 @@ export function useCalendarViewState({
   );
   const handleToday = useCallback(() => setCurrentDate(calendarAnchorDate(todayIso)), [todayIso]);
   const handleOpenDay = useCallback(
-    (date: Date, memberId: string | null) => {
+    (date: Date) => {
       setCurrentDate(date);
-      setHighlightMemberId(memberId);
       setView('day');
     },
     [setView],
@@ -81,8 +78,6 @@ export function useCalendarViewState({
     setShowWorkingHours,
     dayZoom,
     setDayZoom,
-    highlightMemberId,
-    setHighlightMemberId,
     handlePrevious,
     handleNext,
     handleToday,

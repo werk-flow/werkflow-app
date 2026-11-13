@@ -8,6 +8,7 @@ import {
   Calendar,
   Clock,
   CreditCard,
+  FileText,
   LayoutDashboard,
   Shield,
   User,
@@ -24,6 +25,7 @@ export type SettingsSectionSlug =
   | 'abonnement-abrechnung'
   | 'dashboard'
   | 'organisation'
+  | 'dokumente'
   | 'kalender'
   | 'zeiterfassung'
   | 'mitarbeiter'
@@ -115,6 +117,17 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     group: 'organization',
     scope: 'organization',
     adminOnlyWrites: true,
+    managersOnly: true,
+    implemented: true,
+  },
+  {
+    slug: 'dokumente',
+    label: 'Dokumente & Briefpapier',
+    shortDescription: 'Angebote als PDF',
+    description: 'Firmenangaben, Logo und Briefpapier für deine Angebote, dazu ein Musterangebot als PDF.',
+    icon: FileText,
+    group: 'organization',
+    scope: 'organization',
     managersOnly: true,
     implemented: true,
   },

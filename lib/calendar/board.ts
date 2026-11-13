@@ -43,15 +43,19 @@ export type CalendarBoardRowlessAssignee = Pick<
   'employeeRecordId' | 'userId' | 'displayName' | 'entryDate' | 'exitDate' | 'accessEndDate'
 >;
 
+/** The absence kinds a capacity day carries; the board GET's schema reads the same list. */
+export const CALENDAR_ABSENCE_TYPES = ['vacation', 'sickness', 'school'] as const;
+
 type CalendarBoardAbsence = {
-  type: 'vacation' | 'sickness';
+  type: (typeof CALENDAR_ABSENCE_TYPES)[number];
   portion: 'full' | 'half_day';
 };
 
 /** An absence by its kind; a sickness reads „Abwesend“, so the board never names it. */
-const ABSENCE_LABELS: Record<CalendarBoardAbsence['type'], string> = {
+export const ABSENCE_LABELS: Record<CalendarBoardAbsence['type'], string> = {
   vacation: 'Urlaub',
   sickness: 'Abwesend',
+  school: 'Berufsschule',
 };
 
 /** One person-day from the planning owner's target resolution. */

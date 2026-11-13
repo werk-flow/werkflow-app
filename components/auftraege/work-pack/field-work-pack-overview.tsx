@@ -9,6 +9,8 @@ import { useBanner } from '@/components/ui/banner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { FieldWorkPackJob } from '@/lib/jobs/field-work-pack';
+import { contactCustomerLine } from './contact-customer-line';
+import type { FieldSiteAccessSlots } from './field-site-access';
 import { JOB_PRIORITY_LABELS } from '@/lib/jobs/types';
 
 function formatSchedule(job: FieldWorkPackJob): string {
@@ -22,7 +24,14 @@ function formatDurationOrNull(minutes: number | null): string | null {
   return minutes ? formatDuration(minutes) : null;
 }
 
-export function FieldWorkPackOverview({ job }: { job: FieldWorkPackJob }): ReactElement {
+export function FieldWorkPackOverview({
+  job,
+  siteAccess,
+}: {
+  job: FieldWorkPackJob;
+  /** The access proposal on the Einsatzort, rendered on the server; absent without an Einsatzort. */
+  siteAccess?: FieldSiteAccessSlots;
+}): ReactElement {
   const { showBanner } = useBanner();
   const overviewRef = useRef<HTMLElement>(null);
 
@@ -34,6 +43,8 @@ export function FieldWorkPackOverview({ job }: { job: FieldWorkPackJob }): React
       'clients',
       'client_contacts',
       'client_sites',
+      // An office decision on the job's access proposal shows on the Einsatzort.
+      'site_access_proposals',
       'job_instruction_items',
       'job_material_lines',
       'inventory_stock_levels',
@@ -78,7 +89,7 @@ export function FieldWorkPackOverview({ job }: { job: FieldWorkPackJob }): React
         </Badge>
       </div>
 
-      <FieldWorkPackOverviewFacts job={job} />
+      <FieldWorkPackOverviewFacts job={job} siteAccess={siteAccess} />
 
       {job.requestedOutcome && (
         <div className="mt-3 border-t pt-3 sm:mt-4 sm:pt-4">
@@ -93,8 +104,16 @@ export function FieldWorkPackOverview({ job }: { job: FieldWorkPackJob }): React
 }
 
 /** Schedule, contact and site of the job. */
-function FieldWorkPackOverviewFacts({ job }: { job: FieldWorkPackJob }): ReactElement {
+function FieldWorkPackOverviewFacts({
+  job,
+  siteAccess,
+}: {
+  job: FieldWorkPackJob;
+  /** The access proposal on the Einsatzort; undefined without an Einsatzort. */
+  siteAccess: FieldSiteAccessSlots | undefined;
+}): ReactElement {
   const duration = formatDurationOrNull(job.plannedWorkingMinutes);
+  const customerLine = contactCustomerLine(job.contactName, job.customerName);
   return (
     <div className="mt-3 grid gap-3 sm:mt-4 sm:grid-cols-2 sm:gap-4">
       <div className="space-y-3">
@@ -114,9 +133,7 @@ function FieldWorkPackOverviewFacts({ job }: { job: FieldWorkPackJob }): ReactEl
               {job.contactName ?? job.customerName ?? 'Nicht hinterlegt'}
             </p>
             {job.contactRole && <p className="text-xs text-muted-foreground">{job.contactRole}</p>}
-            {job.contactName && job.customerName && (
-              <p className="text-xs text-muted-foreground">{job.customerName}</p>
-            )}
+            {customerLine && <p className="text-xs text-muted-foreground">{customerLine}</p>}
           </div>
         </div>
       </div>
@@ -125,7 +142,10 @@ function FieldWorkPackOverviewFacts({ job }: { job: FieldWorkPackJob }): ReactEl
         <div className="flex gap-3">
           <MapPin className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
           <div className="min-w-0">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Einsatzort</p>
+            <div className="flex items-center gap-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Einsatzort</p>
+              {siteAccess?.action}
+            </div>
             <p className="mt-0.5 text-sm font-medium">{job.siteName ?? 'Einsatzort'}</p>
             <p className="text-sm text-muted-foreground">{job.siteAddress ?? 'Keine Adresse hinterlegt'}</p>
             {job.accessNotes && (
@@ -133,6 +153,7 @@ function FieldWorkPackOverviewFacts({ job }: { job: FieldWorkPackJob }): ReactEl
                 <span className="font-medium">Zugang:</span> {job.accessNotes}
               </p>
             )}
+            {siteAccess?.readError}
           </div>
         </div>
       </div>
