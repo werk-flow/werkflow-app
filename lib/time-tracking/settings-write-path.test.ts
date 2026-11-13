@@ -209,16 +209,15 @@ if (ISOLATED) {
     expect(invalidatedTags).toEqual([]);
   });
 
-  test('the open break of a member ends in the same call and resumes its job', async () => {
+  test('the open break of a member ends in the same call, named by its start entry', async () => {
     todayRows = [
       todayEntry('entry-1', 'clock_in', 2, 'job-1'),
       todayEntry('entry-2', 'break_start', 1, null),
     ];
     const result = await updateTimeTrackingSettings(change);
     expect(result.success).toBe(true);
-    expect(rpcCalls[0]?.args.p_break_ends).toEqual([
-      { user_id: 'worker', job_id: 'job-1', break_start_id: 'entry-2' },
-    ]);
+    // The function reads the job the break resumes itself, under lock.
+    expect(rpcCalls[0]?.args.p_break_ends).toEqual([{ user_id: 'worker', break_start_id: 'entry-2' }]);
   });
 
   test('a refused call is a failure and revalidates nothing', async () => {

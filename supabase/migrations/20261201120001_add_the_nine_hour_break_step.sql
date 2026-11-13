@@ -9,7 +9,9 @@
 -- Both save versions end an open break only after locking the person's
 -- employee record, the row a clock transition locks, and only while the
 -- break's start is still the person's latest entry: a transition that ended
--- it between the action's read and the call leaves nothing to end.
+-- it between the action's read and the call leaves nothing to end. The job a
+-- break resumes is read from the entry before it under a share lock, not
+-- taken from the caller, so a concurrent entry edit cannot leave it stale.
 --
 -- The ten-argument save checks the step: after the first threshold, at least
 -- the first step's break, and its extra minutes between the two thresholds.
@@ -168,12 +170,16 @@ begin
   order by employee.id
   for update;
 
+  -- The break resumes the job of the entry right before its start (a clock-in
+  -- or an earlier break end; none after any other entry), read here under a
+  -- share lock: an entry edit holds that row for update, so a job changed
+  -- after the action's read is the job that resumes.
   insert into public.time_entries (user_id, organization_id, entry_type, timestamp, is_manual, status, job_id)
   select (break_end ->> 'user_id')::uuid, p_organization_id, 'break_end', now(), false, 'approved',
-    (break_end ->> 'job_id')::uuid
+    case when resume.entry_type in ('clock_in', 'break_end') then resume.job_id end
   from jsonb_array_elements(p_break_ends) break_end
   cross join lateral (
-    select entry.id, entry.entry_type
+    select entry.id, entry.entry_type, entry.timestamp, entry.created_at
     from public.time_entries entry
     where entry.user_id = (break_end ->> 'user_id')::uuid
       and entry.organization_id = p_organization_id
@@ -181,6 +187,17 @@ begin
     order by entry.timestamp desc, entry.created_at desc, entry.id desc
     limit 1
   ) latest
+  left join lateral (
+    select entry.entry_type, entry.job_id
+    from public.time_entries entry
+    where entry.user_id = (break_end ->> 'user_id')::uuid
+      and entry.organization_id = p_organization_id
+      and entry.status not in ('rejected', 'pending_delete')
+      and (entry.timestamp, entry.created_at, entry.id) < (latest.timestamp, latest.created_at, latest.id)
+    order by entry.timestamp desc, entry.created_at desc, entry.id desc
+    limit 1
+    for share
+  ) resume on true
   where latest.entry_type = 'break_start'
     and (break_end ->> 'break_start_id' is null or latest.id = (break_end ->> 'break_start_id')::uuid);
 end;
@@ -425,12 +442,16 @@ begin
   order by employee.id
   for update;
 
+  -- The break resumes the job of the entry right before its start (a clock-in
+  -- or an earlier break end; none after any other entry), read here under a
+  -- share lock: an entry edit holds that row for update, so a job changed
+  -- after the action's read is the job that resumes.
   insert into public.time_entries (user_id, organization_id, entry_type, timestamp, is_manual, status, job_id)
   select (break_end ->> 'user_id')::uuid, p_organization_id, 'break_end', now(), false, 'approved',
-    (break_end ->> 'job_id')::uuid
+    case when resume.entry_type in ('clock_in', 'break_end') then resume.job_id end
   from jsonb_array_elements(p_break_ends) break_end
   cross join lateral (
-    select entry.id, entry.entry_type
+    select entry.id, entry.entry_type, entry.timestamp, entry.created_at
     from public.time_entries entry
     where entry.user_id = (break_end ->> 'user_id')::uuid
       and entry.organization_id = p_organization_id
@@ -438,6 +459,17 @@ begin
     order by entry.timestamp desc, entry.created_at desc, entry.id desc
     limit 1
   ) latest
+  left join lateral (
+    select entry.entry_type, entry.job_id
+    from public.time_entries entry
+    where entry.user_id = (break_end ->> 'user_id')::uuid
+      and entry.organization_id = p_organization_id
+      and entry.status not in ('rejected', 'pending_delete')
+      and (entry.timestamp, entry.created_at, entry.id) < (latest.timestamp, latest.created_at, latest.id)
+    order by entry.timestamp desc, entry.created_at desc, entry.id desc
+    limit 1
+    for share
+  ) resume on true
   where latest.entry_type = 'break_start'
     and (break_end ->> 'break_start_id' is null or latest.id = (break_end ->> 'break_start_id')::uuid);
 end;

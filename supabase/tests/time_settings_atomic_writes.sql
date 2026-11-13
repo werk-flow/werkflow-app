@@ -54,6 +54,21 @@ insert into public.time_entries (id, organization_id, user_id, entry_type, times
 insert into public.jobs (id, organization_id, title, job_number, created_by) values
 ('26104154-0000-0000-0000-0000000000aa', '26104154-0000-0000-0000-000000000011', 'Foreign job',
   'TSET-FOREIGN', '26104154-0000-0000-0000-000000000003');
+-- A cancelled job of this organization and the Büro member's open break that
+-- would resume it: the work-start trigger refuses that break end. Seeded with
+-- triggers off (replica role), as the trigger would refuse the clock-in on a
+-- cancelled job too.
+insert into public.jobs (id, organization_id, title, job_number, created_by, execution_state) values
+('26104154-0000-0000-0000-0000000000ab', '26104154-0000-0000-0000-000000000010', 'Cancelled job',
+  'TSET-CANCELLED', '26104154-0000-0000-0000-000000000001', 'cancelled');
+set local session_replication_role = replica;
+insert into public.time_entries (id, organization_id, user_id, entry_type, timestamp, is_manual, status, job_id) values
+('26104154-0000-0000-0000-0000000000c5', '26104154-0000-0000-0000-000000000010',
+  '26104154-0000-0000-0000-000000000004', 'clock_in', now() - interval '2 hours', true, 'approved',
+  '26104154-0000-0000-0000-0000000000ab'),
+('26104154-0000-0000-0000-0000000000c6', '26104154-0000-0000-0000-000000000010',
+  '26104154-0000-0000-0000-000000000004', 'break_start', now() - interval '1 hour', true, 'approved', null);
+set local session_replication_role = origin;
 insert into public.organization_settings (organization_id, break_policy_history) values
 ('26104154-0000-0000-0000-000000000010',
   '[{"breakMode":"manual","autoBreakThresholdMinutes":360,"autoBreakDurationMinutes":30,"effectiveFrom":"2026-01-01T00:00:00.000Z"}]');
@@ -141,8 +156,8 @@ select pg_temp.expect_refusal('a break end the work-start trigger refuses', $sql
   select public.update_time_tracking_settings('26104154-0000-0000-0000-000000000001',
     '26104154-0000-0000-0000-000000000010', (select expected from pg_temp.settings_call),
     'automatic', 360, 45, (select history from pg_temp.settings_call),
-    '[{"user_id":"26104154-0000-0000-0000-000000000002","job_id":"26104154-0000-0000-0000-0000000000aa"}]')
-$sql$, 'work_time_start_job_not_found');
+    '[{"user_id":"26104154-0000-0000-0000-000000000004","job_id":null}]')
+$sql$, 'work_time_start_terminal');
 
 do $$
 begin
@@ -158,13 +173,17 @@ begin
   if exists (
     select 1 from public.time_entries where organization_id = '26104154-0000-0000-0000-000000000010'
       and id not in ('26104154-0000-0000-0000-0000000000c1', '26104154-0000-0000-0000-0000000000c2',
-        '26104154-0000-0000-0000-0000000000c3', '26104154-0000-0000-0000-0000000000c4')
+        '26104154-0000-0000-0000-0000000000c3', '26104154-0000-0000-0000-0000000000c4',
+        '26104154-0000-0000-0000-0000000000c5', '26104154-0000-0000-0000-0000000000c6')
   ) then raise exception 'a refused save ended a break'; end if;
 
   perform public.update_time_tracking_settings('26104154-0000-0000-0000-000000000001',
     '26104154-0000-0000-0000-000000000010', (select expected from pg_temp.settings_call),
     'automatic', 360, 45, (select history from pg_temp.settings_call),
-    '[{"user_id":"26104154-0000-0000-0000-000000000002","job_id":null}]');
+    -- A stale job from the caller (here one of another organization, which the
+    -- work-start trigger would refuse) is ignored: the break resumes the job
+    -- of the entry before it, read under lock.
+    '[{"user_id":"26104154-0000-0000-0000-000000000002","job_id":"26104154-0000-0000-0000-0000000000aa"}]');
   if (select break_mode::text || auto_break_duration_minutes || jsonb_array_length(break_policy_history)
       from public.organization_settings
       where organization_id = '26104154-0000-0000-0000-000000000010') <> 'automatic452'
@@ -185,7 +204,8 @@ begin
     select count(*) from public.time_entries
     where organization_id = '26104154-0000-0000-0000-000000000010'
       and id not in ('26104154-0000-0000-0000-0000000000c1', '26104154-0000-0000-0000-0000000000c2',
-        '26104154-0000-0000-0000-0000000000c3', '26104154-0000-0000-0000-0000000000c4')
+        '26104154-0000-0000-0000-0000000000c3', '26104154-0000-0000-0000-0000000000c4',
+        '26104154-0000-0000-0000-0000000000c5', '26104154-0000-0000-0000-0000000000c6')
   ) <> 1 then raise exception 'a saved break rule rewrote a completed day'; end if;
 
   -- The first save of an organization without a settings row creates it; a
