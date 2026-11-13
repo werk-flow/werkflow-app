@@ -52,6 +52,10 @@ import { initializeProblemReportBoundary, ProblemReportContractFixture } from '.
 import { SupportFilingContractFixture } from './support-filing-boundaries';
 import { SupportTriageContractFixture } from './support-triage-boundaries';
 import { initializeInventoryUnitBoundary, InventoryUnitContractFixture } from './inventory-unit-boundaries';
+import {
+  initializeInventoryMovementsBoundary,
+  InventoryMovementsContractFixture,
+} from './inventory-movements-boundaries';
 import { initializeLeistungenBoundary, LeistungenContractFixture } from './leistungen-boundaries';
 import { AuthUrlContractFixture } from './auth-url-boundaries';
 import { useEffect, useState } from 'react';
@@ -107,6 +111,7 @@ initializeDocumentArchiveBoundary();
 initializeLazyDialogBoundary();
 initializeProblemReportBoundary();
 initializeInventoryUnitBoundary();
+initializeInventoryMovementsBoundary();
 initializeLeistungenBoundary();
 const personnelInitialData = initializePersonnelBoundary();
 
@@ -592,6 +597,8 @@ createRoot(root).render(
     <SupportFilingContractFixture />
   ) : window.uiContractFixture === 'inventory-unit' ? (
     <InventoryUnitContractFixture />
+  ) : window.uiContractFixture === 'inventory-movements' ? (
+    <InventoryMovementsContractFixture />
   ) : window.uiContractFixture === 'leistungen' ? (
     <LeistungenContractFixture />
   ) : window.uiContractFixture === 'presentation' ? (
