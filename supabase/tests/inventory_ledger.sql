@@ -50,13 +50,13 @@ begin
 
   select * into v_taken
   from public.record_inventory_movement(v_org, v_actor, v_item, v_location, 'job_take', -3);
-  if v_taken.quantity_before <> 10 or v_taken.quantity_after <> 7 then
+  if v_taken.quantity_before is distinct from 10 or v_taken.quantity_after is distinct from 7 then
     raise exception 'a job take must report the stock before (10) and after (7) the movement';
   end if;
   select quantity_on_hand into v_stock
   from public.inventory_stock_levels
   where organization_id = v_org and item_id = v_item and location_id = v_location;
-  if v_stock <> 7 then
+  if v_stock is distinct from 7 then
     raise exception 'a job take must lower the stored stock level by its quantity';
   end if;
 
@@ -72,7 +72,7 @@ begin
   select quantity_after into v_last_after
   from public.inventory_movements
   where id = v_returned.movement_id;
-  if v_stock <> 10 or v_total <> 10 or v_last_after <> 10 or v_count <> 3 then
+  if v_stock is distinct from 10 or v_total is distinct from 10 or v_last_after is distinct from 10 or v_count is distinct from 3 then
     raise exception 'after take and return the stock level, the sum of the movements and the last running total must all be 10 over three movements';
   end if;
 
@@ -92,7 +92,7 @@ begin
   select count(*) into v_count
   from public.inventory_movements
   where organization_id = v_org and item_id = v_item and location_id = v_location;
-  if v_stock <> 10 or v_count <> 3 then
+  if v_stock is distinct from 10 or v_count is distinct from 3 then
     raise exception 'a refused take must leave the stock level and the movement ledger unchanged';
   end if;
 end $$;
@@ -143,13 +143,13 @@ begin
   from public.inventory_stock_levels
   where organization_id = v_org and item_id = v_item and location_id = v_location;
   select count(*) into v_count from public.inventory_movements where job_material_line_id = v_line;
-  if v_returned <> 3 or v_stock <> 9 or v_count <> 2 then
+  if v_returned is distinct from 3 or v_stock is distinct from 9 or v_count is distinct from 2 then
     raise exception 'a refused return must leave the line, the stock level and the movement ledger unchanged';
   end if;
 
   perform public.record_inventory_movement(v_org, v_actor, v_item, v_location, 'job_return', 1, null, v_project, v_line);
   select returned_quantity into v_returned from public.job_material_lines where id = v_line;
-  if v_returned <> 4 then
+  if v_returned is distinct from 4 then
     raise exception 'a return up to the taken quantity must be booked';
   end if;
 
@@ -177,7 +177,7 @@ begin
   select quantity_on_hand into v_stock
   from public.inventory_stock_levels
   where organization_id = v_org and item_id = v_item and location_id = v_location;
-  if v_stock <> 10 or (select count(*) from public.inventory_movements where organization_id = v_org) <> v_count then
+  if v_stock is distinct from 10 or (select count(*) from public.inventory_movements where organization_id = v_org) is distinct from v_count then
     raise exception 'a return refused for a foreign line must leave the stock level and the movement ledger unchanged';
   end if;
 end $$;
@@ -236,7 +236,7 @@ begin
   from public.inventory_stock_levels
   where organization_id = v_org and item_id = v_new_item and location_id = v_location;
   select count(*) into v_count from public.inventory_movements where job_material_line_id = v_line;
-  if v_taken <> 0 or v_read_stock <> 10 or v_new_stock <> 5 or v_count <> 0 then
+  if v_taken is distinct from 0 or v_read_stock is distinct from 10 or v_new_stock is distinct from 5 or v_count is distinct from 0 then
     raise exception 'a take refused for a changed item must leave the line, both stock levels and the movement ledger unchanged';
   end if;
 
@@ -245,7 +245,7 @@ begin
   select quantity_on_hand into v_new_stock
   from public.inventory_stock_levels
   where organization_id = v_org and item_id = v_new_item and location_id = v_location;
-  if v_taken <> 2 or v_new_stock <> 3 then
+  if v_taken is distinct from 2 or v_new_stock is distinct from 3 then
     raise exception 'a take for the item the line carries must be booked on the line and the stock';
   end if;
 end $$;

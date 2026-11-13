@@ -48,7 +48,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -175,7 +175,7 @@ begin
   end;
   if exists (select 1 from public.work_artifact_actions
       where revision_id = '15700000-0000-0000-0000-000000000031')
-    or (select version from public.work_artifacts where id = '15700000-0000-0000-0000-000000000030') <> 1
+    or (select version from public.work_artifacts where id = '15700000-0000-0000-0000-000000000030') is distinct from 1
   then raise exception 'a refused signature left the decision or a new version behind'; end if;
 end;
 $$;
@@ -192,7 +192,7 @@ begin
     '15700000-0000-0000-0000-000000000030', '15700000-0000-0000-0000-000000000031',
     '15700000-0000-0000-0000-000000000072', 'customer_acknowledged', null,
     '15700000-0000-0000-0000-000000000073', '15700000-0000-0000-0000-000000000060');
-  if (v_result->>'version')::bigint <> 3 or (v_result->>'duplicate')::boolean then
+  if (v_result->>'version')::bigint is distinct from 3 or (v_result->>'duplicate')::boolean then
     raise exception 'the decision with signature returned % instead of version 3', v_result;
   end if;
   if not exists (select 1 from public.work_artifact_actions
@@ -271,7 +271,7 @@ begin
         and reason = 'Kundin unterschreibt nicht digital.')
     or exists (select 1 from public.work_artifact_actions
       where revision_id = '15700000-0000-0000-0000-000000000051' and action_type = 'signature_captured')
-    or (v_result->>'status') <> 'submitted'
+    or (v_result->>'status') is distinct from 'submitted'
   then raise exception 'a decision without a signature was not recorded alone'; end if;
 end;
 $$;
@@ -292,7 +292,7 @@ begin
     $sql$, v_org, '15700000-0000-0000-0000-000000000002', v_type), 'work_artifact_not_responsible');
   end loop;
   if exists (select 1 from public.work_artifact_actions where id = '15700000-0000-0000-0000-000000000077')
-    or (select status from public.work_artifacts where id = '15700000-0000-0000-0000-000000000050') <> 'submitted'
+    or (select status from public.work_artifacts where id = '15700000-0000-0000-0000-000000000050') is distinct from 'submitted'
   then raise exception 'a refused review action by an employee changed the report'; end if;
 end;
 $$;

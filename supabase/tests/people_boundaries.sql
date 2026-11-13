@@ -100,7 +100,7 @@ begin
   loop
     select count(*) into record_count from public.employee_records
     where organization_id = '39000000-0000-0000-0000-000000000010' and user_id = member.user_id;
-    if record_count <> 1 then
+    if record_count is distinct from 1 then
       raise exception 'member % has % personnel records instead of exactly one', member.user_id, record_count;
     end if;
     select entry_date, exit_date, employee_number into stored_record from public.employee_records
@@ -130,7 +130,7 @@ begin
   end;
   if (select role from public.organization_members
       where organization_id = '39000000-0000-0000-0000-000000000010'
-        and user_id = '39000000-0000-0000-0000-000000000001') <> 'admin'
+        and user_id = '39000000-0000-0000-0000-000000000001') is distinct from 'admin'
   then raise exception 'owner membership changed despite the owner protection'; end if;
 end;
 $$;
@@ -456,7 +456,7 @@ declare
 begin
   for visible in select * from pg_temp.visible_people('39000000-0000-0000-0000-000000000010') loop
     if visible.relation in ('job_capability_requirements', 'job_qualification_assessments') then
-      if visible.row_count <> 0 then
+      if visible.row_count is distinct from 0 then
         raise exception 'employee can read % although only managers may', visible.relation;
       end if;
     elsif visible.relation in ('attention_read_states', 'attention_events') then
@@ -496,7 +496,7 @@ declare
 begin
   for visible in select * from pg_temp.visible_people('39000000-0000-0000-0000-000000000010') loop
     if visible.relation = 'attention_read_states' then
-      if visible.row_count <> 0 then
+      if visible.row_count is distinct from 0 then
         raise exception 'admin can read another person''s attention read markers';
       end if;
     elsif visible.relation = 'attention_events' then
@@ -504,7 +504,7 @@ begin
         raise exception 'admin cannot read the employee''s attention pattern events';
       end if;
     elsif visible.relation = 'sickness_reports' then
-      if visible.row_count <> 2 then
+      if visible.row_count is distinct from 2 then
         raise exception 'admin does not see every sickness report of the organization';
       end if;
     elsif visible.row_count = 0 then
@@ -521,7 +521,7 @@ declare
   visible record;
 begin
   for visible in select * from pg_temp.visible_people('39000000-0000-0000-0000-000000000010') loop
-    if visible.row_count <> 0 then
+    if visible.row_count is distinct from 0 then
       raise exception 'outsider can read % rows of a foreign organization', visible.relation;
     end if;
   end loop;

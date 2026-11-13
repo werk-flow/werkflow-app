@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -26,9 +27,11 @@ import { showInUnsentWorkHost } from '@/components/shared/unsent-work-host';
 import { usePendingTask } from '@/hooks/use-server-action';
 import '@/lib/field-sync/device/registrations';
 import {
+  UnsentWorkBusyError,
   discardUnsentWork,
   flushUnsentWork,
   summarizeUnsentWork,
+  type UnsentReason,
   type UnsentScope,
   type UnsentWorkItem,
 } from '@/lib/field-sync/device/unsent-work';
@@ -42,6 +45,31 @@ import { logError } from '@/lib/logging';
 
 function itemsLabel(items: readonly UnsentWorkItem[]): string {
   return items.map((item) => `${item.label}: ${item.count}`).join(', ');
+}
+
+/** What the question says after a send, for the one reason what is left could not go. */
+const LEFT_AFTER_SEND: Record<UnsentReason, string> = {
+  waiting: 'Noch nicht alles ist übertragen. Prüfe dein Netz und versuche es erneut.',
+  incomplete:
+    'Ein Berichtsentwurf ist noch unvollständig und kann so nicht gesendet werden. Ergänze ihn im Auftrag oder verwirf ihn.',
+  no_access:
+    'Auf den Auftrag eines Entwurfs hast du keinen Zugriff mehr. Er wird nicht gesendet, du kannst ihn nur verwerfen.',
+  unreadable:
+    'Diese App-Version kann einen Entwurf nicht lesen. Er wird nicht gesendet, du kannst ihn nur verwerfen.',
+  refused: 'Ein Entwurf wurde nicht angenommen. Öffne ihn im Auftrag und sende ihn erneut, oder verwirf ihn.',
+};
+
+/** The sentence after a send: the one reason that is left, or a neutral one, true for the mix, when several are. */
+function leftAfterSend(items: readonly UnsentWorkItem[]): string {
+  const reasons = new Set<UnsentReason>(
+    items.flatMap((item) => (item.entries ? item.entries.map((entry) => entry.reason) : ['waiting'])),
+  );
+  const [only] = reasons;
+  if (reasons.size === 1 && only) return LEFT_AFTER_SEND[only];
+  // The network is named only when something waits for it.
+  return reasons.has('waiting')
+    ? 'Noch nicht alles konnte gesendet werden. Manches wartet auf Netz, anderes kann so nicht gesendet werden. Prüfe die Einträge oben.'
+    : 'Noch nicht alles konnte gesendet werden. Prüfe die Einträge oben.';
 }
 
 /** The irreversible step behind „Verwerfen“: it names what goes and asks once more. */
@@ -89,13 +117,27 @@ function DiscardConfirmation({
   );
 }
 
+/** Each line with its number, and below it the pieces it names one by one, such as each report draft. */
 function UnsentItems({ items }: { items: readonly UnsentWorkItem[] }) {
   return (
     <ul className="divide-y rounded-md border text-sm" aria-label="Nicht übertragen">
       {items.map((item) => (
-        <li key={item.label} className="flex items-center justify-between gap-3 px-3 py-2">
-          <span className="font-medium">{item.label}</span>
-          <span className="text-muted-foreground tabular-nums">{item.count}</span>
+        <li key={item.label} className="space-y-2 px-3 py-2">
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-medium">{item.label}</span>
+            <span className="text-muted-foreground tabular-nums">{item.count}</span>
+          </div>
+          {item.entries && item.entries.length > 0 && (
+            <ul className="space-y-1.5" aria-label={item.label}>
+              {item.entries.map((entry) => (
+                <li key={entry.id} className="min-w-0">
+                  <p className="break-words">{entry.name}</p>
+                  <p className="text-xs text-muted-foreground">{entry.detail}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+          {item.note && <p className="text-xs text-muted-foreground">{item.note}</p>}
         </li>
       ))}
     </ul>
@@ -112,6 +154,20 @@ function useUnsentChoice(
   const [items, setItems] = useState(initialItems);
   const [running, setRunning] = useState<'send' | 'discard' | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  /** Lists what is still unsent after a discard that a running draft send stopped; false when the device cannot say. */
+  async function showWhatIsLeft(): Promise<boolean> {
+    try {
+      setItems(await summarizeUnsentWork(scope));
+    } catch (failure) {
+      logError('unsent work: reading what is left failed', failure);
+      return false;
+    }
+    setError(
+      'Gerade wird noch ein Entwurf übertragen. Was hier noch steht, ist nicht gelöscht. Versuche es gleich noch einmal.',
+    );
+    return true;
+  }
 
   /** `onKeptSince` runs when a discard leaves work kept after the question, which is asked about anew. */
   function perform(action: 'send' | 'discard', onKeptSince?: () => void): void {
@@ -137,8 +193,14 @@ function useUnsentChoice(
           return;
         }
         setItems(left);
-        setError('Noch nicht alles ist übertragen. Prüfe dein Netz und versuche es erneut.');
+        setError(leftAfterSend(left));
       } catch (failure) {
+        // A draft send still running: the sources before the drafts may have deleted what they showed.
+        // The confirmation closes, so a draft changed or written meanwhile is shown before any new discard.
+        if (failure instanceof UnsentWorkBusyError && (await showWhatIsLeft())) {
+          onKeptSince?.();
+          return;
+        }
         logError('unsent work: the choice failed', failure);
         setError('Der Speicher deines Geräts hat nicht geantwortet. Bitte versuche es erneut.');
       } finally {
@@ -194,13 +256,15 @@ function UnsentWorkDialog({
               weitermachst. Was du verwirfst, ist endgültig gelöscht.
             </DialogDescription>
           </DialogHeader>
-          <UnsentItems items={items} />
-          {isSending && (
-            <p role="status" className="text-sm text-muted-foreground">
-              Es wird gesendet …
-            </p>
-          )}
-          <ErrorText>{error}</ErrorText>
+          <DialogBody className="space-y-3">
+            <UnsentItems items={items} />
+            {isSending && (
+              <p role="status" className="text-sm text-muted-foreground">
+                Es wird gesendet …
+              </p>
+            )}
+            <ErrorText>{error}</ErrorText>
+          </DialogBody>
           <DialogFooter>
             <Button type="button" variant="outline" disabled={isDiscarding} onClick={() => onSettled(false)}>
               Abbrechen

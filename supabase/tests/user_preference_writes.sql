@@ -37,7 +37,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -66,7 +66,7 @@ reset role;
 do $$
 begin
   if pg_temp.preferences_of('c5000000-0000-4000-8000-000000000002')
-    <> '{"auftraege":{"visibleColumns":["nr","status"]},"calendar":{"view":"month"}}'::jsonb
+    is distinct from '{"auftraege":{"visibleColumns":["nr","status"]},"calendar":{"view":"month"}}'::jsonb
   then
     raise exception 'a save of another key lost the earlier key: %',
       pg_temp.preferences_of('c5000000-0000-4000-8000-000000000002');
@@ -91,7 +91,7 @@ reset role;
 do $$
 begin
   if pg_temp.preferences_of('c5000000-0000-4000-8000-000000000002')
-    <> '{"auftraege":{"visibleColumns":["kunde"],"density":"compact"},"calendar":{"view":"day"},"other":1}'::jsonb
+    is distinct from '{"auftraege":{"visibleColumns":["kunde"],"density":"compact"},"calendar":{"view":"day"},"other":1}'::jsonb
   then
     raise exception 'a key save changed a key it does not own: %',
       pg_temp.preferences_of('c5000000-0000-4000-8000-000000000002');
@@ -114,7 +114,7 @@ reset role;
 do $$
 begin
   if pg_temp.preferences_of('c5000000-0000-4000-8000-000000000002') -> 'auftraege'
-    <> '{"visibleColumns":["nr"]}'::jsonb
+    is distinct from '{"visibleColumns":["nr"]}'::jsonb
   then
     raise exception 'a damaged parent key was not replaced by an object';
   end if;

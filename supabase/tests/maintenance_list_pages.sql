@@ -100,9 +100,9 @@ begin
 
   -- Totals are those of the organization, not of a page.
   result := public.list_maintenance_workspace_page(org_id,through);
-  if (result#>>'{due,total}')::int<>1050 or jsonb_array_length(result#>'{due,ids}')<>50 or not (result#>>'{due,hasAny}')::boolean then raise exception 'due first page or total wrong: %',result#>>'{due,total}'; end if;
-  if (result#>>'{plans,total}')::int<>1050 or jsonb_array_length(result#>'{plans,ids}')<>50 or not (result#>>'{plans,hasAny}')::boolean then raise exception 'plan first page or total wrong: %',result#>>'{plans,total}'; end if;
-  if (result#>>'{coverages,total}')::int<>1051 or jsonb_array_length(result#>'{coverages,ids}')<>50 or not (result#>>'{coverages,hasAny}')::boolean then raise exception 'coverage first page or total wrong: %',result#>>'{coverages,total}'; end if;
+  if (result#>>'{due,total}')::int is distinct from 1050 or jsonb_array_length(result#>'{due,ids}') is distinct from 50 or not (result#>>'{due,hasAny}')::boolean then raise exception 'due first page or total wrong: %',result#>>'{due,total}'; end if;
+  if (result#>>'{plans,total}')::int is distinct from 1050 or jsonb_array_length(result#>'{plans,ids}') is distinct from 50 or not (result#>>'{plans,hasAny}')::boolean then raise exception 'plan first page or total wrong: %',result#>>'{plans,total}'; end if;
+  if (result#>>'{coverages,total}')::int is distinct from 1051 or jsonb_array_length(result#>'{coverages,ids}') is distinct from 50 or not (result#>>'{coverages,hasAny}')::boolean then raise exception 'coverage first page or total wrong: %',result#>>'{coverages,total}'; end if;
   -- Due work: earliest first; plans and coverages: newest change first.
   if exists(select 1 from jsonb_array_elements_text(result#>'{due,ids}') with ordinality listed(id,position) where id<>md5('mt-due-'||position)::uuid::text) then raise exception 'due page is not earliest first'; end if;
   if exists(select 1 from jsonb_array_elements_text(result#>'{plans,ids}') with ordinality listed(id,position) where id<>md5('mt-plan-'||(case when position=1 then 1051 else 1051-position end))::uuid::text) then raise exception 'plan page is not newest first'; end if;
@@ -110,49 +110,49 @@ begin
   -- Each list pages on its own, and consecutive pages do not overlap.
   next_result := public.list_maintenance_workspace_page(org_id,through,'',2,1,1);
   if exists(select 1 from jsonb_array_elements(result#>'{due,ids}') a join jsonb_array_elements(next_result#>'{due,ids}') b on a=b) then raise exception 'due pages overlap'; end if;
-  if next_result->'plans'<>result->'plans' or next_result->'coverages'<>result->'coverages' then raise exception 'the due page moved another list'; end if;
+  if next_result->'plans' is distinct from result->'plans' or next_result->'coverages' is distinct from result->'coverages' then raise exception 'the due page moved another list'; end if;
   -- The tails beyond 1,000 rows stay reachable.
   result := public.list_maintenance_workspace_page(org_id,through,'',21,21,22);
-  if jsonb_array_length(result#>'{due,ids}')<>50 or result#>>'{due,ids,49}'<>md5('mt-due-1051')::uuid::text then raise exception 'due tail beyond 1,000 rows unreachable'; end if;
-  if jsonb_array_length(result#>'{plans,ids}')<>50 or result#>>'{plans,ids,49}'<>md5('mt-plan-1')::uuid::text then raise exception 'plan tail beyond 1,000 rows unreachable'; end if;
-  if result#>'{coverages,ids}'<>jsonb_build_array(md5('mt-coverage-1')::uuid) then raise exception 'coverage tail beyond 1,000 rows unreachable'; end if;
+  if jsonb_array_length(result#>'{due,ids}') is distinct from 50 or result#>>'{due,ids,49}' is distinct from md5('mt-due-1051')::uuid::text then raise exception 'due tail beyond 1,000 rows unreachable'; end if;
+  if jsonb_array_length(result#>'{plans,ids}') is distinct from 50 or result#>>'{plans,ids,49}' is distinct from md5('mt-plan-1')::uuid::text then raise exception 'plan tail beyond 1,000 rows unreachable'; end if;
+  if result#>'{coverages,ids}' is distinct from jsonb_build_array(md5('mt-coverage-1')::uuid) then raise exception 'coverage tail beyond 1,000 rows unreachable'; end if;
   -- Completed work, work past the horizon and a plan without a revision never list.
   if (select count(*) from generate_series(1,21) page_number, jsonb_array_elements_text(public.list_maintenance_workspace_page(org_id,through,'',page_number)#>'{due,ids}') listed(id)
       where id in ('76000000-0000-4000-8000-000000000070','76000000-0000-4000-8000-000000000071',md5('mt-due-1050')::uuid::text))<>0 then raise exception 'unlisted due work is listed'; end if;
-  if (public.list_maintenance_workspace_page(org_id,'2026-01-10')#>>'{due,total}')::int<>9 then raise exception 'the due horizon is not applied'; end if;
-  if (public.list_maintenance_workspace_page(org_id,through,'wpl-1050')#>>'{plans,total}')::int<>0 then raise exception 'a plan without a current revision is listed'; end if;
+  if (public.list_maintenance_workspace_page(org_id,'2026-01-10')#>>'{due,total}')::int is distinct from 9 then raise exception 'the due horizon is not applied'; end if;
+  if (public.list_maintenance_workspace_page(org_id,through,'wpl-1050')#>>'{plans,total}')::int is distinct from 0 then raise exception 'a plan without a current revision is listed'; end if;
 
   -- Search: customer and site match in every list; the template name matches
   -- plans only, the visit job number due work only, the equipment both.
   result := public.list_maintenance_workspace_page(org_id,through,'suchkunde nord');
-  if result#>'{due,ids}'<>jsonb_build_array(md5('mt-due-1049')::uuid) or result#>'{plans,ids}'<>jsonb_build_array(md5('mt-plan-1049')::uuid) or result#>'{coverages,ids}'<>jsonb_build_array(md5('mt-coverage-1049')::uuid) then raise exception 'customer search wrong'; end if;
+  if result#>'{due,ids}' is distinct from jsonb_build_array(md5('mt-due-1049')::uuid) or result#>'{plans,ids}' is distinct from jsonb_build_array(md5('mt-plan-1049')::uuid) or result#>'{coverages,ids}' is distinct from jsonb_build_array(md5('mt-coverage-1049')::uuid) then raise exception 'customer search wrong'; end if;
   result := public.list_maintenance_workspace_page(org_id,through,'werkstatt ost');
-  if (result#>>'{due,total}')::int<>1 or (result#>>'{plans,total}')::int<>1 or (result#>>'{coverages,total}')::int<>1 then raise exception 'site search wrong'; end if;
+  if (result#>>'{due,total}')::int is distinct from 1 or (result#>>'{plans,total}')::int is distinct from 1 or (result#>>'{coverages,total}')::int is distinct from 1 then raise exception 'site search wrong'; end if;
   result := public.list_maintenance_workspace_page(org_id,through,'heizungswartung');
-  if (result#>>'{plans,total}')::int<>1050 or (result#>>'{due,total}')::int<>0 or not (result#>>'{due,hasAny}')::boolean then raise exception 'template search wrong'; end if;
+  if (result#>>'{plans,total}')::int is distinct from 1050 or (result#>>'{due,total}')::int is distinct from 0 or not (result#>>'{due,hasAny}')::boolean then raise exception 'template search wrong'; end if;
   result := public.list_maintenance_workspace_page(org_id,through,'AUF-2026-0777');
-  if result#>'{due,ids}'<>jsonb_build_array(md5('mt-due-7')::uuid) or (result#>>'{plans,total}')::int<>0 then raise exception 'visit job search wrong'; end if;
+  if result#>'{due,ids}' is distinct from jsonb_build_array(md5('mt-due-7')::uuid) or (result#>>'{plans,total}')::int is distinct from 0 then raise exception 'visit job search wrong'; end if;
   result := public.list_maintenance_workspace_page(org_id,through,'anl-tail');
-  if result#>'{due,ids}'<>jsonb_build_array(md5('mt-due-1051')::uuid) or result#>'{plans,ids}'<>jsonb_build_array(md5('mt-plan-1051')::uuid) then raise exception 'equipment search wrong'; end if;
+  if result#>'{due,ids}' is distinct from jsonb_build_array(md5('mt-due-1051')::uuid) or result#>'{plans,ids}' is distinct from jsonb_build_array(md5('mt-plan-1051')::uuid) then raise exception 'equipment search wrong'; end if;
   result := public.list_maintenance_workspace_page(org_id,through,'50%_');
-  if result#>'{coverages,ids}'<>jsonb_build_array(md5('mt-coverage-1051')::uuid) or (result#>>'{plans,total}')::int<>0 then raise exception 'literal coverage reference search wrong'; end if;
+  if result#>'{coverages,ids}' is distinct from jsonb_build_array(md5('mt-coverage-1051')::uuid) or (result#>>'{plans,total}')::int is distinct from 0 then raise exception 'literal coverage reference search wrong'; end if;
 
   -- Bounds: at most 100 rows, at least one row, never a page before the first, empty past the end.
-  if jsonb_array_length(public.list_maintenance_workspace_page(org_id,through,'',1,1,1,100000)#>'{plans,ids}')<>100 then raise exception 'page size is not capped at 100'; end if;
-  if jsonb_array_length(public.list_maintenance_workspace_page(org_id,through,'',1,1,1,0)#>'{coverages,ids}')<>1 then raise exception 'page size has no lower bound'; end if;
-  if public.list_maintenance_workspace_page(org_id,through,'',-3)#>>'{due,ids,0}'<>md5('mt-due-1')::uuid::text then raise exception 'page number has no lower bound'; end if;
+  if jsonb_array_length(public.list_maintenance_workspace_page(org_id,through,'',1,1,1,100000)#>'{plans,ids}') is distinct from 100 then raise exception 'page size is not capped at 100'; end if;
+  if jsonb_array_length(public.list_maintenance_workspace_page(org_id,through,'',1,1,1,0)#>'{coverages,ids}') is distinct from 1 then raise exception 'page size has no lower bound'; end if;
+  if public.list_maintenance_workspace_page(org_id,through,'',-3)#>>'{due,ids,0}' is distinct from md5('mt-due-1')::uuid::text then raise exception 'page number has no lower bound'; end if;
   result := public.list_maintenance_workspace_page(org_id,through,'',2147483647,2147483647,2147483647,100);
-  if (result#>>'{due,total}')::int<>1050 or result#>'{due,ids}'<>'[]'::jsonb or result#>'{plans,ids}'<>'[]'::jsonb or result#>'{coverages,ids}'<>'[]'::jsonb then raise exception 'page past the end is not empty'; end if;
+  if (result#>>'{due,total}')::int is distinct from 1050 or result#>'{due,ids}' is distinct from '[]'::jsonb or result#>'{plans,ids}' is distinct from '[]'::jsonb or result#>'{coverages,ids}' is distinct from '[]'::jsonb then raise exception 'page past the end is not empty'; end if;
 
   -- Tenant isolation and an organization without maintenance.
   result := public.list_maintenance_workspace_page(org_id,through,'fremd');
-  if (result#>>'{due,total}')::int<>0 or (result#>>'{plans,total}')::int<>0 or (result#>>'{coverages,total}')::int<>0 then raise exception 'maintenance tenant leaked'; end if;
+  if (result#>>'{due,total}')::int is distinct from 0 or (result#>>'{plans,total}')::int is distinct from 0 or (result#>>'{coverages,total}')::int is distinct from 0 then raise exception 'maintenance tenant leaked'; end if;
   result := public.list_maintenance_workspace_page('76000000-0000-4000-8000-000000000011',through);
-  if result#>'{due,ids}'<>jsonb_build_array('76000000-0000-4000-8000-000000000082'::uuid)
-    or result#>'{plans,ids}'<>jsonb_build_array('76000000-0000-4000-8000-000000000080'::uuid)
-    or result#>'{coverages,ids}'<>jsonb_build_array('76000000-0000-4000-8000-000000000083'::uuid) then raise exception 'foreign organization page wrong'; end if;
+  if result#>'{due,ids}' is distinct from jsonb_build_array('76000000-0000-4000-8000-000000000082'::uuid)
+    or result#>'{plans,ids}' is distinct from jsonb_build_array('76000000-0000-4000-8000-000000000080'::uuid)
+    or result#>'{coverages,ids}' is distinct from jsonb_build_array('76000000-0000-4000-8000-000000000083'::uuid) then raise exception 'foreign organization page wrong'; end if;
   result := public.list_maintenance_workspace_page('76000000-0000-4000-8000-000000000012',through);
-  if (result#>>'{due,hasAny}')::boolean or (result#>>'{plans,hasAny}')::boolean or (result#>>'{coverages,hasAny}')::boolean or (result#>>'{plans,total}')::int<>0 then raise exception 'empty organization reports maintenance'; end if;
+  if (result#>>'{due,hasAny}')::boolean or (result#>>'{plans,hasAny}')::boolean or (result#>>'{coverages,hasAny}')::boolean or (result#>>'{plans,total}')::int is distinct from 0 then raise exception 'empty organization reports maintenance'; end if;
 end $$;
 
 -- Identical change timestamps keep a deterministic identity order across the page boundary.
@@ -164,8 +164,8 @@ insert into public.maintenance_coverages(id,organization_id,coverage_number,clie
 set local session_replication_role = origin;
 set local role service_role;
 do $$ begin
-  if public.list_maintenance_workspace_page('76000000-0000-4000-8000-000000000010','2030-01-01','gleichzeitig',1,1,1,1)#>'{coverages,ids}'<>jsonb_build_array('76000000-0000-4000-8000-000000000091'::uuid)
-    or public.list_maintenance_workspace_page('76000000-0000-4000-8000-000000000010','2030-01-01','gleichzeitig',1,1,2,1)#>'{coverages,ids}'<>jsonb_build_array('76000000-0000-4000-8000-000000000092'::uuid) then
+  if public.list_maintenance_workspace_page('76000000-0000-4000-8000-000000000010','2030-01-01','gleichzeitig',1,1,1,1)#>'{coverages,ids}' is distinct from jsonb_build_array('76000000-0000-4000-8000-000000000091'::uuid)
+    or public.list_maintenance_workspace_page('76000000-0000-4000-8000-000000000010','2030-01-01','gleichzeitig',1,1,2,1)#>'{coverages,ids}' is distinct from jsonb_build_array('76000000-0000-4000-8000-000000000092'::uuid) then
     raise exception 'identical change timestamps lost the id order';
   end if;
 end $$;

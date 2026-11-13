@@ -70,7 +70,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -258,7 +258,7 @@ alter table public.employee_record_events disable trigger refuse_employee_record
 
 do $$
 begin
-  if pg_temp.personnel_state() <> (select state from personnel_state_before) then
+  if pg_temp.personnel_state() is distinct from (select state from personnel_state_before) then
     raise exception 'a refused personnel write changed rows or history';
   end if;
 end;
@@ -281,8 +281,8 @@ begin
   -- Creating a record.
   v_new_id := public.create_employee_record(v_actor, v_org, 'Max', 'Neu', 'MA-003', '2026-03-01', 'Neu im Team');
   select * into v_row from public.employee_records where id = v_new_id;
-  if v_row.organization_id <> v_org or v_row.last_name <> 'Neu' or v_row.employee_number <> 'MA-003'
-    or v_row.entry_date <> '2026-03-01' or v_row.created_by <> v_actor or v_row.user_id is not null
+  if v_row.organization_id is distinct from v_org or v_row.last_name is distinct from 'Neu' or v_row.employee_number is distinct from 'MA-003'
+    or v_row.entry_date is distinct from '2026-03-01' or v_row.created_by is distinct from v_actor or v_row.user_id is not null
   then raise exception 'creating a record stored the wrong row: %', to_jsonb(v_row); end if;
   select event_payload into v_payload from public.employee_record_events
   where employee_record_id = v_new_id and event_type = 'created' and created_by = v_actor;
@@ -295,7 +295,7 @@ begin
   perform public.update_employee_master_data(v_actor, v_org, v_record,
     '{"phone": "0711", "city": "Stuttgart", "first_name": "Erika", "exit_date": "2026-12-31"}');
   select * into v_row from public.employee_records where id = v_record;
-  if v_row.phone <> '0711' or v_row.city <> 'Stuttgart' or v_row.exit_date <> '2026-12-31' then
+  if v_row.phone is distinct from '0711' or v_row.city is distinct from 'Stuttgart' or v_row.exit_date is distinct from '2026-12-31' then
     raise exception 'editing master data stored the wrong row: %', to_jsonb(v_row);
   end if;
   select event_payload into v_payload from public.employee_record_events
@@ -308,7 +308,7 @@ begin
   perform public.update_employee_master_data(v_actor, v_org, v_linked,
     jsonb_build_object('last_name', (select last_name from linked_record)));
   if (select count(*) from public.employee_record_events where employee_record_id in (v_record, v_linked))
-    <> v_events_before
+    is distinct from v_events_before
   then raise exception 'a patch without a change recorded history'; end if;
 
   -- Conditions: add, correct, delete.
@@ -326,7 +326,7 @@ begin
     '2026-02-01', 'teilzeit', 30, 25, 'Korrektur');
   select event_payload into v_payload from public.employee_record_events
   where employee_record_id = v_record and event_type = 'condition_updated';
-  if v_payload -> 'before' ->> 'valid_from' <> '2026-01-01' or (v_payload -> 'before' ->> 'weekly_hours')::numeric <> 40
+  if v_payload -> 'before' ->> 'valid_from' is distinct from '2026-01-01' or (v_payload -> 'before' ->> 'weekly_hours')::numeric is distinct from 40
     or v_payload -> 'after' is distinct from jsonb_build_object('valid_from', '2026-02-01',
       'employment_type', 'teilzeit', 'weekly_hours', 30, 'vacation_days_per_year', 25, 'note', 'Korrektur')
   then raise exception 'correcting a condition recorded the wrong history: %', v_payload; end if;
@@ -337,8 +337,8 @@ begin
   end if;
   select event_payload into v_payload from public.employee_record_events
   where employee_record_id = v_record and event_type = 'condition_deleted';
-  if v_payload ->> 'condition_id' <> 'c3000000-0000-4000-8000-000000000031'
-    or v_payload -> 'deleted' ->> 'employment_type' <> 'teilzeit'
+  if v_payload ->> 'condition_id' is distinct from 'c3000000-0000-4000-8000-000000000031'
+    or v_payload -> 'deleted' ->> 'employment_type' is distinct from 'teilzeit'
   then raise exception 'deleting a condition recorded the wrong history: %', v_payload; end if;
 
   -- Schedules: add, correct, delete.
@@ -358,14 +358,14 @@ begin
   where employee_record_id = v_record and event_type = 'schedule_updated';
   if v_payload -> 'before' is distinct from jsonb_build_object('valid_from', '2026-01-01',
       'day_minutes', jsonb_build_array(480, 480, 480, 480, 480, 0, 0), 'weekly_minutes', 2400, 'note', null)
-    or v_payload -> 'after' ->> 'weekly_minutes' <> '2100'
+    or v_payload -> 'after' ->> 'weekly_minutes' is distinct from '2100'
   then raise exception 'correcting a schedule recorded the wrong history: %', v_payload; end if;
 
   perform public.delete_work_schedule(v_actor, v_org, 'c3000000-0000-4000-8000-000000000041');
   select event_payload into v_payload from public.employee_record_events
   where employee_record_id = v_record and event_type = 'schedule_deleted';
   if exists (select 1 from public.work_schedules where id = 'c3000000-0000-4000-8000-000000000041')
-    or v_payload -> 'deleted' ->> 'weekly_minutes' <> '1200'
+    or v_payload -> 'deleted' ->> 'weekly_minutes' is distinct from '1200'
   then raise exception 'deleting a schedule recorded the wrong history: %', v_payload; end if;
 end;
 $$;

@@ -68,7 +68,7 @@ begin
   execute p_statement;
   raise exception '% was not refused', p_label;
 exception when others then
-  if sqlerrm <> p_code then
+  if sqlerrm is distinct from p_code then
     raise exception '% refused with "%" instead of %', p_label, sqlerrm, p_code;
   end if;
 end;
@@ -102,7 +102,7 @@ begin
       "track_quantity":true,"track_individual_assets":false}'::jsonb,
     'Großhandel Nord', 'CODE-NEW', v_shelf, 5
   );
-  if v_item.organization_id <> v_org or v_item.created_by <> v_admin or v_item.supplier_id is null then
+  if v_item.organization_id is distinct from v_org or v_item.created_by is distinct from v_admin or v_item.supplier_id is null then
     raise exception 'a create must save the item in the organization with its creator and its new supplier';
   end if;
   if not exists (
@@ -115,8 +115,8 @@ begin
   where organization_id = v_org and item_id = v_item.id and location_id = v_shelf;
   select movement_type, quantity_delta, quantity_before, quantity_after, actor_id into v_movement
   from public.inventory_movements where item_id = v_item.id;
-  if v_stock <> 5 or v_movement.movement_type <> 'initial_count' or v_movement.quantity_delta <> 5
-    or v_movement.quantity_before <> 0 or v_movement.quantity_after <> 5 or v_movement.actor_id <> v_admin
+  if v_stock is distinct from 5 or v_movement.movement_type is distinct from 'initial_count' or v_movement.quantity_delta is distinct from 5
+    or v_movement.quantity_before is distinct from 0 or v_movement.quantity_after is distinct from 5 or v_movement.actor_id is distinct from v_admin
   then
     raise exception 'a create with a first count must book one initial_count movement of 5 and a stock level of 5';
   end if;
@@ -128,7 +128,7 @@ begin
       "track_quantity":true,"track_individual_assets":false}'::jsonb,
     null, 'CODE-NEWER', null, 0
   );
-  if v_item.name <> 'Kupferrohr 15'
+  if v_item.name is distinct from 'Kupferrohr 15'
     or (select count(*) from public.inventory_item_barcodes where item_id = v_item.id) <> 2
     or not exists (select 1 from public.inventory_item_barcodes
       where item_id = v_item.id and barcode_value = 'CODE-NEWER' and is_primary)
@@ -250,7 +250,7 @@ begin
     'Fittings', 'Großhandel Süd', 'Neues Regal', 'CODE-MUFFE', 7, 'CSV-Import: bestand.csv'
   );
   select id into v_new_item from public.inventory_items where organization_id = v_org and internal_sku = 'SKU-MUFFE';
-  if v_outcome <> 'imported' or v_new_item is null
+  if v_outcome is distinct from 'imported' or v_new_item is null
     or not exists (select 1 from public.inventory_item_barcodes
       where item_id = v_new_item and barcode_value = 'CODE-MUFFE' and is_primary)
     or not exists (select 1 from public.inventory_movements movement
@@ -272,7 +272,7 @@ begin
       "internal_sku":"SKU-EXIST"}'::jsonb,
     null, null, 'Atomic shelf', null, 3, 'CSV-Import: bestand.csv'
   );
-  if v_outcome <> 'imported' or (select count(*) from public.inventory_items
+  if v_outcome is distinct from 'imported' or (select count(*) from public.inventory_items
       where organization_id = v_org and internal_sku = 'SKU-EXIST') <> 1
     or not exists (select 1 from public.inventory_movements
       where item_id = v_existing and movement_type = 'stock_in' and quantity_delta = 3)
@@ -286,11 +286,11 @@ begin
     '{"name":"Ohne Lager","item_type":"material","unit":"piece","is_billable":true,"global_minimum_stock":0}'::jsonb,
     null, null, null, 'CODE-NOLAGER', 2, 'CSV-Import: bestand.csv'
   );
-  if v_outcome <> 'missing_location'
+  if v_outcome is distinct from 'missing_location'
     or not exists (select 1 from public.inventory_items item
       join public.inventory_item_barcodes barcode on barcode.item_id = item.id
       where item.organization_id = v_org and item.name = 'Ohne Lager' and barcode.barcode_value = 'CODE-NOLAGER')
-    or (select count(*) from public.inventory_movements where organization_id = v_org) <> v_movements_before
+    or (select count(*) from public.inventory_movements where organization_id = v_org) is distinct from v_movements_before
   then
     raise exception 'an import row without a Lager must keep its item and barcode and book nothing';
   end if;
@@ -325,7 +325,7 @@ begin
   v_after := public.take_unplanned_inventory_material(
     v_org, v_employee, v_job, null, v_item, v_shelf, 1, 'Für Auftrag entnommen', 'Nachgekauft'
   );
-  if v_after <> 2 or not exists (
+  if v_after is distinct from 2 or not exists (
     select 1 from public.job_material_lines line
     join public.inventory_movements movement on movement.job_material_line_id = line.id
     where line.job_id = v_job and line.project_id = v_project and line.item_id = v_item
@@ -340,7 +340,7 @@ begin
   v_after := public.take_unplanned_inventory_material(
     v_org, v_admin, null, v_project, v_item, v_shelf, 1, 'Für Projekt entnommen', null
   );
-  if v_after <> 1 or not exists (
+  if v_after is distinct from 1 or not exists (
     select 1 from public.job_material_lines line
     where line.job_id is null and line.project_id = v_project and line.is_unplanned and line.taken_quantity = 1
   ) then
@@ -392,7 +392,7 @@ $sql$, 'location_not_found');
 do $$
 begin
   if (select count(*) from public.job_material_lines where organization_id = '99100000-0000-4000-8000-000000000010')
-    <> (select lines from lines_before_refused_takes)
+    is distinct from (select lines from lines_before_refused_takes)
   then
     raise exception 'a refused unplanned take must leave no material line behind';
   end if;

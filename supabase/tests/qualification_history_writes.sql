@@ -61,7 +61,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -273,7 +273,7 @@ alter table public.qualification_events disable trigger refuse_qualification_eve
 
 do $$
 begin
-  if pg_temp.qualification_state() <> (select state from qualification_state_before) then
+  if pg_temp.qualification_state() is distinct from (select state from qualification_state_before) then
     raise exception 'a refused qualification write changed rows or history';
   end if;
 end;
@@ -298,43 +298,43 @@ declare
 begin
   v_team_id := public.create_team(v_actor, v_org, 'Team C', 'Kundendienst');
   select * into v_team from public.teams where id = v_team_id;
-  if v_team.organization_id <> v_org or v_team.name <> 'Team C' or v_team.description <> 'Kundendienst'
-    or v_team.created_by <> v_actor or v_team.updated_by <> v_actor or v_team.dissolved_at is not null
+  if v_team.organization_id is distinct from v_org or v_team.name is distinct from 'Team C' or v_team.description is distinct from 'Kundendienst'
+    or v_team.created_by is distinct from v_actor or v_team.updated_by is distinct from v_actor or v_team.dissolved_at is not null
   then raise exception 'creating a team stored the wrong row: %', to_jsonb(v_team); end if;
   if (select array_agg(event_type || ':' || event_payload::text || ':' || created_by::text)
       from public.team_events where team_id = v_team_id)
-    <> array['created:{"name": "Team C"}:' || v_actor::text]
+    is distinct from array['created:{"name": "Team C"}:' || v_actor::text]
   then raise exception 'creating a team did not record its history row'; end if;
 
   perform public.update_team(v_actor, v_org, v_team_b, 'Team Heizung', 'Heizung');
   select * into v_team from public.teams where id = v_team_b;
-  if v_team.name <> 'Team Heizung' or v_team.description <> 'Heizung' or v_team.updated_by <> v_actor then
+  if v_team.name is distinct from 'Team Heizung' or v_team.description is distinct from 'Heizung' or v_team.updated_by is distinct from v_actor then
     raise exception 'editing a team stored the wrong row: %', to_jsonb(v_team);
   end if;
 
   perform public.add_team_membership(v_actor, v_org, v_team_b, v_employee, '2026-03-01', null);
   select * into v_membership from public.team_memberships
   where team_id = v_team_b and employee_record_id = v_employee;
-  if v_membership.organization_id <> v_org or v_membership.valid_from <> '2026-03-01'
-    or v_membership.valid_until is not null or v_membership.created_by <> v_actor
+  if v_membership.organization_id is distinct from v_org or v_membership.valid_from is distinct from '2026-03-01'
+    or v_membership.valid_until is not null or v_membership.created_by is distinct from v_actor
   then raise exception 'adding a membership stored the wrong row: %', to_jsonb(v_membership); end if;
 
   perform public.end_team_membership(v_actor, v_org, v_membership.id, '2026-09-30');
   select * into v_membership from public.team_memberships where id = v_membership.id;
-  if v_membership.valid_until <> '2026-09-30' or v_membership.ended_by <> v_actor then
+  if v_membership.valid_until is distinct from '2026-09-30' or v_membership.ended_by is distinct from v_actor then
     raise exception 'ending a membership stored the wrong row: %', to_jsonb(v_membership);
   end if;
 
   perform public.dissolve_team(v_actor, v_org, v_team_b, null);
   select * into v_team from public.teams where id = v_team_b;
-  if v_team.dissolved_at is null or v_team.updated_by <> v_actor then
+  if v_team.dissolved_at is null or v_team.updated_by is distinct from v_actor then
     raise exception 'dissolving a team stored the wrong row: %', to_jsonb(v_team);
   end if;
 
   select array_agg(event_type || ':' || event_payload::text order by created_at, event_type)
   into v_events
   from public.team_events where team_id = v_team_b and created_by = v_actor;
-  if v_events is null or array_length(v_events, 1) <> 4
+  if v_events is null or array_length(v_events, 1) is distinct from 4
     or not v_events @> array[
       'updated:{"changes": {"name": {"to": "Team Heizung", "from": "Team B"}, '
         || '"description": {"to": "Heizung", "from": null}}}',
@@ -348,21 +348,21 @@ begin
 
   v_capability_id := public.create_capability_definition(v_actor, v_org, 'certification', 'Schweißschein', null, 45);
   select * into v_capability from public.organization_capabilities where id = v_capability_id;
-  if v_capability.organization_id <> v_org or v_capability.kind <> 'certification'
-    or v_capability.name <> 'Schweißschein' or v_capability.default_expiry_warning_days <> 45
-    or v_capability.created_by <> v_actor or v_capability.retired_at is not null
+  if v_capability.organization_id is distinct from v_org or v_capability.kind is distinct from 'certification'
+    or v_capability.name is distinct from 'Schweißschein' or v_capability.default_expiry_warning_days is distinct from 45
+    or v_capability.created_by is distinct from v_actor or v_capability.retired_at is not null
   then raise exception 'creating a definition stored the wrong row: %', to_jsonb(v_capability); end if;
 
   perform public.retire_capability_definition(v_actor, v_org, v_capability_id);
   select * into v_capability from public.organization_capabilities where id = v_capability_id;
-  if v_capability.retired_at is null or v_capability.updated_by <> v_actor then
+  if v_capability.retired_at is null or v_capability.updated_by is distinct from v_actor then
     raise exception 'retiring a definition stored the wrong row: %', to_jsonb(v_capability);
   end if;
 
   select array_agg(event_type || ':' || event_payload::text order by event_type)
   into v_events
   from public.qualification_events where capability_id = v_capability_id and created_by = v_actor;
-  if v_events <> array[
+  if v_events is distinct from array[
     'definition_created:{"kind": "certification", "name": "Schweißschein", "warning_days": 45}',
     'definition_retired:{}'
   ] then raise exception 'the definition writes recorded the wrong history: %', v_events; end if;
@@ -380,7 +380,7 @@ begin
   from public.qualification_events
   where organization_id = v_org and capability_id is null and event_type = 'apprentice_warning_changed'
     and created_by = v_admin;
-  if v_events <> array['{"enabled": false}', '{"enabled": true}'] then
+  if v_events is distinct from array['{"enabled": false}', '{"enabled": true}'] then
     raise exception 'switching the apprentice warning recorded the wrong history: %', v_events;
   end if;
 end;
