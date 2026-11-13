@@ -4,8 +4,10 @@ import {
   useOrganization,
   type UserOrg,
 } from '@/components/organization/organization-context';
-import { BannerProvider } from '@/components/ui/banner';
+import { OrganizationPageScope } from '@/components/organization/organization-page-scope';
+import { BannerProvider, useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import './organization-service-boundaries';
 
 const memberships: UserOrg[] = ['organization-one', 'organization-two'].map((orgId) => ({
@@ -36,6 +38,23 @@ function Consumer(): React.JSX.Element {
   );
 }
 
+/** Page state of one organization: a draft, and a save the spec answers after a switch. */
+function ScopedDraft(): React.JSX.Element {
+  const { showBanner } = useBanner();
+  const [draft, setDraft] = useState('');
+  const save = async (): Promise<void> => {
+    await new Promise<void>((resolve) => window.organizationContract.pendingSaves.push(resolve));
+    showBanner({ variant: 'success', message: `Gespeichert: ${draft}` });
+    window.organizationContract.answeredSaves += 1;
+  };
+  return (
+    <>
+      <Input aria-label="Entwurf" value={draft} onChange={(event) => setDraft(event.target.value)} />
+      <Button onClick={() => void save()}>Entwurf speichern</Button>
+    </>
+  );
+}
+
 export function OrganizationContractFixture(): React.JSX.Element {
   const [serverOrganization, setServerOrganization] = useState('organization-one');
   return (
@@ -46,6 +65,9 @@ export function OrganizationContractFixture(): React.JSX.Element {
         initialActiveOrgCookieNeedsSync={false}
       >
         <Consumer />
+        <OrganizationPageScope organizationId={serverOrganization}>
+          <ScopedDraft />
+        </OrganizationPageScope>
         <Button onClick={() => setServerOrganization(window.organizationContract.cookie)}>
           Serverdaten übernehmen
         </Button>

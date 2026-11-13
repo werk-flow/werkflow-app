@@ -56,3 +56,47 @@ test('a rejected organization switch retains the current scope and can recover',
   await page.getByRole('button', { name: 'Serverdaten übernehmen' }).click();
   await expect(page.getByLabel('Wechselstatus')).toHaveText('Bereit');
 });
+
+/** Answers the oldest held save once its code waits for the answer, and waits until that code ran. */
+async function answerSave(page: Page, answered: number): Promise<void> {
+  await expect.poll(() => page.evaluate(() => window.organizationContract.pendingSaves.length)).toBe(1);
+  await page.evaluate(() => window.organizationContract.pendingSaves.shift()?.());
+  await expect.poll(() => page.evaluate(() => window.organizationContract.answeredSaves)).toBe(answered);
+}
+
+/** Records the text of every banner that renders from now on, also one that is replaced at once. */
+async function recordBanners(page: Page): Promise<() => Promise<string[]>> {
+  await page.evaluate(() => {
+    const shown = window.organizationContract.shownBanners;
+    new MutationObserver(() => {
+      for (const alert of document.querySelectorAll('[data-banner-id]')) {
+        const text = alert.textContent ?? '';
+        if (!shown.includes(text)) shown.push(text);
+      }
+    }).observe(document.body, { childList: true, subtree: true, characterData: true });
+  });
+  return () => page.evaluate(() => window.organizationContract.shownBanners.slice());
+}
+
+test("a switch starts the page's state fresh with the new server props and drops the old page's late feedback", async ({
+  page,
+}) => {
+  const shownBanners = await recordBanners(page);
+  const draft = page.getByLabel('Entwurf');
+  await draft.fill('Notiz der ersten Organisation');
+  await page.getByRole('button', { name: 'Entwurf speichern' }).click();
+  await page.getByRole('button', { name: 'Organisation wechseln', exact: true }).click();
+  await finishCookieWrite(page, 1, true);
+  // Until the new organization's server props arrive, the page still shows the first one's state.
+  await expect(draft).toHaveValue('Notiz der ersten Organisation');
+  await page.getByRole('button', { name: 'Serverdaten übernehmen' }).click();
+  await expect(draft).toHaveValue('');
+  await answerSave(page, 1);
+
+  // The new organization's page shows its own feedback, and only that one ever rendered.
+  await draft.fill('Notiz der zweiten Organisation');
+  await page.getByRole('button', { name: 'Entwurf speichern' }).click();
+  await answerSave(page, 2);
+  await expect(page.getByRole('alert')).toContainText('Gespeichert: Notiz der zweiten Organisation');
+  expect(await shownBanners()).toEqual(['Gespeichert: Notiz der zweiten Organisation']);
+});

@@ -11,6 +11,12 @@ declare global {
       writes: string[];
       navigations: string[];
       reads: Array<{ organizationId: string; cookie: string }>;
+      /** The page's saves waiting for their answer, oldest first. */
+      pendingSaves: Array<() => void>;
+      /** Saves whose code ran after their answer, shown or not. */
+      answeredSaves: number;
+      /** Each banner text that rendered while the spec recorded them. */
+      shownBanners: string[];
       finishCookie: (success: boolean) => void;
     };
   }
@@ -21,6 +27,9 @@ window.organizationContract = {
   writes: [],
   navigations: [],
   reads: [],
+  pendingSaves: [],
+  answeredSaves: 0,
+  shownBanners: [],
   finishCookie(success): void {
     const write = pending;
     if (!write) throw new Error('No pending organization cookie write.');

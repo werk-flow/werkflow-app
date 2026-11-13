@@ -214,6 +214,34 @@ export function BannerProvider({ children }: { children: ReactNode }) {
   );
 }
 
+const ignoreBanner = (): (() => void) => () => {};
+
+/**
+ * Banners for the subtree that stays mounted. Feedback its code shows after the
+ * subtree unmounted, such as a save that answers after an organization switch
+ * replaced the page, belongs to a page nobody sees any more and is dropped.
+ */
+export function BannerScope({ children }: { children: ReactNode }) {
+  const outer = useBanner();
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  const value = useMemo<BannerContextValue>(
+    () => ({
+      showBanner: (banner) => (mountedRef.current ? outer.showBanner(banner) : ignoreBanner()),
+      dismissBanner: () => {
+        if (mountedRef.current) outer.dismissBanner();
+      },
+    }),
+    [outer],
+  );
+  return <BannerContext.Provider value={value}>{children}</BannerContext.Provider>;
+}
+
 export function useBanner(): BannerContextValue {
   const context = useContext(BannerContext);
   if (!context) {
