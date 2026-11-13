@@ -63,11 +63,15 @@ function useBillingPartiesForm({ kind, workId, current, task, onSaved, onReread 
   const [clientError, setClientError] = useState<string | null>(null);
   const [recipientError, setRecipientError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // The choice belongs to the version the form saw: a newer one starts it anew,
-  // while the notice stays and says why (adopted during render).
+  // The choice belongs to the version the form saw. A newer version replaces
+  // it only after a save was refused for it, with the notice saying why; a
+  // read that lands while the user edits never replaces the edit silently,
+  // and a save from it is refused instead (adopted during render).
   const shownVersion = current?.version ?? 0;
   const [formVersion, setFormVersion] = useState(shownVersion);
-  if (formVersion !== shownVersion) {
+  const [adoptNewer, setAdoptNewer] = useState(false);
+  if (adoptNewer && formVersion !== shownVersion) {
+    setAdoptNewer(false);
     setFormVersion(shownVersion);
     setClient(current ? current.auftraggeber : null);
     setRecipient(current ? current.recipient : null);
@@ -102,7 +106,10 @@ function useBillingPartiesForm({ kind, workId, current, task, onSaved, onReread 
             'Speichern fehlgeschlagen. Bitte versuche es erneut.',
           ),
         );
-        if (REREAD_ON.has(result.error)) await onReread();
+        if (REREAD_ON.has(result.error)) {
+          setAdoptNewer(true);
+          await onReread();
+        }
         return;
       }
       await onSaved();

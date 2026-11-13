@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { WorkBillingPartiesDialog } from '@/components/auftraege/shared/work-billing-parties-dialog';
 import { BannerProvider } from '@/components/ui/banner';
@@ -36,6 +36,12 @@ const saved: ResolvedBillingVersion = {
 export function BillingPartiesContractFixture(): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [current, setCurrent] = useState(seen);
+  // The other user's save reaches this page while the dialog is open.
+  useEffect(() => {
+    const deliver = (): void => setCurrent(saved);
+    window.addEventListener('contract-billing-newer', deliver);
+    return () => window.removeEventListener('contract-billing-newer', deliver);
+  }, []);
   return (
     <BannerProvider>
       <main>
