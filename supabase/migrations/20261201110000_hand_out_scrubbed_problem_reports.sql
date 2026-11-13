@@ -11,8 +11,12 @@
 -- triage without an actor; an answer it wrote is marked, so the reporter and
 -- support see that it was written automatically.
 --
--- Prevention: Tier 1 (the claim, the hand-out's history entry, the Agent's
--- limits in the triage function), Tier 2 supabase/tests/problem_report_handout.sql.
+-- Each scrubbed copy records the version of the scrub rules that wrote it;
+-- only a copy at the current version leaves.
+--
+-- Prevention: Tier 1 (the claim, the hand-out's history entry, the rule
+-- version, the Agent's limits in the triage function), Tier 2
+-- supabase/tests/problem_report_handout.sql.
 
 -- When a report thread first received the copy. Set once; a report with it
 -- is no longer waiting for a thread.
@@ -23,9 +27,68 @@ alter table public.problem_reports add column response_by_agent boolean not null
 alter table public.problem_reports add constraint problem_reports_agent_response_consistency
   check (not response_by_agent or response is not null);
 
+-- The version of the scrub rules that wrote the copy
+-- (lib/problem-reports/scrub/scrub-report.ts, SCRUB_RULES_VERSION). A copy
+-- written before versions has none. Only a copy at the current version is
+-- waiting or handed out; the daily run scrubs an older one again from its
+-- originals while they exist.
+alter table public.problem_reports add column scrub_version integer;
+-- @destructive: after release acce7e96: no row of that build has a version, so every row passes
+alter table public.problem_reports add constraint problem_reports_scrub_version_consistency
+  check (scrub_version is null or (scrub_state = 'bereinigt' and scrub_version > 0));
+
 -- The reports waiting for a thread, oldest first.
 create index problem_reports_waiting_idx on public.problem_reports (created_at, id)
   where scrub_state = 'bereinigt' and handed_out_at is null and closed_at is null;
+
+-- Writes the outcome of one scrub with the version of the rules that wrote
+-- it, and returns the state the report has then: `bereinigt`,
+-- `nicht_bereinigbar`, or `veraltet` when the report keeps a copy of an
+-- older version because this scrub failed. A copy is written over only by a
+-- copy of a newer version, so a failed scrub never removes a copy and an
+-- older run never replaces a newer copy. The server resolved the
+-- organization; a report of another organization reads as `report_not_found`.
+-- The four-argument form stays for the build before this one, whose copies
+-- carry no version and are scrubbed again.
+create function public.record_problem_report_scrub(
+  p_organization_id uuid,
+  p_report_id uuid,
+  p_scrubbed_description text,
+  p_scrubbed_context jsonb,
+  p_scrub_version integer
+)
+returns text
+language plpgsql
+security invoker
+set search_path to ''
+as $$
+declare
+  v_state text;
+  v_version integer;
+begin
+  if (p_scrubbed_description is null) <> (p_scrubbed_context is null) then
+    raise exception 'scrubbed_copy_incomplete';
+  end if;
+  if p_scrub_version is null or p_scrub_version < 1 then raise exception 'scrub_version_invalid'; end if;
+  update public.problem_reports report
+  set scrubbed_description = p_scrubbed_description,
+      scrubbed_context = p_scrubbed_context,
+      scrub_state = case when p_scrubbed_description is null then 'nicht_bereinigbar' else 'bereinigt' end,
+      scrub_version = case when p_scrubbed_description is null then null else p_scrub_version end
+  where report.id = p_report_id and report.organization_id = p_organization_id
+    and (report.scrub_state <> 'bereinigt'
+      or (p_scrubbed_description is not null and coalesce(report.scrub_version, 0) < p_scrub_version));
+  select report.scrub_state, report.scrub_version into v_state, v_version from public.problem_reports report
+  where report.id = p_report_id and report.organization_id = p_organization_id;
+  if not found then raise exception 'report_not_found'; end if;
+  return case when v_state = 'bereinigt' and coalesce(v_version, 0) < p_scrub_version
+    then 'veraltet' else v_state end;
+end;
+$$;
+
+revoke all on function public.record_problem_report_scrub(uuid, uuid, text, jsonb, integer)
+  from public, anon, authenticated;
+grant execute on function public.record_problem_report_scrub(uuid, uuid, text, jsonb, integer) to service_role;
 
 -- The Agent acts without an actor id, and only on what a triage changes and
 -- on hand-outs; an opening and an assignee change always name a person.
@@ -152,13 +215,15 @@ $$;
 -- copy, the scrubbed context, status, bucket, whether an answer exists (never
 -- its text, which support wrote unscrubbed) and whether a redrawn screenshot exists;
 -- never an original, a name or another id. A report sent less than ten
--- minutes ago, or still waiting for its scrub, is `copy_pending`; one that
--- cannot be scrubbed `copy_unavailable`, a closed one `report_closed`, one
+-- minutes ago, still waiting for its scrub, or whose copy predates the rules of
+-- p_scrub_version while it keeps its originals, is `copy_pending`; one that
+-- cannot be scrubbed, or keeps such a copy without originals, `copy_unavailable`, a closed one `report_closed`, one
 -- already handed out `already_handed_out`, and a report of another
 -- organization `report_not_found`.
 create function public.hand_out_problem_report(
   p_organization_id uuid,
   p_report_id uuid,
+  p_scrub_version integer,
   p_support_ids uuid[]
 )
 returns jsonb
@@ -179,6 +244,11 @@ begin
   if v_report.scrub_state = 'ausstehend' or v_report.created_at > now() - interval '10 minutes'
   then raise exception 'copy_pending'; end if;
   if v_report.scrub_state <> 'bereinigt' then raise exception 'copy_unavailable'; end if;
+  -- A copy of older rules waits for the daily run to scrub it again; without
+  -- its originals it never leaves.
+  if coalesce(v_report.scrub_version, 0) < p_scrub_version then
+    raise exception '%', case when v_report.originals_deleted_at is null then 'copy_pending' else 'copy_unavailable' end;
+  end if;
   if v_report.closed_at is not null then raise exception 'report_closed'; end if;
   if v_report.handed_out_at is not null then raise exception 'already_handed_out'; end if;
 
@@ -203,8 +273,8 @@ begin
 end;
 $$;
 
-revoke all on function public.hand_out_problem_report(uuid, uuid, uuid[]) from public, anon, authenticated;
-grant execute on function public.hand_out_problem_report(uuid, uuid, uuid[]) to service_role;
+revoke all on function public.hand_out_problem_report(uuid, uuid, integer, uuid[]) from public, anon, authenticated;
+grant execute on function public.hand_out_problem_report(uuid, uuid, integer, uuid[]) to service_role;
 
 -- Hands the redrawn screenshot of a report whose copy a thread received:
 -- writes the hand-out into the history, signals the support persons in

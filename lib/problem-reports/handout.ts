@@ -7,6 +7,7 @@ import type { AdminClient } from '@/lib/supabase/admin';
 import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { supportUserIds } from '@/lib/support/allowlist';
+import { SCRUB_RULES_VERSION } from './scrub/rule-version';
 import { copyNamesItsOrganization } from './scrub/scrub-report';
 import { constrainedValue } from '@/lib/validation/constrained-value';
 import { z } from '@/lib/zod';
@@ -118,6 +119,7 @@ export async function listWaitingProblemReports(
         .eq('scrub_state', 'bereinigt')
         .is('handed_out_at', null)
         .is('closed_at', null)
+        .eq('scrub_version', SCRUB_RULES_VERSION)
         .lte('created_at', new Date(Date.now() - HANDOUT_GRACE_MILLISECONDS).toISOString())
         .order('created_at')
         .order('id')
@@ -151,9 +153,10 @@ async function loadReport(
 }
 
 /**
- * Whether the report's written copy still names its organization, which a
- * copy written before that rule may: then it never leaves (`copy_unavailable`).
- * A report without a copy passes here; the hand-out refuses it with its code.
+ * The second line behind the rule version: whether a copy of the current
+ * rules still names its organization or holds a record id. Such a copy never
+ * leaves (`copy_unavailable`) and is logged, without its text. A report
+ * without a current copy passes here; the hand-out refuses it with its code.
  */
 async function copyWithheld(
   admin: AdminClient,
@@ -165,7 +168,7 @@ async function copyWithheld(
       admin
         // tenant-scope: cross-organization-by-design — the copy of the one report a thread names, by its id
         .from('problem_reports')
-        .select('scrub_state, scrubbed_description, scrubbed_context')
+        .select('scrub_state, scrub_version, scrubbed_description, scrubbed_context')
         .eq('id', report.id)
         .maybeSingle(),
     ),
@@ -175,26 +178,36 @@ async function copyWithheld(
     ),
   ]);
   if (copy.error || organization.error || !copy.data || !organization.data) return null;
-  const { scrub_state: state, scrubbed_description: description, scrubbed_context: context } = copy.data;
-  if (state !== 'bereinigt' || description === null) return false;
+  const { scrub_state: state, scrub_version: version, scrubbed_description: description } = copy.data;
+  // A copy of older rules is refused by the hand-out itself.
+  if (state !== 'bereinigt' || version !== SCRUB_RULES_VERSION || description === null) return false;
   try {
-    return copyNamesItsOrganization(
-      { description, context: parseScrubbedProblemReportContext(context) },
+    const names = copyNamesItsOrganization(
+      { description, context: parseScrubbedProblemReportContext(copy.data.scrubbed_context) },
       organization.data.name,
     );
+    // A copy of the current rules never names its organization; when one
+    // does, the rules missed a case, and it is held back and reported.
+    if (names) logError('problem report hand-out: a current copy names its organization');
+    return names;
   } catch (thrown) {
     logError('problem report hand-out: copy check failed', thrown);
     return null;
   }
 }
 
-/** The arguments of a hand-out call about one loaded report. */
+/** The arguments of a screenshot hand-out about one loaded report. */
 function handOutArguments(report: { id: string; organization_id: string }) {
   return {
     p_organization_id: report.organization_id,
     p_report_id: report.id,
     p_support_ids: supportSignalIds(),
   };
+}
+
+/** The arguments of a copy hand-out: only a copy of the current scrub rules leaves. */
+function copyHandOutArguments(report: { id: string; organization_id: string }) {
+  return { ...handOutArguments(report), p_scrub_version: SCRUB_RULES_VERSION };
 }
 
 /** The arguments of the Agent's triage of one loaded report: no actor. */
@@ -242,7 +255,7 @@ export async function handOutProblemReport(
   const { data, error } = await admin.rpc(
     'hand_out_problem_report',
     // tenant-scope: cross-organization-by-design — a report thread takes a report of any organization; the loaded report's own organization scopes the call
-    rpcArgs('hand_out_problem_report', handOutArguments(loaded.report)),
+    rpcArgs('hand_out_problem_report', copyHandOutArguments(loaded.report)),
   );
   if (error) return refusalOf(error, 'handOutProblemReport: hand-out failed');
   try {

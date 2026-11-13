@@ -7970,6 +7970,7 @@ export type Database = {
           response: string | null;
           response_by_agent: boolean;
           scrub_state: string;
+          scrub_version: number | null;
           scrubbed_context: Json | null;
           scrubbed_description: string | null;
           status: string;
@@ -7991,6 +7992,7 @@ export type Database = {
           response?: string | null;
           response_by_agent?: boolean;
           scrub_state?: string;
+          scrub_version?: number | null;
           scrubbed_context?: Json | null;
           scrubbed_description?: string | null;
           status?: string;
@@ -8012,6 +8014,7 @@ export type Database = {
           response?: string | null;
           response_by_agent?: boolean;
           scrub_state?: string;
+          scrub_version?: number | null;
           scrubbed_context?: Json | null;
           scrubbed_description?: string | null;
           status?: string;
@@ -16158,6 +16161,7 @@ export type Database = {
         Args: {
           p_organization_id: string;
           p_report_id: string;
+          p_scrub_version: number;
           p_support_ids: string[];
         };
         Returns: Json;
@@ -16985,15 +16989,26 @@ export type Database = {
         };
         Returns: undefined;
       };
-      record_problem_report_scrub: {
-        Args: {
-          p_organization_id: string;
-          p_report_id: string;
-          p_scrubbed_context: Json;
-          p_scrubbed_description: string;
-        };
-        Returns: string;
-      };
+      record_problem_report_scrub:
+        | {
+            Args: {
+              p_organization_id: string;
+              p_report_id: string;
+              p_scrubbed_context: Json;
+              p_scrubbed_description: string;
+            };
+            Returns: string;
+          }
+        | {
+            Args: {
+              p_organization_id: string;
+              p_report_id: string;
+              p_scrub_version: number;
+              p_scrubbed_context: Json;
+              p_scrubbed_description: string;
+            };
+            Returns: string;
+          };
       record_work_artifact_action: {
         Args: {
           p_action_id: string;

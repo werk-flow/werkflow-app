@@ -1,3 +1,4 @@
+import { SCRUB_RULES_VERSION } from '../../../../lib/problem-reports/scrub/rule-version';
 import { rpcArgs } from '../../../../lib/supabase/rpc-args';
 import { worldName } from '../../../../lib/testing/seed-world-plan';
 import { TEST_SUPPORT_USER } from '../../../../lib/testing/support-user';
@@ -30,6 +31,7 @@ async function seedAnsweredReports(world: TestWorld): Promise<string> {
           p_report_id: reportId,
           p_scrubbed_description: description,
           p_scrubbed_context: {},
+          p_scrub_version: SCRUB_RULES_VERSION,
         })
         .throwOnError();
       return reportId;
@@ -58,6 +60,7 @@ async function seedAnsweredReports(world: TestWorld): Promise<string> {
       .rpc('hand_out_problem_report', {
         p_organization_id: world.orgId,
         p_report_id: byAgent,
+        p_scrub_version: SCRUB_RULES_VERSION,
         p_support_ids: [],
       })
       .throwOnError();

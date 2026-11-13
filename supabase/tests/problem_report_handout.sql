@@ -1,5 +1,5 @@
 -- The hand-out of scrubbed problem reports to report threads, and the
--- Agent's write-back (20261201100003_hand_out_scrubbed_problem_reports.sql,
+-- Agent's write-back (20261201110000_hand_out_scrubbed_problem_reports.sql,
 -- werk-flow/werkflow-planning#336). Client roles execute neither hand-out
 -- function. The first hand-out claims the report and writes one history
 -- entry without an actor in the same call; a second one is refused and writes
@@ -70,14 +70,36 @@ insert into public.problem_report_files (
  '33600000-0000-0000-0000-000000000010/problem-reports/33600000-0000-0000-0000-000000000020/33600000-0000-0000-0000-000000000030/screenshot',
  'screenshot.png', 'image/png', 2048);
 
+-- The copies above are of the current scrub rules, version 1. 26 keeps a copy
+-- written before versions, with its originals; 27 keeps one without them.
+update public.problem_reports set scrub_version = 1 where scrub_state = 'bereinigt'
+  and organization_id = '33600000-0000-0000-0000-000000000010';
+insert into public.problem_reports (
+  id, organization_id, reporter_id, filed_by_id, description, context,
+  scrub_state, scrubbed_description, scrubbed_context, created_at
+) values
+('33600000-0000-0000-0000-000000000026', '33600000-0000-0000-0000-000000000010',
+ '33600000-0000-0000-0000-000000000002', '33600000-0000-0000-0000-000000000002',
+ 'Bei der Übergabe GmbH hängt die Liste', '{}', 'bereinigt', 'Bei der Übergabe GmbH hängt die Liste', '{}',
+ now() - interval '1 hour');
+insert into public.problem_reports (
+  id, organization_id, reporter_id, filed_by_id, description, context, originals_deleted_at,
+  scrub_state, scrubbed_description, scrubbed_context, created_at
+) values
+('33600000-0000-0000-0000-000000000027', '33600000-0000-0000-0000-000000000010',
+ '33600000-0000-0000-0000-000000000002', '33600000-0000-0000-0000-000000000002', null, null, now(),
+ 'bereinigt', 'Alte Kopie ohne Originale', '{}', now() - interval '1 hour');
+
 -- Client roles execute no hand-out function.
 do $$
 declare
   v_role text;
 begin
   foreach v_role in array array['anon', 'authenticated'] loop
-    if has_function_privilege(v_role, 'public.hand_out_problem_report(uuid, uuid, uuid[])', 'EXECUTE')
+    if has_function_privilege(v_role, 'public.hand_out_problem_report(uuid, uuid, integer, uuid[])', 'EXECUTE')
       or has_function_privilege(v_role, 'public.hand_out_problem_report_screenshot(uuid, uuid, uuid[])', 'EXECUTE')
+      or has_function_privilege(v_role,
+        'public.record_problem_report_scrub(uuid, uuid, text, jsonb, integer)', 'EXECUTE')
     then raise exception '% executes a hand-out function', v_role; end if;
   end loop;
 end;
@@ -94,7 +116,7 @@ declare
   v_support constant uuid := '33600000-0000-0000-0000-000000000003';
   v_copy jsonb;
 begin
-  v_copy := public.hand_out_problem_report(v_org, v_report, array[v_support]);
+  v_copy := public.hand_out_problem_report(v_org, v_report, 1, array[v_support]);
   if v_copy is distinct from jsonb_build_object('description', 'Bei [Person 1] speichert nichts',
     'context', '{}'::jsonb, 'status', 'eingegangen', 'bucket', null, 'has_answer', false,
     'has_screenshot', true)
@@ -111,7 +133,7 @@ begin
   end if;
 
   begin
-    perform public.hand_out_problem_report(v_org, v_report, array[v_support]);
+    perform public.hand_out_problem_report(v_org, v_report, 1, array[v_support]);
     raise exception 'a second hand-out was accepted';
   exception when raise_exception then
     if sqlerrm <> 'already_handed_out' then raise; end if;
@@ -123,8 +145,10 @@ end;
 $$;
 
 -- A report without a scrubbed copy, one sent less than ten minutes ago (its
--- screenshot may still be uploading), a closed one and a report of another
--- organization are refused with their codes and get no entry.
+-- screenshot may still be uploading), one whose copy predates the current
+-- rules (pending while its originals exist, never without them), a closed one
+-- and a report of another organization are refused with their codes and get
+-- no entry.
 do $$
 declare
   v_org constant uuid := '33600000-0000-0000-0000-000000000010';
@@ -133,13 +157,15 @@ begin
   for v_case in select * from (values
     (v_org, '33600000-0000-0000-0000-000000000021'::uuid, 'copy_pending'),
     (v_org, '33600000-0000-0000-0000-000000000025'::uuid, 'copy_pending'),
+    (v_org, '33600000-0000-0000-0000-000000000026'::uuid, 'copy_pending'),
+    (v_org, '33600000-0000-0000-0000-000000000027'::uuid, 'copy_unavailable'),
     (v_org, '33600000-0000-0000-0000-000000000022'::uuid, 'copy_unavailable'),
     (v_org, '33600000-0000-0000-0000-000000000023'::uuid, 'report_closed'),
     ('33600000-0000-0000-0000-000000000011'::uuid, '33600000-0000-0000-0000-000000000024'::uuid, 'report_not_found'),
     (v_org, '33600000-0000-0000-0000-0000000000ff'::uuid, 'report_not_found')
   ) as refused (organization_id, report_id, code) loop
     begin
-      perform public.hand_out_problem_report(v_case.organization_id, v_case.report_id, array[]::uuid[]);
+      perform public.hand_out_problem_report(v_case.organization_id, v_case.report_id, 1, array[]::uuid[]);
       raise exception 'the hand-out of % was accepted', v_case.report_id;
     exception when raise_exception then
       if sqlerrm <> v_case.code then
@@ -177,7 +203,7 @@ begin
         and event_type = 'screenshot_handed_out' and actor_id is null) <> 1
   then raise exception 'the screenshot hand-out wrote no entry without an actor'; end if;
 
-  perform public.hand_out_problem_report(v_org, '33600000-0000-0000-0000-000000000024', array[]::uuid[]);
+  perform public.hand_out_problem_report(v_org, '33600000-0000-0000-0000-000000000024', 1, array[]::uuid[]);
   begin
     perform public.hand_out_problem_report_screenshot(v_org, '33600000-0000-0000-0000-000000000024', array[]::uuid[]);
     raise exception 'a report without a screenshot handed one out';
@@ -303,6 +329,40 @@ begin
   if (select response_by_agent from public.problem_reports where id = v_report) then
     raise exception 'support''s answer kept the Agent''s mark';
   end if;
+end;
+$$;
+
+-- A scrub writes its rules' version with the copy. A newer version rewrites
+-- an older copy; a failed scrub never removes a copy and answers `veraltet`
+-- while the report keeps an older one; an older version never replaces a
+-- newer copy.
+do $$
+declare
+  v_org constant uuid := '33600000-0000-0000-0000-000000000010';
+  v_old constant uuid := '33600000-0000-0000-0000-000000000026';
+  v_state text;
+begin
+  -- Each call stands alone: a check in the same statement reads the row as it was before the call.
+  v_state := public.record_problem_report_scrub(v_org, v_old, null, null, 1);
+  if v_state <> 'veraltet'
+    or (select scrubbed_description from public.problem_reports where id = v_old) is null
+  then raise exception 'a failed scrub removed an older copy or hid that it stays'; end if;
+  v_state := public.record_problem_report_scrub(v_org, v_old, 'Bei [Kunde 1] hängt die Liste', '{}', 1);
+  if v_state <> 'bereinigt'
+    or (select scrubbed_description <> 'Bei [Kunde 1] hängt die Liste' or scrub_version <> 1
+        from public.problem_reports where id = v_old)
+  then raise exception 'a newer version did not rewrite the older copy'; end if;
+  v_state := public.record_problem_report_scrub(v_org, v_old, null, null, 1);
+  if v_state <> 'bereinigt'
+    or (select scrubbed_description from public.problem_reports where id = v_old) is null
+  then raise exception 'a failed scrub removed a current copy'; end if;
+  update public.problem_reports set scrub_version = 2 where id = v_old;
+  perform public.record_problem_report_scrub(v_org, v_old, 'Ältere Regeln', '{}', 1);
+  if (select scrubbed_description <> 'Bei [Kunde 1] hängt die Liste' or scrub_version <> 2
+      from public.problem_reports where id = v_old)
+  then raise exception 'an older version replaced a newer copy'; end if;
+  if (select scrub_version from public.problem_reports where id = '33600000-0000-0000-0000-000000000021') is not null
+  then raise exception 'a report without a copy carries a version'; end if;
 end;
 $$;
 

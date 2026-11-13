@@ -1,6 +1,6 @@
 # Problem report scrubbing
 
-Rules for what a problem report may carry once it leaves WerkFlow: the screenshot redraw on the device and the text scrubber on the server. The originals stay in WerkFlow's private storage; only a scrubbed copy may leave. [Security](security.md) owns the trust boundaries.
+Rules for what a problem report may carry once it leaves WerkFlow: the screenshot redraw on the device and the text scrubber on the server. The originals and every attachment stay in WerkFlow's private storage; only the scrubbed copy and, when the report has one, the redrawn screenshot may leave. [Security](security.md) owns the trust boundaries.
 
 ## Screenshot redraw
 
@@ -39,7 +39,7 @@ Each rule has a test that fails without it: `tests/ui-contracts/problem-report-r
 
 The server keeps a scrubbed copy of each report's description and context beside the originals. Only this copy may leave WerkFlow as text, and only through the [hand-out](#hand-out).
 
-`lib/problem-reports/scrub/` holds the scrubber. `scrubStoredProblemReport(organizationId, reportId)` is its one entry. It reads the report inside that organization, reads the organization's dictionary, and writes the copy with its state through `record_problem_report_scrub` in one call. `submitProblemReport` runs it after its answer, so the receipt never waits for the scrub or fails with it. The daily run (`/api/problem-report-retention`) runs it for every report that has its originals and no copy, before it deletes anything: a report saved before the scrubber existed, one whose scrub never ran, and one whose last scrub failed. The deletion periods bind, so the run deletes a due report's originals whether or not it has a copy. A report without one then keeps no text at all, and the next run sets it `nicht_bereinigbar`.
+`lib/problem-reports/scrub/` holds the scrubber. `scrubStoredProblemReport(organizationId, reportId)` is its one entry. It reads the report inside that organization, reads the organization's dictionary, and writes the copy with its state and its rule version through `record_problem_report_scrub` in one call. `submitProblemReport` runs it after its answer, so the receipt never waits for the scrub or fails with it. The daily run (`/api/problem-report-retention`) runs it for every report that has its originals and no copy, before it deletes anything. Then it scrubs again every copy written by older rules while its originals exist. The deletion periods bind, so the run deletes a due report's originals whether or not it has a copy. A report without one then keeps no text at all, and the next run sets it `nicht_bereinigbar`.
 
 ### The dictionary
 
@@ -67,8 +67,9 @@ Each rule has a test named after it in `lib/problem-reports/scrub/scrub-text.tes
 10. **Salutations.** After „Herr“, „Herrn“, „Frau“, „Familie“ or „Fam.“, up to two capitalized words become a `[Person n]`, and after „Firma“ or „Fa.“ a `[Kunde n]`, even when the dictionary does not know them. A double name joined by a hyphen or an apostrophe („O’Neill“) counts as one word. „Dr.“ and „Prof.“ before the name are skipped. When the next word is in lower case, as typed on a phone, that one word is the name, unless it has no letter or is a function word or an auxiliary such as „hat“ or „ist“.
 11. **Overlaps.** Finds that overlap become one placeholder, so no part of either stays readable. Two known names that share a word, such as „Wei Li“ and „Li Na“ in „Wei Li Na“, are one find.
 12. **Context.** The copy of the context keeps a control label only when the whole label is in the [UI string catalog](#the-ui-string-catalog). The server checks every label again, because it does not trust the device's filter. A stored context is copied only when it is the whole capture or an empty object. The app version and an error's name, code and digest are tokens without spaces. A token that the dictionary knows as a name or a phone number, or that holds a record id, is removed. No other pattern rule applies to a token, so a numeric digest stays. A route is a template and carries no value.
-13. **Fails closed.** A dictionary read that fails, a dictionary above its row cap, a missing catalog and a scrub that throws leave no copy and the state `nicht_bereinigbar`. The report stays, and the daily run tries it again. A written copy never changes.
-14. **One pass.** The terms sit in a tree keyed by word, and the scrub walks the words of the text once. No code loops over the names: the test with 10,000 customers counts the tree lookups against the words of the text. A term of more than twelve words enters the tree as every stretch of twelve words in a row, so no walk from a word goes deeper.
+13. **Rule version.** Each copy carries the version of its rules, `SCRUB_RULES_VERSION` in `rule-version.ts`, which every rule that removes more raises. Only a current copy leaves; the daily run scrubs an older one again while its originals exist.
+14. **Fails closed.** A dictionary read that fails, a dictionary above its row cap, a missing catalog and a scrub that throws leave no copy and the state `nicht_bereinigbar`. The report stays, and the daily run tries it again. A written copy changes only when a newer rule version writes it again from the originals; a failed scrub never removes one.
+15. **One pass.** The terms sit in a tree keyed by word, and the scrub walks the words of the text once. No code loops over the names: the test with 10,000 customers counts the tree lookups against the words of the text. A term of more than twelve words enters the tree as every stretch of twelve words in a row, so no walk from a word goes deeper.
 
 ### Limits of the text scrubber
 
@@ -82,9 +83,9 @@ The owner accepted these limits on 2026-11-12 (werk-flow/werkflow-planning#21). 
 - a word of a site's name alone, and a site named with one UI word;
 - a street of one word without a street ending and without its number.
 
-The owner also accepted on 2026-11-12 that a scrubbed copy, once handed out, outlives WerkFlow's deletion periods in the receiving thread's transcript and at its model provider. The owner's position is that the scrubbed copy counts as anonymous. These limits now apply to a real recipient: every report thread that pulls a copy through the hand-out, and the model provider behind it. Removing the hand-out secret stops every further transfer at once; it recalls no copy already handed out.
+Pending the owner's answer: a former name of the reporting organization stays readable. WerkFlow keeps no earlier names, so after a rename the dictionary knows only the current one.
 
-A report whose scrub fails until its deletion date keeps no text at all, neither original nor copy, because the owner's deletion periods bind before a copy exists.
+These limits apply to every report thread that pulls a copy, and its model provider. The owner also accepted on 2026-11-12 that a handed-out copy outlives WerkFlow's deletion periods there, as the scrubbed copy counts as anonymous. Removing the hand-out secret stops further transfers; it recalls nothing.
 
 The scrubber also replaces too much, which costs readability and never privacy. A name that is an ordinary word and no UI word replaces that word everywhere, such as a customer called „Klein“. A lower-case word after „frau“ or „herr“ that is no name is replaced too, such as „sagte“. A date written `07-11-2026` has a phone number's shape.
 
@@ -93,9 +94,9 @@ The scrubber also replaces too much, which costs readability and never privacy. 
 The one door through which report content leaves WerkFlow. [Problem reports](../features/problem-reports.md#current-product-baseline) owns the four route handlers; `lib/problem-reports/handout.ts` holds what they read and write.
 
 - **Who receives it.** Report threads outside WerkFlow, which pull with the bearer secret `PROBLEM_REPORT_HANDOUT_SECRET`. WerkFlow sends nothing on its own: no webhook, no relay, no outbound call. Without the secret the hand-out is off.
-- **What leaves.** The waiting list names each report's id and bucket. A hand-out names the report's own id, the scrubbed description, the scrubbed context, status, bucket, whether it has an answer, and the redrawn screenshot. Support's answer is unscrubbed, so its text never leaves, also not with a write-back's conflict. Never an original, an attachment, its name or address, the organization's id or name, the reporter, the filer, the assignee, the number or another id.
-- **Only a scrubbed copy.** A report whose state is not `bereinigt` is refused with a code; no other text stands in for the copy.
-- **Checked again before it leaves.** A copy written before the organization's own name and record ids were rules may still hold them, in its text or a token. The hand-out checks every copy against both rules first; one that fails is refused as `copy_unavailable`, unclaimed, and stays with support.
+- **What leaves.** The waiting list: each report's id and bucket. A hand-out: the report's id, the scrubbed description and context, status, bucket, whether it has an answer, and the redrawn screenshot. Never an original, an attachment, support's answer (it is unscrubbed), a person, the organization or any other id.
+- **Only a current scrubbed copy.** A report without a copy of the current [rule version](#rules-1) is neither listed nor handed out; no other text stands in for it.
+- **Checked again.** The hand-out checks a current copy once more for the organization's name and record ids. A hit means the rules missed a case: `copy_unavailable`, unclaimed, and an error logged without text.
 - **Ten minutes after sending.** The device uploads the screenshot after the save, so a report is listed and handed out only ten minutes after it was sent.
 - **Once, accounted.** The hand-out and the screenshot each write a history entry in the database call that answers them, before anything leaves. The first hand-out claims the report, so each copy leaves to one thread once.
 - **The screenshot goes through the server.** A signed storage address would carry the organization's id in its path, so the server reads the bytes and answers them itself.
@@ -104,7 +105,7 @@ The one door through which report content leaves WerkFlow. [Problem reports](../
 
 ### Change the text scrubber
 
-1. Change the rule in `lib/problem-reports/scrub/` and its test in `scrub-text.test.ts` together. A new rule gets its own test, named after the rule, on made-up data.
+1. Change the rule in `lib/problem-reports/scrub/` and its test in `scrub-text.test.ts` together. A new rule gets its own test, named after the rule, on made-up data. A rule that removes more raises `SCRUB_RULES_VERSION`, so older copies are scrubbed again before they can leave.
 2. Prove the test fails with the rule removed, then passes.
 3. A new source of names is one more read in `readDictionarySources`, filtered by the organization.
 4. Run `bun run test:unit lib/problem-reports` and `bun run test:verify --group sql:problem-reports`.

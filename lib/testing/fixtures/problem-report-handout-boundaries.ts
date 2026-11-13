@@ -84,10 +84,17 @@ const report = (id: string, organizationId: string, number: number, extra: objec
   scrub_state: 'bereinigt',
   scrubbed_description: SCRUBBED_DESCRIPTION,
   scrubbed_context: SCRUBBED_CONTEXT,
+  // A copy of the current scrub rules.
+  scrub_version: 1,
   handed_out_at: null,
   ...extra,
 });
-const unscrubbed = { scrub_state: 'ausstehend', scrubbed_description: null, scrubbed_context: null };
+const unscrubbed = {
+  scrub_state: 'ausstehend',
+  scrubbed_description: null,
+  scrubbed_context: null,
+  scrub_version: null,
+};
 
 const world = installActionWorld(
   {
@@ -169,11 +176,17 @@ const recordAgent = (args: Record<string, unknown>, eventType: string) => {
 world.rpc = ({ name, args }) => {
   const row = reportRow(args);
   if (!row) return refused('report_not_found');
+  const versionOf = (value: unknown) => (typeof value === 'number' ? value : 0);
   if (name === 'record_problem_report_scrub') {
-    if (row.scrub_state !== 'bereinigt') {
+    const copy = args.p_scrubbed_description !== null;
+    if (
+      row.scrub_state !== 'bereinigt' ||
+      (copy && versionOf(row.scrub_version) < versionOf(args.p_scrub_version))
+    ) {
       row.scrubbed_description = args.p_scrubbed_description;
       row.scrubbed_context = args.p_scrubbed_context;
-      row.scrub_state = args.p_scrubbed_description === null ? 'nicht_bereinigbar' : 'bereinigt';
+      row.scrub_state = copy ? 'bereinigt' : 'nicht_bereinigbar';
+      row.scrub_version = copy ? args.p_scrub_version : null;
     }
     return { data: row.scrub_state, error: null };
   }
@@ -181,6 +194,8 @@ world.rpc = ({ name, args }) => {
     const sentRecently = Date.parse(String(row.created_at)) > Date.now() - 10 * 60 * 1000;
     if (row.scrub_state === 'ausstehend' || sentRecently) return refused('copy_pending');
     if (row.scrub_state !== 'bereinigt') return refused('copy_unavailable');
+    if (versionOf(row.scrub_version) < versionOf(args.p_scrub_version))
+      return refused(row.originals_deleted_at === null ? 'copy_pending' : 'copy_unavailable');
     if (row.closed_at !== null) return refused('report_closed');
     if (row.handed_out_at !== null) return refused('already_handed_out');
     row.handed_out_at = '2026-11-12T09:00:00.000Z';
@@ -474,23 +489,59 @@ assert.ok(
 );
 assert.ok(!namedBody.toLowerCase().includes(ORGANIZATION_B), "the hand-out carries its organization's id");
 
-// A copy written before those rules, which still names its organization or
-// holds its id in the text, never leaves: refused, unclaimed and without a
-// history entry.
-const legacyCopies = [
-  ['33600000-0000-4000-8000-000000000027', `Bei ${ORGANIZATION_NAME} hängt die Liste.`],
-  [
-    '33600000-0000-4000-8000-000000000028',
-    'Organisation: c3f9a1b2-7d4e-4f60-9a8b-1e2d3c4b5a69, die Liste hängt.',
-  ],
-] as const;
-const historyBeforeLegacy = events().length;
-for (const [legacyId, scrubbedDescription] of legacyCopies) {
-  reports().push(report(legacyId, ORGANIZATION_B, 8, { scrubbed_description: scrubbedDescription }));
-  assert.deepEqual(await refusal(call.handOut(legacyId)), [409, { error: 'copy_unavailable' }]);
-  assert.equal(reports().find((row) => row.id === legacyId)?.handed_out_at, null);
+// A copy of older scrub rules is neither listed nor handed out: while its
+// originals exist it waits for the daily run to scrub it again
+// (copy_pending); without them it never leaves (copy_unavailable). Neither
+// is claimed or enters the history.
+const olderCopyId = '33600000-0000-4000-8000-000000000027';
+const olderCopyGoneId = '33600000-0000-4000-8000-000000000028';
+const olderCopy = `Bei ${ORGANIZATION_NAME} hängt die Liste.`;
+reports().push(
+  report(olderCopyId, ORGANIZATION_B, 8, { scrubbed_description: olderCopy, scrub_version: null }),
+  report(olderCopyGoneId, ORGANIZATION_B, 9, {
+    scrubbed_description: olderCopy,
+    scrub_version: null,
+    description: null,
+    context: null,
+    originals_deleted_at: '2026-11-10T08:00:00.000Z',
+  }),
+);
+const historyBeforeOlder = events().length;
+assert.deepEqual(await (await call.waiting(BEARER)).json(), {
+  reports: [{ id: blockerId, bucket: 'blocker' }],
+});
+assert.deepEqual(await refusal(call.handOut(olderCopyId)), [409, { error: 'copy_pending' }]);
+assert.deepEqual(await refusal(call.handOut(olderCopyGoneId)), [409, { error: 'copy_unavailable' }]);
+// The daily run scrubs the older copy again from its originals; the one without originals stays out.
+const { scrubPendingProblemReports } = await import('@/lib/problem-reports/scrub/scrub-report');
+await scrubPendingProblemReports();
+const rescrubbed = reports().find((row) => row.id === olderCopyId);
+assert.equal(rescrubbed?.scrub_version, 1, 'the daily run left an older copy');
+assert.ok(
+  !String(rescrubbed?.scrubbed_description).includes('Beispiel'),
+  'the scrubbed-again copy names its organization',
+);
+const stillOld = reports().find((row) => row.id === olderCopyGoneId);
+assert.equal(stillOld?.scrub_version, null, 'a copy without originals was scrubbed again');
+assert.deepEqual(await refusal(call.handOut(olderCopyGoneId)), [409, { error: 'copy_unavailable' }]);
+for (const id of [olderCopyId, olderCopyGoneId]) {
+  assert.equal(reports().find((row) => row.id === id)?.handed_out_at, null);
 }
-assert.equal(events().length, historyBeforeLegacy, 'a withheld copy wrote history');
+assert.equal(events().length, historyBeforeOlder, 'a refused older copy wrote history');
+
+// The second line: a copy of the current rules that still names its
+// organization (the rules missed a case) is refused unclaimed and logged,
+// without its text.
+const missedId = '33600000-0000-4000-8000-00000000002a';
+reports().push(report(missedId, ORGANIZATION_B, 10, { scrubbed_description: olderCopy }));
+const loggedBefore = logged.length;
+assert.deepEqual(await refusal(call.handOut(missedId)), [409, { error: 'copy_unavailable' }]);
+assert.equal(reports().find((row) => row.id === missedId)?.handed_out_at, null);
+assert.ok(logged.length > loggedBefore, 'a current copy that names its organization was not logged');
+assert.ok(
+  logged.slice(loggedBefore).every((line) => !line.includes('Beispiel')),
+  'the log carries the text',
+);
 
 // The write-back refuses an invalid bucket or status, an assignee, an empty
 // answer, an empty change, a change without the value it was based on, and

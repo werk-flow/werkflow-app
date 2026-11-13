@@ -101,10 +101,16 @@ world.rpc = ({ name, args }) => {
   }
   assert.equal(name, 'record_problem_report_scrub');
   if (!row) return { data: null, error: { code: 'P0001', message: 'report_not_found' } };
-  if (row.scrub_state !== 'bereinigt') {
+  const copy = args.p_scrubbed_description !== null;
+  const version = (value: unknown) => (typeof value === 'number' ? value : 0);
+  if (
+    row.scrub_state !== 'bereinigt' ||
+    (copy && version(row.scrub_version) < version(args.p_scrub_version))
+  ) {
     row.scrubbed_description = args.p_scrubbed_description;
     row.scrubbed_context = args.p_scrubbed_context;
-    row.scrub_state = args.p_scrubbed_description === null ? 'nicht_bereinigbar' : 'bereinigt';
+    row.scrub_state = copy ? 'bereinigt' : 'nicht_bereinigbar';
+    row.scrub_version = copy ? args.p_scrub_version : null;
   }
   return { data: row.scrub_state, error: null };
 };
@@ -160,6 +166,7 @@ assert.deepEqual(scrubWrites().at(-1)?.args, {
   p_report_id: id(10),
   p_scrubbed_description: scrubbedDescription,
   p_scrubbed_context: scrubbedContext,
+  p_scrub_version: 1,
 });
 assert.equal(stored(id(10))?.scrub_state, 'bereinigt');
 assert.equal(stored(id(10))?.description, description, 'the original changed');
@@ -191,6 +198,7 @@ assert.deepEqual(scrubWrites().at(-1)?.args, {
   p_report_id: id(12),
   p_scrubbed_description: null,
   p_scrubbed_context: null,
+  p_scrub_version: 1,
 });
 assert.equal(stored(id(12))?.scrub_state, 'nicht_bereinigbar');
 assert.equal(stored(id(12))?.description, description, 'the report was not kept');

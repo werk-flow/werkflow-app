@@ -9,6 +9,7 @@ import { loadUiStringCatalog } from '@/lib/problem-reports/screenshot/load-ui-st
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
+import { SCRUB_RULES_VERSION } from './rule-version';
 import { buildScrubDictionary, dictionaryKnows, type ScrubDictionarySources } from './dictionary';
 import { holdsRecordId, scrubReportContext, scrubReportText } from './scrub-text';
 
@@ -203,24 +204,26 @@ export function copyNamesItsOrganization(
 /**
  * Scrubs one stored report of the organization and writes the scrubbed copy
  * with its state in one database call. Call it after a report is saved; the
- * daily run calls it for every report still without a copy. It never throws
- * and never fails its caller: it resolves true when the report has its
- * scrubbed copy afterwards, and false when it has none. A report that
- * already has its copy keeps it.
+ * daily run calls it for every report still without a copy, and for every
+ * copy of older rules while its originals exist. It never throws and never
+ * fails its caller: it resolves true when the report has a copy of the
+ * current rules afterwards, and false when it has none. A report that
+ * already has a current copy keeps it; a failed scrub never removes a copy.
  */
 export async function scrubStoredProblemReport(organizationId: string, reportId: string): Promise<boolean> {
   try {
     const admin = createSupabaseAdminClient();
     const report = await admin
       .from('problem_reports')
-      .select('description, context, scrub_state')
+      .select('description, context, scrub_state, scrub_version')
       .eq('organization_id', organizationId)
       .eq('id', reportId)
       .maybeSingle();
     let copy: Awaited<ReturnType<typeof buildScrubbedCopy>> = null;
     if (report.error) logError('scrubStoredProblemReport: report read failed', report.error);
     else if (report.data === null) return false;
-    else if (report.data.scrub_state === 'bereinigt') return true;
+    else if (report.data.scrub_state === 'bereinigt' && report.data.scrub_version === SCRUB_RULES_VERSION)
+      return true;
     else copy = await buildScrubbedCopy(admin, organizationId, report.data);
     const written = await admin.rpc(
       'record_problem_report_scrub',
@@ -229,6 +232,7 @@ export async function scrubStoredProblemReport(organizationId: string, reportId:
         p_report_id: reportId,
         p_scrubbed_description: copy?.description ?? null,
         p_scrubbed_context: copy?.context ?? null,
+        p_scrub_version: SCRUB_RULES_VERSION,
       }),
     );
     if (written.error) {
@@ -262,29 +266,51 @@ async function readPendingPage(admin: Admin, after: string | null) {
 }
 
 /**
+ * One page, in id order, of the copies of older scrub rules whose originals
+ * still exist: the daily run writes each again with the current rules.
+ */
+async function readOutdatedPage(admin: Admin, after: string | null) {
+  // tenant-scope: cross-organization-by-design — the scheduled run has no caller and spans every organization; each listed report names its organization, which its scrub passes to every read and to the write
+  const outdated = admin
+    .from('problem_reports')
+    .select('id, organization_id')
+    .eq('scrub_state', 'bereinigt')
+    .is('originals_deleted_at', null)
+    .or(`scrub_version.is.null,scrub_version.lt.${SCRUB_RULES_VERSION}`)
+    .order('id')
+    .limit(PENDING_PAGE_SIZE);
+  return after === null ? outdated : outdated.gt('id', after);
+}
+
+/**
  * Scrubs every report that has its originals but no scrubbed copy: one saved
  * before the scrubber existed, one whose scrub never ran, and one whose last
  * scrub failed. A report whose originals the deletion run removed before any
  * scrub succeeded keeps no text; it ends as `nicht_bereinigbar` and is left
- * alone afterwards. It goes page by page in id order, so a report that stays
- * unscrubbed never stops the run from reaching the next ones.
+ * alone afterwards. Then it scrubs every copy of older rules again while its
+ * originals exist; one without them never leaves WerkFlow. Each list goes
+ * page by page in id order, so a report that stays unscrubbed never stops the
+ * run from reaching the next ones.
  */
 export async function scrubPendingProblemReports(): Promise<PendingScrubResult> {
   const admin = createSupabaseAdminClient();
   const result: PendingScrubResult = { ok: true, scrubbed: 0, notScrubbed: 0 };
-  let after: string | null = null;
-  for (;;) {
-    const page = await readPendingPage(admin, after);
-    if (page.error) {
-      logError('scrubPendingProblemReports: pending list failed', page.error);
-      return { ...result, ok: false };
+  for (const readPage of [readPendingPage, readOutdatedPage]) {
+    let after: string | null = null;
+    for (;;) {
+      const page = await readPage(admin, after);
+      if (page.error) {
+        logError('scrubPendingProblemReports: list failed', page.error);
+        return { ...result, ok: false };
+      }
+      for (const report of page.data) {
+        if (await scrubStoredProblemReport(report.organization_id, report.id)) result.scrubbed += 1;
+        else result.notScrubbed += 1;
+      }
+      const last = page.data.at(-1);
+      if (last === undefined || page.data.length < PENDING_PAGE_SIZE) break;
+      after = last.id;
     }
-    for (const report of page.data) {
-      if (await scrubStoredProblemReport(report.organization_id, report.id)) result.scrubbed += 1;
-      else result.notScrubbed += 1;
-    }
-    const last = page.data.at(-1);
-    if (last === undefined || page.data.length < PENDING_PAGE_SIZE) return result;
-    after = last.id;
   }
+  return result;
 }
