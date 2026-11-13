@@ -163,7 +163,8 @@ create trigger guard_event_ledger_history before update or delete on public.comp
   for each row execute function app_private.guard_event_ledger_history();
 
 -- The actor is an Admin or Büro member of the organization whose access is
--- in effect; the share lock holds the membership until commit. Creates the
+-- in effect: the access lifecycle's advisory lock, taken shared, holds off a
+-- suspension, and the share lock holds the membership until commit. Creates the
 -- organization's empty profile when it has none and returns it locked.
 create function app_private.lock_company_document_profile(p_organization_id uuid, p_actor_id uuid)
 returns public.company_document_profiles
@@ -174,6 +175,14 @@ as $$
 declare
   v_profile public.company_document_profiles;
 begin
+  -- A suspension writes only the access lifecycle, under this advisory lock
+  -- (set_personnel_access_transition). Taken shared before the access check,
+  -- it lets no suspension commit between the check and this call's write.
+  perform pg_advisory_xact_lock_shared(hashtextextended(
+    p_organization_id::text || ':p1-24-access:' || record.id::text, 0
+  ))
+  from public.employee_records record
+  where record.organization_id = p_organization_id and record.user_id = p_actor_id;
   perform 1 from public.organization_members member
   where member.organization_id = p_organization_id
     and member.user_id = p_actor_id
