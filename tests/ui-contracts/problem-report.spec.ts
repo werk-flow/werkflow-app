@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { openContractFixture } from './open-fixture';
 
 // The report dialog (docs/features/problem-reports.md) over stub actions:
@@ -37,12 +37,14 @@ async function expectDialogReady(page: Page) {
   return dialog;
 }
 
-/** The colour of the stored screenshot at each point, given as fractions of its width and height. */
-async function storedScreenshotPixels(
+type StoredScreenshot = { width: number; height: number; pixels: number[][] };
+
+/** The stored screenshot's size, and its colour at each point, given as fractions of its width and height. */
+async function storedScreenshot(
   page: Page,
   puts: StoredPut[],
   points: [number, number][],
-): Promise<number[][]> {
+): Promise<StoredScreenshot> {
   const screenshot = puts.find((put) => put.kind === 'screenshot');
   if (!screenshot) throw new Error('No screenshot reached storage.');
   return page.evaluate(
@@ -54,12 +56,88 @@ async function storedScreenshotPixels(
       const context = canvas.getContext('2d');
       if (!context) throw new Error('No 2D context.');
       context.drawImage(image, 0, 0);
-      return points.map(([x, y]) => [
-        ...context.getImageData(image.width * x, image.height * y, 1, 1).data.slice(0, 3),
-      ]);
+      return {
+        width: image.width,
+        height: image.height,
+        pixels: points.map(([x, y]) => [
+          ...context
+            .getImageData(Math.floor(image.width * x), Math.floor(image.height * y), 1, 1)
+            .data.slice(0, 3),
+        ]),
+      };
     },
     { bytes: [...screenshot.body], points },
   );
+}
+
+async function storedScreenshotPixels(
+  page: Page,
+  puts: StoredPut[],
+  points: [number, number][],
+): Promise<number[][]> {
+  return (await storedScreenshot(page, puts, points)).pixels;
+}
+
+type Rgb = [number, number, number];
+
+/** The cover's two colours as the page's tokens give them, read the way the canvas reads them. */
+function coverColors(page: Page): Promise<{ base: Rgb; stripe: Rgb }> {
+  return page.evaluate(() => {
+    const context = document.createElement('canvas').getContext('2d');
+    if (!context) throw new Error('No 2D context.');
+    const style = getComputedStyle(document.documentElement);
+    const rgb = (name: string): [number, number, number] => {
+      context.fillStyle = style.getPropertyValue(name).trim();
+      const hex = String(context.fillStyle);
+      const channel = (start: number) => Number.parseInt(hex.slice(start, start + 2), 16);
+      return [channel(1), channel(3), channel(5)];
+    };
+    return { base: rgb('--brand-purple-deep'), stripe: rgb('--brand-purple-light') };
+  });
+}
+
+/**
+ * Whether a pixel is one of the cover's colours or a mix of only those two, as
+ * a stripe's smoothed edge draws it: it lies on the line between them, within
+ * the PNG's rounding.
+ */
+function isCoverPixel(pixel: readonly number[], { base, stripe }: { base: Rgb; stripe: Rgb }): boolean {
+  const channels = base.map((from, index) => ({
+    from,
+    span: (stripe[index] ?? 0) - from,
+    value: pixel[index] ?? Number.NaN,
+  }));
+  const length = channels.reduce((sum, { span }) => sum + span * span, 0);
+  const projected = channels.reduce((sum, { from, span, value }) => sum + (value - from) * span, 0) / length;
+  const share = Math.min(Math.max(projected, 0), 1);
+  return channels.every(({ from, span, value }) => Math.abs(from + share * span - value) <= 3);
+}
+
+/** Drags with the mouse across a canvas, between two points given as fractions of its drawn box. */
+async function dragAcross(page: Page, canvas: Locator, from: [number, number], to: [number, number]) {
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error('The canvas has no box.');
+  await page.mouse.move(box.x + box.width * from[0], box.y + box.height * from[1]);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * to[0], box.y + box.height * to[1], { steps: 4 });
+  await page.mouse.up();
+}
+
+/** Opens the large view from the dialog's „Vergrößern“. */
+async function openLargeView(page: Page, dialog: Locator) {
+  await dialog.getByRole('button', { name: 'Vergrößern', exact: true }).click();
+  const view = page.getByRole('dialog', { name: 'Screenshot schwärzen', exact: true });
+  const canvas = view.getByRole('img', { name: 'Großer Screenshot mit deinen Schwärzungen', exact: true });
+  await expect(canvas).toBeVisible();
+  return { view, canvas };
+}
+
+async function sendWithDescription(page: Page, dialog: Locator, description: string) {
+  await dialog.getByRole('textbox', { name: 'Was ist passiert?', exact: true }).fill(description);
+  await dialog.getByRole('button', { name: 'Senden', exact: true }).click();
+  await expect(
+    page.getByRole('alert').getByText('Danke! Deine Meldung Nr. 7 ist eingegangen.'),
+  ).toBeVisible();
 }
 
 function boundary(page: Page) {
@@ -106,28 +184,192 @@ test('a redaction box is burned into the uploaded image', async ({ page }) => {
   const puts = await openReportFixture(page);
   const dialog = await openDialog(page);
   const preview = dialog.getByRole('img', { name: 'Vorschau des Screenshots mit deinen Schwärzungen' });
-  const box = await preview.boundingBox();
-  if (!box) throw new Error('The preview has no box.');
   // From a quarter to three quarters of the width, and from a quarter to half the height.
-  await page.mouse.move(box.x + box.width * 0.25, box.y + box.height * 0.25);
-  await page.mouse.down();
-  await page.mouse.move(box.x + box.width * 0.75, box.y + box.height * 0.5, { steps: 4 });
-  await page.mouse.up();
-  await dialog
-    .getByRole('textbox', { name: 'Was ist passiert?', exact: true })
-    .fill('Der Knopf reagiert nicht.');
-  await dialog.getByRole('button', { name: 'Senden', exact: true }).click();
-  await expect(
-    page.getByRole('alert').getByText('Danke! Deine Meldung Nr. 7 ist eingegangen.'),
-  ).toBeVisible();
+  await dragAcross(page, preview, [0.25, 0.25], [0.75, 0.5]);
+  await sendWithDescription(page, dialog, 'Der Knopf reagiert nicht.');
 
   expect((await boundary(page)).registered).toEqual(['screenshot']);
   const [inside, outside] = await storedScreenshotPixels(page, puts, [
     [0.5, 0.375],
     [0.5, 0.75],
   ]);
-  expect(inside).toEqual([0, 0, 0]);
+  expect(isCoverPixel(inside ?? [], await coverColors(page))).toBe(true);
   expect(outside).toEqual([255, 255, 255]);
+});
+
+for (const viewport of [
+  { name: 'a laptop', width: 1280, height: 800 },
+  { name: 'a phone', width: 375, height: 667 },
+]) {
+  test(`a box drawn on the large view covers exactly that area of the full-size upload, on ${viewport.name}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    const puts = await openReportFixture(page);
+    const dialog = await openDialog(page);
+    const { view, canvas } = await openLargeView(page, dialog);
+    // The view shows the image scaled, so a pointer read as image pixels would miss the area.
+    const shown = await canvas.boundingBox();
+    expect(shown && Math.abs(shown.width - viewport.width)).toBeGreaterThan(20);
+    await dragAcross(page, canvas, [0.3, 0.3], [0.7, 0.6]);
+    await view.getByRole('button', { name: 'Fertig', exact: true }).click();
+    await expect(view).toBeHidden();
+    await sendWithDescription(page, dialog, 'Die Adresse soll niemand sehen.');
+
+    const inside: [number, number][] = [
+      [0.31, 0.31],
+      [0.69, 0.59],
+      [0.5, 0.45],
+    ];
+    const outside: [number, number][] = [
+      [0.29, 0.45],
+      [0.71, 0.45],
+      [0.5, 0.29],
+      [0.5, 0.61],
+    ];
+    const stored = await storedScreenshot(page, puts, [...inside, ...outside]);
+    // The redraw's full size: one image pixel per CSS pixel of the window.
+    expect({ width: stored.width, height: stored.height }).toEqual({
+      width: viewport.width,
+      height: viewport.height,
+    });
+    const colors = await coverColors(page);
+    expect(stored.pixels.slice(0, inside.length).map((pixel) => isCoverPixel(pixel, colors))).toEqual(
+      inside.map(() => true),
+    );
+    expect(stored.pixels.slice(inside.length)).toEqual(outside.map(() => [255, 255, 255]));
+  });
+}
+
+for (const colorScheme of ['light', 'dark'] as const) {
+  test(`the cover lets nothing of the page through, only its own two colours, in ${colorScheme} mode`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme });
+    const puts = await openReportFixture(page);
+    // A probe colour no cover colour mixes into: anything of it inside the box came from the page.
+    await page.evaluate(() => {
+      window.uiContractProblemReport.pageColor = 'lime';
+    });
+    const dialog = await openDialog(page);
+    const { view, canvas } = await openLargeView(page, dialog);
+    await dragAcross(page, canvas, [0.2, 0.2], [0.8, 0.8]);
+    await view.getByRole('button', { name: 'Fertig', exact: true }).click();
+    await sendWithDescription(page, dialog, 'Hier steht ein Name.');
+
+    const screenshot = puts.find((put) => put.kind === 'screenshot');
+    if (!screenshot) throw new Error('No screenshot reached storage.');
+    // Every pixel well inside the drawn box, and the probe just outside it.
+    const { inner, probe } = await page.evaluate(
+      async (bytes) => {
+        const image = await createImageBitmap(new Blob([new Uint8Array(bytes)], { type: 'image/png' }));
+        const canvas = document.createElement('canvas');
+        canvas.width = image.width;
+        canvas.height = image.height;
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('No 2D context.');
+        context.drawImage(image, 0, 0);
+        const left = Math.ceil(image.width * 0.21);
+        const top = Math.ceil(image.height * 0.21);
+        const data = context.getImageData(
+          left,
+          top,
+          Math.floor(image.width * 0.58),
+          Math.floor(image.height * 0.58),
+        ).data;
+        const inner: number[][] = [];
+        for (let index = 0; index < data.length; index += 4)
+          inner.push([data[index] ?? -1, data[index + 1] ?? -1, data[index + 2] ?? -1]);
+        return { inner, probe: [...context.getImageData(2, 2, 1, 1).data.slice(0, 3)] };
+      },
+      [...screenshot.body],
+    );
+    expect(probe).toEqual([0, 255, 0]);
+    const colors = await coverColors(page);
+    const leaks = inner.filter((pixel) => !isCoverPixel(pixel, colors));
+    expect(leaks.slice(0, 5)).toEqual([]);
+    // Both colours show: the pattern is drawn, not one flat fill.
+    expect(inner.some((pixel) => pixel.every((value, index) => value === colors.base[index]))).toBe(true);
+    expect(inner.some((pixel) => pixel.every((value, index) => value === colors.stripe[index]))).toBe(true);
+  });
+}
+
+test('a cover colour that is not opaque gives way to black, so the page still never shows through', async ({
+  page,
+}) => {
+  const puts = await openReportFixture(page);
+  await page.evaluate(() => {
+    window.uiContractProblemReport.pageColor = 'lime';
+    document.documentElement.style.setProperty('--brand-purple-deep', 'rgb(62 54 89 / 40%)');
+  });
+  const dialog = await openDialog(page);
+  const { view, canvas } = await openLargeView(page, dialog);
+  await dragAcross(page, canvas, [0.2, 0.2], [0.8, 0.8]);
+  await view.getByRole('button', { name: 'Fertig', exact: true }).click();
+  await sendWithDescription(page, dialog, 'Hier steht eine Telefonnummer.');
+
+  const { stripe } = await coverColors(page);
+  const { pixels } = await storedScreenshot(page, puts, [
+    [0.3, 0.3],
+    [0.4, 0.5],
+    [0.5, 0.5],
+    [0.6, 0.7],
+  ]);
+  expect(pixels.filter((pixel) => !isCoverPixel(pixel, { base: [0, 0, 0], stripe }))).toEqual([]);
+});
+
+test('the large view opens from the keyboard, and Escape closes only it and returns to its button', async ({
+  page,
+}) => {
+  await openReportFixture(page);
+  const dialog = await openDialog(page);
+  const enlarge = dialog.getByRole('button', { name: 'Vergrößern', exact: true });
+  await enlarge.focus();
+  await page.keyboard.press('Enter');
+  const view = page.getByRole('dialog', { name: 'Screenshot schwärzen', exact: true });
+  await expect(view.getByRole('img', { name: 'Großer Screenshot mit deinen Schwärzungen' })).toBeVisible();
+  // Focus starts on the view, not on a button one Enter would act on.
+  await expect(view).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(view).toBeHidden();
+  await expect(dialog).toBeVisible();
+  await expect(enlarge).toBeFocused();
+});
+
+test('on a phone, boxes drawn by touch on the large view reach the upload, and „Rückgängig“ takes back only the last', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  const puts = await openReportFixture(page);
+  const dialog = await openDialog(page);
+  const { view, canvas } = await openLargeView(page, dialog);
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error('The canvas has no box.');
+  const touch = await page.context().newCDPSession(page);
+  const swipe = async (from: [number, number], to: [number, number]) => {
+    const at = ([x, y]: [number, number]) => ({ x: box.x + box.width * x, y: box.y + box.height * y });
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [at(from)] });
+    for (const step of [0.25, 0.5, 0.75, 1]) {
+      const point: [number, number] = [
+        from[0] + (to[0] - from[0]) * step,
+        from[1] + (to[1] - from[1]) * step,
+      ];
+      await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [at(point)] });
+    }
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  };
+  await swipe([0.1, 0.1], [0.4, 0.3]);
+  await swipe([0.6, 0.7], [0.9, 0.9]);
+  await view.getByRole('button', { name: 'Rückgängig', exact: true }).click();
+  await view.getByRole('button', { name: 'Fertig', exact: true }).click();
+  await sendWithDescription(page, dialog, 'Zwei Stellen, eine bleibt.');
+
+  const [kept, removed] = await storedScreenshotPixels(page, puts, [
+    [0.25, 0.2],
+    [0.75, 0.8],
+  ]);
+  expect(isCoverPixel(kept ?? [], await coverColors(page))).toBe(true);
+  expect(removed).toEqual([255, 255, 255]);
 });
 
 test('the report row in the phone menu closes the menu first, so the screenshot shows the page', async ({
