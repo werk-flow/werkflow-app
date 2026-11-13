@@ -1,4 +1,4 @@
--- The company document profile (20261201130001_keep_one_company_document_profile.sql,
+-- The company document profile (20261201140001_keep_one_company_document_profile.sql,
 -- werk-flow/werkflow-planning#378). Client roles read and write neither table
 -- and execute neither write: an employee, and every authenticated caller,
 -- reads no profile field through the Data API. A save writes one history row
