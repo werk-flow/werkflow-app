@@ -125,16 +125,7 @@ export function ArticlePricesPanel({
   return (
     <form onSubmit={submit} noValidate className="flex min-h-0 flex-1 flex-col">
       <DialogBody className="space-y-6 py-1">
-        {prices === null ? (
-          <RegionLoadError title="Preise nicht geladen">
-            Die Preise des Artikels konnten nicht geladen werden. Versuche es noch einmal.
-          </RegionLoadError>
-        ) : (
-          <>
-            <CurrentPrices prices={prices} />
-            <PriceHistory prices={prices} priceDate={priceDate} />
-          </>
-        )}
+        <RecordedPrices prices={prices} priceDate={priceDate} />
         <ArticleNewPriceSection
           form={form}
           setForm={setForm}
@@ -268,6 +259,23 @@ function ArticleNewPriceSection({
       </div>
       <ErrorText>{error}</ErrorText>
     </section>
+  );
+}
+
+/** Today's prices and the history, or the failure of their read with its retry. */
+function RecordedPrices({ prices, priceDate }: { prices: ArticlePriceEntry[] | null; priceDate: string }) {
+  if (prices === null) {
+    return (
+      <RegionLoadError title="Preise nicht geladen">
+        Die Preise des Artikels konnten nicht geladen werden. Versuche es noch einmal.
+      </RegionLoadError>
+    );
+  }
+  return (
+    <>
+      <CurrentPrices prices={prices} />
+      <PriceHistory prices={prices} priceDate={priceDate} />
+    </>
   );
 }
 
