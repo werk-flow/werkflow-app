@@ -50,12 +50,28 @@ function sanitizeRules(rules: CSSRuleList): void {
   }
 }
 
+type MediaTest = (media: MediaList) => boolean;
+
 /**
- * A style element or a sheet outside the build may be written at runtime, so
- * it gets the inline-style rule on a detached copy: no generated text, no
- * image, no font. The live sheet never changes.
+ * Settles every media rule as the live page answers it: `all` when it applies
+ * now, `not all` when it does not. The SVG image is a document of its own and
+ * may answer a query otherwise, such as `prefers-color-scheme` as light on a
+ * page in dark mode; settled, the image shows the page's own answer.
  */
-function sanitizedRuleText(rules: readonly CSSRule[]): string {
+function settleMediaRules(rules: CSSRuleList, appliesNow: MediaTest): void {
+  for (const rule of Array.from(rules)) {
+    if (rule instanceof CSSMediaRule) rule.media.mediaText = appliesNow(rule.media) ? 'all' : 'not all';
+    if ('cssRules' in rule && rule.cssRules instanceof CSSRuleList) settleMediaRules(rule.cssRules, appliesNow);
+  }
+}
+
+/**
+ * The rules' text from a detached copy, with every media rule settled. A
+ * style element or a sheet outside the build may be written at runtime, so
+ * its copy also gets the inline-style rule: no generated text, no image, no
+ * font. A build sheet's rules stay as compiled. The live sheet never changes.
+ */
+function copiedRuleText(rules: readonly CSSRule[], appliesNow: MediaTest, sanitize: boolean): string {
   const copy = new CSSStyleSheet();
   copy.replaceSync(
     rules
@@ -63,7 +79,8 @@ function sanitizedRuleText(rules: readonly CSSRule[]): string {
       .map((rule) => rule.cssText)
       .join('\n'),
   );
-  sanitizeRules(copy.cssRules);
+  settleMediaRules(copy.cssRules, appliesNow);
+  if (sanitize) sanitizeRules(copy.cssRules);
   return Array.from(copy.cssRules, (rule) => rule.cssText).join('\n');
 }
 
@@ -72,7 +89,7 @@ async function collectPageCss(document: Document): Promise<string> {
   const origin = document.location.origin;
   const parts: string[] = [];
   const view = document.defaultView;
-  const appliesNow = (media: MediaList): boolean =>
+  const appliesNow: MediaTest = (media) =>
     media.length === 0 || !view || view.matchMedia(media.mediaText).matches;
   const visit = async (sheet: CSSStyleSheet): Promise<void> => {
     // A sheet that does not style the live page, disabled or for other media (print), stays out.
@@ -85,7 +102,7 @@ async function collectPageCss(document: Document): Promise<string> {
       return;
     }
     if (!isBuildStyleSheet(sheet, origin)) {
-      parts.push(sanitizedRuleText(rules));
+      parts.push(copiedRuleText(rules, appliesNow, true));
       return;
     }
     for (const rule of rules) {
@@ -94,8 +111,8 @@ async function collectPageCss(document: Document): Promise<string> {
         if (rule.styleSheet && appliesNow(rule.media)) await visit(rule.styleSheet);
       } else if (rule instanceof CSSFontFaceRule)
         parts.push(await inlineFontFace(rule, sheet.href ?? document.baseURI, origin));
-      else parts.push(rule.cssText);
     }
+    parts.push(copiedRuleText(rules, appliesNow, false));
   };
   for (const sheet of Array.from(document.styleSheets)) await visit(sheet);
   parts.push(STILL_FRAME_CSS);
