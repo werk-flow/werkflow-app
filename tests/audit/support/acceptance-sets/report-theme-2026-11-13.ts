@@ -1,5 +1,4 @@
-import type { CaptureSpec } from '../acceptance-rounds';
-import { acceptanceSet, type OpenSet } from '../acceptance-sets';
+import { acceptanceSet, type OpenSet, type SetCapture } from '../acceptance-sets';
 
 /**
  * werk-flow/werkflow-planning#410 of 2026-11-13: the report dialog with the
@@ -23,7 +22,7 @@ function reportThemeCaptures(): OpenSet {
   return {
     id: 'report-theme-2026-11-13',
     captures: views.map(
-      ({ id, role, route, opener }): CaptureSpec => ({
+      ({ id, role, route, opener }): SetCapture => ({
         id,
         role,
         route,

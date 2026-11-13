@@ -19,7 +19,7 @@ import type { SurfaceDestination } from './surface-routes';
  */
 
 /** A capture of an open set, which may open a record it seeds instead of its route's layout record. */
-type SetCapture = CaptureSpec & {
+export type SetCapture = CaptureSpec & {
   destination?: (world: TestWorld) => Promise<SurfaceDestination>;
   /** A dialog that pictures the page as it opens, such as the report's screenshot, opens anew in each scheme. */
   openInEachScheme?: true;
