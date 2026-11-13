@@ -45,7 +45,7 @@ Before a machine exists, a connection that fails on the way to Boat (refused, re
 
 A file transfer retries on a fresh request before it counts as a failure, because the machine still holds the file (`lib/testing/boat/boat-transfer.ts`). Each upload gets one retry after a deadline of 30 s plus 1 s per 256 kB, so a stalled upload does not hold a billed machine for minutes. The results download gets three retries over about 40 s, so a dropped connection never throws away a finished run. The upload and the download each log their size and time.
 
-A failed browser group's world is cleaned on its machine before the machine goes; when that fails, the run says so and names `bun run test:runs cleanup <run-key>` for the workstation. Diagnose the failure from the trace and screenshot that came back, and classify it as usual. The one `environment` retry on unchanged inputs needs a diagnostic replay on the retained world or the same build, which a Boat run does not keep; until a Boat replay exists (werk-flow/werkflow-planning#294), repair through a change of the inputs.
+A failed browser group's world is cleaned on its machine before the machine goes; when that fails, the run says so and names `bun run test:runs cleanup <run-key>` for the workstation. Diagnose the failure from the trace and screenshot that came back, and classify it as usual. Its one `environment` retry follows a [fresh-world replay](testing.md#failures).
 
 ## Machine reuse
 
@@ -65,13 +65,13 @@ Idle machines count toward the 10 machines a member may run at once, and toward 
 
 ## Focused runs on Boat
 
-A focused run (`test:audit:focused`, `test:golden:focused`) needs a production build, its server, the stack and a browser, and the server refuses a stack whose migrations differ from the tree's. It goes to Boat (`lib/testing/boat/focused-on-boat.ts`): a rendered acceptance capture (`--grep "@ACCEPT <set>"`) and a [visual reference update](standards-audit.md#keep-accepted-screens-as-visual-references) always, any other focused run when the tree's migrations drift from the shared stack's. The machine serves a build at the tree's migrations and runs the same command; the run folder comes back, captures under `.agent-logs/playwright-runs/<run>/acceptance/<set>/`. An iteration takes about 2 minutes on a kept machine, 3 on a new one. Start no test server for it.
+A focused run (`test:audit:focused`, `test:golden:focused`) needs a production build, its server, the stack and a browser, and the server refuses a stack whose migrations differ from the tree's. It goes to Boat (`lib/testing/boat/focused-on-boat.ts`): a rendered acceptance capture (`--grep "@ACCEPT <set>"`) and a [visual reference update](standards-audit.md#keep-accepted-screens-as-visual-references) always, any other focused run or `--fresh-for` replay when the tree's migrations drift from the shared stack's. The machine serves a build at the tree's migrations and runs the same command; the run folder comes back, captures under `.agent-logs/playwright-runs/<run>/acceptance/<set>/`. An iteration takes about 2 minutes on a kept machine, 3 on a new one. Start no test server for it.
 
 Only a passed update run places what it rewrote or wrote, listed; a failed run's stay in the evidence. Any file but a `.png` or `.txt` directly in an audit snapshot folder, an absolute or `..` path, or a link refuses the whole set (`lib/testing/boat/reference-updates.ts`). A reference changed here meanwhile stays; each replaced one is kept in `.agent-logs/visual-reference-replaced/`.
 
 Both sides render in the pinned Playwright image: a Boat and a local capture of one commit differed only in the run id and by 1 of 255 in at most 99 pixels an image. A Boat capture costs the workstation 19 s of processor time, a local one 500 s at up to 3 GB.
 
-A focused run stays local under `WERKFLOW_VERIFY_LOCAL=1`, with `--reuse-run` (the retained world lives on the workstation's stack) or with `--target cloud`; a capture or update prints why. Diagnostic replays stay local.
+A focused run stays local under `WERKFLOW_VERIFY_LOCAL=1`, with `--reuse-run` (the retained world lives on the workstation's stack) or with `--target cloud`; a capture or update prints why. A `--reuse-run` replay stays local.
 
 When Boat is [unavailable](#fallback), nothing runs: a block names the reason, writes nothing and exits 1. To run here on purpose, start `bun run test:server local` in a second shell, then the same command with `WERKFLOW_VERIFY_LOCAL=1`.
 
