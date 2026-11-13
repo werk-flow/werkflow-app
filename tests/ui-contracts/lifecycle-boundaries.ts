@@ -68,6 +68,7 @@ declare global {
       | 'support-triage'
       | 'support-filing'
       | 'inventory-unit'
+      | 'article-terms'
       | 'inventory-import'
       | 'inventory-movements'
       | 'leistungen'

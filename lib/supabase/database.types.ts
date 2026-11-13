@@ -2909,6 +2909,131 @@ export type Database = {
           },
         ];
       };
+      inventory_item_prices: {
+        Row: {
+          amount_cents: number;
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          item_id: string;
+          kind: string;
+          organization_id: string;
+          price_quantity: number;
+          source: string;
+          unit: string;
+          valid_from: string;
+        };
+        Insert: {
+          amount_cents: number;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          item_id: string;
+          kind: string;
+          organization_id: string;
+          price_quantity: number;
+          source: string;
+          unit: string;
+          valid_from: string;
+        };
+        Update: {
+          amount_cents?: number;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          item_id?: string;
+          kind?: string;
+          organization_id?: string;
+          price_quantity?: number;
+          source?: string;
+          unit?: string;
+          valid_from?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inventory_item_prices_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inventory_item_prices_item_fk";
+            columns: ["item_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_items";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "inventory_item_prices_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      inventory_item_suppliers: {
+        Row: {
+          base_quantity: number;
+          created_at: string;
+          id: string;
+          is_preferred: boolean;
+          item_id: string;
+          organization_id: string;
+          pack_quantity: number;
+          purchase_unit: string | null;
+          supplier_article_number: string | null;
+          supplier_id: string;
+        };
+        Insert: {
+          base_quantity?: number;
+          created_at?: string;
+          id?: string;
+          is_preferred?: boolean;
+          item_id: string;
+          organization_id: string;
+          pack_quantity?: number;
+          purchase_unit?: string | null;
+          supplier_article_number?: string | null;
+          supplier_id: string;
+        };
+        Update: {
+          base_quantity?: number;
+          created_at?: string;
+          id?: string;
+          is_preferred?: boolean;
+          item_id?: string;
+          organization_id?: string;
+          pack_quantity?: number;
+          purchase_unit?: string | null;
+          supplier_article_number?: string | null;
+          supplier_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inventory_item_suppliers_item_fk";
+            columns: ["item_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_items";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "inventory_item_suppliers_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inventory_item_suppliers_supplier_fk";
+            columns: ["supplier_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "inventory_suppliers";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
       inventory_items: {
         Row: {
           category_id: string | null;
@@ -14550,6 +14675,19 @@ export type Database = {
         };
         Returns: string;
       };
+      add_inventory_item_price: {
+        Args: {
+          p_actor_id: string;
+          p_amount_cents: number;
+          p_item_id: string;
+          p_kind: string;
+          p_organization_id: string;
+          p_price_quantity: number;
+          p_unit: string;
+          p_valid_from: string;
+        };
+        Returns: string;
+      };
       add_leistung_price: {
         Args: {
           p_actor_id: string;
@@ -17717,6 +17855,28 @@ export type Database = {
         Args: { p_organization_id: string; p_paths: string[] };
         Returns: undefined;
       };
+      read_inventory_item_prices_on_day: {
+        Args: {
+          p_item_ids: string[];
+          p_on_date: string;
+          p_organization_id: string;
+        };
+        Returns: {
+          item_id: string;
+          purchase_amount_cents: number;
+          purchase_price_id: string;
+          purchase_price_quantity: number;
+          purchase_source: string;
+          purchase_valid_from: string;
+          sale_amount_cents: number;
+          sale_price_id: string;
+          sale_price_quantity: number;
+          sale_source: string;
+          sale_valid_from: string;
+          tax_rate_basis_points: number;
+          unit: string;
+        }[];
+      };
       read_manager_attention_sets: {
         Args: { p_limit: number; p_organization_id: string };
         Returns: Json;
@@ -18057,6 +18217,14 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      remove_inventory_item_supplier: {
+        Args: {
+          p_actor_id: string;
+          p_organization_id: string;
+          p_reference_id: string;
+        };
+        Returns: undefined;
       };
       remove_member_with_time_capture: {
         Args: {
@@ -18630,6 +18798,23 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      save_inventory_item_supplier: {
+        Args: {
+          p_actor_id: string;
+          p_base_quantity: number;
+          p_is_preferred: boolean;
+          p_item_id: string;
+          p_organization_id: string;
+          p_pack_quantity: number;
+          p_purchase_unit: string;
+          p_reference_id: string;
+          p_supplier_article_number: string;
+          p_supplier_id: string;
+          p_supplier_name: string;
+          p_unit: string;
+        };
+        Returns: string;
       };
       save_personnel_onboarding_requirement: {
         Args: {

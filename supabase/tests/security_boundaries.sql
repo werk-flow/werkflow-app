@@ -355,6 +355,7 @@ language sql as $$
     ('get_invite_by_code(text)', 'An invite code names its own organization; the caller has none yet'),
     ('redeem_organization_invite_for_user(text,uuid)', 'An invite code names its own organization; the caller has none yet'),
     ('prune_realtime_deletions()', 'Maintenance across every organization by age, from no request'),
+    ('sync_begun_inventory_item_prices()', 'Maintenance across every organization from the hourly cron, from no request; it syncs each organization''s prices with that organization''s own rows only'),
     ('assert_time_correction_sources_current(uuid,bigint)', 'Step of a public write that resolved the organization; reads the request it loaded there'),
     ('p1_22_revise_time_correction_request_impl(uuid,uuid,uuid,bigint,text,text,text,jsonb,jsonb,jsonb)', 'Step of a public write that resolved the organization; reads the request it loaded there'),
     ('existing_document_retention_class(uuid)', 'Migration-only backfill across every organization; execution is revoked from every application role'),

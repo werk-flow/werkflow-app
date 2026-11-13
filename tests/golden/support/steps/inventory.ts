@@ -5,6 +5,7 @@ import {
   type InventoryItemType,
 } from '../../../../lib/inventory/types';
 import { getInventoryLocationByName, type PersistedInventoryLocation } from '../db/inventory';
+import { dismissDialog } from './interaction';
 import {
   confirmed,
   expectBannerAfter,
@@ -524,4 +525,65 @@ export async function planMaterialOnJobPage(
     dialog.getByRole('button', { name: SHARED_COPY.action.save }).click(),
   );
   await expect(dialog).toHaveCount(0);
+}
+
+/** The article dialog's „Lieferanten“ and „Preise“ (components/inventar/article-*). */
+const ARTICLE_TERMS_COPY = {
+  suppliersTab: 'Lieferanten',
+  pricesTab: 'Preise',
+  editSupplier: 'Bearbeiten',
+  supplierDialog: 'Lieferant bearbeiten',
+  supplierSaved: 'Der Lieferant wurde gespeichert.',
+  savePrice: 'Preis speichern',
+  priceSaved: 'Der Preis wurde gespeichert.',
+  priceKinds: { purchase: 'Einkaufspreis', sale: 'Verkaufspreis' },
+} as const;
+
+/** Closes the open article dialog with Escape: its tabs saved each change already. */
+export async function closeArticleDialog(dialog: Locator): Promise<void> {
+  await dismissDialog(dialog);
+}
+
+/** One supplier's row in the open article dialog's „Lieferanten“ tab, after opening the tab. */
+export async function articleSupplierRow(dialog: Locator, supplierName: string): Promise<Locator> {
+  await dialog.getByRole('tab', { name: ARTICLE_TERMS_COPY.suppliersTab, exact: true }).click();
+  return confirmed(dialog.getByRole('listitem').filter({ hasText: supplierName }));
+}
+
+/** The preferred supplier's mark on its row. */
+export const ARTICLE_PREFERRED_SUPPLIER = 'Bevorzugt';
+
+/** Sets the article number of one supplier of the open article dialog, in its „Lieferanten“ tab. */
+export async function setArticleSupplierNumber(
+  page: Page,
+  dialog: Locator,
+  supplierName: string,
+  articleNumber: string,
+): Promise<void> {
+  const row = await articleSupplierRow(dialog, supplierName);
+  await row.getByRole('button', { name: ARTICLE_TERMS_COPY.editSupplier, exact: true }).click();
+  const supplierDialog = page.getByRole('dialog', { name: ARTICLE_TERMS_COPY.supplierDialog, exact: true });
+  await supplierDialog.locator('#article-supplier-number').fill(articleNumber);
+  await expectBannerAfter(page, ARTICLE_TERMS_COPY.supplierSaved, () =>
+    supplierDialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click(),
+  );
+  await expect(supplierDialog).toHaveCount(0);
+  await expect(row).toContainText(articleNumber);
+}
+
+/** Records a price from today in the open article dialog's „Preise“ tab and waits for it as today's price. */
+export async function addArticlePriceFromToday(
+  page: Page,
+  dialog: Locator,
+  price: { kind: keyof typeof ARTICLE_TERMS_COPY.priceKinds; amount: string; shows: string },
+): Promise<void> {
+  await dialog.getByRole('tab', { name: ARTICLE_TERMS_COPY.pricesTab, exact: true }).click();
+  await dialog.locator('#article-price-kind').click();
+  await page.getByRole('option', { name: ARTICLE_TERMS_COPY.priceKinds[price.kind], exact: true }).click();
+  await dialog.locator('#article-price-amount').fill(price.amount);
+  await expectBannerAfter(page, ARTICLE_TERMS_COPY.priceSaved, () =>
+    dialog.getByRole('button', { name: ARTICLE_TERMS_COPY.savePrice, exact: true }).click(),
+  );
+  const current = confirmed(dialog.getByRole('region', { name: 'Aktuelle Preise' }));
+  await expect(current).toContainText(price.shows);
 }

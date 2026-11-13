@@ -28,11 +28,17 @@ insert into public.organizations (id, name, admin_id, unique_code) values
 insert into public.organization_members (organization_id, user_id, role) values
 ('37000000-0000-4000-8000-000000000010', '37000000-0000-4000-8000-000000000002', 'employee');
 
-insert into public.inventory_items (id, organization_id, name, item_type, unit, purchase_price_cents) values
+insert into public.inventory_items (id, organization_id, name, item_type, unit) values
 ('37000000-0000-4000-8000-000000000020', '37000000-0000-4000-8000-000000000010',
- 'Kupferrohr 15 mm', 'material', 'meter', 412),
+ 'Kupferrohr 15 mm', 'material', 'meter'),
 ('37000000-0000-4000-8000-000000000021', '37000000-0000-4000-8000-000000000010',
- 'Pressfitting 15 mm', 'material', 'piece', null);
+ 'Pressfitting 15 mm', 'material', 'piece');
+
+-- The pipe's dated purchase price; the fitting has none. inventory_article_prices.sql
+-- owns the choice of the price on a day and a price quantity above 1.
+insert into public.inventory_item_prices (organization_id, item_id, kind, unit, amount_cents, price_quantity, valid_from, source) values
+('37000000-0000-4000-8000-000000000010', '37000000-0000-4000-8000-000000000020',
+ 'purchase', 'meter', 412, 1, (now() at time zone 'Europe/Berlin')::date - 30, 'manual');
 
 insert into public.inventory_locations (id, organization_id, name, location_type) values
 ('37000000-0000-4000-8000-000000000030', '37000000-0000-4000-8000-000000000010', 'Hauptlager', 'storage');

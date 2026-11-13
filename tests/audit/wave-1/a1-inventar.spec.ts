@@ -11,7 +11,11 @@ import {
 import { getInventoryLedgerState } from '../../golden/support/db/inventory';
 import { observeRouteRenders } from '../../golden/support/route-renders';
 import {
+  addArticlePriceFromToday,
+  ARTICLE_PREFERRED_SUPPLIER,
+  articleSupplierRow,
   billableQuantityPattern,
+  closeArticleDialog,
   createInventoryItem,
   createInventoryLocation,
   createItemButton,
@@ -40,6 +44,7 @@ import {
   materialLinePendingStatus,
   materialUsedText,
   openItemRowAction,
+  setArticleSupplierNumber,
   pendingLocationStatus,
   planMaterialOnDetailPage,
   projectMaterialTotal,
@@ -197,11 +202,8 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     await inventoryField(editDialog, 'itemInternalSku').fill(`SKU-${world.runId}`);
     await inventoryField(editDialog, 'itemBarcode').fill(`400${world.runId.replace(/\D/g, '').slice(-10)}`);
     await inventoryField(editDialog, 'itemManufacturer').fill('WerkFlow Prüfhersteller');
-    await inventoryField(editDialog, 'itemSupplierNumber').fill(`LIEF-${world.runId}`);
     await inventoryField(editDialog, 'itemMinimumStock').fill('2');
     await inventoryField(editDialog, 'itemTargetStock').fill('12');
-    await inventoryField(editDialog, 'itemPurchasePrice').fill('12,50');
-    await inventoryField(editDialog, 'itemSalePrice').fill('24,90');
     await inventoryField(editDialog, 'itemDescription').fill('A1 vollständige Artikelbeschreibung');
     await inventoryField(editDialog, 'itemNotes').fill('A1 interne Notiz');
     const billableCheckbox = editDialog.getByRole('checkbox', {
@@ -210,6 +212,26 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     if (!(await billableCheckbox.isChecked())) await billableCheckbox.click();
     await editDialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
     await expect(editDialog).toHaveCount(0);
+
+    // Supplier number and prices change in their own tabs and save at once.
+    await openItemRowAction(adminPage, inventoryRow(adminPage, inventoryItemName), 'edit');
+    await setArticleSupplierNumber(
+      adminPage,
+      editDialog,
+      `A1 Lieferant ${world.runId}`,
+      `LIEF-${world.runId}`,
+    );
+    await addArticlePriceFromToday(adminPage, editDialog, {
+      kind: 'purchase',
+      amount: '12,50',
+      shows: '12,50 € je m',
+    });
+    await addArticlePriceFromToday(adminPage, editDialog, {
+      kind: 'sale',
+      amount: '24,90',
+      shows: '24,90 € je m',
+    });
+    await closeArticleDialog(editDialog);
 
     const createDialog = inventoryDialog(adminPage, 'createItem');
     for (const [suffix, type] of [
@@ -413,8 +435,11 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     await openItemRowAction(adminPage, importedRow, 'edit');
     const itemDialog = inventoryDialog(adminPage, 'editItem');
     await expect(inventoryField(itemDialog, 'itemCategory')).toContainText(importedCategory);
-    await expect(inventoryField(itemDialog, 'itemSupplier')).toContainText(importedSupplier);
-    await itemDialog.getByRole('button', { name: SHARED_COPY.action.cancel }).click();
+    // The imported supplier is the article's first, preferred supplier.
+    await expect(await articleSupplierRow(itemDialog, importedSupplier)).toContainText(
+      ARTICLE_PREFERRED_SUPPLIER,
+    );
+    await closeArticleDialog(itemDialog);
     await inventoryTab(adminPage, 'locations').click();
     await expect(visibleText(adminPage, importedLocation)).toBeVisible();
     await inventoryTab(adminPage, 'movements').click();

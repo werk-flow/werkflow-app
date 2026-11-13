@@ -179,6 +179,8 @@ export function getInventoryActionErrorMessage(error: string): string {
     supplier_not_found: 'Der ausgewählte Lieferant wurde nicht gefunden.',
     item_not_found: 'Der Artikel wurde nicht gefunden.',
     barcode_taken: 'Dieser Barcode gehört schon zu einem anderen Artikel.',
+    unit_has_pack_sizes:
+      'Die Einheit lässt sich nicht ändern, solange ein Lieferant den Artikel in Packungen verkauft. Entferne zuerst die Packungsgrößen unter „Lieferanten“.',
     quantity_required: 'Bitte gib eine Menge größer als 0 ein.',
     stock_would_go_negative:
       'Der Bestand in diesem Lager reicht nicht aus. Wähle eine kleinere Menge oder ein anderes Lager.',

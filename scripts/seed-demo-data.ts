@@ -31,6 +31,7 @@ import { resolve } from 'node:path';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database } from '../lib/supabase/database.types';
+import { rpcArgs } from '../lib/supabase/rpc-args';
 import type { TableInsert } from '../lib/supabase/table-insert';
 import { getPublicHolidaysForYear, type HolidayRegion } from '../lib/personnel/holidays';
 import { resolveBerlinWallTime } from '../lib/date-time/berlin';
@@ -2693,10 +2694,6 @@ async function seedInventory(
         unit: item.unit,
         category_id: categoryFor(item.category),
         internal_sku: `${company.key.slice(0, 2).toUpperCase()}-${String(index + 1).padStart(4, '0')}`,
-        supplier_id: supplierIds[index % supplierIds.length] ?? null,
-        supplier_article_number: String(random.int(100000, 999999)),
-        purchase_price_cents: item.purchase,
-        sale_price_cents: item.sale > 0 ? item.sale : null,
         currency_code: 'EUR',
         tax_rate_basis_points: 1900,
         is_billable: item.type !== 'tool',
@@ -2709,6 +2706,51 @@ async function seedInventory(
       };
     }),
   );
+
+  // Supplier and prices go through the functions the app uses: they keep the
+  // dated price rows and the article's supplier columns in step.
+  for (const [index, item] of ITEMS.entries()) {
+    const itemId = itemIds.get(item.name);
+    if (!itemId) continue;
+    const supplierId = supplierIds[index % supplierIds.length];
+    if (supplierId) {
+      const { error } = await admin.rpc(
+        'save_inventory_item_supplier',
+        rpcArgs('save_inventory_item_supplier', {
+          p_organization_id: organizationId,
+          p_actor_id: ownerId,
+          p_item_id: itemId,
+          p_unit: item.unit,
+          p_reference_id: null,
+          p_supplier_id: supplierId,
+          p_supplier_name: null,
+          p_supplier_article_number: String(random.int(100000, 999999)),
+          p_purchase_unit: null,
+          p_pack_quantity: 1,
+          p_base_quantity: 1,
+          p_is_preferred: true,
+        }),
+      );
+      if (error) fail(`supplier ${item.name}`, error);
+    }
+    const prices = [
+      { kind: 'purchase', amount: item.purchase },
+      { kind: 'sale', amount: item.sale },
+    ].filter((price) => price.amount > 0);
+    for (const price of prices) {
+      const { error } = await admin.rpc('add_inventory_item_price', {
+        p_organization_id: organizationId,
+        p_actor_id: ownerId,
+        p_item_id: itemId,
+        p_unit: item.unit,
+        p_kind: price.kind,
+        p_amount_cents: price.amount,
+        p_price_quantity: 1,
+        p_valid_from: '2026-08-01',
+      });
+      if (error) fail(`${price.kind} price ${item.name}`, error);
+    }
+  }
 
   for (const item of ITEMS) {
     const itemId = itemIds.get(item.name);
