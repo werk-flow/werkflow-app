@@ -22,16 +22,17 @@ import { type BoatOutcome, runOnBoat, withRunFolder } from './verify-on-boat';
 //   production build and its server, one of the largest loads on the shared PC;
 // - a visual reference update (WERKFLOW_UPDATE_VISUAL_REFERENCES=1) always, for the same reason;
 //   the references it rewrote come back into the checkout (reference-updates.ts);
-// - any other focused run when the tree's migrations differ from the shared stack's, as
-//   `test:verify` decides (migration-drift.ts): the test server refuses that stack here.
+// - any other focused run, and a fresh-world diagnostic replay (`--fresh-for <run-key>`), when the
+//   tree's migrations differ from the shared stack's, as `test:verify` decides (migration-drift.ts):
+//   the test server refuses that stack here. A replay on a retained world (`--reuse-run`) stays here.
 // The machine serves the build itself, runs the same command on the same tree, and the run folder
 // comes back to the same path. When Boat is unavailable, nothing runs here unless
 // WERKFLOW_VERIFY_LOCAL=1 asks for it.
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
-/** What Boat may run: a capture, a reference update, or another focused run. */
-export type FocusedKind = 'capture' | 'reference-update' | 'focused';
+/** What Boat may run: a capture, a reference update, a fresh-world replay, or another focused run. */
+export type FocusedKind = 'capture' | 'reference-update' | 'replay' | 'focused';
 
 /** A focused run's grep that selects rendered acceptance captures (tests/audit/visual/acceptance-*.spec.ts). */
 const ACCEPTANCE_GREP = /^@ACCEPT(?:\s|$)/;
@@ -48,10 +49,20 @@ function option(args: readonly string[], name: string): string | undefined {
 /** The kind of focused run `bun scripts/run-playwright.ts <argv>` is, or undefined for any other run. */
 export function focusedKind(argv: readonly string[], env: Environment): FocusedKind | undefined {
   const [lane, suite, ...args] = argv;
-  if (lane !== 'iteration' || (suite !== 'audit' && suite !== 'golden')) return undefined;
+  if (suite !== 'audit' && suite !== 'golden') return undefined;
+  // A replay on a retained world needs that world, which lives where its run ran: never on a new machine.
+  if (lane === 'diagnostic') return option(args, '--fresh-for') ? 'replay' : undefined;
+  if (lane !== 'iteration') return undefined;
   if (suite !== 'audit') return 'focused';
   if (ACCEPTANCE_GREP.test(option(args, '--grep') ?? '')) return 'capture';
   return env[VISUAL_REFERENCE_UPDATE_ENV] === '1' ? 'reference-update' : 'focused';
+}
+
+/** The package script that runs a focused run of this kind and suite. */
+function scriptFor(kind: FocusedKind, suite: string | undefined): string {
+  if (kind === 'reference-update') return 'test:audit:update-references';
+  if (kind === 'replay') return suite === 'audit' ? 'test:diagnostic:audit' : 'test:diagnostic';
+  return `test:${suite ?? 'audit'}:focused`;
 }
 
 /**
@@ -158,14 +169,14 @@ export async function focusedOnBoat(
   const [, suite, ...args] = argv;
   if (!kind) return undefined;
   const reason = focusedLocalReason(args, env);
-  if (kind === 'focused') {
+  if (kind === 'focused' || kind === 'replay') {
     // An ordinary focused run stays here, silently as ever, unless the shared stack lacks this tree's migrations.
     if (reason !== undefined) return undefined;
     const drift = driftLine(readDrift());
     if (!drift) return undefined;
     console.info(`[verify] ${drift} Boat runs this focused run on a fresh stack at this tree's migrations.`);
   }
-  const script = kind === 'reference-update' ? 'test:audit:update-references' : `test:${suite}:focused`;
+  const script = scriptFor(kind, suite);
   return withBoatKey(reason, readKey, (key, signal) => {
     const folders = updateFolders(repository);
     // The references change inside the workspace lock the run holds, so no other test operation
@@ -200,7 +211,8 @@ export function focusedUnavailableNotice(
   env: Environment,
 ): string[] {
   const [, suite, ...args] = argv;
-  const update = focusedKind(argv, env) === 'reference-update' ? `${VISUAL_REFERENCE_UPDATE_ENV}=1 ` : '';
+  const kind = focusedKind(argv, env) ?? 'focused';
+  const update = kind === 'reference-update' ? `${VISUAL_REFERENCE_UPDATE_ENV}=1 ` : '';
   const rule = '='.repeat(72);
   return [
     rule,
@@ -209,7 +221,7 @@ export function focusedUnavailableNotice(
     "the stack at this tree's migrations and a browser. Nothing was written; this command exits 1.",
     'Run again later to use Boat, or run it here deliberately, with the server in a second shell:',
     '  bun run test:server local',
-    `  WERKFLOW_VERIFY_LOCAL=1 ${update}bun run test:${suite ?? 'audit'}:focused ${args.map(shellQuote).join(' ')}`,
+    `  WERKFLOW_VERIFY_LOCAL=1 ${update}bun run ${kind === 'reference-update' ? scriptFor('focused', suite) : scriptFor(kind, suite)} ${args.map(shellQuote).join(' ')}`,
     rule,
   ];
 }

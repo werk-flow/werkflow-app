@@ -14,8 +14,18 @@ import {
   materialPlanLayer,
 } from '../../../golden/support/steps/inventory';
 import { openMenuItem } from '../../../golden/support/steps/shared';
+import { seedLeistung } from '../../../golden/support/db/price-catalog';
+import {
+  createLeistungButton,
+  leistungDialogLayer,
+  leistungPriceDialogLayer,
+  leistungRow,
+  leistungRowActionItem,
+  leistungRowActionsButton,
+} from '../../../golden/support/steps/angebote';
+import { worldName } from '../../../../lib/testing/seed-world-plan';
 import type { DialogOpener } from '../dialog-opener';
-import type { SurfaceContext } from '../surface-fixtures';
+import { surfaceFixture, type SurfaceContext } from '../surface-fixtures';
 
 type ItemDialogPicker = Parameters<typeof itemDialogPicker>[1];
 
@@ -76,5 +86,52 @@ export const INVENTORY_OPENERS = {
       openMenuItem(seededItemActionsButton(context), inventoryRowActionItem(context.page, 'adjustStock')),
     layer: (page) => inventoryDialogLayer(page, 'adjustStock'),
     returnFocus: seededItemActionsButton,
+  },
+} satisfies Partial<Record<DialogOpenerId, DialogOpener>>;
+
+function seededLeistungName(context: SurfaceContext): string {
+  return worldName('Layout Montage Heizung', context.world.runId);
+}
+
+/** One Leistung with a past, a current and a coming price, so the history shows every state. */
+async function prepareLeistung(context: SurfaceContext): Promise<string> {
+  const { world, page } = context;
+  const name = seededLeistungName(context);
+  await surfaceFixture(world, 'commercial.leistung', () =>
+    seedLeistung({
+      orgId: world.orgId,
+      actorId: world.users.admin.id,
+      leistungNumber: `L-${world.runId}`,
+      name,
+      description: 'Stundensatz Monteur',
+      prices: [
+        { validFrom: '2020-01-01', salePriceCents: 6200, costRateCents: 4000 },
+        { validFrom: '2021-01-01', salePriceCents: 6500, costRateCents: 4200 },
+        { validFrom: '2099-01-01', salePriceCents: 7500, costRateCents: 4600 },
+      ],
+    }),
+  );
+  // The search narrows the list to this world's Leistung.
+  await page.goto(`/angebote/leistungen?q=${encodeURIComponent(`L-${world.runId}`)}`);
+  return name;
+}
+
+function seededRowActionsButton(context: SurfaceContext) {
+  return leistungRowActionsButton(leistungRow(context.page, seededLeistungName(context)));
+}
+
+/** The Angebote openers; their acceptance captures run with the inventory group. */
+export const COMMERCIAL_OPENERS = {
+  'commercial.leistung': {
+    trigger: async ({ page }) => createLeistungButton(page),
+    layer: (page) => leistungDialogLayer(page, 'create'),
+  },
+  'commercial.leistung-prices': {
+    trigger: async (context) => {
+      await prepareLeistung(context);
+      return openMenuItem(seededRowActionsButton(context), leistungRowActionItem(context.page, 'prices'));
+    },
+    layer: leistungPriceDialogLayer,
+    returnFocus: seededRowActionsButton,
   },
 } satisfies Partial<Record<DialogOpenerId, DialogOpener>>;

@@ -52,6 +52,11 @@ import { initializeProblemReportBoundary, ProblemReportContractFixture } from '.
 import { SupportFilingContractFixture } from './support-filing-boundaries';
 import { SupportTriageContractFixture } from './support-triage-boundaries';
 import { initializeInventoryUnitBoundary, InventoryUnitContractFixture } from './inventory-unit-boundaries';
+import {
+  initializeInventoryMovementsBoundary,
+  InventoryMovementsContractFixture,
+} from './inventory-movements-boundaries';
+import { initializeLeistungenBoundary, LeistungenContractFixture } from './leistungen-boundaries';
 import { AuthUrlContractFixture } from './auth-url-boundaries';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -106,6 +111,8 @@ initializeDocumentArchiveBoundary();
 initializeLazyDialogBoundary();
 initializeProblemReportBoundary();
 initializeInventoryUnitBoundary();
+initializeInventoryMovementsBoundary();
+initializeLeistungenBoundary();
 const personnelInitialData = initializePersonnelBoundary();
 
 /** The card as a manager's job page shows it, or with `fieldMode` as the assigned worker's work pack does. */
@@ -590,6 +597,10 @@ createRoot(root).render(
     <SupportFilingContractFixture />
   ) : window.uiContractFixture === 'inventory-unit' ? (
     <InventoryUnitContractFixture />
+  ) : window.uiContractFixture === 'inventory-movements' ? (
+    <InventoryMovementsContractFixture />
+  ) : window.uiContractFixture === 'leistungen' ? (
+    <LeistungenContractFixture />
   ) : window.uiContractFixture === 'presentation' ? (
     <PresentationFixture />
   ) : window.uiContractFixture === 'customer' ? (

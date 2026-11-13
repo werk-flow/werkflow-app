@@ -126,6 +126,7 @@ T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts`
 - A checkout keeps its own `.next`, workspace lock, `.agent-logs/` and ports (`lib/testing/runner/app-port.ts`).
 - Every worktree shares one local stack. Browser groups of several worktrees run side by side, except one that measures or restarts a stack service: it holds the stack alone (`lib/testing/runner/stack-lock.ts`).
 - `bun run check:changed`, `test:verify`, `typecheck`, `build` (a test server's too) and a `lint` over 150 files take a machine-wide slot (`lib/testing/runner/heavy-slot.ts`): the first unless the machine is blocked, further ones with measured room (`bun run room`). Serving and CI take none. A hook refuses a direct whole-repository `tsc`, wider `eslint` or `next build` and names the slot command (`lib/testing/runner/heavy-command.ts`). Other heavy work: `bun scripts/heavy.ts -- <command>`.
+- A `device_open` that boots an iOS Simulator or Android Emulator here waits for measured room (`bun run room --wait device`); a hook refuses it without room (`lib/testing/runner/device-room.ts`). Shut the device down when its check ends: a booted one holds about 3.5 GiB.
 - `supabase db reset` and `supabase stop` affect every worktree: the edit guard refuses them while any worktree holds the stack. A hook refuses a second stack (`lib/testing/runner/second-stack.ts`).
 - Another worktree's unmerged migration may sit in the shared stack ([recurring traps](testing.md#recurring-traps)).
 

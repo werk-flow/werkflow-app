@@ -49,7 +49,7 @@ Call `logError('<function>: <what failed>', error)` from `lib/logging.ts`; it ke
 
 ### Profile a customer export
 
-A customer's export stays on the owner's machine, in no repository. The owner runs `bun scripts/migration/profile-export.ts <export-folder>` offline; it writes a structure-only `profile.md` and `profile.json` to `~/werkflow-export-profiles/<date>/` and refuses when its self-check finds a name, email, phone number, IBAN or address. The owner reads `profile.md` before sharing. Only the profile reaches an agent; fixtures are synthetic, derived from it. Wrong turn: opening a row of the export in an agent session to "check one field".
+A customer's export stays on the owner's machine, in no repository. The owner runs `bun scripts/migration/profile-export.ts <export-folder>` offline; it writes a structure-only `profile.md` and `profile.json` to `~/werkflow-export-profiles/<date>/` and refuses when its self-check finds a name, email, phone number, IBAN or address. The owner reads `profile.md` before sharing. Only the profile reaches an agent; fixtures are synthetic, derived from it. Wrong turn: opening an export row in an agent session to "check one field".
 
 ## Trust boundaries
 
@@ -71,9 +71,10 @@ A customer's export stays on the owner's machine, in no repository. The owner ru
 
 - RLS restricts every client read, by role and assignment where the server readers restrict them. `supabase/tests/client_read_boundaries.sql` proves an employee reads only their own jobs, assignments and projects, and a suspended member nothing. Extend it for a new role-limited table.
 - RLS checks effective personnel access wherever a policy or its helper reads `organization_members`, `job_assignments` or `employee_records`.
+- **Project lead.** `app_private.work_lead_scope` alone decides who leads which work. A lead reads Arbeitsnachweise (`authorizeWorkArtifactRead`), writes none.
 - Client roles write no table directly, except a user's own name and avatar.
 - Nothing is granted to `anon` without the owner's approval.
-- A table's migration revokes everything from `public`, `anon`, `authenticated` and `service_role`, then grants exactly what is needed. Default grants are revoked: a new object has no Data API access until its migration grants it.
+- A table's migration revokes everything from `public`, `anon`, `authenticated` and `service_role`, then grants exactly what is needed.
 - Grant the sequence privileges an intended insert needs. The service role bypasses RLS, not SQL privileges.
 - A ledger table refuses direct UPDATE and DELETE, also for privileged roles, with a real denial and a permitted-cleanup assertion. Cascade or reference-nulling follows the domain's retention rule.
 - **Service-role queries.** A query on organization data passes an organization from the resolved context, or carries a reviewed `tenant-scope` reason.
@@ -98,7 +99,7 @@ The edge functions accept only the project's secret keys and escape every interp
 
 Responses carry the hardening headers and enforced Content-Security-Policy from `buildSecurityHeaders` (`next.config.ts`). Violations go to `POST /api/csp-report`, which is unauthenticated by design, stores nothing and logs a redacted summary. An `eval` report, or one that names another origin, is a finding. Product code imports Zod through `lib/zod.ts`; `lib/zod-members.ts` turns off its `eval` probe.
 
-The service worker (`public/sw.js`) caches only the cookie-free offline page and its build files; the CSP allows `worker-src` and `manifest-src` `'self'`. Sign-out and organization switch delete its caches and the stored day ([one exception](#known-residual-exposure)); unsent work stays, untrusted ([decision 0010](../decisions/0010-offline-field-sync-contract.md#device-data)).
+The service worker (`/sw.js`, [versioned per build](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-13-the-build-writes-the-shells-version)) caches only the cookie-free offline page and its build files; the CSP allows `worker-src` and `manifest-src` `'self'`. Sign-out and organization switch delete its caches and the stored day ([one exception](#known-residual-exposure)); unsent work stays, untrusted ([decision 0010](../decisions/0010-offline-field-sync-contract.md#device-data)).
 
 ### Server caches
 
@@ -138,7 +139,7 @@ An exception matching no finding on an unchanged tree means the registry narrowe
 List each owner-accepted residual exposure until it closes.
 
 - The script policy allows `'unsafe-inline'`, so injected inline scripts run: a per-request nonce needs per-request rendering, which `cacheComponents` rules out. The `htmlSinkSelectors` lint set keeps product code from creating an injection point.
-- No edge rate limit covers every request; the app and Supabase Auth limit only their own operations (see [Add a Server Action](#add-a-server-action-or-route-handler)). Edge limiting is the owner's Vercel plan decision.
+- No edge rate limit covers every request; the app and Supabase Auth limit only their own operations ([Add a Server Action](#add-a-server-action-or-route-handler)). Edge limiting is the owner's Vercel plan decision.
 - The deletion transport lets current members receive a deleted row's identity, never its content.
 - `simulatePayment` in `lib/subscription/actions.ts` lets a signed-in user without an organization activate their own subscription once (beta; closes with werk-flow/werkflow-planning#248).
 - The code step keeps the address up to one hour in an httpOnly cookie scoped to `/verify`.

@@ -1,6 +1,6 @@
 // Rule test: both agent tools run the edit guard before every tool call that can write a file,
 // Claude runs the delete guard before every shell call, and both run the Boat key, heavy command and
-// second-stack guards.
+// second-stack guards, and the device guard before T3's device_open.
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -14,6 +14,7 @@ const PRODUCTION_LOG_GUARD = '.claude/hooks/refuse-production-logs.ts';
 const BOAT_KEY_GUARD = '.claude/hooks/refuse-boat-key-reads.ts';
 const HEAVY_COMMAND_GUARD = '.claude/hooks/refuse-heavy-commands.ts';
 const SECOND_STACK_GUARD = '.claude/hooks/refuse-second-stack.ts';
+const DEVICE_GUARD = '.claude/hooks/refuse-device-without-room.ts';
 
 const hookFileSchema = z.object({
   hooks: z.object({
@@ -100,6 +101,14 @@ test('both agent tools run the heavy command guard before every shell call', () 
 test('both agent tools run the second-stack guard before every shell call', () => {
   expect(guardedTools('.claude/settings.json', ['Bash'], SECOND_STACK_GUARD)).toEqual(['Bash']);
   expect(guardedTools('.codex/hooks.json', ['Bash'], SECOND_STACK_GUARD)).toEqual(['Bash']);
+});
+
+// A simulator or emulator boots only with measured room (lib/testing/runner/device-room.ts); T3's
+// device tool is `device_open` on its `t3-code` MCP server in both tools.
+test('both agent tools run the device guard before every device_open', () => {
+  const tools = ['mcp__t3-code__device_open'];
+  expect(guardedTools('.claude/settings.json', tools, DEVICE_GUARD)).toEqual(tools);
+  expect(guardedTools('.codex/hooks.json', tools, DEVICE_GUARD)).toEqual(tools);
 });
 
 test('Claude denies its file tools the Boat API key, the Boat CLI config and the hand-out secret', () => {
