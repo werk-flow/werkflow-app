@@ -13,6 +13,7 @@ import {
 } from 'node:fs';
 import { dirname, isAbsolute, join, relative } from 'node:path';
 
+import { isUuid } from '../../validation/uuid';
 import { destinationConflict, linkedDestination } from './verify-on-boat';
 
 // A visual reference update runs on Boat (docs/technical/standards-audit.md, "To update references
@@ -48,7 +49,7 @@ export function referencePathProblem(path: string): string | undefined {
  * whose run exited `exitCode`. The workstation places only the folder of a passed run.
  */
 export function updateFolder(name: string, exitCode: string): string {
-  if (!/^[0-9a-f-]{36}$/.test(name)) throw new Error(`${JSON.stringify(name)} is no update name.`);
+  if (!isUuid(name)) throw new Error(`${JSON.stringify(name)} is no update name.`);
   return join(REFERENCE_UPDATES, exitCode === '0' ? name : `${name}${FAILED_RUN}`);
 }
 

@@ -216,7 +216,8 @@ test('a failed update run publishes its references in the folder the workstation
   const name = '0b5e2b1c-6c1f-4f7e-9d3a-2f8c1e7a9b40';
   expect(updateFolder(name, '0')).toBe(`.agent-logs/visual-reference-updates/${name}`);
   expect(updateFolder(name, '1')).toBe(`.agent-logs/visual-reference-updates/${name}-failed-run`);
-  expect(() => updateFolder('../../lib', '0')).toThrow('is no update name');
+  for (const malformed of ['../../lib', '-'.repeat(36), `${name.slice(0, 35)}/`])
+    expect(() => updateFolder(malformed, '0')).toThrow('is no update name');
 });
 
 test('a write through a descriptor opened before the replacement is recoverable', () => {
