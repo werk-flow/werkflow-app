@@ -7,7 +7,7 @@ import { acceptanceSet, type OpenSet } from '../acceptance-sets';
  * worker and the office, on a phone, a laptop and a desktop.
  */
 function reportRedactionCaptures(): OpenSet {
-  const sizes = { widths: [375, 1280, 1440], schemes: ['light', 'dark'] } as const;
+  const sizes = { widths: [375, 1280, 1680], schemes: ['light', 'dark'] } as const;
   const views = [
     { id: 'employee-dashboard-dialog-reports-field', role: 'employee', route: '/dashboard', opener: 'reports.field' },
     { id: 'buero-auftraege-dialog-reports-office', role: 'buero', route: '/auftraege', opener: 'reports.office' },

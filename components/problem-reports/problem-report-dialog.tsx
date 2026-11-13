@@ -197,13 +197,6 @@ function ScreenshotSection({
             Kundendaten sind schon durch Platzhalter ersetzt. Ziehe Rechtecke über alles, was trotzdem niemand
             sehen soll. Sie werden fest abgedeckt, bevor das Bild dein Gerät verlässt.
           </p>
-          <ScreenshotRedactor
-            image={image}
-            boxes={boxes}
-            onBoxesChange={onBoxesChange}
-            disabled={locked}
-            label="Vorschau des Screenshots mit deinen Schwärzungen"
-          />
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" onClick={() => setEnlarged(true)}>
               <Maximize2 aria-hidden />
@@ -215,6 +208,13 @@ function ScreenshotSection({
               </Button>
             )}
           </div>
+          <ScreenshotRedactor
+            image={image}
+            boxes={boxes}
+            onBoxesChange={onBoxesChange}
+            disabled={locked}
+            label="Vorschau des Screenshots mit deinen Schwärzungen"
+          />
           <ScreenshotRedactionView
             open={enlarged}
             onOpenChange={setEnlarged}
