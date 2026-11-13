@@ -20,14 +20,12 @@
 // A phone keeps the shell it installed until this file changes, and only a new
 // SHELL_VERSION deletes the old cache. Bump it when the shell's content
 // changes: this file's caching, or the offline page and anything it renders
-// with. lib/security/service-worker.test.ts fails on a changed input without
-// a bump and names the line below to record.
+// with.
 
 const CACHE_PREFIX = 'werkflow-';
 // v2: the offline page reads today's assignments from the device (werk-flow/werkflow-planning#318).
 // v3: the offline page shows the clock of a phone that holds unsent time events (werk-flow/werkflow-planning#319).
 const SHELL_VERSION = 3;
-// Shell inputs of this version: c58d69a3da12b56d5b4904bdc786547a86db8090eca928e46f5d5668180bd9a9
 const SHELL_CACHE = `${CACHE_PREFIX}shell-v${SHELL_VERSION}`;
 const OFFLINE_PATH = '/offline';
 const REFILL_MESSAGE = 'werkflow:refill-shell';
