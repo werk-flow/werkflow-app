@@ -200,6 +200,8 @@ export async function finalizeCompanyDocumentFileUpload(
       p_organization_id: organizationId,
       p_kind: input.kind,
       p_expected_storage_path: input.expectedStoragePath,
+      // A replacement leaves the following pages alone.
+      p_expected_following_storage_path: null,
       p_storage_path: copy.path,
       p_mime_type: mimeType,
       p_size_bytes: sizeBytes,
@@ -216,8 +218,8 @@ export async function finalizeCompanyDocumentFileUpload(
 
 /**
  * Removes the logo or a stationery page the caller saw; removing the first
- * page's removes the following pages' too. Another file in its place by now
- * is refused as `file_changed`.
+ * page's removes the following pages' the caller saw too. Another file in
+ * either place by now is refused as `file_changed`.
  */
 export async function removeCompanyDocumentFile(rawInput: CompanyFileRemoveInput): Promise<ActionResult> {
   const parsed = companyFileRemoveInputSchema.safeParse(rawInput);
@@ -233,6 +235,7 @@ export async function removeCompanyDocumentFile(rawInput: CompanyFileRemoveInput
       p_organization_id: auth.context.orgId,
       p_kind: input.kind,
       p_expected_storage_path: input.expectedStoragePath,
+      p_expected_following_storage_path: input.expectedFollowingStoragePath,
       p_storage_path: null,
       p_mime_type: null,
       p_size_bytes: null,

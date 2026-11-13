@@ -274,7 +274,9 @@ grant execute on function public.save_company_document_profile(uuid, uuid, integ
 -- folder; p_size_bytes is its stored size. p_expected_storage_path names the
 -- file the caller saw in that place, null for none: another file there means
 -- someone changed it since, and the call writes and queues nothing. Removing
--- the first page's stationery removes the following pages' too. Every changed
+-- the first page's stationery removes the following pages' too, so that
+-- removal also names the following pages' file the caller saw
+-- (p_expected_following_storage_path, null for none; other calls ignore it). Every changed
 -- file writes its history row and queues its old object for the purge.
 -- Refusals: not_authorized, invalid_input for another kind, file_changed,
 -- stationery_first_missing for following pages without a first page; a table
@@ -284,6 +286,7 @@ create function public.replace_company_document_file(
   p_organization_id uuid,
   p_kind text,
   p_expected_storage_path text,
+  p_expected_following_storage_path text,
   p_storage_path text,
   p_mime_type text,
   p_size_bytes bigint
@@ -304,7 +307,10 @@ begin
     raise exception 'invalid_input';
   end if;
   v_old_json := to_jsonb(v_old);
-  if (v_old_json ->> (p_kind || '_storage_path')) is distinct from p_expected_storage_path then
+  if (v_old_json ->> (p_kind || '_storage_path')) is distinct from p_expected_storage_path
+    or (p_kind = 'stationery_first' and p_storage_path is null
+      and v_old.stationery_following_storage_path is distinct from p_expected_following_storage_path)
+  then
     raise exception 'file_changed';
   end if;
   if p_kind = 'stationery_following' and p_storage_path is not null
@@ -354,8 +360,8 @@ begin
 end;
 $$;
 
-revoke all on function public.replace_company_document_file(uuid, uuid, text, text, text, text, bigint) from public, anon, authenticated;
-grant execute on function public.replace_company_document_file(uuid, uuid, text, text, text, text, bigint) to service_role;
+revoke all on function public.replace_company_document_file(uuid, uuid, text, text, text, text, text, bigint) from public, anon, authenticated;
+grant execute on function public.replace_company_document_file(uuid, uuid, text, text, text, text, text, bigint) to service_role;
 
 -- The organization export holds the profile's files too: they are stored
 -- originals of the organization, and its data part names their keys. A

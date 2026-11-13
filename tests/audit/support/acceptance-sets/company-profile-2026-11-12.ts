@@ -91,6 +91,7 @@ async function seedStationery(world: TestWorld): Promise<void> {
         p_kind: 'stationery_first',
         // The seed stores the first stationery: no file was there before.
         p_expected_storage_path: null,
+        p_expected_following_storage_path: null,
         p_storage_path: path,
         p_mime_type: 'application/pdf',
         p_size_bytes: body.byteLength,

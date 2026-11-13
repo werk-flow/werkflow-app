@@ -58,7 +58,7 @@ begin
   end loop;
   foreach v_function in array array[
     'public.save_company_document_profile(uuid, uuid, integer, jsonb)',
-    'public.replace_company_document_file(uuid, uuid, text, text, text, text, bigint)',
+    'public.replace_company_document_file(uuid, uuid, text, text, text, text, text, bigint)',
     'app_private.lock_company_document_profile(uuid, uuid)'
   ] loop
     foreach v_role in array array['anon', 'authenticated'] loop
@@ -112,7 +112,7 @@ begin
     if sqlerrm <> 'not_authorized' then raise; end if;
   end;
   begin
-    perform public.replace_company_document_file(v_office, v_foreign, 'logo', null,
+    perform public.replace_company_document_file(v_office, v_foreign, 'logo', null, null,
       v_foreign || '/briefpapier/a/logo', 'image/png', 2048);
     raise exception 'a foreign member set another organization''s logo';
   exception when raise_exception then
@@ -183,13 +183,13 @@ begin
 
   -- Files: a path outside the organization's folder is refused; following pages need a first page.
   begin
-    perform public.replace_company_document_file(v_office, v_org, 'logo', null,
+    perform public.replace_company_document_file(v_office, v_org, 'logo', null, null,
       v_foreign || '/briefpapier/a/logo', 'image/png', 2048);
     raise exception 'a logo outside the organization passed';
   exception when check_violation then null;
   end;
   begin
-    perform public.replace_company_document_file(v_office, v_org, 'stationery_following', null,
+    perform public.replace_company_document_file(v_office, v_org, 'stationery_following', null, null,
       v_org || '/briefpapier/b/stationery_following', 'application/pdf', 2048);
     raise exception 'following pages without a first page passed';
   exception when raise_exception then
@@ -198,35 +198,35 @@ begin
 
   -- A stored file names its size.
   begin
-    perform public.replace_company_document_file(v_office, v_org, 'logo', null,
+    perform public.replace_company_document_file(v_office, v_org, 'logo', null, null,
       v_org || '/briefpapier/a/logo', 'image/png', null);
     raise exception 'a logo without its size passed';
   exception when check_violation then null;
   end;
 
-  perform public.replace_company_document_file(v_office, v_org, 'logo', null,
+  perform public.replace_company_document_file(v_office, v_org, 'logo', null, null,
     v_org || '/briefpapier/a/logo', 'image/png', 2048);
   -- The Admin replaces the logo the Büro member still sees. The Büro member's
   -- removal and replacement of the logo they saw are refused, and neither
   -- writes history or queues the Admin's logo for the purge.
-  perform public.replace_company_document_file(v_admin, v_org, 'logo', v_org || '/briefpapier/a/logo',
+  perform public.replace_company_document_file(v_admin, v_org, 'logo', v_org || '/briefpapier/a/logo', null,
     v_org || '/briefpapier/c/logo', 'image/jpeg', 3072);
   begin
-    perform public.replace_company_document_file(v_office, v_org, 'logo', v_org || '/briefpapier/a/logo',
+    perform public.replace_company_document_file(v_office, v_org, 'logo', v_org || '/briefpapier/a/logo', null,
       null, null, null);
     raise exception 'a removal of a logo already replaced passed';
   exception when raise_exception then
     if sqlerrm <> 'file_changed' then raise; end if;
   end;
   begin
-    perform public.replace_company_document_file(v_office, v_org, 'logo', v_org || '/briefpapier/a/logo',
+    perform public.replace_company_document_file(v_office, v_org, 'logo', v_org || '/briefpapier/a/logo', null,
       v_org || '/briefpapier/g/logo', 'image/png', 2048);
     raise exception 'a replacement of a logo already replaced passed';
   exception when raise_exception then
     if sqlerrm <> 'file_changed' then raise; end if;
   end;
   begin
-    perform public.replace_company_document_file(v_office, v_org, 'logo', null,
+    perform public.replace_company_document_file(v_office, v_org, 'logo', null, null,
       v_org || '/briefpapier/g/logo', 'image/png', 2048);
     raise exception 'a first upload over a stored logo passed';
   exception when raise_exception then
@@ -248,17 +248,44 @@ begin
   ) then raise exception 'the logo change has no history row'; end if;
 
   -- Removing the first page's stationery removes the following pages' too.
-  perform public.replace_company_document_file(v_office, v_org, 'stationery_first', null,
+  perform public.replace_company_document_file(v_office, v_org, 'stationery_first', null, null,
     v_org || '/briefpapier/d/stationery_first', 'application/pdf', 2048);
-  perform public.replace_company_document_file(v_office, v_org, 'stationery_following', null,
+  perform public.replace_company_document_file(v_office, v_org, 'stationery_following', null, null,
     v_org || '/briefpapier/e/stationery_following', 'image/png', 2048);
+  -- The Admin replaces the following pages the Büro member still sees. Removing
+  -- the first page would remove them too, so the Büro member's removal naming
+  -- the old following pages, or none, is refused: the Admin's file stays stored
+  -- and is not queued for the purge.
+  perform public.replace_company_document_file(v_admin, v_org, 'stationery_following',
+    v_org || '/briefpapier/e/stationery_following', null,
+    v_org || '/briefpapier/h/stationery_following', 'image/png', 2048);
+  begin
+    perform public.replace_company_document_file(v_office, v_org, 'stationery_first',
+      v_org || '/briefpapier/d/stationery_first', v_org || '/briefpapier/e/stationery_following', null, null, null);
+    raise exception 'a first-page removal over following pages already replaced passed';
+  exception when raise_exception then
+    if sqlerrm <> 'file_changed' then raise; end if;
+  end;
+  begin
+    perform public.replace_company_document_file(v_office, v_org, 'stationery_first',
+      v_org || '/briefpapier/d/stationery_first', null, null, null, null);
+    raise exception 'a first-page removal over following pages it never saw passed';
+  exception when raise_exception then
+    if sqlerrm <> 'file_changed' then raise; end if;
+  end;
+  if (select stationery_following_storage_path from public.company_document_profiles where organization_id = v_org)
+    is distinct from v_org || '/briefpapier/h/stationery_following'
+    or exists (select 1 from public.storage_purge_queue
+      where storage_path = v_org || '/briefpapier/h/stationery_following')
+  then raise exception 'a stale first-page removal removed or queued the replaced following pages'; end if;
   perform public.replace_company_document_file(v_office, v_org, 'stationery_first',
-    v_org || '/briefpapier/d/stationery_first', null, null, null);
+    v_org || '/briefpapier/d/stationery_first', v_org || '/briefpapier/h/stationery_following', null, null, null);
   if exists (select 1 from public.company_document_profiles where organization_id = v_org
     and (stationery_first_storage_path is not null or stationery_following_storage_path is not null))
   then raise exception 'the stationery was not removed'; end if;
   if (select count(*) from public.storage_purge_queue where storage_path in (
-    v_org || '/briefpapier/d/stationery_first', v_org || '/briefpapier/e/stationery_following')) <> 2
+    v_org || '/briefpapier/d/stationery_first', v_org || '/briefpapier/e/stationery_following',
+    v_org || '/briefpapier/h/stationery_following')) <> 3
   then raise exception 'the removed stationery was not queued'; end if;
   -- A file save leaves the details' version alone, so an open form still saves.
   if (select version from public.company_document_profiles where organization_id = v_org) <> 2 then
@@ -267,7 +294,7 @@ begin
 
   -- The organization export plans the stored files with their sizes and no
   -- document; a plan without one of them is refused, a plan with both starts.
-  perform public.replace_company_document_file(v_office, v_org, 'stationery_first', null,
+  perform public.replace_company_document_file(v_office, v_org, 'stationery_first', null, null,
     v_org || '/briefpapier/f/stationery_first', 'application/pdf', 4096);
   if (
     select array_agg(format('%s %s %s', source_path, coalesce(document_id::text, '-'), file_bytes) order by source_path)

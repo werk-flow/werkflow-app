@@ -65,6 +65,7 @@ const ticket = (organizationId: string) => () =>
   });
 const seenLogo = `${ORGANIZATION_A}/briefpapier/37800000-0000-4000-8000-000000000031/logo`;
 const seenStationery = `${ORGANIZATION_A}/briefpapier/37800000-0000-4000-8000-000000000032/stationery_first`;
+const seenFollowing = `${ORGANIZATION_A}/briefpapier/37800000-0000-4000-8000-000000000033/stationery_following`;
 const finalize = (organizationId: string) => () =>
   actions.finalizeCompanyDocumentFileUpload({
     organizationId,
@@ -77,6 +78,7 @@ const remove = (organizationId: string) => () =>
     organizationId,
     kind: 'stationery_first',
     expectedStoragePath: seenStationery,
+    expectedFollowingStoragePath: seenFollowing,
   });
 const everyAction = (organizationId: string) =>
   [
@@ -177,6 +179,7 @@ assert.deepEqual(world.rpcCalls.at(-1), {
     p_organization_id: ORGANIZATION_A,
     p_kind: 'logo',
     p_expected_storage_path: seenLogo,
+    p_expected_following_storage_path: null,
     p_storage_path: `${ORGANIZATION_A}/briefpapier/${fileId}/logo-copy`,
     p_mime_type: 'image/png',
     p_size_bytes: 2048,
@@ -192,6 +195,7 @@ assert.deepEqual(world.rpcCalls.at(-1), {
     p_organization_id: ORGANIZATION_A,
     p_kind: 'stationery_first',
     p_expected_storage_path: seenStationery,
+    p_expected_following_storage_path: seenFollowing,
     p_storage_path: null,
     p_mime_type: null,
     p_size_bytes: null,

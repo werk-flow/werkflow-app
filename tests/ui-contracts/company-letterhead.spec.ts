@@ -27,6 +27,7 @@ async function removeLogoThenSwitch(page: Page): Promise<void> {
     organizationId: 'contract-organization-a',
     kind: 'logo',
     expectedStoragePath: 'contract-organization-a/briefpapier/contract-logo/logo',
+    expectedFollowingStoragePath: null,
   });
   await page.getByRole('button', { name: 'Organisation wechseln' }).click();
   // The other organization has no logo to remove.

@@ -163,6 +163,11 @@ export const companyFileRemoveInputSchema = z.strictObject({
   kind: z.enum(COMPANY_FILE_KINDS),
   /** The file the caller saw and removes. */
   expectedStoragePath: storagePathSchema,
+  /**
+   * The following pages' file the caller saw, null for none: removing the
+   * first page's stationery removes it too. Other kinds send null.
+   */
+  expectedFollowingStoragePath: storagePathSchema.nullable(),
 });
 export type CompanyFileRemoveInput = z.input<typeof companyFileRemoveInputSchema>;
 

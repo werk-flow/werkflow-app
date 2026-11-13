@@ -94,11 +94,14 @@ function LetterheadFileRow({
   row,
   organizationId,
   stored,
+  alsoRemoves,
   blockedBy,
 }: {
   row: FileRow;
   organizationId: string;
   stored: StoredCompanyFile | null;
+  /** The following pages' file a removal of this row removes too, or null. */
+  alsoRemoves: StoredCompanyFile | null;
   /** Why the row cannot take a file yet, or null. */
   blockedBy: string | null;
 }) {
@@ -148,6 +151,7 @@ function LetterheadFileRow({
                         organizationId,
                         kind: row.kind,
                         expectedStoragePath: stored.storagePath,
+                        expectedFollowingStoragePath: alsoRemoves?.storagePath ?? null,
                       }),
                     `${row.label} wurde entfernt.`,
                     `${row.label} konnte nicht entfernt werden. Versuch es noch einmal.`,
@@ -192,6 +196,7 @@ export function DocumentLetterheadFiles({
             row={row}
             organizationId={organizationId}
             stored={files[row.kind]}
+            alsoRemoves={row.kind === 'stationery_first' ? files.stationery_following : null}
             blockedBy={
               row.kind === 'stationery_following' && !files.stationery_first
                 ? 'Lade zuerst das Briefpapier für die erste Seite hoch.'
