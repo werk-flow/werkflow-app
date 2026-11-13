@@ -231,6 +231,16 @@ describe('a day split across blocks', () => {
       [{ minutes: 400, stampedBreak: { after: 200, minutes: 10 } }, { minutes: 200 }],
       45,
     ],
+    [
+      'a stamped 10-minute break in a 1:40 block with no share, then 8:20 on another job',
+      [{ minutes: 100, stampedBreak: { after: 50, minutes: 10 } }, { minutes: 500 }],
+      45,
+    ],
+    [
+      'a stamped 10-minute break in a 3:20 block with no share, then 6:40 on another job',
+      [{ minutes: 200, stampedBreak: { after: 100, minutes: 10 } }, { minutes: 400 }],
+      45,
+    ],
   ])('%s: the calendar shows the break the totals deduct', (_label, blocks, breakMinutes) => {
     expect(breaks(day(blocks))).toEqual({ shown: breakMinutes, deducted: breakMinutes });
   });

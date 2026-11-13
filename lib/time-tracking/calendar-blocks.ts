@@ -287,7 +287,9 @@ function blockSegments(
     block.breakDayPosition,
   );
 
-  if (automaticBreaks.length === 0) {
+  // Without an automatic share a block keeps its own segments, unless it holds
+  // a stamped break: under the automatic rule that is presence, not a break.
+  if (automaticBreaks.length === 0 && extractBreaks(block.sourceEntries).length === 0) {
     return block.segments;
   }
 
