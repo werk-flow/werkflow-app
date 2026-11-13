@@ -7,7 +7,6 @@ import { VISUAL_REFERENCE_UPDATE_ENV } from '../runner/visual-reference-updates'
 import { readBoatKey, withBoatKey, type BoatKeyReading } from './boat-key';
 import { shellQuote } from './boat-machine';
 import {
-  FAILED_RUN,
   REFERENCE_UPDATES,
   REPLACED_REFERENCES,
   applyReferenceUpdates,
@@ -76,7 +75,7 @@ function updateFolders(repository: string): Set<string> {
 
 /**
  * Places the references a Boat update rewrote, from the folder of the update named `before.update`
- * when its run passed, and prints them with the next steps and where the versions they replaced are
+ * when its run on the machine exited 0 (`run.remote`, apart from any refusal here), and prints them with the next steps and where the versions they replaced are
  * kept. A refused set writes nothing and turns the run's exit code into 1. A failed update run places
  * nothing: its references, and any other folder that came back, stay evidence and are named. A
  * reference changed here since `before.references`, taken when the run started, keeps its local
@@ -85,8 +84,9 @@ function updateFolders(repository: string): Set<string> {
 export function placeReferenceUpdates(
   repository: string,
   before: { folders: ReadonlySet<string>; references: ReadonlyMap<string, string>; update: string },
-  code: number,
+  run: { code: number; remote: number | undefined },
 ): number {
+  const { code, remote } = run;
   let placed: string[] = [];
   let kept: string[] = [];
   let failed: string[] = [];
@@ -95,9 +95,10 @@ export function placeReferenceUpdates(
   try {
     for (const name of [...updateFolders(repository)].filter((found) => !before.folders.has(found))) {
       const folder = join(repository, REFERENCE_UPDATES, name);
-      if (name !== before.update) {
+      // The run's exit code decides; the folder's name must agree.
+      if (remote !== 0 || name !== before.update) {
         const files = filesUnder(folder).map((path) => join(REFERENCE_UPDATES, name, path));
-        if (name === `${before.update}${FAILED_RUN}`) failed = [...failed, ...files];
+        if (remote !== 0) failed = [...failed, ...files];
         else other = [...other, ...files];
         continue;
       }
@@ -121,7 +122,7 @@ export function placeReferenceUpdates(
   // A reference never comes from a failed run (docs/technical/testing.md).
   if (failed.length)
     console.error(
-      `[verify] The update run failed on Boat, so none of the ${failed.length} references it rewrote or wrote was placed; they stay with the evidence:${list(failed)}`,
+      `[verify] The update run failed on Boat (exit ${remote ?? 'unknown'}), so none of the ${failed.length} files it returned was placed; they stay with the evidence:${list(failed)}`,
     );
   if (other.length)
     console.error(
@@ -173,15 +174,17 @@ export async function focusedOnBoat(
       // The update folder this run may place, named here so no other folder that comes back is placed.
       const before = { folders, references: referenceHashes(repository), update: randomUUID() };
       const update = kind === 'reference-update' ? [before.update] : [];
+      const remote: { exit?: number } = {};
       const outcome = await runOnBoat({
         args: [script, ...update, ...args],
         repository,
         folder,
         key,
         signal,
+        remoteExit: (exit) => (remote.exit = exit),
       });
       return kind === 'reference-update' && typeof outcome === 'number'
-        ? placeReferenceUpdates(repository, before, outcome)
+        ? placeReferenceUpdates(repository, before, { code: outcome, remote: remote.exit })
         : outcome;
     });
   });

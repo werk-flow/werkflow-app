@@ -25,7 +25,7 @@ import { destinationConflict, linkedDestination } from './verify-on-boat';
 /** Where the machine puts the references an update rewrote, one folder per update. */
 export const REFERENCE_UPDATES = '.agent-logs/visual-reference-updates';
 /** Ends the folder of an update run that failed: its references stay evidence, never references. */
-export const FAILED_RUN = '-failed-run';
+const FAILED_RUN = '-failed-run';
 /** Where the workstation keeps each checkout version an update replaced, one folder per update. */
 export const REPLACED_REFERENCES = '.agent-logs/visual-reference-replaced';
 /** The audit suite's snapshot folders. */

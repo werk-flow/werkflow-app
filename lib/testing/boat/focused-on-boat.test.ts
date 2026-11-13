@@ -137,14 +137,15 @@ test('only a passed update run places its references, and a reference changed he
   };
   // `remote` is the update run's exit on Boat, `code` what the run answered on the workstation.
   const NAME = '0b5e2b1c-6c1f-4f7e-9d3a-2f8c1e7a9b40';
-  type Run = { remote: number; code: number; editHere?: boolean; stray?: boolean };
-  const run = ({ remote, code, editHere = false, stray = false }: Run) => {
+  // `unmarked` returns a failed run's references in the plain update folder, as a run that wrote it itself would.
+  type Run = { remote: number; code: number; editHere?: boolean; stray?: boolean; unmarked?: boolean };
+  const run = ({ remote, code, editHere = false, stray = false, unmarked = false }: Run) => {
     const repository = mkdtempSync(join(tmpdir(), 'reference-place-'));
     write(repository, `${SNAPSHOTS}/a.png`, 'old');
     write(repository, `${SNAPSHOTS}/b.png`, 'old');
     write(repository, `${REFERENCE_UPDATES}/earlier/${SNAPSHOTS}/a.png`, 'earlier');
     const before = { folders: new Set(['earlier']), references: referenceHashes(repository), update: NAME };
-    const update = updateFolder(NAME, String(remote));
+    const update = updateFolder(NAME, unmarked ? '0' : String(remote));
     write(repository, `${update}/${SNAPSHOTS}/a.png`, 'boat');
     // A folder this update did not name, such as one a failed run wrote without the mark.
     write(repository, `${stray ? `${REFERENCE_UPDATES}/stray` : update}/${SNAPSHOTS}/b.png`, 'boat');
@@ -153,7 +154,7 @@ test('only a passed update run places its references, and a reference changed he
     const error = spyOn(console, 'error').mockImplementation((line: string) => void lines.push(line));
     const info = spyOn(console, 'info').mockImplementation((line: string) => void lines.push(line));
     try {
-      const exit = placeReferenceUpdates(repository, before, code);
+      const exit = placeReferenceUpdates(repository, before, { code, remote });
       const read = (name: string) => readFileSync(join(repository, SNAPSHOTS, name), 'utf8');
       return { exit, a: read('a.png'), b: read('b.png'), output: lines.join('\n'), repository, update };
     } finally {
@@ -173,7 +174,11 @@ test('only a passed update run places its references, and a reference changed he
   // A failed update run places nothing, names each reference it left in the evidence, and fails.
   const failed = run({ remote: 1, code: 1 });
   expect(failed).toMatchObject({ exit: 1, a: 'old', b: 'old' });
-  expect(failed.output).toContain('The update run failed on Boat, so none of the 2 references');
+  expect(failed.output).toContain('The update run failed on Boat (exit 1), so none of the 2 files');
+  // The run's exit decides, not the folder's name: a failed run's unmarked folder stays evidence.
+  const unmarked = run({ remote: 1, code: 1, unmarked: true });
+  expect(unmarked).toMatchObject({ exit: 1, a: 'old', b: 'old' });
+  expect(unmarked.output).toContain(`  ${REFERENCE_UPDATES}/${NAME}/${SNAPSHOTS}/a.png`);
   expect(failed.output).toContain(`  ${failed.update}/${SNAPSHOTS}/b.png`);
   expect(failed.output).not.toContain('in this checkout');
   // Only the folder this update named is placed: a failed run's unmarked folder never is.

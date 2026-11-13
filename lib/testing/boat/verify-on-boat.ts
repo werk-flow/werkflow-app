@@ -739,6 +739,7 @@ export async function runOnBoat(input: {
   folder: string;
   key: string;
   signal: AbortSignal;
+  remoteExit?: (code: number) => void;
 }): Promise<BoatOutcome> {
   const { args, repository, folder, signal } = input;
   const before = captureInputSnapshot(repository);
@@ -784,6 +785,7 @@ export async function runOnBoat(input: {
         // The machine pruned only its copy of the archive; the workstation's shrinks as after a local run.
         console.info(pruneRunArchive('prune'));
         code = result.exitCode;
+        input.remoteExit?.(code);
         if (changedInputs(before, captureInputSnapshot(repository)).length) {
           console.error('Inputs changed during verification; this report cannot qualify acceptance.');
           code = 1;
