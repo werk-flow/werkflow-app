@@ -551,7 +551,7 @@ test('a kept machine another workstation evicted meanwhile is not reused: the ru
   const keeping = fakeBoat({ bx_kept0001: { lifeMs: 120 * MINUTE } });
   await keepMachine(
     { id: 'bx_kept0001', client: keeping.client, log: () => undefined },
-    { repository, form: 'main', signal: new AbortController().signal, records },
+    { repository, form: 'main', signal: new AbortController().signal, records, wipeScript },
     () => undefined,
   );
   // The wipe's command marks the machine idle only once the wipe passed.
@@ -567,6 +567,7 @@ test('a kept machine another workstation evicted meanwhile is not reused: the ru
     log: (line) => lines.push(line),
     signal: new AbortController().signal,
     records,
+    wipeScript,
   });
   expect(lease).toMatchObject({ machine: { id: 'bx_created' }, reused: false });
   expect(lines).toContain('Boat machine bx_kept0001 was taken by another workstation at the machine limit.');
@@ -578,7 +579,7 @@ test('a kept machine another workstation deleted between its read and its claim 
   const keeping = fakeBoat(machines);
   await keepMachine(
     { id: 'bx_kept0001', client: keeping.client, log: () => undefined },
-    { repository, form: 'main', signal: new AbortController().signal, records },
+    { repository, form: 'main', signal: new AbortController().signal, records, wipeScript },
     () => undefined,
   );
   // The evicting workstation deletes the machine right after this run read its life left.
