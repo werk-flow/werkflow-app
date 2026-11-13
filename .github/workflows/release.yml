@@ -197,7 +197,8 @@ jobs:
           done
           # Vercel may already have assigned the domain to this build, and promoting the current
           # production deployment fails with 409. A lookup that fails promotes as before.
-          served="$(vercel_api "https://api.vercel.com/v4/aliases/app.werk-flow.app?${team}" | jq -r .deploymentId)" || true
+          # Optional lookup: no rate-limit retries, so a 429 here never spends the job's time before the promote.
+          served="$(VERCEL_API_RETRY_SECONDS=0 vercel_api "https://api.vercel.com/v4/aliases/app.werk-flow.app?${team}" | jq -r .deploymentId)" || true
           if test "$served" = "$id"; then
             echo "Production already serves ${SHA} (${id})."
           else
