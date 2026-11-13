@@ -150,3 +150,7 @@ The owner decided on 2026-11-07 that a new version is live on PROD by 05:00 Berl
 ## Amendment 2026-11-10: full runs prove the wall-clock steps, untimed
 
 Rule 3 kept the wall-clock groups off shared runners, so nothing ran their steps between releases. A test helper change broke `audit:performance:calendar-live` on `main` for days (werk-flow/werkflow-app#338). The CI lead decided on werk-flow/werkflow-planning#29: the nightly run and the release gate run every `audit:performance:*` group with `--untimed`. A missing step or an unconfirmed sample fails the run. No deadline, budget or reference comparison fails it, so rule 3's reason stands: a shared runner judges no median. A pull request never runs these groups. The release gate reuses the nightly's `Full run / Check`, so a broken wall-clock step also stops the release, as a broken daily journey should. [testing.md](../technical/testing.md#ci) owns the rule.
+
+## Amendment 2026-11-13: the repositories belong to an organization
+
+On 2026-11-13 the repositories moved from the personal account `werk-flow` into the organization `werk-flow` (owner decisions 16 and 23 in werk-flow/werkflow-planning). An owner of that organization now sets the rulesets of the GitHub line above, not the personal account, which lives on as `werk-flow-temp` without access. The rulesets themselves are unchanged.
