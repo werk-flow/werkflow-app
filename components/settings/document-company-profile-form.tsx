@@ -2,7 +2,6 @@
 
 import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 
-import { useAttemptKey } from '@/components/anfragen/use-attempt-key';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -217,8 +216,10 @@ function useProfileSave({ organizationId, version, details, stationery, isShown 
   const { showBanner } = useBanner();
   const { run, isPending } = useServerAction(saveCompanyDocumentProfile);
   const [loaded] = useState(() => ({ organizationId, version }));
-  // One per opening: a saved version mounts a new form, and with it a new key.
-  const { attemptKey } = useAttemptKey();
+  // One key per submitted draft: a press repeating the last draft after a lost
+  // answer gets that save's result; a changed draft is a new attempt, so it
+  // never takes an earlier draft's success for its own.
+  const attempt = useRef<{ key: string; details: string } | null>(null);
   const [draft, setDraft] = useState(() => profileDraftOf(details));
   const [errors, setErrors] = useState<Record<string, string>>({});
   // Removed stationery hides its margins without a new version. A hidden group
@@ -243,12 +244,18 @@ function useProfileSave({ organizationId, version, details, stationery, isShown 
       return;
     }
     setErrors({});
+    const submitted = JSON.stringify(parsed.details);
+    const thisAttempt =
+      attempt.current?.details === submitted
+        ? attempt.current
+        : { key: crypto.randomUUID(), details: submitted };
+    attempt.current = thisAttempt;
     // A lost connection rejects the call: the draft stays and the failure shows like a refusal.
     const result = await run({
       organizationId: loaded.organizationId,
       expectedVersion: loaded.version,
       details: parsed.details,
-      attemptKey,
+      attemptKey: thisAttempt.key,
     }).catch(() => ({ success: false, error: 'save_failed' }) as const);
     // A save that answers after a switch to another organization says nothing there.
     if (!isShown(loaded.organizationId)) return;

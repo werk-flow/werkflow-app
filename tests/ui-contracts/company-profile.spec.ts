@@ -101,3 +101,39 @@ test('a save that answers on the same organization says it was saved', async ({ 
     page.getByRole('alert').filter({ hasText: 'Die Firmenangaben wurden gespeichert.' }),
   ).toBeVisible();
 });
+
+test('a repeated draft reuses its attempt key, and a changed draft takes a new one', async ({ page }) => {
+  await openContractFixture(page, 'company-profile');
+  const save = page.getByRole('button', { name: 'Angaben speichern' });
+  const answerNext = async (count: number, refusal: string | null) => {
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (expected) =>
+            window.uiContractWrites.calls.length === expected && window.uiContractWrites.answer !== null,
+          count,
+        ),
+      )
+      .toBe(true);
+    await answerHeldWrite(page, refusal);
+  };
+  // A lost answer looks like a failed save: the same draft again is the same attempt.
+  await save.click();
+  await answerNext(1, 'save_failed');
+  await save.click();
+  await answerNext(2, 'save_failed');
+  // A changed draft must not take the first draft's save for its own.
+  await page.getByLabel('Ort').fill('Sonnenstadt');
+  await save.click();
+  await answerNext(3, null);
+  const keys = await page.evaluate(() =>
+    window.uiContractWrites.calls.map((call) =>
+      typeof call.input === 'object' && call.input !== null && 'attemptKey' in call.input
+        ? String(call.input.attemptKey)
+        : null,
+    ),
+  );
+  expect(keys[0]).toEqual(expect.any(String));
+  expect(keys[1]).toBe(keys[0]);
+  expect(keys[2]).not.toBe(keys[0]);
+});

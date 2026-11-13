@@ -37,9 +37,11 @@ export async function uploadCompanyFile(
         fileId: ticket.ticket.fileId,
         expectedStoragePath,
       });
-    // A lost answer may hide a registered upload: the repeat under the same
-    // file id answers with what the first call did.
-    return await finalize().catch(finalize);
+    // A lost answer, of the action or of its database call (`finalize_failed`),
+    // may hide a registered upload: the repeat under the same file id answers
+    // with what the first call did.
+    const first = await finalize().catch(() => null);
+    return first === null || (!first.success && first.error === 'finalize_failed') ? await finalize() : first;
   } catch (error) {
     logError('uploadCompanyFile: transfer failed', error);
     return { success: false, error: 'upload_failed' };

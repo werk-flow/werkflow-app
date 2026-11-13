@@ -47,6 +47,18 @@ mock.module('@/lib/storage/r2', () => ({
 }));
 
 const world = installActionWorld({ company_document_profiles: [], company_document_profile_events: [] });
+// The world ignores revalidation; this fixture records it.
+const revalidatedPaths: string[] = [];
+mock.module('next/cache', () => ({
+  updateTag: () => {},
+  revalidatePath: (path: string) => revalidatedPaths.push(path),
+  revalidateTag: () => {},
+  cacheTag: () => {},
+  cacheLife: () => {},
+  unstable_cache: () => {
+    throw new Error('unexpected unstable_cache');
+  },
+}));
 world.rpc = () => ({ data: 1, error: null });
 const actions = await import('@/lib/company-profile/actions');
 
@@ -248,6 +260,9 @@ world.tables.company_document_profile_events = [
 ];
 const storageBefore = storageCalls.length;
 world.rpcCalls.length = 0;
+revalidatedPaths.length = 0;
 assert.deepEqual(await finalize(ORGANIZATION_A)(), { success: true });
 assert.equal(storageCalls.length, storageBefore, 'a repeated finalize reached storage');
 assert.equal(world.rpcCalls.length, 0, 'a repeated finalize wrote again');
+// Its first answer, and the refresh in it, never arrived: this one refreshes the page.
+assert.deepEqual(revalidatedPaths, ['/einstellungen/dokumente']);

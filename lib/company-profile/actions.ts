@@ -180,7 +180,11 @@ export async function finalizeCompanyDocumentFileUpload(
     logError('finalizeCompanyDocumentFileUpload: attempt read failed', registered.error);
     return { success: false, error: 'finalize_failed' };
   }
-  if (registered.data.length > 0) return { success: true };
+  if (registered.data.length > 0) {
+    // The first call's refresh never reached this browser either.
+    revalidatePath(SETTINGS_PATH);
+    return { success: true };
+  }
 
   let copy;
   try {
