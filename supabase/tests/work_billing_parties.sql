@@ -1,7 +1,7 @@
 -- Work keeps its Auftraggeber and its frozen Rechnungsempfänger: defaults
 -- from the Objekt's payer role, a copy that survives a customer edit, the
 -- office's choice with history, the carry on conversion and the organization
--- boundary (migration 20261202100001_keep_work_auftraggeber_and_frozen_recipient.sql).
+-- boundary (migration 20261202120001_keep_work_auftraggeber_and_frozen_recipient.sql).
 begin;
 
 insert into auth.users (
