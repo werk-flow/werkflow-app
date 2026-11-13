@@ -1,5 +1,6 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 import { type MigrationDrift, driftLine, readMigrationDrift } from '../local-stack/migration-drift';
 import { VISUAL_REFERENCE_UPDATE_ENV } from '../runner/visual-reference-updates';
@@ -74,32 +75,36 @@ function updateFolders(repository: string): Set<string> {
 }
 
 /**
- * Places the references a Boat update rewrote, from the update folders that came back, and prints
- * them with the next steps and where the versions they replaced are kept. A refused set writes
- * nothing and turns the run's exit code into 1. A failed update run places nothing: its references
- * stay evidence and are named. A reference changed here since `before.references`, taken when the
- * run started, keeps its local version and is named with Boat's copy. Both exit non-zero.
+ * Places the references a Boat update rewrote, from the folder of the update named `before.update`
+ * when its run passed, and prints them with the next steps and where the versions they replaced are
+ * kept. A refused set writes nothing and turns the run's exit code into 1. A failed update run places
+ * nothing: its references, and any other folder that came back, stay evidence and are named. A
+ * reference changed here since `before.references`, taken when the run started, keeps its local
+ * version and is named with Boat's copy. Each of these exits non-zero.
  */
 export function placeReferenceUpdates(
   repository: string,
-  before: { folders: ReadonlySet<string>; references: ReadonlyMap<string, string> },
+  before: { folders: ReadonlySet<string>; references: ReadonlyMap<string, string>; update: string },
   code: number,
 ): number {
   let placed: string[] = [];
   let kept: string[] = [];
-  let unplaced: string[] = [];
+  let failed: string[] = [];
+  let other: string[] = [];
   let recovery: string[] = [];
   try {
     for (const name of [...updateFolders(repository)].filter((found) => !before.folders.has(found))) {
       const folder = join(repository, REFERENCE_UPDATES, name);
-      if (name.endsWith(FAILED_RUN)) {
-        unplaced = [...unplaced, ...filesUnder(folder).map((path) => join(REFERENCE_UPDATES, name, path))];
+      if (name !== before.update) {
+        const files = filesUnder(folder).map((path) => join(REFERENCE_UPDATES, name, path));
+        if (name === `${before.update}${FAILED_RUN}`) failed = [...failed, ...files];
+        else other = [...other, ...files];
         continue;
       }
       const replaced = join(REPLACED_REFERENCES, name);
       const result = applyReferenceUpdates(repository, folder, {
         before: before.references,
-        recovery: join(repository, replaced),
+        recovery: replaced,
       });
       if (existsSync(join(repository, replaced))) recovery = [...recovery, replaced];
       placed = [...placed, ...result.placed];
@@ -114,10 +119,15 @@ export function placeReferenceUpdates(
   }
   const list = (paths: readonly string[]) => paths.map((path) => `\n  ${path}`).join('');
   // A reference never comes from a failed run (docs/technical/testing.md).
-  if (unplaced.length)
+  if (failed.length)
     console.error(
-      `[verify] The update run failed on Boat, so none of the ${unplaced.length} references it rewrote or wrote was placed; they stay with the evidence:${list(unplaced)}`,
+      `[verify] The update run failed on Boat, so none of the ${failed.length} references it rewrote or wrote was placed; they stay with the evidence:${list(failed)}`,
     );
+  if (other.length)
+    console.error(
+      `[verify] ${other.length} files came back outside this update's folder and were not placed; they stay with the evidence:${list(other)}`,
+    );
+  const unplaced = [...failed, ...other];
   if (placed.length)
     console.info(
       `[verify] The update rewrote or wrote ${placed.length} visual references in this checkout:${list(placed)}${recovery.length ? `\n[verify] The versions they replaced are kept in ${recovery.join(', ')}.` : ''}\n[verify] Next: look at every changed image, restore each one the accepted change does not explain with git checkout -- <file>, then run bun run test:verify --group audit:visual.`,
@@ -160,8 +170,16 @@ export async function focusedOnBoat(
     // The references change inside the workspace lock the run holds, so no other test operation
     // starts between the run and the files it rewrote.
     return withRunFolder(repository, signal, `focused run on Boat`, async (folder) => {
-      const before = { folders, references: referenceHashes(repository) };
-      const outcome = await runOnBoat({ args: [script, ...args], repository, folder, key, signal });
+      // The update folder this run may place, named here so no other folder that comes back is placed.
+      const before = { folders, references: referenceHashes(repository), update: randomUUID() };
+      const update = kind === 'reference-update' ? [before.update] : [];
+      const outcome = await runOnBoat({
+        args: [script, ...update, ...args],
+        repository,
+        folder,
+        key,
+        signal,
+      });
       return kind === 'reference-update' && typeof outcome === 'number'
         ? placeReferenceUpdates(repository, before, outcome)
         : outcome;

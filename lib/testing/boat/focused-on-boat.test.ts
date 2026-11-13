@@ -136,15 +136,18 @@ test('only a passed update run places its references, and a reference changed he
     writeFileSync(join(root, path), text);
   };
   // `remote` is the update run's exit on Boat, `code` what the run answered on the workstation.
-  const run = ({ remote, code, editHere }: { remote: number; code: number; editHere: boolean }) => {
+  const NAME = '0b5e2b1c-6c1f-4f7e-9d3a-2f8c1e7a9b40';
+  type Run = { remote: number; code: number; editHere?: boolean; stray?: boolean };
+  const run = ({ remote, code, editHere = false, stray = false }: Run) => {
     const repository = mkdtempSync(join(tmpdir(), 'reference-place-'));
     write(repository, `${SNAPSHOTS}/a.png`, 'old');
     write(repository, `${SNAPSHOTS}/b.png`, 'old');
     write(repository, `${REFERENCE_UPDATES}/earlier/${SNAPSHOTS}/a.png`, 'earlier');
-    const before = { folders: new Set(['earlier']), references: referenceHashes(repository) };
-    const update = updateFolder('run', String(remote));
+    const before = { folders: new Set(['earlier']), references: referenceHashes(repository), update: NAME };
+    const update = updateFolder(NAME, String(remote));
     write(repository, `${update}/${SNAPSHOTS}/a.png`, 'boat');
-    write(repository, `${update}/${SNAPSHOTS}/b.png`, 'boat');
+    // A folder this update did not name, such as one a failed run wrote without the mark.
+    write(repository, `${stray ? `${REFERENCE_UPDATES}/stray` : update}/${SNAPSHOTS}/b.png`, 'boat');
     if (editHere) write(repository, `${SNAPSHOTS}/b.png`, 'local edit');
     const lines: string[] = [];
     const error = spyOn(console, 'error').mockImplementation((line: string) => void lines.push(line));
@@ -158,24 +161,29 @@ test('only a passed update run places its references, and a reference changed he
       info.mockRestore();
     }
   };
-  const passed = run({ remote: 0, code: 0, editHere: false });
+  const passed = run({ remote: 0, code: 0 });
   expect(passed).toMatchObject({ exit: 0, a: 'boat', b: 'boat' });
   // The versions the update replaced stay as recovery data, and the output names their folder.
-  expect(passed.output).toContain(`kept in ${REPLACED_REFERENCES}/run.`);
-  expect(readFileSync(join(passed.repository, REPLACED_REFERENCES, 'run', SNAPSHOTS, 'a.png'), 'utf8')).toBe(
+  expect(passed.output).toContain(`kept in ${REPLACED_REFERENCES}/${NAME}.`);
+  expect(readFileSync(join(passed.repository, REPLACED_REFERENCES, NAME, SNAPSHOTS, 'a.png'), 'utf8')).toBe(
     'old',
   );
   // A refusal on the workstation after a passed run (changed inputs) keeps its exit and places.
-  expect(run({ remote: 0, code: 1, editHere: false })).toMatchObject({ exit: 1, a: 'boat', b: 'boat' });
+  expect(run({ remote: 0, code: 1 })).toMatchObject({ exit: 1, a: 'boat', b: 'boat' });
   // A failed update run places nothing, names each reference it left in the evidence, and fails.
-  const failed = run({ remote: 1, code: 1, editHere: false });
+  const failed = run({ remote: 1, code: 1 });
   expect(failed).toMatchObject({ exit: 1, a: 'old', b: 'old' });
   expect(failed.output).toContain('The update run failed on Boat, so none of the 2 references');
   expect(failed.output).toContain(`  ${failed.update}/${SNAPSHOTS}/b.png`);
   expect(failed.output).not.toContain('in this checkout');
+  // Only the folder this update named is placed: a failed run's unmarked folder never is.
+  const failedStray = run({ remote: 1, code: 1, stray: true });
+  expect(failedStray).toMatchObject({ exit: 1, a: 'old', b: 'old' });
+  expect(failedStray.output).toContain(`  ${REFERENCE_UPDATES}/stray/${SNAPSHOTS}/b.png`);
+  expect(run({ remote: 0, code: 0, stray: true })).toMatchObject({ exit: 1, a: 'boat', b: 'old' });
   const edited = run({ remote: 0, code: 0, editHere: true });
   expect(edited).toMatchObject({ exit: 1, a: 'boat', b: 'local edit' });
   expect(edited.output).toContain(
-    `${SNAPSHOTS}/b.png (Boat's copy: ${REFERENCE_UPDATES}/run/${SNAPSHOTS}/b.png)`,
+    `${SNAPSHOTS}/b.png (Boat's copy: ${REFERENCE_UPDATES}/${NAME}/${SNAPSHOTS}/b.png)`,
   );
 });

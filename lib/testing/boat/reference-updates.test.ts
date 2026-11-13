@@ -110,7 +110,7 @@ test('rewritten references are placed in the checkout, and any bad entry refuses
       return {
         files: applyReferenceUpdates(repository, update, {
           before: referenceHashes(repository),
-          recovery: join(repository, 'replaced'),
+          recovery: 'replaced',
         }).placed,
         repository,
       };
@@ -170,9 +170,7 @@ test('a reference changed in the checkout during the run keeps its local version
   write(repository, `${SNAPSHOTS}/edited.png`, 'local edit');
   rmSync(join(repository, SNAPSHOTS, 'removed.png'));
   write(repository, `${SNAPSHOTS}/created.txt`, 'local');
-  expect(
-    applyReferenceUpdates(repository, update, { before, recovery: join(repository, 'replaced') }),
-  ).toEqual({
+  expect(applyReferenceUpdates(repository, update, { before, recovery: 'replaced' })).toEqual({
     placed: [`${SNAPSHOTS}/new.txt`, `${SNAPSHOTS}/unchanged.png`],
     kept: [`${SNAPSHOTS}/created.txt`, `${SNAPSHOTS}/edited.png`, `${SNAPSHOTS}/removed.png`],
   });
@@ -203,9 +201,7 @@ test('a reference changed here while the update is placed keeps its local versio
     copyFileSync(from, to);
     during[basename(from)]?.();
   };
-  expect(
-    applyReferenceUpdates(repository, update, { before, recovery: join(repository, 'replaced'), copy }),
-  ).toEqual({
+  expect(applyReferenceUpdates(repository, update, { before, recovery: 'replaced', copy })).toEqual({
     placed: [],
     kept: [`${SNAPSHOTS}/created.txt`, `${SNAPSHOTS}/edited.png`, `${SNAPSHOTS}/removed.png`],
   });
@@ -216,13 +212,11 @@ test('a reference changed here while the update is placed keeps its local versio
   expect(readdirSync(join(repository, SNAPSHOTS)).sort()).toEqual(['created.txt', 'edited.png']);
 });
 
-test('a failed update run publishes its references in a marked folder', () => {
-  expect(updateFolder('2026-11-13T050000Z', '0')).toBe(
-    '.agent-logs/visual-reference-updates/2026-11-13T050000Z',
-  );
-  expect(updateFolder('2026-11-13T050000Z', '1')).toBe(
-    '.agent-logs/visual-reference-updates/2026-11-13T050000Z-failed-run',
-  );
+test('a failed update run publishes its references in the folder the workstation named, marked', () => {
+  const name = '0b5e2b1c-6c1f-4f7e-9d3a-2f8c1e7a9b40';
+  expect(updateFolder(name, '0')).toBe(`.agent-logs/visual-reference-updates/${name}`);
+  expect(updateFolder(name, '1')).toBe(`.agent-logs/visual-reference-updates/${name}-failed-run`);
+  expect(() => updateFolder('../../lib', '0')).toThrow('is no update name');
 });
 
 test('a write through a descriptor opened before the replacement is recoverable', () => {
@@ -231,7 +225,7 @@ test('a write through a descriptor opened before the replacement is recoverable'
   write(repository, `${SNAPSHOTS}/a.png`, 'old');
   write(update, `${SNAPSHOTS}/a.png`, 'boat');
   const before = referenceHashes(repository);
-  const recovery = join(repository, 'replaced');
+  const recovery = 'replaced';
   // An editor holds the reference open from before the run and writes after the hash check.
   const descriptor = openSync(join(repository, SNAPSHOTS, 'a.png'), 'r+');
   try {
@@ -244,5 +238,32 @@ test('a write through a descriptor opened before the replacement is recoverable'
     closeSync(descriptor);
   }
   expect(readFileSync(join(repository, SNAPSHOTS, 'a.png'), 'utf8')).toBe('boat');
-  expect(readFileSync(join(recovery, SNAPSHOTS, 'a.png'), 'utf8')).toBe('late');
+  expect(readFileSync(join(repository, recovery, SNAPSHOTS, 'a.png'), 'utf8')).toBe('late');
+});
+
+test('a recovery folder that exists or is reached through a symbolic link refuses the set before anything moves', () => {
+  const refused = (prepare: (repository: string) => void) => {
+    const repository = mkdtempSync(join(tmpdir(), 'reference-apply-'));
+    const update = mkdtempSync(join(tmpdir(), 'reference-update-'));
+    write(repository, `${SNAPSHOTS}/a.png`, 'old');
+    write(update, `${SNAPSHOTS}/a.png`, 'boat');
+    prepare(repository);
+    const before = referenceHashes(repository);
+    expect(() =>
+      applyReferenceUpdates(repository, update, { before, recovery: '.agent-logs/replaced/run' }),
+    ).toThrow('were refused');
+    expect(readFileSync(join(repository, SNAPSHOTS, 'a.png'), 'utf8')).toBe('old');
+    return repository;
+  };
+  const outside = mkdtempSync(join(tmpdir(), 'reference-outside-'));
+  refused((repository) => {
+    mkdirSync(join(repository, '.agent-logs'));
+    symlinkSync(outside, join(repository, '.agent-logs/replaced'));
+  });
+  expect(readdirSync(outside)).toEqual([]);
+  // Saved recovery data is never overwritten.
+  const collided = refused((repository) =>
+    write(repository, `.agent-logs/replaced/run/${SNAPSHOTS}/a.png`, 'saved'),
+  );
+  expect(readFileSync(join(collided, '.agent-logs/replaced/run', SNAPSHOTS, 'a.png'), 'utf8')).toBe('saved');
 });

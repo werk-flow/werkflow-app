@@ -8,6 +8,7 @@ import {
   readdirSync,
   readFileSync,
   renameSync,
+  rmdirSync,
   rmSync,
 } from 'node:fs';
 import { dirname, isAbsolute, join, relative } from 'node:path';
@@ -42,9 +43,13 @@ export function referencePathProblem(path: string): string | undefined {
   return undefined;
 }
 
-/** The update folder, relative to the checkout, for an update run started at `stamp` that exited `exitCode`. */
-export function updateFolder(stamp: string, exitCode: string): string {
-  return join(REFERENCE_UPDATES, exitCode === '0' ? stamp : `${stamp}${FAILED_RUN}`);
+/**
+ * The update folder, relative to the checkout, of the update the workstation named `name` (a UUID)
+ * whose run exited `exitCode`. The workstation places only the folder of a passed run.
+ */
+export function updateFolder(name: string, exitCode: string): string {
+  if (!/^[0-9a-f-]{36}$/.test(name)) throw new Error(`${JSON.stringify(name)} is no update name.`);
+  return join(REFERENCE_UPDATES, exitCode === '0' ? name : `${name}${FAILED_RUN}`);
 }
 
 /** Every regular file under `folder`, relative to it; a link or any other kind of entry throws. */
@@ -183,7 +188,9 @@ function placeUnchanged(
  * is a hard link, as for the results import (verify-on-boat.ts). A destination that changed here
  * since `before`, the hashes taken when the run started (edited, written or removed), keeps this
  * checkout's version up to its replacement; Boat's copy stays in `folder`, with the evidence. Each
- * version a placed file replaced stays in `recovery`. `copy` is a test's seam into placement.
+ * version a placed file replaced stays in `recovery`, a new folder relative to the checkout: one
+ * that exists or is reached through a symbolic link refuses the set. An empty one is removed.
+ * `copy` is a test's seam into placement.
  */
 export function applyReferenceUpdates(
   repository: string,
@@ -201,16 +208,24 @@ export function applyReferenceUpdates(
   const files = filesUnder(folder);
   const problem =
     files.map(referencePathProblem).find((found) => found !== undefined) ??
-    linkedDestination(repository, files) ??
-    destinationConflict(repository, files);
+    linkedDestination(repository, [...files, ...files.map((path) => join(recovery, path))]) ??
+    destinationConflict(repository, files) ??
+    (existsSync(join(repository, recovery)) ? `${recovery} exists already.` : undefined);
   if (problem) throw new Error(`The rewritten references were refused: ${problem}`);
+  // Created here and only once: nothing in it predates this update.
+  mkdirSync(dirname(join(repository, recovery)), { recursive: true });
+  mkdirSync(join(repository, recovery));
   const placed: string[] = [];
   const kept: string[] = [];
   for (const path of files) {
     try {
-      (placeUnchanged(repository, folder, path, before.get(path), { recovery, copy }) ? placed : kept).push(
-        path,
-      );
+      (placeUnchanged(repository, folder, path, before.get(path), {
+        recovery: join(repository, recovery),
+        copy,
+      })
+        ? placed
+        : kept
+      ).push(path);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(
@@ -218,5 +233,6 @@ export function applyReferenceUpdates(
       );
     }
   }
+  if (!readdirSync(join(repository, recovery)).length) rmdirSync(join(repository, recovery));
   return { placed, kept };
 }

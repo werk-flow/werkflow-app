@@ -2,6 +2,7 @@
 # Runs on a Boat machine started from the verification snapshot, for lib/testing/boat/verify-on-boat.ts.
 # Usage: remote-verify.sh <repository path> <HEAD commit> <main|linked> <test:verify arguments...>
 #    or: remote-verify.sh <repository path> <HEAD commit> <main|linked> <focused script> <arguments...>
+#    or: remote-verify.sh <repository path> <HEAD commit> <main|linked> test:audit:update-references <name> <arguments...>
 #    or: remote-verify.sh <repository path> <HEAD commit> <main|linked> types:generate
 #
 # It rebuilds the workstation's checkout at the same absolute path, so every path in a report or a
@@ -10,7 +11,7 @@
 # `test:audit:focused` or `test:golden:focused` runs that focused run instead
 # (lib/testing/boat/focused-on-boat.ts), always with the test server; `test:audit:update-references`
 # is the audit one with WERKFLOW_UPDATE_VISUAL_REFERENCES=1, and the references it rewrote or wrote
-# join the evidence (lib/testing/boat/reference-updates.ts). A leading `types:generate` writes the
+# join the evidence in the update folder the workstation named (lib/testing/boat/reference-updates.ts). A leading `types:generate` writes the
 # types of this tree's migrations from the fresh stack instead (lib/testing/boat/types-on-boat.ts),
 # without a server. It packs the evidence the run wrote into ~/results.tgz. Exit 90 means setup
 # failed before the run started.
@@ -21,7 +22,7 @@ head="$2"
 form="$3"
 shift 3
 script=test:verify
-update=0
+update=''
 case "${1:-}" in
   test:audit:focused | test:golden:focused | types:generate)
     script="$1"
@@ -29,9 +30,9 @@ case "${1:-}" in
     ;;
   test:audit:update-references)
     script=test:audit:focused
-    update=1
+    update="${2:-}"
     export WERKFLOW_UPDATE_VISUAL_REFERENCES=1
-    shift
+    shift 2
     ;;
 esac
 export PATH="$HOME/.bun/bin:$PATH"
@@ -147,7 +148,7 @@ if [ "$serve" = 1 ]; then
 fi
 
 phase "running $script $*"
-[ "$update" = 0 ] || bun scripts/boat/reference-updates.ts record "$HOME/references-before.json" ||
+[ -z "$update" ] || bun scripts/boat/reference-updates.ts record "$HOME/references-before.json" ||
   setup_failed "hashing the visual references"
 # The machine's peak memory use, so the run's size can be judged against its 16 GB.
 while :; do free -m | awk '/^Mem:/ { print $3 }'; sleep 5; done > "$HOME/memory.log" &
@@ -166,8 +167,8 @@ phase "$script exited $code; peak memory in use $(sort -n "$HOME/memory.log" | t
 # The run's own evidence: every report and run folder that did not exist before, and the server log.
 # A failed collection brings no reference back and fails the run, whatever the browser run's exit.
 # A failed run's references come back marked, as evidence the workstation never places.
-if [ "$update" = 1 ] && ! bun scripts/boat/reference-updates.ts collect "$HOME/references-before.json" \
-  "$(date -u +%Y-%m-%dT%H%M%SZ)" "$code"; then
+if [ -n "$update" ] && ! bun scripts/boat/reference-updates.ts collect "$HOME/references-before.json" \
+  "$update" "$code"; then
   printf '[boat] collecting the rewritten visual references failed; none come back, and the run fails.\n'
   code=1
 fi
