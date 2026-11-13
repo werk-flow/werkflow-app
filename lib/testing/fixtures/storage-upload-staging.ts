@@ -1,6 +1,8 @@
 // Actual storage adapter over an in-memory bucket. A signed upload URL writes
 // a staging key, and finalize registers only the server's copy, which each
-// promotion writes to a key of its own.
+// promotion writes to a key of its own. A copy alone leaves the staging
+// object, so a finalize whose registration may not have committed can copy
+// it again.
 import assert from 'node:assert/strict';
 import { installInMemoryBucket } from './in-memory-bucket';
 
@@ -11,7 +13,7 @@ const documentPath = `${documentFolder}aufmass.pdf`;
 const stagingPath = `${organizationId}/staging/92000000-0000-4000-8000-000000000011/aufmass.pdf`;
 const upload = (body: string) => ({ body, contentType: 'application/pdf' });
 
-const { createSignedUploadUrl, promoteUploadedObject } = await import('@/lib/storage/r2');
+const { copyStagedUpload, createSignedUploadUrl, promoteUploadedObject } = await import('@/lib/storage/r2');
 
 // The signed PUT names the staging key, never the key a document row references.
 const uploadUrl = new URL(
@@ -34,8 +36,17 @@ assert.notEqual(second.path, firstPath);
 assert.deepEqual(bucket.get(firstPath), upload('original'));
 assert.deepEqual(bucket.get(second.path), upload('replaced'));
 
-// Without a staged upload there is nothing to promote.
+// Without a staged upload there is nothing to promote or copy.
 bucket.clear();
 const missing = await promoteUploadedObject({ organizationId, path: documentPath });
 assert.equal(missing.exists, false);
+assert.equal((await copyStagedUpload({ organizationId, path: documentPath })).exists, false);
 assert.equal(bucket.size, 0);
+
+// A copy alone writes a key of its own and keeps the staged bytes, which a second copy finds again.
+bucket.set(stagingPath, upload('original'));
+const kept = await copyStagedUpload({ organizationId, path: documentPath });
+assert.deepEqual(bucket.get(kept.path), upload('original'));
+const again = await copyStagedUpload({ organizationId, path: documentPath });
+assert.notEqual(again.path, kept.path);
+assert.deepEqual([...bucket.keys()].sort(), [again.path, kept.path, stagingPath].sort());
