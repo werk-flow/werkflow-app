@@ -197,13 +197,13 @@ export async function getWorkArtifactDetail(
     artifact: {
       ...lead,
       ...toVisibleArtifactDetail(auth.context, opened.artifact, {
-      revisions: revisions.data ?? [],
-      actions: actions.data ?? [],
-      lines: lines.data ?? [],
-      defects: defects.data ?? [],
-      changes: changes.data ?? [],
-      documents: documents.data ?? [],
-      sources: sources.data ?? [],
+        revisions: revisions.data ?? [],
+        actions: actions.data ?? [],
+        lines: lines.data ?? [],
+        defects: defects.data ?? [],
+        changes: changes.data ?? [],
+        documents: documents.data ?? [],
+        sources: sources.data ?? [],
       }),
     },
   };

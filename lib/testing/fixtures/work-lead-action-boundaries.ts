@@ -41,7 +41,13 @@ const world = installActionWorld({
   ],
   job_assignments: [],
   work_artifacts: [
-    { id: changeRecord, organization_id: ORGANIZATION_A, job_id: jobA1, project_id: null, kind: 'change_work' },
+    {
+      id: changeRecord,
+      organization_id: ORGANIZATION_A,
+      job_id: jobA1,
+      project_id: null,
+      kind: 'change_work',
+    },
     { id: siteDiary, organization_id: ORGANIZATION_A, job_id: jobA1, project_id: null, kind: 'site_diary' },
   ],
   work_artifact_revisions: [
@@ -61,7 +67,8 @@ const world = installActionWorld({
 
 world.rpc = ({ name }) => {
   if (name === 'read_work_lead_scope') return { data: structuredClone(leadScope), error: null };
-  if (name === 'record_work_artifact_action') return { data: { version: 2, status: 'approved' }, error: null };
+  if (name === 'record_work_artifact_action')
+    return { data: { version: 2, status: 'approved' }, error: null };
   return { data: null, error: { code: 'P0001', message: `unexpected_function_${name}` } };
 };
 
@@ -72,7 +79,13 @@ const { getWorkArtifactDetail, getWorkArtifacts, recordWorkArtifactAction, saveW
 const initialDatabase = databaseSnapshot(world);
 const notAuthorized = { success: false, error: 'not_authorized' };
 const approve = (artifactId: string, revisionId: string) =>
-  recordWorkArtifactAction({ artifactId, revisionId, actionId: newId, expectedVersion: 1, actionType: 'internal_approved' });
+  recordWorkArtifactAction({
+    artifactId,
+    revisionId,
+    actionId: newId,
+    expectedVersion: 1,
+    actionType: 'internal_approved',
+  });
 const writes = () => world.rpcCalls.filter((call) => call.name !== 'read_work_lead_scope');
 
 // An employee who is not the lead, and the lead of project B, review and read

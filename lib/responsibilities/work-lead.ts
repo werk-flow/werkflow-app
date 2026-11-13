@@ -12,7 +12,7 @@ import type { WorkArtifactTarget } from '@/lib/work-artifacts/types';
  * is open and the member still belongs to the organization with effective
  * access and has not left.
  */
-export type WorkLeadScope = {
+type WorkLeadScope = {
   projectIds: ReadonlySet<string>;
   jobIds: ReadonlySet<string>;
 };
@@ -44,7 +44,9 @@ async function getWorkLeadScope(
 
 /** Whether the scope covers the job, or, for project-level work, the project. */
 function workLeadCovers(scope: WorkLeadScope, target: WorkArtifactTarget): boolean {
-  return target.targetType === 'job' ? scope.jobIds.has(target.targetId) : scope.projectIds.has(target.targetId);
+  return target.targetType === 'job'
+    ? scope.jobIds.has(target.targetId)
+    : scope.projectIds.has(target.targetId);
 }
 
 /**

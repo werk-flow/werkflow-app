@@ -153,22 +153,26 @@ export function WorkArtifactDialogActions({
   const { detail, editing, currentRevision, error } = editor;
   return (
     <>
-      {(!readOnly || detail?.leadReadOnly) && !editing && detail && currentRevision && detail.status !== 'voided' && (
-        <WorkArtifactActionPanel
-          detail={detail}
-          currentRevision={currentRevision}
-          editor={editor}
-          review={review}
-          customer={customer}
-          links={links}
-          isManager={isManager}
-          canApprove={canApprove}
-          currentUserId={currentUserId}
-          documents={documents}
-          timeEntryOptions={timeEntryOptions}
-          evidenceRequirements={evidenceRequirements}
-        />
-      )}
+      {(!readOnly || detail?.leadReadOnly) &&
+        !editing &&
+        detail &&
+        currentRevision &&
+        detail.status !== 'voided' && (
+          <WorkArtifactActionPanel
+            detail={detail}
+            currentRevision={currentRevision}
+            editor={editor}
+            review={review}
+            customer={customer}
+            links={links}
+            isManager={isManager}
+            canApprove={canApprove}
+            currentUserId={currentUserId}
+            documents={documents}
+            timeEntryOptions={timeEntryOptions}
+            evidenceRequirements={evidenceRequirements}
+          />
+        )}
       {/* A failed read offers its retry in place; the last-known detail stays visible. */}
       {editor.loadFailure && <SectionError failure={editor.loadFailure} />}
       <ErrorText>{error}</ErrorText>
