@@ -154,3 +154,12 @@ Rule 3 kept the wall-clock groups off shared runners, so nothing ran their steps
 ## Amendment 2026-11-13: the repositories belong to an organization
 
 On 2026-11-13 the repositories moved from the personal account `werk-flow` into the organization `werk-flow` (owner decisions 16 and 23 in werk-flow/werkflow-planning). An owner of that organization now sets the rulesets of the GitHub line above, not the personal account, which lives on as `werk-flow-temp` without access. The rulesets themselves are unchanged.
+
+## Amendment 2026-11-13: browser groups run last, once a draft is marked ready
+
+PR runs of `ci.yml` took a median 31 minutes, and more than half of them were cancelled by a newer push during review: the browser shards are the long pole, every other job ends in about 5 minutes. The owner decided on 2026-11-13 that browser tests run last (werk-flow/werkflow-planning#423).
+
+1. A thread opens its PR as a draft. A push to a draft runs every job of `ci.yml` except the browser shards and the midnight wait.
+2. When the level's reviews are done and every finding has a disposition, the thread marks the PR ready (`gh pr ready`). The `ready_for_review` event runs the diff-selected browser groups once, with every other job, on the same commit.
+3. A push to a PR that is not a draft runs everything, as before. Marking a PR a draft again starts no run.
+4. The merge gate is unchanged. On a draft, `Check` fails while the plan holds browser groups, so it never reads as green with them skipped. A draft whose diff selects no browser group has nothing held, and its `Check` passes.

@@ -11,13 +11,17 @@ name: CI
 # engine as a local run. The required check is `Check` at the end of this file.
 # `Midnight wait` holds the browser shards around Berlin midnight, so a run never
 # starts a group inside the window (ciBrowserHoldUntil in lib/testing/runner/group-schedule.ts).
+# A draft pull request runs every job except the browser shards and the wait, and its Check fails
+# while the plan holds browser groups; marking it ready (`ready_for_review`) runs them, with
+# every other job, on the same commit.
 on:
   # No label event starts a run: a relabel on the same commit cancelled the run in progress and
   # left the required `Check` failed or "Expected". The Unit job reads the PR's labels at run
   # time, and list-growth.yml reruns it when the owner's `approved: list growth` label changes.
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened]
+    # No `converted_to_draft`: a draft cannot merge, and its next push runs without the browser shards.
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
   workflow_call:
@@ -37,9 +41,9 @@ on:
 permissions:
   contents: read
 
-# A new commit's run cancels the PR's older run. A rerun takes a group of its own commit:
-# list-growth.yml may rerun a commit the PR has just left, and that rerun must neither cancel nor
-# replace the new head's run.
+# A new commit's run, or the run that marking a draft ready starts, cancels the PR's older run. A
+# rerun takes a group of its own commit: list-growth.yml may rerun a commit the PR has just left,
+# and that rerun must neither cancel nor replace the new head's run.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}-${{ inputs.full && 'full' || 'diff' }}${{ github.run_attempt != '1' && format('-rerun-{0}', github.event.pull_request.head.sha || github.sha) || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -237,7 +241,7 @@ jobs:
   midnight:
     name: Midnight wait
     needs: plan
-    if: needs.plan.outputs.midnight_until != ''
+    if: needs.plan.outputs.midnight_until != '' && github.event.pull_request.draft != true
     runs-on: ubuntu-24.04
     # Above the longest hold, CI_MIDNIGHT_HOLD_MAX_MS; a test keeps the two in step.
     timeout-minutes: 80
@@ -258,7 +262,8 @@ jobs:
     name: Browser ${{ matrix.shard }}
     needs: [plan, midnight]
     # `midnight` is skipped on almost every run, and a skipped need skips this job by default.
-    if: ${{ !cancelled() && needs.plan.outputs.browser == 'true' && contains(fromJSON('["success", "skipped"]'), needs.midnight.result) }}
+    # A draft's groups wait until it is marked ready; Check then fails on the skipped job.
+    if: ${{ !cancelled() && needs.plan.outputs.browser == 'true' && github.event.pull_request.draft != true && contains(fromJSON('["success", "skipped"]'), needs.midnight.result) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     # Reads the Build job's state.
@@ -334,7 +339,8 @@ jobs:
 
   # The one required status check. It fails unless every job passed, or the
   # browser shards were skipped because the plan selected no browser group, or
-  # the midnight wait was skipped because the plan set no hold.
+  # the midnight wait was skipped because the plan set no hold. So a draft
+  # fails it while the plan holds browser groups for the ready run.
   # `always()`, never `!cancelled()`: a cancelled run reports a failed Check,
   # and a skipped Check would count as passed.
   check:
@@ -347,8 +353,13 @@ jobs:
       - name: Require every job to pass
         env:
           RESULTS: ${{ toJSON(needs) }}
+          DRAFT: ${{ github.event.pull_request.draft == true }}
         run: |
           echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          # The rule below fails a draft's skipped browser shards; this says why.
+          if test "$DRAFT" = true && test "$(jq -r .plan.outputs.browser <<< "$RESULTS")" = true; then
+            echo "::error title=Draft::Draft: browser groups not run. Mark the PR ready (gh pr ready) to run them; Check then reports again."
+          fi
           echo "$RESULTS" | jq -e '.plan.outputs as $plan | all(to_entries[];
             .value.result == "success"
             or (.key == "browser" and .value.result == "skipped" and $plan.browser == "false")
