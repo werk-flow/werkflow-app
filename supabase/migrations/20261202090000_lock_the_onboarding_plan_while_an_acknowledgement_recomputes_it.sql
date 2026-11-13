@@ -41,8 +41,8 @@ begin
   if p_acknowledgement_kind = 'requirement_completed' then
     -- The plan before the requirement, as save_personnel_onboarding_requirement locks them.
     perform 1 from public.personnel_onboarding_plans plan
-    join public.personnel_onboarding_requirements requirement on requirement.plan_id = plan.id
-    where requirement.id = p_requirement_id and requirement.organization_id = p_organization_id
+    join public.personnel_onboarding_requirements plan_requirement on plan_requirement.plan_id = plan.id
+    where plan_requirement.id = p_requirement_id and plan_requirement.organization_id = p_organization_id
     for update of plan;
     select requirement.state, requirement.requirement_type
     into requirement_state, requirement_type
@@ -106,8 +106,8 @@ begin
     if employee_id is null then raise exception 'document_not_released'; end if;
   elsif p_acknowledgement_kind = 'requirement_completed' then
     perform 1 from public.personnel_onboarding_plans plan
-    join public.personnel_onboarding_requirements requirement on requirement.plan_id = plan.id
-    where requirement.id = p_requirement_id and requirement.organization_id = p_organization_id
+    join public.personnel_onboarding_requirements plan_requirement on plan_requirement.plan_id = plan.id
+    where plan_requirement.id = p_requirement_id and plan_requirement.organization_id = p_organization_id
     for update of plan;
     select * into requirement from public.personnel_onboarding_requirements
     where id = p_requirement_id and organization_id = p_organization_id for update;
