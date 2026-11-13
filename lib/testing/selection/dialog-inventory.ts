@@ -332,6 +332,15 @@ export const DIALOG_INVENTORY = {
     {
       audits: [{ route: '/aufgaben', role: 'employee', opener: 'field.evidence-upload' }],
     },
+  'components/mitarbeiter/school-day-dialogs.tsx#AddSchoolDayDialog|Berufsschule erfassen': {
+    audits: [{ route: '/mitarbeiter/[userId]', role: 'admin', opener: 'people.school-day-add' }],
+  },
+  'components/mitarbeiter/school-day-dialogs.tsx#EndSchoolDayDialog|Enddatum setzen': {
+    audits: [{ route: '/mitarbeiter/[userId]', role: 'admin', opener: 'people.school-day-end' }],
+  },
+  'components/mitarbeiter/school-days-section.tsx#CancelSchoolDayDialog|Berufsschule stornieren?': {
+    audits: [{ route: '/mitarbeiter/[userId]', role: 'admin', opener: 'people.school-day-cancel' }],
+  },
   'components/mitarbeiter/sickness-report-correct-dialog.tsx#CorrectSicknessDialog|Krankmeldung korrigieren':
     {
       audits: [{ route: '/mitarbeiter/[userId]', role: 'admin', opener: 'people.sickness-correct' }],
