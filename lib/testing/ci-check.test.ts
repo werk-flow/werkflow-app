@@ -1,7 +1,9 @@
 // A draft pull request runs no browser shard, and its required `Check` never passes while the
 // plan holds browser groups for the run that marking it ready starts (.github/workflows/ci.yml).
 import { expect, test } from 'bun:test';
-import { ciWorkflowAt, ciWorkflowText, runCiStep } from './ci-workflow';
+import { readWorkflow } from './ci-workflow';
+
+const ci = readWorkflow('ci.yml');
 
 const DRAFT_GUARD = 'github.event.pull_request.draft != true';
 const SUCCESS = { result: 'success', outputs: {} };
@@ -19,21 +21,21 @@ function check(input: { draft: boolean; planBrowser: 'true' | 'false'; browser: 
     midnight: { result: 'skipped', outputs: {} },
     browser: { result: input.browser, outputs: {} },
   };
-  return runCiStep('check', 'Require every job to pass', {
+  return ci.runStep('check', 'Require every job to pass', {
     env: { RESULTS: JSON.stringify(results), DRAFT: String(input.draft) },
   });
 }
 
 test('a draft runs no browser shard and no midnight wait, and marking it ready starts a run', () => {
-  expect(ciWorkflowAt('on', 'pull_request', 'types')).toEqual([
+  expect(ci.at('on', 'pull_request', 'types')).toEqual([
     'opened',
     'synchronize',
     'reopened',
     'ready_for_review',
   ]);
-  expect(ciWorkflowText('jobs', 'browser', 'if')).toContain(DRAFT_GUARD);
-  expect(ciWorkflowText('jobs', 'midnight', 'if')).toContain(DRAFT_GUARD);
-  expect(ciWorkflowText('jobs', 'check', 'steps', 0, 'env', 'DRAFT')).toContain(
+  expect(ci.text('jobs', 'browser', 'if')).toContain(DRAFT_GUARD);
+  expect(ci.text('jobs', 'midnight', 'if')).toContain(DRAFT_GUARD);
+  expect(ci.text('jobs', 'check', 'steps', 0, 'env', 'DRAFT')).toContain(
     'github.event.pull_request.draft == true',
   );
 });

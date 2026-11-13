@@ -67,7 +67,7 @@ For each hand-back:
 3. Merge a child with `gh pr merge <n> --squash --auto` once [the merge gate](../../../docs/technical/coderabbit.md#the-merge-gate) passes. A "full stop" child, or one that changes `AGENTS.md`, waits for the owner's merge: call `unwatch_pull_request`, post it under "Owner queue", and go on with the children that do not depend on it. When nothing else can move, ask through the question tool and end your turn. Confirm the merge with `gh pr view <n> --json state` before you start the next stage.
 4. Bring the new `main` into an open sibling only when GitHub reports it conflicting (`DIRTY`), and keep both sides. The merge queue tests the others on the newest `main`.
 5. Classify every failed job by [Failures](../../../docs/technical/testing.md#failures) before any rerun. Only an `environment` failure gets its one retry; cite its issue.
-6. Close the child issue with "Merged in <PR>."
+6. Once `gh pr view <n> --json state` reports `MERGED`, close the child issue with "Merged in <PR>."
 
 Start the next stage only after every child of this stage merged.
 

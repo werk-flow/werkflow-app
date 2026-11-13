@@ -5,7 +5,9 @@ import { execFileSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ciStep, ciWorkflowAt, ciWorkflowText, runCiStep } from './ci-workflow';
+import { readWorkflow } from './ci-workflow';
+
+const ci = readWorkflow('ci.yml');
 
 // Answers like gh: `--jq` runs through real jq, so the step's own filter is under test. It records
 // each call, fails every call while `broken` exists, and lists `labels-<n>.json` for PR <n>.
@@ -72,7 +74,7 @@ const read = (file: string): string =>
   existsSync(join(stub, file)) ? readFileSync(join(stub, file), 'utf8') : '';
 
 function step(job: string, name: string, env: Record<string, string>) {
-  return runCiStep(job, name, {
+  return ci.runStep(job, name, {
     cwd: repository,
     env: {
       PATH: `${stub}:${process.env.PATH}`,
@@ -103,21 +105,21 @@ const plan = (env: Record<string, string>) =>
   step('plan', 'Plan the browser groups', { FULL: '', QUEUE_RUN: '', BASE: '', ...env });
 
 test('the merge queue starts a run that plans against the queue base and is never a draft', () => {
-  expect(ciWorkflowAt('on', 'merge_group', 'types')).toEqual(['checks_requested']);
-  expect(ciStep('plan', 'Plan the browser groups').env).toHaveProperty(
+  expect(ci.at('on', 'merge_group', 'types')).toEqual(['checks_requested']);
+  expect(ci.step('plan', 'Plan the browser groups').env).toHaveProperty(
     'BASE',
     expect.stringContaining("github.event_name == 'merge_group' && github.event.merge_group.base_sha ||"),
   );
   // A merge_group event has no pull_request, so the draft guards hold and Check's DRAFT is false.
-  expect(ciWorkflowText('jobs', 'browser', 'if')).toContain('github.event.pull_request.draft != true');
-  expect(ciWorkflowAt('jobs', 'check', 'if')).toBe('always()');
+  expect(ci.text('jobs', 'browser', 'if')).toContain('github.event.pull_request.draft != true');
+  expect(ci.at('jobs', 'check', 'if')).toBe('always()');
 
   expect(plan({ BASE: 'queue-base-sha' }).passed).toBe(true);
   expect(read('bun.calls')).toBe('scripts/ci-plan.ts --base queue-base-sha\n');
 });
 
 test('a push to main whose tree a green queue run passed plans no browser group', () => {
-  expect(ciStep('plan', "Find the queue's run of this tree").if).toBe("github.event_name == 'push'");
+  expect(ci.step('plan', "Find the queue's run of this tree").if).toBe("github.event_name == 'push'");
   const tree = git('rev-parse', 'HEAD^{tree}');
   writeQueueRuns(['0'.repeat(40), tree]);
   const found = findQueueRun();
