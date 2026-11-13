@@ -263,3 +263,24 @@ Decided for werk-flow/werkflow-planning#319 on its sixth review and the lead's d
 ## Amendment 2026-11-12: a late chain of a session that still runs
 
 Decided by the lead for werk-flow/werkflow-planning#319. A stopped chain whose events belong to a session the server still holds open offers no correction: an approved addition plus the later end of that session would count the time twice. The phone shows the captured times and the order that counts them once (note the times, delete them, end the running session through the clock, then file the correction), as a forgotten clock-out is settled today.
+
+## Amendment 2026-11-12: stored records stay readable
+
+Decided by the E7 lead for werk-flow/werkflow-planning#402. It extends the stored-record invariant of the time outbox to report drafts: a draft record of an earlier version is always readable by every later release, and a record a release cannot read is never sent, shows to its person and stays on the device until that person deletes it; the golden records beside the draft store's reader (`lib/field-sync/device/draft-store.golden.json`) are the mechanism (Tier 2).
+
+## Amendment 2026-11-13: the device test matrix, run
+
+Recorded for werk-flow/werkflow-planning#321. The no-signal visit (flow `E7-F01`) ran by hand on the matrix's devices with a synthetic organization: today's assignment loaded with signal, signal lost, time recorded, a report saved on the device, a restart, the office changing the instruction and blocking the job's start, and the signal back. The browser group `audit:security:offline-visit` proves the same journey at 375 px in Chrome emulation.
+
+| Device | Install | How "without signal" was made | Result |
+| --- | --- | --- | --- |
+| Android emulator, Chrome, Android 17 | "Add to Home screen", "Install": a launcher icon with a Chrome badge that opens standalone; no WebAPK was minted | Airplane mode plus removing the `adb reverse` forwards: airplane mode alone leaves `localhost` reachable through the adb tunnel | Pass: the offline pack and the offline clock after a restart, two photos from the emulated camera kept with the draft, with signal the recorded actions once at their captured times, the job switch as „Konflikt“ with the office's reason, the changed instruction, the report as one revision with two photos |
+| iOS simulator, Safari, iOS 27.2 | "Add to Home Screen", opened from the Home Screen, signed in inside the web app | The local app server stopped: the simulator's airplane and Wi-Fi switches change only its status bar. This is "server gone, radio up", not real signal loss | Pass, except photos: the same states as on Android; the report arrived as one revision without photos |
+| Mac Safari | — | — | Not run: no tool in the agent session drives the Mac's own Safari without acting in the owner's browser profile |
+
+Differences from the matrix and the iOS limits table above:
+
+- **The camera.** On the iOS simulator the photo input opened the system camera, which shows no picture and takes none; because the input asks for the camera, iOS offers no photo library. The matrix already lists the camera as unprovable there; the photo step stays proven by Android's emulated camera, the browser group and a real iPhone.
+- **Offline through the host's network.** Neither device loses the app when the host or the device switches its network: Android reaches `localhost` through adb, and the iOS simulator through the Mac's loopback. A run cuts the tunnel (Android) or stops the server (iOS) instead.
+- **Restart.** Android: a Chrome process restart, then the home screen icon. iOS: the driver cannot close a Home Screen web app, so the restart is the web app's own reload when it is opened again; it loaded the offline page from the service worker.
+- **„Wartet auf Netz“ in the dock.** On iOS the dock showed the plain static mark: without the server the outbox view's code could not load. Android showed the badge. Both name the waiting state.
