@@ -7,13 +7,7 @@ import { SectionTitle } from '@/components/shared/section-title';
 import { StaleRegion } from '@/components/shared/stale-region';
 import { Button } from '@/components/ui/button';
 import { SectionError } from '@/components/ui/section-error';
-import { TextLink } from '@/components/ui/text-link';
-import type {
-  BillingPartySource,
-  BillingRecipient,
-  BillingWorkKind,
-  WorkBillingParties,
-} from '@/lib/billing-parties/types';
+import type { BillingRecipient, BillingWorkKind, WorkBillingParties } from '@/lib/billing-parties/types';
 import {
   partyLinks,
   resolveBillingVersions,
@@ -23,22 +17,9 @@ import {
 } from '@/lib/billing-parties/resolve';
 import { formatSiteAddress } from '@/lib/clients/types';
 import { formatBerlinDateTime } from '@/lib/utils';
+import { RecipientFact, partyName } from './work-billing-parties-facts';
 import { lazyWorkBillingPartiesDialog } from './work-billing-parties-lazy-dialog';
 import { WORK_BILLING_PARTIES_LOAD_FAILED, useWorkBillingParties } from './use-work-billing-parties';
-
-/** Why this recipient: shown under it on the work. */
-const SOURCE_LABELS: Readonly<Record<BillingPartySource, string>> = {
-  objekt: 'Rechnungsempfänger des Einsatzorts',
-  auftraggeber: 'Wie Auftraggeber',
-  projekt: 'Aus dem Projekt übernommen',
-  anfrage: 'Aus der Anfrage übernommen',
-  buero: 'Vom Büro gewählt',
-};
-
-/** A party's name, linked to its customer only where the page does not link it already. */
-export function partyName(party: { id: string; name: string }, linked: boolean): React.ReactNode {
-  return linked ? <TextLink href={`/kunden/${party.id}`}>{party.name}</TextLink> : party.name;
-}
 
 /** One labelled fact: a plain element, so the section adds no component per fact (lab.office.job-open). */
 function partyFact(label: string, value: React.ReactNode): React.ReactNode {
@@ -47,21 +28,6 @@ function partyFact(label: string, value: React.ReactNode): React.ReactNode {
       <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd className="mt-0.5 break-words text-sm">{value}</dd>
     </div>
-  );
-}
-
-/** The recipient as it was copied onto the work, and why and when. */
-export function RecipientFact({ current, linked }: { current: ResolvedBillingVersion; linked: boolean }) {
-  return (
-    <>
-      {partyName(current.recipient, linked)}
-      {current.recipient.address && (
-        <span className="block whitespace-pre-line text-muted-foreground">{current.recipient.address}</span>
-      )}
-      <span className="block text-xs text-muted-foreground">
-        {SOURCE_LABELS[current.source]} · {formatBerlinDateTime(current.setAt)}
-      </span>
-    </>
   );
 }
 

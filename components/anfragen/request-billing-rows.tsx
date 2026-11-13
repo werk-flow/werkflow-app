@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Pencil } from 'lucide-react';
 
-import { RecipientFact, partyName } from '@/components/auftraege/shared/work-billing-parties-section';
+import { RecipientFact, partyName } from '@/components/auftraege/shared/work-billing-parties-facts';
 import { lazyWorkBillingPartiesDialog } from '@/components/auftraege/shared/work-billing-parties-lazy-dialog';
 import {
   WORK_BILLING_PARTIES_LOAD_FAILED,
