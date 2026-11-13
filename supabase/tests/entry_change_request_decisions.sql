@@ -88,10 +88,10 @@ begin
         v_case.actor, v_case.organization, 'c5000000-0000-4000-8000-000000000033', v_case.decision);
       raise exception 'decision by % in % was not refused', v_case.actor, v_case.organization;
     exception when raise_exception then
-      if sqlerrm <> v_case.expected then raise; end if;
+      if sqlerrm is distinct from v_case.expected then raise; end if;
     end;
   end loop;
-  if (select status from public.entry_change_requests where id = 'c5000000-0000-4000-8000-000000000033') <> 'pending'
+  if (select status from public.entry_change_requests where id = 'c5000000-0000-4000-8000-000000000033') is distinct from 'pending'
     or (select count(*) from public.time_entries
         where id in ('c5000000-0000-4000-8000-000000000023', 'c5000000-0000-4000-8000-000000000024')
           and status = 'pending_delete') <> 2
@@ -134,7 +134,7 @@ begin
       where id in ('c5000000-0000-4000-8000-000000000027', 'c5000000-0000-4000-8000-000000000028')
         and status = 'pending_delete') <> 2
     or (select timestamp from public.time_entries where id = 'c5000000-0000-4000-8000-000000000029')
-      <> '2026-04-08 08:00+02'
+      is distinct from '2026-04-08 08:00+02'
   then
     raise exception 'a refused decision changed its entries';
   end if;
@@ -151,26 +151,26 @@ declare
 begin
   -- Approving an edit keeps the entry as edited.
   v_request := public.decide_entry_change_request(v_admin, v_org, 'c5000000-0000-4000-8000-000000000031', 'approve');
-  if v_request.status <> 'approved' or v_request.reviewed_by <> v_admin or v_request.reviewed_at is null
+  if v_request.status is distinct from 'approved' or v_request.reviewed_by is distinct from v_admin or v_request.reviewed_at is null
     or (select timestamp from public.time_entries where id = 'c5000000-0000-4000-8000-000000000021')
-      <> '2026-04-02 08:30+02'
+      is distinct from '2026-04-02 08:30+02'
   then
     raise exception 'approving an edit changed the entry or missed the decision';
   end if;
 
   -- Rejecting an edit restores the original timestamp.
   v_request := public.decide_entry_change_request(v_admin, v_org, 'c5000000-0000-4000-8000-000000000032', 'reject');
-  if v_request.status <> 'rejected'
-    or (select status from public.entry_change_requests where id = 'c5000000-0000-4000-8000-000000000032') <> 'rejected'
+  if v_request.status is distinct from 'rejected'
+    or (select status from public.entry_change_requests where id = 'c5000000-0000-4000-8000-000000000032') is distinct from 'rejected'
     or (select timestamp from public.time_entries where id = 'c5000000-0000-4000-8000-000000000022')
-      <> '2026-04-03 08:00+02'
+      is distinct from '2026-04-03 08:00+02'
   then
     raise exception 'rejecting an edit did not restore the original time';
   end if;
 
   -- Rejecting a deletion restores both entries.
   v_request := public.decide_entry_change_request(v_admin, v_org, 'c5000000-0000-4000-8000-000000000033', 'reject');
-  if v_request.status <> 'rejected'
+  if v_request.status is distinct from 'rejected'
     or (select count(*) from public.time_entries
         where id in ('c5000000-0000-4000-8000-000000000023', 'c5000000-0000-4000-8000-000000000024')
           and status = 'approved') <> 2
@@ -180,7 +180,7 @@ begin
 
   -- Approving a deletion removes the pair, and the cascade removes the request.
   v_request := public.decide_entry_change_request(v_admin, v_org, 'c5000000-0000-4000-8000-000000000034', 'approve');
-  if v_request.status <> 'approved' or v_request.reviewed_by <> v_admin
+  if v_request.status is distinct from 'approved' or v_request.reviewed_by is distinct from v_admin
     or exists (select 1 from public.time_entries
       where id in ('c5000000-0000-4000-8000-000000000025', 'c5000000-0000-4000-8000-000000000026'))
     or exists (select 1 from public.entry_change_requests where id = 'c5000000-0000-4000-8000-000000000034')

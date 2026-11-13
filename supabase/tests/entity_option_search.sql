@@ -153,87 +153,87 @@ begin
 
   -- Projects: newest number first across the page boundary, the unnumbered last.
   result := public.search_project_options(org,'',null,false,0);
-  if jsonb_array_length(result->'options')<>50 or not (result->>'hasMore')::boolean
-    or result#>>'{options,0,projectNumber}'<>'PRJ-2026-1051' or result#>>'{options,49,projectNumber}'<>'PRJ-2026-1002' then
+  if jsonb_array_length(result->'options') is distinct from 50 or not (result->>'hasMore')::boolean
+    or result#>>'{options,0,projectNumber}' is distinct from 'PRJ-2026-1051' or result#>>'{options,49,projectNumber}' is distinct from 'PRJ-2026-1002' then
     raise exception 'project first page wrong: %',result#>>'{options,0,projectNumber}';
   end if;
-  if result#>>'{options,0,clientName}'<>'Hauptkunde' or (result#>>'{options,0,jobCount}')::int<>3
-    or (result#>>'{options,0,completedJobCount}')::int<>3 then raise exception 'project counts or customer lost'; end if;
+  if result#>>'{options,0,clientName}' is distinct from 'Hauptkunde' or (result#>>'{options,0,jobCount}')::int is distinct from 3
+    or (result#>>'{options,0,completedJobCount}')::int is distinct from 3 then raise exception 'project counts or customer lost'; end if;
   result := public.search_project_options(org,'',null,false,1050);
-  if jsonb_array_length(result->'options')<>2 or (result->>'hasMore')::boolean
-    or result#>>'{options,0,projectNumber}'<>'PRJ-2026-1' or result#>>'{options,1,name}'<>'Ohne Nummer' then
+  if jsonb_array_length(result->'options') is distinct from 2 or (result->>'hasMore')::boolean
+    or result#>>'{options,0,projectNumber}' is distinct from 'PRJ-2026-1' or result#>>'{options,1,name}' is distinct from 'Ohne Nummer' then
     raise exception 'project last page wrong: %',result->'options';
   end if;
   -- Open only: the closed project 1051 and the override 1049 drop before the page boundary.
   result := public.search_project_options(org,'',null,true,0);
-  if jsonb_array_length(result->'options')<>50 or result#>>'{options,0,projectNumber}'<>'PRJ-2026-1050'
-    or result#>>'{options,1,projectNumber}'<>'PRJ-2026-1048' then raise exception 'open projects wrong'; end if;
+  if jsonb_array_length(result->'options') is distinct from 50 or result#>>'{options,0,projectNumber}' is distinct from 'PRJ-2026-1050'
+    or result#>>'{options,1,projectNumber}' is distinct from 'PRJ-2026-1048' then raise exception 'open projects wrong'; end if;
   -- Customer filter keeps projects without a customer and drops the other customer's.
   result := public.search_project_options(org,'',  '78000000-0000-4000-8000-000000000021',false,0);
-  if jsonb_array_length(result->'options')<>2 or result#>>'{options,0,projectNumber}'<>'PRJ-2026-1048'
-    or result#>>'{options,1,name}'<>'Ohne Nummer' then raise exception 'project customer filter wrong'; end if;
+  if jsonb_array_length(result->'options') is distinct from 2 or result#>>'{options,0,projectNumber}' is distinct from 'PRJ-2026-1048'
+    or result#>>'{options,1,name}' is distinct from 'Ohne Nummer' then raise exception 'project customer filter wrong'; end if;
   result := public.search_project_options(org,'nebenkunde 50%_',null,false,0);
-  if jsonb_array_length(result->'options')<>1 then raise exception 'project search by customer name failed'; end if;
+  if jsonb_array_length(result->'options') is distinct from 1 then raise exception 'project search by customer name failed'; end if;
   -- A site filter keeps only the projects at that site.
   result := public.search_project_options(org,'',null,false,0,'78000000-0000-4000-8000-000000000030');
-  if jsonb_array_length(result->'options')<>1 or result#>>'{options,0,siteId}'<>'78000000-0000-4000-8000-000000000030' then raise exception 'project site filter wrong'; end if;
+  if jsonb_array_length(result->'options') is distinct from 1 or result#>>'{options,0,siteId}' is distinct from '78000000-0000-4000-8000-000000000030' then raise exception 'project site filter wrong'; end if;
   result := public.search_project_options(org,'9999',null,false,0);
-  if jsonb_array_length(result->'options')<>0 then raise exception 'project search leaked a foreign project'; end if;
+  if jsonb_array_length(result->'options') is distinct from 0 then raise exception 'project search leaked a foreign project'; end if;
 
   -- Clock jobs: the worker sees the assigned open jobs, never a parked one: own job in
   -- progress, today's own visit, the next own visits by date, then the other own jobs.
   result := public.search_clock_job_options(org,worker,false,'2026-10-09','2026-10-08T22:00:00Z','2026-10-09T22:00:00Z','',50,null);
   if (select array_agg(item.value->>'jobNumber' order by item.position) from jsonb_array_elements(result->'options') with ordinality item(value,position))
-    <> array['AUF-2026-2001','AUF-2026-2','AUF-2026-2003','AUF-2026-2002','AUF-2026-1']
+    is distinct from array['AUF-2026-2001','AUF-2026-2','AUF-2026-2003','AUF-2026-2002','AUF-2026-1']
     or (select array_agg(item.value->>'group' order by item.position) from jsonb_array_elements(result->'options') with ordinality item(value,position))
-    <> array['in_progress','today','upcoming','upcoming','own']
-    or result#>>'{options,2,nextVisitDate}'<>'2026-10-11' or result#>>'{options,3,nextVisitDate}'<>'2026-10-12'
+    is distinct from array['in_progress','today','upcoming','upcoming','own']
+    or result#>>'{options,2,nextVisitDate}' is distinct from '2026-10-11' or result#>>'{options,3,nextVisitDate}' is distinct from '2026-10-12'
     or not (result#>>'{options,1,plannedToday}')::boolean then
     raise exception 'worker clock order wrong: %',result->'options';
   end if;
   result := public.search_clock_job_options(org,worker,false,'2026-10-09','2026-10-08T22:00:00Z','2026-10-09T22:00:00Z','Heizkörper',2,null);
   if (select array_agg(item.value->>'jobNumber' order by item.position) from jsonb_array_elements(result->'options') with ordinality item(value,position))
-    <> array['AUF-2026-2001','AUF-2026-2003'] or not (result->>'hasMore')::boolean then
+    is distinct from array['AUF-2026-2001','AUF-2026-2003'] or not (result->>'hasMore')::boolean then
     raise exception 'clock order not applied before the page boundary: %',result->'options';
   end if;
   -- An office role gets the same own groups first (another worker's visit and
   -- another job in progress do not count), then everyone else's jobs by title.
   result := public.search_clock_job_options(org,worker,true,'2026-10-09','2026-10-08T22:00:00Z','2026-10-09T22:00:00Z','',50,null);
   if (select array_agg(item.value->>'jobNumber' order by item.position) from jsonb_array_elements(result->'options') with ordinality item(value,position))[1:8]
-    <> array['AUF-2026-2001','AUF-2026-2','AUF-2026-5','AUF-2026-3','AUF-2026-2003','AUF-2026-2002','AUF-2026-1','AUF-2026-4']
-    or result#>>'{options,7,group}'<>'other' or not (result->>'hasMore')::boolean then
+    is distinct from array['AUF-2026-2001','AUF-2026-2','AUF-2026-5','AUF-2026-3','AUF-2026-2003','AUF-2026-2002','AUF-2026-1','AUF-2026-4']
+    or result#>>'{options,7,group}' is distinct from 'other' or not (result->>'hasMore')::boolean then
     raise exception 'manager clock ranking wrong: %',result->'options';
   end if;
   result := public.search_clock_job_options(org,worker,true,'2026-10-09','2026-10-08T22:00:00Z','2026-10-09T22:00:00Z','Heizkörper',50,null);
   if (select array_agg(item.value->>'jobNumber' order by item.position) from jsonb_array_elements(result->'options') with ordinality item(value,position))
-    <> array['AUF-2026-2001','AUF-2026-2003','AUF-2026-2002','AUF-2026-2005'] then
+    is distinct from array['AUF-2026-2001','AUF-2026-2003','AUF-2026-2002','AUF-2026-2005'] then
     raise exception 'manager clock search lists a parked job or misorders: %',result->'options';
   end if;
   result := public.search_clock_job_options(org,worker,true,'2026-10-09','2026-10-08T22:00:00Z','2026-10-09T22:00:00Z','',1000,null);
-  if jsonb_array_length(result->'options')<>1000 or not (result->>'hasMore')::boolean then raise exception 'clock limit wrong'; end if;
+  if jsonb_array_length(result->'options') is distinct from 1000 or not (result->>'hasMore')::boolean then raise exception 'clock limit wrong'; end if;
   result := public.search_clock_job_options(org,worker,true,'2026-10-09','2026-10-08T22:00:00Z','2026-10-09T22:00:00Z','AUF-2026-1051',50,md5('opt-job-1051')::uuid);
-  if jsonb_array_length(result->'options')<>0 or result#>>'{selected,jobNumber}'<>'AUF-2026-1051' then
+  if jsonb_array_length(result->'options') is distinct from 0 or result#>>'{selected,jobNumber}' is distinct from 'AUF-2026-1051' then
     raise exception 'finished job listed or selected job lost';
   end if;
   result := public.search_clock_job_options(org,worker,false,'2026-10-09','2026-10-08T22:00:00Z','2026-10-09T22:00:00Z','',50,md5('opt-job-9')::uuid);
-  if result->'selected'<>'null'::jsonb then raise exception 'worker sees an unassigned selected job'; end if;
+  if result->'selected' is distinct from 'null'::jsonb then raise exception 'worker sees an unassigned selected job'; end if;
   result := public.search_clock_job_options(org,worker,true,'2026-10-09','2026-10-08T22:00:00Z','2026-10-09T22:00:00Z','fremdauftrag',50,null);
-  if jsonb_array_length(result->'options')<>0 then raise exception 'clock search leaked a foreign job'; end if;
+  if jsonb_array_length(result->'options') is distinct from 0 then raise exception 'clock search leaked a foreign job'; end if;
 
   -- Inventory: name order, inactive excluded, literal `%_`, barcode, more than 1,000 reachable.
   result := public.search_inventory_item_options(org,'',0);
-  if jsonb_array_length(result->'options')<>50 or not (result->>'hasMore')::boolean or result#>>'{options,0,name}'<>'Artikel 0001' then
+  if jsonb_array_length(result->'options') is distinct from 50 or not (result->>'hasMore')::boolean or result#>>'{options,0,name}' is distinct from 'Artikel 0001' then
     raise exception 'inventory first page wrong';
   end if;
   result := public.search_inventory_item_options(org,'',1100);
-  if jsonb_array_length(result->'options')<>7 or (result->>'hasMore')::boolean then
+  if jsonb_array_length(result->'options') is distinct from 7 or (result->>'hasMore')::boolean then
     raise exception 'inventory last page wrong: %',result->'options';
   end if;
   result := public.search_inventory_item_options(org,'50%_',0);
-  if jsonb_array_length(result->'options')<>1 or result#>>'{options,0,unit}'<>'meter' or (result#>>'{options,0,isBillable}')::boolean
-    or result#>>'{options,0,internalSku}'<>'SKU-81' then raise exception 'inventory literal search wrong'; end if;
+  if jsonb_array_length(result->'options') is distinct from 1 or result#>>'{options,0,unit}' is distinct from 'meter' or (result#>>'{options,0,isBillable}')::boolean
+    or result#>>'{options,0,internalSku}' is distinct from 'SKU-81' then raise exception 'inventory literal search wrong'; end if;
   result := public.search_inventory_item_options(org,'4001234',0);
-  if jsonb_array_length(result->'options')<>1 or result#>>'{options,0,name}'<>'Artikel 0007' then raise exception 'barcode search failed'; end if;
+  if jsonb_array_length(result->'options') is distinct from 1 or result#>>'{options,0,name}' is distinct from 'Artikel 0007' then raise exception 'barcode search failed'; end if;
   result := public.search_inventory_item_options(org,'artikel',0);
   if exists(select 1 from jsonb_array_elements(result->'options') option where option->>'name' in ('Inaktiver Artikel','Fremdartikel')) then
     raise exception 'inactive or foreign item listed';
@@ -241,39 +241,39 @@ begin
 
   -- Service cases: natural number order across the page boundary.
   result := public.search_service_case_options(org,'',null,null,false,0);
-  if jsonb_array_length(result->'options')<>50 or result#>>'{options,0,caseNumber}'<>'SRV-2026-1'
-    or result#>>'{options,49,caseNumber}'<>'SRV-2026-50' then raise exception 'case first page wrong'; end if;
+  if jsonb_array_length(result->'options') is distinct from 50 or result#>>'{options,0,caseNumber}' is distinct from 'SRV-2026-1'
+    or result#>>'{options,49,caseNumber}' is distinct from 'SRV-2026-50' then raise exception 'case first page wrong'; end if;
   for offset_value in 0..1050 by 50 loop
     result := public.search_service_case_options(org,'',null,null,false,offset_value);
     seen := seen + jsonb_array_length(result->'options');
   end loop;
-  if seen<>1051 then raise exception 'cases unreachable: %',seen; end if;
+  if seen is distinct from 1051 then raise exception 'cases unreachable: %',seen; end if;
   result := public.search_service_case_options(org,'',null,null,false,1000);
-  if result#>>'{options,0,caseNumber}'<>'SRV-2026-1001' or result#>>'{options,49,caseNumber}'<>'SRV-2026-1050' or not (result->>'hasMore')::boolean then
+  if result#>>'{options,0,caseNumber}' is distinct from 'SRV-2026-1001' or result#>>'{options,49,caseNumber}' is distinct from 'SRV-2026-1050' or not (result->>'hasMore')::boolean then
     raise exception 'case natural order wrong at the boundary';
   end if;
   result := public.search_service_case_options(org,'','78000000-0000-4000-8000-000000000020','78000000-0000-4000-8000-000000000030',true,1000);
-  if jsonb_array_length(result->'options')<>49 or result#>>'{options,48,caseNumber}'<>'SRV-2026-1049' then
+  if jsonb_array_length(result->'options') is distinct from 49 or result#>>'{options,48,caseNumber}' is distinct from 'SRV-2026-1049' then
     raise exception 'case customer, site or open filter wrong';
   end if;
   result := public.search_service_case_options(org,'störung 105',null,null,false,0);
-  if jsonb_array_length(result->'options')<>3 then raise exception 'case search wrong'; end if;
+  if jsonb_array_length(result->'options') is distinct from 3 then raise exception 'case search wrong'; end if;
 
   -- Coverages: customer and site filter, literal search, no foreign rows.
   result := public.search_coverage_options(org,'','78000000-0000-4000-8000-000000000021','78000000-0000-4000-8000-000000000031',0);
-  if jsonb_array_length(result->'options')<>1 or result#>>'{options,0,coverageNumber}'<>'WDV-2026-1050' then
+  if jsonb_array_length(result->'options') is distinct from 1 or result#>>'{options,0,coverageNumber}' is distinct from 'WDV-2026-1050' then
     raise exception 'coverage filter wrong';
   end if;
   result := public.search_coverage_options(org,'50%_',null,null,0);
-  if jsonb_array_length(result->'options')<>1 or result#>>'{options,0,coverageNumber}'<>'WDV-2026-1049' then
+  if jsonb_array_length(result->'options') is distinct from 1 or result#>>'{options,0,coverageNumber}' is distinct from 'WDV-2026-1049' then
     raise exception 'coverage literal search wrong';
   end if;
   result := public.search_coverage_options(org,'',null,null,1001);
-  if jsonb_array_length(result->'options')<>50 or (result->>'hasMore')::boolean or result#>>'{options,49,coverageNumber}'<>'WDV-2026-1051' then
+  if jsonb_array_length(result->'options') is distinct from 50 or (result->>'hasMore')::boolean or result#>>'{options,49,coverageNumber}' is distinct from 'WDV-2026-1051' then
     raise exception 'coverage last page wrong';
   end if;
   result := public.search_coverage_options('78000000-0000-4000-8000-000000000011','',null,null,0);
-  if jsonb_array_length(result->'options')<>1 then raise exception 'coverage tenant scope wrong'; end if;
+  if jsonb_array_length(result->'options') is distinct from 1 then raise exception 'coverage tenant scope wrong'; end if;
 end $$;
 
 -- A browser role cannot call a reader at all.

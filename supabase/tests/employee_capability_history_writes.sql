@@ -62,7 +62,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -180,7 +180,7 @@ alter table public.employee_record_events disable trigger refuse_employee_record
 
 do $$
 begin
-  if pg_temp.capability_state() <> (select state from capability_state_before) then
+  if pg_temp.capability_state() is distinct from (select state from capability_state_before) then
     raise exception 'a refused capability write changed rows or history';
   end if;
 end;
@@ -206,10 +206,10 @@ begin
   v_renewed_id := public.add_employee_capability(v_actor, v_org, v_employee, v_certification,
     '2026-01-01', '2026-12-31', 'TÜV', '2026-11-30', 'confirmed', 'received', 'Kurs', v_expired);
   select * into v_record from public.employee_capabilities where id = v_renewed_id;
-  if v_record.capability_kind <> 'certification' or v_record.issuer <> 'TÜV'
-    or v_record.confirmation_status <> 'confirmed' or v_record.confirmed_by <> v_actor
-    or v_record.evidence_state <> 'received' or v_record.supersedes_id <> v_expired
-    or v_record.created_by <> v_actor
+  if v_record.capability_kind is distinct from 'certification' or v_record.issuer is distinct from 'TÜV'
+    or v_record.confirmation_status is distinct from 'confirmed' or v_record.confirmed_by is distinct from v_actor
+    or v_record.evidence_state is distinct from 'received' or v_record.supersedes_id is distinct from v_expired
+    or v_record.created_by is distinct from v_actor
   then raise exception 'renewing stored the wrong row: %', to_jsonb(v_record); end if;
   if (select superseded_at from public.employee_capabilities where id = v_expired) is null then
     raise exception 'renewing did not supersede the previous certification';
@@ -225,9 +225,9 @@ begin
   perform public.update_employee_capability(v_actor, v_org, v_skill_record, '2026-02-01', null,
     'Ignoriert', '2026-03-01', 'confirmed', 'received', 'Neu');
   select * into v_record from public.employee_capabilities where id = v_skill_record;
-  if v_record.valid_from <> '2026-02-01' or v_record.issuer is not null or v_record.renewal_due_date is not null
-    or v_record.confirmation_status <> 'unconfirmed' or v_record.evidence_state <> 'not_required'
-    or v_record.operational_note <> 'Neu' or v_record.updated_by <> v_actor
+  if v_record.valid_from is distinct from '2026-02-01' or v_record.issuer is not null or v_record.renewal_due_date is not null
+    or v_record.confirmation_status is distinct from 'unconfirmed' or v_record.evidence_state is distinct from 'not_required'
+    or v_record.operational_note is distinct from 'Neu' or v_record.updated_by is distinct from v_actor
   then raise exception 'correcting stored the wrong row: %', to_jsonb(v_record); end if;
   select event_payload into v_payload from public.employee_record_events
   where employee_record_id = v_employee and event_type = 'qualification_corrected' and created_by = v_actor;
@@ -238,7 +238,7 @@ begin
       'valid_from', '2026-02-01', 'valid_until', null, 'issuer', null, 'renewal_due_date', null,
       'confirmation_status', 'unconfirmed', 'confirmed_by', null, 'confirmed_at', null,
       'evidence_state', 'not_required', 'operational_note', 'Neu', 'updated_by', v_actor)
-    or v_payload ->> 'employee_capability_id' <> v_skill_record::text
+    or v_payload ->> 'employee_capability_id' is distinct from v_skill_record::text
   then raise exception 'correcting recorded the wrong history: %', v_payload; end if;
 
   -- A new skill keeps no certification fields and records 'qualification_added'.
@@ -247,8 +247,8 @@ begin
   v_renewed_id := public.add_employee_capability(v_actor, v_org, v_employee, v_skill,
     '2026-07-01', null, 'Ignoriert', null, 'confirmed', 'pending', null, null);
   select * into v_record from public.employee_capabilities where id = v_renewed_id;
-  if v_record.capability_kind <> 'skill' or v_record.issuer is not null
-    or v_record.confirmation_status <> 'unconfirmed' or v_record.evidence_state <> 'not_required'
+  if v_record.capability_kind is distinct from 'skill' or v_record.issuer is not null
+    or v_record.confirmation_status is distinct from 'unconfirmed' or v_record.evidence_state is distinct from 'not_required'
   then raise exception 'adding a skill stored the wrong row: %', to_jsonb(v_record); end if;
   if (select count(*) from public.employee_record_events
       where employee_record_id = v_employee and event_type = 'qualification_added'

@@ -170,7 +170,7 @@ begin
         (select scrub_revision from public.problem_reports where id = v_case.report_id), array[]::uuid[]);
       raise exception 'the hand-out of % was accepted', v_case.report_id;
     exception when raise_exception then
-      if sqlerrm <> v_case.code then
+      if sqlerrm is distinct from v_case.code then
         raise exception 'the hand-out of % answered %, not %', v_case.report_id, sqlerrm, v_case.code;
       end if;
     end;
@@ -198,7 +198,7 @@ begin
   v_shot := public.hand_out_problem_report_screenshot(
     v_org, '33600000-0000-0000-0000-000000000020', array[]::uuid[]);
   if v_shot ->> 'path' not like '33600000-0000-0000-0000-000000000010/problem-reports/%'
-    or v_shot ->> 'mime_type' <> 'image/png'
+    or v_shot ->> 'mime_type' is distinct from 'image/png'
   then raise exception 'the screenshot hand-out answered %', v_shot; end if;
   if (select count(*) from public.problem_report_events
       where report_id = '33600000-0000-0000-0000-000000000020'
@@ -242,7 +242,7 @@ begin
       perform public.triage_problem_report(v_org, v_case.report_id, null, v_case.changes, v_case.expected, array[]::uuid[]);
       raise exception 'the Agent''s change % was accepted', v_case.changes;
     exception when raise_exception then
-      if sqlerrm <> v_case.code then
+      if sqlerrm is distinct from v_case.code then
         raise exception 'the Agent''s change % answered %, not %', v_case.changes, sqlerrm, v_case.code;
       end if;
     end;
@@ -311,7 +311,7 @@ begin
     jsonb_build_object('status', 'eingegangen', 'bucket', null, 'response', null),
     array[v_support]);
   select * into v_row from public.problem_reports where id = v_report;
-  if v_row.status <> 'erledigt' or v_row.bucket <> 'fehler' or v_row.response <> 'Behoben, ab morgen live.'
+  if v_row.status is distinct from 'erledigt' or v_row.bucket is distinct from 'fehler' or v_row.response is distinct from 'Behoben, ab morgen live.'
     or not v_row.response_by_agent or v_row.closed_at is null
   then raise exception 'the write-back did not apply: %', row_to_json(v_row); end if;
   if (select array_agg(event_type order by event_type) from public.problem_report_events
@@ -347,16 +347,16 @@ declare
 begin
   -- Each call stands alone: a check in the same statement reads the row as it was before the call.
   v_state := public.record_problem_report_scrub(v_org, v_old, null, null, 1);
-  if v_state <> 'veraltet'
+  if v_state is distinct from 'veraltet'
     or (select scrubbed_description from public.problem_reports where id = v_old) is null
   then raise exception 'a failed scrub removed an older copy or hid that it stays'; end if;
   v_state := public.record_problem_report_scrub(v_org, v_old, 'Bei [Kunde 1] hängt die Liste', '{}', 1);
-  if v_state <> 'bereinigt'
+  if v_state is distinct from 'bereinigt'
     or (select scrubbed_description <> 'Bei [Kunde 1] hängt die Liste' or scrub_version <> 1
         from public.problem_reports where id = v_old)
   then raise exception 'a newer version did not rewrite the older copy'; end if;
   v_state := public.record_problem_report_scrub(v_org, v_old, null, null, 1);
-  if v_state <> 'bereinigt'
+  if v_state is distinct from 'bereinigt'
     or (select scrubbed_description from public.problem_reports where id = v_old) is null
   then raise exception 'a failed scrub removed a current copy'; end if;
   update public.problem_reports set scrub_version = 2 where id = v_old;
@@ -413,12 +413,12 @@ begin
   update public.problem_reports set scrub_version = 1 where id = v_report;
   v_checked := (select scrub_revision from public.problem_reports where id = v_report);
   update public.problem_reports set scrub_revision = 0 where id = v_report;
-  if (select scrub_revision from public.problem_reports where id = v_report) <> v_checked then
+  if (select scrub_revision from public.problem_reports where id = v_report) is distinct from v_checked then
     raise exception 'a direct write changed the revision';
   end if;
   perform public.withdraw_problem_report_copy(v_org, v_report, 1);
   perform public.record_problem_report_scrub(v_org, v_report, 'Die neue Kopie', '{}', 1);
-  if (select scrub_revision from public.problem_reports where id = v_report) <> v_checked + 2 then
+  if (select scrub_revision from public.problem_reports where id = v_report) is distinct from v_checked + 2 then
     raise exception 'the withdrawal and the new scrub did not each raise the revision';
   end if;
   begin
@@ -431,7 +431,7 @@ begin
     or exists (select 1 from public.problem_report_events where report_id = v_report)
   then raise exception 'a refused hand-out of a rewritten copy claimed or wrote history'; end if;
   v_copy := public.hand_out_problem_report(v_org, v_report, 1, v_checked + 2, array[]::uuid[]);
-  if v_copy ->> 'description' <> 'Die neue Kopie' then
+  if v_copy ->> 'description' is distinct from 'Die neue Kopie' then
     raise exception 'the hand-out did not answer the newly checked copy: %', v_copy;
   end if;
 end;

@@ -62,7 +62,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -173,10 +173,10 @@ begin
   v_first := pg_temp.attach(v_org, v_employee, '32000000-0000-0000-0000-000000000080', v_hash,
     '32000000-0000-0000-0000-000000000030', '32000000-0000-0000-0000-000000000031',
     '32000000-0000-0000-0000-000000000020', v_two_photos);
-  if v_first <> jsonb_build_object('artifactId', '32000000-0000-0000-0000-000000000030',
+  if v_first is distinct from jsonb_build_object('artifactId', '32000000-0000-0000-0000-000000000030',
     'revisionId', '32000000-0000-0000-0000-000000000031', 'version', 3, 'replayed', false)
   then raise exception 'the first attach answered %', v_first; end if;
-  if (select status from public.work_artifacts where id = '32000000-0000-0000-0000-000000000030') <> 'draft'
+  if (select status from public.work_artifacts where id = '32000000-0000-0000-0000-000000000030') is distinct from 'draft'
     or exists (select 1 from public.work_artifact_actions
       where artifact_id = '32000000-0000-0000-0000-000000000030')
   then raise exception 'an attached draft did not stay a draft'; end if;
@@ -187,13 +187,13 @@ begin
   v_again := pg_temp.attach(v_org, v_employee, '32000000-0000-0000-0000-000000000080', v_hash,
     '32000000-0000-0000-0000-000000000030', '32000000-0000-0000-0000-000000000031',
     '32000000-0000-0000-0000-000000000020', v_two_photos);
-  if v_again <> v_first || jsonb_build_object('replayed', true)
+  if v_again is distinct from v_first || jsonb_build_object('replayed', true)
   then raise exception 'the resend answered %', v_again; end if;
   if (select count(*) from public.work_artifact_revisions
       where artifact_id = '32000000-0000-0000-0000-000000000030') <> 1
     or (select count(*) from public.work_artifact_revision_documents
       where revision_id = '32000000-0000-0000-0000-000000000031') <> 2
-    or (select version from public.work_artifacts where id = '32000000-0000-0000-0000-000000000030') <> 3
+    or (select version from public.work_artifacts where id = '32000000-0000-0000-0000-000000000030') is distinct from 3
     or (select count(*) from public.work_artifact_draft_operations where organization_id = v_org) <> 1
   then raise exception 'a replayed attach wrote again'; end if;
 

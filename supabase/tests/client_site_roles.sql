@@ -68,7 +68,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -149,8 +149,8 @@ begin
   v_role := public.assign_client_site_role('45000000-0000-0000-0000-000000000002',
     '45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000040', 'hausverwaltung',
     '45000000-0000-0000-0000-000000000021', null, null);
-  if v_role.client_id <> '45000000-0000-0000-0000-000000000020' or v_role.starts_on is not null
-    or v_role.created_by <> '45000000-0000-0000-0000-000000000002'
+  if v_role.client_id is distinct from '45000000-0000-0000-0000-000000000020' or v_role.starts_on is not null
+    or v_role.created_by is distinct from '45000000-0000-0000-0000-000000000002'
   then raise exception 'the recorded role does not name its Objekt''s customer and actor: %', v_role; end if;
   perform public.assign_client_site_role('45000000-0000-0000-0000-000000000002',
     '45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000040', 'eigentuemer',
@@ -198,7 +198,7 @@ begin
     and holder_client_id = '45000000-0000-0000-0000-000000000021';
   if v_old.ends_on is distinct from '2026-06-30'::date
     or v_old.ended_by is distinct from '45000000-0000-0000-0000-000000000002'
-    or v_new.starts_on <> '2026-07-01'::date or v_new.ends_on is not null
+    or v_new.starts_on is distinct from '2026-07-01'::date or v_new.ends_on is not null
   then raise exception 'the change did not end the previous Hausverwaltung the day before: % %', v_old, v_new; end if;
   if (select count(*) from public.client_site_roles where site_id = '45000000-0000-0000-0000-000000000040'
       and role = 'hausverwaltung') <> 2
@@ -263,9 +263,9 @@ begin
   v_owner := public.assign_client_site_role('45000000-0000-0000-0000-000000000002',
     '45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000040', 'eigentuemer',
     '45000000-0000-0000-0000-000000000020', null, '2020-01-01');
-  if v_changed.holder_client_id <> '45000000-0000-0000-0000-000000000022'
-    or v_changed.starts_on <> '2026-07-01'::date or v_changed.ends_on is not null
-    or v_owner.holder_client_id <> '45000000-0000-0000-0000-000000000020'
+  if v_changed.holder_client_id is distinct from '45000000-0000-0000-0000-000000000022'
+    or v_changed.starts_on is distinct from '2026-07-01'::date or v_changed.ends_on is not null
+    or v_owner.holder_client_id is distinct from '45000000-0000-0000-0000-000000000020'
   then raise exception 'a retried assignment did not return the recorded role: % %', v_changed, v_owner; end if;
   if (select count(*) from public.client_site_roles where site_id = '45000000-0000-0000-0000-000000000040'
       and role = 'hausverwaltung') <> 2
@@ -273,11 +273,11 @@ begin
       and role = 'eigentuemer') <> 1
     or (select ends_on from public.client_site_roles where site_id = '45000000-0000-0000-0000-000000000040'
       and role = 'hausverwaltung' and holder_client_id = '45000000-0000-0000-0000-000000000021')
-      <> '2026-06-30'::date
+      is distinct from '2026-06-30'::date
   then raise exception 'a retried assignment wrote a role or moved an end'; end if;
   if (select count(*) from public.client_master_events
       where organization_id = '45000000-0000-0000-0000-000000000010'
-        and site_id = '45000000-0000-0000-0000-000000000040') <> v_events
+        and site_id = '45000000-0000-0000-0000-000000000040') is distinct from v_events
   then raise exception 'a retried assignment wrote a second history event'; end if;
 end;
 $$;
@@ -304,7 +304,7 @@ begin
     'role_not_found');
   v_role := public.end_client_site_role('45000000-0000-0000-0000-000000000002',
     '45000000-0000-0000-0000-000000000010', v_owner, '2037-12-31');
-  if v_role.ends_on <> '2037-12-31'::date or v_role.holder_client_id <> '45000000-0000-0000-0000-000000000020'
+  if v_role.ends_on is distinct from '2037-12-31'::date or v_role.holder_client_id is distinct from '45000000-0000-0000-0000-000000000020'
   then raise exception 'ending a role did not keep it with its end: %', v_role; end if;
   -- A retried end returns the role and writes no second event.
   v_events := (select count(*) from public.client_master_events
@@ -312,11 +312,11 @@ begin
       and site_id = '45000000-0000-0000-0000-000000000040');
   v_role := public.end_client_site_role('45000000-0000-0000-0000-000000000002',
     '45000000-0000-0000-0000-000000000010', v_owner, '2037-12-31');
-  if v_role.id <> v_owner or v_role.ends_on <> '2037-12-31'::date
+  if v_role.id is distinct from v_owner or v_role.ends_on is distinct from '2037-12-31'::date
   then raise exception 'a retried end did not return the ended role: %', v_role; end if;
   if (select count(*) from public.client_master_events
       where organization_id = '45000000-0000-0000-0000-000000000010'
-        and site_id = '45000000-0000-0000-0000-000000000040') <> v_events
+        and site_id = '45000000-0000-0000-0000-000000000040') is distinct from v_events
   then raise exception 'a retried end wrote a second history event'; end if;
   perform pg_temp.expect_refusal('ending an ended role',
     format($sql$select public.end_client_site_role('45000000-0000-0000-0000-000000000002',
@@ -369,7 +369,7 @@ begin
   v_contact := public.update_client_contact('45000000-0000-0000-0000-000000000002',
     '45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000030',
     '{"site_role": "zugangskontakt"}');
-  if v_contact.site_role <> 'zugangskontakt' or not exists (
+  if v_contact.site_role is distinct from 'zugangskontakt' or not exists (
     select 1 from public.client_master_events where contact_id = v_contact.id
       and event_payload ->> 'field' = 'site_role' and event_payload ->> 'new' = 'zugangskontakt'
   ) then raise exception 'changing a contact''s role at the Objekt kept no history'; end if;
@@ -409,20 +409,20 @@ begin
   foreach v_search in array array['Lindenstraße 5', '10115', 'berlin', 'obj-77'] loop
     v_page := public.list_customer_page('45000000-0000-0000-0000-000000000010', v_search, 1, 50, false);
     select jsonb_agg(client -> 'id' order by client ->> 'name') into v_ids from jsonb_array_elements(v_page -> 'clients') client;
-    if v_ids <> '["45000000-0000-0000-0000-000000000022", "45000000-0000-0000-0000-000000000020"]'::jsonb
+    if v_ids is distinct from '["45000000-0000-0000-0000-000000000022", "45000000-0000-0000-0000-000000000020"]'::jsonb
     then raise exception 'searching % did not find the Objekt''s customer and current Hausverwaltung: %', v_search, v_page; end if;
     v_site := v_page -> 'clients' -> 0 -> 'matchedSites' -> 0;
-    if v_site ->> 'id' <> '45000000-0000-0000-0000-000000000040'
-      or v_site ->> 'clientName' <> 'WEG Lindenstraße 5'
-      or v_site -> 'equipment' <> '[{"id": "45000000-0000-0000-0000-000000000060", "name": "Gasbrennwerttherme Keller", "equipmentNumber": "ROLES-A-1"}]'::jsonb
-      or (v_site ->> 'equipmentTotal')::integer <> 1
+    if v_site ->> 'id' is distinct from '45000000-0000-0000-0000-000000000040'
+      or v_site ->> 'clientName' is distinct from 'WEG Lindenstraße 5'
+      or v_site -> 'equipment' is distinct from '[{"id": "45000000-0000-0000-0000-000000000060", "name": "Gasbrennwerttherme Keller", "equipmentNumber": "ROLES-A-1"}]'::jsonb
+      or (v_site ->> 'equipmentTotal')::integer is distinct from 1
       or not v_site -> 'roles' @> '[{"role": "eigentuemer", "holderName": "WEG Lindenstraße 5"}]'::jsonb
-      or (v_page -> 'clients' -> 0 ->> 'matchedSiteTotal')::integer <> 1
+      or (v_page -> 'clients' -> 0 ->> 'matchedSiteTotal')::integer is distinct from 1
     then raise exception 'searching % did not show the Objekt with its roles and Anlagen: %', v_search, v_site; end if;
   end loop;
   v_page := public.list_customer_page('45000000-0000-0000-0000-000000000010', 'k-1001', 1, 50, false);
-  if (v_page ->> 'total')::integer <> 1 or v_page -> 'clients' -> 0 ->> 'id' <> '45000000-0000-0000-0000-000000000020'
-    or v_page -> 'clients' -> 0 -> 'matchedSites' <> '[]'::jsonb
+  if (v_page ->> 'total')::integer is distinct from 1 or v_page -> 'clients' -> 0 ->> 'id' is distinct from '45000000-0000-0000-0000-000000000020'
+    or v_page -> 'clients' -> 0 -> 'matchedSites' is distinct from '[]'::jsonb
   then raise exception 'the customer source number did not find its customer alone: %', v_page; end if;
 end;
 $$;
@@ -447,7 +447,7 @@ declare
 begin
   v_result := public.delete_unlinked_client('45000000-0000-0000-0000-000000000002',
     '45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000021');
-  if v_result <> '{"deleted": false, "links": {"site_roles": 1}}'::jsonb
+  if v_result is distinct from '{"deleted": false, "links": {"site_roles": 1}}'::jsonb
   then raise exception 'deleting a former Hausverwaltung did not refuse with its role: %', v_result; end if;
   perform public.assign_client_site_role('45000000-0000-0000-0000-000000000002',
     '45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000041', 'eigentuemer',
@@ -457,7 +457,7 @@ begin
    '45000000-0000-0000-0000-000000000041', 'zugangskontakt');
   v_result := public.delete_unlinked_client('45000000-0000-0000-0000-000000000002',
     '45000000-0000-0000-0000-000000000010', '45000000-0000-0000-0000-000000000024');
-  if v_result <> '{"deleted": true, "links": {}}'::jsonb
+  if v_result is distinct from '{"deleted": true, "links": {}}'::jsonb
     or exists (select 1 from public.client_site_roles where site_id = '45000000-0000-0000-0000-000000000041')
     or exists (select 1 from public.client_contacts where site_id = '45000000-0000-0000-0000-000000000041')
   then raise exception 'an unlinked owner of its own Objekt and access contact was not deleted: %', v_result; end if;

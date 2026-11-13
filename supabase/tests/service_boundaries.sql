@@ -78,7 +78,7 @@ begin
   if (public.create_installed_equipment(
     '18000000-0000-0000-0000-000000000010', '18000000-0000-0000-0000-000000000040',
     v_root_payload, '18000000-0000-0000-0000-000000000001', '18000000-0000-0000-0000-000000000041'
-  )).equipment_number <> v_root.equipment_number
+  )).equipment_number is distinct from v_root.equipment_number
     or (select count(*) from public.installed_equipment
         where organization_id = '18000000-0000-0000-0000-000000000010') <> 1 then
     raise exception 'replayed equipment create was not idempotent';
@@ -123,9 +123,9 @@ begin
       'category', 'system_component', 'state', 'unknown', 'identifiers', '[]'::jsonb),
     '18000000-0000-0000-0000-000000000001', '18000000-0000-0000-0000-000000000047'
   );
-  if v_component.parent_equipment_id <> v_root.id
-    or v_component.client_id <> v_root.client_id
-    or v_component.site_id <> v_root.site_id
+  if v_component.parent_equipment_id is distinct from v_root.id
+    or v_component.client_id is distinct from v_root.client_id
+    or v_component.site_id is distinct from v_root.site_id
     or v_component.equipment_number = v_root.equipment_number then
     raise exception 'component does not keep its own number under the parent customer and site';
   end if;
@@ -169,7 +169,7 @@ begin
       'equipmentIds', jsonb_build_array('18000000-0000-0000-0000-000000000040')),
     '18000000-0000-0000-0000-000000000001', '18000000-0000-0000-0000-000000000051'
   );
-  if v_case.case_number !~ '^SRV-\d{4}-\d{3}$' or v_case.intake_type <> 'direct'
+  if v_case.case_number !~ '^SRV-\d{4}-\d{3}$' or v_case.intake_type is distinct from 'direct'
     or v_case.source_request_id is not null then
     raise exception 'direct service case lost its identity: %', v_case.case_number;
   end if;
@@ -193,7 +193,7 @@ begin
       raise exception 'a stale service case update was not rejected: %', sqlerrm;
     end if;
   end;
-  if (select triage_note from public.service_cases where id = v_case.id) <> 'Nur Verdacht' then
+  if (select triage_note from public.service_cases where id = v_case.id) is distinct from 'Nur Verdacht' then
     raise exception 'a rejected stale update changed the service case';
   end if;
 
@@ -234,12 +234,12 @@ begin
       'chargeContext', 'unknown', 'equipmentIds', '[]'::jsonb),
     '18000000-0000-0000-0000-000000000001', '18000000-0000-0000-0000-000000000059'
   );
-  if v_converted.intake_type <> 'request'
-    or v_converted.source_request_id <> '18000000-0000-0000-0000-000000000057'
-    or v_converted.original_statement <> 'Heizung kalt SQL'
-    or v_converted.original_details <> 'Kalte Heizkörper seit dem Morgen.'
-    or v_converted.urgency <> 'hoch'
-    or (select status from public.client_requests where id = '18000000-0000-0000-0000-000000000057') <> 'umgewandelt'
+  if v_converted.intake_type is distinct from 'request'
+    or v_converted.source_request_id is distinct from '18000000-0000-0000-0000-000000000057'
+    or v_converted.original_statement is distinct from 'Heizung kalt SQL'
+    or v_converted.original_details is distinct from 'Kalte Heizkörper seit dem Morgen.'
+    or v_converted.urgency is distinct from 'hoch'
+    or (select status from public.client_requests where id = '18000000-0000-0000-0000-000000000057') is distinct from 'umgewandelt'
     or exists (select 1 from public.service_case_equipment_links where service_case_id = v_converted.id) then
     raise exception 'request conversion did not keep the request wording, urgency and empty equipment scope';
   end if;
@@ -427,7 +427,7 @@ begin
     ] loop
       execute format('select count(*) from public.%I where organization_id = $1', v_table)
         into v_count using '18000000-0000-0000-0000-000000000010'::uuid;
-      if v_count <> 0 then raise exception '% read % rows of %', v_user, v_count, v_table; end if;
+      if v_count is distinct from 0 then raise exception '% read % rows of %', v_user, v_count, v_table; end if;
     end loop;
   end loop;
 end;
