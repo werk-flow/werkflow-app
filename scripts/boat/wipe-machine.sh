@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Runs on a Boat verification machine for lib/testing/boat/machine-reuse.ts, which sends this text as
-# the command itself, so the script never lands on the machine's disk.
+# the command itself, so the script never lands on the machine's disk. It sends origin/main's copy,
+# whatever branch the run is on (main-wipe-script.ts), so a branch behind main calls this version
+# with its own arguments: keep both commands below accepting what an older caller sends.
 #
 #   record                           On a fresh machine, before its first run: lists every path the
 #                                    snapshot left in each place a run writes, and marks the time.
