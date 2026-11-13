@@ -64,10 +64,10 @@ For each hand-back:
 1. Call `link_pull_request` and `watch_pull_request` for the PR.
 2. Read the diff against its issue. Then babysit the PR by [Babysit a pull request](../../../docs/technical/coderabbit.md#babysit-a-pull-request): every CI and review wake is yours. Fix small gaps and small findings yourself.
    For a larger fix round, start a fresh `delegate_task` whose prompt names the PR, its head SHA, the branch and each finding to fix, and ends with the same hand-back line. Each review or re-check round is a new `delegate_task`.
-3. Merge a child with `gh pr merge --squash` once [the merge gate](../../../docs/technical/coderabbit.md#the-merge-gate) passes. A "full stop" child, or one that changes `AGENTS.md`, waits for the owner's merge: call `unwatch_pull_request`, post it under "Owner queue", and go on with the children that do not depend on it. When nothing else can move, ask through the question tool and end your turn. Confirm the merge with `gh pr view <n> --json state` before you start the next stage.
-4. Rebase the open siblings on the new `main`. Where two children edit the same lines, keep both sides.
+3. Merge a child with `gh pr merge <n> --squash --auto` once [the merge gate](../../../docs/technical/coderabbit.md#the-merge-gate) passes. A "full stop" child, or one that changes `AGENTS.md`, waits for the owner's merge: call `unwatch_pull_request`, post it under "Owner queue", and go on with the children that do not depend on it. When nothing else can move, ask through the question tool and end your turn. A merge wakes nobody, so keep one repeating `schedule_task` of yours, changed in place, that confirms `MERGED` with `gh pr view <n> --json state` and starts the next stage, or finds the child open and out of the queue ([the merge gate](../../../docs/technical/coderabbit.md#the-merge-gate)) and babysits it again; delete it when the epic settles.
+4. Bring the new `main` into an open sibling only when GitHub reports it conflicting (`DIRTY`), and keep both sides. The merge queue tests the others on the newest `main`.
 5. Classify every failed job by [Failures](../../../docs/technical/testing.md#failures) before any rerun. Only an `environment` failure gets its one retry; cite its issue.
-6. Close the child issue with "Merged in <PR>."
+6. Once `gh pr view <n> --json state` reports `MERGED`, close the child issue with "Merged in <PR>."
 
 Start the next stage only after every child of this stage merged.
 

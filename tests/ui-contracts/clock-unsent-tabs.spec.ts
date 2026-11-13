@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { clockDock } from '../golden/support/steps/time-tracking';
 import { CLOCK_ORGANIZATION_ID, CLOCK_USER_ID } from './clock-state-fixture';
 import {
@@ -10,6 +10,13 @@ import {
   unsentOnDevice,
   unsentSection,
 } from './clock-unsent-support';
+
+declare global {
+  interface Window {
+    /** Lets go of the take-in a contract holds (tapAfterAnotherTabSignedOut). */
+    releaseTakeIn?: () => void;
+  }
+}
 
 // What one tab learns of another tab's clock actions (werk-flow/werkflow-planning#319): an action
 // another tab kept, and another tab's sign-out or switch, which ends this tab's hold.
@@ -50,10 +57,25 @@ test('a tab that started without unsent work learns of an action another tab kep
   await expect(unsentBadge(clockDock(page))).toHaveText('Wartet auf Netz');
 });
 
-test('after another tab’s sign-out ended this tab’s hold, a tap never reaches the server ahead of the person’s waiting events', async ({
-  page,
-}) => {
+/**
+ * Another tab's sign-out ends this tab's hold while the person's start waits without signal; then
+ * the signal is back. `beforeOutboxShows` holds the take-in of kept actions until the hold ended,
+ * as a slow phone does while the outbox code starts, so the outbox never showed the waiting start.
+ */
+async function tapAfterAnotherTabSignedOut(page: Page, beforeOutboxShows: boolean): Promise<void> {
   const server = await mountClock(page, CLOCKED_OUT_STATE);
+  if (beforeOutboxShows)
+    await page.evaluate(
+      () =>
+        new Promise<void>((held) => {
+          void navigator.locks.request('werkflow-kept-clock-actions', () => {
+            held();
+            return new Promise<void>((release) => {
+              window.releaseTakeIn = release;
+            });
+          });
+        }),
+    );
   await startWithoutNetwork(page, server);
   await expect(unsentBadge(clockDock(page))).toHaveText('Wartet auf Netz');
   const waiting = (await unsentOnDevice(page)).map((event) => event.operationId);
@@ -65,6 +87,7 @@ test('after another tab’s sign-out ended this tab’s hold, a tap never reache
     );
   });
   await expect(unsentBadge(clockDock(page))).toHaveCount(0);
+  await page.evaluate(() => window.releaseTakeIn?.());
   // The signal is back, and no `online` event told the page yet.
   server.online = true;
   await page.evaluate(() => {
@@ -79,6 +102,18 @@ test('after another tab’s sign-out ended this tab’s hold, a tap never reache
   // Only the person's waiting start may reach the server; the new tap neither went online nor was kept.
   expect(server.sent.every((envelope) => waiting.includes(envelope.operationId))).toBe(true);
   await setNetwork(page, server, false);
+}
+
+test('after another tab’s sign-out ended this tab’s hold, a tap never reaches the server ahead of the person’s waiting events', async ({
+  page,
+}) => {
+  await tapAfterAnotherTabSignedOut(page, false);
+});
+
+test('a hold another tab’s sign-out ended before the outbox showed the waiting start shows the server’s clock again, and a tap there still never reaches the server ahead of it', async ({
+  page,
+}) => {
+  await tapAfterAnotherTabSignedOut(page, true);
 });
 
 test('a session end that fails after its check lifts its own barrier, so keeping works again', async ({
