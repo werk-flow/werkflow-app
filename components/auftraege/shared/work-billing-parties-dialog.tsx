@@ -18,8 +18,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
+import { SectionError } from '@/components/ui/section-error';
 import { Field } from '@/components/ui/field';
-import { usePendingTask } from '@/hooks/use-server-action';
+import { usePendingTask, useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { setWorkBillingParties } from '@/lib/billing-parties/actions';
 import type { BillingWorkKind } from '@/lib/billing-parties/types';
@@ -40,6 +41,9 @@ const ERROR_MESSAGES: Record<string, string> = {
 /** A save refused because another save landed first reads the parties again. */
 const REREAD_ON = new Set(['parties_changed']);
 
+const REREAD_FAILED =
+  'Auftraggeber oder Rechnungsempfänger wurden gerade geändert, aber die aktuellen Angaben konnten nicht geladen werden. Deine Auswahl bleibt erhalten.';
+
 const CLIENT_FIELD_ID = 'billing-parties-client';
 const RECIPIENT_FIELD_ID = 'billing-parties-recipient';
 
@@ -52,9 +56,23 @@ type FormProps = {
   task: ReturnType<typeof usePendingTask>;
   onClose: () => void;
   onSaved: () => Promise<void>;
-  /** Reads the parties again without closing the dialog. */
-  onReread: () => Promise<void>;
+  /** Reads the parties again without closing the dialog; false when the read failed. */
+  onReread: () => Promise<boolean>;
 };
+
+/**
+ * The reread after a refused save, and its retry when it failed: the entered
+ * values stay until a reread lands and the form takes the newer pair.
+ */
+function useRereadAfterRefusal(onReread: () => Promise<boolean>) {
+  const [failed, setFailed] = useState(false);
+  const retry = useServerAction(async () => setFailed(!(await onReread())));
+  return {
+    failed,
+    retry,
+    afterRefusal: async (): Promise<void> => setFailed(!(await onReread())),
+  };
+}
 
 function useBillingPartiesForm({ kind, workId, current, task, onSaved, onReread }: FormProps) {
   const { showBanner } = useBanner();
@@ -63,6 +81,7 @@ function useBillingPartiesForm({ kind, workId, current, task, onSaved, onReread 
   const [clientError, setClientError] = useState<string | null>(null);
   const [recipientError, setRecipientError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const reread = useRereadAfterRefusal(onReread);
   // The choice belongs to the version the form saw. A newer version replaces
   // it only after a save was refused for it, with the notice saying why; a
   // read that lands while the user edits never replaces the edit silently,
@@ -108,7 +127,7 @@ function useBillingPartiesForm({ kind, workId, current, task, onSaved, onReread 
         );
         if (REREAD_ON.has(result.error)) {
           setAdoptNewer(true);
-          await onReread();
+          await reread.afterRefusal();
         }
         return;
       }
@@ -118,6 +137,7 @@ function useBillingPartiesForm({ kind, workId, current, task, onSaved, onReread 
   };
 
   return {
+    reread,
     client,
     recipient,
     clientError,
@@ -143,6 +163,8 @@ export type WorkBillingPartiesDialogProps = {
   current: ResolvedBillingVersion | null;
   /** Resolves once the card shows the saved parties. */
   onSaved: () => Promise<void>;
+  /** Reads the parties again after a refused save; false when that read failed. */
+  onReread: () => Promise<boolean>;
 };
 
 /**
@@ -157,6 +179,7 @@ export function WorkBillingPartiesDialog({
   workId,
   current,
   onSaved,
+  onReread,
 }: WorkBillingPartiesDialogProps) {
   const task = usePendingTask();
   const onClose = () => onOpenChange(false);
@@ -169,7 +192,7 @@ export function WorkBillingPartiesDialog({
           current={current}
           task={task}
           onClose={onClose}
-          onReread={onSaved}
+          onReread={onReread}
           onSaved={async () => {
             await onSaved();
             onClose();
@@ -219,7 +242,16 @@ function WorkBillingPartiesForm(props: FormProps) {
               disabled={isPending}
             />
           </Field>
-          <ErrorText>{form.error}</ErrorText>
+          {form.reread.failed ? (
+            <SectionError
+              onRetry={() => void form.reread.retry.run()}
+              retryPending={form.reread.retry.isPending}
+            >
+              {REREAD_FAILED}
+            </SectionError>
+          ) : (
+            <ErrorText>{form.error}</ErrorText>
+          )}
         </DialogBody>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>

@@ -31,7 +31,7 @@ export function RequestBillingRows({
   initialParties: WorkBillingParties | undefined;
   isEditable: boolean;
 }) {
-  const view = useWorkBillingParties('request', requestId, initialParties);
+  const { view, reread } = useWorkBillingParties('request', requestId, initialParties);
   const [editing, setEditing] = useState(false);
   const parties = view.data;
   if (parties === undefined) {
@@ -94,6 +94,7 @@ export function RequestBillingRows({
         workId={requestId}
         current={current}
         onSaved={view.refresh}
+        onReread={reread}
       />
     </>
   );

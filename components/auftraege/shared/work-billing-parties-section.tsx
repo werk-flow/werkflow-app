@@ -205,7 +205,7 @@ export function WorkBillingPartiesSection({
   workClientId: string | null;
   className?: string;
 }) {
-  const view = useWorkBillingParties(kind, id, initialParties);
+  const { view, reread } = useWorkBillingParties(kind, id, initialParties);
   const [editing, setEditing] = useState(false);
   const openEditor = useCallback(() => setEditing(true), []);
   const parties = view.data;
@@ -255,6 +255,7 @@ export function WorkBillingPartiesSection({
           workId={id}
           current={versions[0] ?? null}
           onSaved={view.refresh}
+          onReread={reread}
         />
       )}
     </StaleRegion>

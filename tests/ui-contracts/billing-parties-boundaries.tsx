@@ -33,14 +33,24 @@ const saved: ResolvedBillingVersion = {
   recipient: lindenhof,
 };
 
+/** How many of the next rereads fail, as a lost connection does. */
+let failingRereads = 0;
+
 export function BillingPartiesContractFixture(): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [current, setCurrent] = useState(seen);
   // The other user's save reaches this page while the dialog is open.
   useEffect(() => {
     const deliver = (): void => setCurrent(saved);
+    const failNextReread = (): void => {
+      failingRereads = 1;
+    };
     window.addEventListener('contract-billing-newer', deliver);
-    return () => window.removeEventListener('contract-billing-newer', deliver);
+    window.addEventListener('contract-billing-reread-fails', failNextReread);
+    return () => {
+      window.removeEventListener('contract-billing-newer', deliver);
+      window.removeEventListener('contract-billing-reread-fails', failNextReread);
+    };
   }, []);
   return (
     <BannerProvider>
@@ -55,6 +65,14 @@ export function BillingPartiesContractFixture(): React.JSX.Element {
           current={current}
           // The reread finds the version the other save wrote.
           onSaved={async () => setCurrent(saved)}
+          onReread={async () => {
+            if (failingRereads > 0) {
+              failingRereads -= 1;
+              return false;
+            }
+            setCurrent(saved);
+            return true;
+          }}
         />
       </main>
     </BannerProvider>

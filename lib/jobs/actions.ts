@@ -606,6 +606,8 @@ export async function getJobByNumber(
       .select(`*, ${JOB_BILLING_PARTIES_EMBED}`)
       .eq('organization_id', orgId)
       .eq('job_number', decodeURIComponent(jobNumber))
+      // Newest first, so the current version leads whatever cuts the list.
+      .order('version', { referencedTable: 'work_billing_parties', ascending: false })
       .single();
 
     if (jobError || !jobRow) {

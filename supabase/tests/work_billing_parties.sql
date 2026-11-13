@@ -69,7 +69,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -130,21 +130,21 @@ declare
   v_party public.work_billing_parties;
 begin
   v_party := app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050');
-  if v_party.version is distinct from 1 or v_party.source <> 'objekt'
-    or v_party.client_id <> '32700000-0000-0000-0000-000000000020'
-    or v_party.recipient_client_id <> '32700000-0000-0000-0000-000000000021'
-    or v_party.recipient_name <> 'Hausverwaltung Lindenhof GmbH'
+  if v_party.version is distinct from 1 or v_party.source is distinct from 'objekt'
+    or v_party.client_id is distinct from '32700000-0000-0000-0000-000000000020'
+    or v_party.recipient_client_id is distinct from '32700000-0000-0000-0000-000000000021'
+    or v_party.recipient_name is distinct from 'Hausverwaltung Lindenhof GmbH'
     or v_party.recipient_address is distinct from 'Hofweg 1, 10117 Berlin'
     or v_party.set_by is not null
   then raise exception 'the Objekt''s payer did not become the recipient of job 50: %', to_jsonb(v_party); end if;
   v_party := app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000051');
-  if v_party.source <> 'auftraggeber' or v_party.recipient_client_id <> '32700000-0000-0000-0000-000000000020'
-    or v_party.recipient_name <> 'WEG Lindenstraße 5'
+  if v_party.source is distinct from 'auftraggeber' or v_party.recipient_client_id is distinct from '32700000-0000-0000-0000-000000000020'
+    or v_party.recipient_name is distinct from 'WEG Lindenstraße 5'
   then raise exception 'without a payer role the Auftraggeber did not become the recipient'; end if;
-  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000052')).source <> 'auftraggeber'
+  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000052')).source is distinct from 'auftraggeber'
   then raise exception 'work without a site has no default parties'; end if;
   if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000061')).recipient_client_id
-    <> '32700000-0000-0000-0000-000000000021'
+    is distinct from '32700000-0000-0000-0000-000000000021'
   then raise exception 'a request at the Objekt did not take its payer'; end if;
   if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000060')).id is not null
   then raise exception 'a request without a customer has parties'; end if;
@@ -159,8 +159,8 @@ declare
   v_party public.work_billing_parties :=
     app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050');
 begin
-  if v_party.version <> 1 or v_party.recipient_name <> 'Hausverwaltung Lindenhof GmbH'
-    or v_party.recipient_address <> 'Hofweg 1, 10117 Berlin'
+  if v_party.version is distinct from 1 or v_party.recipient_name is distinct from 'Hausverwaltung Lindenhof GmbH'
+    or v_party.recipient_address is distinct from 'Hofweg 1, 10117 Berlin'
   then raise exception 'a customer edit rewrote the frozen recipient: %', to_jsonb(v_party); end if;
 end;
 $$;
@@ -223,7 +223,7 @@ select pg_temp.expect_refusal('a request without a customer',
 do $$
 begin
   if (select count(*) from public.work_billing_parties
-    where work_id = '32700000-0000-0000-0000-000000000050') <> 1
+    where work_id = '32700000-0000-0000-0000-000000000050') is distinct from 1
   then raise exception 'a refused choice wrote a version'; end if;
 end;
 $$;
@@ -239,31 +239,31 @@ begin
     '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000050',
     '32700000-0000-0000-0000-000000000021', '32700000-0000-0000-0000-000000000022',
     coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).version, 0));
-  if v_party.version <> 2 or v_party.source <> 'buero'
-    or v_party.client_id <> '32700000-0000-0000-0000-000000000021'
-    or v_party.recipient_name <> 'Hausverwaltung Birkenhain GmbH'
-    or v_party.set_by <> '32700000-0000-0000-0000-000000000002'
+  if v_party.version is distinct from 2 or v_party.source is distinct from 'buero'
+    or v_party.client_id is distinct from '32700000-0000-0000-0000-000000000021'
+    or v_party.recipient_name is distinct from 'Hausverwaltung Birkenhain GmbH'
+    or v_party.set_by is distinct from '32700000-0000-0000-0000-000000000002'
   then raise exception 'the office''s choice was not recorded: %', to_jsonb(v_party); end if;
 
   v_party := public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000050',
     '32700000-0000-0000-0000-000000000021', '32700000-0000-0000-0000-000000000022',
     coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).version, 0));
-  if v_party.version <> 2 then raise exception 'an unchanged choice wrote a version'; end if;
+  if v_party.version is distinct from 2 then raise exception 'an unchanged choice wrote a version'; end if;
 
   update public.clients set address = 'Birkenallee 4, 20095 Hamburg'
   where id = '32700000-0000-0000-0000-000000000022';
   if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).recipient_address
-    <> 'Birkenweg 2, 20095 Hamburg'
+    is distinct from 'Birkenweg 2, 20095 Hamburg'
   then raise exception 'a customer edit rewrote the chosen recipient'; end if;
   v_party := public.set_work_billing_parties('32700000-0000-0000-0000-000000000001',
     '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000050',
     '32700000-0000-0000-0000-000000000021', '32700000-0000-0000-0000-000000000022',
     coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).version, 0));
-  if v_party.version <> 3 or v_party.recipient_address <> 'Birkenallee 4, 20095 Hamburg'
+  if v_party.version is distinct from 3 or v_party.recipient_address is distinct from 'Birkenallee 4, 20095 Hamburg'
   then raise exception 'choosing the recipient again did not copy its new address'; end if;
   if (select array_agg(version order by version) from public.work_billing_parties
-    where work_id = '32700000-0000-0000-0000-000000000050') <> array[1, 2, 3]
+    where work_id = '32700000-0000-0000-0000-000000000050') is distinct from array[1, 2, 3]
   then raise exception 'the history of job 50 is not kept'; end if;
 end;
 $$;
@@ -278,16 +278,16 @@ begin
     '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000052',
     '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000020',
     coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000052')).version, 0));
-  if v_party.version <> 2 or v_party.source <> 'buero'
+  if v_party.version is distinct from 2 or v_party.source is distinct from 'buero'
   then raise exception 'confirming the default pair was not recorded as the office''s choice: %', to_jsonb(v_party); end if;
   v_party := public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000052',
     '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000020',
     coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000052')).version, 0));
-  if v_party.version <> 2 then raise exception 'confirming the chosen pair again wrote a version'; end if;
+  if v_party.version is distinct from 2 then raise exception 'confirming the chosen pair again wrote a version'; end if;
   update public.jobs set site_id = '32700000-0000-0000-0000-000000000040'
   where id = '32700000-0000-0000-0000-000000000052';
-  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000052')).source <> 'buero'
+  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000052')).source is distinct from 'buero'
   then raise exception 'a changed site replaced a confirmed default'; end if;
 end;
 $$;
@@ -298,19 +298,19 @@ do $$
 begin
   update public.jobs set site_id = '32700000-0000-0000-0000-000000000041'
   where id = '32700000-0000-0000-0000-000000000050';
-  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).version <> 3
+  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).version is distinct from 3
   then raise exception 'a changed site replaced the office''s choice'; end if;
 
   update public.jobs set site_id = '32700000-0000-0000-0000-000000000040'
   where id = '32700000-0000-0000-0000-000000000051';
   if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000051')).recipient_client_id
-    <> '32700000-0000-0000-0000-000000000021'
+    is distinct from '32700000-0000-0000-0000-000000000021'
   then raise exception 'a default recipient did not follow the new Objekt''s payer'; end if;
 
   update public.jobs set client_id = '32700000-0000-0000-0000-000000000022', site_id = null
   where id = '32700000-0000-0000-0000-000000000050';
   if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).recipient_client_id
-    <> '32700000-0000-0000-0000-000000000022'
+    is distinct from '32700000-0000-0000-0000-000000000022'
   then raise exception 'a changed customer kept the old parties'; end if;
 end;
 $$;
@@ -338,9 +338,9 @@ begin
     converted_by = '32700000-0000-0000-0000-000000000002', converted_at = now()
   where id = '32700000-0000-0000-0000-000000000061';
   v_party := app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000053');
-  if v_party.source <> 'anfrage' or v_party.recipient_client_id <> '32700000-0000-0000-0000-000000000022'
-    or v_party.recipient_name <> 'Hausverwaltung Birkenhain GmbH'
-    or v_party.set_by <> '32700000-0000-0000-0000-000000000002'
+  if v_party.source is distinct from 'anfrage' or v_party.recipient_client_id is distinct from '32700000-0000-0000-0000-000000000022'
+    or v_party.recipient_name is distinct from 'Hausverwaltung Birkenhain GmbH'
+    or v_party.set_by is distinct from '32700000-0000-0000-0000-000000000002'
   then raise exception 'the conversion did not carry the request''s frozen recipient: %', to_jsonb(v_party); end if;
 
   perform set_config('app.service_case_write', 'true', true);
@@ -354,7 +354,7 @@ begin
     '32700000-0000-0000-0000-000000000002', '32700000-0000-0000-0000-000000000002'
   );
   perform set_config('app.service_case_write', 'false', true);
-  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000070')).source <> 'anfrage'
+  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000070')).source is distinct from 'anfrage'
   then raise exception 'a Servicefall from the request did not carry its parties'; end if;
 
   insert into public.projects (id, organization_id, name, project_number, client_id, site_id, created_by) values
@@ -370,8 +370,8 @@ begin
    'B-54', '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000040',
    '32700000-0000-0000-0000-000000000080', 'nicht_bearbeitet', '32700000-0000-0000-0000-000000000001');
   v_party := app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000054');
-  if v_party.source <> 'projekt' or v_party.client_id <> '32700000-0000-0000-0000-000000000021'
-    or v_party.recipient_client_id <> '32700000-0000-0000-0000-000000000020'
+  if v_party.source is distinct from 'projekt' or v_party.client_id is distinct from '32700000-0000-0000-0000-000000000021'
+    or v_party.recipient_client_id is distinct from '32700000-0000-0000-0000-000000000020'
   then raise exception 'a job of the project did not take the project''s parties'; end if;
 end;
 $$;
@@ -383,10 +383,10 @@ declare
   v_read jsonb := public.get_work_billing_parties('32700000-0000-0000-0000-000000000010', 'job',
     '32700000-0000-0000-0000-000000000051');
 begin
-  if jsonb_array_length(v_read -> 'versions') <> 2
-    or v_read -> 'versions' -> 0 -> 'recipient' ->> 'name' <> 'Lindenhof Immobilien GmbH'
-    or v_read -> 'site' ->> 'name' <> 'Haus Lindenstraße'
-    or v_read -> 'accessContacts' -> 0 ->> 'name' <> 'Max Hausmeister'
+  if jsonb_array_length(v_read -> 'versions') is distinct from 2
+    or v_read -> 'versions' -> 0 -> 'recipient' ->> 'name' is distinct from 'Lindenhof Immobilien GmbH'
+    or v_read -> 'site' ->> 'name' is distinct from 'Haus Lindenstraße'
+    or v_read -> 'accessContacts' -> 0 ->> 'name' is distinct from 'Max Hausmeister'
   then raise exception 'the office read is incomplete: %', v_read; end if;
   if public.get_work_billing_parties('32700000-0000-0000-0000-000000000010', 'job',
     '32700000-0000-0000-0000-000000000059') is not null
@@ -397,6 +397,11 @@ $$;
 -- A version never changes or leaves on its own.
 select pg_temp.expect_refusal('an edited version',
   $sql$update public.work_billing_parties set recipient_name = 'Andere'
+    where work_id = '32700000-0000-0000-0000-000000000051'$sql$,
+  'permission denied for table work_billing_parties');
+-- No API role may delete a version: the server holds no DELETE grant.
+select pg_temp.expect_refusal('a version deleted by the server role',
+  $sql$delete from public.work_billing_parties
     where work_id = '32700000-0000-0000-0000-000000000051'$sql$,
   'permission denied for table work_billing_parties');
 select public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
@@ -413,6 +418,30 @@ begin
     return;
   end;
   raise exception 'a privileged role rewrote a frozen recipient';
+end;
+$$;
+
+-- A browser session and even the owner role cannot delete a version
+-- directly: the grant refuses the one, the ledger guard the other. Only the
+-- cascade of a deleted work removes its versions (tested below).
+do $$
+begin
+  begin
+    set local role authenticated;
+    delete from public.work_billing_parties where work_id = '32700000-0000-0000-0000-000000000051';
+    raise exception 'a browser session deleted a version';
+  exception when insufficient_privilege then
+    null;
+  end;
+  reset role;
+  begin
+    delete from public.work_billing_parties where work_id = '32700000-0000-0000-0000-000000000051';
+    raise exception 'a privileged role deleted a version directly';
+  exception when raise_exception then
+    if sqlerrm is distinct from 'event_ledger_history_immutable' then raise; end if;
+  end;
+  if not exists (select 1 from public.work_billing_parties where work_id = '32700000-0000-0000-0000-000000000051')
+  then raise exception 'a refused delete removed versions'; end if;
 end;
 $$;
 
@@ -435,12 +464,12 @@ begin
       '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000022', v_seen);
     raise exception 'a save from an outdated version was accepted';
   exception when raise_exception then
-    if sqlerrm <> 'parties_changed' then raise; end if;
+    if sqlerrm is distinct from 'parties_changed' then raise; end if;
   end;
   if (select count(*) from public.work_billing_parties
-      where work_id = '32700000-0000-0000-0000-000000000054') <> v_versions
+      where work_id = '32700000-0000-0000-0000-000000000054') is distinct from v_versions
     or (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000054')).client_id
-      <> '32700000-0000-0000-0000-000000000022'
+      is distinct from '32700000-0000-0000-0000-000000000022'
   then raise exception 'a refused stale save changed the parties'; end if;
 end;
 $$;
@@ -475,19 +504,19 @@ $$;
 do $$
 begin
   if app_private.client_links('32700000-0000-0000-0000-000000000010',
-    '32700000-0000-0000-0000-000000000024') <> '{"billing_parties": 1}'::jsonb
+    '32700000-0000-0000-0000-000000000024') is distinct from '{"billing_parties": 1}'::jsonb
   then raise exception 'the recipient of another customer''s work is not linked'; end if;
   begin
     delete from public.clients where id = '32700000-0000-0000-0000-000000000024';
     raise exception 'a recipient of other work was deleted';
   exception when raise_exception then
-    if sqlerrm <> 'client_has_history' then raise; end if;
+    if sqlerrm is distinct from 'client_has_history' then raise; end if;
   end;
   delete from public.jobs where id = '32700000-0000-0000-0000-000000000052';
   if exists (select 1 from public.work_billing_parties where work_id = '32700000-0000-0000-0000-000000000052')
   then raise exception 'a deleted job left its parties'; end if;
   if app_private.client_links('32700000-0000-0000-0000-000000000010',
-    '32700000-0000-0000-0000-000000000024') <> '{}'::jsonb
+    '32700000-0000-0000-0000-000000000024') is distinct from '{}'::jsonb
   then raise exception 'a deleted job still links its recipient'; end if;
 end;
 $$;
