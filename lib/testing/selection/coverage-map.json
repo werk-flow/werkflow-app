@@ -103,7 +103,8 @@
     "E6-F01": "dc0d5eea51203011b5c2d5fb0ab420f8baabd9985ffbaaa8e6eabcdea22a82cf",
     "E6-F02": "84c21f927725510fb45656a55d661dc3bcadb25b23cd84352bf803798ad20a83",
     "E6-F03": "ca263f300e3d784036d0a370059c42eafbc617070b7ff335fff479a7d7e317eb",
-    "E6-F04": "11ba516d8c698e304120fa18358b305b915f3582ce71f5f4d873ce865a72d114"
+    "E6-F04": "11ba516d8c698e304120fa18358b305b915f3582ce71f5f4d873ce865a72d114",
+    "E7-F01": "dbc4d50a046b26791412f5a5cd4df0e7ee2b539c1a0df4155879e05e3b5b2c45"
   },
   "mappings": [
     {
@@ -3154,6 +3155,36 @@
       "review": {
         "kind": "assertions-reviewed",
         "rationale": "werk-flow/werkflow-planning#335: every clause of both bullets read against the assertion bodies of the listed files."
+      }
+    },
+    {
+      "id": "e7-no-signal-visit",
+      "flowIds": [
+        "E7-F01"
+      ],
+      "evidence": [
+        {
+          "file": "tests/audit/security/offline-visit.spec.ts",
+          "kind": "browser",
+          "description": "At 375 px with the service worker: the start page keeps today's assignment, the signal goes on the job page, the clock starts, a report with two synthetic photos is saved on the device and the work switches onto the job. A reload and a new page without signal show the assignment with its „Stand“, the waiting clock and the kept draft, and end the work. The office changes the instruction and adds a start-blocking delivery prerequisite. With signal the server holds exactly the start's operation and one session with one segment, the device keeps the switch and the end as „Konflikt“ with the office reason, the stored day and the job page show the changed instruction, and the report arrives as one draft revision with two photos and one operation; a later start sends nothing again. A second member's start kept without signal is refused into a closed month and, after the membership is removed, on „Erneut senden“; both stay on the device as „Nicht übertragen“ with their reason, and the server records nothing.",
+          "titles": [
+            "E7-F01 a visit without signal survives a restart, and with signal everything arrives once while the conflict stays shown",
+            "E7-F01 a replay into a closed month and a replay after the membership was removed fail safely and stay on the phone"
+          ]
+        },
+        {
+          "file": "lib/field-sync/operations-http.test.ts",
+          "kind": "unit",
+          "description": "The real operations handler: a foreign organization's id, another person's session, a revoked membership and a closed period are refused, through a cookie and a bearer token alike.",
+          "titles": [
+            "a field sync replay is a fresh request: a foreign organization's id, another person's session, a revoked membership and a closed period are refused, a bearer token and a cookie reach the same result, and the online clock call is unchanged"
+          ]
+        }
+      ],
+      "clauses": "Today's assignment kept with signal, shown without signal and after a restart with „Stand“ (journey: reload and new page). Clock actions without signal marked „Wartet auf Netz“ (journey). A report with two photos kept on the device (journey, device store). Office changes the instruction and blocks the start meanwhile (journey seeds). With signal: one segment per recorded clock action and nothing else (journey, server rows), one revision with both photos and one operation (journey, server rows), the changed instruction on the phone (journey, stored day and job page), the switch kept as „Konflikt“ with its reason (journey). A closed month and a removed membership refuse the replay, it stays „Nicht übertragen“ with its reason, nothing is recorded (journey on the real handler; boundary fixture for cookie and bearer).",
+      "review": {
+        "kind": "assertions-reviewed",
+        "rationale": "werk-flow/werkflow-planning#321: every clause of the bullet read against the assertion bodies of the listed files."
       }
     }
   ]

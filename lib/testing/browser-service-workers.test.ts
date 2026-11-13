@@ -18,6 +18,7 @@ const OFFLINE_SPECS = [
   'tests/audit/security/offline-drafts.spec.ts',
   'tests/audit/security/offline-shell.spec.ts',
   'tests/audit/security/offline-today.spec.ts',
+  'tests/audit/security/offline-visit.spec.ts',
 ];
 
 function sourceFiles(directory: string): string[] {
