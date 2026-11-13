@@ -323,8 +323,10 @@ assert.deepEqual(
   }),
   notAuthorized,
 );
-// The refused upload never left its staging key, so only that key is discarded.
-assert.deepEqual(discardedPaths, [`${ORGANIZATION_A}/staging/${refusedProjectUploadId}/aufmass.pdf`]);
+// The refused upload never left its staging key, the caller's own, so only that key is discarded.
+assert.deepEqual(discardedPaths, [
+  `${ORGANIZATION_A}/staging/${refusedProjectUploadId}/${CALLER_ID}/aufmass.pdf`,
+]);
 assert.deepEqual(promotedPaths, []);
 assert.equal(
   tableRows(world, 'documents').some((document) => document.id === refusedProjectUploadId),
@@ -363,10 +365,10 @@ const jobUpload = await finalizeJobUpload();
 assert.ok(jobUpload.success, JSON.stringify(jobUpload));
 assert.deepEqual(linksTo(jobUploadId), [{ job_id: assignedJobId, project_id: null }]);
 // The registered document references the promoted key, never the key its upload URL wrote.
-const jobUploadPath = `${ORGANIZATION_A}/${jobUploadId}/aufmass.pdf`;
+const jobUploadPath = `${ORGANIZATION_A}/${jobUploadId}/${CALLER_ID}/aufmass.pdf`;
 assert.equal(
   tableRows(world, 'documents').find((document) => document.id === jobUploadId)?.storage_path,
-  `${ORGANIZATION_A}/${jobUploadId}/copy-aufmass.pdf`,
+  `${ORGANIZATION_A}/${jobUploadId}/${CALLER_ID}/copy-aufmass.pdf`,
 );
 assert.deepEqual(promotedPaths, [jobUploadPath]);
 assert.deepEqual(

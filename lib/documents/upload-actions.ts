@@ -32,6 +32,7 @@ import { inferDocumentCategory } from './category-inference';
 import { hydrateWrittenDocument } from './hydration';
 import { readDocumentStoragePath } from './reads';
 import {
+  bindUploadPathToCreator,
   buildDocumentStoragePath,
   buildDocumentVersionStoragePath,
   buildDocumentVersionUploadFolder,
@@ -93,6 +94,32 @@ function uploadLinkTarget(target: NormalizedUploadTarget): { kind: string; id: s
   return null;
 }
 
+/**
+ * The key of a document upload ticket, bound to the session's organization and
+ * person. Ticket and finalize both build it from the session, never from input.
+ */
+function documentUploadPath(
+  context: AuthorizedDocumentContext,
+  documentId: string,
+  fileName: string,
+): string {
+  return bindUploadPathToCreator(
+    buildDocumentStoragePath({ organizationId: context.orgId, documentId, fileName }),
+    context.userId,
+  );
+}
+
+/** The key of a version upload ticket, bound like `documentUploadPath`, inside the upload's own folder. */
+function documentVersionUploadPath(
+  context: AuthorizedDocumentContext,
+  upload: { documentId: string; uploadId: string; versionNumber: number; fileName: string },
+): string {
+  return bindUploadPathToCreator(
+    buildDocumentVersionStoragePath({ organizationId: context.orgId, ...upload }),
+    context.userId,
+  );
+}
+
 export async function createDocumentUploadTicket(
   rawInput: CreateDocumentUploadTicketInput,
 ): Promise<DocumentUploadTicketResult> {
@@ -115,11 +142,7 @@ export async function createDocumentUploadTicket(
 
   const originalFileName = input.fileName.trim() || 'Dokument';
   const documentId = randomUUID();
-  const storagePath = buildDocumentStoragePath({
-    organizationId: auth.context.orgId,
-    documentId,
-    fileName: originalFileName,
-  });
+  const storagePath = documentUploadPath(auth.context, documentId, originalFileName);
 
   try {
     const uploadUrl = await createSignedUploadUrl({
@@ -141,23 +164,19 @@ export async function finalizeDocumentUpload(rawInput: FinalizeDocumentUploadInp
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
-  // Identity stays with the session: the expected uploader only refuses. A phone that started the
-  // upload for one person must not register it under another person who signed in meanwhile. The
-  // staging object stays where the browser put it, for the author's next try under the author's own
-  // session. A finalize that names no expected uploader is not bound to the staging object's
-  // creator; that server-side binding is tracked in werk-flow/werkflow-planning#364.
+  // Identity stays with the session: the expected uploader only refuses, early and readably. A
+  // phone that started the upload for one person must not register it under another person who
+  // signed in meanwhile. The staging object stays where the browser put it, for the author's next
+  // try under the author's own session. Without the id the recomputed key binds the same way.
   if (input.expectedUploaderId !== undefined && input.expectedUploaderId !== auth.context.userId) {
     return { success: false, error: 'uploader_changed' };
   }
 
   const originalFileName = input.fileName.trim() || 'Dokument';
-  // The upload's path is recomputed server-side from the authenticated org and
-  // the document id, so a client can never register a foreign object key.
-  const uploadPath = buildDocumentStoragePath({
-    organizationId: auth.context.orgId,
-    documentId: input.documentId,
-    fileName: originalFileName,
-  });
+  // The upload's path is recomputed server-side from the session's organization
+  // and person and the document id, so a client can never register a foreign
+  // object key, nor the staged upload of another person's ticket.
+  const uploadPath = documentUploadPath(auth.context, input.documentId, originalFileName);
 
   // Only a completed read proves the upload unregistered. A finalize that read
   // before a concurrent one committed still copies only to a key of its own.
@@ -255,8 +274,7 @@ export async function createDocumentVersionUploadTicket(
 
   const nextVersionNumber = existing.document.current_version_number + 1;
   const uploadId = randomUUID();
-  const storagePath = buildDocumentVersionStoragePath({
-    organizationId: auth.context.orgId,
+  const storagePath = documentVersionUploadPath(auth.context, {
     documentId: existing.document.id,
     uploadId,
     versionNumber: nextVersionNumber,
@@ -330,11 +348,11 @@ export async function finalizeDocumentVersionUpload(
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
-  // The ticket's key, recomputed from the authenticated organization: a
-  // client never names a foreign key. Finalize promotes its staging object.
+  // The ticket's key, recomputed from the session's organization and person:
+  // a client never names a foreign key, nor another person's staged upload.
+  // Finalize promotes its staging object.
   const originalFileName = input.fileName.trim() || 'Dokument';
-  const ticketPath = buildDocumentVersionStoragePath({
-    organizationId: auth.context.orgId,
+  const ticketPath = documentVersionUploadPath(auth.context, {
     documentId: input.documentId,
     uploadId: input.uploadId,
     versionNumber: input.versionNumber,
