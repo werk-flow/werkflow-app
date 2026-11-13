@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useMemo, useState } from 'react';
 import { FileUp, Plus, Warehouse } from 'lucide-react';
 
@@ -7,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ListRow } from '@/components/ui/list-row';
 import { PendingRow } from '@/components/ui/pending-row';
+import { Skeleton } from '@/components/ui/skeleton';
+import { SkeletonList } from '@/components/ui/skeleton-table';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { INVENTORY_ITEM_COLUMNS } from '@/components/inventar/inventory-table-columns';
@@ -28,10 +31,23 @@ import {
   pendingItemRowCells,
 } from './inventory-item-row-parts';
 import { LocationsView } from './inventory-locations-view';
-import { InventoryMovementsView } from './inventory-movements-view';
 import { InventorySummaryTiles } from './inventory-summary-tiles';
 import { useInventoryEditing } from './use-inventory-editing';
 import { useInventoryFilters } from './use-inventory-filters';
+
+// The history's code (date range, people, links, retry) loads only when its tab
+// opens, so the office's other tabs and every other page carry none of it.
+const InventoryMovementsView = dynamic(
+  () => import('./inventory-movements-view').then((mod) => mod.InventoryMovementsView),
+  {
+    loading: () => (
+      <div className="space-y-4">
+        <Skeleton className="h-9 w-full" />
+        <SkeletonList count={6} />
+      </div>
+    ),
+  },
+);
 
 type InventoryContentProps = {
   overview: InventoryOverview;
