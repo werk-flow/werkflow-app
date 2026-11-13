@@ -39,6 +39,7 @@ export function mainWipeScript(repository: string, git: Git = gitIn(repository))
     const complaint = result.stderr.trim().split('\n')[0] || `git ${args[0]} exited ${String(result.status)}`;
     throw new Error(`origin/main's wipe script cannot be read: ${complaint}`);
   };
-  run(['fetch', '--quiet', '--no-tags', 'origin', 'main']);
+  // An explicit refspec: a checkout whose fetch settings do not map main would otherwise leave origin/main stale.
+  run(['fetch', '--quiet', '--no-tags', 'origin', '+refs/heads/main:refs/remotes/origin/main']);
   return run(['show', `origin/main:${WIPE_SCRIPT}`]);
 }

@@ -50,6 +50,17 @@ test("the wipe is main's script as fetched now, not the branch's or the last fet
   expect(mainWipeScript(checkout)).toBe('new wipe\n');
 });
 
+test('a checkout whose fetch refspec omits main still reads the fetched main', () => {
+  const { root, origin, checkout } = checkoutBehindMain();
+  // A single-branch clone: its fetch maps only feature, so a bare `fetch origin main` leaves origin/main stale.
+  git(checkout, 'config', 'remote.origin.fetch', '+refs/heads/feature:refs/remotes/origin/feature');
+  const other = join(root, 'other');
+  git(root, 'clone', '-q', origin, other);
+  commitScript(other, 'newer wipe\n');
+  git(other, 'push', '-q', 'origin', 'main');
+  expect(mainWipeScript(checkout)).toBe('newer wipe\n');
+});
+
 test("a wipe script that cannot be fetched or read is refused with git's reason", () => {
   const { root, checkout } = checkoutBehindMain();
   git(checkout, 'remote', 'set-url', 'origin', join(root, 'gone.git'));
