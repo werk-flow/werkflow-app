@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { memo } from 'react';
 
 import { downloadWorkBillingPartiesSection } from './work-billing-parties-download';
 
@@ -13,4 +14,6 @@ import { downloadWorkBillingPartiesSection } from './work-billing-parties-downlo
 // (audit:wave-2:p1-19); the job page hands in its parties read, so the section
 // opens without a read of its own once its chunk is there. The office's job
 // list downloads the chunk on intent (work-billing-parties-download.ts).
-export const WorkBillingPartiesSection = dynamic(downloadWorkBillingPartiesSection, { ssr: false });
+// The section reads and refreshes its own parties, so a render of the page
+// that hands it the same props leaves it alone (lab.office.job-open).
+export const WorkBillingPartiesSection = memo(dynamic(downloadWorkBillingPartiesSection, { ssr: false }));
