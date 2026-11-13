@@ -2,8 +2,10 @@ import { expect, test } from '../support/fixtures';
 import {
   formatInventoryQuantity,
   getInventoryUnitLabel,
+  INVENTORY_HISTORY_KIND_LABELS,
   INVENTORY_ITEM_TYPE_LABELS,
   INVENTORY_LOCATION_TYPE_LABELS,
+  INVENTORY_STOCK_UNCHANGED_LABEL,
   INVENTORY_MOVEMENT_TYPE_LABELS,
 } from '../../../lib/inventory/types';
 import { getInventoryLedgerState } from '../../golden/support/db/inventory';
@@ -149,6 +151,18 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     await expect(projectTotal).toContainText(materialTakenText(3));
     await expect(projectTotal).toContainText(materialReturnedText(1));
     await expect(projectTotal).toContainText(billableQuantityPattern(2));
+
+    // The office finds the worker's use in the movement history: its own kind,
+    // no stock effect, and a link to the job.
+    await adminPage.goto(`/inventar?tab=movements&kind=job_use&person=${world.users.employee.id}`);
+    const useRow = inventoryRow(adminPage, jobNumber);
+    await expect(useRow).toHaveCount(1);
+    await expect(useRow).toContainText(INVENTORY_HISTORY_KIND_LABELS.job_use);
+    await expect(useRow).toContainText(INVENTORY_STOCK_UNCHANGED_LABEL);
+    await expect(useRow.getByRole('link', { name: new RegExp(jobNumber) })).toHaveAttribute(
+      'href',
+      `/auftraege/projekt/${encodeURIComponent(projectNumber)}/${encodeURIComponent(jobNumber)}`,
+    );
   });
 
   test('A1-40/A1-44: Artikel und Lager per UI sowie alle Inventaransichten', async ({
@@ -309,19 +323,21 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     const inboundMovement = inventoryRow(adminPage, itemName).filter({
       hasText: INVENTORY_MOVEMENT_TYPE_LABELS.stock_in,
     });
-    // Whole-row cells in column order: Zeitpunkt, Artikel, Lager, Von, Nach,
-    // Bewegung, Vorher, Menge, Danach, Grund. Run id and time stay in their
-    // own cells, so a quantity cannot match them.
+    // Whole-row cells in column order: Zeitpunkt, Artikel, Von, Nach,
+    // Bewegung, Vorher, Menge, Danach, Person, Grund; „Von“ or „Nach“ names the Lager. Run id and time stay in
+    // their own cells, so a quantity cannot match them. The person is the
+    // signed-in admin, whatever the world names them; „—“ means nobody.
+    const bookedBySomeone = /^[^—]+$/;
     await expect(inboundMovement.getByRole('cell')).toHaveText([
       /\d{4}/,
       itemName,
-      locationName,
       INVENTORY_COPY.movementSource.external,
       locationName,
       INVENTORY_MOVEMENT_TYPE_LABELS.stock_in,
       '5',
-      '+2',
+      `+${formatInventoryQuantity(2, 'piece')}`,
       '7',
+      bookedBySomeone,
       inboundReason,
     ]);
     const outboundMovement = inventoryRow(adminPage, itemName).filter({
@@ -331,12 +347,12 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
       /\d{4}/,
       itemName,
       locationName,
-      locationName,
       INVENTORY_COPY.movementTarget.correctionOut,
       INVENTORY_MOVEMENT_TYPE_LABELS.stock_out,
       '7',
-      '-1',
+      formatInventoryQuantity(-1, 'piece'),
       '6',
+      bookedBySomeone,
       outboundReason,
     ]);
   });
@@ -405,7 +421,9 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     const initialMovement = inventoryRow(adminPage, importedItem);
     await expect(initialMovement).toContainText(INVENTORY_MOVEMENT_TYPE_LABELS.initial_count);
     await expect(initialMovement.getByRole('cell', { name: '0', exact: true })).toBeVisible();
-    await expect(initialMovement.getByRole('cell', { name: '+4', exact: true })).toBeVisible();
+    await expect(
+      initialMovement.getByRole('cell', { name: `+${formatInventoryQuantity(4, 'piece')}`, exact: true }),
+    ).toBeVisible();
     await expect(initialMovement.getByRole('cell', { name: '4', exact: true })).toBeVisible();
 
     // The same file again warns before its preview, and the user decides.
