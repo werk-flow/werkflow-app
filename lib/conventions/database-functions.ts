@@ -26,7 +26,10 @@ export function committedMigrations(): Migration[] {
   return readdirSync(directory)
     .filter((file) => file.endsWith('.sql'))
     .sort()
-    .map((file) => ({ file: `supabase/migrations/${file}`, sql: readFileSync(join(directory, file), 'utf8') }));
+    .map((file) => ({
+      file: `supabase/migrations/${file}`,
+      sql: readFileSync(join(directory, file), 'utf8'),
+    }));
 }
 
 /** The SQL without `--` and block comments, string literals and dollar-quoted bodies kept. */
@@ -105,7 +108,7 @@ const TYPE_START = /^(?:timestamp|time|double|character|bit|interval|setof)$/;
 /** A parameter as name and normalized type; a drop names the type alone. */
 function parameter(declaration: string): { name: string | null; type: string } {
   const words = declaration
-    .replace(/\s+(?:default\b|=).*$/s, '')
+    .replace(/\s+(?:default\b|=)[\s\S]*$/, '')
     .replace(/^(?:in|out|inout|variadic)\s+/, '')
     .split(/\s+/);
   const named = words.length > 1 && !TYPE_START.test(words[0] ?? '');

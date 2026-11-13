@@ -323,7 +323,9 @@ describe('checks on existing tables', () => {
           (statement) => `supabase/migrations/${file}:${statement}`,
         ),
       );
-    expect(offenders, 'End each `add constraint … check (…)` on an existing table with `not valid`').toEqual([]);
+    expect(offenders, 'End each `add constraint … check (…)` on an existing table with `not valid`').toEqual(
+      [],
+    );
   });
 
   // The flagged statements of two review findings, and their landed fixes.
@@ -349,7 +351,10 @@ describe('checks on existing tables', () => {
     const fixed = flagged
       .replace("{0,62}$');", "{0,62}$') not valid;")
       .replace('(source_id is null)),', '(source_id is null)) not valid,')
-      .replace("'client_request_callback_overdue'])\n  );", "'client_request_callback_overdue'])\n  ) not valid;");
+      .replace(
+        "'client_request_callback_overdue'])\n  );",
+        "'client_request_callback_overdue'])\n  ) not valid;",
+      );
     expect(validatedChecksOnExistingTables(fixed)).toEqual([]);
   });
 });

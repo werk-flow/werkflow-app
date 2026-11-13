@@ -43,7 +43,8 @@ const KEY_PARAMETER =
   /^p_(?:expected_[a-z_0-9]+|[a-z_0-9]*(?:version|revision)[a-z_0-9]*|operation_id|[a-z_0-9]*attempt_key)$/;
 const JSON_VERSION = /->>\s*'(?:expected_?)?version'/;
 const ROW_LOCK = /\bfor\s+(?:no\s+key\s+)?update\b/;
-const UPDATE = /\bupdate\s+(?:only\s+)?(?:public\.)?([a-z_][a-z_0-9]*)(?:\s+(?:as\s+)?(?!set\b)[a-z_][a-z_0-9]*)?\s+set\b/g;
+const UPDATE =
+  /\bupdate\s+(?:only\s+)?(?:public\.)?([a-z_][a-z_0-9]*)(?:\s+(?:as\s+)?(?!set\b)[a-z_][a-z_0-9]*)?\s+set\b/g;
 const VERSION_BUMP = /\b(?:[a-z_]+_)?(?:version|revision)\s*=\s*[^,;]*?\+\s*1\b/;
 const EXPECTED_VERSION_FILTER = /\bwhere\b[^;]*\b(?:[a-z_]+_)?(?:version|revision)\s*=\s*p_[a-z_0-9]+/;
 
@@ -65,7 +66,8 @@ function statementAt(body: string, index: number): string {
 function unguardedVersionBumps(functions: readonly DatabaseFunction[]): Map<string, string> {
   const problems = new Map<string, string>();
   for (const fn of functions) {
-    const keyed = fn.isTrigger || fn.parameters.some((name) => KEY_PARAMETER.test(name)) || JSON_VERSION.test(fn.body);
+    const keyed =
+      fn.isTrigger || fn.parameters.some((name) => KEY_PARAMETER.test(name)) || JSON_VERSION.test(fn.body);
     for (const match of fn.body.matchAll(UPDATE)) {
       const table = match[1] ?? '';
       const statement = statementAt(fn.body, match.index);
@@ -75,7 +77,10 @@ function unguardedVersionBumps(functions: readonly DatabaseFunction[]): Map<stri
         EXPECTED_VERSION_FILTER.test(statement) ||
         statementsBefore(fn.body, match.index, table).some((earlier) => ROW_LOCK.test(earlier));
       if (locked && keyed) continue;
-      const missing = [locked ? null : `locks no ${table} row first`, keyed ? null : 'takes no expected version or retry key'];
+      const missing = [
+        locked ? null : `locks no ${table} row first`,
+        keyed ? null : 'takes no expected version or retry key',
+      ];
       problems.set(`${fn.name}::${table}`, `${fn.file}: ${missing.filter(Boolean).join(' and ')}`);
     }
   }
@@ -86,7 +91,9 @@ function unguardedVersionBumps(functions: readonly DatabaseFunction[]): Map<stri
 function unlockedClockEvents(functions: readonly DatabaseFunction[]): string[] {
   return functions.flatMap((fn) =>
     [...fn.body.matchAll(/\binsert\s+into\s+public\.time_entries\b/g)]
-      .filter((match) => !statementsBefore(fn.body, match.index, 'employee_records').some((s) => ROW_LOCK.test(s)))
+      .filter(
+        (match) => !statementsBefore(fn.body, match.index, 'employee_records').some((s) => ROW_LOCK.test(s)),
+      )
       .map(() => `${fn.file}: ${fn.name} writes a clock event without locking the employee record`),
   );
 }
@@ -136,7 +143,11 @@ describe('the probes catch the flagged code', () => {
     expect(before.get('public.acknowledge_personnel_item_review_base::personnel_onboarding_plans')).toContain(
       'locks no personnel_onboarding_plans row first',
     );
-    expect(unguardedVersionBumps(committed).has('public.acknowledge_personnel_item_review_base::personnel_onboarding_plans')).toBe(false);
+    expect(
+      unguardedVersionBumps(committed).has(
+        'public.acknowledge_personnel_item_review_base::personnel_onboarding_plans',
+      ),
+    ).toBe(false);
   });
 
   test('a bump without a key fails; a trigger, an expected-version filter and JSON versions pass', () => {
@@ -155,7 +166,10 @@ describe('the probes catch the flagged code', () => {
       "  perform 1 from public.plans where id = (p_items->>'id')::uuid and version = (p_items->>'version')::int for update;",
       "  update public.plans set version = version + 1 where id = (p_items->>'id')::uuid; end $$;",
     ].join('\n');
-    expect([...unguardedVersionBumps(planted(sql)).keys()]).toEqual(['public.unkeyed::plans', 'public.unlocked::plans']);
+    expect([...unguardedVersionBumps(planted(sql)).keys()]).toEqual([
+      'public.unkeyed::plans',
+      'public.unlocked::plans',
+    ]);
   });
 
   test('finding 142: a break end written without the clock lock fails, and the lock passes', () => {
@@ -176,7 +190,9 @@ describe('the probes catch the flagged code', () => {
       '  for update;',
     ];
     expect(unlockedClockEvents(planted(flagged.join('\n')))).toHaveLength(1);
-    expect(unlockedClockEvents(planted([...flagged.slice(0, 2), ...lock, ...flagged.slice(2)].join('\n')))).toEqual([]);
+    expect(
+      unlockedClockEvents(planted([...flagged.slice(0, 2), ...lock, ...flagged.slice(2)].join('\n'))),
+    ).toEqual([]);
   });
 
   test("finding 182: a job's project copied without a lock fails, and `for share` passes", () => {
