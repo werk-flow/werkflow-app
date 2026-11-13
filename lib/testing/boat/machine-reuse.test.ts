@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { z } from '../../zod';
 
 import { BoatError, boatClient } from './boat-api';
+import { MARK_IDLE, workstationLabel } from './machine-eviction';
 import { acquireMachine, keepMachine, reapIdleMachine, withMachine } from './machine-reuse';
 
 const repository = join(import.meta.dir, '../../..');
@@ -23,8 +24,19 @@ afterAll(() => setSystemTime());
 /** A Boat stand-in: machines by id with their auto-stop, every call it got, and the commands it ran. */
 function fakeBoat(
   /** Each machine's life left, or `archiveAfter` as Boat sends it when a test needs it verbatim. */
-  machines: Record<string, { lifeMs: number | null; state?: string; archiveAfter?: string }>,
-  wipeExit = 0,
+  machines: Record<
+    string,
+    {
+      lifeMs: number | null;
+      state?: string;
+      archiveAfter?: string;
+      /** Labels of another workstation's machine; a machine without them is listed for any checkout. */
+      workstation?: string;
+      checkout?: string;
+    }
+  >,
+  /** Every command's exit code, or each one's by its script. */
+  wipeExit: number | ((script: string) => number) = 0,
   /** Called as Boat reports a command finished; a test's interruption at that moment. */
   onExit: () => void = () => undefined,
   /** Calls Boat refuses with a 500, as `GET /sandboxes?…` or `GET /sandboxes/bx_…`. */
@@ -34,6 +46,8 @@ function fakeBoat(
 ) {
   const calls: string[] = [];
   const commands: string[] = [];
+  /** The labels of each start Boat accepted. */
+  const labels: Record<string, string>[] = [];
   const client = boatClient('boat_secret', async (url, init) => {
     const { pathname, searchParams } = new URL(url);
     const method = init?.method ?? 'GET';
@@ -50,14 +64,20 @@ function fakeBoat(
         archiveAfter:
           machine?.archiveAfter ??
           (machine?.lifeMs == null ? null : new Date(NOW.getTime() + machine.lifeMs).toISOString()),
+        labels: machine?.workstation ? { workstation: machine.workstation } : {},
       };
     };
     if (method === 'POST' && pathname.endsWith('/sandboxes')) {
       const refusal = startRefusals.shift();
       if (refusal) return refusal;
       machines.bx_created = { lifeMs: 180 * MINUTE };
+      labels.push(
+        z.object({ labels: z.record(z.string(), z.string()) }).parse(JSON.parse(String(init?.body))).labels,
+      );
       return Response.json({ sandbox: { id: 'bx_created', state: 'provisioning' } });
     }
+    if (method === 'POST' && pathname.endsWith('/commands') && !machines[id ?? ''])
+      return Response.json({ code: 'not_found' }, { status: 404 });
     if (method === 'POST' && pathname.endsWith('/commands')) {
       // The script as bash reads it: runScript sends it as one quoted word after `bash -lc`.
       const { command } = z.object({ command: z.string() }).parse(JSON.parse(String(init?.body)));
@@ -66,13 +86,14 @@ function fakeBoat(
     }
     if (pathname.endsWith('/commands/7')) {
       onExit();
+      const exitCode = typeof wipeExit === 'number' ? wipeExit : wipeExit(commands.at(-1) ?? '');
       return Response.json({
         status: 'exited',
         running: false,
-        exitCode: wipeExit,
-        stdout: wipeExit ? 'a line without its newline' : '',
+        exitCode,
+        stdout: exitCode ? 'a line without its newline' : '',
         // A failing wipe names its reason; the login shell may still print after it.
-        stderr: wipeExit
+        stderr: exitCode
           ? '[boat] wipe failed: /tmp still holds: run.log \nTERM environment variable not set.\n'
           : '',
       });
@@ -83,12 +104,21 @@ function fakeBoat(
       if (id) Reflect.deleteProperty(machines, id);
       return Response.json({ operation: { id: 'op', status: 'pending' } });
     }
-    if (pathname.endsWith('/sandboxes'))
-      return Response.json({ sandboxes: Object.keys(machines).map(sandbox) });
+    if (pathname.endsWith('/sandboxes')) {
+      const checkout = searchParams.getAll('label').find((label) => label.startsWith('checkout='));
+      return Response.json({
+        sandboxes: Object.keys(machines)
+          .filter(
+            (key) =>
+              !checkout || !machines[key]?.checkout || checkout === `checkout=${machines[key].checkout}`,
+          )
+          .map(sandbox),
+      });
+    }
     if (id && machines[id]) return Response.json({ sandbox: sandbox(id) });
     return Response.json({ code: 'not_found' }, { status: 404 });
   });
-  return { client, calls, commands };
+  return { client, calls, commands, labels };
 }
 
 const acquire = (client: ReturnType<typeof boatClient>, records: string) =>
@@ -112,8 +142,9 @@ test("a wiped machine serves the checkout's next run, and the run deletes every 
     (_repository, record) => reapers.push(record),
   );
   expect(kept).toBe(true);
-  // The wipe runs as text: origin/main's script, never the checkout's file, with the checkout it removes.
-  expect(boat.commands[0]).toBe(`set -- 'wipe' '${repository}' 'linked'\n${wipeScript()}`);
+  // The wipe runs as text: origin/main's script, never the checkout's file, with the checkout it
+  // removes, and a passed wipe marks the machine idle.
+  expect(boat.commands[0]).toBe(`set -- 'wipe' '${repository}' 'linked'\n${wipeScript()}${MARK_IDLE}`);
   expect(reapers).toHaveLength(1);
 
   const lease = await acquire(boat.client, records);
@@ -435,8 +466,11 @@ test('a start refused at the machine limit evicts idle machines, oldest first, a
     // A record a running run took is renamed away; its machine serves that run.
     for (const id of taken)
       writeFileSync(join(records, `f00dfeedf00dfeed--${id}.json.taken-run`), JSON.stringify({ id }));
+    // The idle machines live on Boat under the other checkout their records name.
     const boat = fakeBoat(
-      {},
+      Object.fromEntries(
+        Object.keys(idle).map((id) => [id, { lifeMs: 120 * MINUTE, checkout: 'f00dfeedf00dfeed' }]),
+      ),
       0,
       () => undefined,
       () => false,
@@ -488,5 +522,95 @@ test('a machine whose auto-stop time does not parse is neither wiped nor kept', 
   // A run could never take it (acquireMachine needs a known hour of life), so it is deleted instead.
   expect(kept).toBe('under an hour of its life left');
   expect(boat.commands).toEqual([]);
+  expect(readdirSync(records)).toEqual([]);
+});
+
+test("at the limit without an idle machine of its own, a run evicts another workstation's long-idle one", async () => {
+  const atLimit = Response.json({ error: { code: 'member_limit_reached' } }, { status: 429 });
+  const records = mkdtempSync(join(tmpdir(), 'boat-idle-'));
+  const boat = fakeBoat(
+    { bx_otherws1: { lifeMs: 120 * MINUTE, workstation: 'f00dfeedf00dfeed', checkout: 'deadbeefdeadbeef' } },
+    0,
+    () => undefined,
+    () => false,
+    [atLimit],
+  );
+  expect(await acquire(boat.client, records)).toMatchObject({ machine: { id: 'bx_created' }, reused: false });
+  // The machine's own mark decided it: the eviction renamed it, then the run deleted the machine.
+  expect(boat.commands[0]).toContain('-mmin +10');
+  expect(boat.calls).toContain('DELETE /sandboxes/bx_otherws1');
+  expect(boat.calls.filter((call) => call === 'POST /sandboxes')).toHaveLength(2);
+  // The new machine carries its workstation beside its checkout, so the others can evict it too.
+  expect(boat.labels).toHaveLength(1);
+  expect(boat.labels[0]).toMatchObject({ workstation: workstationLabel(), purpose: 'werkflow-verify' });
+  expect(boat.labels[0]?.checkout).toMatch(/^[0-9a-f]{16}$/);
+});
+
+test('a kept machine another workstation evicted meanwhile is not reused: the run starts a new one', async () => {
+  const records = mkdtempSync(join(tmpdir(), 'boat-idle-'));
+  const keeping = fakeBoat({ bx_kept0001: { lifeMs: 120 * MINUTE } });
+  await keepMachine(
+    { id: 'bx_kept0001', client: keeping.client, log: () => undefined },
+    { repository, form: 'main', signal: new AbortController().signal, records },
+    () => undefined,
+  );
+  // The wipe's command marks the machine idle only once the wipe passed.
+  expect(keeping.commands[0]).toContain('sudo touch /var/lib/werkflow-pristine/idle');
+  const lines: string[] = [];
+  const evicted = fakeBoat({ bx_kept0001: { lifeMs: 120 * MINUTE } }, (script) =>
+    script.includes('/taken') ? 1 : 0,
+  );
+  const lease = await acquireMachine(evicted.client, {
+    repository,
+    from: 'werkflow-verify',
+    name: 'verify-test',
+    log: (line) => lines.push(line),
+    signal: new AbortController().signal,
+    records,
+  });
+  expect(lease).toMatchObject({ machine: { id: 'bx_created' }, reused: false });
+  expect(lines).toContain('Boat machine bx_kept0001 was taken by another workstation at the machine limit.');
+});
+
+test('a kept machine another workstation deleted between its read and its claim gives way to a new one', async () => {
+  const records = mkdtempSync(join(tmpdir(), 'boat-idle-'));
+  const machines: Record<string, { lifeMs: number | null }> = { bx_kept0001: { lifeMs: 120 * MINUTE } };
+  const keeping = fakeBoat(machines);
+  await keepMachine(
+    { id: 'bx_kept0001', client: keeping.client, log: () => undefined },
+    { repository, form: 'main', signal: new AbortController().signal, records },
+    () => undefined,
+  );
+  // The evicting workstation deletes the machine right after this run read its life left.
+  const raced = fakeBoat(
+    machines,
+    0,
+    () => undefined,
+    (call) => {
+      if (call === 'POST /sandboxes/bx_kept0001/commands') Reflect.deleteProperty(machines, 'bx_kept0001');
+      return false;
+    },
+  );
+  expect(await acquire(raced.client, records)).toMatchObject({
+    machine: { id: 'bx_created' },
+    reused: false,
+  });
+});
+
+test('an idle record whose machine another workstation evicted frees nothing, so the run evicts elsewhere', async () => {
+  const atLimit = Response.json({ error: { code: 'member_limit_reached' } }, { status: 429 });
+  const records = mkdtempSync(join(tmpdir(), 'boat-idle-'));
+  // Another checkout's record on this workstation; its machine is already gone.
+  writeFileSync(join(records, 'f00dfeedf00dfeed--gone.json'), JSON.stringify({ id: 'bx_gone0001' }));
+  const boat = fakeBoat(
+    { bx_otherws1: { lifeMs: 120 * MINUTE, workstation: 'f00dfeedf00dfeed', checkout: 'deadbeefdeadbeef' } },
+    0,
+    () => undefined,
+    () => false,
+    [atLimit],
+  );
+  expect(await acquire(boat.client, records)).toMatchObject({ machine: { id: 'bx_created' }, reused: false });
+  expect(boat.calls).toContain('DELETE /sandboxes/bx_otherws1');
+  expect(boat.calls).not.toContain('DELETE /sandboxes/bx_gone0001');
   expect(readdirSync(records)).toEqual([]);
 });

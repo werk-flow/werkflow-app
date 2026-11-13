@@ -16795,6 +16795,10 @@ export type Database = {
           project_id: string;
         }[];
       };
+      list_inventory_movement_page: {
+        Args: { p_organization_id: string; p_query?: Json };
+        Returns: Json;
+      };
       list_inventory_page: {
         Args: { p_organization_id: string; p_query?: Json };
         Returns: Json;
