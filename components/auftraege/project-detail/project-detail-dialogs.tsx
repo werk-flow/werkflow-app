@@ -16,6 +16,7 @@ import { usePendingTask } from '@/hooks/use-server-action';
 import { updateJob } from '@/lib/jobs/actions';
 import type { Client, Job, Project } from '@/lib/jobs/types';
 import { updateProject, deleteProject } from '@/lib/projects/actions';
+import { describeProjectDeleteError } from '../list/project-actions-menu';
 import { loadDocument } from '@/lib/navigation/document-load';
 import { ClientAssignmentDialog } from '../shared/client-assignment-dialog';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
@@ -238,7 +239,7 @@ function ProjectDetailDeleteDialog({
         loadDocument(`/auftraege?deleted_project=${encodeURIComponent(project.name)}`);
         return;
       }
-      setDeleteError('Das Projekt konnte nicht gelöscht werden.');
+      setDeleteError(describeProjectDeleteError(result?.error ?? 'delete_failed'));
     });
   };
 

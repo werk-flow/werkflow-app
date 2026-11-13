@@ -16,6 +16,7 @@ import { listProductSources, parseProductSource } from './product-sources';
 const KNOWN_TEST_SEAMS: readonly string[] = [
   'lib/calendar/messages.ts#CALENDAR_REFUSAL_CODES',
   'lib/installed-equipment/validation.ts#equipmentFormSchema',
+  'lib/inventory/material-line-reads.ts#readJobMaterialConsumption',
   'lib/jobs/option-server.ts#loadJobEntityOptions',
   'lib/personnel/targets.ts#resolveHolidayRegionOnDate',
   'lib/qualifications/resolution.ts#resolveApprenticeWarning',

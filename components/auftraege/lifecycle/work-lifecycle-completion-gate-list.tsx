@@ -133,6 +133,15 @@ function RunningClockGate({
       );
       return;
     }
+    if (result.kept) {
+      // Without signal the end waits on the phone; the server still sees the time running, so nothing completes yet.
+      showBanner({
+        variant: 'info',
+        message:
+          'Deine Zeit ist auf dem Gerät beendet und wird gesendet, sobald du Netz hast. Schließe danach ab.',
+      });
+      return;
+    }
     if (result.outcome === 'recovery_required') {
       showBanner({
         variant: 'info',

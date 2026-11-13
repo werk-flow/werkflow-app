@@ -89,9 +89,9 @@ export function InviteDialog() {
       <DialogTrigger asChild>
         <Button size="default" className="gap-2">
           <UserPlus className="size-4" />
-          <span className="sr-only sm:not-sr-only">Mitarbeiter hinzufügen</span>
+          <span className="sr-only sm:not-sr-only">Mitarbeiter einladen</span>
           <span className="sm:hidden" aria-hidden="true">
-            Hinzufügen
+            Einladen
           </span>
         </Button>
       </DialogTrigger>
@@ -99,8 +99,8 @@ export function InviteDialog() {
         <DialogHeader>
           <DialogTitle>Mitarbeiter einladen</DialogTitle>
           <DialogDescription>
-            Gib die E-Mail-Adresse des Mitarbeiters ein, den du einladen möchtest. Er erhält eine E-Mail mit
-            einem Einladungslink.
+            Gib die E-Mail-Adresse der Person ein, die du einladen möchtest. Sie erhält eine E-Mail mit einem
+            Einladungslink.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate>
@@ -189,7 +189,7 @@ function InviteDialogFields({
       <Field
         label="Rolle"
         htmlFor="role"
-        description="Die Rolle, die der Mitarbeiter nach Annahme der Einladung erhält."
+        description="Die Rolle, die die Person nach Annahme der Einladung erhält."
       >
         <Select
           value={selectedRole}

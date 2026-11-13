@@ -47,7 +47,6 @@ export function MitarbeiterDetailTimeCards({ liveTime, breakPolicy }: Mitarbeite
               status={status?.status}
               isClockedIn={status?.isClockedIn ?? false}
               isPending={status?.isPending ?? false}
-              canViewStatus
             />
 
             {status?.isClockedIn && status.clockInTime && (

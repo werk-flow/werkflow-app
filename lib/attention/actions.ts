@@ -31,6 +31,8 @@ import {
 import { deriveDispatchAcknowledgementTasks, deriveDispatchChallengeTasks } from './dispatch-tasks';
 import { deriveParkingReviewTasks } from './parking-tasks';
 import { deriveVisitReplanTasks } from './replan-tasks';
+import { readManagerAttentionSets } from './manager-sets';
+import { deriveSiteAccessProposalTasks } from './site-access-tasks';
 import {
   deriveCertificationExpiryNotifications,
   readNotificationReadVersions,
@@ -293,10 +295,12 @@ type DerivedAttention = { tasks: AttentionTask[]; notifications: AttentionNotifi
  */
 async function deriveAttention(context: ActionContext): Promise<DerivedAttention | null> {
   const ownRecord = readOwnEmployeeRecord(context);
+  // One read of the open requests and access proposals serves both derivations.
+  const managerSets = readManagerAttentionSets(context);
   const [taskParts, notificationParts] = await Promise.all([
     Promise.all([
       deriveApprovalTasks(context),
-      deriveOpenRequestTasks(context),
+      deriveOpenRequestTasks(context, managerSets),
       deriveFollowUpTasks(context),
       deriveDispatchAcknowledgementTasks(context, ownRecord),
       deriveDispatchChallengeTasks(context),
@@ -305,6 +309,7 @@ async function deriveAttention(context: ActionContext): Promise<DerivedAttention
       deriveWorkHandoverTasks(context),
       deriveJoinRequestTasks(context),
       deriveVisitReplanTasks(context),
+      deriveSiteAccessProposalTasks(context, managerSets),
     ]),
     Promise.all([
       deriveOwnNotifications(context, ownRecord),

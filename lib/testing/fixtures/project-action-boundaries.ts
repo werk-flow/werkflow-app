@@ -337,6 +337,33 @@ assert.deepEqual(await actions.updateProject(projectId, { clientId: secondClient
 });
 world.rpcCalls.length = 0;
 
+// A project whose own or job material was taken or used keeps its material
+// history: the delete is refused with its reason before anything is deleted.
+world.tables.job_material_lines = [
+  {
+    id: '54000000-0000-4000-8000-000000000011',
+    organization_id: ORGANIZATION_A,
+    job_id: null,
+    project_id: unassignedProjectId,
+    item_id: '54000000-0000-4000-8000-000000000012',
+    taken_quantity: 2,
+    used_quantity: 1,
+    returned_quantity: 0,
+    status: 'taken',
+  },
+];
+const beforeMaterialRefusal = databaseSnapshot();
+assert.deepEqual(await actions.deleteProject(unassignedProjectId), {
+  success: false,
+  error: 'material_history_exists',
+});
+assert.equal(
+  databaseSnapshot(),
+  beforeMaterialRefusal,
+  'a refused delete keeps the project and its material',
+);
+world.tables.job_material_lines = [];
+
 // Deleting removes exactly the named project.
 assert.deepEqual(await actions.deleteProject(unassignedProjectId), { success: true });
 assert.equal(projectById(unassignedProjectId), undefined);

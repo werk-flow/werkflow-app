@@ -86,6 +86,12 @@ export type ReturnJobMaterialInput = {
   reason?: string | null;
 };
 
+export type RecordJobMaterialUseInput = {
+  lineId: string;
+  quantity: number;
+  note?: string | null;
+};
+
 export type InventoryImportRow = {
   name: string;
   itemType?: InventoryItemType;

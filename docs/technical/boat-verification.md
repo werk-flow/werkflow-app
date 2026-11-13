@@ -1,6 +1,6 @@
 # Verify on Boat
 
-On a workstation with a Boat key, `bun run test:verify` and each [rendered acceptance capture](#captures-on-boat) run on a short-lived Boat machine instead of the workstation (owner decision 15, werk-flow/werkflow-planning#294). Type-aware lint, the build, the stack and the browsers then load Boat's machine, not the 16 GB PC that agents share. CI stays on GitHub's runners ([decision 0009](../decisions/0009-pull-requests-and-ci.md)).
+On a workstation with a Boat key, `bun run test:verify`, each [rendered acceptance capture](#captures-on-boat) and [a migration's types](#types-on-boat) run on a short-lived Boat machine instead of the workstation (owner decision 15, werk-flow/werkflow-planning#294). Type-aware lint, the build, the stack and the browsers then load Boat's machine, not the 16 GB PC that agents share. CI stays on GitHub's runners ([decision 0009](../decisions/0009-pull-requests-and-ci.md)).
 
 ## How a run picks Boat
 
@@ -11,7 +11,7 @@ On a workstation with a Boat key, `bun run test:verify` and each [rendered accep
 - `--mode release`, or a group under `audit:performance` without `--untimed`: their medians measure the workstation's wall clock. Every other audit group runs on Boat. Lab counts repeat on any machine, and layout groups check computed boxes. Visual groups render in the pinned Playwright image on `linux/amd64` ([visual references](standards-audit.md#keep-accepted-screens-as-visual-references)), so a Boat machine compares with the same references as the workstation and CI. A new machine pulls the image once, in about 30 s.
 - `--target cloud`: the canary needs DEV's secrets.
 - The plan prints `[verify] refused:` (an unclassified failed run): the run ends there, exit 1, nothing run.
-- The plan runs no group, or only cheap groups, at most one of them not a SQL group. A Boat run's upload and setup cost about 95 s of machine time; here a SQL group takes about 1 s against the shared stack, `unit:all` 60 to 90 s and a static gate up to 35 s. `static:lint` takes 170 to 370 s and 3 to 4 GB, so it goes to Boat even alone, as do `ui:contracts` and the browser groups. A SQL group goes to Boat while the shared stack [drifts](testing.md#recurring-traps).
+- The plan runs no group, or only cheap groups, at most one of them not a SQL group. A Boat run's upload and setup cost more than these groups do here (`CHEAP_HERE`, `verify-on-boat.ts`). `static:lint` goes to Boat even alone, as do `ui:contracts` and the browser groups. A SQL group goes to Boat while the shared stack [drifts](testing.md#recurring-traps).
 
 The whole plan runs there, static gates included: type-aware lint is the largest local load. A Boat run takes no heavy slot, and holds the workspace lock while the machine runs, so the edit guard works as during a local run.
 
@@ -29,7 +29,7 @@ A proof records its backend by a digest of `.env.local`, which on a workstation 
 
 ### Fallback
 
-When Boat is unavailable, a run never sends its heavy groups to the workstation by default. A heavy local fallback once overloaded the shared PC: one refused connection sent a whole plan there, type-aware lint included, and with the other worktrees' work the lint ran for three hours with swap full.
+When Boat is unavailable, a run never sends its heavy groups to the workstation by default. A heavy local fallback once overloaded the shared PC for hours.
 
 Boat is unavailable when one of these happens before the results are back:
 
@@ -67,11 +67,15 @@ Idle machines count toward the 10 machines a member may run at once, and toward 
 
 A rendered acceptance capture, `bun run test:audit:focused --grep "@ACCEPT <set>"`, goes to Boat through the same machinery (`lib/testing/boat/capture-on-boat.ts`): the same snapshot, packing, checks and results import. On the workstation it needs a production build and its server beside the stack and a browser, one of the largest loads on the shared PC. The machine builds and serves the app itself and runs the same command on the same tree. The captures come back, so the images land where a local capture writes them, under `.agent-logs/playwright-runs/<run>/acceptance/<set>/`. Start no test server for a capture.
 
-The images render in the pinned Playwright image on both sides. Measured on one set: a Boat capture and a local capture of the same commit differ only in the world's run id, which every run changes, and in at most 99 other pixels an image, each by 1 of 255. The Boat run took about 3 minutes and 180 s of machine time, and the workstation spent 19 s of processor time and 0.26 GB on it. The local capture spent about 500 s of processor time at up to 3 GB, most of it the build.
+The images render in the pinned Playwright image on both sides. Measured on one set: a Boat and a local capture of the same commit differ only in the world's run id and in at most 99 other pixels an image, each by 1 of 255. The Boat run took about 3 minutes and cost the workstation 19 s of processor time; the local capture spent about 500 s at up to 3 GB.
 
 A capture runs locally, with a `Running locally:` line, under `WERKFLOW_VERIFY_LOCAL=1`, with `--reuse-run` (the retained world lives on the workstation's stack) or with `--target cloud`. CI and the Boat machine run it locally without a line. Other focused runs and reference updates stay on the workstation.
 
 When Boat is [unavailable](#fallback), the capture does not run: a block names the reason, writes no image and exits 1. To capture on the workstation on purpose, start `bun run test:server local` in a second shell, then run `WERKFLOW_VERIFY_LOCAL=1 bun run test:audit:focused --grep "@ACCEPT <set>"`.
+
+## Types on Boat
+
+`bun run types:generate -- --local` reads the stack on its machine where that stack has the tree's schema: CI, a Boat machine, a shared stack whose ledger matches. Otherwise a Boat machine's fresh stack generates the file, byte for byte what CI's check computes. Without Boat, CI's SQL job uploads it (`database-types`) when the committed types are stale, which the command takes.
 
 ## The key contract
 

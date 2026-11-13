@@ -18,6 +18,15 @@ const TASK_OF_EVERY_KIND: AttentionTask[] = [
   },
   { sourceType: 'organization_join_request', sourceId: 'join-1', personName: 'Jo Neu', email: null },
   {
+    sourceType: 'site_access_proposal',
+    sourceId: 'access-1',
+    clientId: 'client-1',
+    siteName: 'Haus Lindenstraße',
+    jobNumber: 'A-1',
+    proposerName: 'Max Muster',
+    proposedAt: '2026-11-10T08:00:00Z',
+  },
+  {
     sourceType: 'planning_visit_replan',
     sourceId: 'assignment-1',
     personName: 'Max Muster',
@@ -164,6 +173,7 @@ describe('groupAttentionTasks', () => {
       'visitReplan',
       'request',
       'joinRequest',
+      'siteAccess',
       'dispatchAcknowledgement',
       'dispatchChallenge',
       'parkingReview',

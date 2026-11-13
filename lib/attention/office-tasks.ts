@@ -15,9 +15,6 @@ import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/qu
 import { logReadFailure } from '@/lib/data/read-request-cache';
 import { logError } from '@/lib/logging';
 import { getPendingVacationRequestsForApprover } from '@/lib/vacation/actions';
-import { Constants } from '@/lib/supabase/database.types';
-import { uuidSchema } from '@/lib/validation/uuid';
-import { z } from '@/lib/zod';
 import { readPendingJoinRequests } from '@/lib/org/join-requests';
 import {
   FOLLOW_UP_ATTENTION_CAPACITY,
@@ -26,6 +23,7 @@ import {
   showsOverdueCallback,
   type FollowUpAttentionCandidate,
 } from './resolution';
+import type { ManagerAttentionSetsRead } from './manager-sets';
 import type { AttentionTask } from './types';
 
 export async function deriveApprovalTasks(
@@ -118,43 +116,19 @@ export async function deriveApprovalTasks(
   return { tasks, failed };
 }
 
-// list_open_request_attention declares every column non-null; the number,
-// the owner and the callback may be null.
-const openRequestRowsSchema = z.array(
-  z.object({
-    id: uuidSchema,
-    request_number: z.string().nullable(),
-    summary: z.string(),
-    status: z.enum(Constants.public.Enums.request_status),
-    urgency: z.enum(Constants.public.Enums.request_urgency),
-    assigned_to: uuidSchema.nullable(),
-    received_at: z.string(),
-    callback_due_at: z.string().nullable(),
-    callback_overdue: z.boolean(),
-    owner_is_manager: z.boolean(),
-  }),
-);
-
 export async function deriveOpenRequestTasks(
   context: ActionContext,
+  managerSets: ManagerAttentionSetsRead,
 ): Promise<{ tasks: AttentionTask[]; failed: boolean }> {
   // Open client requests are an office surface; employees never see them.
   if (context.role !== 'admin' && context.role !== 'buero') {
     return { tasks: [], failed: false };
   }
 
+  const sets = await managerSets;
+  if (sets.failed) return { tasks: [], failed: true };
+  const rows = sets.requests;
   const admin = createSupabaseAdminClient();
-  const { data, error } = await readCompleteRows(
-    (from, to) =>
-      admin.rpc('list_open_request_attention', { p_organization_id: context.orgId }).range(from, to),
-    LIST_ROW_CAP,
-  );
-  const parsed = openRequestRowsSchema.safeParse(data);
-  if (error || !parsed.success) {
-    logError('Failed to load open client requests', error ?? parsed.error);
-    return { tasks: [], failed: true };
-  }
-  const rows = parsed.data;
 
   const assigneeIds = [
     ...new Set(rows.map((row) => row.assigned_to).filter((id): id is string => Boolean(id))),
