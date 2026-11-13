@@ -308,8 +308,10 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
       hasText: INVENTORY_MOVEMENT_TYPE_LABELS.stock_in,
     });
     // Whole-row cells in column order: Zeitpunkt, Artikel, Lager, Von, Nach,
-    // Bewegung, Vorher, Menge, Danach, Grund. Run id and time stay in their
-    // own cells, so a quantity cannot match them.
+    // Bewegung, Vorher, Menge, Danach, Person, Grund. Run id and time stay in
+    // their own cells, so a quantity cannot match them. The person is the
+    // signed-in admin, whatever the world names them; „—“ means nobody.
+    const bookedBySomeone = /^[^—]+$/;
     await expect(inboundMovement.getByRole('cell')).toHaveText([
       /\d{4}/,
       itemName,
@@ -318,8 +320,9 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
       locationName,
       INVENTORY_MOVEMENT_TYPE_LABELS.stock_in,
       '5',
-      '+2',
+      `+${formatInventoryQuantity(2, 'piece')}`,
       '7',
+      bookedBySomeone,
       inboundReason,
     ]);
     const outboundMovement = inventoryRow(adminPage, itemName).filter({
@@ -333,8 +336,9 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
       INVENTORY_COPY.movementTarget.correctionOut,
       INVENTORY_MOVEMENT_TYPE_LABELS.stock_out,
       '7',
-      '-1',
+      formatInventoryQuantity(-1, 'piece'),
       '6',
+      bookedBySomeone,
       outboundReason,
     ]);
   });
@@ -385,7 +389,9 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     const initialMovement = inventoryRow(adminPage, importedItem);
     await expect(initialMovement).toContainText(INVENTORY_MOVEMENT_TYPE_LABELS.initial_count);
     await expect(initialMovement.getByRole('cell', { name: '0', exact: true })).toBeVisible();
-    await expect(initialMovement.getByRole('cell', { name: '+4', exact: true })).toBeVisible();
+    await expect(
+      initialMovement.getByRole('cell', { name: `+${formatInventoryQuantity(4, 'piece')}`, exact: true }),
+    ).toBeVisible();
     await expect(initialMovement.getByRole('cell', { name: '4', exact: true })).toBeVisible();
   });
 });

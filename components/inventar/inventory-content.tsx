@@ -9,19 +9,14 @@ import { ListRow } from '@/components/ui/list-row';
 import { PendingRow } from '@/components/ui/pending-row';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  INVENTORY_ITEM_COLUMNS,
-  INVENTORY_MOVEMENT_COLUMNS,
-} from '@/components/inventar/inventory-table-columns';
+import { INVENTORY_ITEM_COLUMNS } from '@/components/inventar/inventory-table-columns';
 import { ListPagination } from '@/components/shared/list-pagination';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { useListNavigation } from '@/hooks/use-list-navigation';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import { isServerRow, withPendingDraft } from '@/lib/inventory/pending-drafts';
-import type { InventoryOverview, InventoryOverviewItem } from '@/lib/inventory/types';
-import { INVENTORY_MOVEMENT_TYPE_LABELS } from '@/lib/inventory/types';
-import { cn, formatBerlinDateTime } from '@/lib/utils';
+import type { InventoryMovementPage, InventoryOverview, InventoryOverviewItem } from '@/lib/inventory/types';
 import { InventoryDialogs } from './inventory-dialogs';
 import { InventoryFilterBar } from './inventory-filter-bar';
 import type { PendingItemDraft } from './inventory-form-state';
@@ -33,16 +28,18 @@ import {
   pendingItemRowCells,
 } from './inventory-item-row-parts';
 import { LocationsView } from './inventory-locations-view';
-import { formatMovementTarget } from './inventory-row-format';
+import { InventoryMovementsView } from './inventory-movements-view';
 import { InventorySummaryTiles } from './inventory-summary-tiles';
 import { useInventoryEditing } from './use-inventory-editing';
 import { useInventoryFilters } from './use-inventory-filters';
 
 type InventoryContentProps = {
   overview: InventoryOverview;
+  /** The movement history's page; null on every other tab. */
+  history: InventoryMovementPage | null;
 };
 
-export function InventoryContent({ overview }: InventoryContentProps) {
+export function InventoryContent({ overview, history }: InventoryContentProps) {
   const navigation = useListNavigation();
   const query = overview.page.query;
   const filters = useInventoryFilters(query, navigation);
@@ -93,6 +90,7 @@ export function InventoryContent({ overview }: InventoryContentProps) {
 
         <InventoryTabs
           overview={overview}
+          history={history}
           navigation={navigation}
           filters={filters}
           editing={editing}
@@ -151,6 +149,7 @@ function InventoryHeaderActions({
 /** The four tabs with the filter bar; the URL holds the open tab. */
 function InventoryTabs({
   overview,
+  history,
   navigation,
   filters,
   editing,
@@ -158,6 +157,7 @@ function InventoryTabs({
   plannedItems,
 }: {
   overview: InventoryOverview;
+  history: InventoryMovementPage | null;
   navigation: ReturnType<typeof useListNavigation>;
   filters: ReturnType<typeof useInventoryFilters>;
   editing: ReturnType<typeof useInventoryEditing>;
@@ -170,7 +170,7 @@ function InventoryTabs({
       onValueChange={(tab) => navigation.navigate({ tab, page: 1 })}
       className="mt-4"
     >
-      {/* One row only where tabs and all four filters fit beside the sidebar. */}
+      {/* One row only where tabs and all four filters fit beside the sidebar; the history brings its own filters. */}
       <div className="flex flex-col gap-3 2xl:flex-row 2xl:items-center 2xl:justify-between">
         <TabsList>
           <TabsTrigger value="all">Alle Artikel</TabsTrigger>
@@ -179,7 +179,9 @@ function InventoryTabs({
           <TabsTrigger value="movements">Bewegungen</TabsTrigger>
         </TabsList>
 
-        <InventoryFilterBar filters={filters} locations={overview.locations} />
+        {overview.page.query.tab !== 'movements' && (
+          <InventoryFilterBar filters={filters} locations={overview.locations} />
+        )}
       </div>
 
       <TabsContent value="all" className="mt-4" aria-busy={navigation.busy} inert={navigation.busy}>
@@ -210,8 +212,17 @@ function InventoryTabs({
         />
       </TabsContent>
 
-      <TabsContent value="movements" className="mt-4" aria-busy={navigation.busy} inert={navigation.busy}>
-        <MovementsTable movements={overview.movements} />
+      <TabsContent value="movements" className="mt-4">
+        {history && (
+          <InventoryMovementsView
+            history={history}
+            filters={filters}
+            locations={overview.locations}
+            page={overview.page.query.page}
+            busy={navigation.busy}
+            onPageChange={(page) => navigation.navigate({ page })}
+          />
+        )}
       </TabsContent>
     </Tabs>
   );
@@ -325,126 +336,6 @@ function InventoryItemsDesktopTable({ rows, isBusy, onEdit, onAdjust }: Inventor
                 />
               ),
             )
-          )}
-        </TableBody>
-      </Table>
-    </div>
-  );
-}
-
-type InventoryMovements = { movements: InventoryOverview['movements'] };
-
-function MovementsTable({ movements }: InventoryMovements) {
-  return (
-    <>
-      <MovementCards movements={movements} />
-      <MovementsDesktopTable movements={movements} />
-    </>
-  );
-}
-
-function MovementCards({ movements }: InventoryMovements) {
-  return (
-    <div className="space-y-2 md:hidden">
-      {movements.length === 0 ? (
-        <EmptyState
-          title="Noch keine Bewegungen"
-          description="Zugänge, Entnahmen und Umlagerungen erscheinen hier, sobald Bestand gebucht wird."
-        />
-      ) : (
-        movements.map((movement) => {
-          const target = formatMovementTarget(movement);
-          return (
-            <ListRow key={movement.id} className="items-start">
-              <div className="min-w-0 flex-1 space-y-1">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="min-w-0 truncate text-sm font-medium">{movement.itemName}</p>
-                  <span
-                    className={cn(
-                      'shrink-0 text-sm font-medium tabular-nums',
-                      movement.quantityDelta < 0 ? 'text-destructive' : 'text-success-text',
-                    )}
-                  >
-                    {movement.quantityDelta > 0 ? '+' : ''}
-                    {movement.quantityDelta.toLocaleString('de-DE')}
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {INVENTORY_MOVEMENT_TYPE_LABELS[movement.movementType]} ·{' '}
-                  {formatBerlinDateTime(movement.createdAt)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {target.from} → {target.to}
-                </p>
-                <p className="text-xs tabular-nums text-muted-foreground">
-                  Vorher {movement.quantityBefore.toLocaleString('de-DE')} · Danach{' '}
-                  {movement.quantityAfter.toLocaleString('de-DE')}
-                </p>
-                {movement.reason && <p className="text-xs text-muted-foreground">Grund: {movement.reason}</p>}
-              </div>
-            </ListRow>
-          );
-        })
-      )}
-    </div>
-  );
-}
-
-function MovementsDesktopTable({ movements }: InventoryMovements) {
-  return (
-    <div className="hidden overflow-hidden rounded-lg border bg-card md:block">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            {INVENTORY_MOVEMENT_COLUMNS.map((column) => (
-              <TableHead key={column.id} className={column.className}>
-                {column.header}
-              </TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {movements.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={INVENTORY_MOVEMENT_COLUMNS.length}>
-                <EmptyState
-                  title="Noch keine Bewegungen"
-                  description="Zugänge, Entnahmen und Umlagerungen erscheinen hier, sobald Bestand gebucht wird."
-                />
-              </TableCell>
-            </TableRow>
-          ) : (
-            movements.map((movement) => {
-              const target = formatMovementTarget(movement);
-              return (
-                <TableRow key={movement.id}>
-                  <TableCell className="text-muted-foreground">
-                    {formatBerlinDateTime(movement.createdAt)}
-                  </TableCell>
-                  <TableCell className="font-medium wrap-anywhere">{movement.itemName}</TableCell>
-                  <TableCell className="wrap-anywhere">{movement.locationName}</TableCell>
-                  <TableCell className="wrap-anywhere">{target.from}</TableCell>
-                  <TableCell className="wrap-anywhere">{target.to}</TableCell>
-                  <TableCell>{INVENTORY_MOVEMENT_TYPE_LABELS[movement.movementType]}</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {movement.quantityBefore.toLocaleString('de-DE')}
-                  </TableCell>
-                  <TableCell
-                    className={cn(
-                      'text-right tabular-nums',
-                      movement.quantityDelta < 0 ? 'text-destructive' : 'text-success-text',
-                    )}
-                  >
-                    {movement.quantityDelta > 0 ? '+' : ''}
-                    {movement.quantityDelta.toLocaleString('de-DE')}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {movement.quantityAfter.toLocaleString('de-DE')}
-                  </TableCell>
-                  <TableCell>{movement.reason ?? '—'}</TableCell>
-                </TableRow>
-              );
-            })
           )}
         </TableBody>
       </Table>

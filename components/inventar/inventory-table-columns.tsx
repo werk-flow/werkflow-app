@@ -48,5 +48,6 @@ export const INVENTORY_MOVEMENT_COLUMNS: readonly SkeletonColumn[] = [
   { id: 'before', header: 'Vorher', className: 'text-right', skeleton: MOVEMENT_QUANTITY_CELL },
   { id: 'delta', header: 'Menge', className: 'text-right', skeleton: MOVEMENT_QUANTITY_CELL },
   { id: 'after', header: 'Danach', className: 'text-right', skeleton: MOVEMENT_QUANTITY_CELL },
+  { id: 'person', header: 'Person', skeleton: <Skeleton className="h-4 w-24" /> },
   { id: 'reason', header: 'Grund', skeleton: <Skeleton className="h-4 w-32" /> },
 ];

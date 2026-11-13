@@ -4,14 +4,15 @@ import type { ActionResult } from '@/lib/action-result';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import type { AdminClient } from '@/lib/supabase/admin';
 import { logReadErrors } from '@/lib/data/read-request-cache';
+import { formatProfileName } from '@/lib/members/profile-name';
+import { inventoryMovementPageResultSchema, type InventoryPageQuery } from './list-page';
 import type {
   InventoryBarcodeRow,
   InventoryCategory,
   InventoryItem,
   InventoryItemRow,
   InventoryLocation,
-  InventoryMovementListItem,
-  InventoryMovementRow,
+  InventoryMovementPage,
   InventoryOverviewItem,
   InventoryPickerOption,
   InventoryStockLevelRow,
@@ -23,7 +24,6 @@ import {
   toInventoryCategory,
   toInventoryItem,
   toInventoryLocation,
-  toInventoryMovementType,
   toInventorySupplier,
   toNumber,
 } from './types';
@@ -141,45 +141,13 @@ function readInventoryItemSupportRows(admin: AdminClient, orgId: string, support
   ]);
 }
 
-/** The jobs and projects the latest movements name. */
-function readInventoryMovementTargets(
-  admin: AdminClient,
-  orgId: string,
-  jobIds: string[],
-  projectIds: string[],
-) {
-  return Promise.all([
-    readInBatches(jobIds, (batch) =>
-      admin
-        .from('jobs')
-        .select('id, job_number, title')
-        .eq('organization_id', orgId)
-        .in('id', [...batch]),
-    ),
-    readInBatches(projectIds, (batch) =>
-      admin
-        .from('projects')
-        .select('id, project_number, name')
-        .eq('organization_id', orgId)
-        .in('id', [...batch]),
-    ),
-  ]);
-}
-
 /** Every support read of the inventory page, started together, in one flat result list. */
-async function readInventoryOverviewSupportRows(
-  admin: AdminClient,
-  orgId: string,
-  supportIds: string[],
-  jobIds: string[],
-  projectIds: string[],
-) {
-  const [lookups, itemRows, targets] = await Promise.all([
+async function readInventoryOverviewSupportRows(admin: AdminClient, orgId: string, supportIds: string[]) {
+  const [lookups, itemRows] = await Promise.all([
     readInventoryCatalogLookups(admin, orgId),
     readInventoryItemSupportRows(admin, orgId, supportIds),
-    readInventoryMovementTargets(admin, orgId, jobIds, projectIds),
   ]);
-  return [...lookups, ...itemRows, ...targets] as const;
+  return [...lookups, ...itemRows] as const;
 }
 
 function groupRowsByItem<Row extends { item_id: string }>(rows: Row[]): Map<string, Row[]> {
@@ -217,7 +185,7 @@ function toInventoryOverviewItems(
     assetCountByItem.set(asset.item_id, (assetCountByItem.get(asset.item_id) ?? 0) + 1);
   }
 
-  // The page is the filtered, ordered id list; movement-only items feed the lookups above but are not page rows.
+  // The page is the filtered, ordered id list; a Lager preview's items feed the lookups above but are not page rows.
   return pageIds.flatMap((id) => {
     const item = itemMap.get(id);
     if (!item) return [];
@@ -253,28 +221,23 @@ function toInventoryOverviewItems(
 }
 
 /**
- * Reads everything the inventory page shows beside the page ids and the latest
- * movements: the catalog lookups and the support rows of the listed and moved
- * items. Returns `inventory_failed` when any read fails.
+ * Reads everything the inventory page shows beside the page ids: the catalog
+ * lookups and the support rows of the listed items. Returns
+ * `inventory_failed` when any read fails.
  */
 export async function loadInventoryOverviewLists(
   admin: AdminClient,
   orgId: string,
   page: { ids: string[]; supportIds: string[] },
-  movements: InventoryMovementRow[],
 ): Promise<
   ActionResult<{
     categories: InventoryCategory[];
     locations: InventoryLocation[];
     suppliers: InventorySupplier[];
     items: InventoryOverviewItem[];
-    movements: InventoryMovementListItem[];
   }>
 > {
-  const supportIds = [...new Set([...page.supportIds, ...movements.map((movement) => movement.item_id)])];
-  const jobIds = [...new Set(movements.flatMap((row) => (row.job_id ? [row.job_id] : [])))];
-  const projectIds = [...new Set(movements.flatMap((row) => (row.project_id ? [row.project_id] : [])))];
-  const supportResults = await readInventoryOverviewSupportRows(admin, orgId, supportIds, jobIds, projectIds);
+  const supportResults = await readInventoryOverviewSupportRows(admin, orgId, page.supportIds);
   const [
     categoriesResult,
     locationsResult,
@@ -284,8 +247,6 @@ export async function loadInventoryOverviewLists(
     stockLevelsResult,
     materialLinesResult,
     assetInstancesResult,
-    jobsResult,
-    projectsResult,
   ] = supportResults;
   if (supportResults.some((result) => result.error)) {
     logReadErrors('getInventoryOverview: read failed', ...supportResults.map((result) => result.error));
@@ -296,15 +257,11 @@ export async function loadInventoryOverviewLists(
   const locations = (locationsResult.data ?? []).map(toInventoryLocation);
   const suppliers = (suppliersResult.data ?? []).map(toInventorySupplier);
   const items = (itemsResult.data ?? []).map(toInventoryItem);
-  const jobs = jobsResult.data ?? [];
-  const projects = projectsResult.data ?? [];
 
   const categoryMap = new Map(categories.map((category) => [category.id, category]));
   const locationMap = new Map(locations.map((location) => [location.id, location]));
   const supplierMap = new Map(suppliers.map((supplier) => [supplier.id, supplier]));
   const itemMap = new Map(items.map((item) => [item.id, item]));
-  const jobMap = new Map(jobs.map((job) => [job.id, job]));
-  const projectMap = new Map(projects.map((project) => [project.id, project]));
 
   const overviewItems = toInventoryOverviewItems(
     page.ids,
@@ -318,27 +275,45 @@ export async function loadInventoryOverviewLists(
     assetInstancesResult.data ?? [],
   );
 
-  const movementItems: InventoryMovementListItem[] = movements.map((movement) => ({
-    id: movement.id,
-    itemId: movement.item_id,
-    itemName: itemMap.get(movement.item_id)?.name ?? 'Unbekannter Artikel',
-    locationId: movement.location_id,
-    locationName: locationMap.get(movement.location_id)?.name ?? 'Unbekanntes Lager',
-    movementType: toInventoryMovementType(movement.movement_type),
-    quantityDelta: toNumber(movement.quantity_delta),
-    quantityBefore: toNumber(movement.quantity_before),
-    quantityAfter: toNumber(movement.quantity_after),
-    jobId: movement.job_id,
-    jobTitle: movement.job_id ? (jobMap.get(movement.job_id)?.title ?? null) : null,
-    jobNumber: movement.job_id ? (jobMap.get(movement.job_id)?.job_number ?? null) : null,
-    projectId: movement.project_id,
-    projectName: movement.project_id ? (projectMap.get(movement.project_id)?.name ?? null) : null,
-    projectNumber: movement.project_id ? (projectMap.get(movement.project_id)?.project_number ?? null) : null,
-    reason: movement.reason,
-    createdAt: movement.created_at,
-  }));
+  return { success: true, categories, locations, suppliers, items: overviewItems };
+}
 
-  return { success: true, categories, locations, suppliers, items: overviewItems, movements: movementItems };
+/**
+ * One page of the movement history: stock movements and use events of job
+ * material, filtered, counted and ordered in the database
+ * (`list_inventory_movement_page`). The caller authorizes Admin or Büro and
+ * passes the caller's organization. A failed or malformed read is `failed`,
+ * never an empty history.
+ */
+export async function loadInventoryMovementPage(
+  admin: AdminClient,
+  orgId: string,
+  query: InventoryPageQuery,
+): Promise<InventoryMovementPage> {
+  const { data, error } = await admin.rpc('list_inventory_movement_page', {
+    p_organization_id: orgId,
+    p_query: query,
+  });
+  const parsed = inventoryMovementPageResultSchema.safeParse(data);
+  if (error || !parsed.success) {
+    logReadErrors('loadInventoryMovementPage: read failed', error ?? { code: 'malformed_result' });
+    return { status: 'failed' };
+  }
+  const people = parsed.data.people.map((person) => ({
+    id: person.id,
+    name: formatProfileName({ first_name: person.firstName, last_name: person.lastName, email: person.email }),
+  }));
+  const nameById = new Map(people.map((person) => [person.id, person.name]));
+  return {
+    status: 'loaded',
+    total: parsed.data.total,
+    hasAny: parsed.data.hasAny,
+    people,
+    entries: parsed.data.rows.map(({ actorId, ...row }) => ({
+      ...row,
+      actorName: actorId ? (nameById.get(actorId) ?? null) : null,
+    })),
+  };
 }
 
 /** The ids a picker search matches by name, SKU, manufacturer, or barcode, plus the barcode each matched by. */
