@@ -56,9 +56,23 @@ import {
   vacationRejectDialog,
   vacationRequestDialog,
 } from '../../../golden/support/steps/vacation';
+import {
+  accountMenuButton,
+  showOrganizationSwitcher,
+  signOutMenuItem,
+} from '../../../golden/support/steps/organization';
+import { fieldPackSiteAccessButton, fieldPackSiteAccessDialog } from '../../../golden/support/steps/work';
 import type { TestWorld } from '../../../golden/support/world';
 import type { DialogOpener } from '../dialog-opener';
 import { prepareLayoutDetails } from '../layout-fixtures';
+import {
+  seedRefusedTimeEvent,
+  unsentDeleteButton,
+  unsentDeleteConfirmation,
+  unsentDiscardButton,
+  unsentDiscardConfirmation,
+  unsentWorkDialog,
+} from '../time-outbox';
 import { surfaceFixture, type SurfaceContext } from '../surface-fixtures';
 import { worldName } from '../../../../lib/testing/seed-world-plan';
 
@@ -81,6 +95,14 @@ async function enabled(control: Locator): Promise<Locator> {
 }
 
 /** Opens the stopped clock's sheet from the clock button; the sheet is the parent of nested dialogs. */
+/** The sign-out of the account menu, with the menu open: the trigger of the unsent-work question. */
+async function signOutControl(page: Page): Promise<Locator> {
+  // On a phone the profile card sits in the menu sheet.
+  await showOrganizationSwitcher(page);
+  await (await enabled(accountMenuButton(page))).click();
+  return enabled(signOutMenuItem(page));
+}
+
 async function openClockSheet(page: Page): Promise<Locator> {
   await (await enabled(clockInLauncher(page))).click();
   const sheet = clockStartSheet(page);
@@ -212,6 +234,39 @@ export const TIME_OPENERS = {
     trigger: async ({ page }) => enabled(clockInLauncher(page)),
     layer: clockStartSheet,
   },
+  'field.clock-unsent': {
+    trigger: async ({ page, world }) => {
+      await seedRefusedTimeEvent(page, world);
+      return enabled(clockInLauncher(page));
+    },
+    layer: clockStartSheet,
+  },
+  'field.unsent-delete': {
+    trigger: async ({ page, world }) => {
+      await seedRefusedTimeEvent(page, world);
+      return enabled(unsentDeleteButton(await openClockSheet(page)));
+    },
+    layer: unsentDeleteConfirmation,
+    parents: (page) => [clockStartSheet(page)],
+  },
+  'field.unsent-work': {
+    trigger: async ({ page, world }) => {
+      await seedRefusedTimeEvent(page, world);
+      return signOutControl(page);
+    },
+    layer: unsentWorkDialog,
+    returnFocus: ({ page }) => accountMenuButton(page),
+  },
+  'field.unsent-discard': {
+    trigger: async ({ page, world }) => {
+      await seedRefusedTimeEvent(page, world);
+      await (await signOutControl(page)).click();
+      await expect(unsentWorkDialog(page)).toBeVisible();
+      return enabled(unsentDiscardButton(page));
+    },
+    layer: unsentDiscardConfirmation,
+    parents: (page) => [unsentWorkDialog(page)],
+  },
   'field.job-picker': {
     trigger: async ({ page, world }) => {
       // The layout job is assigned to the employee, so the picker lists a row.
@@ -271,6 +326,11 @@ export const TIME_OPENERS = {
       return ownEvidenceUploadButton(page);
     },
     layer: ownEvidenceUploadDialog,
+  },
+  // The field worker's proposal from the pencil on the opened job's Einsatzort, in any proposal state.
+  'field.site-access': {
+    trigger: async ({ page }) => fieldPackSiteAccessButton(page),
+    layer: fieldPackSiteAccessDialog,
   },
   'field.artifact': {
     trigger: async ({ page }) => newWorkArtifactButton(page, { exact: true }),

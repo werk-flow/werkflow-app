@@ -107,7 +107,7 @@ const searchParams = Promise.resolve({});
 const pages = {
   '/anfragen': () => AnfragenPage({ searchParams }),
   '/anfragen/[requestId]': () => AnfrageDetailPage({ params: Promise.resolve({ requestId }) }),
-  '/kunden/[clientId]': () => KundenDetailPage({ params: Promise.resolve({ clientId }) }),
+  '/kunden/[clientId]': () => KundenDetailPage({ params: Promise.resolve({ clientId }), searchParams }),
   '/dokumente': () => DokumentePage({ searchParams }),
   '/inventar': () => InventoryPage({ searchParams }),
 } satisfies Record<string, Render>;

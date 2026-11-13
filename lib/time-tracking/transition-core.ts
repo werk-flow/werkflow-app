@@ -109,6 +109,42 @@ async function isRecordedOperation(organizationId: string, operationId: string):
   return data !== null;
 }
 
+/** The arguments of one transition as `asked` asks it: captured offline, or as the online call asked. */
+function transitionArgs(
+  { userId, organizationId }: TimeTransitionCaller,
+  command: TimeTransitionCommand,
+  asked: OfflineCapture | null,
+) {
+  const selection = command.selection;
+  return rpcArgs('transition_time_activity', {
+    p_organization_id: organizationId,
+    p_actor_id: userId,
+    p_operation_id: command.operationId,
+    p_request_hash: hashTimeTransitionRequest({
+      organizationId,
+      action: command.action,
+      expectedSessionId: command.expectedSessionId,
+      expectedVersion: command.expectedVersion,
+      selection,
+      acknowledgeLong: command.acknowledgeLong,
+      ...(asked ? { capturedAt: asked.capturedAt } : {}),
+    }),
+    p_action: command.action,
+    p_expected_session_id: command.expectedSessionId,
+    p_expected_version: command.expectedVersion,
+    p_segment_kind: selection?.kind ?? null,
+    p_allocation_kind: selection?.allocationKind ?? null,
+    p_job_id: selection?.jobId ?? null,
+    p_internal_type: selection?.internalType ?? null,
+    p_travel_route: selection?.travelRoute ?? null,
+    p_travel_role: selection?.travelRole ?? null,
+    p_standby_context: selection?.standbyContext ?? null,
+    p_acknowledge_long: command.acknowledgeLong,
+    // An online call omits both, so the database keeps its own clock.
+    ...(asked ? { p_captured_at: asked.capturedAt, p_sent_at: asked.sentAt } : {}),
+  });
+}
+
 export async function recordTimeTransition(
   caller: TimeTransitionCaller,
   command: TimeTransitionCommand,
@@ -155,37 +191,17 @@ export async function recordTimeTransition(
     sicknessNotice = await hasActiveSicknessOn(organizationId, userId, day);
   }
 
-  const selection = command.selection;
-  const { data, error } = await admin.rpc(
-    'transition_time_activity',
-    rpcArgs('transition_time_activity', {
-      p_organization_id: organizationId,
-      p_actor_id: userId,
-      p_operation_id: command.operationId,
-      p_request_hash: hashTimeTransitionRequest({
-        organizationId,
-        action: command.action,
-        expectedSessionId: command.expectedSessionId,
-        expectedVersion: command.expectedVersion,
-        selection,
-        acknowledgeLong: command.acknowledgeLong,
-        ...(capture ? { capturedAt: capture.capturedAt } : {}),
-      }),
-      p_action: command.action,
-      p_expected_session_id: command.expectedSessionId,
-      p_expected_version: command.expectedVersion,
-      p_segment_kind: selection?.kind ?? null,
-      p_allocation_kind: selection?.allocationKind ?? null,
-      p_job_id: selection?.jobId ?? null,
-      p_internal_type: selection?.internalType ?? null,
-      p_travel_route: selection?.travelRoute ?? null,
-      p_travel_role: selection?.travelRole ?? null,
-      p_standby_context: selection?.standbyContext ?? null,
-      p_acknowledge_long: command.acknowledgeLong,
-      // An online call omits both, so the database keeps its own clock.
-      ...(capture ? { p_captured_at: capture.capturedAt, p_sent_at: capture.sentAt } : {}),
-    }),
-  );
+  const transition = (asked: OfflineCapture | null) =>
+    // tenant-scope: built-from-context — transitionArgs passes the caller's resolved organization as p_organization_id
+    admin.rpc('transition_time_activity', transitionArgs(caller, command, asked));
+  let { data, error } = await transition(capture);
+  // The phone's online call carried this operation id and its page closed before the answer: the
+  // ledger holds it under the online call's hash. Asked as that call asked, the same action replays
+  // its first result. The conflict itself proves the id is recorded, also when the online call
+  // committed after the read above, and the database function re-checks organization, employee and
+  // hash under its row lock: this can only replay or conflict, never record anything new.
+  if (error && capture && error.message.includes('time_transition_idempotency_conflict'))
+    ({ data, error } = await transition(null));
 
   if (error) return { success: false, error: mapTransitionError(error, capture !== null) };
   const parsedPayload = transitionPayloadSchema.safeParse(data);

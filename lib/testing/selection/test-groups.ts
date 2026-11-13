@@ -311,6 +311,7 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['security:account', 'security/account.spec.ts', ['*']],
   ['security:offline-shell', 'security/offline-shell.spec.ts', ['standalone', 'work']],
   ['security:offline-today', 'security/offline-today.spec.ts', ['standalone', 'work', 'planning']],
+  ['security:offline-clock', 'security/offline-clock.spec.ts', ['standalone', 'time']],
   ['security:offline-drafts', 'security/offline-drafts.spec.ts', ['standalone', 'work', 'documents']],
   // The report screenshot redraw on a seeded customer and job (docs/technical/problem-report-scrubbing.md).
   ['problem-reports:redraw', 'problem-reports/screenshot-redraw.spec.ts', ['customers', 'work']],
@@ -380,6 +381,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['client-duplicates', ['client_duplicates.sql'], ['customers']],
   ['client-archive-history', ['client_archive_history.sql'], ['customers']],
   ['client-site-roles', ['client_site_roles.sql'], ['customers', 'service']],
+  ['site-access-proposals', ['site_access_proposals.sql'], ['customers', 'work', 'attention']],
   [
     'request-callback-and-equipment',
     ['request_callback_and_equipment.sql'],
@@ -394,7 +396,16 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ],
   ['service', ['service_boundaries.sql'], ['service', 'customers', 'work']],
   ['service-atomic-writes', ['service_atomic_writes.sql'], ['service', 'planning']],
-  ['inventory-ledger', ['inventory_ledger.sql', 'inventory_atomic_writes.sql'], ['inventory']],
+  [
+    'inventory-ledger',
+    [
+      'inventory_ledger.sql',
+      'inventory_atomic_writes.sql',
+      'job_material_use.sql',
+      'job_material_use_concurrency.sql',
+    ],
+    ['inventory'],
+  ],
   ['leistung-prices', ['leistung_prices.sql'], ['commercial']],
   ['closed-period-writes', ['closed_period_writes.sql'], ['time']],
   ['entry-change-request-decisions', ['entry_change_request_decisions.sql'], ['time']],

@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/card';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import type { PersonnelQualificationSummary } from '@/lib/qualifications/types';
 import { SectionTitle } from '@/components/shared/section-title';
-import { formatBerlin } from '@/lib/utils';
+import { formatGermanDate } from '@/lib/utils';
 
 export type PersonnelQualificationSummaryData = PersonnelQualificationSummary;
 
@@ -19,7 +19,6 @@ export function PersonnelQualificationSummary({ data }: { data: PersonnelQualifi
       </RegionLoadError>
     );
   }
-  const formatDate = (value: string) => formatBerlin(value, 'numericDate');
   return (
     <Card className="gap-4 p-4">
       <div className="flex items-start justify-between gap-3">
@@ -59,8 +58,8 @@ export function PersonnelQualificationSummary({ data }: { data: PersonnelQualifi
               <div key={record.id} className="rounded-md bg-muted/40 px-3 py-2">
                 <p className="text-sm font-medium">{definition.name}</p>
                 <p className="text-xs text-muted-foreground">
-                  {formatDate(record.validFrom)}
-                  {record.validUntil ? ' – ' + formatDate(record.validUntil) : ''}
+                  {formatGermanDate(record.validFrom)}
+                  {record.validUntil ? ' – ' + formatGermanDate(record.validUntil) : ''}
                   {definition.kind === 'certification'
                     ? ' · ' +
                       (record.confirmationStatus === 'confirmed' ? 'intern bestätigt' : 'nicht bestätigt')

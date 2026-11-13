@@ -17,6 +17,7 @@ import { useBanner } from '@/components/ui/banner';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import type { ActionResult } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
+import { endSessionAfterCheck, withReload } from '@/components/shared/unsent-work-gate';
 import { clearTodayOnDevice } from '@/lib/field-sync/device/today-wipe';
 import { clearServiceWorkerCaches, restoreOfflineShell } from '@/lib/offline/service-worker-caches';
 import { setActiveOrgCookie } from '@/lib/org/actions';
@@ -178,6 +179,25 @@ async function refreshOwnMemberships({
   }
 }
 
+/**
+ * Claims the switch for `orgId`, then settles the phone's unsent work: it belongs to the
+ * organization the person leaves, and the server refuses it under another one. So it is sent, or
+ * the person decides, before `proceed` starts the switch. When the person stays, the claim is
+ * dropped, and the membership refresh this selection discarded runs again.
+ */
+async function switchAfterCheck(
+  orgId: string,
+  pendingOrgIdRef: RefObject<string | null>,
+  showBanner: ReturnType<typeof useBanner>['showBanner'],
+  refreshMemberships: () => Promise<void>,
+  proceed: () => Promise<void>,
+): Promise<void> {
+  pendingOrgIdRef.current = orgId;
+  if (await endSessionAfterCheck(withReload(showBanner), proceed, 'organization')) return;
+  pendingOrgIdRef.current = null;
+  void refreshMemberships();
+}
+
 function getParentListPath(pathname: string): string | null {
   const detailRoutePatterns = [
     { pattern: /^\/auftraege\/[^/]+$/, parent: '/auftraege' },
@@ -306,49 +326,44 @@ export function OrganizationProvider({
     async (orgId: string) => {
       if (orgId === activeOrgId || pendingOrgIdRef.current) return;
 
-      pendingOrgIdRef.current = orgId;
-      setIsSwitchingOrg(true);
       // An in-flight membership refresh must not fall back over this selection.
       refreshGenerationRef.current += 1;
+      await switchAfterCheck(orgId, pendingOrgIdRef, showBanner, refreshMemberships, async () => {
+        setIsSwitchingOrg(true);
 
-      try {
-        // Nothing the previous organization's day held stays on the device. Before the cookie: the
-        // new organization's start page can render from the cookie action's response, and its
-        // refresh must come after this wipe, never before it.
-        await clearTodayOnDevice();
-        // The cookie call stays in this handler, where the double-render check sees it.
-        await clearCachesAfterSwitch(setActiveOrgCookie(orgId));
-        // GET readers authorize against this cookie. Publish the new scope only
-        // after its response commits, otherwise their first read is denied.
-        setActiveOrgId(orgId);
+        try {
+          // Nothing the previous organization's day held stays on the device. Before the cookie: the
+          // new organization's start page can render from the cookie action's response, and its
+          // refresh must come after this wipe, never before it.
+          await clearTodayOnDevice();
+          // The cookie call stays in this handler, where the double-render check sees it.
+          await clearCachesAfterSwitch(setActiveOrgCookie(orgId));
+          // GET readers authorize against this cookie. Publish the new scope only
+          // after its response commits, otherwise their first read is denied.
+          setActiveOrgId(orgId);
 
-        const parentPath = getParentListPath(pathname);
+          const parentPath = getParentListPath(pathname);
 
-        // Wrap navigation in startTransition so React keeps showing the
-        // current UI (with the overlay) until the server finishes rendering
-        // the new org data. This prevents the hydration mismatch that occurs
-        // when PPR serves a stale static shell while dynamic data is still
-        // streaming for the new org. The overlay's pending state is
-        // isSwitchingOrg, never the transition's.
-        startTransition(() => {
-          if (parentPath) {
-            router.push(parentPath);
-          } else {
-            router.refresh();
-          }
-        });
-      } catch (error) {
-        logError('OrganizationProvider: organization switch failed', error);
-        setActiveOrgId(activeOrgId);
-        pendingOrgIdRef.current = null;
-        setIsSwitchingOrg(false);
-        showBanner({
-          variant: 'error',
-          message: 'Die Organisation konnte nicht gewechselt werden.',
-        });
-      }
+          // Wrap navigation in startTransition so React keeps showing the
+          // current UI (with the overlay) until the server finishes rendering
+          // the new org data. This prevents the hydration mismatch that occurs
+          // when PPR serves a stale static shell while dynamic data is still
+          // streaming for the new org. The overlay's pending state is
+          // isSwitchingOrg, never the transition's.
+          startTransition(() => (parentPath ? router.push(parentPath) : router.refresh()));
+        } catch (error) {
+          logError('OrganizationProvider: organization switch failed', error);
+          setActiveOrgId(activeOrgId);
+          pendingOrgIdRef.current = null;
+          setIsSwitchingOrg(false);
+          showBanner({
+            variant: 'error',
+            message: 'Die Organisation konnte nicht gewechselt werden.',
+          });
+        }
+      });
     },
-    [activeOrgId, router, pathname, showBanner],
+    [activeOrgId, router, pathname, showBanner, refreshMemberships],
   );
 
   // Reset switching state when server data arrives for the target org
