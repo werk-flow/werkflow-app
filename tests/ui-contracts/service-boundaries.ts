@@ -6,7 +6,8 @@ import {
   reviewChangeRequestContract,
   reviewEntriesContract,
 } from './time-approval-boundaries';
-import { createJobMaterialLineContract } from './material-boundaries';
+import { createJobMaterialLineContract, recordJobMaterialUseContract } from './material-boundaries';
+import { CLOCK_USER_ID } from './clock-state-fixture';
 import { CONTRACT_SUPABASE_URL } from './supabase-contract-env';
 import { FIELD_SYNC_TODAY_PATH } from '@/lib/field-sync/today-snapshot';
 import type { InventoryLocation, InventoryLocationType } from '@/lib/inventory/types';
@@ -54,6 +55,14 @@ export function initializeServiceBoundaries(): void {
         typeof input === 'string' &&
         input.startsWith('/api/time-tracking-state?') &&
         (init?.method ?? 'GET') === 'GET'
+      ) {
+        return browserFetch(input, init);
+      }
+      // The clock contract answers the time outbox's sends at Playwright's network boundary.
+      if (
+        window.uiContractFixture === 'clock' &&
+        input === '/api/field-sync/v1/operations' &&
+        init?.method === 'POST'
       ) {
         return browserFetch(input, init);
       }
@@ -129,6 +138,11 @@ export async function createInventoryLocation(input: {
 export function createSupabaseBrowserClient() {
   return {
     auth: {
+      // The browser's session, as the time outbox reads it before a send or a sign-out question.
+      getSession: async () => ({
+        data: { session: { user: { id: CLOCK_USER_ID }, access_token: 'contract-access-token' } },
+        error: null,
+      }),
       signOut: async () => {
         const failure = window.uiContractServices.authFailure;
         if (failure === 'thrown') throw new Error('Simulated auth connection failure.');
@@ -167,8 +181,9 @@ export const deleteEntriesBatch = unexpectedWrite;
 export const updateEntry = unexpectedWrite;
 export const addManualEntry = unexpectedWrite;
 
-// `@/lib/inventory/actions`: the job material section plans one line.
+// `@/lib/inventory/actions` and `material-use-actions`: the job material section plans one line and records a use.
 export const createJobMaterialLine = createJobMaterialLineContract;
+export const recordJobMaterialUse = recordJobMaterialUseContract;
 export const createProjectMaterialLine = unexpectedWrite;
 export const updateJobMaterialLine = unexpectedWrite;
 export const deleteJobMaterialLine = unexpectedWrite;

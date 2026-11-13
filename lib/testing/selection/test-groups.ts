@@ -309,7 +309,14 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['security:account', 'security/account.spec.ts', ['*']],
   ['security:offline-shell', 'security/offline-shell.spec.ts', ['standalone', 'work']],
   ['security:offline-today', 'security/offline-today.spec.ts', ['standalone', 'work', 'planning']],
+  ['security:offline-clock', 'security/offline-clock.spec.ts', ['standalone', 'time']],
   ['security:offline-drafts', 'security/offline-drafts.spec.ts', ['standalone', 'work', 'documents']],
+  // The no-signal visit end to end, and the office's refusals of a replay (decision record 0010).
+  [
+    'security:offline-visit',
+    'security/offline-visit.spec.ts',
+    ['standalone', 'work', 'time', 'documents', 'planning'],
+  ],
   // The report screenshot redraw on a seeded customer and job (docs/technical/problem-report-scrubbing.md).
   ['problem-reports:redraw', 'problem-reports/screenshot-redraw.spec.ts', ['customers', 'work']],
   // Reporting a problem from the app shell, with a redacted screenshot, to „Meine Meldungen“.
@@ -393,7 +400,16 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ],
   ['service', ['service_boundaries.sql'], ['service', 'customers', 'work']],
   ['service-atomic-writes', ['service_atomic_writes.sql'], ['service', 'planning']],
-  ['inventory-ledger', ['inventory_ledger.sql', 'inventory_atomic_writes.sql'], ['inventory']],
+  [
+    'inventory-ledger',
+    [
+      'inventory_ledger.sql',
+      'inventory_atomic_writes.sql',
+      'job_material_use.sql',
+      'job_material_use_concurrency.sql',
+    ],
+    ['inventory'],
+  ],
   ['closed-period-writes', ['closed_period_writes.sql'], ['time']],
   ['entry-change-request-decisions', ['entry_change_request_decisions.sql'], ['time']],
   ['own-time-entry-changes', ['own_time_entry_changes.sql', 'pending_entry_withdrawals.sql'], ['time']],
@@ -415,7 +431,11 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['organization-deletion', ['organization_deletion.sql'], ['*']],
   ['storage-purge', ['storage_purge.sql'], ['documents']],
   ['company-document-profiles', ['company_document_profiles.sql'], ['documents']],
-  ['problem-reports', ['problem_reports.sql', 'problem_report_support.sql'], ['*']],
+  [
+    'problem-reports',
+    ['problem_reports.sql', 'problem_report_support.sql', 'problem_report_handout.sql'],
+    ['*'],
+  ],
   ['organization-export', ['organization_export.sql'], ['*']],
   ['record-numbers', ['record_numbers.sql'], ['work', 'customers', 'personnel', 'service']],
   ['hot-read-volume', ['hot_read_volume.sql'], ['planning', 'time', 'attention', 'work', 'documents']],

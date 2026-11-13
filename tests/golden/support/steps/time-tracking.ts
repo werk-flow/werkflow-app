@@ -367,6 +367,12 @@ export async function clockInOnJob(page: Page, jobTitle?: string): Promise<void>
   await expect(runningClockLauncher(page)).toBeVisible();
 }
 
+/** Taps „Erfassung beenden“ without waiting for its answer: a call that hangs keeps the sheet open. */
+export async function tapClockOut(page: Page): Promise<void> {
+  const sheet = await openRunningClockSheet(page);
+  await sheet.getByRole('button', { name: CLOCK_COPY.endCapture }).click();
+}
+
 export async function clockOut(page: Page): Promise<void> {
   const sheet = await openRunningClockSheet(page);
   await sheet.getByRole('button', { name: CLOCK_COPY.endCapture }).click();
