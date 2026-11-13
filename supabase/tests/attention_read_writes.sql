@@ -262,8 +262,11 @@ begin
   if (select count(*) from public.attention_read_states marker
       where marker.source_id = 'c4000000-0000-4000-8000-000000000050') <> 2
     or exists (select 1 from public.attention_read_states marker
-      where marker.organization_id <> 'c4000000-0000-4000-8000-000000000010'
-        or marker.user_id not in (v_employee, v_buero)) then
+      where (marker.organization_id in ('c4000000-0000-4000-8000-000000000010', 'c4000000-0000-4000-8000-000000000011')
+          or marker.user_id in ('c4000000-0000-4000-8000-000000000002', 'c4000000-0000-4000-8000-000000000003',
+            'c4000000-0000-4000-8000-000000000004', 'c4000000-0000-4000-8000-000000000005'))
+        and (marker.organization_id <> 'c4000000-0000-4000-8000-000000000010'
+          or marker.user_id not in (v_employee, v_buero))) then
     raise exception 'a call wrote markers of another user or organization';
   end if;
 end;

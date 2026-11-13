@@ -132,18 +132,18 @@ function neverNull(expression: readonly Token[]): boolean {
   if (groupAt < 0 || closing(tokens, groupAt) !== last) return false;
   if (groupAt === 0) {
     const inner = tokens.slice(1, last);
-    // `select count(…) [filter (…)] from …` without grouping or HAVING always returns one row.
+    // `select count(…) [filter (…)] from …` without grouping, HAVING, LIMIT or OFFSET always returns one row.
     if (inner[0]?.lower === 'select' && inner[1]?.lower === 'count' && inner[2]?.lower === '(') {
       const after = closing(inner, 2) + 1;
       const from = inner[after]?.lower === 'filter' ? closing(inner, after + 1) + 1 : after;
       return (
         inner[from]?.lower === 'from' &&
-        !inner.some((token) => token.lower === 'group' || token.lower === 'having')
+        !inner.some((token) => ['group', 'having', 'limit', 'offset'].includes(token.lower))
       );
     }
     return neverNull(inner);
   }
-  if (first.lower === 'exists' || first.lower === 'array' || first.lower === 'row') return true;
+  if (first.lower === 'exists' || first.lower === 'array') return true;
   if (first.lower === 'coalesce') return argumentsOf(tokens, 1, last).some(neverNull);
   return false;
 }
@@ -223,6 +223,8 @@ type Relation = {
   readonly at: number;
   readonly call: boolean;
   readonly joinedOn: boolean;
+  /** The tokens of the join's `on` condition, empty for a relation without one. */
+  readonly on: Token[];
 };
 
 /** The relations a select reads in its own FROM clause. */
@@ -246,9 +248,44 @@ function relationsRead(select: readonly Token[]): Relation[] {
       !['cross', 'left', 'right', 'full', 'outer', 'natural'].includes(kind) &&
       select.slice(at + 1, at + 4).some((part) => part.lower === 'on');
     const schema = at > index + 1 ? first : null;
-    relations.push({ schema, name: select[at]?.lower ?? '', at, call, joinedOn });
+    relations.push({
+      schema,
+      name: select[at]?.lower ?? '',
+      at,
+      call,
+      joinedOn,
+      on: joinedOn ? onClause(select, at) : [],
+    });
   }
   return relations;
+}
+
+const CLAUSE_ENDS = new Set([
+  'join',
+  'where',
+  'group',
+  'order',
+  'limit',
+  'offset',
+  'union',
+  'cross',
+  'left',
+  'right',
+  'full',
+  'inner',
+  'natural',
+]);
+
+/** The tokens after the first `on` past `at`, up to the next join or clause at the same depth. */
+function onClause(select: readonly Token[], at: number): Token[] {
+  const start = select.findIndex((token, index) => index > at && token.lower === 'on') + 1;
+  let end = start;
+  for (; end < select.length; end += 1) {
+    const token = select[end]?.lower ?? '';
+    if (CLOSE.has(token) || CLAUSE_ENDS.has(token)) break;
+    if (OPEN.has(token)) end = closing(select, end);
+  }
+  return select.slice(start, end);
 }
 
 /** A variable or parameter that holds the test's organization. */
@@ -274,24 +311,57 @@ function ownFilter(select: readonly Token[]): Token[] {
   return own;
 }
 
-const EQUALITY = new Set(['=', 'in', 'like']);
+/** A restricting comparison in the filter: `=`, `in`, `like` or `is not distinct from`, as its first and last index. */
+type Restriction = { readonly start: number; readonly end: number };
+
+function restrictions(filter: readonly Token[]): Restriction[] {
+  return filter.flatMap((token, index) => {
+    const before = (back: number) => filter[index - back]?.lower;
+    if (token.lower === '=') return [{ start: index, end: index }];
+    if ((token.lower === 'in' || token.lower === 'like') && before(1) !== 'not')
+      return [{ start: index, end: index }];
+    if (token.lower === 'from' && before(1) === 'distinct' && before(2) === 'not' && before(3) === 'is')
+      return [{ start: index - 3, end: index }];
+    return [];
+  });
+}
+
+/** The operands on both sides of a restriction, the left one cut at the clause that opens it. */
+function restrictedOperands(filter: readonly Token[], { start, end }: Restriction): Token[] {
+  const left = leftOperand(filter, start);
+  const clause = left.findLastIndex((token) => ['where', 'on', 'join'].includes(token.lower));
+  return [...left.slice(clause + 1), ...rightOperand(filter, end)];
+}
+
+const ID_COLUMN = /^(?:id|\w+_id|\w+_by)$/;
 
 /**
- * Whether the select's own filter keeps to the test's rows: it compares an id
- * column (`organization_id` included), an organization variable or a literal
- * that starts with a fixture id for equality.
+ * Whether the select's own filter keeps to the test's rows: a restricting
+ * comparison has an id column (`organization_id` included) as one side, or an
+ * organization variable or a literal that starts with a fixture id in an operand.
  */
 function scoped(select: readonly Token[]): boolean {
   const filter = ownFilter(select);
-  return filter.some((token, index) => {
-    const compared =
-      EQUALITY.has(filter[index + 1]?.lower ?? '') || EQUALITY.has(filter[index - 1]?.lower ?? '');
-    if (/^(?:id|\w+_id|\w+_by)$/.test(token.lower)) return compared;
+  return restrictions(filter).some((restriction) => {
+    if (ID_COLUMN.test(filter[restriction.start - 1]?.lower ?? '')) return true;
+    if (ID_COLUMN.test(filter[restriction.end + 1]?.lower ?? '')) return true;
     // An organization variable or a fixture-id literal, such as a storage path, may sit in a list or a concatenation.
-    return (
-      ORGANIZATION_VARIABLE.test(token.lower) ||
-      (token.text.startsWith("'") && isUuid(token.text.slice(1, 37)))
+    return restrictedOperands(filter, restriction).some(
+      (token) =>
+        ORGANIZATION_VARIABLE.test(token.lower) ||
+        (token.text.startsWith("'") && isUuid(token.text.slice(1, 37))),
     );
+  });
+}
+
+/** Whether a join condition equates a column of one relation with a column of another. */
+function correlates(on: readonly Token[]): boolean {
+  const qualifiers = (operand: readonly Token[]) =>
+    operand.flatMap((token, index) => (operand[index + 1]?.lower === '.' ? [token.lower] : []));
+  return restrictions(on).some(({ start, end }) => {
+    const left = qualifiers(leftOperand(on, start));
+    const right = qualifiers(rightOperand(on, end));
+    return left.some((qualifier) => right.some((other) => other !== qualifier));
   });
 }
 
@@ -362,7 +432,7 @@ function unscopedReads(
     if (!tenant) return [];
     // A join with the test's own temporary rows keeps the read to them.
     const joinsOwnRows =
-      relations.some(({ joinedOn }) => joinedOn) &&
+      relations.some(({ joinedOn, on }) => joinedOn && correlates(on)) &&
       relations.some(
         ({ schema, name, call }) =>
           !call && (schema === null || schema === 'pg_temp') && !tenantTables.has(name),

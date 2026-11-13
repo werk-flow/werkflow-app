@@ -15,7 +15,8 @@ import { sqlAssertionFindings } from './sql-test-assertions-scan';
 // 2. Every worktree shares the local stack, and browser worlds commit rows in
 //    other organizations. A `count(*)` or `exists (select …)` over a table with
 //    an `organization_id` column filters by the organization, a fixture id or
-//    an id column, or inner-joins the test's own temporary rows. A read under the
+//    an id column in an `=`, `in`, `like` or `is not distinct from`, or
+//    inner-joins the test's own temporary rows on a column. A read under the
 //    `authenticated` or `anon` role is exempt: there it proves a policy, and a
 //    filter would hide a leak.
 // The scan cannot see a nullable `<`, `>` or `not`, or an id filter on a
@@ -81,11 +82,19 @@ test('a count is never NULL only as a bare scalar count, and coalesce with any l
         assertion('(select count(*) from public.jobs where id = v_job having false) <> 1'),
         assertion('coalesce(v_total, 0, v_other) <> 1'),
         assertion("(select count(*) filter (where status = 'offen') from public.jobs where id = v_job) <> 1"),
+        // LIMIT 0 and OFFSET 1 remove the count's one row, so the subquery is NULL.
+        assertion('(select count(*) from public.jobs where id = v_job limit 0) <> 1'),
+        assertion('(select count(*) from public.jobs where id = v_job offset 1) <> 1'),
+        // A row comparison is NULL when a field is.
+        assertion('row(null::integer) <> row(1)'),
       ].join('\n'),
     ).map(({ line, rule }) => ({ line, rule })),
   ).toEqual([
     { line: 2, rule: 'null-safe' },
     { line: 5, rule: 'null-safe' },
+    { line: 14, rule: 'null-safe' },
+    { line: 17, rule: 'null-safe' },
+    { line: 20, rule: 'null-safe' },
   ]);
 });
 
@@ -100,6 +109,13 @@ test('only a restricting filter or an inner join with own rows scopes a read', (
         assertion('exists (select 1 from public.jobs cross join generate_series(1, 2))'),
         "select 'set role authenticated';",
         assertion('exists (select 1 from public.jobs)'),
+        "do $$ begin execute 'reset role'; end $$;",
+        // An organization token scopes only in a restricting comparison.
+        assertion('exists (select 1 from public.jobs where organization_id <> v_org)'),
+        assertion('exists (select 1 from public.jobs where status = v_state and v_org is not null)'),
+        assertion('exists (select 1 from public.jobs where organization_id is not distinct from v_org)'),
+        // A join `on true` is a cross join: it restricts nothing.
+        assertion('exists (select 1 from public.jobs job join pg_temp.ids fixture on true)'),
       ].join('\n'),
     ).map(({ line, rule }) => ({ line, rule })),
   ).toEqual([
@@ -107,6 +123,9 @@ test('only a restricting filter or an inner join with own rows scopes a read', (
     { line: 5, rule: 'org-scope' },
     { line: 8, rule: 'org-scope' },
     { line: 12, rule: 'org-scope' },
+    { line: 16, rule: 'org-scope' },
+    { line: 19, rule: 'org-scope' },
+    { line: 25, rule: 'org-scope' },
   ]);
 });
 
