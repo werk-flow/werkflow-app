@@ -458,6 +458,26 @@ $$;
 
 reset role;
 
+-- 4e. A matched article is locked against a change of its unit, but not
+--     against the foreign-key check of a concurrent movement: the import
+--     holds FOR NO KEY UPDATE, never FOR UPDATE, which would deadlock with a
+--     booking that holds the stock row and inserts a movement. The pipe was
+--     matched by Artikelnummer and by barcode in this transaction.
+create extension if not exists pgrowlocks;
+do $$
+declare
+  v_modes text[];
+begin
+  select locks.modes into v_modes
+  from public.pgrowlocks('public.inventory_items') locks
+  join public.inventory_items item on item.ctid = locks.locked_row
+  where item.id = '99200000-0000-4000-8000-000000000030';
+  if v_modes is null or 'For Update' = any (v_modes) then
+    raise exception 'a matched article must be locked FOR NO KEY UPDATE, not FOR UPDATE: %', v_modes;
+  end if;
+end;
+$$;
+
 -- 6. Only the service role executes the functions; nobody executes the steps.
 do $$
 declare

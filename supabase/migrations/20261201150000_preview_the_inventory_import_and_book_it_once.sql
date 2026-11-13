@@ -114,7 +114,10 @@ begin
   if v_sku is not null then
     select item.* into v_item from public.inventory_items item
     where item.organization_id = p_organization_id and item.internal_sku = v_sku
-    for update;
+    -- Blocks a change of the unit until the row is booked, but not the
+    -- foreign-key check of a movement another session inserts while it holds
+    -- the stock row: FOR UPDATE would deadlock with that booking.
+    for no key update;
     if v_item.id is not null then
       v_matched_by := 'internal_sku';
     end if;
@@ -123,7 +126,7 @@ begin
     select item.* into v_item from public.inventory_item_barcodes barcode
     join public.inventory_items item on item.id = barcode.item_id
     where barcode.organization_id = p_organization_id and barcode.barcode_value = v_barcode
-    for update of item;
+    for no key update of item;
     if v_item.id is not null then
       v_matched_by := 'barcode';
     end if;
