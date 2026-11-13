@@ -13103,6 +13103,77 @@ export type Database = {
           },
         ];
       };
+      work_leads: {
+        Row: {
+          created_at: string;
+          employee_record_id: string;
+          ended_at: string | null;
+          ended_by: string | null;
+          id: string;
+          job_id: string | null;
+          organization_id: string;
+          project_id: string | null;
+          started_at: string;
+          started_by: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          employee_record_id: string;
+          ended_at?: string | null;
+          ended_by?: string | null;
+          id?: string;
+          job_id?: string | null;
+          organization_id: string;
+          project_id?: string | null;
+          started_at?: string;
+          started_by?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          employee_record_id?: string;
+          ended_at?: string | null;
+          ended_by?: string | null;
+          id?: string;
+          job_id?: string | null;
+          organization_id?: string;
+          project_id?: string | null;
+          started_at?: string;
+          started_by?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "work_leads_employee_fk";
+            columns: ["employee_record_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "work_leads_job_fk";
+            columns: ["job_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "jobs";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "work_leads_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "work_leads_project_fk";
+            columns: ["project_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
       work_request_entries: {
         Row: {
           attempt_key: string;
@@ -15946,6 +16017,15 @@ export type Database = {
         };
         Returns: undefined;
       };
+      end_work_lead: {
+        Args: {
+          p_actor_id: string;
+          p_job_id: string;
+          p_organization_id: string;
+          p_project_id: string;
+        };
+        Returns: Json;
+      };
       ensure_inventory_defaults: {
         Args: { p_actor_id: string; p_org_id: string };
         Returns: undefined;
@@ -16960,6 +17040,16 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      name_work_lead: {
+        Args: {
+          p_actor_id: string;
+          p_employee_record_id: string;
+          p_job_id: string;
+          p_organization_id: string;
+          p_project_id: string;
+        };
+        Returns: Json;
       };
       open_time_account: {
         Args: {
@@ -20033,6 +20123,13 @@ export type Database = {
           p_request_id: string;
         };
         Returns: Json;
+      };
+      work_lead_scope: {
+        Args: { p_organization_id: string; p_user_id: string };
+        Returns: {
+          job_id: string;
+          project_id: string;
+        }[];
       };
     };
     Enums: {
