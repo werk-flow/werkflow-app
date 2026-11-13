@@ -5,6 +5,7 @@ import {
   type InventoryItemType,
 } from '../../../../lib/inventory/types';
 import { getInventoryLocationByName, type PersistedInventoryLocation } from '../db/inventory';
+import { dismissDialog } from './interaction';
 import {
   confirmed,
   expectBannerAfter,
@@ -536,13 +537,11 @@ const ARTICLE_TERMS_COPY = {
   savePrice: 'Preis speichern',
   priceSaved: 'Der Preis wurde gespeichert.',
   priceKinds: { purchase: 'Einkaufspreis', sale: 'Verkaufspreis' },
-  close: 'Schließen',
 } as const;
 
-/** Closes the open article dialog from one of its saved-at-once tabs. */
+/** Closes the open article dialog with Escape: its tabs saved each change already. */
 export async function closeArticleDialog(dialog: Locator): Promise<void> {
-  await dialog.getByRole('button', { name: ARTICLE_TERMS_COPY.close, exact: true }).click();
-  await expect(dialog).toHaveCount(0);
+  await dismissDialog(dialog);
 }
 
 /** Sets the article number of one supplier of the open article dialog, in its „Lieferanten“ tab. */
