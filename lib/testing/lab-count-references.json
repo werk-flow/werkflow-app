@@ -1796,7 +1796,7 @@
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 0, "tolerance": 0 },
-        "componentRenders": { "reference": 803, "tolerance": 15 }
+        "componentRenders": { "reference": 773, "tolerance": 15 }
       },
       "payloads": {},
       "source": {
@@ -1877,6 +1877,14 @@
           "from": { "reference": 827, "tolerance": 15 },
           "to": { "reference": 803, "tolerance": 15 },
           "runKeys": ["2026-11-08T112625699Z-098a70"],
+          "reason": null
+        },
+        {
+          "kind": "ratchet",
+          "target": "componentRenders",
+          "from": { "reference": 803, "tolerance": 15 },
+          "to": { "reference": 773, "tolerance": 15 },
+          "runKeys": ["2026-11-13T224018778Z-e324f5"],
           "reason": null
         }
       ]
