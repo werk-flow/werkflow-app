@@ -34,13 +34,15 @@ const ERROR_MESSAGES: Record<string, string> = {
   client_not_found: 'Der Auftraggeber wurde nicht gefunden.',
   recipient_not_found: 'Der Rechnungsempfänger wurde nicht gefunden.',
   client_archived: 'Der Kunde ist archiviert. Stelle ihn zuerst wieder her.',
-  parties_changed:
-    'Auftraggeber oder Rechnungsempfänger wurden gerade geändert. Hier stehen jetzt die aktuellen Angaben; prüfe sie und speichere erneut.',
 };
 
 /** A save refused because another save landed first reads the parties again. */
 const REREAD_ON = new Set(['parties_changed']);
 
+const REREAD_PENDING =
+  'Auftraggeber oder Rechnungsempfänger wurden gerade geändert. Die aktuellen Angaben werden geladen…';
+const REREAD_LANDED =
+  'Auftraggeber oder Rechnungsempfänger wurden gerade geändert. Hier stehen jetzt die aktuellen Angaben; prüfe sie und speichere erneut.';
 const REREAD_FAILED =
   'Auftraggeber oder Rechnungsempfänger wurden gerade geändert, aber die aktuellen Angaben konnten nicht geladen werden. Deine Auswahl bleibt erhalten.';
 
@@ -62,23 +64,58 @@ type FormProps = {
   stale: boolean;
 };
 
+/** Where the reread after a refused save stands: none yet, running, or done. */
+type RereadPhase = 'none' | 'reading' | 'done';
+
 /**
  * The reread after a refused save, and its retry when it failed. The live view
- * owns the read and its failure: after a refusal, a stale view means the
- * reread failed. The entered values stay until a reread lands and the form
- * takes the newer pair.
+ * owns the read and its failure: once the reread is done, a stale view means it
+ * failed, a current one that it landed. The entered values stay until a
+ * reread lands and the form takes the newer pair.
  */
 function useRereadAfterRefusal(onReread: () => Promise<void>, stale: boolean) {
-  const [refused, setRefused] = useState(false);
+  const [phase, setPhase] = useState<RereadPhase>('none');
   const retry = useServerAction(async () => onReread());
+  const done = phase === 'done';
   return {
-    failed: refused && stale,
+    reading: phase === 'reading',
+    failed: done && stale,
+    landed: done && !stale,
     retry,
+    /** A new save starts without the previous refusal's outcome. */
+    reset: () => setPhase('none'),
     afterRefusal: async (): Promise<void> => {
+      setPhase('reading');
       await onReread();
-      setRefused(true);
+      setPhase('done');
     },
   };
+}
+
+/**
+ * The save's outcome under the pickers: the reread's state after a refusal,
+ * which says the pair is current only once the reread landed, else the error.
+ */
+function SaveOutcome({
+  reread,
+  error,
+}: {
+  reread: ReturnType<typeof useRereadAfterRefusal>;
+  error: string | null;
+}) {
+  if (reread.failed)
+    return (
+      <SectionError onRetry={() => void reread.retry.run()} retryPending={reread.retry.isPending}>
+        {REREAD_FAILED}
+      </SectionError>
+    );
+  if (reread.reading)
+    return (
+      <p role="status" className="text-sm text-muted-foreground">
+        {REREAD_PENDING}
+      </p>
+    );
+  return <ErrorText>{reread.landed ? REREAD_LANDED : error}</ErrorText>;
 }
 
 function useBillingPartiesForm({ kind, workId, current, task, onSaved, onReread, stale }: FormProps) {
@@ -108,6 +145,7 @@ function useBillingPartiesForm({ kind, workId, current, task, onSaved, onReread,
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
+    reread.reset();
     const nextClientError = client ? undefined : 'Bitte wähle den Auftraggeber.';
     const nextRecipientError = recipient ? undefined : 'Bitte wähle den Rechnungsempfänger.';
     setClientError(nextClientError ?? null);
@@ -124,6 +162,11 @@ function useBillingPartiesForm({ kind, workId, current, task, onSaved, onReread,
         recipientClientId: recipient?.id ?? '',
         expectedVersion: formVersion,
       }).catch(() => ({ success: false as const, error: 'unexpected_error' }));
+      if (!result.success && REREAD_ON.has(result.error)) {
+        setAdoptNewer(true);
+        await reread.afterRefusal();
+        return;
+      }
       if (!result.success) {
         setError(
           describeFailure(
@@ -132,10 +175,6 @@ function useBillingPartiesForm({ kind, workId, current, task, onSaved, onReread,
             'Speichern fehlgeschlagen. Bitte versuche es erneut.',
           ),
         );
-        if (REREAD_ON.has(result.error)) {
-          setAdoptNewer(true);
-          await reread.afterRefusal();
-        }
         return;
       }
       await onSaved();
@@ -254,16 +293,7 @@ function WorkBillingPartiesForm(props: FormProps) {
               disabled={isPending}
             />
           </Field>
-          {form.reread.failed ? (
-            <SectionError
-              onRetry={() => void form.reread.retry.run()}
-              retryPending={form.reread.retry.isPending}
-            >
-              {REREAD_FAILED}
-            </SectionError>
-          ) : (
-            <ErrorText>{form.error}</ErrorText>
-          )}
+          <SaveOutcome reread={form.reread} error={form.error} />
         </DialogBody>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>

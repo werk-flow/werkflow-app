@@ -100,3 +100,23 @@ test('the pickers wait while a retried reread runs, so nothing chosen then is ov
   await expect(auftraggeber).toBeEnabled();
   await expect(recipient).toBeEnabled();
 });
+
+test('the current-data notice waits until the reread after a refusal has landed', async ({ page }) => {
+  await openContractFixture(page, 'billing-parties');
+  await page.getByRole('button', { name: 'Rechnung ändern', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Auftraggeber und Rechnungsempfänger' });
+  const auftraggeber = dialog.getByRole('combobox', { name: 'Auftraggeber', exact: true });
+  await page.evaluate(() => window.dispatchEvent(new Event('contract-billing-reread-hold')));
+
+  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  // While the reread runs, the dialog says it loads and claims nothing about the shown pair.
+  await expect(dialog.getByRole('status').filter({ hasText: 'werden geladen' })).toBeVisible();
+  await expect(dialog.getByText(/Hier stehen jetzt die aktuellen Angaben/)).toHaveCount(0);
+  await expect(dialog.getByText(/konnten nicht geladen werden/)).toHaveCount(0);
+  await expect(auftraggeber).toContainText('WEG Lindenstraße 5');
+
+  await page.evaluate(() => window.dispatchEvent(new Event('contract-billing-reread-release')));
+  await expect(dialog.getByText(/Hier stehen jetzt die aktuellen Angaben/)).toBeVisible();
+  await expect(auftraggeber).toContainText('Hausverwaltung Birkenhain GmbH');
+  await expect(dialog.getByRole('status').filter({ hasText: 'werden geladen' })).toHaveCount(0);
+});
