@@ -110,6 +110,14 @@ test('a machine a run uses, or none waiting long enough, leaves the limit standi
   expect(await takeIdleMachineElsewhere(fakeBoat({}, true).client, signal, MINE)).toEqual([]);
 });
 
+test('an aborted run probes no machine of another workstation', async () => {
+  const boat = fakeBoat({ bx_idle0001: { workstation: OTHER, idleSeconds: 3_600 } });
+  const aborted = new AbortController();
+  aborted.abort();
+  expect(await takeIdleMachineElsewhere(boat.client, aborted.signal, MINE)).toEqual([]);
+  expect(boat.ran).toEqual([]);
+});
+
 test("a kept machine is its workstation's again only while no evicting run took its mark", async () => {
   const boat = fakeBoat({
     bx_kept0001: { workstation: OTHER, idleSeconds: 700 },

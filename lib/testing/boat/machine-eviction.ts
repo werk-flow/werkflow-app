@@ -81,6 +81,8 @@ export async function takeIdleMachineElsewhere(
     )
     .sort((a, b) => stopsAt(a.archiveAfter) - stopsAt(b.archiveAfter));
   for (const { id } of candidates) {
+    // An aborted run probes no further machine: a later probe could take a mark no one then deletes.
+    if (signal.aborted) break;
     const taken = await runScript({ id, client, log: () => undefined }, EVICT, silent, signal).then(
       ({ exitCode }) => exitCode === 0,
       () => false,
