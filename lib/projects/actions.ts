@@ -21,6 +21,11 @@ import {
   calculateTrafficLight,
   getEffectiveProjectStatus,
 } from '@/lib/jobs/types';
+import {
+  hasMaterialHistory,
+  isMaterialHistoryRefusal,
+  MATERIAL_HISTORY_EXISTS,
+} from '@/lib/inventory/material-history';
 import { logError } from '@/lib/logging';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
@@ -182,9 +187,16 @@ export async function deleteProject(rawProjectId: string): Promise<DeleteProject
       return { success: false, error: 'project_not_found' };
     }
 
+    // Deleting a project deletes the material lines it and its jobs carry.
+    const materialHistory = await hasMaterialHistory(admin, orgId, { projectId });
+    if (materialHistory.error) return { success: false, error: 'delete_failed' };
+    if (materialHistory.exists) return { success: false, error: MATERIAL_HISTORY_EXISTS };
+
     const { error } = await admin.from('projects').delete().eq('id', projectId).eq('organization_id', orgId);
 
     if (error) {
+      // A take booked after the check: the ledger keeps it, so the delete is refused.
+      if (isMaterialHistoryRefusal(error)) return { success: false, error: MATERIAL_HISTORY_EXISTS };
       logError('Error deleting project:', error);
       return { success: false, error: 'delete_failed' };
     }

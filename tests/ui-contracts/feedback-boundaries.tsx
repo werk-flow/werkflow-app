@@ -39,6 +39,8 @@ const FEEDBACK_FIXTURES = [
   'time-approvals',
   'entry-details',
   'material-plan',
+  'material-use',
+  'material-use-off-page',
   'request-list',
   'client-relations',
   'team-qualifications',
@@ -142,13 +144,14 @@ function EntryDetailsHost(): React.JSX.Element {
 const MATERIAL_ITEMS = [materialContractItem];
 const MATERIAL_LOCATIONS = [materialContractLocation];
 
-function MaterialPlanHost(): React.JSX.Element {
+/** The material section; `items` is the loaded catalog page, which may lack a line's article. */
+function MaterialPlanHost({ items = MATERIAL_ITEMS }: { items?: typeof MATERIAL_ITEMS }): React.JSX.Element {
   const lines = useRouteProps(readMaterialLines);
   return (
     <JobMaterialsSection
       jobId="contract-job"
       initialLines={lines}
-      inventoryItems={MATERIAL_ITEMS}
+      inventoryItems={items}
       locations={MATERIAL_LOCATIONS}
       isAdminOrManager
     />
@@ -354,7 +357,10 @@ function FeedbackSurface({ name }: { name: FeedbackFixtureName }): React.JSX.Ele
     case 'entry-details':
       return <EntryDetailsHost />;
     case 'material-plan':
+    case 'material-use':
       return <MaterialPlanHost />;
+    case 'material-use-off-page':
+      return <MaterialPlanHost items={[]} />;
     case 'request-list':
       return <RequestListHost />;
     case 'client-relations':

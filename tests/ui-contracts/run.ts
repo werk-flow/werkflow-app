@@ -338,7 +338,7 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve(
               {
                 filter:
-                  /^(next\/navigation|@\/lib\/(subscription\/actions|settings\/email-change-actions|time-tracking\/(?:clock-state|entry-write|review)-actions|inventory\/actions|supabase\/client))$/,
+                  /^(next\/navigation|@\/lib\/(subscription\/actions|settings\/email-change-actions|time-tracking\/(?:clock-state|entry-write|review)-actions|inventory\/(?:material-use-)?actions|supabase\/client))$/,
               },
               () => ({
                 path: join(import.meta.dir, 'service-boundaries.ts'),

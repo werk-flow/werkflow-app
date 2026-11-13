@@ -16,6 +16,7 @@ import {
   takeProjectMaterial,
   updateJobMaterialLine,
 } from '@/lib/inventory/actions';
+import { recordJobMaterialUse } from '@/lib/inventory/material-use-actions';
 import {
   applyMaterialLinePlan,
   buildPlannedMaterialLineDraft,
@@ -85,20 +86,22 @@ async function bookMaterialRow(
               quantity,
               reason: row.notes,
             })
-          : mode === 'return'
-            ? await returnJobMaterial({
-                lineId: row.lineId ?? '',
-                locationId: row.locationId,
-                quantity,
-                reason: row.notes,
-              })
-            : await updateJobMaterialLine({
-                lineId: row.lineId ?? '',
-                itemId: row.itemId,
-                preferredLocationId,
-                plannedQuantity: quantity,
-                notes: row.notes,
-              });
+          : mode === 'use'
+            ? await recordJobMaterialUse({ lineId: row.lineId ?? '', quantity, note: row.notes })
+            : mode === 'return'
+              ? await returnJobMaterial({
+                  lineId: row.lineId ?? '',
+                  locationId: row.locationId,
+                  quantity,
+                  reason: row.notes,
+                })
+              : await updateJobMaterialLine({
+                  lineId: row.lineId ?? '',
+                  itemId: row.itemId,
+                  preferredLocationId,
+                  plannedQuantity: quantity,
+                  notes: row.notes,
+                });
 }
 
 /** Shows a planned or edited row in the list before its write resolves. */
@@ -143,6 +146,19 @@ function showPlanEcho(
   return draft;
 }
 
+/** Shows a line's new used quantity before its write resolves. */
+function showUseEcho(
+  row: MaterialDialogRow,
+  quantity: number,
+  lines: OptimisticMaterialLines,
+): JobMaterialLine | null {
+  const line = lines.items.find((entry) => entry.item.id === row.lineId)?.item;
+  if (!line) return null;
+  const used = { ...line, usedQuantity: line.usedQuantity + quantity };
+  lines.update(line.id, used);
+  return used;
+}
+
 /** What a dialog save touches besides the bookings: the dialog, the list echo and the banner. */
 type DialogSaveContext = MaterialContext & {
   markLines: () => number;
@@ -182,13 +198,15 @@ async function saveDialogRows(
   const validatedRows = validation.rows;
   const { mode } = dialog;
 
-  // A plan or its edit books nothing and has no correctable server answer,
-  // so the dialog closes and the lines show the outcome in the first frame.
+  // A plan, its edit and a use move no stock, so the dialog closes and the
+  // lines show the outcome in the first frame; a refusal takes it back.
   const echoContext = { lines, pickerItems, pickerLocations, jobId, projectId };
   const echoes =
     mode === 'plan' || mode === 'edit'
       ? validatedRows.map(({ row, quantity }) => showPlanEcho(mode, row, quantity, echoContext))
-      : [];
+      : mode === 'use'
+        ? validatedRows.map(({ row, quantity }) => showUseEcho(row, quantity, lines))
+        : [];
   if (echoes.length > 0) setDialog(null);
 
   for (const [rowIndex, { row, quantity }] of validatedRows.entries()) {
@@ -222,9 +240,11 @@ async function saveDialogRows(
     message:
       dialog.mode === 'take'
         ? 'Die Entnahme wurde gebucht.'
-        : dialog.mode === 'return'
-          ? 'Das Material wurde zurückgelegt.'
-          : 'Die Materialplanung wurde gespeichert.',
+        : dialog.mode === 'use'
+          ? 'Der Verbrauch wurde gebucht.'
+          : dialog.mode === 'return'
+            ? 'Das Material wurde zurückgelegt.'
+            : 'Die Materialplanung wurde gespeichert.',
   });
   return { lineIds: dialog.rows.flatMap((row) => (row.lineId ? [row.lineId] : [])), since };
 }
