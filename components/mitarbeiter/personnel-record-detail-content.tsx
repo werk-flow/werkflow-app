@@ -7,6 +7,7 @@ import { PersonalienSection } from '@/components/mitarbeiter/personalien-section
 import { EmploymentConditionsSection } from '@/components/mitarbeiter/employment-conditions-section';
 import { WorkScheduleSection } from '@/components/mitarbeiter/work-schedule-section';
 import { SicknessReportsSection } from '@/components/mitarbeiter/sickness-reports-section';
+import { SchoolDaysSection } from '@/components/mitarbeiter/school-days-section';
 import { PersonnelHistorySection } from '@/components/mitarbeiter/personnel-history-section';
 import { PersonnelInviteDialog } from '@/components/mitarbeiter/personnel-invite-dialog';
 import { AccessStateBadge, EmploymentStateBadge } from '@/components/mitarbeiter/personnel-state-badges';
@@ -100,6 +101,7 @@ export function PersonnelRecordDetailContent({
             canEdit={canEdit}
           />
           <SicknessReportsSection recordId={record.id} />
+          <SchoolDaysSection recordId={record.id} conditions={conditions} />
           <PersonnelQualificationSummary data={qualificationSummary} />
           {lifecycle ? (
             <PersonnelLifecycleSection
