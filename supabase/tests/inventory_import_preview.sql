@@ -29,9 +29,15 @@ insert into public.inventory_locations (id, organization_id, name, location_type
  '99200000-0000-4000-8000-000000000001', now() - interval '1 day');
 insert into public.inventory_items (id, organization_id, name, item_type, unit, internal_sku, created_by) values
 ('99200000-0000-4000-8000-000000000030', '99200000-0000-4000-8000-000000000010', 'Kupferrohr 15 mm', 'material',
- 'meter', 'NR-ROHR-15', '99200000-0000-4000-8000-000000000001');
+ 'meter', 'NR-ROHR-15', '99200000-0000-4000-8000-000000000001'),
+-- Step 4e's two articles, each matched by one path only and never updated here.
+('99200000-0000-4000-8000-000000000032', '99200000-0000-4000-8000-000000000010', 'Kugelhahn 3/4"', 'material',
+ 'piece', 'NR-KH-34', '99200000-0000-4000-8000-000000000001'),
+('99200000-0000-4000-8000-000000000033', '99200000-0000-4000-8000-000000000010', 'Thermostatkopf', 'material',
+ 'piece', null, '99200000-0000-4000-8000-000000000001');
 insert into public.inventory_item_barcodes (organization_id, item_id, barcode_value, is_primary) values
-('99200000-0000-4000-8000-000000000010', '99200000-0000-4000-8000-000000000030', '4000000000015', true);
+('99200000-0000-4000-8000-000000000010', '99200000-0000-4000-8000-000000000030', '4000000000015', true),
+('99200000-0000-4000-8000-000000000010', '99200000-0000-4000-8000-000000000033', '4000000000077', true);
 -- A draft the previous release created: it carries no staged rows.
 insert into public.inventory_import_batches (id, organization_id, file_name, created_by) values
 ('99200000-0000-4000-8000-000000000040', '99200000-0000-4000-8000-000000000010', 'alt.csv',
@@ -459,22 +465,52 @@ $$;
 reset role;
 
 -- 4e. A matched article is locked against a change of its unit, but not
---     against the foreign-key check of a concurrent movement: the import
---     holds FOR NO KEY UPDATE, never FOR UPDATE, which would deadlock with a
---     booking that holds the stock row and inserts a movement. The pipe was
---     matched by Artikelnummer and by barcode in this transaction.
+--     against the foreign-key check of a concurrent movement: each match path
+--     holds FOR NO KEY UPDATE until the row books, never FOR UPDATE, which
+--     would deadlock with a booking that holds the stock row and inserts a
+--     movement, and never only a share lock, which would let the unit change.
+--     Each path is checked on its own article, which nothing else in this
+--     transaction locks or updates (an update would hide the import's lock).
 create extension if not exists pgrowlocks;
 do $$
 declare
+  v_org constant uuid := '99200000-0000-4000-8000-000000000010';
+  v_admin constant uuid := '99200000-0000-4000-8000-000000000001';
+  v_rows constant jsonb := jsonb_build_array(
+    jsonb_build_object('item', jsonb_build_object('name', 'Kugelhahn', 'item_type', 'material',
+      'unit', 'piece', 'internal_sku', 'NR-KH-34', 'is_billable', true, 'global_minimum_stock', 0),
+      'location_name', 'Hauptlager', 'quantity', 1),
+    jsonb_build_object('item', jsonb_build_object('name', 'Thermostatkopf', 'item_type', 'material',
+      'unit', 'piece', 'is_billable', true, 'global_minimum_stock', 0),
+      'barcode', '4000000000077', 'location_name', 'Hauptlager', 'quantity', 1)
+  );
+  v_booking jsonb;
+  v_path record;
   v_modes text[];
 begin
-  select locks.modes into v_modes
-  from public.pgrowlocks('public.inventory_items') locks
-  join public.inventory_items item on item.ctid = locks.locked_row
-  where item.id = '99200000-0000-4000-8000-000000000030';
-  if v_modes is null or 'For Update' = any (v_modes) then
-    raise exception 'a matched article must be locked FOR NO KEY UPDATE, not FOR UPDATE: %', v_modes;
+  v_booking := public.book_inventory_import(v_org, v_admin, (public.preview_inventory_import(
+    v_org, v_admin, 'sperren.csv', '{}'::jsonb, null, 'stock', v_rows)->>'batch_id')::uuid);
+  if v_booking->'rows'->0 @> '{"outcome":"booked","matched_by":"internal_sku"}' is not true
+    or v_booking->'rows'->1 @> '{"outcome":"booked","matched_by":"barcode"}' is not true
+  then
+    raise exception 'step 4e must book one row matched by Artikelnummer and one by barcode: %', v_booking->'rows';
   end if;
+  for v_path in
+    select * from (values
+      ('Artikelnummer', '99200000-0000-4000-8000-000000000032'::uuid),
+      ('barcode', '99200000-0000-4000-8000-000000000033'::uuid)
+    ) path(name, item_id)
+  loop
+    v_modes := null;
+    select locks.modes into v_modes
+    from public.pgrowlocks('public.inventory_items') locks
+    join public.inventory_items item on item.ctid = locks.locked_row
+    where item.id = v_path.item_id;
+    if v_modes is null or not ('For No Key Update' = any (v_modes)) or 'For Update' = any (v_modes) then
+      raise exception 'an article matched by % must be locked FOR NO KEY UPDATE, and not FOR UPDATE: %',
+        v_path.name, v_modes;
+    end if;
+  end loop;
 end;
 $$;
 
