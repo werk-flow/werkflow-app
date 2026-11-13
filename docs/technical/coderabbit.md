@@ -58,11 +58,10 @@ A PR is ready when all of these hold on its latest commit:
 - The PR is no draft, and `Check` is green.
 - The proof covers every change in the diff.
 - The level's reviews are done, and each finding is fixed or dismissed with a reason in its thread.
-- GitHub reports the PR mergeable and not `DIRTY` (`gh pr view <n> --json mergeable,mergeStateStatus`).
-- No commit that reached `main` after the last green run touches this PR's files. Otherwise merge `origin/main` into the branch, push, and wait for green again. The ruleset does not require an up-to-date branch, so this check is yours.
+- GitHub reports the PR mergeable and not `DIRTY` (`gh pr view <n> --json mergeable,mergeStateStatus`). On `DIRTY`, merge `origin/main` into the branch, resolve the conflict, push, and wait for green again. Without a conflict, never merge `origin/main` to freshen the branch: the merge queue tests the PR on the newest `main`.
 - Each group this PR selects that an open `ci-alert` issue's run failed has passed on the branch. List the failed groups of each alert's run (`gh run view <run> --log-failed | grep -E '\[verify\] [^ ]+: failed'`), using the full run a release alert links, and compare them with `bun run test:plan`. Pass the overlap with `bun run test:verify --group <ids>`. A red run in other groups never blocks a merge.
 
-Merge with `gh pr merge --squash`, after a fresh `git fetch` and a last look at the PR. Never use `--admin` or another bypass.
+Merge with `gh pr merge <n> --squash --auto`, after a fresh `git fetch` and a last look at the PR. The merge queue runs `ci.yml` on the PR on top of `main` and of the PRs ahead of it, and lands the PR when that run's `Check` passes ([decision 0009](../decisions/0009-pull-requests-and-ci.md)). Keep watching until `gh pr view <n> --json state` reports `MERGED`. When the queue's run fails, GitHub takes the PR out of the queue and your watch wakes: classify the failure ([testing.md, "Failures"](testing.md#failures)), fix it in a push, and run the merge command again once the gate holds. Never use `--admin` or another bypass.
 
 ### The CodeRabbit queue
 
