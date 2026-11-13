@@ -48,6 +48,8 @@ insert into public.inventory_locations (id, organization_id, name, location_type
 insert into public.projects (id, organization_id, name, created_by) values
 ('39000000-0000-4000-8000-000000000040', '39000000-0000-4000-8000-000000000010',
  'Bad Musterstraße', '39000000-0000-4000-8000-000000000001'),
+('39000000-0000-4000-8000-000000000042', '39000000-0000-4000-8000-000000000010',
+ 'Heizung Lindenhof', '39000000-0000-4000-8000-000000000001'),
 ('39000000-0000-4000-8000-000000000041', '39000000-0000-4000-8000-000000000011',
  'Heizung Nordrohr', '39000000-0000-4000-8000-000000000003');
 
@@ -269,6 +271,78 @@ begin
     or exists (select 1 from public.jobs where id = '39000000-0000-4000-8000-000000000071')
   then
     raise exception 'a failed conversion must roll back its planned material with its job';
+  end if;
+end $$;
+
+-- Moving a job to another project moves its material lines with it
+-- (werk-flow/werkflow-planning#411). A take and a use booked before the move
+-- keep the project they were booked with; a use after it books on the new one.
+-- A project's own line stays where it is.
+do $$
+declare
+  v_org constant uuid := '39000000-0000-4000-8000-000000000010';
+  v_admin constant uuid := '39000000-0000-4000-8000-000000000001';
+  v_pipe constant uuid := '39000000-0000-4000-8000-000000000020';
+  v_location constant uuid := '39000000-0000-4000-8000-000000000030';
+  v_project constant uuid := '39000000-0000-4000-8000-000000000040';
+  v_next_project constant uuid := '39000000-0000-4000-8000-000000000042';
+  v_job constant uuid := '39000000-0000-4000-8000-000000000050';
+  v_line uuid;
+  v_project_line uuid;
+  v_take uuid;
+begin
+  v_line := public.plan_job_material(v_org, v_admin, v_job, null, v_pipe, 4, v_location, null, null, null);
+  v_project_line := public.plan_job_material(v_org, v_admin, null, v_project, v_pipe, 1, null, null, null, null);
+  perform public.record_inventory_movement(v_org, v_admin, v_pipe, v_location, 'initial_count', 10);
+  select movement.movement_id into v_take
+  from public.record_inventory_movement(
+    v_org, v_admin, v_pipe, v_location, 'job_take', -3, v_job, v_project, v_line
+  ) movement;
+  perform public.record_job_material_use(v_org, v_admin, v_line, 1);
+
+  perform public.update_job_with_assignments(
+    v_org, v_job, v_admin, jsonb_build_object('project_id', v_next_project), false,
+    null, null, null, null, null, null, null, null, null
+  );
+
+  if exists (
+    select 1 from public.job_material_lines line
+    where line.organization_id = v_org and line.job_id = v_job
+      and line.project_id is distinct from v_next_project
+  ) then
+    raise exception 'every material line of a moved job must follow it to its new project';
+  end if;
+  if (select project_id from public.job_material_lines where id = v_project_line) is distinct from v_project then
+    raise exception 'a project''s own material line must stay on its project when a job leaves it';
+  end if;
+  if (select project_id from public.inventory_movements where id = v_take) is distinct from v_project then
+    raise exception 'a take must keep the project it was booked with';
+  end if;
+  if exists (
+    select 1 from public.job_material_use_events event
+    where event.job_material_line_id = v_line and event.project_id is distinct from v_project
+  ) then
+    raise exception 'a use recorded before the move must keep the project it was booked with';
+  end if;
+
+  perform public.record_job_material_use(v_org, v_admin, v_line, 1);
+  if (
+    select count(*) from public.job_material_use_events event
+    where event.job_material_line_id = v_line and event.project_id = v_next_project
+  ) <> 1 then
+    raise exception 'a use recorded after the move must book on the job''s new project';
+  end if;
+
+  -- A job taken out of every project leaves its lines on no project.
+  perform public.update_job_with_assignments(
+    v_org, v_job, v_admin, jsonb_build_object('project_id', null), false,
+    null, null, null, null, null, null, null, null, null
+  );
+  if exists (
+    select 1 from public.job_material_lines line
+    where line.organization_id = v_org and line.job_id = v_job and line.project_id is not null
+  ) then
+    raise exception 'the material lines of a job without a project must carry no project';
   end if;
 end $$;
 
