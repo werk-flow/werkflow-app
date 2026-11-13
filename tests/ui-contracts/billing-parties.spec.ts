@@ -155,3 +155,22 @@ test('a running retry keeps the dialog open on Escape, so the kept choice stays'
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
 });
+
+test('a newer version that arrives before a failed reread never replaces the kept choice', async ({
+  page,
+}) => {
+  await openContractFixture(page, 'billing-parties');
+  await page.getByRole('button', { name: 'Rechnung ändern', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Auftraggeber und Rechnungsempfänger' });
+  const auftraggeber = dialog.getByRole('combobox', { name: 'Auftraggeber', exact: true });
+  await expect(auftraggeber).toContainText('WEG Lindenstraße 5');
+
+  // The other user's version reaches the page, then the save from the old one is refused and its reread fails.
+  await page.evaluate(() => window.dispatchEvent(new Event('contract-billing-newer')));
+  await page.evaluate(() => window.dispatchEvent(new Event('contract-billing-reread-fails')));
+  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+
+  await expect(dialog.getByRole('alert')).toContainText('Deine Auswahl bleibt erhalten');
+  await expect(auftraggeber).toContainText('WEG Lindenstraße 5');
+  await expect(dialog.getByText(/Hier stehen jetzt die aktuellen Angaben/)).toHaveCount(0);
+});

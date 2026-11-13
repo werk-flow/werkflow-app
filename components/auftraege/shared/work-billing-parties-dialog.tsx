@@ -128,13 +128,14 @@ function useBillingPartiesForm({ kind, workId, current, task, reread, onSaved }:
   const [recipientError, setRecipientError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // The choice belongs to the version the form saw. A newer version replaces
-  // it only after a save was refused for it, with the notice saying why; a
+  // it only after a save was refused for it and the reread after that refusal
+  // landed, with the notice saying why; a failed reread keeps the choice. A
   // read that lands while the user edits never replaces the edit silently,
   // and a save from it is refused instead (adopted during render).
   const shownVersion = current?.version ?? 0;
   const [formVersion, setFormVersion] = useState(shownVersion);
   const [adoptNewer, setAdoptNewer] = useState(false);
-  if (adoptNewer && formVersion !== shownVersion) {
+  if (adoptNewer && reread.landed && formVersion !== shownVersion) {
     setAdoptNewer(false);
     setFormVersion(shownVersion);
     setClient(current ? current.auftraggeber : null);
