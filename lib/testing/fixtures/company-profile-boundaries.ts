@@ -5,8 +5,12 @@
 // refused before any database or storage call, the upload ticket included. Admin and Büro write only their
 // own organization's profile: the database call carries the resolved
 // organization and actor, never the client's, and a signed upload goes to
-// the caller's own Briefpapier folder. The database function's own refusals
-// are proven by supabase/tests/company_document_profiles.sql.
+// the caller's own Briefpapier folder, under a folder of the caller's own
+// (werk-flow/werkflow-planning#420). Another manager who knows the file id
+// finds nothing there to finalize. A finalize whose registration may not have
+// committed keeps the staged upload, so its retry under the same file id
+// registers the same file. The database function's own refusals are proven by
+// supabase/tests/company_document_profiles.sql.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
 
@@ -28,21 +32,30 @@ const PNG_BYTES = Uint8Array.from(
   (char) => char.charCodeAt(0),
 );
 let storedBytes = new Uint8Array([1, 2, 3]);
+// The staged uploads by the key their ticket signed, as the browser's PUT left them.
+const staged = new Set<string>();
+let copies = 0;
 mock.module('@/lib/storage/r2', () => ({
   createSignedUploadUrl: async ({ organizationId, path }: { organizationId: string; path: string }) => {
     storageCalls.push(`sign ${organizationId} ${path}`);
     return 'https://storage.example.test/signed';
   },
-  promoteUploadedObject: async ({ path }: { path: string }) => {
-    storageCalls.push(`promote ${path}`);
-    return { exists: true, sizeBytes: 2048, contentType: 'image/png', path: `${path}-copy` };
+  uploadStagingPath: (_organizationId: string, path: string) => `staging:${path}`,
+  copyStagedUpload: async ({ path }: { path: string }) => {
+    storageCalls.push(`copy ${path}`);
+    if (!staged.has(path)) return { exists: false, sizeBytes: null, contentType: null, path: `${path}-none` };
+    copies += 1;
+    return { exists: true, sizeBytes: 2048, contentType: 'image/png', path: `${path}-copy${copies}` };
   },
   readStorageObject: async ({ path }: { path: string }) => {
     storageCalls.push(`read ${path}`);
     return storedBytes;
   },
   discardStorageObjects: async ({ paths }: { paths: readonly string[] }) => {
-    storageCalls.push(...paths.map((path) => `discard ${path}`));
+    for (const path of paths) {
+      storageCalls.push(`discard ${path}`);
+      staged.delete(path.replace(/^staging:/, ''));
+    }
   },
 }));
 
@@ -180,10 +193,14 @@ assert.deepEqual(
 );
 assert.equal(world.rpcCalls.length, 0);
 
-// A ticket signs a key in A's own Briefpapier folder; a file of another type is refused unsigned.
+// A ticket signs a key in A's own Briefpapier folder, under the caller's own
+// folder; a file of another type is refused unsigned.
 const signed = await ticket(ORGANIZATION_A)();
 assert.ok(signed.success);
-assert.match(storageCalls.at(-1) ?? '', new RegExp(`^sign ${ORGANIZATION_A} ${ORGANIZATION_A}/briefpapier/`));
+assert.equal(
+  storageCalls.at(-1),
+  `sign ${ORGANIZATION_A} ${ORGANIZATION_A}/briefpapier/${signed.ticket.fileId}/${CALLER_ID}/logo`,
+);
 const callsBefore = storageCalls.length;
 assert.deepEqual(
   await actions.createCompanyDocumentFileUploadTicket({
@@ -196,14 +213,45 @@ assert.deepEqual(
 );
 assert.equal(storageCalls.length, callsBefore);
 
-// A stored copy the renderer cannot embed is discarded and never registered.
+const ownUpload = `${ORGANIZATION_A}/briefpapier/${fileId}/${CALLER_ID}/logo`;
+const ownStaging = `staging:${ownUpload}`;
+
+// A stored copy the renderer cannot embed is discarded with its staged upload and never registered.
+staged.add(ownUpload);
 world.rpcCalls.length = 0;
 assert.deepEqual(await finalize(ORGANIZATION_A)(), { success: false, error: 'file_unreadable' });
 assert.equal(world.rpcCalls.length, 0);
-assert.equal(storageCalls.at(-1), `discard ${ORGANIZATION_A}/briefpapier/${fileId}/logo-copy`);
+assert.deepEqual(storageCalls.slice(-2), [`discard ${ownUpload}-copy1`, `discard ${ownStaging}`]);
 
-// An embeddable copy is registered with its stored size, for the organization export.
+// Another manager of A who knows the caller's file id finalizes it: the key
+// recomputed from that session holds nothing, so no object is copied or
+// removed, nothing is written, and the caller's staged logo stays.
+const COWORKER_ID = '30000000-0000-4000-8000-000000000002';
 storedBytes = PNG_BYTES;
+staged.add(ownUpload);
+for (const role of ['admin', 'buero'] as const) {
+  signInAs(world, role);
+  world.callerId = COWORKER_ID;
+  const coworkerFrom: number = storageCalls.length;
+  world.rpcCalls.length = 0;
+  assert.deepEqual(
+    await finalize(ORGANIZATION_A)(),
+    { success: false, error: 'file_missing' },
+    `${role}: another manager finalized the caller's staged logo`,
+  );
+  assert.deepEqual(
+    storageCalls.slice(coworkerFrom),
+    [`copy ${ORGANIZATION_A}/briefpapier/${fileId}/${COWORKER_ID}/logo`],
+    `${role}: another manager's finalize reached the caller's staged logo`,
+  );
+  assert.equal(world.rpcCalls.length, 0, `${role}: another manager's finalize wrote`);
+  assert.deepEqual([...staged], [ownUpload]);
+  assert.deepEqual(world.tables.company_document_profile_events, []);
+}
+
+// The caller's own finalize registers the copy with its stored size, for the
+// organization export, and then removes the staged upload.
+signInAs(world, 'buero');
 assert.deepEqual(await finalize(ORGANIZATION_A)(), { success: true });
 assert.deepEqual(world.rpcCalls.at(-1), {
   name: 'replace_company_document_file',
@@ -213,12 +261,14 @@ assert.deepEqual(world.rpcCalls.at(-1), {
     p_kind: 'logo',
     p_expected_storage_path: seenLogo,
     p_expected_following_storage_path: null,
-    p_storage_path: `${ORGANIZATION_A}/briefpapier/${fileId}/logo-copy`,
+    p_storage_path: `${ownUpload}-copy2`,
     p_mime_type: 'image/png',
     p_size_bytes: 2048,
     p_attempt_key: fileId,
   },
 });
+assert.equal(storageCalls.at(-1), `discard ${ownStaging}`);
+assert.equal(staged.size, 0);
 
 // A removal names the caller's organization and actor.
 assert.deepEqual(await remove(ORGANIZATION_A)(), { success: true });
@@ -239,16 +289,32 @@ assert.deepEqual(world.rpcCalls.at(-1), {
 
 // A file someone else changed since the caller saw it: the database refuses
 // the removal and the replacement, the caller hears why, and the refused
-// upload's copy is discarded.
+// upload's copy and staged upload are discarded.
 world.rpc = () => ({ data: null, error: { message: 'file_changed', code: 'P0001' } });
 assert.deepEqual(await remove(ORGANIZATION_A)(), { success: false, error: 'file_changed' });
+staged.add(ownUpload);
 assert.deepEqual(await finalize(ORGANIZATION_A)(), { success: false, error: 'file_changed' });
-assert.equal(storageCalls.at(-1), `discard ${ORGANIZATION_A}/briefpapier/${fileId}/logo-copy`);
+assert.deepEqual(storageCalls.slice(-2), [`discard ${ownUpload}-copy3`, `discard ${ownStaging}`]);
+assert.equal(staged.size, 0);
+
+// A registration whose answer was lost may still commit, so its copy stays,
+// and so does the staged upload: the retry under the same file id copies the
+// same upload again and registers it.
+staged.add(ownUpload);
+world.rpc = () => ({ data: null, error: { message: 'fetch failed' } });
+const lostFrom = storageCalls.length;
+assert.deepEqual(await finalize(ORGANIZATION_A)(), { success: false, error: 'finalize_failed' });
+assert.deepEqual(storageCalls.slice(lostFrom), [`copy ${ownUpload}`, `read ${ownUpload}-copy4`]);
+assert.ok(staged.has(ownUpload), 'a registration of unknown outcome removed the staged upload');
+world.rpc = () => ({ data: null, error: null });
+assert.deepEqual(await finalize(ORGANIZATION_A)(), { success: true });
+assert.equal(world.rpcCalls.at(-1)?.args.p_storage_path, `${ownUpload}-copy5`);
+assert.equal(world.rpcCalls.at(-1)?.args.p_attempt_key, fileId);
+assert.equal(storageCalls.at(-1), `discard ${ownStaging}`);
 
 // A finalize repeated after its answer was lost: the upload's file id already
 // registered a change of this kind by this caller, so it answers as the first
 // call did, before storage, where the staged object is gone.
-world.rpc = () => ({ data: null, error: null });
 world.tables.company_document_profile_events = [
   {
     id: '37800000-0000-4000-8000-000000000050',

@@ -2,6 +2,7 @@ import 'server-only';
 
 import type { ActionContext } from '@/lib/org/action-context';
 import { loggedRead } from '@/lib/data/read-request-cache';
+import { bindUploadPathToCreator } from '@/lib/documents/storage-path';
 import type { StationeryFile } from '@/lib/document-rendering/model';
 import { readStorageObject } from '@/lib/storage/r2';
 import type { AdminClient } from '@/lib/supabase/admin';
@@ -30,9 +31,14 @@ type StoredProfile = {
   filePaths: Record<CompanyFileKind, StoredFilePath | null>;
 };
 
-/** The storage key of one uploaded logo or stationery page; it holds no file name. */
-export function companyFilePath(organizationId: string, fileId: string, kind: CompanyFileKind): string {
-  return `${organizationId}/briefpapier/${fileId}/${kind}`;
+/**
+ * The key of one logo or stationery upload, bound to the organization and
+ * person of the session that signs or finalizes it; it holds no file name.
+ * Ticket and finalize both build it from the session, so another person who
+ * knows the file id finds no staged object there.
+ */
+export function companyFilePath(context: ActionContext, fileId: string, kind: CompanyFileKind): string {
+  return bindUploadPathToCreator(`${context.orgId}/briefpapier/${fileId}/${kind}`, context.userId);
 }
 
 function storedFile(path: string | null, mimeType: string | null): StoredFilePath | null {
