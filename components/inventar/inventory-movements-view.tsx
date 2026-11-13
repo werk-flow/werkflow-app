@@ -249,6 +249,17 @@ function MovementQuantity({ entry }: { entry: InventoryMovementHistoryEntry }) {
   );
 }
 
+/**
+ * A text cell of the history table: words wrap between each other, and only a
+ * token longer than the cell's bound (a long article number or address)
+ * breaks inside itself, so no column grows past its share.
+ */
+function BoundedText({ width, children }: { width: 'wide' | 'narrow'; children: React.ReactNode }) {
+  return (
+    <span className={cn('block break-words', width === 'wide' ? 'max-w-56' : 'max-w-40')}>{children}</span>
+  );
+}
+
 const formatStockQuantity = (quantity: number | null): string =>
   quantity === null ? '—' : quantity.toLocaleString('de-DE');
 
@@ -313,12 +324,18 @@ function MovementsDesktopTable({ entries }: { entries: InventoryMovementHistoryE
                 <TableCell className="whitespace-nowrap text-muted-foreground">
                   {formatBerlinDateTime(entry.createdAt)}
                 </TableCell>
-                <TableCell className="font-medium">{entry.itemName}</TableCell>
-                <TableCell>
-                  <MovementEndLabel end={target.from} />
+                <TableCell className="font-medium">
+                  <BoundedText width="wide">{entry.itemName}</BoundedText>
                 </TableCell>
                 <TableCell>
-                  <MovementEndLabel end={target.to} />
+                  <BoundedText width="narrow">
+                    <MovementEndLabel end={target.from} />
+                  </BoundedText>
+                </TableCell>
+                <TableCell>
+                  <BoundedText width="narrow">
+                    <MovementEndLabel end={target.to} />
+                  </BoundedText>
                 </TableCell>
                 <TableCell>{INVENTORY_HISTORY_KIND_LABELS[entry.kind]}</TableCell>
                 <TableCell className="whitespace-nowrap text-right tabular-nums">
@@ -330,8 +347,12 @@ function MovementsDesktopTable({ entries }: { entries: InventoryMovementHistoryE
                 <TableCell className="whitespace-nowrap text-right tabular-nums">
                   {formatStockQuantity(entry.quantityAfter)}
                 </TableCell>
-                <TableCell>{entry.actorName ?? '—'}</TableCell>
-                <TableCell>{entry.reason ?? '—'}</TableCell>
+                <TableCell>
+                  <BoundedText width="narrow">{entry.actorName ?? '—'}</BoundedText>
+                </TableCell>
+                <TableCell>
+                  <BoundedText width="wide">{entry.reason ?? '—'}</BoundedText>
+                </TableCell>
               </TableRow>
             );
           })}
