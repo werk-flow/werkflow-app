@@ -153,28 +153,17 @@ test('main that did not move since its full run gets none', () => {
   expect(decide(NOON)).toEqual({ run: 'false', reason: `${head} already has a full run.` });
 });
 
-test('a push sooner than 3 hours after the last full run waits for it, and a running one holds the next back', () => {
+test('a full run that started less than 3 hours ago, or still runs, holds the next one back', () => {
   const [, second] = writeCommits(3);
   writeFullRun(second ?? '', hoursBefore(NOON, 2.5), 'success');
   expect(decide(NOON)).toEqual({
-    run: 'wait',
-    reason: `The full run on ${second} started 150 min ago; the next starts at 12:30 in Berlin.`,
+    run: 'false',
+    reason: `The full run on ${second} started 150 min ago; the next is due at 12:30 in Berlin.`,
   });
-  expect(readFileSync(join(stub, 'output'), 'utf8')).toContain(`wait=${0.5 * HOUR}\n`);
   writeFullRun(second ?? '', hoursBefore(NOON, 5), 'running');
   expect(decide(NOON).reason).toBe(
-    `The full run on ${second} is still running; a later push or schedule takes the newer commits.`,
+    `The full run on ${second} is still running; a later dispatch takes the newer commits.`,
   );
-});
-
-test('a push whose wait would end after 20:00 Berlin leaves its commits to the nightly', () => {
-  const [, second] = writeCommits(2);
-  // 18:30 Berlin; the full run started at 17:30, so the next would start at 20:30.
-  writeFullRun(second ?? '', '2026-11-13T16:30:00Z', 'success');
-  expect(decide('2026-11-13T17:30:00Z')).toEqual({
-    run: 'false',
-    reason: 'The next full run on main would start at 20:30 in Berlin; the nightly takes the newer commits.',
-  });
 });
 
 test('main without a full run on its last 100 commits gets one', () => {
@@ -313,12 +302,12 @@ test('the alert detail says so when no green full run is in reach', () => {
   );
 });
 
-test('the alert speaks for a full run or a failed decision, wait or dispatch, and never for a finished wait', () => {
+test('the alert speaks for a full run or a failed decision, never for a skipped one', () => {
   const workflow = readFileSync(join(repositoryRoot, '.github/workflows/main-full-run.yml'), 'utf8');
   const alert = workflow.slice(workflow.indexOf('\n  alert:'));
-  expect(alert).toContain('needs: [decide, wait, full]\n');
+  expect(alert).toContain('needs: [decide, full]\n');
   const condition = /\n {4}if: >-\n((?: {6}.+\n)+)/.exec(alert)?.[1]?.replace(/\s+/g, ' ').trim();
   expect(condition).toBe(
-    "!cancelled() && github.ref == 'refs/heads/main' && (needs.decide.result == 'failure' || needs.wait.result == 'failure' || needs.decide.outputs.run == 'true')",
+    "!cancelled() && github.ref == 'refs/heads/main' && (needs.decide.result == 'failure' || needs.decide.outputs.run == 'true')",
   );
 });

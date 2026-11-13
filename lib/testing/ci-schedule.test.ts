@@ -137,27 +137,22 @@ test('the nightly shares the release cron line, so the release usually reuses it
   expect(nightlyWorkflow).toMatch(/- cron: '\d+ \d+ \* \* \*'\n {6}timezone: Europe\/Berlin/);
 });
 
-test('main gets a full run every 3 hours from 06:00 to 20:00 Berlin, and each push asks too', () => {
-  // GitHub starts scheduled runs hours late (#184), so a push asks for the full run that is due.
-  const cron =
-    /- cron: '0 (\d+)-(\d+)\/(\d+) \* \* \*'\n {6}timezone: Europe\/Berlin\n {2}push:\n {4}branches: \[main\]\n/.exec(
-      mainFullRunWorkflow,
-    );
-  const [first, last, step] = cron?.slice(1).map(Number) ?? [];
-  expect([first, last, step]).toEqual([6, 18, 3]);
-  // The decision's window holds every scheduled start, and its interval is the cron's step.
+test('main gets a full run every 3 hours from 06:00 to 20:00 Berlin, and no job waits for it', () => {
+  // GitHub starts scheduled runs hours late (#184), so ops/ci-alert.py in werk-flow/werkflow-planning
+  // dispatches the workflow, and the workflow decides at once whether a full run is due.
+  expect(mainFullRunWorkflow).toMatch(/\non:\n {2}workflow_dispatch:\n\n/);
+  expect(mainFullRunWorkflow).not.toMatch(/\n {2}(schedule|push):/);
+  expect(mainFullRunWorkflow).not.toMatch(/\bsleep\b/);
+  // Berlin's window and the interval (ops/ci-alert.py keeps the same three for its dispatches).
   const window = /readonly FIRST=(\d\d:\d\d) LAST=(\d\d:\d\d) INTERVAL=\$\(\((\d+) \* 3600\)\)/.exec(
     mainFullRunScript,
   );
-  expect(window?.slice(1)).toEqual(['06:00', '20:00', String(step)]);
-  expect((first ?? 0) * 60).toBe(minutesOf(window?.[1] ?? ''));
-  expect((last ?? 0) * 60).toBeLessThan(minutesOf(window?.[2] ?? ''));
-  // A push sooner than the interval waits it out in a job that outlasts it, then asks again on main.
-  const wait =
-    /\n {2}wait:\n[\s\S]*?timeout-minutes: (\d+)\n[\s\S]*?gh workflow run main-full-run\.yml --ref main\n/.exec(
-      mainFullRunWorkflow,
-    );
-  expect(Number(wait?.[1])).toBeGreaterThan(Number(step) * 60);
+  expect(window?.slice(1)).toEqual(['06:00', '20:00', '3']);
+  expect(mainFullRunScript).toContain('ZoneInfo("Europe/Berlin")');
+  // The decision ends in seconds.
+  expect(mainFullRunWorkflow).toMatch(
+    /\n {2}decide:\n {4}name: Decide\n {4}runs-on: .+\n {4}timeout-minutes: 5\n/,
+  );
   // Two full runs on main never overlap: one run decides at a time, and none cancels another.
   expect(mainFullRunWorkflow).toContain(
     'group: main-full-run-${{ github.ref }}\n  cancel-in-progress: false\n',

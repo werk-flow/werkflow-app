@@ -6,10 +6,10 @@
 # A full run is ci.yml called from a job named `Full run` (nightly.yml, release.yml and
 # main-full-run.yml). Its jobs show on their commit as the check runs `Full run / …`.
 #
-# `decide` writes run=true|false|wait and reason to $GITHUB_OUTPUT. A full run starts only from 06:00
-# to 20:00 Berlin, only when main moved since the newest full run, and only when that run has ended and
-# started 3 hours ago or more. Before then the answer is `wait`, with the seconds left in `wait`, unless
-# the next start falls after 20:00. `context` prints the alert's detail: the groups that this run's
+# `decide` writes run=true|false and reason to $GITHUB_OUTPUT. A full run starts only from 06:00 to
+# 20:00 Berlin, only when main moved since the newest full run, and only when that run has ended and
+# started 3 hours ago or more. It reads no clock but this one, so the dispatcher may ask at any time.
+# `context` prints the alert's detail: the groups that this run's
 # failed jobs report, and the commits since the newest green full run.
 # Needs GH_TOKEN, GITHUB_REPOSITORY and GITHUB_SHA; `context` also GITHUB_RUN_ID and GITHUB_SERVER_URL.
 set -euo pipefail
@@ -54,19 +54,17 @@ print(datetime.fromtimestamp(int(sys.argv[1]), ZoneInfo("Europe/Berlin")).strfti
 ' "$1"
 }
 
-# Usage: answer <true|false|wait> <reason> [<seconds to wait>]
 answer() {
   {
     echo "run=$1"
     echo "reason=$2"
-    test -z "${3:-}" || echo "wait=$3"
   } >> "$GITHUB_OUTPUT"
   echo "::notice title=Full run on main::$2"
   exit 0
 }
 
 decide() {
-  local now clock list commit state="" behind=0 started conclusion due
+  local now clock list commit state="" behind=0 started conclusion
   now="$(date +%s)"
   clock="$(berlin "$now")"
   if [[ "$clock" < "$FIRST" || ! "$clock" < "$LAST" ]]; then
@@ -83,16 +81,9 @@ decide() {
   read -r started conclusion <<< "$state"
   test "$behind" -gt 0 || answer false "${GITHUB_SHA} already has a full run."
   test "$conclusion" != running \
-    || answer false "The full run on ${commit} is still running; a later push or schedule takes the newer commits."
-  due=$((started + INTERVAL))
-  if test "$now" -lt "$due"; then
-    clock="$(berlin "$due")"
-    if [[ "$clock" < "$FIRST" || ! "$clock" < "$LAST" ]]; then
-      answer false "The next full run on main would start at ${clock} in Berlin; the nightly takes the newer commits."
-    fi
-    answer wait "The full run on ${commit} started $(((now - started) / 60)) min ago; the next starts at ${clock} in Berlin." \
-      $((due - now))
-  fi
+    || answer false "The full run on ${commit} is still running; a later dispatch takes the newer commits."
+  test $((now - started)) -ge "$INTERVAL" \
+    || answer false "The full run on ${commit} started $(((now - started) / 60)) min ago; the next is due at $(berlin $((started + INTERVAL))) in Berlin."
   answer true "main moved ${behind} commits since the full run on ${commit}."
 }
 

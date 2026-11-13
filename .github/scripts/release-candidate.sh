@@ -48,7 +48,7 @@ runs="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${sh
   --jq '.workflow_runs[] | select(.head_branch == "main"
     and (.path == ".github/workflows/nightly.yml" or .path == ".github/workflows/release.yml"
       or .path == ".github/workflows/main-full-run.yml")
-    and (.event == "schedule" or .event == "workflow_dispatch" or .event == "push")) | .id')"
+    and (.event == "schedule" or .event == "workflow_dispatch")) | .id')"
 # A failed request stops the gate: a missing run could be the newest, failed one.
 latest="$(for run in $runs; do
   gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${run}/jobs?per_page=100" \

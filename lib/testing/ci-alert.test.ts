@@ -449,16 +449,16 @@ test('the skip output changes no decision: a green or manual release still goes 
   expect(manual.join('\n')).not.toContain('skip');
 });
 
-test('a green full run on main from a push counts for the release, and only from main-full-run.yml', () => {
-  const fromPush = (path: string, branch = 'main', event = 'push') => {
+test('a green full run on main from main-full-run.yml counts for the release', () => {
+  const fullRun = (path: string, branch = 'main', event = 'workflow_dispatch') => {
     writeFileSync(join(stub, 'output'), '');
     rmSync(join(stub, 'repository'), { recursive: true, force: true });
     return decide('scheduled', true, 'success', { id: 3, head_branch: branch, path, event }).outputs;
   };
-  expect(fromPush('.github/workflows/main-full-run.yml')).toContain('verified=true');
-  expect(fromPush('.github/workflows/ci.yml')).toContain('verified=false');
-  expect(fromPush('.github/workflows/main-full-run.yml', 'main', 'pull_request')).toContain('verified=false');
-  expect(fromPush('.github/workflows/main-full-run.yml', 'feature')).toContain('verified=false');
+  expect(fullRun('.github/workflows/main-full-run.yml')).toContain('verified=true');
+  expect(fullRun('.github/workflows/ci.yml')).toContain('verified=false');
+  expect(fullRun('.github/workflows/main-full-run.yml', 'main', 'pull_request')).toContain('verified=false');
+  expect(fullRun('.github/workflows/main-full-run.yml', 'feature')).toContain('verified=false');
 });
 
 test("a red run report ends with the caller's detail", () => {
