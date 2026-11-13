@@ -439,8 +439,8 @@ begin
   foreach v_kind in array array['job_id', 'request_id', 'project_id', 'service_case_id'] loop
     begin
       execute format(
-        'insert into public.work_billing_parties (organization_id, %I, version, client_id, recipient_client_id,
-           recipient_name, source) values ($1, $2, 99, $3, $3, $4, ''buero'')', v_kind)
+        'insert into public.work_billing_parties (organization_id, %I, work_id, version, client_id,
+           recipient_client_id, recipient_name, source) values ($1, $2, $2, 99, $3, $3, $4, ''buero'')', v_kind)
       using '32700000-0000-0000-0000-000000000011'::uuid,
         case v_kind
           when 'job_id' then '32700000-0000-0000-0000-000000000051'::uuid
