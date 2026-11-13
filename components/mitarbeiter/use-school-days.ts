@@ -42,20 +42,20 @@ export function useSchoolDays(recordId: string) {
     [refresh],
   );
 
-  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [cancelRequestError, setCancelRequestError] = useState<string | null>(null);
   const confirmCancel = (schoolDay: SchoolDay | null) => {
-    setCancelError(null);
+    setCancelRequestError(null);
     setCancelTarget(schoolDay);
   };
 
   // The confirmation stays open and pending until the answer lands; a refusal
   // stays in it with its sentence, so the office can retry or cancel.
   const cancel = async (schoolDay: SchoolDay) => {
-    setCancelError(null);
+    setCancelRequestError(null);
     try {
       const result = await busy.run(schoolDay.id, () => cancelSchoolDay(schoolDay.id));
       if (!result.success) {
-        setCancelError(
+        setCancelRequestError(
           describeFailure(result.error, SCHOOL_DAY_ERROR_MESSAGES, 'Die Stornierung ist fehlgeschlagen.'),
         );
         return;
@@ -65,7 +65,7 @@ export function useSchoolDays(recordId: string) {
       await refresh();
     } catch (error) {
       logError('useSchoolDays: cancel failed', error);
-      setCancelError('Die Stornierung ist fehlgeschlagen.');
+      setCancelRequestError('Die Stornierung ist fehlgeschlagen.');
     }
   };
 
@@ -77,7 +77,7 @@ export function useSchoolDays(recordId: string) {
     closeDialog,
     cancelTarget,
     confirmCancel,
-    cancelError,
+    cancelRequestError,
     cancel,
   };
 }

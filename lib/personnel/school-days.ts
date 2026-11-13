@@ -112,7 +112,11 @@ export function isApprenticeThroughout(
     .reduce<{
       valid_from: string;
       employment_type: string;
-    } | null>((latest, condition) => (latest === null || condition.valid_from > latest.valid_from ? condition : latest), null);
+    } | null>(
+      (latest, condition) =>
+        latest === null || condition.valid_from > latest.valid_from ? condition : latest,
+      null,
+    );
   if (inForceAtStart?.employment_type !== 'ausbildung') return false;
   return conditions.every(
     (condition) =>

@@ -126,7 +126,7 @@ function SchoolDayRows({ schoolDays, state }: { schoolDays: SchoolDay[]; state: 
 }
 
 function CancelSchoolDayDialog({ state }: { state: SchoolDaysState }) {
-  const { cancelTarget, confirmCancel, cancelError, cancel, busy } = state;
+  const { cancelTarget, confirmCancel, cancelRequestError, cancel, busy } = state;
   const pending = cancelTarget !== null && busy.isBusy(cancelTarget.id);
   return (
     <AlertDialog
@@ -143,7 +143,7 @@ function CancelSchoolDayDialog({ state }: { state: SchoolDaysState }) {
             sichtbar.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter error={cancelError}>
+        <AlertDialogFooter error={cancelRequestError}>
           <AlertDialogCancel>Abbrechen</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
