@@ -9,7 +9,8 @@
 --
 -- 1. work_leads: one row per lead holding. Only its end and who ended it are
 --    set, once, so the rows are the history. One open lead per project and
---    per job.
+--    per job. No delete removes a holding but its organization's, and a
+--    project or job with one refuses its hard deletion as work with history.
 -- 2. app_private.work_lead_scope: the one rule for „is this member the lead
 --    of this work“. A lead counts while the holding is open, the member still
 --    belongs to the organization with effective access and has not left.
@@ -116,6 +117,65 @@ revoke all on function app_private.guard_work_lead_history() from public, anon, 
 
 create trigger guard_work_lead_history before update on public.work_leads
   for each row execute function app_private.guard_work_lead_history();
+
+-- No delete removes a holding, direct or by the cascade of its project, job
+-- or person; only its organization's deletion does. The organization
+-- teardown is recognised as in app_private.prevent_historic_work_delete:
+-- inside a cascade, for an organization app.deleting_organization_ids names.
+create function app_private.prevent_work_lead_delete()
+returns trigger
+language plpgsql
+security invoker
+set search_path to ''
+as $$
+begin
+  if pg_trigger_depth() > 1 and old.organization_id::text = any (
+    string_to_array(current_setting('app.deleting_organization_ids', true), ',')
+  ) then return old; end if;
+  raise exception 'work_lead_history_immutable';
+end;
+$$;
+revoke all on function app_private.prevent_work_lead_delete() from public, anon, authenticated;
+
+create trigger prevent_work_lead_delete before delete on public.work_leads
+  for each row execute function app_private.prevent_work_lead_delete();
+
+-- Work with a lead holding is work with history: its hard deletion is refused
+-- with the reason the office already sees. Unchanged from
+-- 20261130090003_attach_a_request_to_existing_work.sql but for the holdings.
+create or replace function app_private.prevent_historic_work_delete()
+returns trigger
+language plpgsql
+security definer
+set search_path to ''
+as $function$
+begin
+  if pg_trigger_depth() > 1 and old.organization_id::text = any (
+    string_to_array(current_setting('app.deleting_organization_ids', true), ',')
+  ) then return old; end if;
+
+  if tg_table_name = 'jobs' and (
+    exists (select 1 from public.work_execution_events event where event.job_id = old.id)
+    or exists (select 1 from public.work_blockers blocker where blocker.job_id = old.id)
+    or exists (select 1 from public.work_dependencies dependency
+      where dependency.dependent_job_id = old.id or dependency.predecessor_job_id = old.id)
+    or exists (select 1 from public.work_artifacts artifact where artifact.job_id = old.id)
+    or exists (select 1 from public.work_request_entries entry where entry.job_id = old.id)
+    or exists (select 1 from public.work_leads lead where lead.job_id = old.id)
+  ) then raise exception 'work_with_history_cannot_be_deleted'; end if;
+
+  if tg_table_name = 'projects' and (
+    exists (select 1 from public.work_execution_events event where event.project_id = old.id)
+    or exists (select 1 from public.work_blockers blocker where blocker.project_id = old.id)
+    or exists (select 1 from public.work_dependencies dependency
+      where dependency.dependent_project_id = old.id or dependency.predecessor_project_id = old.id)
+    or exists (select 1 from public.work_artifacts artifact where artifact.project_id = old.id)
+    or exists (select 1 from public.work_request_entries entry where entry.project_id = old.id)
+    or exists (select 1 from public.work_leads lead where lead.project_id = old.id)
+  ) then raise exception 'work_with_history_cannot_be_deleted'; end if;
+  return old;
+end;
+$function$;
 
 -- 2. The lead rule. Rows (project_id, null) for each project the member
 -- leads; rows (project_id or null, job_id) for each job they lead, by its own

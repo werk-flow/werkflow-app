@@ -5,7 +5,9 @@
 -- its jobs, unless a job names its own lead; a lead of another project, an
 -- employee who is not the lead, an ended lead, a member who left and a
 -- removed member are refused, and the four-eyes rule holds. Only the service
--- role reads the rule. One rolled-back transaction.
+-- role reads the rule. No delete removes a holding, and no project, job or
+-- personnel record with one is deleted, except with its organization. One
+-- rolled-back transaction.
 begin;
 
 insert into auth.users (
@@ -22,14 +24,17 @@ from (values
   ('4f200000-0000-4000-8000-000000000004'::uuid, 'work-lead-other@example.test', 'Lena'),
   ('4f200000-0000-4000-8000-000000000005'::uuid, 'work-lead-second@example.test', 'Jonas'),
   ('4f200000-0000-4000-8000-000000000006'::uuid, 'work-lead-foreign-admin@example.test', 'Fremd'),
-  ('4f200000-0000-4000-8000-000000000007'::uuid, 'work-lead-foreign@example.test', 'Fremda')
+  ('4f200000-0000-4000-8000-000000000007'::uuid, 'work-lead-foreign@example.test', 'Fremda'),
+  ('4f200000-0000-4000-8000-000000000008'::uuid, 'work-lead-teardown@example.test', 'Ende')
 ) as person(id, email, first_name);
 
 insert into public.organizations (id, name, admin_id, unique_code) values
   ('4f200000-0000-4000-8000-0000000000a0', 'Haustechnik Sonnenberg GmbH',
    '4f200000-0000-4000-8000-000000000001', 'LEADORGA'),
   ('4f200000-0000-4000-8000-0000000000b0', 'Hausverwaltung Lindenhof GmbH',
-   '4f200000-0000-4000-8000-000000000006', 'LEADORGB');
+   '4f200000-0000-4000-8000-000000000006', 'LEADORGB'),
+  ('4f200000-0000-4000-8000-0000000000c0', 'Haustechnik Abwicklung GmbH',
+   '4f200000-0000-4000-8000-000000000008', 'LEADORGC');
 insert into public.organization_members (organization_id, user_id, role) values
   ('4f200000-0000-4000-8000-0000000000a0', '4f200000-0000-4000-8000-000000000002', 'employee'),
   ('4f200000-0000-4000-8000-0000000000a0', '4f200000-0000-4000-8000-000000000003', 'employee'),
@@ -54,7 +59,10 @@ insert into public.jobs (id, organization_id, project_id, title, job_number, cre
   ('4f200000-0000-4000-8000-000000000022', '4f200000-0000-4000-8000-0000000000a0',
    '4f200000-0000-4000-8000-000000000011', 'Lüftung', 'LEAD-3', '4f200000-0000-4000-8000-000000000001'),
   ('4f200000-0000-4000-8000-000000000023', '4f200000-0000-4000-8000-0000000000a0',
-   null, 'Wartung', 'LEAD-4', '4f200000-0000-4000-8000-000000000001');
+   null, 'Wartung', 'LEAD-4', '4f200000-0000-4000-8000-000000000001'),
+  -- A job whose only history is its lead holding.
+  ('4f200000-0000-4000-8000-000000000024', '4f200000-0000-4000-8000-0000000000a0',
+   null, 'Inspektion', 'LEAD-5', '4f200000-0000-4000-8000-000000000001');
 -- The author works on A1 and A2; the lead only on the standalone job.
 insert into public.job_assignments (organization_id, job_id, user_id, assigned_by) values
   ('4f200000-0000-4000-8000-0000000000a0', '4f200000-0000-4000-8000-000000000020',
@@ -186,9 +194,9 @@ begin
 
   -- The lead's scope: project A, its job A1 (not A2), and the standalone job.
   if (select array_agg(id::uuid order by id) from jsonb_array_elements_text(
-        public.read_work_lead_scope(v_org, v_lead)->'projectIds') id) <> array[v_project_a]
+        public.read_work_lead_scope(v_org, v_lead)->'projectIds') id) is distinct from array[v_project_a]
     or (select array_agg(id::uuid order by id) from jsonb_array_elements_text(
-        public.read_work_lead_scope(v_org, v_lead)->'jobIds') id) <> array[v_job_a1, v_job_s]
+        public.read_work_lead_scope(v_org, v_lead)->'jobIds') id) is distinct from array[v_job_a1, v_job_s]
   then raise exception 'the lead''s scope is wrong'; end if;
   if public.read_work_lead_scope(v_org, v_other) <> pg_temp.no_scope() then
     raise exception 'an ended lead keeps a scope';
@@ -261,6 +269,21 @@ begin
   end if;
   update public.employee_records set exit_date = null where id = pg_temp.record_of(v_lead);
 
+  -- No delete removes a holding: neither a direct one nor the cascade of its
+  -- project, job or person. Work with a holding refuses its deletion with the
+  -- reason the office sees for work with history.
+  perform pg_temp.name_lead(null, '4f200000-0000-4000-8000-000000000024', v_other);
+  perform pg_temp.expect_refusal('a holding is deleted', format(
+    'delete from public.work_leads where job_id = %L', v_job_s), 'work_lead_history_immutable');
+  perform pg_temp.expect_refusal('a project with a holding is deleted', format(
+    'delete from public.projects where id = %L', v_project_b), 'work_with_history_cannot_be_deleted');
+  perform pg_temp.expect_refusal('a job with a holding is deleted', format(
+    'delete from public.jobs where id = %L', '4f200000-0000-4000-8000-000000000024'),
+    'work_with_history_cannot_be_deleted');
+  perform pg_temp.expect_refusal('a person with a holding is deleted', format(
+    'delete from public.employee_records where id = %L', pg_temp.record_of(v_other)),
+    'work_lead_history_immutable');
+
   -- A holding is history.
   perform pg_temp.expect_refusal('a holding changes its person', format(
     'update public.work_leads set employee_record_id = %L where job_id = %L',
@@ -268,6 +291,26 @@ begin
   perform pg_temp.expect_refusal('an end is moved', format(
     'update public.work_leads set ended_at = now() + interval ''1 day'' where project_id = %L and ended_at is not null',
     v_project_a), 'work_lead_history_immutable');
+end;
+$$;
+
+-- The organization's deletion removes its holdings with the rest.
+insert into public.projects (id, organization_id, name, project_number, created_by) values
+  ('4f200000-0000-4000-8000-000000000013', '4f200000-0000-4000-8000-0000000000c0', 'Altbau',
+   'LEAD-P-4', '4f200000-0000-4000-8000-000000000008');
+insert into public.jobs (id, organization_id, project_id, title, job_number, created_by) values
+  ('4f200000-0000-4000-8000-000000000025', '4f200000-0000-4000-8000-0000000000c0',
+   '4f200000-0000-4000-8000-000000000013', 'Rückbau', 'LEAD-6', '4f200000-0000-4000-8000-000000000008');
+insert into public.work_leads (organization_id, project_id, job_id, employee_record_id) values
+  ('4f200000-0000-4000-8000-0000000000c0', '4f200000-0000-4000-8000-000000000013', null,
+   pg_temp.record_of('4f200000-0000-4000-8000-000000000008')),
+  ('4f200000-0000-4000-8000-0000000000c0', null, '4f200000-0000-4000-8000-000000000025',
+   pg_temp.record_of('4f200000-0000-4000-8000-000000000008'));
+delete from public.organizations where id = '4f200000-0000-4000-8000-0000000000c0';
+do $$
+begin
+  if exists (select 1 from public.work_leads where organization_id = '4f200000-0000-4000-8000-0000000000c0')
+  then raise exception 'the organization''s deletion left its holdings'; end if;
 end;
 $$;
 
@@ -303,7 +346,7 @@ $$;
 select set_config('request.jwt.claims', '{"sub":"4f200000-0000-4000-8000-000000000001","role":"authenticated"}', true);
 do $$
 begin
-  if (select count(*) from public.work_leads) <> 5 then raise exception 'the Admin does not see every holding'; end if;
+  if (select count(*) from public.work_leads) <> 6 then raise exception 'the Admin does not see every holding'; end if;
 end;
 $$;
 reset role;
