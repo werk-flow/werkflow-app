@@ -1342,52 +1342,53 @@ const alertDialogFooterActionsRule = {
  * open while it runs and show its failure in the footer, or the failure lands
  * in a closed dialog: the school-day cancellation, the unsent-time deletion
  * and the unsent-work discard each did (class (a) of
- * werk-flow/werkflow-planning#432). The rule passes a handler that only sets
- * state (`setTarget(null)`: the dialog closes on purpose) and a handler that
- * calls `preventDefault()` on an action with `pending` in a footer with
- * `error`. Any other handler, a passed-in one included, goes through
- * `ConfirmActionDialog` (components/shared/confirm-action-dialog.tsx), which
- * holds all three.
+ * werk-flow/werkflow-planning#432). The rule passes a handler that only calls
+ * local `useState` setters (`setTarget(null)`: the dialog closes on purpose)
+ * and a handler that calls `preventDefault()` on an action with `pending` in a
+ * footer with `error`. Any other handler, a passed-in one included, goes
+ * through `ConfirmActionDialog` (components/shared/confirm-action-dialog.tsx),
+ * which holds all three.
  */
-const STATE_SETTER = /^set[A-Z]/;
-
-function callsPreventDefault(handler, visitorKeys) {
-  const [event] = handler.params;
-  if (event?.type !== 'Identifier') return false;
-  let found = false;
-  const visit = (node) => {
-    if (found || !node || typeof node.type !== 'string') return;
-    if (
-      node.type === 'CallExpression' &&
-      node.callee.type === 'MemberExpression' &&
-      node.callee.object.type === 'Identifier' &&
-      node.callee.object.name === event.name &&
-      node.callee.property.type === 'Identifier' &&
-      node.callee.property.name === 'preventDefault'
-    ) {
-      found = true;
-      return;
-    }
-    for (const key of visitorKeys[node.type] ?? []) {
-      const child = node[key];
-      if (Array.isArray(child)) child.forEach(visit);
-      else visit(child);
-    }
-  };
-  visit(handler.body);
-  return found;
+function isPreventDefaultOn(node, event) {
+  return (
+    node?.type === 'CallExpression' &&
+    node.callee.type === 'MemberExpression' &&
+    node.callee.object.type === 'Identifier' &&
+    node.callee.object.name === event.name &&
+    node.callee.property.type === 'Identifier' &&
+    node.callee.property.name === 'preventDefault'
+  );
 }
 
-// Only state setters, behind guards and in short-circuits: the click closes the dialog and starts nothing.
-function onlySetsState(handler, visitorKeys) {
+// The primitive closes right after the click handler returns or reaches its first `await`, so only a
+// top-level statement before that counts: never one in a branch, after an await or in a nested function.
+function preventsDefaultFirst(handler, visitorKeys) {
+  const [event] = handler.params;
+  if (event?.type !== 'Identifier') return false;
+  if (handler.body.type !== 'BlockStatement') return isPreventDefaultOn(handler.body, event);
+  for (const statement of handler.body.body) {
+    if (statement.type === 'ExpressionStatement' && isPreventDefaultOn(statement.expression, event))
+      return true;
+    if (containsAwait(statement, visitorKeys)) return false;
+  }
+  return false;
+}
+
+// Only local `useState` setters, behind guards and in short-circuits: the click closes the dialog and
+// starts nothing. A request function named `set…` is no setter.
+function onlySetsState(handler, sourceCode) {
   if (handler.async) return false;
+  const { visitorKeys } = sourceCode;
   let pure = true;
   const visit = (node) => {
     if (!pure || !node || typeof node.type !== 'string') return;
     if (['AwaitExpression', 'NewExpression', 'TaggedTemplateExpression'].includes(node.type)) pure = false;
     if (node.type === 'UnaryExpression' && node.operator === 'void') pure = false;
     if (node.type === 'CallExpression') {
-      if (node.callee.type !== 'Identifier' || !STATE_SETTER.test(node.callee.name)) {
+      if (
+        node.callee.type !== 'Identifier' ||
+        !isStateSetter(findScopeVariable(sourceCode.getScope(node), node.callee.name))
+      ) {
         pure = false;
         return;
       }
@@ -1402,6 +1403,25 @@ function onlySetsState(handler, visitorKeys) {
   return pure;
 }
 
+// `return Promise.resolve(null)` as a confirm's last statement: it answers success before any work it
+// started has answered, so ConfirmActionDialog closes over a request that may still fail.
+function answersSuccessAtOnce(handler) {
+  if (handler?.type !== 'ArrowFunctionExpression' && handler?.type !== 'FunctionExpression') return false;
+  if (handler.body.type !== 'BlockStatement') return false;
+  const last = handler.body.body.at(-1);
+  const value = last?.type === 'ReturnStatement' ? last.argument : null;
+  return (
+    value?.type === 'CallExpression' &&
+    value.callee.type === 'MemberExpression' &&
+    value.callee.object.type === 'Identifier' &&
+    value.callee.object.name === 'Promise' &&
+    value.callee.property.type === 'Identifier' &&
+    value.callee.property.name === 'resolve' &&
+    value.arguments[0]?.type === 'Literal' &&
+    value.arguments[0].value === null
+  );
+}
+
 const confirmActionStaysOpenRule = {
   meta: {
     type: 'problem',
@@ -1413,21 +1433,35 @@ const confirmActionStaysOpenRule = {
         'An AlertDialogAction that keeps its confirmation open binds `pending` to the running request, so the action shows it and cannot run twice. Prefer ConfirmActionDialog from components/shared/confirm-action-dialog.',
       noError:
         'A confirmation that stays open on failure shows that failure: pass `error` to its AlertDialogFooter. Prefer ConfirmActionDialog from components/shared/confirm-action-dialog.',
+
+      answersAtOnce:
+        "This onConfirm answers success before its work answers, so the confirmation closes over a request that may still fail. Return the request's outcome, or, when the surface underneath shows the pending step and its failure, pass `closesAtOnce` with an `onConfirm` that returns nothing (werkflow-design: Dialog close and success).",
     },
   },
   create(context) {
-    const { visitorKeys } = context.sourceCode;
+    const { sourceCode } = context;
+    const checkConfirm = (name, value) => {
+      if (name === 'onConfirm' && answersSuccessAtOnce(value))
+        context.report({ node: value, messageId: 'answersAtOnce' });
+    };
     return {
+      JSXAttribute(node) {
+        if (node.name.type === 'JSXIdentifier' && node.value?.type === 'JSXExpressionContainer')
+          checkConfirm(node.name.name, node.value.expression);
+      },
+      Property(node) {
+        if (node.key.type === 'Identifier' && !node.computed) checkConfirm(node.key.name, node.value);
+      },
       JSXOpeningElement(node) {
         if (node.name.type !== 'JSXIdentifier' || node.name.name !== 'AlertDialogAction') return;
         const onClick = jsxAttribute(node, 'onClick');
         if (!onClick) return;
         const handler =
           onClick.value?.type === 'JSXExpressionContainer'
-            ? localFunction(onClick.value.expression, context.sourceCode.getScope(node))
+            ? localFunction(onClick.value.expression, sourceCode.getScope(node))
             : null;
-        if (handler && onlySetsState(handler, visitorKeys)) return;
-        if (!handler || !callsPreventDefault(handler, visitorKeys)) {
+        if (handler && onlySetsState(handler, sourceCode)) return;
+        if (!handler || !preventsDefaultFirst(handler, sourceCode.visitorKeys)) {
           context.report({ node, messageId: 'closes' });
           return;
         }

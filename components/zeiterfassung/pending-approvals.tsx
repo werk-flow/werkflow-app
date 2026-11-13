@@ -14,7 +14,7 @@ import type { ActionResult } from '@/lib/action-result';
 import { describeBatchRefusal, describeFailure } from '@/lib/action-messages';
 import { useOptimisticList } from '@/hooks/use-optimistic-list';
 import { useLiveView, type LiveViewResult, type LiveViewState } from '@/hooks/use-live-view';
-import { PendingApprovalsHeader } from './pending-approvals-header';
+import { PendingApprovalsHeader, type ConfirmedSessions } from './pending-approvals-header';
 import { combinePendingApprovalItems, PendingApprovalsList } from './pending-approvals-list';
 
 interface PendingApprovalsProps {
@@ -111,7 +111,6 @@ type PendingApprovalReviewsInput = {
   view: LiveViewState<PendingApprovalData>;
   sessionList: ReviewList;
   changeRequestList: ReviewList;
-  sessions: PendingSession[];
   setActionError: (error: string | null) => void;
   showBanner: ReturnType<typeof useBanner>['showBanner'];
 };
@@ -121,7 +120,6 @@ function pendingApprovalReviews({
   view,
   sessionList,
   changeRequestList,
-  sessions,
   setActionError,
   showBanner,
 }: PendingApprovalReviewsInput) {
@@ -158,18 +156,15 @@ function pendingApprovalReviews({
       getEntryReviewErrorMessage,
     ).then(setActionError);
 
-  // One round trip for the whole backlog; the server re-checks every entry. The rows stay until the
-  // answer: the confirmation that shows a refusal sits in the header, which only these rows keep open.
-  const approveAllSessions = () =>
+  // One round trip for the confirmed entries; the server re-checks every one and refuses all when one
+  // is no longer pending. The rows stay until the answer: the confirmation that shows a refusal sits
+  // in the header, which only these rows keep open.
+  const approveAllSessions = (confirmed: ConfirmedSessions) =>
     review(
       sessionList,
       [],
-      () =>
-        reviewEntries(
-          sessions.flatMap((session) => session.entryIds),
-          'approved',
-        ),
-      `${sessions.length} Zeiteinträge wurden genehmigt.`,
+      () => reviewEntries(confirmed.entryIds, 'approved'),
+      `${confirmed.count} Zeiteinträge wurden genehmigt.`,
       getEntryReviewErrorMessage,
     );
 
@@ -242,7 +237,6 @@ export function PendingApprovals({
     view,
     sessionList,
     changeRequestList,
-    sessions,
     setActionError,
     showBanner,
   });
@@ -260,7 +254,7 @@ export function PendingApprovals({
           isInitialLoading={isInitialLoading}
           loadFailed={Boolean(error) && allItems.length === 0}
           itemCount={allItems.length}
-          sessionCount={sessions.length}
+          sessions={sessions}
           approveAllSessions={approveAllSessions}
           onRefresh={view.refresh}
         />

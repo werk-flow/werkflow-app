@@ -28,9 +28,9 @@ export function ContextualDocumentsDeleteDialog({
       description={target ? getDeleteDescription(target) : ''}
       confirmLabel="In Papierkorb verschieben"
       variant="destructive"
+      closesAtOnce
       onConfirm={() => {
         if (target) onConfirm(target);
-        return Promise.resolve(null);
       }}
     />
   );

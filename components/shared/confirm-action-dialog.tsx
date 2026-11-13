@@ -21,11 +21,58 @@ import { logError } from '@/lib/logging';
 const UNEXPECTED_FAILURE = 'Das hat nicht geklappt. Bitte versuche es erneut.';
 
 /**
+ * What the confirm does. By default it awaits the request: `onConfirm`
+ * answers `null` when the step is done, or the German message to show.
+ *
+ * `closesAtOnce` is the one exception (werkflow-design: Dialog close and
+ * success): the confirmation closes on the click because the surface under it
+ * shows the step, its pending state and its failure, such as an optimistic
+ * row that comes back with its error. It never fits a step whose failure
+ * would show nowhere else.
+ */
+export type ConfirmActionStep =
+  | { closesAtOnce?: false; onConfirm: () => Promise<string | null> }
+  | { closesAtOnce: true; onConfirm: () => void };
+
+/** Runs the confirm, closes on success, and keeps the failure while the dialog stays open. */
+function useConfirmStep(step: ConfirmActionStep, isOpen: boolean, close: () => void) {
+  const [error, setError] = useState<string | null>(null);
+  // A closed dialog forgets its failure, also when the parent closed it.
+  const [shownOpen, setShownOpen] = useState(isOpen);
+  if (shownOpen !== isOpen) {
+    setShownOpen(isOpen);
+    if (!isOpen) setError(null);
+  }
+  const { run, isPending } = useServerAction(() =>
+    step.closesAtOnce ? Promise.resolve(null) : step.onConfirm(),
+  );
+
+  async function confirm() {
+    if (step.closesAtOnce) {
+      step.onConfirm();
+      close();
+      return;
+    }
+    setError(null);
+    let failure: string | null;
+    try {
+      failure = await run();
+    } catch (cause) {
+      logError('confirm action: the request failed', cause);
+      failure = UNEXPECTED_FAILURE;
+    }
+    if (failure === null) close();
+    else setError(failure);
+  }
+
+  return { confirm, isPending, error };
+}
+
+/**
  * A confirmation whose action runs a request: it stays open while the request
  * runs and after a failure, shows that failure in its footer, and closes only
- * on success (werkflow-design: Dialog close and success). `onConfirm` answers
- * `null` when the step is done, or the German message to show. A thrown
- * request shows a general message and keeps the dialog open.
+ * on success (werkflow-design: Dialog close and success). A thrown request
+ * shows a general message and keeps the dialog open.
  *
  * Open it with `trigger`, or control it with `open` and `onOpenChange`. Lint
  * rule `ui/confirm-action-stays-open` sends every confirm with work here.
@@ -40,8 +87,8 @@ export function ConfirmActionDialog({
   confirmLabel,
   variant = 'default',
   confirmDisabled = false,
-  onConfirm,
-}: {
+  ...step
+}: ConfirmActionStep & {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   /** The control that opens the dialog; it takes the trigger's role through `asChild`. */
@@ -53,36 +100,14 @@ export function ConfirmActionDialog({
   confirmLabel: ReactNode;
   variant?: VariantProps<typeof buttonVariants>['variant'];
   confirmDisabled?: boolean;
-  onConfirm: () => Promise<string | null>;
 }) {
   const [ownOpen, setOwnOpen] = useState(false);
   const isOpen = open ?? ownOpen;
-  const [error, setError] = useState<string | null>(null);
-  // A closed dialog forgets its failure, also when the parent closed it.
-  const [shownOpen, setShownOpen] = useState(isOpen);
-  if (shownOpen !== isOpen) {
-    setShownOpen(isOpen);
-    if (!isOpen) setError(null);
-  }
-  const { run, isPending } = useServerAction(onConfirm);
-
   function changeOpen(next: boolean) {
     setOwnOpen(next);
     onOpenChange?.(next);
   }
-
-  async function confirm() {
-    setError(null);
-    let failure: string | null;
-    try {
-      failure = await run();
-    } catch (cause) {
-      logError('confirm action: the request failed', cause);
-      failure = UNEXPECTED_FAILURE;
-    }
-    if (failure === null) changeOpen(false);
-    else setError(failure);
-  }
+  const { confirm, isPending, error } = useConfirmStep(step, isOpen, () => changeOpen(false));
 
   return (
     <AlertDialog open={isOpen} onOpenChange={changeOpen} pending={isPending}>

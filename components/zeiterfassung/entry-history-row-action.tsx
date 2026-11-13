@@ -113,12 +113,10 @@ function WithdrawSubmissionButton({
       description={`Alle Einträge deines Nachtrags vom ${day} werden zurückgezogen und nicht mehr geprüft. Du kannst die Zeit danach neu nachtragen.`}
       confirmLabel="Zurückziehen"
       variant="destructive"
-      // The running withdrawal replaces this row, the dialog with it, so the confirmation closes at
-      // once: the row shows the spinner, and a failure shows above the list after it reads again.
-      onConfirm={() => {
-        withdraw(entry);
-        return Promise.resolve(null);
-      }}
+      // The running withdrawal replaces this row, the dialog with it: the row shows the spinner, and a
+      // failure shows above the list after it reads again.
+      closesAtOnce
+      onConfirm={() => withdraw(entry)}
     />
   );
 }

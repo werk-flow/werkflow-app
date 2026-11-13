@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 
+import type { ConfirmActionStep } from '@/components/shared/confirm-action-dialog';
 import { describeFailure } from '@/lib/action-messages';
 import { permanentlyDeleteDocument } from '@/lib/documents/actions';
 import { deleteDocumentFolder } from '@/lib/documents/folder-actions';
@@ -18,13 +19,13 @@ const PERMANENT_DELETE_ERROR_MESSAGES = {
     'Die Aufbewahrungsfrist der Datei läuft noch. Bis zu ihrem Ende lässt sie sich nicht endgültig löschen.',
 } satisfies Record<string, string>;
 
-export type DocumentConfirmDialogState = {
-  title: string;
-  description: string;
-  confirmLabel: string;
-  /** Answers the failure to show in the confirmation, or null once the step is done. */
-  onConfirm: () => Promise<string | null>;
-} | null;
+export type DocumentConfirmDialogState =
+  | ({
+      title: string;
+      description: string;
+      confirmLabel: string;
+    } & ConfirmActionStep)
+  | null;
 
 // Folders have no restore action, so a selection that contains one reports
 // without offering „Rückgängig".
@@ -155,12 +156,13 @@ function selectionDeleteConfirmation({
     description: `${selectedItemLabel} ${itemCount === 1 ? 'wird' : 'werden'} in den Papierkorb verschoben.`,
     confirmLabel: 'Einträge löschen',
     // The trash is undoable: the rows leave at once and a failed one comes back with its error.
+    closesAtOnce: true,
     onConfirm: () => {
       clearSelection();
       // Documents only: the undoable path.
       if (foldersToDelete.length === 0) {
         void trashDocuments(documentsToDelete);
-        return Promise.resolve(null);
+        return;
       }
 
       void runDocumentMutationFlow(() =>
@@ -170,7 +172,6 @@ function selectionDeleteConfirmation({
           foldersToDelete,
         }),
       );
-      return Promise.resolve(null);
     },
   };
 }
@@ -200,10 +201,10 @@ export function useDocumentDeleteActions({
       description: `„${document.displayName}“ wird in den Papierkorb verschoben und kann dort wiederhergestellt werden.`,
       confirmLabel: 'Datei löschen',
       // Undoable: the row leaves at once and comes back with its error on a failure.
+      closesAtOnce: true,
       onConfirm: () => {
         removeDocumentsFromSelection([document.id]);
         void trashDocuments([document]);
-        return Promise.resolve(null);
       },
     });
   }
