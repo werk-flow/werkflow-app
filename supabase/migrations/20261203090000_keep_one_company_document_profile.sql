@@ -299,7 +299,9 @@ begin
     stationery_following_bottom_mm = v_new.stationery_following_bottom_mm,
     stationery_following_left_mm = v_new.stationery_following_left_mm,
     version = v_old.version + 1, updated_at = now(), updated_by = p_actor_id
-  where profile.organization_id = p_organization_id;
+  -- The helper locked the row and the check above compared its version; the
+  -- filter states that inline.
+  where profile.organization_id = p_organization_id and profile.version = p_expected_version;
   return v_old.version + 1;
 end;
 $$;

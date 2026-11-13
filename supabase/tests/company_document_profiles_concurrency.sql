@@ -110,7 +110,7 @@ begin
       + (select count(*) from public.company_document_profile_events
         where organization_id = '37900000-0000-4000-8000-000000000010')
   $read$) as profile(rows integer);
-  if v_rows <> 0 then
+  if v_rows is distinct from 0 then
     raise exception 'a refused logo change wrote % rows', v_rows;
   end if;
 end $$;

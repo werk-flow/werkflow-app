@@ -181,8 +181,8 @@ begin
 
   -- The first save creates the profile and writes one history row per changed field.
   v_version := public.save_company_document_profile(v_office, v_org, 0, v_filled, gen_random_uuid());
-  if v_version <> 1 then raise exception 'the first save answered version %', v_version; end if;
-  if (select count(*) from public.company_document_profile_events where organization_id = v_org) <> 15 + 2 then
+  if v_version is distinct from 1 then raise exception 'the first save answered version %', v_version; end if;
+  if (select count(*) from public.company_document_profile_events where organization_id = v_org) is distinct from 15 + 2 then
     raise exception 'the first save wrote % history rows',
       (select count(*) from public.company_document_profile_events where organization_id = v_org);
   end if;
@@ -215,8 +215,8 @@ begin
 
   -- A change writes exactly its own history row.
   v_version := public.save_company_document_profile(v_admin, v_org, 1, v_filled || '{"offer_validity_days": 14}', v_save_key);
-  if v_version <> 2 or (select offer_validity_days from public.company_document_profiles
-    where organization_id = v_org) <> 14
+  if v_version is distinct from 2 or (select offer_validity_days from public.company_document_profiles
+    where organization_id = v_org) is distinct from 14
   then raise exception 'the second save did not apply'; end if;
   if (select count(*) from public.company_document_profile_events
     where organization_id = v_org and actor_id = v_admin) <> 1
@@ -229,9 +229,9 @@ begin
   -- now old. Another attempt from that version is refused.
   v_events := (select count(*) from public.company_document_profile_events where organization_id = v_org);
   v_version := public.save_company_document_profile(v_admin, v_org, 1, v_filled || '{"offer_validity_days": 14}', v_save_key);
-  if v_version <> 2
-    or (select version from public.company_document_profiles where organization_id = v_org) <> 2
-    or (select count(*) from public.company_document_profile_events where organization_id = v_org) <> v_events
+  if v_version is distinct from 2
+    or (select version from public.company_document_profiles where organization_id = v_org) is distinct from 2
+    or (select count(*) from public.company_document_profile_events where organization_id = v_org) is distinct from v_events
   then raise exception 'a repeated save answered % or wrote again', v_version; end if;
   begin
     perform public.save_company_document_profile(v_admin, v_org, 1, v_filled || '{"offer_validity_days": 15}', gen_random_uuid());
@@ -344,7 +344,7 @@ begin
   v_events := (select count(*) from public.company_document_profile_events where organization_id = v_org);
   perform public.replace_company_document_file(v_office, v_org, 'stationery_first',
     v_org || '/briefpapier/d/stationery_first', v_org || '/briefpapier/h/stationery_following', null, null, null, v_remove_key);
-  if (select count(*) from public.company_document_profile_events where organization_id = v_org) <> v_events then
+  if (select count(*) from public.company_document_profile_events where organization_id = v_org) is distinct from v_events then
     raise exception 'a repeated removal wrote again';
   end if;
   if exists (select 1 from public.company_document_profiles where organization_id = v_org
@@ -355,7 +355,7 @@ begin
     v_org || '/briefpapier/h/stationery_following')) <> 3
   then raise exception 'the removed stationery was not queued'; end if;
   -- A file save leaves the details' version alone, so an open form still saves.
-  if (select version from public.company_document_profiles where organization_id = v_org) <> 2 then
+  if (select version from public.company_document_profiles where organization_id = v_org) is distinct from 2 then
     raise exception 'a file change moved the profile version';
   end if;
 
@@ -388,7 +388,7 @@ begin
   )));
   if (select count(*) from public.organization_export_files
     where organization_id = v_org and document_id is null) <> 2
-    or (select file_bytes from public.organization_exports where organization_id = v_org) <> 3072 + 4096
+    or (select file_bytes from public.organization_exports where organization_id = v_org) is distinct from 3072 + 4096
   then raise exception 'the export did not plan the profile files with their sizes'; end if;
 
   -- Another organization's profile stays untouched by all of the above.
