@@ -160,11 +160,12 @@ The [freshness contract](realtime-and-caching.md) owns the product targets. [Per
 
 ## Failures
 
-1. Open the failed browser group's `error-context.md`, screenshot and trace under `.agent-logs/playwright-runs/<run-key>/`. The verification log names the run key; `.agent-logs/test-server/` holds server output. Any other group's log is under `.agent-logs/verification/<report-id>/`.
-2. Find and fix the cause. If the test seems wrong, compare it with the catalog clause and feature spec first. Add prevention at the highest reachable tier of the [enforcement ladder](../decisions/0005-enforcement-ladder.md).
-3. Classify: `bun run test:runs classify <run-key> <class> "<cause>" "<prevention>"`. A group without a run key takes its group id, or `<group-id>@<report-id>` for a failed attempt in that report.
-4. Clean the retained world: `bun run test:runs cleanup <run-key>`.
-5. Run `bun run test:verify`. Repair mode selects the failed groups; their pass closes the repair.
+1. Read the open `ci-alert` issues first: a failure in a group the pinned `CI alert: main` names is that alert's, not yours.
+2. Open the failed browser group's `error-context.md`, screenshot and trace under `.agent-logs/playwright-runs/<run-key>/`. The verification log names the run key; `.agent-logs/test-server/` holds server output. Other groups log to `.agent-logs/verification/<report-id>/`.
+3. Find and fix the cause. If the test seems wrong, compare it with the catalog clause and feature spec first. Add prevention at the highest reachable tier of the [enforcement ladder](../decisions/0005-enforcement-ladder.md).
+4. Classify: `bun run test:runs classify <run-key> <class> "<cause>" "<prevention>"`. A group without a run key takes its id, or `<group-id>@<report-id>` for one failed attempt.
+5. Clean the retained world: `bun run test:runs cleanup <run-key>`.
+6. Run `bun run test:verify`: [repair mode](#repair-mode) reruns the failed groups.
 
 Classes:
 
@@ -174,7 +175,7 @@ Classes:
 - **authoring**: test code that never passed on its current content fails. Refused for test inputs that passed.
 - **accepted-change**: an accepted design made an `audit:visual` reference stale.
 
-Only `environment` allows one retry on unchanged inputs: a browser group's after a passing diagnostic and the cleanup, any other group's at once. A local run's diagnostic replays the failed test on its retained world (`--reuse-run`). If the test wrote to it, or ran on Boat, whose world dies with the machine, replay the group on a fresh world (`--fresh-for`). A second failure on those inputs needs a change.
+Only `environment` allows one retry on unchanged inputs: a browser group's after a passing diagnostic and the cleanup, any other group's at once. The diagnostic replays the failed test on its retained world (`--reuse-run`), or on a fresh one (`--fresh-for`) when the test wrote to it or ran on Boat. A second failure on those inputs needs a change.
 
 A preflight failure that creates no run, or a heavy group held back [without Boat](boat-verification.md#fallback), is blocked verification, not a product failure. If the host kills a run, confirm the lock owner is gone, then run `bun run test:runs recover-interrupted <run-key> "<observed interruption>"`.
 

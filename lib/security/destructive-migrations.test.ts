@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { splitTopLevel } from '../conventions/database-functions';
 import { repositoryRoot } from '../conventions/product-sources';
 
 // Tier 2 for the expand-only rule of the migration rule
@@ -49,21 +50,6 @@ const TIGHTENING_STATEMENTS: readonly RegExp[] = [
   /^alter\s+table\s+(?:only\s+)?(?:if\s+exists\s+)?([\w."]+)\b.*\b(?:enable|force)\s+row\s+level\s+security\b/,
 ];
 const ALTERED_TABLE = /^alter\s+table\s+(?:only\s+)?(?:if\s+exists\s+)?([\w."]+)/;
-/** The comma-separated actions of an ALTER TABLE, split only outside parentheses: `numeric(10,2)` stays whole. */
-function topLevelActions(text: string): string[] {
-  const actions: string[] = [];
-  let depth = 0;
-  let current = '';
-  for (const char of text) {
-    if (char === '(') depth += 1;
-    if (char === ')') depth -= 1;
-    if (char === ',' && depth === 0) {
-      actions.push(current.trim());
-      current = '';
-    } else current += char;
-  }
-  return [...actions, current.trim()];
-}
 const ADDED_COLUMN = /(?:^|\s)add\s+(?:column\s+)?(?:if\s+not\s+exists\s+)?(.+)$/;
 /** Only a plain CREATE TABLE proves the table is new: IF NOT EXISTS may meet an existing one. */
 const CREATED_TABLE = /^create\s+table\s+(?!if\s+not\s+exists\b)([\w."]+)/;
@@ -144,16 +130,21 @@ function topLevelStatements(sql: string): Statement[] {
   return statements;
 }
 
-/** `line: statement` for every statement the previous release may not survive that lacks its marker. */
-function unmarkedDestructiveStatements(sql: string, releaseRule = false): string[] {
-  const marker = releaseRule ? RELEASE_MARKER : MARKER;
-  const statements = topLevelStatements(sql);
-  const created = new Set(
+/** The tables a plain CREATE TABLE of these statements creates. */
+function createdTables(statements: readonly Statement[]): Set<string> {
+  return new Set(
     statements.flatMap((statement) => {
       const name = CREATED_TABLE.exec(statement.text)?.[1];
       return name ? [tableName(name)] : [];
     }),
   );
+}
+
+/** `line: statement` for every statement the previous release may not survive that lacks its marker. */
+function unmarkedDestructiveStatements(sql: string, releaseRule = false): string[] {
+  const marker = releaseRule ? RELEASE_MARKER : MARKER;
+  const statements = topLevelStatements(sql);
+  const created = createdTables(statements);
   const onExistingTable = (pattern: RegExp, text: string): boolean => {
     const name = pattern.exec(text)?.[1];
     return name !== undefined && !created.has(tableName(name));
@@ -161,7 +152,7 @@ function unmarkedDestructiveStatements(sql: string, releaseRule = false): string
   // A new NOT NULL column without a default, in either order of its clauses, on a table that existed.
   const addsRequiredColumn = (text: string): boolean =>
     onExistingTable(ALTERED_TABLE, text) &&
-    topLevelActions(text).some((action) => {
+    splitTopLevel(text).some((action) => {
       const column = ADDED_COLUMN.exec(action)?.[1];
       return (
         column !== undefined &&
@@ -181,6 +172,29 @@ function unmarkedDestructiveStatements(sql: string, releaseRule = false): string
             addsRequiredColumn(statement.text))),
     )
     .filter((statement) => !marker.test(statement.leadingComments))
+    .map((statement) => `${statement.line}: ${statement.text.slice(0, 100)}`);
+}
+
+const ADDED_CHECK = /^add\s+(?:constraint\s+(?:"(?:[^"]|"")*"|\S+)\s+)?check\b/;
+
+/** `line: statement` for every CHECK added to an existing table without NOT VALID. */
+function validatedChecksOnExistingTables(sql: string): string[] {
+  const statements = topLevelStatements(sql);
+  const created = createdTables(statements);
+  return statements
+    .filter((statement) => {
+      const altered = ALTERED_TABLE.exec(statement.text);
+      return (
+        altered?.[1] !== undefined &&
+        !created.has(tableName(altered[1])) &&
+        splitTopLevel(statement.text.slice(altered[0].length)).some(
+          (action) =>
+            (ADDED_CHECK.test(action) && !/\bnot\s+valid$/.test(action)) ||
+            // A column's own CHECK cannot be NOT VALID: add it as a separate constraint.
+            (/^add\s/.test(action) && !ADDED_CHECK.test(action) && /\bcheck\s*\(/.test(action)),
+        )
+      );
+    })
     .map((statement) => `${statement.line}: ${statement.text.slice(0, 100)}`);
 }
 
@@ -275,6 +289,68 @@ describe('destructive migration statements', () => {
     ].join('\n');
     expect(unmarkedDestructiveStatements(named, true)).toEqual([
       '4: drop function public.older_helper(uuid)',
+    ]);
+  });
+});
+
+// Tier 2: a CHECK added to an existing table is added NOT VALID. A validated
+// ADD CONSTRAINT scans every row under an ACCESS EXCLUSIVE lock, and a row that
+// DEV or PROD holds but the local stack does not fails the push after the
+// merge. NOT VALID checks every new write as before; a later VALIDATE
+// CONSTRAINT checks the old rows without blocking writes. The rule applies to
+// every migration after NOT_VALID_REQUIRED_AFTER, the newest on main when it
+// landed. Never raise it.
+const NOT_VALID_REQUIRED_AFTER = '20261201180000';
+
+describe('checks on existing tables', () => {
+  test('a new migration adds a CHECK to an existing table NOT VALID', () => {
+    const directory = join(repositoryRoot, 'supabase/migrations');
+    const offenders = readdirSync(directory)
+      .filter((file) => file.endsWith('.sql') && file.slice(0, 14) > NOT_VALID_REQUIRED_AFTER)
+      .flatMap((file) =>
+        validatedChecksOnExistingTables(readFileSync(join(directory, file), 'utf8')).map(
+          (statement) => `supabase/migrations/${file}:${statement}`,
+        ),
+      );
+    expect(offenders, 'End each `add constraint … check (…)` on an existing table with `not valid`').toEqual(
+      [],
+    );
+  });
+
+  // The flagged statements of two review findings, and their landed fixes.
+  test('the probe flags a validated CHECK on an existing table only', () => {
+    const flagged = [
+      'alter table public.job_material_lines',
+      '  add constraint job_material_lines_source_complete',
+      '    check ((source_kind is null) = (source_id is null)),',
+      '  add constraint job_material_lines_source_kind_format',
+      "    check (source_kind ~ '^[a-z][a-z0-9_]{0,62}$');",
+      'alter table public.attention_events',
+      '  add constraint attention_events_source_type_check check (',
+      "    source_type = any (array['time_session_approval', 'client_request_callback_overdue'])",
+      '  );',
+      'create table public.fresh (id uuid primary key, name text);',
+      "alter table public.fresh add constraint fresh_name_check check (name <> '');",
+      "alter table public.jobs add column note text, add constraint jobs_note_check check (note <> '') not valid;",
+      'alter table public.jobs add column quantity integer default -1 check (quantity > 0);',
+      'alter table public.jobs add constraint "positive quantity" check (quantity > 0) not valid;',
+      'alter table public.jobs add constraint "the ""real"" note" check (note <> \'\') not valid;',
+      "alter table public.jobs add constraint jobs_note_comma check (note not in (',', 'add column x int check (')) not valid;",
+    ].join('\n');
+    expect(validatedChecksOnExistingTables(flagged)).toEqual([
+      '1: alter table public.job_material_lines add constraint job_material_lines_source_complete check ((sour',
+      '6: alter table public.attention_events add constraint attention_events_source_type_check check ( source',
+      '13: alter table public.jobs add column quantity integer default -1 check (quantity > 0)',
+    ]);
+    const fixed = flagged
+      .replace("{0,62}$');", () => "{0,62}$') not valid;")
+      .replace('(source_id is null)),', '(source_id is null)) not valid,')
+      .replace(
+        "'client_request_callback_overdue'])\n  );",
+        "'client_request_callback_overdue'])\n  ) not valid;",
+      );
+    expect(validatedChecksOnExistingTables(fixed)).toEqual([
+      '13: alter table public.jobs add column quantity integer default -1 check (quantity > 0)',
     ]);
   });
 });
