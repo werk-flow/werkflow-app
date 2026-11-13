@@ -376,8 +376,8 @@
           "target": "requests",
           "from": { "reference": 59, "tolerance": 1 },
           "to": { "reference": 57, "tolerance": 1 },
-          "runKeys": ["2026-11-13T010222505Z-e054f8"],
-          "reason": null
+          "runKeys": ["2026-11-13T073843350Z-d01ff1"],
+          "reason": "Merged with main 5100c6de, the field cold start loads 41 script files instead of 43 (main alone: 42, 58 requests); the five job prefetches stay. Every other request shape (the API and Supabase reads, route, document, fonts, images, stylesheets) and every backend read by path match main 8783c979 and this branch before the merge (c0ea3439). The /auftraege entry chunks of the three builds name both files: one goes with main's own start-up, which since #382 (decision 13) loads the activity fields and their alarm-clock icon on first use and since #405 keeps the member-removal dialog out; the other is bundling: all 564 start-up modules of main 5100c6de stay in the start-up, and Turbopack packs five of main's (app) layout chunks with this PR's two Leistungen skeleton modules (the org-switch overlay's map) into four (1,740,600 to 1,743,228 B over all entry files)."
         }
       ]
     },
@@ -1550,8 +1550,8 @@
           "target": "requests",
           "from": { "reference": 53, "tolerance": 1 },
           "to": { "reference": 51, "tolerance": 1 },
-          "runKeys": ["2026-11-13T010222505Z-54de8f"],
-          "reason": null
+          "runKeys": ["2026-11-13T073843350Z-996ca3"],
+          "reason": "Merged with main 5100c6de, the office cold start loads 35 script files instead of 37 (main alone: 36, 52 requests). Every other request shape (the API and Supabase reads, route, document, fonts, images, stylesheets) and every backend read by path match main 8783c979; against this branch before the merge (c0ea3439) one read differs by main's #391: two read_manager_attention_sets calls replace two list_open_request_attention calls. The /auftraege entry chunks of the three builds name both files: one goes with main's own start-up, which since #382 (decision 13) loads the activity fields and their alarm-clock icon on first use and since #405 keeps the member-removal dialog out; the other is bundling: all 564 start-up modules of main 5100c6de stay in the start-up, and Turbopack packs five of main's (app) layout chunks with this PR's two Leistungen skeleton modules (the org-switch overlay's map) into four (1,740,600 to 1,743,228 B over all entry files)."
         }
       ]
     },
