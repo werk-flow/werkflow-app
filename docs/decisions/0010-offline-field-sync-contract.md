@@ -287,10 +287,12 @@ Differences from the matrix and the iOS limits table above:
 
 ## Amendment 2026-11-13: the build writes the shell's version
 
-Decided for werk-flow/werkflow-planning#408. A phone replaces its offline shell only when `/sw.js` serves other bytes, and a hand-bumped version had already been missed in a release.
+Decided for werk-flow/werkflow-planning#408. A phone replaces its offline shell only when the service worker changes, and a version bumped by hand had already been missed in a release.
 
-- **Version.** `app/sw.js/route.ts` serves the worker source `lib/offline/service-worker.js` behind one line, `const SHELL_VERSION = "<id>";`. `next.config.ts` writes it at every build (`lib/offline/service-worker-script.ts`): the recorded build id of `bun run build`, which the test server and CI serve, or on Vercel the commit, `VERCEL_GIT_COMMIT_SHA`, a system variable Vercel sets at build time. A production build with neither fails. Outside a production build the version is `development`, and no worker registers there.
-- **Update.** Each deployed commit serves another worker, so the browser installs it at its next update check. It fills `werkflow-shell-<version>`, and its activation deletes every other cache under the `werkflow-` prefix, the previous shell included. A redeploy of the same commit keeps the version, and phones keep their shell. A release that leaves the shell unchanged still replaces it once: one fetch of the offline page and its files per phone.
-- **Delivery.** The route is prerendered at build time, reads no request, sets no cookie and answers `Cache-Control: no-cache`; `proxy.ts` does not run on it. The CSP's `worker-src 'self'` is unchanged. The script holds a build id or a public commit hash, no secret and no personal data.
-- **Unchanged.** Sign-out and the organization switch delete every cache under the prefix, whatever the version.
-- **Rejected: a recorded hash of the shell's inputs, checked in CI.** It works, but its line in the worker would change with most product PRs, and parallel PRs would invalidate each other's green runs.
+- **The build sets the version.** Every production build gives the worker its own version, so nobody bumps one by hand.
+- **A new commit replaces the shell.** Each deployed commit installs a new shell cache, and the new worker's activation removes every other `werkflow-` cache, the previous shell included.
+- **A redeploy keeps it.** A rebuild of the same commit keeps the version, so phones keep their shell.
+- **No id, no build.** A production build without a build id fails instead of shipping a changed shell under an earlier version.
+- **Rejected: a recorded hash of the shell's inputs, checked in CI.** Its line would change with most product PRs, and parallel PRs would invalidate each other's green runs.
+
+[Security](../technical/security.md#browser) and the code own the paths, the delivery headers and the cache deletion at a session end.
