@@ -22,6 +22,8 @@ const artifact: WorkArtifactDetail = {
   created_at: '2026-08-24T08:00:00+00:00',
   created_by: AUTHOR_ID,
   updated_at: '2026-08-24T08:00:00+00:00',
+  canLeadReview: false,
+  leadReadOnly: false,
   revisions: [
     {
       id: '00000000-0000-4000-8000-000000000002',
