@@ -165,7 +165,13 @@ describe('a day split across blocks', () => {
   const at = (minutesAfterSeven: number) =>
     new Date(Date.parse('2026-10-06T05:00:00.000Z') + minutesAfterSeven * 60_000).toISOString();
   /** Back-to-back blocks from 07:00 Berlin on Tuesday 6 October 2026, one job (or standby) each. */
-  const day = (blocks: Array<{ minutes: number; standby?: boolean }>): TimeEntry[] => {
+  type BlockShape = {
+    minutes: number;
+    standby?: boolean;
+    /** A break stamped inside the block: its start after the block's start, and its length. */
+    stampedBreak?: { after: number; minutes: number };
+  };
+  const day = (blocks: BlockShape[]): TimeEntry[] => {
     let offset = 0;
     return blocks.flatMap((block, index) => {
       const entry = (entryType: TimeEntry['entryType'], minutes: number): TimeEntry => ({
@@ -183,7 +189,17 @@ describe('a day split across blocks', () => {
         updatedAt: at(minutes),
         ...(block.standby ? { activityKind: 'standby' as const } : {}),
       });
-      const blockEntries = [entry('clock_in', offset), entry('clock_out', offset + block.minutes)];
+      const stamped = block.stampedBreak
+        ? [
+            entry('break_start', offset + block.stampedBreak.after),
+            entry('break_end', offset + block.stampedBreak.after + block.stampedBreak.minutes),
+          ]
+        : [];
+      const blockEntries = [
+        entry('clock_in', offset),
+        ...stamped,
+        entry('clock_out', offset + block.minutes),
+      ];
       offset += block.minutes;
       return blockEntries;
     });
@@ -210,6 +226,11 @@ describe('a day split across blocks', () => {
     ],
     ['three hours of standby before seven of work', [{ minutes: 180, standby: true }, { minutes: 420 }], 30],
     ['a block too short to show: 8:59:30 and 0:00:45', [{ minutes: 539.5 }, { minutes: 0.75 }], 45],
+    [
+      'a stamped 10-minute break in a 6:40 block, then 3:20 on another job',
+      [{ minutes: 400, stampedBreak: { after: 200, minutes: 10 } }, { minutes: 200 }],
+      45,
+    ],
   ])('%s: the calendar shows the break the totals deduct', (_label, blocks, breakMinutes) => {
     expect(breaks(day(blocks))).toEqual({ shown: breakMinutes, deducted: breakMinutes });
   });

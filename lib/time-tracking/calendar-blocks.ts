@@ -6,6 +6,7 @@ import { isBreakEndFollowedByClockIn } from './transition-pairs';
 import {
   getAutomaticBreakRanges,
   type BreakDayPosition,
+  type BreakPolicyValues,
   resolveBreakPolicyAtTimestamp,
   type OrganizationTimeTrackingSettings,
 } from './settings';
@@ -199,6 +200,17 @@ function buildSyntheticBreakEntry(
   };
 }
 
+/**
+ * Whether a block shows the rule's automatic breaks instead of its stamped
+ * ones. Under the automatic rule the totals deduct the automatic break from
+ * the day's presence, stamped breaks counted as presence, and the entry
+ * dialog shows the automatic breaks too; under the manual rule the stamped
+ * breaks are the breaks.
+ */
+function showsAutomaticBreaks(policy: BreakPolicyValues | null): policy is BreakPolicyValues {
+  return policy?.breakMode === 'automatic';
+}
+
 /** The first automatic break keeps the ids it had before the second step existed. */
 function autoBreakId(edge: 'start' | 'end', index: number): string {
   return index === 0 ? `auto-break-${edge}` : `auto-break-${index + 1}-${edge}`;
@@ -228,12 +240,10 @@ function getCalendarBlockDisplayBreaks(
   referenceDate = new Date(),
   settings?: OrganizationTimeTrackingSettings | null,
 ): WorkSessionBreak[] {
-  const actualBreaks = extractBreaks(block.sourceEntries);
-  if (actualBreaks.length > 0) {
-    return actualBreaks;
-  }
-
   const displayPolicy = resolveDisplayBreakPolicy(block, referenceDate, settings);
+  if (!showsAutomaticBreaks(displayPolicy)) {
+    return extractBreaks(block.sourceEntries);
+  }
   const displayEnd = block.end ? new Date(block.end) : referenceDate;
 
   return getAutomaticBreakRanges(block.start, displayEnd, displayPolicy, block.breakDayPosition).map(
@@ -265,12 +275,10 @@ function blockSegments(
   referenceDate: Date,
   settings: OrganizationTimeTrackingSettings | null | undefined,
 ): CalendarBlockSegment[] {
-  const actualBreaks = extractBreaks(block.sourceEntries);
-  if (actualBreaks.length > 0) {
+  const displayPolicy = resolveDisplayBreakPolicy(block, referenceDate, settings);
+  if (!showsAutomaticBreaks(displayPolicy)) {
     return block.segments;
   }
-
-  const displayPolicy = resolveDisplayBreakPolicy(block, referenceDate, settings);
   const displayEnd = block.end ? new Date(block.end) : referenceDate;
   const automaticBreaks = getAutomaticBreakRanges(
     block.start,
