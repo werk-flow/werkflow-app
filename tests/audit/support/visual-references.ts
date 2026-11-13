@@ -218,13 +218,12 @@ async function expectGeistTypography(page: Page): Promise<void> {
 }
 
 /**
- * In an update run, removes the reference image `name` when its text reference is missing or differs
- * from `text`, so the screenshot writes the image anew. An update rewrites an image only past its
- * pixel tolerance, and a changed word alone can stay under it: its image would still show the old one.
+ * Removes the reference image `name` when its text reference is missing or differs from `text`, so
+ * the screenshot writes the image anew. An update rewrites an image only past its pixel tolerance,
+ * and a changed word alone can stay under it: its image would still show the old one.
  */
 function dropImageOfChangedText(name: string, text: string): void {
   const info = test.info();
-  if (info.config.updateSnapshots === 'none') return;
   const textReference = info.snapshotPath(`${name}.txt`, { kind: 'snapshot' });
   if (existsSync(textReference) && readFileSync(textReference, 'utf8') === text) return;
   rmSync(info.snapshotPath(`${name}.png`, { kind: 'screenshot' }), { force: true });
@@ -244,7 +243,10 @@ export async function expectReference(
 ): Promise<void> {
   await expectGeistTypography(page);
   await normalizeText(page, replacements, options.calendarWeek ?? false);
-  dropImageOfChangedText(name, await viewportText(page));
+  // Only an update run writes references; every other run compares as before.
+  const update = test.info().config.updateSnapshots !== 'none';
+  const before = update ? await viewportText(page) : undefined;
+  if (before !== undefined) dropImageOfChangedText(name, before);
   await expect(page).toHaveScreenshot(`${name}.png`, {
     animations: 'disabled',
     caret: 'hide',
@@ -252,5 +254,9 @@ export async function expectReference(
     mask: [...(options.mask ?? [])],
     maxDiffPixelRatio: 0.002,
   });
-  expect(await viewportText(page)).toMatchSnapshot(`${name}.txt`);
+  const text = await viewportText(page);
+  // The image was kept or dropped for the text read before it: text that changed during the capture
+  // could pair an old image with a new text reference, so the update fails instead.
+  if (before !== undefined) expect(text, `${name}: the text held still during the capture`).toBe(before);
+  expect(text).toMatchSnapshot(`${name}.txt`);
 }
