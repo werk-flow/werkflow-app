@@ -91,7 +91,9 @@ begin
 
   if p_job_id is not null then
     select job.project_id into v_project_id from public.jobs job
-    where job.id = p_job_id and job.organization_id = p_organization_id;
+    where job.id = p_job_id and job.organization_id = p_organization_id
+    -- A job edit that moves the job to another project waits, so the line keeps the job's project.
+    for share;
     if not found then
       raise exception 'job_not_found';
     end if;
