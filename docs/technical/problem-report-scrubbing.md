@@ -43,7 +43,7 @@ The reporter then covers more (`lib/problem-reports/redaction.ts`). A box is kep
 
 The server keeps a scrubbed copy of each report's description and context beside the originals. Only this copy may leave WerkFlow as text, and only through the [hand-out](#hand-out).
 
-`lib/problem-reports/scrub/` holds the scrubber. `scrubStoredProblemReport(organizationId, reportId)` is its one entry. It reads the report and its organization's dictionary, and writes the copy with its state and rule version through `record_problem_report_scrub` in one call. `submitProblemReport` runs it after its answer, so the receipt never waits for the scrub or fails with it. The daily run (`/api/problem-report-retention`) runs it for every report that has its originals and no copy, before it deletes anything. The deletion periods bind, so the run deletes a due report's originals whether or not it has a copy. A report without one then keeps no text at all, and the next run sets it `nicht_bereinigbar`.
+`lib/problem-reports/scrub/` holds the scrubber. `scrubStoredProblemReport(organizationId, reportId)` is its one entry. It reads the report and its organization's dictionary, and writes the copy with its state and rule version through `record_problem_report_scrub` in one call. `submitProblemReport` runs it after its answer, so the receipt never waits for the scrub or fails with it. The daily run (`/api/problem-report-retention`) runs it, before it deletes anything, for every report that has its originals and no copy or a copy of older rules. The deletion periods bind, so the run deletes a due report's originals with or without a copy. A report without one then keeps no text at all, and the next run sets it `nicht_bereinigbar`.
 
 ### The dictionary
 
