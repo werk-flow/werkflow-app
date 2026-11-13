@@ -324,3 +324,7 @@ Decided for werk-flow/werkflow-planning#403 on the second round of its outside r
 - A save of a report draft takes the drafts' turn before it seals the draft, and keeps it through the online save and its cleanup, so a discard in another tab never falls between the seal and the request. A draft with photos leaves the turn before its own send, which takes the turn itself.
 - The save waits for the turn at most 10 seconds, as a discard does. When the bound passes first, it seals and saves nothing, never runs later, and says that a transfer is still running; the form keeps its input. A save whose turn began always finishes.
 - A discard runs the sources in their order, time events first. When the drafts' wait reaches its bound after the time events were deleted, the question lists what is still unsent and says that what it lists is not deleted; it never claims that nothing was.
+
+## Amendment 2026-11-13: an approved correction is recorded time
+
+Owner decision for werk-flow/werkflow-planning#447. The person's last recorded time, before which a captured event is `conflict` with `version_conflict`, includes the time of every current approved `Zeitkorrektur`. A late clock-in captured inside hours the office already approved is refused on the phone as „Konflikt“, so the hours never count twice.
