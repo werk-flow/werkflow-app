@@ -260,7 +260,7 @@ begin
   then
     raise exception 'invalid_input';
   end if;
-  if v_old.version <> p_expected_version then
+  if v_old.version is distinct from p_expected_version then
     raise exception 'profile_changed';
   end if;
 

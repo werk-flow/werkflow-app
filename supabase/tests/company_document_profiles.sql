@@ -199,6 +199,13 @@ begin
   exception when raise_exception then
     if sqlerrm <> 'profile_changed' then raise; end if;
   end;
+  -- Without an expected version, the save writes neither history nor details.
+  begin
+    perform public.save_company_document_profile(v_admin, v_org, null, v_filled || '{"city": "Mondstadt"}', gen_random_uuid());
+    raise exception 'a save without an expected version passed';
+  exception when raise_exception then
+    if sqlerrm <> 'profile_changed' then raise; end if;
+  end;
   begin
     perform public.save_company_document_profile(v_admin, v_org, 1, v_filled, gen_random_uuid());
     raise exception 'a save without a change passed';
