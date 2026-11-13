@@ -153,17 +153,28 @@ test('main that did not move since its full run gets none', () => {
   expect(decide(NOON)).toEqual({ run: 'false', reason: `${head} already has a full run.` });
 });
 
-test('a full run that started less than 3 hours ago, or still runs, holds the next one back', () => {
+test('a push sooner than 3 hours after the last full run waits for it, and a running one holds the next back', () => {
   const [, second] = writeCommits(3);
   writeFullRun(second ?? '', hoursBefore(NOON, 2.5), 'success');
   expect(decide(NOON)).toEqual({
-    run: 'false',
-    reason: `The full run on ${second} started 150 min ago; the next starts 3 hours after it.`,
+    run: 'wait',
+    reason: `The full run on ${second} started 150 min ago; the next starts at 12:30 in Berlin.`,
   });
+  expect(readFileSync(join(stub, 'output'), 'utf8')).toContain(`wait=${0.5 * HOUR}\n`);
   writeFullRun(second ?? '', hoursBefore(NOON, 5), 'running');
   expect(decide(NOON).reason).toBe(
     `The full run on ${second} is still running; a later push or schedule takes the newer commits.`,
   );
+});
+
+test('a push whose wait would end after 20:00 Berlin leaves its commits to the nightly', () => {
+  const [, second] = writeCommits(2);
+  // 18:30 Berlin; the full run started at 17:30, so the next would start at 20:30.
+  writeFullRun(second ?? '', '2026-11-13T16:30:00Z', 'success');
+  expect(decide('2026-11-13T17:30:00Z')).toEqual({
+    run: 'false',
+    reason: 'The next full run on main would start at 20:30 in Berlin; the nightly takes the newer commits.',
+  });
 });
 
 test('main without a full run on its last 100 commits gets one', () => {
@@ -252,6 +263,37 @@ test('the alert detail names the failed groups and the commits since the last gr
       '```',
       '',
     ].join('\n'),
+  );
+});
+
+test('a commit whose green full run a later red attempt replaced is still the last green one', () => {
+  const [head, second] = writeCommits(3);
+  writeFullRun(head ?? '', hoursBefore(NOON, 1), 'failure');
+  const attempts = [
+    {
+      name: 'Full run / Check',
+      status: 'completed',
+      conclusion: 'failure',
+      started_at: hoursBefore(NOON, 2),
+    },
+    {
+      name: 'Full run / Check',
+      status: 'completed',
+      conclusion: 'success',
+      started_at: hoursBefore(NOON, 6),
+    },
+  ];
+  writeFileSync(
+    join(stub, `checks/${second}.json`),
+    JSON.stringify({ check_runs: attempts.map((entry) => ({ ...entry, app: { slug: 'github-actions' } })) }),
+  );
+  const result = run('context', NOON);
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain(`Commits since the last green full run, on ${second?.slice(0, 9)} `);
+  expect(result.stdout).toContain(`\`\`\`text\n${head?.slice(0, 9)} Change 0\n\`\`\`\n`);
+  // The lookup asks for every attempt, not only the newest.
+  expect(readFileSync(join(stub, 'gh.log'), 'utf8')).toContain(
+    'check_name=Full%20run%20%2F%20Check&filter=all',
   );
 });
 

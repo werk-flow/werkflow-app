@@ -152,6 +152,12 @@ test('main gets a full run every 3 hours from 06:00 to 20:00 Berlin, and each pu
   expect(window?.slice(1)).toEqual(['06:00', '20:00', String(step)]);
   expect((first ?? 0) * 60).toBe(minutesOf(window?.[1] ?? ''));
   expect((last ?? 0) * 60).toBeLessThan(minutesOf(window?.[2] ?? ''));
+  // A push sooner than the interval waits it out in a job that outlasts it, then asks again on main.
+  const wait =
+    /\n {2}wait:\n[\s\S]*?timeout-minutes: (\d+)\n[\s\S]*?gh workflow run main-full-run\.yml --ref main\n/.exec(
+      mainFullRunWorkflow,
+    );
+  expect(Number(wait?.[1])).toBeGreaterThan(Number(step) * 60);
   // Two full runs on main never overlap: one run decides at a time, and none cancels another.
   expect(mainFullRunWorkflow).toContain(
     'group: main-full-run-${{ github.ref }}\n  cancel-in-progress: false\n',

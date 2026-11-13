@@ -4,7 +4,8 @@ name: Full run on main
 # plan selected shows within hours instead of at the nightly (werk-flow/werkflow-planning#413).
 # GitHub starts this repository's scheduled runs 4 to 10 hours late, so each push to main asks too.
 # .github/scripts/main-full-run.sh starts a full run only when main moved since the newest full run,
-# that run has ended, and it started 3 hours ago or more. The release reuses a green one on its commit.
+# that run has ended, and it started 3 hours ago or more. A push that comes sooner waits until then
+# and asks again on main's newest commit. The release reuses a green full run on its commit.
 # A red run opens or updates the issue "CI alert: full run on main", which names the failed groups and
 # the commits since the last green full run; the next green run closes it.
 on:
@@ -21,7 +22,7 @@ permissions:
   actions: read
 
 # One run decides at a time, so two pushes never start two full runs. A newer trigger replaces a
-# waiting one, which would have decided the same.
+# pending one, which would have decided the same; while a run waits, every later push is in its turn.
 concurrency:
   group: main-full-run-${{ github.ref }}
   cancel-in-progress: false
@@ -36,6 +37,7 @@ jobs:
       checks: read # find the newest full run
     outputs:
       run: ${{ steps.decide.outputs.run }}
+      wait: ${{ steps.decide.outputs.wait }}
     steps:
       # Only the script is read; no step needs the job token in .git/config.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -47,6 +49,25 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash .github/scripts/main-full-run.sh decide
+
+  wait:
+    name: Wait for the next full run
+    needs: decide
+    if: needs.decide.outputs.run == 'wait'
+    runs-on: ubuntu-24.04
+    # The wait is 3 hours at most (INTERVAL in the script); a job may last 6.
+    timeout-minutes: 190
+    permissions:
+      actions: write # dispatch this workflow; a dispatch is the one event the job token may start a run with
+    steps:
+      - name: Wait, then ask again on main's newest commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          WAIT: ${{ needs.decide.outputs.wait }}
+        run: |
+          sleep "$WAIT"
+          gh workflow run main-full-run.yml --ref main
 
   full:
     # The release reuses a green full run on the commit it ships by this check name,

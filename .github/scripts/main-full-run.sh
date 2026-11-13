@@ -6,10 +6,11 @@
 # A full run is ci.yml called from a job named `Full run` (nightly.yml, release.yml and
 # main-full-run.yml). Its jobs show on their commit as the check runs `Full run / …`.
 #
-# `decide` writes run=true|false and reason to $GITHUB_OUTPUT. A full run starts only from 06:00 to
-# 20:00 Berlin, only when main moved since the newest full run, and only when that run has ended and
-# started 3 hours ago or more. `context` prints the alert's detail: the groups that this run's failed
-# jobs report, and the commits since the newest green full run.
+# `decide` writes run=true|false|wait and reason to $GITHUB_OUTPUT. A full run starts only from 06:00
+# to 20:00 Berlin, only when main moved since the newest full run, and only when that run has ended and
+# started 3 hours ago or more. Before then the answer is `wait`, with the seconds left in `wait`, unless
+# the next start falls after 20:00. `context` prints the alert's detail: the groups that this run's
+# failed jobs report, and the commits since the newest green full run.
 # Needs GH_TOKEN, GITHUB_REPOSITORY and GITHUB_SHA; `context` also GITHUB_RUN_ID and GITHUB_SERVER_URL.
 set -euo pipefail
 
@@ -33,26 +34,41 @@ full_run() {
         [.[] | select(.name == "Full run / Check" and .status == "completed")][0].conclusion // "running")"'
 }
 
+# Whether a commit had a green `Full run / Check` in any attempt; a later red attempt hides none.
+passed() {
+  gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/$1/check-runs?check_name=Full%20run%20%2F%20Check&filter=all&per_page=100" \
+    --jq '.check_runs[] | select(.app.slug == "github-actions" and .name == "Full run / Check" and .conclusion == "success")
+      | .id' < /dev/null \
+    | grep --quiet .
+}
+
+# The Berlin time of an epoch as HH:MM. Python knows Berlin's clock changes, so the window stays right
+# in summer and in winter.
+berlin() {
+  python3 -c '
+import sys
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+print(datetime.fromtimestamp(int(sys.argv[1]), ZoneInfo("Europe/Berlin")).strftime("%H:%M"))
+' "$1"
+}
+
+# Usage: answer <true|false|wait> <reason> [<seconds to wait>]
 answer() {
   {
     echo "run=$1"
     echo "reason=$2"
+    test -z "${3:-}" || echo "wait=$3"
   } >> "$GITHUB_OUTPUT"
   echo "::notice title=Full run on main::$2"
   exit 0
 }
 
 decide() {
-  local now clock list commit state="" behind=0 started conclusion
+  local now clock list commit state="" behind=0 started conclusion due
   now="$(date +%s)"
-  # Python knows Berlin's clock changes, so the window stays right in summer and in winter.
-  clock="$(python3 -c '
-import sys
-from datetime import datetime
-from zoneinfo import ZoneInfo
-
-print(datetime.fromtimestamp(int(sys.argv[1]), ZoneInfo("Europe/Berlin")).strftime("%H:%M"))
-' "$now")"
+  clock="$(berlin "$now")"
   if [[ "$clock" < "$FIRST" || ! "$clock" < "$LAST" ]]; then
     answer false "It is ${clock} in Berlin; full runs on main start from ${FIRST} to ${LAST}."
   fi
@@ -68,13 +84,20 @@ print(datetime.fromtimestamp(int(sys.argv[1]), ZoneInfo("Europe/Berlin")).strfti
   test "$behind" -gt 0 || answer false "${GITHUB_SHA} already has a full run."
   test "$conclusion" != running \
     || answer false "The full run on ${commit} is still running; a later push or schedule takes the newer commits."
-  test $((now - started)) -ge "$INTERVAL" \
-    || answer false "The full run on ${commit} started $(((now - started) / 60)) min ago; the next starts 3 hours after it."
+  due=$((started + INTERVAL))
+  if test "$now" -lt "$due"; then
+    clock="$(berlin "$due")"
+    if [[ "$clock" < "$FIRST" || ! "$clock" < "$LAST" ]]; then
+      answer false "The next full run on main would start at ${clock} in Berlin; the nightly takes the newer commits."
+    fi
+    answer wait "The full run on ${commit} started $(((now - started) / 60)) min ago; the next starts at ${clock} in Berlin." \
+      $((due - now))
+  fi
   answer true "main moved ${behind} commits since the full run on ${commit}."
 }
 
 context() {
-  local jobs job log groups="" unread="" list commit subject state range="" green=""
+  local jobs job log groups="" unread="" list commit subject range="" green=""
   jobs="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100" \
     --jq '.jobs[] | select(.conclusion == "failure" or .conclusion == "cancelled" or .conclusion == "timed_out") | .id')"
   for job in $jobs; do
@@ -92,8 +115,7 @@ context() {
 
   list="$(commits)"
   while read -r commit subject; do
-    state="$(full_run "$commit")"
-    if test "${state#* }" = success; then
+    if passed "$commit"; then
       green="$commit"
       break
     fi
