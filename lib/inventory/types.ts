@@ -192,6 +192,7 @@ export type JobMaterialLine = {
   preferredLocationName: string | null;
   plannedQuantity: number;
   takenQuantity: number;
+  usedQuantity: number;
   returnedQuantity: number;
   billableQuantity: number;
   isBillable: boolean;
@@ -215,9 +216,47 @@ export type ProjectMaterialSummary = {
     unit: string;
     plannedQuantity: number;
     takenQuantity: number;
+    usedQuantity: number;
     returnedQuantity: number;
     billableQuantity: number;
   }>;
+};
+
+/**
+ * One recorded use of a material line, in the article's base unit. A
+ * correction has a negative quantity and names the event it corrects. The
+ * cost is the article's purchase price when the use was recorded, per
+ * `priceQuantity` base units, or null when the article had no price.
+ */
+export type MaterialUseEvent = {
+  id: string;
+  jobId: string | null;
+  projectId: string | null;
+  lineId: string;
+  itemId: string;
+  unit: string;
+  quantity: number;
+  cost: { amountCents: number; priceQuantity: number } | null;
+  correctsEventId: string | null;
+  note: string | null;
+  actorId: string;
+  createdAt: string;
+};
+
+/** The consumption facts of one material line for the office's billable review. */
+export type MaterialConsumptionLine = {
+  lineId: string;
+  jobId: string | null;
+  projectId: string | null;
+  itemId: string;
+  itemName: string;
+  unit: string;
+  plannedQuantity: number;
+  takenQuantity: number;
+  usedQuantity: number;
+  returnedQuantity: number;
+  isUnplanned: boolean;
+  events: MaterialUseEvent[];
 };
 
 export const INVENTORY_ITEM_TYPE_LABELS: Record<InventoryItemType, string> = {

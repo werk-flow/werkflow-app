@@ -10,6 +10,21 @@ import { getOrganizationByJoinCode, type PersistedJoinCode } from '../../golden/
 /** The search field of the material dialog's location picker, named by its placeholder. */
 const MATERIAL_LOCATION_SEARCH = 'Lager suchen …';
 
+/** Books a use on a material line: the dialog has no Lager, the stock stays as the take left it. */
+export async function bookMaterialUse(page: Page, openButton: Locator, quantity: string): Promise<void> {
+  const dialog = page.getByRole('dialog').filter({
+    has: page.getByRole('heading', { name: 'Verbrauch buchen' }),
+  });
+  await retryDialogTransaction({
+    open: () => openButton.click(),
+    dialog,
+    prepare: async () => {
+      await materialRowQuantity(dialog).fill(quantity);
+    },
+    submit: () => dialog.getByRole('button', { name: 'Verbrauch buchen' }).click(),
+  });
+}
+
 /** A presigned storage URL, as the document viewer's links and downloads use it. */
 export const SIGNED_URL_PATTERN = /^https?:\/\/.+X-Amz-(Algorithm|Signature)=/;
 
