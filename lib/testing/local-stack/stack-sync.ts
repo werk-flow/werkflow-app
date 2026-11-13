@@ -22,10 +22,12 @@ const GUARD_TRIGGERS = ['werkflow_main_only', 'werkflow_main_only_truncate'] as 
 
 /**
  * Installs the ledger trigger, again and again without harm. The Supabase CLI records a migration
- * in the same implicit transaction that ran its statements, so a refused ledger row rolls the
- * migration back: `supabase migration up`, `db push --local` and `migration repair --local` all
- * fail before they change the stack. The CLI prints the message and drops the hint, so the
- * message carries the sanctioned commands.
+ * in the same implicit transaction that ran its statements, so a refused ledger row rolls an
+ * ordinary migration back: `supabase migration up`, `db push --local` and `migration repair
+ * --local` fail before they change the stack. A migration that commits before its ledger row (its
+ * own `commit;`, `create index concurrently`, `-- pg-delta: transaction=false`) keeps what it ran;
+ * the hook refuses that route, and docs/technical/enforcement-ladder-backlog.md records the rest.
+ * The CLI prints the message and drops the hint, so the message carries the sanctioned commands.
  */
 export const GUARD_SQL = `
 begin;
