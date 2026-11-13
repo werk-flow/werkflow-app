@@ -116,7 +116,7 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve(
               {
                 filter:
-                  /^@\/(components\/organization\/organization-context|lib\/time-tracking\/segment-actions|components\/job-picker-modal)$/,
+                  /^@\/(components\/organization\/organization-context|components\/user\/user-profile-context|lib\/time-tracking\/segment-actions|components\/job-picker-modal)$/,
               },
               (args) => {
                 if (
@@ -129,6 +129,11 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
                 }
               },
             );
+            // The correction form is outside the clock's contract; the unsent section only opens it prefilled.
+            builder.onResolve({ filter: /^@\/components\/manual-entry-dialog$/ }, (args) => {
+              if (args.importer.endsWith('clock-unsent-events.tsx'))
+                return { path: join(import.meta.dir, 'clock-unsent-boundaries.tsx') };
+            });
             builder.onResolve({ filter: /^(next\/link|next\/navigation)$/ }, (args) => {
               if (args.importer.endsWith('sidebar-link.tsx'))
                 return { path: join(import.meta.dir, 'sidebar-service-boundaries.tsx') };
@@ -333,7 +338,7 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve(
               {
                 filter:
-                  /^(next\/navigation|@\/lib\/(subscription\/actions|settings\/email-change-actions|time-tracking\/(?:clock-state|entry-write|review)-actions|inventory\/actions|supabase\/client))$/,
+                  /^(next\/navigation|@\/lib\/(subscription\/actions|settings\/email-change-actions|time-tracking\/(?:clock-state|entry-write|review)-actions|inventory\/(?:material-use-)?actions|supabase\/client))$/,
               },
               () => ({
                 path: join(import.meta.dir, 'service-boundaries.ts'),

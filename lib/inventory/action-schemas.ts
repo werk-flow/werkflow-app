@@ -93,6 +93,17 @@ export const returnJobMaterialSchema = z.object({
   reason: nullableBoundedText(2000),
 });
 
+export const recordJobMaterialUseSchema = z.object({
+  lineId: uuidSchema,
+  quantity: amount,
+  note: nullableBoundedText(2000),
+});
+
+export const materialConsumptionTargetSchema = z.union([
+  z.object({ jobId: uuidSchema }),
+  z.object({ projectId: uuidSchema }),
+]);
+
 const importRowSchema = z.object({
   name: boundedText(300),
   itemType: boundedText(40).optional(),

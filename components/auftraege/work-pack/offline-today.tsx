@@ -20,12 +20,8 @@ import { ListRow } from '@/components/ui/list-row';
 import { SectionError } from '@/components/ui/section-error';
 import { useClientRead } from '@/hooks/use-client-read';
 import { offlineViewAt } from '@/lib/field-sync/device/today-address';
-import {
-  readTodayOnDevice,
-  sharedWipeGeneration,
-  type StoredToday,
-} from '@/lib/field-sync/device/today-store';
-import { TODAY_HOLDER_KEY, TODAY_WIPE_KEY } from '@/lib/field-sync/device/today-wipe';
+import { readTodayOnDevice, type StoredToday } from '@/lib/field-sync/device/today-store';
+import { TODAY_HOLDER_KEY, TODAY_WIPE_KEY, sharedWipeGeneration } from '@/lib/field-sync/device/today-wipe';
 import type { FieldSyncTodayAssignment } from '@/lib/field-sync/today-snapshot';
 import { jobDetailHref } from '@/lib/jobs/routes';
 import { logError } from '@/lib/logging';

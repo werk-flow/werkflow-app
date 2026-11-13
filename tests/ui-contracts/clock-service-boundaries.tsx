@@ -2,7 +2,7 @@ import type { ComponentProps } from 'react';
 import type { OrgContextValue } from '@/components/organization/organization-context';
 import type { TimeTransitionInput } from '@/lib/time-tracking/segment-actions';
 import type { TimeTransitionResult } from '@/lib/time-tracking/types';
-import { CLOCK_ORGANIZATION_ID, RUNNING_CLOCK_STATE } from './clock-state-fixture';
+import { CLOCK_ORGANIZATION_ID, CLOCK_USER_ID, RUNNING_CLOCK_STATE } from './clock-state-fixture';
 
 declare global {
   interface Window {
@@ -10,6 +10,8 @@ declare global {
       transitions: TimeTransitionInput[];
       directResult: TimeTransitionResult | null;
       resolveTransition: (() => void) | null;
+      /** The online clock call fails on its way, as a lost connection does. */
+      failTransition?: boolean;
       /** The next transition fails as the server would refuse it. */
       refuse?: boolean;
     };
@@ -29,12 +31,19 @@ export function useOrganization(): Pick<OrgContextValue, 'activeOrgId' | 'active
   };
 }
 
+/** The signed-in person, as far as the clock's provider reads the profile. */
+export function useUserProfile(): { profile: { id: string } } {
+  return { profile: { id: CLOCK_USER_ID } };
+}
+
 export async function transitionTimeActivity(input: TimeTransitionInput): Promise<TimeTransitionResult> {
   window.clockContract.transitions.push(input);
   await new Promise<void>((resolve) => {
     window.clockContract.resolveTransition = resolve;
   });
   window.clockContract.resolveTransition = null;
+  // Fails when the contract releases it, as a connection that drops after a while.
+  if (window.clockContract.failTransition) throw new TypeError('Failed to fetch');
   if (window.clockContract.refuse) return { success: false, error: 'time_transition_failed' };
   return {
     success: true,

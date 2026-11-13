@@ -35,6 +35,8 @@ import {
   jobMaterialLineAction,
   materialReturnedText,
   materialTakenText,
+  materialLinePendingStatus,
+  materialUsedText,
   openItemRowAction,
   pendingLocationStatus,
   planMaterialOnDetailPage,
@@ -43,6 +45,7 @@ import {
 } from '../../golden/support/steps/inventory';
 import { projectQualificationSection } from '../../golden/support/steps/qualifications';
 import {
+  expectGone,
   SHARED_COPY,
   selectFromSearchable,
   testData,
@@ -50,7 +53,7 @@ import {
   visibleText,
 } from '../../golden/support/steps/shared';
 import { createJob, createProject } from '../../golden/support/steps/work';
-import { bookMaterialDialog } from '../support/a1-steps';
+import { bookMaterialDialog, bookMaterialUse } from '../support/a1-steps';
 
 test.describe('A1 Inventar @AUDIT-W1-A1', () => {
   test('A1-39/A1-42: Material planen, geplant und ungeplant entnehmen, Projekt summiert', async ({
@@ -93,6 +96,19 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
       JOB_MATERIAL_ACTIONS.take.heading,
       '2',
     );
+    // A use moves no stock: the material left the Lager at the take.
+    const stockBeforeUse = await getInventoryLedgerState(
+      world.orgId,
+      world.inventory.itemId,
+      world.inventory.locationId,
+    );
+    await bookMaterialUse(employeePage, jobMaterialLineAction(materialLine, 'use'), '1');
+    // The line shows the use at once; its pending mark clears only after the write and the fresh read.
+    await expectGone(materialLinePendingStatus(materialLine));
+    await expect(materialLine).toContainText(materialUsedText(1));
+    expect(
+      await getInventoryLedgerState(world.orgId, world.inventory.itemId, world.inventory.locationId),
+    ).toEqual(stockBeforeUse);
     await bookMaterialDialog(
       employeePage,
       jobMaterialLineAction(materialLine, 'return'),

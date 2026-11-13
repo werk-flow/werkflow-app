@@ -5,8 +5,8 @@
 // every cold start needs stay in the app shell: a chunk loaded after the load event still costs
 // the lab's cold start a request and its bytes.
 //
-// A lazy load can fail (a lost connection, a new deployment), so each `import()` of a module
-// under lib/offline/ is awaited (or returned) inside a try block with a catch clause in its own
+// A lazy load can fail (a lost connection, a new deployment), so each `import()` of an offline
+// module is awaited (or returned) inside a try block with a catch clause in its own
 // function, or sits in a function the module calls only that way: a sign-out or switch whose
 // load fails shows its error instead of stopping silently.
 //
@@ -28,11 +28,35 @@ const CACHE_CLEAR_MODULE = 'lib/offline/service-worker-caches.ts';
 /** The only module the cache clear may import: every startup chunk already carries it. */
 const CACHE_CLEAR_IMPORTS = ['@/lib/logging'];
 
-/** The offline modules that load lazily: later the offline data, and the iOS install hint. */
+/**
+ * The time outbox, the sync runner, the unsent-work check and their views
+ * (werk-flow/werkflow-planning#319). The clock dock and the menu sign-out sit in chunks every page
+ * loads at start, so they reach these only through `import()`. The offline page is a bundle of its
+ * own and imports its clock statically.
+ */
+const UNSENT_WORK_MODULES: readonly string[] = [
+  'app/offline/page.tsx',
+  'components/clock-offline.tsx',
+  'components/clock-unsent-events.tsx',
+  'components/clock-unsent-list.tsx',
+  'components/shared/unsent-work-prompt.tsx',
+  'lib/field-sync/device/clock-device.ts',
+  'lib/field-sync/device/clock-outbox.ts',
+  'lib/field-sync/device/kept-clock-actions.ts',
+  'lib/field-sync/device/registrations.ts',
+  'lib/field-sync/device/sync-runner.ts',
+  'lib/field-sync/device/time-outbox-send.ts',
+  'lib/field-sync/device/time-outbox-store.ts',
+  'lib/field-sync/device/time-outbox.ts',
+  'lib/field-sync/device/unsent-work.ts',
+];
+
+/** The offline modules that load lazily: the unsent work of a phone, and the iOS install hint. */
 function isOfflineModule(file: string): boolean {
   return (
     (file.startsWith('lib/offline/') && file !== CACHE_CLEAR_MODULE) ||
-    file === 'components/shared/ios-install-hint.tsx'
+    file === 'components/shared/ios-install-hint.tsx' ||
+    UNSENT_WORK_MODULES.includes(file)
   );
 }
 
@@ -97,14 +121,35 @@ function calledOnlyCaught(source: ts.SourceFile, name: string): boolean {
   );
 }
 
+/** True when the load's own promise carries a `.catch(...)`, as a `lazy()` component's fallback does. */
+function catchChained(load: ts.CallExpression): boolean {
+  const access = load.parent;
+  return (
+    ts.isPropertyAccessExpression(access) &&
+    access.name.text === 'catch' &&
+    ts.isCallExpression(access.parent) &&
+    access.parent.expression === access &&
+    // `.catch()` without a handler still rejects.
+    access.parent.arguments.length > 0
+  );
+}
+
 function caught(load: ts.CallExpression, source: ts.SourceFile): boolean {
+  if (catchChained(load)) return true;
   if (!awaitedOrReturned(load)) return false;
   if (ts.isAwaitExpression(load.parent) && insideCatchingTry(load)) return true;
   const declaration = enclosingFunctionDeclaration(load);
   return declaration?.name !== undefined && calledOnlyCaught(source, declaration.name.text);
 }
 
-/** The `import()` calls of lib/offline/ modules that no try block catches, as file and line. */
+function isCaughtLoadTarget(target: string): boolean {
+  return (
+    (target.startsWith('lib/offline/') && target !== CACHE_CLEAR_MODULE) ||
+    UNSENT_WORK_MODULES.includes(target)
+  );
+}
+
+/** The `import()` calls of lib/offline/ and unsent-work modules that no try block catches, as file and line. */
 function uncaughtOfflineLoads(file: string, host: SourceHost): string[] {
   const text = host(file);
   if (text === null || isOfflineModule(file)) return [];
@@ -115,7 +160,8 @@ function uncaughtOfflineLoads(file: string, host: SourceHost): string[] {
       const [specifier] = node.arguments;
       const target =
         specifier && ts.isStringLiteralLike(specifier) ? resolveTarget(file, specifier.text, host) : null;
-      if (target?.startsWith('lib/offline/') && target !== CACHE_CLEAR_MODULE && !caught(node, source))
+      // The iOS hint's load failing shows nothing by design; every other offline module's failure must reach the person.
+      if (target !== null && isCaughtLoadTarget(target) && !caught(node, source))
         found.push(`${file}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1}`);
     }
     ts.forEachChild(node, visit);
@@ -197,6 +243,12 @@ describe('offline code loads lazily', () => {
       "export async function out() { const m = await import('@/lib/offline/offline-data'); }",
     'components/probe-caught.ts':
       "export async function out() { try { await import('@/lib/offline/offline-data'); } catch {} }",
+    'components/probe-chained-catch.ts':
+      "export const View = lazy(() => import('@/lib/offline/offline-data').catch(() => ({ default: Fallback })));",
+    'components/probe-empty-catch.ts':
+      "export const View = lazy(() => import('@/lib/offline/offline-data').catch());",
+    'components/probe-chained-then.ts':
+      "export const View = lazy(() => import('@/lib/offline/offline-data').then((loaded) => loaded));",
     'components/probe-caller.ts': [
       "async function load() { return import('@/lib/offline/offline-data'); }",
       'export async function out() { try { await load(); } catch {} }',
@@ -245,9 +297,15 @@ describe('offline code loads lazily', () => {
       'components/probe-unawaited.ts',
       'components/probe-nested.ts',
       'components/probe-unawaited-caller.ts',
+      'components/probe-chained-then.ts',
+      'components/probe-empty-catch.ts',
     ])
       expect(uncaughtOfflineLoads(file, host), file).toEqual([`${file}:1`]);
-    for (const file of ['components/probe-caught.ts', 'components/probe-caller.ts'])
+    for (const file of [
+      'components/probe-caught.ts',
+      'components/probe-caller.ts',
+      'components/probe-chained-catch.ts',
+    ])
       expect(uncaughtOfflineLoads(file, host), file).toEqual([]);
   });
 

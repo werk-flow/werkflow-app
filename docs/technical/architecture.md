@@ -44,7 +44,7 @@ One client factory per trust boundary under `lib/supabase/`:
 
 ## Offline field sync
 
-Phone work that starts without signal syncs through versioned JSON route handlers under `/api/field-sync/v1/`, never a Server Action. The handlers accept the session cookie or a bearer token, recheck every permission at replay time, and serve the web app and the planned native client unchanged. Only device storage is web-specific. [Decision 0010](../decisions/0010-offline-field-sync-contract.md) owns the contract and the iOS limits it designs around.
+Phone work that starts without signal syncs through versioned JSON route handlers under `/api/field-sync/v1/`, never a Server Action. The handlers accept the session cookie or a bearer token, recheck every permission at replay time, and serve the web app and the planned native client unchanged. Only device storage is web-specific. A page keeps an action that meets no network with a few static lines; the outbox, its sender and its views load only while a phone holds unsent work. [Decision 0010](../decisions/0010-offline-field-sync-contract.md) owns the contract and the iOS limits it designs around.
 
 ## Authentication and organization context
 

@@ -31,6 +31,7 @@ import { ProblemReportLauncher } from '@/components/problem-reports/problem-repo
 import type { AttentionCounts } from '@/lib/attention/types';
 import { MobileDrawer } from './mobile-drawer';
 import { OrgSwitchOverlay } from './org-switch-overlay';
+import { UnsentWorkHost } from '@/components/shared/unsent-work-host';
 import { isNavItemActive, navItemsFor } from './sidebar-nav-items';
 
 const OrganizationSwitcher = dynamic(
@@ -377,6 +378,7 @@ export function AppShell({
               {activeOrg?.role === 'employee' && showIosInstallHint && <IosInstallHint />}
             </div>
           </div>
+          <UnsentWorkHost />
         </ProblemReportLauncher>
       </AttentionCountProvider>
     </SidebarContext.Provider>

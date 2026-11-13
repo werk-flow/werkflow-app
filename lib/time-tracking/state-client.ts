@@ -17,6 +17,7 @@ const clockJobInfoSchema = z.object({
   projectName: nullableText,
   clientName: nullableText,
 });
+/** The clock state as the server answers it; the phone parses what it kept without signal with it too. */
 const clockStateSchema = z.object({
   organizationId: text,
   // Inline, not imported from ./settings: that module in the layout's client
