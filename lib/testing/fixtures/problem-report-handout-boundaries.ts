@@ -99,8 +99,8 @@ const unscrubbed = {
 const world = installActionWorld(
   {
     organizations: [
-      { id: ORGANIZATION_A, name: OTHER_ORGANIZATION_NAME },
-      { id: ORGANIZATION_B, name: ORGANIZATION_NAME },
+      { id: ORGANIZATION_A, name: OTHER_ORGANIZATION_NAME, unique_code: 'MHT26A' },
+      { id: ORGANIZATION_B, name: ORGANIZATION_NAME, unique_code: 'BSG26B' },
     ],
     organization_members: [{ organization_id: ORGANIZATION_B, user_id: CALLER_ID, role: 'employee' }],
     profiles: [

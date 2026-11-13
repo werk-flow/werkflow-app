@@ -66,8 +66,8 @@ const report = (reportId: string, organizationId: string, fields: Record<string,
 
 const world = installActionWorld({
   organizations: [
-    { id: ORGANIZATION_A, name: ownOrganization },
-    { id: ORGANIZATION_B, name: foreignOrganization },
+    { id: ORGANIZATION_A, name: ownOrganization, unique_code: 'SWT26A' },
+    { id: ORGANIZATION_B, name: foreignOrganization, unique_code: 'FHB26B' },
   ],
   problem_reports: [],
   clients: [

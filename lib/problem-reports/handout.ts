@@ -177,7 +177,7 @@ async function checkCopy(
     ),
     loggedRead(
       'problem report hand-out: organization read failed',
-      admin.from('organizations').select('name').eq('id', report.organization_id).maybeSingle(),
+      admin.from('organizations').select('name, unique_code').eq('id', report.organization_id).maybeSingle(),
     ),
   ]);
   if (copy.error || organization.error || !organization.data) return 'failed';
@@ -191,7 +191,7 @@ async function checkCopy(
   try {
     const names = copyNamesItsOrganization(
       { description, context: parseScrubbedProblemReportContext(copy.data.scrubbed_context) },
-      organization.data.name,
+      organization.data,
     );
     if (!names) return null;
     // A copy of the current rules never names its organization; when one

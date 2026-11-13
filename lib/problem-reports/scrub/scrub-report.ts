@@ -11,7 +11,7 @@ import { readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { SCRUB_RULES_VERSION } from './rule-version';
 import { buildScrubDictionary, dictionaryKnows, type ScrubDictionarySources } from './dictionary';
-import { holdsRecordId, scrubReportContext, scrubReportText } from './scrub-text';
+import { holdsIdentifier, scrubReportContext, scrubReportText } from './scrub-text';
 
 // The scrubbed copy of a stored problem report
 // (docs/technical/problem-report-scrubbing.md, "Text scrubbing"). Scrubbing
@@ -33,7 +33,7 @@ const joined = (separator: string, ...parts: Array<string | null>): string => pr
 /** The organization itself and its rows that name a person, a customer, an address or a phone number. */
 async function readDictionaryRows(admin: Admin, organizationId: string) {
   const [organization, clients, contacts, sites, requests, employees, members] = await Promise.all([
-    admin.from('organizations').select('name').eq('id', organizationId).maybeSingle(),
+    admin.from('organizations').select('name, unique_code').eq('id', organizationId).maybeSingle(),
     readCompleteRows(
       (from, to) =>
         admin
@@ -146,6 +146,7 @@ async function readDictionarySources(
       ...requests.map((request) => request.caller_phone),
       ...employees.flatMap((employee) => [employee.phone, employee.emergency_contact_phone]),
     ]),
+    identifiers: present([reads.organization.data?.unique_code ?? null]),
   };
 }
 
@@ -183,10 +184,17 @@ async function buildScrubbedCopy(
  */
 export function copyNamesItsOrganization(
   copy: { description: string; context: ScrubbedProblemReportContext | null },
-  organizationName: string,
+  organization: { name: string; unique_code: string },
 ): boolean {
   const dictionary = buildScrubDictionary(
-    { customerNames: [organizationName], personNames: [], siteNames: [], addresses: [], phones: [] },
+    {
+      customerNames: [organization.name],
+      personNames: [],
+      siteNames: [],
+      addresses: [],
+      phones: [],
+      identifiers: [organization.unique_code],
+    },
     loadUiStringCatalog(),
   );
   if (scrubReportText(copy.description, dictionary) !== copy.description) return true;
@@ -197,7 +205,7 @@ export function copyNamesItsOrganization(
       ]
     : [];
   return tokens.some(
-    (token) => token !== null && (holdsRecordId(token) || dictionaryKnows(dictionary, token)),
+    (token) => token !== null && (holdsIdentifier(token, dictionary) || dictionaryKnows(dictionary, token)),
   );
 }
 

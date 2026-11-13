@@ -7,7 +7,14 @@ import { scrubReportContext, scrubReportText } from './scrub-text';
 // scrubbing"), named after the rule. The data is synthetic: the customers,
 // people, addresses and numbers of a made-up company.
 
-const NO_SOURCES = { customerNames: [], personNames: [], siteNames: [], addresses: [], phones: [] };
+const NO_SOURCES = {
+  customerNames: [],
+  personNames: [],
+  siteNames: [],
+  addresses: [],
+  phones: [],
+  identifiers: [],
+};
 // A few of the app's own UI strings, as the build's catalog holds them.
 const uiStrings = new Set(['Speichern', 'Service', 'Wartung', 'Hauptstandort', 'Rückruf an Nordlicht']);
 const dictionary = buildScrubDictionary(
@@ -30,6 +37,7 @@ const dictionary = buildScrubDictionary(
       'Kirchberg 5, 54324 Altdorf',
     ],
     phones: ['0171 2345678', '+43 664 1234567'],
+    identifiers: ['KRH26X'],
   },
   uiStrings,
 );
@@ -424,4 +432,24 @@ test('pattern rule: any record id, also inside a longer word', () => {
   expect(scrubReportText(text, dictionary)).toBe(
     'Organisation: [ID 1], Link /kunden/[ID 1]x und ref-[ID 2].',
   );
+});
+
+test("matching rule: the organization's join code, as a whole word in any case, and in a token", () => {
+  expect(scrub('Der Code KRH26X geht nicht, auch krh26x nicht. KRH26XY ist ein anderer.')).toBe(
+    'Der Code [ID 1] geht nicht, auch [ID 1] nicht. KRH26XY ist ein anderer.',
+  );
+  const routeTemplate = '/einstellungen/organisation';
+  const scrubbed = scrubReportContext(
+    {
+      ...context,
+      appVersion: 'krh26x2026',
+      clientErrors: [{ name: 'TypeError', code: 'joinKRH26X', digest: '0123456789', routeTemplate }],
+    },
+    uiStrings,
+    dictionary,
+  );
+  expect(scrubbed.appVersion).toBeNull();
+  expect(scrubbed.clientErrors).toEqual([
+    { name: 'TypeError', code: null, digest: '0123456789', routeTemplate },
+  ]);
 });

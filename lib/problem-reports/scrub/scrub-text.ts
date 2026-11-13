@@ -158,17 +158,21 @@ export function scrubReportText(original: string, dictionary: ScrubDictionary): 
   return parts.join('');
 }
 
-/** Whether a token holds a record id anywhere, such as an organization's id inside an error code. */
-export function holdsRecordId(token: string): boolean {
-  return findRecordIds(token).length > 0;
+/**
+ * Whether a token holds a record id or one of the organization's identifying
+ * codes anywhere, such as an organization's id inside an error code.
+ */
+export function holdsIdentifier(token: string, dictionary: ScrubDictionary): boolean {
+  const folded = token.toLowerCase();
+  return findRecordIds(token).length > 0 || [...dictionary.identifiers].some((code) => folded.includes(code));
 }
 
 /**
  * The context without any text of a record. The label of a pressed control
  * stays when the whole label is one of the app's own UI strings. The app
  * version and an error's name, code and digest are tokens; one that the
- * dictionary knows as a name or a phone number, or that holds a record id, is
- * removed. No other pattern rule applies to a token, so a numeric digest stays. The server checks all of
+ * dictionary knows as a name or a phone number, or that holds a record id or
+ * the organization's join code, is removed. No other pattern rule applies to a token, so a numeric digest stays. The server checks all of
  * this again, because the device's filter is not trusted.
  */
 export function scrubReportContext(
@@ -177,7 +181,9 @@ export function scrubReportContext(
   dictionary: ScrubDictionary,
 ): ScrubbedProblemReportContext {
   const kept = (token: string | null): string | null =>
-    token !== null && (dictionaryKnows(dictionary, token) || holdsRecordId(token)) ? null : token;
+    token !== null && (dictionaryKnows(dictionary, token) || holdsIdentifier(token, dictionary))
+      ? null
+      : token;
   return {
     ...context,
     recentActions: context.recentActions.map((action) => ({
