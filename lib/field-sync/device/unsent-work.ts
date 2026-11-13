@@ -13,7 +13,14 @@ import { logError } from '@/lib/logging';
  * One piece of a line that the question names on its own, such as a report draft: its id among the
  * line's `ids`, and what the person recognizes it by, never its content.
  */
-type UnsentWorkEntry = { id: string; name: string; detail: string };
+type UnsentWorkEntry = { id: string; name: string; detail: string; reason: UnsentReason };
+
+/**
+ * Why a piece is still unsent after a send: it waits for the network, it is incomplete, its person
+ * lost access, this version cannot read it, or the server refused it. The question's sentence after
+ * a send names the reason; a line without entries, such as the time events, waits for the network.
+ */
+export type UnsentReason = 'waiting' | 'incomplete' | 'no_access' | 'unreadable' | 'refused';
 
 /**
  * One line of what is still unsent, such as „Stempelzeiten“ with their number, and the ids of what

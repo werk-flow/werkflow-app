@@ -31,6 +31,7 @@ import {
   discardUnsentWork,
   flushUnsentWork,
   summarizeUnsentWork,
+  type UnsentReason,
   type UnsentScope,
   type UnsentWorkItem,
 } from '@/lib/field-sync/device/unsent-work';
@@ -44,6 +45,29 @@ import { logError } from '@/lib/logging';
 
 function itemsLabel(items: readonly UnsentWorkItem[]): string {
   return items.map((item) => `${item.label}: ${item.count}`).join(', ');
+}
+
+/** What the question says after a send, for the one reason what is left could not go. */
+const LEFT_AFTER_SEND: Record<UnsentReason, string> = {
+  waiting: 'Noch nicht alles ist übertragen. Prüfe dein Netz und versuche es erneut.',
+  incomplete:
+    'Ein Berichtsentwurf ist noch unvollständig und kann so nicht gesendet werden. Ergänze ihn im Auftrag oder verwirf ihn.',
+  no_access:
+    'Auf den Auftrag eines Entwurfs hast du keinen Zugriff mehr. Er wird nicht gesendet, du kannst ihn nur verwerfen.',
+  unreadable:
+    'Diese App-Version kann einen Entwurf nicht lesen. Er wird nicht gesendet, du kannst ihn nur verwerfen.',
+  refused: 'Ein Entwurf wurde nicht angenommen. Öffne ihn im Auftrag und sende ihn erneut, oder verwirf ihn.',
+};
+
+/** The sentence after a send: the one reason that is left, or a neutral one when several are. */
+function leftAfterSend(items: readonly UnsentWorkItem[]): string {
+  const reasons = new Set<UnsentReason>(
+    items.flatMap((item) => (item.entries ? item.entries.map((entry) => entry.reason) : ['waiting'])),
+  );
+  const [only] = reasons;
+  return reasons.size === 1 && only
+    ? LEFT_AFTER_SEND[only]
+    : 'Noch nicht alles konnte gesendet werden. Manches wartet auf Netz, anderes kann so nicht gesendet werden. Prüfe die Einträge oben.';
 }
 
 /** The irreversible step behind „Verwerfen“: it names what goes and asks once more. */
@@ -166,7 +190,7 @@ function useUnsentChoice(
           return;
         }
         setItems(left);
-        setError('Noch nicht alles ist übertragen. Prüfe dein Netz und versuche es erneut.');
+        setError(leftAfterSend(left));
       } catch (failure) {
         // A draft send still running: the sources before the drafts may have deleted what they showed.
         // The confirmation closes, so a draft changed or written meanwhile is shown before any new discard.

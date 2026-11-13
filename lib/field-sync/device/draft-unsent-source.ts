@@ -12,7 +12,13 @@ import {
 } from './draft-store';
 import { deleteShownDrafts, isPastUnsentLimit, pageHolder, sendDraftsBeforeSessionEnd } from './draft-sync';
 import { readTodayOnDevice } from './today-store';
-import { UnsentWorkBusyError, type UnsentScope, type UnsentSource, type UnsentWorkItem } from './unsent-work';
+import {
+  UnsentWorkBusyError,
+  type UnsentReason,
+  type UnsentScope,
+  type UnsentSource,
+  type UnsentWorkItem,
+} from './unsent-work';
 
 // The report drafts as the unsent work a session end asks about (decision record 0010, the
 // amendment "a session end asks about report drafts"). Only registrations.ts loads this module, so
@@ -57,18 +63,23 @@ function detailLine(parts: readonly (string | null)[]): string {
 }
 
 /** What the question says of a readable draft: its title, state, kind, photos, last change and job. */
-function draftEntry(draft: StoredDraft, jobs: ReadonlyMap<string, string>): { name: string; detail: string } {
+function draftEntry(
+  draft: StoredDraft,
+  jobs: ReadonlyMap<string, string>,
+): { name: string; detail: string; reason: UnsentReason } {
   const photos = draft.photos.length;
+  const reason = draftReason(draft);
   const state =
-    draft.refusal?.kind === 'no_access'
+    reason === 'no_access'
       ? 'Kein Zugriff mehr, wird nicht gesendet'
-      : draft.refusal !== null || isPastUnsentLimit(draft)
+      : reason === 'refused' || isPastUnsentLimit(draft)
         ? 'Nicht übertragen'
-        : draft.ready
-          ? null
-          : 'Unvollständig';
+        : reason === 'incomplete'
+          ? 'Unvollständig'
+          : null;
   return {
     name: draft.title.trim() || 'Ohne Titel',
+    reason,
     detail: detailLine([
       state,
       WORK_ARTIFACT_KIND_LABELS[draft.kind],
@@ -77,6 +88,13 @@ function draftEntry(draft: StoredDraft, jobs: ReadonlyMap<string, string>): { na
       jobs.get(draft.jobId) ?? null,
     ]),
   };
+}
+
+/** Why the question's send left the draft: what keeps it from going, else the network. */
+function draftReason(draft: StoredDraft): UnsentReason {
+  if (draft.refusal?.kind === 'no_access') return 'no_access';
+  if (draft.refusal !== null) return 'refused';
+  return draft.ready ? 'waiting' : 'incomplete';
 }
 
 /** A shown draft's id: the draft and the state it was shown in, so a later change is asked about anew. */
@@ -103,13 +121,13 @@ function shownDrafts(ids: readonly string[]): ShownDrafts {
 
 function item(
   label: string,
-  entries: readonly { id: string; name: string; detail: string }[],
+  entries: readonly { id: string; name: string; detail: string; reason: UnsentReason }[],
 ): UnsentWorkItem {
   return {
     label,
     count: entries.length,
     ids: entries.map((entry) => entry.id),
-    entries: entries.map(({ id, name, detail }) => ({ id, name, detail })),
+    entries: entries.map(({ id, name, detail, reason }) => ({ id, name, detail, reason })),
   };
 }
 
@@ -117,6 +135,7 @@ function unreadableEntry(draft: UnreadableDraft, jobs: ReadonlyMap<string, strin
   return {
     id: `${SHOWN_UNREADABLE}${draft.id}`,
     name: 'Entwurf lässt sich nicht öffnen',
+    reason: 'unreadable' as const,
     detail: detailLine(['Nicht lesbar', draft.jobId === null ? null : (jobs.get(draft.jobId) ?? null)]),
   };
 }

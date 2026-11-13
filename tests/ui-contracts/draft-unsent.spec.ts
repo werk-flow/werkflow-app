@@ -22,6 +22,7 @@ const updatedAt = '2026-11-12T08:30:00.000Z';
 
 type DraftRecord = {
   id: string;
+  ready?: boolean;
   userId?: string;
   title?: string;
   refusal?: { kind: 'no_access' | 'failed'; at: string } | null;
@@ -182,7 +183,10 @@ test('a lost-access draft is named as such and never sent; an unreadable one is 
     }),
   ).toHaveText('Entwurf lässt sich nicht öffnenNicht lesbar');
   await question(page).getByRole('button', { name: 'Jetzt senden', exact: true }).click();
-  await expect(question(page)).toContainText('Noch nicht alles ist übertragen.');
+  // Two reasons are left, so the question says so neutrally and never sends the person to the network.
+  await expect(question(page)).toContainText(
+    'Noch nicht alles konnte gesendet werden. Manches wartet auf Netz, anderes kann so nicht gesendet werden.',
+  );
   expect(attached).toEqual([]);
 
   await question(page).getByRole('button', { name: 'Verwerfen', exact: true }).click();
@@ -315,3 +319,37 @@ test('a discard that deletes the times but finds a draft save still running says
   await expect(page.getByLabel('Abmeldung')).toHaveText('Sitzung bleibt');
   expect(await draftsOnDevice(page)).toEqual([DRAFT_ID]);
 });
+
+// After a send, the question names the one reason that keeps what is left from going; never the
+// network for a draft that could not go with signal either.
+for (const { record, says } of [
+  {
+    record: { ready: false },
+    says: 'Ein Berichtsentwurf ist noch unvollständig und kann so nicht gesendet werden. Ergänze ihn im Auftrag oder verwirf ihn.',
+  },
+  {
+    record: { refusal: { kind: 'no_access', at: '2026-11-12T08:40:00.000Z' } },
+    says: 'Auf den Auftrag eines Entwurfs hast du keinen Zugriff mehr. Er wird nicht gesendet, du kannst ihn nur verwerfen.',
+  },
+  {
+    record: { version: 99 },
+    says: 'Diese App-Version kann einen Entwurf nicht lesen. Er wird nicht gesendet, du kannst ihn nur verwerfen.',
+  },
+  {
+    record: { refusal: { kind: 'failed', at: '2026-11-12T08:40:00.000Z' } },
+    says: 'Ein Entwurf wurde nicht angenommen. Öffne ihn im Auftrag und sende ihn erneut, oder verwirf ihn.',
+  },
+] as const)
+  test(`with signal, a draft the send cannot take is named by its reason: ${says.split('.')[0]}`, async ({
+    page,
+  }) => {
+    const server = await mountClock(page, CLOCKED_OUT_STATE);
+    const attached = await acceptDraftAttaches(page, server);
+    await storeDrafts(page, [{ id: DRAFT_ID, ...record }]);
+
+    await page.getByRole('button', { name: 'Abmelden prüfen', exact: true }).click();
+
+    await expect(question(page)).toContainText(says);
+    await expect(question(page)).not.toContainText('Prüfe dein Netz');
+    expect(attached).toEqual([]);
+  });
