@@ -5,6 +5,8 @@ import type { SurfaceDestination } from '../surface-routes';
 import { acceptanceSet, type OpenSet } from '../acceptance-sets';
 
 const JOB_TITLE = 'Heizungstausch Lindenweg';
+/** A Lager of no organization: the history read is refused, and the tab shows its failure. */
+const UNKNOWN_LOCATION = '00000000-0000-4000-8000-0000000000ff';
 const seeded = new Map<string, Promise<void>>();
 
 type Written = PromiseLike<{ error: { message: string } | null }>;
@@ -92,8 +94,8 @@ function movementHistory(world: TestWorld, query: string): Promise<SurfaceDestin
 
 /**
  * werk-flow/werkflow-planning#374 of 2026-11-13: the paged movement history of
- * `/inventar` with every kind, filtered to the uses, and a search without a
- * match, for the office.
+ * `/inventar` with every kind, filtered to the uses, a search without a
+ * match, and a failed read, for the office.
  */
 function movementHistoryCaptures(): OpenSet {
   const both = { widths: [1280, 375], schemes: ['light', 'dark'] } as const;
@@ -122,6 +124,15 @@ function movementHistoryCaptures(): OpenSet {
         route: '/inventar',
         view: { kind: 'page' },
         destination: (world) => movementHistory(world, 'tab=movements&search=Gasbrennwert'),
+        ...both,
+      },
+      {
+        id: 'admin-bewegungen-error',
+        role: 'admin',
+        route: '/inventar',
+        view: { kind: 'page' },
+        state: 'error',
+        destination: (world) => movementHistory(world, `tab=movements&location=${UNKNOWN_LOCATION}`),
         ...both,
       },
     ],
