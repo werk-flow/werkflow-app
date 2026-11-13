@@ -335,6 +335,26 @@ test('aliased dialog imports remain discoverable', () => {
   expect(dialog.uncoveredControls).toEqual(['Input']);
 });
 
+test('each use of the shared confirm-and-action dialog is a confirmation keyed by its title, and its own file is none', () => {
+  const dialogs = inspectDialogs(
+    new Map([
+      [
+        'components/probe.tsx',
+        'import { ConfirmActionDialog } from "@/components/shared/confirm-action-dialog"; function Remove(){ return <><ConfirmActionDialog title="Team auflösen?" onConfirm={go} /><ConfirmActionDialog title={target?.title} onConfirm={go}><Input/></ConfirmActionDialog></> }',
+      ],
+      [
+        'components/shared/confirm-action-dialog.tsx',
+        'export function ConfirmActionDialog({ title }){ return <AlertDialogContent><AlertDialogTitle>{title}</AlertDialogTitle></AlertDialogContent> }',
+      ],
+    ]),
+  );
+  expect(dialogs.map(({ key, kind }) => [key, kind])).toEqual([
+    ['components/probe.tsx#Remove|Team auflösen?', 'alert-dialog'],
+    ['components/probe.tsx#Remove|{target?.title}', 'alert-dialog'],
+  ]);
+  expect(dialogs[1]?.uncoveredControls).toEqual(['Input']);
+});
+
 test('whole-content responsive and conditional scrolling fails even with an owned body', () => {
   const dialog = fixture(
     'function Edit(){ return <DialogContent className={cn("overflow-hidden", long && "md:overflow-y-auto")}><form onSubmit={save}><DialogBody><Input/></DialogBody></form></DialogContent> }',
