@@ -19,7 +19,8 @@
 -- 2. Lines that an earlier move left on the previous project take their job's
 --    project now, unless that project lies outside the line's organization,
 --    which the line's organization check would refuse. The repair locks those
---    jobs before it reads their projects, so a move committed meanwhile wins.
+--    jobs before it reads their projects and changes only their lines, so a
+--    move committed meanwhile wins.
 --
 -- inventory_movements and job_material_use_events keep the project they were
 -- booked with: they are history. A project's own lines (no job) do not move.
@@ -136,21 +137,27 @@ end;
 $$;
 
 do $$
+declare
+  v_job_ids uuid[];
 begin
   -- The jobs first, in the order the job edit locks: a move of one of them
-  -- waits, and the update reads each job's project after the locks.
-  perform 1 from public.jobs job
-  where exists (
-    select 1 from public.job_material_lines line
-    where line.job_id = job.id and line.project_id is distinct from job.project_id
-  )
-  order by job.id
-  for share;
+  -- waits, and the update reads only these locked jobs, after the locks.
+  select array_agg(locked.id) into v_job_ids
+  from (
+    select job.id from public.jobs job
+    where exists (
+      select 1 from public.job_material_lines line
+      where line.job_id = job.id and line.project_id is distinct from job.project_id
+    )
+    order by job.id
+    for share
+  ) locked;
 
   update public.job_material_lines line
   set project_id = job.project_id
   from public.jobs job
-  where job.id = line.job_id
+  where job.id = any(v_job_ids)
+    and job.id = line.job_id
     and job.organization_id = line.organization_id
     and line.project_id is distinct from job.project_id
     and (job.project_id is null or exists (
