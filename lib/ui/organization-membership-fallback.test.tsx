@@ -59,6 +59,14 @@ async function runFixture(): Promise<void> {
       from: () => ({ select: () => ({ eq: async () => ({ data: membershipRows, error: null }) }) }),
     }),
   }));
+  // The switch's check loads the report drafts' sender, whose upload path reaches server actions
+  // that only Next's bundler turns into references; no draft of this test is sent.
+  mock.module('@/lib/documents/upload-client', () => ({
+    uploadDocumentDirect: () => Promise.reject(new Error('no upload here')),
+  }));
+  mock.module('@/lib/data/background-read-client', () => ({
+    readInBackground: () => Promise.reject(new Error('no read here')),
+  }));
   mock.module('@/lib/org/actions', () => ({
     setActiveOrgCookie: async (orgId: string) => {
       cookieWrites.push(orgId);

@@ -482,7 +482,7 @@ async function todaysJobLabels(userId: string): Promise<ReadonlyMap<string, stri
   }
 }
 
-function joined(parts: readonly (string | null)[]): string {
+function detailLine(parts: readonly (string | null)[]): string {
   return parts.filter((part): part is string => part !== null).join(' · ');
 }
 
@@ -499,7 +499,7 @@ function draftEntry(draft: StoredDraft, jobs: ReadonlyMap<string, string>): { na
           : 'Unvollständig';
   return {
     name: draft.title.trim() || 'Ohne Titel',
-    detail: joined([
+    detail: detailLine([
       state,
       WORK_ARTIFACT_KIND_LABELS[draft.kind],
       photos === 0 ? null : `${photos} ${photos === 1 ? 'Foto' : 'Fotos'}`,
@@ -547,7 +547,7 @@ function unreadableEntry(draft: UnreadableDraft, jobs: ReadonlyMap<string, strin
   return {
     id: `${SHOWN_UNREADABLE}${draft.id}`,
     name: 'Entwurf lässt sich nicht öffnen',
-    detail: joined(['Nicht lesbar', draft.jobId === null ? null : (jobs.get(draft.jobId) ?? null)]),
+    detail: detailLine(['Nicht lesbar', draft.jobId === null ? null : (jobs.get(draft.jobId) ?? null)]),
   };
 }
 
