@@ -28,14 +28,14 @@ const RIGHT_STOPS = new Set(['and', 'or', 'then', 'when', 'else', 'end', ',', ';
 const NEVER_NULL_WORDS = new Set(['true', 'false', 'sqlerrm', 'sqlstate', 'found']);
 
 /** The text with comments blanked and every string literal's content kept; offsets stay. */
-function withoutComments(source: string): string {
+function blankComments(source: string): string {
   return source.replace(/'(?:[^']|'')*'|--[^\n]*|\/\*[\s\S]*?\*\//g, (match) =>
     match.startsWith("'") ? match : match.replace(/[^\n]/g, ' '),
   );
 }
 
 function tokenize(source: string): Token[] {
-  return [...withoutComments(source).matchAll(TOKEN)].map((match) => ({
+  return [...blankComments(source).matchAll(TOKEN)].map((match) => ({
     text: match[0],
     lower: match[0].toLowerCase(),
     offset: match.index,
