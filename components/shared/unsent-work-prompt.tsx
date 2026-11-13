@@ -59,15 +59,17 @@ const LEFT_AFTER_SEND: Record<UnsentReason, string> = {
   refused: 'Ein Entwurf wurde nicht angenommen. Öffne ihn im Auftrag und sende ihn erneut, oder verwirf ihn.',
 };
 
-/** The sentence after a send: the one reason that is left, or a neutral one when several are. */
+/** The sentence after a send: the one reason that is left, or a neutral one, true for the mix, when several are. */
 function leftAfterSend(items: readonly UnsentWorkItem[]): string {
   const reasons = new Set<UnsentReason>(
     items.flatMap((item) => (item.entries ? item.entries.map((entry) => entry.reason) : ['waiting'])),
   );
   const [only] = reasons;
-  return reasons.size === 1 && only
-    ? LEFT_AFTER_SEND[only]
-    : 'Noch nicht alles konnte gesendet werden. Manches wartet auf Netz, anderes kann so nicht gesendet werden. Prüfe die Einträge oben.';
+  if (reasons.size === 1 && only) return LEFT_AFTER_SEND[only];
+  // The network is named only when something waits for it.
+  return reasons.has('waiting')
+    ? 'Noch nicht alles konnte gesendet werden. Manches wartet auf Netz, anderes kann so nicht gesendet werden. Prüfe die Einträge oben.'
+    : 'Noch nicht alles konnte gesendet werden. Prüfe die Einträge oben.';
 }
 
 /** The irreversible step behind „Verwerfen“: it names what goes and asks once more. */

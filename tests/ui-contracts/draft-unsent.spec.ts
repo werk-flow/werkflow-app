@@ -183,10 +183,12 @@ test('a lost-access draft is named as such and never sent; an unreadable one is 
     }),
   ).toHaveText('Entwurf lässt sich nicht öffnenNicht lesbar');
   await question(page).getByRole('button', { name: 'Jetzt senden', exact: true }).click();
-  // Two reasons are left, so the question says so neutrally and never sends the person to the network.
+  // Two reasons are left, neither waits for the network: the question says so neutrally and never
+  // sends the person to the network.
   await expect(question(page)).toContainText(
-    'Noch nicht alles konnte gesendet werden. Manches wartet auf Netz, anderes kann so nicht gesendet werden.',
+    'Noch nicht alles konnte gesendet werden. Prüfe die Einträge oben.',
   );
+  await expect(question(page)).not.toContainText('Netz');
   expect(attached).toEqual([]);
 
   await question(page).getByRole('button', { name: 'Verwerfen', exact: true }).click();
@@ -353,3 +355,17 @@ for (const { record, says } of [
     await expect(question(page)).not.toContainText('Prüfe dein Netz');
     expect(attached).toEqual([]);
   });
+
+test('after a send that leaves a draft waiting for the network and an incomplete one, the question names both kinds of reason', async ({
+  page,
+}) => {
+  const server = await mountClock(page, CLOCKED_OUT_STATE);
+  await setNetwork(page, server, false);
+  await storeDrafts(page, [{ id: DRAFT_ID }, { id: '60000000-0000-4000-8000-000000000006', ready: false }]);
+
+  await page.getByRole('button', { name: 'Abmelden prüfen', exact: true }).click();
+
+  await expect(question(page)).toContainText(
+    'Noch nicht alles konnte gesendet werden. Manches wartet auf Netz, anderes kann so nicht gesendet werden.',
+  );
+});
