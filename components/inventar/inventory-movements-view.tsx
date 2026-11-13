@@ -19,11 +19,7 @@ import type {
   InventoryMovementHistoryEntry,
   InventoryMovementPage,
 } from '@/lib/inventory/types';
-import {
-  INVENTORY_HISTORY_KIND_LABELS,
-  INVENTORY_STOCK_UNCHANGED_LABEL,
-  formatInventoryQuantity,
-} from '@/lib/inventory/types';
+import { INVENTORY_HISTORY_KIND_LABELS, formatInventoryQuantity } from '@/lib/inventory/types';
 import { LIST_PAGE_SIZE } from '@/lib/ui/list-pagination';
 import { cn, formatBerlinDateTime, parseIsoLocalDate, toLocalDateString } from '@/lib/utils';
 import { INVENTORY_MOVEMENT_COLUMNS } from './inventory-table-columns';
@@ -259,11 +255,13 @@ function MovementCards({ entries }: { entries: InventoryMovementHistoryEntry[] }
                 <p className="text-xs text-muted-foreground wrap-anywhere">
                   <MovementEndLabel end={target.from} /> → <MovementEndLabel end={target.to} />
                 </p>
-                <p className="text-xs tabular-nums text-muted-foreground">
-                  {movesStock(entry)
-                    ? `Vorher ${formatStockQuantity(entry.quantityBefore)} · Danach ${formatStockQuantity(entry.quantityAfter)}`
-                    : INVENTORY_STOCK_UNCHANGED_LABEL}
-                </p>
+                {/* A use's „Nach“ already says that the stock stays the same. */}
+                {movesStock(entry) && (
+                  <p className="text-xs tabular-nums text-muted-foreground">
+                    Vorher {formatStockQuantity(entry.quantityBefore)} · Danach{' '}
+                    {formatStockQuantity(entry.quantityAfter)}
+                  </p>
+                )}
                 {entry.actorName && <p className="text-xs text-muted-foreground">Von {entry.actorName}</p>}
                 {entry.reason && <p className="text-xs text-muted-foreground">Grund: {entry.reason}</p>}
               </div>
@@ -293,34 +291,29 @@ function MovementsDesktopTable({ entries }: { entries: InventoryMovementHistoryE
             const target = formatMovementTarget(entry);
             return (
               <TableRow key={entry.id}>
-                <TableCell className="text-muted-foreground">
+                {/* Text wraps between words (the table's wrap-normal); time and quantities stay on one line. */}
+                <TableCell className="whitespace-nowrap text-muted-foreground">
                   {formatBerlinDateTime(entry.createdAt)}
                 </TableCell>
-                <TableCell className="font-medium wrap-anywhere">{entry.itemName}</TableCell>
-                <TableCell className="wrap-anywhere">{entry.locationName ?? '—'}</TableCell>
-                <TableCell className="wrap-anywhere">
+                <TableCell className="font-medium">{entry.itemName}</TableCell>
+                <TableCell>
                   <MovementEndLabel end={target.from} />
                 </TableCell>
-                <TableCell className="wrap-anywhere">
+                <TableCell>
                   <MovementEndLabel end={target.to} />
                 </TableCell>
                 <TableCell>{INVENTORY_HISTORY_KIND_LABELS[entry.kind]}</TableCell>
-                <TableCell className="text-right tabular-nums">
+                <TableCell className="whitespace-nowrap text-right tabular-nums">
                   {formatStockQuantity(entry.quantityBefore)}
                 </TableCell>
-                <TableCell className="text-right whitespace-nowrap">
+                <TableCell className="whitespace-nowrap text-right">
                   <MovementQuantity entry={entry} />
-                  {!movesStock(entry) && (
-                    <span className="block text-xs text-muted-foreground">
-                      {INVENTORY_STOCK_UNCHANGED_LABEL}
-                    </span>
-                  )}
                 </TableCell>
-                <TableCell className="text-right tabular-nums">
+                <TableCell className="whitespace-nowrap text-right tabular-nums">
                   {formatStockQuantity(entry.quantityAfter)}
                 </TableCell>
-                <TableCell className="wrap-anywhere">{entry.actorName ?? '—'}</TableCell>
-                <TableCell className="wrap-anywhere">{entry.reason ?? '—'}</TableCell>
+                <TableCell>{entry.actorName ?? '—'}</TableCell>
+                <TableCell>{entry.reason ?? '—'}</TableCell>
               </TableRow>
             );
           })}

@@ -321,15 +321,14 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     const inboundMovement = inventoryRow(adminPage, itemName).filter({
       hasText: INVENTORY_MOVEMENT_TYPE_LABELS.stock_in,
     });
-    // Whole-row cells in column order: Zeitpunkt, Artikel, Lager, Von, Nach,
-    // Bewegung, Vorher, Menge, Danach, Person, Grund. Run id and time stay in
+    // Whole-row cells in column order: Zeitpunkt, Artikel, Von, Nach,
+    // Bewegung, Vorher, Menge, Danach, Person, Grund; „Von“ or „Nach“ names the Lager. Run id and time stay in
     // their own cells, so a quantity cannot match them. The person is the
     // signed-in admin, whatever the world names them; „—“ means nobody.
     const bookedBySomeone = /^[^—]+$/;
     await expect(inboundMovement.getByRole('cell')).toHaveText([
       /\d{4}/,
       itemName,
-      locationName,
       INVENTORY_COPY.movementSource.external,
       locationName,
       INVENTORY_MOVEMENT_TYPE_LABELS.stock_in,
@@ -345,7 +344,6 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     await expect(outboundMovement.getByRole('cell')).toHaveText([
       /\d{4}/,
       itemName,
-      locationName,
       locationName,
       INVENTORY_COPY.movementTarget.correctionOut,
       INVENTORY_MOVEMENT_TYPE_LABELS.stock_out,

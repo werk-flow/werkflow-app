@@ -4,6 +4,7 @@ import type {
   InventoryMovementHistoryEntry,
   InventoryOverviewItem,
 } from '@/lib/inventory/types';
+import { INVENTORY_STOCK_UNCHANGED_LABEL } from '@/lib/inventory/types';
 
 /** One end of a movement: a place, or the job or project it links to. */
 export type MovementEnd = { label: string; href: string | null };
@@ -24,7 +25,11 @@ function movementWork(entry: InventoryMovementHistoryEntry): MovementEnd | null 
   return project ? { label: projectLabel, href: projectDetailHref(project) } : null;
 }
 
-/** Where a movement came from and went to („Von“ and „Nach“). */
+/**
+ * Where a movement came from and went to („Von“ and „Nach“); a stock movement
+ * names its Lager on one side. A use and its correction have no place: they
+ * come from the job and leave the stock as it is.
+ */
 export function formatMovementTarget(entry: InventoryMovementHistoryEntry): {
   from: MovementEnd;
   to: MovementEnd;
@@ -38,9 +43,8 @@ export function formatMovementTarget(entry: InventoryMovementHistoryEntry): {
     case 'job_return':
       return { from: work, to: location };
     case 'job_use':
-      return { from: work, to: place('Verbraucht') };
     case 'job_use_correction':
-      return { from: place('Verbraucht'), to: work };
+      return { from: work, to: place(INVENTORY_STOCK_UNCHANGED_LABEL) };
     case 'stock_in':
     case 'initial_count':
       return { from: place('Externe Quelle'), to: location };

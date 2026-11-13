@@ -99,6 +99,8 @@ function movementHistory(world: TestWorld, query: string): Promise<SurfaceDestin
  */
 function movementHistoryCaptures(): OpenSet {
   const both = { widths: [1280, 375], schemes: ['light', 'dark'] } as const;
+  // The table at the narrowest desktop width, where the sidebar leaves the least room.
+  const withLaptop = { widths: [1280, 1024, 375], schemes: ['light', 'dark'] } as const;
   return {
     id: 'movement-history-2026-11-13',
     captures: [
@@ -108,7 +110,7 @@ function movementHistoryCaptures(): OpenSet {
         route: '/inventar',
         view: { kind: 'page' },
         destination: (world) => movementHistory(world, 'tab=movements'),
-        ...both,
+        ...withLaptop,
       },
       {
         id: 'admin-bewegungen-verbraucht',
@@ -116,7 +118,7 @@ function movementHistoryCaptures(): OpenSet {
         route: '/inventar',
         view: { kind: 'page' },
         destination: (world) => movementHistory(world, 'tab=movements&kind=job_use'),
-        ...both,
+        ...withLaptop,
       },
       {
         id: 'admin-bewegungen-ohne-treffer',

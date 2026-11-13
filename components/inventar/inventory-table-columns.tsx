@@ -41,7 +41,6 @@ const MOVEMENT_QUANTITY_CELL = <Skeleton className="ml-auto h-4 w-12" />;
 export const INVENTORY_MOVEMENT_COLUMNS: readonly SkeletonColumn[] = [
   { id: 'createdAt', header: 'Zeitpunkt', skeleton: <Skeleton className="h-4 w-28" /> },
   { id: 'item', header: 'Artikel', skeleton: <Skeleton className="h-4 w-40 max-w-full" /> },
-  { id: 'location', header: 'Lager', skeleton: <Skeleton className="h-4 w-24" /> },
   { id: 'from', header: 'Von', skeleton: <Skeleton className="h-4 w-24" /> },
   { id: 'to', header: 'Nach', skeleton: <Skeleton className="h-4 w-24" /> },
   { id: 'movementType', header: 'Bewegung', skeleton: <Skeleton className="h-4 w-24" /> },
