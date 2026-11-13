@@ -10,7 +10,7 @@ import { z } from '@/lib/zod';
 import { BILLING_WORK_KINDS } from './types';
 
 // The refusals set_work_billing_parties raises
-// (supabase/migrations/20261201150001_keep_work_auftraggeber_and_frozen_recipient.sql).
+// (supabase/migrations/20261201160001_keep_work_auftraggeber_and_frozen_recipient.sql).
 const partiesWriteRefusal = writeRefusalFor(
   new Set([
     'not_authorized',
