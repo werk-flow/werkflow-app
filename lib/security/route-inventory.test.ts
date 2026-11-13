@@ -76,6 +76,11 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
       "verified identity from an Authorization bearer token or, after the same-origin JSON guard, the cookie session; an identity check that cannot complete answers retry; the active organization from the current memberships, an organization hint naming another refused; reads only the caller's own scheduled visits on the Berlin day of jobs the caller is assigned to, with named field columns, every read scoped to that organization; private no-store responses",
     mustCall: ['identifyFieldSyncCaller', 'resolveActiveContextForUser', 'readFieldSyncToday'],
   },
+  'app/sw.js/route.ts': {
+    authorization:
+      'unauthenticated by design: serves the service worker script the build composed, the same bytes for everyone; reads no request, cookie or session, writes nothing, and proxy.ts does not run on it',
+    mustCall: [],
+  },
   'app/api/problem-reports/v1/reports/route.ts': {
     authorization:
       'report threads send the dedicated PROBLEM_REPORT_HANDOUT_SECRET as a bearer token, compared in constant time, never a user session; without a configured secret the handler reads nothing and answers 503, a missing or wrong one 401; answers only the id and bucket of open reports with a scrubbed copy not yet handed out, no-store',

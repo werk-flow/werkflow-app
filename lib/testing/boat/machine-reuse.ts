@@ -16,6 +16,7 @@ import {
   runScript,
   shellQuote,
 } from './boat-machine';
+import { MARK_IDLE, claimKeptMachine, takeIdleMachineElsewhere, workstationLabel } from './machine-eviction';
 
 // One Boat machine serves a checkout's consecutive verification runs, because Boat counts every
 // create as a start (docs/technical/boat-verification.md#machine-reuse). After a run the machine is
@@ -151,8 +152,10 @@ async function runWipe(machine: Machine, command: string, signal: AbortSignal): 
  * This checkout's kept machine with the most life left, when that is a run's life, else a new one
  * from `from`. Every other machine of the checkout is left over, from a killed run or past its use,
  * and is deleted, as is any machine of this workstation whose idle window passed without its reaper.
- * A start refused at the machine limit evicts this workstation's idle machines and is tried once
- * more. A new machine first records what its snapshot holds, which every later wipe restores.
+ * A kept machine another workstation evicted meanwhile is not taken. A start refused at the machine
+ * limit evicts this workstation's idle machines, or else one another workstation kept idle for over
+ * 10 minutes (machine-eviction.ts), and is tried once more. A new machine first records what its
+ * snapshot holds, which every later wipe restores.
  */
 export async function acquireMachine(
   client: BoatClient,
@@ -178,6 +181,10 @@ export async function acquireMachine(
       const life = await lifeLeft(client, id);
       if (life >= RUN_LIFE_SECONDS && life > (kept?.life ?? 0)) kept = { id, life };
     }
+    if (kept && !(await claimKeptMachine(client, kept.id, input.signal))) {
+      input.log(`Boat machine ${kept.id} was taken by another workstation at the machine limit.`);
+      kept = undefined;
+    }
     // A refused listing throws, as any Boat failure before the run does: the run falls back.
     for (const { id } of await client.list({ purpose: 'werkflow-verify', checkout }))
       if (id !== kept?.id) await deleteLeftover(client, id, input.log);
@@ -193,7 +200,7 @@ export async function acquireMachine(
       name: input.name,
       ttlSeconds: MACHINE_TTL_SECONDS,
       purpose: 'run',
-      labels: { checkout },
+      labels: { checkout, workstation: workstationLabel() },
       log: input.log,
       signal: input.signal,
     });
@@ -202,15 +209,20 @@ export async function acquireMachine(
     machine = await create();
   } catch (error) {
     // Kept machines count toward the machines a member, and the plan, may run at once. At that
-    // limit, this workstation's idle ones go, oldest first, and the start is tried once more. Boat
-    // out of capacity or without a ready machine is no limit of ours: deleting would not help.
+    // limit, this workstation's idle ones go, oldest first, or else one another workstation kept
+    // idle for long, and the start is tried once more. Boat out of capacity or without a ready
+    // machine is no limit of ours: deleting would not help.
     const limit =
       error instanceof BoatError &&
       error.status === 429 &&
       (error.code === 'member_limit_reached' || error.code === 'limit_reached')
         ? error.code
         : undefined;
-    const evicted = limit ? takeIdleRecords(folder, () => true) : [];
+    const evicted: string[] = [];
+    // A record outlives its machine when another workstation evicted it; such a record frees nothing.
+    for (const id of limit ? takeIdleRecords(folder, () => true) : [])
+      if ((await lifeLeft(client, id).catch(() => 1)) > 0) evicted.push(id);
+    if (limit && !evicted.length) evicted.push(...(await takeIdleMachineElsewhere(client, input.signal)));
     if (!evicted.length) throw error;
     for (const id of evicted) {
       input.log(`Boat refused a start at the machine limit (${limit}); deleting the idle machine ${id}.`);
@@ -286,7 +298,11 @@ export async function keepMachine(
   reaper: (repository: string, record: string) => void = startReaper,
 ): Promise<boolean> {
   if ((await lifeLeft(machine.client, machine.id)) < RUN_LIFE_SECONDS) return false;
-  await runWipe(machine, wipeCommand(input.repository, ['wipe', input.repository, input.form]), input.signal);
+  await runWipe(
+    machine,
+    wipeCommand(input.repository, ['wipe', input.repository, input.form]) + MARK_IDLE,
+    input.signal,
+  );
   // A Ctrl-C deletes the machine: nothing is kept once the user interrupted.
   if (input.signal.aborted) return false;
   const checkout = checkoutLabel(input.repository);

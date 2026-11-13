@@ -67,6 +67,7 @@ declare global {
       | 'support-triage'
       | 'support-filing'
       | 'inventory-unit'
+      | 'inventory-movements'
       | 'site-access-review'
       | 'site-access-proposal'
       | AuthUrlFixtureName
