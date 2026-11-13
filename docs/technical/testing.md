@@ -195,7 +195,7 @@ Check these before classifying.
 - **Unstable order.** A list ordered by random UUID reorders between runs.
 - **Long tokens at 375 px.** An email address or generated token is one unbreakable word.
 - **Fixture race.** Read-then-insert fixtures race under two workers.
-- **Slow machine.** When every measured scenario slows at once, replay `HEAD` on that machine before blaming the change.
+- **Slow machine.** When every measured scenario slows at once, replay `HEAD` there before blaming the change.
 
 ## Never
 
@@ -208,10 +208,10 @@ Check these before classifying.
 - Compare `count()` reads taken once. Poll them together with `expect.poll`.
 - Weaken an assertion, or retry until green, a failed CI job included.
 - Derive a reference from a failed run.
-- Raise a timeout or a budget, or rewrite a visual reference, to make a run pass.
+- Raise a timeout or budget, or rewrite a visual reference, to pass a run.
 - Treat a review score or an old report as acceptance.
 - Edit a proof input, reset or stop the local stack, or run a raw `next build` while a test operation holds the workspace lock.
-- Add a package script that builds, tests or changes the local stack outside the workspace lock.
+- Add a package script that builds or tests outside the workspace lock, or writes the shared stack outside its exclusive lock.
 - Set a duration assertion in a unit test. Make a slow test cheaper.
 
 ## Verify your work
