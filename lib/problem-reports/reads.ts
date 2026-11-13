@@ -11,7 +11,8 @@ import { PROBLEM_REPORT_STATUSES, type OwnProblemReport, type ProblemReportFileK
 // or filer, so no member reaches another person's report.
 
 /** The columns a reporter reads of their own report: no scrubbed copy, no context. */
-export const OWN_REPORT_COLUMNS = 'id, number, created_at, status, closed_at, response, description';
+export const OWN_REPORT_COLUMNS =
+  'id, number, created_at, status, closed_at, response, response_by_agent, description';
 
 type OwnReportRow = {
   id: string;
@@ -20,6 +21,7 @@ type OwnReportRow = {
   status: string;
   closed_at: string | null;
   response: string | null;
+  response_by_agent: boolean;
   description: string | null;
 };
 
@@ -31,6 +33,7 @@ export function toOwnProblemReport(row: OwnReportRow): OwnProblemReport {
     status: constrainedValue(PROBLEM_REPORT_STATUSES, row.status, 'problem_reports.status'),
     closedAt: row.closed_at,
     response: row.response,
+    responseByAgent: row.response_by_agent,
     description: row.description,
   };
 }

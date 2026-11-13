@@ -24,6 +24,7 @@ const lineRow = (id: string, takenQuantity: number): Record<string, unknown> => 
   item_id: oldItemId,
   planned_quantity: 4,
   taken_quantity: takenQuantity,
+  used_quantity: 0,
   returned_quantity: 0,
   is_billable: true,
   status: 'planned',

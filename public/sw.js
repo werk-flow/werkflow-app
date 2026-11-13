@@ -17,11 +17,15 @@
 // client sends REFILL_MESSAGE instead, so the fallback is back before the
 // signal goes.
 //
-// Bump SHELL_VERSION when this file changes what the shell holds.
+// A phone keeps the shell it installed until this file changes, and only a new
+// SHELL_VERSION deletes the old cache. Bump it when the shell's content
+// changes: this file's caching, or the offline page and anything it renders
+// with.
 
 const CACHE_PREFIX = 'werkflow-';
 // v2: the offline page reads today's assignments from the device (werk-flow/werkflow-planning#318).
-const SHELL_VERSION = 2;
+// v3: the offline page shows the clock of a phone that holds unsent time events (werk-flow/werkflow-planning#319).
+const SHELL_VERSION = 3;
 const SHELL_CACHE = `${CACHE_PREFIX}shell-v${SHELL_VERSION}`;
 const OFFLINE_PATH = '/offline';
 const REFILL_MESSAGE = 'werkflow:refill-shell';

@@ -21,8 +21,9 @@ type MitarbeiterTabsRoleChangeInput = {
 };
 
 // Role change: the row flips at once and stays marked until the refreshed
-// list lands; the banner fires only after the server confirmed, and a
-// failure rolls the role back and reports at list level.
+// list lands; the banner fires only after the server confirmed. A failure
+// rolls the role back and resolves with its sentence, which the caller shows
+// at its point of action (the row's banner or the open confirmation).
 export function useMitarbeiterTabsRoleChange({
   members,
   initialMembers,
@@ -35,20 +36,16 @@ export function useMitarbeiterTabsRoleChange({
   const waitForMembers = useSettleOnChange(initialMembers);
 
   const handleRoleChange = useCallback(
-    (memberId: string, newRole: OrgRole, firstName: string, lastName: string): Promise<void> => {
+    (memberId: string, newRole: OrgRole, firstName: string, lastName: string): Promise<string | null> => {
       const member = members.find((candidate) => candidate.user_id === memberId);
-      if (!member) return Promise.resolve();
+      if (!member) return Promise.resolve(null);
       const displayName = `${firstName} ${lastName}`.trim() || 'Mitglied';
       updateMember(memberId, { ...member, role: newRole });
       return runBusy(memberId, async () => {
         const result = await updateMemberRole(memberId, newRole).catch(() => null);
         if (!result || !result.success) {
           rollbackMember(memberId);
-          showBanner({
-            variant: 'error',
-            message: `Die Rolle von ${displayName} konnte nicht geändert werden: ${getMemberActionErrorMessage(result)}`,
-          });
-          return;
+          return `Die Rolle von ${displayName} konnte nicht geändert werden: ${getMemberActionErrorMessage(result)}`;
         }
         showBanner({
           variant: 'success',
@@ -56,6 +53,7 @@ export function useMitarbeiterTabsRoleChange({
         });
         router.refresh();
         await waitForMembers();
+        return null;
       });
     },
     [members, updateMember, rollbackMember, runBusy, router, showBanner, waitForMembers],

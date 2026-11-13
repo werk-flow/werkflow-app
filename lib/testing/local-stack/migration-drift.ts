@@ -33,6 +33,11 @@ export type MigrationDrift = {
   readonly treeOnly: readonly string[];
   /** Names on both sides whose SQL differs. */
   readonly changed: readonly string[];
+  /**
+   * Names matched by name alone, because the ledger row records no statements: no drift for a
+   * plan, but no proof that the stack ran the tree's SQL.
+   */
+  readonly unverified: readonly string[];
 };
 
 /** Whether a plan that runs these groups reads the shared local stack. */
@@ -163,6 +168,7 @@ export function migrationDrift(tree: readonly TreeMigration[], ledger: readonly 
   const stackOnly: string[] = [];
   const treeOnly: string[] = [];
   const changed: string[] = [];
+  const unverified: string[] = [];
   for (const name of [...new Set([...rows.keys(), ...files.keys()])].sort()) {
     const shapes = (files.get(name) ?? []).map((migration) => sqlShape(migration.sql));
     // Rows with statements claim their file first; a row without them takes any file left.
@@ -176,12 +182,13 @@ export function migrationDrift(tree: readonly TreeMigration[], ledger: readonly 
       const unmatched = applied.filter(({ statements }) => {
         const index = statements?.length ? open.indexOf(sqlShape(statements.join('\n;\n'))) : open.length - 1;
         if (index >= 0) open.splice(index, 1);
+        if (index >= 0 && !statements?.length) unverified.push(name);
         return index < 0;
       });
       if (unmatched.length || open.length) changed.push(name);
     }
   }
-  return { stackOnly, treeOnly, changed };
+  return { stackOnly, treeOnly, changed, unverified };
 }
 
 /** One line naming the drift, or undefined when there is none or it could not be read. */

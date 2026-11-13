@@ -32,6 +32,8 @@ function historySentence(change: SupportReportHistoryEntry['change']): string {
       return 'Antwort an die Person geändert';
     case 'original_opened':
       return change.attachment ? 'Anhang heruntergeladen' : 'Original geöffnet';
+    case 'handed_out':
+      return change.part === 'copy' ? 'Bereinigte Kopie abgerufen' : 'Screenshot abgerufen';
   }
 }
 

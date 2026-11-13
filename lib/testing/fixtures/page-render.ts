@@ -3,7 +3,7 @@
 // runs with its props. Import a page only after `installPageWorld`.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
-import { isValidElement, type ReactElement } from 'react';
+import { Fragment, isValidElement, type ReactElement } from 'react';
 import { installActionWorld, type ActionWorld } from './action-boundary-world';
 
 export type Render = () => Promise<ReactElement> | ReactElement;
@@ -41,11 +41,25 @@ export function field(value: unknown, ...path: string[]): unknown {
   );
 }
 
-/** Runs the page and each async server component it returns, as the server renders them. */
+/** A fragment's first element: a page that renders its content beside a slot. */
+function firstChild(element: ReactElement): ReactElement | null {
+  const children = field(element, 'props', 'children');
+  const first: unknown = Array.isArray(children) ? children.at(0) : children;
+  return isValidElement(first) ? first : null;
+}
+
+/**
+ * Runs the page and each async server component it returns, as the server
+ * renders them. A fragment draws nothing, so its first element is the page.
+ */
 export async function render(page: Render): Promise<ReactElement> {
   let element = await page();
-  while (isServerComponent(element.type)) {
-    const next = await element.type(element.props);
+  for (;;) {
+    const { type } = element;
+    let next: ReactElement | null;
+    if (type === Fragment) next = firstChild(element);
+    else if (isServerComponent(type)) next = await type(element.props);
+    else break;
     assert.ok(next, 'the page rendered nothing');
     element = next;
   }
@@ -64,6 +78,8 @@ async function collect(node: unknown, elements: ReactElement[], sync: SyncServer
   }
   if (!isValidElement<Record<string, unknown>>(node)) return;
   const { type } = node;
+  // A fragment draws nothing: its children are the page's elements.
+  if (type === Fragment) return collect(node.props.children, elements, sync);
   if (isServerComponent(type)) return collect(await type(node.props), elements, sync);
   const syncComponent = [...sync].find((component) => component === type);
   if (syncComponent) return collect(syncComponent(node.props), elements, sync);

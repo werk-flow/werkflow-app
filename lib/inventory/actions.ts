@@ -388,8 +388,23 @@ export async function deleteJobMaterialLine(lineIdInput: string): Promise<Action
   const line = existing;
   if (!line) return { success: false, error: 'line_not_found' };
 
+  // Used material is built in and stays on its line: the line cannot be removed.
+  if (toNumber(line.used_quantity) > 0) return { success: false, error: 'material_use_recorded' };
+  // A fully corrected use nets to 0 but stays history: the event ledger decides too.
+  const { data: useEvents, error: useEventsError } = await loggedRead(
+    'deleteJobMaterialLine: job_material_use_events read failed',
+    admin
+      .from('job_material_use_events')
+      .select('id')
+      .eq('organization_id', auth.context.orgId)
+      .eq('job_material_line_id', lineId)
+      .limit(1),
+  );
+  if (useEventsError) return { success: false, error: 'load_failed' };
+  if ((useEvents ?? []).length > 0) return { success: false, error: 'material_use_recorded' };
+
   // A line with movements is cancelled so its ledger keeps the line; one without
-  // is deleted. The quantity filters refuse a movement booked after the check.
+  // is deleted. The quantity filters refuse a movement or use booked after the check.
   const hasMovement = toNumber(line.taken_quantity) > 0 || toNumber(line.returned_quantity) > 0;
   const result = hasMovement
     ? await admin
@@ -397,6 +412,7 @@ export async function deleteJobMaterialLine(lineIdInput: string): Promise<Action
         .update({ status: 'cancelled' })
         .eq('id', lineId)
         .eq('organization_id', auth.context.orgId)
+        .eq('used_quantity', 0)
         .or('taken_quantity.gt.0,returned_quantity.gt.0')
         .select('id')
     : await admin
@@ -404,11 +420,15 @@ export async function deleteJobMaterialLine(lineIdInput: string): Promise<Action
         .delete()
         .eq('id', lineId)
         .eq('organization_id', auth.context.orgId)
+        .eq('used_quantity', 0)
         .eq('taken_quantity', 0)
         .eq('returned_quantity', 0)
         .select('id');
 
   if (result.error) {
+    // A use and its full correction committed after the check above: the line guard refuses.
+    if (result.error.message === 'material_use_recorded')
+      return { success: false, error: 'material_use_recorded' };
     logError('Error deleting job material line:', result.error);
     return { success: false, error: 'delete_failed' };
   }
@@ -644,7 +664,10 @@ export async function returnJobMaterial(
     return { success: false, error: 'line_not_found' };
   }
 
-  const stillOut = toNumber(line.taken_quantity) - toNumber(line.returned_quantity);
+  // Used material is built in; only what is neither used nor returned comes back.
+  const stillOut = normalizeQuantity(
+    toNumber(line.taken_quantity) - toNumber(line.used_quantity) - toNumber(line.returned_quantity),
+  );
   if (quantity > stillOut) {
     return { success: false, error: 'return_exceeds_taken' };
   }

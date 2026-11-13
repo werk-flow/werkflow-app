@@ -1,20 +1,23 @@
 'use client';
 
 import { Badge } from '@/components/ui/badge';
-import { MetadataSection, type MetadataField } from '@/components/shared/metadata-section';
+import { MetadataSaveError, MetadataSection, type MetadataField } from '@/components/shared/metadata-section';
 import type { MemberDetail } from '@/lib/members/actions';
 import { isOrgRole, ROLE_LABELS, type OrgRole } from '@/lib/roles';
 import { formatGermanDate } from '@/lib/utils';
+import { escalatesToBuero, roleEscalationCopy, type RoleChange } from './role-escalation-confirm-dialog';
 
 type MitarbeiterDetailProfileSectionProps = {
   member: MemberDetail;
+  fullName: string;
   canManage: boolean;
   roleOptions: { value: OrgRole; label: string }[] | undefined;
-  onRoleChange: (role: OrgRole) => Promise<void>;
+  onRoleChange: RoleChange;
 };
 
 export function MitarbeiterDetailProfileSection({
   member,
+  fullName,
   canManage,
   roleOptions,
   onRoleChange,
@@ -35,9 +38,17 @@ export function MitarbeiterDetailProfileSection({
             type: 'select' as const,
             currentValue: member.role,
             onSave: async (v: string) => {
-              if (isOrgRole(v)) await onRoleChange(v);
+              if (!isOrgRole(v)) return;
+              // The failure stays at the field, which keeps its editor open.
+              const failure = await onRoleChange(v);
+              if (failure) throw new MetadataSaveError(failure);
             },
             options: roleOptions,
+            confirmBeforeSave: {
+              shouldConfirm: (newValue: string, currentValue: string) =>
+                isOrgRole(newValue) && isOrgRole(currentValue) && escalatesToBuero(currentValue, newValue),
+              ...roleEscalationCopy(fullName),
+            },
           }
         : undefined,
     },

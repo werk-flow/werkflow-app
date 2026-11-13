@@ -1,7 +1,14 @@
 import { isUiString, type UiStringCatalog } from '@/lib/problem-reports/screenshot/ui-string-catalog';
 import type { ProblemReportContext, ScrubbedProblemReportContext } from '@/lib/problem-reports/schemas';
 import { dictionaryKnows, findTerms, NOT_A_NAME_ALONE, type ScrubDictionary } from './dictionary';
-import { findEmails, findIbans, findPhones, type Found, type PlaceholderKind } from './patterns';
+import {
+  findEmails,
+  findIbans,
+  findPhones,
+  findRecordIds,
+  type Found,
+  type PlaceholderKind,
+} from './patterns';
 import { wordsOf, type Word } from './words';
 
 // The scrubbed copy of a problem report's text and context
@@ -117,14 +124,15 @@ function mergeFound(ranked: readonly Found[][]): Found[] {
 }
 
 /**
- * The text with every IBAN, email address, phone number, known name and
- * address and every saluted name replaced by a placeholder such as
+ * The text with every record id, IBAN, email address, phone number, known
+ * name and address and every saluted name replaced by a placeholder such as
  * `[Kunde 1]`. The same name takes the same placeholder throughout the text.
  */
 export function scrubReportText(original: string, dictionary: ScrubDictionary): string {
   const text = original.normalize('NFC');
   const words = wordsOf(text);
   const found = mergeFound([
+    findRecordIds(text),
     findIbans(text),
     findEmails(text),
     findPhones(text, dictionary.phones),
@@ -151,11 +159,20 @@ export function scrubReportText(original: string, dictionary: ScrubDictionary): 
 }
 
 /**
+ * Whether a token holds a record id or one of the organization's identifying
+ * codes anywhere, such as an organization's id inside an error code.
+ */
+export function holdsIdentifier(token: string, dictionary: ScrubDictionary): boolean {
+  const folded = token.toLowerCase();
+  return findRecordIds(token).length > 0 || [...dictionary.identifiers].some((code) => folded.includes(code));
+}
+
+/**
  * The context without any text of a record. The label of a pressed control
  * stays when the whole label is one of the app's own UI strings. The app
  * version and an error's name, code and digest are tokens; one that the
- * dictionary knows as a name or a phone number is removed. No pattern rule
- * applies to a token, so a numeric digest stays. The server checks all of
+ * dictionary knows as a name or a phone number, or that holds a record id or
+ * the organization's join code, is removed. No other pattern rule applies to a token, so a numeric digest stays. The server checks all of
  * this again, because the device's filter is not trusted.
  */
 export function scrubReportContext(
@@ -164,7 +181,9 @@ export function scrubReportContext(
   dictionary: ScrubDictionary,
 ): ScrubbedProblemReportContext {
   const kept = (token: string | null): string | null =>
-    token !== null && dictionaryKnows(dictionary, token) ? null : token;
+    token !== null && (dictionaryKnows(dictionary, token) || holdsIdentifier(token, dictionary))
+      ? null
+      : token;
   return {
     ...context,
     recentActions: context.recentActions.map((action) => ({

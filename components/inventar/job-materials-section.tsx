@@ -219,6 +219,7 @@ function JobMaterialLineList({
           locations={locations}
           readOnly={readOnly}
           onTake={() => void busyLines.run(line.id, () => openDialog('take', line))}
+          onUse={() => void busyLines.run(line.id, () => openDialog('use', line))}
           onReturn={() => void busyLines.run(line.id, () => openDialog('return', line))}
           onEdit={() => void busyLines.run(line.id, () => openDialog('edit', line))}
           onDelete={() => onDelete(line.id)}

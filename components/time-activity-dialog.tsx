@@ -10,8 +10,8 @@ import {
   TimeActivityKindPicker,
   TimeActivityQualifierFields,
   TimeActivityRecoveryNotice,
-  TimeActivityStatusNotice,
 } from '@/components/time-activity-fields';
+import { TimeActivityStatusNotice } from '@/components/time-activity-status-notice';
 import { Button } from '@/components/ui/button';
 import { useBanner } from '@/components/ui/banner';
 import {

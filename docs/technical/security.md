@@ -12,7 +12,7 @@ Every rule here is hard, even where only review enforces it; virtue 3 in `AGENTS
 4. A table that feeds the period calculation gets the closed-period trigger. A ledger refuses UPDATE and DELETE, and `security_boundaries.sql` asserts the denial.
 5. A table the UI shows live follows [add Realtime data](realtime-and-caching.md#add-realtime-data).
 6. Filter every service-role query on the table by `organization_id`, or add a reviewed `tenant-scope:` comment.
-7. Run `bun run test:verify --group sql:security`, `bun run migrations:check`, `bun run types:check` and `bun run test:unit lib/conventions/tenant-scope.test.ts`.
+7. Run `bun run test:verify --group sql:security`, `bun run migrations:check`, `bun run types:check -- --local` and `bun run test:unit lib/conventions/tenant-scope.test.ts`.
 
 Wrong turn: a policy that checks membership but not the role, so every member reads through the Data API what only managers see.
 
@@ -128,7 +128,7 @@ An exception matching no finding on an unchanged tree means the registry narrowe
 ## Verify your work
 
 1. Run `bun run test:unit`.
-2. For a migration, a policy or a privileged function: `bun run test:verify --group sql:security` on the local stack, plus the SQL group that owns the table or function. Then `bun run migrations:check` and `bun run types:check`.
+2. For a migration, a policy or a privileged function: `bun run test:verify --group sql:security`, plus the SQL group that owns the table or function. Then `bun run migrations:check` and `bun run types:check -- --local`.
 3. For a dependency change: `bun run security:dependencies`. A network failure leaves it unverified, not passed.
 4. Before a release, the cloud canary runs `canary:security` against DEV (`bun run test:verify --target cloud`). It checks the live grants and Realtime delivery to foreign and removed receivers.
 5. Record which permission check guards each new operation and why it fits, and every residual exposure with the owner's acceptance, in the slice record or the commit body.
@@ -149,7 +149,7 @@ List each owner-accepted residual exposure until it closes.
 - A coworker's Arbeitsnachweis detail hides the customer signer's name; an exported report, a job or project document, shows it to all its readers (owner decision, werk-flow/werkflow-planning#241).
 - Unverified without a stronger read token: the R2 buckets' CORS rules (`GetBucketCors` refuses runtime tokens) and the Vercel environment scopes.
 - A phone's offline day can outlive lost access or sign-out ([decision 0010](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-owner-accepted-residual-exposure)).
-- Report drafts stay on the phone (owner decision 2026-11-12, werk-flow/werkflow-planning#22; [decision 0010](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-report-drafts)): text and photos 7 days past lost access, then until the phone's next use; unsent ones until their author sends or deletes them. The app shows one only to its author; the phone's browser storage holds it for anyone who unlocks it.
+- Unsent work outlives sign-out on the phone, readable to whoever unlocks its browser profile; the app shows it only to its person (werk-flow/werkflow-planning#22, OQ-4). [Report drafts](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-report-drafts) keep text and photos 7 days past lost access, then until the phone's next use; unsent [drafts and time events](../decisions/0010-offline-field-sync-contract.md#amendment-2026-11-12-the-time-outbox) stay until their person sends or deletes them.
 
 ## Revocation boundaries
 

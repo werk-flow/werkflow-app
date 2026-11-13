@@ -49,6 +49,8 @@ const QUEUE_EXCERPT_LENGTH = 280;
 /** How long the address of an attachment support opened stays valid. */
 const ATTACHMENT_URL_EXPIRES_SECONDS = 120;
 const FORMER_SUPPORT_PERSON = 'Früheres Support-Mitglied';
+/** The actor of a report thread's history entries, which carry no account. */
+const AGENT_ACTOR = 'Agent';
 
 const QUEUE_COLUMNS =
   'id, number, organization_id, created_at, status, bucket, assignee_id, reporter_id, filed_by_id, scrub_state, scrubbed_description, originals_deleted_at';
@@ -214,7 +216,13 @@ const historyPayloadSchema = z.object({
   file_id: z.string().optional(),
 });
 
-type HistoryRow = { id: string; event_type: string; actor_id: string; payload: Json; created_at: string };
+type HistoryRow = {
+  id: string;
+  event_type: string;
+  actor_id: string | null;
+  payload: Json;
+  created_at: string;
+};
 
 function toHistoryChange(
   row: HistoryRow,
@@ -236,6 +244,10 @@ function toHistoryChange(
       return { kind: 'response' };
     case 'original_opened':
       return { kind: 'original_opened', attachment: payload.success && payload.data.file_id !== undefined };
+    case 'copy_handed_out':
+      return { kind: 'handed_out', part: 'copy' };
+    case 'screenshot_handed_out':
+      return { kind: 'handed_out', part: 'screenshot' };
     default:
       // An entry of a kind a newer release writes: left out, never guessed.
       return null;
@@ -262,7 +274,8 @@ function toReportHistory(
       {
         id: event.id,
         createdAt: event.created_at,
-        actorName: profileNames.get(event.actor_id) ?? FORMER_SUPPORT_PERSON,
+        actorName:
+          event.actor_id === null ? AGENT_ACTOR : (profileNames.get(event.actor_id) ?? FORMER_SUPPORT_PERSON),
         change,
       },
     ];
@@ -292,7 +305,7 @@ export async function readSupportReport(admin: AdminClient, reportId: string): P
     admin
       // tenant-scope: cross-organization-by-design — WerkFlow support opens a report of any organization
       .from('problem_reports')
-      .select(`${QUEUE_COLUMNS}, response, scrubbed_context`)
+      .select(`${QUEUE_COLUMNS}, response, response_by_agent, scrubbed_context`)
       .eq('id', reportId)
       .maybeSingle(),
   );
@@ -335,7 +348,7 @@ export async function readSupportReport(admin: AdminClient, reportId: string): P
     readProfileNames(admin, [
       ...(supportUserIds() ?? []),
       ...(row.assignee_id === null ? [] : [row.assignee_id]),
-      ...history.data.map((event) => event.actor_id),
+      ...history.data.flatMap((event) => (event.actor_id === null ? [] : [event.actor_id])),
       ...assigneeIdsOf(history.data),
     ]),
   ]);
@@ -351,6 +364,7 @@ export async function readSupportReport(admin: AdminClient, reportId: string): P
       ...toQueueEntry(row, organizationNames, profileNames, scrubbedCopy(row)),
       assigneeId: row.assignee_id,
       response: row.response,
+      responseByAgent: row.response_by_agent,
       scrubbedContext: scrubbedContext.context,
       screenshotUrl: screenshot.url,
       attachmentCount: files.data.filter((file) => file.kind === 'anhang').length,

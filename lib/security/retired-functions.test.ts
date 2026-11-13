@@ -62,6 +62,8 @@ const SQL_CALLERS: Readonly<Record<string, string>> = {
 
 /** Function -> why it stays although the current build does not call it. */
 const KEPT_FOR_DEPLOYED_BUILD: Readonly<Record<string, string>> = {
+  list_open_request_attention:
+    'the deployed production build reads open requests through it; read_manager_attention_sets replaced it, so drop it in the first migration after the next production release',
   renew_employee_capability:
     'the deployed production build still calls it; drop it in the first migration after the next production release',
 };
