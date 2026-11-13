@@ -68,19 +68,23 @@ export function savedOnDeviceBanner(page: Page): Locator {
 
 /** „Jetzt senden“ of one draft in the section's list, by its title. */
 export function deviceDraftSendButton(page: Page, title: string): Locator {
-  return deviceDrafts(page)
-    .getByRole('listitem')
-    .filter({ hasText: title })
-    .getByRole('button', { name: DRAFT_COPY.sendNow, exact: true });
+  return confirmed(deviceDrafts(page).getByRole('listitem').filter({ hasText: title })).getByRole('button', {
+    name: DRAFT_COPY.sendNow,
+    exact: true,
+  });
 }
 
 /**
  * Waits until the session-end question names the draft, a work report with one photo, by its title,
  * and checks that it shows none of the draft's text.
  */
-export async function expectDraftNamedInQuestion(question: Locator, title: string, text: string): Promise<void> {
+export async function expectDraftNamedInQuestion(
+  question: Locator,
+  title: string,
+  text: string,
+): Promise<void> {
   const drafts = question.getByRole('list', { name: DRAFT_COPY.questionDrafts, exact: true });
-  await expect(drafts.getByRole('listitem').filter({ hasText: title })).toContainText(
+  await expect(confirmed(drafts.getByRole('listitem').filter({ hasText: title }))).toContainText(
     DRAFT_COPY.questionOnePhotoReport,
   );
   await expect(question).not.toContainText(text);

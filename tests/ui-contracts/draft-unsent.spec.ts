@@ -83,7 +83,9 @@ async function draftsOnDevice(page: Page): Promise<string[]> {
 }
 
 const draftAttachSchema = z.object({
-  operations: z.array(z.object({ kind: z.literal('work_artifact.draft'), payload: z.object({ artifactId: z.string() }) })),
+  operations: z.array(
+    z.object({ kind: z.literal('work_artifact.draft'), payload: z.object({ artifactId: z.string() }) }),
+  ),
 });
 
 /** The handler's side for draft attaches: it records each and accepts it. Time events go to the clock's route. */
@@ -100,7 +102,9 @@ async function acceptDraftAttaches(page: Page, server: Server): Promise<string[]
       return;
     }
     attached.push(...draftAttach.data.operations.map((operation) => operation.payload.artifactId));
-    await route.fulfill({ json: { results: [{ operationId: 'echo', outcome: 'accepted', code: 'accepted' }] } });
+    await route.fulfill({
+      json: { results: [{ operationId: 'echo', outcome: 'accepted', code: 'accepted' }] },
+    });
   });
   return attached;
 }
@@ -119,7 +123,9 @@ test('a sign-out names each unsent draft by its title, kind and last change, nev
   await page.getByRole('button', { name: 'Abmelden prüfen', exact: true }).click();
 
   const drafts = question(page).getByRole('list', { name: 'Berichtsentwürfe', exact: true });
-  await expect(drafts.getByRole('listitem')).toHaveText(['Wartung HeizungArbeitsbericht · geändert 12.11.2026, 09:30']);
+  await expect(drafts.getByRole('listitem')).toHaveText([
+    'Wartung HeizungArbeitsbericht · geändert 12.11.2026, 09:30',
+  ]);
   await expect(question(page)).not.toContainText('Brenner gereinigt');
   await question(page).getByRole('button', { name: 'Abbrechen', exact: true }).click();
   await expect(page.getByLabel('Abmeldung')).toHaveText('Sitzung bleibt');

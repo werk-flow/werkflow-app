@@ -34,7 +34,8 @@ mock.module('@/lib/supabase/client', () => ({
             ? { data: { session: null }, error: sessionUserId }
             : {
                 data: {
-                  session: sessionUserId === null ? null : { user: { id: sessionUserId }, access_token: 'token' },
+                  session:
+                    sessionUserId === null ? null : { user: { id: sessionUserId }, access_token: 'token' },
                 },
                 error: null,
               },
@@ -138,7 +139,6 @@ function saveUnreadable(owner: DraftHolder, id: string): Promise<void> {
   return writeStore({ ...draft({ ...owner, id }), version: 99 });
 }
 
-
 async function until(condition: () => boolean): Promise<void> {
   for (let turn = 0; turn < 500; turn += 1) {
     if (condition()) return;
@@ -193,7 +193,10 @@ describe('drafts as unsent work at a session end', () => {
   const OTHER_ORGANIZATION_ID = '9e000000-0000-4000-8000-000000000041';
   const COLLEAGUE_ID = '9e000000-0000-4000-8000-000000000060';
   const UNREADABLE_ID = '9e000000-0000-4000-8000-000000000070';
-  const otherOrganization: DraftHolder = { ...holder, organizationId: '9e000000-0000-4000-8000-0000000000a2' };
+  const otherOrganization: DraftHolder = {
+    ...holder,
+    organizationId: '9e000000-0000-4000-8000-0000000000a2',
+  };
 
   async function storeEveryone(): Promise<void> {
     await save(
@@ -207,8 +210,12 @@ describe('drafts as unsent work at a session end', () => {
         })),
       }),
     );
-    await save(draft({ id: NO_ACCESS_ID, photos: [], refusal: { kind: 'no_access', at: NOW.toISOString() } }));
-    await save(draft({ ...otherOrganization, id: OTHER_ORGANIZATION_ID, photos: [], title: 'Anderer Betrieb' }));
+    await save(
+      draft({ id: NO_ACCESS_ID, photos: [], refusal: { kind: 'no_access', at: NOW.toISOString() } }),
+    );
+    await save(
+      draft({ ...otherOrganization, id: OTHER_ORGANIZATION_ID, photos: [], title: 'Anderer Betrieb' }),
+    );
     await save(draft({ ...otherPerson, id: COLLEAGUE_ID, photos: [], title: 'Kollegin' }));
     await saveUnreadable(holder, UNREADABLE_ID);
   }
@@ -218,7 +225,11 @@ describe('drafts as unsent work at a session end', () => {
     const items = await draftUnsentSource.summarize('organization');
     expect(items.map(({ label, count, ids }) => ({ label, count, ids }))).toEqual([
       { label: 'Berichtsentwürfe', count: 1, ids: [`draft:${DRAFT_ID}:${NOW.toISOString()}`] },
-      { label: 'Berichtsentwürfe ohne Zugriff', count: 1, ids: [`draft:${NO_ACCESS_ID}:${NOW.toISOString()}`] },
+      {
+        label: 'Berichtsentwürfe ohne Zugriff',
+        count: 1,
+        ids: [`draft:${NO_ACCESS_ID}:${NOW.toISOString()}`],
+      },
       {
         label: 'Berichtsentwürfe, die diese App-Version nicht lesen kann',
         count: 1,
@@ -227,7 +238,12 @@ describe('drafts as unsent work at a session end', () => {
     ]);
     expect(items.map((item) => item.entries?.map(({ name, detail }) => ({ name, detail })))).toEqual([
       [{ name: 'Heizung gewartet', detail: 'Arbeitsbericht · 2 Fotos · geändert 09.11.2026, 09:00' }],
-      [{ name: 'Heizung gewartet', detail: 'Kein Zugriff mehr, wird nicht gesendet · Arbeitsbericht · geändert 09.11.2026, 09:00' }],
+      [
+        {
+          name: 'Heizung gewartet',
+          detail: 'Kein Zugriff mehr, wird nicht gesendet · Arbeitsbericht · geändert 09.11.2026, 09:00',
+        },
+      ],
       [{ name: 'Entwurf lässt sich nicht öffnen', detail: 'Nicht lesbar' }],
     ]);
     expect(JSON.stringify(items)).not.toContain('Brenner gereinigt');
@@ -272,7 +288,10 @@ describe('drafts as unsent work at a session end', () => {
       current ? { ...current, title: 'Danach ergänzt', updatedAt: changedAt } : null,
     );
 
-    await draftUnsentSource.discard('session', shown.flatMap((item) => item.ids));
+    await draftUnsentSource.discard(
+      'session',
+      shown.flatMap((item) => item.ids),
+    );
 
     expect((await draftUnsentSource.summarize('session')).flatMap((item) => item.ids)).toEqual([
       `draft:${laterId}:${NOW.toISOString()}`,
@@ -303,7 +322,10 @@ describe('drafts as unsent work at a session end', () => {
     const sending = sendDraft(holder, DRAFT_ID).then((outcome) => order.push(`send ${outcome}`));
     await until(() => sent.length === 1);
     const discarding = draftUnsentSource
-      .discard('session', shown.flatMap((item) => item.ids))
+      .discard(
+        'session',
+        shown.flatMap((item) => item.ids),
+      )
       .then(() => order.push('discarded'));
     for (let turn = 0; turn < 20; turn += 1) await new Promise((resolve) => setImmediate(resolve));
     expect(order).toEqual([]);
@@ -315,7 +337,9 @@ describe('drafts as unsent work at a session end', () => {
   test('„Jetzt senden“ sends the person’s drafts, also one unchanged for seven days, and never a lost-access one', async () => {
     const old = new Date(NOW.getTime() - DRAFT_UNSENT_LIMIT_MS - 60_000).toISOString();
     await save(draft({ photos: [], updatedAt: old }));
-    await save(draft({ id: NO_ACCESS_ID, photos: [], refusal: { kind: 'no_access', at: NOW.toISOString() } }));
+    await save(
+      draft({ id: NO_ACCESS_ID, photos: [], refusal: { kind: 'no_access', at: NOW.toISOString() } }),
+    );
     handlerAnswers = [results('accepted', 'accepted')];
 
     await draftUnsentSource.flush();
@@ -357,4 +381,3 @@ describe('drafts as unsent work at a session end', () => {
     expect((await stored(otherOrganization)).map((entry) => entry.sealed)).toEqual([true]);
   });
 });
-

@@ -13,7 +13,7 @@ import { logError } from '@/lib/logging';
  * One piece of a line that the question names on its own, such as a report draft: its id among the
  * line's `ids`, and what the person recognizes it by, never its content.
  */
-export type UnsentWorkEntry = { id: string; name: string; detail: string };
+type UnsentWorkEntry = { id: string; name: string; detail: string };
 
 /**
  * One line of what is still unsent, such as „Stempelzeiten“ with their number, and the ids of what

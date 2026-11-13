@@ -458,7 +458,8 @@ export function sendDraft(
  */
 async function sessionScope(scope: UnsentScope): Promise<DraftScope | null> {
   const page = pageHolder();
-  if (page) return { userId: page.userId, organizationId: scope === 'organization' ? page.organizationId : null };
+  if (page)
+    return { userId: page.userId, organizationId: scope === 'organization' ? page.organizationId : null };
   const { data, error } = await createSupabaseBrowserClient().auth.getSession();
   if (error) throw error;
   return data.session ? { userId: data.session.user.id, organizationId: null } : null;
@@ -530,7 +531,10 @@ function shownDrafts(ids: readonly string[]): ShownDrafts {
   return { drafts, unreadable };
 }
 
-function item(label: string, entries: readonly { id: string; name: string; detail: string }[]): UnsentWorkItem {
+function item(
+  label: string,
+  entries: readonly { id: string; name: string; detail: string }[],
+): UnsentWorkItem {
   return {
     label,
     count: entries.length,

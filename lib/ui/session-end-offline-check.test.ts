@@ -48,7 +48,9 @@ async function runFixture(): Promise<void> {
   const expected =
     'Wir konnten nicht prüfen, ob auf diesem Gerät noch etwas nicht übertragen ist. Lade die Seite neu und versuche es dann erneut.';
   if (answer || ended || failures.length !== 1 || failures[0] !== expected)
-    throw new Error(`expected a kept session and one check failure, got ${JSON.stringify({ answer, ended, failures })}`);
+    throw new Error(
+      `expected a kept session and one check failure, got ${JSON.stringify({ answer, ended, failures })}`,
+    );
   // The flow lifted its own barrier: the person keeps working on the phone.
   if ([...values.keys()].some((key) => key.startsWith('werkflow:session-ending:')))
     throw new Error('the session-end barrier stayed up');

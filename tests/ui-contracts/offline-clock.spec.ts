@@ -103,5 +103,7 @@ for (const { marks, says } of [
     if (says === null) await expect(notice).toHaveCount(0);
     else await expect(notice).toHaveText(says);
     // The page reads only the marks: it opens no device database to say so.
-    expect(await page.evaluate(async () => (await indexedDB.databases()).map((info) => info.name))).toEqual([]);
+    expect(await page.evaluate(async () => (await indexedDB.databases()).map((info) => info.name))).toEqual(
+      [],
+    );
   });

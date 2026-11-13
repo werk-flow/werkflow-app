@@ -178,7 +178,10 @@ describe('report drafts on the device', () => {
 });
 
 describe('the drafts a session end asks about', () => {
-  const otherJobDraft = draft({ id: '9c000000-0000-4000-8000-000000000013', updatedAt: '2026-11-09T07:10:00.000Z' });
+  const otherJobDraft = draft({
+    id: '9c000000-0000-4000-8000-000000000013',
+    updatedAt: '2026-11-09T07:10:00.000Z',
+  });
   const otherOrganizationDraft = draft({ ...otherOrganization, id: '9c000000-0000-4000-8000-000000000014' });
   const colleaguesDraft = draft({ ...otherPerson, id: '9c000000-0000-4000-8000-000000000015' });
   const unreadableId = '9c000000-0000-4000-8000-000000000016';
@@ -193,7 +196,11 @@ describe('the drafts a session end asks about', () => {
   test("a sign-out's listing holds the person's drafts of every organization, readable or not, and never a colleague's", async () => {
     await storeEveryone();
     const listed = await listDraftsInScopeOnDevice({ userId: holder.userId, organizationId: null }, NOW);
-    expect(listed.drafts.map((entry) => entry.id)).toEqual([otherJobDraft.id, draft().id, otherOrganizationDraft.id]);
+    expect(listed.drafts.map((entry) => entry.id)).toEqual([
+      otherJobDraft.id,
+      draft().id,
+      otherOrganizationDraft.id,
+    ]);
     expect(listed.unreadable).toEqual([{ id: unreadableId, jobId: draft().jobId }]);
   });
 
@@ -231,9 +238,9 @@ describe('the drafts a session end asks about', () => {
       [otherJobDraft.id, 'Später ergänzt'],
     ]);
     expect(left.unreadable).toEqual([]);
-    expect((await listDraftsInScopeOnDevice({ userId: otherPerson.userId, organizationId: null }, NOW)).drafts).toEqual([
-      colleaguesDraft,
-    ]);
+    expect(
+      (await listDraftsInScopeOnDevice({ userId: otherPerson.userId, organizationId: null }, NOW)).drafts,
+    ).toEqual([colleaguesDraft]);
     const colleagues = await listDraftsInScopeOnDevice(otherPerson, NOW);
     expect(colleagues.unreadable.map((entry) => entry.id)).toEqual([colleaguesUnreadableId]);
   });
@@ -244,7 +251,9 @@ describe('the drafts a session end asks about', () => {
       drafts: new Map([[otherOrganizationDraft.id, otherOrganizationDraft.updatedAt]]),
       unreadable: new Set(),
     });
-    expect((await listDraftsInScopeOnDevice(otherOrganization, NOW)).drafts).toEqual([otherOrganizationDraft]);
+    expect((await listDraftsInScopeOnDevice(otherOrganization, NOW)).drafts).toEqual([
+      otherOrganizationDraft,
+    ]);
   });
 });
 
