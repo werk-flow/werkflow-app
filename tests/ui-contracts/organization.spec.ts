@@ -117,6 +117,24 @@ test("a failure the old page's write reports after a switch still shows, without
   await expect(failure.getByRole('button', { name: 'Erneut versuchen' })).toHaveCount(0);
 });
 
+test('a failure the old page showed before a switch keeps its text but loses its retry in the new organization', async ({
+  page,
+}) => {
+  await page.getByLabel('Entwurf').fill('Notiz der ersten Organisation');
+  await page.getByRole('button', { name: 'Entwurf speichern' }).click();
+  await answerSave(page, 1, false);
+  const failure = page.getByRole('alert');
+  await expect(failure.getByRole('button', { name: 'Erneut versuchen' })).toHaveCount(1);
+
+  await page.getByRole('button', { name: 'Organisation wechseln', exact: true }).click();
+  await finishCookieWrite(page, 1, true);
+  await page.getByRole('button', { name: 'Serverdaten übernehmen' }).click();
+  await expect(page.getByLabel('Entwurf')).toHaveValue('');
+
+  await expect(failure).toContainText('Nicht gespeichert: Notiz der ersten Organisation');
+  await expect(failure.getByRole('button', { name: 'Erneut versuchen' })).toHaveCount(0);
+});
+
 test("an old page's save that answers in the replacing commit, before its passive effects, forwards neither its confirmation nor a retry", async ({
   page,
 }) => {
