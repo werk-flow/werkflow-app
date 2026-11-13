@@ -1336,6 +1336,111 @@ const alertDialogFooterActionsRule = {
   },
 };
 
+/**
+ * A confirmation's action closes its AlertDialog on click unless the handler
+ * calls `event.preventDefault()`. A confirm that starts a request must stay
+ * open while it runs and show its failure in the footer, or the failure lands
+ * in a closed dialog: the school-day cancellation, the unsent-time deletion
+ * and the unsent-work discard each did (class (a) of
+ * werk-flow/werkflow-planning#432). The rule passes a handler that only sets
+ * state (`setTarget(null)`: the dialog closes on purpose) and a handler that
+ * calls `preventDefault()` on an action with `pending` in a footer with
+ * `error`. Any other handler, a passed-in one included, goes through
+ * `ConfirmActionDialog` (components/shared/confirm-action-dialog.tsx), which
+ * holds all three.
+ */
+const STATE_SETTER = /^set[A-Z]/;
+
+function callsPreventDefault(handler, visitorKeys) {
+  const [event] = handler.params;
+  if (event?.type !== 'Identifier') return false;
+  let found = false;
+  const visit = (node) => {
+    if (found || !node || typeof node.type !== 'string') return;
+    if (
+      node.type === 'CallExpression' &&
+      node.callee.type === 'MemberExpression' &&
+      node.callee.object.type === 'Identifier' &&
+      node.callee.object.name === event.name &&
+      node.callee.property.type === 'Identifier' &&
+      node.callee.property.name === 'preventDefault'
+    ) {
+      found = true;
+      return;
+    }
+    for (const key of visitorKeys[node.type] ?? []) {
+      const child = node[key];
+      if (Array.isArray(child)) child.forEach(visit);
+      else visit(child);
+    }
+  };
+  visit(handler.body);
+  return found;
+}
+
+// Only state setters, behind guards and in short-circuits: the click closes the dialog and starts nothing.
+function onlySetsState(handler, visitorKeys) {
+  if (handler.async) return false;
+  let pure = true;
+  const visit = (node) => {
+    if (!pure || !node || typeof node.type !== 'string') return;
+    if (['AwaitExpression', 'NewExpression', 'TaggedTemplateExpression'].includes(node.type)) pure = false;
+    if (node.type === 'UnaryExpression' && node.operator === 'void') pure = false;
+    if (node.type === 'CallExpression') {
+      if (node.callee.type !== 'Identifier' || !STATE_SETTER.test(node.callee.name)) {
+        pure = false;
+        return;
+      }
+    }
+    for (const key of visitorKeys[node.type] ?? []) {
+      const child = node[key];
+      if (Array.isArray(child)) child.forEach(visit);
+      else visit(child);
+    }
+  };
+  visit(handler.body);
+  return pure;
+}
+
+const confirmActionStaysOpenRule = {
+  meta: {
+    type: 'problem',
+    schema: [],
+    messages: {
+      closes:
+        'This AlertDialogAction closes its confirmation on click while its handler starts work, so a failure lands in a closed dialog. Use ConfirmActionDialog from components/shared/confirm-action-dialog (werkflow-design: Destructive confirmations).',
+      noPending:
+        'An AlertDialogAction that keeps its confirmation open binds `pending` to the running request, so the action shows it and cannot run twice. Prefer ConfirmActionDialog from components/shared/confirm-action-dialog.',
+      noError:
+        'A confirmation that stays open on failure shows that failure: pass `error` to its AlertDialogFooter. Prefer ConfirmActionDialog from components/shared/confirm-action-dialog.',
+    },
+  },
+  create(context) {
+    const { visitorKeys } = context.sourceCode;
+    return {
+      JSXOpeningElement(node) {
+        if (node.name.type !== 'JSXIdentifier' || node.name.name !== 'AlertDialogAction') return;
+        const onClick = jsxAttribute(node, 'onClick');
+        if (!onClick) return;
+        const handler =
+          onClick.value?.type === 'JSXExpressionContainer'
+            ? localFunction(onClick.value.expression, context.sourceCode.getScope(node))
+            : null;
+        if (handler && onlySetsState(handler, visitorKeys)) return;
+        if (!handler || !callsPreventDefault(handler, visitorKeys)) {
+          context.report({ node, messageId: 'closes' });
+          return;
+        }
+        if (!jsxAttribute(node, 'pending')) context.report({ node, messageId: 'noPending' });
+        let footer = node.parent.parent;
+        while (footer && jsxElementName(footer) !== 'AlertDialogFooter') footer = footer.parent;
+        if (footer && !jsxAttribute(footer.openingElement, 'error'))
+          context.report({ node, messageId: 'noError' });
+      },
+    };
+  },
+};
+
 /** The expression a type assertion or a non-null assertion wraps. */
 function withoutTypeWrappers(node) {
   let current = node;
@@ -1412,5 +1517,6 @@ export const uiRules = {
     'dialog-pending-while-waiting': dialogPendingWhileWaitingRule,
     'no-derived-state-effect': noDerivedStateEffectRule,
     'alert-dialog-footer-actions': alertDialogFooterActionsRule,
+    'confirm-action-stays-open': confirmActionStaysOpenRule,
   },
 };

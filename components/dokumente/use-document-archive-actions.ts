@@ -119,14 +119,17 @@ export function useDocumentArchiveActions({
       title: 'Datei festschreiben?',
       description: `„${document.displayName}“ wird endgültig festgeschrieben. Danach lassen sich Inhalt, Herkunft, Belegdatum und Aufbewahrungsfrist nicht mehr ändern, und die Datei lässt sich nicht mehr löschen. Name, Ordner, Kategorie und Verknüpfungen bleiben änderbar.`,
       confirmLabel: 'Festschreiben',
-      onConfirm: () =>
+      // The details dialog under the confirmation shows the step's spinner and a refusal.
+      onConfirm: () => {
         void runArchiveWrite({
           details,
           mutations,
           document,
           write: () => fileDocument(document.id),
           fallback: 'Die Datei konnte nicht festgeschrieben werden.',
-        }),
+        });
+        return Promise.resolve(null);
+      },
     });
   }
 

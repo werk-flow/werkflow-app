@@ -186,6 +186,41 @@ test('a failed keyboard confirmation keeps focus on its action and shows the err
   await expectDialogFits(confirmation, 'failed long confirmation at 375');
 });
 
+test('the shared confirm-and-action dialog stays open while its request runs and on failure, and closes on success', async ({
+  page,
+}) => {
+  const answer = (value: string | null | 'throw') =>
+    page.evaluate(
+      (sent) => window.uiContractConfirmAnswer?.(sent === 'throw' ? new Error('lost') : sent),
+      value,
+    );
+  await page.getByRole('button', { name: 'Team auflösen' }).click();
+  const confirmation = page.getByRole('alertdialog', { name: 'Team „Probe“ auflösen?' });
+  const confirm = confirmation.getByRole('button', { name: 'Team auflösen' });
+  await confirm.click();
+  // Running: busy, and neither Escape nor Abbrechen closes it.
+  await expect(confirm).toHaveAttribute('aria-busy', 'true');
+  await expect(confirmation.getByRole('button', { name: 'Abbrechen' })).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await expect(confirmation).toBeVisible();
+
+  await answer('Das Team konnte nicht aufgelöst werden.');
+  await expect(confirmation.getByRole('alert')).toHaveText('Das Team konnte nicht aufgelöst werden.');
+  await expect(confirm).toBeEnabled();
+
+  // A lost request keeps it open too, with a general sentence.
+  await confirm.click();
+  await answer('throw');
+  await expect(confirmation.getByRole('alert')).toHaveText(
+    'Das hat nicht geklappt. Bitte versuche es erneut.',
+  );
+
+  await confirm.click();
+  await expect(confirmation.getByRole('alert')).toHaveCount(0);
+  await answer(null);
+  await expect(confirmation).toHaveCount(0);
+});
+
 test('focus remains visible without adding an orange border or shifting the field', async ({ page }) => {
   const input = page.getByLabel('Bezeichnung');
   const before = await input.evaluate((element) => ({

@@ -119,7 +119,7 @@ Trap: a reference rewritten because the comparison failed. A reference records a
 
 - Success closes the dialog and a `Banner` confirms. No inline success flash, no auto-close timer.
 - The root's `pending` blocks Escape, outside clicks and the close controls until the answer lands. A form inside reports its request with `useReportPending`.
-- An `AlertDialogAction` that awaits calls `event.preventDefault()` synchronously first. The primitive closes on activation before `pending` can guard it, so a failure would land in a closed dialog.
+- A confirmation whose action runs a request is `ConfirmActionDialog`. A hand-built one calls `event.preventDefault()` first in its `AlertDialogAction`, passes `pending` to the action and `error` to the footer. The primitive closes on activation, so a failure would land in a closed dialog. `ui/confirm-action-stays-open` enforces this.
 - A create dialog closes optimistically only when no correctable server error can follow.
 - Escape returns focus to the control that opened the dialog.
 

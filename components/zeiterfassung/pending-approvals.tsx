@@ -125,26 +125,28 @@ function pendingApprovalReviews({
   setActionError,
   showBanner,
 }: PendingApprovalReviewsInput) {
-  // Confirmation appears only after the server accepted the review.
+  // Confirmation appears only after the server accepted the review. Answers the refusal, or null.
   const review = async (
     list: ReviewList,
     ids: string[],
     write: () => Promise<ActionResult>,
     confirmation: string,
     describeRefusal: (error: string) => string,
-  ) => {
+  ): Promise<string | null> => {
     setActionError(null);
     view.invalidate();
     for (const id of ids) list.remove(id);
     const result = await write().catch(() => ({ success: false as const, error: 'unexpected_error' }));
+    let refusal: string | null = null;
     if (result.success) {
       showBanner({ variant: 'success', message: confirmation });
     } else {
       for (const id of ids) list.rollback(id);
-      setActionError(describeRefusal(result.error));
+      refusal = describeRefusal(result.error);
     }
     // Read again: another session may have decided items meanwhile.
     await view.refresh();
+    return refusal;
   };
 
   const reviewPendingSession = (session: PendingSession, decision: 'approved' | 'rejected') =>
@@ -154,13 +156,14 @@ function pendingApprovalReviews({
       () => reviewEntries(session.entryIds, decision),
       decision === 'approved' ? 'Der Zeiteintrag wurde genehmigt.' : 'Der Zeiteintrag wurde abgelehnt.',
       getEntryReviewErrorMessage,
-    );
+    ).then(setActionError);
 
-  // One round trip for the whole backlog; the server re-checks every entry.
+  // One round trip for the whole backlog; the server re-checks every entry. The rows stay until the
+  // answer: the confirmation that shows a refusal sits in the header, which only these rows keep open.
   const approveAllSessions = () =>
     review(
       sessionList,
-      sessions.map((session) => session.id),
+      [],
       () =>
         reviewEntries(
           sessions.flatMap((session) => session.entryIds),
@@ -179,7 +182,7 @@ function pendingApprovalReviews({
         ? 'Der Änderungsantrag wurde genehmigt.'
         : 'Der Änderungsantrag wurde abgelehnt.',
       getApprovalErrorMessage,
-    );
+    ).then(setActionError);
 
   return { reviewPendingSession, approveAllSessions, reviewPendingChangeRequest };
 }
