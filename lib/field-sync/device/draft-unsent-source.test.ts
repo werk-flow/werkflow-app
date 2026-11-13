@@ -10,6 +10,7 @@ import {
   type DraftHolder,
   type StoredDraft,
 } from './draft-store';
+import { TODAY_WIPE_KEY } from './today-wipe';
 
 // The report drafts as the unsent work a session end asks about (decision record 0010, the
 // amendment "a session end asks about report drafts"), against the real device store
@@ -53,26 +54,16 @@ Object.assign(globalThis, {
   },
 });
 
-function isSenderModule(value: unknown): value is typeof import('./draft-sync') {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'draftUnsentSource' in value &&
-    typeof value.draftUnsentSource === 'object' &&
-    'startDraftSync' in value &&
-    typeof value.startDraftSync === 'function'
-  );
-}
+const { sendDraft, startDraftSync } = await import('./draft-sync');
+const { draftUnsentSource } = await import('./draft-unsent-source');
 
-/** The sender as a tab of its own loads it: a fresh module with its own holder and queue. */
-async function loadTab(name: string): Promise<typeof import('./draft-sync')> {
-  const specifier = `./draft-sync?unsent-source=${name}`;
-  const loaded: unknown = await import(specifier);
-  if (!isSenderModule(loaded)) throw new Error('The tab did not load the sender.');
-  return loaded;
+/**
+ * Another tab's sign-out or sign-in page wrote the wipe signal: this tab's page no longer names
+ * whose drafts it holds, as on a page that never named one, so a session end reads the session.
+ */
+function pageHoldsNobody(): void {
+  storage.set(TODAY_WIPE_KEY, 'another-tab-wiped');
 }
-
-const { draftUnsentSource, sendDraft, startDraftSync } = await loadTab('page');
 
 const holder: DraftHolder = {
   userId: '9e000000-0000-4000-8000-000000000001',
@@ -259,22 +250,22 @@ describe('drafts as unsent work at a session end', () => {
       expect((await names(scope)).some((id) => id.includes(COLLEAGUE_ID))).toBe(false);
   });
 
-  test("a tab whose page named nobody asks about the session person's drafts, and fails closed when the session cannot be read", async () => {
+  test("a tab whose page names nobody now asks about the session person's drafts, and fails closed when the session cannot be read", async () => {
     await storeEveryone();
-    const tab = await loadTab('without-holder');
+    pageHoldsNobody();
     sessionUserId = holder.userId;
-    const ids = (await tab.draftUnsentSource.summarize('organization')).flatMap((item) => item.ids);
+    const ids = (await draftUnsentSource.summarize('organization')).flatMap((item) => item.ids);
     // Without a page that names the organization, a switch asks as a sign-out does: more, never less.
     expect(ids).toContain(`draft:${OTHER_ORGANIZATION_ID}:${NOW.toISOString()}`);
     expect(ids.some((id) => id.includes(COLLEAGUE_ID))).toBe(false);
     sessionUserId = otherPerson.userId;
-    expect((await tab.draftUnsentSource.summarize('session')).flatMap((item) => item.ids)).toEqual([
+    expect((await draftUnsentSource.summarize('session')).flatMap((item) => item.ids)).toEqual([
       `draft:${COLLEAGUE_ID}:${NOW.toISOString()}`,
     ]);
     sessionUserId = null;
-    expect(await tab.draftUnsentSource.summarize('session')).toEqual([]);
+    expect(await draftUnsentSource.summarize('session')).toEqual([]);
     sessionUserId = new Error('The session store did not answer.');
-    expect(tab.draftUnsentSource.summarize('session')).rejects.toThrow('The session store did not answer.');
+    expect(draftUnsentSource.summarize('session')).rejects.toThrow('The session store did not answer.');
     sessionUserId = null;
   });
 
@@ -348,15 +339,15 @@ describe('drafts as unsent work at a session end', () => {
     expect((await stored()).map((entry) => entry.id)).toEqual([NO_ACCESS_ID]);
   });
 
-  test("„Jetzt senden“ in a tab whose page named nobody sends the session person's drafts, and one the active organization refuses waits unsealed", async () => {
+  test("„Jetzt senden“ in a tab whose page names nobody now sends the session person's drafts, and one the active organization refuses waits unsealed", async () => {
     await save(draft({ photos: [] }));
     await save(draft({ ...otherOrganization, id: OTHER_ORGANIZATION_ID, photos: [] }));
     await save(draft({ ...otherPerson, id: COLLEAGUE_ID, photos: [] }));
-    const tab = await loadTab('flush-without-holder');
+    pageHoldsNobody();
     sessionUserId = holder.userId;
     handlerAnswers = [results('accepted', 'accepted'), results('rejected', 'organization_mismatch')];
 
-    await tab.draftUnsentSource.flush();
+    await draftUnsentSource.flush();
     sessionUserId = null;
 
     expect(sent.map((operation) => [operation.payload.artifactId, operation.organizationId])).toEqual([
@@ -371,11 +362,11 @@ describe('drafts as unsent work at a session end', () => {
 
   test('a draft whose earlier attach was never answered stays sealed when another organization refuses its resend', async () => {
     await save(draft({ ...otherOrganization, id: OTHER_ORGANIZATION_ID, photos: [], sealed: true }));
-    const tab = await loadTab('flush-sealed');
+    pageHoldsNobody();
     sessionUserId = holder.userId;
     handlerAnswers = [results('rejected', 'organization_mismatch')];
 
-    await tab.draftUnsentSource.flush();
+    await draftUnsentSource.flush();
     sessionUserId = null;
 
     expect((await stored(otherOrganization)).map((entry) => entry.sealed)).toEqual([true]);

@@ -1,7 +1,8 @@
 'use client';
 
 import { sendOwnTimeEvents, timeUnsentSource } from './clock-device';
-import { draftUnsentSource, sendDrafts } from './draft-sync';
+import { sendDrafts } from './draft-sync';
+import { draftUnsentSource } from './draft-unsent-source';
 import { registerSender } from './sync-runner';
 import { registerUnsentSource } from './unsent-work';
 

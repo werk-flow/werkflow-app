@@ -131,8 +131,13 @@ test('a sign-out names an unsent report draft with its photo, keeps it on „Abb
   const jobTitle = `Heizung prüfen ${world.runId}`;
   const reportTitle = `Prüfbericht ${world.runId}`;
   const offlineText = 'Ausdehnungsgefäß getauscht.';
-  await seedTodayAssignment(world, { title: jobTitle, instruction: `Druck prüfen ${world.runId}` });
-  const jobNumber = todayJobNumber(world);
+  // The spec's first test seeded today's job under todayJobNumber(world) in the same world.
+  const jobNumber = `${todayJobNumber(world)}-ABMELDEN`;
+  await seedTodayAssignment(world, {
+    title: jobTitle,
+    instruction: `Druck prüfen ${world.runId}`,
+    jobNumber,
+  });
   const syncPath = '**/api/field-sync/v1/operations';
 
   await test.step('the field worker opens the job while the phone has signal', async () => {
