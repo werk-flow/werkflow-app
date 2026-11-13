@@ -26,6 +26,8 @@ const SHIP_MINUTES = 10;
 
 const releaseWorkflow = readFileSync(join(repositoryRoot, '.github/workflows/release.yml'), 'utf8');
 const nightlyWorkflow = readFileSync(join(repositoryRoot, '.github/workflows/nightly.yml'), 'utf8');
+const mainFullRunWorkflow = readFileSync(join(repositoryRoot, '.github/workflows/main-full-run.yml'), 'utf8');
+const mainFullRunScript = readFileSync(join(repositoryRoot, '.github/scripts/main-full-run.sh'), 'utf8');
 
 let stub = '';
 
@@ -133,6 +135,28 @@ test('the nightly shares the release cron line, so the release usually reuses it
   const cronLine = (workflow: string) => /- cron: '(\d+ \d+) /.exec(workflow)?.[1];
   expect(cronLine(nightlyWorkflow)).toBe(cronLine(releaseWorkflow));
   expect(nightlyWorkflow).toMatch(/- cron: '\d+ \d+ \* \* \*'\n {6}timezone: Europe\/Berlin/);
+});
+
+test('main gets a full run every 3 hours from 06:00 to 20:00 Berlin, and no job waits for it', () => {
+  // GitHub starts scheduled runs hours late (#184), so ops/ci-alert.py in werk-flow/werkflow-planning
+  // dispatches the workflow, and the workflow decides at once whether a full run is due.
+  expect(mainFullRunWorkflow).toMatch(/\non:\n {2}workflow_dispatch:\n\n/);
+  expect(mainFullRunWorkflow).not.toMatch(/\n {2}(schedule|push):/);
+  expect(mainFullRunWorkflow).not.toMatch(/\bsleep\b/);
+  // Berlin's window and the interval (ops/ci-alert.py keeps the same three for its dispatches).
+  const window = /readonly FIRST=(\d\d:\d\d) LAST=(\d\d:\d\d) INTERVAL=\$\(\((\d+) \* 3600\)\)/.exec(
+    mainFullRunScript,
+  );
+  expect(window?.slice(1)).toEqual(['06:00', '20:00', '3']);
+  expect(mainFullRunScript).toContain('ZoneInfo("Europe/Berlin")');
+  // The decision ends in seconds.
+  expect(mainFullRunWorkflow).toMatch(
+    /\n {2}decide:\n {4}name: Decide\n {4}runs-on: .+\n {4}timeout-minutes: 5\n/,
+  );
+  // Two full runs on main never overlap: one run decides at a time, and none cancels another.
+  expect(mainFullRunWorkflow).toContain(
+    'group: main-full-run-${{ github.ref }}\n  cancel-in-progress: false\n',
+  );
 });
 
 test('a held run whose commit production already passed ends quietly with nothing to do', () => {

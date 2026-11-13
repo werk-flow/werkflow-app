@@ -40,12 +40,14 @@ git merge-base --is-ancestor origin/production "$sha" \
   || { echo "::error::production is not an ancestor of main; it only ever moves forward."; exit 1; }
 
 # A full run is ci.yml called with `full` from a job named `Full run`, so its aggregate
-# job is `Full run / Check` (.github/workflows/nightly.yml). Only a nightly or release run
-# on main counts: their workflow files come from the commit itself, so no other branch
-# can stand in for one. The newest completed full run decides; a later failure replaces a pass.
+# job is `Full run / Check` (.github/workflows/nightly.yml). Only a nightly, release or
+# main-full-run run on main counts: their workflow files come from the commit itself, so no
+# other branch can stand in for one, and no pull request starts them. The newest completed full
+# run decides; a later failure replaces a pass.
 runs="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${sha}&branch=main&per_page=100" \
   --jq '.workflow_runs[] | select(.head_branch == "main"
-    and (.path == ".github/workflows/nightly.yml" or .path == ".github/workflows/release.yml")
+    and (.path == ".github/workflows/nightly.yml" or .path == ".github/workflows/release.yml"
+      or .path == ".github/workflows/main-full-run.yml")
     and (.event == "schedule" or .event == "workflow_dispatch")) | .id')"
 # A failed request stops the gate: a missing run could be the newest, failed one.
 latest="$(for run in $runs; do
