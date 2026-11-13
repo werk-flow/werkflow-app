@@ -16017,15 +16017,6 @@ export type Database = {
         };
         Returns: undefined;
       };
-      end_work_lead: {
-        Args: {
-          p_actor_id: string;
-          p_job_id: string;
-          p_organization_id: string;
-          p_project_id: string;
-        };
-        Returns: Json;
-      };
       ensure_inventory_defaults: {
         Args: { p_actor_id: string; p_org_id: string };
         Returns: undefined;
@@ -17041,16 +17032,6 @@ export type Database = {
           isSetofReturn: false;
         };
       };
-      name_work_lead: {
-        Args: {
-          p_actor_id: string;
-          p_employee_record_id: string;
-          p_job_id: string;
-          p_organization_id: string;
-          p_project_id: string;
-        };
-        Returns: Json;
-      };
       open_time_account: {
         Args: {
           p_actor_id: string;
@@ -17305,6 +17286,13 @@ export type Database = {
           isOneToOne: false;
           isSetofReturn: true;
         };
+      };
+      read_work_lead_scope: {
+        Args: { p_organization_id: string; p_user_id: string };
+        Returns: {
+          job_id: string;
+          project_id: string;
+        }[];
       };
       record_client_communication_exception: {
         Args: {
@@ -20123,13 +20111,6 @@ export type Database = {
           p_request_id: string;
         };
         Returns: Json;
-      };
-      work_lead_scope: {
-        Args: { p_organization_id: string; p_user_id: string };
-        Returns: {
-          job_id: string;
-          project_id: string;
-        }[];
       };
     };
     Enums: {

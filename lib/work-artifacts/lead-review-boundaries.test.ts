@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { resolve } from 'node:path';
 
-test("„Projektleitung“ actions refuse a lower role, a foreign organization and a lead of other work", async () => {
+test("a „Projektleitung“ reviews and reads only the work they lead, and writes none of it", async () => {
   const child = Bun.spawn(
     [process.execPath, resolve(import.meta.dir, '../testing/fixtures/work-lead-action-boundaries.ts')],
     { cwd: resolve(import.meta.dir, '../..'), stdout: 'pipe', stderr: 'pipe' },

@@ -59,7 +59,7 @@ mock.module('@/lib/supabase/admin', () => ({
       },
       rpc: async (name: string) => {
         // The lead rule: nobody leads, or the rule cannot be read.
-        if (name === 'work_lead_scope') {
+        if (name === 'read_work_lead_scope') {
           return leadRuleFails
             ? { data: null, error: { code: '08006', message: 'read failed' } }
             : { data: [], error: null };
@@ -104,7 +104,7 @@ failingReadTable = null;
 assert.deepEqual(await getWorkArtifacts(jobTarget), { success: false, error: 'not_authorized' });
 // The lead rule that admits a „Projektleitung“: a failed read is a load failure too.
 leadRuleFails = true;
-assert.deepEqual(await getWorkArtifacts(jobTarget), loadFailed, 'work_lead_scope');
+assert.deepEqual(await getWorkArtifacts(jobTarget), loadFailed, 'read_work_lead_scope');
 leadRuleFails = false;
 
 // The correction review: a failed request or subject read is a load failure;

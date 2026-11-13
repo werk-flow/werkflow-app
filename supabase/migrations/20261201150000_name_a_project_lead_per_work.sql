@@ -4,7 +4,8 @@
 -- A project lead is a scoped responsibility, not a role: the member keeps
 -- their role (admin, buero or employee). Admin and Büro name one member as the
 -- lead of a project or of a job and end it. A project's lead covers its jobs
--- unless a job names its own.
+-- unless a job names its own. This step holds the record, the rule and the
+-- review; the office's naming and ending functions come with their screen.
 --
 -- 1. work_leads: one row per lead holding. Only its end and who ended it are
 --    set, once, so the rows are the history. One open lead per project and
@@ -12,17 +13,15 @@
 -- 2. app_private.work_lead_scope: the one rule for „is this member the lead
 --    of this work“. A lead counts while the holding is open, the member still
 --    belongs to the organization with effective access and has not left.
---    public.work_lead_scope hands the same rows to the server
+--    public.read_work_lead_scope hands the same rows to the server
 --    (lib/responsibilities/work-lead.ts).
--- 3. name_work_lead and end_work_lead: the office's writes, one call each.
--- 4. record_work_artifact_action_p1_17_inner: the lead of the work may
+-- 3. record_work_artifact_action_p1_17_inner: the lead of the work may
 --    approve, reject or send back a Regie- oder Änderungsnachweis
 --    (kind change_work) of it, besides the work_artifact_approval holders.
 --    The four-eyes rule against the revision's author stays.
 --
--- Division of work: the server actions establish identity, organization and
--- the manager role and pass them. The functions check the actor again, load
--- every id inside the organization and write.
+-- Division of work: the server actions establish identity and organization
+-- and pass them; the review function checks the lead rule again.
 --
 -- Expand-only: the previous release reads and writes none of the new objects;
 -- its review action never names a lead, so the widened check never meets it.
@@ -203,7 +202,7 @@ as $$
 $$;
 revoke all on function app_private.is_work_artifact_lead_reviewer(uuid, uuid) from public, anon, authenticated;
 
-create function public.work_lead_scope(p_organization_id uuid, p_user_id uuid)
+create function public.read_work_lead_scope(p_organization_id uuid, p_user_id uuid)
 returns table (project_id uuid, job_id uuid)
 language sql
 stable
@@ -212,106 +211,10 @@ set search_path to ''
 as $$
   select scope.project_id, scope.job_id from app_private.work_lead_scope(p_organization_id, p_user_id) scope;
 $$;
-revoke all on function public.work_lead_scope(uuid, uuid) from public, anon, authenticated;
-grant execute on function public.work_lead_scope(uuid, uuid) to service_role;
+revoke all on function public.read_work_lead_scope(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.read_work_lead_scope(uuid, uuid) to service_role;
 
--- 3. The office's writes. Naming a member ends the open holding and opens the
--- new one in one call; naming the current lead again changes nothing.
-create function public.name_work_lead(
-  p_organization_id uuid,
-  p_actor_id uuid,
-  p_project_id uuid,
-  p_job_id uuid,
-  p_employee_record_id uuid
-)
-returns jsonb
-language plpgsql
-security invoker
-set search_path to ''
-as $$
-declare
-  v_user_id uuid;
-  v_open public.work_leads%rowtype;
-  v_lead_id uuid;
-begin
-  if num_nonnulls(p_project_id, p_job_id) <> 1 then raise exception 'work_lead_target_invalid'; end if;
-  if not app_private.p1_24_is_manager(p_organization_id, p_actor_id) then
-    raise exception 'work_lead_not_authorized';
-  end if;
-  -- The target's row lock orders concurrent namings of the same work.
-  if p_project_id is not null then
-    perform 1 from public.projects project
-    where project.id = p_project_id and project.organization_id = p_organization_id for update;
-  else
-    perform 1 from public.jobs job
-    where job.id = p_job_id and job.organization_id = p_organization_id for update;
-  end if;
-  if not found then raise exception 'work_lead_target_not_found'; end if;
-
-  select employee.user_id into v_user_id
-  from public.employee_records employee
-  join public.organization_members member
-    on member.organization_id = employee.organization_id and member.user_id = employee.user_id
-  where employee.id = p_employee_record_id
-    and employee.organization_id = p_organization_id
-    and (employee.exit_date is null
-      or employee.exit_date >= (now() at time zone 'Europe/Berlin')::date);
-  if v_user_id is null or not app_private.p1_24_has_effective_access(p_organization_id, v_user_id) then
-    raise exception 'work_lead_member_not_eligible';
-  end if;
-
-  select * into v_open from public.work_leads work_lead
-  where work_lead.organization_id = p_organization_id
-    and work_lead.ended_at is null
-    and (work_lead.project_id = p_project_id or work_lead.job_id = p_job_id);
-  if found and v_open.employee_record_id = p_employee_record_id then
-    return jsonb_build_object('leadId', v_open.id, 'changed', false);
-  end if;
-  if found then
-    update public.work_leads set ended_at = now(), ended_by = p_actor_id where id = v_open.id;
-  end if;
-
-  insert into public.work_leads (organization_id, project_id, job_id, employee_record_id, started_by)
-  values (p_organization_id, p_project_id, p_job_id, p_employee_record_id, p_actor_id)
-  returning id into v_lead_id;
-  return jsonb_build_object('leadId', v_lead_id, 'changed', true);
-end;
-$$;
-revoke all on function public.name_work_lead(uuid, uuid, uuid, uuid, uuid) from public, anon, authenticated;
-grant execute on function public.name_work_lead(uuid, uuid, uuid, uuid, uuid) to service_role;
-
--- Ends the open holding; without one it changes nothing, so a second end
--- from another tab is no failure.
-create function public.end_work_lead(
-  p_organization_id uuid,
-  p_actor_id uuid,
-  p_project_id uuid,
-  p_job_id uuid
-)
-returns jsonb
-language plpgsql
-security invoker
-set search_path to ''
-as $$
-declare
-  v_lead_id uuid;
-begin
-  if num_nonnulls(p_project_id, p_job_id) <> 1 then raise exception 'work_lead_target_invalid'; end if;
-  if not app_private.p1_24_is_manager(p_organization_id, p_actor_id) then
-    raise exception 'work_lead_not_authorized';
-  end if;
-  update public.work_leads work_lead set ended_at = now(), ended_by = p_actor_id
-  where work_lead.organization_id = p_organization_id
-    and work_lead.ended_at is null
-    and (work_lead.project_id = p_project_id or work_lead.job_id = p_job_id)
-  returning work_lead.id into v_lead_id;
-  return jsonb_build_object('leadId', v_lead_id, 'changed', v_lead_id is not null);
-end;
-$$;
-revoke all on function public.end_work_lead(uuid, uuid, uuid, uuid) from public, anon, authenticated;
-grant execute on function public.end_work_lead(uuid, uuid, uuid, uuid) to service_role;
-
--- 4. The lead's review, in the action function and in the ledger's guard.
+-- 3. The lead's review, in the action function and in the ledger's guard.
 -- The action function is unchanged from
 -- 20261108000000_keep_internal_drafts_with_their_author.sql except for
 -- v_lead_review: a review step on a Regie- oder Änderungsnachweis by the

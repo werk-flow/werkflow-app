@@ -3,7 +3,7 @@ import 'server-only';
 import { logReadFailure } from '@/lib/data/read-request-cache';
 import type { ActionContext } from '@/lib/org/action-context';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import type { WorkLeadTarget } from '@/lib/projects/work-lead-types';
+import type { WorkArtifactTarget } from '@/lib/work-artifacts/types';
 
 /**
  * The work a member leads as „Projektleitung“, from the database's one rule
@@ -22,10 +22,10 @@ export type WorkLeadScope = {
  * never kept beyond its check. Null when it could not be read, which never
  * counts as access.
  */
-export async function getWorkLeadScope(
+async function getWorkLeadScope(
   context: Pick<ActionContext, 'orgId' | 'userId'>,
 ): Promise<WorkLeadScope | null> {
-  const { data, error } = await createSupabaseAdminClient().rpc('work_lead_scope', {
+  const { data, error } = await createSupabaseAdminClient().rpc('read_work_lead_scope', {
     p_organization_id: context.orgId,
     p_user_id: context.userId,
   });
@@ -43,7 +43,7 @@ export async function getWorkLeadScope(
 }
 
 /** Whether the scope covers the job, or, for project-level work, the project. */
-function workLeadCovers(scope: WorkLeadScope, target: WorkLeadTarget): boolean {
+function workLeadCovers(scope: WorkLeadScope, target: WorkArtifactTarget): boolean {
   return target.targetType === 'job' ? scope.jobIds.has(target.targetId) : scope.projectIds.has(target.targetId);
 }
 
@@ -53,7 +53,7 @@ function workLeadCovers(scope: WorkLeadScope, target: WorkLeadTarget): boolean {
  */
 export async function isWorkLeadOf(
   context: Pick<ActionContext, 'orgId' | 'userId'>,
-  target: WorkLeadTarget,
+  target: WorkArtifactTarget,
 ): Promise<boolean | 'load_failed'> {
   const scope = await getWorkLeadScope(context);
   return scope ? workLeadCovers(scope, target) : 'load_failed';

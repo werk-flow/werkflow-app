@@ -1,11 +1,11 @@
 -- A project lead per project or job (20261201150000_name_a_project_lead_per_work.sql,
--- werk-flow/werkflow-planning#381). Only a manager names or ends a lead, only
--- a current member of the same organization can be named, and every holding
--- stays as history. The lead of a project reviews the Regie- und
--- Änderungsnachweise of the project and of its jobs, unless a job names its
--- own lead; a lead of another project, an employee who is not the lead, an
--- ended lead and a removed member are refused, and the four-eyes rule holds.
--- One rolled-back transaction.
+-- werk-flow/werkflow-planning#381). A holding names a member of the work's own
+-- organization, one open holding per work, and stays as history. The lead of
+-- a project reviews the Regie- und Änderungsnachweise of the project and of
+-- its jobs, unless a job names its own lead; a lead of another project, an
+-- employee who is not the lead, an ended lead, a member who left and a
+-- removed member are refused, and the four-eyes rule holds. Only the service
+-- role reads the rule. One rolled-back transaction.
 begin;
 
 insert into auth.users (
@@ -84,6 +84,33 @@ begin
 end;
 $$;
 
+-- Runs one statement and requires the SQLSTATE it fails with.
+create function pg_temp.expect_state(p_label text, p_statement text, p_state text) returns void
+language plpgsql as $$
+begin
+  begin
+    execute p_statement;
+  exception when others then
+    if sqlstate <> p_state then
+      raise exception '% failed with % (%) instead of %', p_label, sqlstate, sqlerrm, p_state;
+    end if;
+    return;
+  end;
+  raise exception '% was not refused', p_label;
+end;
+$$;
+
+-- Names the member the lead of the work, ending the open holding, as the
+-- office's naming does.
+create function pg_temp.name_lead(p_project_id uuid, p_job_id uuid, p_user_id uuid) returns void
+language sql as $$
+  update public.work_leads set ended_at = now(), ended_by = '4f200000-0000-4000-8000-000000000001'
+  where ended_at is null and (project_id = p_project_id or job_id = p_job_id);
+  insert into public.work_leads (organization_id, project_id, job_id, employee_record_id, started_by)
+  values ('4f200000-0000-4000-8000-0000000000a0', p_project_id, p_job_id, pg_temp.record_of(p_user_id),
+    '4f200000-0000-4000-8000-000000000001');
+$$;
+
 -- A submitted Arbeitsnachweis of the given kind on a job or the project.
 create function pg_temp.submit(
   p_artifact_id uuid, p_author uuid, p_kind public.work_artifact_kind, p_job_id uuid, p_project_id uuid
@@ -126,46 +153,37 @@ declare
   v_job_s constant uuid := '4f200000-0000-4000-8000-000000000023';
   v_result jsonb;
 begin
-  -- Naming: only a manager, only a current member of the organization, only
-  -- work of the organization.
-  perform pg_temp.expect_refusal('an employee names a lead', format(
-    'select public.name_work_lead(%L, %L, %L, null, %L)', v_org, v_author, v_project_a, pg_temp.record_of(v_lead)),
-    'work_lead_not_authorized');
-  perform pg_temp.expect_refusal('a foreign organization''s member is named', format(
-    'select public.name_work_lead(%L, %L, %L, null, %L)', v_org, v_admin, v_project_a,
-    pg_temp.record_of('4f200000-0000-4000-8000-000000000007')), 'work_lead_member_not_eligible');
-  perform pg_temp.expect_refusal('a foreign organization''s project gets a lead', format(
-    'select public.name_work_lead(%L, %L, %L, null, %L)', v_org, v_admin,
-    '4f200000-0000-4000-8000-000000000012', pg_temp.record_of(v_lead)), 'work_lead_target_not_found');
-  perform pg_temp.expect_refusal('an Admin names a lead in another organization', format(
-    'select public.name_work_lead(%L, %L, %L, null, %L)', '4f200000-0000-4000-8000-0000000000b0', v_admin,
-    '4f200000-0000-4000-8000-000000000012', pg_temp.record_of('4f200000-0000-4000-8000-000000000007')),
-    'work_lead_not_authorized');
-  perform pg_temp.expect_refusal('a lead names both a project and a job', format(
-    'select public.name_work_lead(%L, %L, %L, %L, %L)', v_org, v_admin, v_project_a, v_job_a1,
-    pg_temp.record_of(v_lead)), 'work_lead_target_invalid');
+  -- A holding names a member of the work's organization, exactly one work,
+  -- and one open holding per work.
+  perform pg_temp.expect_state('a foreign organization''s member is named', format(
+    'insert into public.work_leads (organization_id, project_id, employee_record_id) values (%L, %L, %L)',
+    v_org, v_project_a, pg_temp.record_of('4f200000-0000-4000-8000-000000000007')), '23503');
+  perform pg_temp.expect_state('a holding names a foreign organization''s project', format(
+    'insert into public.work_leads (organization_id, project_id, employee_record_id) values (%L, %L, %L)',
+    v_org, '4f200000-0000-4000-8000-000000000012', pg_temp.record_of(v_lead)), '23503');
+  perform pg_temp.expect_state('a holding names both a project and a job', format(
+    'insert into public.work_leads (organization_id, project_id, job_id, employee_record_id) values (%L, %L, %L, %L)',
+    v_org, v_project_a, v_job_a1, pg_temp.record_of(v_lead)), '23514');
 
   -- Project A: first the other employee, then the lead, who replaces them.
-  perform public.name_work_lead(v_org, v_admin, v_project_a, null, pg_temp.record_of(v_other));
-  v_result := public.name_work_lead(v_org, v_admin, v_project_a, null, pg_temp.record_of(v_lead));
-  if (v_result->>'changed')::boolean is not true then raise exception 'replacing the lead changed nothing'; end if;
-  v_result := public.name_work_lead(v_org, v_admin, v_project_a, null, pg_temp.record_of(v_lead));
-  if (v_result->>'changed')::boolean then raise exception 'naming the current lead again wrote a row'; end if;
+  perform pg_temp.name_lead(v_project_a, null, v_other);
+  perform pg_temp.name_lead(v_project_a, null, v_lead);
+  perform pg_temp.expect_state('a second open holding on one project', format(
+    'insert into public.work_leads (organization_id, project_id, employee_record_id) values (%L, %L, %L)',
+    v_org, v_project_a, pg_temp.record_of(v_second)), '23505');
   if (select count(*) from public.work_leads where project_id = v_project_a) <> 2
     or (select count(*) from public.work_leads where project_id = v_project_a and ended_at is null) <> 1
-    or (select ended_by from public.work_leads
-        where project_id = v_project_a and employee_record_id = pg_temp.record_of(v_other)) <> v_admin
   then raise exception 'the replaced lead is not kept as ended history'; end if;
   -- Job A2 names its own lead; project B and the standalone job get theirs.
-  perform public.name_work_lead(v_org, v_admin, null, v_job_a2, pg_temp.record_of(v_second));
-  perform public.name_work_lead(v_org, v_admin, v_project_b, null, pg_temp.record_of(v_second));
-  perform public.name_work_lead(v_org, v_admin, null, v_job_s, pg_temp.record_of(v_lead));
+  perform pg_temp.name_lead(null, v_job_a2, v_second);
+  perform pg_temp.name_lead(v_project_b, null, v_second);
+  perform pg_temp.name_lead(null, v_job_s, v_lead);
 
   -- The lead's scope: project A, its job A1 (not A2), and the standalone job.
   if (select array_agg(coalesce(job_id, project_id) order by coalesce(job_id, project_id))
-      from public.work_lead_scope(v_org, v_lead)) <> array[v_project_a, v_job_a1, v_job_s]
+      from public.read_work_lead_scope(v_org, v_lead)) <> array[v_project_a, v_job_a1, v_job_s]
   then raise exception 'the lead''s scope is wrong'; end if;
-  if exists (select 1 from public.work_lead_scope(v_org, v_other)) then
+  if exists (select 1 from public.read_work_lead_scope(v_org, v_other)) then
     raise exception 'an ended lead keeps a scope';
   end if;
 
@@ -211,11 +229,9 @@ begin
   v_result := pg_temp.review(v_second, '4f200000-0000-4000-8000-000000000033', 'internal_rejected');
   if v_result->>'status' <> 'rejected' then raise exception 'the job lead''s rejection did not apply'; end if;
 
-  -- Ending: the ended lead is refused at once; a second end changes nothing.
-  v_result := public.end_work_lead(v_org, v_admin, v_project_a, null);
-  if (v_result->>'changed')::boolean is not true then raise exception 'the end did not apply'; end if;
-  v_result := public.end_work_lead(v_org, v_admin, v_project_a, null);
-  if (v_result->>'changed')::boolean then raise exception 'a second end wrote'; end if;
+  -- Ending: the ended lead is refused at once.
+  update public.work_leads set ended_at = now(), ended_by = v_admin
+  where project_id = v_project_a and ended_at is null;
   perform pg_temp.expect_refusal('an ended lead approves', format(
     'select pg_temp.review(%L, %L, %L)', v_lead, '4f200000-0000-4000-8000-000000000035', 'internal_approved'),
     'work_artifact_not_authorized');
@@ -225,17 +241,18 @@ begin
 
   -- Removing the member ends the access at once.
   delete from public.organization_members where organization_id = v_org and user_id = v_second;
-  if exists (select 1 from public.work_lead_scope(v_org, v_second)) then
+  if exists (select 1 from public.read_work_lead_scope(v_org, v_second)) then
     raise exception 'a removed member keeps a lead scope';
   end if;
 
-  -- A member who left cannot be named.
+  -- A member who left leads nothing, even with an open holding.
   update public.employee_records set entry_date = (now() at time zone 'Europe/Berlin')::date - 30,
     exit_date = (now() at time zone 'Europe/Berlin')::date - 1
-  where id = pg_temp.record_of(v_other);
-  perform pg_temp.expect_refusal('a member who left is named', format(
-    'select public.name_work_lead(%L, %L, %L, null, %L)', v_org, v_admin, v_project_a, pg_temp.record_of(v_other)),
-    'work_lead_member_not_eligible');
+  where id = pg_temp.record_of(v_lead);
+  if exists (select 1 from public.read_work_lead_scope(v_org, v_lead)) then
+    raise exception 'a member who left keeps a lead scope';
+  end if;
+  update public.employee_records set exit_date = null where id = pg_temp.record_of(v_lead);
 
   -- A holding is history.
   perform pg_temp.expect_refusal('a holding changes its person', format(
@@ -254,10 +271,8 @@ begin
     or has_table_privilege('authenticated', 'public.work_leads', 'insert')
     or has_table_privilege('authenticated', 'public.work_leads', 'update')
     or has_table_privilege('authenticated', 'public.work_leads', 'delete')
-    or has_function_privilege('authenticated', 'public.name_work_lead(uuid, uuid, uuid, uuid, uuid)', 'execute')
-    or has_function_privilege('authenticated', 'public.end_work_lead(uuid, uuid, uuid, uuid)', 'execute')
-    or has_function_privilege('authenticated', 'public.work_lead_scope(uuid, uuid)', 'execute')
-    or has_function_privilege('anon', 'public.work_lead_scope(uuid, uuid)', 'execute')
+    or has_function_privilege('authenticated', 'public.read_work_lead_scope(uuid, uuid)', 'execute')
+    or has_function_privilege('anon', 'public.read_work_lead_scope(uuid, uuid)', 'execute')
   then raise exception 'a browser role holds a privilege on the work leads'; end if;
 end;
 $$;
