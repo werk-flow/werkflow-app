@@ -3,6 +3,8 @@
 import { History } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import type { SkeletonColumn } from '@/components/ui/skeleton-table';
 import { DatePicker } from '@/components/ui/date-picker';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ListRow } from '@/components/ui/list-row';
@@ -22,11 +24,27 @@ import type {
 import { INVENTORY_HISTORY_KIND_LABELS, formatInventoryQuantity } from '@/lib/inventory/types';
 import { LIST_PAGE_SIZE } from '@/lib/ui/list-pagination';
 import { cn, formatBerlinDateTime, parseIsoLocalDate, toLocalDateString } from '@/lib/utils';
-import { INVENTORY_MOVEMENT_COLUMNS } from './inventory-table-columns';
 import { formatMovementTarget, movesStock, type MovementEnd } from './inventory-row-format';
 import type { InventoryFilters } from './use-inventory-filters';
 
 const ALL_VALUE = 'all';
+
+const MOVEMENT_QUANTITY_CELL = <Skeleton className="ml-auto h-4 w-12" />;
+
+// The history's columns live with the view, so only /inventar loads them (the
+// route skeleton mirrors the item list). Rows do nothing on click and do not hover.
+const INVENTORY_MOVEMENT_COLUMNS: readonly SkeletonColumn[] = [
+  { id: 'createdAt', header: 'Zeitpunkt', skeleton: <Skeleton className="h-4 w-28" /> },
+  { id: 'item', header: 'Artikel', skeleton: <Skeleton className="h-4 w-40 max-w-full" /> },
+  { id: 'from', header: 'Von', skeleton: <Skeleton className="h-4 w-24" /> },
+  { id: 'to', header: 'Nach', skeleton: <Skeleton className="h-4 w-24" /> },
+  { id: 'movementType', header: 'Bewegung', skeleton: <Skeleton className="h-4 w-24" /> },
+  { id: 'before', header: 'Vorher', className: 'text-right', skeleton: MOVEMENT_QUANTITY_CELL },
+  { id: 'delta', header: 'Menge', className: 'text-right', skeleton: MOVEMENT_QUANTITY_CELL },
+  { id: 'after', header: 'Danach', className: 'text-right', skeleton: MOVEMENT_QUANTITY_CELL },
+  { id: 'person', header: 'Person', skeleton: <Skeleton className="h-4 w-24" /> },
+  { id: 'reason', header: 'Grund', skeleton: <Skeleton className="h-4 w-32" /> },
+];
 
 /** The kinds the app books today; older kinds still show under „Alle Bewegungen“. */
 const KIND_FILTER_OPTIONS: readonly InventoryHistoryKind[] = [
@@ -276,7 +294,7 @@ function MovementCards({ entries }: { entries: InventoryMovementHistoryEntry[] }
 function MovementsDesktopTable({ entries }: { entries: InventoryMovementHistoryEntry[] }) {
   return (
     <div className="hidden overflow-hidden rounded-lg border bg-card md:block">
-      <Table>
+      <Table scrollLabel="Bewegungen">
         <TableHeader>
           <TableRow>
             {INVENTORY_MOVEMENT_COLUMNS.map((column) => (
