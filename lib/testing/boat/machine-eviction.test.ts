@@ -134,9 +134,11 @@ test('the idle mark follows only a passed wipe, and the label names no host', ()
       '-c',
       `${wipe}${MARK_IDLE.replaceAll('/var/lib/werkflow-pristine', folder).replaceAll('sudo ', '')}`,
     ]);
-  expect(mark('false').exitCode).toBe(1);
+  const failed = mark('false');
+  expect(failed.exitCode, failed.stderr.toString()).toBe(1);
   expect(existsSync(join(folder, 'idle'))).toBe(false);
-  expect(mark('true').exitCode).toBe(0);
+  const passed = mark('true');
+  expect(passed.exitCode, passed.stderr.toString()).toBe(0);
   expect(existsSync(join(folder, 'idle'))).toBe(true);
   expect(workstationLabel('Tamays-MacBook')).toMatch(/^[0-9a-f]{16}$/);
   expect(workstationLabel('Tamays-MacBook')).not.toBe(workstationLabel('werkflow-vm'));
