@@ -311,6 +311,12 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['security:offline-today', 'security/offline-today.spec.ts', ['standalone', 'work', 'planning']],
   ['security:offline-clock', 'security/offline-clock.spec.ts', ['standalone', 'time']],
   ['security:offline-drafts', 'security/offline-drafts.spec.ts', ['standalone', 'work', 'documents']],
+  // The no-signal visit end to end, and the office's refusals of a replay (decision record 0010).
+  [
+    'security:offline-visit',
+    'security/offline-visit.spec.ts',
+    ['standalone', 'work', 'time', 'documents', 'planning'],
+  ],
   // The report screenshot redraw on a seeded customer and job (docs/technical/problem-report-scrubbing.md).
   ['problem-reports:redraw', 'problem-reports/screenshot-redraw.spec.ts', ['customers', 'work']],
   // Reporting a problem from the app shell, with a redacted screenshot, to „Meine Meldungen“.

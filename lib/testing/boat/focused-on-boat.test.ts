@@ -1,0 +1,194 @@
+// Rule test: a focused run goes to Boat when it needs the app built at this tree's migrations: a
+// capture or a reference update always, any other focused run only under migration drift. It stays
+// local only when asked or when its world or target lives here, and never turns an unavailable Boat
+// into a silent local build: it names the reason and the deliberate local command. The references
+// an update rewrote are placed only after a passed update run, except one changed here meanwhile.
+import { expect, spyOn, test } from 'bun:test';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+
+import {
+  focusedKind,
+  focusedLocalReason,
+  focusedOnBoat,
+  focusedUnavailableNotice,
+  placeReferenceUpdates,
+} from './focused-on-boat';
+import { REFERENCE_UPDATES, REPLACED_REFERENCES, referenceHashes, updateFolder } from './reference-updates';
+
+const UPDATE = { WERKFLOW_UPDATE_VISUAL_REFERENCES: '1' };
+const drift = {
+  stackOnly: [],
+  treeOnly: ['20261201090000_zeiterfassung_settings'],
+  changed: [],
+  unverified: [],
+};
+const noDrift = { stackOnly: [], treeOnly: [], changed: [], unverified: [] };
+const absent = () => ({ kind: 'absent' as const });
+
+test('a capture, a reference update and any other focused audit or golden run are focused kinds', () => {
+  expect(focusedKind(['iteration', 'audit', '--grep', '@ACCEPT leaver-handover'], {})).toBe('capture');
+  expect(focusedKind(['iteration', 'audit', '--grep=@ACCEPT'], {})).toBe('capture');
+  // The reference spec's tag also holds ACCEPT: with the update variable it is an update, else a focused run.
+  const references = ['iteration', 'audit', '--grep', '@AUDIT-VISUAL rendered references'];
+  expect(focusedKind(references, UPDATE)).toBe('reference-update');
+  expect(focusedKind(references, {})).toBe('focused');
+  expect(focusedKind(['iteration', 'audit', '--grep', '@ACCEPTED'], {})).toBe('focused');
+  // A golden run never updates references; group, diagnostic and direct runs are no focused runs.
+  expect(focusedKind(['iteration', 'golden', '--grep', 'P1-07'], UPDATE)).toBe('focused');
+  expect(focusedKind(['diagnostic', 'audit', '--grep', '@ACCEPT x'], {})).toBeUndefined();
+  expect(focusedKind(['group', 'audit', '--group', 'audit:visual'], UPDATE)).toBeUndefined();
+  expect(focusedKind(['iteration', 'canary'], {})).toBeUndefined();
+});
+
+test('a focused run may run on Boat unless asked local or bound to this workstation', () => {
+  expect(focusedLocalReason(['--grep', '@ACCEPT x'], {})).toBeUndefined();
+  expect(focusedLocalReason(['--grep', '@ACCEPT x'], { WERKFLOW_VERIFY_LOCAL: '1' })).toContain(
+    'WERKFLOW_VERIFY_LOCAL',
+  );
+  expect(focusedLocalReason(['--grep', '@ACCEPT x', '--reuse-run', 'run-1'], {})).toContain('retained world');
+  expect(focusedLocalReason(['--grep', '@ACCEPT x', '--target=cloud'], {})).toContain('DEV');
+  expect(focusedLocalReason([], { CI: 'true' })).toBe('');
+  expect(focusedLocalReason([], { WERKFLOW_BOAT_MACHINE: '1' })).toBe('');
+});
+
+test('a capture or update always asks Boat; without a usable key it reports Boat unavailable', async () => {
+  const neverRead = () => {
+    throw new Error('the drift is read only for an ordinary focused run');
+  };
+  const capture = await focusedOnBoat(
+    ['iteration', 'audit', '--grep', '@ACCEPT x'],
+    '/nowhere',
+    {},
+    absent,
+    neverRead,
+  );
+  expect(typeof capture === 'object' && capture.unavailable).toContain('no Boat key');
+  const update = await focusedOnBoat(
+    ['iteration', 'audit', '--grep', '@AUDIT-VISUAL rendered references'],
+    '/nowhere',
+    UPDATE,
+    () => ({ kind: 'unusable', reason: 'it expired.' }),
+    neverRead,
+  );
+  expect(update).toEqual({ unavailable: 'it expired.' });
+  // Asked local, the key is never read.
+  const readKey = () => {
+    throw new Error('read');
+  };
+  expect(
+    await focusedOnBoat(
+      ['iteration', 'audit', '--grep', '@ACCEPT x'],
+      '/nowhere',
+      { WERKFLOW_VERIFY_LOCAL: '1' },
+      readKey,
+    ),
+  ).toBeUndefined();
+});
+
+test('an ordinary focused run goes to Boat only under migration drift, and stays here silently otherwise', async () => {
+  const argv = ['iteration', 'golden', '--grep', 'P1-07'];
+  const readKey = () => {
+    throw new Error('the key is read only when the run goes to Boat');
+  };
+  expect(await focusedOnBoat(argv, '/nowhere', {}, readKey, () => noDrift)).toBeUndefined();
+  // An unreadable stack is no drift: the run stays here, and the local server reports the stack.
+  expect(await focusedOnBoat(argv, '/nowhere', {}, readKey, () => undefined)).toBeUndefined();
+  // A local reason keeps it here without reading the stack.
+  expect(
+    await focusedOnBoat([...argv, '--reuse-run', 'run-1'], '/nowhere', {}, readKey, () => {
+      throw new Error('read');
+    }),
+  ).toBeUndefined();
+  const drifted = await focusedOnBoat(argv, '/nowhere', {}, absent, () => drift);
+  expect(typeof drifted === 'object' && drifted.unavailable).toContain('no Boat key');
+});
+
+test('the unavailable notice names the reason and the deliberate local command, the update variable included', () => {
+  const capture = focusedUnavailableNotice(
+    'Boat answered 503 capacity.',
+    ['iteration', 'audit', '--grep', "@ACCEPT it's"],
+    {},
+  );
+  expect(capture).toContain('BOAT IS UNAVAILABLE: Boat answered 503 capacity.');
+  expect(capture).toContain('  bun run test:server local');
+  expect(capture).toContain(
+    `  WERKFLOW_VERIFY_LOCAL=1 bun run test:audit:focused '--grep' '@ACCEPT it'\\''s'`,
+  );
+  const update = focusedUnavailableNotice(
+    'no key.',
+    ['iteration', 'audit', '--grep', '@AUDIT-VISUAL rendered references'],
+    UPDATE,
+  );
+  expect(update).toContain(
+    `  WERKFLOW_VERIFY_LOCAL=1 WERKFLOW_UPDATE_VISUAL_REFERENCES=1 bun run test:audit:focused '--grep' '@AUDIT-VISUAL rendered references'`,
+  );
+  expect(focusedUnavailableNotice('no key.', ['iteration', 'golden', '--grep', 'P1-07'], {})).toContain(
+    `  WERKFLOW_VERIFY_LOCAL=1 bun run test:golden:focused '--grep' 'P1-07'`,
+  );
+});
+
+test('only a passed update run places its references, and a reference changed here meanwhile fails the command', () => {
+  const SNAPSHOTS = 'tests/audit/visual/references.spec.ts-snapshots';
+  const write = (root: string, path: string, text: string) => {
+    mkdirSync(dirname(join(root, path)), { recursive: true });
+    writeFileSync(join(root, path), text);
+  };
+  // `remote` is the update run's exit on Boat, `code` what the run answered on the workstation.
+  const NAME = '0b5e2b1c-6c1f-4f7e-9d3a-2f8c1e7a9b40';
+  // `unmarked` returns a failed run's references in the plain update folder, as a run that wrote it itself would.
+  type Run = { remote: number; code: number; editHere?: boolean; stray?: boolean; unmarked?: boolean };
+  const run = ({ remote, code, editHere = false, stray = false, unmarked = false }: Run) => {
+    const repository = mkdtempSync(join(tmpdir(), 'reference-place-'));
+    write(repository, `${SNAPSHOTS}/a.png`, 'old');
+    write(repository, `${SNAPSHOTS}/b.png`, 'old');
+    write(repository, `${REFERENCE_UPDATES}/earlier/${SNAPSHOTS}/a.png`, 'earlier');
+    const before = { folders: new Set(['earlier']), references: referenceHashes(repository), update: NAME };
+    const update = updateFolder(NAME, unmarked ? '0' : String(remote));
+    write(repository, `${update}/${SNAPSHOTS}/a.png`, 'boat');
+    // A folder this update did not name, such as one a failed run wrote without the mark.
+    write(repository, `${stray ? `${REFERENCE_UPDATES}/stray` : update}/${SNAPSHOTS}/b.png`, 'boat');
+    if (editHere) write(repository, `${SNAPSHOTS}/b.png`, 'local edit');
+    const lines: string[] = [];
+    const error = spyOn(console, 'error').mockImplementation((line: string) => void lines.push(line));
+    const info = spyOn(console, 'info').mockImplementation((line: string) => void lines.push(line));
+    try {
+      const exit = placeReferenceUpdates(repository, before, { code, remote });
+      const read = (name: string) => readFileSync(join(repository, SNAPSHOTS, name), 'utf8');
+      return { exit, a: read('a.png'), b: read('b.png'), output: lines.join('\n'), repository, update };
+    } finally {
+      error.mockRestore();
+      info.mockRestore();
+    }
+  };
+  const passed = run({ remote: 0, code: 0 });
+  expect(passed).toMatchObject({ exit: 0, a: 'boat', b: 'boat' });
+  // The versions the update replaced stay as recovery data, and the output names their folder.
+  expect(passed.output).toContain(`kept in ${REPLACED_REFERENCES}/${NAME}.`);
+  expect(readFileSync(join(passed.repository, REPLACED_REFERENCES, NAME, SNAPSHOTS, 'a.png'), 'utf8')).toBe(
+    'old',
+  );
+  // A refusal on the workstation after a passed run (changed inputs) keeps its exit and places.
+  expect(run({ remote: 0, code: 1 })).toMatchObject({ exit: 1, a: 'boat', b: 'boat' });
+  // A failed update run places nothing, names each reference it left in the evidence, and fails.
+  const failed = run({ remote: 1, code: 1 });
+  expect(failed).toMatchObject({ exit: 1, a: 'old', b: 'old' });
+  expect(failed.output).toContain('The update run failed on Boat (exit 1), so none of the 2 files');
+  // The run's exit decides, not the folder's name: a failed run's unmarked folder stays evidence.
+  const unmarked = run({ remote: 1, code: 1, unmarked: true });
+  expect(unmarked).toMatchObject({ exit: 1, a: 'old', b: 'old' });
+  expect(unmarked.output).toContain(`  ${REFERENCE_UPDATES}/${NAME}/${SNAPSHOTS}/a.png`);
+  expect(failed.output).toContain(`  ${failed.update}/${SNAPSHOTS}/b.png`);
+  expect(failed.output).not.toContain('in this checkout');
+  // Only the folder this update named is placed: a failed run's unmarked folder never is.
+  const failedStray = run({ remote: 1, code: 1, stray: true });
+  expect(failedStray).toMatchObject({ exit: 1, a: 'old', b: 'old' });
+  expect(failedStray.output).toContain(`  ${REFERENCE_UPDATES}/stray/${SNAPSHOTS}/b.png`);
+  expect(run({ remote: 0, code: 0, stray: true })).toMatchObject({ exit: 1, a: 'boat', b: 'old' });
+  const edited = run({ remote: 0, code: 0, editHere: true });
+  expect(edited).toMatchObject({ exit: 1, a: 'boat', b: 'local edit' });
+  expect(edited.output).toContain(
+    `${SNAPSHOTS}/b.png (Boat's copy: ${REFERENCE_UPDATES}/${NAME}/${SNAPSHOTS}/b.png)`,
+  );
+});
