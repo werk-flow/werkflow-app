@@ -29,6 +29,8 @@ const DRAFT_DATABASE = 'werkflow-drafts';
 const DRAFT_COPY = {
   onDevice: 'Entwurf auf dem Gerät',
   sendNow: 'Jetzt senden',
+  /** The phone header's menu sheet, where the account menu and its sign-out sit. */
+  closePhoneMenu: 'Menü schließen',
   /** The line of the session-end question that names each unsent report draft. */
   questionDrafts: 'Berichtsentwürfe',
   /** How the question describes a work report with one photo. */
@@ -95,6 +97,14 @@ export async function startSignOut(page: Page): Promise<void> {
   await showOrganizationSwitcher(page);
   await accountMenuButton(page).click();
   await signOutMenuItem(page).click();
+}
+
+/** Closes the phone's menu sheet a cancelled sign-out leaves open; from the tablet width there is none. */
+export async function closePhoneMenu(page: Page): Promise<void> {
+  const close = page.getByRole('button', { name: DRAFT_COPY.closePhoneMenu, exact: true });
+  if (!(await close.isVisible())) return;
+  await close.click();
+  await expect(close).toBeHidden();
 }
 
 /** The section's list of drafts on this device. */

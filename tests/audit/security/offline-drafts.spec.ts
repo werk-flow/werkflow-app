@@ -8,6 +8,7 @@ import {
 import { openPage } from '../../golden/support/streamed-content';
 import { bypassHttpCache, setNetwork, waitForOfflineShell } from '../support/offline-shell';
 import {
+  closePhoneMenu,
   deviceDraftSendButton,
   deviceDrafts,
   draftOnDevice,
@@ -178,6 +179,7 @@ test('a sign-out names an unsent report draft with its photo, keeps it on „Abb
     await expectDraftNamedInQuestion(question, reportTitle, offlineText);
     await question.getByRole('button', { name: UNSENT_COPY.cancel, exact: true }).click();
     await expect(question).toHaveCount(0);
+    await closePhoneMenu(page);
     await expect(page).toHaveURL(new RegExp(`/auftraege/${jobNumber}`));
     await expectDraftsOnDevice(page, 1);
   });
