@@ -1,9 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 
 import { Banner } from '@/components/ui/banner';
-import { useHydrated } from '@/hooks/use-hydrated';
 import { deviceMayHoldDrafts } from '@/lib/field-sync/device/draft-expiry';
 import { deviceHoldsUnsentTime } from '@/lib/field-sync/device/unsent-mark';
 
@@ -23,9 +22,15 @@ function heldKinds(): string | null {
   return drafts ? 'Berichtsentwürfe' : null;
 }
 
+/** Another tab's write of a mark, such as a draft stored after this page loaded, or its `clear()`. */
+function subscribeToMarks(changed: () => void): () => void {
+  window.addEventListener('storage', changed);
+  return () => window.removeEventListener('storage', changed);
+}
+
 export function UnsentWorkLandingNotice() {
-  // Read in the browser only, after hydration: the server never knows what the phone holds.
-  const kinds = useHydrated() ? heldKinds() : null;
+  // Read in the browser only: the server never knows what the phone holds.
+  const kinds = useSyncExternalStore(subscribeToMarks, heldKinds, () => null);
   const [dismissed, setDismissed] = useState(false);
   if (kinds === null || dismissed) return null;
   return (

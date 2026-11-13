@@ -80,7 +80,8 @@ function claimFor(owner: DraftHolder): SendClaim {
 
 function stillHolder(claim: SendClaim): boolean {
   if (claim.generation === null || todayWipeGeneration() !== claim.generation) return false;
-  if (!claim.byPage) return holder === null || holder.userId === claim.owner.userId;
+  // A holder a page named before the claim's wipe signal no longer counts; one named since must be the claim's person.
+  if (!claim.byPage) return holderGeneration !== claim.generation || holder?.userId === claim.owner.userId;
   return (
     claim.generation === holderGeneration &&
     holder?.userId === claim.owner.userId &&
@@ -255,8 +256,10 @@ async function uploadPhotos(claim: SendClaim, draft: StoredDraft): Promise<Draft
     // Another person's session: like every other stop of that kind, the draft waits for its author.
     if (reason === 'uploader_changed') return 'waiting';
     if (reason !== null && WAITING_UPLOAD_REASONS.has(reason)) return 'waiting';
-    // The access read and the refusal speak for the author only while the tab is still theirs.
-    if (!stillHolder(claim)) return 'waiting';
+    // The access read and the refusal speak for the author only while the tab is still theirs, and
+    // only under the organization a page named: a session end's send runs under the active one, which
+    // may not be the draft's, so a refusal there says nothing about the draft and it waits.
+    if (!stillHolder(claim) || !claim.byPage) return 'waiting';
     const lost = reason === 'refused' ? await lostJobAccess(draft.jobId) : false;
     if (lost === null || !stillHolder(claim)) return 'waiting';
     await markRefused(owner, draft.id, lost ? 'no_access' : 'failed');
@@ -465,13 +468,48 @@ export async function sendDraftsBeforeSessionEnd(person: DraftScope): Promise<vo
   }
 }
 
+/** How long a session end's discard waits for a draft send in flight, an online save included. */
+const DISCARD_WAIT_MS = 10_000;
+
+/**
+ * Runs `run` while no draft is sent in this tab or, with Web Locks, in any other: the online save of
+ * a sealed draft takes this turn, so a session end's discard waits for its answer and its cleanup.
+ * Never around a device send of the draft, which takes the turn itself.
+ */
+export function whileNoDraftSend<T>(run: () => Promise<T>): Promise<T> {
+  return enqueue(run);
+}
+
 /**
  * Deletes the drafts a session end's question showed, after a send in flight, in this tab and every
- * other: the server never gets a draft the person was told is gone.
+ * other: the server never gets a draft the person was told is gone. Answers false, having deleted
+ * nothing, when that send does not end within DISCARD_WAIT_MS, as a save in a dead spot: the question
+ * then says so and its „Abbrechen“ keeps the session.
  */
-export async function deleteShownDrafts(person: DraftScope, shown: ShownDrafts): Promise<void> {
-  await enqueue(() => deleteShownDraftsOnDevice(person, shown));
+export async function deleteShownDrafts(person: DraftScope, shown: ShownDrafts): Promise<boolean> {
+  let started = false;
+  let abandoned = false;
+  const deleting = enqueue(async () => {
+    if (abandoned) return;
+    started = true;
+    await deleteShownDraftsOnDevice(person, shown);
+  });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<'late'>((resolve) => {
+    timer = setTimeout(() => resolve('late'), DISCARD_WAIT_MS);
+  });
+  try {
+    // A deletion that began before the wait ended always finishes: its answer is the truth.
+    if ((await Promise.race([deleting, late])) === 'late' && !started) {
+      abandoned = true;
+      return false;
+    }
+    await deleting;
+  } finally {
+    clearTimeout(timer);
+  }
   notify();
+  return true;
 }
 
 /**

@@ -659,6 +659,29 @@ test('text typed while an online save holds the draft sealed reaches the device 
   ).toHaveValue('Brenner und Pumpe');
 });
 
+test("an online save of a sealed draft holds the drafts' send turn until its answer is handled, so a session end's discard in any tab waits for it", async ({
+  page,
+}) => {
+  await openContractFixture(page, 'work-artifact-report');
+  await answerSync(page, () => 'offline');
+  await page.evaluate(() => {
+    window.uiContractWorkArtifacts.holdSave = true;
+  });
+  await writeReport(page, 'Wartung Heizung', 0);
+  await page.getByRole('button', { name: 'Als Entwurf speichern', exact: true }).click();
+  await expect
+    .poll(() => page.evaluate(() => typeof window.uiContractWorkArtifacts.releaseSave))
+    .toBe('function');
+  const heldTurns = () =>
+    page.evaluate(async () => (await navigator.locks.query()).held?.map((lock) => lock.name) ?? []);
+
+  expect(await heldTurns()).toContain('werkflow-draft-send');
+  await page.evaluate(() => window.uiContractWorkArtifacts.releaseSave?.());
+  // The answer is handled: the device's copy is gone, and with it the turn.
+  await expect.poll(() => storedDraftCount(page)).toBe(0);
+  await expect.poll(heldTurns).not.toContain('werkflow-draft-send');
+});
+
 test('a refused online save never writes over the newer text another tab stored after its own refusal unsealed the draft', async ({
   page,
 }) => {

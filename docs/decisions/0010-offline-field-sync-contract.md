@@ -296,3 +296,11 @@ Decided for werk-flow/werkflow-planning#403. The report drafts register with the
 - **7, a cleanup after a correction.** It does not apply.
 - **8, stored records.** The record format is unchanged; the question writes no draft.
 - **Without signal.** The question's code is a lazy file that the service worker does not keep. A phone that never loaded it cannot ask without signal: the session end fails closed and keeps the session, as for time events (`lib/ui/session-end-offline-check.test.ts`). werk-flow/werkflow-planning#407 decides how the code reaches the phone.
+
+## Amendment 2026-11-13: report drafts at a session end after review
+
+Decided for werk-flow/werkflow-planning#403 on its outside review. Where the amendment above differs, this section wins.
+
+- **4, sending under the session's claim.** A refused photo upload under that claim says nothing about the draft: it ran under the active organization, which may not be the draft's. The draft waits and is never marked „Kein Zugriff mehr“ from there. A holder a page of the tab named before another tab's wipe no longer counts against the session's person.
+- **6, a discard and an online save.** An online save of a sealed draft is a send in flight: it holds the drafts' turn from its request until its unseal or its device cleanup, so a discard in any tab waits for its answer. The wait is bounded at 10 seconds. A discard that reaches the bound deletes nothing, the question says that something is still being sent, and „Abbrechen“ keeps the session. A question that opens while such a save hangs shows its stalled send with „Abbrechen“. In a browser without Web Locks, which no supported browser is, the turn holds only within the tab, as for time events.
+- **5, the landing page.** It follows another tab's change of either device mark, so a draft stored after the page loaded is named too.

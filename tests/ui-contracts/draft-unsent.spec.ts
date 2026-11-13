@@ -18,6 +18,7 @@ type DraftRecord = {
   userId?: string;
   title?: string;
   refusal?: { kind: 'no_access' | 'failed'; at: string } | null;
+  sealed?: boolean;
   version?: number;
 };
 
@@ -216,5 +217,57 @@ test('a sign-out is not asked about a colleague’s draft, which stays on the ph
 
   await expect(page.getByLabel('Abmeldung')).toHaveText('Sitzung darf enden');
   await expect(question(page)).toHaveCount(0);
+  expect(await draftsOnDevice(page)).toEqual([DRAFT_ID]);
+});
+
+/** Another tab's online save of a draft takes the drafts' send turn and never answers, as in a dead spot. */
+async function hangSaveInAnotherTab(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    void navigator.locks.request('werkflow-draft-send', () => new Promise<void>(() => undefined));
+  });
+}
+
+test('a save hanging in another tab when the question opens stalls its send, and „Abbrechen“ still keeps the session', async ({
+  page,
+}) => {
+  await mountClock(page, CLOCKED_OUT_STATE);
+  await storeDrafts(page, [{ id: DRAFT_ID, sealed: true }]);
+  await hangSaveInAnotherTab(page);
+
+  await page.getByRole('button', { name: 'Abmelden prüfen', exact: true }).click();
+
+  await expect(question(page).getByRole('status')).toHaveText('Es wird gesendet …');
+  await question(page).getByRole('button', { name: 'Abbrechen', exact: true }).click();
+  await expect(page.getByLabel('Abmeldung')).toHaveText('Sitzung bleibt');
+  expect(await draftsOnDevice(page)).toEqual([DRAFT_ID]);
+});
+
+test('a discard waiting for a save that started hanging in another tab ends after its bound, deletes nothing, and „Abbrechen“ keeps the session', async ({
+  page,
+}) => {
+  // The page's clock runs by hand, so the discard's ten-second bound passes without waiting.
+  await page.clock.install();
+  const server = await mountClock(page, CLOCKED_OUT_STATE);
+  await setNetwork(page, server, false);
+  await storeDrafts(page, [{ id: DRAFT_ID, sealed: true }]);
+  await page.getByRole('button', { name: 'Abmelden prüfen', exact: true }).click();
+  // The question's own send found no signal and ended; then another tab's save starts and hangs.
+  await expect(question(page)).toContainText('Noch nicht alles ist übertragen.');
+  await hangSaveInAnotherTab(page);
+
+  await question(page).getByRole('button', { name: 'Verwerfen', exact: true }).click();
+  const confirmation = page.getByRole('alertdialog', { name: 'Nicht Übertragenes verwerfen?' });
+  await confirmation.getByRole('button', { name: 'Endgültig verwerfen', exact: true }).click();
+  // The discard starts its bound only after it read the session: the page clock moves in steps until it passed.
+  await expect(async () => {
+    await page.clock.runFor(1_000);
+    await expect(confirmation).toContainText(
+      'Gerade wird noch etwas übertragen. Nichts wurde gelöscht. Versuche es gleich noch einmal.',
+      { timeout: 100 },
+    );
+  }).toPass();
+  await confirmation.getByRole('button', { name: 'Abbrechen', exact: true }).click();
+  await question(page).getByRole('button', { name: 'Abbrechen', exact: true }).click();
+  await expect(page.getByLabel('Abmeldung')).toHaveText('Sitzung bleibt');
   expect(await draftsOnDevice(page)).toEqual([DRAFT_ID]);
 });

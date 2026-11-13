@@ -44,6 +44,17 @@ export type UnsentSource = {
   discard(scope: UnsentScope, ids: readonly string[]): Promise<void>;
 };
 
+/**
+ * A discard that waited for a send in flight, such as a save in a dead spot, until its limit, and
+ * deleted nothing. The question says so; „Abbrechen“ keeps the session.
+ */
+export class UnsentWorkBusyError extends Error {
+  constructor() {
+    super('a send in flight did not end in time; nothing was deleted');
+    this.name = 'UnsentWorkBusyError';
+  }
+}
+
 const sources: UnsentSource[] = [];
 
 /** Registers one kind of unsent work. A second registration under the same name replaces the first. */

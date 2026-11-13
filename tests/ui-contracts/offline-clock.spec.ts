@@ -107,3 +107,35 @@ for (const { marks, says } of [
       [],
     );
   });
+
+test('the page a sign-out lands on names a draft another tab stored after the page loaded', async ({
+  page,
+}) => {
+  assertWorkspaceTestLock();
+  const bundle = process.env.WERKFLOW_UI_CONTRACT_BUNDLE;
+  if (!bundle) throw new Error('Run through bun tests/ui-contracts/run.ts.');
+  await page.route('http://localhost/ui-contracts**', (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: '<html lang="de"><body><div id="root"></div></body></html>',
+    }),
+  );
+  await page.goto('http://localhost/ui-contracts');
+  await page.evaluate(() => {
+    window.uiContractFixture = 'unsent-time-landing';
+  });
+  await page.addScriptTag({ path: bundle });
+  await expect(page.getByRole('main').getByText('Anmelden')).toBeVisible();
+  const notice = page.getByRole('alert').filter({ hasText: 'Auf diesem Gerät liegen' });
+  await expect(notice).toHaveCount(0);
+
+  // Another tab's report dialog stores a draft: its mark reaches this page as a storage event.
+  await page.evaluate(() => {
+    localStorage.setItem('werkflow:drafts-on-device', '1');
+    window.dispatchEvent(new StorageEvent('storage', { key: 'werkflow:drafts-on-device', newValue: '1' }));
+  });
+
+  await expect(notice).toHaveText(
+    'Auf diesem Gerät liegen noch nicht gesendete Berichtsentwürfe. Melde dich an, damit sie gesendet werden.',
+  );
+});

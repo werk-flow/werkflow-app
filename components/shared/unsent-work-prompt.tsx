@@ -27,6 +27,7 @@ import { showInUnsentWorkHost } from '@/components/shared/unsent-work-host';
 import { usePendingTask } from '@/hooks/use-server-action';
 import '@/lib/field-sync/device/registrations';
 import {
+  UnsentWorkBusyError,
   discardUnsentWork,
   flushUnsentWork,
   summarizeUnsentWork,
@@ -153,6 +154,12 @@ function useUnsentChoice(
         setItems(left);
         setError('Noch nicht alles ist übertragen. Prüfe dein Netz und versuche es erneut.');
       } catch (failure) {
+        if (failure instanceof UnsentWorkBusyError) {
+          setError(
+            'Gerade wird noch etwas übertragen. Nichts wurde gelöscht. Versuche es gleich noch einmal.',
+          );
+          return;
+        }
         logError('unsent work: the choice failed', failure);
         setError('Der Speicher deines Geräts hat nicht geantwortet. Bitte versuche es erneut.');
       } finally {

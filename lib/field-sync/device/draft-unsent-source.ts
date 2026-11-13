@@ -12,7 +12,7 @@ import {
 } from './draft-store';
 import { deleteShownDrafts, isPastUnsentLimit, pageHolder, sendDraftsBeforeSessionEnd } from './draft-sync';
 import { readTodayOnDevice } from './today-store';
-import type { UnsentScope, UnsentSource, UnsentWorkItem } from './unsent-work';
+import { UnsentWorkBusyError, type UnsentScope, type UnsentSource, type UnsentWorkItem } from './unsent-work';
 
 // The report drafts as the unsent work a session end asks about (decision record 0010, the
 // amendment "a session end asks about report drafts"). Only registrations.ts loads this module, so
@@ -159,6 +159,6 @@ export const draftUnsentSource: UnsentSource = {
     const shown = shownDrafts(ids);
     if (shown.drafts.size === 0 && shown.unreadable.size === 0) return;
     const person = await sessionScope(scope);
-    if (person) await deleteShownDrafts(person, shown);
+    if (person && !(await deleteShownDrafts(person, shown))) throw new UnsentWorkBusyError();
   },
 };

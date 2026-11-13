@@ -14,14 +14,22 @@ import { TODAY_WIPE_KEY } from './today-wipe';
 
 // The report drafts as the unsent work a session end asks about (decision record 0010, the
 // amendment "a session end asks about report drafts"), against the real device store
-// (fake-indexeddb). The session read and the sync handler are stand-ins; every draft here is
-// without photos, so no upload runs.
+// (fake-indexeddb). The session read, the photo upload, the job access read and the sync handler
+// are stand-ins.
 
+/** What the photo upload answers; null when a test expects none. */
+let uploadAnswer: { status: 'failed'; reason: string; transferred: null } | null = null;
+let accessReads = 0;
 mock.module('@/lib/documents/upload-client', () => ({
-  uploadDocumentDirect: () => Promise.reject(new Error('No draft of these tests has a photo.')),
+  uploadDocumentDirect: () =>
+    uploadAnswer ? Promise.resolve(uploadAnswer) : Promise.reject(new Error('Unexpected photo upload')),
 }));
 mock.module('@/lib/data/background-read-client', () => ({
-  readInBackground: () => Promise.reject(new Error('No draft of these tests loses access by an upload.')),
+  readInBackground: () => {
+    accessReads += 1;
+    // The active organization's reader: another organization's job is out of its reach.
+    return Promise.resolve({ success: false, error: 'not_authorized' });
+  },
 }));
 
 /** The person of the browser's session; an Error is a session that cannot be read. */
@@ -54,7 +62,8 @@ Object.assign(globalThis, {
   },
 });
 
-const { sendDraft, startDraftSync } = await import('./draft-sync');
+const { sendDraft, startDraftSync, whileNoDraftSend } = await import('./draft-sync');
+const { UnsentWorkBusyError } = await import('./unsent-work');
 const { draftUnsentSource } = await import('./draft-unsent-source');
 
 /**
@@ -158,6 +167,8 @@ beforeEach(async () => {
   sent.length = 0;
   handlerAnswers = [];
   sessionUserId = null;
+  uploadAnswer = null;
+  accessReads = 0;
   Object.assign(globalThis, {
     window: { addEventListener: () => undefined, removeEventListener: () => undefined },
     fetch: (_url: string, init: RequestInit) => {
@@ -370,5 +381,100 @@ describe('drafts as unsent work at a session end', () => {
     sessionUserId = null;
 
     expect((await stored(otherOrganization)).map((entry) => entry.sealed)).toEqual([true]);
+  });
+  test('„Jetzt senden“ never marks a photo draft of an organization the page did not name as lost access when its upload is refused', async () => {
+    const photoDraft = draft({
+      ...otherOrganization,
+      id: OTHER_ORGANIZATION_ID,
+      photos: [
+        {
+          id: '9e000000-0000-4000-8000-000000000031',
+          name: 'foto-1.jpg',
+          blob: new Blob(['synthetic photo'], { type: 'image/jpeg' }),
+          transferred: null,
+          documentId: null,
+        },
+      ],
+    });
+    await save(photoDraft);
+    sessionUserId = holder.userId;
+    // The upload runs under the session's active organization, the page's, which refuses the other one's job.
+    uploadAnswer = { status: 'failed', reason: 'refused', transferred: null };
+
+    await draftUnsentSource.flush();
+
+    expect(accessReads).toBe(0);
+    expect(sent).toEqual([]);
+    expect((await stored(otherOrganization)).map((entry) => [entry.refusal, entry.sealed])).toEqual([
+      [null, false],
+    ]);
+  });
+
+  test("„Jetzt senden“ sends the session person's drafts after another tab changed the person, though this tab's page named the earlier one", async () => {
+    await save(draft({ ...otherPerson, id: COLLEAGUE_ID, photos: [] }));
+    // Another tab signed the first person out and the colleague in; this tab's page still named the first.
+    pageHoldsNobody();
+    sessionUserId = otherPerson.userId;
+    handlerAnswers = [results('accepted', 'accepted')];
+
+    await draftUnsentSource.flush();
+
+    expect(sent.map((operation) => operation.payload.artifactId)).toEqual([COLLEAGUE_ID]);
+    expect(await stored(otherPerson)).toEqual([]);
+  });
+  test('a discard waits for an online save of a sealed draft in its turn, so the server never records a draft the person was told is gone', async () => {
+    await save(draft({ sealed: true }));
+    const shown = (await draftUnsentSource.summarize('session')).flatMap((item) => item.ids);
+    let answerSave = (): void => undefined;
+    const order: string[] = [];
+    // Another tab's online save holds the drafts' turn until the server answers.
+    const saving = whileNoDraftSend(
+      () =>
+        new Promise<void>((resolve) => {
+          answerSave = resolve;
+        }),
+    ).then(() => order.push('save answered'));
+    const discarding = draftUnsentSource.discard('session', shown).then(() => order.push('discarded'));
+    for (let turn = 0; turn < 20; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+    expect(order).toEqual([]);
+    expect((await stored()).length).toBe(1);
+    answerSave();
+    await Promise.all([saving, discarding]);
+    expect(order).toEqual(['save answered', 'discarded']);
+    expect(await stored()).toEqual([]);
+  });
+
+  test('a discard whose wait for a hanging online save ends deletes nothing and says a send is still running', async () => {
+    await save(draft({ sealed: true }));
+    const shown = (await draftUnsentSource.summarize('session')).flatMap((item) => item.ids);
+    let answerSave = (): void => undefined;
+    const saving = whileNoDraftSend(
+      () =>
+        new Promise<void>((resolve) => {
+          answerSave = resolve;
+        }),
+    );
+    // The discard's wait limit, fired by hand: a save in a dead spot never answers within it.
+    const realSetTimeout = globalThis.setTimeout;
+    const wait: { end: (() => void) | null } = { end: null };
+    Object.assign(globalThis, {
+      setTimeout: (run: () => void) => {
+        wait.end = run;
+        return realSetTimeout(() => undefined, 0);
+      },
+    });
+    try {
+      const discarding = draftUnsentSource.discard('session', shown);
+      await until(() => wait.end !== null);
+      wait.end?.();
+      await expect(discarding).rejects.toBeInstanceOf(UnsentWorkBusyError);
+    } finally {
+      Object.assign(globalThis, { setTimeout: realSetTimeout });
+    }
+    answerSave();
+    await saving;
+    // The abandoned deletion never runs after the save answered: the person was told nothing went.
+    for (let turn = 0; turn < 20; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+    expect((await stored()).length).toBe(1);
   });
 });
