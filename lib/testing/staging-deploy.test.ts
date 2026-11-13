@@ -57,7 +57,7 @@ beforeEach(() => {
 afterEach(() => rmSync(stub, { recursive: true, force: true }));
 
 /** Runs the deploy against the given answers, in request order, and fails the test if the token prints. */
-function deploy(answers: Answer[]) {
+function deploy(answers: Answer[], extraEnv: Record<string, string> = {}) {
   for (const [index, answer] of answers.entries())
     writeFileSync(
       join(stub, `answer-${index + 1}.json`),
@@ -71,6 +71,7 @@ function deploy(answers: Answer[]) {
       STUB: stub,
       VERCEL_TOKEN: TOKEN,
       GITHUB_REPOSITORY_ID: '42',
+      ...extraEnv,
     },
   });
   const output = `${result.stdout}${result.stderr}`;
@@ -128,6 +129,15 @@ test('a create still rate-limited after about 20 minutes of backoff fails with t
     'Vercel answered HTTP 429 (rate_limited: GitHub API rate limit exceeded., still after 900 seconds).',
   );
   expect(result.requests).toHaveLength(5);
+});
+
+// The release's optional alias lookup runs with a zero budget, so a 429 there never delays the promote.
+test('a zero retry budget fails the first 429 without waiting', () => {
+  const result = deploy([rateLimited(['retry-after: 1']), created, ready], { VERCEL_API_RETRY_SECONDS: '0' });
+  expect(result.status).toBe(1);
+  expect(result.sleeps).toEqual([]);
+  expect(result.requests).toHaveLength(1);
+  expect(result.output).toContain('still after 0 seconds).');
 });
 
 test('the retry budget counts the time requests take, not only the waits', () => {
