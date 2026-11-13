@@ -35,6 +35,10 @@ import { OrganizationContractFixture } from './organization-boundaries';
 import { MemberRoleContractFixture } from './member-role-boundaries';
 import { OrganizationExportContractFixture } from './organization-export-boundaries';
 import {
+  CompanyLetterheadContractFixture,
+  CompanyProfileContractFixture,
+} from './company-profile-boundaries';
+import {
   TodayRefreshContractFixture,
   TodayRefreshFallbackContractFixture,
   TodayRefreshProfileContractFixture,
@@ -655,6 +659,10 @@ createRoot(root).render(
     <OrganizationContractFixture />
   ) : window.uiContractFixture === 'organization-export' ? (
     <OrganizationExportContractFixture />
+  ) : window.uiContractFixture === 'company-profile' ? (
+    <CompanyProfileContractFixture />
+  ) : window.uiContractFixture === 'company-letterhead' ? (
+    <CompanyLetterheadContractFixture />
   ) : window.uiContractFixture === 'draft-landing' ? (
     <AuthLayout>
       <h1>Komponentenverträge</h1>

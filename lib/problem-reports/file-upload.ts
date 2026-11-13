@@ -10,6 +10,7 @@ import {
   promoteUploadedObject,
   uploadStagingPath,
 } from '@/lib/storage/r2';
+import { uploadRuleFailure } from '@/lib/storage/upload-rules';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { isConfirmedWriteRefusal, writeRefusalFor } from '@/lib/supabase/write-refusal';
@@ -42,24 +43,16 @@ const refusal = writeRefusalFor(
   ]),
 );
 
-/** Whether the type and size fit the file kind; the ticket and the stored copy are checked alike. */
-function fileRuleFailure(
-  kind: ProblemReportFileKind,
-  mimeType: string | null,
-  sizeBytes: number | null,
-): 'file_type_not_allowed' | 'file_empty' | 'file_too_large' | null {
-  const rule = PROBLEM_REPORT_FILE_RULES[kind];
-  if (mimeType === null || !rule.mimeTypes.includes(mimeType)) return 'file_type_not_allowed';
-  if (sizeBytes === null || sizeBytes <= 0) return 'file_empty';
-  return sizeBytes > rule.maxSizeBytes ? 'file_too_large' : null;
-}
-
 /** Signs the upload of one file of a report the filer filed. */
 export async function issueProblemReportFileUploadTicket(
   filer: ReportFiler,
   input: ReportFileTarget & { mimeType: string; fileSizeBytes: number },
 ): Promise<ProblemReportFileUploadTicketResult> {
-  const ruleFailure = fileRuleFailure(input.kind, input.mimeType, input.fileSizeBytes);
+  const ruleFailure = uploadRuleFailure(
+    PROBLEM_REPORT_FILE_RULES[input.kind],
+    input.mimeType,
+    input.fileSizeBytes,
+  );
   if (ruleFailure) return { success: false, error: ruleFailure };
   const report = await readFilableReport(createSupabaseAdminClient(), filer, input.reportId);
   if (!report.success) return report;
@@ -121,7 +114,11 @@ export async function registerUploadedProblemReportFile(
     return { success: false, error: 'upload_failed' };
   }
   if (!copy.exists) return { success: false, error: 'file_missing' };
-  const ruleFailure = fileRuleFailure(input.kind, copy.contentType, copy.sizeBytes);
+  const ruleFailure = uploadRuleFailure(
+    PROBLEM_REPORT_FILE_RULES[input.kind],
+    copy.contentType,
+    copy.sizeBytes,
+  );
   if (ruleFailure || copy.contentType === null || copy.sizeBytes === null) {
     await discardStorageObjects({ organizationId, paths: [copy.path] });
     return { success: false, error: ruleFailure ?? 'file_empty' };

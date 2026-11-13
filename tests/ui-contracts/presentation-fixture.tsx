@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { ConfirmActionDialog } from '@/components/shared/confirm-action-dialog';
 import { usePageBodyKeyboardScroll } from '@/components/shared/page-body-keyboard-scroll';
 import {
   AlertDialog,
@@ -59,6 +60,32 @@ const savedLocation: InventoryLocation = {
   sortOrder: 0,
   isActive: true,
 };
+
+declare global {
+  interface Window {
+    /** Answers the running confirm of the shared action dialog: a failure sentence, null, or a throw. */
+    uiContractConfirmAnswer?: (answer: string | null | Error) => void;
+  }
+}
+
+/** The shared confirm-and-action dialog; the spec answers its request. */
+function ConfirmActionProbe(): React.JSX.Element {
+  return (
+    <ConfirmActionDialog
+      trigger={<Button>Team auflösen</Button>}
+      title="Team „Probe“ auflösen?"
+      description="Das Team bleibt mit seiner Historie erhalten."
+      confirmLabel="Team auflösen"
+      variant="destructive"
+      onConfirm={() =>
+        new Promise<string | null>((resolve, reject) => {
+          window.uiContractConfirmAnswer = (answer) =>
+            answer instanceof Error ? reject(answer) : resolve(answer);
+        })
+      }
+    />
+  );
+}
 
 /**
  * A confirmation longer than a phone screen, built without AlertDialogBody or an extra class. Its
@@ -186,6 +213,7 @@ function PresentationControls(): React.JSX.Element {
       </Field>
       <Button onClick={() => setOpen(true)}>Formular öffnen</Button>
       <LongConfirmation />
+      <ConfirmActionProbe />
       <section aria-label="Seitenkörper">
         <Button onClick={() => setSoleControlDisabled((current) => !current)}>Knopf umschalten</Button>
         <div ref={mainRef} style={{ height: 160, display: 'flex', flexDirection: 'column' }}>
