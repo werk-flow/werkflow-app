@@ -490,6 +490,7 @@ export function CalendarBoardContractFixture(): React.JSX.Element {
               entries={entries}
               vacation={absent ? boardVacation : []}
               sickness={absent ? boardSickness : []}
+              school={[]}
               holidays={holidays}
               mutations={mutations}
               parkingContexts={new Map()}
@@ -672,6 +673,7 @@ export function CalendarMonthContractFixture(): React.JSX.Element {
             members={members}
             vacation={[]}
             sickness={[]}
+            school={[]}
             holidays={holidays}
             organizationSettings={settings}
             currentUserId="manager"

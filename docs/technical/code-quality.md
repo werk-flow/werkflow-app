@@ -47,7 +47,7 @@ Wrong turn: an `as` cast or a `!` to quiet the compiler. The strict flag points 
 
 A user action that changes more than one row, or one row plus its history, audit, stock or link rows, changes all of them in one database function call. A refusal at any step then leaves nothing applied.
 
-1. Copy `supabase/migrations/20261003110000_apply_time_entry_batches_atomically.sql`. The action authorizes and passes only server-resolved values. The function locks the rows, repeats the state checks, raises the action's failure code, pins `search_path`, and grants execute to `service_role` only.
+1. Copy `supabase/migrations/20261003110000_apply_time_entry_batches_atomically.sql`. The action authorizes and passes only server-resolved values. The function locks the rows, repeats the state checks, raises the action's failure code, pins `search_path`, and grants execute to `service_role` only. A version bump locks its row first and takes the expected version or a retry key; `lib/conventions/database-function-races.test.ts` fails one that does not, and names the locks clock and job-project writes need.
 2. Call it through `rpcArgs` (`lib/supabase/rpc-args.ts`). Map refusals with `writeRefusalFor` or `rowWriteResultFor` (`lib/supabase/write-refusal.ts`).
 3. Keep every side effect of the old sequence: history and audit rows, published-table writes, cache tags.
 4. Prove it in SQL as `supabase/tests/closed_period_writes.sql` does: a refused later step changes nothing, success works, a foreign organization is refused, the grants hold.

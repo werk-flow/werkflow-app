@@ -32,6 +32,7 @@ function periodTargets(exitDate: string | null) {
       conditions: [],
       vacations: new Map(),
       sickness: new Map(),
+      school: new Map(),
       calendar: EMPTY_HOLIDAY_CALENDAR,
     },
     // Thursday 29.10. and Friday 30.10.2026.
