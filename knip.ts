@@ -61,6 +61,9 @@ const config: KnipConfig = {
     // reader and the line arithmetic rule exist before E2a's offers import
     // them. Remove this entry with the first production import.
     'lib/inventory/{article-prices,line-amount}.ts!',
+    // The Leistung price reader (werk-flow/werkflow-planning#379) exists before
+    // the offer calculation imports it. Remove this entry with that import.
+    'lib/price-catalog/leistung-prices.ts!',
   ],
   project: ['**/*.{ts,tsx,mjs}!', '!lib/**/*.test.{ts,tsx,mjs}!', '!lib/testing/fixtures/**!'],
   // Deno functions have their own import graph; the transcript folder is
