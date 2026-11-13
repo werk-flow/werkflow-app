@@ -38,7 +38,7 @@ export const UNSENT_COPY = {
 } as const;
 
 /** The clock's section of unsent events, in the app's clock sheet. */
-function unsentSection(scope: Page | Locator): Locator {
+export function unsentSection(scope: Page | Locator): Locator {
   return scope.getByRole('region', { name: UNSENT_COPY.section, exact: true });
 }
 
