@@ -60,7 +60,9 @@ async function storedScreenshot(
         width: image.width,
         height: image.height,
         pixels: points.map(([x, y]) => [
-          ...context.getImageData(Math.floor(image.width * x), Math.floor(image.height * y), 1, 1).data.slice(0, 3),
+          ...context
+            .getImageData(Math.floor(image.width * x), Math.floor(image.height * y), 1, 1)
+            .data.slice(0, 3),
         ]),
       };
     },
@@ -258,22 +260,30 @@ for (const colorScheme of ['light', 'dark'] as const) {
     const screenshot = puts.find((put) => put.kind === 'screenshot');
     if (!screenshot) throw new Error('No screenshot reached storage.');
     // Every pixel well inside the drawn box, and the probe just outside it.
-    const { inner, probe } = await page.evaluate(async (bytes) => {
-      const image = await createImageBitmap(new Blob([new Uint8Array(bytes)], { type: 'image/png' }));
-      const canvas = document.createElement('canvas');
-      canvas.width = image.width;
-      canvas.height = image.height;
-      const context = canvas.getContext('2d');
-      if (!context) throw new Error('No 2D context.');
-      context.drawImage(image, 0, 0);
-      const left = Math.ceil(image.width * 0.21);
-      const top = Math.ceil(image.height * 0.21);
-      const data = context.getImageData(left, top, Math.floor(image.width * 0.58), Math.floor(image.height * 0.58)).data;
-      const inner: number[][] = [];
-      for (let index = 0; index < data.length; index += 4)
-        inner.push([data[index] ?? -1, data[index + 1] ?? -1, data[index + 2] ?? -1]);
-      return { inner, probe: [...context.getImageData(2, 2, 1, 1).data.slice(0, 3)] };
-    }, [...screenshot.body]);
+    const { inner, probe } = await page.evaluate(
+      async (bytes) => {
+        const image = await createImageBitmap(new Blob([new Uint8Array(bytes)], { type: 'image/png' }));
+        const canvas = document.createElement('canvas');
+        canvas.width = image.width;
+        canvas.height = image.height;
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('No 2D context.');
+        context.drawImage(image, 0, 0);
+        const left = Math.ceil(image.width * 0.21);
+        const top = Math.ceil(image.height * 0.21);
+        const data = context.getImageData(
+          left,
+          top,
+          Math.floor(image.width * 0.58),
+          Math.floor(image.height * 0.58),
+        ).data;
+        const inner: number[][] = [];
+        for (let index = 0; index < data.length; index += 4)
+          inner.push([data[index] ?? -1, data[index + 1] ?? -1, data[index + 2] ?? -1]);
+        return { inner, probe: [...context.getImageData(2, 2, 1, 1).data.slice(0, 3)] };
+      },
+      [...screenshot.body],
+    );
     expect(probe).toEqual([0, 255, 0]);
     const colors = await coverColors(page);
     const leaks = inner.filter((pixel) => !isCoverPixel(pixel, colors));
@@ -340,7 +350,10 @@ test('on a phone, boxes drawn by touch on the large view reach the upload, and â
     const at = ([x, y]: [number, number]) => ({ x: box.x + box.width * x, y: box.y + box.height * y });
     await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [at(from)] });
     for (const step of [0.25, 0.5, 0.75, 1]) {
-      const point: [number, number] = [from[0] + (to[0] - from[0]) * step, from[1] + (to[1] - from[1]) * step];
+      const point: [number, number] = [
+        from[0] + (to[0] - from[0]) * step,
+        from[1] + (to[1] - from[1]) * step,
+      ];
       await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [at(point)] });
     }
     await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });

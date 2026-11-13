@@ -9,8 +9,18 @@ import { acceptanceSet, type OpenSet } from '../acceptance-sets';
 function reportRedactionCaptures(): OpenSet {
   const sizes = { widths: [375, 1280, 1680], schemes: ['light', 'dark'] } as const;
   const views = [
-    { id: 'employee-dashboard-dialog-reports-field', role: 'employee', route: '/dashboard', opener: 'reports.field' },
-    { id: 'buero-auftraege-dialog-reports-office', role: 'buero', route: '/auftraege', opener: 'reports.office' },
+    {
+      id: 'employee-dashboard-dialog-reports-field',
+      role: 'employee',
+      route: '/dashboard',
+      opener: 'reports.field',
+    },
+    {
+      id: 'buero-auftraege-dialog-reports-office',
+      role: 'buero',
+      route: '/auftraege',
+      opener: 'reports.office',
+    },
     {
       id: 'employee-dashboard-dialog-reports-redaction-field',
       role: 'employee',

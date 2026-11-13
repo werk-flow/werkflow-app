@@ -3,13 +3,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { RedactionBox } from '@/lib/problem-reports/redaction';
 import { ScreenshotRedactor } from './screenshot-redactor';
 
@@ -54,12 +48,7 @@ export function ScreenshotRedactionView({
             Ziehe mit dem Finger oder der Maus Rechtecke über alles, was niemand sehen soll.
           </DialogDescription>
         </DialogHeader>
-        <FittedScreenshot
-          image={image}
-          boxes={boxes}
-          onBoxesChange={onBoxesChange}
-          disabled={disabled}
-        />
+        <FittedScreenshot image={image} boxes={boxes} onBoxesChange={onBoxesChange} disabled={disabled} />
         <div className="flex flex-wrap items-center justify-end gap-2">
           {boxes.length > 0 && !disabled && (
             <>

@@ -108,7 +108,10 @@ export function drawRedacted(
   canvas.height = image.height;
   context.drawImage(image, 0, 0);
   if (boxes.length === 0) return;
-  const colors = { base: opaqueToken(context, COVER_TOKENS.base), stripe: opaqueToken(context, COVER_TOKENS.stripe) };
+  const colors = {
+    base: opaqueToken(context, COVER_TOKENS.base),
+    stripe: opaqueToken(context, COVER_TOKENS.stripe),
+  };
   const period = Math.max(12, Math.round(Math.max(image.width, image.height) / 64));
   for (const box of boxes) {
     coverBox(
