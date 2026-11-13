@@ -170,9 +170,11 @@ export async function finalizeCompanyDocumentFileUpload(
   // The key is recomputed from the session's organization and person, so no
   // client names an object of another organization or another person's upload.
   const path = companyFilePath(auth.context, input.fileId, input.kind);
+  // The staged upload stays until the registration's outcome is known, so a
+  // retry under the same file id copies it again (werk-flow/werkflow-planning#420).
+  const stagingPath = uploadStagingPath(organizationId, path);
   // The upload's file id is its attempt key. A finalize repeated after its
-  // answer was lost finds its staged object promoted and gone: the change it
-  // registered answers instead.
+  // answer was lost answers with the change it registered, without a new copy.
   const registered = await createSupabaseAdminClient()
     .from('company_document_profile_events')
     .select('id')
@@ -186,6 +188,9 @@ export async function finalizeCompanyDocumentFileUpload(
     return { success: false, error: 'finalize_failed' };
   }
   if (registered.data.length > 0) {
+    // The registration committed after its answer was lost, which kept the
+    // staged upload; only the copy it registered stays.
+    await discardStorageObjects({ organizationId, paths: [stagingPath] });
     // The first call's refresh never reached this browser either.
     revalidatePath(SETTINGS_PATH);
     return { success: true };
@@ -199,9 +204,6 @@ export async function finalizeCompanyDocumentFileUpload(
     return { success: false, error: 'upload_failed' };
   }
   if (!copy.exists) return { success: false, error: 'file_missing' };
-  // The staged upload stays until the registration's outcome is known, so a
-  // retry under the same file id copies it again (werk-flow/werkflow-planning#420).
-  const stagingPath = uploadStagingPath(organizationId, path);
   const discardUpload = () => discardStorageObjects({ organizationId, paths: [copy.path, stagingPath] });
   const ruleFailure = uploadRuleFailure(COMPANY_FILE_RULES[input.kind], copy.contentType, copy.sizeBytes);
   if (ruleFailure || copy.contentType === null || copy.sizeBytes === null) {

@@ -314,7 +314,8 @@ assert.equal(storageCalls.at(-1), `discard ${ownStaging}`);
 
 // A finalize repeated after its answer was lost: the upload's file id already
 // registered a change of this kind by this caller, so it answers as the first
-// call did, before storage, where the staged object is gone.
+// call did. It copies nothing and writes nothing, and removes the staged
+// upload a registration of unknown outcome left.
 world.tables.company_document_profile_events = [
   {
     id: '37800000-0000-4000-8000-000000000050',
@@ -328,7 +329,11 @@ const storageBefore = storageCalls.length;
 world.rpcCalls.length = 0;
 revalidatedPaths.length = 0;
 assert.deepEqual(await finalize(ORGANIZATION_A)(), { success: true });
-assert.equal(storageCalls.length, storageBefore, 'a repeated finalize reached storage');
+assert.deepEqual(
+  storageCalls.slice(storageBefore),
+  [`discard ${ownStaging}`],
+  'a repeated finalize copied again or left the staged upload',
+);
 assert.equal(world.rpcCalls.length, 0, 'a repeated finalize wrote again');
 // Its first answer, and the refresh in it, never arrived: this one refreshes the page.
 assert.deepEqual(revalidatedPaths, ['/einstellungen/dokumente']);
