@@ -1,8 +1,9 @@
 // The CSV import actions over the in-memory database: a field worker is
 // refused the repeat check, the preview and the booking before any database
 // access; Büro does not book another organization's batch, which the one
-// booking call refuses with the caller's organization and actor; and another
-// organization's booking of the same file is no repeat.
+// booking call refuses with the caller's organization and actor; another
+// organization's booking of the same file is no repeat; and a repeat names the
+// person who booked, not the one who previewed.
 import assert from 'node:assert/strict';
 import {
   CALLER_ID,
@@ -15,6 +16,9 @@ import { assertRefused, refuseForeignIds } from './operations-boundary-refusals'
 
 const foreignBatchId = '91000000-0000-4000-8000-000000000001';
 const contentHash = 'b'.repeat(64);
+const bookedHash = 'c'.repeat(64);
+const previewerId = '31000000-0000-4000-8000-000000000002';
+const bookerId = '31000000-0000-4000-8000-000000000003';
 
 const world = installActionWorld({
   inventory_import_batches: [
@@ -25,6 +29,18 @@ const world = installActionWorld({
       completed_at: '2026-11-02T08:00:00.000Z',
       created_by: '31000000-0000-4000-8000-000000000001',
     },
+    {
+      id: '91000000-0000-4000-8000-000000000002',
+      organization_id: ORGANIZATION_A,
+      content_hash: bookedHash,
+      completed_at: '2026-11-03T09:30:00.000Z',
+      created_by: previewerId,
+      booked_by: bookerId,
+    },
+  ],
+  profiles: [
+    { id: previewerId, first_name: 'Vera', last_name: 'Vorschau', email: 'vera@example.test' },
+    { id: bookerId, first_name: 'Bernd', last_name: 'Buchung', email: 'bernd@example.test' },
   ],
 });
 const { bookInventoryImport, findInventoryImportRepeat, previewInventoryImport } = await import(
@@ -59,3 +75,9 @@ assert.equal(world.rpcCalls[0]?.args.p_actor_id, CALLER_ID);
 
 // Another organization's booking of the same file is no repeat.
 assert.deepEqual(await repeat[1](), { success: true, repeat: null });
+
+// A repeat names the person who booked the file, not the one who previewed it.
+assert.deepEqual(await findInventoryImportRepeat({ contentHash: bookedHash }), {
+  success: true,
+  repeat: { bookedAt: '2026-11-03T09:30:00.000Z', bookedBy: 'Bernd Buchung' },
+});

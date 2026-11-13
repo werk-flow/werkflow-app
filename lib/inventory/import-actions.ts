@@ -28,10 +28,10 @@ import {
 
 // The CSV import's Server Actions: the repeat check, the preview and the
 // booking. The rule that creates or matches a row lives once, in the database
-// (migration 20261201120000); the preview and the booking both run it. Only
+// (migration 20261201200000); the preview and the booking both run it. Only
 // Admin and Büro import.
 
-/** The latest booking of a file with the same content, so the dialog warns before a repeat. */
+/** The latest booking of a file with the same content and who booked it, so the dialog warns before a repeat. */
 export async function findInventoryImportRepeat(
   rawInput: InventoryImportRepeatInput,
 ): Promise<ActionResult<{ repeat: { bookedAt: string; bookedBy: string } | null }>> {
@@ -44,7 +44,7 @@ export async function findInventoryImportRepeat(
   const admin = createSupabaseAdminClient();
   const { data: batch, error } = await admin
     .from('inventory_import_batches')
-    .select('completed_at, created_by')
+    .select('completed_at, booked_by')
     .eq('organization_id', auth.context.orgId)
     .eq('content_hash', parsedInput.data.contentHash)
     .not('completed_at', 'is', null)
@@ -58,11 +58,11 @@ export async function findInventoryImportRepeat(
   if (!batch?.completed_at) return { success: true, repeat: null };
 
   let bookedBy = 'Unbekannt';
-  if (batch.created_by) {
+  if (batch.booked_by) {
     const { data: profile, error: profileError } = await admin
       .from('profiles')
       .select('first_name, last_name, email')
-      .eq('id', batch.created_by)
+      .eq('id', batch.booked_by)
       .maybeSingle();
     if (profileError) {
       logError('findInventoryImportRepeat: profile read failed', profileError);

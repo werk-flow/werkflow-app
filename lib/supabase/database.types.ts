@@ -2606,6 +2606,7 @@ export type Database = {
       };
       inventory_import_batches: {
         Row: {
+          booked_by: string | null;
           column_mapping: Json;
           completed_at: string | null;
           content_hash: string | null;
@@ -2623,6 +2624,7 @@ export type Database = {
           status: string;
         };
         Insert: {
+          booked_by?: string | null;
           column_mapping?: Json;
           completed_at?: string | null;
           content_hash?: string | null;
@@ -2640,6 +2642,7 @@ export type Database = {
           status?: string;
         };
         Update: {
+          booked_by?: string | null;
           column_mapping?: Json;
           completed_at?: string | null;
           content_hash?: string | null;
@@ -2657,6 +2660,13 @@ export type Database = {
           status?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "inventory_import_batches_booked_by_fkey";
+            columns: ["booked_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "inventory_import_batches_created_by_fkey";
             columns: ["created_by"];

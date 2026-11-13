@@ -21,10 +21,14 @@
 --
 -- The booking holds to what the preview resolved. The preview notes on each
 -- staged row the article it matched, „new“ for one it creates, or „file“ for
--- one an earlier row of the same file creates; a row whose resolution differs
--- at booking is refused (changed_since_preview) instead of booking stock to
--- another article. A row the preview rejected stays rejected with the
--- preview's reason.
+-- one an earlier row of the same file creates, and the Lager it resolved, or
+-- „new“ for one the import creates. A row whose article or Lager resolves
+-- differently at booking is refused (changed_since_preview) instead of booking
+-- stock to an article or a Lager the preview never showed. A row the preview
+-- rejected stays rejected with the preview's reason.
+--
+-- The batch keeps who previewed it (created_by) and who booked it
+-- (booked_by); the repeat warning names the person who booked.
 --
 -- A row whose unit differs from its matched item's unit is refused
 -- (unit_mismatch, its detail the item's unit); the action refuses an empty or
@@ -43,7 +47,8 @@ alter table public.inventory_import_batches
   add column content_hash text check (content_hash ~ '^[0-9a-f]{64}$'),
   add column mode text not null default 'stock' check (mode in ('stock', 'master_data')),
   add column staged_rows jsonb check (staged_rows is null or jsonb_typeof(staged_rows) = 'array'),
-  add column result_payload jsonb check (result_payload is null or jsonb_typeof(result_payload) = 'array');
+  add column result_payload jsonb check (result_payload is null or jsonb_typeof(result_payload) = 'array'),
+  add column booked_by uuid references public.profiles(id) on delete set null;
 
 comment on column public.inventory_import_batches.content_hash is
   'SHA-256 of the imported file''s bytes, computed in the browser; it finds a repeated file.';
@@ -51,6 +56,8 @@ comment on column public.inventory_import_batches.staged_rows is
   'The rows the preview showed, as book_inventory_import books them.';
 comment on column public.inventory_import_batches.result_payload is
   'Each row''s outcome of the booking, answered again to a repeated confirm.';
+comment on column public.inventory_import_batches.booked_by is
+  'Who booked the previewed batch; created_by is who previewed it.';
 
 create index inventory_import_batches_content_hash_idx
   on public.inventory_import_batches (organization_id, content_hash, completed_at desc)
@@ -172,6 +179,7 @@ begin
     'item_id', v_item.id,
     'item_name', v_item.name,
     'unit', v_item.unit,
+    'location_id', v_location.id,
     -- A Lager this transaction created reads as new on every row that names it.
     'location_name', v_location.name,
     'location_created', coalesce(v_location.created_at = now(), false),
@@ -238,8 +246,9 @@ $$;
 -- leaves nothing behind and the next row still runs. A row the action already
 -- refused carries its `rejection`, and a row the preview rejected its
 -- `previewed_rejection`; both are answered without a write. A row with a
--- `previewed_item` must resolve to it again. Each answer carries the row's
--- position in the file (`index`) and what it resolved to (`item_ref`).
+-- `previewed_item` or `previewed_location` must resolve to it again. Each
+-- answer carries the row's position in the file (`index`) and what it
+-- resolved to (`item_ref`, `location_ref`).
 create function app_private.apply_inventory_import_rows(
   p_organization_id uuid,
   p_actor_id uuid,
@@ -261,6 +270,7 @@ declare
   v_state text;
   v_reason text;
   v_ref text;
+  v_location_ref text;
   v_created uuid[] := '{}';
   v_results jsonb := '[]'::jsonb;
 begin
@@ -283,10 +293,18 @@ begin
           when (v_outcome->>'item_id')::uuid = any (v_created) then 'file'
           else v_outcome->>'item_id'
         end;
-        if v_row ? 'previewed_item' and v_row->>'previewed_item' is distinct from v_ref then
+        -- A Lager the import creates reads as „new“ on every row that names
+        -- it, in the preview and in the booking alike.
+        v_location_ref := case
+          when (v_outcome->>'location_created')::boolean then 'new'
+          else v_outcome->>'location_id'
+        end;
+        if (v_row ? 'previewed_item' and v_row->>'previewed_item' is distinct from v_ref)
+          or (v_row ? 'previewed_location' and v_row->>'previewed_location' is distinct from v_location_ref)
+        then
           raise exception 'changed_since_preview';
         end if;
-        v_outcome := v_outcome || jsonb_build_object('item_ref', v_ref);
+        v_outcome := v_outcome || jsonb_build_object('item_ref', v_ref, 'location_ref', v_location_ref);
       -- One handler for every row failure: the savepoint must isolate any of
       -- them so the other rows still book. The named refusals all raise
       -- SQLSTATE P0001 and differ only by message, so condition names cannot
@@ -319,7 +337,7 @@ begin
         v_created := v_created || (v_outcome->>'item_id')::uuid;
       end if;
     end if;
-    v_results := v_results || jsonb_build_array(v_outcome - 'item_id' || jsonb_build_object('index', v_index));
+    v_results := v_results || jsonb_build_array(v_outcome - 'item_id' - 'location_id' || jsonb_build_object('index', v_index));
   end loop;
   return v_results;
 end;
@@ -372,8 +390,8 @@ begin
     end if;
   end;
 
-  -- The booking holds to this: each row notes the article it resolved to, or
-  -- the rejection it showed. Managers read the staged rows through the Data
+  -- The booking holds to this: each row notes the article and the Lager it
+  -- resolved to, or the rejection it showed. Managers read the staged rows through the Data
   -- API, so a rejection keeps no SQLSTATE.
   update public.inventory_import_batches batch set staged_rows = (
     select jsonb_agg(
@@ -381,7 +399,10 @@ begin
         when staged.value ? 'rejection' then staged.value
         when result.value->>'outcome' = 'rejected'
           then staged.value || jsonb_build_object('previewed_rejection', result.value - 'index' - 'code')
-        else staged.value || jsonb_build_object('previewed_item', result.value->>'item_ref')
+        else staged.value || jsonb_build_object(
+          'previewed_item', result.value->>'item_ref',
+          'previewed_location', result.value->'location_ref'
+        )
       end
       order by staged.ordinality)
     from jsonb_array_elements(p_rows) with ordinality staged
@@ -433,6 +454,7 @@ begin
     imported_count = jsonb_array_length(v_results) - v_rejected,
     failed_count = v_rejected,
     completed_at = now(),
+    booked_by = p_actor_id,
     -- Managers read the batch through the Data API and Realtime: the stored
     -- rows keep no SQLSTATE. Only this first answer carries it, for the log.
     result_payload = (

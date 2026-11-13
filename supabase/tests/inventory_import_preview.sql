@@ -3,8 +3,9 @@
 -- the preview and the booking run the same row rule and agree row by row, the
 -- preview leaves nothing but its draft batch, a confirm sent twice books once,
 -- a Stammdaten-only batch books no stock, a row with an unknown or a differing
--- unit leaves nothing behind, and only a manager of the batch's organization
--- previews or books it.
+-- unit leaves nothing behind, the booking holds to the article and the Lager
+-- the preview resolved, the batch keeps who previewed and who booked it, and
+-- only a manager of the batch's organization previews or books it.
 begin;
 
 insert into auth.users (
@@ -16,17 +17,24 @@ insert into auth.users (
 ('99200000-0000-4000-8000-000000000002', '00000000-0000-0000-0000-000000000000',
  'authenticated', 'authenticated', 'import-preview-employee@example.test', '', now(), '{}', '{}', now(), now()),
 ('99200000-0000-4000-8000-000000000003', '00000000-0000-0000-0000-000000000000',
- 'authenticated', 'authenticated', 'import-preview-foreign@example.test', '', now(), '{}', '{}', now(), now());
+ 'authenticated', 'authenticated', 'import-preview-foreign@example.test', '', now(), '{}', '{}', now(), now()),
+('99200000-0000-4000-8000-000000000004', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'import-preview-buero@example.test', '', now(), '{}', '{}', now(), now());
 
 insert into public.organizations (id, name, admin_id, unique_code) values
 ('99200000-0000-4000-8000-000000000010', 'Haustechnik Sonnenberg', '99200000-0000-4000-8000-000000000001', 'IMPPREVA'),
 ('99200000-0000-4000-8000-000000000011', 'Fremdbetrieb', '99200000-0000-4000-8000-000000000003', 'IMPPREVB');
 insert into public.organization_members (organization_id, user_id, role) values
-('99200000-0000-4000-8000-000000000010', '99200000-0000-4000-8000-000000000002', 'employee');
+('99200000-0000-4000-8000-000000000010', '99200000-0000-4000-8000-000000000002', 'employee'),
+('99200000-0000-4000-8000-000000000010', '99200000-0000-4000-8000-000000000004', 'buero');
 
 insert into public.inventory_locations (id, organization_id, name, location_type, created_by, created_at) values
 ('99200000-0000-4000-8000-000000000020', '99200000-0000-4000-8000-000000000010', 'Hauptlager', 'storage',
  '99200000-0000-4000-8000-000000000001', now() - interval '1 day');
+-- Step 4g's Werkstatt: a shelf inside Hauptlager, the only Lager of that name.
+insert into public.inventory_locations (id, organization_id, name, location_type, parent_location_id, created_by, created_at) values
+('99200000-0000-4000-8000-000000000022', '99200000-0000-4000-8000-000000000010', 'Werkstatt', 'shelf',
+ '99200000-0000-4000-8000-000000000020', '99200000-0000-4000-8000-000000000001', now() - interval '1 day');
 insert into public.inventory_items (id, organization_id, name, item_type, unit, internal_sku, created_by) values
 ('99200000-0000-4000-8000-000000000030', '99200000-0000-4000-8000-000000000010', 'Kupferrohr 15 mm', 'material',
  'meter', 'NR-ROHR-15', '99200000-0000-4000-8000-000000000001'),
@@ -132,7 +140,8 @@ begin
       and batch.mode = 'stock' and batch.content_hash = repeat('a', 64) and batch.row_count = 6
       and batch.created_by = v_admin
       -- The staged rows are the file's rows, each with what the preview resolved.
-      and (select jsonb_agg(staged.value - 'previewed_item' - 'previewed_rejection' order by staged.ordinality)
+      and (select jsonb_agg(staged.value - 'previewed_item' - 'previewed_location' - 'previewed_rejection'
+          order by staged.ordinality)
         from jsonb_array_elements(batch.staged_rows) with ordinality staged) = pg_temp.file_rows()
   ) then
     raise exception 'a preview must stage its rows on a draft batch with the file''s hash and mode';
@@ -391,6 +400,91 @@ begin
     or (select count(*) from public.inventory_movements where organization_id = v_org) <> v_movements + 1
   then
     raise exception 'a row whose match changed or that the preview rejected must leave nothing behind';
+  end if;
+end;
+$$;
+
+-- 4g. The booking holds to the Lager the preview resolved: a top-level Lager
+--     of the same name created after the preview, which the name lookup
+--     prefers, refuses the row instead of receiving stock the preview never
+--     showed. Two rows that name one Lager the import creates still book into
+--     that one new Lager.
+do $$
+declare
+  v_org constant uuid := '99200000-0000-4000-8000-000000000010';
+  v_admin constant uuid := '99200000-0000-4000-8000-000000000001';
+  v_shelf constant uuid := '99200000-0000-4000-8000-000000000022';
+  v_new_top constant uuid := '99200000-0000-4000-8000-000000000021';
+  v_rows constant jsonb := jsonb_build_array(
+    jsonb_build_object('item', jsonb_build_object('name', 'Heizkörperventil 1/2"', 'item_type', 'material',
+      'unit', 'piece', 'internal_sku', 'NR-HKV-12', 'is_billable', true, 'global_minimum_stock', 0),
+      'location_name', 'Werkstatt', 'quantity', 2),
+    jsonb_build_object('item', jsonb_build_object('name', 'Spülkasten', 'item_type', 'material',
+      'unit', 'piece', 'internal_sku', 'NR-SK-1', 'is_billable', true, 'global_minimum_stock', 0),
+      'location_name', 'Wagen 7', 'quantity', 1),
+    jsonb_build_object('item', jsonb_build_object('name', 'Siphon 40 mm', 'item_type', 'material',
+      'unit', 'piece', 'internal_sku', 'NR-SI-40', 'is_billable', true, 'global_minimum_stock', 0),
+      'location_name', 'Wagen 7', 'quantity', 4)
+  );
+  v_preview jsonb;
+  v_booking jsonb;
+  v_batch uuid;
+begin
+  v_preview := public.preview_inventory_import(v_org, v_admin, 'werkstatt.csv', '{}'::jsonb, null, 'stock', v_rows);
+  v_batch := (v_preview->>'batch_id')::uuid;
+  if v_preview->'rows'->0 @> '{"outcome":"booked","location_name":"Werkstatt","location_created":false}' is not true
+    or v_preview->'rows'->1 @> '{"outcome":"booked","location_name":"Wagen 7","location_created":true}' is not true
+    or v_preview->'rows'->2 @> '{"outcome":"booked","location_name":"Wagen 7","location_created":true}' is not true
+  then
+    raise exception 'the preview must book into the Werkstatt shelf and one new Wagen 7: %', v_preview->'rows';
+  end if;
+
+  -- After the preview, someone creates a top-level Lager named Werkstatt.
+  insert into public.inventory_locations (id, organization_id, name, location_type, created_by)
+  values (v_new_top, v_org, 'Werkstatt', 'room', v_admin);
+
+  v_booking := public.book_inventory_import(v_org, v_admin, v_batch);
+  if v_booking->'rows'->0 @> '{"outcome":"rejected","reason":"changed_since_preview"}' is not true
+    or v_booking->'rows'->1 @> '{"outcome":"booked","location_name":"Wagen 7","location_created":true,"quantity_after":1}' is not true
+    or v_booking->'rows'->2 @> '{"outcome":"booked","location_name":"Wagen 7","location_created":true,"quantity_after":4}' is not true
+  then
+    raise exception 'the booking must refuse a row whose Lager changed and book both rows into the new Lager: %',
+      v_booking->'rows';
+  end if;
+  if exists (select 1 from public.inventory_movements where location_id in (v_new_top, v_shelf))
+    or exists (select 1 from public.inventory_items where organization_id = v_org and internal_sku = 'NR-HKV-12')
+  then
+    raise exception 'a row whose Lager changed since the preview must leave no movement and no article behind';
+  end if;
+  if (select count(*) from public.inventory_locations where organization_id = v_org and name = 'Wagen 7') <> 1
+    or (select count(*) from public.inventory_movements movement
+      join public.inventory_locations location on location.id = movement.location_id
+      where movement.import_batch_id = v_batch and location.name = 'Wagen 7') <> 2
+  then
+    raise exception 'two rows that name one new Lager must book into that one Lager';
+  end if;
+end;
+$$;
+
+-- 4h. The batch keeps who previewed it and who booked it, so the repeat
+--     warning names the person who booked.
+do $$
+declare
+  v_org constant uuid := '99200000-0000-4000-8000-000000000010';
+  v_admin constant uuid := '99200000-0000-4000-8000-000000000001';
+  v_buero constant uuid := '99200000-0000-4000-8000-000000000004';
+  v_batch uuid;
+begin
+  v_batch := (public.preview_inventory_import(v_org, v_admin, 'zwei-personen.csv', '{}'::jsonb, repeat('d', 64), 'stock',
+    jsonb_build_array(jsonb_build_object('item', jsonb_build_object('name', 'Dichtband', 'item_type', 'material',
+      'unit', 'piece', 'internal_sku', 'NR-DB-1', 'is_billable', true, 'global_minimum_stock', 0),
+      'location_name', 'Hauptlager', 'quantity', 1)))->>'batch_id')::uuid;
+  perform public.book_inventory_import(v_org, v_buero, v_batch);
+  if not exists (
+    select 1 from public.inventory_import_batches batch
+    where batch.id = v_batch and batch.created_by = v_admin and batch.booked_by = v_buero
+  ) then
+    raise exception 'a booked batch must keep its previewer as created_by and its booker as booked_by';
   end if;
 end;
 $$;
