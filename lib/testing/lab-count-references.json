@@ -2581,7 +2581,7 @@
         },
         "script": {
           "requests": { "reference": 4, "tolerance": 0 },
-          "encodedBytes": { "reference": 37609, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 38150, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         }
@@ -2793,6 +2793,24 @@
           },
           "runKeys": ["2026-11-08T142527257Z-73e286"],
           "reason": "werk-flow/werkflow-app#276 adds the employee's „Zeit nachtragen“ flow to /zeiterfassung (earlier-day Zeitkorrektur, withdrawal confirmation, extended „Vorgemerkte Zeit“). The Aufgaben step prefetches that route from the sidebar, so its script grew by about 2.5 kB over main's 35153; the Aufgaben route and its reads are unchanged."
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 4, "tolerance": 0 },
+            "encodedBytes": { "reference": 37609, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 4, "tolerance": 0 },
+            "encodedBytes": { "reference": 38150, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-13T120348256Z-ff99fd"],
+          "reason": "Berufsschule days (werk-flow/werkflow-planning#165, #431): the prefetched Zeiterfassung chunks carry the apprentice's school-day note. Production builds of 8f304a90 and this branch differ in two chunks only: the weekly hours chart gains WeeklySchoolDays (347 raw bytes) with its call (29) and the week view's school_days live table (14), +154 gzip; the dashboard hero gains its school sentence, +82 raw, +38 gzip. next/dynamic for both measured larger (loader stubs of 134 and about 290 raw bytes, gzip 15 bytes more), so they stay inline. Accepted by the E0 lead under decision 21."
         }
       ]
     },
