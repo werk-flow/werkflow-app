@@ -93,11 +93,13 @@ const SERVED: Record<string, { contentType: string; body: string }> = {
   '/_next/static/css/app.css': {
     contentType: 'text/css',
     // The app's theme: tokens on the root, flipped for dark mode by a media rule, as app/globals.css does.
+    // The probe's own variant nests its media rule in a style rule, as a compiled `dark:` class may.
     body:
       '@import url("/_next/static/css/print.css") print;\n.brand{font-family:"Geist Probe"}\n' +
       ':root{--theme-surface:rgb(240, 240, 240)}\n' +
       '@media (prefers-color-scheme: dark){:root{--theme-surface:rgb(20, 20, 30)}}\n' +
-      'body,.theme-probe{background-color:var(--theme-surface)}',
+      'body{background-color:var(--theme-surface)}\n' +
+      '.theme-probe{background-color:rgb(240, 240, 240);@media (prefers-color-scheme: dark){background-color:rgb(20, 20, 30)}}',
   },
   '/_next/static/css/print.css': { contentType: 'text/css', body: '.imported-print{color:rgb(6, 5, 4)}' },
   '/dynamic/record.css': {
@@ -427,7 +429,11 @@ async function redrawnSvg(page: Page): Promise<{ svg: string; width: number; hei
     if (!isPageModule(pageModule) || !isCatalogModule(catalogModule) || !isRasterizeModule(rasterizeModule))
       throw new Error('The redraw bundle is incomplete.');
     const redrawn = pageModule.redrawPage(document, catalogModule.loadUiStringCatalog(), Math.random);
-    return { svg: await rasterizeModule.pageToSvg(redrawn, document), width: redrawn.width, height: redrawn.height };
+    return {
+      svg: await rasterizeModule.pageToSvg(redrawn, document),
+      width: redrawn.width,
+      height: redrawn.height,
+    };
   });
 }
 
@@ -447,7 +453,11 @@ test('theme rule: the image shows the page’s theme even where the image itself
       const path = '/redraw/rasterize.js';
       const rasterizeModule: unknown = await import(path);
       if (!isRasterizeModule(rasterizeModule)) throw new Error('The redraw bundle is incomplete.');
-      const blob = await rasterizeModule.rasterizeSvg(svg, { root: document.documentElement, width, height }, document);
+      const blob = await rasterizeModule.rasterizeSvg(
+        svg,
+        { root: document.documentElement, width, height },
+        document,
+      );
       const bitmap = await createImageBitmap(blob);
       const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
       const context = canvas.getContext('2d');

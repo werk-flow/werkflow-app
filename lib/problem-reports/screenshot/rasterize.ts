@@ -61,7 +61,8 @@ type MediaTest = (media: MediaList) => boolean;
 function settleMediaRules(rules: CSSRuleList, appliesNow: MediaTest): void {
   for (const rule of Array.from(rules)) {
     if (rule instanceof CSSMediaRule) rule.media.mediaText = appliesNow(rule.media) ? 'all' : 'not all';
-    if ('cssRules' in rule && rule.cssRules instanceof CSSRuleList) settleMediaRules(rule.cssRules, appliesNow);
+    if ('cssRules' in rule && rule.cssRules instanceof CSSRuleList)
+      settleMediaRules(rule.cssRules, appliesNow);
   }
 }
 
