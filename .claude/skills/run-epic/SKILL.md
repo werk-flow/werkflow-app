@@ -12,21 +12,21 @@ The planning repo `werk-flow/werkflow-planning` is private. Its clone sits besid
 ## 1. Plan
 
 1. Read the brief, `AGENTS.md`, [the docs index](../../../docs/README.md), and the feature spec's **Current Product Baseline**.
-2. Split the work into child PRs, one problem each. Give each a [review level](../../../docs/technical/coderabbit.md#choose-the-review-level) and a merge mode: "full send", or "full stop" where the owner must read the diff.
-3. Order the children in stages. A stage runs in parallel and starts after the previous one merged. A child that changes a shared check or helper goes first, alone.
-4. List every kind-1 and kind-3 decision of [Decide or ask](../../../AGENTS.md#decide-or-ask) that the work can reach, each with your recommendation: scope edges, money, new personal data, a design direction with real alternatives, a residual exposure, a Willert question. Read the specs and the code until no child would have to stop for one.
+2. Split the work into child PRs, one problem each. A child merges within one working day and stays under about 1,500 changed lines: larger PRs pull `main` into their branch again and again. Each child ships the product caller of its code, so slices are vertical and pass the dead-code checks. Give each a [review level](../../../docs/technical/coderabbit.md#choose-the-review-level) and a merge mode: "full send", or "full stop" where the owner must read the diff.
+3. Order the children in stages. A stage runs in parallel and starts after the previous one merged. A child that changes a shared check or helper goes first, alone. Stack a child on an unmerged branch only when their files do not overlap; otherwise it waits a stage. A dependency on another epic is a stage on both epics.
+4. List every scope question and every kind-1 and kind-3 decision of [Decide or ask](../../../AGENTS.md#decide-or-ask) that the work can reach, each with your recommendation: where each child's code lives (public `werkflow-app` or a private repo) and whether its data is licensed, scope edges, money, new personal data, a design direction with real alternatives, a residual exposure, a Willert question. Read the specs and the code until no child would have to stop for one: a question asked after building leaves a finished PR waiting.
 5. Open the epic issue: goal, targets, a table of children (stage, issue, level, merge mode), the listed decisions, done-when, and the three lists of [section 4](#4-keep-the-three-lists), empty.
-6. Open one issue per child: "Part of <epic>. Stage <s>, level <l>, <merge mode>." Then **Do** (the scope, with file paths) and **Done when** (the commands that must pass and what the PR body reports).
+6. Open one issue per child: "Part of <epic>. Stage <s>, level <l>, <merge mode>." Then **Do** (the scope, with file paths) and **Done when** (the commands that must pass, what the PR body reports, the product caller, and under about 1,500 changed lines).
 7. Write one shared child brief in werkflow-planning: how to work, the style, the hand-back line, known flaky checks.
 
-Done when every child issue has a stage, a level, a merge mode and a checkable done-when, and the epic lists every owner decision you can foresee.
+Done when every child issue has a stage, a level, a merge mode and a checkable done-when, and the epic names where the code lives and lists every scope question and owner decision you can foresee.
 
 ## 2. Approve once
 
 1. Ask the owner through the question tool, in one batch: the epic link, the children in order, and every listed decision with your recommendation first. End your turn.
 2. Comment the approval and every answer on the epic, and put each answer into the child issue it changes.
 
-Never ask about the breakdown again. From here, [Decide or ask](../../../AGENTS.md#decide-or-ask) applies: decide, record, keep working.
+Never ask about the breakdown or scope again. From here, [Decide or ask](../../../AGENTS.md#decide-or-ask) applies: decide, record, keep working.
 
 ## 3. Start children
 

@@ -4085,6 +4085,110 @@ export type Database = {
           },
         ];
       };
+      leistung_price_versions: {
+        Row: {
+          cost_rate_cents: number | null;
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          leistung_id: string;
+          organization_id: string;
+          sale_price_cents: number;
+          valid_from: string;
+        };
+        Insert: {
+          cost_rate_cents?: number | null;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          leistung_id: string;
+          organization_id: string;
+          sale_price_cents: number;
+          valid_from: string;
+        };
+        Update: {
+          cost_rate_cents?: number | null;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          leistung_id?: string;
+          organization_id?: string;
+          sale_price_cents?: number;
+          valid_from?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "leistung_price_versions_leistung_fk";
+            columns: ["leistung_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "leistungen";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "leistung_price_versions_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      leistungen: {
+        Row: {
+          archived_at: string | null;
+          created_at: string;
+          created_by: string | null;
+          description: string;
+          id: string;
+          kind: string;
+          leistung_number: string;
+          name: string;
+          organization_id: string;
+          tax_rate_basis_points: number;
+          unit: string;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          archived_at?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          description?: string;
+          id?: string;
+          kind: string;
+          leistung_number: string;
+          name: string;
+          organization_id: string;
+          tax_rate_basis_points: number;
+          unit: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          archived_at?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          description?: string;
+          id?: string;
+          kind?: string;
+          leistung_number?: string;
+          name?: string;
+          organization_id?: string;
+          tax_rate_basis_points?: number;
+          unit?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "leistungen_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       maintenance_coverage_events: {
         Row: {
           actor_id: string;
@@ -13115,6 +13219,77 @@ export type Database = {
           },
         ];
       };
+      work_leads: {
+        Row: {
+          created_at: string;
+          employee_record_id: string;
+          ended_at: string | null;
+          ended_by: string | null;
+          id: string;
+          job_id: string | null;
+          organization_id: string;
+          project_id: string | null;
+          started_at: string;
+          started_by: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          employee_record_id: string;
+          ended_at?: string | null;
+          ended_by?: string | null;
+          id?: string;
+          job_id?: string | null;
+          organization_id: string;
+          project_id?: string | null;
+          started_at?: string;
+          started_by?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          employee_record_id?: string;
+          ended_at?: string | null;
+          ended_by?: string | null;
+          id?: string;
+          job_id?: string | null;
+          organization_id?: string;
+          project_id?: string | null;
+          started_at?: string;
+          started_by?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "work_leads_employee_fk";
+            columns: ["employee_record_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "work_leads_job_fk";
+            columns: ["job_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "jobs";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "work_leads_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "work_leads_project_fk";
+            columns: ["project_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
       work_request_entries: {
         Row: {
           attempt_key: string;
@@ -14106,6 +14281,17 @@ export type Database = {
           p_vacation_days_per_year: number;
           p_valid_from: string;
           p_weekly_hours: number;
+        };
+        Returns: string;
+      };
+      add_leistung_price: {
+        Args: {
+          p_actor_id: string;
+          p_cost_rate_cents: number;
+          p_leistung_id: string;
+          p_organization_id: string;
+          p_sale_price_cents: number;
+          p_valid_from: string;
         };
         Returns: string;
       };
@@ -15183,6 +15369,22 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      create_leistung: {
+        Args: {
+          p_actor_id: string;
+          p_cost_rate_cents: number;
+          p_description: string;
+          p_kind: string;
+          p_leistung_number: string;
+          p_name: string;
+          p_organization_id: string;
+          p_sale_price_cents: number;
+          p_tax_rate_basis_points: number;
+          p_unit: string;
+          p_valid_from: string;
+        };
+        Returns: string;
       };
       create_maintenance_coverage: {
         Args: {
@@ -16474,6 +16676,22 @@ export type Database = {
         };
         Returns: string;
       };
+      leistung_prices_on_day: {
+        Args: {
+          p_leistung_ids: string[];
+          p_on_date: string;
+          p_organization_id: string;
+        };
+        Returns: {
+          cost_rate_cents: number;
+          leistung_id: string;
+          price_version_id: string;
+          sale_price_cents: number;
+          tax_rate_basis_points: number;
+          unit: string;
+          valid_from: string;
+        }[];
+      };
       link_installed_equipment_source: {
         Args: {
           p_actor_id: string;
@@ -16795,6 +17013,10 @@ export type Database = {
           project_id: string;
         }[];
       };
+      list_inventory_movement_page: {
+        Args: { p_organization_id: string; p_query?: Json };
+        Returns: Json;
+      };
       list_inventory_page: {
         Args: { p_organization_id: string; p_query?: Json };
         Returns: Json;
@@ -16805,6 +17027,17 @@ export type Database = {
           p_organization_id: string;
           p_queries: Json;
           p_user_id: string;
+        };
+        Returns: Json;
+      };
+      list_leistung_page: {
+        Args: {
+          p_on_date: string;
+          p_organization_id: string;
+          p_page?: number;
+          p_page_size?: number;
+          p_search?: string;
+          p_view?: string;
         };
         Returns: Json;
       };
@@ -17242,6 +17475,10 @@ export type Database = {
           isOneToOne: false;
           isSetofReturn: true;
         };
+      };
+      read_work_lead_scope: {
+        Args: { p_organization_id: string; p_user_id: string };
+        Returns: Json;
       };
       record_client_communication_exception: {
         Args: {

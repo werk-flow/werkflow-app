@@ -12,6 +12,7 @@ import {
   Award,
   ClipboardList,
   Wrench,
+  ReceiptText,
 } from 'lucide-react';
 
 import { isManagerRole, type OrgRole } from '@/lib/roles';
@@ -73,6 +74,13 @@ const navItems: NavItem[] = [
     href: '/inventar',
     label: 'Inventar',
     icon: Boxes,
+    managerOrAbove: true,
+  },
+  {
+    href: '/angebote/leistungen',
+    activePrefix: '/angebote',
+    label: 'Angebote',
+    icon: ReceiptText,
     managerOrAbove: true,
   },
   {

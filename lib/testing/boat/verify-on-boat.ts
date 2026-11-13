@@ -758,7 +758,7 @@ export async function runOnBoat(input: {
   if ('unavailable' in machine) return machine;
   // Only a run that returned its exit code leaves a machine worth wiping and keeping.
   const keep = async (outcome: BoatOutcome) =>
-    typeof outcome === 'number' && keepMachine(machine, { repository, form, signal });
+    typeof outcome === 'number' ? keepMachine(machine, { repository, form, signal }) : 'no exit code';
   return withMachine(
     machine,
     signal,

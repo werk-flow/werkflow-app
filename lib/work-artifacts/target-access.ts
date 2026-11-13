@@ -4,6 +4,7 @@ import type { ActionResult } from '@/lib/action-result';
 import { loggedRead } from '@/lib/data/read-request-cache';
 import { readJobAssignmentOfUser, readOrganizationJob } from '@/lib/jobs/job-access-reads';
 import type { ActionContext } from '@/lib/org/action-context';
+import { isWorkLeadOf } from '@/lib/responsibilities/work-lead';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { WorkArtifactTarget } from './types';
 
@@ -59,4 +60,22 @@ export async function authorizeWorkArtifactTarget(
   );
   if (assignedJobError) return loadFailed;
   return assignedJob ? allowed : refused;
+}
+
+/**
+ * Whether the caller may read the Arbeitsnachweise of a job or project, and
+ * how: `work` for who may write them, `lead` for the work's „Projektleitung“,
+ * who only reads them to review (authorizeWorkArtifactTarget refuses the lead
+ * every write).
+ */
+export async function authorizeWorkArtifactRead(
+  context: ActionContext,
+  target: WorkArtifactTarget,
+): Promise<ActionResult<{ via: 'work' | 'lead' }, 'not_authorized' | 'load_failed'>> {
+  const access = await authorizeWorkArtifactTarget(context, target);
+  if (access.success) return { success: true, via: 'work' };
+  if (access.error !== 'not_authorized') return access;
+  const lead = await isWorkLeadOf(context, target);
+  if (lead === 'load_failed') return { success: false, error: 'load_failed' };
+  return lead ? { success: true, via: 'lead' } : access;
 }

@@ -6,7 +6,7 @@ Rules for what a problem report may carry once it leaves WerkFlow: the screensho
 
 A report screenshot is never a picture of the page. The device redraws the visible page into a clone, rasterizes the clone, and only that image can leave the device. The redraw is default-deny: it keeps what it can prove belongs to the app and replaces everything else, so a new field can never slip through.
 
-`lib/problem-reports/screenshot/` holds the redraw. `redrawScreenshot` is its one entry; a caller imports it lazily, so neither the redraw nor the catalog rides in a cold start.
+`redrawScreenshot` in `lib/problem-reports/screenshot/` is the redraw's one entry, imported lazily.
 
 ### The UI string catalog
 
@@ -26,7 +26,7 @@ Each rule has a test that fails without it: `tests/ui-contracts/problem-report-r
 4. **Attributes.** Layout and state attributes (`class`, `role`, `type`, `checked`, SVG geometry) stay verbatim. Attributes that load or link (`href`, `src`, `srcset`, `poster`, `action`, event handlers) are dropped. Every other attribute (`title`, `aria-*`, `alt`, `placeholder`, `value`, `data-*`, `id`) follows the text rule. An inline style loses each declaration with a `url()`, an image function, a quoted string or a CSS escape, which could spell either.
 5. **Media.** Images, pictures, video, audio, canvas, embedded objects and every SVG with anything but shapes (text, an image, a foreign object, a reference) become neutral blocks of the same size. An icon drawn from shapes stays.
 6. **Frames.** Iframes, scripts, templates and style elements are dropped.
-7. **Styles.** A disabled sheet and a sheet for other media (print) stay out. A style sheet the build compiled from the source (same origin, under `/_next/static/`) stays verbatim, with its fonts inlined. Every other sheet, a style element included, may be written at runtime, so a detached copy of it gets the inline-style rule and loses its fonts. The live sheets never change.
+7. **Styles.** A disabled sheet and a sheet for other media (print) stay out. A build sheet (same origin, under `/_next/static/`) keeps its rules, with its fonts inlined. Every other sheet, a style element included, may be written at runtime, so its detached copy gets the inline-style rule and loses its fonts. Each media rule is settled as the live page answers it: the image might answer light on a dark page.
 8. **Rasterize on the device.** The clone and those styles become an SVG `foreignObject` drawn onto a canvas. An SVG drawn as an image loads nothing from the network. This needs `img-src data:` in the enforced content security policy (`lib/security/csp-report.ts`).
 
 ### Accepted limits of the redraw
@@ -35,15 +35,19 @@ Each rule has a test that fails without it: `tests/ui-contracts/problem-report-r
 - The redraw shows the visible viewport. Scrolled containers are shifted to their scroll position; the rest of a long page is not in the image. A sticky element inside a scrolled container shows where it sits unscrolled, and a fixed element inside one moves with it, so either may leave the image.
 - A Radix state that only a library sets (such as `data-state="checked"`) is faked like any other value, so that element may render in its default state.
 
+### The reporter's boxes
+
+The reporter then covers more (`lib/problem-reports/redaction.ts`). A box is kept as fractions of the image, so one drawn on the preview or the large view covers the same area. Only a copy with the boxes burned in at full size leaves the device. The cover is opaque by construction: a base fill, then stripes, in brand purples both themes share; a token that is not opaque gives black.
+
 ## Text scrubbing
 
 The server keeps a scrubbed copy of each report's description and context beside the originals. Only this copy may leave WerkFlow as text, and only through the [hand-out](#hand-out).
 
-`lib/problem-reports/scrub/` holds the scrubber. `scrubStoredProblemReport(organizationId, reportId)` is its one entry. It reads the report inside that organization, reads the organization's dictionary, and writes the copy with its state and its rule version through `record_problem_report_scrub` in one call. `submitProblemReport` runs it after its answer, so the receipt never waits for the scrub or fails with it. The daily run (`/api/problem-report-retention`) runs it for every report that has its originals and no copy, before it deletes anything. Then it scrubs again every copy written by older rules while its originals exist. The deletion periods bind, so the run deletes a due report's originals whether or not it has a copy. A report without one then keeps no text at all, and the next run sets it `nicht_bereinigbar`.
+`lib/problem-reports/scrub/` holds the scrubber. `scrubStoredProblemReport(organizationId, reportId)` is its one entry. It reads the report and its organization's dictionary, and writes the copy with its state and rule version through `record_problem_report_scrub` in one call. `submitProblemReport` runs it after its answer, so the receipt never waits for the scrub or fails with it. The daily run (`/api/problem-report-retention`) runs it, before it deletes anything, for every report that has its originals and no copy or a copy of older rules. The deletion periods bind, so the run deletes a due report's originals with or without a copy. A report without one then keeps no text at all, and the next run sets it `nicht_bereinigbar`.
 
 ### The dictionary
 
-- The dictionary holds what the rows of the reporting organization name, and nothing of another organization. Every read filters by the organization. A scrub reads the dictionary anew and keeps nothing.
+- The dictionary holds what the rows of the reporting organization name, and nothing of another organization. Every read filters by the organization.
 - Customer names come from the organization's own name, the customers and the callers of requests. Person names come from contacts, members, employees and their emergency contacts. Addresses come from customers, sites, callers and employees. Site names come from the sites. Phone numbers come from all of these.
 - A name is a term as a whole and word by word, so a surname alone is replaced. A word of fewer than three letters, and a function word (a salutation, a title, a legal form, an article, a preposition, a conjunction), is a term only inside its whole name. Without that, a customer called „Die Bad GmbH“ would replace every „die“. A short part before a word that is a term alone goes with it, so „O’Neill“ leaves no „O“. The apostrophes `'`, `’` and `ʼ` all separate two words.
 - A word of a customer's name that is one of the app's own UI words is a term only inside the whole name. Reports are about the app: a customer called „Kältetechnik Service Nord“ must not turn every „Service“ into a placeholder. A UI word is a [catalog](#the-ui-string-catalog) entry of one word; a word inside a longer entry is none. A person's name has no such exception.
@@ -73,7 +77,7 @@ Each rule has a test named after it in `lib/problem-reports/scrub/scrub-text.tes
 
 ### Limits of the text scrubber
 
-The owner accepted these limits on 2026-11-12 (werk-flow/werkflow-planning#21). The scrubbed copy keeps what neither the dictionary nor a pattern covers:
+The owner accepted these limits (werk-flow/werkflow-planning#21). The scrubbed copy keeps what neither the dictionary nor a pattern covers:
 
 - a name the organization's data does not know and that follows no salutation, such as a neighbour, a nickname or a misspelt customer;
 - a name of two letters alone;
@@ -81,9 +85,8 @@ The owner accepted these limits on 2026-11-12 (werk-flow/werkflow-planning#21). 
 - an unknown phone number without a leading `0` or `+`;
 - a lone word of a customer's name that is one of the app's own UI words, such as „Service“ or „Lager“;
 - a word of a site's name alone, and a site named with one UI word;
-- a street of one word without a street ending and without its number.
-
-Pending the owner's answer: a former name of the reporting organization stays readable. WerkFlow keeps no earlier names, so after a rename the dictionary knows only the current one.
+- a street of one word without a street ending and without its number;
+- a former name of the reporting organization: WerkFlow keeps no earlier names, so after a rename the dictionary knows only the current one.
 
 These limits apply to every report thread that pulls a copy, and its model provider. The owner also accepted on 2026-11-12 that a handed-out copy outlives WerkFlow's deletion periods there, as the scrubbed copy counts as anonymous. Removing the hand-out secret stops further transfers; it recalls nothing.
 
@@ -97,7 +100,6 @@ The one door through which report content leaves WerkFlow. [Problem reports](../
 - **What leaves.** The waiting list: each report's id and bucket. A hand-out: the report's id, the scrubbed description and context, status, bucket, whether it has an answer, and the redrawn screenshot. Never an original, an attachment, support's answer (it is unscrubbed), a person, the organization or any other id.
 - **Only a current scrubbed copy.** A report without a copy of the current [rule version](#rules-1) is neither listed nor handed out, and the hand-out answers only the checked copy revision.
 - **Checked again.** The hand-out checks a current copy once more for the organization's name, its join code and record ids. A hit means the rules missed a case: `copy_unavailable`, an error logged without text, and the copy withdrawn for the daily run.
-- **Ten minutes after sending** a report is listed and handed out, since the device uploads the screenshot after the save.
 - **Once, accounted.** The hand-out and the screenshot each write a history entry, in the call that answers them, before anything leaves. The first hand-out claims the report, so each copy leaves to one thread once.
 - **The screenshot goes through the server.** A signed storage address would carry the organization's id in its path, so the server reads the bytes and answers them itself.
 
@@ -109,8 +111,6 @@ The one door through which report content leaves WerkFlow. [Problem reports](../
 2. Prove the test fails with the rule removed, then passes.
 3. A new source of names is one more read in `readDictionarySources`, filtered by the organization.
 4. Run `bun run test:unit lib/problem-reports` and `bun run test:verify --group sql:problem-reports`.
-
-Wrong turn: one regular expression per name. A company with 10,000 customers would run 10,000 searches over each report.
 
 ### Change the redraw
 
@@ -135,4 +135,4 @@ Wrong turn: keeping a text because it looks harmless. A rule that keeps by patte
 
 ## Verify your work
 
-Run `bun run test:unit lib/problem-reports`. For the hand-out, also run `bun run test:verify --group sql:problem-reports`. For the redraw, also run `bun run test:ui problem-report-redraw` and the `audit:problem-reports:redraw` group. For the text scrubber, also run `bun run test:verify --group sql:problem-reports`.
+Run `bun run test:unit lib/problem-reports`. For the hand-out or the text scrubber, also run `bun run test:verify --group sql:problem-reports`; for the redraw, `bun run test:ui problem-report-redraw` and the `audit:problem-reports:redraw` group; for the boxes, `bun run test:ui problem-report`.
