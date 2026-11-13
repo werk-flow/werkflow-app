@@ -17,12 +17,7 @@ import { FileInput } from '@/components/ui/file-input';
 import { Label } from '@/components/ui/label';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import type { InventoryCategory, InventoryLocation } from '@/lib/inventory/types';
-import {
-  IMPORT_COLUMNS,
-  importTotals,
-  type ImportColumnMapping,
-  type ImportRowOutcome,
-} from '@/lib/inventory/csv-import';
+import { IMPORT_COLUMNS, importTotals, type ImportColumnMapping } from '@/lib/inventory/csv-import';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { formatBerlinDateTime } from '@/lib/utils';
 import { ImportOutcomeList, ImportTotalsSummary } from './inventory-import-outcomes';
@@ -176,7 +171,9 @@ function ChooseStep({ csvImport }: { csvImport: CsvImport }) {
 
 function dialogDescription(csvImport: CsvImport, props: ImportDialogProps): string {
   const { step, rows } = csvImport;
-  if (step.kind === 'preview') return `Vorschau von ${rows.length} Zeilen. Noch ist nichts gebucht.`;
+  if (step.kind === 'preview') {
+    return `Vorschau von ${step.basis.rows.length} Zeilen. Noch ist nichts gebucht.`;
+  }
   if (step.kind === 'result') {
     return step.alreadyBooked
       ? 'Dieser Import war schon gebucht. Es wurde nichts doppelt gebucht.'
@@ -188,11 +185,17 @@ function dialogDescription(csvImport: CsvImport, props: ImportDialogProps): stri
 }
 
 /** The download of the result report, above the rows it holds; nothing when every row went in as the file says. */
-function ReportDownload({ csvImport, outcomes }: { csvImport: CsvImport; outcomes: ImportRowOutcome[] }) {
-  const report = csvImport.report(outcomes);
+function ReportDownload({
+  csvImport,
+  step,
+}: {
+  csvImport: CsvImport;
+  step: Extract<CsvImport['step'], { kind: 'result' }>;
+}) {
+  const report = csvImport.report(step.outcomes, step.basis);
   if (report === null) return null;
   return (
-    <Button type="button" variant="outline" onClick={() => csvImport.downloadReport(report)}>
+    <Button type="button" variant="outline" onClick={() => csvImport.downloadReport(report, step.basis)}>
       Bericht herunterladen
     </Button>
   );
@@ -227,7 +230,7 @@ function StepFooter({ csvImport }: { csvImport: CsvImport }) {
 
 export function ImportDialog(props: ImportDialogProps) {
   const csvImport = useInventoryCsvImport({ onOpenChange: props.onOpenChange });
-  const { step, mode } = csvImport;
+  const { step } = csvImport;
 
   return (
     <Dialog open={props.open} onOpenChange={csvImport.handleOpenChange} pending={csvImport.isPending}>
@@ -240,7 +243,7 @@ export function ImportDialog(props: ImportDialogProps) {
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            if (step.kind === 'preview') return csvImport.book(step.batchId);
+            if (step.kind === 'preview') return csvImport.book(step);
             if (step.kind === 'result') return csvImport.handleOpenChange(false);
             csvImport.setAttempted(true);
             if (focusFirstInvalidField(csvImport.validationErrors)) return;
@@ -253,13 +256,13 @@ export function ImportDialog(props: ImportDialogProps) {
             {step.kind === 'choose' && <ChooseStep csvImport={csvImport} />}
             {step.kind !== 'choose' && (
               <>
-                <ImportTotalsSummary totals={importTotals(step.outcomes)} mode={mode} />
-                {step.kind === 'result' && <ReportDownload csvImport={csvImport} outcomes={step.outcomes} />}
+                <ImportTotalsSummary totals={importTotals(step.outcomes)} mode={step.basis.mode} />
+                {step.kind === 'result' && <ReportDownload csvImport={csvImport} step={step} />}
                 <ImportOutcomeList
                   outcomes={step.outcomes}
-                  importRows={csvImport.importRows}
-                  lineNumbers={csvImport.lineNumbers}
-                  mode={mode}
+                  importRows={step.basis.importRows}
+                  lineNumbers={step.basis.lineNumbers}
+                  mode={step.basis.mode}
                   onlyProblems={step.kind === 'result'}
                 />
               </>

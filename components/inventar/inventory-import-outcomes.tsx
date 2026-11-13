@@ -100,7 +100,7 @@ export function ImportTotalsSummary({ totals, mode }: { totals: ImportTotals; mo
                 {location.isNew ? ' (neues Lager)' : ''}:
               </span>{' '}
               {location.quantities
-                .map((entry) => `+${formatInventoryQuantity(entry.quantity, entry.unit)}`)
+                .map((entry) => `+${formatInventoryQuantity(entry.quantity, entry.unit, 3)}`)
                 .join(', ')}
             </p>
           ))
@@ -133,7 +133,8 @@ export function ImportOutcomeList({
   const [filter, setFilter] = useState<'all' | 'problems'>(onlyProblems ? 'problems' : 'all');
   const [visibleCount, setVisibleCount] = useState(ROWS_PER_STEP);
   const problemRows = outcomes.filter((row) => importRowProblem(row, null) !== null);
-  const shown = filter === 'problems' ? problemRows : outcomes;
+  // The result shows only rows with a note; its list may keep the preview's filter state.
+  const shown = onlyProblems || filter === 'problems' ? problemRows : outcomes;
   return (
     <section aria-label="Zeilen" className="space-y-3">
       {!onlyProblems && (

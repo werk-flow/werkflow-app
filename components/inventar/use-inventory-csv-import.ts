@@ -23,11 +23,25 @@ import {
   previewInventoryImport,
 } from '@/lib/inventory/import-actions';
 
+/**
+ * The file and the mode a preview was made from. The preview and the result
+ * render and report from it, so a control changed while the preview loads
+ * never mixes into the batch it shows.
+ */
+type ImportBasis = {
+  mode: InventoryImportMode;
+  fileName: string;
+  headers: string[];
+  rows: Record<string, string>[];
+  lineNumbers: number[];
+  importRows: InventoryImportRow[];
+};
+
 /** Where the dialog stands: choosing file and columns, looking at the preview, or reading the result. */
 type ImportStep =
   | { kind: 'choose' }
-  | { kind: 'preview'; batchId: string; outcomes: ImportRowOutcome[] }
-  | { kind: 'result'; outcomes: ImportRowOutcome[]; alreadyBooked: boolean };
+  | { kind: 'preview'; batchId: string; outcomes: ImportRowOutcome[]; basis: ImportBasis }
+  | { kind: 'result'; outcomes: ImportRowOutcome[]; alreadyBooked: boolean; basis: ImportBasis };
 
 /** Whether the chosen file's content was booked before; a repeat or a failed check waits for the user's decision. */
 export type RepeatCheck =
@@ -146,8 +160,8 @@ function useCsvFile() {
 }
 
 /** Saves the result report, built in the browser from the file's own rows. */
-function downloadReport(fileName: string, csv: string) {
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+function downloadReport(fileName: string, csv: Uint8Array) {
+  const url = URL.createObjectURL(new Blob([csv.slice()], { type: 'text/csv;charset=utf-8' }));
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = `${fileName.replace(/\.csv$/i, '') || 'inventar-import'}-hinweise.csv`;
@@ -161,7 +175,7 @@ function useImportRun() {
   const [error, setError] = useState<string | null>(null);
   const { run, isPending } = usePendingTask();
 
-  function preview(input: PreviewInventoryImportInput) {
+  function preview(input: PreviewInventoryImportInput, basis: ImportBasis) {
     setError(null);
     void run(async () => {
       const result = await previewInventoryImport(input).catch(() => null);
@@ -171,11 +185,14 @@ function useImportRun() {
         );
         return;
       }
-      setStep({ kind: 'preview', batchId: result.batchId, outcomes: result.rows });
+      setStep({ kind: 'preview', batchId: result.batchId, outcomes: result.rows, basis });
     });
   }
 
-  function book(batchId: string, onBookedClean: (outcomes: ImportRowOutcome[]) => void) {
+  function book(
+    { batchId, basis }: { batchId: string; basis: ImportBasis },
+    onBookedClean: (outcomes: ImportRowOutcome[]) => void,
+  ) {
     setError(null);
     void run(async () => {
       const result = await bookInventoryImport({ batchId }).catch(() => null);
@@ -186,7 +203,7 @@ function useImportRun() {
       }
       const hasProblems = result.rows.some((row) => importRowProblem(row, null) !== null);
       if (hasProblems || result.alreadyBooked) {
-        setStep({ kind: 'result', outcomes: result.rows, alreadyBooked: result.alreadyBooked });
+        setStep({ kind: 'result', outcomes: result.rows, alreadyBooked: result.alreadyBooked, basis });
         return;
       }
       onBookedClean(result.rows);
@@ -213,7 +230,6 @@ export function useInventoryCsvImport({ onOpenChange }: { onOpenChange: (open: b
   const validationErrors = importValidationErrors(rows.length, mapping, fileRefusal, repeat);
   const fileError = fileRefusal ?? (attempted ? validationErrors['inventory-import-file'] : undefined);
   const importRows: InventoryImportRow[] = buildImportRows(rows, mapping);
-  const fileUnits = importRows.map((row) => row.unit ?? null);
 
   function handleOpenChange(nextOpen: boolean) {
     if (!nextOpen) {
@@ -232,19 +248,18 @@ export function useInventoryCsvImport({ onOpenChange }: { onOpenChange: (open: b
   }
 
   function preview() {
-    importRun.preview({
-      fileName: fileName || 'inventar-import.csv',
-      contentHash,
-      mode,
-      columnMapping: Object.fromEntries(
-        Object.entries(mapping).filter((entry): entry is [string, string] => Boolean(entry[1])),
-      ),
-      rows: importRows,
-    });
-  }
-
-  function report(outcomes: readonly ImportRowOutcome[]): string | null {
-    return importReportCsv({ headers, rows, lineNumbers, outcomes, fileUnits });
+    importRun.preview(
+      {
+        fileName: fileName || 'inventar-import.csv',
+        contentHash,
+        mode,
+        columnMapping: Object.fromEntries(
+          Object.entries(mapping).filter((entry): entry is [string, string] => Boolean(entry[1])),
+        ),
+        rows: importRows,
+      },
+      { mode, fileName, headers, rows, lineNumbers, importRows },
+    );
   }
 
   return {
@@ -272,13 +287,19 @@ export function useInventoryCsvImport({ onOpenChange }: { onOpenChange: (open: b
     handleOpenChange,
     handleFile,
     preview,
-    book: (batchId: string) =>
-      importRun.book(batchId, (outcomes) => {
+    book: (preview: { batchId: string; basis: ImportBasis }) =>
+      importRun.book(preview, (outcomes) => {
         handleOpenChange(false);
         showBanner({ variant: 'success', message: importResultMessage(importTotals(outcomes)) });
       }),
-    backToChoose: importRun.reset,
-    report,
-    downloadReport: (csv: string) => downloadReport(fileName, csv),
+    // A failed booking answer may hide a booking that went through, so the
+    // file is checked for a repeat again before the next preview.
+    backToChoose: () => {
+      importRun.reset();
+      csvFile.retryRepeat();
+    },
+    report: (outcomes: readonly ImportRowOutcome[], basis: ImportBasis) =>
+      importReportCsv({ ...basis, outcomes, fileUnits: basis.importRows.map((row) => row.unit ?? null) }),
+    downloadReport: (csv: Uint8Array, basis: ImportBasis) => downloadReport(basis.fileName, csv),
   };
 }

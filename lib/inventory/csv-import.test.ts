@@ -329,6 +329,12 @@ describe('importTotals', () => {
 });
 
 describe('importRowEffect and importRowProblem', () => {
+  test('a quantity keeps the three decimal places the ledger books', () => {
+    expect(importRowEffect({ ...BASE, unit: 'meter', quantity: 0.001, quantityAfter: 4.125 }, 'stock')).toBe(
+      '+0,001 Meter in Hauptlager, danach 4,125 Meter',
+    );
+  });
+
   test('a matched row says its quantity adds to the stock it already has', () => {
     expect(importRowEffect(OUTCOMES[1] ?? BASE, 'stock')).toBe(
       '+0,1 Meter zum vorhandenen Bestand in Hauptlager, danach 4,1 Meter',
@@ -352,6 +358,11 @@ describe('importRowEffect and importRowProblem', () => {
   });
 });
 
+/** The report's text with its byte order mark, as a spreadsheet reads it. */
+function readReport(bytes: Uint8Array | null): string | null {
+  return bytes === null ? null : new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes);
+}
+
 describe('importReportCsv', () => {
   const headers = ['Bezeichnung', 'Einheit'];
   const rows = OUTCOMES.map((_, index) => ({ Bezeichnung: `Artikel; ${index}`, Einheit: 'Stk' }));
@@ -359,13 +370,31 @@ describe('importReportCsv', () => {
   const fileUnits = OUTCOMES.map(() => 'Stk');
 
   test('holds every rejected row and every row without a Lager with its line, cells and reason', () => {
-    const csv = importReportCsv({ headers, rows, lineNumbers, outcomes: OUTCOMES, fileUnits });
+    const csv = readReport(importReportCsv({ headers, rows, lineNumbers, outcomes: OUTCOMES, fileUnits }));
     expect(csv?.split('\r\n')).toEqual([
       '﻿Zeile;Bezeichnung;Einheit;Importhinweis',
       '7;"Artikel; 4";Stk;Einheit weicht ab: Stück statt Meter.',
       '8;"Artikel; 5";Stk;Unbekannte Einheit: „Stk“.',
       '9;"Artikel; 6";Stk;Kein Lager angegeben: Artikel übernommen, kein Bestand gebucht.',
       '10;"Artikel; 7";Stk;Kein Artikelname.',
+      '',
+    ]);
+  });
+
+  test('a cell or header that starts like a formula reaches the report as text', () => {
+    const formulaRows = OUTCOMES.map(() => ({ '+Bezeichnung': '=HYPERLINK("x")', Einheit: '@Stk' }));
+    const csv = readReport(
+      importReportCsv({
+        headers: ['+Bezeichnung', 'Einheit'],
+        rows: formulaRows,
+        lineNumbers,
+        outcomes: OUTCOMES.slice(4, 5),
+        fileUnits,
+      }),
+    );
+    expect(csv?.split('\r\n')).toEqual([
+      "\uFEFFZeile;'+Bezeichnung;Einheit;Importhinweis",
+      `7;"'=HYPERLINK(""x"")";'@Stk;Einheit weicht ab: Stück statt Meter.`,
       '',
     ]);
   });

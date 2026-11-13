@@ -4,6 +4,7 @@ import {
   getInventoryUnitLabel,
   type InventoryItemType,
 } from '@/lib/inventory/types';
+import { buildCsv } from '@/lib/format/csv-zip';
 import { parseDecimalInput } from '@/lib/ui/decimal';
 
 type ImportColumnKey = keyof InventoryImportRow;
@@ -318,9 +319,9 @@ export function importRowEffect(row: ImportRowOutcome, mode: InventoryImportMode
   }
   const place = row.locationCreated ? `${row.locationName} (neues Lager)` : row.locationName;
   const after =
-    row.quantityAfter === null ? '' : `, danach ${formatInventoryQuantity(row.quantityAfter, row.unit)}`;
+    row.quantityAfter === null ? '' : `, danach ${formatInventoryQuantity(row.quantityAfter, row.unit, 3)}`;
   const added = row.matchedBy === null ? '' : ' zum vorhandenen Bestand';
-  return `+${formatInventoryQuantity(row.quantity, row.unit)}${added} in ${place}${after}`;
+  return `+${formatInventoryQuantity(row.quantity, row.unit, 3)}${added} in ${place}${after}`;
 }
 
 /**
@@ -352,14 +353,11 @@ export function importRowProblem(row: ImportRowOutcome, fileUnit: string | null)
   }
 }
 
-function csvCell(value: string): string {
-  return /[;"\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
-}
-
 /**
  * The result report: every row that was not imported as the file says, with
- * its line, its original cells and why. Null when there is no such row. The
- * byte order mark lets a spreadsheet read the umlauts.
+ * its line, its original cells and why. Null when there is no such row. It is
+ * built by the CSV encoder of every WerkFlow download, which writes the byte
+ * order mark and turns a cell that starts like a formula into text.
  */
 export function importReportCsv({
   headers,
@@ -373,7 +371,7 @@ export function importReportCsv({
   lineNumbers: number[];
   outcomes: readonly ImportRowOutcome[];
   fileUnits: ReadonlyArray<string | null>;
-}): string | null {
+}): Uint8Array | null {
   const lines = outcomes.flatMap((outcome) => {
     const problem = importRowProblem(outcome, fileUnits[outcome.index] ?? null);
     if (problem === null) return [];
@@ -382,9 +380,7 @@ export function importReportCsv({
     return [[String(lineNumber), ...headers.map((header) => row[header] ?? ''), problem]];
   });
   if (lines.length === 0) return null;
-  return `﻿${[['Zeile', ...headers, 'Importhinweis'], ...lines]
-    .map((cells) => cells.map(csvCell).join(';'))
-    .join('\r\n')}\r\n`;
+  return buildCsv(['Zeile', ...headers, 'Importhinweis'], lines);
 }
 
 /** The banner after a booking with no rejected row and no row without a Lager. */
