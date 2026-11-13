@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
-import { Pencil, ReceiptText } from 'lucide-react';
+import { Pencil, ReceiptEuro } from 'lucide-react';
 
 import { SectionTitle } from '@/components/shared/section-title';
 import { StaleRegion } from '@/components/shared/stale-region';
@@ -150,7 +150,7 @@ function billingCard(input: {
       data-testid="work-billing-parties"
     >
       <div className="flex items-start justify-between gap-3">
-        <SectionTitle as="h2" id={`work-billing-parties-${id}`} icon={<ReceiptText className="size-4" />}>
+        <SectionTitle as="h2" id={`work-billing-parties-${id}`} icon={<ReceiptEuro className="size-4" />}>
           Auftraggeber und Rechnung
         </SectionTitle>
         {parties.hasClient && (

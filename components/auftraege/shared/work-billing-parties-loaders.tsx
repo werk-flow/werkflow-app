@@ -12,5 +12,5 @@ import { downloadWorkBillingPartiesSection } from './work-billing-parties-downlo
 // before the chunk arrived, and a press right after the page showed was lost
 // (audit:wave-2:p1-19); the job page hands in its parties read, so the section
 // opens without a read of its own once its chunk is there. The office's job
-// list downloads the chunk ahead (work-billing-parties-download.ts).
+// list downloads the chunk on intent (work-billing-parties-download.ts).
 export const WorkBillingPartiesSection = dynamic(downloadWorkBillingPartiesSection, { ssr: false });
