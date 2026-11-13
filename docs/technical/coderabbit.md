@@ -13,7 +13,7 @@ Choose the level from the diff before you open the PR, and state it in the PR's 
 | Level | The diff | Reviews before ready |
 | --- | --- | --- |
 | 0 | No behavior effect: docs, comments, copy typos, agent instructions, formatting | Your own read of the diff |
-| 1 | Changes behavior: product code, tests, CI logic, scripts. The default | `sol-loop` until Sol approves or its budget ends |
+| 1 | Changes behavior: product code, tests, CI logic, scripts. The default | `sol-loop` until Sol approves or its budget of 3 rounds ends |
 | 2 | Touches security, authentication, permissions and RLS, a migration, personal data, data deletion, the Zeitkonto, or time and payroll logic (for example `supabase/`, `lib/auth/`, `lib/org/`, `lib/security/`, `lib/storage/`, `lib/time-tracking/`, `lib/time-accounts/`, `lib/time-corrections/`) | `sol-loop`, then one CodeRabbit app review per PR |
 
 - Every level also needs `Check` green on the latest commit.
@@ -30,8 +30,8 @@ The organization `werk-flow` has its own CodeRabbit Advanced trial until 2026-11
 | Level | Trial reviews |
 | --- | --- |
 | 0 | Your own read, as outside the trial |
-| 1 | CodeRabbit plus `sol-loop`, budget 1 round |
-| 2 | CodeRabbit plus `sol-loop`, full budget |
+| 1 | CodeRabbit plus `sol-loop` |
+| 2 | CodeRabbit plus `sol-loop` |
 
 Open a level 1 or 2 draft and add `needs-coderabbit` before Sol's first round, so the queue requests CodeRabbit's review of the draft while that round runs. Fix both reviewers' findings in one push. The queue swaps the label for `coderabbit-requested` when it asks; after the push that answers a complete round, add `needs-coderabbit` again for the next review. A push without the label gets no review.
 
