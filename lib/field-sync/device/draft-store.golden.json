@@ -1,0 +1,244 @@
+{
+  "1": {
+    "text": {
+      "userId": "9c000000-0000-4000-8000-000000000001",
+      "organizationId": "9c000000-0000-4000-8000-0000000000a1",
+      "id": "9c000000-0000-4000-8000-000000000110",
+      "revisionId": "9c000000-0000-4000-8000-000000000111",
+      "operationId": "9c000000-0000-4000-8000-000000000112",
+      "jobId": "9c000000-0000-4000-8000-000000000020",
+      "kind": "work_report",
+      "visibility": "internal_only",
+      "capturedAt": "2026-11-09T07:00:00.000Z",
+      "title": "Heizung gewartet",
+      "content": {
+        "summary": "Brenner gereinigt",
+        "requiresSignature": false
+      },
+      "photos": [],
+      "ready": true,
+      "updatedAt": "2026-11-09T07:30:00.000Z",
+      "sealed": false,
+      "refusal": null,
+      "version": 1
+    },
+    "photos": {
+      "userId": "9c000000-0000-4000-8000-000000000001",
+      "organizationId": "9c000000-0000-4000-8000-0000000000a1",
+      "id": "9c000000-0000-4000-8000-000000000120",
+      "revisionId": "9c000000-0000-4000-8000-000000000121",
+      "operationId": "9c000000-0000-4000-8000-000000000122",
+      "jobId": "9c000000-0000-4000-8000-000000000020",
+      "kind": "defect",
+      "visibility": "customer_facing",
+      "capturedAt": "2026-11-09T08:00:00.000Z",
+      "title": "Undichtes Ventil",
+      "content": {
+        "summary": "Ventil tropft am Anschluss"
+      },
+      "photos": [
+        {
+          "id": "9c000000-0000-4000-8000-000000000131",
+          "name": "ventil-1.jpg",
+          "blob": {
+            "$blob": {
+              "type": "image/jpeg",
+              "text": "synthetic photo one"
+            }
+          },
+          "transferred": {
+            "documentId": "9c000000-0000-4000-8000-000000000141",
+            "version": {
+              "versionNumber": 1,
+              "uploadId": "9c000000-0000-4000-8000-000000000151"
+            },
+            "storagePath": "synthetic/ventil-1.jpg"
+          },
+          "documentId": "9c000000-0000-4000-8000-000000000141"
+        },
+        {
+          "id": "9c000000-0000-4000-8000-000000000132",
+          "name": "ventil-2.jpg",
+          "blob": {
+            "$blob": {
+              "type": "image/jpeg",
+              "text": "synthetic photo two"
+            }
+          },
+          "transferred": null,
+          "documentId": null
+        }
+      ],
+      "ready": true,
+      "updatedAt": "2026-11-09T08:15:00.000Z",
+      "sealed": false,
+      "refusal": {
+        "kind": "failed",
+        "at": "2026-11-09T08:20:00.000Z"
+      },
+      "version": 1
+    },
+    "sealed": {
+      "userId": "9c000000-0000-4000-8000-000000000001",
+      "organizationId": "9c000000-0000-4000-8000-0000000000a1",
+      "id": "9c000000-0000-4000-8000-000000000160",
+      "revisionId": "9c000000-0000-4000-8000-000000000161",
+      "operationId": "9c000000-0000-4000-8000-000000000162",
+      "jobId": "9c000000-0000-4000-8000-000000000020",
+      "kind": "site_diary",
+      "visibility": "internal_only",
+      "capturedAt": "2026-11-09T09:00:00.000Z",
+      "title": "Baustelle übergeben",
+      "content": {
+        "summary": "Rohbau abgenommen"
+      },
+      "photos": [],
+      "ready": true,
+      "updatedAt": "2026-11-09T09:10:00.000Z",
+      "sealed": true,
+      "refusal": null,
+      "version": 1
+    },
+    "noAccess": {
+      "userId": "9c000000-0000-4000-8000-000000000001",
+      "organizationId": "9c000000-0000-4000-8000-0000000000a1",
+      "id": "9c000000-0000-4000-8000-000000000170",
+      "revisionId": "9c000000-0000-4000-8000-000000000171",
+      "operationId": "9c000000-0000-4000-8000-000000000172",
+      "jobId": "9c000000-0000-4000-8000-000000000021",
+      "kind": "measurement",
+      "visibility": "internal_only",
+      "capturedAt": "2026-11-09T10:00:00.000Z",
+      "title": "",
+      "content": {},
+      "photos": [],
+      "ready": false,
+      "updatedAt": "2026-11-09T10:05:00.000Z",
+      "sealed": false,
+      "refusal": {
+        "kind": "no_access",
+        "at": "2026-11-09T10:30:00.000Z"
+      },
+      "version": 1
+    }
+  },
+  "1 without version": {
+    "text": {
+      "userId": "9c000000-0000-4000-8000-000000000001",
+      "organizationId": "9c000000-0000-4000-8000-0000000000a1",
+      "id": "9c000000-0000-4000-8000-000000000110",
+      "revisionId": "9c000000-0000-4000-8000-000000000111",
+      "operationId": "9c000000-0000-4000-8000-000000000112",
+      "jobId": "9c000000-0000-4000-8000-000000000020",
+      "kind": "work_report",
+      "visibility": "internal_only",
+      "capturedAt": "2026-11-09T07:00:00.000Z",
+      "title": "Heizung gewartet",
+      "content": {
+        "summary": "Brenner gereinigt",
+        "requiresSignature": false
+      },
+      "photos": [],
+      "ready": true,
+      "updatedAt": "2026-11-09T07:30:00.000Z",
+      "sealed": false,
+      "refusal": null
+    },
+    "photos": {
+      "userId": "9c000000-0000-4000-8000-000000000001",
+      "organizationId": "9c000000-0000-4000-8000-0000000000a1",
+      "id": "9c000000-0000-4000-8000-000000000120",
+      "revisionId": "9c000000-0000-4000-8000-000000000121",
+      "operationId": "9c000000-0000-4000-8000-000000000122",
+      "jobId": "9c000000-0000-4000-8000-000000000020",
+      "kind": "defect",
+      "visibility": "customer_facing",
+      "capturedAt": "2026-11-09T08:00:00.000Z",
+      "title": "Undichtes Ventil",
+      "content": {
+        "summary": "Ventil tropft am Anschluss"
+      },
+      "photos": [
+        {
+          "id": "9c000000-0000-4000-8000-000000000131",
+          "name": "ventil-1.jpg",
+          "blob": {
+            "$blob": {
+              "type": "image/jpeg",
+              "text": "synthetic photo one"
+            }
+          },
+          "transferred": {
+            "documentId": "9c000000-0000-4000-8000-000000000141",
+            "version": {
+              "versionNumber": 1,
+              "uploadId": "9c000000-0000-4000-8000-000000000151"
+            },
+            "storagePath": "synthetic/ventil-1.jpg"
+          },
+          "documentId": "9c000000-0000-4000-8000-000000000141"
+        },
+        {
+          "id": "9c000000-0000-4000-8000-000000000132",
+          "name": "ventil-2.jpg",
+          "blob": {
+            "$blob": {
+              "type": "image/jpeg",
+              "text": "synthetic photo two"
+            }
+          },
+          "transferred": null,
+          "documentId": null
+        }
+      ],
+      "ready": true,
+      "updatedAt": "2026-11-09T08:15:00.000Z",
+      "sealed": false,
+      "refusal": {
+        "kind": "failed",
+        "at": "2026-11-09T08:20:00.000Z"
+      }
+    },
+    "sealed": {
+      "userId": "9c000000-0000-4000-8000-000000000001",
+      "organizationId": "9c000000-0000-4000-8000-0000000000a1",
+      "id": "9c000000-0000-4000-8000-000000000160",
+      "revisionId": "9c000000-0000-4000-8000-000000000161",
+      "operationId": "9c000000-0000-4000-8000-000000000162",
+      "jobId": "9c000000-0000-4000-8000-000000000020",
+      "kind": "site_diary",
+      "visibility": "internal_only",
+      "capturedAt": "2026-11-09T09:00:00.000Z",
+      "title": "Baustelle übergeben",
+      "content": {
+        "summary": "Rohbau abgenommen"
+      },
+      "photos": [],
+      "ready": true,
+      "updatedAt": "2026-11-09T09:10:00.000Z",
+      "sealed": true,
+      "refusal": null
+    },
+    "noAccess": {
+      "userId": "9c000000-0000-4000-8000-000000000001",
+      "organizationId": "9c000000-0000-4000-8000-0000000000a1",
+      "id": "9c000000-0000-4000-8000-000000000170",
+      "revisionId": "9c000000-0000-4000-8000-000000000171",
+      "operationId": "9c000000-0000-4000-8000-000000000172",
+      "jobId": "9c000000-0000-4000-8000-000000000021",
+      "kind": "measurement",
+      "visibility": "internal_only",
+      "capturedAt": "2026-11-09T10:00:00.000Z",
+      "title": "",
+      "content": {},
+      "photos": [],
+      "ready": false,
+      "updatedAt": "2026-11-09T10:05:00.000Z",
+      "sealed": false,
+      "refusal": {
+        "kind": "no_access",
+        "at": "2026-11-09T10:30:00.000Z"
+      }
+    }
+  }
+}

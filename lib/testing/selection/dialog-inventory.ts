@@ -497,10 +497,9 @@ export const DIALOG_INVENTORY = {
         { route: '/auftraege/[jobNumber]', role: 'employee', opener: 'field.artifact' },
       ],
     },
-  "components/auftraege/artifacts/device-draft-list.tsx#DeviceDraftDeleteDialog|Entwurf „ {draft?.title.trim() || 'Ohne Titel'} “ löschen?":
-    {
-      audits: [{ route: '/auftraege/[jobNumber]', role: 'employee', opener: 'field.artifact-draft-delete' }],
-    },
+  'components/auftraege/artifacts/device-draft-list.tsx#DeviceDraftDeleteDialog|{deletion?.title}': {
+    audits: [{ route: '/auftraege/[jobNumber]', role: 'employee', opener: 'field.artifact-draft-delete' }],
+  },
   'components/auftraege/forms/create-auftrag-project-dialog.tsx#CreateAuftragProjectDialog|Neuen Auftrag oder Projekt erstellen':
     {
       audits: [{ route: '/auftraege', role: 'admin', opener: 'work.create', tabs: ['job', 'project'] }],
