@@ -15,6 +15,8 @@ declare global {
       pendingSaves: Array<(saved: boolean) => void>;
       /** Saves whose code ran after their answer, shown or not. */
       answeredSaves: number;
+      /** Answers for the held saves, given in the commit of the next server props, before passive effects. */
+      answersOnCommit: boolean[];
       /** Each banner text that rendered while the spec recorded them. */
       shownBanners: string[];
       finishCookie: (success: boolean) => void;
@@ -29,6 +31,7 @@ window.organizationContract = {
   reads: [],
   pendingSaves: [],
   answeredSaves: 0,
+  answersOnCommit: [],
   shownBanners: [],
   finishCookie(success): void {
     const write = pending;

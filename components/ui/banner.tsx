@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -221,21 +222,39 @@ const ignoreBanner = (): (() => void) => () => {};
  * the subtree unmounted, such as a save that answers after an organization
  * switch replaced the page, belongs to a page nobody sees any more and is
  * dropped. A failure still shows, without its action: a retry would run the
- * former page's write in the scope that replaced it.
+ * former page's write in the scope that replaced it. A progress banner the
+ * subtree showed leaves with it.
+ *
+ * The scope ends in the commit that removes it, not in passive cleanup: a save
+ * answering between that commit and its passive effects already counts as late.
  */
 export function BannerScope({ children }: { children: ReactNode }) {
   const outer = useBanner();
   const mountedRef = useRef(true);
-  useEffect(() => {
+  const progressDisposersRef = useRef(new Set<() => void>());
+  useLayoutEffect(() => {
     mountedRef.current = true;
+    const progressDisposers = progressDisposersRef.current;
     return () => {
       mountedRef.current = false;
+      // Each disposer checks its message id, so a newer banner stays.
+      for (const dispose of progressDisposers) dispose();
+      progressDisposers.clear();
     };
   }, []);
   const value = useMemo<BannerContextValue>(
     () => ({
       showBanner: (banner) => {
-        if (mountedRef.current) return outer.showBanner(banner);
+        if (mountedRef.current) {
+          const dispose = outer.showBanner(banner);
+          if (banner.variant !== 'progress') return dispose;
+          const progressDisposers = progressDisposersRef.current;
+          progressDisposers.add(dispose);
+          return () => {
+            progressDisposers.delete(dispose);
+            dispose();
+          };
+        }
         if (banner.variant !== 'error') return ignoreBanner();
         return outer.showBanner({ variant: banner.variant, message: banner.message });
       },

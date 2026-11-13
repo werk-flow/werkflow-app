@@ -116,3 +116,40 @@ test("a failure the old page's write reports after a switch still shows, without
   await expect(failure).toContainText('Nicht gespeichert: Notiz der ersten Organisation');
   await expect(failure.getByRole('button', { name: 'Erneut versuchen' })).toHaveCount(0);
 });
+
+test("an old page's save that answers in the replacing commit, before its passive effects, forwards neither its confirmation nor a retry", async ({
+  page,
+}) => {
+  const shownBanners = await recordBanners(page);
+  await page.getByLabel('Entwurf').fill('Notiz der ersten Organisation');
+  await page.getByRole('button', { name: 'Entwurf speichern' }).click();
+  await page.getByRole('button', { name: 'Entwurf speichern' }).click();
+  await page.getByRole('button', { name: 'Organisation wechseln', exact: true }).click();
+  await finishCookieWrite(page, 1, true);
+  await expect.poll(() => page.evaluate(() => window.organizationContract.pendingSaves.length)).toBe(2);
+  await page.evaluate(() => {
+    window.organizationContract.answersOnCommit = [true, false];
+  });
+  await page.getByRole('button', { name: 'Serverdaten später übernehmen' }).click();
+  await expect.poll(() => page.evaluate(() => window.organizationContract.answeredSaves)).toBe(2);
+
+  const failure = page.getByRole('alert');
+  await expect(failure).toContainText('Nicht gespeichert: Notiz der ersten Organisation');
+  await expect(failure.getByRole('button', { name: 'Erneut versuchen' })).toHaveCount(0);
+  expect(await shownBanners()).toEqual(['Nicht gespeichert: Notiz der ersten Organisation']);
+});
+
+test("the old page's progress banner leaves with the page a switch replaced", async ({ page }) => {
+  const draft = page.getByLabel('Entwurf');
+  await draft.fill('Notiz der ersten Organisation');
+  await page.getByRole('button', { name: 'Entwurf mit Fortschritt speichern' }).click();
+  await expect(page.getByRole('alert')).toContainText('Wird gespeichert: Notiz der ersten Organisation');
+  await page.getByRole('button', { name: 'Organisation wechseln', exact: true }).click();
+  await finishCookieWrite(page, 1, true);
+  await page.getByRole('button', { name: 'Serverdaten übernehmen' }).click();
+  await expect(draft).toHaveValue('');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+
+  await answerSave(page, 1);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});

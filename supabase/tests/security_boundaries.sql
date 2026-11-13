@@ -381,7 +381,7 @@ language sql as $$
     and p.prorettype <> 'trigger'::regtype
     and pg_get_function_identity_arguments(p.oid) !~ '(organization|org)_id\M'
     and not exists (select 1 from tenant where tenant.reltype = any (p.proargtypes::oid[]))
-    and exists (select 1 from tenant where p.prosrc ~ ('\mpublic\.' || tenant.relname || '\M'));
+    and exists (select 1 from tenant where p.prosrc ~* ('\mpublic\.' || tenant.relname || '\M'));
 $$;
 
 -- An exemption is stale when its signature is no longer reported: the
@@ -416,6 +416,9 @@ $$;
 savepoint tenant_helper_probe;
 create function app_private.werkflow_tenant_probe(p_work_id uuid) returns setof public.jobs
 language sql stable as $probe$ select * from public.jobs job where job.id = p_work_id $probe$;
+-- Unquoted identifiers fold to lower case, so an uppercase reference names the same table.
+create function app_private.werkflow_tenant_probe(p_work_id text) returns setof public.jobs
+language sql stable as $probe$ SELECT * FROM PUBLIC.JOBS job WHERE job.id = p_work_id::uuid $probe$;
 create function app_private.werkflow_tenant_probe_scoped(p_organization_id uuid, p_work_id uuid)
 returns setof public.jobs language sql stable as $probe$
   select * from public.jobs job where job.organization_id = p_organization_id and job.id = p_work_id
@@ -437,7 +440,7 @@ begin
   from pg_temp.tenant_helpers_without_organization() helper
   where helper.name like 'werkflow_tenant_probe%' or helper.name like 'get_user_org_ids(%'
     and helper.name not in (select exemption.name from pg_temp.tenant_helper_exemptions() exemption);
-  if found is distinct from 'get_user_org_ids(uuid,text), werkflow_tenant_probe(uuid)' then
+  if found is distinct from 'get_user_org_ids(uuid,text), werkflow_tenant_probe(text), werkflow_tenant_probe(uuid)' then
     raise exception 'Tenant helper check missed the probe or flagged a scoped one: %', found;
   end if;
   -- A helper that gained the organization, and one that is gone, leave stale exemptions.
