@@ -68,6 +68,24 @@ insert into public.time_entries (id, organization_id, user_id, entry_type, times
   '26104154-0000-0000-0000-0000000000ab'),
 ('26104154-0000-0000-0000-0000000000c6', '26104154-0000-0000-0000-000000000010',
   '26104154-0000-0000-0000-000000000004', 'break_start', now() - interval '1 hour', true, 'approved', null);
+-- The admin's open break after a break end on job A and a clock-in on job B
+-- at one timestamp, the break end recorded later: the app orders a break end
+-- before a clock-in at one timestamp, so the break resumes job B.
+insert into public.jobs (id, organization_id, title, job_number, created_by) values
+('26104154-0000-0000-0000-0000000000ac', '26104154-0000-0000-0000-000000000010', 'Job A',
+  'TSET-A', '26104154-0000-0000-0000-000000000001'),
+('26104154-0000-0000-0000-0000000000ad', '26104154-0000-0000-0000-000000000010', 'Job B',
+  'TSET-B', '26104154-0000-0000-0000-000000000001');
+insert into public.time_entries (id, organization_id, user_id, entry_type, timestamp, is_manual, status, job_id, created_at) values
+('26104154-0000-0000-0000-0000000000c7', '26104154-0000-0000-0000-000000000010',
+  '26104154-0000-0000-0000-000000000001', 'break_end', now() - interval '50 minutes', true, 'approved',
+  '26104154-0000-0000-0000-0000000000ac', now()),
+('26104154-0000-0000-0000-0000000000c8', '26104154-0000-0000-0000-000000000010',
+  '26104154-0000-0000-0000-000000000001', 'clock_in', now() - interval '50 minutes', true, 'approved',
+  '26104154-0000-0000-0000-0000000000ad', now() - interval '1 minute'),
+('26104154-0000-0000-0000-0000000000c9', '26104154-0000-0000-0000-000000000010',
+  '26104154-0000-0000-0000-000000000001', 'break_start', now() - interval '40 minutes', true, 'approved',
+  null, now());
 set local session_replication_role = origin;
 insert into public.organization_settings (organization_id, break_policy_history) values
 ('26104154-0000-0000-0000-000000000010',
@@ -174,7 +192,9 @@ begin
     select 1 from public.time_entries where organization_id = '26104154-0000-0000-0000-000000000010'
       and id not in ('26104154-0000-0000-0000-0000000000c1', '26104154-0000-0000-0000-0000000000c2',
         '26104154-0000-0000-0000-0000000000c3', '26104154-0000-0000-0000-0000000000c4',
-        '26104154-0000-0000-0000-0000000000c5', '26104154-0000-0000-0000-0000000000c6')
+        '26104154-0000-0000-0000-0000000000c5', '26104154-0000-0000-0000-0000000000c6',
+        '26104154-0000-0000-0000-0000000000c7', '26104154-0000-0000-0000-0000000000c8',
+        '26104154-0000-0000-0000-0000000000c9')
   ) then raise exception 'a refused save ended a break'; end if;
 
   perform public.update_time_tracking_settings('26104154-0000-0000-0000-000000000001',
@@ -205,7 +225,9 @@ begin
     where organization_id = '26104154-0000-0000-0000-000000000010'
       and id not in ('26104154-0000-0000-0000-0000000000c1', '26104154-0000-0000-0000-0000000000c2',
         '26104154-0000-0000-0000-0000000000c3', '26104154-0000-0000-0000-0000000000c4',
-        '26104154-0000-0000-0000-0000000000c5', '26104154-0000-0000-0000-0000000000c6')
+        '26104154-0000-0000-0000-0000000000c5', '26104154-0000-0000-0000-0000000000c6',
+        '26104154-0000-0000-0000-0000000000c7', '26104154-0000-0000-0000-0000000000c8',
+        '26104154-0000-0000-0000-0000000000c9')
   ) <> 1 then raise exception 'a saved break rule rewrote a completed day'; end if;
 
   -- The first save of an organization without a settings row creates it; a
@@ -301,6 +323,22 @@ begin
         and user_id = '26104154-0000-0000-0000-000000000002'
         and entry_type = 'break_end') <> 1
   then raise exception 'a save ended a break that was no longer open'; end if;
+end;
+$$;
+
+-- Same-timestamp entries before a break are ordered as the app orders them.
+do $$
+begin
+  perform public.update_time_tracking_settings('26104154-0000-0000-0000-000000000001',
+    '26104154-0000-0000-0000-000000000010', (select expected from pg_temp.second_step_call),
+    'automatic', 360, 30, 540, 45,
+    (select expected -> 'break_policy_history' from pg_temp.second_step_call),
+    '[{"user_id":"26104154-0000-0000-0000-000000000001","break_start_id":"26104154-0000-0000-0000-0000000000c9"}]');
+  if (select job_id from public.time_entries
+      where organization_id = '26104154-0000-0000-0000-000000000010'
+        and user_id = '26104154-0000-0000-0000-000000000001'
+        and entry_type = 'break_end' and timestamp = now()) is distinct from '26104154-0000-0000-0000-0000000000ad'
+  then raise exception 'a break resumed another job than the app orders before it'; end if;
 end;
 $$;
 

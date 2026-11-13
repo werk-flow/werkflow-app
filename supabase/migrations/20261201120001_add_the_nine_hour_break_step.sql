@@ -170,6 +170,9 @@ begin
   order by employee.id
   for update;
 
+  -- Entries are ordered as the app orders them (compareTimeEntries in
+  -- lib/time-tracking/entry-order.ts): at one timestamp a break end, then a
+  -- clock-out, a clock-in, a break start.
   -- The break resumes the job of the entry right before its start (a clock-in
   -- or an earlier break end; none after any other entry), read here under a
   -- share lock: an entry edit holds that row for update, so a job changed
@@ -179,12 +182,13 @@ begin
     case when resume.entry_type in ('clock_in', 'break_end') then resume.job_id end
   from jsonb_array_elements(p_break_ends) break_end
   cross join lateral (
-    select entry.id, entry.entry_type, entry.timestamp, entry.created_at
+    select entry.id, entry.entry_type, entry.timestamp, entry.created_at,
+      (case entry.entry_type when 'break_end' then 0 when 'clock_out' then 1 when 'clock_in' then 2 else 3 end) as boundary
     from public.time_entries entry
     where entry.user_id = (break_end ->> 'user_id')::uuid
       and entry.organization_id = p_organization_id
       and entry.status not in ('rejected', 'pending_delete')
-    order by entry.timestamp desc, entry.created_at desc, entry.id desc
+    order by entry.timestamp desc, (case entry.entry_type when 'break_end' then 0 when 'clock_out' then 1 when 'clock_in' then 2 else 3 end) desc, entry.created_at desc, entry.id desc
     limit 1
   ) latest
   left join lateral (
@@ -193,8 +197,9 @@ begin
     where entry.user_id = (break_end ->> 'user_id')::uuid
       and entry.organization_id = p_organization_id
       and entry.status not in ('rejected', 'pending_delete')
-      and (entry.timestamp, entry.created_at, entry.id) < (latest.timestamp, latest.created_at, latest.id)
-    order by entry.timestamp desc, entry.created_at desc, entry.id desc
+      and (entry.timestamp, (case entry.entry_type when 'break_end' then 0 when 'clock_out' then 1 when 'clock_in' then 2 else 3 end), entry.created_at, entry.id)
+        < (latest.timestamp, latest.boundary, latest.created_at, latest.id)
+    order by entry.timestamp desc, (case entry.entry_type when 'break_end' then 0 when 'clock_out' then 1 when 'clock_in' then 2 else 3 end) desc, entry.created_at desc, entry.id desc
     limit 1
     for share
   ) resume on true
@@ -442,6 +447,9 @@ begin
   order by employee.id
   for update;
 
+  -- Entries are ordered as the app orders them (compareTimeEntries in
+  -- lib/time-tracking/entry-order.ts): at one timestamp a break end, then a
+  -- clock-out, a clock-in, a break start.
   -- The break resumes the job of the entry right before its start (a clock-in
   -- or an earlier break end; none after any other entry), read here under a
   -- share lock: an entry edit holds that row for update, so a job changed
@@ -451,12 +459,13 @@ begin
     case when resume.entry_type in ('clock_in', 'break_end') then resume.job_id end
   from jsonb_array_elements(p_break_ends) break_end
   cross join lateral (
-    select entry.id, entry.entry_type, entry.timestamp, entry.created_at
+    select entry.id, entry.entry_type, entry.timestamp, entry.created_at,
+      (case entry.entry_type when 'break_end' then 0 when 'clock_out' then 1 when 'clock_in' then 2 else 3 end) as boundary
     from public.time_entries entry
     where entry.user_id = (break_end ->> 'user_id')::uuid
       and entry.organization_id = p_organization_id
       and entry.status not in ('rejected', 'pending_delete')
-    order by entry.timestamp desc, entry.created_at desc, entry.id desc
+    order by entry.timestamp desc, (case entry.entry_type when 'break_end' then 0 when 'clock_out' then 1 when 'clock_in' then 2 else 3 end) desc, entry.created_at desc, entry.id desc
     limit 1
   ) latest
   left join lateral (
@@ -465,8 +474,9 @@ begin
     where entry.user_id = (break_end ->> 'user_id')::uuid
       and entry.organization_id = p_organization_id
       and entry.status not in ('rejected', 'pending_delete')
-      and (entry.timestamp, entry.created_at, entry.id) < (latest.timestamp, latest.created_at, latest.id)
-    order by entry.timestamp desc, entry.created_at desc, entry.id desc
+      and (entry.timestamp, (case entry.entry_type when 'break_end' then 0 when 'clock_out' then 1 when 'clock_in' then 2 else 3 end), entry.created_at, entry.id)
+        < (latest.timestamp, latest.boundary, latest.created_at, latest.id)
+    order by entry.timestamp desc, (case entry.entry_type when 'break_end' then 0 when 'clock_out' then 1 when 'clock_in' then 2 else 3 end) desc, entry.created_at desc, entry.id desc
     limit 1
     for share
   ) resume on true
