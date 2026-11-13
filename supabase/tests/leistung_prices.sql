@@ -375,7 +375,9 @@ begin
   if exists (select 1 from public.leistung_price_versions where created_by = '47000000-0000-0000-0000-000000000002')
     or (select count(*) from public.leistung_price_versions
         where organization_id = '47000000-0000-0000-0000-000000000010' and created_by is null) <> 7
-    or not exists (select 1 from public.leistung_price_versions where sale_price_cents = 7100 and cost_rate_cents = 4500) then
+    or not exists (select 1 from public.leistung_price_versions
+      where organization_id = '47000000-0000-0000-0000-000000000010' and leistung_id = (select montage from ids)
+        and sale_price_cents = 7100 and cost_rate_cents = 4500) then
     raise exception 'deleting a price author changed the price history';
   end if;
 end;
