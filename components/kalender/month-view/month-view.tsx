@@ -10,6 +10,7 @@ import { monthGridRange, monthWeeks } from '@/lib/calendar/month-layout';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { JobParkingContext } from '@/lib/parking/types';
 import { getHolidayContextDays, type OrganizationHolidayCalendar } from '@/lib/personnel/targets';
+import type { SchoolCalendarEntry } from '@/lib/calendar/board-model';
 import type { SicknessCalendarEntry } from '@/lib/sickness/actions';
 import { calculateCalendarWorkBlocks } from '@/lib/time-tracking/calendar-blocks';
 import type { OrganizationTimeTrackingSettings } from '@/lib/time-tracking/settings';
@@ -34,6 +35,7 @@ export type MonthViewProps = {
   members: CalendarMember[];
   vacation: VacationCalendarEntry[];
   sickness: SicknessCalendarEntry[];
+  school: SchoolCalendarEntry[];
   holidays: OrganizationHolidayCalendar;
   organizationSettings: OrganizationTimeTrackingSettings;
   currentUserId: string;
@@ -144,7 +146,7 @@ function useMonthViewState(props: MonthViewProps) {
  * past days dimmed, and date moves through the shared engine.
  */
 export function MonthView(props: MonthViewProps): React.JSX.Element {
-  const { jobs, vacation, sickness, organizationSettings, currentUserId, currentUserRole } = props;
+  const { jobs, vacation, sickness, school, organizationSettings, currentUserId, currentUserRole } = props;
   const { isAdminOrManager, actions, onOpenDay, onSessionClick } = props;
   const state = useMonthViewState(props);
   const { rootRef, highlightRef, startDrag, openMore, setOpenMore, nowTick } = state;
@@ -194,6 +196,7 @@ export function MonthView(props: MonthViewProps): React.JSX.Element {
             labels={labels}
             vacation={vacation}
             sickness={sickness}
+            school={school}
             jobs={jobs}
             itemsByDate={itemsByDate}
             itemFor={itemFor}

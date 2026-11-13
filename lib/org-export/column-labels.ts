@@ -745,6 +745,7 @@ export const COLUMN_LABELS: Record<LabeledColumn, string> = {
   weather_conditions: 'Wetter',
   website: 'Website',
   wednesday_minutes: 'Mittwoch (Minuten)',
+  weekday: 'Wochentag',
   weekdays: 'Wochentage',
   weekly_hours: 'Wochenstunden',
   window_end_date: 'Zeitfenster bis (Datum)',
