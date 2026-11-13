@@ -1,5 +1,5 @@
 -- The CSV import shows its effect before it books, and a confirm books once
--- (migration 20261201200000_preview_the_inventory_import_and_book_it_once.sql):
+-- (migration 20261202120000_preview_the_inventory_import_and_book_it_once.sql):
 -- the preview and the booking run the same row rule and agree row by row, the
 -- preview leaves nothing but its draft batch, a confirm sent twice books once,
 -- a Stammdaten-only batch books no stock, a row with an unknown or a differing
