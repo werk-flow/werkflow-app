@@ -53,6 +53,14 @@ export const DIALOG_INVENTORY = {
   'components/shared/unsent-work-prompt.tsx#DiscardConfirmation|Nicht Übertragenes verwerfen?': {
     audits: [{ route: '/dashboard', role: 'employee', opener: 'field.unsent-discard' }],
   },
+  "components/angebote/leistungen/leistung-dialog.tsx#LeistungDialog|{entry ? 'Leistung bearbeiten' : 'Leistung anlegen'}":
+    {
+      audits: [{ route: '/angebote/leistungen', role: 'admin', opener: 'commercial.leistung' }],
+    },
+  'components/angebote/leistungen/leistung-price-dialog.tsx#LeistungPriceDialog|Preise von „ {entry.name} “':
+    {
+      audits: [{ route: '/angebote/leistungen', role: 'admin', opener: 'commercial.leistung-prices' }],
+    },
   'components/problem-reports/problem-report-dialog.tsx#ProblemReportDialog|Problem melden': {
     audits: [
       { route: '/dashboard', role: 'employee', opener: 'reports.field' },

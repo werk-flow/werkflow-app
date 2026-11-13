@@ -68,6 +68,7 @@ declare global {
       | 'inventory-unit'
       | 'inventory-import'
       | 'inventory-movements'
+      | 'leistungen'
       | 'site-access-review'
       | 'site-access-proposal'
       | AuthUrlFixtureName

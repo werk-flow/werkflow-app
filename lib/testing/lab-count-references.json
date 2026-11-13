@@ -16,7 +16,7 @@
         "backend": "local"
       },
       "counts": {
-        "requests": { "reference": 59, "tolerance": 1 },
+        "requests": { "reference": 57, "tolerance": 1 },
         "routeRenders": { "reference": 1, "tolerance": 0 },
         "echoRenders": { "reference": 1, "tolerance": 0 },
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
@@ -370,6 +370,14 @@
           },
           "runKeys": ["2026-11-12T164516903Z-805d1e"],
           "reason": "werk-flow/werkflow-app#393 on main removed one start-up script and about 6.1 KB (main alone measured 687,435 B against its 693,562 B reference, 42 requests); together with this PR's lazy dialog the sum is 671,539 B here (671,304 B before #400), below main's floor. Request shapes match main's and the job-open step is unchanged. Replayed after merging main 43262e0e (#400)."
+        },
+        {
+          "kind": "ratchet",
+          "target": "requests",
+          "from": { "reference": 59, "tolerance": 1 },
+          "to": { "reference": 57, "tolerance": 1 },
+          "runKeys": ["2026-11-13T073843350Z-d01ff1"],
+          "reason": "Merged with main 5100c6de, the field cold start loads 41 script files instead of 43 (main alone: 42, 58 requests); the five job prefetches stay. Every other request shape (the API and Supabase reads, route, document, fonts, images, stylesheets) and every backend read by path match main 8783c979 and this branch before the merge (c0ea3439). The /auftraege entry chunks of the three builds name both files: one goes with main's own start-up, which since #382 (decision 13) loads the activity fields and their alarm-clock icon on first use and since #405 keeps the member-removal dialog out; the other is bundling: all 564 start-up modules of main 5100c6de stay in the start-up, and Turbopack packs five of main's (app) layout chunks with this PR's two Leistungen skeleton modules (the org-switch overlay's map) into four (1,740,600 to 1,743,228 B over all entry files)."
         }
       ]
     },
@@ -1222,7 +1230,7 @@
         "backend": "local"
       },
       "counts": {
-        "requests": { "reference": 53, "tolerance": 1 },
+        "requests": { "reference": 51, "tolerance": 1 },
         "routeRenders": { "reference": 1, "tolerance": 0 },
         "echoRenders": { "reference": 1, "tolerance": 0 },
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
@@ -1536,6 +1544,14 @@
           },
           "runKeys": ["2026-11-12T221701408Z-cb4509"],
           "reason": "Merged with main 0a645ab9 (#405, #391), the office cold start loads 36 script files (main alone 7635410d: 37; this branch alone 6cfc656d: 37) and 573,760 B (main before #405 7ef4b95c: 581,060; main alone: 578,033; branch alone: 579,387). Module comparison of the captured start-up chunks: the branch's lazy-loader stubs chunk 250d7s622ddpd.js (456 B, loaders 986332, 210572, 777462) now shares a chunk with layout module 537416 again, as on main; every module of main's and of the branch's start-up is present, except the activity fields and their alarm-clock icon (decision 13, loaded on first use) and #405's five Mitarbeiter member-removal modules, absent from main's start-up too. Lead's decision of 2026-11-12."
+        },
+        {
+          "kind": "ratchet",
+          "target": "requests",
+          "from": { "reference": 53, "tolerance": 1 },
+          "to": { "reference": 51, "tolerance": 1 },
+          "runKeys": ["2026-11-13T073843350Z-996ca3"],
+          "reason": "Merged with main 5100c6de, the office cold start loads 35 script files instead of 37 (main alone: 36, 52 requests). Every other request shape (the API and Supabase reads, route, document, fonts, images, stylesheets) and every backend read by path match main 8783c979; against this branch before the merge (c0ea3439) one read differs by main's #391: two read_manager_attention_sets calls replace two list_open_request_attention calls. The /auftraege entry chunks of the three builds name both files: one goes with main's own start-up, which since #382 (decision 13) loads the activity fields and their alarm-clock icon on first use and since #405 keeps the member-removal dialog out; the other is bundling: all 564 start-up modules of main 5100c6de stay in the start-up, and Turbopack packs five of main's (app) layout chunks with this PR's two Leistungen skeleton modules (the org-switch overlay's map) into four (1,740,600 to 1,743,228 B over all entry files)."
         }
       ]
     },
@@ -2801,7 +2817,7 @@
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 11, "tolerance": 1 },
-        "componentRenders": { "reference": 471, "tolerance": 9 }
+        "componentRenders": { "reference": 484, "tolerance": 9 }
       },
       "payloads": {
         "route:/einstellungen/mitarbeiter": {
@@ -2937,6 +2953,14 @@
           },
           "runKeys": ["2026-11-09T122231468Z-966927"],
           "reason": "The customer picker loads its create dialog through lazyDialog (werk-flow/werkflow-app#312), so the settings page's script chunk no longer carries modules it shared with the dialog; CI measured 8184 (run 42617438000), this run 8186; requests and renders unchanged"
+        },
+        {
+          "kind": "raise",
+          "target": "componentRenders",
+          "from": { "reference": 471, "tolerance": 9 },
+          "to": { "reference": 484, "tolerance": 9 },
+          "runKeys": ["2026-11-12T203332260Z-8a8d37"],
+          "reason": "The office sidebar gains the Angebote entry (werk-flow/werkflow-planning#379); each sidebar re-render while settings opens renders its link and icon once more"
         }
       ]
     }
