@@ -1,8 +1,8 @@
 // The actual company-profile actions over the in-memory database
 // (werk-flow/werkflow-planning#378). A signed-out caller, an employee, a
-// caller who names another organization, and a manager of two organizations
-// whose form names the one no longer active are refused before any database
-// or storage call, the upload ticket included. Admin and Büro write only their
+// suspended or ended manager, a caller who names another organization, and a
+// manager of two organizations whose form names the one no longer active are
+// refused before any database or storage call, the upload ticket included. Admin and Büro write only their
 // own organization's profile: the database call carries the resolved
 // organization and actor, never the client's, and a signed upload goes to
 // the caller's own Briefpapier folder. The database function's own refusals
@@ -105,6 +105,21 @@ for (const role of ['admin', 'buero'] as const) {
   signInAs(world, role);
   world.activeOrganizationCookie = ORGANIZATION_B;
   await assertRefused(world, everyAction(ORGANIZATION_B), { success: false, error: 'not_a_member' }, 'none');
+}
+
+// A suspended or ended Admin or Büro member of A is no current member: every
+// action refuses before any database or storage call.
+for (const role of ['admin', 'buero'] as const) {
+  for (const accessState of ['suspended', 'ended'] as const) {
+    signInAs(world, role);
+    world.memberships = [{ orgId: ORGANIZATION_A, role, accessState }];
+    await assertRefused(
+      world,
+      everyAction(ORGANIZATION_A),
+      { success: false, error: 'not_a_member' },
+      'none',
+    );
+  }
 }
 
 // A manager of A and B whose form was loaded for A writes nothing once B is

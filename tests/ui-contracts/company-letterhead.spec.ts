@@ -46,12 +46,15 @@ test('a refused removal answered after a switch shows no error on the other orga
 });
 
 test('a removal accepted after a switch shows no success on the other organization', async ({ page }) => {
+  // A paused clock keeps any banner from dismissing itself before the check.
+  await page.clock.install({ time: new Date('2026-11-13T09:00:00Z') });
   await answerSamples(page);
   await openContractFixture(page, 'company-letterhead');
+  await page.clock.pauseAt(new Date('2026-11-13T09:01:00Z'));
   await removeLogoThenSwitch(page);
   await answerHeldWrite(page, null);
   await expect(page.getByRole('button', { name: 'Organisation wechseln' })).toBeVisible();
-  await expect(page.getByRole('main').getByText('Logo wurde entfernt.')).toHaveCount(0);
+  await expect(page.getByRole('alert').filter({ hasText: 'Logo wurde entfernt.' })).toHaveCount(0);
 });
 
 test('the other organization renders its own sample instead of showing the one before', async ({ page }) => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
@@ -207,7 +207,12 @@ function MarginFields({
  * one save call. The save names the organization and version the draft was
  * loaded from, so the server refuses it once another organization is active.
  */
-function useProfileSave({ organizationId, version, details, stationery }: FormProps) {
+type ProfileSaveProps = FormProps & {
+  /** Whether the page still shows this organization when a save answers. */
+  isShown: (organizationId: string) => boolean;
+};
+
+function useProfileSave({ organizationId, version, details, stationery, isShown }: ProfileSaveProps) {
   const { showBanner } = useBanner();
   const { run, isPending } = useServerAction(saveCompanyDocumentProfile);
   const [loaded] = useState(() => ({ organizationId, version }));
@@ -241,6 +246,8 @@ function useProfileSave({ organizationId, version, details, stationery }: FormPr
       expectedVersion: loaded.version,
       details: parsed.details,
     }).catch(() => ({ success: false, error: 'save_failed' }) as const);
+    // A save that answers after a switch to another organization says nothing there.
+    if (!isShown(loaded.organizationId)) return;
     if (result.success) {
       // The answer renders the route with the saved profile, which remounts this form.
       showBanner({ variant: 'success', message: 'Die Firmenangaben wurden gespeichert.' });
@@ -274,10 +281,22 @@ function StationeryMargins({ controls, following }: { controls: DraftControls; f
  * draft always starts from the profile shown.
  */
 export function DocumentCompanyProfileForm(props: FormProps) {
-  return <CompanyProfileForm key={`${props.organizationId}:${props.version}`} {...props} />;
+  // A saved version remounts the form too, so the shown organization, not the
+  // mounted form, tells whether a save's answer still belongs on the page.
+  const shownOrganization = useRef(props.organizationId);
+  useEffect(() => {
+    shownOrganization.current = props.organizationId;
+  }, [props.organizationId]);
+  return (
+    <CompanyProfileForm
+      key={`${props.organizationId}:${props.version}`}
+      {...props}
+      isShown={(organizationId) => shownOrganization.current === organizationId}
+    />
+  );
 }
 
-function CompanyProfileForm(profile: FormProps) {
+function CompanyProfileForm(profile: ProfileSaveProps) {
   const { stationery } = profile;
   const { controls, submit, isPending, failure } = useProfileSave(profile);
   return (

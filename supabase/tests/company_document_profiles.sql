@@ -3,7 +3,8 @@
 -- and execute neither write: an employee, and every authenticated caller,
 -- reads no profile field through the Data API. A save writes one history row
 -- per changed field with actor, old and new value, in the same call, and only
--- for an Admin or Büro member of that organization. Another organization's
+-- for an Admin or Büro member of that organization whose access is not
+-- suspended. Another organization's
 -- profile is neither read nor written. A replaced file queues its old object
 -- for the purge, and a change of a file someone else changed since is
 -- refused without a write. A stored file records its size, and the organization
@@ -69,6 +70,44 @@ begin
   end loop;
 end;
 $$;
+
+-- A suspended Büro member keeps the role on the membership row, yet saves no
+-- details and replaces no file: the lock checks effective access. The fixture
+-- writes the suspension directly and lifts it afterwards.
+insert into public.personnel_access_lifecycles (organization_id, employee_record_id, state, state_effective_at)
+select record.organization_id, record.id, 'suspended', now() from public.employee_records record
+where record.organization_id = '37800000-0000-4000-8000-000000000010'
+  and record.user_id = '37800000-0000-4000-8000-000000000002';
+set local role service_role;
+do $$
+declare
+  v_org constant uuid := '37800000-0000-4000-8000-000000000010';
+  v_office constant uuid := '37800000-0000-4000-8000-000000000002';
+begin
+  begin
+    perform public.save_company_document_profile(v_office, v_org, 0, '{}'::jsonb);
+    raise exception 'a suspended Büro member saved the profile';
+  exception when raise_exception then
+    if sqlerrm <> 'not_authorized' then raise; end if;
+  end;
+  begin
+    perform public.replace_company_document_file(v_office, v_org, 'logo', null, null,
+      v_org || '/briefpapier/s/logo', 'image/png', 2048);
+    raise exception 'a suspended Büro member set the logo';
+  exception when raise_exception then
+    if sqlerrm <> 'not_authorized' then raise; end if;
+  end;
+  if exists (select 1 from public.company_document_profiles where organization_id = v_org)
+    or exists (select 1 from public.company_document_profile_events where organization_id = v_org)
+  then raise exception 'a suspended member''s call wrote a row'; end if;
+end;
+$$;
+reset role;
+delete from public.personnel_access_lifecycles lifecycle
+using public.employee_records record
+where lifecycle.employee_record_id = record.id
+  and record.organization_id = '37800000-0000-4000-8000-000000000010'
+  and record.user_id = '37800000-0000-4000-8000-000000000002';
 
 set local role service_role;
 

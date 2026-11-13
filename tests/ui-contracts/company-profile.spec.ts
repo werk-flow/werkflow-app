@@ -64,3 +64,40 @@ test('removed stationery returns its hidden margins to the saved ones, so the sa
   });
   await answerHeldWrite(page, null);
 });
+
+test('a save that answers after a switch shows no banner on the other organization', async ({ page }) => {
+  // A paused clock keeps any banner from dismissing itself before the check.
+  await page.clock.install({ time: new Date('2026-11-13T09:00:00Z') });
+  await openContractFixture(page, 'company-profile');
+  await page.clock.pauseAt(new Date('2026-11-13T09:01:00Z'));
+  await page.getByRole('button', { name: 'Angaben speichern' }).click();
+  await expectHeldWrite(page, 'save-company-profile');
+  await page.getByRole('button', { name: 'Organisation wechseln' }).click();
+  await expect(page.getByLabel('Firma mit Rechtsform')).toHaveValue('Haustechnik Lindenhof GmbH');
+  await answerHeldWrite(page, null);
+  // The other organization's own refused save renders after anything the late
+  // answer set, so once its reason shows, a banner of the late answer would too.
+  await page.getByRole('button', { name: 'Angaben speichern' }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => window.uiContractWrites.calls.length > 1 && window.uiContractWrites.answer !== null,
+      ),
+    )
+    .toBe(true);
+  await answerHeldWrite(page, 'profile_changed');
+  await expect(page.getByRole('main').getByText(/Jemand hat die Angaben inzwischen geändert/)).toBeVisible();
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'Die Firmenangaben wurden gespeichert.' }),
+  ).toHaveCount(0);
+});
+
+test('a save that answers on the same organization says it was saved', async ({ page }) => {
+  await openContractFixture(page, 'company-profile');
+  await page.getByRole('button', { name: 'Angaben speichern' }).click();
+  await expectHeldWrite(page, 'save-company-profile');
+  await answerHeldWrite(page, null);
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'Die Firmenangaben wurden gespeichert.' }),
+  ).toBeVisible();
+});

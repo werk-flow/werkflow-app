@@ -7,7 +7,6 @@ import { createAdminClient } from '../../../golden/support/db/shared';
 import type { TestWorld } from '../../../golden/support/world';
 import { stateCaptureId } from '../acceptance-state-plan';
 import { acceptanceSet, type OpenSet } from '../acceptance-sets';
-import { surfaceFixture } from '../surface-fixtures';
 import type { SurfaceDestination } from '../surface-routes';
 
 const ROUTE = '/einstellungen/dokumente';
@@ -43,18 +42,56 @@ const FILLED_PROFILE = {
   stationery_following_left_mm: 25,
 };
 
-/** The made-up company's profile, saved through the function the form's action calls. */
-async function seedFilledProfile(world: TestWorld): Promise<void> {
-  await surfaceFixture(world, 'acceptance.company-profile-filled', async () => {
-    const { error } = await createAdminClient().rpc('save_company_document_profile', {
+/** The details of an organization that saved none: every text empty, every number its default. */
+const EMPTY_PROFILE = Object.fromEntries(
+  Object.entries(FILLED_PROFILE).map(([field, value]) => [field, typeof value === 'string' ? '' : value]),
+);
+
+type ProfileState = { details: Record<string, string | number>; stationery: boolean };
+
+/**
+ * Brings the organization's profile to the state a capture shows, through the
+ * functions the actions call: its details, and first-page stationery or none.
+ * Each capture sets its own state when it opens, so the captures share one
+ * world without depending on their order.
+ */
+async function showProfile(world: TestWorld, wanted: ProfileState): Promise<SurfaceDestination> {
+  const admin = createAdminClient();
+  const { data: row, error } = await admin
+    .from('company_document_profiles')
+    .select('*')
+    .eq('organization_id', world.orgId)
+    .maybeSingle();
+  if (error) throw new Error(`company profile read failed: ${error.message}`);
+  const saved: Record<string, unknown> = row ?? EMPTY_PROFILE;
+  if (Object.entries(wanted.details).some(([field, value]) => saved[field] !== value)) {
+    const { error: saveError } = await admin.rpc('save_company_document_profile', {
       p_actor_id: world.users.buero.id,
       p_organization_id: world.orgId,
-      p_expected_version: 0,
-      p_values: FILLED_PROFILE,
+      p_expected_version: row?.version ?? 0,
+      p_values: wanted.details,
     });
-    if (error) throw new Error(`company profile seed failed: ${error.message}`);
-    return 'saved';
-  });
+    if (saveError) throw new Error(`company profile seed failed: ${saveError.message}`);
+  }
+  const first = row?.stationery_first_storage_path ?? null;
+  if (wanted.stationery && first === null) await storeStationery(world);
+  if (!wanted.stationery && first !== null) {
+    const { error: removeError } = await admin.rpc(
+      'replace_company_document_file',
+      rpcArgs('replace_company_document_file', {
+        p_actor_id: world.users.buero.id,
+        p_organization_id: world.orgId,
+        p_kind: 'stationery_first',
+        p_expected_storage_path: first,
+        p_expected_following_storage_path: row?.stationery_following_storage_path ?? null,
+        p_storage_path: null,
+        p_mime_type: null,
+        p_size_bytes: null,
+      }),
+    );
+    if (removeError) throw new Error(`stationery removal failed: ${removeError.message}`);
+  }
+  return { route: ROUTE };
 }
 
 /** A first-page stationery: the company's letterhead at the top and its footer line at the bottom. */
@@ -76,47 +113,39 @@ async function stationeryPdf(): Promise<Uint8Array> {
   return pdf.save();
 }
 
-/** The filled profile with stationery for the first page, stored as an upload's finalize stores it. */
-async function seedStationery(world: TestWorld): Promise<void> {
-  await seedFilledProfile(world);
-  await surfaceFixture(world, 'acceptance.company-profile-stationery', async () => {
-    const path = `${world.orgId}/briefpapier/${randomUUID()}/stationery_first`;
-    const body = await stationeryPdf();
-    await putStorageObject({ organizationId: world.orgId, path, body, contentType: 'application/pdf' });
-    const { error } = await createAdminClient().rpc(
-      'replace_company_document_file',
-      rpcArgs('replace_company_document_file', {
-        p_actor_id: world.users.buero.id,
-        p_organization_id: world.orgId,
-        p_kind: 'stationery_first',
-        // The seed stores the first stationery: no file was there before.
-        p_expected_storage_path: null,
-        p_expected_following_storage_path: null,
-        p_storage_path: path,
-        p_mime_type: 'application/pdf',
-        p_size_bytes: body.byteLength,
-      }),
-    );
-    if (error) throw new Error(`stationery seed failed: ${error.message}`);
-    return path;
-  });
+/** First-page stationery, stored as an upload's finalize stores it. */
+async function storeStationery(world: TestWorld): Promise<void> {
+  const path = `${world.orgId}/briefpapier/${randomUUID()}/stationery_first`;
+  const body = await stationeryPdf();
+  await putStorageObject({ organizationId: world.orgId, path, body, contentType: 'application/pdf' });
+  const { error } = await createAdminClient().rpc(
+    'replace_company_document_file',
+    rpcArgs('replace_company_document_file', {
+      p_actor_id: world.users.buero.id,
+      p_organization_id: world.orgId,
+      p_kind: 'stationery_first',
+      // Stored only while the profile shows no first-page stationery.
+      p_expected_storage_path: null,
+      p_expected_following_storage_path: null,
+      p_storage_path: path,
+      p_mime_type: 'application/pdf',
+      p_size_bytes: body.byteLength,
+    }),
+  );
+  if (error) throw new Error(`stationery seed failed: ${error.message}`);
 }
 
-async function filled(world: TestWorld): Promise<SurfaceDestination> {
-  await seedFilledProfile(world);
-  return { route: ROUTE };
-}
-
-async function withStationery(world: TestWorld): Promise<SurfaceDestination> {
-  await seedStationery(world);
-  return { route: ROUTE };
-}
+const empty = (world: TestWorld) => showProfile(world, { details: EMPTY_PROFILE, stationery: false });
+const filled = (world: TestWorld) => showProfile(world, { details: FILLED_PROFILE, stationery: false });
+const withStationery = (world: TestWorld) =>
+  showProfile(world, { details: FILLED_PROFILE, stationery: true });
 
 /**
  * werk-flow/werkflow-planning#378 of 2026-11-12: „Dokumente & Briefpapier“
  * with the company profile, empty, filled and with stationery, loading and
  * with a failed read, for Admin and Büro; the employee's settings keep the
- * section out. The empty captures come first, before any seed.
+ * section out. Every capture sets the profile it shows, so none depends on
+ * the captures before it.
  */
 function companyProfileCaptures(): OpenSet {
   const both = { widths: [1280, 375], schemes: ['light', 'dark'] } as const;
@@ -124,12 +153,13 @@ function companyProfileCaptures(): OpenSet {
   return {
     id: 'company-profile-2026-11-12',
     captures: [
-      { id: 'admin-dokumente-leer', role: 'admin', route: ROUTE, view: page, ...both },
+      { id: 'admin-dokumente-leer', role: 'admin', route: ROUTE, view: page, destination: empty, ...both },
       {
         id: stateCaptureId('admin-dokumente-leer', 'loading'),
         role: 'admin',
         route: ROUTE,
         view: page,
+        destination: empty,
         state: 'loading',
         ...both,
       },
@@ -138,6 +168,7 @@ function companyProfileCaptures(): OpenSet {
         role: 'admin',
         route: ROUTE,
         view: page,
+        destination: empty,
         state: 'error',
         ...both,
       },

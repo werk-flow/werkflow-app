@@ -152,9 +152,9 @@ grant select, insert on table public.company_document_profile_events to service_
 create trigger guard_event_ledger_history before update or delete on public.company_document_profile_events
   for each row execute function app_private.guard_event_ledger_history();
 
--- The actor is a current Admin or Büro member of the organization; the share
--- lock holds the membership until commit. Creates the organization's empty
--- profile when it has none and returns it locked.
+-- The actor is an Admin or Büro member of the organization whose access is
+-- in effect; the share lock holds the membership until commit. Creates the
+-- organization's empty profile when it has none and returns it locked.
 create function app_private.lock_company_document_profile(p_organization_id uuid, p_actor_id uuid)
 returns public.company_document_profiles
 language plpgsql
@@ -168,6 +168,8 @@ begin
   where member.organization_id = p_organization_id
     and member.user_id = p_actor_id
     and member.role = any (array['admin'::public.org_role, 'buero'::public.org_role])
+    -- A suspended or ended member keeps the row and its role, but not the access.
+    and app_private.p1_24_has_effective_access(member.organization_id, member.user_id)
   for share;
   if not found then
     raise exception 'not_authorized';
