@@ -35,6 +35,10 @@ export type WorkArtifactDetail = WorkArtifactRow & {
   changeDetails: WorkArtifactChangeDetailRow[];
   documents: WorkArtifactDocumentRow[];
   sources: WorkArtifactSourceRow[];
+  /** The viewer reviews this Regie- oder Änderungsnachweis as the „Projektleitung“ of its work. */
+  canLeadReview: boolean;
+  /** The viewer reads it only as the work's lead: no new revision, customer step, link or export. */
+  leadReadOnly: boolean;
 };
 
 export type MeasurementLineInput = {
