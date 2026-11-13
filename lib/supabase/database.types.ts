@@ -1053,6 +1053,187 @@ export type Database = {
           },
         ];
       };
+      company_document_profile_events: {
+        Row: {
+          actor_id: string | null;
+          attempt_key: string;
+          created_at: string;
+          field: string;
+          id: string;
+          new_value: string | null;
+          old_value: string | null;
+          organization_id: string;
+          profile_version: number | null;
+        };
+        Insert: {
+          actor_id?: string | null;
+          attempt_key: string;
+          created_at?: string;
+          field: string;
+          id?: string;
+          new_value?: string | null;
+          old_value?: string | null;
+          organization_id: string;
+          profile_version?: number | null;
+        };
+        Update: {
+          actor_id?: string | null;
+          attempt_key?: string;
+          created_at?: string;
+          field?: string;
+          id?: string;
+          new_value?: string | null;
+          old_value?: string | null;
+          organization_id?: string;
+          profile_version?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "company_document_profile_events_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      company_document_profiles: {
+        Row: {
+          bank_name: string;
+          bic: string;
+          city: string;
+          company_name: string;
+          email: string;
+          iban: string;
+          logo_mime_type: string | null;
+          logo_size_bytes: number | null;
+          logo_storage_path: string | null;
+          managing_directors: string;
+          offer_closing_text: string;
+          offer_opening_text: string;
+          offer_validity_days: number;
+          organization_id: string;
+          phone: string;
+          postal_code: string;
+          register_court: string;
+          register_number: string;
+          standard_tax_rate_basis_points: number;
+          stationery_first_bottom_mm: number;
+          stationery_first_left_mm: number;
+          stationery_first_mime_type: string | null;
+          stationery_first_right_mm: number;
+          stationery_first_size_bytes: number | null;
+          stationery_first_storage_path: string | null;
+          stationery_first_top_mm: number;
+          stationery_following_bottom_mm: number;
+          stationery_following_left_mm: number;
+          stationery_following_mime_type: string | null;
+          stationery_following_right_mm: number;
+          stationery_following_size_bytes: number | null;
+          stationery_following_storage_path: string | null;
+          stationery_following_top_mm: number;
+          street: string;
+          tax_number: string;
+          updated_at: string;
+          updated_by: string | null;
+          vat_id: string;
+          version: number;
+          website: string;
+        };
+        Insert: {
+          bank_name?: string;
+          bic?: string;
+          city?: string;
+          company_name?: string;
+          email?: string;
+          iban?: string;
+          logo_mime_type?: string | null;
+          logo_size_bytes?: number | null;
+          logo_storage_path?: string | null;
+          managing_directors?: string;
+          offer_closing_text?: string;
+          offer_opening_text?: string;
+          offer_validity_days?: number;
+          organization_id: string;
+          phone?: string;
+          postal_code?: string;
+          register_court?: string;
+          register_number?: string;
+          standard_tax_rate_basis_points?: number;
+          stationery_first_bottom_mm?: number;
+          stationery_first_left_mm?: number;
+          stationery_first_mime_type?: string | null;
+          stationery_first_right_mm?: number;
+          stationery_first_size_bytes?: number | null;
+          stationery_first_storage_path?: string | null;
+          stationery_first_top_mm?: number;
+          stationery_following_bottom_mm?: number;
+          stationery_following_left_mm?: number;
+          stationery_following_mime_type?: string | null;
+          stationery_following_right_mm?: number;
+          stationery_following_size_bytes?: number | null;
+          stationery_following_storage_path?: string | null;
+          stationery_following_top_mm?: number;
+          street?: string;
+          tax_number?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+          vat_id?: string;
+          version?: number;
+          website?: string;
+        };
+        Update: {
+          bank_name?: string;
+          bic?: string;
+          city?: string;
+          company_name?: string;
+          email?: string;
+          iban?: string;
+          logo_mime_type?: string | null;
+          logo_size_bytes?: number | null;
+          logo_storage_path?: string | null;
+          managing_directors?: string;
+          offer_closing_text?: string;
+          offer_opening_text?: string;
+          offer_validity_days?: number;
+          organization_id?: string;
+          phone?: string;
+          postal_code?: string;
+          register_court?: string;
+          register_number?: string;
+          standard_tax_rate_basis_points?: number;
+          stationery_first_bottom_mm?: number;
+          stationery_first_left_mm?: number;
+          stationery_first_mime_type?: string | null;
+          stationery_first_right_mm?: number;
+          stationery_first_size_bytes?: number | null;
+          stationery_first_storage_path?: string | null;
+          stationery_first_top_mm?: number;
+          stationery_following_bottom_mm?: number;
+          stationery_following_left_mm?: number;
+          stationery_following_mime_type?: string | null;
+          stationery_following_right_mm?: number;
+          stationery_following_size_bytes?: number | null;
+          stationery_following_storage_path?: string | null;
+          stationery_following_top_mm?: number;
+          street?: string;
+          tax_number?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+          vat_id?: string;
+          version?: number;
+          website?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "company_document_profiles_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: true;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       document_audit_events: {
         Row: {
           actor_id: string | null;
@@ -5061,7 +5242,7 @@ export type Database = {
       organization_export_files: {
         Row: {
           archive_name: string;
-          document_id: string;
+          document_id: string | null;
           export_id: string;
           file_bytes: number;
           id: string;
@@ -5072,7 +5253,7 @@ export type Database = {
         };
         Insert: {
           archive_name: string;
-          document_id: string;
+          document_id?: string | null;
           export_id: string;
           file_bytes: number;
           id?: string;
@@ -5083,7 +5264,7 @@ export type Database = {
         };
         Update: {
           archive_name?: string;
-          document_id?: string;
+          document_id?: string | null;
           export_id?: string;
           file_bytes?: number;
           id?: string;
@@ -18037,6 +18218,20 @@ export type Database = {
         };
         Returns: undefined;
       };
+      replace_company_document_file: {
+        Args: {
+          p_actor_id: string;
+          p_attempt_key: string;
+          p_expected_following_storage_path: string;
+          p_expected_storage_path: string;
+          p_kind: string;
+          p_mime_type: string;
+          p_organization_id: string;
+          p_size_bytes: number;
+          p_storage_path: string;
+        };
+        Returns: undefined;
+      };
       replace_installed_equipment: {
         Args: {
           p_actor_id: string;
@@ -18380,6 +18575,16 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      save_company_document_profile: {
+        Args: {
+          p_actor_id: string;
+          p_attempt_key: string;
+          p_expected_version: number;
+          p_organization_id: string;
+          p_values: Json;
+        };
+        Returns: number;
       };
       save_inventory_item: {
         Args: {

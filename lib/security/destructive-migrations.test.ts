@@ -302,19 +302,40 @@ describe('destructive migration statements', () => {
 // landed. Never raise it.
 const NOT_VALID_REQUIRED_AFTER = '20261201180000';
 
+/**
+ * Statements that were in review when the rule landed and merged after it.
+ * Applied migrations are immutable, so each is named by file and line with its
+ * reason. Never exempt a statement that DEV has not applied yet: fix it instead.
+ */
+const NOT_VALID_EXEMPTIONS: ReadonlyMap<string, string> = new Map([
+  [
+    '20261202120000_preview_the_inventory_import_and_book_it_once.sql:46',
+    'merged concurrently with the rule; each CHECK sits on a new column that is NULL or defaults to an allowed value, so existing rows pass',
+  ],
+]);
+
 describe('checks on existing tables', () => {
   test('a new migration adds a CHECK to an existing table NOT VALID', () => {
     const directory = join(repositoryRoot, 'supabase/migrations');
-    const offenders = readdirSync(directory)
+    const flagged = readdirSync(directory)
       .filter((file) => file.endsWith('.sql') && file.slice(0, 14) > NOT_VALID_REQUIRED_AFTER)
       .flatMap((file) =>
-        validatedChecksOnExistingTables(readFileSync(join(directory, file), 'utf8')).map(
-          (statement) => `supabase/migrations/${file}:${statement}`,
-        ),
+        validatedChecksOnExistingTables(readFileSync(join(directory, file), 'utf8')).map((statement) => ({
+          key: `${file}:${statement.split(':')[0]}`,
+          statement: `${file}:${statement}`,
+        })),
       );
+    const offenders = flagged
+      .filter(({ key }) => !NOT_VALID_EXEMPTIONS.has(key))
+      .map(({ statement }) => `supabase/migrations/${statement}`);
     expect(offenders, 'End each `add constraint … check (…)` on an existing table with `not valid`').toEqual(
       [],
     );
+    const flaggedKeys = new Set(flagged.map(({ key }) => key));
+    expect(
+      [...NOT_VALID_EXEMPTIONS.keys()].filter((key) => !flaggedKeys.has(key)),
+      'An exemption names a statement the probe no longer flags: remove it',
+    ).toEqual([]);
   });
 
   // The flagged statements of two review findings, and their landed fixes.

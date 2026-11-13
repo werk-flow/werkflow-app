@@ -14,6 +14,9 @@ name: CI
 # A draft pull request runs every job except the browser shards and the wait, and its Check fails
 # while the plan holds browser groups; marking it ready (`ready_for_review`) runs them, with
 # every other job, on the same commit.
+# The merge queue runs this workflow on its own commit: the PR on top of main and of every PR ahead
+# of it in the queue, planned by the diff against the queue's base. A push to main whose tree such a
+# run already passed runs no browser group (`Find the queue's run of this tree`).
 on:
   # No label event starts a run: a relabel on the same commit cancelled the run in progress and
   # left the required `Check` failed or "Expected". The Unit job reads the PR's labels at run
@@ -22,6 +25,9 @@ on:
     branches: [main]
     # No `converted_to_draft`: a draft cannot merge, and its next push runs without the browser shards.
     types: [opened, synchronize, reopened, ready_for_review]
+  # The queue's run is never a draft: every planned browser group runs, and Check reports on it.
+  merge_group:
+    types: [checks_requested]
   push:
     branches: [main]
   workflow_call:
@@ -53,6 +59,10 @@ jobs:
     name: Plan
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    # Lists the merge queue's runs of this workflow.
+    permissions:
+      contents: read
+      actions: read
     outputs:
       browser: ${{ steps.plan.outputs.browser }}
       shards: ${{ steps.plan.outputs.shards }}
@@ -64,6 +74,23 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup
+      # The merge queue squashes a PR onto main exactly as its own run tested it, so main's tree equals
+      # the tree of the queue's run, while the commits differ. A push whose tree a green queue run
+      # passed runs no browser group: that run ran them on this tree. Anything else, an unreadable
+      # list included, plans by diff as before. The nightly and release full runs are no push.
+      - name: Find the queue's run of this tree
+        id: queue
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if tree="$(git rev-parse 'HEAD^{tree}')" \
+            && tested="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=merge_group&status=success&per_page=50" \
+            --jq "[.workflow_runs[] | select(.head_commit.tree_id == \"$tree\")][0].html_url // empty")"; then
+            echo "run=$tested" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning title=Merge queue::The merge queue's runs could not be read, so this push runs its browser groups."
+          fi
       - name: Plan the browser groups
         id: plan
         env:
@@ -74,9 +101,15 @@ jobs:
           # base.sha can predate main's newer commits, which then counted as the PR's own
           # (2026-10-30: #85 ran all 82 groups for #77's heavy-slot.ts). A force push or a new branch has no
           # readable `before`, so the plan fails open to a full run.
-          BASE: ${{ github.event_name == 'pull_request' && 'HEAD^1' || github.event.before }}
+          # The queue's commit sits on its base, the main it will land on.
+          BASE: ${{ github.event_name == 'pull_request' && 'HEAD^1' || github.event_name == 'merge_group' && github.event.merge_group.base_sha || github.event.before }}
+          QUEUE_RUN: ${{ steps.queue.outputs.run }}
         run: |
           if test -n "$FULL"; then bun scripts/ci-plan.ts --full "$FULL"
+          elif test -n "$QUEUE_RUN"; then
+            echo "::notice title=Merge queue::The merge queue's run $QUEUE_RUN passed on this exact tree, so this push runs no browser group."
+            # Nothing changed since the tree that run tested.
+            bun scripts/ci-plan.ts --base HEAD
           else bun scripts/ci-plan.ts --base "$BASE"; fi
 
   lint:
@@ -136,14 +169,27 @@ jobs:
       - uses: ./.github/actions/setup
       # The owner's approval for a shrink-only list to grow (docs/technical/testing.md, "Grow a
       # shrink-only list"). Read now, not from the event, so a rerun after a label change sees it.
+      # A queue run holds its own PR (named in its branch) and each PR ahead of it, one squash commit
+      # "<title> (#<n>)" each above the queue's base; it diffs all of them against main. Each PR's own
+      # Check already held its growth to its label, so one approval covers the group.
       - name: Read the list growth approval
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
+          QUEUE_BRANCH: ${{ github.event.merge_group.head_ref }}
+          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
         run: |
-          labels="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR/labels" --jq '.[].name')"
-          if grep -qxF 'approved: list growth' <<< "$labels"; then approved=true; else approved=false; fi
+          prs="$PR"
+          if test -n "$QUEUE_BRANCH"; then
+            prs="$(sed -nE 's|.*/pr-([0-9]+)-[0-9a-f]+$|\1|p' <<< "$QUEUE_BRANCH"
+              git log --format=%s "$QUEUE_BASE..HEAD" | sed -nE 's/.*\(#([0-9]+)\)$/\1/p')"
+          fi
+          approved=false
+          for pr in $(sort -u <<< "$prs"); do
+            labels="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$pr/labels" --jq '.[].name')"
+            if grep -qxF 'approved: list growth' <<< "$labels"; then approved=true; fi
+          done
           echo "SHRINK_ONLY_GROWTH_APPROVED=$approved" >> "$GITHUB_ENV"
           echo "approved: list growth = $approved"
       - run: bun scripts/verify.ts run --group unit:all

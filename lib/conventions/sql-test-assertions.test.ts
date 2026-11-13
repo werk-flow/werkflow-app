@@ -24,15 +24,8 @@ import { sqlAssertionFindings } from './sql-test-assertions-scan';
 const testsDirectory = resolve(repositoryRoot, 'supabase/tests');
 const tenantTables = organizationTables();
 
-// werk-flow/werkflow-app#406 adds these tables; its finding below needs them before it merges.
-const fixtureTables = new Set([
-  ...tenantTables,
-  'company_document_profiles',
-  'company_document_profile_events',
-]);
-
 const findings = (sql: string) =>
-  sqlAssertionFindings(sql, fixtureTables).map(({ line, rule, code }) => ({ line, rule, code }));
+  sqlAssertionFindings(sql, tenantTables).map(({ line, rule, code }) => ({ line, rule, code }));
 
 const assertion = (condition: string) =>
   `do $$ begin\n  if ${condition} then raise exception 'x'; end if;\nend $$;`;

@@ -27,11 +27,25 @@ async function readSampleOffer(signal: AbortSignal): Promise<SampleOfferRead> {
   }
 }
 
-/** The Musterangebot as the PDF a customer receives, to open or download. */
-export function DocumentSamplePreview() {
+type PreviewProps = {
+  /** The organization whose profile the sample shows. */
+  organizationId: string;
+  profileUpdatedAt: string | null;
+};
+
+/**
+ * The Musterangebot as the PDF a customer receives, to open or download. A
+ * saved change of the company profile renders it anew; another organization
+ * mounts a new preview, so no sample of the one before stays on screen.
+ */
+export function DocumentSamplePreview(props: PreviewProps) {
+  return <SamplePreview key={props.organizationId} profileUpdatedAt={props.profileUpdatedAt} />;
+}
+
+function SamplePreview({ profileUpdatedAt }: Pick<PreviewProps, 'profileUpdatedAt'>) {
   const sample = useClientRead({
     read: readSampleOffer,
-    deps: [],
+    deps: [profileUpdatedAt],
     failureMessage: 'Das Musterangebot konnte nicht erstellt werden.',
   });
   const url = sample.data?.url;
@@ -42,8 +56,8 @@ export function DocumentSamplePreview() {
       <CardHeader>
         <CardTitle>Musterangebot</CardTitle>
         <CardDescription>
-          So kommt ein Angebot als PDF bei deinen Kunden an: dein Firmenname als Absender, ein erfundener
-          Kunde und erfundene Preise.
+          So kommt ein Angebot als PDF bei deinen Kunden an: mit deinen Firmenangaben, deinem Logo oder
+          Briefpapier, einem erfundenen Kunden und erfundenen Preisen.
         </CardDescription>
       </CardHeader>
       <CardContent>
