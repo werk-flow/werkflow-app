@@ -6,7 +6,7 @@ import { uuidSchema } from '@/lib/validation/uuid';
 // The company document profile (werk-flow/werkflow-planning#378): the
 // details every generated business document carries, the defaults of a new
 // offer, and which logo and stationery files are stored. The limits are the
-// check constraints of 20261201150003_keep_one_company_document_profile.sql.
+// check constraints of 20261201190000_keep_one_company_document_profile.sql.
 
 const shortText = (maxLength: number) => z.string().trim().max(maxLength);
 const marginSchema = (maximum: number) => z.number().int().min(0).max(maximum);
