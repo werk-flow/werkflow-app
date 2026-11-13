@@ -328,7 +328,11 @@ function payloadRows(
       status: 'ungated',
     },
   ];
-  rows.push(...byteRows(shape, observed, reference, ungated));
+  // The bytes sum the shape's requests, so they follow that count's timing too: with another
+  // count than the reference's they print, and the step's `requests` count judges the change.
+  rows.push(
+    ...byteRows(shape, observed, reference, ungated || observed.requests !== reference.requests.reference),
+  );
   if (reference.rows && observed.rows === null)
     rows.push(missingRow(`${shape}#rows`, reference.rows.reference, ungated));
   else if (reference.rows && observed.rows !== null) {
