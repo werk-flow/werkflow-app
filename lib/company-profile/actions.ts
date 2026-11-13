@@ -45,7 +45,7 @@ const refusal = writeRefusalFor(
   new Set(['not_authorized', 'profile_changed', 'no_changes', 'stationery_first_missing', 'file_changed']),
 );
 
-async function resolveManager(
+async function resolveManagerOfNamedOrganization(
   organizationId: string,
 ): Promise<
   | { success: true; context: ActionContext }
@@ -69,7 +69,7 @@ export async function saveCompanyDocumentProfile(
   const parsed = saveCompanyProfileInputSchema.safeParse(rawInput);
   if (!parsed.success) return INVALID_INPUT;
   const input = parsed.data;
-  const auth = await resolveManager(input.organizationId);
+  const auth = await resolveManagerOfNamedOrganization(input.organizationId);
   if (!auth.success) return auth;
   const { details } = input;
   if (
@@ -133,7 +133,7 @@ export async function createCompanyDocumentFileUploadTicket(
   const parsed = companyFileTicketInputSchema.safeParse(rawInput);
   if (!parsed.success) return INVALID_INPUT;
   const input = parsed.data;
-  const auth = await resolveManager(input.organizationId);
+  const auth = await resolveManagerOfNamedOrganization(input.organizationId);
   if (!auth.success) return auth;
   const ruleFailure = uploadRuleFailure(COMPANY_FILE_RULES[input.kind], input.mimeType, input.fileSizeBytes);
   if (ruleFailure) return { success: false, error: ruleFailure };
@@ -159,7 +159,7 @@ export async function finalizeCompanyDocumentFileUpload(
   const parsed = companyFileFinalizeInputSchema.safeParse(rawInput);
   if (!parsed.success) return INVALID_INPUT;
   const input = parsed.data;
-  const auth = await resolveManager(input.organizationId);
+  const auth = await resolveManagerOfNamedOrganization(input.organizationId);
   if (!auth.success) return auth;
   const organizationId = auth.context.orgId;
   // The key is recomputed from the authorized organization, so no client
@@ -247,7 +247,7 @@ export async function removeCompanyDocumentFile(rawInput: CompanyFileRemoveInput
   const parsed = companyFileRemoveInputSchema.safeParse(rawInput);
   if (!parsed.success) return INVALID_INPUT;
   const input = parsed.data;
-  const auth = await resolveManager(input.organizationId);
+  const auth = await resolveManagerOfNamedOrganization(input.organizationId);
   if (!auth.success) return auth;
 
   const { error } = await createSupabaseAdminClient().rpc(
