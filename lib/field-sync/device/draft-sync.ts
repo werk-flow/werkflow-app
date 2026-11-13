@@ -14,6 +14,7 @@ import {
   type StoredDraft,
 } from './draft-store';
 import { TODAY_WIPE_KEY, todayWipeGeneration } from './today-wipe';
+import { createListeners } from '@/lib/listeners';
 
 // Sends the report drafts a phone keeps (decision record 0010, the report
 // draft amendment). Each photo goes to storage through the document upload
@@ -90,16 +91,11 @@ let listening = false;
 let queue: Promise<unknown> = Promise.resolve();
 /** Each open editor's guard per draft: a draft is open while any editor of it holds one. */
 const openInEditor = new Map<string, Set<symbol>>();
-const listeners = new Set<() => void>();
-
-function notify(): void {
-  for (const listener of listeners) listener();
-}
+const { subscribe, notify } = createListeners();
 
 /** Tells `listener` whenever a draft or the upload progress changed. Returns the unsubscribe. */
 export function subscribeToDrafts(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
+  return subscribe(listener);
 }
 
 export function draftSendProgress(): DraftSendProgress | null {

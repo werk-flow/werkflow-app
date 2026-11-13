@@ -254,6 +254,46 @@ assert.deepEqual(await actions.updateJob(assignedJobId, { plannedDate: '2026-11-
 assert.equal(databaseSnapshot(), initialDatabase, 'a refused schedule edit writes nothing');
 assert.deepEqual(world.rpcCalls, []);
 
+// A job whose material was taken or used keeps its material history: the
+// delete is refused with its reason before anything is deleted.
+const usedLine = {
+  id: '54000000-0000-4000-8000-000000000001',
+  organization_id: ORGANIZATION_A,
+  job_id: unassignedJobId,
+  project_id: null,
+  item_id: '54000000-0000-4000-8000-000000000002',
+  taken_quantity: 2,
+  used_quantity: 1,
+  returned_quantity: 0,
+  status: 'taken',
+};
+world.tables.job_material_lines = [usedLine];
+const beforeMaterialRefusal = databaseSnapshot();
+assert.deepEqual(await actions.deleteJob(unassignedJobId), {
+  success: false,
+  error: 'material_history_exists',
+});
+assert.equal(databaseSnapshot(), beforeMaterialRefusal, 'a refused delete keeps the job and its material');
+world.tables.job_material_lines = [];
+// When a take lands after that check, the database's refusal maps to the same code.
+const { isMaterialHistoryRefusal } = await import('@/lib/inventory/material-history');
+assert.equal(isMaterialHistoryRefusal({ code: 'P0001', message: 'inventory_ledger_append_only' }), true);
+assert.equal(
+  isMaterialHistoryRefusal({
+    code: '23503',
+    message:
+      'update or delete on table "job_material_lines" violates foreign key constraint "job_material_use_events_job_material_line_id_fkey" on table "job_material_use_events"',
+  }),
+  true,
+);
+assert.equal(
+  isMaterialHistoryRefusal({
+    code: '23503',
+    message: 'violates foreign key constraint on table "documents"',
+  }),
+  false,
+);
+
 // The same manager deletes an own job: exactly that row goes, organization B's job stays.
 assert.deepEqual(await actions.deleteJob(unassignedJobId), { success: true });
 assert.deepEqual(

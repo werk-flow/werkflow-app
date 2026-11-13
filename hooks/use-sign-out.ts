@@ -2,6 +2,7 @@
 
 import { useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { endSessionAfterCheck, withReload } from '@/components/shared/unsent-work-gate';
 import { useBanner } from '@/components/ui/banner';
 import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 
@@ -56,44 +57,47 @@ export function useSignOut() {
 
     await runSignOut(async () => {
       try {
-        const clockedOut = await endOpenWorkBeforeSignOut();
-        if (clockedOut) clockOutWarningShownRef.current = false;
-        if (!clockedOut && !clockOutWarningShownRef.current) {
-          clockOutWarningShownRef.current = true;
-          showBanner({
-            variant: 'error',
-            message:
-              'Wir konnten dich vor der Abmeldung nicht ausstempeln. Stemple dich selbst aus oder klicke erneut auf „Abmelden“, um dich trotzdem abzumelden.',
+        // Before the clock-out: an unsent start must reach the server before the session it opened is ended.
+        await endSessionAfterCheck(withReload(showBanner), async () => {
+          const clockedOut = await endOpenWorkBeforeSignOut();
+          if (clockedOut) clockOutWarningShownRef.current = false;
+          if (!clockedOut && !clockOutWarningShownRef.current) {
+            clockOutWarningShownRef.current = true;
+            showBanner({
+              variant: 'error',
+              message:
+                'Wir konnten dich vor der Abmeldung nicht ausstempeln. Stemple dich selbst aus oder klicke erneut auf „Abmelden“, um dich trotzdem abzumelden.',
+            });
+            return;
+          }
+
+          await clearEmailChangeChallengeQuietly();
+          clearManualEntryBridge();
+          await clearServiceWorkerCaches();
+          await clearTodayOnDevice();
+
+          // Explicit global: the menu sign-out currently ends the user's sessions
+          // on every device (pre-existing behavior, made explicit by the scope
+          // lint from decision 0005).
+          const { error } = await supabase.auth.signOut({ scope: 'global' });
+          if (error) throw error;
+          const response = await fetch('/auth/callback', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              event: 'SIGNED_OUT',
+              session: null,
+            }),
           });
-          return;
-        }
+          if (!response.ok) throw new Error('Server session cleanup failed.');
 
-        await clearEmailChangeChallengeQuietly();
-        clearManualEntryBridge();
-        await clearServiceWorkerCaches();
-        await clearTodayOnDevice();
-
-        // Explicit global: the menu sign-out currently ends the user's sessions
-        // on every device (pre-existing behavior, made explicit by the scope
-        // lint from decision 0005).
-        const { error } = await supabase.auth.signOut({ scope: 'global' });
-        if (error) throw error;
-        const response = await fetch('/auth/callback', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            event: 'SIGNED_OUT',
-            session: null,
-          }),
+          router.replace('/login');
+          router.refresh();
+          // The sign-out stays pending until the login page replaces this one.
+          await untilPageLeaves();
         });
-        if (!response.ok) throw new Error('Server session cleanup failed.');
-
-        router.replace('/login');
-        router.refresh();
-        // The sign-out stays pending until the login page replaces this one.
-        await untilPageLeaves();
       } catch {
         // The next attempt starts over, including the clock-out warning.
         clockOutWarningShownRef.current = false;

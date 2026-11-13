@@ -44,11 +44,7 @@ import {
   validateRunRequest,
 } from '../lib/testing/runner/run-policy';
 import { runPlaywrightPreflight } from './playwright-preflight';
-import {
-  captureOnBoat,
-  captureUnavailableNotice,
-  isAcceptanceCapture,
-} from '../lib/testing/boat/capture-on-boat';
+import { focusedOnBoat, focusedUnavailableNotice } from '../lib/testing/boat/focused-on-boat';
 import { loadEnvLocal } from '../tests/golden/support/env';
 import { finalizeQualifiedWorld } from '../tests/golden/global-teardown';
 import {
@@ -447,14 +443,15 @@ function recordRunnerFailure(error: unknown): void {
   }
 }
 
-// A focused acceptance capture runs on Boat when this workstation has a key
-// (lib/testing/boat/capture-on-boat.ts); an unavailable Boat never turns it into a local build.
-if (isAcceptanceCapture(process.argv.slice(2))) {
-  const capture = process.argv.slice(4);
-  const boat = await captureOnBoat(capture, resolve(import.meta.dir, '..'));
+// A focused run goes to Boat when it needs the app built at this tree's migrations: a capture or a
+// reference update always, any other focused run under migration drift
+// (lib/testing/boat/focused-on-boat.ts). An unavailable Boat never turns it into a local build.
+{
+  const boat = await focusedOnBoat(process.argv.slice(2), resolve(import.meta.dir, '..'));
   if (typeof boat === 'number') process.exit(boat);
   if (boat) {
-    for (const line of captureUnavailableNotice(boat.unavailable, capture)) console.error(line);
+    for (const line of focusedUnavailableNotice(boat.unavailable, process.argv.slice(2), process.env))
+      console.error(line);
     process.exit(1);
   }
 }

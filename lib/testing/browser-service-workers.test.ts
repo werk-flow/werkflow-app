@@ -14,9 +14,11 @@ const ROOT = join(import.meta.dir, '../..');
 const CONFIGS = ['playwright.config.ts', 'playwright.audit.config.ts', 'playwright.canary.config.ts'];
 /** The specs whose steps need the worker: the shell it serves, and the day read through that shell. */
 const OFFLINE_SPECS = [
+  'tests/audit/security/offline-clock.spec.ts',
   'tests/audit/security/offline-drafts.spec.ts',
   'tests/audit/security/offline-shell.spec.ts',
   'tests/audit/security/offline-today.spec.ts',
+  'tests/audit/security/offline-visit.spec.ts',
 ];
 
 function sourceFiles(directory: string): string[] {

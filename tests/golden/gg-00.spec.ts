@@ -7,7 +7,11 @@ import { getPendingInviteCode } from './support/db/shared';
 import { seedJob, seedJobAssignment } from './support/db/work';
 import { createCustomer } from './support/steps/customers';
 import { documentLibraryHeading, uploadDocumentOnJobPage } from './support/steps/documents';
-import { materialAtJobText, returnMaterialOnJobPage, takeMaterialOnJobPage } from './support/steps/inventory';
+import {
+  materialReturnedText,
+  returnMaterialOnJobPage,
+  takeMaterialOnJobPage,
+} from './support/steps/inventory';
 import {
   expectRedirectedAway,
   inviteMember,
@@ -197,7 +201,7 @@ test.describe('GG-00 Bestandsfunktionen @GG-00', () => {
     );
 
     await returnMaterialOnJobPage(employeePage, jobNumber, itemName, 3);
-    await expect(visibleText(employeePage, materialAtJobText(0))).toBeVisible();
+    await expect(visibleText(employeePage, materialReturnedText(3))).toBeVisible();
     expect((await getInventoryLedgerState(world.orgId, itemId, locationId)).quantityOnHand).toBe(
       initialQuantity,
     );

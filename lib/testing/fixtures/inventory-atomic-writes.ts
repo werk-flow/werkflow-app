@@ -259,6 +259,26 @@ expect(await returnJobMaterial(returnInput)).toEqual({ success: false, error: 'r
 expect(rpcCalls).toHaveLength(1);
 expect(logged).toEqual([]);
 
+// 8b. Returning exactly what is open after a decimal use reaches the function:
+//     0.3 taken minus 0.1 used is 0.2, not a binary remainder just below it.
+reset({ data: [{ movement_id: 'movement', quantity_before: 0, quantity_after: 0.2 }], error: null });
+tables.job_material_lines = [
+  {
+    id: LINE,
+    organization_id: ORG,
+    job_id: JOB,
+    item_id: ITEM,
+    taken_quantity: 0.3,
+    used_quantity: 0.1,
+    returned_quantity: 0,
+  },
+];
+expect(await returnJobMaterial({ ...returnInput, quantity: 0.2 })).toEqual({
+  success: true,
+  quantityAfter: 0.2,
+});
+expect(rpcCalls).toHaveLength(1);
+
 // 9. A take the function refuses because the line's item changed since the
 //    server read the line reaches the caller as line_changed, unlogged.
 reset(refusal('material_line_item_changed'));

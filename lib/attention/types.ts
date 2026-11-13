@@ -36,7 +36,8 @@ type AttentionSourceType =
   | 'work_defect_due'
   | 'work_handover_review'
   | 'organization_join_request'
-  | 'planning_visit_replan';
+  | 'planning_visit_replan'
+  | 'site_access_proposal';
 
 export type AttentionItemIdentity = {
   sourceType: AttentionSourceType;
@@ -227,6 +228,19 @@ export type AttentionTask =
       visitTitle: string;
       jobNumber: string | null;
       dispatchState: CalendarDispatchState;
+    }
+  // A field worker's open proposal for the access to their job's Einsatzort.
+  // Every manager decides it on the customer page of its Einsatzort; the
+  // proposal is the identity.
+  | {
+      sourceType: 'site_access_proposal';
+      sourceId: string;
+      /** The customer the Einsatzort is filed under: its page holds the review. */
+      clientId: string;
+      siteName: string;
+      jobNumber: string | null;
+      proposerName: string;
+      proposedAt: string;
     };
 
 // Informational notices, deduplicated per source record: a domain state

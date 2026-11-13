@@ -12,7 +12,7 @@ import { JOB_DELETE_FAILED_MESSAGE } from '@/lib/jobs/messages';
 import type { Job, Project, ProjectWithDetails } from '@/lib/jobs/types';
 import { deleteProject } from '@/lib/projects/actions';
 import { describeJobDeleteError } from './job-actions-menu';
-import { PROJECT_DELETE_FAILED_MESSAGE } from './project-actions-menu';
+import { describeProjectDeleteError, PROJECT_DELETE_FAILED_MESSAGE } from './project-actions-menu';
 import type { useAuftraegeLocalUpdates } from './use-auftraege-local-updates';
 
 type OptimisticListControls = ReturnType<typeof useOptimisticList>;
@@ -84,7 +84,7 @@ function useAuftraegeRowDeletes({
         const result = await deleteProject(projectId);
         if (!result.success) {
           rollbackProject(projectId);
-          showBanner({ variant: 'error', message: PROJECT_DELETE_FAILED_MESSAGE });
+          showBanner({ variant: 'error', message: describeProjectDeleteError(result.error) });
           return;
         }
         handleProjectDelete(projectId);
