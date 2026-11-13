@@ -74,6 +74,8 @@ function fakeBoat(
       );
       return Response.json({ sandbox: { id: 'bx_created', state: 'provisioning' } });
     }
+    if (method === 'POST' && pathname.endsWith('/commands') && !machines[id ?? ''])
+      return Response.json({ code: 'not_found' }, { status: 404 });
     if (method === 'POST' && pathname.endsWith('/commands')) {
       // The script as bash reads it: runScript sends it as one quoted word after `bash -lc`.
       const { command } = z.object({ command: z.string() }).parse(JSON.parse(String(init?.body)));
@@ -487,4 +489,29 @@ test('a kept machine another workstation evicted meanwhile is not reused: the ru
   });
   expect(lease).toMatchObject({ machine: { id: 'bx_created' }, reused: false });
   expect(lines).toContain('Boat machine bx_kept0001 was taken by another workstation at the machine limit.');
+});
+
+test('a kept machine another workstation deleted between its read and its claim gives way to a new one', async () => {
+  const records = mkdtempSync(join(tmpdir(), 'boat-idle-'));
+  const machines: Record<string, { lifeMs: number | null }> = { bx_kept0001: { lifeMs: 120 * MINUTE } };
+  const keeping = fakeBoat(machines);
+  await keepMachine(
+    { id: 'bx_kept0001', client: keeping.client, log: () => undefined },
+    { repository, form: 'main', signal: new AbortController().signal, records },
+    () => undefined,
+  );
+  // The evicting workstation deletes the machine right after this run read its life left.
+  const raced = fakeBoat(
+    machines,
+    0,
+    () => undefined,
+    (call) => {
+      if (call === 'POST /sandboxes/bx_kept0001/commands') Reflect.deleteProperty(machines, 'bx_kept0001');
+      return false;
+    },
+  );
+  expect(await acquire(raced.client, records)).toMatchObject({
+    machine: { id: 'bx_created' },
+    reused: false,
+  });
 });

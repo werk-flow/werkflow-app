@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { hostname } from 'node:os';
 
-import { type BoatClient, READY_STATES } from './boat-api';
+import { type BoatClient, BoatError, READY_STATES } from './boat-api';
 import { runScript } from './boat-machine';
 
 // The three workstations share one Boat member limit of 10 machines. At that limit a run first deletes
@@ -46,14 +46,22 @@ const silent = { stdout: () => undefined, stderr: () => undefined };
 /** When Boat stops a machine, or never for a deadline it did not send or that does not parse. */
 const stopsAt = (archiveAfter: string | null | undefined) => Date.parse(archiveAfter ?? '') || Infinity;
 
-/** Whether the run may use its workstation's kept machine `id`; false once another workstation took it. */
+/**
+ * Whether the run may use its workstation's kept machine `id`; false once another workstation took
+ * it, including when that workstation already deleted it. Any other Boat refusal throws.
+ */
 export async function claimKeptMachine(
   client: BoatClient,
   id: string,
   signal: AbortSignal,
 ): Promise<boolean> {
-  const { exitCode } = await runScript({ id, client, log: () => undefined }, CLAIM, silent, signal);
-  return exitCode === 0;
+  try {
+    const { exitCode } = await runScript({ id, client, log: () => undefined }, CLAIM, silent, signal);
+    return exitCode === 0;
+  } catch (error) {
+    if (error instanceof BoatError && error.status === 404) return false;
+    throw error;
+  }
 }
 
 /**
