@@ -1,5 +1,11 @@
 import { expect, test } from 'bun:test';
-import { partyLinks, resolveBillingVersions, standInsByRead } from './resolve';
+import {
+  billingPartiesScope,
+  partyLinks,
+  resolveBillingVersions,
+  shownBillingSite,
+  standInsByRead,
+} from './resolve';
 
 const customer = { id: 'c1', name: 'WEG Lindenstraße 5', address: 'Lindenstraße 5, 10115 Berlin' };
 const manager = { id: 'c2', name: 'Hausverwaltung Lindenhof GmbH', address: 'Hofweg 1, 10117 Berlin' };
@@ -56,4 +62,22 @@ test('the work’s own customer and a recipient that is the Auftraggeber get no 
     auftraggeber: true,
     recipient: false,
   });
+});
+
+test('another organization is another live view scope, so it never keeps the previous parties', () => {
+  expect(billingPartiesScope('org-a', 'job', 'job-1')).not.toBe(billingPartiesScope('org-b', 'job', 'job-1'));
+  expect(billingPartiesScope('org-a', 'job', 'job-1')).toBe(billingPartiesScope('org-a', 'job', 'job-1'));
+});
+
+test('the page’s site stands in only for the job read it handed in; a later read’s null stays null', () => {
+  const pageSite = { id: 's1', name: 'Haus Lindenstraße', street: null, postalCode: null, city: null };
+  const pageRead = { hasClient: true, versions: [], site: null, accessContacts: [] };
+  const laterRead = { hasClient: true, versions: [], site: null, accessContacts: [] };
+  const standIns = standInsByRead();
+  standIns.remember(pageRead, customer);
+  expect(standIns.fromPage(pageRead)).toBe(true);
+  expect(standIns.fromPage(laterRead)).toBe(false);
+  expect(shownBillingSite(pageRead, standIns.fromPage(pageRead), pageSite)).toEqual(pageSite);
+  expect(shownBillingSite(laterRead, standIns.fromPage(laterRead), pageSite)).toBeNull();
+  expect(shownBillingSite({ ...laterRead, site: pageSite }, false, undefined)).toEqual(pageSite);
 });

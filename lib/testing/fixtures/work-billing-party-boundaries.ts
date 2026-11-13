@@ -17,7 +17,13 @@ const { setWorkBillingParties } = await import('@/lib/billing-parties/actions');
 const { getWorkBillingParties } = await import('@/lib/billing-parties/server');
 
 const choose = (workId: string, recipientClientId: string) => () =>
-  setWorkBillingParties({ kind: 'job', workId, clientId: ownClientId, recipientClientId });
+  setWorkBillingParties({
+    kind: 'job',
+    workId,
+    clientId: ownClientId,
+    recipientClientId,
+    expectedVersion: 1,
+  });
 
 // Field workers are refused before the service-role client exists: the
 // recipient never reaches them.
@@ -55,6 +61,17 @@ await assertRefused(
   'one-call',
 );
 assert.equal(world.rpcCalls.at(-1)?.args.p_organization_id, ORGANIZATION_A);
+assert.equal(world.rpcCalls.at(-1)?.args.p_expected_version, 1);
+
+// A save from an outdated version is refused by the one call and reaches the
+// dialog as parties_changed, which rereads the parties.
+world.rpc = () => ({ data: null, error: { code: 'P0001', message: 'parties_changed' } });
+await assertRefused(
+  world,
+  [['setWorkBillingParties', choose(ownJobId, ownClientId)]],
+  { success: false, error: 'parties_changed' },
+  'one-call',
+);
 
 // The read of another organization's work finds nothing in the caller's.
 world.rpc = ({ args }) => ({

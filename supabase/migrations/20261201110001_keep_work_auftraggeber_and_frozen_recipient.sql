@@ -385,17 +385,21 @@ join public.clients recipient
 -- 4. The office chooses the Auftraggeber and the recipient of one work. A
 -- request takes them only while it is open. Saving the same customers again
 -- copies the recipient's current name and address when they changed, and
--- writes nothing when they did not. Returns the current version.
+-- writes nothing when they did not. p_expected_version is the version the
+-- office saw (0 for none): a version written since then refuses the save,
+-- so a form never writes back a party another user replaced. Returns the
+-- current version.
 -- Refusals: invalid_input, not_authorized, work_not_found,
 -- request_not_editable, client_required, client_not_found,
--- recipient_not_found, client_archived.
+-- recipient_not_found, client_archived, parties_changed.
 create function public.set_work_billing_parties(
   p_actor_id uuid,
   p_organization_id uuid,
   p_kind text,
   p_work_id uuid,
   p_client_id uuid,
-  p_recipient_client_id uuid
+  p_recipient_client_id uuid,
+  p_expected_version integer
 )
 returns public.work_billing_parties
 language plpgsql
@@ -410,6 +414,7 @@ declare
 begin
   if p_actor_id is null or p_organization_id is null or p_work_id is null
     or p_client_id is null or p_recipient_client_id is null
+    or p_expected_version is null or p_expected_version < 0
     or p_kind is null or p_kind not in ('request', 'job', 'project', 'service_case')
   then
     raise exception 'invalid_input';
@@ -471,6 +476,10 @@ begin
   if v_archived and p_recipient_client_id is distinct from v_current.recipient_client_id then
     raise exception 'client_archived';
   end if;
+  -- Under the work's lock: no version can be written between this check and the append.
+  if coalesce(v_current.version, 0) <> p_expected_version then
+    raise exception 'parties_changed';
+  end if;
 
   v_current := app_private.record_work_billing_parties(p_organization_id, p_kind, p_work_id,
     p_client_id, p_recipient_client_id, 'buero', p_actor_id);
@@ -494,9 +503,9 @@ begin
   return v_current;
 end;
 $$;
-revoke all on function public.set_work_billing_parties(uuid, uuid, text, uuid, uuid, uuid)
+revoke all on function public.set_work_billing_parties(uuid, uuid, text, uuid, uuid, uuid, integer)
   from public, anon, authenticated;
-grant execute on function public.set_work_billing_parties(uuid, uuid, text, uuid, uuid, uuid) to service_role;
+grant execute on function public.set_work_billing_parties(uuid, uuid, text, uuid, uuid, uuid, integer) to service_role;
 
 -- 5. The parties of one work for the office: every version, newest first,
 -- with the Auftraggeber's current name, the work's Einsatzort and

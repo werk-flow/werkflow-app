@@ -1,4 +1,10 @@
-import type { BillingParty, BillingRecipient, WorkBillingPartyVersion } from './types';
+import type {
+  BillingParty,
+  BillingRecipient,
+  BillingWorkKind,
+  WorkBillingParties,
+  WorkBillingPartyVersion,
+} from './types';
 
 /** A version with both parties named. */
 export type ResolvedBillingVersion = Omit<WorkBillingPartyVersion, 'auftraggeber' | 'recipient'> & {
@@ -26,6 +32,8 @@ export function resolveBillingVersions(
 export type StandInsByRead = {
   remember: (parties: object, client: BillingRecipient | null) => void;
   clientFor: (parties: object) => BillingRecipient | null;
+  /** Whether the parties came with the page's job read, which leaves the site out. */
+  fromPage: (parties: object) => boolean;
 };
 
 /**
@@ -43,6 +51,9 @@ export function standInsByRead(): StandInsByRead {
     clientFor(parties: object): BillingRecipient | null {
       return clients.get(parties) ?? null;
     },
+    fromPage(parties: object): boolean {
+      return clients.has(parties);
+    },
   };
 }
 
@@ -59,4 +70,26 @@ export function partyLinks(
     auftraggeber: version.auftraggeber.id !== workClientId,
     recipient: version.recipient.id !== workClientId && version.recipient.id !== version.auftraggeber.id,
   };
+}
+
+/**
+ * The Einsatzort the card shows: the page's own site stands in only for a
+ * job read the page handed in, which leaves the site out; any read of the
+ * section's own is authoritative, a removed site (null) included.
+ */
+export function shownBillingSite(
+  parties: WorkBillingParties,
+  fromPageRead: boolean,
+  pageSite: WorkBillingParties['site'] | undefined,
+): WorkBillingParties['site'] {
+  return fromPageRead && pageSite !== undefined ? pageSite : parties.site;
+}
+
+/** The identity of one work's live billing view: another organization, kind or work starts it anew. */
+export function billingPartiesScope(
+  organizationId: string | null,
+  kind: BillingWorkKind,
+  id: string,
+): string {
+  return `${organizationId ?? ''}:${kind}:${id}`;
 }

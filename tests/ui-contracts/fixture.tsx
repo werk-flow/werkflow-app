@@ -4,6 +4,7 @@ import { PresentationFixture } from './presentation-fixture';
 import { CreateClientContractFixture, CustomerContractFixture } from './customer-boundaries';
 import { RequestCaptureContractFixture } from './request-capture-boundaries';
 import { RequestAttachContractFixture } from './request-attach-boundaries';
+import { BillingPartiesContractFixture } from './billing-parties-boundaries';
 import { VacationApprovals } from '@/components/zeiterfassung/vacation-approvals';
 import {
   AbsencePickerContractFixture,
@@ -600,6 +601,8 @@ createRoot(root).render(
     <RequestCaptureContractFixture />
   ) : window.uiContractFixture === 'request-attach' ? (
     <RequestAttachContractFixture />
+  ) : window.uiContractFixture === 'billing-parties' ? (
+    <BillingPartiesContractFixture />
   ) : window.uiContractFixture === 'approvals' ? (
     <BannerProvider>
       <main>

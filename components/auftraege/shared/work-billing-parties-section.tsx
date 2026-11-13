@@ -17,6 +17,7 @@ import type {
 import {
   partyLinks,
   resolveBillingVersions,
+  shownBillingSite,
   standInsByRead,
   type ResolvedBillingVersion,
 } from '@/lib/billing-parties/resolve';
@@ -208,11 +209,10 @@ export function WorkBillingPartiesSection({
   const [editing, setEditing] = useState(false);
   const openEditor = useCallback(() => setEditing(true), []);
   const parties = view.data;
-  // The job's own read leaves the site out; a later read of the section names it.
-  const shownSite = parties?.site ?? site ?? null;
   // A job read's left-out parties are its own customer of that read (S4).
   const [standIns] = useState(standInsByRead);
   if (initialParties) standIns.remember(initialParties, workClient);
+  const shownSite = parties ? shownBillingSite(parties, standIns.fromPage(parties), site) : null;
   const versions = useMemo(
     () => (parties ? resolveBillingVersions(parties.versions, standIns.clientFor(parties)) : []),
     [parties, standIns],

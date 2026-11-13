@@ -33,7 +33,12 @@ const ERROR_MESSAGES: Record<string, string> = {
   client_not_found: 'Der Auftraggeber wurde nicht gefunden.',
   recipient_not_found: 'Der Rechnungsempfänger wurde nicht gefunden.',
   client_archived: 'Der Kunde ist archiviert. Stelle ihn zuerst wieder her.',
+  parties_changed:
+    'Auftraggeber oder Rechnungsempfänger wurden gerade geändert. Hier stehen jetzt die aktuellen Angaben; prüfe sie und speichere erneut.',
 };
+
+/** A save refused because another save landed first reads the parties again. */
+const REREAD_ON = new Set(['parties_changed']);
 
 const CLIENT_FIELD_ID = 'billing-parties-client';
 const RECIPIENT_FIELD_ID = 'billing-parties-recipient';
@@ -47,15 +52,28 @@ type FormProps = {
   task: ReturnType<typeof usePendingTask>;
   onClose: () => void;
   onSaved: () => Promise<void>;
+  /** Reads the parties again without closing the dialog. */
+  onReread: () => Promise<void>;
 };
 
-function useBillingPartiesForm({ kind, workId, current, task, onSaved }: FormProps) {
+function useBillingPartiesForm({ kind, workId, current, task, onSaved, onReread }: FormProps) {
   const { showBanner } = useBanner();
   const [client, setClient] = useState<ClientSelectItem | null>(current ? current.auftraggeber : null);
   const [recipient, setRecipient] = useState<ClientSelectItem | null>(current ? current.recipient : null);
   const [clientError, setClientError] = useState<string | null>(null);
   const [recipientError, setRecipientError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The choice belongs to the version the form saw: a newer one starts it anew,
+  // while the notice stays and says why (adopted during render).
+  const shownVersion = current?.version ?? 0;
+  const [formVersion, setFormVersion] = useState(shownVersion);
+  if (formVersion !== shownVersion) {
+    setFormVersion(shownVersion);
+    setClient(current ? current.auftraggeber : null);
+    setRecipient(current ? current.recipient : null);
+    setClientError(null);
+    setRecipientError(null);
+  }
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -74,6 +92,7 @@ function useBillingPartiesForm({ kind, workId, current, task, onSaved }: FormPro
         workId,
         clientId: client?.id ?? '',
         recipientClientId: recipient?.id ?? '',
+        expectedVersion: formVersion,
       }).catch(() => ({ success: false as const, error: 'unexpected_error' }));
       if (!result.success) {
         setError(
@@ -83,6 +102,7 @@ function useBillingPartiesForm({ kind, workId, current, task, onSaved }: FormPro
             'Speichern fehlgeschlagen. Bitte versuche es erneut.',
           ),
         );
+        if (REREAD_ON.has(result.error)) await onReread();
         return;
       }
       await onSaved();
@@ -142,6 +162,7 @@ export function WorkBillingPartiesDialog({
           current={current}
           task={task}
           onClose={onClose}
+          onReread={onSaved}
           onSaved={async () => {
             await onSaved();
             onClose();

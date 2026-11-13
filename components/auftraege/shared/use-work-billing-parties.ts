@@ -7,6 +7,7 @@ import { readInBackground } from '@/lib/data/background-read-client';
 import { isEventForRow } from '@/lib/realtime/events';
 import type { RealtimeTable } from '@/lib/realtime/tables';
 import type { BillingWorkKind, WorkBillingParties } from '@/lib/billing-parties/types';
+import { billingPartiesScope } from '@/lib/billing-parties/resolve';
 
 export const WORK_BILLING_PARTIES_LOAD_FAILED =
   'Auftraggeber und Rechnungsempfänger konnten nicht geladen werden.';
@@ -49,6 +50,7 @@ export function useWorkBillingParties(
         : { ok: false, error: describeFailure(result.error, {}, WORK_BILLING_PARTIES_LOAD_FAILED) };
     },
     enabled: Boolean(activeOrgId),
-    resetKey: `${kind}:${id}`,
+    // An organization switch is a new scope too: it never keeps the previous one's parties.
+    resetKey: billingPartiesScope(activeOrgId, kind, id),
   });
 }

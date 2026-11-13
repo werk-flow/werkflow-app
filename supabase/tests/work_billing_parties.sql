@@ -89,7 +89,7 @@ begin
     or has_table_privilege('service_role', 'public.work_billing_parties', 'UPDATE')
     or has_table_privilege('service_role', 'public.work_billing_parties', 'DELETE')
   then raise exception 'a role reads the parties outside the server or changes a version'; end if;
-  if has_function_privilege('authenticated', 'public.set_work_billing_parties(uuid,uuid,text,uuid,uuid,uuid)', 'EXECUTE')
+  if has_function_privilege('authenticated', 'public.set_work_billing_parties(uuid,uuid,text,uuid,uuid,uuid,integer)', 'EXECUTE')
     or has_function_privilege('authenticated', 'public.get_work_billing_parties(uuid,text,uuid)', 'EXECUTE')
   then raise exception 'a browser role can run a billing parties function'; end if;
 end;
@@ -169,47 +169,56 @@ $$;
 select pg_temp.expect_refusal('another organization''s customer as recipient',
   $sql$select public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000050',
-    '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000029')$sql$,
+    '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000029',
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).version, 0))$sql$,
   'recipient_not_found');
 select pg_temp.expect_refusal('another organization''s customer as Auftraggeber',
   $sql$select public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000050',
-    '32700000-0000-0000-0000-000000000029', '32700000-0000-0000-0000-000000000021')$sql$,
+    '32700000-0000-0000-0000-000000000029', '32700000-0000-0000-0000-000000000021',
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).version, 0))$sql$,
   'client_not_found');
 select pg_temp.expect_refusal('another organization''s work',
   $sql$select public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000059',
-    '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000021')$sql$,
+    '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000021',
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000059')).version, 0))$sql$,
   'work_not_found');
 select pg_temp.expect_refusal('a job id passed as a Servicefall',
   $sql$select public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'service_case', '32700000-0000-0000-0000-000000000050',
-    '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000021')$sql$,
+    '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000021',
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).version, 0))$sql$,
   'work_not_found');
 select pg_temp.expect_refusal('a field worker choosing the recipient',
   $sql$select public.set_work_billing_parties('32700000-0000-0000-0000-000000000003',
     '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000050',
-    '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000022')$sql$,
+    '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000022',
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).version, 0))$sql$,
   'not_authorized');
 select pg_temp.expect_refusal('an outsider choosing the recipient',
   $sql$select public.set_work_billing_parties('32700000-0000-0000-0000-000000000004',
     '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000050',
-    '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000022')$sql$,
+    '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000022',
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).version, 0))$sql$,
   'not_authorized');
 select pg_temp.expect_refusal('an archived customer as new recipient',
   $sql$select public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000050',
-    '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000023')$sql$,
+    '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000023',
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).version, 0))$sql$,
   'client_archived');
 select pg_temp.expect_refusal('a closed request',
   $sql$select public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'request', '32700000-0000-0000-0000-000000000062',
-    '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000022')$sql$,
+    '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000022',
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000062')).version, 0))$sql$,
   'request_not_editable');
 select pg_temp.expect_refusal('a request without a customer',
   $sql$select public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'request', '32700000-0000-0000-0000-000000000060',
-    '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000022')$sql$,
+    '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000022',
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000060')).version, 0))$sql$,
   'client_required');
 do $$
 begin
@@ -228,7 +237,8 @@ declare
 begin
   v_party := public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000050',
-    '32700000-0000-0000-0000-000000000021', '32700000-0000-0000-0000-000000000022');
+    '32700000-0000-0000-0000-000000000021', '32700000-0000-0000-0000-000000000022',
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).version, 0));
   if v_party.version <> 2 or v_party.source <> 'buero'
     or v_party.client_id <> '32700000-0000-0000-0000-000000000021'
     or v_party.recipient_name <> 'Hausverwaltung Birkenhain GmbH'
@@ -237,7 +247,8 @@ begin
 
   v_party := public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000050',
-    '32700000-0000-0000-0000-000000000021', '32700000-0000-0000-0000-000000000022');
+    '32700000-0000-0000-0000-000000000021', '32700000-0000-0000-0000-000000000022',
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).version, 0));
   if v_party.version <> 2 then raise exception 'an unchanged choice wrote a version'; end if;
 
   update public.clients set address = 'Birkenallee 4, 20095 Hamburg'
@@ -247,7 +258,8 @@ begin
   then raise exception 'a customer edit rewrote the chosen recipient'; end if;
   v_party := public.set_work_billing_parties('32700000-0000-0000-0000-000000000001',
     '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000050',
-    '32700000-0000-0000-0000-000000000021', '32700000-0000-0000-0000-000000000022');
+    '32700000-0000-0000-0000-000000000021', '32700000-0000-0000-0000-000000000022',
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).version, 0));
   if v_party.version <> 3 or v_party.recipient_address <> 'Birkenallee 4, 20095 Hamburg'
   then raise exception 'choosing the recipient again did not copy its new address'; end if;
   if (select array_agg(version order by version) from public.work_billing_parties
@@ -264,12 +276,14 @@ declare
 begin
   v_party := public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000052',
-    '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000020');
+    '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000020',
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000052')).version, 0));
   if v_party.version <> 2 or v_party.source <> 'buero'
   then raise exception 'confirming the default pair was not recorded as the office''s choice: %', to_jsonb(v_party); end if;
   v_party := public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000052',
-    '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000020');
+    '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000020',
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000052')).version, 0));
   if v_party.version <> 2 then raise exception 'confirming the chosen pair again wrote a version'; end if;
   update public.jobs set site_id = '32700000-0000-0000-0000-000000000040'
   where id = '32700000-0000-0000-0000-000000000052';
@@ -310,7 +324,8 @@ declare
 begin
   perform public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'request', '32700000-0000-0000-0000-000000000061',
-    '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000022');
+    '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000022',
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000061')).version, 0));
   update public.clients set name = 'Birkenhain Verwaltung'
   where id = '32700000-0000-0000-0000-000000000022';
 
@@ -348,7 +363,8 @@ begin
    '32700000-0000-0000-0000-000000000001');
   perform public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'project', '32700000-0000-0000-0000-000000000080',
-    '32700000-0000-0000-0000-000000000021', '32700000-0000-0000-0000-000000000020');
+    '32700000-0000-0000-0000-000000000021', '32700000-0000-0000-0000-000000000020',
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000080')).version, 0));
   insert into public.jobs (id, organization_id, title, job_number, client_id, site_id, project_id, status, created_by)
   values ('32700000-0000-0000-0000-000000000054', '32700000-0000-0000-0000-000000000010', 'Strang 1',
    'B-54', '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000040',
@@ -385,7 +401,8 @@ select pg_temp.expect_refusal('an edited version',
   'permission denied for table work_billing_parties');
 select public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
   '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000052',
-  '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000024');
+  '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000024',
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000052')).version, 0));
 reset role;
 do $$
 begin
@@ -399,12 +416,41 @@ begin
 end;
 $$;
 
+-- Two office users saved from the same version: the second save is refused
+-- with parties_changed and appends nothing, so it never writes back the
+-- Auftraggeber the first one replaced.
+do $$
+declare
+  v_seen integer := (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000054')).version;
+  v_versions integer;
+begin
+  perform public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
+    '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000054',
+    '32700000-0000-0000-0000-000000000022', '32700000-0000-0000-0000-000000000021', v_seen);
+  select count(*) into v_versions from public.work_billing_parties
+  where work_id = '32700000-0000-0000-0000-000000000054';
+  begin
+    perform public.set_work_billing_parties('32700000-0000-0000-0000-000000000001',
+      '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000054',
+      '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000022', v_seen);
+    raise exception 'a save from an outdated version was accepted';
+  exception when raise_exception then
+    if sqlerrm <> 'parties_changed' then raise; end if;
+  end;
+  if (select count(*) from public.work_billing_parties
+      where work_id = '32700000-0000-0000-0000-000000000054') <> v_versions
+    or (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000054')).client_id
+      <> '32700000-0000-0000-0000-000000000022'
+  then raise exception 'a refused stale save changed the parties'; end if;
+end;
+$$;
+
 -- A version always belongs to its work's organization, for every kind of work.
 do $$
 declare
   v_kind text;
 begin
-  foreach v_kind in array array['job_id', 'request_id', 'project_id'] loop
+  foreach v_kind in array array['job_id', 'request_id', 'project_id', 'service_case_id'] loop
     begin
       execute format(
         'insert into public.work_billing_parties (organization_id, %I, version, client_id, recipient_client_id,
@@ -413,7 +459,8 @@ begin
         case v_kind
           when 'job_id' then '32700000-0000-0000-0000-000000000051'::uuid
           when 'request_id' then '32700000-0000-0000-0000-000000000060'::uuid
-          else '32700000-0000-0000-0000-000000000080'::uuid end,
+          when 'project_id' then '32700000-0000-0000-0000-000000000080'::uuid
+          else '32700000-0000-0000-0000-000000000070'::uuid end,
         '32700000-0000-0000-0000-000000000029'::uuid, 'Fremde Verwaltung';
     exception when foreign_key_violation then
       continue;

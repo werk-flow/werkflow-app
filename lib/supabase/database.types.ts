@@ -18756,6 +18756,7 @@ export type Database = {
         Args: {
           p_actor_id: string;
           p_client_id: string;
+          p_expected_version: number;
           p_kind: string;
           p_organization_id: string;
           p_recipient_client_id: string;

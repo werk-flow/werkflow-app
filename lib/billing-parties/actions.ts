@@ -20,6 +20,7 @@ const partiesWriteRefusal = writeRefusalFor(
     'client_not_found',
     'recipient_not_found',
     'client_archived',
+    'parties_changed',
   ]),
 );
 
@@ -28,6 +29,8 @@ const setArgumentsSchema = z.object({
   workId: uuidSchema,
   clientId: uuidSchema,
   recipientClientId: uuidSchema,
+  /** The version the office saw, 0 for none: a newer one refuses the save (parties_changed). */
+  expectedVersion: z.number().int().min(0),
 });
 
 /**
@@ -57,6 +60,7 @@ export async function setWorkBillingParties(
       p_work_id: input.workId,
       p_client_id: input.clientId,
       p_recipient_client_id: input.recipientClientId,
+      p_expected_version: input.expectedVersion,
     });
     if (error || !data)
       return partiesWriteRefusal(error, 'save_failed', 'setWorkBillingParties: save failed');
