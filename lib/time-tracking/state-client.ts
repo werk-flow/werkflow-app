@@ -26,7 +26,11 @@ const clockStateSchema = z.object({
     breakMode: z.enum(['manual', 'automatic']),
     autoBreakThresholdMinutes: z.number(),
     autoBreakDurationMinutes: z.number(),
-    secondStep: z.object({ thresholdMinutes: z.number(), durationMinutes: z.number() }).nullable(),
+    // The previous release's server sends none during a deploy: it reads as one step.
+    secondStep: z
+      .object({ thresholdMinutes: z.number(), durationMinutes: z.number() })
+      .nullish()
+      .transform((step) => step ?? null),
   }),
   status: z.enum(['clocked_out', 'working', 'on_break']),
   isClockedIn: z.boolean(),

@@ -47,9 +47,9 @@ grant select on pg_temp.completed_day to service_role;
 -- Today's open break of the same worker: a save ends it.
 insert into public.time_entries (id, organization_id, user_id, entry_type, timestamp, is_manual, status) values
 ('26104154-0000-0000-0000-0000000000c3', '26104154-0000-0000-0000-000000000010',
-  '26104154-0000-0000-0000-000000000002', 'clock_in', now() - interval '2 hours', false, 'approved'),
+  '26104154-0000-0000-0000-000000000002', 'clock_in', now() - interval '2 hours', true, 'approved'),
 ('26104154-0000-0000-0000-0000000000c4', '26104154-0000-0000-0000-000000000010',
-  '26104154-0000-0000-0000-000000000002', 'break_start', now() - interval '1 hour', false, 'approved');
+  '26104154-0000-0000-0000-000000000002', 'break_start', now() - interval '1 hour', true, 'approved');
 -- A job of the other organization: the work-start trigger refuses a break end on it.
 insert into public.jobs (id, organization_id, title, job_number, created_by) values
 ('26104154-0000-0000-0000-0000000000aa', '26104154-0000-0000-0000-000000000011', 'Foreign job',

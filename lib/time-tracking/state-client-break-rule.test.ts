@@ -4,8 +4,9 @@ import { CLOCK_ORGANIZATION_ID, RUNNING_CLOCK_STATE } from '../../tests/ui-contr
 import { fetchCurrentClockState } from './state-client';
 
 // The clock state carries today's break rule to the browser, the nine-hour
-// step included, through the inline schema in state-client.ts. A step the
-// schema does not know is refused rather than read as one step.
+// step included, through the inline schema in state-client.ts. A malformed
+// step is refused; a missing one (the previous release's server during a
+// deploy) reads as one step.
 const originalFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = originalFetch;
@@ -29,13 +30,16 @@ test('a clock state with the second step reads it', async () => {
   });
 });
 
-test.each([
-  ['a malformed second step', { ...rule, secondStep: { thresholdMinutes: '540', durationMinutes: 45 } }],
-  ['a missing second step', rule],
-])('a clock state with %s is refused', async (_label, breakPolicy) => {
-  answer(breakPolicy);
+test('a clock state with a malformed second step is refused', async () => {
+  answer({ ...rule, secondStep: { thresholdMinutes: '540', durationMinutes: 45 } });
   expect(await fetchCurrentClockState(CLOCK_ORGANIZATION_ID)).toEqual({
     success: false,
     error: 'time_state_read_failed',
   });
+});
+
+test("the previous release's clock state without a second step reads as one step", async () => {
+  answer(rule);
+  const result = await fetchCurrentClockState(CLOCK_ORGANIZATION_ID);
+  expect(result.success && result.state.breakPolicy.secondStep).toBeNull();
 });
