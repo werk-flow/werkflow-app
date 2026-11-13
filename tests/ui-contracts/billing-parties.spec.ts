@@ -120,3 +120,38 @@ test('the current-data notice waits until the reread after a refusal has landed'
   await expect(auftraggeber).toContainText('Hausverwaltung Birkenhain GmbH');
   await expect(dialog.getByRole('status').filter({ hasText: 'werden geladen' })).toHaveCount(0);
 });
+
+test('after a failed reread, Speichern sends nothing and points to the reread', async ({ page }) => {
+  await openContractFixture(page, 'billing-parties');
+  await page.getByRole('button', { name: 'Rechnung ändern', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Auftraggeber und Rechnungsempfänger' });
+  await page.evaluate(() => window.dispatchEvent(new Event('contract-billing-reread-fails')));
+  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expect(dialog.getByRole('alert')).toContainText('konnten nicht geladen werden');
+  const savesBefore = await page.evaluate(() => window.uiContractBillingSaves);
+
+  // The submit stays enabled, but the outdated version is never sent.
+  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expect(dialog.getByRole('button', { name: 'Erneut laden', exact: true })).toBeFocused();
+  await expect(dialog.getByRole('alert')).toContainText('konnten nicht geladen werden');
+  expect(await page.evaluate(() => window.uiContractBillingSaves)).toBe(savesBefore);
+});
+
+test('a running retry keeps the dialog open on Escape, so the kept choice stays', async ({ page }) => {
+  await openContractFixture(page, 'billing-parties');
+  await page.getByRole('button', { name: 'Rechnung ändern', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Auftraggeber und Rechnungsempfänger' });
+  await page.evaluate(() => window.dispatchEvent(new Event('contract-billing-reread-fails')));
+  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expect(dialog.getByRole('alert')).toContainText('konnten nicht geladen werden');
+
+  await page.evaluate(() => window.dispatchEvent(new Event('contract-billing-reread-hold')));
+  await dialog.getByRole('button', { name: 'Erneut laden', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeVisible();
+
+  await page.evaluate(() => window.dispatchEvent(new Event('contract-billing-reread-release')));
+  await expect(dialog.getByText(/Hier stehen jetzt die aktuellen Angaben/)).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+});

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import {
   ClientSelectWithCreate,
@@ -56,12 +56,10 @@ type FormProps = {
   current: ResolvedBillingVersion | null;
   /** The dialog's save task: the dialog stays open while a save runs. */
   task: ReturnType<typeof usePendingTask>;
+  /** The reread after a refusal; the dialog owns it, so its retry keeps the dialog open too. */
+  reread: Reread;
   onClose: () => void;
   onSaved: () => Promise<void>;
-  /** Reads the parties again through the live view, without closing the dialog. */
-  onReread: () => Promise<void>;
-  /** The live view's last read failed, so the shown parties may be outdated. */
-  stale: boolean;
 };
 
 /** Where the reread after a refused save stands: none yet, running, or done. */
@@ -76,13 +74,17 @@ type RereadPhase = 'none' | 'reading' | 'done';
 function useRereadAfterRefusal(onReread: () => Promise<void>, stale: boolean) {
   const [phase, setPhase] = useState<RereadPhase>('none');
   const retry = useServerAction(async () => onReread());
+  const retryRef = useRef<HTMLButtonElement>(null);
   const done = phase === 'done';
   return {
     reading: phase === 'reading',
     failed: done && stale,
     landed: done && !stale,
     retry,
-    /** A new save starts without the previous refusal's outcome. */
+    retryRef,
+    /** A save over a failed reread would send the outdated version: point to the retry instead. */
+    pointToRetry: () => retryRef.current?.focus(),
+    /** A new save, or a closed dialog, starts without the previous refusal's outcome. */
     reset: () => setPhase('none'),
     afterRefusal: async (): Promise<void> => {
       setPhase('reading');
@@ -92,20 +94,20 @@ function useRereadAfterRefusal(onReread: () => Promise<void>, stale: boolean) {
   };
 }
 
+type Reread = ReturnType<typeof useRereadAfterRefusal>;
+
 /**
  * The save's outcome under the pickers: the reread's state after a refusal,
  * which says the pair is current only once the reread landed, else the error.
  */
-function SaveOutcome({
-  reread,
-  error,
-}: {
-  reread: ReturnType<typeof useRereadAfterRefusal>;
-  error: string | null;
-}) {
+function SaveOutcome({ reread, error }: { reread: Reread; error: string | null }) {
   if (reread.failed)
     return (
-      <SectionError onRetry={() => void reread.retry.run()} retryPending={reread.retry.isPending}>
+      <SectionError
+        onRetry={() => void reread.retry.run()}
+        retryPending={reread.retry.isPending}
+        retryRef={reread.retryRef}
+      >
         {REREAD_FAILED}
       </SectionError>
     );
@@ -118,14 +120,13 @@ function SaveOutcome({
   return <ErrorText>{reread.landed ? REREAD_LANDED : error}</ErrorText>;
 }
 
-function useBillingPartiesForm({ kind, workId, current, task, onSaved, onReread, stale }: FormProps) {
+function useBillingPartiesForm({ kind, workId, current, task, reread, onSaved }: FormProps) {
   const { showBanner } = useBanner();
   const [client, setClient] = useState<ClientSelectItem | null>(current ? current.auftraggeber : null);
   const [recipient, setRecipient] = useState<ClientSelectItem | null>(current ? current.recipient : null);
   const [clientError, setClientError] = useState<string | null>(null);
   const [recipientError, setRecipientError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const reread = useRereadAfterRefusal(onReread, stale);
   // The choice belongs to the version the form saw. A newer version replaces
   // it only after a save was refused for it, with the notice saying why; a
   // read that lands while the user edits never replaces the edit silently,
@@ -144,6 +145,12 @@ function useBillingPartiesForm({ kind, workId, current, task, onSaved, onReread,
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    // The submit stays enabled; over a failed reread it sends nothing and
+    // points to „Erneut laden“, whose error stays.
+    if (reread.failed) {
+      reread.pointToRetry();
+      return;
+    }
     setError(null);
     reread.reset();
     const nextClientError = client ? undefined : 'Bitte wähle den Auftraggeber.';
@@ -231,18 +238,23 @@ export function WorkBillingPartiesDialog({
   stale,
 }: WorkBillingPartiesDialogProps) {
   const task = usePendingTask();
-  const onClose = () => onOpenChange(false);
+  const reread = useRereadAfterRefusal(onReread, stale);
+  const changeOpen = (next: boolean) => {
+    if (!next) reread.reset();
+    onOpenChange(next);
+  };
+  const onClose = () => changeOpen(false);
   return (
-    <Dialog open={open} pending={task.isPending} onOpenChange={onOpenChange}>
+    // A running retry may replace the pair the user kept, so it holds the dialog open like a save.
+    <Dialog open={open} pending={task.isPending || reread.retry.isPending} onOpenChange={changeOpen}>
       {open && (
         <WorkBillingPartiesForm
           kind={kind}
           workId={workId}
           current={current}
           task={task}
+          reread={reread}
           onClose={onClose}
-          onReread={onReread}
-          stale={stale}
           onSaved={async () => {
             await onSaved();
             onClose();
