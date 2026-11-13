@@ -54,6 +54,8 @@ function useSentDraft(editor: WorkArtifactEditor, newArtifactId: string) {
 }
 
 type DraftSavePlan = Awaited<ReturnType<DeviceDraftHandle['prepareSave']>>;
+/** What the server answers a save of an Arbeitsnachweis. */
+type ServerSave = Awaited<ReturnType<typeof saveWorkArtifact>>;
 
 /**
  * The draft's save through the device, in the drafts' send turn from its seal to its cleanup: a
@@ -65,10 +67,10 @@ type DraftSavePlan = Awaited<ReturnType<DeviceDraftHandle['prepareSave']>>;
  * device's copy: a refused delete never rejects (the keeper shows it), and the kept copy's later
  * send carries this revision id, which the server replays.
  */
-function saveThroughDevice<Answer extends { success: boolean }>(
+function saveThroughDevice(
   onDevice: DeviceDraftHandle,
-  save: (fromDraft: { revisionId: string; changedAt: string }) => Promise<Answer | 'no_answer'>,
-): Promise<{ plan: DraftSavePlan; result: Answer | 'no_answer'; keptForm: boolean }> {
+  save: (fromDraft: { revisionId: string; changedAt: string }) => Promise<ServerSave | 'no_answer'>,
+): Promise<{ plan: DraftSavePlan; result: ServerSave | 'no_answer'; keptForm: boolean }> {
   return whileNoDraftSend(async () => {
     const plan = await onDevice.prepareSave();
     if (plan?.kind !== 'online') return { plan, result: 'no_answer', keptForm: false };
