@@ -172,6 +172,7 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   profiles: 'Personen',
   projects: 'Projekte',
   qualification_events: 'Qualifikationen_Ereignisse',
+  school_days: 'Berufsschultage',
   service_case_equipment_links: 'Servicefälle_Anlagen',
   service_case_events: 'Servicefälle_Ereignisse',
   service_case_evidence_links: 'Servicefälle_Nachweise',

@@ -74,42 +74,42 @@ begin
 
   -- Equipment: natural order on every page, 50 per page, hasMore before the end.
   result := public.search_equipment_options(org_id);
-  if jsonb_array_length(result->'options')<>50 or not (result->>'hasMore')::boolean then raise exception 'equipment option first page wrong'; end if;
-  if result->'options'->0->>'equipmentNumber'<>'ANL-2025-1200' then raise exception 'an earlier year does not lead'; end if;
+  if jsonb_array_length(result->'options') is distinct from 50 or not (result->>'hasMore')::boolean then raise exception 'equipment option first page wrong'; end if;
+  if result->'options'->0->>'equipmentNumber' is distinct from 'ANL-2025-1200' then raise exception 'an earlier year does not lead'; end if;
   if exists(select 1 from jsonb_array_elements(result->'options') with ordinality listed(option,position) where position>1 and option->>'equipmentNumber'<>'ANL-2026-'||(position-1)) then raise exception 'equipment option page 1 is not in natural order'; end if;
   result := public.search_equipment_options(org_id,'',null,50);
   if exists(select 1 from jsonb_array_elements(result->'options') with ordinality listed(option,position) where option->>'equipmentNumber'<>'ANL-2026-'||(position+49)) then raise exception 'equipment option page 2 is not in natural order'; end if;
   result := public.search_equipment_options(org_id,'',null,1000);
   if exists(select 1 from jsonb_array_elements(result->'options') with ordinality listed(option,position) where option->>'equipmentNumber'<>'ANL-2026-'||(position+999)) then raise exception 'equipment option page beyond 1,000 rows is not in natural order'; end if;
   result := public.search_equipment_options(org_id,'',null,1050);
-  if (result->>'hasMore')::boolean or jsonb_path_query_array(result->'options','$[*].equipmentNumber')<>'["ANL-2026-1050","ANL-2026-1051","ANL-2026-1052","ANL-ALT"]'::jsonb then raise exception 'equipment option tail wrong: %',result; end if;
+  if (result->>'hasMore')::boolean or jsonb_path_query_array(result->'options','$[*].equipmentNumber') is distinct from '["ANL-2026-1050","ANL-2026-1051","ANL-2026-1052","ANL-ALT"]'::jsonb then raise exception 'equipment option tail wrong: %',result; end if;
   -- Customer filter, number and name search, voided equipment.
   result := public.search_equipment_options(org_id,'','78000000-0000-4000-8000-000000000021');
-  if result->'options'<>jsonb_build_array(jsonb_build_object('id',md5('option-equipment-ANL-2026-1052')::uuid,'equipmentNumber','ANL-2026-1052','name','Kesselanlage Nord','clientId','78000000-0000-4000-8000-000000000021')) then raise exception 'equipment customer filter wrong: %',result; end if;
-  if jsonb_path_query_array(public.search_equipment_options(org_id,'kesselanlage')->'options','$[*].equipmentNumber')<>'["ANL-2026-1052"]'::jsonb then raise exception 'equipment name search wrong'; end if;
-  if jsonb_path_query_array(public.search_equipment_options(org_id,'2026-105')->'options','$[*].equipmentNumber')<>'["ANL-2026-105","ANL-2026-1050","ANL-2026-1051","ANL-2026-1052"]'::jsonb then raise exception 'equipment number search is not in natural order'; end if;
-  if public.search_equipment_options(org_id,'2026-2000')->'options'<>'[]'::jsonb then raise exception 'voided equipment is offered'; end if;
+  if result->'options' is distinct from jsonb_build_array(jsonb_build_object('id',md5('option-equipment-ANL-2026-1052')::uuid,'equipmentNumber','ANL-2026-1052','name','Kesselanlage Nord','clientId','78000000-0000-4000-8000-000000000021')) then raise exception 'equipment customer filter wrong: %',result; end if;
+  if jsonb_path_query_array(public.search_equipment_options(org_id,'kesselanlage')->'options','$[*].equipmentNumber') is distinct from '["ANL-2026-1052"]'::jsonb then raise exception 'equipment name search wrong'; end if;
+  if jsonb_path_query_array(public.search_equipment_options(org_id,'2026-105')->'options','$[*].equipmentNumber') is distinct from '["ANL-2026-105","ANL-2026-1050","ANL-2026-1051","ANL-2026-1052"]'::jsonb then raise exception 'equipment number search is not in natural order'; end if;
+  if public.search_equipment_options(org_id,'2026-2000')->'options' is distinct from '[]'::jsonb then raise exception 'voided equipment is offered'; end if;
   -- Tenant isolation.
   if exists(select 1 from jsonb_array_elements(public.search_equipment_options(org_id,'fremdanlage')->'options')) then raise exception 'equipment option tenant leaked'; end if;
-  if jsonb_path_query_array(public.search_equipment_options('78000000-0000-4000-8000-000000000012')->'options','$[*].id')<>'["78000000-0000-4000-8000-000000000040"]'::jsonb then raise exception 'foreign organization equipment options wrong'; end if;
+  if jsonb_path_query_array(public.search_equipment_options('78000000-0000-4000-8000-000000000012')->'options','$[*].id') is distinct from '["78000000-0000-4000-8000-000000000040"]'::jsonb then raise exception 'foreign organization equipment options wrong'; end if;
 
   -- Predecessors: the window is selected in natural order, not text order.
   result := public.search_work_predecessor_options(org_id,'job','',25);
-  if jsonb_array_length(result)<>25 or exists(select 1 from jsonb_array_elements(result) with ordinality listed(option,position) where option->>'number'<>'AUF-2026-'||position) then raise exception 'first job predecessors are not in natural order'; end if;
+  if jsonb_array_length(result) is distinct from 25 or exists(select 1 from jsonb_array_elements(result) with ordinality listed(option,position) where option->>'number'<>'AUF-2026-'||position) then raise exception 'first job predecessors are not in natural order'; end if;
   result := public.search_work_predecessor_options(org_id,'job','auf-2026-1');
-  if jsonb_array_length(result)<>50 or result->0->>'number'<>'AUF-2026-1' or result->1->>'number'<>'AUF-2026-10' or result->10->>'number'<>'AUF-2026-19' or result->11->>'number'<>'AUF-2026-100' or result->49->>'number'<>'AUF-2026-138' then raise exception 'searched job predecessors are not selected in natural order: %',result; end if;
+  if jsonb_array_length(result) is distinct from 50 or result->0->>'number' is distinct from 'AUF-2026-1' or result->1->>'number' is distinct from 'AUF-2026-10' or result->10->>'number' is distinct from 'AUF-2026-19' or result->11->>'number' is distinct from 'AUF-2026-100' or result->49->>'number' is distinct from 'AUF-2026-138' then raise exception 'searched job predecessors are not selected in natural order: %',result; end if;
   if (select count(*) from jsonb_array_elements(public.search_work_predecessor_options(org_id,'job','auftrag 1050'))) <> 1 then raise exception 'job predecessor title search wrong'; end if;
   result := public.search_work_predecessor_options(org_id,'project','',3);
-  if jsonb_path_query_array(result,'$[*].number')<>'["PRJ-2026-1","PRJ-2026-2","PRJ-2026-3"]'::jsonb or result->0->>'title'<>'Projekt 1' then raise exception 'project predecessors wrong: %',result; end if;
-  if jsonb_array_length(public.search_work_predecessor_options(org_id,'job','',1000))<>50 or jsonb_array_length(public.search_work_predecessor_options(org_id,'job','',0))<>1 then raise exception 'predecessor limit is not bounded'; end if;
-  if public.search_work_predecessor_options(org_id,'instruction')<>'[]'::jsonb then raise exception 'an unknown predecessor kind lists records'; end if;
+  if jsonb_path_query_array(result,'$[*].number') is distinct from '["PRJ-2026-1","PRJ-2026-2","PRJ-2026-3"]'::jsonb or result->0->>'title' is distinct from 'Projekt 1' then raise exception 'project predecessors wrong: %',result; end if;
+  if jsonb_array_length(public.search_work_predecessor_options(org_id,'job','',1000)) is distinct from 50 or jsonb_array_length(public.search_work_predecessor_options(org_id,'job','',0)) is distinct from 1 then raise exception 'predecessor limit is not bounded'; end if;
+  if public.search_work_predecessor_options(org_id,'instruction') is distinct from '[]'::jsonb then raise exception 'an unknown predecessor kind lists records'; end if;
   if exists(select 1 from jsonb_array_elements(public.search_work_predecessor_options(org_id,'job','fremdauftrag'))) then raise exception 'predecessor tenant leaked'; end if;
 
   -- Organization 11: -099, -100, -101, -1000 across the year, a number outside the form and none last.
   if jsonb_path_query_array(public.search_equipment_options('78000000-0000-4000-8000-000000000011')->'options','$[*].equipmentNumber')
-    <>'["ANL-2025-1200","ANL-2026-099","ANL-2026-100","ANL-2026-101","ANL-2026-1000","ANL-ALT"]'::jsonb then raise exception 'equipment options do not sort naturally'; end if;
+    is distinct from '["ANL-2025-1200","ANL-2026-099","ANL-2026-100","ANL-2026-101","ANL-2026-1000","ANL-ALT"]'::jsonb then raise exception 'equipment options do not sort naturally'; end if;
   if jsonb_path_query_array(public.search_work_predecessor_options('78000000-0000-4000-8000-000000000011','job'),'$[*].number')
-    <>'["AUF-2025-1200","AUF-2026-099","AUF-2026-100","AUF-2026-101","AUF-2026-1000","AUF-ALT",null]'::jsonb then raise exception 'job predecessors do not sort naturally'; end if;
+    is distinct from '["AUF-2025-1200","AUF-2026-099","AUF-2026-100","AUF-2026-101","AUF-2026-1000","AUF-ALT",null]'::jsonb then raise exception 'job predecessors do not sort naturally'; end if;
 end $$;
 
 -- A browser session cannot execute either reader, even for its own organization.

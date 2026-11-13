@@ -281,6 +281,7 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['layout:people', 'layout/surfaces-people.spec.ts', ['personnel']],
   ['layout:personnel', 'layout/surfaces-personnel.spec.ts', ['personnel', 'documents']],
   ['layout:personnel-absence', 'layout/surfaces-personnel-absence.spec.ts', ['personnel', 'time']],
+  ['layout:personnel-records', 'layout/surfaces-personnel-records.spec.ts', ['personnel', 'time']],
   ['layout:settings', 'layout/surfaces-settings.spec.ts', ['attention', 'personnel']],
   ['layout:documents', 'layout/surfaces-documents.spec.ts', ['documents']],
   ['layout:inventory', 'layout/surfaces-inventory.spec.ts', ['inventory']],
@@ -395,6 +396,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ],
   ['sickness-report-writes', ['sickness_report_writes.sql'], ['personnel']],
   ['vacation-history-writes', ['vacation_history_writes.sql'], ['personnel']],
+  ['school-days', ['school_days.sql'], ['personnel', 'time']],
   [
     'planning',
     ['planning_occurrences.sql', 'planning_dispatch.sql', 'planning_operation_assessments.sql'],
@@ -407,6 +409,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
     [
       'inventory_ledger.sql',
       'inventory_atomic_writes.sql',
+      'inventory_import_preview.sql',
       'job_material_use.sql',
       'job_material_use_concurrency.sql',
       'job_material_planning.sql',

@@ -1,163 +1,213 @@
-import { expect, mock } from 'bun:test';
-import { resolve } from 'node:path';
-import { isJsonRecord } from '@/lib/supabase/json';
+// Drives the real previewInventoryImport and bookInventoryImport against the
+// in-memory world. The database functions preview_inventory_import and
+// book_inventory_import (migration 20261201120000) own create or match, the
+// unit check against a matched article and the booking; the action stages the
+// file's rows in order, refuses a row without a name or with an empty or
+// unknown unit before it reaches the database, and reads the answer.
+import assert from 'node:assert/strict';
+import { CALLER_ID, ORGANIZATION_A, installActionWorld, signInAs } from './action-boundary-world';
 
-// Run in a child process so replaced framework modules cannot leak into other tests.
-// Drives the real importInventoryRows against a fake service-role client. Each
-// row is one import_inventory_row call (migration 20261004151000), which owns
-// matching, the barcode and the stock movement; the fake answers each call
-// with the outcome or failure a case names, keyed by the row's name.
-const root = resolve(import.meta.dir, '../../..');
-type Row = Record<string, unknown>;
-type RpcResult = { data: unknown; error: { code: string; message: string } | null };
-let tables: Record<string, Row[]> = {};
-let rowCalls: Row[] = [];
-let outcomes: Record<string, RpcResult> = {};
-let nextId = 0;
-
-class Query {
-  private operation: 'insert' | 'update' = 'insert';
-  private payload: Row = {};
-  private predicates: Array<(row: Row) => boolean> = [];
-  constructor(private table: string) {}
-  select(): this {
-    return this;
-  }
-  eq(column: string, value: unknown): this {
-    this.predicates.push((row) => row[column] === value);
-    return this;
-  }
-  insert(payload: Row): this {
-    this.operation = 'insert';
-    this.payload = payload;
-    return this;
-  }
-  update(payload: Row): this {
-    this.operation = 'update';
-    this.payload = payload;
-    return this;
-  }
-  async single() {
-    return this.execute();
-  }
-  then(resolveResult: (value: ReturnType<Query['execute']>) => unknown) {
-    return Promise.resolve(this.execute()).then(resolveResult);
-  }
-  execute(): { data: Row | null; error: null } {
-    const rows = (tables[this.table] ??= []);
-    if (this.operation === 'insert') {
-      nextId += 1;
-      const row = { id: `${this.table}-${nextId}`, ...this.payload };
-      rows.push(row);
-      return { data: row, error: null };
-    }
-    for (const row of rows.filter((candidate) =>
-      this.predicates.every((predicate) => predicate(candidate)),
-    )) {
-      Object.assign(row, this.payload);
-    }
-    return { data: null, error: null };
-  }
-}
-
-mock.module('server-only', () => ({}));
-mock.module('next/cache', () => ({ revalidatePath: () => {}, updateTag: () => {} }));
-mock.module(resolve(root, 'lib/data/cached.ts'), () => ({
-  CACHE_TAGS: { inventory: () => 'inventory', jobs: () => 'jobs', projects: () => 'projects' },
-}));
-mock.module(resolve(root, 'lib/jobs/auth.ts'), () => ({
-  authenticateAndAuthorize: async () => ({
-    success: true,
-    context: { orgId: 'org', userId: 'actor', isManagerOrAbove: true },
-  }),
-}));
-mock.module(resolve(root, 'lib/supabase/admin.ts'), () => ({
-  createSupabaseAdminClient: () => ({
-    from: (table: string) => new Query(table),
-    rpc: async (name: string, args: Row): Promise<RpcResult> => {
-      if (name !== 'import_inventory_row') return { data: null, error: null };
-      rowCalls.push(args);
-      const item = args.p_item;
-      if (!isJsonRecord(item)) throw new Error('import_inventory_row was called without a p_item object');
-      return outcomes[String(item.name)] ?? { data: 'imported', error: null };
-    },
-  }),
-}));
+const world = installActionWorld({});
 const logged: unknown[][] = [];
 // Capture the reviewed log sink: only the label and the classification may reach it.
 console.error = (...args: unknown[]) => logged.push(args);
 
-const { importInventoryRows } = await import('../../inventory/actions');
+const { bookInventoryImport, previewInventoryImport } = await import('@/lib/inventory/import-actions');
+signInAs(world, 'admin');
 
-function reset(rowOutcomes: Record<string, RpcResult> = {}) {
-  tables = {};
-  rowCalls = [];
-  outcomes = rowOutcomes;
-  logged.length = 0;
-  nextId = 0;
-}
+const batchId = '92000000-0000-4000-8000-000000000001';
+const contentHash = 'c'.repeat(64);
+let answer: { data: unknown; error: { code: string; message: string } | null } = { data: null, error: null };
+world.rpc = () => answer;
 
-function importRows(rows: Array<Record<string, unknown>>) {
-  return importInventoryRows({
-    fileName: 'bestand.csv',
-    columnMapping: {},
-    rows: rows.map((row) => ({ name: 'Rohr', itemType: 'material', ...row })),
+function previewRows(rows: Array<Record<string, unknown>>) {
+  return previewInventoryImport({
+    fileName: ' nordrohr.csv ',
+    contentHash,
+    mode: 'master_data',
+    columnMapping: { name: 'Bezeichnung', unit: 'Einheit' },
+    rows: rows.map((row) => ({ name: 'Kupferrohr 15 mm', itemType: 'material', unit: 'm', ...row })),
   });
 }
 
-function batch(): Row | undefined {
-  return tables.inventory_import_batches?.[0];
+function previewCall() {
+  return world.rpcCalls.find((call) => call.name === 'preview_inventory_import');
 }
 
-// 1. Each row is one call with the server-resolved organization, actor and
-//    batch, and the cleaned row values. A row the function reports without a
-//    Lager is counted apart; the batch counts it as imported. Nothing but the
-//    batch is written outside the function.
-reset({ Rohr: { data: 'missing_location', error: null } });
-expect(
-  await importRows([
-    { quantity: 5, locationName: null },
-    { name: 'Muffe', quantity: 0, locationName: '  ' },
-    {
-      name: 'Ventil',
-      quantity: 2,
-      locationName: ' Hauptlager ',
-      barcode: ' 4006381333931 ',
-      categoryName: 'Sanitär',
-    },
-  ]),
-).toEqual({ success: true, importedCount: 2, missingLocationCount: 1, failedCount: 0 });
-expect(rowCalls).toHaveLength(3);
-expect(rowCalls[2]).toMatchObject({
-  p_organization_id: 'org',
-  p_actor_id: 'actor',
-  p_import_batch_id: 'inventory_import_batches-1',
-  p_location_name: 'Hauptlager',
-  p_barcode: '4006381333931',
-  p_category_name: 'Sanitär',
-  p_quantity: 2,
-  p_reason: 'CSV-Import: bestand.csv',
-  p_item: { name: 'Ventil', item_type: 'material', unit: 'piece', is_billable: true },
+// 1. Every row is staged in the file's order. A row without a name or with an
+//    empty or unknown unit is refused by the action and never read as Stück;
+//    a known unit text becomes its unit code. The call carries the caller's
+//    organization and actor, the mode, the hash and the mapping.
+answer = {
+  data: {
+    batch_id: batchId,
+    rows: [
+      {
+        index: 0,
+        outcome: 'imported',
+        matched_by: null,
+        item_name: 'Kupferrohr 15 mm',
+        unit: 'meter',
+        location_name: null,
+        location_created: false,
+        quantity: 5,
+        quantity_before: null,
+        quantity_after: null,
+      },
+      { index: 1, outcome: 'rejected', reason: 'missing_name' },
+      { index: 2, outcome: 'rejected', reason: 'unknown_unit' },
+      { index: 3, outcome: 'rejected', reason: 'unknown_unit' },
+      { index: 4, outcome: 'rejected', reason: 'reason_of_a_newer_release', unit: 'piece' },
+    ],
+  },
+  error: null,
+};
+const preview = await previewRows([
+  { quantity: 5, locationName: ' Hauptlager ', barcode: ' 4000000000015 ', categoryName: 'Rohre' },
+  { name: '   ' },
+  { unit: 'Fass' },
+  { unit: '  ' },
+  { name: 'Pressfitting', unit: 'Stk' },
+]);
+// The preview writes nothing but its draft batch: it is the one call.
+assert.deepEqual(
+  world.rpcCalls.map((call) => call.name),
+  ['preview_inventory_import'],
+);
+assert.equal(previewCall()?.args.p_organization_id, ORGANIZATION_A);
+assert.equal(previewCall()?.args.p_actor_id, CALLER_ID);
+assert.deepEqual(
+  {
+    fileName: previewCall()?.args.p_file_name,
+    mode: previewCall()?.args.p_mode,
+    hash: previewCall()?.args.p_content_hash,
+    mapping: previewCall()?.args.p_column_mapping,
+  },
+  {
+    fileName: 'nordrohr.csv',
+    mode: 'master_data',
+    hash: contentHash,
+    mapping: { name: 'Bezeichnung', unit: 'Einheit' },
+  },
+);
+const staged = previewCall()?.args.p_rows;
+assert.ok(Array.isArray(staged), 'the preview must stage the rows as an array');
+assert.deepEqual(staged.slice(1, 4), [
+  { rejection: 'missing_name' },
+  { rejection: 'unknown_unit' },
+  { rejection: 'unknown_unit' },
+]);
+assert.deepEqual(staged[0], {
+  item: {
+    item_type: 'material',
+    name: 'Kupferrohr 15 mm',
+    unit: 'meter',
+    internal_sku: null,
+    manufacturer: null,
+    supplier_article_number: null,
+    purchase_price_cents: null,
+    sale_price_cents: null,
+    is_billable: true,
+    global_minimum_stock: 0,
+    global_target_stock: null,
+    notes: null,
+  },
+  category_name: 'Rohre',
+  supplier_name: null,
+  location_name: 'Hauptlager',
+  barcode: '4000000000015',
+  quantity: 5,
 });
-expect(rowCalls[1]).toMatchObject({ p_location_name: null, p_quantity: 0 });
-expect(rowCalls[2]?.p_item).not.toHaveProperty('organization_id');
-expect(Object.keys(tables)).toEqual(['inventory_import_batches']);
-expect(batch()).toMatchObject({ status: 'imported', imported_count: 3, failed_count: 0 });
+assert.equal(
+  typeof staged[4] === 'object' && staged[4] !== null && 'item' in staged[4]
+    ? JSON.stringify(staged[4].item)
+    : '',
+  JSON.stringify({ ...staged[0].item, name: 'Pressfitting', unit: 'piece' }),
+);
 
-// 2. A refused row and a row whose call failed are failed rows; the other rows
-//    still import. A refusal is no fault and is not logged; a failure logs a
-//    fixed label with the classification only.
-reset({
-  Doppelt: { data: null, error: { code: 'P0001', message: 'barcode_taken' } },
-  Defekt: { data: null, error: { code: '57014', message: 'Lesefehler mit Artikel 4711' } },
+// 2. The answer reads as one outcome per row; a reason this release does not
+//    know reads as a failed row instead of failing the preview.
+assert.ok(preview.success, 'the preview must succeed');
+assert.equal(preview.batchId, batchId);
+assert.deepEqual(preview.rows[0], {
+  index: 0,
+  outcome: 'imported',
+  matchedBy: null,
+  itemName: 'Kupferrohr 15 mm',
+  unit: 'meter',
+  locationName: null,
+  locationCreated: false,
+  quantity: 5,
+  quantityAfter: null,
+  reason: null,
+  itemUnit: null,
 });
-expect(
-  await importRows([
-    { name: 'Doppelt', barcode: '4006381333931', quantity: 3, locationName: 'Hauptlager' },
-    { name: 'Defekt', internalSku: 'SKU-1', quantity: 3, locationName: 'Hauptlager' },
-    { name: 'Muffe', quantity: 1, locationName: 'Hauptlager' },
-  ]),
-).toEqual({ success: true, importedCount: 1, missingLocationCount: 0, failedCount: 2 });
-expect(batch()).toMatchObject({ status: 'failed', imported_count: 1, failed_count: 2 });
-expect(logged).toEqual([['importInventoryRows: import_inventory_row failed', { code: '57014' }]]);
-expect(JSON.stringify(logged)).not.toContain('4711');
+assert.deepEqual(
+  preview.rows.map((row) => row.reason),
+  [null, 'missing_name', 'unknown_unit', 'unknown_unit', 'failed'],
+);
+
+// 3. A refusal passes through unlogged; a failure logs a fixed label with the
+//    classification only, never a row value.
+world.rpcCalls.length = 0;
+answer = { data: null, error: { code: 'P0001', message: 'not_authorized' } };
+assert.deepEqual(await previewRows([{}]), { success: false, error: 'not_authorized' });
+answer = { data: null, error: { code: '57014', message: 'Lesefehler bei Kupferrohr 15 mm' } };
+assert.deepEqual(await previewRows([{}]), { success: false, error: 'save_failed' });
+assert.deepEqual(logged, [['previewInventoryImport: preview failed', { code: '57014' }]]);
+assert.ok(!JSON.stringify(logged).includes('Kupferrohr'));
+
+// 4. The booking names only the batch; a repeated confirm answers the first
+//    booking's rows and says so.
+world.rpcCalls.length = 0;
+answer = {
+  data: { already_booked: true, rows: [{ index: 0, outcome: 'booked', matched_by: 'barcode' }] },
+  error: null,
+};
+const booking = await bookInventoryImport({ batchId });
+assert.deepEqual(
+  world.rpcCalls.map((call) => [call.name, call.args]),
+  [
+    [
+      'book_inventory_import',
+      { p_organization_id: ORGANIZATION_A, p_actor_id: CALLER_ID, p_import_batch_id: batchId },
+    ],
+  ],
+);
+assert.ok(booking.success, 'the booking must succeed');
+assert.equal(booking.alreadyBooked, true);
+assert.equal(booking.rows[0]?.matchedBy, 'barcode');
+
+// 5. A row that failed for a reason the import does not name carries its
+//    SQLSTATE from the database. The action logs each distinct code once, with
+//    a fixed label and the number of rows, and returns no code to the caller;
+//    a repeated confirm logs nothing again.
+const unexpectedRows = [
+  { index: 0, outcome: 'booked', matched_by: null, unit: 'piece', quantity: 6 },
+  { index: 1, outcome: 'rejected', reason: 'failed', code: '23514', unit: 'piece' },
+  { index: 2, outcome: 'rejected', reason: 'failed', code: '23514', unit: 'piece' },
+  { index: 3, outcome: 'rejected', reason: 'failed', code: '40P01', unit: 'meter' },
+  { index: 4, outcome: 'rejected', reason: 'barcode_taken', unit: 'piece' },
+];
+logged.length = 0;
+answer = { data: { batch_id: batchId, rows: unexpectedRows }, error: null };
+const unexpectedPreview = await previewRows([{}, {}, {}, {}, {}]);
+answer = { data: { already_booked: false, rows: unexpectedRows }, error: null };
+const unexpectedBooking = await bookInventoryImport({ batchId });
+answer = { data: { already_booked: true, rows: unexpectedRows }, error: null };
+await bookInventoryImport({ batchId });
+assert.deepEqual(logged, [
+  ['previewInventoryImport: rows failed unexpectedly', { name: 'rows:2', code: '23514' }],
+  ['previewInventoryImport: rows failed unexpectedly', { name: 'rows:1', code: '40P01' }],
+  ['bookInventoryImport: rows failed unexpectedly', { name: 'rows:2', code: '23514' }],
+  ['bookInventoryImport: rows failed unexpectedly', { name: 'rows:1', code: '40P01' }],
+]);
+assert.ok(unexpectedPreview.success && unexpectedBooking.success, 'both answers must succeed');
+for (const result of [unexpectedPreview, unexpectedBooking]) {
+  assert.deepEqual(
+    result.rows.map((row) => row.reason),
+    [null, 'failed', 'failed', 'failed', 'barcode_taken'],
+  );
+  assert.ok(!JSON.stringify(result).includes('23514'), 'the code must not reach the caller');
+  assert.ok(!JSON.stringify(result).includes('40P01'), 'the code must not reach the caller');
+}

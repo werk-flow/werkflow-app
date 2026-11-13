@@ -107,6 +107,10 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
               if (args.importer.endsWith('use-sickness-report-record-form.ts'))
                 return { path: join(import.meta.dir, 'absence-service-boundaries.ts') };
             });
+            // The CSV import dialog's repeat check, preview and booking answer through its contract's stand-ins.
+            builder.onResolve({ filter: /^@\/lib\/inventory\/import-actions$/ }, () => ({
+              path: join(import.meta.dir, 'inventory-import-boundaries.tsx'),
+            }));
             builder.onResolve({ filter: /^@\/lib\/members\/actions$/ }, () => ({
               path: join(import.meta.dir, 'member-role-service-boundaries.ts'),
             }));
@@ -313,7 +317,8 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             );
             builder.onResolve(
               {
-                filter: /^@\/lib\/personnel\/(?:lifecycle|onboarding|document-download|handover)-actions$/,
+                filter:
+                  /^@\/lib\/personnel\/(?:lifecycle|onboarding|document-download|handover|school-day)-actions$/,
               },
               (args) => ({
                 path: join(

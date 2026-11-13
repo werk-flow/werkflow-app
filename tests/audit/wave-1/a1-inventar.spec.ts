@@ -17,7 +17,9 @@ import {
   createItemButton,
   createLocationButton,
   csvImportButton,
-  csvImportSubmit,
+  csvImportButtonOf,
+  csvImportRepeatChecked,
+  csvImportRow,
   INVENTORY_COPY,
   INVENTORY_VIEWS,
   inventoryDialog,
@@ -355,21 +357,26 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     ]);
   });
 
-  test('A1-43: CSV-Spaltenzuordnung legt Stammdaten und Anfangsbewegung an', async ({ adminPage, world }) => {
+  test('A1-43: CSV-Import zeigt die Wirkung vor dem Buchen, lehnt eine unbekannte Einheit ab und warnt vor einer Wiederholung', async ({
+    adminPage,
+    world,
+  }) => {
     const importedItem = `A1 CSV Artikel ${world.runId}`;
+    const rejectedItem = `A1 CSV Fass ${world.runId}`;
     const importedLocation = `A1 CSV Lager ${world.runId}`;
     const importedCategory = testData`A1 Kategorie`;
     const importedSupplier = testData`A1 CSV Lieferant`;
-    await adminPage.goto('/inventar');
-    await csvImportButton(adminPage).click();
-    const dialog = inventoryDialog(adminPage, 'importCsv');
-    await inventoryImportFileInput(dialog).setInputFiles({
+    const file = {
       name: `a1-import-${world.runId}.csv`,
       mimeType: 'text/csv',
       buffer: Buffer.from(
-        `Bezeichnung;Gruppe;Ort;Anbieter;Menge;Einheit\n${importedItem};${importedCategory};${importedLocation};${importedSupplier};4;Stück`,
+        `Bezeichnung;Gruppe;Ort;Anbieter;Menge;Einheit\n${importedItem};${importedCategory};${importedLocation};${importedSupplier};4;Stück\n${rejectedItem};${importedCategory};${importedLocation};;2;Fass`,
       ),
-    });
+    };
+    await adminPage.goto('/inventar');
+    await csvImportButton(adminPage).click();
+    const dialog = inventoryDialog(adminPage, 'importCsv');
+    await inventoryImportFileInput(dialog).setInputFiles(file);
     const mappings = {
       name: 'Bezeichnung',
       categoryName: 'Gruppe',
@@ -381,7 +388,20 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     for (const [field, header] of Object.entries(mappings)) {
       await selectFromSearchable(adminPage, inventoryImportColumnPicker(dialog, field), header);
     }
-    await csvImportSubmit(dialog).click();
+    await expect(csvImportRepeatChecked(dialog)).toBeVisible();
+    await csvImportButtonOf(dialog, 'importPreview').click();
+    // The preview names each row's effect; nothing is booked yet.
+    const newItemRow = csvImportRow(dialog, importedItem);
+    await expect(newItemRow).toContainText(`+${formatInventoryQuantity(4, 'piece')} in ${importedLocation}`);
+    await expect(newItemRow).toContainText(INVENTORY_COPY.importNewLocation);
+    await expect(csvImportRow(dialog, rejectedItem)).toContainText(INVENTORY_COPY.importUnknownUnit('Fass'));
+    await csvImportButtonOf(dialog, 'importBook').click();
+    // The result keeps the rejected row and offers it as a report.
+    await expect(csvImportRow(dialog, rejectedItem)).toBeVisible();
+    const download = adminPage.waitForEvent('download');
+    await csvImportButtonOf(dialog, 'importReport').click();
+    expect((await download).suggestedFilename()).toBe(`a1-import-${world.runId}-hinweise.csv`);
+    await csvImportButtonOf(dialog, 'importDone').click();
     await expect(dialog).toHaveCount(0);
     const importedRow = inventoryRow(adminPage, importedItem);
     await expect(importedRow).toContainText(importedCategory);
@@ -405,5 +425,12 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
       initialMovement.getByRole('cell', { name: `+${formatInventoryQuantity(4, 'piece')}`, exact: true }),
     ).toBeVisible();
     await expect(initialMovement.getByRole('cell', { name: '4', exact: true })).toBeVisible();
+
+    // The same file again warns before its preview, and the user decides.
+    await csvImportButton(adminPage).click();
+    const repeatDialog = inventoryDialog(adminPage, 'importCsv');
+    await inventoryImportFileInput(repeatDialog).setInputFiles(file);
+    await expect(repeatDialog).toContainText(INVENTORY_COPY.importRepeatWarning);
+    await expect(csvImportButtonOf(repeatDialog, 'importRepeatConfirm')).toBeVisible();
   });
 });

@@ -40,7 +40,9 @@ function ZeiterfassungTodayTargetNote({
         <p className="mt-1 text-sm text-muted-foreground">
           {todayTarget.absence.type === 'sickness'
             ? 'Krankmeldung – heute keine Sollarbeitszeit.'
-            : 'Urlaub genehmigt – heute keine Sollarbeitszeit.'}
+            : todayTarget.absence.type === 'school'
+              ? 'Berufsschule – dein Tagesziel gilt heute als erfüllt.'
+              : 'Urlaub genehmigt – heute keine Sollarbeitszeit.'}
         </p>
       ) : todayTarget?.absence?.portion === 'half_day' ? (
         <p className="mt-1 text-sm text-muted-foreground">

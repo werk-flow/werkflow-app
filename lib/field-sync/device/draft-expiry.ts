@@ -26,7 +26,8 @@ export function markDraftsOnDevice(held: boolean): void {
   }
 }
 
-function deviceMayHoldDrafts(): boolean {
+/** Whether the device mark says the phone may hold a report draft of anyone. False when it cannot be read. */
+export function deviceMayHoldDrafts(): boolean {
   try {
     return localStorage.getItem(DRAFTS_ON_DEVICE_KEY) !== null;
   } catch {

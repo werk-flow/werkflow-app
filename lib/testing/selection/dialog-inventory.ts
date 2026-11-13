@@ -169,7 +169,14 @@ export const DIALOG_INVENTORY = {
       audits: [{ route: '/dokumente', role: 'admin', opener: 'documents.viewer' }],
     },
   'components/inventar/inventory-import-dialog.tsx#ImportDialog|CSV importieren': {
-    audits: [{ route: '/inventar', role: 'admin', opener: 'inventory.import' }],
+    audits: [
+      { route: '/inventar', role: 'admin', opener: 'inventory.import' },
+      { route: '/inventar', role: 'admin', opener: 'inventory.import-preview' },
+      { route: '/inventar', role: 'admin', opener: 'inventory.import-result' },
+      { route: '/inventar', role: 'admin', opener: 'inventory.import-repeat' },
+      { route: '/inventar', role: 'admin', opener: 'inventory.import-empty-file' },
+      { route: '/inventar', role: 'admin', opener: 'inventory.import-read-failure' },
+    ],
   },
   "components/inventar/inventory-item-dialog.tsx#ItemDialog|{form.id ? 'Artikel bearbeiten' : 'Artikel anlegen'}":
     {
@@ -332,6 +339,15 @@ export const DIALOG_INVENTORY = {
     {
       audits: [{ route: '/aufgaben', role: 'employee', opener: 'field.evidence-upload' }],
     },
+  'components/mitarbeiter/school-day-dialogs.tsx#AddSchoolDayDialog|Berufsschule erfassen': {
+    audits: [{ route: '/mitarbeiter/[userId]', role: 'admin', opener: 'people.school-day-add' }],
+  },
+  'components/mitarbeiter/school-day-dialogs.tsx#EndSchoolDayDialog|Enddatum setzen': {
+    audits: [{ route: '/mitarbeiter/[userId]', role: 'admin', opener: 'people.school-day-end' }],
+  },
+  'components/mitarbeiter/school-days-section.tsx#CancelSchoolDayDialog|Berufsschule stornieren?': {
+    audits: [{ route: '/mitarbeiter/[userId]', role: 'admin', opener: 'people.school-day-cancel' }],
+  },
   'components/mitarbeiter/sickness-report-correct-dialog.tsx#CorrectSicknessDialog|Krankmeldung korrigieren':
     {
       audits: [{ route: '/mitarbeiter/[userId]', role: 'admin', opener: 'people.sickness-correct' }],

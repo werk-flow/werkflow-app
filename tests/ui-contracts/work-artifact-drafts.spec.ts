@@ -659,6 +659,113 @@ test('text typed while an online save holds the draft sealed reaches the device 
   ).toHaveValue('Brenner und Pumpe');
 });
 
+test("an online save of a sealed draft holds the drafts' send turn until its answer is handled, so a session end's discard in any tab waits for it", async ({
+  page,
+}) => {
+  await openContractFixture(page, 'work-artifact-report');
+  await answerSync(page, () => 'offline');
+  await page.evaluate(() => {
+    window.uiContractWorkArtifacts.holdSave = true;
+  });
+  await writeReport(page, 'Wartung Heizung', 0);
+  await page.getByRole('button', { name: 'Als Entwurf speichern', exact: true }).click();
+  await expect
+    .poll(() => page.evaluate(() => typeof window.uiContractWorkArtifacts.releaseSave))
+    .toBe('function');
+  const heldTurns = () =>
+    page.evaluate(async () => (await navigator.locks.query()).held?.map((lock) => lock.name) ?? []);
+
+  expect(await heldTurns()).toContain('werkflow-draft-send');
+  await page.evaluate(() => window.uiContractWorkArtifacts.releaseSave?.());
+  // The answer is handled: the device's copy is gone, and with it the turn.
+  await expect.poll(() => storedDraftCount(page)).toBe(0);
+  await expect.poll(heldTurns).not.toContain('werkflow-draft-send');
+});
+
+test("a save seals its draft only once it holds the drafts' send turn, so a discard in another tab never falls between the seal and the online save", async ({
+  page,
+}) => {
+  await openContractFixture(page, 'work-artifact-report');
+  await answerSync(page, () => 'offline');
+  await writeReport(page, 'Wartung Heizung', 0);
+  await expect.poll(() => storedDraftCount(page)).toBe(1);
+  // Another tab holds the turn, as a session end's discard does while it deletes.
+  await page.evaluate(() => {
+    void navigator.locks.request(
+      'werkflow-draft-send',
+      () => new Promise<void>((resolve) => Reflect.set(window, 'releaseTurn', resolve)),
+    );
+  });
+  await expect.poll(() => page.evaluate(() => typeof Reflect.get(window, 'releaseTurn'))).toBe('function');
+
+  await page.getByRole('button', { name: 'Als Entwurf speichern', exact: true }).click();
+  await expect
+    .poll(() => page.evaluate(async () => (await navigator.locks.query()).pending?.length ?? 0))
+    .toBeGreaterThan(0);
+  expect(await storedDraftSealed(page)).toBe(false);
+  expect(await page.evaluate(() => window.uiContractWorkArtifacts.saves.length)).toBe(0);
+
+  await page.evaluate(() => {
+    const release: unknown = Reflect.get(window, 'releaseTurn');
+    if (typeof release === 'function') release();
+  });
+  await expect.poll(() => page.evaluate(() => window.uiContractWorkArtifacts.saves.length)).toBe(1);
+  await expect.poll(() => storedDraftCount(page)).toBe(0);
+});
+
+test("a save that does not get the drafts' send turn within its bound saves nothing, says a transfer is running, keeps the form, and never runs later", async ({
+  page,
+}) => {
+  // The page's clock runs by hand, so the save's ten-second bound passes without waiting.
+  await page.clock.install();
+  await openContractFixture(page, 'work-artifact-report');
+  await answerSync(page, () => 'offline');
+  await writeReport(page, 'Wartung Heizung', 0);
+  await expect.poll(() => storedDraftCount(page)).toBe(1);
+  // Another tab's send in a dead spot holds the turn and never answers within the bound.
+  await page.evaluate(() => {
+    void navigator.locks.request(
+      'werkflow-draft-send',
+      () => new Promise<void>((resolve) => Reflect.set(window, 'releaseTurn', resolve)),
+    );
+  });
+  await expect.poll(() => page.evaluate(() => typeof Reflect.get(window, 'releaseTurn'))).toBe('function');
+  const dialog = page.getByRole('dialog', { name: 'Arbeitsnachweis erstellen', exact: true });
+
+  await dialog.getByRole('button', { name: 'Als Entwurf speichern', exact: true }).click();
+  await expect(async () => {
+    await page.clock.runFor(1_000);
+    await expect(
+      dialog.getByText(
+        'Der Entwurf konnte gerade nicht gespeichert werden, weil noch eine Übertragung läuft. Deine Eingaben bleiben im Formular. Versuch es gleich noch einmal.',
+        { exact: true },
+      ),
+    ).toBeVisible({ timeout: 100 });
+  }).toPass();
+
+  await expect(dialog.getByRole('textbox', { name: 'Titel', exact: true })).toHaveValue('Wartung Heizung');
+  await expect(dialog.getByRole('textbox', { name: 'Ausgeführte Arbeiten', exact: true })).toHaveValue(
+    'Brenner gereinigt',
+  );
+  await expect(dialog.getByRole('button', { name: 'Als Entwurf speichern', exact: true })).toBeEnabled();
+  // The other send ends: the abandoned save takes the turn only to give it back, and seals and sends nothing.
+  await page.evaluate(() => {
+    const release: unknown = Reflect.get(window, 'releaseTurn');
+    if (typeof release === 'function') release();
+  });
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const turns = await navigator.locks.query();
+        return (turns.held?.length ?? 0) + (turns.pending?.length ?? 0);
+      }),
+    )
+    .toBe(0);
+  expect(await page.evaluate(() => window.uiContractWorkArtifacts.saves.length)).toBe(0);
+  expect(await storedDraftSealed(page)).toBe(false);
+  expect(await storedDraftCount(page)).toBe(1);
+});
+
 test('a refused online save never writes over the newer text another tab stored after its own refusal unsealed the draft', async ({
   page,
 }) => {

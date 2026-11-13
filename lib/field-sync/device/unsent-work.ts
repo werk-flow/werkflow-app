@@ -10,10 +10,31 @@ import { logError } from '@/lib/logging';
 // it (lib/field-sync/device/unsent-work-gate.ts asks).
 
 /**
- * One line of what is still unsent, such as „Stempelzeiten“ with their number, and the ids of what
- * it names: a discard deletes exactly those, never what was kept after the question.
+ * One piece of a line that the question names on its own, such as a report draft: its id among the
+ * line's `ids`, and what the person recognizes it by, never its content.
  */
-export type UnsentWorkItem = { label: string; count: number; ids: readonly string[] };
+type UnsentWorkEntry = { id: string; name: string; detail: string; reason: UnsentReason };
+
+/**
+ * Why a piece is still unsent after a send: it waits for the network, it is incomplete, its person
+ * lost access, this version cannot read it, or the server refused it. The question's sentence after
+ * a send names the reason; a line without entries, such as the time events, waits for the network.
+ */
+export type UnsentReason = 'waiting' | 'incomplete' | 'no_access' | 'unreadable' | 'refused';
+
+/**
+ * One line of what is still unsent, such as „Stempelzeiten“ with their number, and the ids of what
+ * it names: a discard deletes exactly those, never what was kept after the question. `entries`
+ * names each piece when the person must recognize it to decide. `note` says what the line could not
+ * name, such as the jobs of drafts when the phone could not read them.
+ */
+export type UnsentWorkItem = {
+  label: string;
+  count: number;
+  ids: readonly string[];
+  entries?: readonly UnsentWorkEntry[];
+  note?: string;
+};
 
 /**
  * Whose work a flow asks about. `session`: the signed-in person's in every organization, before a
@@ -31,6 +52,17 @@ export type UnsentSource = {
   /** Deletes what this source holds in the scope among `ids`, the ids the person was shown. */
   discard(scope: UnsentScope, ids: readonly string[]): Promise<void>;
 };
+
+/**
+ * A discard that waited for a send in flight, such as a save in a dead spot, until its limit, and
+ * deleted nothing. The question says so; „Abbrechen“ keeps the session.
+ */
+export class UnsentWorkBusyError extends Error {
+  constructor() {
+    super('a send in flight did not end in time; nothing was deleted');
+    this.name = 'UnsentWorkBusyError';
+  }
+}
 
 const sources: UnsentSource[] = [];
 

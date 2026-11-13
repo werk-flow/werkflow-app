@@ -105,7 +105,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -206,7 +206,7 @@ begin
     '[{"user_id":"26104154-0000-0000-0000-000000000002","job_id":"26104154-0000-0000-0000-0000000000aa"}]');
   if (select break_mode::text || auto_break_duration_minutes || jsonb_array_length(break_policy_history)
       from public.organization_settings
-      where organization_id = '26104154-0000-0000-0000-000000000010') <> 'automatic452'
+      where organization_id = '26104154-0000-0000-0000-000000000010') is distinct from 'automatic452'
   then raise exception 'a clean save did not write the settings and the history'; end if;
   if (select count(*) from public.time_entries
       where organization_id = '26104154-0000-0000-0000-000000000010'
@@ -236,7 +236,7 @@ begin
     '26104154-0000-0000-0000-000000000011', null,
     'automatic', 480, 30, '[{"breakMode":"automatic","autoBreakThresholdMinutes":480,"autoBreakDurationMinutes":30,"effectiveFrom":"2026-10-04T08:00:00.000Z"}]', '[]');
   if (select auto_break_threshold_minutes from public.organization_settings
-      where organization_id = '26104154-0000-0000-0000-000000000011') <> 480
+      where organization_id = '26104154-0000-0000-0000-000000000011') is distinct from 480
   then raise exception 'a first save did not create the settings row'; end if;
 end;
 $$;

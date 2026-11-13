@@ -1,6 +1,8 @@
 'use client';
 
 import { sendOwnTimeEvents, timeUnsentSource } from './clock-device';
+import { sendDrafts } from './draft-sync';
+import { draftUnsentSource } from './draft-unsent-source';
 import { registerSender } from './sync-runner';
 import { registerUnsentSource } from './unsent-work';
 
@@ -13,3 +15,5 @@ import { registerUnsentSource } from './unsent-work';
 
 registerSender(timeUnsentSource.name, sendOwnTimeEvents);
 registerUnsentSource(timeUnsentSource);
+registerSender(draftUnsentSource.name, sendDrafts);
+registerUnsentSource(draftUnsentSource);
