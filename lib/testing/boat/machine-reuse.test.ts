@@ -9,10 +9,12 @@ import { join } from 'node:path';
 import { z } from '../../zod';
 
 import { BoatError, boatClient } from './boat-api';
-import { workstationLabel } from './machine-eviction';
+import { MARK_IDLE, workstationLabel } from './machine-eviction';
 import { acquireMachine, keepMachine, reapIdleMachine, withMachine } from './machine-reuse';
 
 const repository = join(import.meta.dir, '../../..');
+/** origin/main's wipe script as mainWipeScript would read it; a unit test fetches nothing. */
+const wipeScript = () => '# the wipe script of origin/main\n';
 const MINUTE = 60_000;
 // Boat's auto-stop times below count from this instant.
 const NOW = new Date('2026-11-09T12:00:00Z');
@@ -127,6 +129,7 @@ const acquire = (client: ReturnType<typeof boatClient>, records: string) =>
     log: () => undefined,
     signal: new AbortController().signal,
     records,
+    wipeScript,
   });
 
 test("a wiped machine serves the checkout's next run, and the run deletes every other machine of the checkout", async () => {
@@ -135,12 +138,13 @@ test("a wiped machine serves the checkout's next run, and the run deletes every 
   const reapers: string[] = [];
   const kept = await keepMachine(
     { id: 'bx_kept0001', client: boat.client, log: () => undefined },
-    { repository, form: 'linked', signal: new AbortController().signal, records },
+    { repository, form: 'linked', signal: new AbortController().signal, records, wipeScript },
     (_repository, record) => reapers.push(record),
   );
   expect(kept).toBe(true);
-  // The wipe runs as text: the script's own commands, with the checkout it removes.
-  expect(boat.commands[0]).toContain(`set -- 'wipe' '${repository}' 'linked'`);
+  // The wipe runs as text: origin/main's script, never the checkout's file, with the checkout it
+  // removes, and a passed wipe marks the machine idle.
+  expect(boat.commands[0]).toBe(`set -- 'wipe' '${repository}' 'linked'\n${wipeScript()}${MARK_IDLE}`);
   expect(reapers).toHaveLength(1);
 
   const lease = await acquire(boat.client, records);
@@ -163,7 +167,7 @@ test('a kept machine nobody takes is deleted by its reaper', async () => {
   let record = '';
   await keepMachine(
     { id: 'bx_kept0001', client: boat.client, log: () => undefined },
-    { repository, form: 'main', signal: new AbortController().signal, records },
+    { repository, form: 'main', signal: new AbortController().signal, records, wipeScript },
     (_repository, path) => {
       record = path;
     },
@@ -179,10 +183,10 @@ test('a machine with too little life left for a run, or none Boat would end, is 
   const keep = (id: string) =>
     keepMachine(
       { id, client: boat.client, log: () => undefined },
-      { repository, form: 'main', signal: new AbortController().signal, records },
+      { repository, form: 'main', signal: new AbortController().signal, records, wipeScript },
       () => undefined,
     );
-  expect(await keep('bx_short001')).toBe(false);
+  expect(await keep('bx_short001')).toBe('under an hour of its life left');
   expect(boat.commands).toEqual([]);
 
   // A record whose machine has too little life, or no auto-stop, gives way to a new machine; the
@@ -195,7 +199,7 @@ test('a machine with too little life left for a run, or none Boat would end, is 
   for (const id of Object.keys(machines))
     await keepMachine(
       { id, client: infinite.client, log: () => undefined },
-      { repository, form: 'main', signal: new AbortController().signal, records },
+      { repository, form: 'main', signal: new AbortController().signal, records, wipeScript },
       () => undefined,
     );
   machines.bx_short001 = { lifeMs: 59 * MINUTE };
@@ -215,27 +219,101 @@ test('a machine with too little life left for a run, or none Boat would end, is 
 test('a failed wipe deletes the machine, and the run keeps its result', async () => {
   const records = mkdtempSync(join(tmpdir(), 'boat-idle-'));
   const boat = fakeBoat({ bx_kept0001: { lifeMs: 120 * MINUTE } }, 1);
-  const machine = { id: 'bx_kept0001', client: boat.client, log: () => undefined };
+  const lines: string[] = [];
+  const machine = { id: 'bx_kept0001', client: boat.client, log: (line: string) => lines.push(line) };
   const signal = new AbortController().signal;
   await expect(
-    keepMachine(machine, { repository, form: 'main', signal, records }, () => undefined),
+    keepMachine(machine, { repository, form: 'main', signal, records, wipeScript }, () => undefined),
   ).rejects.toThrow(/^\/tmp still holds: run\.log $/);
   const code = await withMachine(
     machine,
     signal,
     async () => 3,
-    () => keepMachine(machine, { repository, form: 'main', signal, records }, () => undefined),
+    () => keepMachine(machine, { repository, form: 'main', signal, records, wipeScript }, () => undefined),
   );
   expect(code).toBe(3);
   expect(boat.calls).toContain('DELETE /sandboxes/bx_kept0001');
   expect(readdirSync(records)).toEqual([]);
+  // The run's last Boat line names why the machine went, so a run of deletions can be diagnosed.
+  expect(lines.at(-1)).toBe(
+    'Boat machine bx_kept0001 deleted: wipe failed: /tmp still holds: run.log ; 2 s of large, $0.0010.',
+  );
+});
+
+test('a wipe script that cannot be read from origin/main deletes the machine, and starts none', async () => {
+  const records = mkdtempSync(join(tmpdir(), 'boat-idle-'));
+  const unreadable = () => {
+    throw new Error("origin/main's wipe script cannot be read: fatal: unable to access the remote");
+  };
+  // After a run: no wipe runs, the machine is deleted and the last line says why.
+  const boat = fakeBoat({ bx_kept0001: { lifeMs: 120 * MINUTE } });
+  const lines: string[] = [];
+  const machine = { id: 'bx_kept0001', client: boat.client, log: (line: string) => lines.push(line) };
+  const signal = new AbortController().signal;
+  await withMachine(
+    machine,
+    signal,
+    async () => 0,
+    () =>
+      keepMachine(machine, { repository, form: 'main', signal, records, wipeScript: unreadable }, () => {
+        throw new Error('no reaper starts for a machine that was not wiped');
+      }),
+  );
+  expect(boat.commands).toEqual([]);
+  expect(boat.calls).toContain('DELETE /sandboxes/bx_kept0001');
+  expect(lines.at(-1)).toMatch(
+    /^Boat machine bx_kept0001 deleted: wipe failed: origin\/main's wipe script cannot be read: fatal: /,
+  );
+  // Before a run: a new machine needs the script for its record, so the refusal comes before the start.
+  const fresh = fakeBoat({});
+  await expect(
+    acquireMachine(fresh.client, {
+      repository,
+      from: 'werkflow-verify',
+      name: 'verify-test',
+      log: () => undefined,
+      signal,
+      records,
+      wipeScript: unreadable,
+    }),
+  ).rejects.toThrow("origin/main's wipe script cannot be read");
+  expect(fresh.calls).not.toContain('POST /sandboxes');
+});
+
+test('a run that ended without a result, or was interrupted, says so as its machine is deleted', async () => {
+  const boat = fakeBoat({ bx_kept0001: { lifeMs: 120 * MINUTE } });
+  const lines: string[] = [];
+  const machine = { id: 'bx_kept0001', client: boat.client, log: (line: string) => lines.push(line) };
+  await withMachine(
+    machine,
+    new AbortController().signal,
+    async () => undefined,
+    async () => 'no exit code',
+  );
+  expect(lines.at(-1)).toBe('Boat machine bx_kept0001 deleted: no exit code; 2 s of large, $0.0010.');
+  await expect(
+    withMachine(machine, new AbortController().signal, async () => {
+      throw new Error('the upload failed');
+    }),
+  ).rejects.toThrow('the upload failed');
+  expect(lines.at(-1)).toBe(
+    'Boat machine bx_kept0001 deleted: the run ended without a result; 2 s of large, $0.0010.',
+  );
+  const interrupt = new AbortController();
+  await expect(
+    withMachine(machine, interrupt.signal, async () => {
+      interrupt.abort();
+      return 0;
+    }),
+  ).rejects.toThrow('aborted');
+  expect(lines.at(-1)).toBe('Boat machine bx_kept0001 deleted: interrupted; 2 s of large, $0.0010.');
 });
 
 test('a Ctrl-C or a failed run deletes the machine instead of wiping it', async () => {
   const boat = fakeBoat({ bx_kept0001: { lifeMs: 120 * MINUTE } });
   const machine = { id: 'bx_kept0001', client: boat.client, log: () => undefined };
   let asked = 0;
-  const keep = async () => {
+  const keep = async (): Promise<true> => {
     asked++;
     return true;
   };
@@ -279,7 +357,7 @@ test('a run takes the kept machine with the most life, and deletes one whose rea
   for (const id of Object.keys(machines))
     await keepMachine(
       { id, client: boat.client, log: () => undefined },
-      { repository, form: 'main', signal: new AbortController().signal, records },
+      { repository, form: 'main', signal: new AbortController().signal, records, wipeScript },
       (_repository, record) => {
         paths[id] = record;
       },
@@ -318,7 +396,7 @@ test('a Ctrl-C that arrives as the wipe ends deletes the machine and keeps no re
     () =>
       keepMachine(
         machine,
-        { repository, form: 'main', signal: interrupt.signal, records },
+        { repository, form: 'main', signal: interrupt.signal, records, wipeScript },
         (_repository, record) => reapers.push(record),
       ),
   ).catch((error: unknown) => error);
@@ -333,7 +411,7 @@ test('a Boat refusal while a run looks for its machine falls back instead of sta
   const keepOne = async (boat: ReturnType<typeof fakeBoat>) =>
     keepMachine(
       { id: 'bx_kept0001', client: boat.client, log: () => undefined },
-      { repository, form: 'main', signal: new AbortController().signal, records },
+      { repository, form: 'main', signal: new AbortController().signal, records, wipeScript },
       () => undefined,
     );
   // A refused listing.
@@ -438,11 +516,11 @@ test('a machine whose auto-stop time does not parse is neither wiped nor kept', 
   const boat = fakeBoat({ bx_garbled1: { lifeMs: 120 * MINUTE, archiveAfter: 'not a date' } });
   const kept = await keepMachine(
     { id: 'bx_garbled1', client: boat.client, log: () => undefined },
-    { repository, form: 'main', signal: new AbortController().signal, records },
+    { repository, form: 'main', signal: new AbortController().signal, records, wipeScript },
     () => undefined,
   );
   // A run could never take it (acquireMachine needs a known hour of life), so it is deleted instead.
-  expect(kept).toBe(false);
+  expect(kept).toBe('under an hour of its life left');
   expect(boat.commands).toEqual([]);
   expect(readdirSync(records)).toEqual([]);
 });
@@ -473,7 +551,7 @@ test('a kept machine another workstation evicted meanwhile is not reused: the ru
   const keeping = fakeBoat({ bx_kept0001: { lifeMs: 120 * MINUTE } });
   await keepMachine(
     { id: 'bx_kept0001', client: keeping.client, log: () => undefined },
-    { repository, form: 'main', signal: new AbortController().signal, records },
+    { repository, form: 'main', signal: new AbortController().signal, records, wipeScript },
     () => undefined,
   );
   // The wipe's command marks the machine idle only once the wipe passed.
@@ -489,6 +567,7 @@ test('a kept machine another workstation evicted meanwhile is not reused: the ru
     log: (line) => lines.push(line),
     signal: new AbortController().signal,
     records,
+    wipeScript,
   });
   expect(lease).toMatchObject({ machine: { id: 'bx_created' }, reused: false });
   expect(lines).toContain('Boat machine bx_kept0001 was taken by another workstation at the machine limit.');
@@ -500,7 +579,7 @@ test('a kept machine another workstation deleted between its read and its claim 
   const keeping = fakeBoat(machines);
   await keepMachine(
     { id: 'bx_kept0001', client: keeping.client, log: () => undefined },
-    { repository, form: 'main', signal: new AbortController().signal, records },
+    { repository, form: 'main', signal: new AbortController().signal, records, wipeScript },
     () => undefined,
   );
   // The evicting workstation deletes the machine right after this run read its life left.
