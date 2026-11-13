@@ -163,3 +163,7 @@ PR runs of `ci.yml` took a median 31 minutes, and more than half of them were ca
 2. When the level's reviews are done and every finding has a disposition, the thread marks the PR ready (`gh pr ready`). The `ready_for_review` event runs the diff-selected browser groups once, with every other job, on the same commit.
 3. A push to a PR that is not a draft runs everything, as before. Marking a PR a draft again starts no run.
 4. The merge gate is unchanged. On a draft, `Check` fails while the plan holds browser groups, so it never reads as green with them skipped. A draft whose diff selects no browser group has nothing held, and its `Check` passes.
+
+## Amendment 2026-11-13: CodeRabbit reviews the draft while Sol's first round runs
+
+Sol reviewed before the PR opened and CodeRabbit only after, so CodeRabbit's fixes reran CI and Sol never saw them (on 2026-11-12 and 13, 127 pushes and 16,466 job-minutes came after a PR's first CodeRabbit review). During the CodeRabbit trial, a thread opens its draft before Sol's first round and labels it `needs-coderabbit` at once, so CodeRabbit reviews the draft while that round runs. The thread answers both reviewers' findings in one push. The queue asks CodeRabbit again only when the thread labels the PR again after a complete fix round, and the thread marks the PR ready once the reviews are done.
