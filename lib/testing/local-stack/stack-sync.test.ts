@@ -5,14 +5,16 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { sqlShape } from './migration-drift';
+import { migrationDrift, sqlShape } from './migration-drift';
 
 import {
   GUARD_QUERY,
   GUARD_SQL,
+  MIGRATION_UP,
   RESET_CONFIRMATION,
   RESET_WARNING,
   SYNC_OPTIONS,
+  migrationUpFailure,
   resetRefusal,
   syncDecision,
 } from './stack-sync';
@@ -50,6 +52,38 @@ test('a stack that holds anything main lacks is refused, pending migrations or n
   expect(renumbered.kind === 'ahead' && renumbered.lines.join('\n')).toContain(
     '1 recorded under versions main has no file for',
   );
+});
+
+// The merge queue lands migrations in merge order under authoring versions: main has A@v1 and B@v2,
+// the stack applied B first. The CLI applies A only with --include-all.
+test('a pending main migration older than the ledger newest is applied with --include-all', () => {
+  const tree = [
+    { version: '20261101000000', name: 'a', sql: 'select 1;' },
+    { version: '20261102000000', name: 'b', sql: 'select 2;' },
+  ];
+  const decision = syncDecision(
+    migrationDrift(tree, [{ version: '20261102000000', name: 'b', statements: ['select 2'] }]),
+  );
+  expect(decision).toEqual({ kind: 'behind', pending: ['a'] });
+  expect(MIGRATION_UP).toEqual(['migration', 'up', '--include-all']);
+  expect(read('scripts/local-stack.ts')).toContain('supabase(folder, MIGRATION_UP)');
+});
+
+// --include-all never covers a ledger version main has no file for: a branch's migration on the
+// shared stack, which only the reset repairs.
+test('a ledger version main has no file for still refuses, with the reset', () => {
+  const tree = [{ version: '20261101000000', name: 'a', sql: 'select 1;' }];
+  const decision = syncDecision(
+    migrationDrift(tree, [{ version: '20261103000000', name: 'a', statements: ['select 1'] }]),
+  );
+  expect(decision.kind).toBe('ahead');
+  const lines = decision.kind === 'ahead' ? decision.lines.join('\n') : '';
+  expect(lines).toContain('1 recorded under versions main has no file for');
+  expect(lines).toContain('Reset the shared stack');
+  const failure = migrationUpFailure(['a']).join('\n');
+  expect(failure).toContain('Remote migration versions not found in local migrations directory');
+  expect(failure).toContain('Reset the shared stack');
+  expect(failure).toContain('bunx supabase start, then bun run stack:sync');
 });
 
 // A stack that answered but whose ledger could not be read never passes check:changed.

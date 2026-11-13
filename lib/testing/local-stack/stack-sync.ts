@@ -102,6 +102,28 @@ export function syncDecision(drift: MigrationDrift | undefined): SyncDecision {
   return treeOnly.length ? { kind: 'behind', pending: treeOnly } : { kind: 'current' };
 }
 
+/**
+ * The sync's `migration up`. Main's migrations land in merge order, but their versions are
+ * authoring timestamps, so a merged migration often carries a version older than the ledger's
+ * newest, and the CLI applies that one only with `--include-all` (DEV and PROD apply them the same
+ * way, werk-flow/werkflow-planning#427). The sync passes it every time: it runs only after
+ * `syncDecision` found nothing on the stack that main lacks, so the flag applies main's merged
+ * migrations and nothing else, and plain `migration up` would refuse only that routine case.
+ */
+export const MIGRATION_UP = ['migration', 'up', '--include-all'] as const;
+
+/** What a failed `migration up` prints: each case the CLI's output shows, with its recovery. */
+export function migrationUpFailure(pending: readonly string[]): string[] {
+  return [
+    `[stack] Applying main's ${pending.length} pending migrations failed (${named(pending)}); the CLI's output is above.`,
+    '  "Remote migration versions not found in local migrations directory": the ledger holds a version main has no file for,',
+    `  a branch's migration on the shared stack. Only the reset repairs it: tell your lead; it is announced first and runs when no worktree holds the stack (${RESET_DOC}).`,
+    "  An error in a migration's statements: main's migrations passed CI on a fresh database, so this stack holds data or",
+    `  objects main's migrations never made. Tell your lead with the output; the reset rebuilds the stack from main (${RESET_DOC}).`,
+    '  No connection: the stack stopped. Run bunx supabase start, then bun run stack:sync.',
+  ];
+}
+
 /** The lines a refused reset prints: who holds the stack, and that a reset reaches each of them. */
 export function resetRefusal(
   holders: readonly { operation: string; workspace: string; mode: string; startedAt: string }[],

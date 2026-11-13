@@ -8,9 +8,11 @@ import { readMigrationDrift } from '../lib/testing/local-stack/migration-drift';
 import {
   GUARD_QUERY,
   GUARD_SQL,
+  MIGRATION_UP,
   RESET_CONFIRMATION,
   RESET_WARNING,
   SYNC_OPTIONS,
+  migrationUpFailure,
   resetRefusal,
   type SyncDecision,
   syncDecision,
@@ -164,10 +166,8 @@ async function sync(wait: boolean): Promise<number> {
         if (refused(now) || !guard()) return 1;
         if (now.kind === 'behind') {
           say(`Applying main's ${now.pending.length} pending migrations (${commit}).`);
-          if (!supabase(folder, ['migration', 'up'])) {
-            console.error(
-              `[stack] Applying main's migrations failed; the output is above. A ledger that holds a version main lacks needs the reset (bun run stack:reset -- ${RESET_CONFIRMATION}).`,
-            );
+          if (!supabase(folder, MIGRATION_UP)) {
+            for (const line of migrationUpFailure(now.pending)) console.error(line);
             return 1;
           }
         }
