@@ -32,7 +32,7 @@ create table public.school_days (
   cancelled_at timestamptz,
   constraint school_days_kind_check check (kind in ('weekday', 'block')),
   constraint school_days_shape_check check (
-    (kind = 'weekday' and weekday between 0 and 4)
+    (kind = 'weekday' and weekday is not null and weekday between 0 and 4)
     or (kind = 'block' and weekday is null and end_date is not null)
   ),
   constraint school_days_range_check check (end_date is null or end_date >= start_date),
@@ -154,8 +154,16 @@ create policy school_days_select_own on public.school_days
   for select to authenticated
   using (employee_record_id in (select app_private.get_user_employee_record_ids((select auth.uid()))));
 
+-- A client reads only the rule itself, the columns the server's projection
+-- returns (lib/personnel/school-days.ts, SCHOOL_DAY_COLUMNS) plus the
+-- organization its Realtime filter needs; who recorded, ended or cancelled a
+-- rule, and when, stays with the server. Realtime checks each subscriber's
+-- column privileges: the primary key and organization_id stay selectable, so
+-- an event and its organization filter still reach the subscriber.
 revoke all on table public.school_days from public, anon, authenticated, service_role;
-grant select on table public.school_days to authenticated;
+grant select (
+  id, organization_id, employee_record_id, kind, weekday, start_date, end_date, cancelled_at
+) on table public.school_days to authenticated;
 grant select, insert, update on table public.school_days to service_role;
 
 -- Realtime (docs/technical/realtime-and-caching.md, "Add Realtime data"): the

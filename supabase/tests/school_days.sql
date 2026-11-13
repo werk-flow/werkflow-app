@@ -45,9 +45,24 @@ begin
   if has_table_privilege('anon', 'public.school_days', 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') then
     raise exception 'anon holds a privilege on school_days';
   end if;
-  if not has_table_privilege('authenticated', 'public.school_days', 'SELECT')
-    or has_table_privilege('authenticated', 'public.school_days', 'INSERT,UPDATE,DELETE') then
-    raise exception 'authenticated must only read school_days';
+  if has_table_privilege('authenticated', 'public.school_days', 'SELECT,INSERT,UPDATE,DELETE') then
+    raise exception 'authenticated holds a table-wide privilege on school_days';
+  end if;
+  if exists (
+    select 1 from unnest(array[
+      'id', 'organization_id', 'employee_record_id', 'kind', 'weekday', 'start_date', 'end_date', 'cancelled_at'
+    ]) allowed(column_name)
+    where not has_column_privilege('authenticated', 'public.school_days', allowed.column_name, 'SELECT')
+  ) then
+    raise exception 'authenticated cannot read a column of the school-day rule';
+  end if;
+  if exists (
+    select 1 from unnest(array[
+      'created_by', 'created_at', 'ended_by', 'ended_at', 'cancelled_by'
+    ]) hidden(column_name)
+    where has_column_privilege('authenticated', 'public.school_days', hidden.column_name, 'SELECT')
+  ) then
+    raise exception 'authenticated reads who recorded, ended or cancelled a school day, or when';
   end if;
   if has_table_privilege('service_role', 'public.school_days', 'DELETE') then
     raise exception 'service_role may delete school_days';
@@ -200,6 +215,14 @@ begin
     raise exception 'a school day for another organization''s record was accepted';
   exception when raise_exception then
     if sqlerrm <> 'school_day_record_organization_mismatch' then raise; end if;
+  end;
+
+  -- A weekly rule needs its weekday.
+  begin
+    insert into public.school_days (organization_id, employee_record_id, kind, weekday, start_date, created_by)
+    values (v_org, v_apprentice, 'weekday', null, '2038-01-04', v_buero);
+    raise exception 'a weekly rule without a weekday was accepted';
+  exception when check_violation then null;
   end;
 
   -- A second active rule on the same weekday is refused.

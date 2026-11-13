@@ -96,6 +96,32 @@ export function groupSchoolDaySpansByRecord(
   return spansByRecord;
 }
 
+/**
+ * Whether every employment condition in force from the start date through
+ * the end date (open-ended: from the start on) is an apprenticeship: the
+ * version in force on the start date, and every version that starts inside
+ * the range. A day before the first version has no condition and fails.
+ */
+export function isApprenticeThroughout(
+  conditions: readonly { valid_from: string; employment_type: string }[],
+  startDate: string,
+  endDate: string | null,
+): boolean {
+  const inForceAtStart = conditions
+    .filter((condition) => condition.valid_from <= startDate)
+    .reduce<{
+      valid_from: string;
+      employment_type: string;
+    } | null>((latest, condition) => (latest === null || condition.valid_from > latest.valid_from ? condition : latest), null);
+  if (inForceAtStart?.employment_type !== 'ausbildung') return false;
+  return conditions.every(
+    (condition) =>
+      condition.valid_from <= startDate ||
+      (endDate !== null && condition.valid_from > endDate) ||
+      condition.employment_type === 'ausbildung',
+  );
+}
+
 /** How the office and the apprentice read a rule, e.g. „Jeden Montag ab 01.09.2026“. */
 export function describeSchoolDay(schoolDay: SchoolDay): string {
   if (schoolDay.kind === 'block') {
@@ -116,7 +142,7 @@ export const SCHOOL_DAY_ERROR_MESSAGES: Readonly<Record<string, string>> = {
   block_needs_end: 'Ein Blockunterricht braucht ein Enddatum.',
   weekday_required: 'Bitte wähle einen Wochentag aus.',
   record_not_found: 'Die Personalakte wurde nicht gefunden.',
-  not_an_apprentice: 'Berufsschule lässt sich nur für Personen in Ausbildung eintragen.',
+  not_an_apprentice: 'Berufsschule lässt sich nur für Tage eintragen, an denen die Person in Ausbildung ist.',
   school_day_overlap: 'Für diese Tage ist schon Berufsschule eingetragen.',
   school_day_not_found:
     'Der Eintrag wurde inzwischen geändert. Lade die Seite neu und versuche es noch einmal.',

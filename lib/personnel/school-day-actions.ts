@@ -7,11 +7,13 @@ import { logError } from '@/lib/logging';
 import { resolveActionContext } from '@/lib/org/action-context';
 import { isManagerRole } from '@/lib/roles';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
 import { isPeriodClosedError } from '@/lib/time-tracking/closed-periods';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 import { loadSchoolDaysForRecord } from './school-day-server';
 import {
+  isApprenticeThroughout,
   SCHOOL_DAY_COLUMNS,
   SCHOOL_DAY_KINDS,
   SCHOOL_WEEKDAYS,
@@ -140,20 +142,27 @@ export async function addSchoolDay(rawInput: AddSchoolDayInput): Promise<SchoolD
       return { success: false, error: 'load_failed' };
     }
     if (!record) return { success: false, error: 'record_not_found' };
-    // School days belong to an apprenticeship: the section shows only there, and
-    // a rule elsewhere would lower a target nobody sees the reason for.
-    const { data: apprenticeship, error: conditionError } = await admin
-      .from('employment_conditions')
-      .select('id')
-      .eq('organization_id', orgId)
-      .eq('employee_record_id', record.id)
-      .eq('employment_type', 'ausbildung')
-      .limit(1);
+    // School days belong to an apprenticeship: every employment condition in
+    // force over the rule's days must be Ausbildung, or a day the person owes
+    // in full would be credited (werk-flow/werkflow-planning#165).
+    const { data: conditions, error: conditionError } = await readCompleteRows(
+      (from, to) =>
+        admin
+          .from('employment_conditions')
+          .select('valid_from, employment_type')
+          .eq('organization_id', orgId)
+          .eq('employee_record_id', record.id)
+          .order('valid_from')
+          .range(from, to),
+      LIST_ROW_CAP,
+    );
     if (conditionError) {
       logError('addSchoolDay: employment condition read failed', conditionError);
       return { success: false, error: 'load_failed' };
     }
-    if (apprenticeship.length === 0) return { success: false, error: 'not_an_apprentice' };
+    if (!isApprenticeThroughout(conditions, input.startDate, input.endDate)) {
+      return { success: false, error: 'not_an_apprentice' };
+    }
 
     const { data, error } = await admin
       .from('school_days')

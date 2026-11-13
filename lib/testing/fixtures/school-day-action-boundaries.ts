@@ -3,6 +3,7 @@
 // Büro does not find another organization's employee record or school day,
 // and nothing is written on a refusal. Büro records, ends and cancels a
 // school day of its own organization, with itself as the actor.
+import { setSystemTime } from 'bun:test';
 import assert from 'node:assert/strict';
 import {
   CALLER_ID,
@@ -13,11 +14,16 @@ import {
 } from './action-boundary-world';
 import { assertRefused } from './operations-boundary-refusals';
 
+// The rules below are dated from November 2026; a new rule may start at most
+// on January 1 of the previous business year, which reads today.
+setSystemTime(new Date('2026-11-12T10:00:00.000Z'));
+
 const apprenticeRecordId = '87000000-0000-4000-8000-000000000001';
 const foreignRecordId = '87000000-0000-4000-8000-000000000002';
 const ownSchoolDayId = '87000000-0000-4000-8000-000000000003';
 const foreignSchoolDayId = '87000000-0000-4000-8000-000000000004';
 const journeymanRecordId = '87000000-0000-4000-8000-000000000005';
+const formerApprenticeRecordId = '87000000-0000-4000-8000-000000000008';
 
 const weeklyRule = (id: string, organizationId: string, employeeRecordId: string) => ({
   id,
@@ -40,18 +46,36 @@ const world = installActionWorld({
     { id: apprenticeRecordId, organization_id: ORGANIZATION_A, user_id: null },
     { id: foreignRecordId, organization_id: ORGANIZATION_B, user_id: null },
     { id: journeymanRecordId, organization_id: ORGANIZATION_A, user_id: null },
+    { id: formerApprenticeRecordId, organization_id: ORGANIZATION_A, user_id: null },
   ],
   employment_conditions: [
     {
       id: '87000000-0000-4000-8000-000000000006',
       organization_id: ORGANIZATION_A,
       employee_record_id: apprenticeRecordId,
+      valid_from: '2025-09-01',
       employment_type: 'ausbildung',
     },
     {
       id: '87000000-0000-4000-8000-000000000007',
       organization_id: ORGANIZATION_A,
       employee_record_id: journeymanRecordId,
+      valid_from: '2024-01-01',
+      employment_type: 'vollzeit',
+    },
+    // An apprentice until the end of November 2026, a journeyman from December.
+    {
+      id: '87000000-0000-4000-8000-000000000009',
+      organization_id: ORGANIZATION_A,
+      employee_record_id: formerApprenticeRecordId,
+      valid_from: '2023-09-01',
+      employment_type: 'ausbildung',
+    },
+    {
+      id: '87000000-0000-4000-8000-000000000010',
+      organization_id: ORGANIZATION_A,
+      employee_record_id: formerApprenticeRecordId,
+      valid_from: '2026-12-01',
       employment_type: 'vollzeit',
     },
   ],
@@ -109,10 +133,11 @@ await assertRefused(
 );
 assert.deepEqual(await getSchoolDaysForRecord(foreignRecordId), { success: true, schoolDays: [] });
 
-// A person who never was an apprentice gets no school day.
+// A person who never was an apprentice gets no school day, and an apprentice
+// who becomes a journeyman before the block ends gets none for it.
 await assertRefused(
   world,
-  [writesOn(ownSchoolDayId, journeymanRecordId)[0]],
+  [writesOn(ownSchoolDayId, journeymanRecordId)[0], writesOn(ownSchoolDayId, formerApprenticeRecordId)[0]],
   { success: false, error: 'not_an_apprentice' },
   'reads',
 );

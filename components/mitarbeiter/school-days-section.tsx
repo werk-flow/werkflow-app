@@ -118,7 +118,7 @@ function SchoolDayRows({ schoolDays, state }: { schoolDays: SchoolDay[]; state: 
           schoolDay={schoolDay}
           busy={state.busy.isBusy(schoolDay.id)}
           onEnd={() => state.setDialogState({ mode: 'end', schoolDay })}
-          onCancel={() => state.setCancelTarget(schoolDay)}
+          onCancel={() => state.confirmCancel(schoolDay)}
         />
       ))}
     </ul>
@@ -126,9 +126,14 @@ function SchoolDayRows({ schoolDays, state }: { schoolDays: SchoolDay[]; state: 
 }
 
 function CancelSchoolDayDialog({ state }: { state: SchoolDaysState }) {
-  const { cancelTarget, setCancelTarget, cancel } = state;
+  const { cancelTarget, confirmCancel, cancelError, cancel, busy } = state;
+  const pending = cancelTarget !== null && busy.isBusy(cancelTarget.id);
   return (
-    <AlertDialog open={cancelTarget !== null} onOpenChange={(open) => !open && setCancelTarget(null)}>
+    <AlertDialog
+      open={cancelTarget !== null}
+      onOpenChange={(open) => !open && confirmCancel(null)}
+      pending={pending}
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Berufsschule stornieren?</AlertDialogTitle>
@@ -138,15 +143,17 @@ function CancelSchoolDayDialog({ state }: { state: SchoolDaysState }) {
             sichtbar.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter>
+        <AlertDialogFooter error={cancelError}>
           <AlertDialogCancel>Abbrechen</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
-            onClick={() => {
+            pending={pending}
+            onClick={(event) => {
+              event.preventDefault();
               if (cancelTarget) void cancel(cancelTarget);
             }}
           >
-            Stornieren
+            {pending ? 'Wird storniert…' : 'Stornieren'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

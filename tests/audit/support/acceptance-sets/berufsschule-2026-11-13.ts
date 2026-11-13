@@ -46,7 +46,11 @@ async function apprenticeRecord(world: TestWorld): Promise<SurfaceDestination> {
   return { route: `/mitarbeiter/${recordId}`, heading: `Mia ${lastName}` };
 }
 
-/** The world's employee as an apprentice with a Blockunterricht this week and next, today included. */
+/**
+ * The world's employee as an apprentice (an Ausbildung condition from a month
+ * back; the world plan gives them none) with a Blockunterricht this week and
+ * next, today included.
+ */
 async function seedOwnSchoolWeek(world: TestWorld): Promise<void> {
   await surfaceFixture(world, 'acceptance.berufsschule-own-week', async () => {
     const { data: record } = await createAdminClient()
@@ -56,6 +60,16 @@ async function seedOwnSchoolWeek(world: TestWorld): Promise<void> {
       .eq('user_id', world.users.employee.id)
       .single()
       .throwOnError();
+    await seedEmploymentCondition({
+      organizationId: world.orgId,
+      employeeRecordId: record.id,
+      actorUserId: world.users.admin.id,
+      validFrom: berlinDateAtOffset(-30),
+      employmentType: 'ausbildung',
+      weeklyHours: 40,
+      vacationDaysPerYear: 30,
+      note: `Ausbildung ${world.runId}`,
+    });
     return seedSchoolDay({
       organizationId: world.orgId,
       employeeRecordId: record.id,

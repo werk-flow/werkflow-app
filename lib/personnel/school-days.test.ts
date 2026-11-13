@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 
-import { describeSchoolDay, groupSchoolDaySpansByRecord, type SchoolDay } from './school-days';
+import {
+  describeSchoolDay,
+  groupSchoolDaySpansByRecord,
+  isApprenticeThroughout,
+  type SchoolDay,
+} from './school-days';
 import type { ApprovedAbsenceSpan } from './targets';
 
 /** One record's spans; the rules of each test belong to one record. */
@@ -80,5 +85,35 @@ describe('the Berufsschule spans', () => {
       'Jeden Montag ab 07.09.2026 bis 16.07.2027',
     );
     expect(describeSchoolDay(block)).toBe('Blockunterricht 05.10.2026 – 16.10.2026');
+  });
+});
+
+describe('who may get school days', () => {
+  const ausbildung = (validFrom: string) => ({ valid_from: validFrom, employment_type: 'ausbildung' });
+  const vollzeit = (validFrom: string) => ({ valid_from: validFrom, employment_type: 'vollzeit' });
+
+  test('an apprentice throughout the rule may', () => {
+    expect(isApprenticeThroughout([ausbildung('2025-09-01')], '2026-09-07', null)).toBe(true);
+    expect(
+      isApprenticeThroughout([vollzeit('2024-01-01'), ausbildung('2025-09-01')], '2026-09-07', '2026-12-18'),
+    ).toBe(true);
+  });
+
+  test('a person who left the apprenticeship before the start may not', () => {
+    expect(
+      isApprenticeThroughout([ausbildung('2023-09-01'), vollzeit('2026-08-01')], '2026-09-07', null),
+    ).toBe(false);
+  });
+
+  test('a rule that runs past the end of the apprenticeship may not', () => {
+    const conditions = [ausbildung('2023-09-01'), vollzeit('2027-02-01')];
+    expect(isApprenticeThroughout(conditions, '2026-09-07', null)).toBe(false);
+    expect(isApprenticeThroughout(conditions, '2026-09-07', '2027-03-31')).toBe(false);
+    expect(isApprenticeThroughout(conditions, '2026-09-07', '2027-01-29')).toBe(true);
+  });
+
+  test('a rule before the first condition may not', () => {
+    expect(isApprenticeThroughout([ausbildung('2026-10-01')], '2026-09-07', '2026-09-30')).toBe(false);
+    expect(isApprenticeThroughout([], '2026-09-07', null)).toBe(false);
   });
 });
