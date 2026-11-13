@@ -2,6 +2,7 @@
 
 import { Suspense, use, useState, type FormEvent } from 'react';
 import Link from 'next/link';
+import { Maximize2 } from 'lucide-react';
 
 import { useOrganization } from '@/components/organization/organization-context';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,7 @@ import { PROBLEM_REPORT_DESCRIPTION_MAX_LENGTH } from '@/lib/problem-reports/typ
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { AttachmentsField } from './attachments-field';
 import type { ProblemReportCapture } from './problem-report-launcher';
+import { ScreenshotRedactionView } from './screenshot-redaction-view';
 import { ScreenshotRedactor } from './screenshot-redactor';
 import { useProblemReportSend } from './use-problem-report-send';
 import type { ChosenAttachment } from './use-report-files';
@@ -100,6 +102,7 @@ export function ProblemReportDialog({ open, onOpenChange, capture }: ProblemRepo
                   boxes={boxes}
                   onBoxesChange={setBoxes}
                   locked={report.isPending || report.frozenFiles.has('screenshot')}
+                  fieldWorker={activeOrg?.role === 'employee'}
                 />
               </Suspense>
             </section>
@@ -157,6 +160,7 @@ type ScreenshotSectionProps = {
   onBoxesChange: (boxes: RedactionBox[]) => void;
   /** True while sending and once the screenshot's bytes left the device: it no longer changes. */
   locked: boolean;
+  fieldWorker: boolean;
 };
 
 function ScreenshotSection({
@@ -166,8 +170,10 @@ function ScreenshotSection({
   boxes,
   onBoxesChange,
   locked,
+  fieldWorker,
 }: ScreenshotSectionProps) {
   const image = use(screenshot);
+  const [enlarged, setEnlarged] = useState(false);
   if (!image) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -189,14 +195,35 @@ function ScreenshotSection({
         <>
           <p className="text-sm text-muted-foreground">
             Kundendaten sind schon durch Platzhalter ersetzt. Ziehe Rechtecke über alles, was trotzdem niemand
-            sehen soll. Sie werden schwarz, bevor das Bild dein Gerät verlässt.
+            sehen soll. Sie werden fest abgedeckt, bevor das Bild dein Gerät verlässt.
           </p>
-          <ScreenshotRedactor image={image} boxes={boxes} onBoxesChange={onBoxesChange} disabled={locked} />
-          {boxes.length > 0 && !locked && (
-            <Button type="button" variant="outline" onClick={() => onBoxesChange([])}>
-              Schwärzungen entfernen
+          <ScreenshotRedactor
+            image={image}
+            boxes={boxes}
+            onBoxesChange={onBoxesChange}
+            disabled={locked}
+            label="Vorschau des Screenshots mit deinen Schwärzungen"
+          />
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={() => setEnlarged(true)}>
+              <Maximize2 aria-hidden />
+              Vergrößern
             </Button>
-          )}
+            {boxes.length > 0 && !locked && (
+              <Button type="button" variant="outline" onClick={() => onBoxesChange([])}>
+                Schwärzungen entfernen
+              </Button>
+            )}
+          </div>
+          <ScreenshotRedactionView
+            open={enlarged}
+            onOpenChange={setEnlarged}
+            image={image}
+            boxes={boxes}
+            onBoxesChange={onBoxesChange}
+            disabled={locked}
+            fieldWorker={fieldWorker}
+          />
         </>
       )}
     </>

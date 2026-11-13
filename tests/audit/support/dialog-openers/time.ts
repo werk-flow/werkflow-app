@@ -22,7 +22,13 @@ import {
   deviceDraftDeleteConfirmation,
   leaveDraftOnDevice,
 } from '../offline-drafts';
-import { problemReportButton, problemReportDialog } from '../../../golden/support/steps/problem-reports';
+import {
+  enlargeScreenshotButton,
+  openProblemReport,
+  problemReportButton,
+  problemReportDialog,
+  screenshotRedactionView,
+} from '../../../golden/support/steps/problem-reports';
 import { ownEvidenceUploadButton, ownEvidenceUploadDialog } from '../../../golden/support/steps/personnel';
 import {
   ownSicknessCancelButton,
@@ -230,6 +236,17 @@ export const TIME_OPENERS = {
   // worker's and the office's.
   'reports.field': { trigger: async ({ page }) => problemReportButton(page), layer: problemReportDialog },
   'reports.office': { trigger: async ({ page }) => problemReportButton(page), layer: problemReportDialog },
+  // The large redaction view over the report dialog, from its „Vergrößern“.
+  'reports.redaction-field': {
+    trigger: async ({ page }) => enlargeScreenshotButton(await openProblemReport(page)),
+    layer: screenshotRedactionView,
+    parents: (page) => [problemReportDialog(page)],
+  },
+  'reports.redaction-office': {
+    trigger: async ({ page }) => enlargeScreenshotButton(await openProblemReport(page)),
+    layer: screenshotRedactionView,
+    parents: (page) => [problemReportDialog(page)],
+  },
   'field.clock': {
     trigger: async ({ page }) => enabled(clockInLauncher(page)),
     layer: clockStartSheet,
