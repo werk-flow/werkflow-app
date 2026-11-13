@@ -87,12 +87,12 @@ jobs:
 
   alert:
     name: Alert
-    needs: [decide, full]
-    # Only main speaks, and only a run that tested something or could not decide: a skipped full
-    # run proves nothing, so it neither opens nor closes the issue.
+    needs: [decide, wait, full]
+    # Only main speaks, and only a run that tested something, or could not decide, wait or ask again:
+    # a skipped full run or a finished wait proves nothing, so it neither opens nor closes the issue.
     if: >-
       !cancelled() && github.ref == 'refs/heads/main'
-      && (needs.decide.result == 'failure' || needs.decide.outputs.run == 'true')
+      && (needs.decide.result == 'failure' || needs.wait.result == 'failure' || needs.decide.outputs.run == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:

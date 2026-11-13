@@ -312,3 +312,13 @@ test('the alert detail says so when no green full run is in reach', () => {
     ].join('\n'),
   );
 });
+
+test('the alert speaks for a full run or a failed decision, wait or dispatch, and never for a finished wait', () => {
+  const workflow = readFileSync(join(repositoryRoot, '.github/workflows/main-full-run.yml'), 'utf8');
+  const alert = workflow.slice(workflow.indexOf('\n  alert:'));
+  expect(alert).toContain('needs: [decide, wait, full]\n');
+  const condition = /\n {4}if: >-\n((?: {6}.+\n)+)/.exec(alert)?.[1]?.replace(/\s+/g, ' ').trim();
+  expect(condition).toBe(
+    "!cancelled() && github.ref == 'refs/heads/main' && (needs.decide.result == 'failure' || needs.wait.result == 'failure' || needs.decide.outputs.run == 'true')",
+  );
+});
