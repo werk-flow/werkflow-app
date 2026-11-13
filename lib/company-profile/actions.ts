@@ -8,7 +8,12 @@ import { stationeryMarginsFit } from '@/lib/document-rendering/page-geometry';
 import { canEmbedFile } from '@/lib/document-rendering/render';
 import { logError } from '@/lib/logging';
 import { resolveActionContext, resolveActionContextFor, type ActionContext } from '@/lib/org/action-context';
-import { createSignedUploadUrl, discardStorageObjects, promoteUploadedObject } from '@/lib/storage/r2';
+import {
+  copyStagedUpload,
+  createSignedUploadUrl,
+  discardStorageObjects,
+  uploadStagingPath,
+} from '@/lib/storage/r2';
 import { uploadRuleFailure } from '@/lib/storage/upload-rules';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
@@ -142,7 +147,7 @@ export async function createCompanyDocumentFileUploadTicket(
   try {
     const uploadUrl = await createSignedUploadUrl({
       organizationId: auth.context.orgId,
-      path: companyFilePath(auth.context.orgId, fileId, input.kind),
+      path: companyFilePath(auth.context, fileId, input.kind),
       contentType: input.mimeType,
     });
     return { success: true, ticket: { fileId, uploadUrl } };
@@ -162,12 +167,14 @@ export async function finalizeCompanyDocumentFileUpload(
   const auth = await resolveManagerOfNamedOrganization(input.organizationId);
   if (!auth.success) return auth;
   const organizationId = auth.context.orgId;
-  // The key is recomputed from the authorized organization, so no client
-  // names an object of another organization.
-  const path = companyFilePath(organizationId, input.fileId, input.kind);
+  // The key is recomputed from the session's organization and person, so no
+  // client names an object of another organization or another person's upload.
+  const path = companyFilePath(auth.context, input.fileId, input.kind);
+  // The staged upload stays until the registration's outcome is known, so a
+  // retry under the same file id copies it again (werk-flow/werkflow-planning#420).
+  const stagingPath = uploadStagingPath(organizationId, path);
   // The upload's file id is its attempt key. A finalize repeated after its
-  // answer was lost finds its staged object promoted and gone: the change it
-  // registered answers instead.
+  // answer was lost answers with the change it registered, without a new copy.
   const registered = await createSupabaseAdminClient()
     .from('company_document_profile_events')
     .select('id')
@@ -181,6 +188,9 @@ export async function finalizeCompanyDocumentFileUpload(
     return { success: false, error: 'finalize_failed' };
   }
   if (registered.data.length > 0) {
+    // The registration committed after its answer was lost, which kept the
+    // staged upload; only the copy it registered stays.
+    await discardStorageObjects({ organizationId, paths: [stagingPath] });
     // The first call's refresh never reached this browser either.
     revalidatePath(SETTINGS_PATH);
     return { success: true };
@@ -188,16 +198,16 @@ export async function finalizeCompanyDocumentFileUpload(
 
   let copy;
   try {
-    copy = await promoteUploadedObject({ organizationId, path });
+    copy = await copyStagedUpload({ organizationId, path });
   } catch (error) {
     logError('finalizeCompanyDocumentFileUpload: promotion failed', error);
     return { success: false, error: 'upload_failed' };
   }
   if (!copy.exists) return { success: false, error: 'file_missing' };
-  const discardCopy = () => discardStorageObjects({ organizationId, paths: [copy.path] });
+  const discardUpload = () => discardStorageObjects({ organizationId, paths: [copy.path, stagingPath] });
   const ruleFailure = uploadRuleFailure(COMPANY_FILE_RULES[input.kind], copy.contentType, copy.sizeBytes);
   if (ruleFailure || copy.contentType === null || copy.sizeBytes === null) {
-    await discardCopy();
+    await discardUpload();
     return { success: false, error: ruleFailure ?? 'file_type_not_allowed' };
   }
   const mimeType = copy.contentType;
@@ -205,12 +215,12 @@ export async function finalizeCompanyDocumentFileUpload(
   try {
     const file = await readCompanyFile(organizationId, { path: copy.path, mimeType });
     if (!(await canEmbedFile(file, input.kind === 'logo' ? 'image' : 'page'))) {
-      await discardCopy();
+      await discardUpload();
       return { success: false, error: 'file_unreadable' };
     }
   } catch (error) {
     logError('finalizeCompanyDocumentFileUpload: stored copy read failed', error);
-    await discardCopy();
+    await discardUpload();
     return { success: false, error: 'upload_failed' };
   }
 
@@ -230,10 +240,12 @@ export async function finalizeCompanyDocumentFileUpload(
     }),
   );
   if (error) {
-    // After an unknown outcome the copy stays: the registration may still commit.
-    if (isConfirmedWriteRefusal(error)) await discardCopy();
+    // After an unknown outcome copy and staged upload stay: the registration
+    // may still commit, and if it did not, the retry copies the upload again.
+    if (isConfirmedWriteRefusal(error)) await discardUpload();
     return refusal(error, 'finalize_failed', 'finalizeCompanyDocumentFileUpload: registration failed');
   }
+  await discardStorageObjects({ organizationId, paths: [stagingPath] });
   revalidatePath(SETTINGS_PATH);
   return { success: true };
 }
