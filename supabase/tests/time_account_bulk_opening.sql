@@ -42,7 +42,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_message then
+    if sqlerrm is distinct from p_message then
       raise exception '%: expected %, got %', p_label, p_message, sqlerrm;
     end if;
     return;
@@ -174,7 +174,7 @@ begin
   v_opened := public.open_time_accounts(
     v_admin, v_org, pg_temp.openings(array[v_first, v_second], array[750, -195]),
     '2026-08-01', 'Einführung des Zeitkontos', repeat('b', 64));
-  if v_opened <> 2 then raise exception 'the bulk opening reported % accounts, not 2', v_opened; end if;
+  if v_opened is distinct from 2 then raise exception 'the bulk opening reported % accounts, not 2', v_opened; end if;
   if (select array_agg(current_balance_minutes order by current_balance_minutes)
       from public.time_accounts
       where organization_id = v_org and employee_record_id in (v_first, v_second)
@@ -188,7 +188,7 @@ begin
       and event.effective_date = '2026-08-01' and event.reason = 'Einführung des Zeitkontos'
       and event.created_by = v_admin and event.minutes = account.current_balance_minutes
       and event.employee_record_id = account.employee_record_id;
-  if v_event_count <> 2 then
+  if v_event_count is distinct from 2 then
     raise exception 'the bulk opening recorded % opening events, not one per person', v_event_count;
   end if;
   if (select count(distinct operation_id) from public.time_account_events
@@ -222,7 +222,7 @@ begin
     v_admin, v_org, (select period_id from public.time_period_calculations where id = v_calculation),
     '16800000-0000-0000-0000-000000000031', repeat('9', 64));
   if (select state from public.time_periods where organization_id = v_org and period_start_date = '2026-08-01')
-    <> 'closed' then raise exception 'the period workflow did not close August'; end if;
+    is distinct from 'closed' then raise exception 'the period workflow did not close August'; end if;
   perform pg_temp.expect_refusal('a bulk opening reached into a closed month',
     format($sql$select public.open_time_accounts(%L, %L, pg_temp.openings(array[%L]::uuid[], array[0]), '2026-08-15', 'Einführung', repeat('d', 64))$sql$,
       v_admin, v_org, v_third),
@@ -238,7 +238,7 @@ begin
   v_opened := public.open_time_accounts(
     v_admin, v_org, pg_temp.openings(array[v_third], array[0]),
     '2026-09-01', 'Eintritt nach dem August', repeat('e', 64));
-  if v_opened <> 1 or not exists (
+  if v_opened is distinct from 1 or not exists (
     select 1 from public.time_accounts where employee_record_id = v_third and opened_on = '2026-09-01'
   ) then
     raise exception 'an opening after the last closed month was refused';

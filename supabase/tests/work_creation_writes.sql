@@ -79,7 +79,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -189,7 +189,7 @@ grant execute on function pg_temp.create_job(jsonb, uuid[], uuid) to service_rol
 
 create function pg_temp.assert_no_new_rows(p_label text) returns void language plpgsql as $$
 begin
-  if pg_temp.work_rows() <> (select rows_before from pg_temp.world) then
+  if pg_temp.work_rows() is distinct from (select rows_before from pg_temp.world) then
     raise exception '% left rows behind', p_label;
   end if;
 end;
@@ -270,7 +270,7 @@ begin
       '{}', pg_temp.berlin_today(), '{}', '[]', '{}', 'fingerprint', null, null, false, null, false)
   $sql$, v_due.id, v_due.version + 1), 'maintenance_stale_version');
   perform pg_temp.assert_no_new_rows('the refused visit');
-  if public.generate_job_number('26104170-0000-0000-0000-000000000010') <> v_next_number then
+  if public.generate_job_number('26104170-0000-0000-0000-000000000010') is distinct from v_next_number then
     raise exception 'the refused visit consumed the job number';
   end if;
 end;
@@ -293,7 +293,7 @@ begin
   if v_job.client_id is distinct from '26104170-0000-0000-0000-000000000020'::uuid
     or v_job.site_id is distinct from '26104170-0000-0000-0000-000000000021'::uuid
     or v_job.contact_id is distinct from '26104170-0000-0000-0000-000000000022'::uuid
-    or v_job.status <> 'nicht_bearbeitet' or v_job.priority <> 'mittel'
+    or v_job.status is distinct from 'nicht_bearbeitet' or v_job.priority is distinct from 'mittel'
     or not exists (select 1 from public.job_assignments where job_id = v_job.id
                    and user_id = '26104170-0000-0000-0000-000000000002')
     or not exists (select 1 from public.job_instruction_items where job_id = v_job.id and content = 'Anlage warten')
@@ -321,7 +321,8 @@ begin
                    and converted_by = '26104170-0000-0000-0000-000000000001')
     or not exists (select 1 from public.document_links where job_id = v_converted.id
                    and document_id = '26104170-0000-0000-0000-000000000061')
-    or not exists (select 1 from public.document_audit_events where event_type = 'linked'
+    or not exists (select 1 from public.document_audit_events
+                   where organization_id = '26104170-0000-0000-0000-000000000010' and event_type = 'linked'
                    and event_payload ->> 'jobId' = v_converted.id::text
                    and event_payload ->> 'via' = 'request_conversion')
     or not exists (select 1 from public.client_request_events

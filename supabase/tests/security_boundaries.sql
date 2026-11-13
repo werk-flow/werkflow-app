@@ -576,7 +576,7 @@ declare
 begin
   select regexp_count(pg_get_functiondef('public.fulfill_instruction_evidence'::regproc), 'instruction_evidence_requirement_not_found')
     into guard_count;
-  if guard_count <> 2 then
+  if guard_count is distinct from 2 then
     raise exception 'fulfill_instruction_evidence body drifted: % guard occurrences', guard_count;
   end if;
 end;
@@ -664,7 +664,7 @@ declare
 begin
   select quantity_delta into delta from public.inventory_movements
   where id = '51000000-0000-0000-0000-000000000040';
-  if delta <> 5 then raise exception 'ledger row changed despite denial'; end if;
+  if delta is distinct from 5 then raise exception 'ledger row changed despite denial'; end if;
 end;
 $$;
 
@@ -789,9 +789,9 @@ begin
 
   if (select lifecycle.state from public.personnel_access_lifecycles lifecycle
       join public.employee_records record on record.id = lifecycle.employee_record_id
-      where record.organization_id = v_org and record.user_id = v_suspended) <> 'suspended'
+      where record.organization_id = v_org and record.user_id = v_suspended) is distinct from 'suspended'
      or (select lifecycle.state from public.personnel_access_lifecycles lifecycle
-      where lifecycle.employee_record_id = v_record) <> 'ended'
+      where lifecycle.employee_record_id = v_record) is distinct from 'ended'
   then raise exception 'account deletion fixture did not reach its access states'; end if;
 end;
 $$;

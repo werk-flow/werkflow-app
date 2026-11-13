@@ -73,7 +73,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -194,7 +194,7 @@ $sql$, 'not_authorized');
 
 do $$
 begin
-  if pg_temp.attention_state() <> (select state from attention_state_before) then
+  if pg_temp.attention_state() is distinct from (select state from attention_state_before) then
     raise exception 'a refused call changed markers or events';
   end if;
 end;
@@ -300,7 +300,7 @@ alter table public.attention_events disable trigger "ZZ_test_refuse_attention_ev
 
 do $$
 begin
-  if pg_temp.attention_state() <> (select state from pg_temp.attention_state_before_failure) then
+  if pg_temp.attention_state() is distinct from (select state from pg_temp.attention_state_before_failure) then
     raise exception 'a refused event left a marker change behind';
   end if;
 end;
