@@ -2,11 +2,12 @@
 import { useListNavigation } from '@/hooks/use-list-navigation';
 import type { JobListPagination } from '@/lib/jobs/list-page';
 
-import { useState, type ComponentProps } from 'react';
+import { useEffect, useState, type ComponentProps } from 'react';
 import { RefreshButton } from '@/components/ui/refresh-button';
 
 import { usePageAction, usePageActionLoader } from '@/components/shared/page-action';
 import { lazyDialog } from '@/components/shared/lazy-dialog';
+import { downloadWorkBillingPartiesSection } from '@/components/auftraege/shared/work-billing-parties-download';
 import { UsableContent } from '@/components/shared/usable-content';
 import type { Job, ProjectWithDetails } from '@/lib/jobs/types';
 import type { UnifiedListEntry } from '@/lib/jobs/unified-list';
@@ -232,6 +233,12 @@ export function AuftraegeContent(props: AuftraegeContentProps) {
     isAdminOrManager ? lazyCreateDialogs.preload : null,
     lazyCreateDialogs.useWaiting(state.createDialogOpen),
   );
+  // The office opens jobs from here; their billing section waits in its own chunk.
+  useEffect(() => {
+    if (!isAdminOrManager) return;
+    // eslint-disable-next-line no-restricted-syntax -- an early download that fails costs nothing yet: the section downloads again when it renders and reports the failure there
+    void downloadWorkBillingPartiesSection().catch(() => undefined);
+  }, [isAdminOrManager]);
 
   const sectionTableProps: AuftraegeSectionTableSharedProps = {
     pagination,
