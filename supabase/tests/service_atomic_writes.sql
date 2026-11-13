@@ -178,7 +178,7 @@ begin
   );
   select count(*) into v_due_count from public.maintenance_due_work
   where maintenance_plan_id = v_plan.id and status = 'open';
-  if v_plan.status <> 'active' or v_plan.generation_through_date is null or v_due_count < 2 then
+  if v_plan.status is distinct from 'active' or v_plan.generation_through_date is null or v_due_count < 2 then
     raise exception 'a clean create did not generate the due work (% items)', v_due_count;
   end if;
   if (select array_agg(event_type::text order by event_type::text) from public.maintenance_plan_events
@@ -187,7 +187,7 @@ begin
   end if;
   if (select count(*) from public.maintenance_due_work_events event
       join public.maintenance_due_work due on due.id = event.maintenance_due_work_id
-      where due.maintenance_plan_id = v_plan.id and event.event_type = 'generated') <> v_due_count then
+      where due.maintenance_plan_id = v_plan.id and event.event_type = 'generated') is distinct from v_due_count then
     raise exception 'a generated due item lacks its generated event';
   end if;
 
@@ -199,8 +199,8 @@ begin
     '26104000-0000-0000-0000-000000000001', '26104000-0000-0000-0000-000000000052',
     (pg_temp.berlin_today() + interval '12 months')::date
   );
-  if v_replay.version <> v_plan.version
-    or (select count(*) from public.maintenance_due_work where maintenance_plan_id = v_plan.id) <> v_due_count
+  if v_replay.version is distinct from v_plan.version
+    or (select count(*) from public.maintenance_due_work where maintenance_plan_id = v_plan.id) is distinct from v_due_count
     or (select count(*) from public.maintenance_plan_events where maintenance_plan_id = v_plan.id) <> 2
   then raise exception 'a replayed create changed the plan'; end if;
 end;
@@ -233,7 +233,7 @@ declare
   v_revised public.maintenance_plans%rowtype;
 begin
   select * into v_plan from public.maintenance_plans where id = '26104000-0000-0000-0000-000000000050';
-  if v_plan.current_revision_id <> '26104000-0000-0000-0000-000000000051'
+  if v_plan.current_revision_id is distinct from '26104000-0000-0000-0000-000000000051'
     or exists (select 1 from public.maintenance_plan_revisions where id = '26104000-0000-0000-0000-000000000053')
     or (select count(*) from public.maintenance_plan_events where maintenance_plan_id = v_plan.id) <> 2
   then raise exception 'a refused regeneration left the new revision'; end if;
@@ -245,7 +245,7 @@ begin
     'Intervall verkürzt', '26104000-0000-0000-0000-000000000001', '26104000-0000-0000-0000-000000000054',
     (pg_temp.berlin_today() + interval '12 months')::date
   );
-  if v_revised.current_revision_id <> '26104000-0000-0000-0000-000000000053'
+  if v_revised.current_revision_id is distinct from '26104000-0000-0000-0000-000000000053'
     or v_revised.generation_through_date is null
     or not exists (select 1 from public.maintenance_due_work
                    where maintenance_plan_revision_id = '26104000-0000-0000-0000-000000000053')
@@ -267,7 +267,7 @@ begin
     '26104000-0000-0000-0000-000000000001', '26104000-0000-0000-0000-000000000062',
     (pg_temp.berlin_today() + interval '12 months')::date
   );
-  if v_draft.status <> 'draft'
+  if v_draft.status is distinct from 'draft'
     or exists (select 1 from public.maintenance_due_work where maintenance_plan_id = v_draft.id)
   then raise exception 'a draft plan received due work'; end if;
 end;
@@ -293,7 +293,7 @@ declare
   v_active public.maintenance_plans%rowtype;
 begin
   select * into v_plan from public.maintenance_plans where id = '26104000-0000-0000-0000-000000000060';
-  if v_plan.status <> 'draft'
+  if v_plan.status is distinct from 'draft'
     or exists (select 1 from public.maintenance_due_work where maintenance_plan_id = v_plan.id)
     or exists (select 1 from public.maintenance_plan_events
                where maintenance_plan_id = v_plan.id and event_type::text = 'status_changed')
@@ -304,7 +304,7 @@ begin
     '26104000-0000-0000-0000-000000000001', '26104000-0000-0000-0000-000000000063',
     (pg_temp.berlin_today() + interval '12 months')::date
   );
-  if v_active.status <> 'active'
+  if v_active.status is distinct from 'active'
     or not exists (select 1 from public.maintenance_due_work where maintenance_plan_id = v_plan.id)
   then raise exception 'a clean activation did not generate the due work'; end if;
 end;
@@ -397,9 +397,9 @@ begin
     pg_temp.visit_occurrence('26104000-0000-0000-0000-000000000030'), '[]'::jsonb,
     '26104000-0000-0000-0000-000000000071', '{}'::jsonb, 'capacity', '{}'::jsonb, 'qualification'
   );
-  if (select planning_occurrence_id from public.maintenance_due_work where id = v_linked) <> v_occurrence_id
+  if (select planning_occurrence_id from public.maintenance_due_work where id = v_linked) is distinct from v_occurrence_id
     or (select job_id from public.planning_occurrences where id = v_occurrence_id)
-       <> '26104000-0000-0000-0000-000000000030'
+       is distinct from '26104000-0000-0000-0000-000000000030'
     or not exists (select 1 from public.planning_events where occurrence_id = v_occurrence_id
                    and event_type::text = 'created')
     or not exists (select 1 from public.maintenance_due_work_events where maintenance_due_work_id = v_linked
@@ -411,10 +411,10 @@ begin
     pg_temp.visit_occurrence('26104000-0000-0000-0000-000000000030'), '[]'::jsonb,
     '26104000-0000-0000-0000-000000000071', '{}'::jsonb, 'capacity', '{}'::jsonb, 'qualification'
   );
-  if v_replay_id <> v_occurrence_id
+  if v_replay_id is distinct from v_occurrence_id
     or (select count(*) from public.planning_occurrences
         where creation_request_id = '26104000-0000-0000-0000-000000000071') <> 1
-    or (select version from public.maintenance_due_work where id = v_linked) <> v_version + 1
+    or (select version from public.maintenance_due_work where id = v_linked) is distinct from v_version + 1
   then raise exception 'a replayed schedule changed the visit'; end if;
 end;
 $$;

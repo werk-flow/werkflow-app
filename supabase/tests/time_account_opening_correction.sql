@@ -35,7 +35,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_message then
+    if sqlerrm is distinct from p_message then
       raise exception '%: expected %, got %', p_label, p_message, sqlerrm;
     end if;
     return;
@@ -129,19 +129,19 @@ begin
   perform pg_temp.check_deferred_invariants();
 
   select * into v_account_row from public.time_accounts where id = v_account;
-  if v_account_row.opened_on <> '2026-08-01' or v_account_row.version <> 2 then
+  if v_account_row.opened_on is distinct from '2026-08-01' or v_account_row.version is distinct from 2 then
     raise exception 'the account was not moved to the corrected date (opened_on %, version %)',
       v_account_row.opened_on, v_account_row.version;
   end if;
-  if v_account_row.current_balance_minutes <> 90 then
+  if v_account_row.current_balance_minutes is distinct from 90 then
     raise exception 'the correction changed the balance to %', v_account_row.current_balance_minutes;
   end if;
   select * into v_correction_row from public.time_account_opening_corrections where id = v_correction;
-  if v_correction_row.previous_opened_on <> '2026-10-29'
-    or v_correction_row.corrected_opened_on <> '2026-08-01'
-    or v_correction_row.reason <> 'Konto ab August führen'
-    or v_correction_row.reversed_event_id <> v_original_event
-    or v_correction_row.created_by <> v_admin
+  if v_correction_row.previous_opened_on is distinct from '2026-10-29'
+    or v_correction_row.corrected_opened_on is distinct from '2026-08-01'
+    or v_correction_row.reason is distinct from 'Konto ab August führen'
+    or v_correction_row.reversed_event_id is distinct from v_original_event
+    or v_correction_row.created_by is distinct from v_admin
   then raise exception 'the history row lacks old date, new date, reason or actor'; end if;
   if not exists (
     select 1 from public.time_account_events
@@ -157,7 +157,7 @@ begin
     where id = v_correction_row.opening_event_id and effective_date = '2026-08-01' and minutes = 90
       and reason = 'Eröffnungsdatum korrigiert von 29.10.2026 auf 01.08.2026: Konto ab August führen'
   ) then raise exception 'the opening minutes did not move to the corrected date'; end if;
-  if (select sum(minutes) from public.time_account_events where account_id = v_account) <> 90 then
+  if (select sum(minutes) from public.time_account_events where account_id = v_account) is distinct from 90 then
     raise exception 'the account ledger no longer sums to its balance';
   end if;
   if v_fingerprint = app_private.compute_p1_23_source_fingerprint(v_org, '2026-09-01', '2026-09-30') then
@@ -177,7 +177,7 @@ begin
   v_replayed := public.correct_time_account_opening_date(
     v_org, v_account, '2026-08-01', 'Konto ab August führen', v_admin,
     '16700000-0000-0000-0000-000000000021', repeat('c', 64));
-  if v_replayed <> v_correction
+  if v_replayed is distinct from v_correction
     or (select count(*) from public.time_account_opening_corrections where account_id = v_account) <> 1
   then raise exception 'a replayed correction was applied twice'; end if;
   perform pg_temp.expect_refusal('a changed payload reused an operation id',
@@ -191,8 +191,8 @@ begin
     '16700000-0000-0000-0000-000000000022', repeat('e', 64));
   perform pg_temp.check_deferred_invariants();
   select * into v_correction_row from public.time_account_opening_corrections where id = v_correction;
-  if v_correction_row.previous_opened_on <> '2026-08-01'
-    or v_correction_row.reversed_event_id <> (
+  if v_correction_row.previous_opened_on is distinct from '2026-08-01'
+    or v_correction_row.reversed_event_id is distinct from (
       select opening_event_id from public.time_account_opening_corrections
       where operation_id = '16700000-0000-0000-0000-000000000021'
     )
@@ -239,7 +239,7 @@ begin
     v_admin, v_org, (select period_id from public.time_period_calculations where id = v_calculation),
     '16700000-0000-0000-0000-000000000031', repeat('9', 64));
   if (select state from public.time_periods where organization_id = v_org and period_start_date = '2026-08-01')
-    <> 'closed' then raise exception 'the period workflow did not close August'; end if;
+    is distinct from 'closed' then raise exception 'the period workflow did not close August'; end if;
   perform pg_temp.expect_refusal('a correction moved an opening that a closed month used',
     format($sql$select public.correct_time_account_opening_date(%L, %L, '2026-09-01', 'Später', %L, gen_random_uuid(), repeat('b', 64))$sql$,
       v_org, v_account, v_admin),
@@ -262,7 +262,7 @@ begin
     v_org, v_admin_account, '2026-09-01', 'Ab September', v_admin,
     '16700000-0000-0000-0000-000000000024', repeat('a', 64));
   perform pg_temp.check_deferred_invariants();
-  if (select opened_on from public.time_accounts where id = v_admin_account) <> '2026-09-01' then
+  if (select opened_on from public.time_accounts where id = v_admin_account) is distinct from '2026-09-01' then
     raise exception 'an account opened after the last closed month could not be corrected';
   end if;
 end;

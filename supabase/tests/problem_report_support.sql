@@ -89,17 +89,17 @@ begin
     jsonb_build_object('bucket', 'fehler', 'assignee_id', v_support),
     jsonb_build_object('bucket', null, 'assignee_id', null), array[v_colleague, v_ghost]);
   select * into v_row from public.problem_reports where id = v_report;
-  if v_row.bucket <> 'fehler' or v_row.assignee_id <> v_support or v_row.status <> 'eingegangen' then
+  if v_row.bucket is distinct from 'fehler' or v_row.assignee_id is distinct from v_support or v_row.status is distinct from 'eingegangen' then
     raise exception 'a triage did not set bucket and assignee alone';
   end if;
   if (select array_agg(event_type order by event_type) from public.problem_report_events
       where report_id = v_report and actor_id = v_support)
-    <> array['assignee_changed', 'bucket_changed'] then
+    is distinct from array['assignee_changed', 'bucket_changed'] then
     raise exception 'a triage did not write one history entry per changed field';
   end if;
   if (select payload from public.problem_report_events
       where report_id = v_report and event_type = 'bucket_changed')
-    <> jsonb_build_object('from', null, 'to', 'fehler') then
+    is distinct from jsonb_build_object('from', null, 'to', 'fehler') then
     raise exception 'a bucket change did not record its old and new value';
   end if;
   if exists (select 1 from public.problem_report_signals
@@ -126,17 +126,17 @@ begin
     jsonb_build_object('status', 'erledigt', 'response', 'Behoben, ab morgen live.'),
     jsonb_build_object('status', 'eingegangen', 'response', null), null);
   select * into v_row from public.problem_reports where id = v_report;
-  if v_row.status <> 'erledigt' or v_row.closed_at is null or v_row.response <> 'Behoben, ab morgen live.'
-    or v_row.bucket <> 'fehler' then
+  if v_row.status is distinct from 'erledigt' or v_row.closed_at is null or v_row.response is distinct from 'Behoben, ab morgen live.'
+    or v_row.bucket is distinct from 'fehler' then
     raise exception 'closing a report did not set its status, closing time and answer alone';
   end if;
   if (select payload from public.problem_report_events
-      where report_id = v_report and event_type = 'response_changed') <> '{}'::jsonb then
+      where report_id = v_report and event_type = 'response_changed') is distinct from '{}'::jsonb then
     raise exception 'the history kept the text of an answer';
   end if;
   if (select payload from public.problem_report_events
       where report_id = v_report and event_type = 'status_changed')
-    <> jsonb_build_object('from', 'eingegangen', 'to', 'erledigt') then
+    is distinct from jsonb_build_object('from', 'eingegangen', 'to', 'erledigt') then
     raise exception 'a status change did not record its old and new value';
   end if;
   select updated_at into v_signal from public.problem_report_signals
@@ -148,7 +148,7 @@ begin
     jsonb_build_object('status', 'in_bearbeitung', 'assignee_id', null),
     jsonb_build_object('status', 'erledigt', 'assignee_id', v_support), null);
   select * into v_row from public.problem_reports where id = v_report;
-  if v_row.status <> 'in_bearbeitung' or v_row.closed_at is not null or v_row.assignee_id is not null then
+  if v_row.status is distinct from 'in_bearbeitung' or v_row.closed_at is not null or v_row.assignee_id is not null then
     raise exception 'reopening a report did not clear its closing time and assignee';
   end if;
   if (select count(*) from public.problem_report_signals
@@ -165,7 +165,7 @@ declare
   v_org constant uuid := '33500000-0000-0000-0000-000000000010';
   v_report constant uuid := '33500000-0000-0000-0000-000000000020';
   v_support constant uuid := '33500000-0000-0000-0000-000000000003';
-  v_events constant bigint := (select count(*) from public.problem_report_events);
+  v_events constant bigint := (select count(*) from public.problem_report_events where organization_id = v_org);
 begin
   begin
     perform public.triage_problem_report(v_org, gen_random_uuid(), v_support, '{"bucket":"wunsch"}',
@@ -201,7 +201,7 @@ begin
     raise exception 'a bucket outside the four was accepted';
   exception when check_violation then null;
   end;
-  if (select count(*) from public.problem_report_events) <> v_events then
+  if (select count(*) from public.problem_report_events where organization_id = v_org) is distinct from v_events then
     raise exception 'a refused triage wrote history';
   end if;
 end;
@@ -224,7 +224,7 @@ declare
 begin
   perform public.triage_problem_report(v_org, v_report, v_support,
     jsonb_build_object('response', 'Erste Antwort'), v_seen, null);
-  v_events := (select count(*) from public.problem_report_events);
+  v_events := (select count(*) from public.problem_report_events where organization_id = v_org);
   begin
     perform public.triage_problem_report(v_org, v_report, v_colleague,
       jsonb_build_object('response', 'Zweite Antwort'), v_seen, null);
@@ -232,14 +232,14 @@ begin
   exception when raise_exception then
     if sqlerrm <> 'triage_conflict' then raise; end if;
   end;
-  if (select response from public.problem_reports where id = v_report) <> 'Erste Antwort'
-    or (select count(*) from public.problem_report_events) <> v_events then
+  if (select response from public.problem_reports where id = v_report) is distinct from 'Erste Antwort'
+    or (select count(*) from public.problem_report_events where organization_id = v_org) is distinct from v_events then
     raise exception 'a refused write changed the report or its history';
   end if;
 
   perform public.triage_problem_report(v_org, v_report, v_colleague,
     jsonb_build_object('bucket', 'wunsch'), jsonb_build_object('bucket', 'fehler'), null);
-  if (select bucket from public.problem_reports where id = v_report) <> 'wunsch' then
+  if (select bucket from public.problem_reports where id = v_report) is distinct from 'wunsch' then
     raise exception 'a change of another field from the same state was refused';
   end if;
 
@@ -287,16 +287,16 @@ declare
 begin
   v_number := public.file_problem_report_for_caller(v_report, v_org, v_worker, v_support, 'Am Telefon gemeldet', null);
   select * into v_row from public.problem_reports where id = v_report;
-  if v_row.reporter_id <> v_worker or v_row.filed_by_id <> v_support or v_row.number <> v_number
-    or v_row.status <> 'eingegangen' or v_row.scrub_state <> 'ausstehend'
-    or v_row.scrubbed_description is not null or v_row.context <> '{}'::jsonb then
+  if v_row.reporter_id is distinct from v_worker or v_row.filed_by_id is distinct from v_support or v_row.number is distinct from v_number
+    or v_row.status is distinct from 'eingegangen' or v_row.scrub_state is distinct from 'ausstehend'
+    or v_row.scrubbed_description is not null or v_row.context is distinct from '{}'::jsonb then
     raise exception 'a report filed for a caller did not name reporter and filer, or did not start pending';
   end if;
   if not exists (select 1 from public.problem_report_signals where organization_id = v_org and user_id = v_worker) then
     raise exception 'a report filed for a caller did not signal the reporter';
   end if;
-  if public.file_problem_report_for_caller(v_report, v_org, v_worker, v_support, 'Noch einmal', null) <> v_number
-    or (select description from public.problem_reports where id = v_report) <> 'Am Telefon gemeldet' then
+  if public.file_problem_report_for_caller(v_report, v_org, v_worker, v_support, 'Noch einmal', null) is distinct from v_number
+    or (select description from public.problem_reports where id = v_report) is distinct from 'Am Telefon gemeldet' then
     raise exception 'a retried filing did not find its own report';
   end if;
   -- The filer, and nobody else, adds the attachments.
@@ -352,7 +352,7 @@ begin
     is distinct from array['{}'::jsonb, jsonb_build_object('file_id', v_file)] then
     raise exception 'an opening did not record one entry, naming the attachment it opened';
   end if;
-  v_events := (select count(*) from public.problem_report_events);
+  v_events := (select count(*) from public.problem_report_events where organization_id = v_org);
   begin
     perform public.record_problem_report_opening('33500000-0000-0000-0000-000000000011', v_report, v_support,
       null, null);
@@ -360,7 +360,7 @@ begin
   exception when raise_exception then
     if sqlerrm <> 'report_not_found' then raise; end if;
   end;
-  if (select count(*) from public.problem_report_events) <> v_events then
+  if (select count(*) from public.problem_report_events where organization_id = v_org) is distinct from v_events then
     raise exception 'a refused opening wrote history';
   end if;
 end;
@@ -438,7 +438,8 @@ begin
   end if;
   -- Its signal row left without a deletion notice, which would reach every
   -- member of the organization.
-  if exists (select 1 from public.realtime_deletions where table_name = 'problem_report_signals') then
+  if exists (select 1 from public.realtime_deletions where table_name = 'problem_report_signals'
+      and organization_id in ('33500000-0000-0000-0000-000000000010', '33500000-0000-0000-0000-000000000011')) then
     raise exception 'a signal row''s deletion notified the organization';
   end if;
 end;

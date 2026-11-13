@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { createAdminClient, persisted, type Persisted } from './shared';
 
 export type InventoryLedgerState = {
@@ -67,4 +68,28 @@ export async function getInventoryLocationByName(
     .single();
   if (error) throw new Error(`Inventory location ${name} lookup failed: ${error.message}`);
   return persisted({ id: data.id, name: data.name, isActive: data.is_active });
+}
+
+/**
+ * A CSV import of this file content that an earlier booking closed, so the
+ * import dialog warns before the same file again. The hash is the SHA-256 of
+ * the bytes, as the browser computes it.
+ */
+export async function seedBookedImportBatch(input: {
+  orgId: string;
+  actorId: string;
+  fileName: string;
+  content: Buffer;
+}): Promise<void> {
+  await createAdminClient()
+    .from('inventory_import_batches')
+    .insert({
+      organization_id: input.orgId,
+      file_name: input.fileName,
+      status: 'imported',
+      created_by: input.actorId,
+      content_hash: createHash('sha256').update(input.content).digest('hex'),
+      completed_at: new Date().toISOString(),
+    })
+    .throwOnError();
 }

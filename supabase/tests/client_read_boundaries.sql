@@ -246,13 +246,13 @@ where id = 'cb000000-0000-4000-8000-000000000001';
 reset role;
 do $$
 begin
-  if (select first_name from public.profiles where id = 'cb000000-0000-4000-8000-000000000004') <> 'Neu' then
+  if (select first_name from public.profiles where id = 'cb000000-0000-4000-8000-000000000004') is distinct from 'Neu' then
     raise exception 'own profile name update was lost';
   end if;
-  if (select email from public.profiles where id = 'cb000000-0000-4000-8000-000000000004') <> 'crb-colleague@example.test' then
+  if (select email from public.profiles where id = 'cb000000-0000-4000-8000-000000000004') is distinct from 'crb-colleague@example.test' then
     raise exception 'profile email changed';
   end if;
-  if (select first_name from public.profiles where id = 'cb000000-0000-4000-8000-000000000001') <> 'Admin' then
+  if (select first_name from public.profiles where id = 'cb000000-0000-4000-8000-000000000001') is distinct from 'Admin' then
     raise exception 'another person''s profile changed';
   end if;
 end;
@@ -646,7 +646,7 @@ begin
   execute 'set local role authenticated';
   execute format('select count(*) from (select %s from public.%I where id = $1) row_read', p_readable, p_relation)
     into visible using p_id;
-  if visible <> 1 then
+  if visible is distinct from 1 then
     raise exception 'Assigned employee reads % % row(s) of %, expected 1', visible, p_relation, p_id;
   end if;
   foreach hidden_column in array p_hidden loop

@@ -130,7 +130,7 @@ begin
       raise exception 'admin cannot read own-organization % rows', entry.key;
     end if;
   end loop;
-  if (select counts from customer_visibility where viewer = 'buero') <> admin_counts then
+  if (select counts from customer_visibility where viewer = 'buero') is distinct from admin_counts then
     raise exception 'Büro does not read the same customer relationship rows as admin: %',
       (select counts from customer_visibility where viewer = 'buero');
   end if;
@@ -138,7 +138,7 @@ begin
     select viewer, key, value from customer_visibility, jsonb_each(counts)
     where viewer in ('employee', 'outsider')
   loop
-    if entry.value::bigint <> 0 then
+    if entry.value::bigint is distinct from 0 then
       raise exception '% can read % customer relationship rows of %', entry.viewer, entry.value, entry.key;
     end if;
   end loop;

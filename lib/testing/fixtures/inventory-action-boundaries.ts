@@ -131,7 +131,6 @@ const {
   takeJobMaterial,
   takeProjectMaterial,
   returnJobMaterial,
-  importInventoryRows,
 } = await import('@/lib/inventory/actions');
 const { recordJobMaterialUse } = await import('@/lib/inventory/material-use-actions');
 const { readJobMaterialConsumption } = await import('@/lib/inventory/material-line-reads');
@@ -171,11 +170,6 @@ const officeOnly = [
     'createProjectMaterialLine',
     () =>
       createProjectMaterialLine({ projectId: foreignProjectId, itemId: foreignItemId, plannedQuantity: 2 }),
-  ],
-  [
-    'importInventoryRows',
-    () =>
-      importInventoryRows({ fileName: 'inventar.csv', columnMapping: {}, rows: [{ name: 'Kupferrohr' }] }),
   ],
   // The movement history names people and job material: office only.
   ['getInventoryMovementHistory', () => getInventoryMovementHistory({ tab: 'movements' })],

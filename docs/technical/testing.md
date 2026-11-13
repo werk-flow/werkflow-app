@@ -9,11 +9,11 @@ Write each test at its boundary while you build the behavior.
 ### Choose the boundary for a rule
 
 1. A calculation or a pure rule: a unit test beside its module under `lib/`.
-2. A permission, grant or history rule: a rolled-back SQL transaction in `supabase/tests/`, a failure message per invariant, counting only its organizations' rows.
+2. A permission, grant or history rule: a rolled-back SQL transaction in `supabase/tests/`, a failure message per invariant, NULL-safe comparisons, only its organizations' rows (`lib/conventions/sql-test-assertions.test.ts`).
 3. A Server Action's authorization: a boundary fixture on `lib/testing/fixtures/action-boundary-world.ts`.
 4. A shared control, pending feedback or a held write: a contract in `tests/ui-contracts/`.
 5. A connected outcome across roles or sessions: a step in the slice's golden or audit spec.
-6. Map the catalog clause in `lib/testing/selection/coverage-map.json` to the titles of the tests that prove it (for SQL, the `raise exception` message).
+6. Map the catalog clause in `lib/testing/selection/coverage-map.json` to the titles of its proving tests (for SQL, the `raise exception` message).
 7. Probe a lint rule with `createProbeLinter()` from `eslint-rules/probe-linter.mjs`, never `new ESLint()`.
 
 A useful test survives an equivalent implementation. Check a regression test against the broken case. Keep catalog-clause coverage when moving an assertion. A runner test that enforces an author rule opens with `// Rule test:`.

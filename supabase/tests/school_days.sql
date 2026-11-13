@@ -250,7 +250,7 @@ begin
   -- An end date after the closed month removes only open days and passes,
   -- although the rule itself covers the closed month.
   update public.school_days set end_date = '2037-11-30', ended_at = now(), ended_by = v_buero where id = v_rule;
-  if (select end_date from public.school_days where id = v_rule) <> '2037-11-30' then
+  if (select end_date from public.school_days where id = v_rule) is distinct from '2037-11-30' then
     raise exception 'ending a weekly rule after the closed month was refused';
   end if;
 
@@ -318,7 +318,7 @@ begin
   insert into public.school_days (organization_id, employee_record_id, kind, start_date, end_date, created_by)
   values (v_org, v_apprentice, 'block', '2038-03-08', '2038-03-12', '3c650000-0000-0000-0000-000000000002');
   v_after_outside := app_private.compute_p1_23_source_fingerprint(v_org, '2038-02-01', '2038-02-28');
-  if v_after_outside <> v_before then
+  if v_after_outside is distinct from v_before then
     raise exception 'a school day outside the period changed its fingerprint';
   end if;
   insert into public.school_days (organization_id, employee_record_id, kind, start_date, end_date, created_by)

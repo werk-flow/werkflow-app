@@ -173,7 +173,14 @@ export const DIALOG_INVENTORY = {
       audits: [{ route: '/dokumente', role: 'admin', opener: 'documents.viewer' }],
     },
   'components/inventar/inventory-import-dialog.tsx#ImportDialog|CSV importieren': {
-    audits: [{ route: '/inventar', role: 'admin', opener: 'inventory.import' }],
+    audits: [
+      { route: '/inventar', role: 'admin', opener: 'inventory.import' },
+      { route: '/inventar', role: 'admin', opener: 'inventory.import-preview' },
+      { route: '/inventar', role: 'admin', opener: 'inventory.import-result' },
+      { route: '/inventar', role: 'admin', opener: 'inventory.import-repeat' },
+      { route: '/inventar', role: 'admin', opener: 'inventory.import-empty-file' },
+      { route: '/inventar', role: 'admin', opener: 'inventory.import-read-failure' },
+    ],
   },
   "components/inventar/inventory-item-dialog.tsx#ItemDialog|{form.id ? 'Artikel bearbeiten' : 'Artikel anlegen'}":
     {

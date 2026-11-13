@@ -41,8 +41,6 @@ const EMAIL_CHANGE_STATE_RECOVERY =
 const ALLOWED_SEPARATE_WRITES: Readonly<Record<string, string>> = {
   'lib/time-tracking/clock-state-actions.ts::clockOutBeforeSignOut':
     'Independent by design: each organization’s open session is clocked out on its own, best effort before sign-out; one refusal must not keep the others running.',
-  'lib/inventory/actions.ts::importInventoryRows':
-    'Independent by design: each CSV row is booked by its own import_inventory_row call so a refused row keeps the rows before it; the batch row records the counts.',
   'lib/org/delete-action.ts::deleteOrganization':
     'Ordered around storage: delete_organization_with_files deletes the organization and queues its listed files in one transaction; only after it committed does a second listing find a late upload, which queue_storage_purge adds, because a storage listing cannot join a transaction.',
   'lib/org/join-request-actions.ts::requestOrganizationJoin':

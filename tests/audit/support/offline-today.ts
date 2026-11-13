@@ -29,14 +29,15 @@ export function todayJobNumber(world: TestWorld): string {
 
 /**
  * A job assigned to the employee with a visit on the current Berlin day that
- * names the employee, and one instruction, numbered `todayJobNumber(world)`.
+ * names the employee, and one instruction, numbered `todayJobNumber(world)`
+ * unless a second test of the same world names its own `jobNumber`.
  */
 export async function seedTodayAssignment(
   world: TestWorld,
-  input: { title: string; instruction: string },
+  input: { title: string; instruction: string; jobNumber?: string },
 ): Promise<void> {
   const admin = createAdminClient();
-  const jobNumber = todayJobNumber(world);
+  const jobNumber = input.jobNumber ?? todayJobNumber(world);
   const actorId = world.users.admin.id;
   const jobId = await seedJob({ orgId: world.orgId, actorId, jobNumber, title: input.title });
   await seedJobAssignment({ orgId: world.orgId, actorId, jobId, userId: world.users.employee.id });

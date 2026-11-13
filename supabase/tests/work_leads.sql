@@ -83,7 +83,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlerrm <> p_refusal then
+    if sqlerrm is distinct from p_refusal then
       raise exception '% refused with % instead of %', p_label, sqlerrm, p_refusal;
     end if;
     return;
@@ -104,7 +104,7 @@ begin
   begin
     execute p_statement;
   exception when others then
-    if sqlstate <> p_state then
+    if sqlstate is distinct from p_state then
       raise exception '% failed with % (%) instead of %', p_label, sqlstate, sqlerrm, p_state;
     end if;
     return;
@@ -198,7 +198,7 @@ begin
     or (select array_agg(id::uuid order by id) from jsonb_array_elements_text(
         public.read_work_lead_scope(v_org, v_lead)->'jobIds') id) is distinct from array[v_job_a1, v_job_s]
   then raise exception 'the lead''s scope is wrong'; end if;
-  if public.read_work_lead_scope(v_org, v_other) <> pg_temp.no_scope() then
+  if public.read_work_lead_scope(v_org, v_other) is distinct from pg_temp.no_scope() then
     raise exception 'an ended lead keeps a scope';
   end if;
 
@@ -238,11 +238,11 @@ begin
   -- Allowed: the lead approves on A1, sends the project's back, and the job
   -- lead of A2 rejects there.
   v_result := pg_temp.review(v_lead, '4f200000-0000-4000-8000-000000000030', 'internal_approved');
-  if v_result->>'status' <> 'approved' then raise exception 'the lead''s approval did not apply'; end if;
+  if v_result->>'status' is distinct from 'approved' then raise exception 'the lead''s approval did not apply'; end if;
   v_result := pg_temp.review(v_lead, '4f200000-0000-4000-8000-000000000032', 'correction_requested');
-  if v_result->>'status' <> 'correction_requested' then raise exception 'the lead''s correction request did not apply'; end if;
+  if v_result->>'status' is distinct from 'correction_requested' then raise exception 'the lead''s correction request did not apply'; end if;
   v_result := pg_temp.review(v_second, '4f200000-0000-4000-8000-000000000033', 'internal_rejected');
-  if v_result->>'status' <> 'rejected' then raise exception 'the job lead''s rejection did not apply'; end if;
+  if v_result->>'status' is distinct from 'rejected' then raise exception 'the job lead''s rejection did not apply'; end if;
 
   -- Ending: the ended lead is refused at once.
   update public.work_leads set ended_at = now(), ended_by = v_admin
@@ -252,11 +252,11 @@ begin
     'work_artifact_not_authorized');
   -- The Admin, as the approval responsibility's default holder, still reviews.
   v_result := pg_temp.review(v_admin, '4f200000-0000-4000-8000-000000000035', 'internal_approved');
-  if v_result->>'status' <> 'approved' then raise exception 'the open review did not fall back to the holder'; end if;
+  if v_result->>'status' is distinct from 'approved' then raise exception 'the open review did not fall back to the holder'; end if;
 
   -- Removing the member ends the access at once.
   delete from public.organization_members where organization_id = v_org and user_id = v_second;
-  if public.read_work_lead_scope(v_org, v_second) <> pg_temp.no_scope() then
+  if public.read_work_lead_scope(v_org, v_second) is distinct from pg_temp.no_scope() then
     raise exception 'a removed member keeps a lead scope';
   end if;
 
@@ -264,7 +264,7 @@ begin
   update public.employee_records set entry_date = (now() at time zone 'Europe/Berlin')::date - 30,
     exit_date = (now() at time zone 'Europe/Berlin')::date - 1
   where id = pg_temp.record_of(v_lead);
-  if public.read_work_lead_scope(v_org, v_lead) <> pg_temp.no_scope() then
+  if public.read_work_lead_scope(v_org, v_lead) is distinct from pg_temp.no_scope() then
     raise exception 'a member who left keeps a lead scope';
   end if;
   update public.employee_records set exit_date = null where id = pg_temp.record_of(v_lead);
