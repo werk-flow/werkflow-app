@@ -1,5 +1,5 @@
 -- Leistungen keep dated prices without rewriting old ones, and no client role
--- reads them (migration 20261201150002_keep_dated_leistung_prices.sql).
+-- reads them (migration 20261201180000_keep_dated_leistung_prices.sql).
 begin;
 
 insert into auth.users (

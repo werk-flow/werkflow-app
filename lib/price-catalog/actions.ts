@@ -21,7 +21,7 @@ import {
 
 // Admin and Büro keep the Leistungen. Every action resolves the caller's
 // organization and manager role on the server and writes only inside it;
-// the tables have no client grant (supabase/migrations/20261201150002_keep_dated_leistung_prices.sql).
+// the tables have no client grant (supabase/migrations/20261201180000_keep_dated_leistung_prices.sql).
 
 const LEISTUNGEN_PATH = '/angebote/leistungen';
 
