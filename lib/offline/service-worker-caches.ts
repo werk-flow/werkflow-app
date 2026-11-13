@@ -8,11 +8,11 @@
 
 import { logError } from '@/lib/logging';
 
-/** Every cache the service worker (public/sw.js) owns starts with this. */
+/** Every cache the service worker (lib/offline/service-worker.js) owns starts with this. */
 const SERVICE_WORKER_CACHE_PREFIX = 'werkflow-';
 
 /**
- * The message public/sw.js answers by filling its offline shell again when it
+ * The message lib/offline/service-worker.js answers by filling its offline shell again when it
  * is missing (lib/security/service-worker.test.ts pins both sides).
  */
 const SHELL_REFILL_MESSAGE = 'werkflow:refill-shell';

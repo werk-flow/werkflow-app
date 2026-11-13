@@ -284,3 +284,15 @@ Differences from the matrix and the iOS limits table above:
 - **Offline through the host's network.** Neither device loses the app when the host or the device switches its network: Android reaches `localhost` through adb, and the iOS simulator through the Mac's loopback. A run cuts the tunnel (Android) or stops the server (iOS) instead.
 - **Restart.** Android: a Chrome process restart, then the home screen icon. iOS: the driver cannot close a Home Screen web app, so the restart is the web app's own reload when it is opened again; it loaded the offline page from the service worker.
 - **„Wartet auf Netz“ in the dock.** On iOS the dock showed the plain static mark: without the server the outbox view's code could not load. Android showed the badge. Both name the waiting state.
+
+## Amendment 2026-11-13: the build writes the shell's version
+
+Decided for werk-flow/werkflow-planning#408. A phone replaces its offline shell only when the service worker changes, and a version bumped by hand had already been missed in a release.
+
+- **The build sets the version.** Every production build gives the worker its own version, so nobody bumps one by hand.
+- **A new commit replaces the shell.** Each deployed commit installs a new shell cache, and the new worker's activation removes every other `werkflow-` cache, the previous shell included.
+- **A redeploy keeps it.** A redeploy of the same commit keeps the version, so phones keep their shell. A local production build (the test server, CI) gets a new build id on each run, and with it a new version.
+- **No id, no build.** A production build without a build id fails instead of shipping a changed shell under an earlier version.
+- **Rejected: a recorded hash of the shell's inputs, checked in CI.** Its line would change with most product PRs, and parallel PRs would invalidate each other's green runs.
+
+[Security](../technical/security.md#browser) and the code own the paths, the delivery headers and the cache deletion at a session end.

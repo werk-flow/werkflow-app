@@ -76,6 +76,7 @@ export const REALTIME_TABLES = [
   'job_instruction_item_evidence_fulfillments',
   'work_artifacts',
   'work_handover_packages',
+  'work_leads',
   'work_templates',
   'work_template_versions',
   'work_template_applications',
@@ -184,5 +185,6 @@ export const TRANSACTION_STAMPED_TABLES: readonly RealtimeTable[] = [
   'time_entries',
   'time_periods',
   'vacation_requests',
+  'work_leads',
   'work_schedules',
 ];

@@ -65,6 +65,14 @@ const world = installActionWorld({
   employee_records: [],
   profiles: [],
 });
+// The coworker's report: no Regie- oder Änderungsnachweis, so no lead reviews it.
+world.tables.work_artifacts?.push({
+  id: ownArtifactId,
+  organization_id: ORGANIZATION_A,
+  job_id: ownJobId,
+  project_id: null,
+  kind: 'work_report',
+});
 world.tables.work_artifact_revisions?.push({
   id: ownRevisionId,
   organization_id: ORGANIZATION_A,

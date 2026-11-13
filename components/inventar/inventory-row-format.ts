@@ -1,50 +1,67 @@
-import type { InventoryItemType, InventoryOverview, InventoryOverviewItem } from '@/lib/inventory/types';
+import { jobDetailHref, projectDetailHref } from '@/lib/jobs/routes';
+import type {
+  InventoryItemType,
+  InventoryMovementHistoryEntry,
+  InventoryOverviewItem,
+} from '@/lib/inventory/types';
+import { INVENTORY_STOCK_UNCHANGED_LABEL } from '@/lib/inventory/types';
 
-export function formatMovementTarget(movement: InventoryOverview['movements'][number]): {
-  from: string;
-  to: string;
+/** One end of a movement: a place, or the job or project it links to. */
+export type MovementEnd = { label: string; href: string | null };
+
+const place = (label: string): MovementEnd => ({ label, href: null });
+
+/** The job or project a movement or use names, linked to its page; null when it names neither. */
+function movementWork(entry: InventoryMovementHistoryEntry): MovementEnd | null {
+  const project = entry.projectId ? { id: entry.projectId, projectNumber: entry.projectNumber } : null;
+  const projectLabel = `Projekt ${entry.projectNumber ?? entry.projectName ?? ''}`.trim();
+  if (entry.jobId) {
+    const jobLabel = `Auftrag ${entry.jobNumber ?? entry.jobTitle ?? ''}`.trim();
+    return {
+      label: project ? `${jobLabel} · ${projectLabel}` : jobLabel,
+      href: jobDetailHref({ id: entry.jobId, jobNumber: entry.jobNumber }, project),
+    };
+  }
+  return project ? { label: projectLabel, href: projectDetailHref(project) } : null;
+}
+
+/**
+ * Where a movement came from and went to („Von“ and „Nach“); a stock movement
+ * names its Lager on one side. A use and its correction have no place: they
+ * come from the job and leave the stock as it is.
+ */
+export function formatMovementTarget(entry: InventoryMovementHistoryEntry): {
+  from: MovementEnd;
+  to: MovementEnd;
 } {
-  const jobLabel = movement.jobNumber
-    ? `Auftrag ${movement.jobNumber}`
-    : movement.jobTitle
-      ? `Auftrag ${movement.jobTitle}`
-      : 'Auftrag';
-  const projectLabel = movement.projectNumber
-    ? `Projekt ${movement.projectNumber}`
-    : movement.projectName
-      ? `Projekt ${movement.projectName}`
-      : 'Projekt';
-  const targetLabel = movement.jobId
-    ? movement.projectId
-      ? `${jobLabel} · ${projectLabel}`
-      : jobLabel
-    : movement.projectId
-      ? projectLabel
-      : null;
+  const work = movementWork(entry) ?? place('Auftrag/Projekt');
+  const location = place(entry.locationName ?? 'Unbekanntes Lager');
 
-  switch (movement.movementType) {
+  switch (entry.kind) {
     case 'job_take':
-      return {
-        from: movement.locationName,
-        to: targetLabel ?? 'Auftrag/Projekt',
-      };
+      return { from: location, to: work };
     case 'job_return':
-      return {
-        from: targetLabel ?? 'Auftrag/Projekt',
-        to: movement.locationName,
-      };
+      return { from: work, to: location };
+    case 'job_use':
+    case 'job_use_correction':
+      return { from: work, to: place(INVENTORY_STOCK_UNCHANGED_LABEL) };
     case 'stock_in':
     case 'initial_count':
-      return { from: 'Externe Quelle', to: movement.locationName };
+      return { from: place('Externe Quelle'), to: location };
     case 'stock_out':
-      return { from: movement.locationName, to: 'Korrektur/Ausgang' };
+      return { from: location, to: place('Korrektur/Ausgang') };
     case 'transfer_in':
-      return { from: 'Umlagerung', to: movement.locationName };
+      return { from: place('Umlagerung'), to: location };
     case 'transfer_out':
-      return { from: movement.locationName, to: 'Umlagerung' };
+      return { from: location, to: place('Umlagerung') };
     case 'correction':
-      return { from: movement.locationName, to: 'Korrektur' };
+      return { from: location, to: place('Korrektur') };
   }
+}
+
+/** A use and its correction move no stock: they have no Lager and no quantity before or after. */
+export function movesStock(entry: InventoryMovementHistoryEntry): boolean {
+  return entry.kind !== 'job_use' && entry.kind !== 'job_use_correction';
 }
 
 /** Low stock, and an article whose unit is outside the unit list („Einheit prüfen“). */

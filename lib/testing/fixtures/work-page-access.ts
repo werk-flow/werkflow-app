@@ -211,6 +211,8 @@ function signInAsMember(role: 'admin' | 'buero' | 'employee', organizationId = O
 // organization; the row reads still name the caller's (supabase/tests/*_list_pages.sql).
 const selection = (ids: string[]) => ({ total: ids.length, hasAny: ids.length > 0, ids });
 world.rpc = ({ name }) => {
+  // Nobody here leads a project (supabase/tests/work_leads.sql proves the rule).
+  if (name === 'read_work_lead_scope') return { data: { projectIds: [], jobIds: [] }, error: null };
   if (name === 'list_service_case_page') return { data: selection([caseId]), error: null };
   if (name === 'list_maintenance_workspace_page')
     return {
