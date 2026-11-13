@@ -5,7 +5,7 @@ import { type MigrationDrift, driftLine, readMigrationDrift } from '../local-sta
 import { VISUAL_REFERENCE_UPDATE_ENV } from '../runner/visual-reference-updates';
 import { readBoatKey, withBoatKey, type BoatKeyReading } from './boat-key';
 import { shellQuote } from './boat-machine';
-import { REFERENCE_UPDATES, applyReferenceUpdates } from './reference-updates';
+import { REFERENCE_UPDATES, applyReferenceUpdates, referenceHashes } from './reference-updates';
 import { type BoatOutcome, runOnBoat, withRunFolder } from './verify-on-boat';
 
 // A focused browser run, `bun run test:audit:focused` or `test:golden:focused`, runs on a Boat
@@ -68,13 +68,27 @@ function updateFolders(repository: string): Set<string> {
 
 /**
  * Places the references a Boat update rewrote, from the update folders that came back, and prints
- * them with the next steps. A refused set writes nothing and turns the run's exit code into 1.
+ * them with the next steps. A refused set writes nothing and turns the run's exit code into 1. A
+ * reference changed here since `before.references`, taken when the run started, keeps its local
+ * version, is named with Boat's copy, and also turns the exit code into 1.
  */
-function placeReferenceUpdates(repository: string, before: ReadonlySet<string>, code: number): number {
+export function placeReferenceUpdates(
+  repository: string,
+  before: { folders: ReadonlySet<string>; references: ReadonlyMap<string, string> },
+  code: number,
+): number {
   let placed: string[] = [];
+  let kept: string[] = [];
   try {
-    for (const name of [...updateFolders(repository)].filter((found) => !before.has(found)))
-      placed = [...placed, ...applyReferenceUpdates(repository, join(repository, REFERENCE_UPDATES, name))];
+    for (const name of [...updateFolders(repository)].filter((found) => !before.folders.has(found))) {
+      const folder = join(repository, REFERENCE_UPDATES, name);
+      const result = applyReferenceUpdates(repository, folder, before.references);
+      placed = [...placed, ...result.placed];
+      kept = [
+        ...kept,
+        ...result.kept.map((path) => `${path} (Boat's copy: ${join(REFERENCE_UPDATES, name, path)})`),
+      ];
+    }
   } catch (error) {
     console.error(`[verify] ${error instanceof Error ? error.message : String(error)}`);
     return 1;
@@ -84,7 +98,12 @@ function placeReferenceUpdates(repository: string, before: ReadonlySet<string>, 
       ? `[verify] The update rewrote or wrote ${placed.length} visual references in this checkout:\n${placed.map((path) => `  ${path}`).join('\n')}\n[verify] Next: look at every changed image, restore each one the accepted change does not explain with git checkout -- <file>, then run bun run test:verify --group audit:visual.`
       : '[verify] The update rewrote no visual reference.',
   );
-  return code;
+  if (!kept.length) return code;
+  // A reference changed here while the run went keeps this checkout's version: never lost to Boat's.
+  console.error(
+    `[verify] ${kept.length} references changed in this checkout during the run kept their local version:\n${kept.map((path) => `  ${path}`).join('\n')}`,
+  );
+  return 1;
 }
 
 /**
@@ -112,10 +131,11 @@ export async function focusedOnBoat(
   }
   const script = kind === 'reference-update' ? 'test:audit:update-references' : `test:${suite}:focused`;
   return withBoatKey(reason, readKey, (key, signal) => {
-    const before = updateFolders(repository);
+    const folders = updateFolders(repository);
     // The references change inside the workspace lock the run holds, so no other test operation
     // starts between the run and the files it rewrote.
     return withRunFolder(repository, signal, `focused run on Boat`, async (folder) => {
+      const before = { folders, references: referenceHashes(repository) };
       const outcome = await runOnBoat({ args: [script, ...args], repository, folder, key, signal });
       return kind === 'reference-update' && typeof outcome === 'number'
         ? placeReferenceUpdates(repository, before, outcome)

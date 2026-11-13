@@ -1,6 +1,7 @@
 // Rule test: the references a Boat update rewrote enter the working tree only as .png or .txt files
 // in an audit snapshot folder; any other path, an absolute path, a ".." segment, a link or a linked
-// destination refuses the whole set, and a refused set writes nothing.
+// destination refuses the whole set, and a refused set writes nothing. A reference changed in the
+// checkout while the run went keeps its local version.
 import { expect, test } from 'bun:test';
 import {
   existsSync,
@@ -8,6 +9,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -98,7 +100,10 @@ test('rewritten references are placed in the checkout, and any bad entry refuses
     write(update, `${SNAPSHOTS}/kept.png`, 'new');
     build(update, repository);
     try {
-      return { files: applyReferenceUpdates(repository, update), repository };
+      return {
+        files: applyReferenceUpdates(repository, update, referenceHashes(repository)).placed,
+        repository,
+      };
     } catch (error) {
       // Nothing was written: the existing reference keeps its bytes.
       expect(readFileSync(join(repository, SNAPSHOTS, 'kept.png'), 'utf8')).toBe('old');
@@ -140,4 +145,31 @@ test('rewritten references are placed in the checkout, and any bad entry refuses
       write(update, `${SNAPSHOTS}/folder.png`, 'x');
     }).error,
   ).toContain('is not a regular file');
+});
+
+test('a reference changed in the checkout during the run keeps its local version; the others are placed', () => {
+  const repository = mkdtempSync(join(tmpdir(), 'reference-apply-'));
+  const update = mkdtempSync(join(tmpdir(), 'reference-update-'));
+  write(repository, `${SNAPSHOTS}/unchanged.png`, 'old');
+  write(repository, `${SNAPSHOTS}/edited.png`, 'old');
+  write(repository, `${SNAPSHOTS}/removed.png`, 'old');
+  const before = referenceHashes(repository);
+  for (const name of ['unchanged.png', 'edited.png', 'removed.png', 'created.txt', 'new.txt'])
+    write(update, `${SNAPSHOTS}/${name}`, 'boat');
+  // While the run goes: one reference is edited, one removed and one written here.
+  write(repository, `${SNAPSHOTS}/edited.png`, 'local edit');
+  rmSync(join(repository, SNAPSHOTS, 'removed.png'));
+  write(repository, `${SNAPSHOTS}/created.txt`, 'local');
+  expect(applyReferenceUpdates(repository, update, before)).toEqual({
+    placed: [`${SNAPSHOTS}/new.txt`, `${SNAPSHOTS}/unchanged.png`],
+    kept: [`${SNAPSHOTS}/created.txt`, `${SNAPSHOTS}/edited.png`, `${SNAPSHOTS}/removed.png`],
+  });
+  const read = (name: string) => readFileSync(join(repository, SNAPSHOTS, name), 'utf8');
+  expect(read('unchanged.png')).toBe('boat');
+  expect(read('new.txt')).toBe('boat');
+  expect(read('edited.png')).toBe('local edit');
+  expect(read('created.txt')).toBe('local');
+  expect(existsSync(join(repository, SNAPSHOTS, 'removed.png'))).toBe(false);
+  // Boat's copy of each kept reference stays with the evidence.
+  expect(readFileSync(join(update, SNAPSHOTS, 'edited.png'), 'utf8')).toBe('boat');
 });

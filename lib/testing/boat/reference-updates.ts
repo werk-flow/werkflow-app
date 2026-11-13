@@ -104,15 +104,24 @@ export function collectReferenceUpdates(
  * On the workstation: checks every file of an update folder and places it in the checkout, or
  * throws and writes nothing. A file that is no audit reference, a link or a hard link refuses the
  * whole set, as does a destination reached through a symbolic link, or one that exists and is no
- * regular file or is a hard link, as for the results import (verify-on-boat.ts).
+ * regular file or is a hard link, as for the results import (verify-on-boat.ts). A destination that
+ * changed here since `before`, the hashes taken when the run started (edited, written or removed),
+ * keeps this checkout's version; Boat's copy stays in `folder`, with the evidence.
  */
-export function applyReferenceUpdates(repository: string, folder: string): string[] {
+export function applyReferenceUpdates(
+  repository: string,
+  folder: string,
+  before: ReadonlyMap<string, string>,
+): { placed: string[]; kept: string[] } {
   const files = filesUnder(folder);
   const problem =
     files.map(referencePathProblem).find((found) => found !== undefined) ??
     linkedDestination(repository, files) ??
     destinationConflict(repository, files);
   if (problem) throw new Error(`The rewritten references were refused: ${problem}`);
-  placeFiles(folder, repository, files);
-  return files;
+  const now = referenceHashes(repository);
+  const kept = files.filter((path) => now.get(path) !== before.get(path));
+  const placed = files.filter((path) => !kept.includes(path));
+  placeFiles(folder, repository, placed);
+  return { placed, kept };
 }

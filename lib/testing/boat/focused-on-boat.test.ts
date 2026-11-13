@@ -1,10 +1,21 @@
 // Rule test: a focused run goes to Boat when it needs the app built at this tree's migrations: a
 // capture or a reference update always, any other focused run only under migration drift. It stays
 // local only when asked or when its world or target lives here, and never turns an unavailable Boat
-// into a silent local build: it names the reason and the deliberate local command.
-import { expect, test } from 'bun:test';
+// into a silent local build: it names the reason and the deliberate local command. The references
+// an update rewrote are placed whatever the run's exit code, except one changed here meanwhile.
+import { expect, spyOn, test } from 'bun:test';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 
-import { focusedKind, focusedLocalReason, focusedOnBoat, focusedUnavailableNotice } from './focused-on-boat';
+import {
+  focusedKind,
+  focusedLocalReason,
+  focusedOnBoat,
+  focusedUnavailableNotice,
+  placeReferenceUpdates,
+} from './focused-on-boat';
+import { REFERENCE_UPDATES, referenceHashes } from './reference-updates';
 
 const UPDATE = { WERKFLOW_UPDATE_VISUAL_REFERENCES: '1' };
 const drift = {
@@ -115,5 +126,42 @@ test('the unavailable notice names the reason and the deliberate local command, 
   );
   expect(focusedUnavailableNotice('no key.', ['iteration', 'golden', '--grep', 'P1-07'], {})).toContain(
     `  WERKFLOW_VERIFY_LOCAL=1 bun run test:golden:focused '--grep' 'P1-07'`,
+  );
+});
+
+test('an update places its references even after a failed run, and a reference changed here meanwhile fails the command', () => {
+  const SNAPSHOTS = 'tests/audit/visual/references.spec.ts-snapshots';
+  const write = (root: string, path: string, text: string) => {
+    mkdirSync(dirname(join(root, path)), { recursive: true });
+    writeFileSync(join(root, path), text);
+  };
+  const run = (code: number, editHere: boolean) => {
+    const repository = mkdtempSync(join(tmpdir(), 'reference-place-'));
+    write(repository, `${SNAPSHOTS}/a.png`, 'old');
+    write(repository, `${SNAPSHOTS}/b.png`, 'old');
+    write(repository, `${REFERENCE_UPDATES}/earlier/${SNAPSHOTS}/a.png`, 'earlier');
+    const before = { folders: new Set(['earlier']), references: referenceHashes(repository) };
+    write(repository, `${REFERENCE_UPDATES}/run/${SNAPSHOTS}/a.png`, 'boat');
+    write(repository, `${REFERENCE_UPDATES}/run/${SNAPSHOTS}/b.png`, 'boat');
+    if (editHere) write(repository, `${SNAPSHOTS}/b.png`, 'local edit');
+    const errors: string[] = [];
+    const error = spyOn(console, 'error').mockImplementation((line: string) => void errors.push(line));
+    const info = spyOn(console, 'info').mockImplementation(() => undefined);
+    try {
+      const exit = placeReferenceUpdates(repository, before, code);
+      const read = (name: string) => readFileSync(join(repository, SNAPSHOTS, name), 'utf8');
+      return { exit, a: read('a.png'), b: read('b.png'), errors: errors.join('\n') };
+    } finally {
+      error.mockRestore();
+      info.mockRestore();
+    }
+  };
+  expect(run(0, false)).toEqual({ exit: 0, a: 'boat', b: 'boat', errors: '' });
+  // A failed run still places what it rewrote: its exit code stays.
+  expect(run(1, false)).toEqual({ exit: 1, a: 'boat', b: 'boat', errors: '' });
+  const edited = run(0, true);
+  expect(edited).toMatchObject({ exit: 1, a: 'boat', b: 'local edit' });
+  expect(edited.errors).toContain(
+    `${SNAPSHOTS}/b.png (Boat's copy: ${REFERENCE_UPDATES}/run/${SNAPSHOTS}/b.png)`,
   );
 });
