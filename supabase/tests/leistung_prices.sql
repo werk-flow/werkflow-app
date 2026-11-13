@@ -311,6 +311,7 @@ begin
     or (v_row -> 'versions' -> 1 ->> 'salePriceCents')::integer is distinct from 7100
     or (v_row -> 'versions' -> 2 ->> 'salePriceCents')::integer is distinct from 6900
     or (v_row -> 'versions' -> 3 ->> 'salePriceCents')::integer is distinct from 6500
+    or v_row ->> 'priceVersionId' is null
     or v_row ->> 'priceVersionId' is distinct from v_row -> 'versions' -> 1 ->> 'id' then
     raise exception 'list row history of Montage is wrong: %', v_row -> 'versions';
   end if;
