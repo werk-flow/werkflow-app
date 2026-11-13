@@ -28,6 +28,17 @@ import {
   toNumber,
 } from './types';
 import { inventoryStockFacts } from './stock-facts';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
+import type { Database } from '@/lib/supabase/database.types';
+import { uuidSchema } from '@/lib/validation/uuid';
+import { z } from '@/lib/zod';
+import {
+  ARTICLE_PRICE_KINDS,
+  ARTICLE_PRICE_ORIGINS,
+  PRICE_QUANTITIES,
+  type ArticleTerms,
+  type ArticleTermsPage,
+} from './article-price-terms';
 
 // The catalog reads behind the inventory Server Actions in `./actions` and
 // `./catalog-actions`. The callers authorize the organization first; every
@@ -612,4 +623,142 @@ export async function loadInventoryPickerOptions(
   );
 
   return { success: true, items: pickerItems, locations };
+}
+
+type InventoryItemSupplierRow = Database['public']['Tables']['inventory_item_suppliers']['Row'];
+
+const priceRowSchema = z.object({
+  id: uuidSchema,
+  item_id: uuidSchema,
+  kind: z.enum(ARTICLE_PRICE_KINDS),
+  amount_cents: z.number().int(),
+  price_quantity: z.literal(PRICE_QUANTITIES),
+  valid_from: z.iso.date(),
+  source: z.enum(ARTICLE_PRICE_ORIGINS),
+  created_at: z.string(),
+});
+const currentPriceRowSchema = z.object({
+  item_id: uuidSchema,
+  purchase_price_id: uuidSchema.nullable(),
+  sale_price_id: uuidSchema.nullable(),
+});
+
+/** The references, every price and today's price ids of the listed articles, started together. */
+function readArticleTermRows(admin: AdminClient, orgId: string, itemIds: string[], priceDate: string) {
+  return Promise.all([
+    readInBatches(itemIds, (batch) =>
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('inventory_item_suppliers')
+            .select('*')
+            .eq('organization_id', orgId)
+            .in('item_id', [...batch])
+            .order('created_at')
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+    ),
+    readInBatches(itemIds, (batch) =>
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('inventory_item_prices')
+            .select('id, item_id, kind, amount_cents, price_quantity, valid_from, source, created_at')
+            .eq('organization_id', orgId)
+            .in('item_id', [...batch])
+            .order('valid_from', { ascending: false })
+            .order('created_at', { ascending: false })
+            .order('id', { ascending: false })
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+    ),
+    readInBatches(itemIds, (batch) =>
+      admin.rpc('inventory_item_prices_on_day', {
+        p_organization_id: orgId,
+        p_item_ids: [...batch],
+        p_on_date: priceDate,
+      }),
+    ),
+  ]);
+}
+
+/** Each article's references and prices, the prices that apply today marked. */
+function toArticleTermsByItem(
+  references: InventoryItemSupplierRow[],
+  prices: z.infer<typeof priceRowSchema>[],
+  current: z.infer<typeof currentPriceRowSchema>[],
+): Record<string, ArticleTerms> {
+  const currentIds = new Set(
+    current.flatMap((row) => [row.purchase_price_id, row.sale_price_id].filter((id) => id !== null)),
+  );
+  const byItem: Record<string, ArticleTerms> = {};
+  const termsOf = (itemId: string): ArticleTerms => (byItem[itemId] ??= { suppliers: [], prices: [] });
+  for (const reference of references) {
+    termsOf(reference.item_id).suppliers.push({
+      id: reference.id,
+      supplierId: reference.supplier_id,
+      supplierArticleNumber: reference.supplier_article_number,
+      purchaseUnit: reference.purchase_unit,
+      packQuantity: toNumber(reference.pack_quantity),
+      baseQuantity: toNumber(reference.base_quantity),
+      isPreferred: reference.is_preferred,
+    });
+  }
+  for (const price of prices) {
+    termsOf(price.item_id).prices.push({
+      id: price.id,
+      kind: price.kind,
+      amountCents: price.amount_cents,
+      priceQuantity: price.price_quantity,
+      validFrom: price.valid_from,
+      origin: price.source,
+      recordedAt: price.created_at,
+      isCurrent: currentIds.has(price.id),
+    });
+  }
+  return byItem;
+}
+
+/**
+ * The supplier references and every price of the listed articles, with the
+ * prices that apply today (Berlin) marked by `inventory_item_prices_on_day`.
+ * A failed or malformed read is `failed`, never an article without terms.
+ */
+export async function loadArticleTermsPage(
+  admin: AdminClient,
+  orgId: string,
+  itemIds: string[],
+): Promise<ArticleTermsPage> {
+  const priceDate = getBusinessTodayIso();
+  const [referencesResult, pricesResult, currentResult] = await readArticleTermRows(
+    admin,
+    orgId,
+    itemIds,
+    priceDate,
+  );
+  const prices = z.array(priceRowSchema).safeParse(pricesResult.data);
+  const current = z.array(currentPriceRowSchema).safeParse(currentResult.data);
+  if (
+    referencesResult.error ||
+    pricesResult.error ||
+    currentResult.error ||
+    !prices.success ||
+    !current.success
+  ) {
+    logReadErrors(
+      'loadArticleTermsPage: read failed',
+      referencesResult.error,
+      pricesResult.error,
+      currentResult.error ?? (current.success && prices.success ? null : { code: 'malformed_result' }),
+    );
+    return { status: 'failed' };
+  }
+  return {
+    status: 'loaded',
+    priceDate,
+    byItem: toArticleTermsByItem(referencesResult.data, prices.data, current.data),
+  };
 }

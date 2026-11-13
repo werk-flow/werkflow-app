@@ -180,8 +180,25 @@ export const DIALOG_INVENTORY = {
   },
   "components/inventar/inventory-item-dialog.tsx#ItemDialog|{form.id ? 'Artikel bearbeiten' : 'Artikel anlegen'}":
     {
-      audits: [{ route: '/inventar', role: 'admin', opener: 'inventory.item' }],
+      audits: [
+        { route: '/inventar', role: 'admin', opener: 'inventory.item' },
+        {
+          route: '/inventar',
+          role: 'admin',
+          opener: 'inventory.item-edit',
+          tabs: ['stammdaten', 'lieferanten', 'preise'],
+        },
+        { route: '/inventar', role: 'admin', opener: 'inventory.item-suppliers' },
+        { route: '/inventar', role: 'admin', opener: 'inventory.item-prices' },
+      ],
     },
+  "components/inventar/article-supplier-dialog.tsx#ArticleSupplierDialog|{reference ? 'Lieferant bearbeiten' : 'Lieferant hinzufügen'}":
+    {
+      audits: [{ route: '/inventar', role: 'admin', opener: 'inventory.article-supplier' }],
+    },
+  'components/inventar/article-suppliers-panel.tsx#RemoveSupplierDialog|Lieferant „ {name} “ entfernen?': {
+    audits: [{ route: '/inventar', role: 'admin', opener: 'inventory.article-supplier-remove' }],
+  },
   'components/inventar/inventory-location-dialog.tsx#LocationDialog|Lager anlegen': {
     audits: [{ route: '/inventar', role: 'admin', opener: 'inventory.location' }],
   },

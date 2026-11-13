@@ -90,6 +90,8 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   inventory_categories: 'Lager_Kategorien',
   inventory_import_batches: 'Lager_Importe',
   inventory_item_barcodes: 'Lager_Barcodes',
+  inventory_item_prices: 'Lager_Artikelpreise',
+  inventory_item_suppliers: 'Lager_Artikellieferanten',
   inventory_items: 'Lager_Artikel',
   inventory_locations: 'Lager_Lagerorte',
   inventory_movements: 'Lager_Bewegungen',

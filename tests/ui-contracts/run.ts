@@ -79,6 +79,11 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve({ filter: /^@\/lib\/clients\/(site-role-)?actions$/ }, () => ({
               path: join(import.meta.dir, 'customer-service-boundaries.ts'),
             }));
+            // The retry of a failed region refreshes through the article terms contract's router.
+            builder.onResolve({ filter: /^next\/navigation$/ }, (args) => {
+              if (args.importer.endsWith('components/ui/refresh-button.tsx'))
+                return { path: join(import.meta.dir, 'article-terms-boundaries.tsx') };
+            });
             builder.onResolve({ filter: /^next\/navigation$/ }, (args) => {
               if (args.importer.endsWith('create-client-dialog.tsx'))
                 return { path: join(import.meta.dir, 'customer-service-boundaries.ts') };
