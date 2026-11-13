@@ -34,11 +34,11 @@ export type WorkLeadPanel = {
   history: WorkLeadHolding[];
 };
 
-export const WORK_LEAD_ERROR_MESSAGES: Record<string, string> = {
+/** The sentences of the codes this area owns; the shared codes come from lib/action-messages.ts. */
+export const WORK_LEAD_ERROR_MESSAGES: Readonly<Record<string, string>> = {
   work_lead_member_not_eligible:
     'Diese Person kann nicht Projektleitung werden: Sie gehört nicht mehr zur Organisation oder hat keinen Zugang.',
   work_lead_target_not_found: 'Diese Arbeit gibt es nicht mehr.',
-  not_authorized: 'Nur Admin und Büro benennen eine Projektleitung.',
 };
 
 /**

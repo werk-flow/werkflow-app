@@ -155,6 +155,8 @@ const REVIEWED_UNPAGED_RPC_READS: Readonly<Record<string, string>> = {
   'app/auth/callback/route.ts::redeemAfterCodeExchange::rpc:redeem_organization_invite_for_user': ONE_INVITE,
   'lib/dispatch/actions.ts::batchReschedule::rpc:batch_reschedule_planning_occurrences':
     'the occurrences of one batch, at most 100 by its input schema',
+  'lib/responsibilities/work-lead.ts::getWorkLeadScope::rpc:work_lead_scope':
+    'the projects and jobs one member leads as Projektleitung',
   'lib/documents/actions.ts::permanentlyDeleteDocument::rpc:permanently_delete_document':
     'the storage paths of the versions of one document',
   'lib/documents/links.ts::writeDocumentLinks::rpc:update_document_links': 'the links of one document',

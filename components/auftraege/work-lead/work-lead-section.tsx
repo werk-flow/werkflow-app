@@ -42,15 +42,12 @@ import {
   type WorkLeadPanel,
   type WorkLeadTarget,
 } from '@/lib/projects/work-lead-types';
+import { describeFailure } from '@/lib/action-messages';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { formatGermanDate } from '@/lib/utils';
 
 const LEAD_FIELD_ID = 'work-lead-person';
 const SAVE_FAILED = 'Die Projektleitung wurde nicht gespeichert. Versuche es erneut.';
-
-function failureMessage(error: string): string {
-  return WORK_LEAD_ERROR_MESSAGES[error] ?? SAVE_FAILED;
-}
 
 type WorkLeadSectionProps = WorkLeadTarget & {
   /** Null when the read failed: the section shows the failure with a retry. */
@@ -207,7 +204,7 @@ function NameWorkLeadDialog({
     if (focusFirstInvalidField({ [LEAD_FIELD_ID]: personError })) return;
     void run({ ...target, userId }).then((result) => {
       if (!result.success) {
-        setError(failureMessage(result.error));
+        setError(describeFailure(result.error, WORK_LEAD_ERROR_MESSAGES, SAVE_FAILED));
         return;
       }
       onClose();
@@ -283,7 +280,7 @@ function EndWorkLeadDialog({
               event.preventDefault();
               void run(target).then((result) => {
                 if (!result.success) {
-                  setError(failureMessage(result.error));
+                  setError(describeFailure(result.error, WORK_LEAD_ERROR_MESSAGES, SAVE_FAILED));
                   return;
                 }
                 onClose();

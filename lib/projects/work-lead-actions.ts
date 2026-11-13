@@ -2,11 +2,11 @@
 
 import { revalidatePath } from 'next/cache';
 import type { ActionResult } from '@/lib/action-result';
-import { loggedRead } from '@/lib/data/read-request-cache';
+import { loggedRead, logReadFailure } from '@/lib/data/read-request-cache';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { logError } from '@/lib/logging';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { readInBatches } from '@/lib/supabase/query-batches';
+import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import {
   nameWorkLeadSchema,
@@ -30,17 +30,22 @@ function writeFailure(error: { message?: string } | null): WorkLeadRefusal | 'no
 /** The holdings of the work and, for a job of a project, the project's open holding. */
 async function readHoldingRows(orgId: string, target: WorkLeadTarget) {
   const admin = createSupabaseAdminClient();
-  const own = await loggedRead(
-    'getWorkLead: work_leads read failed',
-    admin
-      .from('work_leads')
-      .select('*')
-      .eq('organization_id', orgId)
-      .eq(target.targetType === 'job' ? 'job_id' : 'project_id', target.targetId)
-      .order('started_at', { ascending: false })
-      .order('id'),
+  const own = await readCompleteRows(
+    (from, to) =>
+      admin
+        .from('work_leads')
+        .select('*')
+        .eq('organization_id', orgId)
+        .eq(target.targetType === 'job' ? 'job_id' : 'project_id', target.targetId)
+        .order('started_at', { ascending: false })
+        .order('id')
+        .range(from, to),
+    LIST_ROW_CAP,
   );
-  if (own.error) return null;
+  if (own.error) {
+    logReadFailure('getWorkLead: work_leads read failed', own.error);
+    return null;
+  }
   if (target.targetType === 'project') return { own: own.data, inherited: null };
   const job = await loggedRead(
     'getWorkLead: jobs read failed',

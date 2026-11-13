@@ -93,7 +93,9 @@ create function pg_temp.submit(
     p_artifact_id => p_artifact_id, p_revision_id => p_artifact_id, p_expected_version => null,
     p_job_id => p_job_id, p_project_id => p_project_id, p_kind => p_kind, p_visibility => 'internal_only',
     p_captured_at => now(), p_title => 'Nachweis',
-    p_content => '{"changeDescription":"Zusätzlicher Heizkörper","changeReason":"Wunsch der Kundin","requestedByContext":"Erika Musterfrau vor Ort","progress":"Rohbau fertig","workDate":"2026-11-10"}',
+    p_content => jsonb_build_object('changeDescription', 'Zusätzlicher Heizkörper',
+      'changeReason', 'Wunsch der Kundin', 'requestedByContext', 'Erika Musterfrau vor Ort',
+      'progress', 'Rohbau fertig', 'workDate', (now() at time zone 'Europe/Berlin')::date),
     p_corrects_revision_id => null, p_correction_reason => null, p_submit => true,
     p_submit_action_id => gen_random_uuid(), p_draft_changed_at => null);
 $$;
