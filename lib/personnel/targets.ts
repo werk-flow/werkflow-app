@@ -232,8 +232,13 @@ export function resolveDailyTarget({
   // with a single span (all pre-P1-08 data) behave bit-identically. A school
   // day is a full-day span: under a half-day vacation it makes the day fully
   // absent, and the school day keeps the attribution.
+  // A Blockunterricht spans its weekends: a school day counts only where
+  // the person would work, so a free day never reads „Berufsschule“.
   const coveringSpans = (absences ?? []).filter(
-    (span) => span.startDate <= dateIso && dateIso <= span.endDate,
+    (span) =>
+      span.startDate <= dateIso &&
+      dateIso <= span.endDate &&
+      (span.type !== 'school' || baseTargetMinutes > 0),
   );
   const fullSpans = coveringSpans.filter((span) => span.dayPortion === 'full');
   const strongestSpans = fullSpans.length > 0 ? fullSpans : coveringSpans;

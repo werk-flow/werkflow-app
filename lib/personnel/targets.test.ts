@@ -599,6 +599,17 @@ describe('resolveDailyTarget — Berufsschule day (werk-flow/werkflow-planning#1
     expect(target.absence).toEqual({ type: 'school', portion: 'full' });
   });
 
+  test('a Blockunterricht over a weekend leaves the weekend a free day, not a school day', () => {
+    // 2026-08-08 is a Saturday without a schedule target.
+    const target = resolveDailyTarget({
+      dateIso: '2026-08-08',
+      ...base,
+      absences: [{ type: 'school', startDate: '2026-08-03', endDate: '2026-08-14', dayPortion: 'full' }],
+    });
+    expect(target.absence).toBeNull();
+    expect(getNoTargetReason(target)).toBe('Kein Arbeitstag laut Wochenplan');
+  });
+
   test('the day after a school day has its normal target', () => {
     const target = resolveDailyTarget({ dateIso: '2026-08-05', ...base, absences: [schoolDay] });
     expect(target.targetMinutes).toBe(480);
