@@ -58,6 +58,7 @@ This table is the one home of every deployment and workflow credential. No check
 | `SUPABASE_SECRET_KEY` | Vercel | Admin client, edge-function calls | Never | As above. The functions accept every secret key of their project. |
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | Vercel | Document storage | As set on the token | Cloudflare R2, Manage API tokens: one token scoped to the bucket; set both, redeploy, delete the old token. |
 | `CRON_SECRET` | Vercel, Production | Vercel Cron: [storage purge](document-storage-and-access.md#storage-cleanup) and [report deletion](../features/problem-reports.md#current-product-baseline) | Never | `openssl rand -hex 32`, then redeploy. |
+| `PROBLEM_REPORT_HANDOUT_SECRET` | Vercel; `~/.config/werkflow/problem-report-handout.env`, mode 600, with `PROBLEM_REPORT_HANDOUT_ORIGIN` and an optional `VERCEL_AUTOMATION_BYPASS_SECRET`, on each machine that runs report threads | The [hand-out](problem-report-scrubbing.md#hand-out): `report-dispatch`, `scripts/report-thread.ts` | Never | `openssl rand -hex 32` on Vercel and in each file, redeploy. |
 | `SUPPORT_USER_IDS` | Vercel, Production and Preview (PROD ids, DEV ids) | [Support allowlist](../features/problem-reports.md#current-product-baseline) | Never | Set, redeploy. |
 | `EMAIL_OTP_HASH_SECRET` | Vercel | Email-change code hashes and rate-limit subjects | Never | Only after a leak: a new value voids pending email-change codes and restarts every rate-limit window. |
 | `RESEND_API_KEY` | Supabase secrets, one key per project | The mail functions | Never | Resend, API keys: a sending key for the project, `supabase secrets set --project-ref <ref> RESEND_API_KEY`, delete the old key. |
@@ -69,7 +70,7 @@ The platform injects `SUPABASE_SECRET_KEYS` into every function; `supabase_secre
 
 The test groups run against the Supabase CLI's Docker composition: Docker Engine in WSL Ubuntu, Colima on macOS. `supabase/config.toml` owns ports, auth posture, storage bucket and mail capture.
 
-- `supabase db reset` replays the committed migration history. A failing reset is a finding about it.
+- `supabase db reset` replays the committed migration history; a failing reset is a finding.
 - The keys are the CLI's shared defaults, not secrets.
 - Auth mail lands in Mailpit. Cloud functions reject the local capture setup.
 - Analytics is off: Logflare filled the disk. The lab recorder reads Kong's access log through `docker logs`.
@@ -98,7 +99,7 @@ Agents never read PROD data through any tool: every tool result goes to the mode
 | claude.ai Supabase connector | no | no | Organization-wide, so Claude Code denies it (`deniedMcpServers` in `~/.claude/settings.json`). |
 | MCP server `supabase` | never | read and write | `https://mcp.supabase.com/mcp?project_ref=mbkkzuqjbdvzelqvuzcn` |
 | Supabase CLI (`bunx supabase`) | never link or push | yes | The repository links to the DEV ref only. |
-| `bun run prod:inspect` | structure only | compared | Read-only query endpoint with the owner's token. Prints pending migration versions, objects that differ from DEV by name, and advisor findings. Run it from an up-to-date `main`. |
+| `bun run prod:inspect` | structure only | compared | Read-only query endpoint with the owner's token. Run it from an up-to-date `main`. |
 | Management API | through `prod:inspect` only | yes | DEV configuration and the `*:check` scripts. |
 | R2 tokens | prod bucket only | dev bucket only | Runtime tokens cannot manage bucket settings. `scripts/setup-r2-cors.ts` needs a bucket-admin token. |
 | Local stack | n/a | n/a | The Supabase CLI and psql through `docker exec`. MCP cannot reach it. |
