@@ -7,6 +7,7 @@ Open candidates for moving a rule up the ladder of [decision 0005](../decisions/
 | Candidate | Gap | Target |
 | --- | --- | --- |
 | Saves disabled until a change | `ui/submit-disabled-only-while-pending` refuses a submit that waits on a `*Dirty` flag, but `ui/action-disabled-only-while-pending` still trusts one: `components/dokumente/document-link-dialog.tsx` disables „Speichern“ until a link changes. | Tier 2: answer the unchanged press there, then drop `dirty$` from `AVAILABILITY_FLAG` in `eslint-rules/ui-rules.mjs`. |
+| Rejections in a `void` async handler | `ui/confirm-action-stays-open` covers a confirmation's action. A form dialog that runs `void (async () => { await save(…) })()` still loses a rejected request: the access proposal and its office review did, until a wrapper caught it. `@typescript-eslint/no-floating-promises` ignores `void`. | Tier 2: a rule that refuses an awaited call without a catch inside a `void` async function in `components/`, or Tier 1: `useServerAction` answers a typed failure instead of rejecting. |
 | Hand-built state chips | `components/mitarbeiter/invitations-table.tsx` and `components/zeiterfassung/pending-approvals-cards.tsx` render styled spans instead of `Badge`. | Tier 2: move them to `Badge` variants, then a selector for a rounded-full chip class outside the badge primitive. |
 
 ## Performance and immediate feedback
