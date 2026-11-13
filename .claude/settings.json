@@ -69,6 +69,16 @@
             "timeout": 20
           }
         ]
+      },
+      {
+        "matcher": "mcp__t3-code__device_open",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/refuse-device-without-room.ts\"",
+            "timeout": 30
+          }
+        ]
       }
     ]
   }
