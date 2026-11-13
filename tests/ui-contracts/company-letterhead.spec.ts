@@ -70,3 +70,46 @@ test('the other organization renders its own sample instead of showing the one b
   await held[0]?.fulfill({ contentType: 'application/pdf', body: '%PDF-1.4\n' });
   await expect(page.getByRole('main').getByText('Musterangebot.pdf')).toBeVisible();
 });
+
+test('a removal repeated for the same logo reuses its attempt key, and another logo takes a new one', async ({
+  page,
+}) => {
+  await answerSamples(page);
+  await openContractFixture(page, 'company-letterhead');
+  const remove = page.getByRole('button', { name: 'Entfernen' });
+  const answerNext = async (count: number, refusal: string | null) => {
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (expected) =>
+            window.uiContractWrites.calls.length === expected && window.uiContractWrites.answer !== null,
+          count,
+        ),
+      )
+      .toBe(true);
+    await answerHeldWrite(page, refusal);
+  };
+  // A lost answer looks like a failed removal: the same logo again is the same attempt.
+  await remove.click();
+  await answerNext(1, 'remove_failed');
+  await remove.click();
+  await answerNext(2, 'remove_failed');
+  // Another session put a new logo in its place: removing that one must not replay the first removal.
+  await page.getByRole('button', { name: 'Anderes Logo' }).click();
+  await remove.click();
+  await answerNext(3, null);
+  const sent = await page.evaluate(() =>
+    window.uiContractWrites.calls.map((call) =>
+      typeof call.input === 'object' &&
+      call.input !== null &&
+      'attemptKey' in call.input &&
+      'expectedStoragePath' in call.input
+        ? { key: String(call.input.attemptKey), file: String(call.input.expectedStoragePath) }
+        : null,
+    ),
+  );
+  expect(sent[0]?.key).toEqual(expect.any(String));
+  expect(sent[1]).toEqual(sent[0]);
+  expect(sent[2]?.file).toBe('contract-organization-a/briefpapier/contract-other-logo/logo');
+  expect(sent[2]?.key).not.toBe(sent[0]?.key);
+});

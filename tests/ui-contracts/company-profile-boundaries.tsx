@@ -20,6 +20,11 @@ const PROFILES: Record<ContractOrganization, CompanyProfileDetails> = {
   [ORGANIZATION_B]: { ...EMPTY_COMPANY_PROFILE_DETAILS, companyName: 'Haustechnik Lindenhof GmbH' },
 };
 const LOGO = { storagePath: `${ORGANIZATION_A}/briefpapier/contract-logo/logo`, mimeType: 'image/png' };
+/** The logo another session uploaded in place of the first. */
+const OTHER_LOGO = {
+  storagePath: `${ORGANIZATION_A}/briefpapier/contract-other-logo/logo`,
+  mimeType: 'image/png',
+};
 
 function useContractOrganization() {
   const [organizationId, setOrganizationId] = useState<ContractOrganization>(ORGANIZATION_A);
@@ -53,18 +58,26 @@ export function CompanyProfileContractFixture(): React.JSX.Element {
   );
 }
 
-/** The logo row and the Musterangebot: A has a logo, B has none, neither profile was saved. */
+/**
+ * The logo row and the Musterangebot: A has a logo, B has none, neither
+ * profile was saved. „Anderes Logo“ stands in for the refresh after another
+ * session uploaded a logo in place of A's.
+ */
 export function CompanyLetterheadContractFixture(): React.JSX.Element {
   const { organizationId, switchButton } = useContractOrganization();
+  const [logo, setLogo] = useState(LOGO);
   return (
     <BannerProvider>
       <main>
         <h1>Komponentenverträge</h1>
         {switchButton}
+        <Button type="button" onClick={() => setLogo(OTHER_LOGO)}>
+          Anderes Logo
+        </Button>
         <DocumentLetterheadFiles
           organizationId={organizationId}
           files={{
-            logo: organizationId === ORGANIZATION_A ? LOGO : null,
+            logo: organizationId === ORGANIZATION_A ? logo : null,
             stationery_first: null,
             stationery_following: null,
           }}

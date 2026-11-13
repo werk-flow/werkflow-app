@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-import { useAttemptKey } from '@/components/anfragen/use-attempt-key';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -91,6 +90,23 @@ function useFileTask() {
   return { perform, isPending, failure };
 }
 
+/**
+ * The attempt key of a removal, bound to the files it removes: pressed again
+ * for the same files after a lost answer, it is the same attempt and gets the
+ * first result; other files, such as a new upload in their place, are a new
+ * attempt that never takes the earlier removal's success for its own.
+ */
+function useRemovalKey(): (files: readonly (string | null)[]) => string {
+  const last = useRef<{ key: string; files: string } | null>(null);
+  return (files) => {
+    const target = JSON.stringify(files);
+    const attempt =
+      last.current?.files === target ? last.current : { key: crypto.randomUUID(), files: target };
+    last.current = attempt;
+    return attempt.key;
+  };
+}
+
 function LetterheadFileRow({
   row,
   organizationId,
@@ -107,8 +123,7 @@ function LetterheadFileRow({
   blockedBy: string | null;
 }) {
   const { perform, isPending, failure } = useFileTask();
-  // One per removal until it succeeds, so a retry after a lost answer gets the first result.
-  const removal = useAttemptKey();
+  const removalKey = useRemovalKey();
 
   const status = stored ? `Hinterlegt (${TYPE_LABELS[stored.mimeType] ?? 'Datei'})` : 'Noch nicht hinterlegt';
   const label = (
@@ -155,10 +170,7 @@ function LetterheadFileRow({
                         kind: row.kind,
                         expectedStoragePath: stored.storagePath,
                         expectedFollowingStoragePath: alsoRemoves?.storagePath ?? null,
-                        attemptKey: removal.attemptKey,
-                      }).then((result) => {
-                        if (result.success) removal.renewAttemptKey();
-                        return result;
+                        attemptKey: removalKey([stored.storagePath, alsoRemoves?.storagePath ?? null]),
                       }),
                     `${row.label} wurde entfernt.`,
                     `${row.label} konnte nicht entfernt werden. Versuch es noch einmal.`,
