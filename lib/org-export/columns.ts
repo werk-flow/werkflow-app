@@ -235,6 +235,7 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   work_handover_packages: 'Übergaben',
   work_handover_release_items: 'Übergaben_Freigaben_Inhalte',
   work_handover_releases: 'Übergaben_Freigaben',
+  work_leads: 'Projektleitungen',
   work_request_entries: 'Arbeit_Hinzugefügte_Anfragen',
   work_schedules: 'Arbeitszeitmodelle',
   work_template_applications: 'Arbeitsvorlagen_Anwendungen',

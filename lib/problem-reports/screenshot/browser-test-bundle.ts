@@ -16,6 +16,8 @@ const REDRAW_TEST_ENTRIES = [
   'rasterize',
   'redraw-screenshot',
   'load-ui-string-catalog',
+  // The reporter's boxes, burned into the redrawn image before it leaves the device.
+  '../redaction',
 ] as const;
 
 // The catalog arrives on stdin: it is too long for an argument.
