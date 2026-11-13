@@ -41,7 +41,13 @@ export function ScreenshotRedactionView({
 }: ScreenshotRedactionViewProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="window" workspace data-field-worker={fieldWorker ? '' : undefined}>
+      {/* Focus starts on the view itself: on its first button, one Enter would remove a box. */}
+      <DialogContent
+        size="window"
+        workspace
+        initialFocus="dialog"
+        data-field-worker={fieldWorker ? '' : undefined}
+      >
         <DialogHeader>
           <DialogTitle>Screenshot schwärzen</DialogTitle>
           <DialogDescription>
@@ -58,7 +64,7 @@ export function ScreenshotRedactionView({
           {boxes.length > 0 && !disabled && (
             <>
               <Button type="button" variant="outline" onClick={() => onBoxesChange(boxes.slice(0, -1))}>
-                Letzte entfernen
+                Rückgängig
               </Button>
               <Button type="button" variant="outline" onClick={() => onBoxesChange([])}>
                 Alle entfernen

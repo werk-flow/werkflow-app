@@ -318,13 +318,15 @@ test('the large view opens from the keyboard, and Escape closes only it and retu
   await page.keyboard.press('Enter');
   const view = page.getByRole('dialog', { name: 'Screenshot schwärzen', exact: true });
   await expect(view.getByRole('img', { name: 'Großer Screenshot mit deinen Schwärzungen' })).toBeVisible();
+  // Focus starts on the view, not on a button one Enter would act on.
+  await expect(view).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(view).toBeHidden();
   await expect(dialog).toBeVisible();
   await expect(enlarge).toBeFocused();
 });
 
-test('on a phone, boxes drawn by touch on the large view reach the upload, and „Letzte entfernen“ takes back only the last', async ({
+test('on a phone, boxes drawn by touch on the large view reach the upload, and „Rückgängig“ takes back only the last', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 375, height: 667 });
@@ -345,7 +347,7 @@ test('on a phone, boxes drawn by touch on the large view reach the upload, and �
   };
   await swipe([0.1, 0.1], [0.4, 0.3]);
   await swipe([0.6, 0.7], [0.9, 0.9]);
-  await view.getByRole('button', { name: 'Letzte entfernen', exact: true }).click();
+  await view.getByRole('button', { name: 'Rückgängig', exact: true }).click();
   await view.getByRole('button', { name: 'Fertig', exact: true }).click();
   await sendWithDescription(page, dialog, 'Zwei Stellen, eine bleibt.');
 
