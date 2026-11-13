@@ -115,7 +115,7 @@ function berufsschuleCaptures(): OpenSet {
         route: '/zeiterfassung',
         view: { kind: 'page' },
         destination: ownTimeTracking,
-        reveal: 'Berufsschule diese Woche',
+        reveal: 'Überstunden',
         ...both,
       },
       {
