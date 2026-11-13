@@ -9,7 +9,7 @@
 # caller decides whether that fails its step. The repository is public: it prints those two
 # fields only, never a header, the token or the rest of the body.
 vercel_api() {
-  local work status sent reason retry pause delay=60 start
+  local work status sent reason retry_after pause delay=60 start
   start="$(date +%s)"
   work="$(mktemp -d)"
   while :; do
@@ -29,8 +29,8 @@ vercel_api() {
     esac
     reason="$(jq -r '[.error.code, .error.message] | map(strings) | join(": ")' "$work/body" 2> /dev/null)" || reason=""
     if test "$status" = 429; then
-      retry="$(tr -d '\r' < "$work/headers" | sed -n 's/^[Rr]etry-[Aa]fter: *\([1-9][0-9]*\)$/\1/p' | tail -n 1)"
-      pause="${retry:-$delay}"
+      retry_after="$(tr -d '\r' < "$work/headers" | sed -n 's/^[Rr]etry-[Aa]fter: *\([1-9][0-9]*\)$/\1/p' | tail -n 1)"
+      pause="${retry_after:-$delay}"
       if test $(($(date +%s) + pause - start)) -le "${VERCEL_API_RETRY_SECONDS:-1200}"; then
         echo "Vercel answered HTTP 429${reason:+ (${reason})}; retrying in ${pause} seconds." >&2
         sleep "$pause"
