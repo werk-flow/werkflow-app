@@ -29,20 +29,20 @@ The organization `werk-flow` has its own CodeRabbit Advanced trial until 2026-11
 
 | Level | Trial reviews |
 | --- | --- |
-| 0 | Your own read plus one CodeRabbit review |
+| 0 | Your own read, as outside the trial |
 | 1 | CodeRabbit plus `sol-loop` |
 | 2 | CodeRabbit plus `sol-loop` |
 
-Open the draft and add `needs-coderabbit` before Sol's first round, so the queue requests CodeRabbit's review of the draft while that round runs. Fix both reviewers' findings in one push. The queue swaps the label for `coderabbit-requested` when it asks; after the push that answers a complete round, add `needs-coderabbit` again for the next review. A push without the label gets no review.
+Open a level 1 or 2 draft and add `needs-coderabbit` before Sol's first round, so the queue requests CodeRabbit's review of the draft while that round runs. Fix both reviewers' findings in one push. The queue swaps the label for `coderabbit-requested` when it asks; after the push that answers a complete round, add `needs-coderabbit` again for the next review. A push without the label gets no review.
 
-The merge gate stays unchanged, except every level requires the CodeRabbit review.
+The merge gate stays unchanged, except level 1 and 2 require the CodeRabbit review. Level 0 never gets one.
 
 ### Babysit a pull request
 
 1. Open the PR as a draft after `bun run check:changed` and before Sol's first round (the `file-pr` and `sol-loop` skills). A draft runs every CI job except the browser shards, and its `Check` fails, with no action needed, while the plan holds browser groups ([testing.md, "CI"](testing.md#ci)). After `gh pr create`, call `link_pull_request`, handle the existing checks and comments, then call `watch_pull_request` and end your turn. T3 Code wakes you on a check result, a comment, a review or a conflict. Never poll, sleep or write a watcher.
 2. On each wake, act only on news newer than your last push: the failed job (`gh run view <run-id> --log-failed`, its `evidence-<job>` artifact) or new comments (`gh pr view <number> --comments`, inline threads in `gh api repos/{owner}/{repo}/pulls/<number>/comments`). When a wake needs no action, end your turn without a message.
 3. Verify each finding against the source before you change anything. A CI failure follows [testing.md, "Failures"](testing.md#failures): classify it before any repair, never rerun until green.
-4. In [trial mode](#trial-mode-until-2026-11-27), label every PR at creation; otherwise, a level 2 PR gets one CodeRabbit app review, at the end, from [the queue](#the-coderabbit-queue): once Sol approved, or its budget ended with the open findings in the PR's Review section, and every CI job except `Browser`, `Midnight wait` and `Check` passed, run `gh pr edit <n> --add-label needs-coderabbit` once, then keep watching. A push after that review gets no second one: answer each finding in its thread. Never comment `@coderabbitai review` yourself: a request outside the queue restarts the app's rate-limit window for every waiting PR. The queue requests the review and messages your thread; the review itself wakes you too.
+4. In [trial mode](#trial-mode-until-2026-11-27), label every level 1 and 2 PR at creation; otherwise, a level 2 PR gets one CodeRabbit app review, at the end, from [the queue](#the-coderabbit-queue): once Sol approved, or its budget ended with the open findings in the PR's Review section, and every CI job except `Browser`, `Midnight wait` and `Check` passed, run `gh pr edit <n> --add-label needs-coderabbit` once, then keep watching. A push after that review gets no second one: answer each finding in its thread. Never comment `@coderabbitai review` yourself: a request outside the queue restarts the app's rate-limit window for every waiting PR. The queue requests the review and messages your thread; the review itself wakes you too.
 5. Fix a real finding in a new commit. Collect every finding of a round, Sol's and CodeRabbit's, and answer the round in one push; never push mid-round. Reply in its thread with what changed and the tier where its prevention landed ([decision 0005](../decisions/0005-enforcement-ladder.md)). Every comment follows the `leaving-pr-comments` skill.
 6. Dismiss a false finding with the evidence that the code is right, and resolve the thread. Decline scope creep the same way and list it as a follow-up: unneeded tests, guards for cases that do not occur, extra compatibility. Every CodeRabbit finding gets a disposition.
 7. "Stopped watching, could not read it" usually means GitHub's rate limit is spent (`gh api rate_limit --jq .resources.graphql`). Wait for `reset` with one background command, then watch again.
@@ -72,7 +72,7 @@ Merge with `gh pr merge --squash`, after a fresh `git fetch` and a last look at 
 2. Waits, because CodeRabbit Essentials has no paid overage and its hourly review limit falls as the rolling 7-day review count rises ([rate limits](https://docs.coderabbit.ai/management/rate-limits)). It counts CodeRabbit's "Review finished" notes of the last 7 days. Below 50, it does nothing within 20 minutes of a CodeRabbit review, "Review finished" note or request on any PR; from 50, within 65 minutes. A rate-limit notice pauses it 65 minutes, or until the notice's "available in N minutes" ends.
 3. Selects the PR labelled longest ago, one per pass. Comments `@coderabbitai review` on it, swaps its label for `coderabbit-requested`, and sends one sentence to the PR's T3 thread on that machine: the one on its head branch, else the newest that links the PR, such as an epic's lead. A thread on the other machine hears of the review through its own watch.
 
-In [trial mode](#trial-mode-until-2026-11-27), before `TRIAL_ENDS`, the queue instead requests up to ten labelled PRs per pass at any level, without waiting, once per label: a PR labelled again after its fix round gets the next review. Drafts are served, because the review comes before `gh pr ready`.
+In [trial mode](#trial-mode-until-2026-11-27), before `TRIAL_ENDS`, the queue instead requests up to ten labelled PRs above level 0 per pass, without waiting, once per label: a PR labelled again after its fix round gets the next review. Drafts are served, because the review comes before `gh pr ready`. A level 0 PR is skipped, and its label left alone.
 
 Each machine logs its passes to `~/.local/state/coderabbit-queue.log`. Automatic review is off, so a PR without the label gets no CodeRabbit review.
 
