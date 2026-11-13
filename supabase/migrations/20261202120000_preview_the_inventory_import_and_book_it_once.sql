@@ -44,11 +44,23 @@
 -- before; a preview's rolled-back writes never commit, so they emit nothing.
 
 alter table public.inventory_import_batches
-  add column content_hash text check (content_hash ~ '^[0-9a-f]{64}$'),
-  add column mode text not null default 'stock' check (mode in ('stock', 'master_data')),
-  add column staged_rows jsonb check (staged_rows is null or jsonb_typeof(staged_rows) = 'array'),
-  add column result_payload jsonb check (result_payload is null or jsonb_typeof(result_payload) = 'array'),
+  add column content_hash text,
+  add column mode text not null default 'stock',
+  add column staged_rows jsonb,
+  add column result_payload jsonb,
   add column booked_by uuid references public.profiles(id) on delete set null;
+
+-- Each check keeps the name PostgreSQL gives a column's own check.
+-- @destructive: after release 55088f06f04b5edcc58f8853de54cb4f2251ae0f: that build never writes these new columns, so its rows hold NULL or the default 'stock' and satisfy each check
+alter table public.inventory_import_batches
+  add constraint inventory_import_batches_content_hash_check
+    check (content_hash ~ '^[0-9a-f]{64}$') not valid,
+  add constraint inventory_import_batches_mode_check
+    check (mode in ('stock', 'master_data')) not valid,
+  add constraint inventory_import_batches_staged_rows_check
+    check (staged_rows is null or jsonb_typeof(staged_rows) = 'array') not valid,
+  add constraint inventory_import_batches_result_payload_check
+    check (result_payload is null or jsonb_typeof(result_payload) = 'array') not valid;
 
 comment on column public.inventory_import_batches.content_hash is
   'SHA-256 of the imported file''s bytes, computed in the browser; it finds a repeated file.';
