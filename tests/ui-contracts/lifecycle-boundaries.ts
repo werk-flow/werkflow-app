@@ -68,6 +68,7 @@ declare global {
       | 'support-filing'
       | 'inventory-unit'
       | 'inventory-movements'
+      | 'leistungen'
       | 'site-access-review'
       | 'site-access-proposal'
       | AuthUrlFixtureName

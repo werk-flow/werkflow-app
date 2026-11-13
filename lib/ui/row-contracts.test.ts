@@ -14,6 +14,10 @@ const productFiles = ['app', 'components']
 const sources = new Map(productFiles.map((file) => [file, readFileSync(join(ROOT, file), 'utf8')]));
 
 const PAIRS = [
+  [
+    'components/angebote/leistungen/leistungen-table.tsx',
+    'components/angebote/leistungen/leistungen-skeleton.tsx',
+  ],
   ['components/anfragen/anfragen-content.tsx'],
   [
     'components/auftraege/list/unified-auftraege-table.tsx',
@@ -63,6 +67,9 @@ const SYNCHRONOUS_TABLES = [
   // The Admins' own direct changes, rendered from the Verlauf's read in
   // entry-history.tsx, whose skeleton and failure cover the section.
   'components/zeiterfassung/own-entry-changes.tsx',
+  // The price history of one Leistung, rendered from the list page's payload
+  // inside its dialog; the list's skeleton and failure cover the read.
+  'components/angebote/leistungen/leistung-price-dialog.tsx',
 ];
 
 type Opening = ts.JsxOpeningElement | ts.JsxSelfClosingElement;

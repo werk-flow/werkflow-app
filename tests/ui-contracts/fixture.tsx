@@ -57,6 +57,7 @@ import {
   initializeInventoryMovementsBoundary,
   InventoryMovementsContractFixture,
 } from './inventory-movements-boundaries';
+import { initializeLeistungenBoundary, LeistungenContractFixture } from './leistungen-boundaries';
 import { AuthUrlContractFixture } from './auth-url-boundaries';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -112,6 +113,7 @@ initializeLazyDialogBoundary();
 initializeProblemReportBoundary();
 initializeInventoryUnitBoundary();
 initializeInventoryMovementsBoundary();
+initializeLeistungenBoundary();
 const personnelInitialData = initializePersonnelBoundary();
 
 /** The card as a manager's job page shows it, or with `fieldMode` as the assigned worker's work pack does. */
@@ -598,6 +600,8 @@ createRoot(root).render(
     <InventoryUnitContractFixture />
   ) : window.uiContractFixture === 'inventory-movements' ? (
     <InventoryMovementsContractFixture />
+  ) : window.uiContractFixture === 'leistungen' ? (
+    <LeistungenContractFixture />
   ) : window.uiContractFixture === 'presentation' ? (
     <PresentationFixture />
   ) : window.uiContractFixture === 'customer' ? (
