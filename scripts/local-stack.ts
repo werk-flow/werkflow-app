@@ -157,7 +157,10 @@ async function sync(wait: boolean): Promise<number> {
       say(`The shared stack is at main (${commit}).`);
       return 0;
     }
-    // Every write, the trigger's installation included, happens under the exclusive hold.
+    // Every write, the trigger's installation included, happens under the exclusive hold, which
+    // waits for every SQL and browser run of any worktree: each holds the stack shared. No workspace
+    // lock: it guards one checkout's files and runs, and check:changed's unit step holds it beside
+    // this sync.
     const apply = withStackLock(
       { mode: 'exclusive', operation: 'stack sync', repositoryRoot, wait },
       async () => {

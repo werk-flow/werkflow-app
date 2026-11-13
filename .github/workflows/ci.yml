@@ -221,15 +221,17 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup
       - uses: ./.github/actions/local-stack
+        id: stack
         with:
           save-images: 'true'
       - run: bun scripts/verify.ts run --group "${{ needs.plan.outputs.sql }}"
       # The committed types match every committed migration (docs/technical/environments.md, "The migration rule").
       # It runs after a failed SQL group too, and keeps the file it generated when the committed one
       # is stale: a workstation without Boat takes its types from that artifact
-      # (docs/technical/boat-verification.md, "Types on Boat").
+      # (docs/technical/boat-verification.md, "Types on Boat"). Never after a failed stack start: a
+      # migration that failed leaves a partial schema, and its types would carry the tree's digest.
       - name: Check the generated types
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.stack.outcome == 'success' }}
         env:
           SUPABASE_INTERNAL_IMAGE_REGISTRY: ghcr.io
           WERKFLOW_TYPES_ARTIFACT: ${{ runner.temp }}/database-types/database.types.ts

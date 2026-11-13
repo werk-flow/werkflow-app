@@ -56,10 +56,36 @@ const MIGRATION_FILE = /supabase\/migrations\/[^\s'"]*\.sql\b/;
 const CAT_INTO_PSQL =
   /\bcat\b[^|;&\n]*?(supabase\/migrations\/[^\s'"|;&]*\.sql)\b[^|;&\n]*\|[^;&\n]*\bpsql\b/;
 
-type Started = { name: string; args: string[]; words: ShellWord[] };
+/** `docker exec` flags whose next word is their value, so it is no container. */
+const DOCKER_EXEC_VALUE_FLAGS = new Set([
+  '-e',
+  '--env',
+  '--env-file',
+  '-u',
+  '--user',
+  '-w',
+  '--workdir',
+  '--detach-keys',
+]);
 
-/** The programs a simple command starts, through launchers and `bun x`, and the scripts of nested shells. */
-function started(words: ShellWord[]): (Started | { script: string })[] {
+type Started = { name: string; args: string[]; words: ShellWord[] };
+/** A nested shell's script, with the outer call's other words, whose redirections feed that script's commands. */
+type NestedScript = { script: string; words: ShellWord[] };
+
+/** The command a `docker exec` runs in its container, after the options and the container's name. */
+function dockerExecCommand(args: readonly string[]): string[] | undefined {
+  const exec = args[0] === 'exec' ? 1 : args[0] === 'container' && args[1] === 'exec' ? 2 : undefined;
+  if (exec === undefined) return undefined;
+  let index = exec;
+  while (args[index]?.startsWith('-')) index += DOCKER_EXEC_VALUE_FLAGS.has(args[index] ?? '') ? 2 : 1;
+  return args.slice(index + 1);
+}
+
+/**
+ * The programs a simple command starts, through launchers and `bun x`, and the scripts of nested
+ * shells, a shell that `docker exec` starts in a container among them.
+ */
+function started(words: ShellWord[]): (Started | NestedScript)[] {
   const call = program(words);
   if (!call) return [];
   let name = call.name;
@@ -68,7 +94,15 @@ function started(words: ShellWord[]): (Started | { script: string })[] {
     if (SHELLS.has(name)) {
       const flag = args.findIndex((arg) => SCRIPT_FLAG.test(arg));
       const script = flag === -1 ? undefined : args[flag + 1];
-      return script ? [{ script }] : [];
+      return script ? [{ script, words: words.filter((word) => word.text !== script) }] : [];
+    }
+    // `docker exec <container> sh -c '<script>'`: the script's psql runs in the container. Any other
+    // `docker exec` stays a docker call, which the psql check below reads as a whole.
+    const inContainer = name === 'docker' ? dockerExecCommand(args) : undefined;
+    if (inContainer?.[0] && SHELLS.has(inContainer[0])) {
+      name = inContainer[0];
+      args = inContainer.slice(1);
+      continue;
     }
     const runsBinary =
       (name === 'bun' && (args[0] === 'x' || args[0] === 'run' || args[0] === 'exec')) ||
@@ -163,12 +197,15 @@ function readCommand(command: string, depth: number): { refusal?: string; localP
   const reading = readShell(command);
   if (!reading) return { localPsql: false };
   const calls: Started[] = [];
+  /** The outer words of each nested shell whose script starts a local psql: their redirections are its input. */
+  const nestedPsqlWords: ShellWord[] = [];
   let nestedPsql = false;
   for (const words of reading.commands)
     for (const entry of started(words)) {
       if ('script' in entry) {
         const nested = depth < 4 ? readCommand(entry.script, depth + 1) : { localPsql: false };
         if (nested.refusal) return nested;
+        if (nested.localPsql) nestedPsqlWords.push(...entry.words);
         nestedPsql ||= nested.localPsql;
       } else calls.push(entry);
     }
@@ -183,7 +220,8 @@ function readCommand(command: string, depth: number): { refusal?: string; localP
   );
   const local = psql.filter(reachesLocalDatabase);
   const localPsql = local.length > 0 || nestedPsql;
-  // The file reaches psql as `-f` or as its input, through a `cat` piped into it, or as an include
+  // The file reaches psql as `-f` or as its input (a redirection of the psql call or of the shell
+  // that starts it), through a `cat` piped into it, or as an include
   // (`\i`, `\ir`) in a heredoc psql reads, its own or one a nested shell's psql inherits. A `cat`
   // that only prints the file beside a psql call feeds nothing. A heredoc on a line with a local
   // psql counts as its input whoever reads it: the reader cannot tell a heredoc's reader in every
@@ -191,7 +229,9 @@ function readCommand(command: string, depth: number): { refusal?: string; localP
   const piped = localPsql ? CAT_INTO_PSQL.exec(command)?.[1] : undefined;
   const bodies = localPsql ? [...reading.dataBodies, ...reading.unknownBodies] : [];
   const fed = [
-    ...local.flatMap((call) => call.words.flatMap((word) => MIGRATION_FILE.exec(word.text)?.[0] ?? [])),
+    ...[...local.flatMap((call) => call.words), ...nestedPsqlWords].flatMap(
+      (word) => MIGRATION_FILE.exec(word.text)?.[0] ?? [],
+    ),
     ...(piped ? [piped] : []),
     ...bodies.flatMap((body) => MIGRATION_FILE.exec(body)?.[0] ?? []),
   ];

@@ -60,6 +60,10 @@ test('a migration file never reaches psql on this machine', () => {
     `docker exec -i supabase_db_werkflow-app psql -U postgres <<SQL\n\\ir ${file}\nSQL`,
     // A nested shell's psql inherits the outer heredoc (sol-loop on CodeRabbit's fix, S6).
     `bash -lc 'psql -h localhost -p 54322 -U postgres' <<'SQL'\n\\i ${file}\nSQL`,
+    // A psql that a shell in the stack's container starts (CodeRabbit on #363).
+    `cat ${file} | docker exec -i supabase_db_werkflow-app sh -c 'psql -U postgres -d postgres'`,
+    `docker exec -i supabase_db_werkflow-app sh -c 'psql -U postgres -d postgres' < ${file}`,
+    `docker container exec -i -u postgres supabase_db_werkflow-app bash -lc "psql -d postgres -f /work/${file}"`,
   ]) {
     const refusal = sharedStackMigrationRefusal(command);
     expect(refusal, command).toContain(`\`psql\` with ${file}`);
@@ -91,6 +95,9 @@ test('reads, mentions, other targets and the sanctioned commands pass', () => {
     'cat supabase/migrations/20261130090003_add_a_table.sql && docker exec supabase_db_werkflow-app psql -U postgres -c "select 1"',
     'cat supabase/migrations/20261130090003_add_a_table.sql | head -n 20; docker exec supabase_db_werkflow-app psql -U postgres -c "select 1"',
     'docker exec supabase_db_werkflow-app psql -U postgres -c "select count(*) from public.jobs"',
+    `docker exec supabase_db_werkflow-app sh -c 'psql -U postgres -c "select count(*) from public.jobs"'`,
+    `docker exec -i supabase_db_werkflow-app sh -c 'psql -U postgres' < supabase/tests/problem_reports.sql`,
+    'docker exec supabase_db_werkflow-app sh -c "ls /docker-entrypoint-initdb.d" < supabase/migrations/20261130090003_add_a_table.sql',
     `psql ${DEV_URL} -f supabase/migrations/20261130090003_add_a_table.sql`,
     'docker exec -i supabase_db_werkflow-app psql -U postgres < supabase/tests/problem_reports.sql',
   ])
