@@ -3674,6 +3674,8 @@ export type Database = {
           preferred_location_id: string | null;
           project_id: string | null;
           returned_quantity: number;
+          source_id: string | null;
+          source_kind: string | null;
           source_work_template_material_line_id: string | null;
           status: string;
           taken_quantity: number;
@@ -3696,6 +3698,8 @@ export type Database = {
           preferred_location_id?: string | null;
           project_id?: string | null;
           returned_quantity?: number;
+          source_id?: string | null;
+          source_kind?: string | null;
           source_work_template_material_line_id?: string | null;
           status?: string;
           taken_quantity?: number;
@@ -3718,6 +3722,8 @@ export type Database = {
           preferred_location_id?: string | null;
           project_id?: string | null;
           returned_quantity?: number;
+          source_id?: string | null;
+          source_kind?: string | null;
           source_work_template_material_line_id?: string | null;
           status?: string;
           taken_quantity?: number;
@@ -16976,6 +16982,21 @@ export type Database = {
           p_organization_id: string;
         };
         Returns: string[];
+      };
+      plan_job_material: {
+        Args: {
+          p_actor_id: string;
+          p_item_id: string;
+          p_job_id: string;
+          p_notes?: string;
+          p_organization_id: string;
+          p_planned_quantity: number;
+          p_preferred_location_id?: string;
+          p_project_id: string;
+          p_source_id?: string;
+          p_source_kind?: string;
+        };
+        Returns: string;
       };
       prepare_time_period: {
         Args: {
