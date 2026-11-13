@@ -7,7 +7,14 @@ import { scrubReportContext, scrubReportText } from './scrub-text';
 // scrubbing"), named after the rule. The data is synthetic: the customers,
 // people, addresses and numbers of a made-up company.
 
-const NO_SOURCES = { customerNames: [], personNames: [], siteNames: [], addresses: [], phones: [] };
+const NO_SOURCES = {
+  customerNames: [],
+  personNames: [],
+  siteNames: [],
+  addresses: [],
+  phones: [],
+  identifiers: [],
+};
 // A few of the app's own UI strings, as the build's catalog holds them.
 const uiStrings = new Set(['Speichern', 'Service', 'Wartung', 'Hauptstandort', 'Rückruf an Nordlicht']);
 const dictionary = buildScrubDictionary(
@@ -30,6 +37,7 @@ const dictionary = buildScrubDictionary(
       'Kirchberg 5, 54324 Altdorf',
     ],
     phones: ['0171 2345678', '+43 664 1234567'],
+    identifiers: ['KRH26X'],
   },
   uiStrings,
 );
@@ -396,4 +404,52 @@ test('context rule: a token that the dictionary knows as a name or a phone numbe
     { name: null, code: null, digest: null, routeTemplate },
   ]);
   expect(scrubReportContext(context, uiStrings, dictionary).appVersion).toBe('a1b2c3d4e5f6');
+});
+
+test('context rule: a token that holds a record id is removed', () => {
+  const routeTemplate = '/auftraege/[jobNumber]';
+  const recordId = '7c1e2d3f-0000-4000-8000-00000000abcd';
+  const crafted: ProblemReportContext = {
+    ...context,
+    appVersion: `org-${recordId}`,
+    clientErrors: [
+      { name: 'TypeError', code: `missing:${recordId}`, digest: recordId.toUpperCase(), routeTemplate },
+      { name: 'TypeError', code: 'load_failed', digest: '0123456789', routeTemplate },
+    ],
+  };
+  const scrubbed = scrubReportContext(crafted, uiStrings, dictionary);
+  expect(JSON.stringify(scrubbed).toLowerCase()).not.toContain(recordId);
+  expect(scrubbed.appVersion).toBeNull();
+  expect(scrubbed.clientErrors).toEqual([
+    { name: 'TypeError', code: null, digest: null, routeTemplate },
+    { name: 'TypeError', code: 'load_failed', digest: '0123456789', routeTemplate },
+  ]);
+});
+
+test('pattern rule: any record id, also inside a longer word', () => {
+  const organizationId = '7c1e2d3f-0000-4000-8000-00000000abcd';
+  const text = `Organisation: ${organizationId}, Link /kunden/${organizationId.toUpperCase()}x und ref-1f2e3d4c-5b6a-4789-8a7b-6c5d4e3f2a1b.`;
+  expect(scrubReportText(text, dictionary)).toBe(
+    'Organisation: [ID 1], Link /kunden/[ID 1]x und ref-[ID 2].',
+  );
+});
+
+test("matching rule: the organization's join code, as a whole word in any case, and in a token", () => {
+  expect(scrub('Der Code KRH26X geht nicht, auch krh26x nicht. KRH26XY ist ein anderer.')).toBe(
+    'Der Code [ID 1] geht nicht, auch [ID 1] nicht. KRH26XY ist ein anderer.',
+  );
+  const routeTemplate = '/einstellungen/organisation';
+  const scrubbed = scrubReportContext(
+    {
+      ...context,
+      appVersion: 'krh26x2026',
+      clientErrors: [{ name: 'TypeError', code: 'joinKRH26X', digest: '0123456789', routeTemplate }],
+    },
+    uiStrings,
+    dictionary,
+  );
+  expect(scrubbed.appVersion).toBeNull();
+  expect(scrubbed.clientErrors).toEqual([
+    { name: 'TypeError', code: null, digest: '0123456789', routeTemplate },
+  ]);
 });

@@ -61,6 +61,7 @@ window.uiContractSupport = {
     filedForCaller: false,
     assigneeId: null,
     response: null,
+    responseByAgent: false,
     originalsDeleted: false,
     scrubbedContext: {
       routeTemplate: '/auftraege/[jobNumber]',

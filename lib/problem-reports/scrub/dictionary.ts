@@ -17,12 +17,19 @@ export type ScrubDictionarySources = {
   /** Addresses of customers, sites, callers and employees, each as one line. */
   addresses: readonly string[];
   phones: readonly string[];
+  /** Codes that identify the organization, such as its join code. */
+  identifiers: readonly string[];
 };
 
 type Term = { kind: PlaceholderKind; key: string };
 type TermNode = { next: Map<string, TermNode>; term: Term | null };
 
-export type ScrubDictionary = { terms: TermNode; phones: ReadonlySet<string> };
+export type ScrubDictionary = {
+  terms: TermNode;
+  phones: ReadonlySet<string>;
+  /** The identifying codes in lower case, which a token may not hold anywhere. */
+  identifiers: ReadonlySet<string>;
+};
 
 /**
  * Words of a name that never count as the name alone: salutations and titles,
@@ -151,7 +158,16 @@ export function buildScrubDictionary(
     }
   }
   for (const address of sources.addresses) addAddress(terms, address);
-  return { terms, phones: new Set(sources.phones.flatMap(knownPhoneKeysOf)) };
+  // An identifying code is a whole word in any case, and becomes an `ID`.
+  for (const code of sources.identifiers) {
+    const words = foldedWordsOf(code);
+    if (words.length > 0) addTerm(terms, words, { kind: 'ID', key: words.join(' ') });
+  }
+  return {
+    terms,
+    phones: new Set(sources.phones.flatMap(knownPhoneKeysOf)),
+    identifiers: new Set(sources.identifiers.map((code) => code.trim().toLowerCase()).filter(Boolean)),
+  };
 }
 
 /** The node a word leads to: by its own spelling, or without a genitive `s` („Müllers“). */

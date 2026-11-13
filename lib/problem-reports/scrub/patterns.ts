@@ -2,12 +2,33 @@
 // alone, whoever it belongs to (docs/technical/problem-report-scrubbing.md,
 // "Text scrubbing"). Each finder reads the text once from left to right.
 
-export type PlaceholderKind = 'Kunde' | 'Person' | 'Adresse' | 'Telefon' | 'E-Mail' | 'IBAN';
+import { isUuid } from '@/lib/validation/uuid';
+
+export type PlaceholderKind = 'Kunde' | 'Person' | 'Adresse' | 'Telefon' | 'E-Mail' | 'IBAN' | 'ID';
 
 /** A stretch of the text to replace. Stretches with the same kind and key take the same placeholder. */
 export type Found = { start: number; end: number; kind: PlaceholderKind; key: string };
 
 const WORD_CHARACTER = /[\p{L}\p{N}]/u;
+
+// --- Record id ---
+
+const RECORD_ID_LENGTH = 36;
+
+/**
+ * Every record id, such as an organization's or a customer's, wherever it
+ * stands, also inside a longer word: an id names one record of one company.
+ */
+export function findRecordIds(text: string): Found[] {
+  const found: Found[] = [];
+  for (let start = 0; start + RECORD_ID_LENGTH <= text.length; start += 1) {
+    const candidate = text.slice(start, start + RECORD_ID_LENGTH);
+    if (!isUuid(candidate)) continue;
+    found.push({ start, end: start + RECORD_ID_LENGTH, kind: 'ID', key: candidate.toLowerCase() });
+    start += RECORD_ID_LENGTH - 1;
+  }
+  return found;
+}
 
 // --- IBAN ---
 
