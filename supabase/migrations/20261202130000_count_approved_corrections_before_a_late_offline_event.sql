@@ -10,10 +10,14 @@
 -- shows the refusal as „Konflikt“, and the person deletes the event or files
 -- a correction.
 --
+-- Before that read, an offline-captured event locks the timeline revision
+-- row of each of the person's organizations, which an approval holds until
+-- it commits, so an approval in flight cannot slip past the read.
+--
 -- The rest of the function is unchanged from 20261128090001. It keeps its
 -- signature, owner and grants (create or replace); the revoke restates them.
--- The read is scoped to the person's organizations and runs only for an
--- offline-captured event.
+-- The lock and the read are scoped to the person's organizations and run only
+-- for an offline-captured event.
 
 create or replace function app_private.transition_time_activity(
   p_organization_id uuid,
@@ -154,6 +158,24 @@ begin
   end if;
 
   if p_captured_at is not null then
+    -- An approval holds its organization's timeline revision row until it
+    -- commits. Locking that row of each of the person's organizations first
+    -- makes an approval still in flight finish before the reads below, so
+    -- they see its correction (werk-flow/werkflow-planning#447). The revision
+    -- row comes before any job row, as in every time write; across
+    -- organizations in id order.
+    insert into public.time_timeline_revisions (organization_id)
+    select employee.organization_id from public.employee_records employee
+    where employee.user_id = p_actor_id
+    order by employee.organization_id
+    on conflict (organization_id) do nothing;
+    perform 1 from public.time_timeline_revisions revision
+    where revision.organization_id in (
+      select employee.organization_id from public.employee_records employee
+      where employee.user_id = p_actor_id
+    )
+    order by revision.organization_id
+    for update;
     -- The person's latest recorded time in any organization, so a late event
     -- never overlaps time recorded since, also elsewhere. Across every
     -- session: two sessions can start at the same instant. The refusal names

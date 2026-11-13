@@ -1,4 +1,8 @@
+\connect postgres supabase_admin
 begin;
+set local search_path = public, extensions, pg_temp;
+create extension if not exists pgrowlocks with schema extensions;
+set local role postgres;
 
 -- werk-flow/werkflow-planning#447: an approved addition and a clocked session
 -- over the same hours never both count.
@@ -10,6 +14,12 @@ begin;
 -- 2. The office approves an addition first, and a phone then sends a clock-in
 --    it captured without signal inside those hours. The late event is refused
 --    as out of order; one captured after the addition still records.
+-- 3. An approval holds its organization's timeline revision row until it
+--    commits, so a late event locks that row of each of the person's
+--    organizations before it reads their corrections. A second session cannot
+--    see this file's uncommitted rows, so pgrowlocks reads the row locks from
+--    the same transaction. All data and the pgrowlocks installation roll back
+--    on exit; only the local stack's superuser may install it.
 
 create function pg_temp.timeline_fence() returns jsonb language sql as $$
   select jsonb_build_object('timelineRevision', coalesce((select revision from public.time_timeline_revisions
@@ -46,8 +56,18 @@ values (
   '44700000-0000-0000-0000-000000000010', 'Open session addition SQL',
   '44700000-0000-0000-0000-000000000001', 'OSA447SQL'
 );
+-- A second organization of the person in part 2, without any time of its own.
+insert into public.organizations (id, name, admin_id, unique_code)
+values (
+  '44700000-0000-0000-0000-000000000011', 'Open session addition second SQL',
+  '44700000-0000-0000-0000-000000000001', 'OSA447SQL2'
+);
 insert into public.organization_members (organization_id, user_id, role)
 values
+(
+  '44700000-0000-0000-0000-000000000011',
+  '44700000-0000-0000-0000-000000000003', 'employee'
+),
 (
   '44700000-0000-0000-0000-000000000010',
   '44700000-0000-0000-0000-000000000002', 'employee'
@@ -217,6 +237,35 @@ begin
   );
   if v_result->>'outcome' is distinct from 'active'
   then raise exception 'a late offline clock-in after the approved addition was refused'; end if;
+end;
+$$;
+
+reset role;
+do $$
+declare
+  v_source text := (
+    select prosrc from pg_proc
+    where oid = 'app_private.transition_time_activity'::regproc
+  );
+begin
+  -- Part 2's recorded late clock-in ran in the first organization only, so
+  -- only the read's own lock holds the second organization's row.
+  if not exists (
+    select 1
+    from extensions.pgrowlocks('public.time_timeline_revisions') row_lock
+    join public.time_timeline_revisions revision on revision.ctid = row_lock.locked_row
+    where revision.organization_id = '44700000-0000-0000-0000-000000000011'
+      and 'For Update' = any(row_lock.modes)
+  ) then raise exception 'a late event read corrections without locking the timeline revision of each of the person''s organizations'; end if;
+  -- position() is 0 for absent text, so each marker must be found before the
+  -- comparison can mean anything.
+  if position('from public.time_timeline_revisions revision' in v_source) = 0
+  then raise exception 'the transition no longer locks with "from public.time_timeline_revisions revision"; update this lock-order check'; end if;
+  if position('from public.time_correction_applications application' in v_source) = 0
+  then raise exception 'the transition no longer reads "from public.time_correction_applications application"; update this lock-order check'; end if;
+  if position('from public.time_timeline_revisions revision' in v_source)
+    > position('from public.time_correction_applications application' in v_source)
+  then raise exception 'a late event reads corrections before it locks the timeline revisions, so an approval in flight slips past'; end if;
 end;
 $$;
 
