@@ -34,10 +34,6 @@ export function toJobMaterialStatus(value: string): JobMaterialStatus {
   return constrainedValue(JOB_MATERIAL_STATUSES, value, 'job material status');
 }
 
-export function toInventoryMovementType(value: string): InventoryMovementType {
-  return constrainedValue(INVENTORY_MOVEMENT_TYPES, value, 'movement type');
-}
-
 type Tables = Database['public']['Tables'];
 export type InventoryCategoryRow = Tables['inventory_categories']['Row'];
 export type InventoryLocationRow = Tables['inventory_locations']['Row'];
@@ -46,7 +42,6 @@ export type InventoryItemRow = Tables['inventory_items']['Row'];
 export type InventoryBarcodeRow = Tables['inventory_item_barcodes']['Row'];
 export type InventoryStockLevelRow = Tables['inventory_stock_levels']['Row'];
 export type JobMaterialLineRow = Tables['job_material_lines']['Row'];
-export type InventoryMovementRow = Tables['inventory_movements']['Row'];
 export type InventoryAssetInstanceRow = Tables['inventory_asset_instances']['Row'];
 
 export type InventoryCategory = {
