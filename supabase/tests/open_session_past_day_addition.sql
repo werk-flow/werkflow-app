@@ -1,11 +1,15 @@
 begin;
 
--- werk-flow/werkflow-planning#447: a person forgets to clock out, files an
--- addition for the same hours, and the office approves it. The server action
--- refuses that addition while the session is open (validateCorrectionTimeline,
--- at the proposal and again at the approval). This file proves the database
--- half: when the forgotten session ends after the office's check, the approval
--- that check allowed is refused, so the day never counts both.
+-- werk-flow/werkflow-planning#447: an approved addition and a clocked session
+-- over the same hours never both count.
+-- 1. A person forgets to clock out and files an addition for the same hours.
+--    The server action refuses it while the session is open
+--    (validateCorrectionTimeline, at the proposal and again at the approval).
+--    The database half: when the session ends after the office's check, the
+--    approval that check allowed is refused.
+-- 2. The office approves an addition first, and a phone then sends a clock-in
+--    it captured without signal inside those hours. The late event is refused
+--    as out of order; one captured after the addition still records.
 
 create function pg_temp.timeline_fence() returns jsonb language sql as $$
   select jsonb_build_object('timelineRevision', coalesce((select revision from public.time_timeline_revisions
@@ -29,6 +33,12 @@ insert into auth.users (
   '00000000-0000-0000-0000-000000000000',
   'authenticated', 'authenticated', 'open-session-addition-employee@example.test', '', now(),
   '{}'::jsonb, '{"first_name":"Employee","last_name":"Nachtrag"}'::jsonb, now(), now()
+),
+(
+  '44700000-0000-0000-0000-000000000003',
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated', 'authenticated', 'late-offline-event-employee@example.test', '', now(),
+  '{}'::jsonb, '{"first_name":"Offline","last_name":"Nachtrag"}'::jsonb, now(), now()
 );
 
 insert into public.organizations (id, name, admin_id, unique_code)
@@ -37,9 +47,14 @@ values (
   '44700000-0000-0000-0000-000000000001', 'OSA447SQL'
 );
 insert into public.organization_members (organization_id, user_id, role)
-values (
+values
+(
   '44700000-0000-0000-0000-000000000010',
   '44700000-0000-0000-0000-000000000002', 'employee'
+),
+(
+  '44700000-0000-0000-0000-000000000010',
+  '44700000-0000-0000-0000-000000000003', 'employee'
 );
 
 set local role service_role;
@@ -133,6 +148,75 @@ begin
     where organization_id = c_org and user_id = c_employee and ended_at is not null
   ) <> 1
   then raise exception 'the forgotten session is not recorded once as ended'; end if;
+end;
+$$;
+
+do $$
+declare
+  c_org constant uuid := '44700000-0000-0000-0000-000000000010';
+  c_admin constant uuid := '44700000-0000-0000-0000-000000000001';
+  c_employee constant uuid := '44700000-0000-0000-0000-000000000003';
+  v_employee_record uuid;
+  v_added_from timestamptz := date_trunc('minute', now() - interval '23 hours');
+  v_result jsonb;
+begin
+  select id into v_employee_record from public.employee_records
+  where organization_id = c_org and user_id = c_employee;
+
+  v_result := public.create_time_correction_request(
+    p_organization_id => c_org,
+    p_subject_employee_record_id => v_employee_record,
+    p_actor_id => c_employee,
+    p_operation_id => '44700000-0000-0000-0000-000000000031',
+    p_kind => 'add', p_reason => 'Handy hatte kein Netz',
+    p_source_scope_key => repeat('e', 64),
+    p_source_fingerprint => repeat('f', 64),
+    p_before_snapshot => '{"schemaVersion":1,"facts":[]}'::jsonb,
+    p_proposed_snapshot => jsonb_build_object('schemaVersion', 1, 'facts', jsonb_build_array(
+      jsonb_build_object('factId', 'start', 'employeeRecordId', v_employee_record,
+        'userId', c_employee, 'entryType', 'clock_in', 'timestamp', v_added_from,
+        'jobId', null, 'activityKind', 'work', 'isManual', true),
+      jsonb_build_object('factId', 'end', 'employeeRecordId', v_employee_record,
+        'userId', c_employee, 'entryType', 'clock_out',
+        'timestamp', v_added_from + interval '9 hours',
+        'jobId', null, 'activityKind', 'work', 'isManual', true)
+    )),
+    p_sources => '[]'::jsonb,
+    p_responsibility_snapshot => pg_temp.timeline_fence()
+  );
+  v_result := public.decide_time_correction(
+    (v_result->>'requestId')::uuid, c_admin, '44700000-0000-0000-0000-000000000041',
+    1, 'approve', null, pg_temp.timeline_fence()
+  );
+  if v_result->>'status' is distinct from 'approved'
+  then raise exception 'the office could not approve the addition'; end if;
+
+  begin
+    perform public.transition_time_activity(
+      p_organization_id => c_org, p_actor_id => c_employee,
+      p_operation_id => '44700000-0000-0000-0000-000000000022',
+      p_request_hash => repeat('a', 64), p_action => 'start',
+      p_segment_kind => 'work', p_allocation_kind => 'unallocated',
+      p_captured_at => v_added_from + interval '1 hour', p_sent_at => now()
+    );
+    raise exception 'a late offline clock-in inside an approved addition was recorded';
+  exception when others then
+    if sqlerrm is distinct from 'time_transition_captured_out_of_order' then raise; end if;
+  end;
+  if exists (
+    select 1 from public.time_sessions
+    where organization_id = c_org and user_id = c_employee
+  ) then raise exception 'the refused late clock-in left a session beside the addition'; end if;
+
+  v_result := public.transition_time_activity(
+    p_organization_id => c_org, p_actor_id => c_employee,
+    p_operation_id => '44700000-0000-0000-0000-000000000023',
+    p_request_hash => repeat('b', 64), p_action => 'start',
+    p_segment_kind => 'work', p_allocation_kind => 'unallocated',
+    p_captured_at => v_added_from + interval '10 hours', p_sent_at => now()
+  );
+  if v_result->>'outcome' is distinct from 'active'
+  then raise exception 'a late offline clock-in after the approved addition was refused'; end if;
 end;
 $$;
 
