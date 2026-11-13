@@ -16,6 +16,7 @@ import {
   runScript,
   shellQuote,
 } from './boat-machine';
+import { mainWipeScript } from './main-wipe-script';
 
 // One Boat machine serves a checkout's consecutive verification runs, because Boat counts every
 // create as a start (docs/technical/boat-verification.md#machine-reuse). After a run the machine is
@@ -125,9 +126,11 @@ async function lifeLeft(client: BoatClient, id: string): Promise<number> {
   return Number.isFinite(stopsAt) ? (stopsAt - Date.now()) / 1_000 : 0;
 }
 
-/** The command that runs scripts/boat/wipe-machine.sh of `repository` with `args`, sent as text. */
-function wipeCommand(repository: string, args: readonly string[]): string {
-  const script = readFileSync(resolve(repository, 'scripts/boat/wipe-machine.sh'), 'utf8');
+/** Reads the wipe script's text for `repository`: origin/main's copy, or a test's stand-in. */
+type WipeScript = (repository: string) => string;
+
+/** The command that runs the wipe script's text `script` with `args`, sent as text. */
+function wipeCommand(script: string, args: readonly string[]): string {
   return `set -- ${args.map(shellQuote).join(' ')}\n${script}`;
 }
 
@@ -164,6 +167,7 @@ export async function acquireMachine(
     signal: AbortSignal;
     /** The idle records' folder; a test's stand-in. */
     records?: string;
+    wipeScript?: WipeScript;
   },
 ): Promise<{ machine: Machine; reused: boolean }> {
   const checkout = checkoutLabel(input.repository);
@@ -187,6 +191,8 @@ export async function acquireMachine(
     throw error;
   }
   if (kept) return { machine: { id: kept.id, client, log: input.log }, reused: true };
+  // Read before the start, so a script that cannot be read costs no start.
+  const record = wipeCommand((input.wipeScript ?? mainWipeScript)(input.repository), ['record']);
   const create = () =>
     createMachine(client, {
       from: input.from,
@@ -220,7 +226,7 @@ export async function acquireMachine(
     machine = await create();
   }
   try {
-    await runWipe(machine, wipeCommand(input.repository, ['record']), input.signal);
+    await runWipe(machine, record, input.signal);
   } catch (error) {
     await deleteMachine(machine);
     throw error;
@@ -230,15 +236,16 @@ export async function acquireMachine(
 
 /**
  * Runs `work` on a started machine, then hands the machine to `keep` when `work` returned a result,
- * and deletes it when `keep` declines or fails, `work` failed or the user interrupted. It reports the
- * machine's cost so far either way. A Ctrl-C during that cleanup still stops the run: no fallback to
+ * and deletes it when `keep` declines or fails, `work` failed or the user interrupted. Its last line
+ * says whether the machine was kept or why it was deleted, with its cost so far. A Ctrl-C during that cleanup still stops the run: no fallback to
  * a local run follows an interruption.
  */
 export async function withMachine<T>(
   machine: Machine,
   signal: AbortSignal,
   work: () => Promise<T>,
-  keep: (result: T) => Promise<boolean> = async () => false,
+  /** True when it kept the machine, else why not. */
+  keep: (result: T) => Promise<true | string> = async () => 'the run keeps no machine',
 ): Promise<T> {
   let returned: { result: T } | undefined;
   try {
@@ -246,21 +253,18 @@ export async function withMachine<T>(
   } finally {
     // Read before the keep, so nothing awaits between the keep's last interruption check and the end.
     const usage = await machineUsage(machine);
-    let kept = false;
+    let kept: true | string = signal.aborted ? 'interrupted' : 'the run ended without a result';
     if (returned && !signal.aborted)
-      kept = await keep(returned.result).catch((error: unknown) => {
-        machine.log(
-          `Wiping Boat machine ${machine.id} failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        return false;
-      });
+      kept = await keep(returned.result).catch(
+        (error: unknown) => `wipe failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
     // The run's user waits on this deletion, so its confirmation is short.
-    if (!kept) await deleteMachine(machine, RUN_DELETION_CONFIRM_MS);
+    if (kept !== true) await deleteMachine(machine, RUN_DELETION_CONFIRM_MS);
     const cost = usage ? `${Math.round(usage.seconds / 2)} s of large, $${usage.dollars.toFixed(4)}` : '';
     machine.log(
-      kept
+      kept === true
         ? `Boat machine ${machine.id} wiped and kept ${IDLE_SECONDS / 60} min for this checkout's next run${cost ? `; ${cost} so far` : ''}.`
-        : `Boat machine ${machine.id} deleted${cost ? `: ${cost}` : ''}.`,
+        : `Boat machine ${machine.id} deleted: ${kept.replace(/\.$/, '')}${cost ? `; ${cost}` : ''}.`,
     );
   }
   signal.throwIfAborted();
@@ -277,18 +281,26 @@ function startReaper(repository: string, record: string): void {
 
 /**
  * Wipes the machine after a run and keeps it for this checkout's next run, with a reaper that deletes
- * it after IDLE_SECONDS unless a run took it. False, and nothing kept, when too little of its life is
- * left for another run; a failed wipe throws. Either way the caller then deletes the machine.
+ * it after IDLE_SECONDS unless a run took it. True when kept, else why not, such as too little of its
+ * life left for another run; a failed wipe throws. Unless kept, the caller then deletes the machine.
  */
 export async function keepMachine(
   machine: Machine,
-  input: { repository: string; form: 'main' | 'linked'; signal: AbortSignal; records?: string },
+  input: {
+    repository: string;
+    form: 'main' | 'linked';
+    signal: AbortSignal;
+    records?: string;
+    wipeScript?: WipeScript;
+  },
   reaper: (repository: string, record: string) => void = startReaper,
-): Promise<boolean> {
-  if ((await lifeLeft(machine.client, machine.id)) < RUN_LIFE_SECONDS) return false;
-  await runWipe(machine, wipeCommand(input.repository, ['wipe', input.repository, input.form]), input.signal);
+): Promise<true | string> {
+  if ((await lifeLeft(machine.client, machine.id)) < RUN_LIFE_SECONDS)
+    return 'under an hour of its life left';
+  const script = (input.wipeScript ?? mainWipeScript)(input.repository);
+  await runWipe(machine, wipeCommand(script, ['wipe', input.repository, input.form]), input.signal);
   // A Ctrl-C deletes the machine: nothing is kept once the user interrupted.
-  if (input.signal.aborted) return false;
+  if (input.signal.aborted) return 'interrupted';
   const checkout = checkoutLabel(input.repository);
   reaper(input.repository, writeIdleRecord(checkout, machine.id, input.records ?? IDLE_RECORDS));
   return true;
