@@ -1,7 +1,7 @@
 import type { PriceQuantity } from './line-amount';
 
 // The terms of an article's dated prices and supplier references, as the
-// database checks them (migration 20261203090000). Client and server share
+// database checks them (migration 20261203150000). Client and server share
 // them.
 
 /** Base units one price is stated for, as wholesalers state prices. */

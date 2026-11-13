@@ -1,6 +1,6 @@
 -- An article knows its suppliers and pack sizes, and every price has a date
 -- and a source (werk-flow/werkflow-planning#373, migration
--- 20261203090000_keep_article_suppliers_and_dated_prices.sql).
+-- 20261203150000_keep_article_suppliers_and_dated_prices.sql).
 begin;
 
 insert into auth.users (

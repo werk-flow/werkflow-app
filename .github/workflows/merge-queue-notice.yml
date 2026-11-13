@@ -1,0 +1,76 @@
+name: Merge queue notice
+
+# Tells a PR that the merge queue's run of it failed (docs/technical/coderabbit.md, "The merge gate").
+# The queue's run reports its checks on the queue's own commit, not on the PR's head, and GitHub
+# writes nothing on the PR when it takes the PR out of the queue, so a thread's PR watch may never
+# wake. This comment wakes it. It lives outside ci.yml: nightly.yml and release.yml call ci.yml with
+# fixed permissions, and a called job that asks for more fails its caller.
+#
+# It runs with the base repository's token on a run of a PR's code, so it checks nothing out, and
+# every event field reaches its script as data through `env`.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  notice:
+    name: Notice
+    # `cancelled` gets no comment: a person cancelled the run and knows, or the PR left the queue
+    # another way (a push to it, or a removal), which its thread caused or sees.
+    if: >-
+      github.event.workflow_run.event == 'merge_group' &&
+      (github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'timed_out')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read # name the failed jobs
+      pull-requests: write # read the PR's state and comment on it
+    steps:
+      - name: Comment on the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          QUEUE_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          pr="$(sed -nE 's|^gh-readonly-queue/.+/pr-([0-9]+)-[0-9a-f]+$|\1|p' <<< "$QUEUE_BRANCH")"
+          if test -z "$pr"; then
+            echo '::error title=Merge queue notice::The run is on no merge queue branch, so it names no PR.'
+            exit 1
+          fi
+          # When an entry ahead fails, the queue builds the entries behind it again, and their old runs
+          # fail for that entry's reason. Only a PR that is still open and no longer queued on another
+          # commit hears of this run. An unreadable state still comments, so no thread sleeps.
+          if state="$(gh api graphql -F owner="${GITHUB_REPOSITORY%/*}" -F name="${GITHUB_REPOSITORY#*/}" -F number="$pr" \
+            -f query='query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { state mergeQueueEntry { headCommit { oid } } } } }' \
+            --jq '.data.repository.pullRequest | "\(.state) \(.mergeQueueEntry.headCommit.oid // "")"')"; then
+            read -r pr_state queued_sha <<< "$state"
+            if test "$pr_state" != OPEN; then
+              echo "::notice title=Merge queue notice::PR #$pr is $pr_state, so it gets no comment."
+              exit 0
+            fi
+            if test -n "$queued_sha" && test "$queued_sha" != "$RUN_SHA"; then
+              echo "::notice title=Merge queue notice::The queue tests PR #$pr again on another commit, so this run's failure is not its own."
+              exit 0
+            fi
+          else
+            echo "::warning title=Merge queue notice::The state of PR #$pr could not be read, so it gets the comment."
+          fi
+          # Job names come from the queue commit's ci.yml, so they lose their backticks.
+          if jobs="$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs?per_page=100" \
+            --jq '.jobs[] | select(.conclusion == "failure" or .conclusion == "timed_out") | .name')" && test -n "$jobs"; then
+            failed="$(tr -d '`' <<< "$jobs" | sed 's/.*/- `&`/')"
+          else
+            failed='- The failed jobs could not be read. The run names them.'
+          fi
+          body="The merge queue's run of this PR failed, so GitHub took the PR out of the queue: $RUN_URL
+
+          Failed jobs:
+          $failed
+
+          Confirm with \`gh pr view $pr --json state,autoMergeRequest\`. Classify the failure (docs/technical/testing.md, \"Failures\"), fix it in a push, and run \`gh pr merge $pr --squash --auto\` again once the merge gate holds. Never use \`--admin\` or another bypass."
+          gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$pr/comments" -f body="$body" > /dev/null

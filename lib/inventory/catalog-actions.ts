@@ -40,7 +40,7 @@ import {
 // and its supplier references and dated prices. Each one is for managers only.
 
 // The refusals of save_inventory_item_supplier, remove_inventory_item_supplier
-// and add_inventory_item_price (migration 20261203090000).
+// and add_inventory_item_price (migration 20261203150000).
 const articleTermsRefusal = writeRefusalFor(
   new Set([
     'not_authorized',

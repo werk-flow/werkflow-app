@@ -442,6 +442,11 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['organization-deletion', ['organization_deletion.sql'], ['*']],
   ['storage-purge', ['storage_purge.sql'], ['documents']],
   [
+    'company-document-profiles',
+    ['company_document_profiles.sql', 'company_document_profiles_concurrency.sql'],
+    ['documents'],
+  ],
+  [
     'problem-reports',
     ['problem_reports.sql', 'problem_report_support.sql', 'problem_report_handout.sql'],
     ['*'],

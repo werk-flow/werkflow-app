@@ -17,7 +17,7 @@ import { type InventoryUnitCode, isInventoryUnitCode } from './units';
 //
 // The source is the article's dated prices: the database function
 // `read_inventory_item_prices_on_day` owns which price applies on a day, per kind
-// (migration 20261203090000). An archived article answers too, because offer
+// (migration 20261203150000). An archived article answers too, because offer
 // and order lines keep referencing it.
 
 export type ArticlePrice = {
