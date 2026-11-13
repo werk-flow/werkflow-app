@@ -172,6 +172,7 @@ const recordAgent = (args: Record<string, unknown>, eventType: string) => {
   });
 };
 
+let betweenCheckAndHandOut: (() => void) | null = null;
 /** The hand-out functions and the Agent's triage over the world's tables, with their refusals. */
 world.rpc = ({ name, args }) => {
   const row = reportRow(args);
@@ -191,10 +192,13 @@ world.rpc = ({ name, args }) => {
     return { data: row.scrub_state, error: null };
   }
   if (name === 'hand_out_problem_report') {
+    // What lands between the server's check of the copy and this call, such as the daily run's scrub.
+    betweenCheckAndHandOut?.();
+    betweenCheckAndHandOut = null;
     const sentRecently = Date.parse(String(row.created_at)) > Date.now() - 10 * 60 * 1000;
     if (row.scrub_state === 'ausstehend' || sentRecently) return refused('copy_pending');
     if (row.scrub_state !== 'bereinigt') return refused('copy_unavailable');
-    if (versionOf(row.scrub_version) < versionOf(args.p_scrub_version))
+    if (row.scrub_version !== args.p_scrub_version)
       return refused(row.originals_deleted_at === null ? 'copy_pending' : 'copy_unavailable');
     if (row.closed_at !== null) return refused('report_closed');
     if (row.handed_out_at !== null) return refused('already_handed_out');
@@ -528,6 +532,26 @@ for (const id of [olderCopyId, olderCopyGoneId]) {
   assert.equal(reports().find((row) => row.id === id)?.handed_out_at, null);
 }
 assert.equal(events().length, historyBeforeOlder, 'a refused older copy wrote history');
+
+// A copy the server did not check never leaves: a report whose copy is still
+// older when the server checks it is refused before the claim, even when the
+// daily run writes a current copy right after the check. Here that new copy
+// names the organization, as after a rename the scrub could not know.
+const racedId = '33600000-0000-4000-8000-00000000002b';
+reports().push(
+  report(racedId, ORGANIZATION_B, 11, { scrubbed_description: 'Die Liste hängt.', scrub_version: null }),
+);
+betweenCheckAndHandOut = () => {
+  const raced = reports().find((row) => row.id === racedId);
+  if (raced) Object.assign(raced, { scrubbed_description: olderCopy, scrub_version: 1 });
+};
+const racedCallsBefore = world.rpcCalls.length;
+const raced = await call.handOut(racedId);
+assert.equal(raced.status, 409);
+assert.ok(!(await raced.text()).includes('Beispiel'), 'an unchecked copy left');
+assert.equal(world.rpcCalls.length, racedCallsBefore, 'a copy of older rules reached the hand-out');
+assert.equal(reports().find((row) => row.id === racedId)?.handed_out_at, null);
+betweenCheckAndHandOut = null;
 
 // The second line: a copy of the current rules that still names its
 // organization (the rules missed a case) is refused unclaimed and logged,

@@ -153,22 +153,25 @@ async function loadReport(
 }
 
 /**
- * The second line behind the rule version: whether a copy of the current
- * rules still names its organization or holds a record id. Such a copy never
- * leaves (`copy_unavailable`) and is logged, without its text. A report
- * without a current copy passes here; the hand-out refuses it with its code.
+ * The copy the hand-out may hand out, checked before the claim: a refusal
+ * code, `failed`, or null when the copy is current and clean. Only a copy
+ * of the current rules passes, so the hand-out, which requires that same
+ * version under its lock, answers exactly the copy checked here: a copy only
+ * ever changes to a newer version. The second line behind the version: a
+ * current copy that still names its organization or holds a record id never
+ * leaves (`copy_unavailable`) and is logged, without its text.
  */
-async function copyWithheld(
+async function checkCopy(
   admin: AdminClient,
   report: { id: string; organization_id: string },
-): Promise<boolean | null> {
+): Promise<HandoutRefusal | 'failed' | null> {
   const [copy, organization] = await Promise.all([
     loggedRead(
       'problem report hand-out: copy read failed',
       admin
         // tenant-scope: cross-organization-by-design — the copy of the one report a thread names, by its id
         .from('problem_reports')
-        .select('scrub_state, scrub_version, scrubbed_description, scrubbed_context')
+        .select('scrub_state, scrub_version, scrubbed_description, scrubbed_context, originals_deleted_at')
         .eq('id', report.id)
         .maybeSingle(),
     ),
@@ -177,22 +180,27 @@ async function copyWithheld(
       admin.from('organizations').select('name').eq('id', report.organization_id).maybeSingle(),
     ),
   ]);
-  if (copy.error || organization.error || !copy.data || !organization.data) return null;
+  if (copy.error || organization.error || !organization.data) return 'failed';
+  if (!copy.data) return 'report_not_found';
   const { scrub_state: state, scrub_version: version, scrubbed_description: description } = copy.data;
-  // A copy of older rules is refused by the hand-out itself.
-  if (state !== 'bereinigt' || version !== SCRUB_RULES_VERSION || description === null) return false;
+  // No current copy yet: refused before the claim, with the codes the hand-out uses.
+  if (state === 'ausstehend') return 'copy_pending';
+  if (state !== 'bereinigt' || description === null) return 'copy_unavailable';
+  if (version !== SCRUB_RULES_VERSION)
+    return copy.data.originals_deleted_at === null ? 'copy_pending' : 'copy_unavailable';
   try {
     const names = copyNamesItsOrganization(
       { description, context: parseScrubbedProblemReportContext(copy.data.scrubbed_context) },
       organization.data.name,
     );
+    if (!names) return null;
     // A copy of the current rules never names its organization; when one
     // does, the rules missed a case, and it is held back and reported.
-    if (names) logError('problem report hand-out: a current copy names its organization');
-    return names;
+    logError('problem report hand-out: a current copy names its organization');
+    return 'copy_unavailable';
   } catch (thrown) {
     logError('problem report hand-out: copy check failed', thrown);
-    return null;
+    return 'failed';
   }
 }
 
@@ -249,9 +257,9 @@ export async function handOutProblemReport(
 ): Promise<HandoutResult<{ copy: HandedOutCopy }>> {
   const loaded = await loadReport(admin, reportId);
   if (!loaded.ok) return loaded;
-  const withheld = await copyWithheld(admin, loaded.report);
-  if (withheld === null) return FAILED;
-  if (withheld) return { ok: false, error: 'copy_unavailable' };
+  const refusal = await checkCopy(admin, loaded.report);
+  if (refusal === 'failed') return FAILED;
+  if (refusal) return { ok: false, error: refusal };
   const { data, error } = await admin.rpc(
     'hand_out_problem_report',
     // tenant-scope: cross-organization-by-design — a report thread takes a report of any organization; the loaded report's own organization scopes the call

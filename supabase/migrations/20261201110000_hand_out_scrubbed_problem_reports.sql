@@ -215,7 +215,7 @@ $$;
 -- copy, the scrubbed context, status, bucket, whether an answer exists (never
 -- its text, which support wrote unscrubbed) and whether a redrawn screenshot exists;
 -- never an original, a name or another id. A report sent less than ten
--- minutes ago, still waiting for its scrub, or whose copy predates the rules of
+-- minutes ago, still waiting for its scrub, or whose copy is of other rules than
 -- p_scrub_version while it keeps its originals, is `copy_pending`; one that
 -- cannot be scrubbed, or keeps such a copy without originals, `copy_unavailable`, a closed one `report_closed`, one
 -- already handed out `already_handed_out`, and a report of another
@@ -244,9 +244,10 @@ begin
   if v_report.scrub_state = 'ausstehend' or v_report.created_at > now() - interval '10 minutes'
   then raise exception 'copy_pending'; end if;
   if v_report.scrub_state <> 'bereinigt' then raise exception 'copy_unavailable'; end if;
-  -- A copy of older rules waits for the daily run to scrub it again; without
-  -- its originals it never leaves.
-  if coalesce(v_report.scrub_version, 0) < p_scrub_version then
+  -- Only a copy of exactly the rules the server checked leaves. One of older
+  -- rules waits for the daily run to scrub it again, and never leaves without
+  -- its originals.
+  if v_report.scrub_version is distinct from p_scrub_version then
     raise exception '%', case when v_report.originals_deleted_at is null then 'copy_pending' else 'copy_unavailable' end;
   end if;
   if v_report.closed_at is not null then raise exception 'report_closed'; end if;

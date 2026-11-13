@@ -361,6 +361,13 @@ begin
   if (select scrubbed_description <> 'Bei [Kunde 1] hängt die Liste' or scrub_version <> 2
       from public.problem_reports where id = v_old)
   then raise exception 'an older version replaced a newer copy'; end if;
+  -- The hand-out answers only a copy of exactly the rules the server checked.
+  begin
+    perform public.hand_out_problem_report(v_org, v_old, 1, array[]::uuid[]);
+    raise exception 'a copy of other rules than the checked ones was handed out';
+  exception when raise_exception then
+    if sqlerrm <> 'copy_pending' then raise; end if;
+  end;
   if (select scrub_version from public.problem_reports where id = '33600000-0000-0000-0000-000000000021') is not null
   then raise exception 'a report without a copy carries a version'; end if;
 end;
