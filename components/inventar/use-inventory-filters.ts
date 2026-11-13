@@ -28,8 +28,7 @@ export type InventoryFilters = {
 };
 
 type Query = InventoryOverview['page']['query'];
-const FILTER_KEYS = ['search', 'type', 'stock', 'location', 'kind', 'person', 'from', 'to'] as const;
-type FilterKey = (typeof FILTER_KEYS)[number];
+type FilterKey = 'search' | 'type' | 'stock' | 'location' | 'kind' | 'person' | 'from' | 'to';
 type FilterValues = Record<FilterKey, string>;
 
 /** The URL value of each filter, an empty search and date bound included. */

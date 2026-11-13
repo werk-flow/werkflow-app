@@ -150,8 +150,18 @@ function MovementFilterBar({
           emptyMessage="Keine Person gefunden"
         />
       </div>
-      <DateBound label="Von" ariaLabel="Bewegungen ab" value={filters.fromDate} onChange={filters.changeFromDate} />
-      <DateBound label="Bis" ariaLabel="Bewegungen bis" value={filters.toDate} onChange={filters.changeToDate} />
+      <DateBound
+        label="Von"
+        ariaLabel="Bewegungen ab"
+        value={filters.fromDate}
+        onChange={filters.changeFromDate}
+      />
+      <DateBound
+        label="Bis"
+        ariaLabel="Bewegungen bis"
+        value={filters.toDate}
+        onChange={filters.changeToDate}
+      />
     </div>
   );
 }
@@ -279,7 +289,9 @@ function MovementsDesktopTable({ entries }: { entries: InventoryMovementHistoryE
             const target = formatMovementTarget(entry);
             return (
               <TableRow key={entry.id}>
-                <TableCell className="text-muted-foreground">{formatBerlinDateTime(entry.createdAt)}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  {formatBerlinDateTime(entry.createdAt)}
+                </TableCell>
                 <TableCell className="font-medium wrap-anywhere">{entry.itemName}</TableCell>
                 <TableCell className="wrap-anywhere">{entry.locationName ?? '—'}</TableCell>
                 <TableCell className="wrap-anywhere">
@@ -289,11 +301,15 @@ function MovementsDesktopTable({ entries }: { entries: InventoryMovementHistoryE
                   <MovementEndLabel end={target.to} />
                 </TableCell>
                 <TableCell>{INVENTORY_HISTORY_KIND_LABELS[entry.kind]}</TableCell>
-                <TableCell className="text-right tabular-nums">{formatStockQuantity(entry.quantityBefore)}</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {formatStockQuantity(entry.quantityBefore)}
+                </TableCell>
                 <TableCell className="text-right whitespace-nowrap">
                   <MovementQuantity entry={entry} />
                 </TableCell>
-                <TableCell className="text-right tabular-nums">{formatStockQuantity(entry.quantityAfter)}</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {formatStockQuantity(entry.quantityAfter)}
+                </TableCell>
                 <TableCell className="wrap-anywhere">{entry.actorName ?? '—'}</TableCell>
                 <TableCell className="wrap-anywhere">{entry.reason ?? '—'}</TableCell>
               </TableRow>

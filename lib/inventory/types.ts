@@ -20,7 +20,11 @@ const INVENTORY_MOVEMENT_TYPES = [
  * The kinds of the material history: the stock movements, then a use of job
  * material and its correction, which move no stock.
  */
-export const INVENTORY_HISTORY_KINDS = [...INVENTORY_MOVEMENT_TYPES, 'job_use', 'job_use_correction'] as const;
+export const INVENTORY_HISTORY_KINDS = [
+  ...INVENTORY_MOVEMENT_TYPES,
+  'job_use',
+  'job_use_correction',
+] as const;
 const JOB_MATERIAL_STATUSES = ['planned', 'partially_taken', 'taken', 'returned', 'cancelled'] as const;
 
 export type InventoryItemType = (typeof INVENTORY_ITEM_TYPES)[number];

@@ -301,7 +301,11 @@ export async function loadInventoryMovementPage(
   }
   const people = parsed.data.people.map((person) => ({
     id: person.id,
-    name: formatProfileName({ first_name: person.firstName, last_name: person.lastName, email: person.email }),
+    name: formatProfileName({
+      first_name: person.firstName,
+      last_name: person.lastName,
+      email: person.email,
+    }),
   }));
   const nameById = new Map(people.map((person) => [person.id, person.name]));
   return {
