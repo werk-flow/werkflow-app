@@ -249,7 +249,18 @@ test('a save hanging in another tab when the question opens stalls its send, and
   expect(await draftsOnDevice(page)).toEqual([DRAFT_ID]);
 });
 
-test('a discard waiting for a save that started hanging in another tab ends after its bound, deletes nothing, and „Abbrechen“ keeps the session', async ({
+const STILL_SENDING =
+  'Gerade wird noch ein Entwurf übertragen. Was hier noch steht, ist nicht gelöscht. Versuche es gleich noch einmal.';
+
+/** Moves the page clock in steps until the discard's bound passed, which starts once it read the session. */
+async function passDiscardBound(page: Page): Promise<void> {
+  await expect(async () => {
+    await page.clock.runFor(1_000);
+    await expect(question(page)).toContainText(STILL_SENDING, { timeout: 100 });
+  }).toPass();
+}
+
+test('a discard waiting for a save that started hanging in another tab ends after its bound, deletes nothing, shows a draft written meanwhile, and „Abbrechen“ keeps the session', async ({
   page,
 }) => {
   // The page's clock runs by hand, so the discard's ten-second bound passes without waiting.
@@ -265,18 +276,19 @@ test('a discard waiting for a save that started hanging in another tab ends afte
   await question(page).getByRole('button', { name: 'Verwerfen', exact: true }).click();
   const confirmation = page.getByRole('alertdialog', { name: 'Nicht Übertragenes verwerfen?' });
   await confirmation.getByRole('button', { name: 'Endgültig verwerfen', exact: true }).click();
-  // The discard starts its bound only after it read the session: the page clock moves in steps until it passed.
-  await expect(async () => {
-    await page.clock.runFor(1_000);
-    await expect(confirmation).toContainText(
-      'Gerade wird noch ein Entwurf übertragen. Was hier noch steht, ist nicht gelöscht. Versuche es gleich noch einmal.',
-      { timeout: 100 },
-    );
-  }).toPass();
-  await confirmation.getByRole('button', { name: 'Abbrechen', exact: true }).click();
+  // Another tab writes a draft while the discard waits.
+  const laterId = '60000000-0000-4000-8000-000000000005';
+  await storeDrafts(page, [{ id: laterId, title: 'Nachtrag Dachboden' }]);
+  await passDiscardBound(page);
+
+  // The confirmation closed: a new discard first shows the draft written meanwhile in detail.
+  await expect(confirmation).toHaveCount(0);
+  await expect(question(page).getByRole('list', { name: 'Berichtsentwürfe', exact: true })).toContainText(
+    'Nachtrag Dachboden',
+  );
   await question(page).getByRole('button', { name: 'Abbrechen', exact: true }).click();
   await expect(page.getByLabel('Abmeldung')).toHaveText('Sitzung bleibt');
-  expect(await draftsOnDevice(page)).toEqual([DRAFT_ID]);
+  expect(await draftsOnDevice(page)).toEqual([DRAFT_ID, laterId]);
 });
 
 test('a discard that deletes the times but finds a draft save still running says what is left and lists only that', async ({
@@ -293,20 +305,13 @@ test('a discard that deletes the times but finds a draft save still running says
   await question(page).getByRole('button', { name: 'Verwerfen', exact: true }).click();
   const confirmation = page.getByRole('alertdialog', { name: 'Nicht Übertragenes verwerfen?' });
   await confirmation.getByRole('button', { name: 'Endgültig verwerfen', exact: true }).click();
-  await expect(async () => {
-    await page.clock.runFor(1_000);
-    await expect(confirmation).toContainText(
-      'Gerade wird noch ein Entwurf übertragen. Was hier noch steht, ist nicht gelöscht. Versuche es gleich noch einmal.',
-      { timeout: 100 },
-    );
-  }).toPass();
+  await passDiscardBound(page);
 
   // The times are gone; the question names only the draft that stays.
   expect(await unsentOnDevice(page)).toEqual([]);
-  await expect(confirmation).toContainText('Berichtsentwürfe: 1.');
-  await expect(confirmation).not.toContainText('Stempelzeiten');
-  await confirmation.getByRole('button', { name: 'Abbrechen', exact: true }).click();
   await expect(question(page).getByRole('list', { name: 'Berichtsentwürfe', exact: true })).toBeVisible();
   await expect(question(page)).not.toContainText('Stempelzeiten');
+  await question(page).getByRole('button', { name: 'Abbrechen', exact: true }).click();
+  await expect(page.getByLabel('Abmeldung')).toHaveText('Sitzung bleibt');
   expect(await draftsOnDevice(page)).toEqual([DRAFT_ID]);
 });

@@ -169,7 +169,11 @@ function useUnsentChoice(
         setError('Noch nicht alles ist übertragen. Prüfe dein Netz und versuche es erneut.');
       } catch (failure) {
         // A draft send still running: the sources before the drafts may have deleted what they showed.
-        if (failure instanceof UnsentWorkBusyError && (await showWhatIsLeft())) return;
+        // The confirmation closes, so a draft changed or written meanwhile is shown before any new discard.
+        if (failure instanceof UnsentWorkBusyError && (await showWhatIsLeft())) {
+          onKeptSince?.();
+          return;
+        }
         logError('unsent work: the choice failed', failure);
         setError('Der Speicher deines Geräts hat nicht geantwortet. Bitte versuche es erneut.');
       } finally {
