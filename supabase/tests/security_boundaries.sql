@@ -324,8 +324,7 @@ rollback to savepoint policy_probe;
 -- body names public.<table>. Trigger functions are out of scope: they read the
 -- organization from the row they guard. Each exemption names one signature, so
 -- a new overload gets no reviewed reason by its name, and carries the reason
--- review accepted, and an exemption whose function now takes the organization
--- fails until removed.
+-- review accepted, and a stale exemption fails until removed.
 create function pg_temp.tenant_helper_exemptions() returns table (name text, reason text)
 language sql as $$
   values
@@ -385,6 +384,15 @@ language sql as $$
     and exists (select 1 from tenant where p.prosrc ~ ('\mpublic\.' || tenant.relname || '\M'));
 $$;
 
+-- An exemption is stale when its signature is no longer reported: the
+-- function now takes the organization, was replaced by another signature, or
+-- is gone.
+create function pg_temp.stale_tenant_helper_exemptions(p_names text[]) returns text
+language sql as $$
+  select string_agg(exempted.name, ', ' order by exempted.name) from unnest(p_names) exempted (name)
+  where exempted.name not in (select found.name from pg_temp.tenant_helpers_without_organization() found);
+$$;
+
 do $$
 declare offender text;
 declare stale text;
@@ -395,15 +403,7 @@ begin
   if offender is not null then
     raise exception 'app_private reads tenant rows without taking the organization (add p_organization_id): %', offender;
   end if;
-  select string_agg(exemption.name, ', ' order by exemption.name) into stale
-  from pg_temp.tenant_helper_exemptions() exemption
-  where exemption.name not in (select found.name from pg_temp.tenant_helpers_without_organization() found)
-    -- A local stack behind this branch lacks a newer function; it is not stale there.
-    and exists (
-      select 1 from pg_proc p
-      where p.pronamespace = 'app_private'::regnamespace
-        and replace(p.oid::regprocedure::text, 'app_private.', '') = exemption.name
-    );
+  stale := pg_temp.stale_tenant_helper_exemptions(array(select exemption.name from pg_temp.tenant_helper_exemptions() exemption));
   if stale is not null then
     raise exception 'Tenant helper exemptions that no longer apply (remove them): %', stale;
   end if;
@@ -439,6 +439,13 @@ begin
     and helper.name not in (select exemption.name from pg_temp.tenant_helper_exemptions() exemption);
   if found is distinct from 'get_user_org_ids(uuid,text), werkflow_tenant_probe(uuid)' then
     raise exception 'Tenant helper check missed the probe or flagged a scoped one: %', found;
+  end if;
+  -- A helper that gained the organization, and one that is gone, leave stale exemptions.
+  found := pg_temp.stale_tenant_helper_exemptions(
+    array['werkflow_tenant_probe(uuid)', 'werkflow_tenant_probe_scoped(uuid,uuid)', 'werkflow_tenant_probe_gone(uuid)']
+  );
+  if found is distinct from 'werkflow_tenant_probe_gone(uuid), werkflow_tenant_probe_scoped(uuid,uuid)' then
+    raise exception 'Stale exemption check missed a scoped or removed helper: %', found;
   end if;
 end;
 $$;
