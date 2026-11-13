@@ -80,6 +80,7 @@ test('a count is never NULL only as a bare scalar count, and coalesce with any l
         assertion('(select count(*) + v_extra from public.jobs where id = v_job) <> 1'),
         assertion('(select count(*) from public.jobs where id = v_job having false) <> 1'),
         assertion('coalesce(v_total, 0, v_other) <> 1'),
+        assertion("(select count(*) filter (where status = 'offen') from public.jobs where id = v_job) <> 1"),
       ].join('\n'),
     ).map(({ line, rule }) => ({ line, rule })),
   ).toEqual([
@@ -209,10 +210,13 @@ test('the scope rule spares reads under a client role, fixture literals and join
         assertion(
           'exists (select 1 from public.storage_purge_queue queued join resized_parts part on part.archive_path = queued.storage_path)',
         ),
+        assertion(
+          'exists (select 1 from resized_parts part join public.storage_purge_queue queued on part.archive_path = queued.storage_path)',
+        ),
         assertion('exists (select 1 from public.jobs)'),
       ].join('\n'),
     ),
-  ).toEqual([{ line: 13, rule: 'org-scope', code: 'select 1 from public.jobs' }]);
+  ).toEqual([{ line: 16, rule: 'org-scope', code: 'select 1 from public.jobs' }]);
 });
 
 test('every SQL test asserts NULL-safely over its own organizations', () => {

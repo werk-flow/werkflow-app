@@ -132,12 +132,15 @@ function neverNull(expression: readonly Token[]): boolean {
   if (groupAt < 0 || closing(tokens, groupAt) !== last) return false;
   if (groupAt === 0) {
     const inner = tokens.slice(1, last);
-    // `select count(…) from …` without grouping or HAVING always returns one row.
-    if (inner[0]?.lower === 'select' && inner[1]?.lower === 'count' && inner[2]?.lower === '(')
+    // `select count(…) [filter (…)] from …` without grouping or HAVING always returns one row.
+    if (inner[0]?.lower === 'select' && inner[1]?.lower === 'count' && inner[2]?.lower === '(') {
+      const after = closing(inner, 2) + 1;
+      const from = inner[after]?.lower === 'filter' ? closing(inner, after + 1) + 1 : after;
       return (
-        inner[closing(inner, 2) + 1]?.lower === 'from' &&
+        inner[from]?.lower === 'from' &&
         !inner.some((token) => token.lower === 'group' || token.lower === 'having')
       );
+    }
     return neverNull(inner);
   }
   if (first.lower === 'exists' || first.lower === 'array' || first.lower === 'row') return true;
@@ -210,11 +213,15 @@ function nullableComparisons(source: string, tokens: readonly Token[]): Assertio
   );
 }
 
-/** A relation a select reads, the index of its name token, and whether an `on` join restricts it. */
+/**
+ * A relation a select reads, the index of its name token, whether it is a
+ * function call, and whether an inner `join … on` adds it.
+ */
 type Relation = {
   readonly schema: string | null;
   readonly name: string;
   readonly at: number;
+  readonly call: boolean;
   readonly joinedOn: boolean;
 };
 
@@ -231,14 +238,15 @@ function relationsRead(select: readonly Token[]): Relation[] {
     const first = select[index + 1]?.lower ?? '';
     if (!/^[a-z_]/.test(first)) continue;
     const at = select[index + 2]?.lower === '.' ? index + 3 : index + 1;
-    // An inner `join … on` of a table, not a function: `cross join` and `left join` restrict nothing.
-    const kind = select[index - 1]?.lower;
+    const call = select[at + 1]?.lower === '(';
+    // `cross join` and the outer joins restrict nothing.
+    const kind = select[index - 1]?.lower ?? '';
     const joinedOn =
       token === 'join' &&
-      select[at + 1]?.lower !== '(' &&
-      (kind === 'inner' || !['cross', 'left', 'right', 'full', 'outer', 'natural'].includes(kind ?? '')) &&
+      !['cross', 'left', 'right', 'full', 'outer', 'natural'].includes(kind) &&
       select.slice(at + 1, at + 4).some((part) => part.lower === 'on');
-    relations.push({ schema: at > index + 1 ? first : null, name: select[at]?.lower ?? '', at, joinedOn });
+    const schema = at > index + 1 ? first : null;
+    relations.push({ schema, name: select[at]?.lower ?? '', at, call, joinedOn });
   }
   return relations;
 }
@@ -353,10 +361,12 @@ function unscopedReads(
     );
     if (!tenant) return [];
     // A join with the test's own temporary rows keeps the read to them.
-    const joinsOwnRows = relations.some(
-      ({ schema, name, joinedOn }) =>
-        joinedOn && (schema === null || schema === 'pg_temp') && !tenantTables.has(name),
-    );
+    const joinsOwnRows =
+      relations.some(({ joinedOn }) => joinedOn) &&
+      relations.some(
+        ({ schema, name, call }) =>
+          !call && (schema === null || schema === 'pg_temp') && !tenantTables.has(name),
+      );
     if (joinsOwnRows || scoped(select)) return [];
     const line = lineOf(source, tokens[at]?.offset ?? 0);
     return [{ line, rule: 'org-scope' as const, code: code(source, select.slice(0, tenant.at + 1)) }];
