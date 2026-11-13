@@ -682,6 +682,37 @@ test("an online save of a sealed draft holds the drafts' send turn until its ans
   await expect.poll(heldTurns).not.toContain('werkflow-draft-send');
 });
 
+test("a save seals its draft only once it holds the drafts' send turn, so a discard in another tab never falls between the seal and the online save", async ({
+  page,
+}) => {
+  await openContractFixture(page, 'work-artifact-report');
+  await answerSync(page, () => 'offline');
+  await writeReport(page, 'Wartung Heizung', 0);
+  await expect.poll(() => storedDraftCount(page)).toBe(1);
+  // Another tab holds the turn, as a session end's discard does while it deletes.
+  await page.evaluate(() => {
+    void navigator.locks.request(
+      'werkflow-draft-send',
+      () => new Promise<void>((resolve) => Reflect.set(window, 'releaseTurn', resolve)),
+    );
+  });
+  await expect.poll(() => page.evaluate(() => typeof Reflect.get(window, 'releaseTurn'))).toBe('function');
+
+  await page.getByRole('button', { name: 'Als Entwurf speichern', exact: true }).click();
+  await expect
+    .poll(() => page.evaluate(async () => (await navigator.locks.query()).pending?.length ?? 0))
+    .toBeGreaterThan(0);
+  expect(await storedDraftSealed(page)).toBe(false);
+  expect(await page.evaluate(() => window.uiContractWorkArtifacts.saves.length)).toBe(0);
+
+  await page.evaluate(() => {
+    const release: unknown = Reflect.get(window, 'releaseTurn');
+    if (typeof release === 'function') release();
+  });
+  await expect.poll(() => page.evaluate(() => window.uiContractWorkArtifacts.saves.length)).toBe(1);
+  await expect.poll(() => storedDraftCount(page)).toBe(0);
+});
+
 test('a refused online save never writes over the newer text another tab stored after its own refusal unsealed the draft', async ({
   page,
 }) => {

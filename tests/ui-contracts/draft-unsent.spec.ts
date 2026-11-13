@@ -2,7 +2,14 @@ import { expect, type Page } from '@playwright/test';
 import { test } from '@playwright/test';
 import { z } from '@/lib/zod';
 import { CLOCK_ORGANIZATION_ID, CLOCK_USER_ID } from './clock-state-fixture';
-import { CLOCKED_OUT_STATE, mountClock, setNetwork, type Server } from './clock-unsent-support';
+import {
+  CLOCKED_OUT_STATE,
+  mountClock,
+  setNetwork,
+  startWithoutNetwork,
+  unsentOnDevice,
+  type Server,
+} from './clock-unsent-support';
 
 // The report drafts in the question every session end asks (werk-flow/werkflow-planning#403;
 // decision record 0010, the amendment "a session end asks about report drafts"). The device holds
@@ -262,12 +269,44 @@ test('a discard waiting for a save that started hanging in another tab ends afte
   await expect(async () => {
     await page.clock.runFor(1_000);
     await expect(confirmation).toContainText(
-      'Gerade wird noch etwas übertragen. Nichts wurde gelöscht. Versuche es gleich noch einmal.',
+      'Gerade wird noch ein Entwurf übertragen. Was hier noch steht, ist nicht gelöscht. Versuche es gleich noch einmal.',
       { timeout: 100 },
     );
   }).toPass();
   await confirmation.getByRole('button', { name: 'Abbrechen', exact: true }).click();
   await question(page).getByRole('button', { name: 'Abbrechen', exact: true }).click();
   await expect(page.getByLabel('Abmeldung')).toHaveText('Sitzung bleibt');
+  expect(await draftsOnDevice(page)).toEqual([DRAFT_ID]);
+});
+
+test('a discard that deletes the times but finds a draft save still running says what is left and lists only that', async ({
+  page,
+}) => {
+  await page.clock.install();
+  const server = await mountClock(page, CLOCKED_OUT_STATE);
+  await startWithoutNetwork(page, server);
+  await storeDrafts(page, [{ id: DRAFT_ID, sealed: true }]);
+  await page.getByRole('button', { name: 'Abmelden prüfen', exact: true }).click();
+  await expect(question(page)).toContainText('Noch nicht alles ist übertragen.');
+  await hangSaveInAnotherTab(page);
+
+  await question(page).getByRole('button', { name: 'Verwerfen', exact: true }).click();
+  const confirmation = page.getByRole('alertdialog', { name: 'Nicht Übertragenes verwerfen?' });
+  await confirmation.getByRole('button', { name: 'Endgültig verwerfen', exact: true }).click();
+  await expect(async () => {
+    await page.clock.runFor(1_000);
+    await expect(confirmation).toContainText(
+      'Gerade wird noch ein Entwurf übertragen. Was hier noch steht, ist nicht gelöscht. Versuche es gleich noch einmal.',
+      { timeout: 100 },
+    );
+  }).toPass();
+
+  // The times are gone; the question names only the draft that stays.
+  expect(await unsentOnDevice(page)).toEqual([]);
+  await expect(confirmation).toContainText('Berichtsentwürfe: 1.');
+  await expect(confirmation).not.toContainText('Stempelzeiten');
+  await confirmation.getByRole('button', { name: 'Abbrechen', exact: true }).click();
+  await expect(question(page).getByRole('list', { name: 'Berichtsentwürfe', exact: true })).toBeVisible();
+  await expect(question(page)).not.toContainText('Stempelzeiten');
   expect(await draftsOnDevice(page)).toEqual([DRAFT_ID]);
 });

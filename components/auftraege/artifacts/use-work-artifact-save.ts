@@ -53,48 +53,37 @@ function useSentDraft(editor: WorkArtifactEditor, newArtifactId: string) {
   };
 }
 
+type DraftSavePlan = Awaited<ReturnType<DeviceDraftHandle['prepareSave']>>;
+
+/**
+ * The draft's save through the device, in the drafts' send turn from its seal to its cleanup: a
+ * session end's discard in any tab waits for all of it, and can never fall between the seal and the
+ * online save (decision record 0010, the amendment "report drafts at a session end after review").
+ * Only a sealed text-only draft saves online here; every other plan answers `no_answer`, and its
+ * device send runs after the turn, which it takes itself. A refusal unseals the draft, which the
+ * server holds nothing of; `keptForm` when another tab changed it meanwhile. A success removes the
+ * device's copy: a refused delete never rejects (the keeper shows it), and the kept copy's later
+ * send carries this revision id, which the server replays.
+ */
+function saveThroughDevice<Answer extends { success: boolean }>(
+  onDevice: DeviceDraftHandle,
+  save: (fromDraft: { revisionId: string; changedAt: string }) => Promise<Answer | 'no_answer'>,
+): Promise<{ plan: DraftSavePlan; result: Answer | 'no_answer'; keptForm: boolean }> {
+  return whileNoDraftSend(async () => {
+    const plan = await onDevice.prepareSave();
+    if (plan?.kind !== 'online') return { plan, result: 'no_answer', keptForm: false };
+    const result = await save(plan);
+    if (result === 'no_answer') return { plan, result, keptForm: false };
+    if (!result.success) return { plan, result, keptForm: !(await onDevice.unseal(plan.changedAt)) };
+    await onDevice.discard();
+    return { plan, result, keptForm: false };
+  });
+}
+
 /**
  * Saves the draft as a new revision, optionally submitting it for review. A new Arbeitsnachweis
  * of a job with photos, or one whose save got no answer, goes through its draft on the device.
  */
-/**
- * Saves as the device's plan decided: a draft with photos waits for its own send (`no_answer`), a
- * sealed text-only draft saves online in the drafts' send turn, and a record without a draft saves
- * online as before.
- */
-async function saveByPlan<Answer extends { success: boolean }>(
-  plan: Awaited<ReturnType<DeviceDraftHandle['prepareSave']>>,
-  onDevice: DeviceDraftHandle | null,
-  save: (fromDraft: { revisionId: string; changedAt: string } | null) => Promise<Answer | 'no_answer'>,
-): Promise<{ result: Answer | 'no_answer'; keptForm: boolean }> {
-  if (plan?.kind === 'device') return { result: 'no_answer', keptForm: false };
-  if (plan?.kind === 'online' && onDevice)
-    return saveSealedDraftOnline(() => save(plan), onDevice, plan.changedAt);
-  return { result: await save(null), keptForm: false };
-}
-
-/**
- * The online save of a sealed draft and its device cleanup, in the drafts' send turn: a session
- * end's discard in any tab waits for this answer, so it never deletes a draft the server then
- * records (decision record 0010, the amendment "report drafts at a session end after review"). A
- * refusal unseals the draft, which the server holds nothing of; `keptForm` when another tab changed
- * it meanwhile. A success removes the device's copy: a refused delete never rejects (the keeper
- * shows it), and the kept copy's later send carries this revision id, which the server replays.
- */
-function saveSealedDraftOnline<Answer extends { success: boolean }>(
-  save: () => Promise<Answer | 'no_answer'>,
-  onDevice: DeviceDraftHandle,
-  changedAt: string,
-): Promise<{ result: Answer | 'no_answer'; keptForm: boolean }> {
-  return whileNoDraftSend(async () => {
-    const result = await save();
-    if (result === 'no_answer') return { result, keptForm: false };
-    if (!result.success) return { result, keptForm: !(await onDevice.unseal(changedAt)) };
-    await onDevice.discard();
-    return { result, keptForm: false };
-  });
-}
-
 export function useWorkArtifactSave({
   targetType,
   targetId,
@@ -139,18 +128,17 @@ export function useWorkArtifactSave({
 
   async function runSave(submit: boolean): Promise<void> {
     const onDevice = deviceDraft.current;
-    const plan = onDevice ? await onDevice.prepareSave() : null;
+    // Photos reach the server only with the draft the device holds. A draft without photos is sealed
+    // for its online save: if it lands and the answer is lost, nothing changes the draft until the
+    // device's send of the same revision is answered.
+    const { plan, result, keptForm } = onDevice
+      ? await saveThroughDevice(onDevice, (fromDraft) => saveOnServer(submit, fromDraft))
+      : { plan: null, result: await saveOnServer(submit, null), keptForm: false };
     // The device could not say whether the draft has photos: a text-only save could lose them.
     if (onDevice && plan === null) return;
     // Another tab's save is on its way with the draft as it was: this form keeps what changed since.
     if (plan?.kind === 'sealed_elsewhere')
       return void showBanner({ variant: 'error', message: SEALED_ELSEWHERE_MESSAGE });
-    // Photos reach the server only with the draft the device holds. A draft without photos is now
-    // sealed: if its online save lands and the answer is lost, nothing changes the draft until the
-    // device's send of the same revision is answered.
-    const { result, keptForm } = await saveByPlan(plan, onDevice, (fromDraft) =>
-      saveOnServer(submit, fromDraft),
-    );
     if (result === 'no_answer') {
       // The device sends the draft in the state this save decided on, or keeps the form when it changed.
       const sent = plan && onDevice ? await onDevice.save(submit, plan.changedAt) : null;

@@ -304,3 +304,10 @@ Decided for werk-flow/werkflow-planning#403 on its outside review. Where the ame
 - **4, sending under the session's claim.** A refused photo upload under that claim says nothing about the draft: it ran under the active organization, which may not be the draft's. The draft waits and is never marked „Kein Zugriff mehr“ from there. A holder a page of the tab named before another tab's wipe no longer counts against the session's person.
 - **6, a discard and an online save.** An online save of a sealed draft is a send in flight: it holds the drafts' turn from its request until its unseal or its device cleanup, so a discard in any tab waits for its answer. The wait is bounded at 10 seconds. A discard that reaches the bound deletes nothing, the question says that something is still being sent, and „Abbrechen“ keeps the session. A question that opens while such a save hangs shows its stalled send with „Abbrechen“. In a browser without Web Locks, which no supported browser is, the turn holds only within the tab, as for time events.
 - **5, the landing page.** It follows another tab's change of either device mark, so a draft stored after the page loaded is named too.
+
+## Amendment 2026-11-13: a draft's save takes its turn before its seal
+
+Decided for werk-flow/werkflow-planning#403 on the second round of its outside review. It sharpens point 6 of the amendment above.
+
+- A save of a report draft takes the drafts' turn before it seals the draft, and keeps it through the online save and its cleanup, so a discard in another tab never falls between the seal and the request. A draft with photos leaves the turn before its own send, which takes the turn itself.
+- A discard runs the sources in their order, time events first. When the drafts' wait reaches its bound after the time events were deleted, the question lists what is still unsent and says that what it lists is not deleted; it never claims that nothing was.

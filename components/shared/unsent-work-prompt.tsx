@@ -128,6 +128,20 @@ function useUnsentChoice(
   const [running, setRunning] = useState<'send' | 'discard' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  /** Lists what is still unsent after a discard that a running draft send stopped; false when the device cannot say. */
+  async function showWhatIsLeft(): Promise<boolean> {
+    try {
+      setItems(await summarizeUnsentWork(scope));
+    } catch (failure) {
+      logError('unsent work: reading what is left failed', failure);
+      return false;
+    }
+    setError(
+      'Gerade wird noch ein Entwurf übertragen. Was hier noch steht, ist nicht gelöscht. Versuche es gleich noch einmal.',
+    );
+    return true;
+  }
+
   /** `onKeptSince` runs when a discard leaves work kept after the question, which is asked about anew. */
   function perform(action: 'send' | 'discard', onKeptSince?: () => void): void {
     setError(null);
@@ -154,12 +168,8 @@ function useUnsentChoice(
         setItems(left);
         setError('Noch nicht alles ist übertragen. Prüfe dein Netz und versuche es erneut.');
       } catch (failure) {
-        if (failure instanceof UnsentWorkBusyError) {
-          setError(
-            'Gerade wird noch etwas übertragen. Nichts wurde gelöscht. Versuche es gleich noch einmal.',
-          );
-          return;
-        }
+        // A draft send still running: the sources before the drafts may have deleted what they showed.
+        if (failure instanceof UnsentWorkBusyError && (await showWhatIsLeft())) return;
         logError('unsent work: the choice failed', failure);
         setError('Der Speicher deines Geräts hat nicht geantwortet. Bitte versuche es erneut.');
       } finally {
