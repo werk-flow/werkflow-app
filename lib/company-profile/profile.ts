@@ -68,6 +68,8 @@ export const saveCompanyProfileInputSchema = z.strictObject({
   organizationId: uuidSchema,
   expectedVersion: z.number().int().min(0),
   details: companyProfileDetailsSchema,
+  /** One per opening of the form: a retry after a lost answer gets the first save's result. */
+  attemptKey: uuidSchema,
 });
 export type SaveCompanyProfileInput = z.input<typeof saveCompanyProfileInputSchema>;
 export type SaveCompanyProfileResult = ActionResult<{ version: number }>;
@@ -163,6 +165,8 @@ export const companyFileRemoveInputSchema = z.strictObject({
   kind: z.enum(COMPANY_FILE_KINDS),
   /** The file the caller saw and removes. */
   expectedStoragePath: storagePathSchema,
+  /** One per removal until it succeeds: a retry after a lost answer gets the first result. */
+  attemptKey: uuidSchema,
   /**
    * The following pages' file the caller saw, null for none: removing the
    * first page's stationery removes it too. Other kinds send null.

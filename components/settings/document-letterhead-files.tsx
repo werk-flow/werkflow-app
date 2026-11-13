@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+import { useAttemptKey } from '@/components/anfragen/use-attempt-key';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -106,6 +107,8 @@ function LetterheadFileRow({
   blockedBy: string | null;
 }) {
   const { perform, isPending, failure } = useFileTask();
+  // One per removal until it succeeds, so a retry after a lost answer gets the first result.
+  const removal = useAttemptKey();
 
   const status = stored ? `Hinterlegt (${TYPE_LABELS[stored.mimeType] ?? 'Datei'})` : 'Noch nicht hinterlegt';
   const label = (
@@ -152,6 +155,10 @@ function LetterheadFileRow({
                         kind: row.kind,
                         expectedStoragePath: stored.storagePath,
                         expectedFollowingStoragePath: alsoRemoves?.storagePath ?? null,
+                        attemptKey: removal.attemptKey,
+                      }).then((result) => {
+                        if (result.success) removal.renewAttemptKey();
+                        return result;
                       }),
                     `${row.label} wurde entfernt.`,
                     `${row.label} konnte nicht entfernt werden. Versuch es noch einmal.`,

@@ -4,13 +4,14 @@
 -- reads no profile field through the Data API. A save writes one history row
 -- per changed field with actor, old and new value, in the same call, and only
 -- for an Admin or Büro member of that organization whose access is not
--- suspended. Another organization's
--- profile is neither read nor written. A replaced file queues its old object
--- for the purge, and a change of a file someone else changed since is
--- refused without a write. A stored file records its size, and the organization
--- export plans it with the documents' originals, so an export that leaves it
--- out is refused. The history refuses UPDATE and DELETE, also for the service
--- role, and leaves only with its organization.
+-- suspended. Another organization's profile is neither read nor written. A
+-- replaced file queues its old object for the purge, and a change of a file
+-- someone else changed since is refused without a write. A write repeated
+-- under its attempt key answers with its first result and writes nothing. A
+-- stored file records its size, and the organization export plans it with the
+-- documents' originals, so an export that leaves it out is refused. The
+-- history refuses UPDATE and DELETE, also for the service role, and leaves
+-- only with its organization.
 begin;
 
 insert into auth.users (
@@ -58,8 +59,8 @@ begin
     end loop;
   end loop;
   foreach v_function in array array[
-    'public.save_company_document_profile(uuid, uuid, integer, jsonb)',
-    'public.replace_company_document_file(uuid, uuid, text, text, text, text, text, bigint)',
+    'public.save_company_document_profile(uuid, uuid, integer, jsonb, uuid)',
+    'public.replace_company_document_file(uuid, uuid, text, text, text, text, text, bigint, uuid)',
     'app_private.lock_company_document_profile(uuid, uuid)'
   ] loop
     foreach v_role in array array['anon', 'authenticated'] loop
@@ -85,14 +86,14 @@ declare
   v_office constant uuid := '37800000-0000-4000-8000-000000000002';
 begin
   begin
-    perform public.save_company_document_profile(v_office, v_org, 0, '{}'::jsonb);
+    perform public.save_company_document_profile(v_office, v_org, 0, '{}'::jsonb, gen_random_uuid());
     raise exception 'a suspended Büro member saved the profile';
   exception when raise_exception then
     if sqlerrm <> 'not_authorized' then raise; end if;
   end;
   begin
     perform public.replace_company_document_file(v_office, v_org, 'logo', null, null,
-      v_org || '/briefpapier/s/logo', 'image/png', 2048);
+      v_org || '/briefpapier/s/logo', 'image/png', 2048, gen_random_uuid());
     raise exception 'a suspended Büro member set the logo';
   exception when raise_exception then
     if sqlerrm <> 'not_authorized' then raise; end if;
@@ -136,23 +137,26 @@ declare
   v_worker constant uuid := '37800000-0000-4000-8000-000000000003';
   v_filled jsonb := (select filled from profile_values);
   v_version integer;
+  v_save_key constant uuid := gen_random_uuid();
+  v_remove_key constant uuid := gen_random_uuid();
+  v_events integer;
 begin
   -- An employee and a member of another organization are refused, and nothing is written.
   begin
-    perform public.save_company_document_profile(v_worker, v_org, 0, v_filled);
+    perform public.save_company_document_profile(v_worker, v_org, 0, v_filled, gen_random_uuid());
     raise exception 'an employee saved the profile';
   exception when raise_exception then
     if sqlerrm <> 'not_authorized' then raise; end if;
   end;
   begin
-    perform public.save_company_document_profile(v_office, v_foreign, 0, v_filled);
+    perform public.save_company_document_profile(v_office, v_foreign, 0, v_filled, gen_random_uuid());
     raise exception 'a foreign member saved another organization''s profile';
   exception when raise_exception then
     if sqlerrm <> 'not_authorized' then raise; end if;
   end;
   begin
     perform public.replace_company_document_file(v_office, v_foreign, 'logo', null, null,
-      v_foreign || '/briefpapier/a/logo', 'image/png', 2048);
+      v_foreign || '/briefpapier/a/logo', 'image/png', 2048, gen_random_uuid());
     raise exception 'a foreign member set another organization''s logo';
   exception when raise_exception then
     if sqlerrm <> 'not_authorized' then raise; end if;
@@ -163,20 +167,20 @@ begin
 
   -- A key set other than the profile's fields is refused.
   begin
-    perform public.save_company_document_profile(v_office, v_org, 0, v_filled - 'iban');
+    perform public.save_company_document_profile(v_office, v_org, 0, v_filled - 'iban', gen_random_uuid());
     raise exception 'a save without every field passed';
   exception when raise_exception then
     if sqlerrm <> 'invalid_input' then raise; end if;
   end;
   begin
-    perform public.save_company_document_profile(v_office, v_org, 0, v_filled || '{"version": 9}');
+    perform public.save_company_document_profile(v_office, v_org, 0, v_filled || '{"version": 9}', gen_random_uuid());
     raise exception 'a save with another key passed';
   exception when raise_exception then
     if sqlerrm <> 'invalid_input' then raise; end if;
   end;
 
   -- The first save creates the profile and writes one history row per changed field.
-  v_version := public.save_company_document_profile(v_office, v_org, 0, v_filled);
+  v_version := public.save_company_document_profile(v_office, v_org, 0, v_filled, gen_random_uuid());
   if v_version <> 1 then raise exception 'the first save answered version %', v_version; end if;
   if (select count(*) from public.company_document_profile_events where organization_id = v_org) <> 15 + 2 then
     raise exception 'the first save wrote % history rows',
@@ -190,13 +194,13 @@ begin
 
   -- A save from an older version, or one that changes nothing, is refused.
   begin
-    perform public.save_company_document_profile(v_admin, v_org, 0, v_filled || '{"city": "Mondstadt"}');
+    perform public.save_company_document_profile(v_admin, v_org, 0, v_filled || '{"city": "Mondstadt"}', gen_random_uuid());
     raise exception 'a save from an older version passed';
   exception when raise_exception then
     if sqlerrm <> 'profile_changed' then raise; end if;
   end;
   begin
-    perform public.save_company_document_profile(v_admin, v_org, 1, v_filled);
+    perform public.save_company_document_profile(v_admin, v_org, 1, v_filled, gen_random_uuid());
     raise exception 'a save without a change passed';
   exception when raise_exception then
     if sqlerrm <> 'no_changes' then raise; end if;
@@ -204,13 +208,13 @@ begin
 
   -- A value out of range is refused by the table and leaves the profile as it was.
   begin
-    perform public.save_company_document_profile(v_admin, v_org, 1, v_filled || '{"offer_validity_days": 0}');
+    perform public.save_company_document_profile(v_admin, v_org, 1, v_filled || '{"offer_validity_days": 0}', gen_random_uuid());
     raise exception 'a validity of 0 days passed';
   exception when check_violation then null;
   end;
 
   -- A change writes exactly its own history row.
-  v_version := public.save_company_document_profile(v_admin, v_org, 1, v_filled || '{"offer_validity_days": 14}');
+  v_version := public.save_company_document_profile(v_admin, v_org, 1, v_filled || '{"offer_validity_days": 14}', v_save_key);
   if v_version <> 2 or (select offer_validity_days from public.company_document_profiles
     where organization_id = v_org) <> 14
   then raise exception 'the second save did not apply'; end if;
@@ -220,16 +224,32 @@ begin
       and field = 'offer_validity_days' and old_value = '30' and new_value = '14')
   then raise exception 'the second save wrote the wrong history'; end if;
 
+  -- The same save again, as after a lost answer: its attempt key answers with
+  -- the version it saved and writes nothing, although its expected version is
+  -- now old. Another attempt from that version is refused.
+  v_events := (select count(*) from public.company_document_profile_events where organization_id = v_org);
+  v_version := public.save_company_document_profile(v_admin, v_org, 1, v_filled || '{"offer_validity_days": 14}', v_save_key);
+  if v_version <> 2
+    or (select version from public.company_document_profiles where organization_id = v_org) <> 2
+    or (select count(*) from public.company_document_profile_events where organization_id = v_org) <> v_events
+  then raise exception 'a repeated save answered % or wrote again', v_version; end if;
+  begin
+    perform public.save_company_document_profile(v_admin, v_org, 1, v_filled || '{"offer_validity_days": 15}', gen_random_uuid());
+    raise exception 'another save from the old version passed';
+  exception when raise_exception then
+    if sqlerrm <> 'profile_changed' then raise; end if;
+  end;
+
   -- Files: a path outside the organization's folder is refused; following pages need a first page.
   begin
     perform public.replace_company_document_file(v_office, v_org, 'logo', null, null,
-      v_foreign || '/briefpapier/a/logo', 'image/png', 2048);
+      v_foreign || '/briefpapier/a/logo', 'image/png', 2048, gen_random_uuid());
     raise exception 'a logo outside the organization passed';
   exception when check_violation then null;
   end;
   begin
     perform public.replace_company_document_file(v_office, v_org, 'stationery_following', null, null,
-      v_org || '/briefpapier/b/stationery_following', 'application/pdf', 2048);
+      v_org || '/briefpapier/b/stationery_following', 'application/pdf', 2048, gen_random_uuid());
     raise exception 'following pages without a first page passed';
   exception when raise_exception then
     if sqlerrm <> 'stationery_first_missing' then raise; end if;
@@ -238,35 +258,35 @@ begin
   -- A stored file names its size.
   begin
     perform public.replace_company_document_file(v_office, v_org, 'logo', null, null,
-      v_org || '/briefpapier/a/logo', 'image/png', null);
+      v_org || '/briefpapier/a/logo', 'image/png', null, gen_random_uuid());
     raise exception 'a logo without its size passed';
   exception when check_violation then null;
   end;
 
   perform public.replace_company_document_file(v_office, v_org, 'logo', null, null,
-    v_org || '/briefpapier/a/logo', 'image/png', 2048);
+    v_org || '/briefpapier/a/logo', 'image/png', 2048, gen_random_uuid());
   -- The Admin replaces the logo the Büro member still sees. The Büro member's
   -- removal and replacement of the logo they saw are refused, and neither
   -- writes history or queues the Admin's logo for the purge.
   perform public.replace_company_document_file(v_admin, v_org, 'logo', v_org || '/briefpapier/a/logo', null,
-    v_org || '/briefpapier/c/logo', 'image/jpeg', 3072);
+    v_org || '/briefpapier/c/logo', 'image/jpeg', 3072, gen_random_uuid());
   begin
     perform public.replace_company_document_file(v_office, v_org, 'logo', v_org || '/briefpapier/a/logo', null,
-      null, null, null);
+      null, null, null, gen_random_uuid());
     raise exception 'a removal of a logo already replaced passed';
   exception when raise_exception then
     if sqlerrm <> 'file_changed' then raise; end if;
   end;
   begin
     perform public.replace_company_document_file(v_office, v_org, 'logo', v_org || '/briefpapier/a/logo', null,
-      v_org || '/briefpapier/g/logo', 'image/png', 2048);
+      v_org || '/briefpapier/g/logo', 'image/png', 2048, gen_random_uuid());
     raise exception 'a replacement of a logo already replaced passed';
   exception when raise_exception then
     if sqlerrm <> 'file_changed' then raise; end if;
   end;
   begin
     perform public.replace_company_document_file(v_office, v_org, 'logo', null, null,
-      v_org || '/briefpapier/g/logo', 'image/png', 2048);
+      v_org || '/briefpapier/g/logo', 'image/png', 2048, gen_random_uuid());
     raise exception 'a first upload over a stored logo passed';
   exception when raise_exception then
     if sqlerrm <> 'file_changed' then raise; end if;
@@ -288,26 +308,26 @@ begin
 
   -- Removing the first page's stationery removes the following pages' too.
   perform public.replace_company_document_file(v_office, v_org, 'stationery_first', null, null,
-    v_org || '/briefpapier/d/stationery_first', 'application/pdf', 2048);
+    v_org || '/briefpapier/d/stationery_first', 'application/pdf', 2048, gen_random_uuid());
   perform public.replace_company_document_file(v_office, v_org, 'stationery_following', null, null,
-    v_org || '/briefpapier/e/stationery_following', 'image/png', 2048);
+    v_org || '/briefpapier/e/stationery_following', 'image/png', 2048, gen_random_uuid());
   -- The Admin replaces the following pages the Büro member still sees. Removing
   -- the first page would remove them too, so the Büro member's removal naming
   -- the old following pages, or none, is refused: the Admin's file stays stored
   -- and is not queued for the purge.
   perform public.replace_company_document_file(v_admin, v_org, 'stationery_following',
     v_org || '/briefpapier/e/stationery_following', null,
-    v_org || '/briefpapier/h/stationery_following', 'image/png', 2048);
+    v_org || '/briefpapier/h/stationery_following', 'image/png', 2048, gen_random_uuid());
   begin
     perform public.replace_company_document_file(v_office, v_org, 'stationery_first',
-      v_org || '/briefpapier/d/stationery_first', v_org || '/briefpapier/e/stationery_following', null, null, null);
+      v_org || '/briefpapier/d/stationery_first', v_org || '/briefpapier/e/stationery_following', null, null, null, gen_random_uuid());
     raise exception 'a first-page removal over following pages already replaced passed';
   exception when raise_exception then
     if sqlerrm <> 'file_changed' then raise; end if;
   end;
   begin
     perform public.replace_company_document_file(v_office, v_org, 'stationery_first',
-      v_org || '/briefpapier/d/stationery_first', null, null, null, null);
+      v_org || '/briefpapier/d/stationery_first', null, null, null, null, gen_random_uuid());
     raise exception 'a first-page removal over following pages it never saw passed';
   exception when raise_exception then
     if sqlerrm <> 'file_changed' then raise; end if;
@@ -318,7 +338,15 @@ begin
       where storage_path = v_org || '/briefpapier/h/stationery_following')
   then raise exception 'a stale first-page removal removed or queued the replaced following pages'; end if;
   perform public.replace_company_document_file(v_office, v_org, 'stationery_first',
-    v_org || '/briefpapier/d/stationery_first', v_org || '/briefpapier/h/stationery_following', null, null, null);
+    v_org || '/briefpapier/d/stationery_first', v_org || '/briefpapier/h/stationery_following', null, null, null, v_remove_key);
+  -- The same removal again, as after a lost answer: its attempt key answers
+  -- without a refusal and writes nothing, although the files it names are gone.
+  v_events := (select count(*) from public.company_document_profile_events where organization_id = v_org);
+  perform public.replace_company_document_file(v_office, v_org, 'stationery_first',
+    v_org || '/briefpapier/d/stationery_first', v_org || '/briefpapier/h/stationery_following', null, null, null, v_remove_key);
+  if (select count(*) from public.company_document_profile_events where organization_id = v_org) <> v_events then
+    raise exception 'a repeated removal wrote again';
+  end if;
   if exists (select 1 from public.company_document_profiles where organization_id = v_org
     and (stationery_first_storage_path is not null or stationery_following_storage_path is not null))
   then raise exception 'the stationery was not removed'; end if;
@@ -334,7 +362,7 @@ begin
   -- The organization export plans the stored files with their sizes and no
   -- document; a plan without one of them is refused, a plan with both starts.
   perform public.replace_company_document_file(v_office, v_org, 'stationery_first', null, null,
-    v_org || '/briefpapier/f/stationery_first', 'application/pdf', 4096);
+    v_org || '/briefpapier/f/stationery_first', 'application/pdf', 4096, gen_random_uuid());
   if (
     select array_agg(format('%s %s %s', source_path, coalesce(document_id::text, '-'), file_bytes) order by source_path)
     from app_private.organization_export_sources(v_org)

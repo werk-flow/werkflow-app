@@ -116,6 +116,7 @@ export async function saveCompanyDocumentProfile(
         stationery_following_bottom_mm: details.followingPageMargins.bottomMm,
         stationery_following_left_mm: details.followingPageMargins.leftMm,
       },
+      p_attempt_key: input.attemptKey,
     }),
   );
   if (error || data === null) {
@@ -164,6 +165,22 @@ export async function finalizeCompanyDocumentFileUpload(
   // The key is recomputed from the authorized organization, so no client
   // names an object of another organization.
   const path = companyFilePath(organizationId, input.fileId, input.kind);
+  // The upload's file id is its attempt key. A finalize repeated after its
+  // answer was lost finds its staged object promoted and gone: the change it
+  // registered answers instead.
+  const registered = await createSupabaseAdminClient()
+    .from('company_document_profile_events')
+    .select('id')
+    .eq('organization_id', organizationId)
+    .eq('attempt_key', input.fileId)
+    .eq('actor_id', auth.context.userId)
+    .eq('field', input.kind)
+    .limit(1);
+  if (registered.error) {
+    logError('finalizeCompanyDocumentFileUpload: attempt read failed', registered.error);
+    return { success: false, error: 'finalize_failed' };
+  }
+  if (registered.data.length > 0) return { success: true };
 
   let copy;
   try {
@@ -205,6 +222,7 @@ export async function finalizeCompanyDocumentFileUpload(
       p_storage_path: copy.path,
       p_mime_type: mimeType,
       p_size_bytes: sizeBytes,
+      p_attempt_key: input.fileId,
     }),
   );
   if (error) {
@@ -239,6 +257,7 @@ export async function removeCompanyDocumentFile(rawInput: CompanyFileRemoveInput
       p_storage_path: null,
       p_mime_type: null,
       p_size_bytes: null,
+      p_attempt_key: input.attemptKey,
     }),
   );
   if (error) return refusal(error, 'remove_failed', 'removeCompanyDocumentFile: removal failed');

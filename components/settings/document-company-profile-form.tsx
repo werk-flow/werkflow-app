@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 
+import { useAttemptKey } from '@/components/anfragen/use-attempt-key';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -216,6 +217,8 @@ function useProfileSave({ organizationId, version, details, stationery, isShown 
   const { showBanner } = useBanner();
   const { run, isPending } = useServerAction(saveCompanyDocumentProfile);
   const [loaded] = useState(() => ({ organizationId, version }));
+  // One per opening: a saved version mounts a new form, and with it a new key.
+  const { attemptKey } = useAttemptKey();
   const [draft, setDraft] = useState(() => profileDraftOf(details));
   const [errors, setErrors] = useState<Record<string, string>>({});
   // Removed stationery hides its margins without a new version. A hidden group
@@ -245,6 +248,7 @@ function useProfileSave({ organizationId, version, details, stationery, isShown 
       organizationId: loaded.organizationId,
       expectedVersion: loaded.version,
       details: parsed.details,
+      attemptKey,
     }).catch(() => ({ success: false, error: 'save_failed' }) as const);
     // A save that answers after a switch to another organization says nothing there.
     if (!isShown(loaded.organizationId)) return;

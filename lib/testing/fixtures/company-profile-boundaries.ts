@@ -46,15 +46,18 @@ mock.module('@/lib/storage/r2', () => ({
   },
 }));
 
-const world = installActionWorld({ company_document_profiles: [] });
+const world = installActionWorld({ company_document_profiles: [], company_document_profile_events: [] });
 world.rpc = () => ({ data: 1, error: null });
 const actions = await import('@/lib/company-profile/actions');
 
+const saveKey = '37800000-0000-4000-8000-000000000040';
+const removeKey = '37800000-0000-4000-8000-000000000041';
 const save = (organizationId: string) => () =>
   actions.saveCompanyDocumentProfile({
     organizationId,
     expectedVersion: 0,
     details: { ...EMPTY_COMPANY_PROFILE_DETAILS, companyName: 'Haustechnik Sonnenberg GmbH' },
+    attemptKey: saveKey,
   });
 const ticket = (organizationId: string) => () =>
   actions.createCompanyDocumentFileUploadTicket({
@@ -79,6 +82,7 @@ const remove = (organizationId: string) => () =>
     kind: 'stationery_first',
     expectedStoragePath: seenStationery,
     expectedFollowingStoragePath: seenFollowing,
+    attemptKey: removeKey,
   });
 const everyAction = (organizationId: string) =>
   [
@@ -146,6 +150,7 @@ assert.deepEqual(await save(ORGANIZATION_A)(), { success: true, version: 1 });
 assert.equal(world.rpcCalls.at(-1)?.name, 'save_company_document_profile');
 assert.equal(world.rpcCalls.at(-1)?.args.p_organization_id, ORGANIZATION_A);
 assert.equal(world.rpcCalls.at(-1)?.args.p_actor_id, CALLER_ID);
+assert.equal(world.rpcCalls.at(-1)?.args.p_attempt_key, saveKey);
 
 // Margins that leave the content no room never reach the database.
 world.rpcCalls.length = 0;
@@ -157,6 +162,7 @@ assert.deepEqual(
       ...EMPTY_COMPANY_PROFILE_DETAILS,
       firstPageMargins: { topMm: 45, rightMm: 80, bottomMm: 25, leftMm: 80 },
     },
+    attemptKey: saveKey,
   }),
   { success: false, error: 'margins_leave_no_room' },
 );
@@ -198,6 +204,7 @@ assert.deepEqual(world.rpcCalls.at(-1), {
     p_storage_path: `${ORGANIZATION_A}/briefpapier/${fileId}/logo-copy`,
     p_mime_type: 'image/png',
     p_size_bytes: 2048,
+    p_attempt_key: fileId,
   },
 });
 
@@ -214,6 +221,7 @@ assert.deepEqual(world.rpcCalls.at(-1), {
     p_storage_path: null,
     p_mime_type: null,
     p_size_bytes: null,
+    p_attempt_key: removeKey,
   },
 });
 
@@ -224,3 +232,22 @@ world.rpc = () => ({ data: null, error: { message: 'file_changed', code: 'P0001'
 assert.deepEqual(await remove(ORGANIZATION_A)(), { success: false, error: 'file_changed' });
 assert.deepEqual(await finalize(ORGANIZATION_A)(), { success: false, error: 'file_changed' });
 assert.equal(storageCalls.at(-1), `discard ${ORGANIZATION_A}/briefpapier/${fileId}/logo-copy`);
+
+// A finalize repeated after its answer was lost: the upload's file id already
+// registered a change of this kind by this caller, so it answers as the first
+// call did, before storage, where the staged object is gone.
+world.rpc = () => ({ data: null, error: null });
+world.tables.company_document_profile_events = [
+  {
+    id: '37800000-0000-4000-8000-000000000050',
+    organization_id: ORGANIZATION_A,
+    field: 'logo',
+    actor_id: CALLER_ID,
+    attempt_key: fileId,
+  },
+];
+const storageBefore = storageCalls.length;
+world.rpcCalls.length = 0;
+assert.deepEqual(await finalize(ORGANIZATION_A)(), { success: true });
+assert.equal(storageCalls.length, storageBefore, 'a repeated finalize reached storage');
+assert.equal(world.rpcCalls.length, 0, 'a repeated finalize wrote again');

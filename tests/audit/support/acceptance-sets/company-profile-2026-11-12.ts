@@ -70,6 +70,7 @@ async function showProfile(world: TestWorld, wanted: ProfileState): Promise<Surf
       p_organization_id: world.orgId,
       p_expected_version: row?.version ?? 0,
       p_values: wanted.details,
+      p_attempt_key: randomUUID(),
     });
     if (saveError) throw new Error(`company profile seed failed: ${saveError.message}`);
   }
@@ -87,6 +88,7 @@ async function showProfile(world: TestWorld, wanted: ProfileState): Promise<Surf
         p_storage_path: null,
         p_mime_type: null,
         p_size_bytes: null,
+        p_attempt_key: randomUUID(),
       }),
     );
     if (removeError) throw new Error(`stationery removal failed: ${removeError.message}`);
@@ -130,6 +132,7 @@ async function storeStationery(world: TestWorld): Promise<void> {
       p_storage_path: path,
       p_mime_type: 'application/pdf',
       p_size_bytes: body.byteLength,
+      p_attempt_key: randomUUID(),
     }),
   );
   if (error) throw new Error(`stationery seed failed: ${error.message}`);

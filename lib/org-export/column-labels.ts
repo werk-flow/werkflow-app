@@ -497,6 +497,7 @@ export const COLUMN_LABELS: Record<LabeledColumn, string> = {
   priority: 'Priorität',
   private_email: 'Private E-Mail',
   profile_id: 'Person-ID',
+  profile_version: 'Version der Firmenangaben',
   progress: 'Fortschritt',
   project_id: 'Projekt-ID',
   project_number: 'Projektnummer',

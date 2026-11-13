@@ -1056,30 +1056,36 @@ export type Database = {
       company_document_profile_events: {
         Row: {
           actor_id: string | null;
+          attempt_key: string;
           created_at: string;
           field: string;
           id: string;
           new_value: string | null;
           old_value: string | null;
           organization_id: string;
+          profile_version: number | null;
         };
         Insert: {
           actor_id?: string | null;
+          attempt_key: string;
           created_at?: string;
           field: string;
           id?: string;
           new_value?: string | null;
           old_value?: string | null;
           organization_id: string;
+          profile_version?: number | null;
         };
         Update: {
           actor_id?: string | null;
+          attempt_key?: string;
           created_at?: string;
           field?: string;
           id?: string;
           new_value?: string | null;
           old_value?: string | null;
           organization_id?: string;
+          profile_version?: number | null;
         };
         Relationships: [
           {
@@ -17952,6 +17958,7 @@ export type Database = {
       replace_company_document_file: {
         Args: {
           p_actor_id: string;
+          p_attempt_key: string;
           p_expected_following_storage_path: string;
           p_expected_storage_path: string;
           p_kind: string;
@@ -18309,6 +18316,7 @@ export type Database = {
       save_company_document_profile: {
         Args: {
           p_actor_id: string;
+          p_attempt_key: string;
           p_expected_version: number;
           p_organization_id: string;
           p_values: Json;

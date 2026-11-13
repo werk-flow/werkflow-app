@@ -14,7 +14,11 @@
 --    two writes. A replaced or removed file queues its object for the purge in
 --    the same call: a stored document carries its own bytes, so no row needs
 --    the old object once the backup window has passed.
--- 4. The organization export plans the profile's files with the documents'
+-- 4. Each write carries the caller's attempt key in its history rows. A retry
+--    under that key, whose first answer was lost, gets the first result and
+--    writes nothing, before the version or file check
+--    (docs/technical/data-model.md).
+-- 5. The organization export plans the profile's files with the documents'
 --    originals: each file records its size as stored, and the plan row of a
 --    file without a document names none.
 --
@@ -136,6 +140,10 @@ create table public.company_document_profile_events (
   new_value text,
   -- Null once the actor's account is deleted: the change stays, the person does not.
   actor_id uuid references auth.users (id) on delete set null,
+  -- The write that made the change: a retry under the same key answers from these rows.
+  attempt_key uuid not null,
+  -- The details' version a save produced; null for a file change.
+  profile_version integer,
   created_at timestamptz not null default now(),
   constraint company_document_profile_events_change_check check (old_value is distinct from new_value)
 );
@@ -144,6 +152,8 @@ create index company_document_profile_events_organization_created_idx
   on public.company_document_profile_events (organization_id, created_at desc, id desc);
 create index company_document_profile_events_actor_id_fk_idx
   on public.company_document_profile_events (actor_id);
+create index company_document_profile_events_attempt_idx
+  on public.company_document_profile_events (organization_id, attempt_key);
 
 alter table public.company_document_profile_events enable row level security;
 revoke all on table public.company_document_profile_events from public, anon, authenticated, service_role;
@@ -192,12 +202,15 @@ grant execute on function app_private.lock_company_document_profile(uuid, uuid) 
 -- not_authorized, invalid_input for another key set, profile_changed when the
 -- profile moved past p_expected_version, no_changes when every value equals
 -- the saved one; a table check refuses a value out of range. Writes one
--- history row per changed field and returns the new version.
+-- history row per changed field and returns the new version. A call under an
+-- attempt key the actor's earlier save wrote under returns that save's
+-- version and writes nothing, before the version check.
 create function public.save_company_document_profile(
   p_actor_id uuid,
   p_organization_id uuid,
   p_expected_version integer,
-  p_values jsonb
+  p_values jsonb,
+  p_attempt_key uuid
 )
 returns integer
 language plpgsql
@@ -219,8 +232,19 @@ declare
   v_old_json jsonb;
   v_new_json jsonb;
   v_changed integer;
+  v_replayed integer;
 begin
   v_old := app_private.lock_company_document_profile(p_organization_id, p_actor_id);
+  if p_attempt_key is null then
+    raise exception 'invalid_input';
+  end if;
+  select max(event.profile_version) into v_replayed
+  from public.company_document_profile_events event
+  where event.organization_id = p_organization_id and event.attempt_key = p_attempt_key
+    and event.actor_id = p_actor_id and event.profile_version is not null;
+  if v_replayed is not null then
+    return v_replayed;
+  end if;
   if jsonb_typeof(p_values) is distinct from 'object'
     or (select array_agg(key order by key) from jsonb_object_keys(p_values) key)
       is distinct from (select array_agg(field order by field) from unnest(v_fields) field)
@@ -235,8 +259,11 @@ begin
   v_old_json := to_jsonb(v_old);
   v_new_json := to_jsonb(v_new);
 
-  insert into public.company_document_profile_events (organization_id, field, old_value, new_value, actor_id)
-  select p_organization_id, field, v_old_json ->> field, v_new_json ->> field, p_actor_id
+  insert into public.company_document_profile_events (
+    organization_id, field, old_value, new_value, actor_id, attempt_key, profile_version
+  )
+  select p_organization_id, field, v_old_json ->> field, v_new_json ->> field, p_actor_id,
+    p_attempt_key, v_old.version + 1
   from unnest(v_fields) with ordinality as listed(field, position)
   where (v_old_json ->> field) is distinct from (v_new_json ->> field)
   order by position;
@@ -268,8 +295,8 @@ begin
 end;
 $$;
 
-revoke all on function public.save_company_document_profile(uuid, uuid, integer, jsonb) from public, anon, authenticated;
-grant execute on function public.save_company_document_profile(uuid, uuid, integer, jsonb) to service_role;
+revoke all on function public.save_company_document_profile(uuid, uuid, integer, jsonb, uuid) from public, anon, authenticated;
+grant execute on function public.save_company_document_profile(uuid, uuid, integer, jsonb, uuid) to service_role;
 
 -- Sets or removes (p_storage_path null) the logo or a stationery page. The
 -- object was promoted by the server under the organization's Briefpapier
@@ -278,8 +305,10 @@ grant execute on function public.save_company_document_profile(uuid, uuid, integ
 -- someone changed it since, and the call writes and queues nothing. Removing
 -- the first page's stationery removes the following pages' too, so that
 -- removal also names the following pages' file the caller saw
--- (p_expected_following_storage_path, null for none; other calls ignore it). Every changed
--- file writes its history row and queues its old object for the purge.
+-- (p_expected_following_storage_path, null for none; other calls ignore it).
+-- A call under an attempt key the actor's earlier change of this kind wrote
+-- under writes nothing, before the file check. Every changed file writes its
+-- history row and queues its old object for the purge.
 -- Refusals: not_authorized, invalid_input for another kind, file_changed,
 -- stationery_first_missing for following pages without a first page; a table
 -- check refuses a path outside the folder or another type.
@@ -291,7 +320,8 @@ create function public.replace_company_document_file(
   p_expected_following_storage_path text,
   p_storage_path text,
   p_mime_type text,
-  p_size_bytes bigint
+  p_size_bytes bigint,
+  p_attempt_key uuid
 )
 returns void
 language plpgsql
@@ -305,8 +335,17 @@ declare
   v_change record;
 begin
   v_old := app_private.lock_company_document_profile(p_organization_id, p_actor_id);
-  if p_kind is null or p_kind not in ('logo', 'stationery_first', 'stationery_following') then
+  if p_kind is null or p_kind not in ('logo', 'stationery_first', 'stationery_following')
+    or p_attempt_key is null
+  then
     raise exception 'invalid_input';
+  end if;
+  if exists (
+    select 1 from public.company_document_profile_events event
+    where event.organization_id = p_organization_id and event.attempt_key = p_attempt_key
+      and event.actor_id = p_actor_id and event.field = p_kind and event.profile_version is null
+  ) then
+    return;
   end if;
   v_old_json := to_jsonb(v_old);
   if (v_old_json ->> (p_kind || '_storage_path')) is distinct from p_expected_storage_path
@@ -335,8 +374,10 @@ begin
     order by kind desc
   loop
     continue when v_change.old_path is not distinct from v_change.storage_path;
-    insert into public.company_document_profile_events (organization_id, field, old_value, new_value, actor_id)
-    values (p_organization_id, v_change.kind, v_change.old_path, v_change.storage_path, p_actor_id);
+    insert into public.company_document_profile_events (
+      organization_id, field, old_value, new_value, actor_id, attempt_key
+    )
+    values (p_organization_id, v_change.kind, v_change.old_path, v_change.storage_path, p_actor_id, p_attempt_key);
     if v_change.old_path is not null then
       perform public.queue_storage_purge(p_organization_id, array[v_change.old_path]);
     end if;
@@ -362,8 +403,8 @@ begin
 end;
 $$;
 
-revoke all on function public.replace_company_document_file(uuid, uuid, text, text, text, text, text, bigint) from public, anon, authenticated;
-grant execute on function public.replace_company_document_file(uuid, uuid, text, text, text, text, text, bigint) to service_role;
+revoke all on function public.replace_company_document_file(uuid, uuid, text, text, text, text, text, bigint, uuid) from public, anon, authenticated;
+grant execute on function public.replace_company_document_file(uuid, uuid, text, text, text, text, text, bigint, uuid) to service_role;
 
 -- The organization export holds the profile's files too: they are stored
 -- originals of the organization, and its data part names their keys. A

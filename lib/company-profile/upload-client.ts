@@ -30,12 +30,16 @@ export async function uploadCompanyFile(
       headers: { 'Content-Type': file.type },
     });
     if (!put.ok) return { success: false, error: 'upload_failed' };
-    return await finalizeCompanyDocumentFileUpload({
-      organizationId,
-      kind,
-      fileId: ticket.ticket.fileId,
-      expectedStoragePath,
-    });
+    const finalize = () =>
+      finalizeCompanyDocumentFileUpload({
+        organizationId,
+        kind,
+        fileId: ticket.ticket.fileId,
+        expectedStoragePath,
+      });
+    // A lost answer may hide a registered upload: the repeat under the same
+    // file id answers with what the first call did.
+    return await finalize().catch(finalize);
   } catch (error) {
     logError('uploadCompanyFile: transfer failed', error);
     return { success: false, error: 'upload_failed' };
