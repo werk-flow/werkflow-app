@@ -11,10 +11,11 @@ You own the change. GPT Sol reviews it in rounds until you agree or the budget e
 
 ## Budget
 
-- 3 rounds, 5 for level 2. The owner can raise either. The lead may add one confirmation round ([Stop](#5-stop)). Round 1 reviews everything. Later rounds check changed code and open findings.
+- 3 rounds per PR, at every level, in [trial mode](../../../docs/technical/coderabbit.md#trial-mode-until-2026-11-27) too. It is a hard limit: no lead grants an extra round. Only the owner can raise it, for one PR.
+- The order: round 1 reviews everything while CodeRabbit reviews the draft. One push answers both. Round 2 confirms that push. Round 3 runs only when round 2 left a blocker or should open, and checks its fix.
 - Stop early when a round returns only nits.
 - One reviewer. Sol starts no subagents.
-- Keep a ledger: finding id, severity, outcome, and the usage T3 reports per round ("not exposed" when it shows none).
+- Keep a ledger: finding id, severity, outcome.
 
 ## 1. Scope
 
@@ -62,14 +63,24 @@ Answer CodeRabbit's findings on the same commit in the same fix round. Rerun the
 
 Start one only while budget remains and a blocker or should is open or behavior changed since the last approval. After the round's push, send the round 1 brief plus the ledger (`fixed:`, `disagree:`, `declined:`), the same base and the new head. Ask Sol to mark each old id `resolved` or `still open: <reason>`.
 
+Skip the round when the PR's own diff is unchanged since Sol's last round, as after a pure merge of `main` or a conflict resolution that keeps your side. Prove it before you skip. Compare the PR's diff at Sol's last head with the diff now, without hunk positions and blob hashes, which a merge changes:
+
+```bash
+git diff -U0 <last-round-base>..<last-round-head> | grep -Ev '^(@@|index )' > before.diff
+git diff -U0 "$(git merge-base HEAD origin/main)"..HEAD | grep -Ev '^(@@|index )' > after.diff
+cmp before.diff after.diff
+```
+
+Skip only when `cmp` prints nothing, and write that result in the ledger. A skipped round uses no budget. Never use `git range-diff` for this: it ignores merge commits, so it misses a conflict resolution.
+
 ## 5. Stop
 
 - **Agreed:** APPROVE on the current behavior diff, no blocker or should open.
-- **Disputed:** a finding stays disputed after two replies. Decide it on the evidence and write each side and your decision into the PR's Review section. It is an owner item only as kind 3 of [Decide or ask](../../../AGENTS.md#decide-or-ask).
-- **Budget ended:** when Sol has not read your last fix, the lead decides whether one confirmation round is worth its cost. Outside an epic, you decide. A child hands back with the open findings. Without the round, name the unread commits in the PR's Review section.
+- **Disputed:** a finding is still disputed after the last round. Ask the owner through the question tool: the finding, Sol's side, your side with its evidence, and your recommendation first. A child hands the question to its lead, which asks. Keep working on what does not depend on it, and write the answer into the PR's Review section.
+- **Budget ended:** name the commits Sol has not read and the open findings in the PR's Review section. A child hands back with them.
 
 Put this line in the PR description:
 
-`Reviewed with sol-loop: <N> rounds with <model>. Sol verdict: <approved|not approved>. Usage: <per round, or "not exposed">.`
+`Reviewed with sol-loop: <N> rounds with <model>. Sol verdict: <approved|not approved>.`
 
 Write "not approved" whenever Sol did not approve the final diff.
