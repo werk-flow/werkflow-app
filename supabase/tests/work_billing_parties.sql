@@ -394,56 +394,13 @@ begin
 end;
 $$;
 
--- A version never changes or leaves on its own.
-select pg_temp.expect_refusal('an edited version',
-  $sql$update public.work_billing_parties set recipient_name = 'Andere'
-    where work_id = '32700000-0000-0000-0000-000000000051'$sql$,
-  'permission denied for table work_billing_parties');
--- No API role may delete a version: the server holds no DELETE grant.
-select pg_temp.expect_refusal('a version deleted by the server role',
-  $sql$delete from public.work_billing_parties
-    where work_id = '32700000-0000-0000-0000-000000000051'$sql$,
-  'permission denied for table work_billing_parties');
+-- A version never changes or leaves on its own: security_boundaries.sql
+-- asserts the ledger's denials and its permitted cleanup.
 select public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
   '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000052',
   '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000024',
     coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000052')).version, 0));
 reset role;
-do $$
-begin
-  begin
-    update public.work_billing_parties set recipient_name = 'Andere'
-    where work_id = '32700000-0000-0000-0000-000000000051';
-  exception when others then
-    return;
-  end;
-  raise exception 'a privileged role rewrote a frozen recipient';
-end;
-$$;
-
--- A browser session and even the owner role cannot delete a version
--- directly: the grant refuses the one, the ledger guard the other. Only the
--- cascade of a deleted work removes its versions (tested below).
-do $$
-begin
-  begin
-    set local role authenticated;
-    delete from public.work_billing_parties where work_id = '32700000-0000-0000-0000-000000000051';
-    raise exception 'a browser session deleted a version';
-  exception when insufficient_privilege then
-    null;
-  end;
-  reset role;
-  begin
-    delete from public.work_billing_parties where work_id = '32700000-0000-0000-0000-000000000051';
-    raise exception 'a privileged role deleted a version directly';
-  exception when raise_exception then
-    if sqlerrm is distinct from 'event_ledger_history_immutable' then raise; end if;
-  end;
-  if not exists (select 1 from public.work_billing_parties where work_id = '32700000-0000-0000-0000-000000000051')
-  then raise exception 'a refused delete removed versions'; end if;
-end;
-$$;
 
 -- Two office users saved from the same version: the second save is refused
 -- with parties_changed and appends nothing, so it never writes back the
