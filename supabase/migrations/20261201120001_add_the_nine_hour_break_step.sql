@@ -6,6 +6,11 @@
 -- break_policy_history, and every earlier day keeps the version it ran under.
 -- A new organization starts with the step on.
 --
+-- Both save versions end an open break only after locking the person's
+-- employee record, the row a clock transition locks, and only while the
+-- break's start is still the person's latest entry: a transition that ended
+-- it between the action's read and the call leaves nothing to end.
+--
 -- The ten-argument save checks the step: after the first threshold, at least
 -- the first step's break, and its extra minutes between the two thresholds.
 -- It is no table constraint, so it never refuses a save of the previous
@@ -149,10 +154,35 @@ begin
     raise exception 'target_not_found';
   end if;
 
+  -- Each person's clock timeline is locked as a clock transition locks it
+  -- (their employee record, for update), and a break is ended only while its
+  -- start is still the person's latest entry: a transition that ended the
+  -- break between the action's read and this call leaves nothing to end. A
+  -- caller that names the break's start entry (the ten-argument save) has it
+  -- matched; the previous release names none.
+  perform 1 from public.employee_records employee
+  where employee.organization_id = p_organization_id
+    and employee.user_id in (
+      select (break_end ->> 'user_id')::uuid from jsonb_array_elements(p_break_ends) break_end
+    )
+  order by employee.id
+  for update;
+
   insert into public.time_entries (user_id, organization_id, entry_type, timestamp, is_manual, status, job_id)
   select (break_end ->> 'user_id')::uuid, p_organization_id, 'break_end', now(), false, 'approved',
     (break_end ->> 'job_id')::uuid
-  from jsonb_array_elements(p_break_ends) break_end;
+  from jsonb_array_elements(p_break_ends) break_end
+  cross join lateral (
+    select entry.id, entry.entry_type
+    from public.time_entries entry
+    where entry.user_id = (break_end ->> 'user_id')::uuid
+      and entry.organization_id = p_organization_id
+      and entry.status not in ('rejected', 'pending_delete')
+    order by entry.timestamp desc, entry.created_at desc, entry.id desc
+    limit 1
+  ) latest
+  where latest.entry_type = 'break_start'
+    and (break_end ->> 'break_start_id' is null or latest.id = (break_end ->> 'break_start_id')::uuid);
 end;
 $$;
 
@@ -381,9 +411,34 @@ begin
     raise exception 'target_not_found';
   end if;
 
+  -- Each person's clock timeline is locked as a clock transition locks it
+  -- (their employee record, for update), and a break is ended only while its
+  -- start is still the person's latest entry: a transition that ended the
+  -- break between the action's read and this call leaves nothing to end. A
+  -- caller that names the break's start entry (the ten-argument save) has it
+  -- matched; the previous release names none.
+  perform 1 from public.employee_records employee
+  where employee.organization_id = p_organization_id
+    and employee.user_id in (
+      select (break_end ->> 'user_id')::uuid from jsonb_array_elements(p_break_ends) break_end
+    )
+  order by employee.id
+  for update;
+
   insert into public.time_entries (user_id, organization_id, entry_type, timestamp, is_manual, status, job_id)
   select (break_end ->> 'user_id')::uuid, p_organization_id, 'break_end', now(), false, 'approved',
     (break_end ->> 'job_id')::uuid
-  from jsonb_array_elements(p_break_ends) break_end;
+  from jsonb_array_elements(p_break_ends) break_end
+  cross join lateral (
+    select entry.id, entry.entry_type
+    from public.time_entries entry
+    where entry.user_id = (break_end ->> 'user_id')::uuid
+      and entry.organization_id = p_organization_id
+      and entry.status not in ('rejected', 'pending_delete')
+    order by entry.timestamp desc, entry.created_at desc, entry.id desc
+    limit 1
+  ) latest
+  where latest.entry_type = 'break_start'
+    and (break_end ->> 'break_start_id' is null or latest.id = (break_end ->> 'break_start_id')::uuid);
 end;
 $$;

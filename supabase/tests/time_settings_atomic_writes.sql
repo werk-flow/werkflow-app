@@ -44,6 +44,12 @@ create table pg_temp.completed_day as
 select to_jsonb(entry) as entry from public.time_entries entry
 where organization_id = '26104154-0000-0000-0000-000000000010';
 grant select on pg_temp.completed_day to service_role;
+-- Today's open break of the same worker: a save ends it.
+insert into public.time_entries (id, organization_id, user_id, entry_type, timestamp, is_manual, status) values
+('26104154-0000-0000-0000-0000000000c3', '26104154-0000-0000-0000-000000000010',
+  '26104154-0000-0000-0000-000000000002', 'clock_in', now() - interval '2 hours', false, 'approved'),
+('26104154-0000-0000-0000-0000000000c4', '26104154-0000-0000-0000-000000000010',
+  '26104154-0000-0000-0000-000000000002', 'break_start', now() - interval '1 hour', false, 'approved');
 -- A job of the other organization: the work-start trigger refuses a break end on it.
 insert into public.jobs (id, organization_id, title, job_number, created_by) values
 ('26104154-0000-0000-0000-0000000000aa', '26104154-0000-0000-0000-000000000011', 'Foreign job',
@@ -151,7 +157,8 @@ begin
   then raise exception 'a refused save changed the settings'; end if;
   if exists (
     select 1 from public.time_entries where organization_id = '26104154-0000-0000-0000-000000000010'
-      and id not in ('26104154-0000-0000-0000-0000000000c1', '26104154-0000-0000-0000-0000000000c2')
+      and id not in ('26104154-0000-0000-0000-0000000000c1', '26104154-0000-0000-0000-0000000000c2',
+        '26104154-0000-0000-0000-0000000000c3', '26104154-0000-0000-0000-0000000000c4')
   ) then raise exception 'a refused save ended a break'; end if;
 
   perform public.update_time_tracking_settings('26104154-0000-0000-0000-000000000001',
@@ -177,7 +184,8 @@ begin
   ) or (
     select count(*) from public.time_entries
     where organization_id = '26104154-0000-0000-0000-000000000010'
-      and id not in ('26104154-0000-0000-0000-0000000000c1', '26104154-0000-0000-0000-0000000000c2')
+      and id not in ('26104154-0000-0000-0000-0000000000c1', '26104154-0000-0000-0000-0000000000c2',
+        '26104154-0000-0000-0000-0000000000c3', '26104154-0000-0000-0000-0000000000c4')
   ) <> 1 then raise exception 'a saved break rule rewrote a completed day'; end if;
 
   -- The first save of an organization without a settings row creates it; a
@@ -197,7 +205,7 @@ select pg_temp.expect_refusal('a second first save', $sql$
     'manual', 360, 30, '[]', '[]')
 $sql$, 'settings_changed');
 
--- The nine-hour step (migration 20261201100004_add_the_nine_hour_break_step.sql).
+-- The nine-hour step (migration 20261201120001_add_the_nine_hour_break_step.sql).
 -- An existing organization has it off until an admin switches it on.
 do $$
 begin
@@ -255,6 +263,24 @@ begin
       from public.organization_settings
       where organization_id = '26104154-0000-0000-0000-000000000010') is distinct from '540/45/3'
   then raise exception 'switching the second step on did not write it and its version'; end if;
+end;
+$$;
+
+-- A break that already ended is not ended again: the action read it open,
+-- but a transition (here the first save) ended it before this call. Both
+-- versions re-check the open break under the employee record's lock.
+do $$
+begin
+  perform public.update_time_tracking_settings('26104154-0000-0000-0000-000000000001',
+    '26104154-0000-0000-0000-000000000010', (select expected from pg_temp.second_step_call),
+    'automatic', 360, 30, 540, 45,
+    (select expected -> 'break_policy_history' from pg_temp.second_step_call),
+    '[{"user_id":"26104154-0000-0000-0000-000000000002","job_id":null,"break_start_id":"26104154-0000-0000-0000-0000000000c4"}]');
+  if (select count(*) from public.time_entries
+      where organization_id = '26104154-0000-0000-0000-000000000010'
+        and user_id = '26104154-0000-0000-0000-000000000002'
+        and entry_type = 'break_end') <> 1
+  then raise exception 'a save ended a break that was no longer open'; end if;
 end;
 $$;
 

@@ -36,10 +36,11 @@ export type UpdateTimeTrackingSettingsResult = ActionResult<
   'not_authenticated' | 'org_not_found' | 'not_authorized' | 'invalid_input' | 'no_changes' | 'update_failed'
 >;
 
-function getJobIdBeforeCurrentBreak(entries: TimeEntry[]): string | null {
+/** The open break's start entry and the job it interrupted. */
+function currentBreakOf(entries: TimeEntry[]): { breakStartId: string | null; jobId: string | null } {
   const effectiveEntries = getEffectiveTimeEntries(entries);
   let activeJobId: string | null = null;
-  let jobIdBeforeCurrentBreak: string | null = null;
+  let current: { breakStartId: string | null; jobId: string | null } = { breakStartId: null, jobId: null };
 
   for (const entry of effectiveEntries) {
     switch (entry.entryType) {
@@ -48,7 +49,7 @@ function getJobIdBeforeCurrentBreak(entries: TimeEntry[]): string | null {
         activeJobId = entry.jobId ?? null;
         break;
       case 'break_start':
-        jobIdBeforeCurrentBreak = activeJobId;
+        current = { breakStartId: entry.id, jobId: activeJobId };
         activeJobId = null;
         break;
       case 'clock_out':
@@ -57,10 +58,14 @@ function getJobIdBeforeCurrentBreak(entries: TimeEntry[]): string | null {
     }
   }
 
-  return jobIdBeforeCurrentBreak;
+  return current;
 }
 
-type OpenBreakEnd = { user_id: string; job_id: string | null };
+/**
+ * A break to end: the function ends it only while its start is still the
+ * person's latest entry, so a transition that ended it in between wins.
+ */
+type OpenBreakEnd = { user_id: string; job_id: string | null; break_start_id: string | null };
 
 /** The break end of every member on a break today, with the job the break resumes. */
 async function readOpenBreakEnds(organizationId: string): Promise<OpenBreakEnd[]> {
@@ -125,7 +130,10 @@ async function readOpenBreakEnds(organizationId: string): Promise<OpenBreakEnd[]
 
   return [...entriesByUser.entries()]
     .filter(([, entries]) => deriveCurrentClockState(entries).status === 'on_break')
-    .map(([userId, entries]) => ({ user_id: userId, job_id: getJobIdBeforeCurrentBreak(entries) }));
+    .map(([userId, entries]) => {
+      const { breakStartId, jobId } = currentBreakOf(entries);
+      return { user_id: userId, job_id: jobId, break_start_id: breakStartId };
+    });
 }
 
 /** The action failure of a refused or failed update_time_tracking_settings call. */

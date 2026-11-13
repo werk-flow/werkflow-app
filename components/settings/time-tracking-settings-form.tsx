@@ -1,7 +1,6 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect } from 'react';
 import { useForm, useWatch, type UseFormReturn } from 'react-hook-form';
 import { z } from '@/lib/zod';
 
@@ -161,10 +160,12 @@ function AutoBreakFields({ form, disabled }: { form: TimeTrackingRulesForm; disa
 function SecondStepFields({
   form,
   disabled,
+  toggleDisabled,
   startsWithSave,
 }: {
   form: TimeTrackingRulesForm;
   disabled: boolean;
+  toggleDisabled: boolean;
   /** The step is off in the saved rule: switching it on starts with the save. */
   startsWithSave: boolean;
 }) {
@@ -179,7 +180,7 @@ function SecondStepFields({
             <Checkbox
               ref={field.ref}
               checked={field.value}
-              disabled={disabled}
+              disabled={toggleDisabled}
               onCheckedChange={(checked) => field.onChange(checked === true)}
             />
             <span className="font-medium">
@@ -228,41 +229,16 @@ function TimeTrackingSaveFooter({ canEdit, isSaving }: { canEdit: boolean; isSav
   );
 }
 
-/** Adopts saved rules that arrive with new server props, such as another admin's save. */
-function useAdoptSavedRules(
-  reset: TimeTrackingRulesForm['reset'],
-  initialSettings: TimeTrackingSettingsValues,
-) {
-  const {
-    breakMode: initialBreakMode,
-    autoBreakThresholdMinutes: initialAutoBreakThresholdMinutes,
-    autoBreakDurationMinutes: initialAutoBreakDurationMinutes,
-    secondStepEnabled: initialSecondStepEnabled,
-    secondStepThresholdMinutes: initialSecondStepThresholdMinutes,
-    secondStepDurationMinutes: initialSecondStepDurationMinutes,
-  } = initialSettings;
-
-  useEffect(() => {
-    reset({
-      breakMode: initialBreakMode,
-      autoBreakThresholdMinutes: initialAutoBreakThresholdMinutes,
-      autoBreakDurationMinutes: initialAutoBreakDurationMinutes,
-      secondStepEnabled: initialSecondStepEnabled,
-      secondStepThresholdMinutes: initialSecondStepThresholdMinutes,
-      secondStepDurationMinutes: initialSecondStepDurationMinutes,
-    });
-  }, [
-    initialAutoBreakDurationMinutes,
-    initialAutoBreakThresholdMinutes,
-    initialBreakMode,
-    initialSecondStepDurationMinutes,
-    initialSecondStepEnabled,
-    initialSecondStepThresholdMinutes,
-    reset,
-  ]);
+/**
+ * Saved rules from new server props, such as another admin's save, remount
+ * the form with them, so the first render shows them (adopted during render,
+ * never in an effect).
+ */
+export function TimeTrackingSettingsForm(props: TimeTrackingSettingsFormProps) {
+  return <TimeTrackingRulesCard key={JSON.stringify(props.initialSettings)} {...props} />;
 }
 
-export function TimeTrackingSettingsForm({ initialSettings, role }: TimeTrackingSettingsFormProps) {
+function TimeTrackingRulesCard({ initialSettings, role }: TimeTrackingSettingsFormProps) {
   const { showBanner } = useBanner();
   const { run: runSave, isPending: isSaving } = useServerAction(updateTimeTrackingSettings);
   const canEdit = role === 'admin';
@@ -272,7 +248,6 @@ export function TimeTrackingSettingsForm({ initialSettings, role }: TimeTracking
   });
 
   const selectedBreakMode = useWatch({ control: form.control, name: 'breakMode' });
-  useAdoptSavedRules(form.reset, initialSettings);
 
   const onSubmit = useSaveChangesSubmit(form, async (values) => {
     if (!canEdit) {
@@ -315,6 +290,8 @@ export function TimeTrackingSettingsForm({ initialSettings, role }: TimeTracking
               <SecondStepFields
                 form={form}
                 disabled={!canEdit || isSaving || selectedBreakMode !== 'automatic'}
+                // The switch stays available in manual mode: an invalid second step can be switched off there.
+                toggleDisabled={!canEdit || isSaving}
                 startsWithSave={!initialSettings.secondStepEnabled}
               />
 

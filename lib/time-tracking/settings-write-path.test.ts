@@ -216,7 +216,9 @@ if (ISOLATED) {
     ];
     const result = await updateTimeTrackingSettings(change);
     expect(result.success).toBe(true);
-    expect(rpcCalls[0]?.args.p_break_ends).toEqual([{ user_id: 'worker', job_id: 'job-1' }]);
+    expect(rpcCalls[0]?.args.p_break_ends).toEqual([
+      { user_id: 'worker', job_id: 'job-1', break_start_id: 'entry-2' },
+    ]);
   });
 
   test('a refused call is a failure and revalidates nothing', async () => {
