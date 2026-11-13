@@ -91,8 +91,8 @@ export function LeistungPriceDialog({
         );
         return;
       }
-      setAttempted(false);
-      setPrice(emptyLeistungPrice());
+      // The list's banner confirms the price; a failure above keeps the dialog with its values.
+      onClose();
     });
   };
 

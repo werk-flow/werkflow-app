@@ -162,6 +162,9 @@ export function LeistungenCards({
             >
               {entry.name}
             </PlainButton>
+            {entry.description && (
+              <p className="line-clamp-2 text-xs text-muted-foreground">{entry.description}</p>
+            )}
             <p className="flex flex-wrap gap-x-2 text-xs text-muted-foreground">
               <span>{entry.leistungNumber}</span>
               <span>{LEISTUNG_KIND_LABELS[entry.kind]}</span>

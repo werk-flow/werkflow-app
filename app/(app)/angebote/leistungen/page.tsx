@@ -4,7 +4,7 @@ import { Suspense } from 'react';
 
 import { LeistungenContent } from '@/components/angebote/leistungen/leistungen-content';
 import { LeistungenListSkeleton } from '@/components/angebote/leistungen/leistungen-skeleton';
-import { PageActionButton, PageActionProvider } from '@/components/shared/page-action';
+import { PageActionButton, PageActionProvider, PageActionUnavailable } from '@/components/shared/page-action';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { SubpageHeader } from '@/components/shared/subpage-header';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
@@ -31,10 +31,14 @@ async function LeistungenData({
     },
   );
   if (!page) {
+    // The create dialog lives in LeistungenContent, so „Leistung anlegen“ hides with it.
     return (
-      <RegionLoadError title="Leistungen konnten nicht geladen werden">
-        Die Liste ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
-      </RegionLoadError>
+      <>
+        <PageActionUnavailable />
+        <RegionLoadError title="Leistungen konnten nicht geladen werden">
+          Die Liste ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
+        </RegionLoadError>
+      </>
     );
   }
   return <LeistungenContent {...page} query={query} />;
