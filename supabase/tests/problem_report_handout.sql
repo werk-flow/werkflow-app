@@ -100,6 +100,7 @@ begin
       or has_function_privilege(v_role, 'public.hand_out_problem_report_screenshot(uuid, uuid, uuid[])', 'EXECUTE')
       or has_function_privilege(v_role,
         'public.record_problem_report_scrub(uuid, uuid, text, jsonb, integer)', 'EXECUTE')
+      or has_function_privilege(v_role, 'public.withdraw_problem_report_copy(uuid, uuid, integer)', 'EXECUTE')
     then raise exception '% executes a hand-out function', v_role; end if;
   end loop;
 end;
@@ -370,6 +371,28 @@ begin
   end;
   if (select scrub_version from public.problem_reports where id = '33600000-0000-0000-0000-000000000021') is not null
   then raise exception 'a report without a copy carries a version'; end if;
+end;
+$$;
+
+-- A withdrawal clears a copy's rule version only while it is still the
+-- version the server checked, and leaves its text and state; another
+-- organization's report is untouched.
+do $$
+declare
+  v_org constant uuid := '33600000-0000-0000-0000-000000000010';
+  v_report constant uuid := '33600000-0000-0000-0000-000000000024';
+  v_withdrawn boolean;
+begin
+  v_withdrawn := public.withdraw_problem_report_copy(v_org, v_report, 2);
+  if v_withdrawn or (select scrub_version from public.problem_reports where id = v_report) is distinct from 1
+  then raise exception 'a withdrawal of another version changed the copy'; end if;
+  v_withdrawn := public.withdraw_problem_report_copy('33600000-0000-0000-0000-000000000011', v_report, 1);
+  if v_withdrawn or (select scrub_version from public.problem_reports where id = v_report) is distinct from 1
+  then raise exception 'a withdrawal reached another organization''s report'; end if;
+  v_withdrawn := public.withdraw_problem_report_copy(v_org, v_report, 1);
+  if not v_withdrawn or (select scrub_version is not null or scrub_state <> 'bereinigt'
+      or scrubbed_description <> 'Ohne Bild' from public.problem_reports where id = v_report)
+  then raise exception 'the withdrawal did not clear only the version'; end if;
 end;
 $$;
 

@@ -17,6 +17,7 @@
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
 import * as nextServer from 'next/server';
+import { z } from '@/lib/zod';
 import {
   CALLER_ID,
   ORGANIZATION_A,
@@ -190,6 +191,11 @@ world.rpc = ({ name, args }) => {
       row.scrub_version = copy ? args.p_scrub_version : null;
     }
     return { data: row.scrub_state, error: null };
+  }
+  if (name === 'withdraw_problem_report_copy') {
+    const current = row.scrub_version === args.p_scrub_version;
+    if (current) row.scrub_version = null;
+    return { data: current, error: null };
   }
   if (name === 'hand_out_problem_report') {
     // What lands between the server's check of the copy and this call, such as the daily run's scrub.
@@ -554,8 +560,9 @@ assert.equal(reports().find((row) => row.id === racedId)?.handed_out_at, null);
 betweenCheckAndHandOut = null;
 
 // The second line: a copy of the current rules that still names its
-// organization (the rules missed a case) is refused unclaimed and logged,
-// without its text.
+// organization (the rules missed a case) is refused unclaimed, logged without
+// its text, and withdrawn: the next poll leaves it out, and the daily run
+// scrubs it again from its originals into a current, clean copy.
 const missedId = '33600000-0000-4000-8000-00000000002a';
 reports().push(report(missedId, ORGANIZATION_B, 10, { scrubbed_description: olderCopy }));
 const loggedBefore = logged.length;
@@ -566,6 +573,21 @@ assert.ok(
   logged.slice(loggedBefore).every((line) => !line.includes('Beispiel')),
   'the log carries the text',
 );
+const waitingListSchema = z.object({ reports: z.array(z.object({ id: z.string() })) });
+const listedIds = async () =>
+  waitingListSchema.parse(await (await call.waiting(BEARER)).json()).reports.map((entry) => entry.id);
+assert.ok(!(await listedIds()).includes(missedId), 'a withdrawn copy is still waiting');
+const missed = () => reports().find((row) => row.id === missedId);
+assert.equal(missed()?.scrub_version, null, 'the copy was not withdrawn');
+assert.equal(missed()?.scrubbed_description, olderCopy, 'the withdrawal changed the text');
+assert.equal(missed()?.scrub_state, 'bereinigt', 'the withdrawal changed the state');
+await scrubPendingProblemReports();
+assert.equal(missed()?.scrub_version, 1, 'the daily run did not scrub the withdrawn copy again');
+assert.ok(
+  !String(missed()?.scrubbed_description).includes('Beispiel'),
+  'the copy scrubbed again names its organization',
+);
+assert.ok((await listedIds()).includes(missedId), 'the copy scrubbed again is not waiting');
 
 // The write-back refuses an invalid bucket or status, an assignee, an empty
 // answer, an empty change, a change without the value it was based on, and

@@ -158,8 +158,9 @@ async function loadReport(
  * of the current rules passes, so the hand-out, which requires that same
  * version under its lock, answers exactly the copy checked here: a copy only
  * ever changes to a newer version. The second line behind the version: a
- * current copy that still names its organization or holds a record id never
- * leaves (`copy_unavailable`) and is logged, without its text.
+ * current copy that still names its organization, its join code or a record
+ * id never leaves (`copy_unavailable`), is logged without its text, and is
+ * withdrawn from the current version so the daily run scrubs it again.
  */
 async function checkCopy(
   admin: AdminClient,
@@ -195,13 +196,29 @@ async function checkCopy(
     );
     if (!names) return null;
     // A copy of the current rules never names its organization; when one
-    // does, the rules missed a case, and it is held back and reported.
+    // does, the rules missed a case, such as a rename since the scrub. It is
+    // held back, reported, and withdrawn: the daily run scrubs it again.
     logError('problem report hand-out: a current copy names its organization');
+    const { error } = await admin.rpc(
+      'withdraw_problem_report_copy',
+      // tenant-scope: cross-organization-by-design — a report thread names a report of any organization; the loaded report's own organization scopes the call
+      withdrawArguments(report),
+    );
+    if (error) logError('problem report hand-out: copy withdrawal failed', error);
     return 'copy_unavailable';
   } catch (thrown) {
     logError('problem report hand-out: copy check failed', thrown);
     return 'failed';
   }
+}
+
+/** The arguments of the withdrawal of one loaded report's copy of the checked rules. */
+function withdrawArguments(report: { id: string; organization_id: string }) {
+  return rpcArgs('withdraw_problem_report_copy', {
+    p_organization_id: report.organization_id,
+    p_report_id: report.id,
+    p_scrub_version: SCRUB_RULES_VERSION,
+  });
 }
 
 /** The arguments of a screenshot hand-out about one loaded report. */

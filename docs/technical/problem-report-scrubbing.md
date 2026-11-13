@@ -93,11 +93,11 @@ The scrubber also replaces too much, which costs readability and never privacy. 
 
 The one door through which report content leaves WerkFlow. [Problem reports](../features/problem-reports.md#current-product-baseline) owns the four route handlers; `lib/problem-reports/handout.ts` holds what they read and write.
 
-- **Who receives it.** Report threads outside WerkFlow, which pull with the bearer secret `PROBLEM_REPORT_HANDOUT_SECRET`. WerkFlow sends nothing on its own: no webhook, no relay, no outbound call. Without the secret the hand-out is off.
+- **Who receives it.** Report threads outside WerkFlow, which pull with the bearer secret `PROBLEM_REPORT_HANDOUT_SECRET`. WerkFlow sends nothing on its own: no webhook, relay or outbound call. Without the secret the hand-out is off.
 - **What leaves.** The waiting list: each report's id and bucket. A hand-out: the report's id, the scrubbed description and context, status, bucket, whether it has an answer, and the redrawn screenshot. Never an original, an attachment, support's answer (it is unscrubbed), a person, the organization or any other id.
 - **Only a current scrubbed copy.** A report without a copy of the current [rule version](#rules-1) is neither listed nor handed out; no other text stands in for it.
-- **Checked again.** The hand-out checks a current copy once more for the organization's name, its join code and record ids. A hit means the rules missed a case: `copy_unavailable`, unclaimed, and an error logged without text.
-- **Ten minutes after sending.** The device uploads the screenshot after the save, so a report is listed and handed out only ten minutes after it was sent.
+- **Checked again.** The hand-out checks a current copy once more for the organization's name, its join code and record ids. A hit means the rules missed a case: `copy_unavailable`, an error logged without text, and the copy withdrawn for the daily run.
+- **Ten minutes after sending** a report is listed and handed out, since the device uploads the screenshot after the save.
 - **Once, accounted.** The hand-out and the screenshot each write a history entry in the database call that answers them, before anything leaves. The first hand-out claims the report, so each copy leaves to one thread once.
 - **The screenshot goes through the server.** A signed storage address would carry the organization's id in its path, so the server reads the bytes and answers them itself.
 

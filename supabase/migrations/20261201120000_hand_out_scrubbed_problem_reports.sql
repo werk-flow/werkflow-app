@@ -317,3 +317,31 @@ $$;
 revoke all on function public.hand_out_problem_report_screenshot(uuid, uuid, uuid[])
   from public, anon, authenticated;
 grant execute on function public.hand_out_problem_report_screenshot(uuid, uuid, uuid[]) to service_role;
+
+-- Takes a copy out of circulation when the server's check before the
+-- hand-out finds in it what the rules should have removed, such as the
+-- organization's name after a rename. It clears the copy's rule version, only
+-- while it is still the version the server checked, so the copy is no longer
+-- waiting and the daily run scrubs it again from its originals; without them
+-- it never leaves. Text and state stay. Answers whether it withdrew the copy.
+create function public.withdraw_problem_report_copy(
+  p_organization_id uuid,
+  p_report_id uuid,
+  p_scrub_version integer
+)
+returns boolean
+language sql
+security invoker
+set search_path to ''
+as $$
+  with withdrawn as (
+    update public.problem_reports report set scrub_version = null
+    where report.id = p_report_id and report.organization_id = p_organization_id
+      and report.scrub_version = p_scrub_version
+    returning report.id
+  )
+  select exists (select 1 from withdrawn);
+$$;
+
+revoke all on function public.withdraw_problem_report_copy(uuid, uuid, integer) from public, anon, authenticated;
+grant execute on function public.withdraw_problem_report_copy(uuid, uuid, integer) to service_role;

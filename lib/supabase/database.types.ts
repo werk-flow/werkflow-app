@@ -19946,6 +19946,14 @@ export type Database = {
         };
         Returns: number;
       };
+      withdraw_problem_report_copy: {
+        Args: {
+          p_organization_id: string;
+          p_report_id: string;
+          p_scrub_version: number;
+        };
+        Returns: boolean;
+      };
       withdraw_time_account_adjustment: {
         Args: {
           p_actor_id: string;
