@@ -74,6 +74,7 @@ export const COLUMN_LABELS: Record<LabeledColumn, string> = {
   blocker_id: 'Hindernis-ID',
   blocker_reason: 'Grund des Hindernisses',
   blocks_access: 'Sperrt den Zugang',
+  booked_by: 'Gebucht von (ID)',
   break_mode: 'Pausenregel',
   break_policy_history: 'Verlauf der Pausenregel',
   calculation_id: 'Berechnung-ID',
