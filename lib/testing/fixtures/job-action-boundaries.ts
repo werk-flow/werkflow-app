@@ -54,8 +54,39 @@ const assignment = (id: string, organizationId: string, jobId: string, userId: s
   assigned_at: now,
 });
 
+// A job with its own customer in a project that has none: the defaults follow
+// jobs.client_id, so the office still sees and changes the job's pair.
+const projectWithoutClientId = '53000000-0000-4000-8000-0000000000a1';
+const ownClientJobId = '53000000-0000-4000-8000-0000000000a2';
+
 const world = installActionWorld({
+  projects: [
+    {
+      id: projectWithoutClientId,
+      organization_id: ORGANIZATION_A,
+      name: 'Projekt ohne Kunde',
+      project_number: 'P-2026-001',
+      client_id: null,
+    },
+  ],
   jobs: [
+    {
+      ...jobRow(ownClientJobId, ORGANIZATION_A, 'A-2026-003'),
+      project_id: projectWithoutClientId,
+      client_id: clientId,
+      work_billing_parties: [
+        {
+          version: 1,
+          source: 'auftraggeber',
+          client_id: clientId,
+          recipient_client_id: clientId,
+          recipient_name: 'Familie Berger',
+          recipient_address: null,
+          created_at: '2026-11-01T08:00:00.000Z',
+          auftraggeber: { name: 'Familie Berger' },
+        },
+      ],
+    },
     {
       ...jobRow(assignedJobId, ORGANIZATION_A, 'A-2026-001'),
       client_id: clientId,
@@ -252,6 +283,15 @@ assert.equal(managerDetails.job.assignments[1]?.email, 'max@example.test');
 const managerByNumber = await actions.getJobByNumber('A-2026-001');
 assert.ok(managerByNumber.success);
 assert.equal(managerByNumber.billingParties?.versions[0]?.recipient?.name, 'Hausverwaltung Lindenhof GmbH');
+// The job's own customer keeps its pair although its project has no customer:
+// the parties are named, not left out for a customer the read does not return.
+const ownClientJob = await actions.getJobByNumber('A-2026-003');
+assert.ok(ownClientJob.success);
+assert.equal(ownClientJob.billingParties?.hasClient, true);
+assert.deepEqual(ownClientJob.billingParties?.versions[0]?.auftraggeber, {
+  id: clientId,
+  name: 'Familie Berger',
+});
 
 // A manager of organization A reaches no job of organization B by id or by number.
 assert.deepEqual(await actions.getJobDetails(foreignJobId), jobNotFound);
@@ -315,5 +355,5 @@ assert.equal(
 assert.deepEqual(await actions.deleteJob(unassignedJobId), { success: true });
 assert.deepEqual(
   tableRows(world, 'jobs').map((job) => job.id),
-  [assignedJobId, foreignJobId],
+  [ownClientJobId, assignedJobId, foreignJobId],
 );

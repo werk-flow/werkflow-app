@@ -73,6 +73,9 @@ const embeddedContactsSchema = z.array(
  * embed is malformed, so the section reads them itself.
  */
 export function jobBillingPartiesFrom(input: {
+  /** The job has a customer of its own (jobs.client_id), which the parties follow. */
+  hasClient: boolean;
+  /** That customer as the job read returned it; null leaves no party out. */
   workClient: BillingRecipient | null;
   versions: unknown;
   siteContacts: unknown;
@@ -85,7 +88,7 @@ export function jobBillingPartiesFrom(input: {
     return null;
   }
   return {
-    hasClient: workClient !== null,
+    hasClient: input.hasClient,
     versions: versions.data
       .toSorted((a, b) => b.version - a.version)
       .map((row) => ({

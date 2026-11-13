@@ -518,22 +518,36 @@ async function readJobDetails(input: {
   return {
     success: true,
     job,
-    billingParties: officeBillingParties(input.billingParties, client, siteContacts),
+    billingParties: officeBillingParties(input.billingParties, jobData.client_id, client, siteContacts),
   };
 }
 
 /**
  * The job read's embedded billing parties for the office, without the site the
- * job already carries; undefined when it embedded none or a malformed set.
+ * job already carries; undefined when it embedded none or a malformed set. The
+ * parties belong to the job's own customer (jobs.client_id), which the
+ * defaults follow; a party is left out only where the read's customer is that
+ * same customer, so a project read with another customer never stands in.
  */
 function officeBillingParties(
   embedded: unknown,
+  jobClientId: string | null,
   client: Client | null,
   siteContacts: unknown,
 ): WorkBillingParties | undefined {
   if (embedded === undefined) return undefined;
-  const workClient = client ? { id: client.id, name: client.name, address: client.address } : null;
-  return jobBillingPartiesFrom({ workClient, versions: embedded, siteContacts }) ?? undefined;
+  const workClient =
+    client && client.id === jobClientId
+      ? { id: client.id, name: client.name, address: client.address }
+      : null;
+  return (
+    jobBillingPartiesFrom({
+      hasClient: jobClientId !== null,
+      workClient,
+      versions: embedded,
+      siteContacts,
+    }) ?? undefined
+  );
 }
 
 /** The job form's reader: the job with its details and its scheduled visits. */

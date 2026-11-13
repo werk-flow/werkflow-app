@@ -19,6 +19,13 @@ test('a save from an outdated version says why and starts the choice from the cu
   await expect(dialog.getByText(/wurden gerade geändert/)).toBeVisible();
   await expect(auftraggeber).toContainText('Hausverwaltung Birkenhain GmbH');
   await expect(dialog).toBeVisible();
+
+  // Saving the refreshed choice sends the version it now shows, so it saves.
+  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'Auftraggeber und Rechnungsempfänger gespeichert.' }),
+  ).toBeVisible();
 });
 
 test('a newer read landing while the dialog is open never replaces the choice without the notice', async ({
@@ -39,4 +46,10 @@ test('a newer read landing while the dialog is open never replaces the choice wi
   await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
   await expect(dialog.getByText(/wurden gerade geändert/)).toBeVisible();
   await expect(auftraggeber).toContainText('Hausverwaltung Birkenhain GmbH');
+
+  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'Auftraggeber und Rechnungsempfänger gespeichert.' }),
+  ).toBeVisible();
 });
