@@ -32,7 +32,8 @@
 -- without a label.
 --
 -- Prevention: Tier 1 (constraints, triggers, the ledger guard), Tier 2
--- supabase/tests/work_billing_parties.sql.
+-- supabase/tests/work_billing_parties.sql and the ledger block in
+-- supabase/tests/security_boundaries.sql.
 
 create table public.work_billing_parties (
   id uuid primary key default gen_random_uuid(),
@@ -41,7 +42,10 @@ create table public.work_billing_parties (
   job_id uuid,
   project_id uuid,
   service_case_id uuid,
-  work_id uuid generated always as (coalesce(request_id, job_id, project_id, service_case_id)) stored,
+  -- The one work reference, kept as a plain column: the ledger guard compares
+  -- a set-null update's other columns, and a generated column is not computed
+  -- yet in its BEFORE trigger, so a deleted actor's cleanup would be refused.
+  work_id uuid not null,
   -- 1 for the first version of a work, one more for each change.
   version integer not null,
   -- The Auftraggeber.
@@ -58,6 +62,7 @@ create table public.work_billing_parties (
   created_at timestamptz not null default now(),
   constraint work_billing_parties_one_work check (
     num_nonnulls(request_id, job_id, project_id, service_case_id) = 1
+    and work_id = coalesce(request_id, job_id, project_id, service_case_id)
   ),
   constraint work_billing_parties_source_check check (
     source in ('objekt', 'auftraggeber', 'projekt', 'anfrage', 'buero')
@@ -171,7 +176,7 @@ begin
     return v_current;
   end if;
   insert into public.work_billing_parties (
-    organization_id, request_id, job_id, project_id, service_case_id, version,
+    organization_id, request_id, job_id, project_id, service_case_id, work_id, version,
     client_id, recipient_client_id, recipient_name, recipient_address, source, set_by
   ) values (
     p_organization_id,
@@ -179,6 +184,7 @@ begin
     case when p_kind = 'job' then p_work_id end,
     case when p_kind = 'project' then p_work_id end,
     case when p_kind = 'service_case' then p_work_id end,
+    p_work_id,
     coalesce(v_current.version, 0) + 1,
     p_client_id, p_recipient_client_id, v_name, v_address, p_source, p_actor_id
   )
@@ -349,10 +355,11 @@ create trigger carry_request_billing_parties
 
 -- The defaults for the work that exists already.
 insert into public.work_billing_parties (
-  organization_id, request_id, job_id, project_id, service_case_id, version,
+  organization_id, request_id, job_id, project_id, service_case_id, work_id, version,
   client_id, recipient_client_id, recipient_name, recipient_address, source
 )
-select work.organization_id, work.request_id, work.job_id, work.project_id, work.service_case_id, 1,
+select work.organization_id, work.request_id, work.job_id, work.project_id, work.service_case_id,
+  coalesce(work.request_id, work.job_id, work.project_id, work.service_case_id), 1,
   work.client_id, recipient.id, recipient.name, recipient.address,
   case when payer.holder_client_id is null then 'auftraggeber' else 'objekt' end
 from (

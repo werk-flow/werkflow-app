@@ -12239,7 +12239,7 @@ export type Database = {
           set_by: string | null;
           source: string;
           version: number;
-          work_id: string | null;
+          work_id: string;
         };
         Insert: {
           client_id: string;
@@ -12256,7 +12256,7 @@ export type Database = {
           set_by?: string | null;
           source: string;
           version: number;
-          work_id?: string | null;
+          work_id: string;
         };
         Update: {
           client_id?: string;
@@ -12273,7 +12273,7 @@ export type Database = {
           set_by?: string | null;
           source?: string;
           version?: number;
-          work_id?: string | null;
+          work_id?: string;
         };
         Relationships: [
           {
@@ -18818,7 +18818,7 @@ export type Database = {
           set_by: string | null;
           source: string;
           version: number;
-          work_id: string | null;
+          work_id: string;
         };
         SetofOptions: {
           from: "*";
