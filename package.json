@@ -49,6 +49,8 @@
     "test:campaign": "bun scripts/campaign-summary.ts",
     "migrations:check": "bun scripts/check-dev-migration-history.ts",
     "migrations:order": "bun scripts/check-migration-order.ts",
+    "stack:sync": "bun scripts/local-stack.ts sync",
+    "stack:reset": "bun scripts/local-stack.ts reset",
     "types:generate": "bun scripts/generate-supabase-types.ts",
     "types:check": "bun scripts/generate-supabase-types.ts --check",
     "auth:check": "bun scripts/check-supabase-project.ts auth",

@@ -3,7 +3,13 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { readStackLockHolders, stackLockConflicts, stackLockDirectory, withStackLock } from './stack-lock';
+import {
+  StackHeldError,
+  readStackLockHolders,
+  stackLockConflicts,
+  stackLockDirectory,
+  withStackLock,
+} from './stack-lock';
 
 const holder = (token: string, mode: 'shared' | 'exclusive', startedAt: string) => ({
   token,
@@ -100,4 +106,26 @@ test('a shared holder waits behind a live exclusive holder until it leaves', asy
     report.mockRestore();
   }
   expect(entered).toBe(true);
+});
+
+// The stack sync beside check:changed and the reset never queue behind a run (scripts/local-stack.ts).
+test('a hold asked not to wait names the holders in its way and leaves no registration', async () => {
+  const root = repository();
+  const directory = stackLockDirectory(root);
+  await withStackLock({ mode: 'shared', operation: 'a browser group', repositoryRoot: root }, async () => {
+    const refused = withStackLock(
+      { mode: 'exclusive', operation: 'stack sync', repositoryRoot: root, wait: false },
+      async () => 'ran',
+    );
+    await expect(refused).rejects.toBeInstanceOf(StackHeldError);
+    await expect(refused).rejects.toThrow('The local stack is held by a browser group.');
+    expect(readStackLockHolders(directory).map((held) => held.operation)).toEqual(['a browser group']);
+  });
+  expect(
+    await withStackLock(
+      { mode: 'exclusive', operation: 'stack sync', repositoryRoot: root, wait: false },
+      async () => 'ran',
+    ),
+  ).toBe('ran');
+  expect(readStackLockHolders(directory)).toEqual([]);
 });
