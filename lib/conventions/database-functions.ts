@@ -32,7 +32,7 @@ export function committedMigrations(): Migration[] {
     }));
 }
 
-/** The SQL without `--` and block comments, string literals and dollar-quoted bodies kept. */
+/** The SQL without `--` and block comments; quoted identifiers, string literals and dollar-quoted bodies kept. */
 function withoutComments(sql: string): string {
   let result = '';
   let index = 0;
@@ -46,8 +46,8 @@ function withoutComments(sql: string): string {
       const close = sql.indexOf('*/', index + 2);
       index = close < 0 ? sql.length : close + 2;
       result += ' ';
-    } else if (rest.startsWith("'")) {
-      const close = /^'(?:[^']|'')*'/.exec(rest);
+    } else if (rest.startsWith("'") || rest.startsWith('"')) {
+      const close = /^'(?:[^']|'')*'|^"(?:[^"]|"")*"/.exec(rest);
       const literal = close ? close[0] : rest;
       result += literal;
       index += literal.length;
@@ -63,6 +63,13 @@ function withoutComments(sql: string): string {
     }
   }
   return result;
+}
+
+/** The SQL with every quoted identifier, string literal and dollar-quoted body blanked, offsets kept. */
+function outsideQuotes(sql: string): string {
+  return sql.replace(/"(?:[^"]|"")*"|'(?:[^']|'')*'|(\$(?:[a-z_][a-z0-9_]*)?\$)[\s\S]*?\1/g, (quoted) =>
+    quoted.replace(/[^\n]/g, ' '),
+  );
 }
 
 /** The text up to the parenthesis that closes the one before `start`. */
@@ -137,7 +144,8 @@ export function latestDatabaseFunctions(migrations: readonly Migration[]): Datab
     const sql = withoutComments(raw)
       .toLowerCase()
       .replace(/"([a-z_][a-z_0-9]*)"/g, '$1');
-    for (const match of sql.matchAll(EVENT)) {
+    // A statement inside a literal or a body (a comment's text, an EXECUTE) is no definition.
+    for (const match of outsideQuotes(sql).matchAll(EVENT)) {
       const [whole, verb = '', unqualified = '', open] = match;
       const name = qualified(unqualified);
       const start = match.index + whole.length;

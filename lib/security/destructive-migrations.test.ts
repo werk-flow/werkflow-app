@@ -202,7 +202,10 @@ function validatedChecksOnExistingTables(sql: string): string[] {
         altered?.[1] !== undefined &&
         !created.has(tableName(altered[1])) &&
         topLevelActions(statement.text.slice(altered[0].length)).some(
-          (action) => ADDED_CHECK.test(action) && !/\bnot\s+valid$/.test(action),
+          (action) =>
+            (ADDED_CHECK.test(action) && !/\bnot\s+valid$/.test(action)) ||
+            // A column's own CHECK cannot be NOT VALID: add it as a separate constraint.
+            (/^add\s/.test(action) && !ADDED_CHECK.test(action) && /\bcheck\s*\(/.test(action)),
         )
       );
     })
@@ -343,18 +346,22 @@ describe('checks on existing tables', () => {
       'create table public.fresh (id uuid primary key, name text);',
       "alter table public.fresh add constraint fresh_name_check check (name <> '');",
       "alter table public.jobs add column note text, add constraint jobs_note_check check (note <> '') not valid;",
+      'alter table public.jobs add column quantity integer default -1 check (quantity > 0);',
     ].join('\n');
     expect(validatedChecksOnExistingTables(flagged)).toEqual([
       '1: alter table public.job_material_lines add constraint job_material_lines_source_complete check ((sour',
       '6: alter table public.attention_events add constraint attention_events_source_type_check check ( source',
+      '13: alter table public.jobs add column quantity integer default -1 check (quantity > 0)',
     ]);
     const fixed = flagged
-      .replace("{0,62}$');", "{0,62}$') not valid;")
+      .replace("{0,62}$');", () => "{0,62}$') not valid;")
       .replace('(source_id is null)),', '(source_id is null)) not valid,')
       .replace(
         "'client_request_callback_overdue'])\n  );",
         "'client_request_callback_overdue'])\n  ) not valid;",
       );
-    expect(validatedChecksOnExistingTables(fixed)).toEqual([]);
+    expect(validatedChecksOnExistingTables(fixed)).toEqual([
+      '13: alter table public.jobs add column quantity integer default -1 check (quantity > 0)',
+    ]);
   });
 });

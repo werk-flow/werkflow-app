@@ -42,19 +42,38 @@ const VERSION_BUMP_EXEMPTIONS: Readonly<Record<string, string>> = {
 const KEY_PARAMETER =
   /^p_(?:expected_[a-z_0-9]+|[a-z_0-9]*(?:version|revision)[a-z_0-9]*|operation_id|[a-z_0-9]*attempt_key)$/;
 const JSON_VERSION = /->>\s*'(?:expected_?)?version'/;
-const ROW_LOCK = /\bfor\s+(?:no\s+key\s+)?update\b/;
+// A row lock and its optional `of` list; a lock without one holds every table the statement reads.
+const ROW_LOCK = /\bfor\s+(?:no\s+key\s+)?update\b(?:\s+of\s+([a-z_0-9]+(?:\s*,\s*[a-z_0-9]+)*))?/;
+const SHARE_OR_STRONGER =
+  /\bfor\s+(?:share|no\s+key\s+update|update)\b(?:\s+of\s+([a-z_0-9]+(?:\s*,\s*[a-z_0-9]+)*))?/;
+const NOT_AN_ALIAS =
+  /^(?:where|join|inner|left|right|cross|on|using|for|order|group|limit|set|returning|natural)$/;
 const UPDATE =
   /\bupdate\s+(?:only\s+)?(?:public\.)?([a-z_][a-z_0-9]*)(?:\s+(?:as\s+)?(?!set\b)[a-z_][a-z_0-9]*)?\s+set\b/g;
 const VERSION_BUMP = /\b(?:[a-z_]+_)?(?:version|revision)\s*=\s*[^,;]*?\+\s*1\b/;
 const EXPECTED_VERSION_FILTER = /\bwhere\b[^;]*\b(?:[a-z_]+_)?(?:version|revision)\s*=\s*p_[a-z_0-9]+/;
 
-/** Earlier statements of the body that name `public.<table>`. */
-function statementsBefore(body: string, index: number, table: string): string[] {
-  const names = new RegExp(String.raw`\bpublic\.${table}\b`);
+/** Whether the statement locks rows of `public.<table>` with the given clause. */
+function locksTable(statement: string, table: string, clause: RegExp = ROW_LOCK): boolean {
+  const lock = clause.exec(statement);
+  const reads = [
+    ...statement.matchAll(
+      new RegExp(String.raw`\bpublic\.${table}\b(?:\s+(?:as\s+)?([a-z_][a-z_0-9]*))?`, 'g'),
+    ),
+  ];
+  if (!lock || reads.length === 0) return false;
+  const targets = lock[1]?.split(',').map((name) => name.trim());
+  if (!targets) return true;
+  const names = reads.map((read) => (read[1] && !NOT_AN_ALIAS.test(read[1]) ? read[1] : table));
+  return names.some((name) => targets.includes(name));
+}
+
+/** Whether an earlier statement of the body locks rows of `public.<table>`. */
+function lockedBefore(body: string, index: number, table: string): boolean {
   return body
     .slice(0, index)
     .split(';')
-    .filter((statement) => names.test(statement));
+    .some((statement) => locksTable(statement, table));
 }
 
 function statementAt(body: string, index: number): string {
@@ -73,9 +92,7 @@ function unguardedVersionBumps(functions: readonly DatabaseFunction[]): Map<stri
       const statement = statementAt(fn.body, match.index);
       const assignments = statement.split(/\bwhere\b/)[0] ?? '';
       if (!VERSION_BUMP.test(assignments)) continue;
-      const locked =
-        EXPECTED_VERSION_FILTER.test(statement) ||
-        statementsBefore(fn.body, match.index, table).some((earlier) => ROW_LOCK.test(earlier));
+      const locked = EXPECTED_VERSION_FILTER.test(statement) || lockedBefore(fn.body, match.index, table);
       if (locked && keyed) continue;
       const missing = [
         locked ? null : `locks no ${table} row first`,
@@ -91,9 +108,7 @@ function unguardedVersionBumps(functions: readonly DatabaseFunction[]): Map<stri
 function unlockedClockEvents(functions: readonly DatabaseFunction[]): string[] {
   return functions.flatMap((fn) =>
     [...fn.body.matchAll(/\binsert\s+into\s+public\.time_entries\b/g)]
-      .filter(
-        (match) => !statementsBefore(fn.body, match.index, 'employee_records').some((s) => ROW_LOCK.test(s)),
-      )
+      .filter((match) => !lockedBefore(fn.body, match.index, 'employee_records'))
       .map(() => `${fn.file}: ${fn.name} writes a clock event without locking the employee record`),
   );
 }
@@ -101,10 +116,9 @@ function unlockedClockEvents(functions: readonly DatabaseFunction[]): string[] {
 /** A job's project read into a variable without a lock that a project move waits for. */
 function unlockedJobProjectCopies(functions: readonly DatabaseFunction[]): string[] {
   const copy = /\bselect\b[^;]*\bproject_id\b[^;]*\binto\b[^;]*\bfrom\s+public\.jobs\b[^;]*/g;
-  const projectLock = /\bfor\s+(?:share|no\s+key\s+update|update)\b/;
   return functions.flatMap((fn) =>
     [...fn.body.matchAll(copy)]
-      .filter((match) => !projectLock.test(match[0]))
+      .filter((match) => !locksTable(match[0], 'jobs', SHARE_OR_STRONGER))
       .map(() => `${fn.file}: ${fn.name} copies a job's project without locking the job`),
   );
 }
@@ -165,10 +179,17 @@ describe('the probes catch the flagged code', () => {
       'create function public.batch(p_items jsonb) returns void language plpgsql as $$ begin',
       "  perform 1 from public.plans where id = (p_items->>'id')::uuid and version = (p_items->>'version')::int for update;",
       "  update public.plans set version = version + 1 where id = (p_items->>'id')::uuid; end $$;",
+      'create function public.other_locked(p_id uuid, p_expected_version bigint) returns void language plpgsql as $$ begin',
+      '  perform 1 from public.plans plan join public.requirements r on r.plan_id = plan.id where plan.id = p_id for update of r;',
+      '  update public.plans set version = version + 1 where id = p_id; end $$;',
+      'create function public.alias_locked(p_id uuid, p_expected_version bigint) returns void language plpgsql as $$ begin',
+      '  perform 1 from public.plans plan join public.requirements r on r.plan_id = plan.id where plan.id = p_id for update of plan;',
+      '  update public.plans set version = version + 1 where id = p_id; end $$;',
     ].join('\n');
     expect([...unguardedVersionBumps(planted(sql)).keys()]).toEqual([
       'public.unkeyed::plans',
       'public.unlocked::plans',
+      'public.other_locked::plans',
     ]);
   });
 
@@ -212,9 +233,10 @@ describe('the probes catch the flagged code', () => {
 });
 
 describe('latest definitions', () => {
-  test('a later create replaces, a rename moves, a drop removes', () => {
+  test('a later create replaces, a rename moves, a drop removes, quoted text defines nothing', () => {
     const functions = planted(
       [
+        `create policy "the job's team" on public.jobs for select using (true); -- it's a comment`,
         'create function public.f(p_a uuid) returns void language sql as $$ select 1 $$;',
         'create or replace function public.f(p_a uuid) returns void language sql as $body$ select 2 $body$;',
         'create function public.g(p_a uuid, p_b timestamptz default now()) returns void language sql as $$ select 3 $$;',
@@ -222,6 +244,7 @@ describe('latest definitions', () => {
         'alter function public.g_base(uuid, timestamptz) set schema app_private;',
         'create function "public"."h"(integer) returns trigger language plpgsql as $$ begin return new; end $$;',
         'drop function if exists public.h(int);',
+        "comment on function public.f(uuid) is 'Not a statement: drop function public.f(uuid);';",
       ].join('\n'),
     );
     expect(functions.map(({ signature, body, isTrigger }) => [signature, body.trim(), isTrigger])).toEqual([
