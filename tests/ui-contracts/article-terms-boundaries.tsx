@@ -13,11 +13,16 @@ import type { InventoryOverviewItem } from '@/lib/inventory/types';
 declare global {
   interface Window {
     uiContractArticleTermsWrites: Array<{ write: string; input: unknown }>;
+    /** While set, a price write waits until a test calls it. */
+    uiContractArticleTermsReleasePrice: (() => void) | null;
+    uiContractArticleTermsHoldPrice: boolean;
   }
 }
 
 export function initializeArticleTermsBoundary(): void {
   window.uiContractArticleTermsWrites = [];
+  window.uiContractArticleTermsReleasePrice = null;
+  window.uiContractArticleTermsHoldPrice = false;
 }
 
 const PRICE_DATE = '2026-11-13';
@@ -145,6 +150,11 @@ const recordingWrites: ArticleTermWrites = {
   },
   addPrice: async (input) => {
     window.uiContractArticleTermsWrites.push({ write: 'addPrice', input });
+    if (window.uiContractArticleTermsHoldPrice) {
+      await new Promise<void>((release) => {
+        window.uiContractArticleTermsReleasePrice = release;
+      });
+    }
     return { success: true, priceId: 'price-new' };
   },
 };

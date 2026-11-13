@@ -102,6 +102,21 @@ test('the prices tab shows today’s prices with day and source, and a new price
   ]);
 });
 
+test('an edit made while a price saves stays in the form', async ({ page }) => {
+  const dialog = await openArticle(page, 'Artikel mit Preisen');
+  await dialog.getByRole('tab', { name: 'Preise', exact: true }).click();
+  await page.evaluate(() => {
+    window.uiContractArticleTermsHoldPrice = true;
+  });
+  await dialog.locator('#article-price-amount').fill('418,50');
+  await dialog.getByRole('button', { name: 'Preis speichern', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.uiContractArticleTermsReleasePrice !== null)).toBe(true);
+  await dialog.locator('#article-price-amount').fill('420,00');
+  await page.evaluate(() => window.uiContractArticleTermsReleasePrice?.());
+  await expect(dialog.locator('#article-price-amount')).toHaveValue('420,00');
+  expect(await writes(page)).toHaveLength(1);
+});
+
 test('an article without suppliers or prices says so in each tab', async ({ page }) => {
   const dialog = await openArticle(page, 'Artikel ohne Preise');
   await dialog.getByRole('tab', { name: 'Lieferanten', exact: true }).click();

@@ -97,6 +97,7 @@ export function ArticlePricesPanel({
     setAttempted(true);
     const amountCents = parseEuroCents(form.amount);
     if (focusFirstInvalidField(errors) || amountCents === null || amountCents === undefined) return;
+    const submitted = form;
     void run(async () => {
       setError(null);
       const result = await onAdd({
@@ -118,7 +119,8 @@ export function ArticlePricesPanel({
         return;
       }
       setAttempted(false);
-      setForm(emptyPriceForm(priceDate));
+      // An edit made while the write ran stays: only the saved draft is cleared.
+      setForm((current) => (current === submitted ? emptyPriceForm(priceDate) : current));
     });
   };
 
