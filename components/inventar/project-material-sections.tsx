@@ -42,6 +42,7 @@ export function InheritedJobMaterialGroups({
                 locations={locations}
                 readOnly
                 onTake={() => undefined}
+                onUse={() => undefined}
                 onReturn={() => undefined}
                 onEdit={() => undefined}
                 onDelete={() => undefined}
@@ -80,6 +81,7 @@ export function ProjectMaterialTotals({
               unit={total.unit}
               plannedQuantity={total.plannedQuantity}
               takenQuantity={total.takenQuantity}
+              usedQuantity={total.usedQuantity}
               returnedQuantity={total.returnedQuantity}
               billableQuantity={isAdminOrManager ? total.billableQuantity : null}
             />

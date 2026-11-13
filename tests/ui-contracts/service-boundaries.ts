@@ -6,7 +6,7 @@ import {
   reviewChangeRequestContract,
   reviewEntriesContract,
 } from './time-approval-boundaries';
-import { createJobMaterialLineContract } from './material-boundaries';
+import { createJobMaterialLineContract, recordJobMaterialUseContract } from './material-boundaries';
 import { CLOCK_USER_ID } from './clock-state-fixture';
 import { CONTRACT_SUPABASE_URL } from './supabase-contract-env';
 import { FIELD_SYNC_TODAY_PATH } from '@/lib/field-sync/today-snapshot';
@@ -181,8 +181,9 @@ export const deleteEntriesBatch = unexpectedWrite;
 export const updateEntry = unexpectedWrite;
 export const addManualEntry = unexpectedWrite;
 
-// `@/lib/inventory/actions`: the job material section plans one line.
+// `@/lib/inventory/actions` and `material-use-actions`: the job material section plans one line and records a use.
 export const createJobMaterialLine = createJobMaterialLineContract;
+export const recordJobMaterialUse = recordJobMaterialUseContract;
 export const createProjectMaterialLine = unexpectedWrite;
 export const updateJobMaterialLine = unexpectedWrite;
 export const deleteJobMaterialLine = unexpectedWrite;

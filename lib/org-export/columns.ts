@@ -104,6 +104,7 @@ export const TABLE_FILES: Record<ExportTable, string> = {
   job_instruction_item_evidence_requirements: 'Aufträge_Arbeitsschritte_Nachweisanforderungen',
   job_instruction_items: 'Aufträge_Arbeitsschritte',
   job_material_lines: 'Aufträge_Material',
+  job_material_use_events: 'Aufträge_Material_Verbrauch',
   job_qualification_assessments: 'Aufträge_Qualifikationsprüfungen',
   jobs: 'Aufträge',
   maintenance_coverage_events: 'Wartungsverträge_Ereignisse',

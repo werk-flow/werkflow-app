@@ -264,6 +264,10 @@ Decided for werk-flow/werkflow-planning#319 on its sixth review and the lead's d
 
 Decided by the lead for werk-flow/werkflow-planning#319. A stopped chain whose events belong to a session the server still holds open offers no correction: an approved addition plus the later end of that session would count the time twice. The phone shows the captured times and the order that counts them once (note the times, delete them, end the running session through the clock, then file the correction), as a forgotten clock-out is settled today.
 
+## Amendment 2026-11-12: stored records stay readable
+
+Decided by the E7 lead for werk-flow/werkflow-planning#402. It extends the stored-record invariant of the time outbox to report drafts: a draft record of an earlier version is always readable by every later release, and a record a release cannot read is never sent, shows to its person and stays on the device until that person deletes it; the golden records beside the draft store's reader (`lib/field-sync/device/draft-store.golden.json`) are the mechanism (Tier 2).
+
 ## Amendment 2026-11-13: the device test matrix, run
 
 Recorded for werk-flow/werkflow-planning#321. The no-signal visit (flow `E7-F01`) ran by hand on the matrix's devices with a synthetic organization: today's assignment loaded with signal, signal lost, time recorded, a report saved on the device, a restart, the office changing the instruction and blocking the job's start, and the signal back. The browser group `audit:security:offline-visit` proves the same journey at 375 px in Chrome emulation.

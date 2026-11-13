@@ -75,25 +75,27 @@ export function MaterialDialogRowCard({
             min={0}
           />
         </Field>
-        <Field
-          label="Lager"
-          htmlFor={`${fieldIdPrefix}-location`}
-          required={mode === 'take' || mode === 'return'}
-        >
-          <SearchableSelect
-            options={locationOptions.map((location) => ({
-              value: location.id,
-              label: location.label,
-            }))}
-            value={row.locationId}
-            onChange={(value) => onChange({ locationId: value })}
-            placeholder={mode === 'plan' || mode === 'edit' ? 'Nicht festgelegt' : 'Lager wählen'}
-            searchPlaceholder="Lager suchen …"
-            emptyMessage="Kein Lager gefunden"
-            allowNone={mode === 'plan' || mode === 'edit'}
-            noneLabel="Nicht festgelegt"
-          />
-        </Field>
+        {mode !== 'use' && (
+          <Field
+            label="Lager"
+            htmlFor={`${fieldIdPrefix}-location`}
+            required={mode === 'take' || mode === 'return'}
+          >
+            <SearchableSelect
+              options={locationOptions.map((location) => ({
+                value: location.id,
+                label: location.label,
+              }))}
+              value={row.locationId}
+              onChange={(value) => onChange({ locationId: value })}
+              placeholder={mode === 'plan' || mode === 'edit' ? 'Nicht festgelegt' : 'Lager wählen'}
+              searchPlaceholder="Lager suchen …"
+              emptyMessage="Kein Lager gefunden"
+              allowNone={mode === 'plan' || mode === 'edit'}
+              noneLabel="Nicht festgelegt"
+            />
+          </Field>
+        )}
         <Field label="Notiz" htmlFor={`${fieldIdPrefix}-notes`}>
           <Textarea value={row.notes} onChange={(event) => onChange({ notes: event.target.value })} />
         </Field>
@@ -111,14 +113,17 @@ function MaterialRowEffect({ mode, effectQuantity }: { mode: MaterialDialogMode;
         'rounded-md px-3 py-2 text-xs',
         mode === 'take' && 'bg-muted text-muted-foreground',
         mode === 'return' && 'bg-success-soft text-success-soft-foreground',
+        mode === 'use' && 'bg-muted text-muted-foreground',
         (mode === 'plan' || mode === 'edit') && 'bg-info-soft text-info-soft-foreground',
       )}
     >
       {mode === 'take'
         ? `Diese Zeile zieht ${effectQuantity} aus dem Lager ab.`
-        : mode === 'return'
-          ? `Diese Zeile legt ${effectQuantity} zurück ins Lager.`
-          : 'Diese Zeile plant Bedarf. Der Bestand bleibt unverändert.'}
+        : mode === 'use'
+          ? `Diese Zeile bucht ${effectQuantity} als verbraucht. Der Lagerbestand bleibt gleich.`
+          : mode === 'return'
+            ? `Diese Zeile legt ${effectQuantity} zurück ins Lager.`
+            : 'Diese Zeile plant Bedarf. Der Bestand bleibt unverändert.'}
     </p>
   );
 }
