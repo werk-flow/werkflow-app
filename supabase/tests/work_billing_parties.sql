@@ -129,7 +129,7 @@ do $$
 declare
   v_party public.work_billing_parties;
 begin
-  v_party := app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050');
+  v_party := app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000050');
   if v_party.version is distinct from 1 or v_party.source is distinct from 'objekt'
     or v_party.client_id is distinct from '32700000-0000-0000-0000-000000000020'
     or v_party.recipient_client_id is distinct from '32700000-0000-0000-0000-000000000021'
@@ -137,16 +137,16 @@ begin
     or v_party.recipient_address is distinct from 'Hofweg 1, 10117 Berlin'
     or v_party.set_by is not null
   then raise exception 'the Objekt''s payer did not become the recipient of job 50: %', to_jsonb(v_party); end if;
-  v_party := app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000051');
+  v_party := app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000051');
   if v_party.source is distinct from 'auftraggeber' or v_party.recipient_client_id is distinct from '32700000-0000-0000-0000-000000000020'
     or v_party.recipient_name is distinct from 'WEG Lindenstraße 5'
   then raise exception 'without a payer role the Auftraggeber did not become the recipient'; end if;
-  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000052')).source is distinct from 'auftraggeber'
+  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000052')).source is distinct from 'auftraggeber'
   then raise exception 'work without a site has no default parties'; end if;
-  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000061')).recipient_client_id
+  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000061')).recipient_client_id
     is distinct from '32700000-0000-0000-0000-000000000021'
   then raise exception 'a request at the Objekt did not take its payer'; end if;
-  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000060')).id is not null
+  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000060')).id is not null
   then raise exception 'a request without a customer has parties'; end if;
 end;
 $$;
@@ -157,7 +157,7 @@ where id = '32700000-0000-0000-0000-000000000021';
 do $$
 declare
   v_party public.work_billing_parties :=
-    app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050');
+    app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000050');
 begin
   if v_party.version is distinct from 1 or v_party.recipient_name is distinct from 'Hausverwaltung Lindenhof GmbH'
     or v_party.recipient_address is distinct from 'Hofweg 1, 10117 Berlin'
@@ -170,55 +170,55 @@ select pg_temp.expect_refusal('another organization''s customer as recipient',
   $sql$select public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000050',
     '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000029',
-    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).version, 0))$sql$,
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000050')).version, 0))$sql$,
   'recipient_not_found');
 select pg_temp.expect_refusal('another organization''s customer as Auftraggeber',
   $sql$select public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000050',
     '32700000-0000-0000-0000-000000000029', '32700000-0000-0000-0000-000000000021',
-    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).version, 0))$sql$,
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000050')).version, 0))$sql$,
   'client_not_found');
 select pg_temp.expect_refusal('another organization''s work',
   $sql$select public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000059',
     '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000021',
-    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000059')).version, 0))$sql$,
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000059')).version, 0))$sql$,
   'work_not_found');
 select pg_temp.expect_refusal('a job id passed as a Servicefall',
   $sql$select public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'service_case', '32700000-0000-0000-0000-000000000050',
     '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000021',
-    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).version, 0))$sql$,
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000050')).version, 0))$sql$,
   'work_not_found');
 select pg_temp.expect_refusal('a field worker choosing the recipient',
   $sql$select public.set_work_billing_parties('32700000-0000-0000-0000-000000000003',
     '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000050',
     '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000022',
-    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).version, 0))$sql$,
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000050')).version, 0))$sql$,
   'not_authorized');
 select pg_temp.expect_refusal('an outsider choosing the recipient',
   $sql$select public.set_work_billing_parties('32700000-0000-0000-0000-000000000004',
     '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000050',
     '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000022',
-    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).version, 0))$sql$,
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000050')).version, 0))$sql$,
   'not_authorized');
 select pg_temp.expect_refusal('an archived customer as new recipient',
   $sql$select public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000050',
     '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000023',
-    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).version, 0))$sql$,
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000050')).version, 0))$sql$,
   'client_archived');
 select pg_temp.expect_refusal('a closed request',
   $sql$select public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'request', '32700000-0000-0000-0000-000000000062',
     '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000022',
-    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000062')).version, 0))$sql$,
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000062')).version, 0))$sql$,
   'request_not_editable');
 select pg_temp.expect_refusal('a request without a customer',
   $sql$select public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'request', '32700000-0000-0000-0000-000000000060',
     '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000022',
-    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000060')).version, 0))$sql$,
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000060')).version, 0))$sql$,
   'client_required');
 do $$
 begin
@@ -238,7 +238,7 @@ begin
   v_party := public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000050',
     '32700000-0000-0000-0000-000000000021', '32700000-0000-0000-0000-000000000022',
-    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).version, 0));
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000050')).version, 0));
   if v_party.version is distinct from 2 or v_party.source is distinct from 'buero'
     or v_party.client_id is distinct from '32700000-0000-0000-0000-000000000021'
     or v_party.recipient_name is distinct from 'Hausverwaltung Birkenhain GmbH'
@@ -248,18 +248,18 @@ begin
   v_party := public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000050',
     '32700000-0000-0000-0000-000000000021', '32700000-0000-0000-0000-000000000022',
-    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).version, 0));
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000050')).version, 0));
   if v_party.version is distinct from 2 then raise exception 'an unchanged choice wrote a version'; end if;
 
   update public.clients set address = 'Birkenallee 4, 20095 Hamburg'
   where id = '32700000-0000-0000-0000-000000000022';
-  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).recipient_address
+  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000050')).recipient_address
     is distinct from 'Birkenweg 2, 20095 Hamburg'
   then raise exception 'a customer edit rewrote the chosen recipient'; end if;
   v_party := public.set_work_billing_parties('32700000-0000-0000-0000-000000000001',
     '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000050',
     '32700000-0000-0000-0000-000000000021', '32700000-0000-0000-0000-000000000022',
-    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).version, 0));
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000050')).version, 0));
   if v_party.version is distinct from 3 or v_party.recipient_address is distinct from 'Birkenallee 4, 20095 Hamburg'
   then raise exception 'choosing the recipient again did not copy its new address'; end if;
   if (select array_agg(version order by version) from public.work_billing_parties
@@ -277,17 +277,17 @@ begin
   v_party := public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000052',
     '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000020',
-    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000052')).version, 0));
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000052')).version, 0));
   if v_party.version is distinct from 2 or v_party.source is distinct from 'buero'
   then raise exception 'confirming the default pair was not recorded as the office''s choice: %', to_jsonb(v_party); end if;
   v_party := public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000052',
     '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000020',
-    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000052')).version, 0));
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000052')).version, 0));
   if v_party.version is distinct from 2 then raise exception 'confirming the chosen pair again wrote a version'; end if;
   update public.jobs set site_id = '32700000-0000-0000-0000-000000000040'
   where id = '32700000-0000-0000-0000-000000000052';
-  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000052')).source is distinct from 'buero'
+  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000052')).source is distinct from 'buero'
   then raise exception 'a changed site replaced a confirmed default'; end if;
 end;
 $$;
@@ -298,18 +298,18 @@ do $$
 begin
   update public.jobs set site_id = '32700000-0000-0000-0000-000000000041'
   where id = '32700000-0000-0000-0000-000000000050';
-  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).version is distinct from 3
+  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000050')).version is distinct from 3
   then raise exception 'a changed site replaced the office''s choice'; end if;
 
   update public.jobs set site_id = '32700000-0000-0000-0000-000000000040'
   where id = '32700000-0000-0000-0000-000000000051';
-  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000051')).recipient_client_id
+  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000051')).recipient_client_id
     is distinct from '32700000-0000-0000-0000-000000000021'
   then raise exception 'a default recipient did not follow the new Objekt''s payer'; end if;
 
   update public.jobs set client_id = '32700000-0000-0000-0000-000000000022', site_id = null
   where id = '32700000-0000-0000-0000-000000000050';
-  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000050')).recipient_client_id
+  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000050')).recipient_client_id
     is distinct from '32700000-0000-0000-0000-000000000022'
   then raise exception 'a changed customer kept the old parties'; end if;
 end;
@@ -325,7 +325,7 @@ begin
   perform public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'request', '32700000-0000-0000-0000-000000000061',
     '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000022',
-    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000061')).version, 0));
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000061')).version, 0));
   update public.clients set name = 'Birkenhain Verwaltung'
   where id = '32700000-0000-0000-0000-000000000022';
 
@@ -337,7 +337,7 @@ begin
     converted_job_id = '32700000-0000-0000-0000-000000000053',
     converted_by = '32700000-0000-0000-0000-000000000002', converted_at = now()
   where id = '32700000-0000-0000-0000-000000000061';
-  v_party := app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000053');
+  v_party := app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000053');
   if v_party.source is distinct from 'anfrage' or v_party.recipient_client_id is distinct from '32700000-0000-0000-0000-000000000022'
     or v_party.recipient_name is distinct from 'Hausverwaltung Birkenhain GmbH'
     or v_party.set_by is distinct from '32700000-0000-0000-0000-000000000002'
@@ -354,7 +354,7 @@ begin
     '32700000-0000-0000-0000-000000000002', '32700000-0000-0000-0000-000000000002'
   );
   perform set_config('app.service_case_write', 'false', true);
-  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000070')).source is distinct from 'anfrage'
+  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000070')).source is distinct from 'anfrage'
   then raise exception 'a Servicefall from the request did not carry its parties'; end if;
 
   insert into public.projects (id, organization_id, name, project_number, client_id, site_id, created_by) values
@@ -364,12 +364,12 @@ begin
   perform public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
     '32700000-0000-0000-0000-000000000010', 'project', '32700000-0000-0000-0000-000000000080',
     '32700000-0000-0000-0000-000000000021', '32700000-0000-0000-0000-000000000020',
-    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000080')).version, 0));
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000080')).version, 0));
   insert into public.jobs (id, organization_id, title, job_number, client_id, site_id, project_id, status, created_by)
   values ('32700000-0000-0000-0000-000000000054', '32700000-0000-0000-0000-000000000010', 'Strang 1',
    'B-54', '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000040',
    '32700000-0000-0000-0000-000000000080', 'nicht_bearbeitet', '32700000-0000-0000-0000-000000000001');
-  v_party := app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000054');
+  v_party := app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000054');
   if v_party.source is distinct from 'projekt' or v_party.client_id is distinct from '32700000-0000-0000-0000-000000000021'
     or v_party.recipient_client_id is distinct from '32700000-0000-0000-0000-000000000020'
   then raise exception 'a job of the project did not take the project''s parties'; end if;
@@ -399,7 +399,7 @@ $$;
 select public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
   '32700000-0000-0000-0000-000000000010', 'job', '32700000-0000-0000-0000-000000000052',
   '32700000-0000-0000-0000-000000000020', '32700000-0000-0000-0000-000000000024',
-    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000052')).version, 0));
+    coalesce((app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000052')).version, 0));
 reset role;
 
 -- Two office users saved from the same version: the second save is refused
@@ -407,7 +407,7 @@ reset role;
 -- Auftraggeber the first one replaced.
 do $$
 declare
-  v_seen integer := (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000054')).version;
+  v_seen integer := (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000054')).version;
   v_versions integer;
 begin
   perform public.set_work_billing_parties('32700000-0000-0000-0000-000000000002',
@@ -425,9 +425,22 @@ begin
   end;
   if (select count(*) from public.work_billing_parties
       where work_id = '32700000-0000-0000-0000-000000000054') is distinct from v_versions
-    or (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000054')).client_id
+    or (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010', '32700000-0000-0000-0000-000000000054')).client_id
       is distinct from '32700000-0000-0000-0000-000000000022'
   then raise exception 'a refused stale save changed the parties'; end if;
+end;
+$$;
+
+-- The current version is read inside one organization: another
+-- organization's work id finds nothing, its own organization finds it.
+do $$
+begin
+  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000010',
+      '32700000-0000-0000-0000-000000000059')).id is not null
+  then raise exception 'the current version crossed the organization boundary'; end if;
+  if (app_private.current_work_billing_parties('32700000-0000-0000-0000-000000000011',
+      '32700000-0000-0000-0000-000000000059')).id is null
+  then raise exception 'the other organization''s own work lost its current version'; end if;
 end;
 $$;
 

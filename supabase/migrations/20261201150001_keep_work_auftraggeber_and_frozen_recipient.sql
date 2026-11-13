@@ -112,8 +112,11 @@ alter table public.work_billing_parties enable row level security;
 revoke all on table public.work_billing_parties from public, anon, authenticated, service_role;
 grant select, insert on table public.work_billing_parties to service_role;
 
--- The current version of one work.
-create function app_private.current_work_billing_parties(p_work_id uuid)
+-- The current version of one work of the organization; another
+-- organization's work has none. The server role runs it through the invoker
+-- write function, so it keeps EXECUTE, and every caller passes the
+-- organization it resolved the work in.
+create function app_private.current_work_billing_parties(p_organization_id uuid, p_work_id uuid)
 returns public.work_billing_parties
 language sql
 stable
@@ -121,12 +124,12 @@ security invoker
 set search_path to ''
 as $$
   select * from public.work_billing_parties party
-  where party.work_id = p_work_id
+  where party.organization_id = p_organization_id and party.work_id = p_work_id
   order by party.version desc
   limit 1;
 $$;
-revoke all on function app_private.current_work_billing_parties(uuid) from public, anon, authenticated;
-grant execute on function app_private.current_work_billing_parties(uuid) to service_role;
+revoke all on function app_private.current_work_billing_parties(uuid, uuid) from public, anon, authenticated;
+grant execute on function app_private.current_work_billing_parties(uuid, uuid) to service_role;
 
 -- Records a new version of one work's parties unless it names the same
 -- Auftraggeber and recipient with the same copy as the current one and is,
@@ -151,7 +154,7 @@ security invoker
 set search_path to ''
 as $$
 declare
-  v_current public.work_billing_parties := app_private.current_work_billing_parties(p_work_id);
+  v_current public.work_billing_parties := app_private.current_work_billing_parties(p_organization_id, p_work_id);
   v_name text := p_recipient_name;
   v_address text := p_recipient_address;
   v_party public.work_billing_parties;
@@ -229,7 +232,7 @@ begin
     return null;
   end if;
   if tg_op = 'UPDATE' then
-    v_current := app_private.current_work_billing_parties(new.id);
+    v_current := app_private.current_work_billing_parties(new.organization_id, new.id);
     -- A changed site keeps parties the office chose or that were carried.
     if old.client_id is not distinct from new.client_id and v_current.id is not null
       and v_current.source not in ('objekt', 'auftraggeber')
@@ -245,7 +248,7 @@ begin
   -- table's branch.
   if v_kind = 'service_case' and tg_op = 'INSERT' then
     if new.source_request_id is not null then
-      v_carried := app_private.current_work_billing_parties(new.source_request_id);
+      v_carried := app_private.current_work_billing_parties(new.organization_id, new.source_request_id);
       if v_carried.id is not null and v_carried.source not in ('objekt', 'auftraggeber')
         and exists (select 1 from public.client_requests request
           where request.id = new.source_request_id and request.client_id = new.client_id)
@@ -258,7 +261,7 @@ begin
     end if;
   elsif v_kind = 'job' then
     if new.project_id is not null then
-      v_carried := app_private.current_work_billing_parties(new.project_id);
+      v_carried := app_private.current_work_billing_parties(new.organization_id, new.project_id);
       if v_carried.id is not null and v_carried.source not in ('objekt', 'auftraggeber')
         and exists (select 1 from public.projects project
           where project.id = new.project_id and project.client_id = new.client_id)
@@ -322,7 +325,7 @@ declare
   v_kind text;
   v_work_id uuid;
   v_work_client_id uuid;
-  v_request_parties public.work_billing_parties := app_private.current_work_billing_parties(new.id);
+  v_request_parties public.work_billing_parties := app_private.current_work_billing_parties(new.organization_id, new.id);
 begin
   if v_request_parties.id is null or v_request_parties.source in ('objekt', 'auftraggeber') then
     return null;
@@ -464,7 +467,7 @@ begin
     raise exception 'client_required';
   end if;
 
-  v_current := app_private.current_work_billing_parties(p_work_id);
+  v_current := app_private.current_work_billing_parties(p_organization_id, p_work_id);
   select client.archived_at is not null into v_archived from public.clients client
   where client.id = p_client_id and client.organization_id = p_organization_id
   for share;
