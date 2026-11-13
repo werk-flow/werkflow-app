@@ -1,12 +1,13 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { serviceWorkerScript } from '@/lib/offline/service-worker-script';
 
 // Rule test: the page clears the caches the service worker owns by their name
 // prefix (sign-out, organization switch). A worker cache outside that prefix
 // would survive both, so the two copies of the prefix must stay equal.
 const root = join(import.meta.dir, '..', '..');
-const worker = readFileSync(join(root, 'public', 'sw.js'), 'utf8');
+const worker = serviceWorkerScript(root, 'phase-production-build', { WERKFLOW_BUILD_ID: 'test-build' });
 const pageSide = readFileSync(join(root, 'lib', 'offline', 'service-worker-caches.ts'), 'utf8');
 
 test('every cache the service worker opens carries the prefix the page clears', () => {

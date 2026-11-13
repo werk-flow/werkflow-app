@@ -284,3 +284,13 @@ Differences from the matrix and the iOS limits table above:
 - **Offline through the host's network.** Neither device loses the app when the host or the device switches its network: Android reaches `localhost` through adb, and the iOS simulator through the Mac's loopback. A run cuts the tunnel (Android) or stops the server (iOS) instead.
 - **Restart.** Android: a Chrome process restart, then the home screen icon. iOS: the driver cannot close a Home Screen web app, so the restart is the web app's own reload when it is opened again; it loaded the offline page from the service worker.
 - **„Wartet auf Netz“ in the dock.** On iOS the dock showed the plain static mark: without the server the outbox view's code could not load. Android showed the badge. Both name the waiting state.
+
+## Amendment 2026-11-13: the build writes the shell's version
+
+Decided for werk-flow/werkflow-planning#408. A phone replaces its offline shell only when `/sw.js` serves other bytes, and a hand-bumped version had already been missed in a release.
+
+- **Version.** `app/sw.js/route.ts` serves the worker source `lib/offline/service-worker.js` behind one line, `const SHELL_VERSION = "<id>";`. `next.config.ts` writes it at every build (`lib/offline/service-worker-script.ts`): the recorded build id of `bun run build`, which the test server and CI serve, or on Vercel the commit, `VERCEL_GIT_COMMIT_SHA`, a system variable Vercel sets at build time. A production build with neither fails. Outside a production build the version is `development`, and no worker registers there.
+- **Update.** Each deployed commit serves another worker, so the browser installs it at its next update check. It fills `werkflow-shell-<version>`, and its activation deletes every other cache under the `werkflow-` prefix, the previous shell included. A redeploy of the same commit keeps the version, and phones keep their shell. A release that leaves the shell unchanged still replaces it once: one fetch of the offline page and its files per phone.
+- **Delivery.** The route is prerendered at build time, reads no request, sets no cookie and answers `Cache-Control: no-cache`; `proxy.ts` does not run on it. The CSP's `worker-src 'self'` is unchanged. The script holds a build id or a public commit hash, no secret and no personal data.
+- **Unchanged.** Sign-out and the organization switch delete every cache under the prefix, whatever the version.
+- **Rejected: a recorded hash of the shell's inputs, checked in CI.** It works, but its line in the worker would change with most product PRs, and parallel PRs would invalidate each other's green runs.
