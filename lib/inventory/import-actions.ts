@@ -28,7 +28,7 @@ import {
 
 // The CSV import's Server Actions: the repeat check, the preview and the
 // booking. The rule that creates or matches a row lives once, in the database
-// (migration 20261201200000); the preview and the booking both run it. Only
+// (migration 20261202120000); the preview and the booking both run it. Only
 // Admin and Büro import.
 
 /** The latest booking of a file with the same content and who booked it, so the dialog warns before a repeat. */
