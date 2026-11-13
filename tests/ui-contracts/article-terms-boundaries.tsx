@@ -117,6 +117,7 @@ function entry(
   return {
     id,
     kind,
+    unit: 'meter',
     amountCents,
     priceQuantity,
     validFrom,

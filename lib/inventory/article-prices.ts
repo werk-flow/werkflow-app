@@ -30,8 +30,8 @@ export type ArticlePrice = {
   salePrice: ArticlePriceAmount | null;
   /** 1900 is 19 %. */
   taxRateBasisPoints: number;
-  /** The Berlin day from which both prices apply (the later first day), or `null` while none does. */
-  priceDate: string | null;
+  /** The Berlin day from which both prices apply (the later first day); the asked day while none applies. */
+  priceDate: string;
   /** What was priced: an article, beside `'leistung'` of the Leistung reader. */
   source: 'article';
 };
@@ -66,7 +66,7 @@ function amountOf(
   return { amountCents, priceQuantity, validFrom, origin };
 }
 
-function toArticlePrice(row: PriceRow): ArticlePrice {
+function toArticlePrice(row: PriceRow, onDate: string): ArticlePrice {
   const purchaseCost = amountOf(
     row.purchase_amount_cents,
     row.purchase_price_quantity,
@@ -86,7 +86,7 @@ function toArticlePrice(row: PriceRow): ArticlePrice {
     purchaseCost,
     salePrice,
     taxRateBasisPoints: row.tax_rate_basis_points,
-    priceDate: firstDays.sort().at(-1) ?? null,
+    priceDate: firstDays.sort().at(-1) ?? onDate,
     source: 'article',
   };
 }
@@ -120,5 +120,5 @@ export async function readArticlePrices(
     logError('readArticlePrices: inventory_item_prices_on_day failed', error ?? { code: 'malformed_result' });
     return { success: false, error: 'load_failed' };
   }
-  return { success: true, prices: rows.data.map(toArticlePrice) };
+  return { success: true, prices: rows.data.map((row) => toArticlePrice(row, parsed.data.onDate)) };
 }

@@ -36,9 +36,9 @@ insert into public.inventory_items (id, organization_id, name, item_type, unit) 
 
 -- The pipe's dated purchase price; the fitting has none. inventory_article_prices.sql
 -- owns the choice of the price on a day and a price quantity above 1.
-insert into public.inventory_item_prices (organization_id, item_id, kind, amount_cents, price_quantity, valid_from, source) values
+insert into public.inventory_item_prices (organization_id, item_id, kind, unit, amount_cents, price_quantity, valid_from, source) values
 ('37000000-0000-4000-8000-000000000010', '37000000-0000-4000-8000-000000000020',
- 'purchase', 412, 1, (now() at time zone 'Europe/Berlin')::date - 30, 'manual');
+ 'purchase', 'meter', 412, 1, (now() at time zone 'Europe/Berlin')::date - 30, 'manual');
 
 insert into public.inventory_locations (id, organization_id, name, location_type) values
 ('37000000-0000-4000-8000-000000000030', '37000000-0000-4000-8000-000000000010', 'Hauptlager', 'storage');

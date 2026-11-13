@@ -438,6 +438,44 @@ begin
 end;
 $$;
 
+-- A changed unit leaves the prices of the earlier unit as history: none of
+-- them applies in the new unit. A unit change is refused while a supplier
+-- sells the article in packs, whose conversion counts in the unit.
+do $$
+declare
+  v_org constant uuid := '48000000-0000-4000-8000-000000000010';
+  v_buero constant uuid := '48000000-0000-4000-8000-000000000002';
+  v_fitting constant uuid := '48000000-0000-4000-8000-000000000021';
+  v_base jsonb := jsonb_build_object('item_type', 'material', 'name', 'Pressfitting 15 mm V', 'unit', 'package',
+    'is_billable', true, 'global_minimum_stock', 0, 'track_quantity', true, 'track_individual_assets', false);
+  v_found record;
+  v_refusal text;
+begin
+  perform public.save_inventory_item(v_org, v_buero, v_fitting, v_base, null, null, null, 0);
+  select * into v_found from public.inventory_item_prices_on_day(v_org, array[v_fitting], (now() at time zone 'Europe/Berlin')::date);
+  if v_found.unit is distinct from 'package' or v_found.purchase_amount_cents is not null
+    or (select purchase_price_cents from public.inventory_items where id = v_fitting) is not null then
+    raise exception 'a price stated per piece must not apply to the article counted in packages';
+  end if;
+  if (select unit from public.inventory_item_prices where item_id = v_fitting) is distinct from 'piece' then
+    raise exception 'a recorded price must keep the unit it was stated in';
+  end if;
+
+  perform public.save_inventory_item_supplier(v_org, v_buero, v_fitting, null, '48000000-0000-4000-8000-000000000030',
+    null, 'NR-PF15', 'box', 1, 20, false);
+  begin
+    perform public.save_inventory_item(v_org, v_buero, v_fitting, v_base || jsonb_build_object('unit', 'piece'),
+      null, null, null, 0);
+  exception when raise_exception then
+    v_refusal := sqlerrm;
+  end;
+  if v_refusal is distinct from 'unit_has_pack_sizes'
+    or (select unit from public.inventory_items where id = v_fitting) is distinct from 'package' then
+    raise exception 'a unit change with a pack conversion must be refused, not %', v_refusal;
+  end if;
+end;
+$$;
+
 -- An article with price history is archived, never deleted: the fitting has a
 -- price and a reference, nothing else.
 reset role;
@@ -481,8 +519,8 @@ $$;
 -- A price recorded before its first day reaches the per-unit column on that
 -- day through the hourly job: a row of today recorded yesterday.
 reset role;
-insert into public.inventory_item_prices (organization_id, item_id, kind, amount_cents, price_quantity, valid_from, source, created_at)
-values ('48000000-0000-4000-8000-000000000010', '48000000-0000-4000-8000-000000000022', 'sale', 4900, 1,
+insert into public.inventory_item_prices (organization_id, item_id, kind, unit, amount_cents, price_quantity, valid_from, source, created_at)
+values ('48000000-0000-4000-8000-000000000010', '48000000-0000-4000-8000-000000000022', 'sale', 'piece', 4900, 1,
   (now() at time zone 'Europe/Berlin')::date, 'manual', now() - interval '1 day');
 do $$
 begin

@@ -25,6 +25,7 @@ describe('article terms read as the office says them', () => {
     const price = (validFrom: string, isCurrent: boolean): ArticlePriceEntry => ({
       id: validFrom,
       kind: 'sale',
+      unit: 'piece',
       amountCents: 100,
       priceQuantity: 1,
       validFrom,

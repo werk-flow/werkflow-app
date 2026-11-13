@@ -13,7 +13,11 @@
 --    rows: amount_cents per price_quantity base units (1, 10, 100, 1000),
 --    valid from a Berlin day, with its source and the person. A row is never
 --    changed or deleted, outside an organization deletion; a correction is a
---    new row. A row may start in the past or the future.
+--    new row. A row may start in the past or the future. Each row keeps the
+--    base unit its amount is stated in: after a change of the article's unit,
+--    a price in the earlier unit stays as history and no longer applies.
+--    The unit of an article whose supplier sells it in packs cannot change,
+--    because each pack conversion counts in that unit (unit_has_pack_sizes).
 -- 3. One rule answers the price: public.inventory_item_prices_on_day picks per
 --    kind the row with the latest first day up to that day, and among rows of
 --    the same first day the latest recorded. The price reader of the app
@@ -97,6 +101,8 @@ create table public.inventory_item_prices (
   organization_id uuid not null references public.organizations (id) on delete cascade,
   item_id uuid not null,
   kind text not null,
+  -- The article's base unit when the price was recorded; amount_cents is per price_quantity of it.
+  unit text not null,
   amount_cents integer not null,
   price_quantity integer not null,
   -- The first Berlin day this price applies.
@@ -147,9 +153,9 @@ join public.inventory_suppliers supplier
   on supplier.id = item.supplier_id and supplier.organization_id = item.organization_id;
 
 insert into public.inventory_item_prices (
-  organization_id, item_id, kind, amount_cents, price_quantity, valid_from, source, created_at
+  organization_id, item_id, kind, unit, amount_cents, price_quantity, valid_from, source, created_at
 )
-select item.organization_id, item.id, price.kind, price.amount_cents, 1,
+select item.organization_id, item.id, price.kind, item.unit, price.amount_cents, 1,
   (item.updated_at at time zone 'Europe/Berlin')::date, 'carried_over', item.updated_at
 from public.inventory_items item
 cross join lateral (values
@@ -160,8 +166,9 @@ where price.amount_cents is not null;
 
 -- 3. The price of each named article of the organization on one Berlin day,
 -- per kind: the row with the latest first day up to that day, the latest
--- recorded among rows of the same first day. An article without such a row
--- answers with empty columns of that kind; an id of another organization or
+-- recorded among rows of the same first day. Only a price stated in the
+-- article's current base unit applies. An article without such a row answers
+-- with empty columns of that kind; an id of another organization or
 -- of no article is left out. Archived articles answer too.
 create function public.inventory_item_prices_on_day(
   p_organization_id uuid,
@@ -185,9 +192,12 @@ create function public.inventory_item_prices_on_day(
   with current_price as (
     select distinct on (price.item_id, price.kind) price.*
     from public.inventory_item_prices price
+    join public.inventory_items priced_item
+      on priced_item.id = price.item_id and priced_item.organization_id = price.organization_id
     where price.organization_id = p_organization_id
       and price.item_id = any(coalesce(p_item_ids, '{}'))
       and price.valid_from <= p_on_date
+      and price.unit = priced_item.unit
     order by price.item_id, price.kind, price.valid_from desc, price.created_at desc, price.id desc
   )
   select item.id, item.unit, item.tax_rate_basis_points,
@@ -250,10 +260,12 @@ declare
   v_price_id uuid;
 begin
   insert into public.inventory_item_prices (
-    organization_id, item_id, kind, amount_cents, price_quantity, valid_from, source, created_by
-  ) values (
-    p_organization_id, p_item_id, p_kind, p_amount_cents, p_price_quantity, p_valid_from, p_source, p_actor_id
+    organization_id, item_id, kind, unit, amount_cents, price_quantity, valid_from, source, created_by
   )
+  select p_organization_id, p_item_id, p_kind, item.unit, p_amount_cents, p_price_quantity, p_valid_from,
+    p_source, p_actor_id
+  from public.inventory_items item
+  where item.id = p_item_id and item.organization_id = p_organization_id
   returning id into v_price_id;
   perform app_private.sync_inventory_item_price_columns(p_organization_id, array[p_item_id]);
   return v_price_id;
@@ -548,7 +560,8 @@ end;
 $$;
 
 -- 5. Creates or updates an item with its primary barcode and, on a create, its
--- first count; signature, result and refusals as before.
+-- first count; signature and result as before. A new refusal:
+-- unit_has_pack_sizes, a unit change while a supplier sells the item in packs.
 create or replace function public.save_inventory_item(
   p_organization_id uuid,
   p_actor_id uuid,
@@ -619,6 +632,18 @@ begin
     )
     returning * into v_item;
   else
+    -- A pack conversion counts in the base unit, so the unit stays while a supplier sells in packs.
+    if exists (
+      select 1 from public.inventory_items item
+      where item.id = p_item_id and item.organization_id = p_organization_id
+        and item.unit is distinct from v_fields.unit
+        and exists (
+          select 1 from public.inventory_item_suppliers ref
+          where ref.item_id = item.id and ref.purchase_unit is not null
+        )
+    ) then
+      raise exception 'unit_has_pack_sizes';
+    end if;
     update public.inventory_items item
     set item_type = v_fields.item_type,
         name = v_fields.name,
@@ -638,6 +663,8 @@ begin
     if v_item.id is null then
       raise exception 'item_not_found';
     end if;
+    -- A changed unit leaves the prices of the earlier unit as history.
+    perform app_private.sync_inventory_item_price_columns(p_organization_id, array[v_item.id]);
   end if;
 
   perform app_private.apply_inventory_item_save_terms(

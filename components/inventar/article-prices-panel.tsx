@@ -130,8 +130,8 @@ export function ArticlePricesPanel({
           </RegionLoadError>
         ) : (
           <>
-            <CurrentPrices prices={prices} baseUnit={baseUnit} />
-            <PriceHistory prices={prices} baseUnit={baseUnit} priceDate={priceDate} />
+            <CurrentPrices prices={prices} />
+            <PriceHistory prices={prices} priceDate={priceDate} />
           </>
         )}
         <NewPriceSection form={form} setForm={setForm} errors={shown} error={error} baseUnit={baseUnit} />
@@ -265,7 +265,7 @@ function NewPriceSection({
 }
 
 /** Today's purchase and sale price, each with its first day and source. */
-function CurrentPrices({ prices, baseUnit }: { prices: ArticlePriceEntry[]; baseUnit: string }) {
+function CurrentPrices({ prices }: { prices: ArticlePriceEntry[] }) {
   return (
     <section className="grid gap-3 sm:grid-cols-2" aria-label="Aktuelle Preise">
       {(['purchase', 'sale'] as const).map((kind) => {
@@ -276,7 +276,7 @@ function CurrentPrices({ prices, baseUnit }: { prices: ArticlePriceEntry[]; base
             {current ? (
               <>
                 <p className="text-base font-semibold tabular-nums">
-                  {formatArticlePrice(current.amountCents, current.priceQuantity, baseUnit)}
+                  {formatArticlePrice(current.amountCents, current.priceQuantity, current.unit)}
                 </p>
                 <p className="text-xs text-muted-foreground tabular-nums">
                   Gilt seit {formatGermanDate(current.validFrom)} ·{' '}
@@ -294,15 +294,7 @@ function CurrentPrices({ prices, baseUnit }: { prices: ArticlePriceEntry[]; base
 }
 
 /** Every recorded price, latest first day first; rows on phones, a table on wide screens. */
-function PriceHistory({
-  prices,
-  baseUnit,
-  priceDate,
-}: {
-  prices: ArticlePriceEntry[];
-  baseUnit: string;
-  priceDate: string;
-}) {
+function PriceHistory({ prices, priceDate }: { prices: ArticlePriceEntry[]; priceDate: string }) {
   const rows = prices.map((price) => ({ price, state: articlePriceState(price, priceDate) }));
   return (
     <section className="space-y-2" aria-label="Preisverlauf">
@@ -321,7 +313,7 @@ function PriceHistory({
                 <div className="min-w-0 space-y-0.5">
                   <p className="text-sm font-medium">{KIND_LABELS[price.kind]}</p>
                   <p className="text-sm tabular-nums">
-                    {formatArticlePrice(price.amountCents, price.priceQuantity, baseUnit)}
+                    {formatArticlePrice(price.amountCents, price.priceQuantity, price.unit)}
                   </p>
                   <p className="text-xs text-muted-foreground tabular-nums">
                     ab {formatGermanDate(price.validFrom)} · {ARTICLE_PRICE_ORIGIN_LABELS[price.origin]} ·
@@ -351,7 +343,7 @@ function PriceHistory({
                   <TableRow key={price.id}>
                     <TableCell>{KIND_LABELS[price.kind]}</TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {formatArticlePrice(price.amountCents, price.priceQuantity, baseUnit)}
+                      {formatArticlePrice(price.amountCents, price.priceQuantity, price.unit)}
                     </TableCell>
                     <TableCell className="tabular-nums">{formatGermanDate(price.validFrom)}</TableCell>
                     <TableCell>{ARTICLE_PRICE_ORIGIN_LABELS[price.origin]}</TableCell>

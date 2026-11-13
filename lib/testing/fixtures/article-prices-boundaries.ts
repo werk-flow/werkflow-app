@@ -144,7 +144,8 @@ assert.deepEqual(result, {
       purchaseCost: null,
       salePrice: null,
       taxRateBasisPoints: 1900,
-      priceDate: null,
+      // No price applies: the asked day, as the contract keeps the field a day.
+      priceDate: '2026-11-12',
       source: 'article',
     },
   ],

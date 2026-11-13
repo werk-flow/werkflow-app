@@ -46,6 +46,8 @@ export type ArticleSupplierReference = {
 export type ArticlePriceEntry = {
   id: string;
   kind: ArticlePriceKind;
+  /** The base unit the amount is stated in; a price of an earlier unit no longer applies. */
+  unit: string;
   amountCents: number;
   priceQuantity: PriceQuantity;
   validFrom: string;

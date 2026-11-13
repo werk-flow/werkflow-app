@@ -631,6 +631,7 @@ const priceRowSchema = z.object({
   id: uuidSchema,
   item_id: uuidSchema,
   kind: z.enum(ARTICLE_PRICE_KINDS),
+  unit: z.string(),
   amount_cents: z.number().int(),
   price_quantity: z.literal(PRICE_QUANTITIES),
   valid_from: z.iso.date(),
@@ -665,7 +666,7 @@ function readArticleTermRows(admin: AdminClient, orgId: string, itemIds: string[
         (from, to) =>
           admin
             .from('inventory_item_prices')
-            .select('id, item_id, kind, amount_cents, price_quantity, valid_from, source, created_at')
+            .select('id, item_id, kind, unit, amount_cents, price_quantity, valid_from, source, created_at')
             .eq('organization_id', orgId)
             .in('item_id', [...batch])
             .order('valid_from', { ascending: false })
@@ -711,6 +712,7 @@ function toArticleTermsByItem(
     termsOf(price.item_id).prices.push({
       id: price.id,
       kind: price.kind,
+      unit: price.unit,
       amountCents: price.amount_cents,
       priceQuantity: price.price_quantity,
       validFrom: price.valid_from,

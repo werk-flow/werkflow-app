@@ -2739,6 +2739,7 @@ export type Database = {
           organization_id: string;
           price_quantity: number;
           source: string;
+          unit: string;
           valid_from: string;
         };
         Insert: {
@@ -2751,6 +2752,7 @@ export type Database = {
           organization_id: string;
           price_quantity: number;
           source: string;
+          unit: string;
           valid_from: string;
         };
         Update: {
@@ -2763,6 +2765,7 @@ export type Database = {
           organization_id?: string;
           price_quantity?: number;
           source?: string;
+          unit?: string;
           valid_from?: string;
         };
         Relationships: [
