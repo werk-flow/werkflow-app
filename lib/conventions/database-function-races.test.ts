@@ -4,6 +4,7 @@ import {
   type DatabaseFunction,
   latestDatabaseFunctions,
   type Migration,
+  outsideQuotes,
 } from './database-functions';
 
 // Tier 2 for "the function locks the rows, repeats the state checks"
@@ -68,9 +69,9 @@ function locksTable(statement: string, table: string, clause: RegExp = ROW_LOCK)
   return names.some((name) => targets.includes(name));
 }
 
-/** Whether an earlier statement of the body locks rows of `public.<table>`. */
+/** Whether an earlier statement of the body locks rows of `public.<table>`; SQL text inside quotes locks nothing. */
 function lockedBefore(body: string, index: number, table: string): boolean {
-  return body
+  return outsideQuotes(body)
     .slice(0, index)
     .split(';')
     .some((statement) => locksTable(statement, table));
@@ -117,7 +118,7 @@ function unlockedClockEvents(functions: readonly DatabaseFunction[]): string[] {
 function unlockedJobProjectCopies(functions: readonly DatabaseFunction[]): string[] {
   const copy = /\bselect\b[^;]*\bproject_id\b[^;]*\binto\b[^;]*\bfrom\s+public\.jobs\b[^;]*/g;
   return functions.flatMap((fn) =>
-    [...fn.body.matchAll(copy)]
+    [...outsideQuotes(fn.body).matchAll(copy)]
       .filter((match) => !locksTable(match[0], 'jobs', SHARE_OR_STRONGER))
       .map(() => `${fn.file}: ${fn.name} copies a job's project without locking the job`),
   );
@@ -193,6 +194,29 @@ describe('the probes catch the flagged code', () => {
     ]);
   });
 
+  test('SQL text inside a string or a dollar quote locks nothing', () => {
+    const sql = (lock: string): string =>
+      [
+        'create function public.quoted(p_id uuid, p_expected_version bigint) returns void language plpgsql as $$ begin',
+        `  ${lock};`,
+        '  update public.plans set version = version + 1 where id = p_id; end $$;',
+      ].join('\n');
+    expect([
+      ...unguardedVersionBumps(planted(sql("raise notice 'select 1 from public.plans for update'"))).keys(),
+    ]).toEqual(['public.quoted::plans']);
+    expect([
+      ...unguardedVersionBumps(
+        planted(sql("raise notice 'it''s; select 1 from public.plans for update'")),
+      ).keys(),
+    ]).toEqual(['public.quoted::plans']);
+    expect([
+      ...unguardedVersionBumps(planted(sql('execute $q$select 1 from public.plans for update$q$'))).keys(),
+    ]).toEqual(['public.quoted::plans']);
+    expect([
+      ...unguardedVersionBumps(planted(sql('perform 1 from public.plans where id = p_id for update'))).keys(),
+    ]).toEqual([]);
+  });
+
   test('finding 142: a break end written without the clock lock fails, and the lock passes', () => {
     const flagged = [
       'create function public.update_time_tracking_settings(p_organization_id uuid, p_break_ends jsonb)',
@@ -250,6 +274,18 @@ describe('latest definitions', () => {
     expect(functions.map(({ signature, body, isTrigger }) => [signature, body.trim(), isTrigger])).toEqual([
       ['public.f(uuid)', 'select 2', false],
       ['app_private.g_base(uuid, timestamp with time zone)', 'select 3', false],
+    ]);
+  });
+
+  test('a parenthesis or comma inside a quoted default ends no parameter', () => {
+    const functions = planted(
+      [
+        "create function public.f(p_note text default ')', p_sep text default ',', p_expected_version bigint default 0)",
+        'returns void language sql as $$ select 1 $$;',
+      ].join('\n'),
+    );
+    expect(functions.map(({ signature, parameters }) => [signature, parameters])).toEqual([
+      ['public.f(text, text, bigint)', ['p_note', 'p_sep', 'p_expected_version']],
     ]);
   });
 });

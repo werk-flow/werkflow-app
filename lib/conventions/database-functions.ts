@@ -66,36 +66,40 @@ function withoutComments(sql: string): string {
 }
 
 /** The SQL with every quoted identifier, string literal and dollar-quoted body blanked, offsets kept. */
-function outsideQuotes(sql: string): string {
-  return sql.replace(/"(?:[^"]|"")*"|'(?:[^']|'')*'|(\$(?:[a-z_][a-z0-9_]*)?\$)[\s\S]*?\1/g, (quoted) =>
+export function outsideQuotes(sql: string): string {
+  return sql.replace(/"(?:[^"]|"")*"|'(?:[^']|'')*'|(\$(?:[a-z_][a-z0-9_]*)?\$)[\s\S]*?\1/gi, (quoted) =>
     quoted.replace(/[^\n]/g, ' '),
   );
 }
 
-/** The text up to the parenthesis that closes the one before `start`. */
+/** The text up to the parenthesis that closes the one before `start`; one inside quotes counts for nothing. */
 function insideParentheses(text: string, start: number): string {
+  const code = outsideQuotes(text);
   let depth = 1;
-  for (let index = start; index < text.length; index += 1) {
-    if (text[index] === '(') depth += 1;
-    if (text[index] === ')') depth -= 1;
+  for (let index = start; index < code.length; index += 1) {
+    if (code[index] === '(') depth += 1;
+    if (code[index] === ')') depth -= 1;
     if (depth === 0) return text.slice(start, index);
   }
   return text.slice(start);
 }
 
-function splitTopLevel(text: string): string[] {
+/** The comma-separated parts outside parentheses and quotes: `numeric(10,2)` and `default ','` stay whole. */
+export function splitTopLevel(text: string): string[] {
+  const code = outsideQuotes(text);
   const parts: string[] = [];
   let depth = 0;
-  let current = '';
-  for (const char of text) {
-    if (char === '(') depth += 1;
-    if (char === ')') depth -= 1;
-    if (char === ',' && depth === 0) {
-      parts.push(current.trim());
-      current = '';
-    } else current += char;
+  let from = 0;
+  for (let index = 0; index < code.length; index += 1) {
+    if (code[index] === '(') depth += 1;
+    if (code[index] === ')') depth -= 1;
+    if (code[index] === ',' && depth === 0) {
+      parts.push(text.slice(from, index).trim());
+      from = index + 1;
+    }
   }
-  return current.trim() ? [...parts, current.trim()] : parts;
+  const last = text.slice(from).trim();
+  return last ? [...parts, last] : parts;
 }
 
 const TYPE_ALIASES: Readonly<Record<string, string>> = {

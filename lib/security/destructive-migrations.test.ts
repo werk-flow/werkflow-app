@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { splitTopLevel } from '../conventions/database-functions';
 import { repositoryRoot } from '../conventions/product-sources';
 
 // Tier 2 for the expand-only rule of the migration rule
@@ -49,21 +50,6 @@ const TIGHTENING_STATEMENTS: readonly RegExp[] = [
   /^alter\s+table\s+(?:only\s+)?(?:if\s+exists\s+)?([\w."]+)\b.*\b(?:enable|force)\s+row\s+level\s+security\b/,
 ];
 const ALTERED_TABLE = /^alter\s+table\s+(?:only\s+)?(?:if\s+exists\s+)?([\w."]+)/;
-/** The comma-separated actions of an ALTER TABLE, split only outside parentheses: `numeric(10,2)` stays whole. */
-function topLevelActions(text: string): string[] {
-  const actions: string[] = [];
-  let depth = 0;
-  let current = '';
-  for (const char of text) {
-    if (char === '(') depth += 1;
-    if (char === ')') depth -= 1;
-    if (char === ',' && depth === 0) {
-      actions.push(current.trim());
-      current = '';
-    } else current += char;
-  }
-  return [...actions, current.trim()];
-}
 const ADDED_COLUMN = /(?:^|\s)add\s+(?:column\s+)?(?:if\s+not\s+exists\s+)?(.+)$/;
 /** Only a plain CREATE TABLE proves the table is new: IF NOT EXISTS may meet an existing one. */
 const CREATED_TABLE = /^create\s+table\s+(?!if\s+not\s+exists\b)([\w."]+)/;
@@ -166,7 +152,7 @@ function unmarkedDestructiveStatements(sql: string, releaseRule = false): string
   // A new NOT NULL column without a default, in either order of its clauses, on a table that existed.
   const addsRequiredColumn = (text: string): boolean =>
     onExistingTable(ALTERED_TABLE, text) &&
-    topLevelActions(text).some((action) => {
+    splitTopLevel(text).some((action) => {
       const column = ADDED_COLUMN.exec(action)?.[1];
       return (
         column !== undefined &&
@@ -189,7 +175,7 @@ function unmarkedDestructiveStatements(sql: string, releaseRule = false): string
     .map((statement) => `${statement.line}: ${statement.text.slice(0, 100)}`);
 }
 
-const ADDED_CHECK = /^add\s+(?:constraint\s+\S+\s+)?check\b/;
+const ADDED_CHECK = /^add\s+(?:constraint\s+(?:"(?:[^"]|"")*"|\S+)\s+)?check\b/;
 
 /** `line: statement` for every CHECK added to an existing table without NOT VALID. */
 function validatedChecksOnExistingTables(sql: string): string[] {
@@ -201,7 +187,7 @@ function validatedChecksOnExistingTables(sql: string): string[] {
       return (
         altered?.[1] !== undefined &&
         !created.has(tableName(altered[1])) &&
-        topLevelActions(statement.text.slice(altered[0].length)).some(
+        splitTopLevel(statement.text.slice(altered[0].length)).some(
           (action) =>
             (ADDED_CHECK.test(action) && !/\bnot\s+valid$/.test(action)) ||
             // A column's own CHECK cannot be NOT VALID: add it as a separate constraint.
@@ -347,6 +333,9 @@ describe('checks on existing tables', () => {
       "alter table public.fresh add constraint fresh_name_check check (name <> '');",
       "alter table public.jobs add column note text, add constraint jobs_note_check check (note <> '') not valid;",
       'alter table public.jobs add column quantity integer default -1 check (quantity > 0);',
+      'alter table public.jobs add constraint "positive quantity" check (quantity > 0) not valid;',
+      'alter table public.jobs add constraint "the ""real"" note" check (note <> \'\') not valid;',
+      "alter table public.jobs add constraint jobs_note_comma check (note not in (',', 'add column x int check (')) not valid;",
     ].join('\n');
     expect(validatedChecksOnExistingTables(flagged)).toEqual([
       '1: alter table public.job_material_lines add constraint job_material_lines_source_complete check ((sour',
