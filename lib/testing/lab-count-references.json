@@ -74,7 +74,7 @@
         },
         "script": {
           "requests": { "reference": 42, "tolerance": 1 },
-          "encodedBytes": { "reference": 678319, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 671539, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         },
@@ -378,24 +378,6 @@
           "to": { "reference": 57, "tolerance": 1 },
           "runKeys": ["2026-11-13T073843350Z-d01ff1"],
           "reason": "Merged with main 5100c6de, the field cold start loads 41 script files instead of 43 (main alone: 42, 58 requests); the five job prefetches stay. Every other request shape (the API and Supabase reads, route, document, fonts, images, stylesheets) and every backend read by path match main 8783c979 and this branch before the merge (c0ea3439). The /auftraege entry chunks of the three builds name both files: one goes with main's own start-up, which since #382 (decision 13) loads the activity fields and their alarm-clock icon on first use and since #405 keeps the member-removal dialog out; the other is bundling: all 564 start-up modules of main 5100c6de stay in the start-up, and Turbopack packs five of main's (app) layout chunks with this PR's two Leistungen skeleton modules (the org-switch overlay's map) into four (1,740,600 to 1,743,228 B over all entry files)."
-        },
-        {
-          "kind": "ceiling-accept",
-          "target": "script",
-          "from": {
-            "requests": { "reference": 42, "tolerance": 1 },
-            "encodedBytes": { "reference": 671539, "tolerance": { "relative": 0.01, "absolute": 512 } },
-            "decodedBytes": null,
-            "rows": null
-          },
-          "to": {
-            "requests": { "reference": 42, "tolerance": 1 },
-            "encodedBytes": { "reference": 678319, "tolerance": { "relative": 0.01, "absolute": 512 } },
-            "decodedBytes": null,
-            "rows": null
-          },
-          "runKeys": ["2026-11-13T194648584Z-18124e"],
-          "reason": "Run 2026-11-13T194648584Z-18124e on head ff38675d2: script bytes 678319 against main's 674685 measured on Boat the same day (2026-11-13, main at d2009c09; main's later commits to 212585ba change no client code). The branch loads 42 scripts against main's 41 (34 document scripts against 33). The extra chunk holds main's own (app) layout modules, which Turbopack packs into one more chunk around this PR's (app) modules; it holds no billing module, and the only billing code in the field cold start is the office job list's warm-up stub. Bisect on Boat: putting the PR's components/ and app/ back to main reproduces main's numbers exactly (on the earlier base 7e0049e2: 34 document scripts and 677858 B, against main's 677863 B). Every count on this step stays within its reference (requests 58, ceiling 58)."
         }
       ]
     },
