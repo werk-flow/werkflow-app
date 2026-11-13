@@ -514,6 +514,49 @@ begin
 end;
 $$;
 
+-- 4f. A deadlock or serialization failure is not the row's fault: it fails
+--     the whole call instead of becoming a stored row failure, so no batch is
+--     left behind and a repeated confirm books again. A test trigger raises
+--     the deadlock SQLSTATE for one probe article; the transaction rolls back.
+create function public.test_raise_deadlock_for_probe() returns trigger
+language plpgsql as $$
+begin
+  if new.name = 'Deadlock-Probe' then
+    raise exception 'test deadlock' using errcode = 'deadlock_detected';
+  end if;
+  return new;
+end;
+$$;
+create trigger test_raise_deadlock_for_probe
+before insert on public.inventory_items
+for each row execute function public.test_raise_deadlock_for_probe();
+do $$
+declare
+  v_org constant uuid := '99200000-0000-4000-8000-000000000010';
+  v_admin constant uuid := '99200000-0000-4000-8000-000000000001';
+  v_rows constant jsonb := jsonb_build_array(
+    jsonb_build_object('item', jsonb_build_object('name', 'Deadlock-Probe', 'item_type', 'material',
+      'unit', 'piece', 'internal_sku', 'NR-DEADLOCK', 'is_billable', true, 'global_minimum_stock', 0),
+      'location_name', 'Hauptlager', 'quantity', 1)
+  );
+  v_state text;
+begin
+  begin
+    perform public.preview_inventory_import(v_org, v_admin, 'deadlock.csv', '{}'::jsonb, null, 'stock', v_rows);
+  exception when others then
+    v_state := sqlstate;
+  end;
+  if v_state is distinct from '40P01' then
+    raise exception 'a deadlock must fail the whole preview, not become a row failure: %', coalesce(v_state, 'no error');
+  end if;
+  if exists (select 1 from public.inventory_import_batches where organization_id = v_org and file_name = 'deadlock.csv') then
+    raise exception 'a preview that failed on a deadlock must leave no batch behind';
+  end if;
+end;
+$$;
+drop trigger test_raise_deadlock_for_probe on public.inventory_items;
+drop function public.test_raise_deadlock_for_probe();
+
 -- 6. Only the service role executes the functions; nobody executes the steps.
 do $$
 declare

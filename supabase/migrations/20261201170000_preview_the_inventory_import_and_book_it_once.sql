@@ -293,7 +293,13 @@ begin
       -- tell them apart. Any other failure keeps only its SQLSTATE (`code`),
       -- never its message or detail, which can quote row values; the action
       -- logs it. query_canceled is no OTHERS condition and fails the call.
-      exception when others then
+      -- A deadlock or serialization failure is not the row's fault: it fails
+      -- the whole call, so the batch stays a draft and a repeated confirm
+      -- books it again instead of answering a stored failure.
+      exception
+      when deadlock_detected or serialization_failure then
+        raise;
+      when others then
         get stacked diagnostics v_detail = pg_exception_detail, v_state = returned_sqlstate;
         v_reason := case
           when sqlerrm in ('unit_mismatch', 'barcode_taken', 'invalid_input', 'changed_since_preview') then sqlerrm
