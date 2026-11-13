@@ -110,3 +110,36 @@ test('a refused correction comes back with the reason and never confirms', async
   await expect(page.getByRole('alert')).toHaveText('Die Entscheidung konnte nicht gespeichert werden.');
   expect(await page.evaluate(() => window.uiContractTimeApprovals.corrections)).toHaveLength(1);
 });
+
+test('a refused „Alle genehmigen“ keeps its confirmation open with the reason, even when the read leaves one session', async ({
+  page,
+}) => {
+  // Two pending sessions: the bulk action exists.
+  await page.evaluate(() => {
+    const state = window.uiContractTimeApprovals;
+    const [session] = state.sessions;
+    if (!session) throw new Error('The fixture starts with one pending session.');
+    state.sessions = [
+      session,
+      { ...session, id: 'contract-second-session', entryIds: ['contract-second-entry'] },
+    ];
+  });
+  await page.getByRole('button', { name: 'Anträge aktualisieren', exact: true }).click();
+  await page.getByRole('button', { name: 'Alle genehmigen', exact: true }).click();
+  const confirmation = page.getByRole('alertdialog', { name: 'Alle Zeiteinträge genehmigen?', exact: true });
+  await confirmation.getByRole('button', { name: 'Genehmigen', exact: true }).click();
+  await expectHeldWrite(page, 'review-entries');
+
+  // Another session approved one of them meanwhile: the read after the refusal lists one session.
+  await page.evaluate(() => {
+    const state = window.uiContractTimeApprovals;
+    state.sessions = state.sessions.slice(0, 1);
+  });
+  await answerHeldWrite(page, 'entry_not_pending');
+  await expect(confirmation.getByRole('alert')).toHaveText(
+    'Ein Eintrag wurde bereits bearbeitet. Die Ansicht wurde aktualisiert. Es wurde nichts geändert.',
+  );
+  await expect(page.getByRole('button', { name: 'Alle genehmigen', exact: true })).toHaveCount(0);
+  await confirmation.getByRole('button', { name: 'Abbrechen', exact: true }).click();
+  await expect(confirmation).toHaveCount(0);
+});
