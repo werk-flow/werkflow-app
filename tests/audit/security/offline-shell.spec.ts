@@ -9,6 +9,8 @@ import { selectFromSearchable } from '../../golden/support/steps/shared';
 import { jobListReady } from '../support/lab-journeys';
 import {
   bypassHttpCache,
+  expectNextBuildShellAfterUpdate,
+  expectShellOfServedBuild,
   offlineFallback,
   offlineRetryButton,
   expectNoServiceWorkerCaches,
@@ -17,6 +19,7 @@ import {
   plantOwnedCache,
   setNetwork,
   waitForOfflineShell,
+  withDeployableOrigin,
 } from '../support/offline-shell';
 
 // The installable app shell (werk-flow/werkflow-planning#316): the service
@@ -63,6 +66,37 @@ test('the app shell opens without signal and keeps nothing of the person @AUDIT-
     await page.setViewportSize({ width: 1280, height: 800 });
     await signOutViaUi(page);
     await expectNoServiceWorkerCaches(page);
+  });
+});
+
+// werk-flow/werkflow-planning#408: the build writes the shell version, so a
+// deployment replaces the shell on a phone without anyone editing a number.
+test('a new build replaces the shell a phone holds, without a manual version bump @AUDIT-SECURITY-OFFLINE-SHELL', async ({
+  employeePage: page,
+  request,
+  baseURL,
+}) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await withDeployableOrigin(baseURL ?? '', async (deployment) => {
+    await test.step('the worker of the served build names the build id as its shell version', async () => {
+      await page.goto(`${deployment.origin}/auftraege`);
+      await expect(jobListReady(page)).toBeVisible();
+      await waitForOfflineShell(page);
+      await expectShellOfServedBuild(page, request);
+    });
+
+    await test.step('after the next deployment the new worker fills its shell and deletes the old one', async () => {
+      deployment.deployNextBuild();
+      await expectNextBuildShellAfterUpdate(page);
+    });
+
+    await test.step('a navigation without network shows the fallback from the new shell', async () => {
+      await bypassHttpCache(page);
+      await setNetwork(page, 'offline');
+      await page.goto(`${deployment.origin}/auftraege`);
+      await expect(offlineFallback(page)).toBeVisible();
+      await setNetwork(page, 'online');
+    });
   });
 });
 
