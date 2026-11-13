@@ -379,6 +379,10 @@ describe('lab payload rules', () => {
     expect(
       rowOf(compareLabStep({ step: STEP, observation: coalesced, reference: base }), target).status,
     ).toBe('shrank');
+    const unmeasured = { ...coalesced, payloads: [{ ...payload, requests: 2, decodedBytes: null }] };
+    expect(
+      rowOf(compareLabStep({ step: STEP, observation: unmeasured, reference: base }), target).status,
+    ).toBe('measurement-missing');
   });
 });
 

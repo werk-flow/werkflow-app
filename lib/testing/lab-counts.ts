@@ -248,12 +248,17 @@ function missingRow(target: string, bound: number, informational: boolean): LabR
   };
 }
 
-/** The encoded and decoded byte rows of one shape that has a reference. */
+/**
+ * The encoded and decoded byte rows of one shape that has a reference. When the
+ * shape made a different number of requests than its reference, its byte sums
+ * are printed without failing; a missing measurement still fails.
+ */
 function byteRows(
   shape: string,
   observed: LabPayload,
   reference: PayloadReference,
   ungated: boolean,
+  requestCountDiffers: boolean,
 ): LabRow[] {
   const rows: LabRow[] = [];
   const bytes: [string, number | null, ByteReference | null, boolean][] = [
@@ -272,13 +277,14 @@ function byteRows(
       continue;
     }
     const { ceiling, floor } = byteBounds(bound);
-    const status: LabRowStatus = informational
-      ? 'ungated'
-      : now > ceiling
-        ? 'grew'
-        : now < floor
-          ? 'shrank'
-          : 'within';
+    const status: LabRowStatus =
+      informational || requestCountDiffers
+        ? 'ungated'
+        : now > ceiling
+          ? 'grew'
+          : now < floor
+            ? 'shrank'
+            : 'within';
     rows.push({ target: `${shape}#${field}`, reference: bound.reference, now, ceiling, floor, status });
   }
   return rows;
@@ -331,7 +337,7 @@ function payloadRows(
   // The bytes sum the shape's requests, so they follow that count's timing too: with another
   // count than the reference's they print, and the step's `requests` count judges the change.
   rows.push(
-    ...byteRows(shape, observed, reference, ungated || observed.requests !== reference.requests.reference),
+    ...byteRows(shape, observed, reference, ungated, observed.requests !== reference.requests.reference),
   );
   if (reference.rows && observed.rows === null)
     rows.push(missingRow(`${shape}#rows`, reference.rows.reference, ungated));
