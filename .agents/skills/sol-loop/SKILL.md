@@ -1,6 +1,6 @@
 ---
 name: sol-loop
-description: Use when the user says "sol loop", and before you open or update a level 1 or level 2 pull request.
+description: Use when the user says "sol loop", and when you open or update a level 1 or level 2 pull request.
 ---
 
 Adapted for WerkFlow from t3dotgg/tstack (MIT, [license](../LICENSE-tstack)).
@@ -20,8 +20,9 @@ You own the change. GPT Sol reviews it in rounds until you agree or the budget e
 
 1. Run `git status --short`. Leave unrelated changes out. If they do not separate cleanly, ask.
 2. Run `git fetch origin`. The base is `git merge-base HEAD origin/main`.
-3. Commit locally. Sol's worktree starts from your last commit. Do not push during the loop.
+3. Commit locally. Sol's worktree starts from your last commit.
 4. Run `bun run check:changed` and the focused tests. Note any failure in the brief.
+5. Before round 1, push and open the PR as a draft (the `file-pr` skill). In [trial mode](../../../docs/technical/coderabbit.md#trial-mode-until-2026-11-27) it carries `needs-coderabbit` at once, so CodeRabbit reviews the draft while round 1 runs. Never push while a round runs.
 
 ## 2. Start a round
 
@@ -55,11 +56,11 @@ Check each finding against the source. Another path, a rare case or a small cost
 - **Disagree:** give evidence: `file:line`, a test, command output.
 - **Out of scope or nit:** decline in one line and note a follow-up.
 
-Rerun the checks and `git diff --shortstat <base>`. If review grew the diff, cut first.
+Answer CodeRabbit's findings on the same commit in the same fix round. Rerun the checks and `git diff --shortstat <base>`. If review grew the diff, cut first. Then push the round once; in trial mode, add `needs-coderabbit` again.
 
 ## 4. Next round
 
-Start one only while budget remains and a blocker or should is open or behavior changed since the last approval. Commit, then send the round 1 brief plus the ledger (`fixed:`, `disagree:`, `declined:`), the same base and the new head. Ask Sol to mark each old id `resolved` or `still open: <reason>`.
+Start one only while budget remains and a blocker or should is open or behavior changed since the last approval. After the round's push, send the round 1 brief plus the ledger (`fixed:`, `disagree:`, `declined:`), the same base and the new head. Ask Sol to mark each old id `resolved` or `still open: <reason>`.
 
 ## 5. Stop
 
