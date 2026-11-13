@@ -39,14 +39,21 @@ The merge gate stays unchanged, except every level requires the CodeRabbit revie
 
 ### Babysit a pull request
 
-1. After `gh pr create`, call `link_pull_request`, handle the existing checks and comments, then call `watch_pull_request` and end your turn. T3 Code wakes you on a check result, a comment, a review or a conflict. Never poll, sleep or write a watcher.
+1. After `gh pr create`, call `link_pull_request`, handle the existing checks and comments, then call `watch_pull_request` and end your turn. T3 Code wakes you on a check result, a comment, a review or a conflict. Never poll, sleep or write a watcher. A delegated child never watches: the thread that started it watches its PR.
 2. On each wake, act only on news newer than your last push: the failed job (`gh run view <run-id> --log-failed`, its `evidence-<job>` artifact) or new comments (`gh pr view <number> --comments`, inline threads in `gh api repos/{owner}/{repo}/pulls/<number>/comments`). When a wake needs no action, end your turn without a message.
 3. Verify each finding against the source before you change anything. A CI failure follows [testing.md, "Failures"](testing.md#failures): classify it before any repair, never rerun until green.
 4. In [trial mode](#trial-mode-until-2026-11-27), label every PR at creation; otherwise, a level 2 PR gets one CodeRabbit app review, at the end, from [the queue](#the-coderabbit-queue): once Sol approved and `Check` is green, run `gh pr edit <n> --add-label needs-coderabbit` once, then keep watching. A push after that review gets no second one: answer each finding in its thread. Never comment `@coderabbitai review` yourself: a request outside the queue restarts the app's rate-limit window for every waiting PR. The queue requests the review and messages your thread; the review itself wakes you too.
 5. Fix a real finding in a new commit and push. Reply in its thread with what changed and the tier where its prevention landed ([decision 0005](../decisions/0005-enforcement-ladder.md)). Every comment follows the `leaving-pr-comments` skill.
 6. Dismiss a false finding with the evidence that the code is right, and resolve the thread. Decline scope creep the same way and list it as a follow-up: unneeded tests, guards for cases that do not occur, extra compatibility. Every CodeRabbit finding gets a disposition.
-7. "Stopped watching, could not read it" usually means GitHub's rate limit is spent (`gh api rate_limit --jq .resources.graphql`). Wait for `reset` with one background command, then watch again.
+7. A wake whose text ends "T3 Code stopped watching after 10 comment-only updates in a row" ended the watch. Handle its news, then call `watch_pull_request` again before you end the turn; otherwise no later check result wakes you. "Stopped watching, could not read it" usually means GitHub's rate limit is spent (`gh api rate_limit --jq .resources.graphql`). Wait for `reset` with one background command, then watch again.
 8. When the PR meets [the merge gate](#the-merge-gate), merge it, call `unwatch_pull_request`, and report the level and the reviews it got. A "full stop" PR, or one that changes `AGENTS.md`, you hand back unmerged for the owner. Call `unwatch_pull_request` before every question to the owner too, so the thread reaches the owner's inbox.
+
+What wakes a watch, as of T3 Code 0.1.9:
+
+- T3 Code reads GitHub every 2 minutes. All changes of one read arrive as one wake.
+- A new failed check, all checks passed, a check waiting for approval, no check reported after 15 minutes, and a new conflict each wake you. A pending check never does.
+- Every comment or review not written by your own GitHub account wakes you, bots included. An edited comment counts as new, so CodeRabbit's edits and its "review started" notes wake you too.
+- A push or a check change resets the count of comment-only wakes. Ten in a row end the watch (step 7).
 
 Wrong turn: accepting a suggested diff verbatim. A reviewer sees the diff, not the product. A fix that weakens a role check or a German label to satisfy it is a regression.
 
