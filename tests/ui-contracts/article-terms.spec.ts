@@ -113,6 +113,8 @@ test('an edit made while a price saves stays in the form', async ({ page }) => {
   await expect.poll(() => page.evaluate(() => window.uiContractArticleTermsReleasePrice !== null)).toBe(true);
   await dialog.locator('#article-price-amount').fill('420,00');
   await page.evaluate(() => window.uiContractArticleTermsReleasePrice?.());
+  // The write's success handler has run once the button is no longer busy.
+  await expect(dialog.getByRole('button', { name: 'Preis speichern', exact: true })).toBeEnabled();
   await expect(dialog.locator('#article-price-amount')).toHaveValue('420,00');
   expect(await writes(page)).toHaveLength(1);
 });
