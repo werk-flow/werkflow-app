@@ -70,7 +70,7 @@ The platform injects `SUPABASE_SECRET_KEYS` into every function; `supabase_secre
 
 The test groups run against the Supabase CLI's Docker composition: Docker Engine in WSL Ubuntu, Colima on macOS. `supabase/config.toml` owns ports, auth posture, storage bucket and mail capture.
 
-- `supabase db reset` replays the committed migration history; a failing reset is a finding.
+- A workstation's stack holds only `main`'s merged migrations. `check:changed` fails while it holds another.
 - The keys are the CLI's shared defaults, not secrets.
 - Auth mail lands in Mailpit. Cloud functions reject the local capture setup.
 - Analytics is off: Logflare filled the disk. The lab recorder reads Kong's access log through `docker logs`.
@@ -106,7 +106,7 @@ Agents never read PROD data through any tool: every tool result goes to the mode
 
 ## The migration rule
 
-1. Every schema change is a committed file in `supabase/migrations/` first. A PR carries at most one migration, with its regenerated types: `bun run types:generate -- --local` writes them and leaves the shared stack alone ([types on Boat](boat-verification.md#types-on-boat)). CI fails while the committed types differ. Its version sorts after `main`'s newest, or `supabase db push` refuses it after the merge; `bun run migrations:order` (in `check:changed` and CI) fails otherwise and names the new version.
+1. Every schema change is a committed file in `supabase/migrations/` first. A PR carries at most one migration, with its regenerated types: `bun run types:generate -- --local` writes them and leaves the shared stack alone ([types on Boat](boat-verification.md#types-on-boat)). CI fails while the committed types differ. No branch applies its migration to the [shared local stack](../../.claude/skills/supabase-live-workflow/SKILL.md#the-shared-local-stack): only `bun run stack:sync` writes it, from `main`. Its version sorts after `main`'s newest, or `supabase db push` refuses it after the merge; `bun run migrations:order` (in `check:changed` and CI) fails otherwise and names the new version.
 2. A migration that creates a table follows [add a table](security.md#add-a-table).
 3. DEV receives a migration only when its PR merges to `main`: `.github/workflows/staging.yml` runs `supabase db push`, deploys the edge functions, then deploys that commit to staging. Never apply a migration to DEV by hand. `bun run migrations:check` and the canary fail when DEV's history diverges. `bun run advisors:check` fails on an advisor finding without a reviewed exception, and on an exception the advisor no longer reports.
 4. PROD receives migrations only through the `release` workflow ([Release and rollback](#release-and-rollback)). Never link, push or apply a migration to PROD by hand.
@@ -127,8 +127,7 @@ T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts`
 - Every worktree shares one local stack. Browser groups of several worktrees run side by side, except one that measures or restarts a stack service: it holds the stack alone (`lib/testing/runner/stack-lock.ts`).
 - `bun run check:changed`, `test:verify`, `typecheck`, `build` (a test server's too) and a `lint` over 150 files take a machine-wide slot (`lib/testing/runner/heavy-slot.ts`): the first unless the machine is blocked, further ones with measured room (`bun run room`). Serving and CI take none. A hook refuses a direct whole-repository `tsc`, wider `eslint` or `next build` and names the slot command (`lib/testing/runner/heavy-command.ts`). Other heavy work: `bun scripts/heavy.ts -- <command>`.
 - A `device_open` that boots an iOS Simulator or Android Emulator here waits for measured room (`bun run room --wait device`); a hook refuses it without room (`lib/testing/runner/device-room.ts`). Shut the device down when its check ends: a booted one holds about 3.5 GiB.
-- `supabase db reset` and `supabase stop` affect every worktree: the edit guard refuses them while any worktree holds the stack. A hook refuses a second stack (`lib/testing/runner/second-stack.ts`).
-- Another worktree's unmerged migration may sit in the shared stack ([recurring traps](testing.md#recurring-traps)).
+- `supabase stop` affects every worktree; the edit guard refuses it while one holds the stack. A hook refuses a second stack (`lib/testing/runner/second-stack.ts`). [Reset steps](../../.claude/skills/supabase-live-workflow/SKILL.md#reset-the-shared-stack).
 
 ## Work on production
 

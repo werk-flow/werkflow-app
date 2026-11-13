@@ -36,7 +36,13 @@ test('SQL groups with at most one other cheap group stay local, and a plan that 
 });
 
 test('a cheap plan that reads the drifted shared stack goes to Boat with one line naming the drift', () => {
-  const drift = { stackOnly: ['another_branch'], treeOnly: ['only_here'], changed: [], unverified: [] };
+  const drift = {
+    stackOnly: ['another_branch'],
+    treeOnly: ['only_here'],
+    changed: [],
+    unverified: [],
+    unknownVersions: [],
+  };
   const lines: unknown[] = [];
   const info = spyOn(console, 'info').mockImplementation((line: unknown) => {
     lines.push(line);
@@ -57,7 +63,7 @@ test('a cheap plan that reads the drifted shared stack goes to Boat with one lin
     expect(
       cheapLocalReason(
         plan('sql:security'),
-        readDrift({ stackOnly: [], treeOnly: [], changed: [], unverified: [] }),
+        readDrift({ stackOnly: [], treeOnly: [], changed: [], unverified: [], unknownVersions: [] }),
       ),
     ).toBe('a single sql:security is cheaper here.');
     expect(reads).toBe(4);

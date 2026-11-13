@@ -61,6 +61,7 @@ import {
   InventoryImportContractFixture,
 } from './inventory-import-boundaries';
 import { initializeInventoryUnitBoundary, InventoryUnitContractFixture } from './inventory-unit-boundaries';
+import { ArticleTermsContractFixture, initializeArticleTermsBoundary } from './article-terms-boundaries';
 import {
   initializeInventoryMovementsBoundary,
   InventoryMovementsContractFixture,
@@ -120,6 +121,7 @@ initializeDocumentArchiveBoundary();
 initializeLazyDialogBoundary();
 initializeProblemReportBoundary();
 initializeInventoryUnitBoundary();
+initializeArticleTermsBoundary();
 initializeInventoryImportBoundary();
 initializeInventoryMovementsBoundary();
 initializeLeistungenBoundary();
@@ -607,6 +609,8 @@ createRoot(root).render(
     <SupportFilingContractFixture />
   ) : window.uiContractFixture === 'inventory-unit' ? (
     <InventoryUnitContractFixture />
+  ) : window.uiContractFixture === 'article-terms' ? (
+    <ArticleTermsContractFixture />
   ) : window.uiContractFixture === 'inventory-import' ? (
     <BannerProvider>
       <InventoryImportContractFixture />

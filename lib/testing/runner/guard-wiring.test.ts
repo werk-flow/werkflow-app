@@ -1,6 +1,6 @@
 // Rule test: both agent tools run the edit guard before every tool call that can write a file,
-// Claude runs the delete guard before every shell call, and both run the Boat key, heavy command and
-// second-stack guards, and the device guard before T3's device_open.
+// Claude runs the delete guard before every shell call, and both run the Boat key, heavy command,
+// second-stack and shared stack migration guards, and the device guard before T3's device_open.
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -15,6 +15,7 @@ const BOAT_KEY_GUARD = '.claude/hooks/refuse-boat-key-reads.ts';
 const HEAVY_COMMAND_GUARD = '.claude/hooks/refuse-heavy-commands.ts';
 const SECOND_STACK_GUARD = '.claude/hooks/refuse-second-stack.ts';
 const DEVICE_GUARD = '.claude/hooks/refuse-device-without-room.ts';
+const STACK_MIGRATION_GUARD = '.claude/hooks/refuse-shared-stack-migration.ts';
 
 const hookFileSchema = z.object({
   hooks: z.object({
@@ -101,6 +102,13 @@ test('both agent tools run the heavy command guard before every shell call', () 
 test('both agent tools run the second-stack guard before every shell call', () => {
   expect(guardedTools('.claude/settings.json', ['Bash'], SECOND_STACK_GUARD)).toEqual(['Bash']);
   expect(guardedTools('.codex/hooks.json', ['Bash'], SECOND_STACK_GUARD)).toEqual(['Bash']);
+});
+
+// No branch applies its own migration to the shared local stack
+// (lib/testing/local-stack/shared-stack-migration.ts); both tools name every shell call `Bash`.
+test('both agent tools run the shared stack migration guard before every shell call', () => {
+  expect(guardedTools('.claude/settings.json', ['Bash'], STACK_MIGRATION_GUARD)).toEqual(['Bash']);
+  expect(guardedTools('.codex/hooks.json', ['Bash'], STACK_MIGRATION_GUARD)).toEqual(['Bash']);
 });
 
 // A simulator or emulator boots only with measured room (lib/testing/runner/device-room.ts); T3's

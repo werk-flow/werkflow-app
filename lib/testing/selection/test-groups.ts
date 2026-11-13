@@ -415,6 +415,8 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
       'inventory_ledger.sql',
       'inventory_atomic_writes.sql',
       'inventory_import_preview.sql',
+      'inventory_article_prices.sql',
+      'inventory_article_prices_concurrency.sql',
       'job_material_use.sql',
       'job_material_use_concurrency.sql',
       'job_material_planning.sql',
@@ -442,6 +444,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['work-leads', ['work_leads.sql'], ['work', 'personnel']],
   ['user-preference-writes', ['user_preference_writes.sql'], ['work', 'planning']],
   ['rate-limits', ['rate_limits.sql'], ['*']],
+  ['shared-stack-ledger', ['shared_stack_ledger_guard.sql'], ['*']],
   ['organization-deletion', ['organization_deletion.sql'], ['*']],
   ['storage-purge', ['storage_purge.sql'], ['documents']],
   [
