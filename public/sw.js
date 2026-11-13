@@ -21,7 +21,8 @@
 
 const CACHE_PREFIX = 'werkflow-';
 // v2: the offline page reads today's assignments from the device (werk-flow/werkflow-planning#318).
-const SHELL_VERSION = 2;
+// v3: the offline page shows the clock of a phone that holds unsent time events (werk-flow/werkflow-planning#319).
+const SHELL_VERSION = 3;
 const SHELL_CACHE = `${CACHE_PREFIX}shell-v${SHELL_VERSION}`;
 const OFFLINE_PATH = '/offline';
 const REFILL_MESSAGE = 'werkflow:refill-shell';

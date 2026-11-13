@@ -1,5 +1,10 @@
 'use server';
 
+import {
+  hasMaterialHistory,
+  isMaterialHistoryRefusal,
+  MATERIAL_HISTORY_EXISTS,
+} from '@/lib/inventory/material-history';
 import type { ActionResult } from '@/lib/action-result';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { updateTag, revalidatePath } from 'next/cache';
@@ -314,9 +319,15 @@ export async function deleteJob(rawJobId: string): Promise<DeleteJobResult> {
       return { success: false, error: 'planning_history_exists' };
     }
 
+    const materialHistory = await hasMaterialHistory(admin, orgId, { jobId });
+    if (materialHistory.error) return { success: false, error: 'delete_failed' };
+    if (materialHistory.exists) return { success: false, error: MATERIAL_HISTORY_EXISTS };
+
     const { error } = await admin.from('jobs').delete().eq('id', jobId).eq('organization_id', orgId);
 
     if (error) {
+      // A take booked after the check: the ledger keeps it, so the delete is refused.
+      if (isMaterialHistoryRefusal(error)) return { success: false, error: MATERIAL_HISTORY_EXISTS };
       // Deleting a job clears time_entries.job_id; a closed period refuses that write.
       return { success: false, error: timeWriteFailure('Error deleting job:', error, 'delete_failed') };
     }

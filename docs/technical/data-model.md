@@ -119,5 +119,5 @@ A job's team and the people on its visits are two records of one plan. A job sch
 
 ## Inventory and documents
 
-- Stock movement history and inventory audit events are append-only. [inventory.md](../features/inventory.md) owns the planned scope.
+- Stock movement history, recorded material use and inventory audit events are append-only. [inventory.md](../features/inventory.md) owns the planned scope.
 - A document exists once and reaches other records through links. [document-storage-and-access.md](document-storage-and-access.md) owns the rules.
