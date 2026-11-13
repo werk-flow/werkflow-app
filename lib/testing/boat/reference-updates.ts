@@ -1,7 +1,8 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   copyFileSync,
   existsSync,
+  linkSync,
   lstatSync,
   mkdirSync,
   readdirSync,
@@ -11,7 +12,7 @@ import {
 } from 'node:fs';
 import { dirname, isAbsolute, join, relative } from 'node:path';
 
-import { destinationConflict, linkedDestination, placeFiles } from './verify-on-boat';
+import { destinationConflict, linkedDestination } from './verify-on-boat';
 
 // A visual reference update runs on Boat (docs/technical/standards-audit.md, "To update references
 // after an intended design change"). On the machine, the references are hashed before the update and
@@ -50,6 +51,11 @@ function filesUnder(folder: string): string[] {
   return files.sort();
 }
 
+/** The sha256 of a file's bytes. */
+function hashOf(file: string): string {
+  return createHash('sha256').update(readFileSync(file)).digest('hex');
+}
+
 /** The audit suite's references in `repository` with the hash of each, by path. */
 export function referenceHashes(repository: string): Map<string, string> {
   const hashes = new Map<string, string>();
@@ -58,12 +64,7 @@ export function referenceHashes(repository: string): Map<string, string> {
   for (const entry of readdirSync(audit, { recursive: true, withFileTypes: true })) {
     const path = relative(repository, join(entry.parentPath, entry.name));
     if (!entry.isFile() || referencePathProblem(path)) continue;
-    hashes.set(
-      path,
-      createHash('sha256')
-        .update(readFileSync(join(repository, path)))
-        .digest('hex'),
-    );
+    hashes.set(path, hashOf(join(repository, path)));
   }
   return hashes;
 }
@@ -100,18 +101,84 @@ export function collectReferenceUpdates(
   return changed;
 }
 
+/** Whether `error` is a file system error with this code. */
+function hasCode(error: unknown, code: string): boolean {
+  return error instanceof Error && 'code' in error && error.code === code;
+}
+
+/** Links `from` to `to` unless `to` exists, and answers whether it did. */
+function linkUnlessPresent(from: string, to: string): boolean {
+  try {
+    linkSync(from, to);
+    return true;
+  } catch (error) {
+    if (hasCode(error, 'EEXIST')) return false;
+    throw error;
+  }
+}
+
 /**
- * On the workstation: checks every file of an update folder and places it in the checkout, or
- * throws and writes nothing. A file that is no audit reference, a link or a hard link refuses the
- * whole set, as does a destination reached through a symbolic link, or one that exists and is no
- * regular file or is a hard link, as for the results import (verify-on-boat.ts). A destination that
- * changed here since `before`, the hashes taken when the run started (edited, written or removed),
- * keeps this checkout's version; Boat's copy stays in `folder`, with the evidence.
+ * Replaces the reference `path` with `folder`'s copy only while the checkout's file still has the
+ * hash `expected`, or is still absent when `expected` is undefined, and answers whether it did. No
+ * step overwrites a file: the checkout's version moves aside and is checked there, and each file is
+ * linked into place, which fails when a file appeared meanwhile. A changed version always stays.
+ */
+function placeUnchanged(
+  repository: string,
+  folder: string,
+  path: string,
+  expected: string | undefined,
+  copy: (from: string, to: string) => void,
+): boolean {
+  const target = join(repository, path);
+  mkdirSync(dirname(target), { recursive: true });
+  const temp = join(dirname(target), `.reference-update-${randomUUID()}`);
+  const aside = `${temp}.previous`;
+  const restore = () => {
+    if (!linkUnlessPresent(aside, target))
+      throw new Error(
+        `${path} changed here during placement; its earlier version is kept at ${relative(repository, aside)}.`,
+      );
+    rmSync(aside);
+  };
+  try {
+    copy(join(folder, path), temp);
+    if (expected === undefined) return linkUnlessPresent(temp, target);
+    try {
+      renameSync(target, aside);
+    } catch (error) {
+      if (hasCode(error, 'ENOENT')) return false;
+      throw error;
+    }
+    let placed: boolean;
+    try {
+      placed = hashOf(aside) === expected && linkUnlessPresent(temp, target);
+    } catch (error) {
+      restore();
+      throw error;
+    }
+    if (placed) rmSync(aside);
+    else restore();
+    return placed;
+  } finally {
+    rmSync(temp, { force: true });
+  }
+}
+
+/**
+ * On the workstation: checks every file of an update folder and places it in the checkout. A file
+ * that is no audit reference, a link or a hard link refuses the whole set and writes nothing, as
+ * does a destination reached through a symbolic link, or one that exists and is no regular file or
+ * is a hard link, as for the results import (verify-on-boat.ts). A destination that changed here
+ * since `before`, the hashes taken when the run started (edited, written or removed), keeps this
+ * checkout's version up to its replacement; Boat's copy stays in `folder`, with the evidence.
+ * `copy` is a test's seam into placement.
  */
 export function applyReferenceUpdates(
   repository: string,
   folder: string,
   before: ReadonlyMap<string, string>,
+  copy: (from: string, to: string) => void = copyFileSync,
 ): { placed: string[]; kept: string[] } {
   const files = filesUnder(folder);
   const problem =
@@ -119,9 +186,17 @@ export function applyReferenceUpdates(
     linkedDestination(repository, files) ??
     destinationConflict(repository, files);
   if (problem) throw new Error(`The rewritten references were refused: ${problem}`);
-  const now = referenceHashes(repository);
-  const kept = files.filter((path) => now.get(path) !== before.get(path));
-  const placed = files.filter((path) => !kept.includes(path));
-  placeFiles(folder, repository, placed);
+  const placed: string[] = [];
+  const kept: string[] = [];
+  for (const path of files) {
+    try {
+      (placeUnchanged(repository, folder, path, before.get(path), copy) ? placed : kept).push(path);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Placing ${path} failed: ${message} The references placed before it show in git status.`,
+      );
+    }
+  }
   return { placed, kept };
 }

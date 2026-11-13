@@ -4,17 +4,19 @@
 // checkout while the run went keeps its local version.
 import { expect, test } from 'bun:test';
 import {
+  copyFileSync,
   existsSync,
   linkSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 
 import {
   applyReferenceUpdates,
@@ -172,4 +174,32 @@ test('a reference changed in the checkout during the run keeps its local version
   expect(existsSync(join(repository, SNAPSHOTS, 'removed.png'))).toBe(false);
   // Boat's copy of each kept reference stays with the evidence.
   expect(readFileSync(join(update, SNAPSHOTS, 'edited.png'), 'utf8')).toBe('boat');
+});
+
+test('a reference changed here while the update is placed keeps its local version', () => {
+  const repository = mkdtempSync(join(tmpdir(), 'reference-apply-'));
+  const update = mkdtempSync(join(tmpdir(), 'reference-update-'));
+  for (const name of ['edited.png', 'removed.png']) write(repository, `${SNAPSHOTS}/${name}`, 'old');
+  const before = referenceHashes(repository);
+  for (const name of ['edited.png', 'removed.png', 'created.txt'])
+    write(update, `${SNAPSHOTS}/${name}`, 'boat');
+  // Each local change lands after Boat's copy is staged next to its destination, before the replacement.
+  const during: Record<string, () => void> = {
+    'edited.png': () => write(repository, `${SNAPSHOTS}/edited.png`, 'local edit'),
+    'removed.png': () => rmSync(join(repository, SNAPSHOTS, 'removed.png')),
+    'created.txt': () => write(repository, `${SNAPSHOTS}/created.txt`, 'local'),
+  };
+  const copy = (from: string, to: string) => {
+    copyFileSync(from, to);
+    during[basename(from)]?.();
+  };
+  expect(applyReferenceUpdates(repository, update, before, copy)).toEqual({
+    placed: [],
+    kept: [`${SNAPSHOTS}/created.txt`, `${SNAPSHOTS}/edited.png`, `${SNAPSHOTS}/removed.png`],
+  });
+  expect(readFileSync(join(repository, SNAPSHOTS, 'edited.png'), 'utf8')).toBe('local edit');
+  expect(readFileSync(join(repository, SNAPSHOTS, 'created.txt'), 'utf8')).toBe('local');
+  expect(existsSync(join(repository, SNAPSHOTS, 'removed.png'))).toBe(false);
+  // No staged copy or moved-aside version is left next to the references.
+  expect(readdirSync(join(repository, SNAPSHOTS)).sort()).toEqual(['created.txt', 'edited.png']);
 });
