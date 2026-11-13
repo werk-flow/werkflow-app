@@ -12,6 +12,8 @@ import { getInventoryLedgerState } from '../../golden/support/db/inventory';
 import { observeRouteRenders } from '../../golden/support/route-renders';
 import {
   addArticlePriceFromToday,
+  ARTICLE_PREFERRED_SUPPLIER,
+  articleSupplierRow,
   billableQuantityPattern,
   closeArticleDialog,
   createInventoryItem,
@@ -433,8 +435,11 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     await openItemRowAction(adminPage, importedRow, 'edit');
     const itemDialog = inventoryDialog(adminPage, 'editItem');
     await expect(inventoryField(itemDialog, 'itemCategory')).toContainText(importedCategory);
-    await expect(inventoryField(itemDialog, 'itemSupplier')).toContainText(importedSupplier);
-    await itemDialog.getByRole('button', { name: SHARED_COPY.action.cancel }).click();
+    // The imported supplier is the article's first, preferred supplier.
+    await expect(await articleSupplierRow(itemDialog, importedSupplier)).toContainText(
+      ARTICLE_PREFERRED_SUPPLIER,
+    );
+    await closeArticleDialog(itemDialog);
     await inventoryTab(adminPage, 'locations').click();
     await expect(visibleText(adminPage, importedLocation)).toBeVisible();
     await inventoryTab(adminPage, 'movements').click();

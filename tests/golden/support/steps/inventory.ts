@@ -544,6 +544,15 @@ export async function closeArticleDialog(dialog: Locator): Promise<void> {
   await dismissDialog(dialog);
 }
 
+/** One supplier's row in the open article dialog's „Lieferanten“ tab, after opening the tab. */
+export async function articleSupplierRow(dialog: Locator, supplierName: string): Promise<Locator> {
+  await dialog.getByRole('tab', { name: ARTICLE_TERMS_COPY.suppliersTab, exact: true }).click();
+  return confirmed(dialog.getByRole('listitem').filter({ hasText: supplierName }));
+}
+
+/** The preferred supplier's mark on its row. */
+export const ARTICLE_PREFERRED_SUPPLIER = 'Bevorzugt';
+
 /** Sets the article number of one supplier of the open article dialog, in its „Lieferanten“ tab. */
 export async function setArticleSupplierNumber(
   page: Page,
@@ -551,8 +560,7 @@ export async function setArticleSupplierNumber(
   supplierName: string,
   articleNumber: string,
 ): Promise<void> {
-  await dialog.getByRole('tab', { name: ARTICLE_TERMS_COPY.suppliersTab, exact: true }).click();
-  const row = confirmed(dialog.getByRole('listitem').filter({ hasText: supplierName }));
+  const row = await articleSupplierRow(dialog, supplierName);
   await row.getByRole('button', { name: ARTICLE_TERMS_COPY.editSupplier, exact: true }).click();
   const supplierDialog = page.getByRole('dialog', { name: ARTICLE_TERMS_COPY.supplierDialog, exact: true });
   await supplierDialog.locator('#article-supplier-number').fill(articleNumber);
