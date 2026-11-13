@@ -66,6 +66,17 @@
             "statusMessage": "Checking that the command starts no second Supabase stack"
           }
         ]
+      },
+      {
+        "matcher": "^mcp__t3-code__device_open$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "root=\"$(git rev-parse --show-toplevel)\" || exit 0; bun \"$root/.claude/hooks/refuse-device-without-room.ts\"",
+            "timeout": 30,
+            "statusMessage": "Checking that this machine has room to boot the device"
+          }
+        ]
       }
     ]
   }

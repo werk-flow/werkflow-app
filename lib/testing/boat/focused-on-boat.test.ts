@@ -35,9 +35,15 @@ test('a capture, a reference update and any other focused audit or golden run ar
   expect(focusedKind(references, UPDATE)).toBe('reference-update');
   expect(focusedKind(references, {})).toBe('focused');
   expect(focusedKind(['iteration', 'audit', '--grep', '@ACCEPTED'], {})).toBe('focused');
-  // A golden run never updates references; group, diagnostic and direct runs are no focused runs.
+  // A golden run never updates references; group, direct and retained-world diagnostic runs are no focused runs.
   expect(focusedKind(['iteration', 'golden', '--grep', 'P1-07'], UPDATE)).toBe('focused');
   expect(focusedKind(['diagnostic', 'audit', '--grep', '@ACCEPT x'], {})).toBeUndefined();
+  expect(
+    focusedKind(['diagnostic', 'golden', '--grep', 'P1-07', '--reuse-run', 'run-1'], {}),
+  ).toBeUndefined();
+  // A fresh-world replay repeats the failed group on a new world: Boat may run it.
+  expect(focusedKind(['diagnostic', 'golden', '--fresh-for', 'run-1'], {})).toBe('replay');
+  expect(focusedKind(['diagnostic', 'audit', '--fresh-for=run-1'], UPDATE)).toBe('replay');
   expect(focusedKind(['group', 'audit', '--group', 'audit:visual'], UPDATE)).toBeUndefined();
   expect(focusedKind(['iteration', 'canary'], {})).toBeUndefined();
 });
@@ -127,6 +133,19 @@ test('the unavailable notice names the reason and the deliberate local command, 
   expect(focusedUnavailableNotice('no key.', ['iteration', 'golden', '--grep', 'P1-07'], {})).toContain(
     `  WERKFLOW_VERIFY_LOCAL=1 bun run test:golden:focused '--grep' 'P1-07'`,
   );
+  expect(focusedUnavailableNotice('no key.', ['diagnostic', 'audit', '--fresh-for', 'run-1'], {})).toContain(
+    `  WERKFLOW_VERIFY_LOCAL=1 bun run test:diagnostic:audit '--fresh-for' 'run-1'`,
+  );
+});
+
+test('a fresh-world replay goes to Boat only under migration drift, like any focused run', async () => {
+  const argv = ['diagnostic', 'golden', '--fresh-for', 'run-1'];
+  const readKey = () => {
+    throw new Error('the key is read only when the run goes to Boat');
+  };
+  expect(await focusedOnBoat(argv, '/nowhere', {}, readKey, () => noDrift)).toBeUndefined();
+  const drifted = await focusedOnBoat(argv, '/nowhere', {}, absent, () => drift);
+  expect(typeof drifted === 'object' && drifted.unavailable).toContain('no Boat key');
 });
 
 test('only a passed update run places its references, and a reference changed here meanwhile fails the command', () => {

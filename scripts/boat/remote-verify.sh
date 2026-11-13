@@ -8,7 +8,7 @@
 # It rebuilds the workstation's checkout at the same absolute path, so every path in a report or a
 # run manifest is the workstation's, starts the stack and, when the plan runs a browser group, the
 # test server, as CI does, then runs `bun run test:verify` with the same arguments. A leading
-# `test:audit:focused` or `test:golden:focused` runs that focused run instead
+# `test:audit:focused`, `test:golden:focused` or a fresh-world `test:diagnostic[:audit]` runs that instead
 # (lib/testing/boat/focused-on-boat.ts), always with the test server; `test:audit:update-references`
 # is the audit one with WERKFLOW_UPDATE_VISUAL_REFERENCES=1, and the references it rewrote or wrote
 # join the evidence in the update folder the workstation named (lib/testing/boat/reference-updates.ts). A leading `types:generate` writes the
@@ -24,7 +24,7 @@ shift 3
 script=test:verify
 update=''
 case "${1:-}" in
-  test:audit:focused | test:golden:focused | types:generate)
+  test:audit:focused | test:golden:focused | types:generate | test:diagnostic | test:diagnostic:audit)
     script="$1"
     shift
     ;;
