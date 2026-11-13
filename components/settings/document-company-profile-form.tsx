@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
@@ -282,9 +282,11 @@ function StationeryMargins({ controls, following }: { controls: DraftControls; f
  */
 export function DocumentCompanyProfileForm(props: FormProps) {
   // A saved version remounts the form too, so the shown organization, not the
-  // mounted form, tells whether a save's answer still belongs on the page.
+  // mounted form, tells whether a save's answer still belongs on the page. A
+  // layout effect settles it in the commit that shows another organization, so
+  // no answer between that commit and the passive effects reads the old one.
   const shownOrganization = useRef(props.organizationId);
-  useEffect(() => {
+  useLayoutEffect(() => {
     shownOrganization.current = props.organizationId;
   }, [props.organizationId]);
   return (
