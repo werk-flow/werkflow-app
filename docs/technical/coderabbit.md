@@ -25,7 +25,7 @@ Wrong turn: calling a change level 0 because it is small. A one-line change to a
 
 ### Trial mode until 2026-11-27
 
-The organization `werk-flow` has its own CodeRabbit Advanced trial until 2026-11-27, during which reviews beyond the rate limits are free (owner decision 29 in `werk-flow/werkflow-planning`). These overrides apply only before 2026-11-28, the `TRIAL_ENDS` cutoff in `ops/coderabbit-queue.py` in `werk-flow/werkflow-planning`. From that date, ignore this section even if it remains; the table above applies again. Level definitions stay unchanged.
+The organization `werk-flow` has its own CodeRabbit Advanced trial until 2026-11-27, during which reviews beyond the rate limits are free (owner decision 29 in `werk-flow/werkflow-planning`). These overrides apply until the queue's `TRIAL_ENDS` cutoff in `ops/coderabbit-queue.py` in `werk-flow/werkflow-planning`. From that cutoff, ignore this section even if it remains; the table above applies again. Level definitions stay unchanged.
 
 | Level | Trial reviews |
 | --- | --- |
