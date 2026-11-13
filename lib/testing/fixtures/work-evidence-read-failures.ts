@@ -62,7 +62,7 @@ mock.module('@/lib/supabase/admin', () => ({
         if (name === 'read_work_lead_scope') {
           return leadRuleFails
             ? { data: null, error: { code: '08006', message: 'read failed' } }
-            : { data: [], error: null };
+            : { data: { projectIds: [], jobIds: [] }, error: null };
         }
         rpcCalls.push(name);
         return { data: null, error: { message: `${name} is outside this fixture` } };

@@ -84,6 +84,11 @@ begin
 end;
 $$;
 
+-- The scope of a member who leads nothing.
+create function pg_temp.no_scope() returns jsonb language sql immutable as $$
+  select '{"projectIds": [], "jobIds": []}'::jsonb;
+$$;
+
 -- Runs one statement and requires the SQLSTATE it fails with.
 create function pg_temp.expect_state(p_label text, p_statement text, p_state text) returns void
 language plpgsql as $$
@@ -180,10 +185,12 @@ begin
   perform pg_temp.name_lead(null, v_job_s, v_lead);
 
   -- The lead's scope: project A, its job A1 (not A2), and the standalone job.
-  if (select array_agg(coalesce(job_id, project_id) order by coalesce(job_id, project_id))
-      from public.read_work_lead_scope(v_org, v_lead)) <> array[v_project_a, v_job_a1, v_job_s]
+  if (select array_agg(id::uuid order by id) from jsonb_array_elements_text(
+        public.read_work_lead_scope(v_org, v_lead)->'projectIds') id) <> array[v_project_a]
+    or (select array_agg(id::uuid order by id) from jsonb_array_elements_text(
+        public.read_work_lead_scope(v_org, v_lead)->'jobIds') id) <> array[v_job_a1, v_job_s]
   then raise exception 'the lead''s scope is wrong'; end if;
-  if exists (select 1 from public.read_work_lead_scope(v_org, v_other)) then
+  if public.read_work_lead_scope(v_org, v_other) <> pg_temp.no_scope() then
     raise exception 'an ended lead keeps a scope';
   end if;
 
@@ -241,7 +248,7 @@ begin
 
   -- Removing the member ends the access at once.
   delete from public.organization_members where organization_id = v_org and user_id = v_second;
-  if exists (select 1 from public.read_work_lead_scope(v_org, v_second)) then
+  if public.read_work_lead_scope(v_org, v_second) <> pg_temp.no_scope() then
     raise exception 'a removed member keeps a lead scope';
   end if;
 
@@ -249,7 +256,7 @@ begin
   update public.employee_records set entry_date = (now() at time zone 'Europe/Berlin')::date - 30,
     exit_date = (now() at time zone 'Europe/Berlin')::date - 1
   where id = pg_temp.record_of(v_lead);
-  if exists (select 1 from public.read_work_lead_scope(v_org, v_lead)) then
+  if public.read_work_lead_scope(v_org, v_lead) <> pg_temp.no_scope() then
     raise exception 'a member who left keeps a lead scope';
   end if;
   update public.employee_records set exit_date = null where id = pg_temp.record_of(v_lead);

@@ -17289,10 +17289,7 @@ export type Database = {
       };
       read_work_lead_scope: {
         Args: { p_organization_id: string; p_user_id: string };
-        Returns: {
-          job_id: string;
-          project_id: string;
-        }[];
+        Returns: Json;
       };
       record_client_communication_exception: {
         Args: {

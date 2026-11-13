@@ -1,6 +1,6 @@
 // The „Projektleitung“'s review over the in-memory database: a lead reviews a
 // Regie- oder Änderungsnachweis of the work they lead, as the database's lead
-// rule (work_lead_scope) answers, and reads its Arbeitsnachweise without
+// rule (read_work_lead_scope) answers, and reads its Arbeitsnachweise without
 // writing them. An employee who is not the lead and the lead of another
 // project are refused before any write, and a failed lead rule is a load
 // failure. supabase/tests/work_leads.sql proves the rule and the database's
@@ -19,8 +19,8 @@ const newId = '8c000000-0000-4000-8000-000000000009';
 const siteDiary = '8c000000-0000-4000-8000-00000000000b';
 const siteDiaryRevision = '8c000000-0000-4000-8000-00000000000c';
 
-/** The rows work_lead_scope answers for the caller: what they lead now. */
-let leadScope: Array<{ project_id: string | null; job_id: string | null }> = [];
+/** What read_work_lead_scope answers for the caller: the work they lead now. */
+let leadScope: { projectIds: string[]; jobIds: string[] } = { projectIds: [], jobIds: [] };
 
 const world = installActionWorld({
   projects: [
@@ -92,17 +92,17 @@ const writes = () => world.rpcCalls.filter((call) => call.name !== 'read_work_le
 // nothing in project A; nothing is written.
 signInAs(world, 'employee');
 const jobTarget = { targetType: 'job', targetId: jobA1 } as const;
-for (const scope of [[], [{ project_id: projectB, job_id: null }]]) {
+for (const scope of [
+  { projectIds: [], jobIds: [] },
+  { projectIds: [projectB], jobIds: [] },
+]) {
   leadScope = scope;
   assert.deepEqual(await approve(changeRecord, changeRevision), { success: false, error: 'not_responsible' });
   assert.deepEqual(await getWorkArtifacts(jobTarget), notAuthorized);
   assert.deepEqual(await getWorkArtifactDetail(changeRecord), notAuthorized);
 }
 // The lead of project A reviews no Bautagebuch.
-leadScope = [
-  { project_id: projectA, job_id: null },
-  { project_id: projectA, job_id: jobA1 },
-];
+leadScope = { projectIds: [projectA], jobIds: [jobA1] };
 assert.deepEqual(await approve(siteDiary, siteDiaryRevision), { success: false, error: 'not_responsible' });
 assert.deepEqual(writes(), [], 'a refused review wrote');
 assert.equal(databaseSnapshot(world), initialDatabase, 'no refused call may write');

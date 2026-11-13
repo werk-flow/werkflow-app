@@ -202,14 +202,20 @@ as $$
 $$;
 revoke all on function app_private.is_work_artifact_lead_reviewer(uuid, uuid) from public, anon, authenticated;
 
+-- The same rule for the server, as one value: {"projectIds": [...],
+-- "jobIds": [...]}, so no row cap can cut it short.
 create function public.read_work_lead_scope(p_organization_id uuid, p_user_id uuid)
-returns table (project_id uuid, job_id uuid)
+returns jsonb
 language sql
 stable
 security definer
 set search_path to ''
 as $$
-  select scope.project_id, scope.job_id from app_private.work_lead_scope(p_organization_id, p_user_id) scope;
+  select jsonb_build_object(
+    'projectIds', coalesce(jsonb_agg(scope.project_id) filter (where scope.job_id is null), '[]'::jsonb),
+    'jobIds', coalesce(jsonb_agg(scope.job_id) filter (where scope.job_id is not null), '[]'::jsonb)
+  )
+  from app_private.work_lead_scope(p_organization_id, p_user_id) scope;
 $$;
 revoke all on function public.read_work_lead_scope(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.read_work_lead_scope(uuid, uuid) to service_role;

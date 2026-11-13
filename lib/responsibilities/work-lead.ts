@@ -3,6 +3,8 @@ import 'server-only';
 import { logReadFailure } from '@/lib/data/read-request-cache';
 import type { ActionContext } from '@/lib/org/action-context';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { uuidSchema } from '@/lib/validation/uuid';
+import { z } from '@/lib/zod';
 import type { WorkArtifactTarget } from '@/lib/work-artifacts/types';
 
 /**
@@ -12,6 +14,8 @@ import type { WorkArtifactTarget } from '@/lib/work-artifacts/types';
  * is open and the member still belongs to the organization with effective
  * access and has not left.
  */
+const scopeSchema = z.object({ projectIds: z.array(uuidSchema), jobIds: z.array(uuidSchema) });
+
 type WorkLeadScope = {
   projectIds: ReadonlySet<string>;
   jobIds: ReadonlySet<string>;
@@ -29,17 +33,12 @@ async function getWorkLeadScope(
     p_organization_id: context.orgId,
     p_user_id: context.userId,
   });
-  if (error) {
-    logReadFailure('getWorkLeadScope: work_lead_scope failed', error);
+  const scope = scopeSchema.safeParse(data);
+  if (error || !scope.success) {
+    logReadFailure('getWorkLeadScope: read_work_lead_scope failed', error);
     return null;
   }
-  const projectIds = new Set<string>();
-  const jobIds = new Set<string>();
-  for (const row of data) {
-    if (row.job_id) jobIds.add(row.job_id);
-    else if (row.project_id) projectIds.add(row.project_id);
-  }
-  return { projectIds, jobIds };
+  return { projectIds: new Set(scope.data.projectIds), jobIds: new Set(scope.data.jobIds) };
 }
 
 /** Whether the scope covers the job, or, for project-level work, the project. */
