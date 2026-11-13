@@ -2,13 +2,14 @@
 
 import dynamic from 'next/dynamic';
 
-// The project and Servicefall pages load the section in its own chunk group,
-// in the browser only. Imported statically there too, its client graph made
-// Turbopack regroup the chunks the job route shares with the field worker's
-// work pack (audit:lab:field). Rendered on the server, the page could not
-// hydrate before the chunk arrived, and a press right after the page showed
-// was lost (audit:wave-2:p1-19). Those pages read the parties after mount, so
-// the server renders nothing of it either way.
+// The job, project and Servicefall pages load the office-only section in its
+// own chunk group, in the browser only. A page's entry chunks hold every
+// client module the page reaches, and the field worker's job list prefetches
+// the job route's, so a static import put billing code into every field cold
+// start (audit:lab:field). Rendered on the server, the page could not hydrate
+// before the chunk arrived, and a press right after the page showed was lost
+// (audit:wave-2:p1-19); the job page hands in its parties read, so the section
+// opens without a read of its own once its chunk is there.
 export const WorkBillingPartiesSection = dynamic(
   () => import('./work-billing-parties-section').then((mod) => mod.WorkBillingPartiesSection),
   { ssr: false },
