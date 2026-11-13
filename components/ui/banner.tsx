@@ -217,9 +217,11 @@ export function BannerProvider({ children }: { children: ReactNode }) {
 const ignoreBanner = (): (() => void) => () => {};
 
 /**
- * Banners for the subtree that stays mounted. Feedback its code shows after the
- * subtree unmounted, such as a save that answers after an organization switch
- * replaced the page, belongs to a page nobody sees any more and is dropped.
+ * Banners for the subtree that stays mounted. Confirmation its code shows after
+ * the subtree unmounted, such as a save that answers after an organization
+ * switch replaced the page, belongs to a page nobody sees any more and is
+ * dropped. A failure still shows, without its action: a retry would run the
+ * former page's write in the scope that replaced it.
  */
 export function BannerScope({ children }: { children: ReactNode }) {
   const outer = useBanner();
@@ -232,7 +234,11 @@ export function BannerScope({ children }: { children: ReactNode }) {
   }, []);
   const value = useMemo<BannerContextValue>(
     () => ({
-      showBanner: (banner) => (mountedRef.current ? outer.showBanner(banner) : ignoreBanner()),
+      showBanner: (banner) => {
+        if (mountedRef.current) return outer.showBanner(banner);
+        if (banner.variant !== 'error') return ignoreBanner();
+        return outer.showBanner({ variant: banner.variant, message: banner.message });
+      },
       dismissBanner: () => {
         if (mountedRef.current) outer.dismissBanner();
       },

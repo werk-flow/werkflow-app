@@ -322,48 +322,49 @@ rollback to savepoint policy_probe;
 -- werk-flow/werkflow-planning#431, class c). A tenant row is one of a public
 -- table or view with an organization_id column; a function reads it when its
 -- body names public.<table>. Trigger functions are out of scope: they read the
--- organization from the row they guard. Each exemption carries the reason
+-- organization from the row they guard. Each exemption names one signature, so
+-- a new overload gets no reviewed reason by its name, and carries the reason
 -- review accepted, and an exemption whose function now takes the organization
 -- fails until removed.
 create function pg_temp.tenant_helper_exemptions() returns table (name text, reason text)
 language sql as $$
   values
-    ('can_access_document', 'RLS object check: loads the document by id and checks the user within its own organization'),
-    ('can_access_job_inventory', 'RLS object check: loads the job by id and checks the user within its own organization'),
-    ('can_access_personnel_document', 'RLS object check: loads the personnel document by id and checks the user within its own organization'),
-    ('can_access_personnel_document_history', 'RLS object check: loads the personnel document by id and checks the user within its own organization'),
-    ('can_access_personnel_document_version', 'RLS object check: loads the personnel document by id and checks the user within its own organization'),
-    ('can_access_work_artifact', 'RLS object check: loads the artifact by id and checks the user within its own organization'),
-    ('can_read_work_handover_root', 'RLS object check: loads the handover package by id and checks the actor within its own organization'),
-    ('can_review_work_handover_package', 'RLS object check: loads the handover package by id and checks the actor within its own organization'),
-    ('can_view_p1_14_blocker', 'RLS object check: loads the blocker by id and checks the user within its own organization'),
-    ('can_view_p1_14_dependency', 'RLS object check: loads the dependency by id and checks the user within its own organization'),
-    ('is_work_artifact_lead_reviewer', 'Object check: loads the artifact by id and asks for the lead within its own organization'),
-    ('can_view_work_instruction_item', 'RLS object check: loads the instruction item by id and checks the user within its own organization'),
-    ('employee_record_has_effective_access', 'RLS object check: reads the employee record by id and its own organization''s access state'),
-    ('p1_24_is_protected_document', 'RLS object check: whether a document id is a personnel document; the calling policy checks the organization'),
-    ('get_user_admin_or_manager_org_ids', 'RLS helper: the caller''s own organizations; each policy pairs the result with the row''s organization_id'),
-    ('get_user_admin_org_ids', 'RLS helper: the caller''s own organizations; each policy pairs the result with the row''s organization_id'),
-    ('get_user_org_ids', 'RLS helper: the caller''s own organizations; each policy pairs the result with the row''s organization_id'),
-    ('get_user_assigned_job_ids', 'RLS helper: the caller''s own assignments across their organizations; the policy also checks the row''s organization'),
-    ('get_user_assigned_project_ids', 'RLS helper: the caller''s own assignments across their organizations; the policy also checks the row''s organization'),
-    ('get_user_capability_ids', 'RLS helper: the caller''s own records across their organizations; the policy also checks the row''s organization'),
-    ('get_user_employee_record_ids', 'RLS helper: the caller''s own records across their organizations; the policy also checks the row''s organization'),
-    ('get_user_planning_occurrence_ids', 'RLS helper: the caller''s own assignments, joined within each record''s organization'),
-    ('get_user_team_ids', 'RLS helper: the caller''s own teams across their organizations; the policy also checks the row''s organization'),
-    ('get_user_visible_responsibility_configuration_ids', 'RLS helper: the caller''s own responsibilities across their organizations; the policy also checks the row''s organization'),
-    ('get_invite_by_code', 'An invite code names its own organization; the caller has none yet'),
-    ('redeem_organization_invite_for_user', 'An invite code names its own organization; the caller has none yet'),
-    ('prune_realtime_deletions', 'Maintenance across every organization by age, from no request'),
-    ('assert_time_correction_sources_current', 'Step of a public write that resolved the organization; reads the request it loaded there'),
-    ('p1_22_revise_time_correction_request_impl', 'Step of a public write that resolved the organization; reads the request it loaded there'),
-    ('existing_document_retention_class', 'Step of a document write that resolved the organization; reads the document it loaded there'),
-    ('resolve_project_execution_state', 'Step of a public write or reader that resolved the organization; reads the project it loaded there'),
-    ('sync_planning_dispatch_for_occurrence', 'Step of a planning write that resolved the organization; reads the occurrence it wrote there'),
-    ('validate_submitted_work_artifact_revision', 'Step of a public write that resolved the organization; reads the revision it loaded there'),
-    ('validate_work_handover_sources', 'Step of a public write that resolved the organization; reads the package it loaded there'),
-    ('work_dependency_is_satisfied', 'Step of a public write that resolved the organization; reads the dependency it loaded there'),
-    ('work_template_dependency_has_cycle', 'Step of a public write that resolved the organization; reads the template version it loaded there')
+    ('can_access_document(uuid,uuid)', 'RLS object check: loads the document by id and checks the user within its own organization'),
+    ('can_access_job_inventory(uuid,uuid)', 'RLS object check: loads the job by id and checks the user within its own organization'),
+    ('can_access_personnel_document(uuid,uuid)', 'RLS object check: loads the personnel document by id and checks the user within its own organization'),
+    ('can_access_personnel_document_history(uuid,uuid)', 'RLS object check: loads the personnel document by id and checks the user within its own organization'),
+    ('can_access_personnel_document_version(uuid,integer,uuid)', 'RLS object check: loads the personnel document by id and checks the user within its own organization'),
+    ('can_access_work_artifact(uuid,uuid)', 'RLS object check: loads the artifact by id and checks the user within its own organization'),
+    ('can_read_work_handover_root(uuid,uuid)', 'RLS object check: loads the handover package by id and checks the actor within its own organization'),
+    ('can_review_work_handover_package(uuid,uuid)', 'RLS object check: loads the handover package by id and checks the actor within its own organization'),
+    ('can_view_p1_14_blocker(uuid,uuid)', 'RLS object check: loads the blocker by id and checks the user within its own organization'),
+    ('can_view_p1_14_dependency(uuid,uuid)', 'RLS object check: loads the dependency by id and checks the user within its own organization'),
+    ('is_work_artifact_lead_reviewer(uuid,uuid)', 'Object check: loads the artifact by id and asks for the lead within its own organization'),
+    ('can_view_work_instruction_item(uuid,uuid)', 'RLS object check: loads the instruction item by id and checks the user within its own organization'),
+    ('employee_record_has_effective_access(uuid)', 'RLS object check: reads the employee record by id and its own organization''s access state'),
+    ('p1_24_is_protected_document(uuid)', 'RLS object check: whether a document id is a personnel document; the calling policy checks the organization'),
+    ('get_user_admin_or_manager_org_ids(uuid)', 'RLS helper: the caller''s own organizations; each policy pairs the result with the row''s organization_id'),
+    ('get_user_admin_org_ids(uuid)', 'RLS helper: the caller''s own organizations; each policy pairs the result with the row''s organization_id'),
+    ('get_user_org_ids(uuid)', 'RLS helper: the caller''s own organizations; each policy pairs the result with the row''s organization_id'),
+    ('get_user_assigned_job_ids(uuid)', 'RLS helper: the caller''s own assignments across their organizations; the policy also checks the row''s organization'),
+    ('get_user_assigned_project_ids(uuid)', 'RLS helper: the caller''s own assignments across their organizations; the policy also checks the row''s organization'),
+    ('get_user_capability_ids(uuid)', 'RLS helper: the caller''s own records across their organizations; the policy also checks the row''s organization'),
+    ('get_user_employee_record_ids(uuid)', 'RLS helper: the caller''s own records across their organizations; the policy also checks the row''s organization'),
+    ('get_user_planning_occurrence_ids()', 'RLS helper: the caller''s own assignments, joined within each record''s organization'),
+    ('get_user_team_ids(uuid)', 'RLS helper: the caller''s own teams across their organizations; the policy also checks the row''s organization'),
+    ('get_user_visible_responsibility_configuration_ids(uuid)', 'RLS helper: the caller''s own responsibilities across their organizations; the policy also checks the row''s organization'),
+    ('get_invite_by_code(text)', 'An invite code names its own organization; the caller has none yet'),
+    ('redeem_organization_invite_for_user(text,uuid)', 'An invite code names its own organization; the caller has none yet'),
+    ('prune_realtime_deletions()', 'Maintenance across every organization by age, from no request'),
+    ('assert_time_correction_sources_current(uuid,bigint)', 'Step of a public write that resolved the organization; reads the request it loaded there'),
+    ('p1_22_revise_time_correction_request_impl(uuid,uuid,uuid,bigint,text,text,text,jsonb,jsonb,jsonb)', 'Step of a public write that resolved the organization; reads the request it loaded there'),
+    ('existing_document_retention_class(uuid)', 'Migration-only backfill across every organization; execution is revoked from every application role'),
+    ('resolve_project_execution_state(uuid)', 'Step of a public write or reader that resolved the organization; reads the project it loaded there'),
+    ('sync_planning_dispatch_for_occurrence(uuid)', 'Step of a planning write that resolved the organization; reads the occurrence it wrote there'),
+    ('validate_submitted_work_artifact_revision(uuid)', 'Step of a public write that resolved the organization; reads the revision it loaded there'),
+    ('validate_work_handover_sources(uuid)', 'Step of a public write that resolved the organization; reads the package it loaded there'),
+    ('work_dependency_is_satisfied(uuid)', 'Step of a public write that resolved the organization; reads the dependency it loaded there'),
+    ('work_template_dependency_has_cycle(uuid)', 'Step of a public write that resolved the organization; reads the template version it loaded there')
 $$;
 
 create function pg_temp.tenant_helpers_without_organization() returns table (name text)
@@ -376,7 +377,7 @@ language sql as $$
         where a.attrelid = c.oid and a.attname = 'organization_id' and not a.attisdropped
       )
   )
-  select distinct p.proname::text from pg_proc p
+  select replace(p.oid::regprocedure::text, 'app_private.', '') from pg_proc p
   where p.pronamespace = 'app_private'::regnamespace
     and p.prorettype <> 'trigger'::regtype
     and pg_get_function_identity_arguments(p.oid) !~ '(organization|org)_id\M'
@@ -400,7 +401,8 @@ begin
     -- A local stack behind this branch lacks a newer function; it is not stale there.
     and exists (
       select 1 from pg_proc p
-      where p.pronamespace = 'app_private'::regnamespace and p.proname = exemption.name
+      where p.pronamespace = 'app_private'::regnamespace
+        and replace(p.oid::regprocedure::text, 'app_private.', '') = exemption.name
     );
   if stale is not null then
     raise exception 'Tenant helper exemptions that no longer apply (remove them): %', stale;
@@ -410,7 +412,7 @@ $$;
 
 -- Probe: the reviewed shape of the finding. A current-version helper keyed by
 -- the work id alone is reported; the same helper taking the organization, or a
--- whole tenant row, is not.
+-- whole tenant row, is not, and an unscoped overload of an exempted name is.
 savepoint tenant_helper_probe;
 create function app_private.werkflow_tenant_probe(p_work_id uuid) returns setof public.jobs
 language sql stable as $probe$ select * from public.jobs job where job.id = p_work_id $probe$;
@@ -422,12 +424,20 @@ create function app_private.werkflow_tenant_probe_row(p_job public.jobs) returns
 language sql stable as $probe$
   select * from public.jobs job where job.organization_id = p_job.organization_id and job.id = p_job.id
 $probe$;
+-- An unscoped overload of an exempted helper inherits no exemption.
+create function app_private.get_user_org_ids(p_user_id uuid, p_role text) returns setof uuid
+language sql stable as $probe$
+  select member.organization_id from public.organization_members member
+  where member.user_id = p_user_id and member.role::text = p_role
+$probe$;
 do $$
 declare found text;
 begin
   select string_agg(helper.name, ', ' order by helper.name) into found
-  from pg_temp.tenant_helpers_without_organization() helper where helper.name like 'werkflow_tenant_probe%';
-  if found is distinct from 'werkflow_tenant_probe' then
+  from pg_temp.tenant_helpers_without_organization() helper
+  where helper.name like 'werkflow_tenant_probe%' or helper.name like 'get_user_org_ids(%'
+    and helper.name not in (select exemption.name from pg_temp.tenant_helper_exemptions() exemption);
+  if found is distinct from 'get_user_org_ids(uuid,text), werkflow_tenant_probe(uuid)' then
     raise exception 'Tenant helper check missed the probe or flagged a scoped one: %', found;
   end if;
 end;

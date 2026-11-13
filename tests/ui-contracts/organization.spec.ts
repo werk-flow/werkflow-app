@@ -58,9 +58,9 @@ test('a rejected organization switch retains the current scope and can recover',
 });
 
 /** Answers the oldest held save once its code waits for the answer, and waits until that code ran. */
-async function answerSave(page: Page, answered: number): Promise<void> {
+async function answerSave(page: Page, answered: number, saved = true): Promise<void> {
   await expect.poll(() => page.evaluate(() => window.organizationContract.pendingSaves.length)).toBe(1);
-  await page.evaluate(() => window.organizationContract.pendingSaves.shift()?.());
+  await page.evaluate((ok) => window.organizationContract.pendingSaves.shift()?.(ok), saved);
   await expect.poll(() => page.evaluate(() => window.organizationContract.answeredSaves)).toBe(answered);
 }
 
@@ -99,4 +99,20 @@ test("a switch starts the page's state fresh with the new server props and drops
   await answerSave(page, 2);
   await expect(page.getByRole('alert')).toContainText('Gespeichert: Notiz der zweiten Organisation');
   expect(await shownBanners()).toEqual(['Gespeichert: Notiz der zweiten Organisation']);
+});
+
+test("a failure the old page's write reports after a switch still shows, without a retry in the new organization", async ({
+  page,
+}) => {
+  await page.getByLabel('Entwurf').fill('Notiz der ersten Organisation');
+  await page.getByRole('button', { name: 'Entwurf speichern' }).click();
+  await page.getByRole('button', { name: 'Organisation wechseln', exact: true }).click();
+  await finishCookieWrite(page, 1, true);
+  await page.getByRole('button', { name: 'Serverdaten übernehmen' }).click();
+  await expect(page.getByLabel('Entwurf')).toHaveValue('');
+
+  await answerSave(page, 1, false);
+  const failure = page.getByRole('alert');
+  await expect(failure).toContainText('Nicht gespeichert: Notiz der ersten Organisation');
+  await expect(failure.getByRole('button', { name: 'Erneut versuchen' })).toHaveCount(0);
 });

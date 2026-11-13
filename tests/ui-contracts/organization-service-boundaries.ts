@@ -12,7 +12,7 @@ declare global {
       navigations: string[];
       reads: Array<{ organizationId: string; cookie: string }>;
       /** The page's saves waiting for their answer, oldest first. */
-      pendingSaves: Array<() => void>;
+      pendingSaves: Array<(saved: boolean) => void>;
       /** Saves whose code ran after their answer, shown or not. */
       answeredSaves: number;
       /** Each banner text that rendered while the spec recorded them. */
@@ -63,4 +63,9 @@ export function useRouter(): typeof router {
 }
 export function usePathname(): string {
   return '/dashboard';
+}
+
+/** Counts a save whose code ran after its answer, shown or not. */
+export function recordAnsweredSave(): void {
+  window.organizationContract.answeredSaves += 1;
 }

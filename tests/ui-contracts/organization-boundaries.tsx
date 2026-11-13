@@ -8,7 +8,7 @@ import { OrganizationPageScope } from '@/components/organization/organization-pa
 import { BannerProvider, useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import './organization-service-boundaries';
+import { recordAnsweredSave } from './organization-service-boundaries';
 
 const memberships: UserOrg[] = ['organization-one', 'organization-two'].map((orgId) => ({
   orgId,
@@ -43,9 +43,18 @@ function ScopedDraft(): React.JSX.Element {
   const { showBanner } = useBanner();
   const [draft, setDraft] = useState('');
   const save = async (): Promise<void> => {
-    await new Promise<void>((resolve) => window.organizationContract.pendingSaves.push(resolve));
-    showBanner({ variant: 'success', message: `Gespeichert: ${draft}` });
-    window.organizationContract.answeredSaves += 1;
+    const saved = await new Promise<boolean>((resolve) =>
+      window.organizationContract.pendingSaves.push(resolve),
+    );
+    if (saved) showBanner({ variant: 'success', message: `Gespeichert: ${draft}` });
+    else
+      showBanner({
+        variant: 'error',
+        message: `Nicht gespeichert: ${draft}`,
+        actionLabel: 'Erneut versuchen',
+        onAction: () => undefined,
+      });
+    recordAnsweredSave();
   };
   return (
     <>
