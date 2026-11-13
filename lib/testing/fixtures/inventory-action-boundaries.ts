@@ -277,17 +277,6 @@ assert.deepEqual(
 await assertRefused(
   world,
   [
-    [
-      'createJobMaterialLine',
-      () => createJobMaterialLine({ jobId: ownJobId, itemId: foreignItemId, plannedQuantity: 2 }),
-    ],
-  ],
-  { success: false, error: 'item_not_found' },
-  'reads',
-);
-await assertRefused(
-  world,
-  [
     ['takeJobMaterial', () => takeJobMaterial({ ...take, jobId: ownJobId, lineId: foreignLineId })],
     [
       'takeProjectMaterial',
@@ -329,4 +318,21 @@ refuseForeignIds(world, new Map([[foreignItemId, 'item_not_found']]));
 await assertRefused(world, [upsert], { success: false, error: 'item_not_found' }, 'one-call');
 assert.equal(world.rpcCalls[0]?.args.p_organization_id, ORGANIZATION_A);
 await assertRefused(world, [adjust], { success: false, error: 'movement_failed' }, 'one-call');
+assert.equal(world.rpcCalls[0]?.args.p_organization_id, ORGANIZATION_A);
+// plan_job_material checks the article inside the caller's organization.
+await assertRefused(
+  world,
+  [
+    [
+      'createJobMaterialLine',
+      () => createJobMaterialLine({ jobId: ownJobId, itemId: foreignItemId, plannedQuantity: 2 }),
+    ],
+    [
+      'createProjectMaterialLine',
+      () => createProjectMaterialLine({ projectId: ownProjectId, itemId: foreignItemId, plannedQuantity: 2 }),
+    ],
+  ],
+  { success: false, error: 'item_not_found' },
+  'one-call',
+);
 assert.equal(world.rpcCalls[0]?.args.p_organization_id, ORGANIZATION_A);

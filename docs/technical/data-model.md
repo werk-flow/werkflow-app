@@ -119,4 +119,6 @@ A job's team and the people on its visits are two records of one plan. A job sch
 ## Inventory and documents
 
 - Stock movement history, recorded material use and inventory audit events are append-only. [inventory.md](../features/inventory.md) owns the planned scope.
+- An article that a material line, a movement or another domain's line references is archived (`is_active = false`), never deleted. The references restrict the delete for every writer.
+- The office and other domains plan material on a job or project through `plan_job_material`, which another database function can call inside its own transaction; applying a work template and an unplanned take write their own lines. A caller that names a source record (kind and id) gets one line per source and organization: a repeated or concurrent call answers with the first line and changes nothing.
 - A document exists once and reaches other records through links. [document-storage-and-access.md](document-storage-and-access.md) owns the rules.
