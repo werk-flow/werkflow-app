@@ -291,7 +291,7 @@ Decided for werk-flow/werkflow-planning#408. A phone replaces its offline shell 
 
 - **The build sets the version.** Every production build gives the worker its own version, so nobody bumps one by hand.
 - **A new commit replaces the shell.** Each deployed commit installs a new shell cache, and the new worker's activation removes every other `werkflow-` cache, the previous shell included.
-- **A redeploy keeps it.** A rebuild of the same commit keeps the version, so phones keep their shell.
+- **A redeploy keeps it.** A redeploy of the same commit keeps the version, so phones keep their shell. A local production build (the test server, CI) gets a new build id on each run, and with it a new version.
 - **No id, no build.** A production build without a build id fails instead of shipping a changed shell under an earlier version.
 - **Rejected: a recorded hash of the shell's inputs, checked in CI.** Its line would change with most product PRs, and parallel PRs would invalidate each other's green runs.
 
