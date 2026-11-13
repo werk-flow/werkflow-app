@@ -203,3 +203,9 @@ export const savePersonnelOnboardingRequirement = unexpectedPersonnelAction;
 export const setPersonnelAccessTransition = unexpectedPersonnelAction;
 export const setPersonnelDocumentRelease = unexpectedPersonnelAction;
 export const uploadDocumentDirect = unexpectedPersonnelAction;
+// The Berufsschule section (lib/personnel/school-day-actions.ts) renders in
+// the personnel sections; no contract drives its writes yet.
+export const getSchoolDaysForRecord = unexpectedPersonnelAction;
+export const addSchoolDay = unexpectedPersonnelAction;
+export const endSchoolDay = unexpectedPersonnelAction;
+export const cancelSchoolDay = unexpectedPersonnelAction;
