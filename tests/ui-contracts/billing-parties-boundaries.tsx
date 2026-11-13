@@ -42,6 +42,8 @@ let releaseReread: (() => void) | null = null;
 export function BillingPartiesContractFixture(): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [current, setCurrent] = useState(seen);
+  // As the live view does, a failed read marks the parties stale until one lands.
+  const [stale, setStale] = useState(false);
   // The other user's save reaches this page while the dialog is open.
   useEffect(() => {
     const deliver = (): void => setCurrent(saved);
@@ -78,17 +80,19 @@ export function BillingPartiesContractFixture(): React.JSX.Element {
           current={current}
           // The reread finds the version the other save wrote.
           onSaved={async () => setCurrent(saved)}
+          stale={stale}
           onReread={async () => {
             if (failingRereads > 0) {
               failingRereads -= 1;
-              return false;
+              setStale(true);
+              return;
             }
             if (heldReread) {
               await heldReread;
               heldReread = null;
             }
             setCurrent(saved);
-            return true;
+            setStale(false);
           }}
         />
       </main>

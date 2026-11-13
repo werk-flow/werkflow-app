@@ -56,32 +56,39 @@ type FormProps = {
   task: ReturnType<typeof usePendingTask>;
   onClose: () => void;
   onSaved: () => Promise<void>;
-  /** Reads the parties again without closing the dialog; false when the read failed. */
-  onReread: () => Promise<boolean>;
+  /** Reads the parties again through the live view, without closing the dialog. */
+  onReread: () => Promise<void>;
+  /** The live view's last read failed, so the shown parties may be outdated. */
+  stale: boolean;
 };
 
 /**
- * The reread after a refused save, and its retry when it failed: the entered
- * values stay until a reread lands and the form takes the newer pair.
+ * The reread after a refused save, and its retry when it failed. The live view
+ * owns the read and its failure: after a refusal, a stale view means the
+ * reread failed. The entered values stay until a reread lands and the form
+ * takes the newer pair.
  */
-function useRereadAfterRefusal(onReread: () => Promise<boolean>) {
-  const [failed, setFailed] = useState(false);
-  const retry = useServerAction(async () => setFailed(!(await onReread())));
+function useRereadAfterRefusal(onReread: () => Promise<void>, stale: boolean) {
+  const [refused, setRefused] = useState(false);
+  const retry = useServerAction(async () => onReread());
   return {
-    failed,
+    failed: refused && stale,
     retry,
-    afterRefusal: async (): Promise<void> => setFailed(!(await onReread())),
+    afterRefusal: async (): Promise<void> => {
+      await onReread();
+      setRefused(true);
+    },
   };
 }
 
-function useBillingPartiesForm({ kind, workId, current, task, onSaved, onReread }: FormProps) {
+function useBillingPartiesForm({ kind, workId, current, task, onSaved, onReread, stale }: FormProps) {
   const { showBanner } = useBanner();
   const [client, setClient] = useState<ClientSelectItem | null>(current ? current.auftraggeber : null);
   const [recipient, setRecipient] = useState<ClientSelectItem | null>(current ? current.recipient : null);
   const [clientError, setClientError] = useState<string | null>(null);
   const [recipientError, setRecipientError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const reread = useRereadAfterRefusal(onReread);
+  const reread = useRereadAfterRefusal(onReread, stale);
   // The choice belongs to the version the form saw. A newer version replaces
   // it only after a save was refused for it, with the notice saying why; a
   // read that lands while the user edits never replaces the edit silently,
@@ -163,8 +170,10 @@ export type WorkBillingPartiesDialogProps = {
   current: ResolvedBillingVersion | null;
   /** Resolves once the card shows the saved parties. */
   onSaved: () => Promise<void>;
-  /** Reads the parties again after a refused save; false when that read failed. */
-  onReread: () => Promise<boolean>;
+  /** Reads the parties again after a refused save, through the live view. */
+  onReread: () => Promise<void>;
+  /** The live view's last read failed. */
+  stale: boolean;
 };
 
 /**
@@ -180,6 +189,7 @@ export function WorkBillingPartiesDialog({
   current,
   onSaved,
   onReread,
+  stale,
 }: WorkBillingPartiesDialogProps) {
   const task = usePendingTask();
   const onClose = () => onOpenChange(false);
@@ -193,6 +203,7 @@ export function WorkBillingPartiesDialog({
           task={task}
           onClose={onClose}
           onReread={onReread}
+          stale={stale}
           onSaved={async () => {
             await onSaved();
             onClose();
