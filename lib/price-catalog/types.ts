@@ -3,7 +3,7 @@ import { z } from '@/lib/zod';
 
 // A Leistung is a priced service without an article: labour by the hour,
 // travel, a flat service, a fee or subcontracted work. Its prices are dated
-// versions (supabase/migrations/20261201110001_keep_dated_leistung_prices.sql).
+// versions (supabase/migrations/20261201140000_keep_dated_leistung_prices.sql).
 
 export const LEISTUNG_KINDS = ['arbeit', 'anfahrt', 'pauschale', 'gebuehr', 'fremdleistung'] as const;
 export type LeistungKind = (typeof LEISTUNG_KINDS)[number];
