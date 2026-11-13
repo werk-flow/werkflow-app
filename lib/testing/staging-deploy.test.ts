@@ -12,7 +12,9 @@ const TOKEN = 'token-that-must-never-print';
 const SHA = 'abc123';
 
 // Answers like curl with --output, --dump-header and --write-out: the n-th request gets
-// $STUB/answer-<n>.json ({status, headers, body}); a request without an answer fails to connect.
+// $STUB/answer-<n>.json ({status, headers, body, takes, exit}); a request without an answer fails
+// to connect. A request moves the fake clock ($STUB/clock, read by the date stub) by its `takes`
+// seconds, and the sleep stub moves it by the seconds it was asked to wait.
 const CURL_STUB = `#!/usr/bin/env bash
 output=
 headers=
@@ -27,20 +29,29 @@ count=$(($(cat "$STUB/count" 2> /dev/null || echo 0) + 1))
 echo "$count" > "$STUB/count"
 answer="$STUB/answer-$count.json"
 test -f "$answer" || { printf 000; exit 7; }
+echo $(($(cat "$STUB/clock") + $(jq '.takes' "$answer"))) > "$STUB/clock"
 jq -r '.headers[]' "$answer" > "$headers"
 jq -c '.body' "$answer" > "$output"
 jq -j '.status' "$answer"
+exit "$(jq '.exit' "$answer")"
 `;
 
-type Answer = { status: number; headers?: string[]; body: unknown };
+const SLEEP_STUB = `#!/usr/bin/env bash
+echo "$1" >> "$STUB/sleep.log"
+echo $(($(cat "$STUB/clock") + $1)) > "$STUB/clock"
+`;
+
+type Answer = { status: number; headers?: string[]; body: unknown; takes?: number; exit?: number };
 
 let stub = '';
 
 beforeEach(() => {
   stub = mkdtempSync(join(tmpdir(), 'staging-deploy-'));
   writeFileSync(join(stub, 'curl'), CURL_STUB);
-  writeFileSync(join(stub, 'sleep'), '#!/usr/bin/env bash\necho "$1" >> "$STUB/sleep.log"\n');
-  for (const name of ['curl', 'sleep']) chmodSync(join(stub, name), 0o755);
+  writeFileSync(join(stub, 'sleep'), SLEEP_STUB);
+  writeFileSync(join(stub, 'date'), '#!/usr/bin/env bash\ncat "$STUB/clock"\n');
+  for (const name of ['curl', 'sleep', 'date']) chmodSync(join(stub, name), 0o755);
+  writeFileSync(join(stub, 'clock'), '1000');
 });
 
 afterEach(() => rmSync(stub, { recursive: true, force: true }));
@@ -48,7 +59,10 @@ afterEach(() => rmSync(stub, { recursive: true, force: true }));
 /** Runs the deploy against the given answers, in request order, and fails the test if the token prints. */
 function deploy(answers: Answer[]) {
   for (const [index, answer] of answers.entries())
-    writeFileSync(join(stub, `answer-${index + 1}.json`), JSON.stringify({ headers: [], ...answer }));
+    writeFileSync(
+      join(stub, `answer-${index + 1}.json`),
+      JSON.stringify({ headers: [], takes: 0, exit: 0, ...answer }),
+    );
   const result = spawnSync('bash', [script, SHA], {
     encoding: 'utf8',
     env: {
@@ -111,9 +125,25 @@ test('a create still rate-limited after about 20 minutes of backoff fails with t
   expect(result.status).toBe(1);
   expect(result.sleeps).toEqual(['60', '120', '240', '480']);
   expect(result.output).toContain(
-    'Vercel answered HTTP 429 (rate_limited: GitHub API rate limit exceeded., still after 900 seconds of retries).',
+    'Vercel answered HTTP 429 (rate_limited: GitHub API rate limit exceeded., still after 900 seconds).',
   );
   expect(result.requests).toHaveLength(5);
+});
+
+test('the retry budget counts the time requests take, not only the waits', () => {
+  const slow = { ...rateLimited(['retry-after: 1']), takes: 400 };
+  const result = deploy([slow, slow, slow, created]);
+  expect(result.status).toBe(1);
+  expect(result.sleeps).toEqual(['1', '1']);
+  expect(result.output).toContain('still after 1202 seconds).');
+  expect(result.requests).toHaveLength(3);
+});
+
+test('an answer that did not arrive whole fails, even with a 2xx status', () => {
+  const result = deploy([{ ...created, exit: 18 }]);
+  expect(result.status).toBe(1);
+  expect(result.output).toContain("Vercel's answer did not arrive (HTTP 200, curl exit 18).");
+  expect(result.output).not.toContain('Staging deployment dpl_new');
 });
 
 test('an answer without an id fails instead of polling an empty one', () => {
@@ -142,7 +172,7 @@ test('a refused or unreachable poll stops the deploy at once', () => {
   rmSync(join(stub, 'requests.log'));
   const unreachable = deploy([created]);
   expect(unreachable.status).toBe(1);
-  expect(unreachable.output).toContain('Vercel answered HTTP 000.');
+  expect(unreachable.output).toContain("Vercel's answer did not arrive (HTTP 000, curl exit 7).");
   expect(unreachable.requests).toHaveLength(2);
 });
 
