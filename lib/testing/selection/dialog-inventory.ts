@@ -67,6 +67,12 @@ export const DIALOG_INVENTORY = {
       { route: '/auftraege', role: 'admin', opener: 'reports.office' },
     ],
   },
+  'components/problem-reports/screenshot-redaction-view.tsx#ScreenshotRedactionView|Screenshot schwärzen': {
+    audits: [
+      { route: '/dashboard', role: 'employee', opener: 'reports.redaction-field' },
+      { route: '/auftraege', role: 'admin', opener: 'reports.redaction-office' },
+    ],
+  },
   'components/job-picker-modal.tsx#JobPickerModal|{title}': {
     audits: [{ route: '/dashboard', role: 'employee', opener: 'field.job-picker' }],
   },

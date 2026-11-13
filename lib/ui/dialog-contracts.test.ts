@@ -131,6 +131,11 @@ const exceptions: Record<string, DialogException> = {
     kind: 'destructive',
     reason: 'Lifecycle commands include termination; require deliberate confirmation.',
   },
+  'components/problem-reports/screenshot-redaction-view.tsx#ScreenshotRedactionView|Screenshot schwärzen': {
+    kind: 'widget',
+    reason:
+      'A drawing surface over the report dialog: each box edits the report form behind it, which alone sends; „Fertig“ only closes.',
+  },
   'components/settings/profile-avatar-section.tsx#ProfileAvatarSection|Profilbild anpassen': {
     kind: 'widget',
     reason: 'Interactive crop/zoom editor uses an explicit image-save action.',
