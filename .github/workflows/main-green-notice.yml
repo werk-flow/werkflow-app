@@ -57,39 +57,43 @@ jobs:
             echo "::notice title=Main green notice::The previous run of main ended '$previous', so main did not turn green now."
             exit 0
           fi
-          prs="$(gh pr list --repo "$GITHUB_REPOSITORY" --base main --state open --limit 200 --json number,isDraft,headRefOid \
-            --jq '.[] | select(.isDraft | not) | "\(.number) \(.headRefOid)"')"
+          # Every page, so no open PR past the first hundred is left out.
+          prs="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls?state=open&base=main&per_page=100" \
+            --jq '.[] | select(.draft | not) | "\(.number) \(.head.sha)"')"
           marker="<!-- main-green-notice $RUN_SHA -->"
           body="\`main\` is green again at $RUN_SHA. Merge \`main\` into this branch and let CI run again.
 
           $marker"
           posted=0
-          unsent=0
+          missed=0
           while read -r pr head <&3; do
             test -n "$pr" || continue
-            # An unreadable Check or comment list still comments, so no thread sleeps on a stale failure.
-            if check="$(gh api "repos/$GITHUB_REPOSITORY/commits/$head/check-runs?check_name=Check&per_page=100" \
+            # An unreadable Check or comment list skips the PR, so no green PR hears of it and no rerun
+            # comments twice, and fails the run at the end, so the miss shows.
+            if ! check="$(gh api "repos/$GITHUB_REPOSITORY/commits/$head/check-runs?check_name=Check&per_page=100" \
               --jq '[.check_runs[]] | max_by(.started_at) | .conclusion // ""')"; then
-              if test "$check" != failure && test "$check" != timed_out; then continue; fi
-            else
-              echo "::warning title=Main green notice::The Check of PR #$pr could not be read, so it gets the comment."
+              echo "::error title=Main green notice::The Check of PR #$pr could not be read, so it gets no comment."
+              missed=$((missed + 1))
+              continue
             fi
-            if seen="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$pr/comments?per_page=100" \
+            if test "$check" != failure && test "$check" != timed_out; then continue; fi
+            if ! seen="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$pr/comments?per_page=100" \
               --jq ".[] | select(.body | contains(\"$marker\")) | .id")"; then
-              if test -n "$seen"; then
-                echo "::notice title=Main green notice::PR #$pr already heard that main is green at $RUN_SHA."
-                continue
-              fi
-            else
-              echo "::warning title=Main green notice::The comments of PR #$pr could not be read, so it gets the comment."
+              echo "::error title=Main green notice::The comments of PR #$pr could not be read, so it gets no comment."
+              missed=$((missed + 1))
+              continue
+            fi
+            if test -n "$seen"; then
+              echo "::notice title=Main green notice::PR #$pr already heard that main is green at $RUN_SHA."
+              continue
             fi
             if gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$pr/comments" -f body="$body" > /dev/null; then
               echo "PR #$pr heard that main is green at $RUN_SHA."
               posted=$((posted + 1))
             else
               echo "::error title=Main green notice::The comment on PR #$pr failed."
-              unsent=$((unsent + 1))
+              missed=$((missed + 1))
             fi
           done 3<<< "$prs"
-          echo "::notice title=Main green notice::Main is green again at $RUN_SHA; $posted PRs heard of it."
-          test "$unsent" -eq 0
+          echo "::notice title=Main green notice::Main is green again at $RUN_SHA; $posted PRs heard of it, $missed missed it."
+          test "$missed" -eq 0

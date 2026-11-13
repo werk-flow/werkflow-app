@@ -34,7 +34,8 @@ for argument in "$@"; do
 done
 answer() { if test -e "$STUB/$1"; then jq -r "$filter" "$STUB/$1"; else echo 'HTTP 502' >&2; exit 1; fi; }
 if [[ "$*" =~ ^api\\ repos/owner/repo/actions/workflows/7/runs\\?branch=main\\&event=push\\&status=completed ]]; then answer runs.json
-elif [[ "$*" =~ ^pr\\ list\\ --repo\\ owner/repo\\ --base\\ main\\ --state\\ open ]]; then answer prs.json
+elif [[ "$*" =~ ^api\\ --paginate\\ repos/owner/repo/pulls\\?state=open\\&base=main\\&per_page=100 ]]; then
+  for page in "$STUB"/prs*.json; do answer "\${page##*/}"; done
 elif [[ "$*" =~ ^api\\ repos/owner/repo/commits/([0-9a-f]+)/check-runs\\?check_name=Check ]]; then answer "checks-\${BASH_REMATCH[1]}.json"
 elif [[ "$*" =~ ^api\\ --paginate\\ repos/owner/repo/issues/([0-9]+)/comments ]]; then answer "comments-\${BASH_REMATCH[1]}.json"
 elif [[ "$*" =~ ^api\\ --method\\ POST\\ repos/owner/repo/issues/([0-9]+)/comments ]]; then
@@ -82,7 +83,7 @@ function pullRequest(pr: number, options: { draft?: boolean; checks?: string[]; 
     `comments-${pr}.json`,
     (options.comments ?? []).map((body, id) => ({ id: id + 1, body })),
   );
-  return { number: pr, isDraft: options.draft ?? false, headRefOid: head(pr) };
+  return { number: pr, draft: options.draft ?? false, head: { sha: head(pr) } };
 }
 
 function notify() {
@@ -155,20 +156,36 @@ test('a green-to-green run, or one after no earlier run, comments nowhere', () =
     expect(run.passed).toBe(true);
     expect(run.output).toContain('so main did not turn green now');
     expect(commented()).toEqual([]);
-    expect(read('gh.calls')).not.toContain('pr list');
+    expect(read('gh.calls')).not.toContain('/pulls?');
   }
 });
 
-test('an unreadable Check or comment list still comments, so no thread sleeps', () => {
+test('an unreadable Check or comment list skips that PR, lets the others hear of it, then fails the run', () => {
   earlierRuns('failure');
-  write('prs.json', [pullRequest(441, { checks: ['failure'] }), pullRequest(442, { checks: ['failure'] })]);
+  write('prs.json', [
+    pullRequest(441, { checks: ['success'] }),
+    pullRequest(442, { checks: ['failure'], comments: [MARKER] }),
+    pullRequest(443, { checks: ['failure'] }),
+  ]);
   rmSync(join(stub, `checks-${head(441)}.json`));
   rmSync(join(stub, 'comments-442.json'));
   const run = notify();
+  expect(run.passed).toBe(false);
+  expect(run.output).toContain('The Check of PR #441 could not be read, so it gets no comment');
+  expect(run.output).toContain('The comments of PR #442 could not be read, so it gets no comment');
+  expect(commented()).toEqual([443]);
+});
+
+test('every page of open PRs is read, so a PR past the first hundred hears of it', () => {
+  earlierRuns('failure');
+  write('prs.json', [pullRequest(441, { checks: ['success'] })]);
+  write('prs2.json', [pullRequest(542, { checks: ['failure'] })]);
+  const run = notify();
   expect(run.passed).toBe(true);
-  expect(run.output).toContain('The Check of PR #441 could not be read, so it gets the comment');
-  expect(run.output).toContain('The comments of PR #442 could not be read, so it gets the comment');
-  expect(commented()).toEqual([441, 442]);
+  expect(read('gh.calls')).toContain(
+    'api --paginate repos/owner/repo/pulls?state=open&base=main&per_page=100',
+  );
+  expect(commented()).toEqual([542]);
 });
 
 test('an unreadable previous run, or an event without a commit, fails and comments on nothing', () => {
