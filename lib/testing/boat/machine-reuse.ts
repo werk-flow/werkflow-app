@@ -218,7 +218,10 @@ export async function acquireMachine(
       (error.code === 'member_limit_reached' || error.code === 'limit_reached')
         ? error.code
         : undefined;
-    const evicted = limit ? takeIdleRecords(folder, () => true) : [];
+    const evicted: string[] = [];
+    // A record outlives its machine when another workstation evicted it; such a record frees nothing.
+    for (const id of limit ? takeIdleRecords(folder, () => true) : [])
+      if ((await lifeLeft(client, id).catch(() => 1)) > 0) evicted.push(id);
     if (limit && !evicted.length) evicted.push(...(await takeIdleMachineElsewhere(client, input.signal)));
     if (!evicted.length) throw error;
     for (const id of evicted) {

@@ -388,8 +388,11 @@ test('a start refused at the machine limit evicts idle machines, oldest first, a
     // A record a running run took is renamed away; its machine serves that run.
     for (const id of taken)
       writeFileSync(join(records, `f00dfeedf00dfeed--${id}.json.taken-run`), JSON.stringify({ id }));
+    // The idle machines live on Boat under the other checkout their records name.
     const boat = fakeBoat(
-      {},
+      Object.fromEntries(
+        Object.keys(idle).map((id) => [id, { lifeMs: 120 * MINUTE, checkout: 'f00dfeedf00dfeed' }]),
+      ),
       0,
       () => undefined,
       () => false,
@@ -514,4 +517,22 @@ test('a kept machine another workstation deleted between its read and its claim 
     machine: { id: 'bx_created' },
     reused: false,
   });
+});
+
+test('an idle record whose machine another workstation evicted frees nothing, so the run evicts elsewhere', async () => {
+  const atLimit = Response.json({ error: { code: 'member_limit_reached' } }, { status: 429 });
+  const records = mkdtempSync(join(tmpdir(), 'boat-idle-'));
+  // Another checkout's record on this workstation; its machine is already gone.
+  writeFileSync(join(records, 'f00dfeedf00dfeed--gone.json'), JSON.stringify({ id: 'bx_gone0001' }));
+  const boat = fakeBoat(
+    { bx_otherws1: { lifeMs: 120 * MINUTE, workstation: 'f00dfeedf00dfeed', checkout: 'deadbeefdeadbeef' } },
+    0,
+    () => undefined,
+    () => false,
+    [atLimit],
+  );
+  expect(await acquire(boat.client, records)).toMatchObject({ machine: { id: 'bx_created' }, reused: false });
+  expect(boat.calls).toContain('DELETE /sandboxes/bx_otherws1');
+  expect(boat.calls).not.toContain('DELETE /sandboxes/bx_gone0001');
+  expect(readdirSync(records)).toEqual([]);
 });
