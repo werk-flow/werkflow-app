@@ -67,7 +67,7 @@ test('Zeiterfassung: a rule saved in another session rebuilds the open week, als
 /** Another session saves the rule: the provider joins, then organization_settings changes. */
 async function saveRuleElsewhere(page: Page, saved: 'switched-on' | 'read-fails'): Promise<void> {
   await page.evaluate((outcome) => {
-    const version = { autoBreakThresholdMinutes: 360, autoBreakDurationMinutes: 30 };
+    const version = { autoBreakThresholdMinutes: 360, autoBreakDurationMinutes: 30, secondStep: null };
     window.breakRuleWeekContract.policy =
       outcome === 'read-fails'
         ? null

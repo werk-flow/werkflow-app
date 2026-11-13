@@ -44,7 +44,12 @@ export const OTHER_SESSION_ID = '40000000-0000-4000-8000-000000000002';
 
 export const CLOCKED_OUT: LiveClockState = {
   organizationId: WORKER.organizationId,
-  breakPolicy: { breakMode: 'manual', autoBreakThresholdMinutes: 360, autoBreakDurationMinutes: 30 },
+  breakPolicy: {
+    breakMode: 'manual',
+    autoBreakThresholdMinutes: 360,
+    autoBreakDurationMinutes: 30,
+    secondStep: null,
+  },
   status: 'clocked_out',
   isClockedIn: false,
   isOnBreak: false,
