@@ -1,16 +1,6 @@
 'use client';
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { InlinePending } from '@/components/ui/inline-pending';
+import { ConfirmActionDialog } from '@/components/shared/confirm-action-dialog';
 import type { TeamManagementController } from './use-team-management';
 
 type TeamManagementDissolveDialogProps = {
@@ -18,43 +8,19 @@ type TeamManagementDissolveDialogProps = {
 };
 
 export function TeamManagementDissolveDialog({ management }: TeamManagementDissolveDialogProps) {
-  const {
-    teamToDissolve,
-    setTeamToDissolve,
-    dissolveError,
-    setDissolveError,
-    anyBusy,
-    isBusy,
-    handleDissolve,
-  } = management;
-  // The dialog stays until the dissolve settles, so its outcome shows at the point of action.
+  const { teamToDissolve, setTeamToDissolve, anyBusy, isBusy, handleDissolve } = management;
   const isDissolving = teamToDissolve !== null && isBusy(`dissolve:${teamToDissolve.id}`);
   return (
-    <AlertDialog
+    <ConfirmActionDialog
       open={Boolean(teamToDissolve)}
-      onOpenChange={(open) => {
-        if (open) return;
-        setTeamToDissolve(null);
-        setDissolveError(null);
-      }}
-      pending={isDissolving}
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Team auflösen?</AlertDialogTitle>
-          <AlertDialogDescription>
-            {teamToDissolve?.name} bleibt mit seiner Historie erhalten, steht aber nicht mehr für neue
-            Planungen zur Auswahl.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter error={dissolveError}>
-          <AlertDialogCancel disabled={isDissolving}>Abbrechen</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" disabled={anyBusy} onClick={handleDissolve}>
-            Team auflösen
-            <InlinePending active={isDissolving} label="Team wird aufgelöst" />
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      onOpenChange={(open) => !open && setTeamToDissolve(null)}
+      title="Team auflösen?"
+      description={`${teamToDissolve?.name ?? ''} bleibt mit seiner Historie erhalten, steht aber nicht mehr für neue Planungen zur Auswahl.`}
+      confirmLabel="Team auflösen"
+      variant="destructive"
+      // Another team action still runs: one change at a time.
+      confirmDisabled={anyBusy && !isDissolving}
+      onConfirm={handleDissolve}
+    />
   );
 }

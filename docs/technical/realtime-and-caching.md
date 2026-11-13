@@ -185,3 +185,5 @@ Optional shell reads, such as the clock, active jobs and attention counts, never
 ## Organization switch confirmation
 
 The organization provider publishes a new active organization only after the cookie write completes, and keeps its switch lock until matching server props arrive. A rejected write keeps the current scope with visible failure.
+
+The app layout keys all page content by the organization the server rendered (`OrganizationPageScope`). When the new organization's props arrive, every page's client state starts fresh. A confirmation from the previous organization's page, answering late, shows nowhere; its failure still shows, without a retry. Page code needs no reset of its own for a switch; a shell provider above the scope, such as the clock, resets through its `resetKey`. Enforced by `tests/ui-contracts/organization.spec.ts` and `lib/conventions/organization-page-scope.test.ts`.

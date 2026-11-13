@@ -14,7 +14,7 @@ Every rule here is hard, even where only review enforces it; virtue 3 in `AGENTS
 6. Filter every service-role query on the table by `organization_id`, or add a reviewed `tenant-scope:` comment.
 7. Run `bun run test:verify --group sql:security`, `bun run migrations:check`, `bun run types:check -- --local` and `bun run test:unit lib/conventions/tenant-scope.test.ts`.
 
-Wrong turn: a policy that checks membership but not the role, so every member reads through the Data API what only managers see.
+Wrong turn: a policy that checks membership but not the role: every member reads managers' rows through the Data API.
 
 ### Add a Server Action or route handler
 
@@ -28,16 +28,17 @@ Wrong turn: a policy that checks membership but not the role, so every member re
 8. Write the boundary test: copy `lib/testing/fixtures/join-request-boundaries.ts`, which runs the real actions on `action-boundary-world.ts`. Expect a refusal for a foreign organization's id and for a lower role.
 9. Run `bun run test:unit lib/security lib/conventions/server-action-input.test.ts` and the new boundary test.
 
-Wrong turn: trusting an id because the UI offers only the caller's own records. Every export is a public POST endpoint that accepts any id.
+Wrong turn: trusting an id because the UI offers only own records. Every export is a public POST endpoint.
 
 ### Add a privileged function
 
 1. Write `SECURITY DEFINER` only when one transaction must cross RLS, such as an approval that creates a membership. A function that writes related rows for a server action runs as `security invoker`.
 2. A public function is executable by `service_role` only. An RLS helper that policies call goes into `app_private`, is granted to `authenticated` only, and joins the definer-execution inventory with the policy that needs it.
 3. The server caller resolves organization and role before the call. A service-only list or search function revokes browser execution.
-4. Run `bun run test:verify --group sql:security` and the SQL group that owns the function.
+4. An `app_private` function reading tenant rows takes `p_organization_id` or a tenant row, or `security_boundaries.sql` exempts it.
+5. Run `bun run test:verify --group sql:security` and the SQL group that owns the function.
 
-Wrong turn: granting `authenticated` so the browser can call the function, which then bypasses every policy with its owner's rights.
+Wrong turn: granting `authenticated`, so the browser runs the function past every policy with its owner's rights.
 
 ### Add a storage path
 
@@ -49,7 +50,7 @@ Call `logError('<function>: <what failed>', error)` from `lib/logging.ts`; it ke
 
 ### Profile a customer export
 
-A customer's export stays on the owner's machine, in no repository. The owner runs `bun scripts/migration/profile-export.ts <export-folder>` offline; it writes a structure-only `profile.md` and `profile.json` to `~/werkflow-export-profiles/<date>/` and refuses when its self-check finds a name, email, phone number, IBAN or address. The owner reads `profile.md` before sharing. Only the profile reaches an agent; fixtures are synthetic, derived from it. Wrong turn: opening an export row in an agent session to "check one field".
+A customer's export stays on the owner's machine, in no repository. The owner runs `bun scripts/migration/profile-export.ts <export-folder>` offline; it writes a structure-only `profile.md` and `profile.json` to `~/werkflow-export-profiles/<date>/` and refuses when its self-check finds a name, email, phone number, IBAN or address. The owner reads `profile.md` before sharing. Only the profile reaches an agent; fixtures derive from it. Wrong turn: opening an export row to "check one field".
 
 ## Trust boundaries
 
