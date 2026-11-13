@@ -19,6 +19,13 @@
 --   and answers a booked batch with its stored result, so a confirm sent twice
 --   books once. The stored result keeps no SQLSTATE of a failed row.
 --
+-- The booking holds to what the preview resolved. The preview notes on each
+-- staged row the article it matched, „new“ for one it creates, or „file“ for
+-- one an earlier row of the same file creates; a row whose resolution differs
+-- at booking is refused (changed_since_preview) instead of booking stock to
+-- another article. A row the preview rejected stays rejected with the
+-- preview's reason.
+--
 -- A row whose unit differs from its matched item's unit is refused
 -- (unit_mismatch, its detail the item's unit); the action refuses an empty or
 -- unknown unit before it stages the row. A batch in mode master_data books no
@@ -115,7 +122,8 @@ begin
   if v_item.id is null and v_barcode is not null then
     select item.* into v_item from public.inventory_item_barcodes barcode
     join public.inventory_items item on item.id = barcode.item_id
-    where barcode.organization_id = p_organization_id and barcode.barcode_value = v_barcode;
+    where barcode.organization_id = p_organization_id and barcode.barcode_value = v_barcode
+    for update of item;
     if v_item.id is not null then
       v_matched_by := 'barcode';
     end if;
@@ -158,6 +166,7 @@ begin
   v_outcome := jsonb_build_object(
     'outcome', 'imported',
     'matched_by', v_matched_by,
+    'item_id', v_item.id,
     'item_name', v_item.name,
     'unit', v_item.unit,
     -- A Lager this transaction created reads as new on every row that names it.
@@ -224,8 +233,10 @@ $$;
 
 -- Every staged row through the rule, each in its own savepoint: a refused row
 -- leaves nothing behind and the next row still runs. A row the action already
--- refused carries its `rejection` and is answered without a write. Each answer
--- carries the row's position in the file (`index`).
+-- refused carries its `rejection`, and a row the preview rejected its
+-- `previewed_rejection`; both are answered without a write. A row with a
+-- `previewed_item` must resolve to it again. Each answer carries the row's
+-- position in the file (`index`) and what it resolved to (`item_ref`).
 create function app_private.apply_inventory_import_rows(
   p_organization_id uuid,
   p_actor_id uuid,
@@ -246,6 +257,8 @@ declare
   v_detail text;
   v_state text;
   v_reason text;
+  v_ref text;
+  v_created uuid[] := '{}';
   v_results jsonb := '[]'::jsonb;
 begin
   for v_row, v_index in
@@ -253,6 +266,8 @@ begin
   loop
     if v_row ? 'rejection' then
       v_outcome := jsonb_build_object('outcome', 'rejected', 'reason', v_row->>'rejection');
+    elsif v_row ? 'previewed_rejection' then
+      v_outcome := v_row->'previewed_rejection';
     else
       begin
         v_outcome := app_private.apply_inventory_import_row(
@@ -260,6 +275,15 @@ begin
           v_row->>'category_name', v_row->>'supplier_name', v_row->>'location_name', v_row->>'barcode',
           (v_row->>'quantity')::numeric, p_reason, p_mode, true
         );
+        v_ref := case
+          when v_outcome->>'matched_by' is null then 'new'
+          when (v_outcome->>'item_id')::uuid = any (v_created) then 'file'
+          else v_outcome->>'item_id'
+        end;
+        if v_row ? 'previewed_item' and v_row->>'previewed_item' is distinct from v_ref then
+          raise exception 'changed_since_preview';
+        end if;
+        v_outcome := v_outcome || jsonb_build_object('item_ref', v_ref);
       -- One handler for every row failure: the savepoint must isolate any of
       -- them so the other rows still book. The named refusals all raise
       -- SQLSTATE P0001 and differ only by message, so condition names cannot
@@ -269,7 +293,7 @@ begin
       exception when others then
         get stacked diagnostics v_detail = pg_exception_detail, v_state = returned_sqlstate;
         v_reason := case
-          when sqlerrm in ('unit_mismatch', 'barcode_taken', 'invalid_input') then sqlerrm
+          when sqlerrm in ('unit_mismatch', 'barcode_taken', 'invalid_input', 'changed_since_preview') then sqlerrm
           when sqlerrm = 'inventory item is not available for stock movement' then 'stock_not_tracked'
           else 'failed'
         end;
@@ -280,8 +304,13 @@ begin
           'item_unit', case when v_reason = 'unit_mismatch' then v_detail end
         ) || case when v_reason = 'failed' then jsonb_build_object('code', v_state) else '{}'::jsonb end;
       end;
+      -- Kept only once the row's savepoint committed, so a later row of the
+      -- file that matches this new article reads as „file“.
+      if v_outcome->>'item_ref' = 'new' then
+        v_created := v_created || (v_outcome->>'item_id')::uuid;
+      end if;
     end if;
-    v_results := v_results || jsonb_build_array(v_outcome || jsonb_build_object('index', v_index));
+    v_results := v_results || jsonb_build_array(v_outcome - 'item_id' || jsonb_build_object('index', v_index));
   end loop;
   return v_results;
 end;
@@ -333,6 +362,23 @@ begin
       raise;
     end if;
   end;
+
+  -- The booking holds to this: each row notes the article it resolved to, or
+  -- the rejection it showed. Managers read the staged rows through the Data
+  -- API, so a rejection keeps no SQLSTATE.
+  update public.inventory_import_batches batch set staged_rows = (
+    select jsonb_agg(
+      case
+        when staged.value ? 'rejection' then staged.value
+        when result.value->>'outcome' = 'rejected'
+          then staged.value || jsonb_build_object('previewed_rejection', result.value - 'index' - 'code')
+        else staged.value || jsonb_build_object('previewed_item', result.value->>'item_ref')
+      end
+      order by staged.ordinality)
+    from jsonb_array_elements(p_rows) with ordinality staged
+    join jsonb_array_elements(v_results) with ordinality result on result.ordinality = staged.ordinality
+  )
+  where batch.id = v_batch_id;
 
   return jsonb_build_object('batch_id', v_batch_id, 'rows', v_results);
 end;

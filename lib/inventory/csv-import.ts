@@ -238,6 +238,7 @@ export const IMPORT_REJECTIONS = [
   'barcode_taken',
   'invalid_input',
   'stock_not_tracked',
+  'changed_since_preview',
   'failed',
 ] as const;
 type ImportRejection = (typeof IMPORT_REJECTIONS)[number];
@@ -348,6 +349,8 @@ export function importRowProblem(row: ImportRowOutcome, fileUnit: string | null)
       return 'Die Zeile enthält eine ungültige Angabe.';
     case 'stock_not_tracked':
       return 'Für diesen Artikel wird kein Bestand geführt.';
+    case 'changed_since_preview':
+      return 'Der Artikel hat sich seit der Vorschau geändert. Importiere die Zeile erneut und prüfe die neue Vorschau.';
     case 'failed':
       return 'Die Zeile konnte nicht übernommen werden.';
   }

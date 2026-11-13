@@ -124,7 +124,10 @@ begin
     select 1 from public.inventory_import_batches batch
     where batch.id = (v_preview->>'batch_id')::uuid and batch.organization_id = v_org and batch.status = 'draft'
       and batch.mode = 'stock' and batch.content_hash = repeat('a', 64) and batch.row_count = 6
-      and batch.staged_rows = pg_temp.file_rows() and batch.created_by = v_admin
+      and batch.created_by = v_admin
+      -- The staged rows are the file's rows, each with what the preview resolved.
+      and (select jsonb_agg(staged.value - 'previewed_item' - 'previewed_rejection' order by staged.ordinality)
+        from jsonb_array_elements(batch.staged_rows) with ordinality staged) = pg_temp.file_rows()
   ) then
     raise exception 'a preview must stage its rows on a draft batch with the file''s hash and mode';
   end if;
@@ -277,8 +280,9 @@ end;
 $$;
 
 -- 4c. A row that fails for a reason the rule does not name carries its
---     SQLSTATE and nothing else, the other rows still book, and the preview
---     answers the same as the booking.
+--     SQLSTATE and nothing else, and the other rows still book. The booking
+--     keeps the preview's rejection without the code, which the preview's
+--     action logged.
 do $$
 declare
   v_org constant uuid := '99200000-0000-4000-8000-000000000010';
@@ -297,12 +301,14 @@ declare
 begin
   v_preview := public.preview_inventory_import(v_org, v_admin, 'unerwartet.csv', '{}'::jsonb, null, 'stock', v_rows);
   v_booking := public.book_inventory_import(v_org, v_admin, (v_preview->>'batch_id')::uuid);
-  if v_booking->'rows' is distinct from v_preview->'rows' then
-    raise exception 'the preview must answer an unexpected row failure as the booking does: % against %',
+  if v_booking->'rows' is distinct from (select jsonb_agg(result.value - 'code' order by result.ordinality)
+      from jsonb_array_elements(v_preview->'rows') with ordinality result)
+  then
+    raise exception 'the booking must keep the preview''s rejection of an unexpected row failure: % against %',
       v_preview->'rows', v_booking->'rows';
   end if;
-  if v_booking->'rows'->0 @> '{"outcome":"rejected","reason":"failed","code":"23514"}' is not true
-    or (v_booking->'rows'->0) ?| array['message', 'detail']
+  if v_preview->'rows'->0 @> '{"outcome":"rejected","reason":"failed","code":"23514"}' is not true
+    or (v_preview->'rows'->0) ?| array['message', 'detail']
     or v_booking->'rows'->1 @> '{"outcome":"booked","quantity_after":6}' is not true
     or exists (select 1 from public.inventory_items where organization_id = v_org and internal_sku = 'NR-GADGET')
   then
@@ -327,6 +333,58 @@ begin
         from jsonb_array_elements(v_booking->'rows') with ordinality result)
   then
     raise exception 'a stored booking result must keep no SQLSTATE';
+  end if;
+end;
+$$;
+
+-- 4d. The booking holds to what the preview resolved: a row whose
+--     Artikelnummer moved to no article after the preview is refused instead
+--     of creating one, and a row the preview rejected stays rejected even when
+--     the article changed so that it would pass now.
+do $$
+declare
+  v_org constant uuid := '99200000-0000-4000-8000-000000000010';
+  v_admin constant uuid := '99200000-0000-4000-8000-000000000001';
+  v_rows constant jsonb := jsonb_build_array(
+    jsonb_build_object('item', jsonb_build_object('name', 'Rotguss-Bogen', 'item_type', 'material',
+      'unit', 'piece', 'internal_sku', 'NR-BOGEN-15', 'is_billable', true, 'global_minimum_stock', 0),
+      'location_name', 'Hauptlager', 'quantity', 2),
+    jsonb_build_object('item', jsonb_build_object('name', 'Pressfitting', 'item_type', 'material',
+      'unit', 'meter', 'internal_sku', 'NR-FIT-15', 'is_billable', true, 'global_minimum_stock', 0),
+      'location_name', 'Hauptlager', 'quantity', 3),
+    jsonb_build_object('item', jsonb_build_object('name', 'Kupferrohr', 'item_type', 'material',
+      'unit', 'meter', 'internal_sku', 'NR-ROHR-15', 'is_billable', true, 'global_minimum_stock', 0),
+      'location_name', 'Hauptlager', 'quantity', 1)
+  );
+  v_preview jsonb;
+  v_booking jsonb;
+  v_movements integer;
+begin
+  v_preview := public.preview_inventory_import(v_org, v_admin, 'spaeter.csv', '{}'::jsonb, null, 'stock', v_rows);
+  if v_preview->'rows'->0 @> '{"outcome":"booked","matched_by":"internal_sku"}' is not true
+    or v_preview->'rows'->1 @> '{"outcome":"rejected","reason":"unit_mismatch"}' is not true
+  then
+    raise exception 'the preview must match the Rotguss-Bogen and refuse the Pressfitting in Meter: %', v_preview->'rows';
+  end if;
+
+  -- After the preview, someone moves the Bogen's Artikelnummer and counts the fitting in Meter.
+  update public.inventory_items set internal_sku = 'NR-BOGEN-15-ALT'
+  where organization_id = v_org and internal_sku = 'NR-BOGEN-15';
+  update public.inventory_items set unit = 'meter'
+  where organization_id = v_org and internal_sku = 'NR-FIT-15';
+  select count(*) into v_movements from public.inventory_movements where organization_id = v_org;
+
+  v_booking := public.book_inventory_import(v_org, v_admin, (v_preview->>'batch_id')::uuid);
+  if v_booking->'rows'->0 @> '{"outcome":"rejected","reason":"changed_since_preview"}' is not true
+    or v_booking->'rows'->1 is distinct from v_preview->'rows'->1
+    or v_booking->'rows'->2 @> '{"outcome":"booked","matched_by":"internal_sku"}' is not true
+  then
+    raise exception 'the booking must refuse a row whose match changed and keep a previewed rejection: %', v_booking->'rows';
+  end if;
+  if exists (select 1 from public.inventory_items where organization_id = v_org and internal_sku = 'NR-BOGEN-15')
+    or (select count(*) from public.inventory_movements where organization_id = v_org) <> v_movements + 1
+  then
+    raise exception 'a row whose match changed or that the preview rejected must leave nothing behind';
   end if;
 end;
 $$;
