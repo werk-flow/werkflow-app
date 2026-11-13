@@ -5,7 +5,14 @@ import { type MigrationDrift, driftLine, readMigrationDrift } from '../local-sta
 import { VISUAL_REFERENCE_UPDATE_ENV } from '../runner/visual-reference-updates';
 import { readBoatKey, withBoatKey, type BoatKeyReading } from './boat-key';
 import { shellQuote } from './boat-machine';
-import { REFERENCE_UPDATES, applyReferenceUpdates, referenceHashes } from './reference-updates';
+import {
+  FAILED_RUN,
+  REFERENCE_UPDATES,
+  REPLACED_REFERENCES,
+  applyReferenceUpdates,
+  filesUnder,
+  referenceHashes,
+} from './reference-updates';
 import { type BoatOutcome, runOnBoat, withRunFolder } from './verify-on-boat';
 
 // A focused browser run, `bun run test:audit:focused` or `test:golden:focused`, runs on a Boat
@@ -68,9 +75,10 @@ function updateFolders(repository: string): Set<string> {
 
 /**
  * Places the references a Boat update rewrote, from the update folders that came back, and prints
- * them with the next steps. A refused set writes nothing and turns the run's exit code into 1. A
- * reference changed here since `before.references`, taken when the run started, keeps its local
- * version, is named with Boat's copy, and also turns the exit code into 1.
+ * them with the next steps and where the versions they replaced are kept. A refused set writes
+ * nothing and turns the run's exit code into 1. A failed update run places nothing: its references
+ * stay evidence and are named. A reference changed here since `before.references`, taken when the
+ * run started, keeps its local version and is named with Boat's copy. Both exit non-zero.
  */
 export function placeReferenceUpdates(
   repository: string,
@@ -79,10 +87,21 @@ export function placeReferenceUpdates(
 ): number {
   let placed: string[] = [];
   let kept: string[] = [];
+  let unplaced: string[] = [];
+  let recovery: string[] = [];
   try {
     for (const name of [...updateFolders(repository)].filter((found) => !before.folders.has(found))) {
       const folder = join(repository, REFERENCE_UPDATES, name);
-      const result = applyReferenceUpdates(repository, folder, before.references);
+      if (name.endsWith(FAILED_RUN)) {
+        unplaced = [...unplaced, ...filesUnder(folder).map((path) => join(REFERENCE_UPDATES, name, path))];
+        continue;
+      }
+      const replaced = join(REPLACED_REFERENCES, name);
+      const result = applyReferenceUpdates(repository, folder, {
+        before: before.references,
+        recovery: join(repository, replaced),
+      });
+      if (existsSync(join(repository, replaced))) recovery = [...recovery, replaced];
       placed = [...placed, ...result.placed];
       kept = [
         ...kept,
@@ -93,17 +112,23 @@ export function placeReferenceUpdates(
     console.error(`[verify] ${error instanceof Error ? error.message : String(error)}`);
     return 1;
   }
-  console.info(
-    placed.length
-      ? `[verify] The update rewrote or wrote ${placed.length} visual references in this checkout:\n${placed.map((path) => `  ${path}`).join('\n')}\n[verify] Next: look at every changed image, restore each one the accepted change does not explain with git checkout -- <file>, then run bun run test:verify --group audit:visual.`
-      : '[verify] The update rewrote no visual reference.',
-  );
-  if (!kept.length) return code;
+  const list = (paths: readonly string[]) => paths.map((path) => `\n  ${path}`).join('');
+  // A reference never comes from a failed run (docs/technical/testing.md).
+  if (unplaced.length)
+    console.error(
+      `[verify] The update run failed on Boat, so none of the ${unplaced.length} references it rewrote or wrote was placed; they stay with the evidence:${list(unplaced)}`,
+    );
+  if (placed.length)
+    console.info(
+      `[verify] The update rewrote or wrote ${placed.length} visual references in this checkout:${list(placed)}${recovery.length ? `\n[verify] The versions they replaced are kept in ${recovery.join(', ')}.` : ''}\n[verify] Next: look at every changed image, restore each one the accepted change does not explain with git checkout -- <file>, then run bun run test:verify --group audit:visual.`,
+    );
+  else if (!unplaced.length) console.info('[verify] The update rewrote no visual reference.');
   // A reference changed here while the run went keeps this checkout's version: never lost to Boat's.
-  console.error(
-    `[verify] ${kept.length} references changed in this checkout during the run kept their local version:\n${kept.map((path) => `  ${path}`).join('\n')}`,
-  );
-  return 1;
+  if (kept.length)
+    console.error(
+      `[verify] ${kept.length} references changed in this checkout during the run kept their local version:${list(kept)}`,
+    );
+  return unplaced.length || kept.length ? code || 1 : code;
 }
 
 /**

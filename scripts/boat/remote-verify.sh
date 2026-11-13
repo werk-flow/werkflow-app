@@ -165,8 +165,9 @@ phase "$script exited $code; peak memory in use $(sort -n "$HOME/memory.log" | t
 
 # The run's own evidence: every report and run folder that did not exist before, and the server log.
 # A failed collection brings no reference back and fails the run, whatever the browser run's exit.
+# A failed run's references come back marked, as evidence the workstation never places.
 if [ "$update" = 1 ] && ! bun scripts/boat/reference-updates.ts collect "$HOME/references-before.json" \
-  ".agent-logs/visual-reference-updates/$(date -u +%Y-%m-%dT%H%M%SZ)"; then
+  "$(date -u +%Y-%m-%dT%H%M%SZ)" "$code"; then
   printf '[boat] collecting the rewritten visual references failed; none come back, and the run fails.\n'
   code=1
 fi

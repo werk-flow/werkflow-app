@@ -22,6 +22,10 @@ import { destinationConflict, linkedDestination } from './verify-on-boat';
 
 /** Where the machine puts the references an update rewrote, one folder per update. */
 export const REFERENCE_UPDATES = '.agent-logs/visual-reference-updates';
+/** Ends the folder of an update run that failed: its references stay evidence, never references. */
+export const FAILED_RUN = '-failed-run';
+/** Where the workstation keeps each checkout version an update replaced, one folder per update. */
+export const REPLACED_REFERENCES = '.agent-logs/visual-reference-replaced';
 /** The audit suite's snapshot folders. */
 const SNAPSHOTS = /^tests\/audit\/(?:[a-z0-9-]+\/)*[a-z0-9-]+\.spec\.ts-snapshots$/;
 /** A reference file: an image or its text twin, with a plain name, directly in a snapshot folder. */
@@ -38,8 +42,13 @@ export function referencePathProblem(path: string): string | undefined {
   return undefined;
 }
 
+/** The update folder, relative to the checkout, for an update run started at `stamp` that exited `exitCode`. */
+export function updateFolder(stamp: string, exitCode: string): string {
+  return join(REFERENCE_UPDATES, exitCode === '0' ? stamp : `${stamp}${FAILED_RUN}`);
+}
+
 /** Every regular file under `folder`, relative to it; a link or any other kind of entry throws. */
-function filesUnder(folder: string): string[] {
+export function filesUnder(folder: string): string[] {
   const files: string[] = [];
   for (const entry of readdirSync(folder, { recursive: true, withFileTypes: true })) {
     const path = relative(folder, join(entry.parentPath, entry.name));
@@ -120,20 +129,22 @@ function linkUnlessPresent(from: string, to: string): boolean {
 /**
  * Replaces the reference `path` with `folder`'s copy only while the checkout's file still has the
  * hash `expected`, or is still absent when `expected` is undefined, and answers whether it did. No
- * step overwrites a file: the checkout's version moves aside and is checked there, and each file is
- * linked into place, which fails when a file appeared meanwhile. A changed version always stays.
+ * step overwrites a file: the checkout's version moves aside into `recovery` and is checked there,
+ * and each file is linked into place, which fails when a file appeared meanwhile. A changed version
+ * goes back; a replaced one stays in `recovery`, with every write made through a descriptor opened
+ * before it moved.
  */
 function placeUnchanged(
   repository: string,
   folder: string,
   path: string,
   expected: string | undefined,
-  copy: (from: string, to: string) => void,
+  { recovery, copy }: { recovery: string; copy: (from: string, to: string) => void },
 ): boolean {
   const target = join(repository, path);
   mkdirSync(dirname(target), { recursive: true });
   const temp = join(dirname(target), `.reference-update-${randomUUID()}`);
-  const aside = `${temp}.previous`;
+  const aside = join(recovery, path);
   const restore = () => {
     if (!linkUnlessPresent(aside, target))
       throw new Error(
@@ -144,6 +155,7 @@ function placeUnchanged(
   try {
     copy(join(folder, path), temp);
     if (expected === undefined) return linkUnlessPresent(temp, target);
+    mkdirSync(dirname(aside), { recursive: true });
     try {
       renameSync(target, aside);
     } catch (error) {
@@ -157,8 +169,7 @@ function placeUnchanged(
       restore();
       throw error;
     }
-    if (placed) rmSync(aside);
-    else restore();
+    if (!placed) restore();
     return placed;
   } finally {
     rmSync(temp, { force: true });
@@ -171,14 +182,21 @@ function placeUnchanged(
  * does a destination reached through a symbolic link, or one that exists and is no regular file or
  * is a hard link, as for the results import (verify-on-boat.ts). A destination that changed here
  * since `before`, the hashes taken when the run started (edited, written or removed), keeps this
- * checkout's version up to its replacement; Boat's copy stays in `folder`, with the evidence.
- * `copy` is a test's seam into placement.
+ * checkout's version up to its replacement; Boat's copy stays in `folder`, with the evidence. Each
+ * version a placed file replaced stays in `recovery`. `copy` is a test's seam into placement.
  */
 export function applyReferenceUpdates(
   repository: string,
   folder: string,
-  before: ReadonlyMap<string, string>,
-  copy: (from: string, to: string) => void = copyFileSync,
+  {
+    before,
+    recovery,
+    copy = copyFileSync,
+  }: {
+    before: ReadonlyMap<string, string>;
+    recovery: string;
+    copy?: (from: string, to: string) => void;
+  },
 ): { placed: string[]; kept: string[] } {
   const files = filesUnder(folder);
   const problem =
@@ -190,7 +208,9 @@ export function applyReferenceUpdates(
   const kept: string[] = [];
   for (const path of files) {
     try {
-      (placeUnchanged(repository, folder, path, before.get(path), copy) ? placed : kept).push(path);
+      (placeUnchanged(repository, folder, path, before.get(path), { recovery, copy }) ? placed : kept).push(
+        path,
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(

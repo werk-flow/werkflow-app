@@ -1,19 +1,23 @@
 // Rule test: the references a Boat update rewrote enter the working tree only as .png or .txt files
 // in an audit snapshot folder; any other path, an absolute path, a ".." segment, a link or a linked
 // destination refuses the whole set, and a refused set writes nothing. A reference changed in the
-// checkout while the run went keeps its local version.
+// checkout while the run went keeps its local version, and each version a placement replaced stays
+// as recovery data. A failed update run's references come back marked.
 import { expect, test } from 'bun:test';
 import {
+  closeSync,
   copyFileSync,
   existsSync,
   linkSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
   writeFileSync,
+  writeSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
@@ -23,6 +27,7 @@ import {
   collectReferenceUpdates,
   referenceHashes,
   referencePathProblem,
+  updateFolder,
 } from './reference-updates';
 
 const SNAPSHOTS = 'tests/audit/visual/references.spec.ts-snapshots';
@@ -103,7 +108,10 @@ test('rewritten references are placed in the checkout, and any bad entry refuses
     build(update, repository);
     try {
       return {
-        files: applyReferenceUpdates(repository, update, referenceHashes(repository)).placed,
+        files: applyReferenceUpdates(repository, update, {
+          before: referenceHashes(repository),
+          recovery: join(repository, 'replaced'),
+        }).placed,
         repository,
       };
     } catch (error) {
@@ -162,7 +170,9 @@ test('a reference changed in the checkout during the run keeps its local version
   write(repository, `${SNAPSHOTS}/edited.png`, 'local edit');
   rmSync(join(repository, SNAPSHOTS, 'removed.png'));
   write(repository, `${SNAPSHOTS}/created.txt`, 'local');
-  expect(applyReferenceUpdates(repository, update, before)).toEqual({
+  expect(
+    applyReferenceUpdates(repository, update, { before, recovery: join(repository, 'replaced') }),
+  ).toEqual({
     placed: [`${SNAPSHOTS}/new.txt`, `${SNAPSHOTS}/unchanged.png`],
     kept: [`${SNAPSHOTS}/created.txt`, `${SNAPSHOTS}/edited.png`, `${SNAPSHOTS}/removed.png`],
   });
@@ -193,7 +203,9 @@ test('a reference changed here while the update is placed keeps its local versio
     copyFileSync(from, to);
     during[basename(from)]?.();
   };
-  expect(applyReferenceUpdates(repository, update, before, copy)).toEqual({
+  expect(
+    applyReferenceUpdates(repository, update, { before, recovery: join(repository, 'replaced'), copy }),
+  ).toEqual({
     placed: [],
     kept: [`${SNAPSHOTS}/created.txt`, `${SNAPSHOTS}/edited.png`, `${SNAPSHOTS}/removed.png`],
   });
@@ -202,4 +214,35 @@ test('a reference changed here while the update is placed keeps its local versio
   expect(existsSync(join(repository, SNAPSHOTS, 'removed.png'))).toBe(false);
   // No staged copy or moved-aside version is left next to the references.
   expect(readdirSync(join(repository, SNAPSHOTS)).sort()).toEqual(['created.txt', 'edited.png']);
+});
+
+test('a failed update run publishes its references in a marked folder', () => {
+  expect(updateFolder('2026-11-13T050000Z', '0')).toBe(
+    '.agent-logs/visual-reference-updates/2026-11-13T050000Z',
+  );
+  expect(updateFolder('2026-11-13T050000Z', '1')).toBe(
+    '.agent-logs/visual-reference-updates/2026-11-13T050000Z-failed-run',
+  );
+});
+
+test('a write through a descriptor opened before the replacement is recoverable', () => {
+  const repository = mkdtempSync(join(tmpdir(), 'reference-apply-'));
+  const update = mkdtempSync(join(tmpdir(), 'reference-update-'));
+  write(repository, `${SNAPSHOTS}/a.png`, 'old');
+  write(update, `${SNAPSHOTS}/a.png`, 'boat');
+  const before = referenceHashes(repository);
+  const recovery = join(repository, 'replaced');
+  // An editor holds the reference open from before the run and writes after the hash check.
+  const descriptor = openSync(join(repository, SNAPSHOTS, 'a.png'), 'r+');
+  try {
+    expect(applyReferenceUpdates(repository, update, { before, recovery })).toEqual({
+      placed: [`${SNAPSHOTS}/a.png`],
+      kept: [],
+    });
+    writeSync(descriptor, 'late');
+  } finally {
+    closeSync(descriptor);
+  }
+  expect(readFileSync(join(repository, SNAPSHOTS, 'a.png'), 'utf8')).toBe('boat');
+  expect(readFileSync(join(recovery, SNAPSHOTS, 'a.png'), 'utf8')).toBe('late');
 });
